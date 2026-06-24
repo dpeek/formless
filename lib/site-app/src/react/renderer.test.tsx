@@ -173,10 +173,12 @@ describe("public Site renderer characterization", () => {
     expect(html).toContain('name="email"');
     expect(html).toContain('type="email"');
     expect(html).toContain("Join");
-    expect(html).toContain('class="cf-turnstile"');
+    expect(countOccurrences(html, 'class="cf-turnstile"')).toBe(0);
+    expect(html).toContain('data-site-turnstile="true"');
     expect(html).toContain('data-sitekey="public-site-key"');
-    expect(html).toContain('data-response-field-name="cf-turnstile-response"');
-    expect(html).toContain("https://challenges.cloudflare.com/turnstile/v0/api.js");
+    expect(html).toContain('name="cf-turnstile-response"');
+    expect(html).toContain('data-site-turnstile-token="true"');
+    expect(html).not.toContain("turnstile/v0/api.js");
     expect(html).toContain('data-web-markdown-renderer="shared"');
     expect(html).not.toContain("server-secret-value");
     expect(html).not.toContain("reader@example.com");
@@ -198,6 +200,114 @@ describe("public Site renderer characterization", () => {
     expect(html).toContain("Subscribe form unavailable.");
     expect(html).not.toContain('data-site-subscribe-form="subscribe-block"');
     expect(html).not.toContain('name="email"');
+    expect(html).not.toContain("turnstile/v0/api.js");
+  });
+
+  it("renders contact forms with public operation route and Turnstile widget facts", () => {
+    const html = renderSite(
+      pageNode("home", [
+        placement(
+          "contact-placement",
+          blockNode("contact-block", "contactForm", "Contact us", {
+            body: "Send **details**.",
+            buttonLabel: "Send",
+            successLabel: "Message received.",
+            nameLabel: "Your name",
+            emailLabel: "Your email",
+            messageLabel: "How can we help?",
+            publicOperation: {
+              entityName: "contact-message",
+              operationName: "submit",
+              canonicalKey: "contact-message.submit",
+              route: "/api/site/public/operations/contact-message/submit",
+              challenge: {
+                kind: "turnstile",
+                siteKey: "public-site-key",
+              },
+            },
+          }),
+        ),
+      ]),
+    );
+
+    expect(html).toContain('data-block-type="contactForm"');
+    expect(html).toContain('data-site-contact-form="contact-block"');
+    expect(html).toContain(
+      'data-site-contact-route="/api/site/public/operations/contact-message/submit"',
+    );
+    expect(html).toContain('action="/api/site/public/operations/contact-message/submit"');
+    expect(html).toContain('name="name"');
+    expect(html).toContain('name="email"');
+    expect(html).toContain('name="message"');
+    expect(html).toContain('type="email"');
+    expect(html).toContain("Your name");
+    expect(html).toContain("Your email");
+    expect(html).toContain("How can we help?");
+    expect(html).toContain("Send");
+    expect(countOccurrences(html, 'class="cf-turnstile"')).toBe(0);
+    expect(html).toContain('data-site-turnstile="true"');
+    expect(html).toContain('data-sitekey="public-site-key"');
+    expect(html).toContain('name="cf-turnstile-response"');
+    expect(html).toContain('data-site-turnstile-token="true"');
+    expect(html).not.toContain("turnstile/v0/api.js");
+    expect(html).toContain('data-web-markdown-renderer="shared"');
+    expect(html).not.toContain("owner@example.com");
+    expect(html).not.toContain("providerMessageId");
+  });
+
+  it("keeps Turnstile script and implicit widget markup out of SSR when multiple public forms render", () => {
+    const publicSiteKey = "public-site-key";
+    const html = renderSite(
+      pageNode("home", [
+        placement(
+          "contact-placement",
+          blockNode("contact-block", "contactForm", "Contact us", {
+            publicOperation: {
+              entityName: "contact-message",
+              operationName: "submit",
+              canonicalKey: "contact-message.submit",
+              route: "/api/site/public/operations/contact-message/submit",
+              challenge: { kind: "turnstile", siteKey: publicSiteKey },
+            },
+          }),
+        ),
+        placement(
+          "subscribe-placement",
+          blockNode("subscribe-block", "subscribeForm", "Join", {
+            publicOperation: {
+              entityName: "subscription",
+              operationName: "subscribe",
+              canonicalKey: "subscription.subscribe",
+              route: "/api/site/public/operations/subscription/subscribe",
+              challenge: { kind: "turnstile", siteKey: publicSiteKey },
+            },
+          }),
+        ),
+      ]),
+    );
+
+    expect(html).not.toContain("turnstile/v0/api.js");
+    expect(countOccurrences(html, 'class="cf-turnstile"')).toBe(0);
+    expect(countOccurrences(html, 'data-site-turnstile="true"')).toBe(2);
+    expect(countOccurrences(html, 'name="cf-turnstile-response"')).toBe(2);
+  });
+
+  it("does not render a working contact form without projected public operation facts", () => {
+    const html = renderSite(
+      pageNode("home", [
+        placement(
+          "contact-placement",
+          blockNode("contact-block", "contactForm", "Contact us", {
+            operationName: "missingContactSubmit",
+          }),
+        ),
+      ]),
+    );
+
+    expect(html).toContain("Contact us");
+    expect(html).toContain("Contact form unavailable.");
+    expect(html).not.toContain('data-site-contact-form="contact-block"');
+    expect(html).not.toContain('name="message"');
     expect(html).not.toContain("turnstile/v0/api.js");
   });
 

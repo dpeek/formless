@@ -4,10 +4,11 @@
 
 Instance control plane models Formless instance management data as runtime-owned
 schema records. It keeps app installs, unified route intent, and deployment
-configuration in flat Authority records. Deployment config records may include a
-display-safe latest deployment observation cache while installed app data,
-provider secrets, raw operation tokens, projected deployment resource graphs,
-deployment history, and provider resource truth stay outside those records.
+configuration, production identity settings, and email deployment intent in flat
+Authority records. Deployment config records may include a display-safe latest
+deployment observation cache while installed app data, provider secrets, raw
+operation tokens, projected deployment resource graphs, deployment history, and
+provider resource truth stay outside those records.
 
 ## Requirements
 
@@ -24,7 +25,7 @@ outside reviewable control-plane storage snapshots.
 - **THEN** it uses schema key `instance-control-plane`, storage identity
   `instance:control-plane`, and API prefix `/api/formless/control-plane`
 - **AND** it defines flat records for app installs, unified routes, and
-  deployment configs
+  deployment configs, instance settings, email domains, and email senders
 - **AND** each deployment config stores the target identity, display-safe
   `targetUrl` origin facts, provider family, provider account, worker name, and
   optional display-safe credential reference used for that deployment target
@@ -134,6 +135,80 @@ runtime-owned App schema source with deterministic provenance.
 - AND incompatible control-plane schema changes require an explicit migration,
   backfill, or reset path before they can become active
 
+### Requirement: Instance Settings
+
+The system SHALL store active production identity and email defaults on one
+singleton instance settings record.
+
+#### Scenario: Settings singleton shape
+
+- **GIVEN** the instance control-plane schema is loaded
+- **WHEN** the `instance-settings` entity is inspected
+- **THEN** at most one active settings record exists for the instance
+- **AND** it stores camelCase fields for canonical origin, primary route
+  reference, auth route reference or auth origin facts, default email domain
+  reference, default contact sender reference, contact notification recipient,
+  and production identity status
+- **AND** those fields are active policy selections, not provider resource
+  truth, raw DNS state, provider credentials, or runtime secrets
+
+#### Scenario: Bootstrap without production identity
+
+- **GIVEN** an instance has no primary route selected
+- **WHEN** deployment intent is projected
+- **THEN** workers.dev deployment may remain valid
+- **AND** production identity features that require a canonical origin report
+  unconfigured state instead of inferring identity from the workers.dev host
+
+#### Scenario: Settings reference domain records
+
+- **GIVEN** primary route, email domain, or email sender records exist
+- **WHEN** the settings singleton selects defaults
+- **THEN** it stores stable record references to the selected records
+- **AND** DNS authentication, sender verification, provider status, and cleanup
+  lifecycle remain on the referenced records or provider observation boundary
+
+### Requirement: Email Domain And Sender Records
+
+The system SHALL represent email deployment intent as flat control-plane
+records separate from HTTP route behavior.
+
+#### Scenario: Email domain record shape
+
+- **GIVEN** the instance control-plane schema is loaded
+- **WHEN** the `email-domain` entity is inspected
+- **THEN** each record stores camelCase fields for enabled state, provider
+  family, domain, optional primary route reference, optional deployment config
+  reference, verification status, display-safe DNS status, and latest
+  display-safe error
+- **AND** email domain records remain flat schema records
+- **AND** created and updated timestamps come from record system fields rather
+  than email-domain value fields
+- **AND** provider credentials, Cloudflare OAuth tokens, Alchemy state, raw DNS
+  provider truth, and runtime secrets are not stored on the record
+
+#### Scenario: Email sender record shape
+
+- **GIVEN** the instance control-plane schema is loaded
+- **WHEN** the `email-sender` entity is inspected
+- **THEN** each record stores camelCase fields for enabled state, address,
+  display name, purpose, email domain reference, and verification status
+- **AND** the sender address host must belong to the referenced email domain
+- **AND** disabled or unverified senders are excluded from runtime email
+  delivery defaults
+
+#### Scenario: Route remains HTTP intent
+
+- **GIVEN** an email domain uses a host under the same DNS zone as a public
+  route
+- **WHEN** the control-plane records are validated or projected
+- **THEN** the email domain may reference the primary route for default
+  derivation
+- **AND** the route record still represents only HTTP mount or redirect
+  behavior
+- **AND** sender verification, SPF, DKIM, DMARC, and Email Sending state are not
+  stored as route fields
+
 ### Requirement: Deployment Projection Boundary
 
 The system SHALL build deployment runtime desired-state projections from
@@ -147,6 +222,10 @@ schema-owned control-plane intent records.
   records
 - **AND** enabled `route` records provide app mount, custom-domain, DNS, and
   Worker-handled redirect source-host resources
+- **AND** enabled `email-domain` and `email-sender` records provide email
+  sending, DNS authentication, and Worker email binding resources
+- **AND** the singleton `instance-settings` record provides active primary
+  route and email default selections when those defaults are configured
 - **AND** `deployment-config` records provide the target URL, provider account,
   worker name, and credential reference needed to project provider-facing
   resources
@@ -303,7 +382,8 @@ records.
 
 #### Scenario: Control-plane lifecycle metadata
 
-- **GIVEN** `app-install`, `route`, or `deployment-config` records are created,
+- **GIVEN** `app-install`, `route`, `deployment-config`,
+  `instance-settings`, `email-domain`, or `email-sender` records are created,
   updated, synced, snapshotted, restored, or projected
 - **WHEN** control-plane lifecycle timestamps are needed
 - **THEN** `createdAt` and `updatedAt` are read from record system fields
@@ -395,13 +475,14 @@ canonical source for workspace-authored instance intent.
 #### Scenario: Save control-plane records to workspace state
 
 - **WHEN** local Authority control-plane state is saved to workspace source
-- **THEN** `app-install`, `route`, and `deployment-config` records are written
+- **THEN** `app-install`, `route`, `deployment-config`,
+  `instance-settings`, `email-domain`, and `email-sender` records are written
   to the schema-owned `state/instance.json` workspace state file
 - **AND** enabled `deployment-config` records include the display-safe
   deployed HTTP origin in `targetUrl`
 - **AND** workspace and archive boundaries identify those records with
-  qualified entity names such as `instance:app-install` and
-  `instance:route`
+  qualified entity names such as `instance:app-install`, `instance:route`, and
+  `instance:email-domain`
 - **AND** `state/instance.json` declares a workspace state kind, version,
   storage identity `instance:control-plane`, schema key
   `instance-control-plane`, control-plane schema provenance, source cursor, and
@@ -411,7 +492,7 @@ canonical source for workspace-authored instance intent.
 - **AND** `state/instance.json` does not embed the full control-plane App
   schema object
 - **AND** `formless.json` does not duplicate those records as app, route,
-  domain, or deploy intent
+  domain, email, or deploy intent
 - **AND** `deploy-target`, `provider-config-ref`,
   `deploy-desired-resource`, `deploy-attempt`, `deploy-evidence-summary`, and
   `deploy-drift-report` records are not written as workspace source
@@ -428,8 +509,8 @@ canonical source for workspace-authored instance intent.
 - **THEN** the control-plane storage snapshot is restored through the
   `instance:control-plane` Authority storage identity
 - **AND** Authority validation rejects invalid references, immutable field
-  changes, route conflicts, secret values, and unsupported control-plane
-  entities before behavior changes
+  changes, route conflicts, email sender/domain conflicts, secret values, and
+  unsupported control-plane entities before behavior changes
 - **AND** workspace state containing runtime-observed deployment cache fields is
   rejected or stripped before restore
 - **AND** restore rejects public Site route records when the referenced package
@@ -455,7 +536,8 @@ writing schema-owned control-plane records.
 #### Scenario: Browser edits deploy and domain intent
 
 - **WHEN** a browser owner or admin edits domain or deployment configuration
-- **THEN** the write commits unified `route` or `deployment-config` records
-  through Authority validation
+- **THEN** the write commits unified `route`, `deployment-config`,
+  `instance-settings`, `email-domain`, or `email-sender` records through
+  Authority validation
 - **AND** provider credentials, raw provider state, and runtime secrets remain
   outside control-plane records

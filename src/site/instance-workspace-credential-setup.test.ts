@@ -201,6 +201,7 @@ describe("Formless Cloudflare OAuth credentials", () => {
       },
       status: "running",
     });
+    expect(start.result?.details?.requestedScopes).toContain("email-sending.write");
     expect(JSON.stringify(start)).not.toContain("formless-access-token");
     expect(JSON.stringify(start)).not.toContain("formless-refresh-token");
     expect(start.continue).toBeDefined();

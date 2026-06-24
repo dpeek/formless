@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 
 import { afterEach, describe, expect, it } from "vite-plus/test";
 import {
+  INSTANCE_CONTROL_PLANE_INSTANCE_SETTINGS_ID,
   INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
   INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
   instanceControlPlaneSchema,
@@ -540,6 +541,47 @@ describe("workspace record state node files", () => {
   it("writes and reads control-plane record state without embedding schema source", async () => {
     const workspaceRoot = await makeTempDir();
     const manifest = defaultInstanceWorkspaceManifest({ name: "personal-sites" });
+    const records: StoredRecord[] = [
+      {
+        id: "settings:instance",
+        entity: "instance-settings",
+        values: {
+          settingsId: INSTANCE_CONTROL_PLANE_INSTANCE_SETTINGS_ID,
+          canonicalOrigin: "https://www.example.com",
+          defaultEmailDomain: "email-domain:mail.example.com",
+          defaultContactSender: "email-sender:contact@mail.example.com",
+          contactNotificationRecipient: "owner@example.com",
+          productionIdentityStatus: "configured",
+        },
+        createdAt: "2026-06-18T00:00:00.000Z",
+        updatedAt: "2026-06-18T00:00:00.000Z",
+      },
+      {
+        id: "email-domain:mail.example.com",
+        entity: "email-domain",
+        values: {
+          enabled: true,
+          providerFamily: "cloudflare",
+          domain: "mail.example.com",
+          verificationStatus: "pending",
+        },
+        createdAt: "2026-06-18T00:00:00.000Z",
+        updatedAt: "2026-06-18T00:00:00.000Z",
+      },
+      {
+        id: "email-sender:contact@mail.example.com",
+        entity: "email-sender",
+        values: {
+          enabled: true,
+          address: "contact@mail.example.com",
+          purpose: "contact-notification",
+          emailDomain: "email-domain:mail.example.com",
+          verificationStatus: "pending",
+        },
+        createdAt: "2026-06-18T00:00:00.000Z",
+        updatedAt: "2026-06-18T00:00:00.000Z",
+      },
+    ];
     const snapshot: StorageSnapshot = {
       kind: STORAGE_SNAPSHOT_KIND,
       version: STORAGE_SNAPSHOT_VERSION,
@@ -547,9 +589,9 @@ describe("workspace record state node files", () => {
       schemaKey: INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
       exportedAt: "2026-06-18T00:00:00.000Z",
       schemaUpdatedAt: "2026-06-18T00:00:01.000Z",
-      sourceCursor: 0,
+      sourceCursor: records.length,
       schema: instanceControlPlaneSchema,
-      records: [],
+      records,
     };
 
     await writeInstanceWorkspaceControlPlaneStorageSnapshot({
@@ -565,9 +607,22 @@ describe("workspace record state node files", () => {
     expect(file.storageIdentity).toBe(INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY);
     expect(file.schema).toBeUndefined();
     expect(file.schemaProvenance).toEqual(instanceControlPlaneSchemaProvenance);
+    expect((file.records as StoredRecord[]).map((record) => record.entity)).toEqual([
+      "instance:email-domain",
+      "instance:email-sender",
+      "instance:instance-settings",
+    ]);
     await expect(
       readInstanceWorkspaceControlPlaneStorageSnapshot({ manifest, workspaceRoot }),
-    ).resolves.toEqual(snapshot);
+    ).resolves.toMatchObject({
+      records: [
+        { entity: "email-domain", id: "email-domain:mail.example.com" },
+        { entity: "email-sender", id: "email-sender:contact@mail.example.com" },
+        { entity: "instance-settings", id: "settings:instance" },
+      ],
+      schemaKey: snapshot.schemaKey,
+      storageIdentity: snapshot.storageIdentity,
+    });
   });
 
   it("rejects control-plane record state when provenance does not match the resolved schema", async () => {

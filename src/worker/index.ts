@@ -12,6 +12,10 @@ import {
 } from "@dpeek/formless-media/worker";
 import { handleInstanceDomainProviderApiRequest } from "./domain-provider-api.ts";
 import { handleInstanceDeploymentRuntimeApiRequest } from "./deployment-runtime-api.ts";
+import {
+  handleInstanceEmailRuntimeApiRequest,
+  type CloudflareSendEmailBinding,
+} from "./email-runtime.ts";
 import { handleInstanceAppInstallsApiRequest } from "./instance-app-installs.ts";
 import { handleInstanceControlPlaneApiRequest } from "./instance-control-plane.ts";
 import { handleInstanceDomainMappingsApiRequest } from "./instance-domain-mappings.ts";
@@ -61,6 +65,7 @@ export type Env = TurnstileRuntimeEnv & {
   FORMLESS_DOMAIN_PROVIDER_CLOUDFLARE_ACCOUNT_ID?: string;
   FORMLESS_DOMAIN_PROVIDER_INSTANCE_ID?: string;
   FORMLESS_DOMAIN_PROVIDER_WORKER_NAME?: string;
+  FORMLESS_EMAIL?: CloudflareSendEmailBinding;
   FORMLESS_DOMAIN_PROVIDER_ZONE_ID?: string;
   FORMLESS_DOMAIN_PROVIDER_ZONE_NAME?: string;
   FORMLESS_DOMAIN_PROVIDER_ZONES?: string;
@@ -242,6 +247,12 @@ export default {
 
     if (instanceDeploymentRuntimeResponse) {
       return instanceDeploymentRuntimeResponse;
+    }
+
+    const instanceEmailRuntimeResponse = await handleInstanceEmailRuntimeApiRequest(request, env);
+
+    if (instanceEmailRuntimeResponse) {
+      return instanceEmailRuntimeResponse;
     }
 
     const instanceDomainMappingsResponse = await handleInstanceDomainMappingsApiRequest(

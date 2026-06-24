@@ -39,7 +39,8 @@ export const INSTANCE_CONTROL_PLANE_BOUNDARY_SCHEMA_KEY = "instance";
 export const INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY = "instance:control-plane";
 export const INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX = "/api/formless/control-plane";
 export const INSTANCE_CONTROL_PLANE_SOURCE_SCHEMA_HASH =
-  "sha256:c965ec00f55af7db6a03d8082ebf94eb3a662f0a4e392e8a9214dfe12418fea9" satisfies SourceSchemaHash;
+  "sha256:11f83efcf61072f92ae877d7b659d6eb34079d9097067f4ab13ac2e464163ea8" satisfies SourceSchemaHash;
+export const INSTANCE_CONTROL_PLANE_INSTANCE_SETTINGS_ID = "instance";
 export const instanceControlPlaneSchemaProvenance = {
   kind: "instance-control-plane",
   sourceSchemaHash: INSTANCE_CONTROL_PLANE_SOURCE_SCHEMA_HASH,
@@ -49,6 +50,9 @@ export const instanceControlPlaneEntityNames = [
   "app-install",
   "route",
   "deployment-config",
+  "instance-settings",
+  "email-domain",
+  "email-sender",
 ] as const;
 
 export type InstanceControlPlaneEntityName = (typeof instanceControlPlaneEntityNames)[number];
@@ -170,11 +174,65 @@ export type InstanceControlPlaneDeploymentConfigValues = {
   observedRunnerId?: string;
 };
 
+export type InstanceControlPlaneProductionIdentityStatus = "configured" | "unconfigured";
+export type InstanceControlPlaneVerificationStatus =
+  | "failed"
+  | "pending"
+  | "unconfigured"
+  | "verified";
+export type InstanceControlPlaneEmailDnsStatus = "failed" | "pending" | "unconfigured" | "verified";
+export type InstanceControlPlaneEmailSenderPurpose = "contact-notification" | "system";
+
+export type InstanceControlPlaneInstanceSettingsValues = {
+  settingsId: typeof INSTANCE_CONTROL_PLANE_INSTANCE_SETTINGS_ID;
+  canonicalOrigin?: string;
+  primaryRoute?: string;
+  authRoute?: string;
+  authOrigin?: string;
+  authRelyingPartyId?: string;
+  authRelyingPartyName?: string;
+  defaultEmailDomain?: string;
+  defaultContactSender?: string;
+  contactNotificationRecipient?: string;
+  productionIdentityStatus: InstanceControlPlaneProductionIdentityStatus;
+};
+
+export type InstanceControlPlaneEmailDomainValues = {
+  enabled: boolean;
+  providerFamily: InstanceControlPlaneProviderFamily;
+  domain: string;
+  primaryRoute?: string;
+  deploymentConfig?: string;
+  verificationStatus: InstanceControlPlaneVerificationStatus;
+  dnsStatus?: InstanceControlPlaneEmailDnsStatus;
+  latestError?: string;
+};
+
+export type InstanceControlPlaneEmailSenderValues = {
+  enabled: boolean;
+  address: string;
+  displayName?: string;
+  purpose: InstanceControlPlaneEmailSenderPurpose;
+  emailDomain: string;
+  verificationStatus: InstanceControlPlaneVerificationStatus;
+};
+
+export type InstanceControlPlaneProductionIdentity = {
+  authOrigin: string;
+  canonicalOrigin: string;
+  primaryRoute?: string;
+  relyingPartyId: string;
+  relyingPartyName?: string;
+};
+
 export type InstanceControlPlaneRedirectStatusCode = "301" | "302" | "303" | "307" | "308";
 
 export type InstanceControlPlaneRecordValuesByEntity = {
   "app-install": InstanceControlPlaneAppInstallValues;
   "deployment-config": InstanceControlPlaneDeploymentConfigValues;
+  "email-domain": InstanceControlPlaneEmailDomainValues;
+  "email-sender": InstanceControlPlaneEmailSenderValues;
+  "instance-settings": InstanceControlPlaneInstanceSettingsValues;
   route: InstanceControlPlaneRouteValues;
 };
 
@@ -206,6 +264,9 @@ export type AnyInstanceControlPlaneRecord = {
 export const instanceControlPlaneImmutableFields = {
   "app-install": ["installId", "packageAppKey", "storageIdentity"],
   "deployment-config": ["targetId", "targetKind", "providerFamily"],
+  "email-domain": ["providerFamily"],
+  "email-sender": ["emailDomain"],
+  "instance-settings": ["settingsId"],
   route: ["kind"],
 } as const satisfies Record<InstanceControlPlaneEntityName, readonly string[]>;
 
@@ -372,6 +433,148 @@ export const instanceControlPlaneSourceSchema = {
         uniqueTargetId: { kind: "unique", fields: ["targetId"] },
       },
     },
+    "instance-settings": {
+      label: "Instance settings",
+      fields: {
+        settingsId: textField("Settings id"),
+        canonicalOrigin: optionalTextField("Canonical origin", "href"),
+        primaryRoute: optionalReferenceField("Primary route", "route", "matchHost"),
+        authRoute: optionalReferenceField("Auth route", "route", "matchHost"),
+        authOrigin: optionalTextField("Auth origin", "href"),
+        authRelyingPartyId: optionalTextField("Auth relying-party id"),
+        authRelyingPartyName: optionalTextField("Auth relying-party name"),
+        defaultEmailDomain: optionalReferenceField(
+          "Default email domain",
+          "email-domain",
+          "domain",
+        ),
+        defaultContactSender: optionalReferenceField(
+          "Default contact sender",
+          "email-sender",
+          "address",
+        ),
+        contactNotificationRecipient: optionalTextField("Contact notification recipient"),
+        productionIdentityStatus: enumField(
+          "Production identity status",
+          {
+            configured: "Configured",
+            unconfigured: "Unconfigured",
+          },
+          "unconfigured",
+        ),
+      },
+      operations: writeOperations(
+        "Instance settings",
+        [
+          "settingsId",
+          "canonicalOrigin",
+          "primaryRoute",
+          "authRoute",
+          "authOrigin",
+          "authRelyingPartyId",
+          "authRelyingPartyName",
+          "defaultEmailDomain",
+          "defaultContactSender",
+          "contactNotificationRecipient",
+          "productionIdentityStatus",
+        ],
+        {
+          updateFields: [
+            "canonicalOrigin",
+            "primaryRoute",
+            "authRoute",
+            "authOrigin",
+            "authRelyingPartyId",
+            "authRelyingPartyName",
+            "defaultEmailDomain",
+            "defaultContactSender",
+            "contactNotificationRecipient",
+            "productionIdentityStatus",
+          ],
+        },
+      ),
+    },
+    "email-domain": {
+      label: "Email domain",
+      fields: {
+        enabled: booleanField("Enabled", true),
+        providerFamily: enumField("Provider", { cloudflare: "Cloudflare" }),
+        domain: textField("Domain"),
+        primaryRoute: optionalReferenceField("Primary route", "route", "matchHost"),
+        deploymentConfig: optionalReferenceField("Deployment config", "deployment-config", "label"),
+        verificationStatus: enumField(
+          "Verification status",
+          {
+            failed: "Failed",
+            pending: "Pending",
+            unconfigured: "Unconfigured",
+            verified: "Verified",
+          },
+          "unconfigured",
+        ),
+        dnsStatus: optionalEnumField("DNS status", {
+          failed: "Failed",
+          pending: "Pending",
+          unconfigured: "Unconfigured",
+          verified: "Verified",
+        }),
+        latestError: optionalTextField("Latest error", "longText"),
+      },
+      operations: writeOperations(
+        "Email domain",
+        [
+          "enabled",
+          "providerFamily",
+          "domain",
+          "primaryRoute",
+          "deploymentConfig",
+          "verificationStatus",
+          "dnsStatus",
+          "latestError",
+        ],
+        {
+          updateFields: [
+            "enabled",
+            "domain",
+            "primaryRoute",
+            "deploymentConfig",
+            "verificationStatus",
+            "dnsStatus",
+            "latestError",
+          ],
+        },
+      ),
+    },
+    "email-sender": {
+      label: "Email sender",
+      fields: {
+        enabled: booleanField("Enabled", true),
+        address: textField("Address"),
+        displayName: optionalTextField("Display name"),
+        purpose: enumField("Purpose", {
+          "contact-notification": "Contact notification",
+          system: "System",
+        }),
+        emailDomain: referenceField("Email domain", "email-domain", "domain"),
+        verificationStatus: enumField(
+          "Verification status",
+          {
+            failed: "Failed",
+            pending: "Pending",
+            unconfigured: "Unconfigured",
+            verified: "Verified",
+          },
+          "unconfigured",
+        ),
+      },
+      operations: writeOperations(
+        "Email sender",
+        ["enabled", "address", "displayName", "purpose", "emailDomain", "verificationStatus"],
+        {
+          updateFields: ["enabled", "address", "displayName", "purpose", "verificationStatus"],
+        },
+      ),
+    },
   },
   relationships: {
     routeInstall: toOne("Route install", "route", "appInstall", "app-install"),
@@ -382,12 +585,65 @@ export const instanceControlPlaneSourceSchema = {
       "deployment-config",
       "deploymentConfigRoutes",
     ),
+    settingsPrimaryRoute: toOne(
+      "Settings primary route",
+      "instance-settings",
+      "primaryRoute",
+      "route",
+    ),
+    settingsAuthRoute: toOne("Settings auth route", "instance-settings", "authRoute", "route"),
+    settingsDefaultEmailDomain: toOne(
+      "Settings default email domain",
+      "instance-settings",
+      "defaultEmailDomain",
+      "email-domain",
+    ),
+    settingsDefaultContactSender: toOne(
+      "Settings default contact sender",
+      "instance-settings",
+      "defaultContactSender",
+      "email-sender",
+    ),
+    emailDomainPrimaryRoute: toOne(
+      "Email domain primary route",
+      "email-domain",
+      "primaryRoute",
+      "route",
+    ),
+    emailDomainDeploymentConfig: toOne(
+      "Email domain deployment config",
+      "email-domain",
+      "deploymentConfig",
+      "deployment-config",
+      "deploymentConfigEmailDomains",
+    ),
+    emailSenderDomain: toOne(
+      "Email sender domain",
+      "email-sender",
+      "emailDomain",
+      "email-domain",
+      "emailDomainSenders",
+    ),
     deploymentConfigRoutes: toMany(
       "Deployment config routes",
       "deployment-config",
       "route",
       "deploymentConfig",
       "routeDeploymentConfig",
+    ),
+    deploymentConfigEmailDomains: toMany(
+      "Deployment config email domains",
+      "deployment-config",
+      "email-domain",
+      "deploymentConfig",
+      "emailDomainDeploymentConfig",
+    ),
+    emailDomainSenders: toMany(
+      "Email domain senders",
+      "email-domain",
+      "email-sender",
+      "emailDomain",
+      "emailSenderDomain",
     ),
   },
   queries: {
@@ -416,6 +672,11 @@ export const instanceControlPlaneSourceSchema = {
       "enabled",
       true,
     ),
+    instanceSettingsAll: allQuery("Instance settings", "instance-settings"),
+    emailDomainAll: allQuery("Email domains", "email-domain"),
+    emailDomainEnabled: whereQuery("Enabled email domains", "email-domain", "enabled", true),
+    emailSenderAll: allQuery("Email senders", "email-sender"),
+    emailSenderEnabled: whereQuery("Enabled email senders", "email-sender", "enabled", true),
   },
   itemViews: {
     appInstallItem: itemView("app-install", ["label", "installId", "packageAppKey", "status"]),
@@ -427,6 +688,24 @@ export const instanceControlPlaneSourceSchema = {
       "enabled",
       "observedStatus",
       "observedAt",
+    ]),
+    instanceSettingsItem: itemView("instance-settings", [
+      "settingsId",
+      "primaryRoute",
+      "canonicalOrigin",
+      "productionIdentityStatus",
+    ]),
+    emailDomainItem: itemView("email-domain", [
+      "domain",
+      "providerFamily",
+      "enabled",
+      "verificationStatus",
+    ]),
+    emailSenderItem: itemView("email-sender", [
+      "address",
+      "purpose",
+      "enabled",
+      "verificationStatus",
     ]),
   },
   tableViews: {
@@ -495,6 +774,79 @@ export const instanceControlPlaneSourceSchema = {
           },
         ],
         operationLabel: "Deployment config operations",
+      },
+    ),
+    instanceSettingsTable: tableView(
+      "instance-settings",
+      [
+        { field: "settingsId", display: "readOnly" },
+        "canonicalOrigin",
+        "primaryRoute",
+        "authRoute",
+        "authOrigin",
+        "authRelyingPartyId",
+        "authRelyingPartyName",
+        "defaultEmailDomain",
+        "defaultContactSender",
+        "contactNotificationRecipient",
+        "productionIdentityStatus",
+      ],
+      {
+        operations: [
+          {
+            operation: "instance-settings.update",
+            label: "Edit settings",
+            target: { kind: "row" },
+            editView: "instanceSettingsEdit",
+          },
+        ],
+        operationLabel: "Settings operations",
+      },
+    ),
+    emailDomainTable: tableView(
+      "email-domain",
+      [
+        { field: "enabled", display: "editor" },
+        "domain",
+        "providerFamily",
+        "primaryRoute",
+        "deploymentConfig",
+        "verificationStatus",
+        "dnsStatus",
+        "latestError",
+      ],
+      {
+        operations: [
+          {
+            operation: "email-domain.update",
+            label: "Edit email domain",
+            target: { kind: "row" },
+            editView: "emailDomainEdit",
+          },
+        ],
+        operationLabel: "Email domain operations",
+      },
+    ),
+    emailSenderTable: tableView(
+      "email-sender",
+      [
+        { field: "enabled", display: "editor" },
+        "address",
+        "displayName",
+        "purpose",
+        "emailDomain",
+        "verificationStatus",
+      ],
+      {
+        operations: [
+          {
+            operation: "email-sender.update",
+            label: "Edit email sender",
+            target: { kind: "row" },
+            editView: "emailSenderEdit",
+          },
+        ],
+        operationLabel: "Email sender operations",
       },
     ),
   },
@@ -595,6 +947,94 @@ export const instanceControlPlaneSourceSchema = {
         extraQueries: ["deploymentConfigEnabled"],
       },
     ),
+    instanceSettingsCreate: createView("instance-settings", [
+      "settingsId",
+      "canonicalOrigin",
+      "primaryRoute",
+      "authRoute",
+      "authOrigin",
+      "authRelyingPartyId",
+      "authRelyingPartyName",
+      "defaultEmailDomain",
+      "defaultContactSender",
+      "contactNotificationRecipient",
+      "productionIdentityStatus",
+    ]),
+    instanceSettingsEdit: editView("instance-settings", [
+      "canonicalOrigin",
+      "primaryRoute",
+      "authRoute",
+      "authOrigin",
+      "authRelyingPartyId",
+      "authRelyingPartyName",
+      "defaultEmailDomain",
+      "defaultContactSender",
+      "contactNotificationRecipient",
+      "productionIdentityStatus",
+    ]),
+    instanceSettingsList: collectionView(
+      "Instance settings",
+      "instance-settings",
+      "instanceSettingsAll",
+      "instanceSettingsTable",
+      {
+        createView: "instanceSettingsCreate",
+      },
+    ),
+    emailDomainCreate: createView("email-domain", [
+      "enabled",
+      "providerFamily",
+      "domain",
+      "primaryRoute",
+      "deploymentConfig",
+      "verificationStatus",
+      "dnsStatus",
+      "latestError",
+    ]),
+    emailDomainEdit: editView("email-domain", [
+      "enabled",
+      "domain",
+      "primaryRoute",
+      "deploymentConfig",
+      "verificationStatus",
+      "dnsStatus",
+      "latestError",
+    ]),
+    emailDomainList: collectionView(
+      "Email domains",
+      "email-domain",
+      "emailDomainAll",
+      "emailDomainTable",
+      {
+        createView: "emailDomainCreate",
+        extraQueries: ["emailDomainEnabled"],
+      },
+    ),
+    emailSenderCreate: createView("email-sender", [
+      "enabled",
+      "address",
+      "displayName",
+      "purpose",
+      "emailDomain",
+      "verificationStatus",
+    ]),
+    emailSenderEdit: editView("email-sender", [
+      "enabled",
+      "address",
+      "displayName",
+      "purpose",
+      "verificationStatus",
+    ]),
+    emailSenderList: collectionView(
+      "Email senders",
+      "email-sender",
+      "emailSenderAll",
+      "emailSenderTable",
+      {
+        createView: "emailSenderCreate",
+        extraQueries: ["emailSenderEnabled"],
+      },
+    ),
   },
   screens: {
     apps: {
@@ -627,6 +1067,20 @@ export const instanceControlPlaneSourceSchema = {
         sections: [{ id: "deployment-configs", type: "collection", view: "deploymentConfigList" }],
       },
     },
+    settings: {
+      type: "workspace",
+      label: "Settings",
+      path: "/settings",
+      navigation: { primary: true },
+      layout: {
+        type: "stack",
+        sections: [
+          { id: "instance-settings", type: "collection", view: "instanceSettingsList" },
+          { id: "email-domains", type: "collection", view: "emailDomainList" },
+          { id: "email-senders", type: "collection", view: "emailSenderList" },
+        ],
+      },
+    },
   },
   runtime: {
     owner: "runtime",
@@ -642,6 +1096,15 @@ export const instanceControlPlaneSourceSchema = {
           immutableFields: [...instanceControlPlaneImmutableFields["deployment-config"]],
           observedFields: [...instanceControlPlaneDeploymentConfigObservedFields],
           secretReferenceFields: ["credentialRef"],
+        },
+        "instance-settings": {
+          immutableFields: [...instanceControlPlaneImmutableFields["instance-settings"]],
+        },
+        "email-domain": {
+          immutableFields: [...instanceControlPlaneImmutableFields["email-domain"]],
+        },
+        "email-sender": {
+          immutableFields: [...instanceControlPlaneImmutableFields["email-sender"]],
         },
       },
     },
@@ -1171,6 +1634,53 @@ export function instanceControlPlaneEffectiveRouteAccess(
   return route.access ?? instanceControlPlaneDefaultRouteAccess(route);
 }
 
+export function instanceControlPlaneProductionIdentityFromRecords(
+  records: readonly InstanceControlPlaneProjectionRecord[],
+): InstanceControlPlaneProductionIdentity | undefined {
+  const activeRecords = records.filter((record) => record.deletedAt === undefined);
+  const settings = activeRecords.find((record) => record.entity === "instance-settings");
+
+  if (!settings) {
+    return undefined;
+  }
+
+  const primaryRoute = stringControlPlaneValue(settings.values.primaryRoute);
+  const authRoute = stringControlPlaneValue(settings.values.authRoute);
+  const routeRecord =
+    activeRecords.find((record) => record.id === (authRoute ?? primaryRoute)) ??
+    activeRecords.find((record) => record.id === primaryRoute);
+  const routeOrigin = routeRecord ? productionOriginForRouteRecord(routeRecord) : undefined;
+  const canonicalOrigin = normalizeInstanceControlPlaneOrigin(
+    stringControlPlaneValue(settings.values.canonicalOrigin) ?? routeOrigin,
+  );
+  const authOrigin = normalizeInstanceControlPlaneOrigin(
+    stringControlPlaneValue(settings.values.authOrigin) ?? canonicalOrigin,
+  );
+
+  if (canonicalOrigin === undefined || authOrigin === undefined) {
+    return undefined;
+  }
+
+  const relyingPartyId = normalizeInstanceControlPlaneRelyingPartyId(
+    stringControlPlaneValue(settings.values.authRelyingPartyId) ??
+      new URL(authOrigin).hostname.toLowerCase(),
+    { canonicalOrigin: authOrigin },
+  );
+  const relyingPartyName = stringControlPlaneValue(settings.values.authRelyingPartyName);
+
+  if (relyingPartyId === undefined) {
+    return undefined;
+  }
+
+  return {
+    authOrigin,
+    canonicalOrigin,
+    ...(primaryRoute === undefined ? {} : { primaryRoute }),
+    relyingPartyId,
+    ...(relyingPartyName === undefined ? {} : { relyingPartyName }),
+  };
+}
+
 export const instanceControlPlaneRecordSourceExcludedEntityNames = [
   "deploy-desired-resource",
   "deploy-target",
@@ -1306,6 +1816,7 @@ export function validateInstanceControlPlaneRecords(
   }
 
   validateInstanceControlPlaneUniqueConstraints(context, records);
+  validateInstanceSettingsSingleton(context, records);
   assertInstanceControlPlaneRoutesAreValid(context, records, options);
 }
 
@@ -1482,6 +1993,18 @@ function validateInstanceControlPlaneRecord(
     validateDeploymentConfigImmutableIdentity(context, record);
   }
 
+  if (entity === "instance-settings") {
+    validateInstanceSettingsRecord(context, record, recordsById);
+  }
+
+  if (entity === "email-domain") {
+    validateEmailDomainRecord(context, record, recordsById);
+  }
+
+  if (entity === "email-sender") {
+    validateEmailSenderRecord(context, record, recordsById);
+  }
+
   if (entity === "app-install" && options.packageResolver !== undefined) {
     const packageAppKey = requiredStringValue(context, record, "packageAppKey");
 
@@ -1595,6 +2118,173 @@ function validateDeploymentConfigImmutableIdentity(context: string, record: Stor
   if (targetUrl !== normalizeInstanceControlPlaneTargetUrl(targetUrl)) {
     throw new Error(
       `${context} record "${record.id}" field "${controlPlaneFieldLabel(record, "targetUrl")}" must be a normalized HTTP origin.`,
+    );
+  }
+}
+
+function validateInstanceSettingsSingleton(context: string, records: readonly StoredRecord[]) {
+  const activeSettings = records.filter(
+    (record) =>
+      instanceControlPlaneRecordSourceEntityName(record.entity) === "instance-settings" &&
+      !record.deletedAt,
+  );
+
+  if (activeSettings.length > 1) {
+    throw new Error(
+      `${context} must include at most one active instance:instance-settings record.`,
+    );
+  }
+}
+
+function validateInstanceSettingsRecord(
+  context: string,
+  record: StoredRecord,
+  recordsById: ReadonlyMap<string, StoredRecord>,
+) {
+  const settingsId = requiredStringValue(context, record, "settingsId");
+  const productionIdentityStatus = requiredStringValue(context, record, "productionIdentityStatus");
+  const canonicalOrigin = optionalStringValue(context, record, "canonicalOrigin");
+  const authOrigin = optionalStringValue(context, record, "authOrigin");
+  const authRelyingPartyId = optionalStringValue(context, record, "authRelyingPartyId");
+  const authRelyingPartyName = optionalStringValue(context, record, "authRelyingPartyName");
+  const contactNotificationRecipient = optionalStringValue(
+    context,
+    record,
+    "contactNotificationRecipient",
+  );
+  const primaryRoute = optionalStringValue(context, record, "primaryRoute");
+  const authRoute = optionalStringValue(context, record, "authRoute");
+  const defaultEmailDomain = optionalStringValue(context, record, "defaultEmailDomain");
+  const defaultContactSender = optionalStringValue(context, record, "defaultContactSender");
+
+  if (settingsId !== INSTANCE_CONTROL_PLANE_INSTANCE_SETTINGS_ID) {
+    throw new Error(
+      `${context} record "${record.id}" field "${controlPlaneFieldLabel(record, "settingsId")}" must be "${INSTANCE_CONTROL_PLANE_INSTANCE_SETTINGS_ID}".`,
+    );
+  }
+
+  if (canonicalOrigin !== undefined) {
+    assertNormalizedControlPlaneOrigin(context, record, "canonicalOrigin", canonicalOrigin);
+  }
+
+  if (authOrigin !== undefined) {
+    assertNormalizedControlPlaneOrigin(context, record, "authOrigin", authOrigin);
+  }
+
+  if (authRelyingPartyId !== undefined) {
+    assertControlPlaneRelyingPartyId(context, record, "authRelyingPartyId", authRelyingPartyId, {
+      canonicalOrigin: authOrigin ?? canonicalOrigin,
+    });
+  }
+
+  if (authRelyingPartyName !== undefined && authRelyingPartyName.trim() === "") {
+    throw new Error(
+      `${context} record "${record.id}" field "${controlPlaneFieldLabel(record, "authRelyingPartyName")}" must be non-empty when set.`,
+    );
+  }
+
+  if (contactNotificationRecipient !== undefined) {
+    assertControlPlaneEmailAddress(
+      context,
+      record,
+      "contactNotificationRecipient",
+      contactNotificationRecipient,
+    );
+  }
+
+  if (primaryRoute !== undefined) {
+    assertProductionRouteReference(context, record, "primaryRoute", primaryRoute, recordsById);
+  }
+
+  if (authRoute !== undefined) {
+    assertProductionRouteReference(context, record, "authRoute", authRoute, recordsById);
+  }
+
+  if (
+    productionIdentityStatus === "configured" &&
+    canonicalOrigin === undefined &&
+    authOrigin === undefined &&
+    primaryRoute === undefined &&
+    authRoute === undefined
+  ) {
+    throw new Error(
+      `${context} record "${record.id}" field "${controlPlaneFieldLabel(record, "productionIdentityStatus")}" cannot be "configured" without a canonical origin or production route.`,
+    );
+  }
+
+  if (defaultEmailDomain !== undefined) {
+    assertActiveRecordEntity(
+      context,
+      record,
+      "defaultEmailDomain",
+      defaultEmailDomain,
+      "email-domain",
+      recordsById,
+    );
+  }
+
+  if (defaultContactSender !== undefined) {
+    const sender = assertActiveRecordEntity(
+      context,
+      record,
+      "defaultContactSender",
+      defaultContactSender,
+      "email-sender",
+      recordsById,
+    );
+    const senderDomain = optionalStringValue(context, sender, "emailDomain");
+
+    if (defaultEmailDomain !== undefined && senderDomain !== defaultEmailDomain) {
+      throw new Error(
+        `${context} record "${record.id}" field "${controlPlaneFieldLabel(record, "defaultContactSender")}" must reference a sender for the selected default email domain.`,
+      );
+    }
+  }
+}
+
+function validateEmailDomainRecord(
+  context: string,
+  record: StoredRecord,
+  recordsById: ReadonlyMap<string, StoredRecord>,
+) {
+  const domain = requiredStringValue(context, record, "domain");
+  const primaryRoute = optionalStringValue(context, record, "primaryRoute");
+
+  assertNormalizedControlPlaneHost(context, record, "domain", domain);
+
+  if (primaryRoute !== undefined) {
+    assertProductionRouteReference(context, record, "primaryRoute", primaryRoute, recordsById);
+  }
+}
+
+function validateEmailSenderRecord(
+  context: string,
+  record: StoredRecord,
+  recordsById: ReadonlyMap<string, StoredRecord>,
+) {
+  const address = requiredStringValue(context, record, "address");
+  const emailDomain = requiredStringValue(context, record, "emailDomain");
+  const displayName = optionalStringValue(context, record, "displayName");
+  const parsedAddress = parseControlPlaneEmailAddress(context, record, "address", address);
+  const domainRecord = assertActiveRecordEntity(
+    context,
+    record,
+    "emailDomain",
+    emailDomain,
+    "email-domain",
+    recordsById,
+  );
+  const domain = requiredStringValue(context, domainRecord, "domain");
+
+  if (!controlPlaneHostBelongsToDomain(parsedAddress.host, domain)) {
+    throw new Error(
+      `${context} record "${record.id}" field "${controlPlaneFieldLabel(record, "address")}" host must belong to referenced email domain "${domain}".`,
+    );
+  }
+
+  if (displayName !== undefined && /[\r\n]/.test(displayName)) {
+    throw new Error(
+      `${context} record "${record.id}" field "${controlPlaneFieldLabel(record, "displayName")}" must not contain line breaks.`,
     );
   }
 }
@@ -1956,6 +2646,101 @@ function assertNormalizedHttpsUrl(
       `${context} route "${route.id}" field "${controlPlaneFieldLabel(route, fieldName)}" must be a normalized absolute HTTPS URL without credentials or fragment.`,
     );
   }
+}
+
+function assertNormalizedControlPlaneOrigin(
+  context: string,
+  record: StoredRecord,
+  fieldName: string,
+  value: string,
+) {
+  if (normalizeInstanceControlPlaneOrigin(value) !== value) {
+    throw new Error(
+      `${context} record "${record.id}" field "${controlPlaneFieldLabel(record, fieldName)}" must be a normalized absolute origin.`,
+    );
+  }
+}
+
+function assertNormalizedControlPlaneHost(
+  context: string,
+  record: StoredRecord,
+  fieldName: string,
+  value: string,
+) {
+  if (normalizeExactHost(value) !== value) {
+    throw new Error(
+      `${context} record "${record.id}" field "${controlPlaneFieldLabel(record, fieldName)}" must be a normalized exact host.`,
+    );
+  }
+}
+
+function assertControlPlaneRelyingPartyId(
+  context: string,
+  record: StoredRecord,
+  fieldName: string,
+  value: string,
+  options: { canonicalOrigin?: string } = {},
+) {
+  if (normalizeInstanceControlPlaneRelyingPartyId(value, options) !== value) {
+    throw new Error(
+      `${context} record "${record.id}" field "${controlPlaneFieldLabel(record, fieldName)}" must be a normalized relying-party id for the configured auth origin.`,
+    );
+  }
+}
+
+function assertControlPlaneEmailAddress(
+  context: string,
+  record: StoredRecord,
+  fieldName: string,
+  value: string,
+) {
+  parseControlPlaneEmailAddress(context, record, fieldName, value);
+}
+
+function assertProductionRouteReference(
+  context: string,
+  record: StoredRecord,
+  fieldName: string,
+  routeId: string,
+  recordsById: ReadonlyMap<string, StoredRecord>,
+): StoredRecord {
+  const route = assertActiveRecordEntity(context, record, fieldName, routeId, "route", recordsById);
+
+  if (
+    route.values.enabled !== true ||
+    optionalStringValue(context, route, "matchHost") === undefined
+  ) {
+    throw new Error(
+      `${context} record "${record.id}" field "${controlPlaneFieldLabel(record, fieldName)}" must reference an enabled exact-host route.`,
+    );
+  }
+
+  return route;
+}
+
+function assertActiveRecordEntity(
+  context: string,
+  record: StoredRecord,
+  fieldName: string,
+  recordId: string,
+  entityName: InstanceControlPlaneEntityName,
+  recordsById: ReadonlyMap<string, StoredRecord>,
+): StoredRecord {
+  const target = recordsById.get(recordId);
+
+  if (!target || instanceControlPlaneRecordSourceEntityName(target.entity) !== entityName) {
+    throw new Error(
+      `${context} record "${record.id}" field "${controlPlaneFieldLabel(record, fieldName)}" references unknown ${formatInstanceControlPlaneBoundaryEntityName(entityName)} record "${recordId}".`,
+    );
+  }
+
+  if (target.deletedAt) {
+    throw new Error(
+      `${context} record "${record.id}" field "${controlPlaneFieldLabel(record, fieldName)}" cannot reference tombstoned record "${recordId}".`,
+    );
+  }
+
+  return target;
 }
 
 function assertNormalizedAbsoluteMatchPath(
@@ -2348,6 +3133,116 @@ function normalizeExactHost(value: string): string | undefined {
   }
 }
 
+function normalizeInstanceControlPlaneOrigin(value: string | undefined): string | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  try {
+    const url = new URL(value);
+    const hostname = url.hostname.toLowerCase();
+    const normalizedHost = isLocalControlPlaneHost(hostname)
+      ? hostname
+      : normalizeExactHost(hostname);
+    const normalizedOrigin = url.origin.replace(url.hostname, hostname);
+
+    if (
+      normalizedHost === undefined ||
+      url.username !== "" ||
+      url.password !== "" ||
+      url.pathname !== "/" ||
+      url.search !== "" ||
+      url.hash !== "" ||
+      (url.protocol !== "https:" &&
+        !(url.protocol === "http:" && isLocalControlPlaneHost(hostname))) ||
+      normalizedOrigin !== value
+    ) {
+      return undefined;
+    }
+
+    return normalizedOrigin;
+  } catch {
+    return undefined;
+  }
+}
+
+function normalizeInstanceControlPlaneRelyingPartyId(
+  value: string | undefined,
+  options: { canonicalOrigin?: string } = {},
+): string | undefined {
+  const relyingPartyId = value?.trim().toLowerCase();
+
+  if (!relyingPartyId || normalizeExactHost(relyingPartyId) !== relyingPartyId) {
+    return undefined;
+  }
+
+  if (options.canonicalOrigin !== undefined) {
+    const canonicalOrigin = normalizeInstanceControlPlaneOrigin(options.canonicalOrigin);
+
+    if (canonicalOrigin === undefined) {
+      return undefined;
+    }
+
+    const canonicalHost = new URL(canonicalOrigin).hostname.toLowerCase();
+
+    if (canonicalHost !== relyingPartyId && !canonicalHost.endsWith(`.${relyingPartyId}`)) {
+      return undefined;
+    }
+  }
+
+  return relyingPartyId;
+}
+
+function productionOriginForRouteRecord(
+  record: InstanceControlPlaneProjectionRecord,
+): string | undefined {
+  if (
+    record.entity !== "route" ||
+    record.deletedAt !== undefined ||
+    record.values.enabled !== true
+  ) {
+    return undefined;
+  }
+
+  const matchHost = stringControlPlaneValue(record.values.matchHost);
+
+  return matchHost === undefined ? undefined : `https://${matchHost}`;
+}
+
+function parseControlPlaneEmailAddress(
+  context: string,
+  record: StoredRecord,
+  fieldName: string,
+  value: string,
+): { host: string } {
+  const atIndex = value.lastIndexOf("@");
+  const local = atIndex <= 0 ? "" : value.slice(0, atIndex);
+  const host = atIndex <= 0 ? "" : value.slice(atIndex + 1).toLowerCase();
+  const normalized = `${local}@${host}`;
+
+  if (
+    value !== normalized ||
+    value.indexOf("@") !== atIndex ||
+    local === "" ||
+    !/^[^@\s<>]+$/.test(local) ||
+    normalizeExactHost(host) !== host
+  ) {
+    throw new Error(
+      `${context} record "${record.id}" field "${controlPlaneFieldLabel(record, fieldName)}" must be a normalized email address.`,
+    );
+  }
+
+  return { host };
+}
+
+function controlPlaneHostBelongsToDomain(host: string, domain: string) {
+  return host === domain || host.endsWith(`.${domain}`);
+}
+
+function isLocalControlPlaneHost(value: string) {
+  return value === "localhost" || value.endsWith(".localhost");
+}
+
 function stripTrailingDots(value: string): string {
   return value.replaceAll(/\.+$/g, "");
 }
@@ -2423,6 +3318,10 @@ function optionalEnumField(
 
 function optionalReferenceField(label: string, to: string, displayField: string): FieldSchema {
   return { type: "reference", required: false, label, to, displayField };
+}
+
+function referenceField(label: string, to: string, displayField: string): FieldSchema {
+  return { type: "reference", required: true, label, to, displayField };
 }
 
 function toOne(
@@ -2707,6 +3606,10 @@ function editorForField(field: string): FieldEditor {
     field === "targetProfile" ||
     field === "providerFamily" ||
     field === "observedStatus" ||
+    field === "verificationStatus" ||
+    field === "dnsStatus" ||
+    field === "productionIdentityStatus" ||
+    field === "purpose" ||
     field === "profile" ||
     field === "statusCode" ||
     field === "kind" ||
@@ -2721,6 +3624,11 @@ function editorForField(field: string): FieldEditor {
     field === "appInstall" ||
     field === "appRoute" ||
     field === "deploymentConfig" ||
+    field === "primaryRoute" ||
+    field === "authRoute" ||
+    field === "defaultEmailDomain" ||
+    field === "defaultContactSender" ||
+    field === "emailDomain" ||
     field === "route" ||
     field === "domainMapping" ||
     field === "redirectIntent" ||
@@ -2733,12 +3641,13 @@ function editorForField(field: string): FieldEditor {
     field === "inputsJson" ||
     field === "dependenciesJson" ||
     field === "providerResourceIdsJson" ||
-    field === "affectedLogicalIdsJson"
+    field === "affectedLogicalIdsJson" ||
+    field === "latestError"
   ) {
     return "textarea";
   }
 
-  if (field === "toUrl") {
+  if (field === "toUrl" || field === "canonicalOrigin" || field === "authOrigin") {
     return "href";
   }
 

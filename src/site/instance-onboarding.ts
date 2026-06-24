@@ -27,6 +27,9 @@ import {
   applyAlchemyDeployResourceGraph,
   type AlchemyDeployResourceZoneResolver,
   type AlchemyDomainProviderFactories,
+  type CloudflareEmailSendingDomain,
+  type CloudflareEmailSendingDomainProps,
+  type CloudflareWorkerSendEmailBindingProps,
 } from "../worker/domain-provider-alchemy.ts";
 import { appendDotEnvValue, parseDotEnv } from "./dotenv.ts";
 import {
@@ -90,6 +93,7 @@ type AlchemyCloudflareApiOptions = {
 type AlchemyCloudflareApiClient = {
   accountId?: string;
   get: (path: string, init?: RequestInit) => Promise<Response>;
+  post: (path: string, body: unknown, init?: RequestInit) => Promise<Response>;
 };
 
 export type AlchemyFormlessInstanceAccountDiscoveryDependencies = {
@@ -342,6 +346,8 @@ export type AlchemyFormlessInstanceDeploymentDependencies = {
     },
   ) => unknown;
   createDnsRecords?: AlchemyDomainProviderFactories["DnsRecords"];
+  createEmailSenderBinding?: AlchemyDomainProviderFactories["SendEmailBinding"];
+  createEmailSendingDomain?: AlchemyDomainProviderFactories["EmailSendingDomain"];
   createR2Bucket: (
     id: "media",
     props: {
@@ -864,6 +870,10 @@ async function declareFormlessInstanceAlchemyResourceTree(
     mode: "managed",
     name: turnstileWidgetName(input.plan),
   });
+  const workerEmailBindings = await workerEmailBindingsFromDeployResourceGraph({
+    dependencies: input.dependencies,
+    resourceGraph: input.resourceGraph,
+  });
   const worker = await input.dependencies.deployViteWorker("worker", {
     adopt: input.adoptExistingDeployment,
     ...cloudflareResourceOptions,
@@ -887,6 +897,7 @@ async function declareFormlessInstanceAlchemyResourceTree(
       FORMLESS_RUNTIME_PROFILE: input.plan.runtimeVars.FORMLESS_RUNTIME_PROFILE,
       [FORMLESS_TURNSTILE_SECRET_KEY_ENV_NAME]: turnstileWidget.verificationSecret,
       [FORMLESS_TURNSTILE_SITE_KEY_ENV_NAME]: turnstileWidget.siteKey,
+      ...workerEmailBindings,
     },
     build: {
       command: FORMLESS_INSTANCE_WORKER_BUILD_COMMAND,
@@ -1321,8 +1332,91 @@ function turnstileWidgetDomains(input: {
   return [...domains].filter(Boolean).sort((left, right) => left.localeCompare(right));
 }
 
+async function workerEmailBindingsFromDeployResourceGraph(input: {
+  dependencies: AlchemyFormlessInstanceDeploymentDependencies;
+  resourceGraph?: DeployResourceGraph;
+}): Promise<Record<string, unknown>> {
+  const resources =
+    input.resourceGraph?.resources.filter(
+      (resource) => resource.kind === "cloudflare-worker-send-email-binding",
+    ) ?? [];
+
+  if (resources.length === 0) {
+    return {};
+  }
+
+  const createEmailSenderBinding = input.dependencies.createEmailSenderBinding;
+
+  if (createEmailSenderBinding === undefined) {
+    throw new Error(
+      "Formless instance deploy requires a Cloudflare Email Sending binding factory for email resources.",
+    );
+  }
+
+  const bindings: Record<string, unknown> = {};
+
+  for (const resource of resources) {
+    const props = workerEmailBindingPropsFromDeployResource(resource);
+
+    if (Object.prototype.hasOwnProperty.call(bindings, props.bindingName)) {
+      throw new Error(`Duplicate Worker email binding "${props.bindingName}" in deployment graph.`);
+    }
+
+    bindings[props.bindingName] = await createEmailSenderBinding(resource.logicalId, props);
+  }
+
+  return bindings;
+}
+
+function workerEmailBindingPropsFromDeployResource(
+  resource: DeployResourceGraph["resources"][number],
+): CloudflareWorkerSendEmailBindingProps {
+  return {
+    allowedSenderAddresses: deployResourceInputStringArray(resource, "allowedSenderAddresses"),
+    bindingName: deployResourceRequiredString(resource, "bindingName"),
+    domain: deployResourceRequiredString(resource, "domain"),
+    ...(deployResourceInputString(resource.inputs.workerName) === undefined
+      ? {}
+      : { workerName: deployResourceInputString(resource.inputs.workerName) }),
+  };
+}
+
 function deployResourceInputString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value : undefined;
+}
+
+function deployResourceRequiredString(
+  resource: DeployResourceGraph["resources"][number],
+  key: string,
+): string {
+  const value = deployResourceInputString(resource.inputs[key]);
+
+  if (value === undefined) {
+    throw new Error(`Deployment resource "${resource.logicalId}" ${key} input must be a string.`);
+  }
+
+  return value;
+}
+
+function deployResourceInputStringArray(
+  resource: DeployResourceGraph["resources"][number],
+  key: string,
+): string[] {
+  const value = resource.inputs[key];
+
+  if (!Array.isArray(value)) {
+    throw new Error(`Deployment resource "${resource.logicalId}" ${key} input must be an array.`);
+  }
+
+  return value.map((entry, index) => {
+    if (typeof entry === "string" && entry.trim()) {
+      return entry.trim();
+    }
+
+    throw new Error(
+      `Deployment resource "${resource.logicalId}" ${key}[${index}] input must be a string.`,
+    );
+  });
 }
 
 function deploymentResourceFactories(
@@ -1331,23 +1425,169 @@ function deploymentResourceFactories(
 ): AlchemyDomainProviderFactories {
   const createCustomDomain = dependencies.createCustomDomain;
   const createDnsRecords = dependencies.createDnsRecords;
-
-  if (createCustomDomain === undefined || createDnsRecords === undefined) {
-    throw new Error("Formless instance deploy requires Alchemy route resource factories.");
-  }
+  const createEmailSenderBinding = dependencies.createEmailSenderBinding;
+  const createEmailSendingDomain = dependencies.createEmailSendingDomain;
 
   return {
-    CustomDomain: (id, props) =>
-      createCustomDomain(id, {
-        ...props,
-        ...cloudflareOptions,
-      } as Parameters<AlchemyDomainProviderFactories["CustomDomain"]>[1]),
-    DnsRecords: (id, props) =>
-      createDnsRecords(id, {
-        ...props,
-        ...cloudflareOptions,
-      } as Parameters<AlchemyDomainProviderFactories["DnsRecords"]>[1]),
+    CustomDomain:
+      createCustomDomain === undefined
+        ? missingAlchemyResourceFactory<AlchemyDomainProviderFactories["CustomDomain"]>(
+            "Alchemy custom-domain",
+          )
+        : (id, props) =>
+            createCustomDomain(id, {
+              ...props,
+              ...cloudflareOptions,
+            } as Parameters<AlchemyDomainProviderFactories["CustomDomain"]>[1]),
+    DnsRecords:
+      createDnsRecords === undefined
+        ? missingAlchemyResourceFactory<AlchemyDomainProviderFactories["DnsRecords"]>(
+            "Alchemy DNS records",
+          )
+        : (id, props) =>
+            createDnsRecords(id, {
+              ...props,
+              ...cloudflareOptions,
+            } as Parameters<AlchemyDomainProviderFactories["DnsRecords"]>[1]),
+    ...(createEmailSenderBinding === undefined
+      ? {}
+      : {
+          SendEmailBinding: (id, props) =>
+            createEmailSenderBinding(id, {
+              ...props,
+              ...cloudflareOptions,
+            } as CloudflareWorkerSendEmailBindingProps),
+        }),
+    ...(createEmailSendingDomain === undefined
+      ? {}
+      : {
+          EmailSendingDomain: (id, props) =>
+            createEmailSendingDomain(id, {
+              ...props,
+              ...cloudflareOptions,
+            } as CloudflareEmailSendingDomainProps),
+        }),
   };
+}
+
+function missingAlchemyResourceFactory<T extends (id: string, props: never) => Promise<unknown>>(
+  label: string,
+): T {
+  return (async (id: string) => {
+    throw new Error(`Deployment resource "${id}" requires ${label} factory.`);
+  }) as unknown as T;
+}
+
+async function createCloudflareEmailSendingDomainResource(
+  id: string,
+  props: CloudflareEmailSendingDomainProps,
+  createCloudflareApi: (
+    options: AlchemyCloudflareApiOptions,
+  ) => Promise<AlchemyCloudflareApiClient>,
+): Promise<CloudflareEmailSendingDomain> {
+  const domain = normalizeCloudflareHost(props.name || props.domain);
+  const zoneId = parseRequiredString(
+    `Cloudflare Email Sending zone id for ${domain}`,
+    props.zoneId,
+  );
+  const api = await createCloudflareApi(props);
+
+  try {
+    return await ensureCloudflareEmailSendingDomain({
+      api,
+      domain,
+      id,
+      zoneId,
+    });
+  } catch (error) {
+    throw cloudflareEmailDeployError(error, domain);
+  }
+}
+
+async function ensureCloudflareEmailSendingDomain(input: {
+  api: AlchemyCloudflareApiClient;
+  domain: string;
+  id: string;
+  zoneId: string;
+}): Promise<CloudflareEmailSendingDomain> {
+  const existing = await readCloudflareResult<CloudflareEmailSendingSubdomainApiResult[]>(
+    `list Cloudflare Email Sending domains for ${input.domain}`,
+    input.api.get(`/zones/${input.zoneId}/email/sending/subdomains`, {
+      headers: { accept: "application/json" },
+    }),
+  );
+  const matched = existing.find((entry) => {
+    if (!isRecord(entry)) {
+      return false;
+    }
+
+    const name = parseOptionalString("Cloudflare Email Sending domain name", entry.name);
+
+    return name !== undefined && normalizeCloudflareHost(name) === input.domain;
+  });
+
+  if (matched !== undefined) {
+    return cloudflareEmailSendingDomainFromApiResult(matched, input.domain, input.zoneId);
+  }
+
+  const created = await readCloudflareResult<CloudflareEmailSendingSubdomainApiResult>(
+    `create Cloudflare Email Sending domain ${input.domain}`,
+    input.api.post(
+      `/zones/${input.zoneId}/email/sending/subdomains`,
+      { name: input.domain },
+      { headers: { accept: "application/json" } },
+    ),
+  );
+
+  return cloudflareEmailSendingDomainFromApiResult(created, input.domain, input.zoneId);
+}
+
+function cloudflareEmailSendingDomainFromApiResult(
+  value: CloudflareEmailSendingSubdomainApiResult,
+  fallbackName: string,
+  zoneId: string,
+): CloudflareEmailSendingDomain {
+  if (!isRecord(value)) {
+    throw new Error("Cloudflare Email Sending domain response must be an object.");
+  }
+
+  const name = normalizeCloudflareHost(
+    parseOptionalString("Cloudflare Email Sending domain name", value.name) ?? fallbackName,
+  );
+  const tag = parseOptionalString("Cloudflare Email Sending domain tag", value.tag);
+  const dkimSelector = parseOptionalString(
+    "Cloudflare Email Sending DKIM selector",
+    value.dkim_selector,
+  );
+  const returnPathDomain = parseOptionalString(
+    "Cloudflare Email Sending return-path domain",
+    value.return_path_domain,
+  );
+
+  return {
+    ...(typeof value.enabled === "boolean" ? { enabled: value.enabled } : {}),
+    ...(dkimSelector === undefined ? {} : { dkimSelector }),
+    ...(tag === undefined ? {} : { id: tag, tag }),
+    name,
+    ...(returnPathDomain === undefined ? {} : { returnPathDomain }),
+    zoneId,
+  };
+}
+
+function cloudflareEmailDeployError(error: unknown, domain: string): Error {
+  const message = error instanceof Error ? error.message : String(error);
+
+  if (!isCloudflareAuthenticationFailure(error)) {
+    return error instanceof Error ? error : new Error(message);
+  }
+
+  return new Error(
+    [
+      message,
+      `Cloudflare rejected Email Sending deployment for ${domain}.`,
+      "Reconnect Cloudflare or provide a token with Email Sending and DNS permissions.",
+    ].join(" "),
+  );
 }
 
 function deploymentResourceZoneResolver(
@@ -1499,6 +1739,25 @@ async function nodeAlchemyFormlessInstanceDependencies(): Promise<AlchemyFormles
     createCustomDomain: (id, props) => cloudflare.CustomDomain(id, props),
     createDurableObjectNamespace: (id, props) => cloudflare.DurableObjectNamespace(id, props),
     createDnsRecords: (id, props) => cloudflare.DnsRecords(id, props),
+    createEmailSenderBinding: async (_id, props) => ({
+      ...cloudflare.EmailSender({
+        ...(props.allowedSenderAddresses === undefined
+          ? {}
+          : { allowedSenderAddresses: props.allowedSenderAddresses }),
+        ...(props.allowedDestinationAddresses === undefined
+          ? {}
+          : { allowedDestinationAddresses: props.allowedDestinationAddresses }),
+        ...(props.destinationAddress === undefined
+          ? {}
+          : { destinationAddress: props.destinationAddress }),
+        ...(props.dev === undefined ? {} : { dev: props.dev }),
+      } as Parameters<typeof cloudflare.EmailSender>[0]),
+      bindingName: props.bindingName,
+    }),
+    createEmailSendingDomain: (id, props) =>
+      createCloudflareEmailSendingDomainResource(id, props, (options) =>
+        cloudflare.createCloudflareApi(options as never),
+      ),
     createR2Bucket: (id, props) => cloudflare.R2Bucket(id, props as never),
     createSecret: (value) => alchemy.secret(value),
     createTurnstileWidget: (id, props) => CloudflareTurnstileWidget(id, props),
@@ -1836,6 +2095,14 @@ function isNodeError(error: unknown): error is NodeJS.ErrnoException {
 type CloudflareAccountApiResult = {
   id?: unknown;
   name?: unknown;
+};
+
+type CloudflareEmailSendingSubdomainApiResult = {
+  dkim_selector?: unknown;
+  enabled?: unknown;
+  name?: unknown;
+  return_path_domain?: unknown;
+  tag?: unknown;
 };
 
 type CloudflareApiResponse<T> = {

@@ -1,0 +1,219 @@
+import { INSTANCE_CONTROL_PLANE_INSTANCE_SETTINGS_ID } from "@dpeek/formless-instance-control-plane";
+import type { StoredRecord } from "@dpeek/formless-storage";
+import { describe, expect, it } from "vite-plus/test";
+
+import { schemaKeyStorageIdentity } from "../shared/app-storage-identity.ts";
+import type { OperationInvocationResponse } from "../shared/operation-invocation.ts";
+import { scheduleSiteContactNotificationAfterPublicOperation } from "./site-contact-notifications.ts";
+
+describe("Site contact notification scheduling", () => {
+  it("schedules contact notification email from committed public contact message output", async () => {
+    const scheduled: unknown[] = [];
+
+    await scheduleSiteContactNotificationAfterPublicOperation({
+      env: fakeNotificationEnv(contactNotificationControlPlaneRecords(), scheduled),
+      identity: schemaKeyStorageIdentity("site"),
+      requestUrl: "https://www.example.com/api/site/public/operations/contact-message/submit",
+      response: contactMessageResponse(),
+    });
+
+    expect(scheduled).toEqual([
+      {
+        canonicalOrigin: "https://www.example.com",
+        idempotencyKey: expect.stringMatching(/^contact-notification:[a-f0-9]{64}$/),
+        message: {
+          subject: "New contact message from Ada Lovelace",
+          text: [
+            "New contact form message",
+            "",
+            "Name: Ada Lovelace",
+            "Email: ada@example.com",
+            "",
+            "Please send details.",
+          ].join("\n"),
+          html: expect.stringContaining("Please send details."),
+        },
+        messageKind: "site-contact-notification",
+        recipients: [
+          {
+            address: "owner@example.com",
+            displayName: "Site contact",
+          },
+        ],
+        replyTo: {
+          address: "ada@example.com",
+          displayName: "Ada Lovelace",
+        },
+        sender: {
+          id: "email-sender:contact@mail.example.com",
+        },
+        source: {
+          operationId: "operation:contact-message.submit:contact-create-email-notify",
+          recordId: "contact-message-1",
+          storageIdentity: "site",
+        },
+      },
+    ]);
+  });
+
+  it("skips contact notification scheduling when email settings are incomplete", async () => {
+    const scheduled: unknown[] = [];
+
+    await scheduleSiteContactNotificationAfterPublicOperation({
+      env: fakeNotificationEnv([], scheduled),
+      identity: schemaKeyStorageIdentity("site"),
+      requestUrl: "https://www.example.com/api/site/public/operations/contact-message/submit",
+      response: contactMessageResponse(),
+    });
+
+    expect(scheduled).toEqual([]);
+  });
+
+  it("uses stable notification idempotency for the same public operation output", async () => {
+    const scheduled: unknown[] = [];
+    const env = fakeNotificationEnv(contactNotificationControlPlaneRecords(), scheduled);
+    const response = contactMessageResponse();
+
+    await scheduleSiteContactNotificationAfterPublicOperation({
+      env,
+      identity: schemaKeyStorageIdentity("site"),
+      requestUrl: "https://www.example.com/api/site/public/operations/contact-message/submit",
+      response,
+    });
+    await scheduleSiteContactNotificationAfterPublicOperation({
+      env,
+      identity: schemaKeyStorageIdentity("site"),
+      requestUrl: "https://www.example.com/api/site/public/operations/contact-message/submit",
+      response,
+    });
+
+    expect((scheduled[0] as { idempotencyKey: string }).idempotencyKey).toBe(
+      (scheduled[1] as { idempotencyKey: string }).idempotencyKey,
+    );
+  });
+});
+
+function fakeNotificationEnv(records: StoredRecord[], scheduled: unknown[]) {
+  return {
+    FORMLESS_AUTHORITY: {
+      idFromName(name: string) {
+        return { name };
+      },
+      get(_id: unknown) {
+        return {
+          async fetch(request: Request) {
+            const url = new URL(request.url);
+
+            if (url.pathname === "/api/formless/control-plane/_internal/read-records") {
+              return Response.json({ records });
+            }
+
+            if (url.pathname === "/_internal/email/deliveries/schedule") {
+              scheduled.push(await request.json());
+
+              return Response.json({
+                delivery: { id: "delivery-1" },
+                replayed: false,
+              });
+            }
+
+            return Response.json({ error: "Not found." }, { status: 404 });
+          },
+        };
+      },
+    } as unknown as DurableObjectNamespace,
+  };
+}
+
+function contactNotificationControlPlaneRecords(): StoredRecord[] {
+  return [
+    {
+      id: "route:primary",
+      entity: "route",
+      values: {
+        enabled: true,
+        matchHost: "www.example.com",
+        matchPath: "/",
+        matchPrefix: "/",
+        kind: "mount",
+        targetProfile: "instance",
+        surface: "admin",
+      },
+      createdAt: "2026-06-24T00:00:00.000Z",
+      updatedAt: "2026-06-24T00:00:00.000Z",
+    },
+    {
+      id: "settings:instance",
+      entity: "instance-settings",
+      values: {
+        settingsId: INSTANCE_CONTROL_PLANE_INSTANCE_SETTINGS_ID,
+        primaryRoute: "route:primary",
+        defaultContactSender: "email-sender:contact@mail.example.com",
+        contactNotificationRecipient: "owner@example.com",
+        productionIdentityStatus: "configured",
+      },
+      createdAt: "2026-06-24T00:00:00.000Z",
+      updatedAt: "2026-06-24T00:00:00.000Z",
+    },
+  ];
+}
+
+function contactMessageResponse(): OperationInvocationResponse {
+  const identity = schemaKeyStorageIdentity("site");
+
+  return {
+    invocation: {
+      invocationId: "operation:contact-message.submit:contact-create-email-notify",
+      actor: { kind: "anonymous" },
+      appStorageIdentity: identity,
+      idempotency: {
+        required: true,
+        key: "contact-create-email-notify",
+        source: "caller",
+        writeIdentity: "operation:contact-message.submit:contact-create-email-notify",
+      },
+      input: {
+        type: "create",
+        values: {
+          name: "Ada Lovelace",
+          email: "ada@example.com",
+          message: "Please send details.",
+        },
+      },
+      operation: {
+        entityName: "contact-message",
+        operationName: "submit",
+        canonicalKey: "contact-message.submit",
+        kind: "create",
+        scope: "collection",
+        output: { type: "create" },
+      },
+      receivedAt: "2026-06-24T00:00:00.000Z",
+      schemaOperation: {} as never,
+      source: {
+        host: "www.example.com",
+        path: "/api/site/public/operations/contact-message/submit",
+        protocol: "public",
+        siteBlockId: "contact-block",
+      },
+    },
+    output: {
+      type: "create",
+      affectedChangeIds: ["1"],
+      changes: [],
+      cursor: 1,
+      record: {
+        id: "contact-message-1",
+        entity: "contact-message",
+        values: {
+          name: "Ada Lovelace",
+          email: "ada@example.com",
+          message: "Please send details.",
+        },
+        createdAt: "2026-06-24T00:00:00.000Z",
+        updatedAt: "2026-06-24T00:00:00.000Z",
+      },
+    },
+    status: "committed",
+  };
+}

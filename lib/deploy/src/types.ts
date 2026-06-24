@@ -57,7 +57,11 @@ export type DeployTargetRef = {
   targetId: DeployTargetId;
 };
 
-export type DeployResourceKind = "cloudflare-dns-records" | "cloudflare-worker-custom-domain";
+export type DeployResourceKind =
+  | "cloudflare-dns-records"
+  | "cloudflare-email-sending-domain"
+  | "cloudflare-worker-custom-domain"
+  | "cloudflare-worker-send-email-binding";
 
 export type DeployJsonPrimitive = boolean | number | string | null;
 
@@ -143,6 +147,8 @@ export type DeployDesiredStateProjection = {
 
 export type DeployDesiredStateProjectionInput = {
   appInstalls?: readonly ControlPlaneAppInstallProjectionRecord[];
+  emailDomains?: readonly ControlPlaneEmailDomainProjectionRecord[];
+  emailSenders?: readonly ControlPlaneEmailSenderProjectionRecord[];
   instanceId: string;
   providerConfigs?: readonly ControlPlaneProviderConfigProjectionRecord[];
   routes?: readonly ControlPlaneRouteProjectionRecord[];
@@ -212,6 +218,32 @@ export type ControlPlaneProviderConfigProjectionRecord = {
   id: string;
   providerFamily: DeployProviderFamily;
   workerName?: string;
+};
+
+export type ControlPlaneEmailDomainProjectionRecord = {
+  deploymentConfig?: string;
+  domain: string;
+  enabled: boolean;
+  id: string;
+  providerFamily: DeployProviderFamily;
+  verificationStatus?: ControlPlaneEmailVerificationStatus;
+};
+
+export type ControlPlaneEmailSenderPurpose = "contact-notification" | "system";
+export type ControlPlaneEmailVerificationStatus =
+  | "failed"
+  | "pending"
+  | "unconfigured"
+  | "verified";
+
+export type ControlPlaneEmailSenderProjectionRecord = {
+  address: string;
+  displayName?: string;
+  emailDomain: string;
+  enabled: boolean;
+  id: string;
+  purpose: ControlPlaneEmailSenderPurpose;
+  verificationStatus?: ControlPlaneEmailVerificationStatus;
 };
 
 export type ControlPlaneDeploymentConfigObservedStatus =

@@ -54,6 +54,7 @@ export type PublicOperationWriteNotifier = {
 };
 
 type PublicOperationExecutionInput = {
+  afterCommit?: (response: OperationInvocationResponse) => Promise<void> | void;
   body: unknown;
   env: PublicOperationEnv;
   identity: AppStorageIdentity;
@@ -232,6 +233,10 @@ export async function executePublicOperationRequest(
     storage: input.storage,
     writes: input.writes,
   });
+
+  if (response.status === "committed") {
+    await input.afterCommit?.(response);
+  }
 
   return publicOperationResult(response);
 }
@@ -434,17 +439,13 @@ async function verifyTurnstileChallenge(input: {
         body: JSON.stringify({
           secret,
           response: input.token,
-          idempotency_key: input.idempotencyKey,
+          idempotency_key: await turnstileSiteverifyIdempotencyKey(input.idempotencyKey),
         }),
         headers: { "Content-Type": "application/json" },
         method: "POST",
       }),
     );
   } catch {
-    throw new PublicOperationError("Public operation challenge is unavailable.", 503);
-  }
-
-  if (!response.ok) {
     throw new PublicOperationError("Public operation challenge is unavailable.", 503);
   }
 
@@ -460,6 +461,10 @@ async function verifyTurnstileChallenge(input: {
     throw new PublicOperationError("Public operation challenge failed.", 403);
   }
 
+  if (!response.ok) {
+    throw new PublicOperationError("Public operation challenge is unavailable.", 503);
+  }
+
   return {
     kind: "turnstile",
     success: true,
@@ -467,6 +472,36 @@ async function verifyTurnstileChallenge(input: {
     ...(typeof body.challenge_ts === "string" ? { challengeTs: body.challenge_ts } : {}),
     ...(typeof body.hostname === "string" ? { hostname: body.hostname } : {}),
   };
+}
+
+async function turnstileSiteverifyIdempotencyKey(publicOperationIdempotencyKey: string) {
+  if (isUuid(publicOperationIdempotencyKey)) {
+    return publicOperationIdempotencyKey;
+  }
+
+  // Cloudflare requires a UUID; public operation idempotency keys are domain-scoped text.
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(`turnstile-siteverify:${publicOperationIdempotencyKey}`),
+  );
+  const bytes = new Uint8Array(digest).slice(0, 16);
+
+  bytes[6] = (bytes[6] & 0x0f) | 0x50;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+
+  return uuidFromBytes(bytes);
+}
+
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+function uuidFromBytes(bytes: Uint8Array) {
+  const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0"));
+
+  return `${hex.slice(0, 4).join("")}-${hex.slice(4, 6).join("")}-${hex
+    .slice(6, 8)
+    .join("")}-${hex.slice(8, 10).join("")}-${hex.slice(10, 16).join("")}`;
 }
 
 function turnstileFetch(env: PublicOperationEnv, request: Request): Promise<Response> {

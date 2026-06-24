@@ -61,15 +61,29 @@ workspace operations that are promoted to public CLI bindings.
 #### Scenario: Sync dry-runs
 
 - **GIVEN** the package CLI is installed
-- **WHEN** a user runs `formless push --dry-run` or `formless pull --dry-run`
+- **WHEN** a user runs `formless push --dry-run`, `formless push --force
+--dry-run`, or `formless pull --dry-run`
 - **THEN** the command reports the source, target, and high-level changes that
   would be synchronized
 - **AND** it does not mutate local source, remote instance data, Cloudflare
   resources, or Alchemy state
-- **AND** if source and target are already equivalent, it reports
-  `Everything up to date.`
+- **AND** if source and target are already equivalent and no forced deployment
+  or runtime rebuild is requested, it reports `Everything up to date.`
 - **AND** the no-op message is the exact command output and is not accompanied
   by sync plan, drift, deploy, migration, retry, or warning text
+
+#### Scenario: Forced push deployment
+
+- **GIVEN** the package CLI is installed and local workspace source already
+  matches the selected deployed instance data
+- **WHEN** a user runs `formless push --force`
+- **THEN** the command reconciles the deployment provider graph, including the
+  Worker runtime
+- **AND** it does not restore archive data when the source comparison is already
+  up to date
+- **AND** `formless push --force --dry-run` reports the forced runtime deployment
+  as available without mutating local source, remote instance data, Cloudflare
+  resources, or Alchemy state
 
 #### Scenario: Unsupported command families
 
@@ -200,8 +214,10 @@ local execution binding handles it.
   display-safe input facts
 - **AND** the first public CLI operation bindings are `formless pull` and
   `formless push`
-- **AND** public push and pull bindings expose only `--workspace`, `--target`,
-  and `--dry-run` inputs
+- **AND** public pull bindings expose only `--workspace`, `--target`, and
+  `--dry-run` inputs
+- **AND** public push bindings expose only `--workspace`, `--target`,
+  `--dry-run`, and `--force` inputs
 - **AND** the workspace source save operation may be invoked by local runtime,
   auto-save, or gateway flows without exposing `formless save`
 - **AND** public CLI operation definitions do not expose save, apply, replace,

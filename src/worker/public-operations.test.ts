@@ -9,6 +9,7 @@ import type {
 } from "@dpeek/formless-schema";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vite-plus/test";
 import type { StoredRecord } from "@dpeek/formless-storage";
+import { INSTANCE_CONTROL_PLANE_INSTANCE_SETTINGS_ID } from "@dpeek/formless-instance-control-plane";
 import type {
   BootstrapResponse,
   ChangeRow,
@@ -16,6 +17,7 @@ import type {
   SchemaResponse,
   SchemaUpdateResponse,
 } from "../shared/protocol.ts";
+import type { OperationInvocationResponse } from "../shared/operation-invocation.ts";
 import type { SitePageTreeResponse } from "@dpeek/formless-site-app";
 import { recordOperationRequest, operationWriteRequest } from "../test/authority-write.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
@@ -29,6 +31,11 @@ type PublicOperationHarnessState = {
   invocations: StoredOperationInvocation[];
   records: StoredRecord[];
 };
+type TurnstileVerifyRequest = {
+  idempotency_key?: unknown;
+  response?: unknown;
+  secret?: unknown;
+};
 
 const adminToken = "test-admin-token";
 const turnstileSiteKey = "test-turnstile-site-key";
@@ -41,7 +48,7 @@ let harness: Harness;
 let publicOperationHarness: Harness;
 let publicOperationHarnessDir: string | undefined;
 let publicOperationHarnessName: string;
-let turnstileRequests: unknown[];
+let turnstileRequests: TurnstileVerifyRequest[];
 let turnstileResponse: Record<string, unknown>;
 
 beforeAll(async () => {
@@ -168,11 +175,10 @@ describe("public operation runtime", () => {
     expect(records.subscriptions[0]?.values.consentedAt).toEqual(expect.any(String));
     expect(records.subscriptions[0]?.values).not.toHaveProperty("sourceIp");
     expect(records.subscriptions[0]?.values).not.toHaveProperty("sourceUserAgent");
-    expect(turnstileRequests).toEqual([
+    expectTurnstileRequests(turnstileRequests, [
       {
         secret: turnstileSecret,
         response: "token-ok",
-        idempotency_key: "schema-key-exec",
       },
     ]);
   });
@@ -303,11 +309,10 @@ describe("public operation runtime", () => {
       sourceInstallId: installId,
       sourceApiRoutePrefix: `/api/app-installs/site/${installId}`,
     });
-    expect(turnstileRequests).toEqual([
+    expectTurnstileRequests(turnstileRequests, [
       {
         secret: turnstileSecret,
         response: "token-ok",
-        idempotency_key: "installed-replay",
       },
     ]);
   });
@@ -352,13 +357,102 @@ describe("public operation runtime", () => {
     expect(JSON.stringify(body)).not.toContain(turnstileSecret);
     expect(JSON.stringify(body)).not.toContain("token-ok");
     expect(JSON.stringify(body)).not.toContain("turnstileToken");
-    expect(turnstileRequests).toEqual([
+    expectTurnstileRequests(turnstileRequests, [
       {
         secret: turnstileSecret,
         response: "token-ok",
-        idempotency_key: "contact-create-exec",
       },
     ]);
+  });
+
+  it("keeps configured contact notification scheduling out of public create responses", async () => {
+    const emailHarness = await createPublicOperationWorkerHarness({
+      bindings: {
+        FORMLESS_ADMIN_TOKEN: adminToken,
+        FORMLESS_TURNSTILE_SITE_KEY: turnstileSiteKey,
+        FORMLESS_TURNSTILE_SECRET_KEY: turnstileSecret,
+      },
+      turnstileVerify: turnstileVerifyResponse,
+    });
+
+    try {
+      await resetSchemaApp("site", emailHarness);
+      await configureContactNotificationEmail(emailHarness);
+
+      const first = await postPublicOperation(
+        "/api/site/public/operations/contact-message/submit",
+        publicContactMessageBody({ idempotencyKey: "contact-create-email-notify" }),
+        emailHarness,
+      );
+      const replay = await postPublicOperation(
+        "/api/site/public/operations/contact-message/submit",
+        publicContactMessageBody({
+          idempotencyKey: "contact-create-email-notify",
+          token: "token-replay",
+        }),
+        emailHarness,
+      );
+      const firstBody = (await first.json()) as PublicOperationResponse;
+      const replayBody = (await replay.json()) as PublicOperationResponse;
+      const after = await getJson<BootstrapResponse>("/api/site/bootstrap", emailHarness);
+
+      expect(first.status).toBe(200);
+      expect(replay.status).toBe(200);
+      expect(firstBody.status).toBe("committed");
+      expect(replayBody).toEqual({ ...firstBody, status: "replayed" });
+      expect(contactMessageRecords(after.records)).toHaveLength(1);
+      expect(JSON.stringify(firstBody)).not.toContain("owner@example.com");
+      expect(JSON.stringify(firstBody)).not.toContain("contact@mail.example.com");
+      expect(JSON.stringify(firstBody)).not.toContain("providerMessageId");
+      expectTurnstileRequests(turnstileRequests, [
+        {
+          secret: turnstileSecret,
+          response: "token-ok",
+        },
+      ]);
+    } finally {
+      await emailHarness.dispose();
+    }
+  });
+
+  it("commits contact messages without provider sends when contact email settings are missing", async () => {
+    const missingEmailConfigHarness = await createPublicOperationWorkerHarness({
+      bindings: {
+        FORMLESS_ADMIN_TOKEN: adminToken,
+        FORMLESS_TURNSTILE_SITE_KEY: turnstileSiteKey,
+        FORMLESS_TURNSTILE_SECRET_KEY: turnstileSecret,
+      },
+      turnstileVerify: turnstileVerifyResponse,
+    });
+
+    try {
+      await resetSchemaApp("site", missingEmailConfigHarness);
+
+      const accepted = await postPublicOperation(
+        "/api/site/public/operations/contact-message/submit",
+        publicContactMessageBody({ idempotencyKey: "contact-create-email-missing" }),
+        missingEmailConfigHarness,
+      );
+      const body = (await accepted.json()) as PublicOperationResponse;
+      const after = await getJson<BootstrapResponse>(
+        "/api/site/bootstrap",
+        missingEmailConfigHarness,
+      );
+
+      expect(accepted.status).toBe(200);
+      expect(body).toMatchObject({
+        operation: {
+          entityName: "contact-message",
+          operationName: "submit",
+          kind: "create",
+        },
+        status: "committed",
+      });
+      expect(contactMessageRecords(after.records)).toHaveLength(1);
+      expect(JSON.stringify(body)).not.toContain("providerMessageId");
+    } finally {
+      await missingEmailConfigHarness.dispose();
+    }
   });
 
   it("executes and rejects schema-key public record-plan command operations", async () => {
@@ -444,11 +538,10 @@ describe("public operation runtime", () => {
     });
     expect(afterRejected.records).toEqual(beforeRejected.records);
     expect(afterRejected.cursor).toBe(beforeRejected.cursor);
-    expect(turnstileRequests).toEqual([
+    expectTurnstileRequests(turnstileRequests, [
       {
         secret: turnstileSecret,
         response: "token-ok",
-        idempotency_key: "record-plan-schema-key",
       },
     ]);
   });
@@ -533,11 +626,10 @@ describe("public operation runtime", () => {
     });
     expect(afterRejected.records).toEqual(beforeRejected.records);
     expect(afterRejected.cursor).toBe(beforeRejected.cursor);
-    expect(turnstileRequests).toEqual([
+    expectTurnstileRequests(turnstileRequests, [
       {
         secret: turnstileSecret,
         response: "token-ok",
-        idempotency_key: "record-plan-installed",
       },
     ]);
   });
@@ -773,11 +865,10 @@ describe("public operation runtime", () => {
     expect(JSON.stringify(rows[0])).not.toContain("turnstileToken");
     expect(JSON.stringify(firstBody)).not.toContain("token-ok");
     expect(JSON.stringify(replayBody)).not.toContain("token-replay");
-    expect(turnstileRequests).toEqual([
+    expectTurnstileRequests(turnstileRequests, [
       {
         secret: turnstileSecret,
         response: "token-ok",
-        idempotency_key: "contact-create-replay",
       },
     ]);
   });
@@ -915,6 +1006,104 @@ describe("public operation runtime", () => {
     expect(after.records).toEqual(before.records);
   });
 
+  it("sends a UUID Siteverify idempotency key for domain-scoped public operation idempotency", async () => {
+    const publicIdempotencyKey = `site-contact:rec_site_block_contact_form:${randomUUID()}`;
+    const siteverifyRequests: TurnstileVerifyRequest[] = [];
+    const uuidRequiredHarness = await createPublicOperationWorkerHarness({
+      bindings: {
+        FORMLESS_ADMIN_TOKEN: adminToken,
+        FORMLESS_TURNSTILE_SITE_KEY: turnstileSiteKey,
+        FORMLESS_TURNSTILE_SECRET_KEY: turnstileSecret,
+      },
+      turnstileVerify: async (request) => {
+        const body = (await request.json()) as TurnstileVerifyRequest;
+
+        siteverifyRequests.push(body);
+
+        if (typeof body.idempotency_key !== "string" || !isUuid(body.idempotency_key)) {
+          return Response.json(
+            { success: false, "error-codes": ["invalid-idempotency-key"], messages: [] },
+            { status: 400 },
+          );
+        }
+
+        return Response.json({
+          success: true,
+          challenge_ts: "2026-05-28T00:00:00.000Z",
+          hostname: "example.com",
+        });
+      },
+    });
+
+    try {
+      await resetSchemaApp("site", uuidRequiredHarness);
+
+      const response = await postPublicOperation(
+        "/api/site/public/operations/contact-message/submit",
+        publicContactMessageBody({ idempotencyKey: publicIdempotencyKey }),
+        uuidRequiredHarness,
+      );
+      const after = await getJson<BootstrapResponse>("/api/site/bootstrap", uuidRequiredHarness);
+
+      expect(response.status).toBe(200);
+      expect(contactMessageRecords(after.records)).toHaveLength(1);
+      expectTurnstileRequests(siteverifyRequests, [
+        {
+          secret: turnstileSecret,
+          response: "token-ok",
+        },
+      ]);
+      expect(siteverifyRequests[0]?.idempotency_key).not.toBe(publicIdempotencyKey);
+    } finally {
+      await uuidRequiredHarness.dispose();
+    }
+  });
+
+  it("maps non-OK Siteverify JSON failures to challenge failure", async () => {
+    const siteverifyRequests: TurnstileVerifyRequest[] = [];
+    const nonOkFailureHarness = await createPublicOperationWorkerHarness({
+      bindings: {
+        FORMLESS_ADMIN_TOKEN: adminToken,
+        FORMLESS_TURNSTILE_SITE_KEY: turnstileSiteKey,
+        FORMLESS_TURNSTILE_SECRET_KEY: turnstileSecret,
+      },
+      turnstileVerify: async (request) => {
+        siteverifyRequests.push((await request.json()) as TurnstileVerifyRequest);
+
+        return Response.json(
+          { success: false, "error-codes": ["invalid-input-response"], messages: [] },
+          { status: 400 },
+        );
+      },
+    });
+
+    try {
+      await resetSchemaApp("site", nonOkFailureHarness);
+
+      const before = await getJson<BootstrapResponse>("/api/site/bootstrap", nonOkFailureHarness);
+      const response = await postPublicOperation(
+        "/api/site/public/operations/subscription/subscribe",
+        publicSubscribeBody({ idempotencyKey: "site-subscribe:rec_site_subscribe_form:key-1" }),
+        nonOkFailureHarness,
+      );
+      const after = await getJson<BootstrapResponse>("/api/site/bootstrap", nonOkFailureHarness);
+
+      expect(response.status).toBe(403);
+      expect((await response.json()) as { error: string }).toEqual({
+        error: "Public operation challenge failed.",
+      });
+      expect(after.records).toEqual(before.records);
+      expectTurnstileRequests(siteverifyRequests, [
+        {
+          secret: turnstileSecret,
+          response: "token-ok",
+        },
+      ]);
+    } finally {
+      await nonOkFailureHarness.dispose();
+    }
+  });
+
   it("fails closed when Turnstile secret configuration is missing or blank", async () => {
     const missingConfigRequests: unknown[] = [];
     const missingConfigHarness = await createPublicOperationWorkerHarness({
@@ -1020,7 +1209,7 @@ describe("public operation runtime", () => {
   it("uses deployed Turnstile bindings for subscribe form rendering and verification", async () => {
     const deployedSiteKey = "deployed-turnstile-site-key";
     const deployedSecret = "deployed-turnstile-secret";
-    const deployedRequests: unknown[] = [];
+    const deployedRequests: TurnstileVerifyRequest[] = [];
     const deployedHarness = await createPublicOperationWorkerHarness({
       bindings: {
         FORMLESS_ADMIN_TOKEN: adminToken,
@@ -1028,7 +1217,7 @@ describe("public operation runtime", () => {
         FORMLESS_TURNSTILE_SECRET_KEY: deployedSecret,
       },
       turnstileVerify: async (request) => {
-        deployedRequests.push(await request.json());
+        deployedRequests.push((await request.json()) as TurnstileVerifyRequest);
 
         return Response.json({ success: true });
       },
@@ -1080,11 +1269,10 @@ describe("public operation runtime", () => {
         siteKey: deployedSiteKey,
       });
       expect(accepted.status).toBe(200);
-      expect(deployedRequests).toEqual([
+      expectTurnstileRequests(deployedRequests, [
         {
           secret: deployedSecret,
           response: "token-ok",
-          idempotency_key: "deployed-bindings",
         },
       ]);
       expect(JSON.stringify(tree)).not.toContain(deployedSecret);
@@ -1393,9 +1581,26 @@ async function createPublicOperationHarness(input: {
 }
 
 async function turnstileVerifyResponse(request: Request) {
-  turnstileRequests.push(await request.json());
+  turnstileRequests.push((await request.json()) as TurnstileVerifyRequest);
 
   return Response.json(turnstileResponse);
+}
+
+function expectTurnstileRequests(
+  actual: TurnstileVerifyRequest[],
+  expected: Array<{ response: string; secret: string }>,
+) {
+  expect(actual).toHaveLength(expected.length);
+
+  for (const [index, request] of actual.entries()) {
+    expect(request).toMatchObject(expected[index] ?? {});
+    expect(request.idempotency_key).toEqual(expect.any(String));
+    expect(isUuid(String(request.idempotency_key))).toBe(true);
+  }
+}
+
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
 async function resetSchemaApp(schemaKey: "tasks" | "site", target: Harness = harness) {
@@ -1659,6 +1864,87 @@ async function postAdminRecordOperation(
   expect([200, 201], text).toContain(response.status);
 
   return request.response(JSON.parse(text));
+}
+
+async function configureContactNotificationEmail(target: Harness) {
+  const route = await createControlPlaneRecord(
+    "route",
+    "contact-notification-primary-route",
+    {
+      enabled: true,
+      matchHost: "www.example.com",
+      matchPath: "/",
+      matchPrefix: "/",
+      kind: "mount",
+      targetProfile: "instance",
+      surface: "admin",
+      access: "owner",
+    },
+    target,
+  );
+  const domain = await createControlPlaneRecord(
+    "email-domain",
+    "contact-notification-email-domain",
+    {
+      enabled: true,
+      providerFamily: "cloudflare",
+      domain: "mail.example.com",
+      primaryRoute: route.id,
+      verificationStatus: "verified",
+      dnsStatus: "verified",
+    },
+    target,
+  );
+  const sender = await createControlPlaneRecord(
+    "email-sender",
+    "contact-notification-email-sender",
+    {
+      enabled: true,
+      address: "contact@mail.example.com",
+      displayName: "Contact",
+      purpose: "contact-notification",
+      emailDomain: domain.id,
+      verificationStatus: "verified",
+    },
+    target,
+  );
+
+  await createControlPlaneRecord(
+    "instance-settings",
+    "contact-notification-instance-settings",
+    {
+      settingsId: INSTANCE_CONTROL_PLANE_INSTANCE_SETTINGS_ID,
+      primaryRoute: route.id,
+      authRelyingPartyId: "www.example.com",
+      defaultEmailDomain: domain.id,
+      defaultContactSender: sender.id,
+      contactNotificationRecipient: "owner@example.com",
+      productionIdentityStatus: "configured",
+    },
+    target,
+  );
+}
+
+async function createControlPlaneRecord(
+  entity: string,
+  idempotencyKey: string,
+  input: Record<string, unknown>,
+  target: Harness,
+): Promise<StoredRecord> {
+  const response = await postAdminJson<OperationInvocationResponse>(
+    `/api/formless/control-plane/operations/${entity}/create`,
+    {
+      idempotencyKey,
+      input,
+    },
+    target,
+  );
+
+  if (response.output.type !== "create") {
+    throw new Error(`Expected ${entity}.create to return create output.`);
+  }
+
+  return response.output.record;
 }
 
 async function createMappedPublicSiteRoute(target: Harness, host: string, appInstallId: string) {

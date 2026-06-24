@@ -1,0 +1,182 @@
+# Email Runtime Specification
+
+## Purpose
+
+Email runtime owns instance-scoped outbound email configuration, Cloudflare
+Email Service deployment intent, and delivery status records. It gives Site
+contact notifications one platform email primitive without making the Site app
+own provider setup, provider-owned DNS authentication, sender validation, or
+delivery evidence.
+
+## Requirements
+
+### Requirement: Instance Email Defaults
+
+The system SHALL derive default email identity from the instance production
+identity while allowing deployed preview instances to exist without email.
+
+#### Scenario: Primary domain drives email defaults
+
+- GIVEN an instance has selected a primary HTTP route for production identity
+- WHEN email defaults are initialized
+- THEN the default sending domain is derived from that route's host
+- AND the default sending domain is a managed sending subdomain such as
+  `mail.<primary-zone>` or `notify.<primary-zone>` unless the owner explicitly
+  chooses an apex sender
+- AND email links use the instance canonical origin selected for production
+  identity rather than an arbitrary request host
+
+#### Scenario: Workers.dev remains bootstrap-only
+
+- GIVEN an instance has only a workers.dev deployment target
+- WHEN the instance is deployed
+- THEN deployment may succeed without a primary route or email domain
+- AND production identity, canonical auth ceremonies, and default outbound
+  email sending remain unavailable until the owner configures a primary route
+  and email defaults
+
+#### Scenario: Route is not email identity
+
+- GIVEN the control plane stores route records for HTTP mount and redirect
+  behavior
+- WHEN email defaults are configured
+- THEN email domains and senders are stored as email records that may reference
+  the selected primary route
+- AND route records are not overloaded with email-only behavior such as sender
+  verification, SPF, DKIM, DMARC, bounce handling, or recipient verification
+  state
+
+### Requirement: Email Domain And Sender Records
+
+The system SHALL model email configuration as flat instance-owned records.
+
+#### Scenario: Email domain record
+
+- GIVEN an owner enables outbound email for an instance
+- WHEN the email domain intent is stored
+- THEN an `email-domain` record stores enabled state, provider family, domain,
+  deployment config reference, optional primary route reference, verification
+  status, display-safe DNS status, and latest display-safe error
+- AND it does not store provider credentials, raw provider responses, raw DNS
+  provider truth, API tokens, OAuth tokens, Alchemy state, or runtime secrets
+
+#### Scenario: Email sender record
+
+- GIVEN an email domain is configured
+- WHEN sender intent is stored
+- THEN an `email-sender` record stores address, display name, purpose, enabled
+  state, email domain reference, and verification status
+- AND the sender address host belongs to the referenced email domain
+- AND disabled or unverified senders are not used for runtime delivery
+
+#### Scenario: Instance settings select defaults
+
+- GIVEN multiple domain or sender records exist
+- WHEN the runtime resolves platform email defaults
+- THEN the singleton instance settings record selects the default email domain
+  and default senders by stable record id
+- AND the selected defaults are policy, not duplicated provider resource state
+
+### Requirement: Cloudflare Email Deployment
+
+The system SHALL deploy Cloudflare Email Service resources through the same
+projected deployment pipeline used for other provider resources.
+
+#### Scenario: Deploy outbound sending resources
+
+- GIVEN an enabled Cloudflare `email-domain` record
+- WHEN the deployer applies the desired resource graph
+- THEN it provisions or adopts the Cloudflare Email Sending domain or subdomain
+- AND it relies on Cloudflare Email Service onboarding to create and own the DNS
+  records required for SPF, DKIM, bounce handling, and DMARC
+- AND it binds a Worker `send_email` binding constrained to the configured
+  sender addresses
+- AND the Email Sending domain and Worker binding resources are declared in
+  tracked Alchemy state or an equivalent provider reconciler with stable
+  logical ids
+
+#### Scenario: Email Sending DNS is provider-owned
+
+- GIVEN email deployment provisions or adopts a Cloudflare Email Sending domain
+- WHEN Cloudflare creates or reports the required Email Sending DNS records
+- THEN those records remain provider-owned and are not declared as Formless
+  Alchemy DNS resources
+- AND the deployer does not preflight, update, delete, or adopt those DNS
+  records through generic Cloudflare DNS record reconciliation
+
+#### Scenario: OAuth scope boundary
+
+- GIVEN Cloudflare email resources are included in desired deployment state
+- WHEN a deployer resolves a Formless-owned Cloudflare OAuth credential
+- THEN the credential must include the Cloudflare permissions required for the
+  selected Email Sending resources
+- AND missing permissions fail provider reconciliation with a display-safe
+  observation rather than falling back to broad manual credentials
+
+### Requirement: Outbound Delivery
+
+The system SHALL send email through a platform delivery primitive instead of
+app-specific provider calls.
+
+#### Scenario: Delivery record
+
+- GIVEN runtime code schedules an email delivery
+- WHEN the delivery intent is accepted
+- THEN an `email-delivery` record stores the template or message kind, source
+  storage identity, source operation or record id, idempotency key, sender,
+  recipients, reply-to address, canonical origin, status, provider message id,
+  latest display-safe error, and timestamps
+- AND it stores no raw provider credentials, OAuth tokens, Alchemy state,
+  Turnstile proof values, or private challenge material
+
+#### Scenario: Idempotent delivery
+
+- GIVEN the same source event is retried with the same delivery purpose and
+  idempotency key
+- WHEN delivery is scheduled again
+- THEN the runtime returns or advances the existing delivery record
+- AND it does not send duplicate email for an already accepted provider
+  delivery
+
+#### Scenario: Sender and reply-to validation
+
+- GIVEN an app schedules outbound email
+- WHEN the runtime builds the provider request
+- THEN the `from` address must be a verified enabled email sender
+- AND user-supplied addresses may be used as `replyTo` only after field-level
+  validation
+- AND visitor or customer addresses are not spoofed as the sender address
+
+#### Scenario: Template boundary
+
+- GIVEN Site contact notification content is rendered
+- WHEN the runtime prepares an outbound message
+- THEN the message passes through the same delivery primitive as plain text and
+  HTML bodies
+- AND template rendering is separate from provider delivery
+
+### Requirement: Site Contact Notifications
+
+The system SHALL use Site contact message submission as the first public
+outbound email consumer.
+
+#### Scenario: Contact message notification
+
+- GIVEN a public Site contact form submits a valid contact message operation
+- WHEN the contact message record is committed
+- THEN the runtime may schedule one contact notification delivery to the
+  configured contact recipient
+- AND the notification uses the configured contact sender
+- AND the visitor email is used as `replyTo`, not as the sender address
+- AND the public operation response remains based on the contact message
+  operation output rather than provider delivery internals
+
+#### Scenario: Missing email configuration
+
+- GIVEN a contact message operation succeeds but email defaults or contact
+  notification recipient are not configured
+- WHEN post-commit notification scheduling is evaluated
+- THEN the contact message remains committed
+- AND no provider send is attempted with incomplete sender, recipient, or email
+  domain configuration
+- AND public responses do not claim that email delivery occurred

@@ -176,6 +176,7 @@ async function runWorkspaceOperationBody(
         await pushFormlessInstanceWorkspace(
           {
             apply: !input.dryRun,
+            force: input.force,
             targetAlias: input.targetAlias,
             workspacePath: input.workspacePath ?? undefined,
           },

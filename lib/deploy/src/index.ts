@@ -4,6 +4,9 @@ import {
   type ControlPlaneDeploymentConfigObservationRecord,
   type ControlPlaneDeploymentConfigObservedStatus,
   type ControlPlaneDomainMappingProfile,
+  type ControlPlaneEmailDomainProjectionRecord,
+  type ControlPlaneEmailSenderProjectionRecord,
+  type ControlPlaneEmailVerificationStatus,
   type ControlPlaneProviderConfigProjectionRecord,
   type ControlPlaneProjectionSourceRecord,
   type ControlPlaneRedirectStatusCode,
@@ -49,6 +52,10 @@ export type {
   ControlPlaneDeploymentConfigObservedField,
   ControlPlaneDeploymentConfigObservedStatus,
   ControlPlaneDomainMappingProfile,
+  ControlPlaneEmailDomainProjectionRecord,
+  ControlPlaneEmailSenderProjectionRecord,
+  ControlPlaneEmailSenderPurpose,
+  ControlPlaneEmailVerificationStatus,
   ControlPlaneProviderConfigProjectionRecord,
   ControlPlaneProjectionSourceRecord,
   ControlPlaneRedirectStatusCode,
@@ -119,6 +126,18 @@ export function deployDesiredStateProjectionInputFromControlPlaneRecords(
   const providerConfigs = providerConfigProjectionRecordsFromControlPlaneRecords(activeRecords);
   const providerConfigsById = new Map(providerConfigs.map((config) => [config.id, config]));
   const primaryProviderConfig = primaryProviderConfigForTarget(providerConfigs, input.targetId);
+  const emailDomains = emailDomainProjectionRecordsFromControlPlaneRecords(activeRecords).filter(
+    (emailDomain) =>
+      emailDomainMatchesProjectionTarget(emailDomain, {
+        primaryProviderConfig,
+        providerConfigs: providerConfigsById,
+        targetId: input.targetId,
+      }),
+  );
+  const emailDomainIds = new Set(emailDomains.map((emailDomain) => emailDomain.id));
+  const emailSenders = emailSenderProjectionRecordsFromControlPlaneRecords(activeRecords).filter(
+    (sender) => emailDomainIds.has(sender.emailDomain),
+  );
   const routes = routeProjectionRecordsFromControlPlaneRecords(activeRecords).filter((route) =>
     routeMatchesProjectionTarget(route, {
       primaryProviderConfig,
@@ -130,6 +149,8 @@ export function deployDesiredStateProjectionInputFromControlPlaneRecords(
 
   return {
     appInstalls: appInstallProjectionRecordsFromControlPlaneRecords(activeRecords),
+    emailDomains,
+    emailSenders,
     instanceId: input.instanceId,
     providerConfigs: providerConfigProjectionInputRecords(providerConfigs),
     routes,
@@ -143,6 +164,8 @@ export function projectDeployControlPlaneDesiredState(
 ): DeployDesiredStateProjection {
   const routes = input.routes ?? [];
   const providerConfigs = input.providerConfigs ?? [];
+  const emailDomains = input.emailDomains ?? [];
+  const emailSenders = input.emailSenders ?? [];
   const routeTargets = projectDeployRouteTargets(routes, input.appInstalls ?? []);
   const providerConfigsById = providerConfigRecordsById(providerConfigs);
   const resources = [
@@ -152,8 +175,19 @@ export function projectDeployControlPlaneDesiredState(
       targetId: input.targetId,
       workerName: input.workerName,
     }),
+    ...projectEmailProviderResources(emailDomains, emailSenders, {
+      instanceId: input.instanceId,
+      targetId: input.targetId,
+      workerName: input.workerName,
+    }),
   ].sort(compareDeployResources);
   const projectionIntent = {
+    ...(emailDomains.length === 0
+      ? {}
+      : { emailDomains: normalizeEmailDomainInputs(emailDomains) }),
+    ...(emailSenders.length === 0
+      ? {}
+      : { emailSenders: normalizeEmailSenderInputs(emailSenders) }),
     providerConfigs: normalizeProviderConfigInputs(providerConfigs, routes),
     routes: normalizeRouteInputs(routes),
     routeTargets,
@@ -685,6 +719,102 @@ function routeProjectionRecordFromControlPlaneRecord(
   };
 }
 
+function emailDomainProjectionRecordsFromControlPlaneRecords(
+  records: readonly ControlPlaneProjectionSourceRecord[],
+): ControlPlaneEmailDomainProjectionRecord[] {
+  return records
+    .filter(
+      (record) =>
+        record.deletedAt === undefined &&
+        record.entity === "email-domain" &&
+        booleanRecordValue(record, "enabled") === true &&
+        stringRecordValue(record, "providerFamily") === "cloudflare",
+    )
+    .map(emailDomainProjectionRecordFromControlPlaneRecord)
+    .filter((record): record is ControlPlaneEmailDomainProjectionRecord => record !== undefined)
+    .sort((left, right) => left.id.localeCompare(right.id));
+}
+
+function emailDomainProjectionRecordFromControlPlaneRecord(
+  record: ControlPlaneProjectionSourceRecord,
+): ControlPlaneEmailDomainProjectionRecord | undefined {
+  const domain = normalizeOptionalHost(stringRecordValue(record, "domain"));
+
+  if (domain === undefined) {
+    return undefined;
+  }
+
+  const deploymentConfig = stringRecordValue(record, "deploymentConfig");
+  const verificationStatus = emailVerificationStatusRecordValue(record, "verificationStatus");
+
+  return {
+    domain,
+    enabled: true,
+    id: record.id,
+    providerFamily: "cloudflare",
+    ...(deploymentConfig === undefined ? {} : { deploymentConfig }),
+    ...(verificationStatus === undefined ? {} : { verificationStatus }),
+  };
+}
+
+function emailSenderProjectionRecordsFromControlPlaneRecords(
+  records: readonly ControlPlaneProjectionSourceRecord[],
+): ControlPlaneEmailSenderProjectionRecord[] {
+  return records
+    .filter(
+      (record) =>
+        record.deletedAt === undefined &&
+        record.entity === "email-sender" &&
+        booleanRecordValue(record, "enabled") === true,
+    )
+    .map(emailSenderProjectionRecordFromControlPlaneRecord)
+    .filter((record): record is ControlPlaneEmailSenderProjectionRecord => record !== undefined)
+    .sort((left, right) => left.id.localeCompare(right.id));
+}
+
+function emailSenderProjectionRecordFromControlPlaneRecord(
+  record: ControlPlaneProjectionSourceRecord,
+): ControlPlaneEmailSenderProjectionRecord | undefined {
+  const address = normalizedEmailAddress(stringRecordValue(record, "address"));
+  const emailDomain = stringRecordValue(record, "emailDomain");
+  const purpose = stringRecordValue(record, "purpose");
+
+  if (
+    address === undefined ||
+    emailDomain === undefined ||
+    (purpose !== "contact-notification" && purpose !== "system")
+  ) {
+    return undefined;
+  }
+
+  const displayName = stringRecordValue(record, "displayName");
+  const verificationStatus = emailVerificationStatusRecordValue(record, "verificationStatus");
+
+  return {
+    address,
+    emailDomain,
+    enabled: true,
+    id: record.id,
+    purpose,
+    ...(displayName === undefined ? {} : { displayName }),
+    ...(verificationStatus === undefined ? {} : { verificationStatus }),
+  };
+}
+
+function emailVerificationStatusRecordValue(
+  record: ControlPlaneProjectionSourceRecord,
+  fieldName: string,
+): ControlPlaneEmailVerificationStatus | undefined {
+  const value = stringRecordValue(record, fieldName);
+
+  return value === "failed" ||
+    value === "pending" ||
+    value === "unconfigured" ||
+    value === "verified"
+    ? value
+    : undefined;
+}
+
 function providerConfigProjectionRecordsFromControlPlaneRecords(
   records: readonly ControlPlaneProjectionSourceRecord[],
 ): DeploymentConfigProjectionRecord[] {
@@ -740,6 +870,22 @@ function routeMatchesProjectionTarget(
     route.providerConfig === undefined
       ? input.primaryProviderConfig
       : input.providerConfigs.get(route.providerConfig);
+
+  return providerConfig === undefined || providerConfig.targetId === input.targetId;
+}
+
+function emailDomainMatchesProjectionTarget(
+  emailDomain: ControlPlaneEmailDomainProjectionRecord,
+  input: {
+    primaryProviderConfig?: DeploymentConfigProjectionRecord;
+    providerConfigs: ReadonlyMap<string, DeploymentConfigProjectionRecord>;
+    targetId: string;
+  },
+): boolean {
+  const providerConfig =
+    emailDomain.deploymentConfig === undefined
+      ? input.primaryProviderConfig
+      : input.providerConfigs.get(emailDomain.deploymentConfig);
 
   return providerConfig === undefined || providerConfig.targetId === input.targetId;
 }
@@ -941,6 +1087,84 @@ function projectRouteRedirectCustomDomainResource(
     ),
     providerFamily: "cloudflare",
     targetId: input.targetId,
+  };
+}
+
+function projectEmailProviderResources(
+  emailDomains: readonly ControlPlaneEmailDomainProjectionRecord[],
+  emailSenders: readonly ControlPlaneEmailSenderProjectionRecord[],
+  input: {
+    instanceId: string;
+    targetId: string;
+    workerName?: string;
+  },
+): DeployResource[] {
+  const sendersByDomainId = new Map<string, ControlPlaneEmailSenderProjectionRecord[]>();
+
+  for (const sender of emailSenders) {
+    if (sender.enabled !== true || sender.verificationStatus !== "verified") {
+      continue;
+    }
+
+    const current = sendersByDomainId.get(sender.emailDomain) ?? [];
+
+    current.push(sender);
+    sendersByDomainId.set(sender.emailDomain, current);
+  }
+
+  return emailDomains
+    .filter((emailDomain) => emailDomain.enabled && emailDomain.providerFamily === "cloudflare")
+    .flatMap((emailDomain) => {
+      const domain = normalizeOptionalHost(emailDomain.domain);
+
+      if (domain === undefined) {
+        return [];
+      }
+
+      const logicalIds = emailDomainLogicalIds(input.instanceId, domain);
+      const senderAddresses = uniqueSorted(
+        (sendersByDomainId.get(emailDomain.id) ?? [])
+          .map((sender) => normalizedEmailAddress(sender.address))
+          .filter((address): address is string => address !== undefined),
+      );
+      const domainResource: DeployResource = {
+        dependencies: [],
+        inputs: {
+          domain,
+          name: domain,
+        },
+        kind: "cloudflare-email-sending-domain",
+        logicalId: logicalIds.domain,
+        providerFamily: "cloudflare",
+        targetId: input.targetId,
+      };
+      const resources = [domainResource];
+
+      if (senderAddresses.length > 0) {
+        resources.push({
+          dependencies: [{ logicalId: logicalIds.domain, reason: "verified senders" }],
+          inputs: {
+            allowedSenderAddresses: senderAddresses,
+            bindingName: "FORMLESS_EMAIL",
+            domain,
+            ...(input.workerName === undefined ? {} : { workerName: input.workerName }),
+          },
+          kind: "cloudflare-worker-send-email-binding",
+          logicalId: logicalIds.binding,
+          providerFamily: "cloudflare",
+          targetId: input.targetId,
+        });
+      }
+
+      return resources;
+    })
+    .sort(compareDeployResources);
+}
+
+function emailDomainLogicalIds(instanceId: string, domain: string) {
+  return {
+    binding: deployLogicalResourceId(instanceId, "worker-send-email", domain),
+    domain: deployLogicalResourceId(instanceId, "email-sending-domain", domain),
   };
 }
 
@@ -1291,6 +1515,37 @@ function normalizeRouteInputs(
     .sort((left, right) => String(left.id).localeCompare(String(right.id)));
 }
 
+function normalizeEmailDomainInputs(
+  emailDomains: readonly ControlPlaneEmailDomainProjectionRecord[],
+): DeployJsonValue[] {
+  return emailDomains
+    .filter((emailDomain) => emailDomain.enabled)
+    .map((emailDomain) => ({
+      deploymentConfig: emailDomain.deploymentConfig ?? null,
+      domain: normalizeOptionalHost(emailDomain.domain) ?? null,
+      id: emailDomain.id,
+      providerFamily: emailDomain.providerFamily,
+      verificationStatus: emailDomain.verificationStatus ?? null,
+    }))
+    .sort((left, right) => String(left.id).localeCompare(String(right.id)));
+}
+
+function normalizeEmailSenderInputs(
+  emailSenders: readonly ControlPlaneEmailSenderProjectionRecord[],
+): DeployJsonValue[] {
+  return emailSenders
+    .filter((sender) => sender.enabled && sender.verificationStatus === "verified")
+    .map((sender) => ({
+      address: normalizedEmailAddress(sender.address) ?? null,
+      displayName: sender.displayName ?? null,
+      emailDomain: sender.emailDomain,
+      id: sender.id,
+      purpose: sender.purpose,
+      verificationStatus: sender.verificationStatus ?? null,
+    }))
+    .sort((left, right) => String(left.id).localeCompare(String(right.id)));
+}
+
 function normalizeOptionalHost(value: string | undefined): string | undefined {
   const normalized = optionalText(value);
 
@@ -1305,6 +1560,20 @@ function optionalText(value: string | undefined): string | undefined {
 
 function normalizeHost(value: string): string {
   return value.trim().toLowerCase().replace(/\.+$/, "");
+}
+
+function normalizedEmailAddress(value: string | undefined): string | undefined {
+  const text = optionalText(value)?.toLowerCase();
+
+  if (text === undefined || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(text)) {
+    return undefined;
+  }
+
+  return text;
+}
+
+function uniqueSorted(values: readonly string[]): string[] {
+  return [...new Set(values)].sort((left, right) => left.localeCompare(right));
 }
 
 function compareDeployResources(left: DeployResource, right: DeployResource): number {

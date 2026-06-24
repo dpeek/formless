@@ -47,6 +47,8 @@ import {
 import {
   INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
   INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
+  formatInstanceControlPlaneBoundaryEntityName,
+  instanceControlPlaneRecordSourceEntityName,
   instanceControlPlaneSchema,
   instanceControlPlaneSchemaProvenance,
   reviewableInstanceControlPlaneStorageSnapshot,
@@ -275,6 +277,7 @@ export async function writeInstanceWorkspaceControlPlaneStorageSnapshot(input: {
     sourceLabel: input.sourceLabel,
   });
   const state = await workspaceRecordStateFileFromStorageSnapshot(snapshot, {
+    formatRecordEntity: formatInstanceControlPlaneRecordStateEntity,
     schemaProvenance: instanceControlPlaneSchemaProvenance,
   });
 
@@ -876,7 +879,10 @@ function reviewableControlPlaneStorageSnapshot(
 
 async function workspaceRecordStateFileFromStorageSnapshot(
   snapshot: StorageSnapshot,
-  input: { schemaProvenance: WorkspaceSchemaProvenance },
+  input: {
+    formatRecordEntity?: (entity: string) => string;
+    schemaProvenance: WorkspaceSchemaProvenance;
+  },
 ): Promise<WorkspaceRecordStateFile> {
   const parsed = parseStorageSnapshot(snapshot);
   const formatted = {
@@ -888,7 +894,9 @@ async function workspaceRecordStateFileFromStorageSnapshot(
     schemaUpdatedAt: parsed.schemaUpdatedAt,
     sourceCursor: parsed.sourceCursor,
     schemaProvenance: input.schemaProvenance,
-    records: parsed.records.map(canonicalStoredRecord).sort(compareStoredRecords),
+    records: parsed.records
+      .map((record) => canonicalStoredRecord(record, input))
+      .sort(compareStoredRecords),
   };
 
   return parseWorkspaceRecordStateFile(formatted);
@@ -940,10 +948,13 @@ function isWorkspaceRecordStateFile(value: unknown): boolean {
   );
 }
 
-function canonicalStoredRecord(record: StoredRecord): StoredRecord {
+function canonicalStoredRecord(
+  record: StoredRecord,
+  input: { formatRecordEntity?: (entity: string) => string } = {},
+): StoredRecord {
   return {
     id: record.id,
-    entity: record.entity,
+    entity: input.formatRecordEntity?.(record.entity) ?? record.entity,
     values: stableJsonValue(record.values) as RecordValues,
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
@@ -955,6 +966,14 @@ function compareStoredRecords(left: StoredRecord, right: StoredRecord): number {
   const entityOrder = left.entity.localeCompare(right.entity);
 
   return entityOrder === 0 ? left.id.localeCompare(right.id) : entityOrder;
+}
+
+function formatInstanceControlPlaneRecordStateEntity(entity: string): string {
+  const sourceEntity = instanceControlPlaneRecordSourceEntityName(entity);
+
+  return sourceEntity === undefined
+    ? entity
+    : formatInstanceControlPlaneBoundaryEntityName(sourceEntity);
 }
 
 function stableJsonValue(value: unknown): unknown {

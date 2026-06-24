@@ -1185,6 +1185,138 @@ describe("site page tree projection", () => {
     );
   });
 
+  it("projects contact form operation facts without notification configuration or secrets", () => {
+    const records = [
+      ...baseTreeRecords(),
+      blockRecord("rec_site_block_contact", {
+        type: "contactForm",
+        label: "Contact us",
+        body: "Send a **message**.",
+        operationName: "submit",
+        buttonLabel: "Send",
+        successLabel: "Message received.",
+        nameLabel: "Your name",
+        emailLabel: "Your email",
+        messageLabel: "How can we help?",
+      }),
+      placementRecord(
+        "rec_site_place_home_contact",
+        "rec_site_content_home",
+        "rec_site_block_contact",
+        {
+          order: 4000,
+        },
+      ),
+      {
+        id: "rec_site_contact_message_private",
+        entity: "contact-message",
+        values: {
+          name: "Private visitor",
+          email: "visitor@example.com",
+          message: "Private message.",
+        },
+        createdAt: "2026-05-06T00:00:01.000Z",
+      },
+      {
+        id: "instance-settings-private",
+        entity: "instance-settings",
+        values: {
+          contactNotificationRecipient: "owner@example.com",
+          providerSecret: "server-secret-value",
+        },
+        createdAt: "2026-05-06T00:00:02.000Z",
+      },
+    ];
+    const tree = requireTree(
+      buildSitePageTree(siteSourceSchema, records, "home", {
+        generatedAt,
+        target: { apiRoutePrefix: "/api/app-installs/site/site" },
+        turnstileSiteKey: "public-site-key",
+      }),
+    );
+    const contactForm = childForPlacement(tree.page, "rec_site_place_home_contact");
+
+    expect(contactForm).toMatchObject({
+      id: "rec_site_block_contact",
+      type: "contactForm",
+      label: "Contact us",
+      body: "Send a **message**.",
+      operationName: "submit",
+      buttonLabel: "Send",
+      successLabel: "Message received.",
+      nameLabel: "Your name",
+      emailLabel: "Your email",
+      messageLabel: "How can we help?",
+      publicOperation: {
+        entityName: "contact-message",
+        operationName: "submit",
+        canonicalKey: "contact-message.submit",
+        route: "/api/app-installs/site/site/public/operations/contact-message/submit",
+        challenge: {
+          kind: "turnstile",
+          siteKey: "public-site-key",
+        },
+      },
+    });
+    expect(JSON.stringify(tree)).not.toContain("owner@example.com");
+    expect(JSON.stringify(tree)).not.toContain("server-secret-value");
+    expect(JSON.stringify(tree)).not.toContain("Private message.");
+  });
+
+  it("warns and omits working contact form operations when bindings are missing or not public", () => {
+    const records = [
+      ...baseTreeRecords(),
+      blockRecord("rec_site_block_missing_contact", {
+        type: "contactForm",
+        label: "Missing contact operation",
+        operationName: "missingContactSubmit",
+      }),
+      blockRecord("rec_site_block_private_contact", {
+        type: "contactForm",
+        label: "Private contact operation",
+        operationName: "addTreeChild",
+      }),
+      placementRecord(
+        "rec_site_place_home_missing_contact",
+        "rec_site_content_home",
+        "rec_site_block_missing_contact",
+        {
+          order: 4000,
+        },
+      ),
+      placementRecord(
+        "rec_site_place_home_private_contact",
+        "rec_site_content_home",
+        "rec_site_block_private_contact",
+        {
+          order: 5000,
+        },
+      ),
+    ];
+    const result = buildSitePageTree(siteSourceSchema, records, "home", {
+      generatedAt,
+      turnstileSiteKey: "public-site-key",
+    });
+    const tree = requireTree(result);
+    const missing = childForPlacement(tree.page, "rec_site_place_home_missing_contact");
+    const privateAction = childForPlacement(tree.page, "rec_site_place_home_private_contact");
+
+    expect(missing.publicOperation).toBeUndefined();
+    expect(privateAction.publicOperation).toBeUndefined();
+    expect(result.meta.warnings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "missing-public-operation",
+          recordId: "rec_site_block_missing_contact",
+        }),
+        expect.objectContaining({
+          code: "invalid-public-operation",
+          recordId: "rec_site_block_private_contact",
+        }),
+      ]),
+    );
+  });
+
   it("omits tombstoned and undated posts from postList projection", () => {
     const records = baseTreeRecords().map((record) =>
       record.id === "rec_site_content_post_draft_notes"

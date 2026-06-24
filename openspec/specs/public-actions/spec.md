@@ -72,6 +72,19 @@ through an explicit actor policy and public binding.
 - AND Turnstile proof values are not stored in the created record or returned in
   the public response
 
+#### Scenario: Public contact notification side effect
+
+- GIVEN a Site contact message public operation commits successfully
+- WHEN instance email defaults and a contact notification recipient are
+  configured
+- THEN post-commit email notification scheduling may create or update platform
+  email delivery records outside the target app storage identity
+- AND the public operation response remains the operation-native create output
+- AND provider delivery status, sender verification facts, and notification
+  recipient configuration are not returned in the public response
+- AND retries use the public operation idempotency key and contact notification
+  purpose to avoid duplicate sends
+
 #### Scenario: Execute public record-plan command operation
 
 - GIVEN a non-Site app declares an anonymous public command operation with a

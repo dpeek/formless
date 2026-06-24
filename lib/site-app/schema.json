@@ -113,6 +113,9 @@
             "subscribeForm": {
               "label": "Subscribe form"
             },
+            "contactForm": {
+              "label": "Contact form"
+            },
             "group": {
               "label": "Group"
             },
@@ -186,6 +189,26 @@
           "type": "text",
           "required": false,
           "label": "Button label"
+        },
+        "successLabel": {
+          "type": "text",
+          "required": false,
+          "label": "Success label"
+        },
+        "nameLabel": {
+          "type": "text",
+          "required": false,
+          "label": "Name label"
+        },
+        "emailLabel": {
+          "type": "text",
+          "required": false,
+          "label": "Email label"
+        },
+        "messageLabel": {
+          "type": "text",
+          "required": false,
+          "label": "Message label"
         },
         "href": {
           "type": "text",
@@ -285,6 +308,18 @@
               "buttonLabel": {
                 "field": "buttonLabel"
               },
+              "successLabel": {
+                "field": "successLabel"
+              },
+              "nameLabel": {
+                "field": "nameLabel"
+              },
+              "emailLabel": {
+                "field": "emailLabel"
+              },
+              "messageLabel": {
+                "field": "messageLabel"
+              },
               "href": {
                 "field": "href"
               },
@@ -350,6 +385,18 @@
               },
               "buttonLabel": {
                 "field": "buttonLabel"
+              },
+              "successLabel": {
+                "field": "successLabel"
+              },
+              "nameLabel": {
+                "field": "nameLabel"
+              },
+              "emailLabel": {
+                "field": "emailLabel"
+              },
+              "messageLabel": {
+                "field": "messageLabel"
               },
               "href": {
                 "field": "href"
@@ -1151,6 +1198,19 @@
           "label": "Subscribe form",
           "fields": ["label", "body", "operationName", "buttonLabel"]
         },
+        "contactForm": {
+          "label": "Contact form",
+          "fields": [
+            "label",
+            "body",
+            "operationName",
+            "buttonLabel",
+            "successLabel",
+            "nameLabel",
+            "emailLabel",
+            "messageLabel"
+          ]
+        },
         "group": {
           "label": "Group",
           "fields": ["label"]
@@ -1681,6 +1741,39 @@
             }
           }
         },
+        "contactForm": {
+          "presentation": "fields",
+          "fields": {
+            "body": {
+              "editor": "markdown",
+              "commit": "field-commit"
+            },
+            "operationName": {
+              "editor": "text",
+              "commit": "field-commit"
+            },
+            "buttonLabel": {
+              "editor": "text",
+              "commit": "field-commit"
+            },
+            "successLabel": {
+              "editor": "text",
+              "commit": "field-commit"
+            },
+            "nameLabel": {
+              "editor": "text",
+              "commit": "field-commit"
+            },
+            "emailLabel": {
+              "editor": "text",
+              "commit": "field-commit"
+            },
+            "messageLabel": {
+              "editor": "text",
+              "commit": "field-commit"
+            }
+          }
+        },
         "image": {
           "presentation": "fields",
           "fields": {
@@ -1879,6 +1972,39 @@
               "commit": "field-commit"
             },
             "buttonLabel": {
+              "editor": "text",
+              "commit": "field-commit"
+            }
+          }
+        },
+        "contactForm": {
+          "presentation": "fields",
+          "fields": {
+            "body": {
+              "editor": "markdown",
+              "commit": "field-commit"
+            },
+            "operationName": {
+              "editor": "text",
+              "commit": "field-commit"
+            },
+            "buttonLabel": {
+              "editor": "text",
+              "commit": "field-commit"
+            },
+            "successLabel": {
+              "editor": "text",
+              "commit": "field-commit"
+            },
+            "nameLabel": {
+              "editor": "text",
+              "commit": "field-commit"
+            },
+            "emailLabel": {
+              "editor": "text",
+              "commit": "field-commit"
+            },
+            "messageLabel": {
               "editor": "text",
               "commit": "field-commit"
             }
@@ -2362,7 +2488,8 @@
                 "project",
                 "postList",
                 "projectList",
-                "subscribeForm"
+                "subscribeForm",
+                "contactForm"
               ]
             },
             "group": {
@@ -2379,7 +2506,8 @@
                 "project",
                 "postList",
                 "projectList",
-                "subscribeForm"
+                "subscribeForm",
+                "contactForm"
               ]
             },
             "section": {
@@ -2396,7 +2524,8 @@
                 "project",
                 "postList",
                 "projectList",
-                "subscribeForm"
+                "subscribeForm",
+                "contactForm"
               ]
             },
             "cardGrid": {
@@ -2451,6 +2580,7 @@
             "postList": "leaf",
             "projectList": "leaf",
             "subscribeForm": "leaf",
+            "contactForm": "leaf",
             "header": {
               "action": "leaf",
               "children": ["headerPrimary", "headerSecondary"]
@@ -2735,6 +2865,32 @@
             }
           }
         },
+        "contactForm": {
+          "presentation": "fields",
+          "fields": {
+            "body": {
+              "editor": "markdown"
+            },
+            "operationName": {
+              "editor": "text"
+            },
+            "buttonLabel": {
+              "editor": "text"
+            },
+            "successLabel": {
+              "editor": "text"
+            },
+            "nameLabel": {
+              "editor": "text"
+            },
+            "emailLabel": {
+              "editor": "text"
+            },
+            "messageLabel": {
+              "editor": "text"
+            }
+          }
+        },
         "image": {
           "presentation": "fields",
           "fields": {
@@ -3009,6 +3165,39 @@
               "commit": "field-commit"
             },
             "buttonLabel": {
+              "editor": "text",
+              "commit": "field-commit"
+            }
+          }
+        },
+        "contactForm": {
+          "presentation": "fields",
+          "fields": {
+            "body": {
+              "editor": "markdown",
+              "commit": "field-commit"
+            },
+            "operationName": {
+              "editor": "text",
+              "commit": "field-commit"
+            },
+            "buttonLabel": {
+              "editor": "text",
+              "commit": "field-commit"
+            },
+            "successLabel": {
+              "editor": "text",
+              "commit": "field-commit"
+            },
+            "nameLabel": {
+              "editor": "text",
+              "commit": "field-commit"
+            },
+            "emailLabel": {
+              "editor": "text",
+              "commit": "field-commit"
+            },
+            "messageLabel": {
               "editor": "text",
               "commit": "field-commit"
             }

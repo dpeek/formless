@@ -35,6 +35,7 @@ export type FormlessCliCommand =
     }
   | {
       dryRun: boolean;
+      force: boolean;
       kind: "workspacePush";
       targetAlias: string | null;
       workspacePath: string | null;
@@ -52,7 +53,11 @@ export type FormlessCliCommand =
       workspacePath: string | null;
     };
 
-type FormlessCliWorkspaceOperationOptionField = "dryRun" | "targetAlias" | "workspacePath";
+type FormlessCliWorkspaceOperationOptionField =
+  | "dryRun"
+  | "force"
+  | "targetAlias"
+  | "workspacePath";
 
 type FormlessCliWorkspaceOperationOptionBinding = {
   fieldKey: FormlessCliWorkspaceOperationOptionField;
@@ -90,6 +95,7 @@ export const FORMLESS_CLI_WORKSPACE_OPERATION_BINDINGS = [
       { fieldKey: "workspacePath", optionName: "--workspace", syntax: "[--workspace <path>]" },
       { fieldKey: "targetAlias", optionName: "--target", syntax: "[--target <alias>]" },
       { fieldKey: "dryRun", optionName: "--dry-run", syntax: "[--dry-run]" },
+      { fieldKey: "force", optionName: "--force", syntax: "[--force]" },
     ],
     terminalDescription: "Workspace source push",
     terminalLabel: "push",
@@ -255,6 +261,7 @@ function parseWorkspaceSourceSyncCliOperationArgs<TKind extends "workspacePull" 
   const usage = workspaceCliOperationUsage(binding);
   const allowed = workspaceCliOperationInputFieldSet(definition, binding);
   let dryRun = workspaceCliOperationBooleanDefault(binding.operationKind, "dryRun");
+  let force = false;
   let targetAlias: string | null = null;
   let workspacePath: string | null = null;
 
@@ -282,11 +289,17 @@ function parseWorkspaceSourceSyncCliOperationArgs<TKind extends "workspacePull" 
       continue;
     }
 
+    if (arg === "--force" && allowed.has("force")) {
+      force = true;
+      continue;
+    }
+
     throw new Error(`Unknown option for ${commandName}: ${arg}`);
   }
 
   return {
     dryRun,
+    ...(allowed.has("force") ? { force } : {}),
     kind,
     targetAlias,
     workspacePath,

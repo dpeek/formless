@@ -4,6 +4,8 @@ import type {
   CustomDomainProps,
   DnsRecords,
   DnsRecordsProps,
+  EmailSender,
+  EmailSenderProps,
 } from "alchemy/cloudflare";
 import type {
   DeployEvidenceSummary,
@@ -30,9 +32,38 @@ export type AlchemyDomainProviderRunner = <T>(
   apply: () => Promise<T>,
 ) => Promise<T>;
 
+export type CloudflareEmailSendingDomainProps = Omit<DnsRecordsProps, "records"> & {
+  domain: string;
+  name: string;
+};
+
+export type CloudflareEmailSendingDomain = {
+  dkimSelector?: string;
+  enabled?: boolean;
+  id?: string;
+  name: string;
+  returnPathDomain?: string;
+  tag?: string;
+  zoneId: string;
+};
+
+export type CloudflareWorkerSendEmailBindingProps = EmailSenderProps & {
+  bindingName: string;
+  domain: string;
+  workerName?: string;
+};
+
 export type AlchemyDomainProviderFactories = {
   CustomDomain: (id: string, props: CustomDomainProps) => Promise<CustomDomain>;
   DnsRecords: (id: string, props: DnsRecordsProps) => Promise<DnsRecords>;
+  EmailSendingDomain?: (
+    id: string,
+    props: CloudflareEmailSendingDomainProps,
+  ) => Promise<CloudflareEmailSendingDomain>;
+  SendEmailBinding?: (
+    id: string,
+    props: CloudflareWorkerSendEmailBindingProps,
+  ) => Promise<EmailSender>;
 };
 
 export type AlchemyDeployResourceZoneResolverInput = {
@@ -250,6 +281,21 @@ async function applyDeployResourceGraphResource(
         resource.logicalId,
         await dnsRecordsPropsFromDeployResource(resource, input.resolveZoneIdForHost),
       );
+    case "cloudflare-email-sending-domain":
+      return requiredFactory(
+        input.factories.EmailSendingDomain,
+        resource,
+        "Cloudflare Email Sending domain",
+      )(
+        resource.logicalId,
+        await emailSendingDomainPropsFromDeployResource(resource, input.resolveZoneIdForHost),
+      );
+    case "cloudflare-worker-send-email-binding":
+      return requiredFactory(
+        input.factories.SendEmailBinding,
+        resource,
+        "Cloudflare Worker send-email binding",
+      )(resource.logicalId, sendEmailBindingPropsFromDeployResource(resource));
   }
 }
 
@@ -292,6 +338,49 @@ async function dnsRecordsPropsFromDeployResource(
   };
 }
 
+async function emailSendingDomainPropsFromDeployResource(
+  resource: DeployResource,
+  resolveZoneIdForHost: AlchemyDeployResourceZoneResolver | undefined,
+): Promise<CloudflareEmailSendingDomainProps> {
+  const domain = requiredStringInput(resource, "domain", optionalStringInput(resource, "name"));
+  const zoneId =
+    optionalStringInput(resource, "zoneId") ??
+    (await resolveZoneId(resource, domain, resolveZoneIdForHost));
+
+  if (zoneId === undefined) {
+    throw new Error(
+      `Deployment resource "${resource.logicalId}" requires zoneId or a resolvable domain for Email Sending.`,
+    );
+  }
+
+  return {
+    domain,
+    name: optionalStringInput(resource, "name") ?? domain,
+    zoneId,
+  };
+}
+
+function sendEmailBindingPropsFromDeployResource(
+  resource: DeployResource,
+): CloudflareWorkerSendEmailBindingProps {
+  const allowedSenderAddresses = stringArrayInput(resource, "allowedSenderAddresses");
+
+  if (allowedSenderAddresses.length === 0) {
+    throw new Error(
+      `Deployment resource "${resource.logicalId}" allowedSenderAddresses input must not be empty.`,
+    );
+  }
+
+  return {
+    allowedSenderAddresses,
+    bindingName: requiredStringInput(resource, "bindingName"),
+    domain: requiredStringInput(resource, "domain"),
+    ...(optionalStringInput(resource, "workerName") === undefined
+      ? {}
+      : { workerName: optionalStringInput(resource, "workerName") }),
+  };
+}
+
 function deploymentEvidenceFromAlchemyResult(input: {
   resource: DeployResource;
   result: AlchemyDeployResourceGraphResourceResult;
@@ -320,6 +409,10 @@ function providerResourceIdsFromOutput(kind: DeployResource["kind"], output: unk
       return Array.isArray(record.records)
         ? stringValues(record.records.map((entry) => (isRecord(entry) ? entry.id : undefined)))
         : [];
+    case "cloudflare-email-sending-domain":
+      return uniqueStringValues([record.id, record.tag]);
+    case "cloudflare-worker-send-email-binding":
+      return uniqueStringValues([record.bindingName, record.name]);
   }
 }
 
@@ -329,6 +422,12 @@ function resourceDisplayName(resource: DeployResource): string | undefined {
       return optionalStringInput(resource, "host") ?? optionalStringInput(resource, "name");
     case "cloudflare-dns-records":
       return optionalStringInput(resource, "fromHost") ?? dnsRecordsInput(resource)[0]?.name;
+    case "cloudflare-email-sending-domain":
+      return optionalStringInput(resource, "domain") ?? optionalStringInput(resource, "name");
+    case "cloudflare-worker-send-email-binding":
+      return (
+        optionalStringInput(resource, "domain") ?? optionalStringInput(resource, "bindingName")
+      );
   }
 }
 
@@ -394,6 +493,24 @@ function booleanInput(resource: DeployResource, key: string, fallback: boolean):
   return typeof value === "boolean" ? value : fallback;
 }
 
+function stringArrayInput(resource: DeployResource, key: string): string[] {
+  const value = resource.inputs[key];
+
+  if (!Array.isArray(value)) {
+    throw new Error(`Deployment resource "${resource.logicalId}" ${key} input must be an array.`);
+  }
+
+  return value.map((entry, index) => {
+    if (typeof entry === "string" && entry.trim()) {
+      return entry.trim();
+    }
+
+    throw new Error(
+      `Deployment resource "${resource.logicalId}" ${key}[${index}] input must be a string.`,
+    );
+  });
+}
+
 function requiredRecordString(
   record: Record<string, DeployJsonValue>,
   key: string,
@@ -419,6 +536,18 @@ function stringValues(values: unknown[]): string[] {
   return values.filter(
     (value): value is string => typeof value === "string" && value.trim() !== "",
   );
+}
+
+function uniqueStringValues(values: unknown[]): string[] {
+  return [...new Set(stringValues(values))];
+}
+
+function requiredFactory<T>(factory: T | undefined, resource: DeployResource, label: string): T {
+  if (factory === undefined) {
+    throw new Error(`Deployment resource "${resource.logicalId}" requires ${label} factory.`);
+  }
+
+  return factory;
 }
 
 function isRecord(value: unknown): value is Record<string, DeployJsonValue> {

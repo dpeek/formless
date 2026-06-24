@@ -175,6 +175,30 @@ The system SHALL project subscribe form blocks into public Site trees without ex
 - THEN the public tree includes a warning
 - AND public rendering does not expose a working form for that block
 
+### Requirement: Contact Form Public Tree Projection
+
+The system SHALL project contact form blocks into public Site trees without
+exposing private challenge, email provider, or runtime secrets.
+
+#### Scenario: Project contact form operation facts
+
+- GIVEN the public Site tree includes a `contactForm` block
+- WHEN the block references a publicly executable contact message operation
+- THEN the projected block includes the operation key and target public
+  operation route
+- AND the referenced operation is a public-eligible create, record-plan, or
+  operation handler command that stores flat contact message data
+- AND the projected block does not include Turnstile secrets, email provider
+  credentials, sender verification facts, or private notification recipients
+
+#### Scenario: Warn for missing contact operation
+
+- GIVEN a `contactForm` block references an operation that is missing or not
+  publicly executable
+- WHEN the public tree is projected
+- THEN the public tree includes a warning
+- AND public rendering does not expose a working form for that block
+
 ### Requirement: Site Authoring
 
 The system SHALL expose Site authoring through generated admin screens that edit Site settings and tree-structured block composition without exposing raw implementation-only fields as primary controls.
@@ -217,6 +241,28 @@ The system SHALL support a Site `subscribeForm` block that binds public page con
 - GIVEN the Site source schema declares the `subscribeForm` block type
 - WHEN the schema is parsed
 - THEN `subscribeForm` is a valid block type and union variant
+- AND its stored operation reference resolves through source-declared operation
+  keys and operation handler capability facts
+- AND generated Site authoring exposes the fields needed to configure the form
+
+### Requirement: Contact Form Block
+
+The system SHALL support a Site `contactForm` block that binds public page
+content to a schema-declared public contact message operation.
+
+#### Scenario: Author contact form block
+
+- GIVEN a Site author creates a `contactForm` block
+- WHEN the block is stored
+- THEN the block stores normal flat block fields for label, body, operation
+  name, button label, success label, and field labels
+- AND the block can be placed under public page and group composition branches
+
+#### Scenario: Contact form variant is parsed
+
+- GIVEN the Site source schema declares the `contactForm` block type
+- WHEN the schema is parsed
+- THEN `contactForm` is a valid block type and union variant
 - AND its stored operation reference resolves through source-declared operation
   keys and operation handler capability facts
 - AND generated Site authoring exposes the fields needed to configure the form
@@ -294,6 +340,30 @@ The system SHALL render subscribe form blocks as public forms on preview, instal
 - WHEN the public page handles the outcome
 - THEN the page shows the configured success state
 - AND the visitor is not shown admin-only subscriber records
+
+### Requirement: Contact Form Rendering
+
+The system SHALL render contact form blocks as public forms on preview,
+installed, and mapped public Site routes.
+
+#### Scenario: Render Turnstile-protected contact form
+
+- GIVEN a public Site page renders a valid `contactForm` block whose operation
+  requires Turnstile
+- WHEN the public renderer renders the block
+- THEN the page renders name, email, and message inputs, a submit control, and
+  Turnstile widget using the public site key
+- AND form submission posts to the target public operation route with the
+  declared contact message input, source block id, idempotency key, and
+  Turnstile token
+
+#### Scenario: Render successful contact outcome
+
+- GIVEN a public contact form submission succeeds
+- WHEN the public page handles the outcome
+- THEN the page shows the configured success state
+- AND the visitor is not shown provider delivery state, notification recipient
+  configuration, or admin-only contact message records
 
 ### Requirement: Links And Frames
 

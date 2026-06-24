@@ -21,12 +21,30 @@ ceremonies.
   relying-party id
 - AND the relying-party id is not inferred from an arbitrary mapped request host
 
+#### Scenario: Production auth uses primary route identity
+
+- GIVEN an instance has selected a primary route as its production identity
+- WHEN production passkey registration or login ceremonies are configured
+- THEN canonical origin and relying-party id are derived from that selected
+  route or explicit instance settings
+- AND workers.dev origin remains a bootstrap or preview identity unless the
+  owner explicitly selects it as production identity
+
 #### Scenario: Missing auth configuration
 
 - GIVEN owner setup or passkey login requires instance auth configuration
 - WHEN canonical origin or relying-party id is missing
 - THEN the ceremony request is rejected with a configuration error
 - AND no owner, credential, challenge, or session state is written
+
+#### Scenario: Primary domain activation before production owner credentials
+
+- GIVEN a deployed instance has only a workers.dev bootstrap origin
+- WHEN the owner attempts to create production owner passkey credentials
+- THEN the runtime requires configured canonical auth origin and relying-party
+  id before accepting the ceremony
+- AND local-dev bootstrap sessions and preview deployment remain available
+  without creating production passkey credentials
 
 ### Requirement: First Owner Passkey Setup
 

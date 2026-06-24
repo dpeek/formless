@@ -23,6 +23,8 @@ import {
 import type {
   ControlPlaneAppInstallProjectionRecord,
   ControlPlaneDeploymentConfigObservationRecord,
+  ControlPlaneEmailDomainProjectionRecord,
+  ControlPlaneEmailSenderProjectionRecord,
   ControlPlaneProviderConfigProjectionRecord,
   ControlPlaneProjectionSourceRecord,
   ControlPlaneRouteProjectionRecord,
@@ -59,6 +61,8 @@ describe("Deploy control-plane projection helpers", () => {
           packageAppKey: "site",
         },
       ],
+      emailDomains: [],
+      emailSenders: [],
       instanceId: "demo-instance",
       providerConfigs: [
         {
@@ -275,6 +279,120 @@ describe("Deploy control-plane projection helpers", () => {
     );
     expect(serialized).not.toContain("secret");
     expect(changedProjection.sourceFingerprint).not.toContain("secret");
+  });
+
+  it("adapts email domain and sender records into target-scoped deploy projection input", () => {
+    const projectionInput = deployDesiredStateProjectionInputFromControlPlaneRecords({
+      instanceId: "demo-instance",
+      records: [
+        ...sourceRecords,
+        ...emailSourceRecords,
+        {
+          id: "email-domain:secondary.example.com",
+          entity: "email-domain",
+          createdAt: "2026-06-14T00:00:00.000Z",
+          values: {
+            deploymentConfig: "cloudflare-secondary",
+            domain: "secondary.example.com",
+            enabled: true,
+            providerFamily: "cloudflare",
+            verificationStatus: "verified",
+          },
+        },
+      ],
+      targetId: "instance.primary",
+      workerName: "fallback-worker",
+    });
+
+    expect(projectionInput.emailDomains).toEqual([
+      {
+        deploymentConfig: "cloudflare-primary",
+        domain: "mail.example.com",
+        enabled: true,
+        id: "email-domain:mail.example.com",
+        providerFamily: "cloudflare",
+        verificationStatus: "pending",
+      },
+    ]);
+    expect(projectionInput.emailSenders).toEqual([
+      {
+        address: "contact@mail.example.com",
+        displayName: "Contact",
+        emailDomain: "email-domain:mail.example.com",
+        enabled: true,
+        id: "email-sender:contact@mail.example.com",
+        purpose: "contact-notification",
+        verificationStatus: "verified",
+      },
+      {
+        address: "pending@mail.example.com",
+        emailDomain: "email-domain:mail.example.com",
+        enabled: true,
+        id: "email-sender:pending@mail.example.com",
+        purpose: "system",
+        verificationStatus: "pending",
+      },
+    ]);
+    expect(JSON.stringify(projectionInput)).not.toContain("email-domain:secondary.example.com");
+  });
+
+  it("projects Cloudflare email domain and constrained send-email binding resources", async () => {
+    const projection = projectDeployControlPlaneDesiredState({
+      emailDomains,
+      emailSenders,
+      instanceId: "demo-instance",
+      targetId: "instance.primary",
+      workerName: "demo-worker",
+    });
+
+    expect(projection.resourceGraph.resources).toEqual([
+      {
+        dependencies: [],
+        inputs: {
+          domain: "mail.example.com",
+          name: "mail.example.com",
+        },
+        kind: "cloudflare-email-sending-domain",
+        logicalId: "demo-instance-email-sending-domain-mail-example-com",
+        providerFamily: "cloudflare",
+        targetId: "instance.primary",
+      },
+      {
+        dependencies: [
+          {
+            logicalId: "demo-instance-email-sending-domain-mail-example-com",
+            reason: "verified senders",
+          },
+        ],
+        inputs: {
+          allowedSenderAddresses: ["contact@mail.example.com", "system@mail.example.com"],
+          bindingName: "FORMLESS_EMAIL",
+          domain: "mail.example.com",
+          workerName: "demo-worker",
+        },
+        kind: "cloudflare-worker-send-email-binding",
+        logicalId: "demo-instance-worker-send-email-mail-example-com",
+        providerFamily: "cloudflare",
+        targetId: "instance.primary",
+      },
+    ]);
+    expect(deployResourceCountsByKind(projection.resourceGraph)).toEqual({
+      "cloudflare-email-sending-domain": 1,
+      "cloudflare-worker-send-email-binding": 1,
+    });
+    expect(JSON.stringify(projection.resourceGraph)).not.toContain("cloudflare-email-dns-records");
+    expect(deployProjectionCanonicalJson(projection)).not.toContain("pending@mail.example.com");
+    expect(await computeDeployProjectionHash(projection)).toBe(
+      await computeDeployProjectionHash(
+        projectDeployControlPlaneDesiredState({
+          emailDomains: [...emailDomains].reverse(),
+          emailSenders: [...emailSenders].reverse(),
+          instanceId: "demo-instance",
+          targetId: "instance.primary",
+          workerName: "demo-worker",
+        }),
+      ),
+    );
   });
 
   it("keeps route-derived redirect projection stable and display-safe", async () => {
@@ -811,6 +929,45 @@ const providerConfigs = [
   },
 ] satisfies ControlPlaneProviderConfigProjectionRecord[];
 
+const emailDomains = [
+  {
+    deploymentConfig: "cloudflare-primary",
+    domain: "Mail.Example.com.",
+    enabled: true,
+    id: "email-domain:mail.example.com",
+    providerFamily: "cloudflare",
+    verificationStatus: "pending",
+  },
+] satisfies ControlPlaneEmailDomainProjectionRecord[];
+
+const emailSenders = [
+  {
+    address: "System@Mail.Example.com",
+    emailDomain: "email-domain:mail.example.com",
+    enabled: true,
+    id: "email-sender:system@mail.example.com",
+    purpose: "system",
+    verificationStatus: "verified",
+  },
+  {
+    address: "contact@mail.example.com",
+    displayName: "Contact",
+    emailDomain: "email-domain:mail.example.com",
+    enabled: true,
+    id: "email-sender:contact@mail.example.com",
+    purpose: "contact-notification",
+    verificationStatus: "verified",
+  },
+  {
+    address: "pending@mail.example.com",
+    emailDomain: "email-domain:mail.example.com",
+    enabled: true,
+    id: "email-sender:pending@mail.example.com",
+    purpose: "system",
+    verificationStatus: "pending",
+  },
+] satisfies ControlPlaneEmailSenderProjectionRecord[];
+
 const sourceRecords = [
   {
     id: "app-install:site",
@@ -887,6 +1044,58 @@ const sourceRecords = [
       matchPath: "/",
       surface: "public-site",
       targetProfile: "public-site",
+    },
+  },
+] satisfies ControlPlaneProjectionSourceRecord[];
+
+const emailSourceRecords = [
+  {
+    id: "email-domain:mail.example.com",
+    entity: "email-domain",
+    createdAt: "2026-06-14T00:00:00.000Z",
+    values: {
+      deploymentConfig: "cloudflare-primary",
+      domain: "Mail.Example.com.",
+      enabled: true,
+      providerFamily: "cloudflare",
+      verificationStatus: "pending",
+    },
+  },
+  {
+    id: "email-sender:contact@mail.example.com",
+    entity: "email-sender",
+    createdAt: "2026-06-14T00:00:00.000Z",
+    values: {
+      address: "Contact@Mail.Example.com",
+      displayName: "Contact",
+      emailDomain: "email-domain:mail.example.com",
+      enabled: true,
+      purpose: "contact-notification",
+      verificationStatus: "verified",
+    },
+  },
+  {
+    id: "email-sender:pending@mail.example.com",
+    entity: "email-sender",
+    createdAt: "2026-06-14T00:00:00.000Z",
+    values: {
+      address: "pending@mail.example.com",
+      emailDomain: "email-domain:mail.example.com",
+      enabled: true,
+      purpose: "system",
+      verificationStatus: "pending",
+    },
+  },
+  {
+    id: "email-sender:disabled@mail.example.com",
+    entity: "email-sender",
+    createdAt: "2026-06-14T00:00:00.000Z",
+    values: {
+      address: "disabled@mail.example.com",
+      emailDomain: "email-domain:mail.example.com",
+      enabled: false,
+      purpose: "system",
+      verificationStatus: "verified",
     },
   },
 ] satisfies ControlPlaneProjectionSourceRecord[];

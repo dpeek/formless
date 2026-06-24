@@ -174,6 +174,12 @@ const dryRunInputField = {
   valueType: "boolean",
 } as const;
 
+const forceInputField = {
+  display: "when-present",
+  key: "force",
+  valueType: "boolean",
+} as const;
+
 export const WORKSPACE_OPERATION_DEFINITIONS = [
   {
     actorPolicy: { allowedActors: allWorkspaceOperationActors },
@@ -290,7 +296,9 @@ export const WORKSPACE_OPERATION_DEFINITIONS = [
     },
     executionRequirements: ["local-filesystem", "workspace-source-read", "remote-target"],
     handlerKey: "workspace.source.push",
-    input: { fields: [dryRunInputField, targetAliasInputField, workspacePathInputField] },
+    input: {
+      fields: [dryRunInputField, forceInputField, targetAliasInputField, workspacePathInputField],
+    },
     key: "workspace.source.push",
     kind: "push",
     label: "Workspace source push",
@@ -690,6 +698,7 @@ export type PullWorkspaceOperationInput = {
 
 export type PushWorkspaceOperationInput = {
   dryRun?: boolean;
+  force?: boolean;
   kind: "push";
   targetAlias?: string | null;
   workspacePath?: string | null;
@@ -743,6 +752,7 @@ export type WorkspaceOperationCheckOrPullStartInput = {
 
 export type WorkspaceOperationPushStartInput = {
   dryRun?: boolean;
+  force?: boolean;
   kind: "push";
   targetAlias?: string | null;
 };

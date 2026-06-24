@@ -899,6 +899,7 @@ describe("workspace operation contracts", () => {
     ]);
     expect(workspaceOperationInputDefaults("pull")).toEqual({ dryRun: false });
     expect(workspaceOperationInputDefaults("push")).toEqual({ dryRun: false });
+    expect(workspaceOperationInputFieldDefaultValue("push", "force")).toBeUndefined();
     expect(workspaceOperationInputFieldDefaultValue("save", "check")).toBe(false);
     expect(workspaceOperationLabel("save")).toBe("Workspace source save");
     expect(workspaceOperationActorPolicy("save").allowedActors).toEqual([
@@ -1116,11 +1117,13 @@ describe("workspace operation contracts", () => {
     expect(
       workspaceOperationInputDisplay({
         dryRun: true,
+        force: true,
         kind: "push",
         targetAlias: "remote",
       }),
     ).toEqual({
       dryRun: true,
+      force: true,
       targetAlias: "remote",
     });
     expect(workspaceOperationInputDisplay({ kind: "deploymentRefresh" })).toEqual({});

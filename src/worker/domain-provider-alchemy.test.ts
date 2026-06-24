@@ -392,6 +392,126 @@ describe("Alchemy domain provider adapter", () => {
     ]);
   });
 
+  it("applies Cloudflare email sending domain and constrained send-email bindings", async () => {
+    const calls: Array<{ id: string; kind: string; props: unknown }> = [];
+    const runner: AlchemyDomainProviderRunner = async (_appName, _options, apply) => apply();
+    const factories: AlchemyDomainProviderFactories = {
+      CustomDomain: async () => {
+        throw new Error("CustomDomain should not be called.");
+      },
+      DnsRecords: async () => {
+        throw new Error("DnsRecords should not be called.");
+      },
+      EmailSendingDomain: async (id, props) => {
+        calls.push({ id, kind: "EmailSendingDomain", props });
+
+        return {
+          dkimSelector: "cf20260624",
+          id: "email-domain-output",
+          name: props.name,
+          returnPathDomain: "bounce.mail.example.com",
+          tag: "email-domain-tag",
+          zoneId: props.zoneId,
+        };
+      },
+      SendEmailBinding: async (id, props) => {
+        calls.push({ id, kind: "SendEmailBinding", props });
+
+        return {
+          allowedSenderAddresses: props.allowedSenderAddresses,
+          bindingName: props.bindingName,
+          type: "send_email",
+        };
+      },
+    };
+    const resourceGraph: DeployResourceGraph = {
+      targetId: "instance.primary",
+      resources: [
+        {
+          dependencies: [],
+          inputs: {
+            domain: "mail.example.com",
+            name: "mail.example.com",
+          },
+          kind: "cloudflare-email-sending-domain",
+          logicalId: "primary-email-sending-domain-mail-example-com",
+          providerFamily: "cloudflare",
+          targetId: "instance.primary",
+        },
+        {
+          dependencies: [
+            {
+              logicalId: "primary-email-sending-domain-mail-example-com",
+              reason: "verified senders",
+            },
+          ],
+          inputs: {
+            allowedSenderAddresses: ["contact@mail.example.com"],
+            bindingName: "FORMLESS_EMAIL",
+            domain: "mail.example.com",
+            workerName: "formless-prod",
+          },
+          kind: "cloudflare-worker-send-email-binding",
+          logicalId: "primary-worker-send-email-mail-example-com",
+          providerFamily: "cloudflare",
+          targetId: "instance.primary",
+        },
+      ],
+    };
+
+    const result = await runAlchemyDeployResourceGraph({
+      factories,
+      resolveZoneIdForHost: ({ host }) =>
+        host.endsWith("example.com") ? "zone-example" : undefined,
+      resourceGraph,
+      runner,
+    });
+
+    expect(calls).toEqual([
+      {
+        id: "primary-email-sending-domain-mail-example-com",
+        kind: "EmailSendingDomain",
+        props: {
+          domain: "mail.example.com",
+          name: "mail.example.com",
+          zoneId: "zone-example",
+        },
+      },
+      {
+        id: "primary-worker-send-email-mail-example-com",
+        kind: "SendEmailBinding",
+        props: {
+          allowedSenderAddresses: ["contact@mail.example.com"],
+          bindingName: "FORMLESS_EMAIL",
+          domain: "mail.example.com",
+          workerName: "formless-prod",
+        },
+      },
+    ]);
+    expect(result.evidence).toEqual([
+      {
+        action: "updated",
+        alchemyResourceId: "primary-email-sending-domain-mail-example-com",
+        displayName: "mail.example.com",
+        kind: "cloudflare-email-sending-domain",
+        logicalId: "primary-email-sending-domain-mail-example-com",
+        providerFamily: "cloudflare",
+        providerResourceIds: ["email-domain-output", "email-domain-tag"],
+        targetId: "instance.primary",
+      },
+      {
+        action: "updated",
+        alchemyResourceId: "primary-worker-send-email-mail-example-com",
+        displayName: "mail.example.com",
+        kind: "cloudflare-worker-send-email-binding",
+        logicalId: "primary-worker-send-email-mail-example-com",
+        providerFamily: "cloudflare",
+        providerResourceIds: ["FORMLESS_EMAIL"],
+        targetId: "instance.primary",
+      },
+    ]);
+  });
+
   it("bundles the injected adapter path for a Worker target", async () => {
     await expect(
       build({

@@ -15,6 +15,7 @@ import { nowIsoString } from "../shared/clock.ts";
 import {
   INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
   INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
+  INSTANCE_CONTROL_PLANE_INSTANCE_SETTINGS_ID,
   instanceControlPlaneAppInstallsFromRecords,
   instanceControlPlaneDefaultRouteAccess,
   instanceControlPlaneSchemaProvenance,
@@ -31,6 +32,7 @@ import type {
   InstanceDomainMapping,
   InstanceDomainMappingProfile,
 } from "../shared/instance-domain-mappings.ts";
+import { normalizeInstanceDomainHost } from "../shared/instance-domain-mappings.ts";
 import type { RecordValues, StoredRecord } from "@dpeek/formless-storage";
 import { parseCreateAppInstallRequest, type CreateAppInstallRequest } from "../shared/protocol.ts";
 import { type EntityOperationSchema, type SchemaOperationActorKind } from "@dpeek/formless-schema";
@@ -733,7 +735,13 @@ function validateControlPlaneRecordWrite(
       packageResolver: options.packageResolver,
     });
 
-    validateControlPlanePackageBoundary(storage, entityName, validated, options);
+    validateControlPlanePackageBoundary(
+      storage,
+      entityName,
+      validated,
+      options,
+      recordOptions?.ignoreRecordId,
+    );
     assertUniqueConstraints(storage, schema, entityName, validated, recordOptions);
   };
 }
@@ -752,6 +760,7 @@ function validateControlPlanePackageBoundary(
   entityName: string,
   values: RecordValues,
   options: { additionalRecords?: StoredRecord[]; packageResolver?: AppPackageResolver },
+  existingRecordId?: string,
 ) {
   if (entityName === "app-install") {
     const packageAppKey = parseRequiredString("packageAppKey", values.packageAppKey);
@@ -760,6 +769,21 @@ function validateControlPlanePackageBoundary(
       throw new BadRequestError(`App install package "${packageAppKey}" is unsupported.`);
     }
 
+    return;
+  }
+
+  if (entityName === "instance-settings") {
+    validateInstanceSettingsBoundary(storage, values, options.additionalRecords, existingRecordId);
+    return;
+  }
+
+  if (entityName === "email-domain") {
+    validateEmailDomainBoundary(storage, values, options.additionalRecords);
+    return;
+  }
+
+  if (entityName === "email-sender") {
+    validateEmailSenderBoundary(storage, values, options.additionalRecords);
     return;
   }
 
@@ -795,6 +819,154 @@ function validateControlPlanePackageBoundary(
   }
 }
 
+function validateInstanceSettingsBoundary(
+  storage: DurableObjectStorage,
+  values: RecordValues,
+  additionalRecords: readonly StoredRecord[] | undefined,
+  existingRecordId: string | undefined,
+) {
+  const settingsId = parseRequiredString("settingsId", values.settingsId);
+
+  if (settingsId !== INSTANCE_CONTROL_PLANE_INSTANCE_SETTINGS_ID) {
+    throw new BadRequestError(
+      `Field "settingsId" must be "${INSTANCE_CONTROL_PLANE_INSTANCE_SETTINGS_ID}".`,
+    );
+  }
+
+  const existingSettings = getBootstrapRecordsForControlPlaneValidation(storage, additionalRecords)
+    .filter((record) => record.entity === "instance-settings" && !record.deletedAt)
+    .filter((record) => record.id !== existingRecordId);
+
+  if (existingSettings.length > 0) {
+    throw new BadRequestError("Only one active instance-settings record is allowed.");
+  }
+
+  validateOptionalOrigin("canonicalOrigin", values.canonicalOrigin);
+  validateOptionalOrigin("authOrigin", values.authOrigin);
+  validateOptionalRelyingPartyId(
+    "authRelyingPartyId",
+    values.authRelyingPartyId,
+    stringRecordValue(values.authOrigin) ?? stringRecordValue(values.canonicalOrigin),
+  );
+  validateOptionalEmailAddress("contactNotificationRecipient", values.contactNotificationRecipient);
+
+  for (const fieldName of ["primaryRoute", "authRoute"] as const) {
+    const routeId = stringRecordValue(values[fieldName]);
+
+    if (routeId === undefined) {
+      continue;
+    }
+
+    const route = findControlPlaneRecord(storage, "route", routeId, additionalRecords);
+
+    if (
+      !route ||
+      route.values.enabled !== true ||
+      stringRecordValue(route.values.matchHost) === undefined
+    ) {
+      throw new BadRequestError(`Field "${fieldName}" must reference an enabled exact-host route.`);
+    }
+  }
+
+  const defaultEmailDomain = stringRecordValue(values.defaultEmailDomain);
+  const defaultContactSender = stringRecordValue(values.defaultContactSender);
+
+  if (defaultContactSender !== undefined) {
+    const sender = findControlPlaneRecord(
+      storage,
+      "email-sender",
+      defaultContactSender,
+      additionalRecords,
+    );
+
+    if (!sender) {
+      throw new BadRequestError(
+        `Field "defaultContactSender" references unknown email-sender record "${defaultContactSender}".`,
+      );
+    }
+
+    if (
+      defaultEmailDomain !== undefined &&
+      stringRecordValue(sender.values.emailDomain) !== defaultEmailDomain
+    ) {
+      throw new BadRequestError(
+        'Field "defaultContactSender" must reference a sender for the selected default email domain.',
+      );
+    }
+  }
+
+  if (
+    values.productionIdentityStatus === "configured" &&
+    values.canonicalOrigin === undefined &&
+    values.authOrigin === undefined &&
+    values.primaryRoute === undefined &&
+    values.authRoute === undefined
+  ) {
+    throw new BadRequestError(
+      'Field "productionIdentityStatus" cannot be "configured" without a canonical origin or production route.',
+    );
+  }
+}
+
+function validateEmailDomainBoundary(
+  storage: DurableObjectStorage,
+  values: RecordValues,
+  additionalRecords: readonly StoredRecord[] | undefined,
+) {
+  assertNormalizedControlPlaneHost("domain", parseRequiredString("domain", values.domain));
+
+  const primaryRoute = stringRecordValue(values.primaryRoute);
+
+  if (primaryRoute === undefined) {
+    return;
+  }
+
+  const route = findControlPlaneRecord(storage, "route", primaryRoute, additionalRecords);
+
+  if (
+    !route ||
+    route.values.enabled !== true ||
+    stringRecordValue(route.values.matchHost) === undefined
+  ) {
+    throw new BadRequestError('Field "primaryRoute" must reference an enabled exact-host route.');
+  }
+}
+
+function validateEmailSenderBoundary(
+  storage: DurableObjectStorage,
+  values: RecordValues,
+  additionalRecords: readonly StoredRecord[] | undefined,
+) {
+  const address = parseEmailAddress("address", parseRequiredString("address", values.address));
+  const emailDomain = parseRequiredString("emailDomain", values.emailDomain);
+  const domainRecord = findControlPlaneRecord(
+    storage,
+    "email-domain",
+    emailDomain,
+    additionalRecords,
+  );
+
+  if (!domainRecord) {
+    throw new BadRequestError(
+      `Field "emailDomain" references unknown email-domain record "${emailDomain}".`,
+    );
+  }
+
+  const domain = parseRequiredString("emailDomain.domain", domainRecord.values.domain);
+
+  if (!hostBelongsToDomain(address.host, domain)) {
+    throw new BadRequestError(
+      `Field "address" host must belong to referenced email domain "${domain}".`,
+    );
+  }
+
+  const displayName = stringRecordValue(values.displayName);
+
+  if (displayName !== undefined && /[\r\n]/.test(displayName)) {
+    throw new BadRequestError('Field "displayName" must not contain line breaks.');
+  }
+}
+
 function findControlPlaneRecord(
   storage: DurableObjectStorage,
   entity: string,
@@ -812,6 +984,146 @@ function findControlPlaneRecord(
   const stored = getStoredRecord(storage, id);
 
   return stored?.entity === entity && !stored.deletedAt ? stored : undefined;
+}
+
+function getBootstrapRecordsForControlPlaneValidation(
+  storage: DurableObjectStorage,
+  additionalRecords: readonly StoredRecord[] | undefined,
+): StoredRecord[] {
+  if (!additionalRecords?.length) {
+    return getBootstrapRecords(storage);
+  }
+
+  const recordsById = new Map(getBootstrapRecords(storage).map((record) => [record.id, record]));
+
+  for (const record of additionalRecords) {
+    recordsById.set(record.id, record);
+  }
+
+  return [...recordsById.values()];
+}
+
+function validateOptionalOrigin(fieldName: string, value: unknown) {
+  if (value === undefined) {
+    return;
+  }
+
+  const origin = parseRequiredString(fieldName, value);
+  const normalized = normalizeControlPlaneOrigin(origin);
+
+  if (normalized !== origin) {
+    throw new BadRequestError(`Field "${fieldName}" must be a normalized absolute origin.`);
+  }
+}
+
+function validateOptionalRelyingPartyId(
+  fieldName: string,
+  value: unknown,
+  canonicalOrigin: string | undefined,
+) {
+  if (value === undefined) {
+    return;
+  }
+
+  const rawRelyingPartyId = parseRequiredString(fieldName, value);
+  const relyingPartyId = rawRelyingPartyId.toLowerCase();
+
+  if (
+    relyingPartyId !== rawRelyingPartyId ||
+    normalizeInstanceDomainHost(relyingPartyId).ok !== true ||
+    (canonicalOrigin !== undefined && !relyingPartyIdMatchesOrigin(relyingPartyId, canonicalOrigin))
+  ) {
+    throw new BadRequestError(
+      `Field "${fieldName}" must be a normalized relying-party id for the configured auth origin.`,
+    );
+  }
+}
+
+function validateOptionalEmailAddress(fieldName: string, value: unknown) {
+  if (value === undefined) {
+    return;
+  }
+
+  parseEmailAddress(fieldName, parseRequiredString(fieldName, value));
+}
+
+function assertNormalizedControlPlaneHost(fieldName: string, value: string) {
+  const normalized = normalizeInstanceDomainHost(value);
+
+  if (!normalized.ok || normalized.host !== value) {
+    throw new BadRequestError(`Field "${fieldName}" must be a normalized exact host.`);
+  }
+}
+
+function normalizeControlPlaneOrigin(value: string): string | undefined {
+  try {
+    const url = new URL(value);
+    const hostname = url.hostname.toLowerCase();
+    const normalizedHostResult = normalizeInstanceDomainHost(hostname);
+    const normalizedHost = isLocalControlPlaneHost(hostname)
+      ? hostname
+      : normalizedHostResult.ok
+        ? normalizedHostResult.host
+        : undefined;
+    const normalizedOrigin = url.origin.replace(url.hostname, hostname);
+
+    if (
+      normalizedHost === undefined ||
+      url.username !== "" ||
+      url.password !== "" ||
+      url.pathname !== "/" ||
+      url.search !== "" ||
+      url.hash !== "" ||
+      (url.protocol !== "https:" &&
+        !(url.protocol === "http:" && isLocalControlPlaneHost(hostname))) ||
+      normalizedOrigin !== value
+    ) {
+      return undefined;
+    }
+
+    return normalizedOrigin;
+  } catch {
+    return undefined;
+  }
+}
+
+function relyingPartyIdMatchesOrigin(relyingPartyId: string, canonicalOrigin: string) {
+  const normalizedOrigin = normalizeControlPlaneOrigin(canonicalOrigin);
+
+  if (normalizedOrigin === undefined) {
+    return false;
+  }
+
+  const canonicalHost = new URL(normalizedOrigin).hostname.toLowerCase();
+
+  return canonicalHost === relyingPartyId || canonicalHost.endsWith(`.${relyingPartyId}`);
+}
+
+function parseEmailAddress(fieldName: string, value: string): { host: string } {
+  const atIndex = value.lastIndexOf("@");
+  const local = atIndex <= 0 ? "" : value.slice(0, atIndex);
+  const host = atIndex <= 0 ? "" : value.slice(atIndex + 1).toLowerCase();
+  const normalized = `${local}@${host}`;
+
+  if (
+    value !== normalized ||
+    value.indexOf("@") !== atIndex ||
+    local === "" ||
+    !/^[^@\s<>]+$/.test(local) ||
+    normalizeInstanceDomainHost(host).ok !== true
+  ) {
+    throw new BadRequestError(`Field "${fieldName}" must be a normalized email address.`);
+  }
+
+  return { host };
+}
+
+function hostBelongsToDomain(host: string, domain: string) {
+  return host === domain || host.endsWith(`.${domain}`);
+}
+
+function isLocalControlPlaneHost(value: string) {
+  return value === "localhost" || value.endsWith(".localhost");
 }
 
 function parseCreateAppInstallOperationRequest(

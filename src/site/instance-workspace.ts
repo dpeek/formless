@@ -71,6 +71,7 @@ import {
   instanceControlPlaneSchema,
   instanceControlPlaneDeploymentConfigObservedFields,
   isInstanceControlPlaneEntityName,
+  reviewableInstanceControlPlaneStorageSnapshot,
 } from "@dpeek/formless-instance-control-plane";
 import { STORAGE_SNAPSHOT_KIND, STORAGE_SNAPSHOT_VERSION } from "@dpeek/formless-storage";
 import type { RecordValues, StorageSnapshot, StoredRecord } from "@dpeek/formless-storage";
@@ -431,6 +432,7 @@ export type SaveLocalFormlessWorkspaceResult = {
 
 export type PushFormlessInstanceWorkspaceInput = {
   apply?: boolean;
+  force?: boolean;
   targetAlias?: string | null;
   targetOverride?: FormlessInstanceWorkspaceTarget;
   workspacePath?: string;
@@ -459,7 +461,7 @@ export type PushFormlessInstanceWorkspaceSource = {
 };
 
 export type PushFormlessInstanceWorkspaceRuntimeRebuild = {
-  reason: "runtime-extensions-configured";
+  reason: "force" | "runtime-extensions-configured";
   status: "applied" | "available";
 };
 
@@ -1577,10 +1579,13 @@ export async function pushFormlessInstanceWorkspace(
       targetLabel: selectedTarget.alias,
     });
     const runtimeRebuild =
-      planned.workspaceRuntimeExtensions === undefined
+      planned.workspaceRuntimeExtensions === undefined && input.force !== true
         ? undefined
         : {
-            reason: "runtime-extensions-configured" as const,
+            reason:
+              planned.workspaceRuntimeExtensions === undefined
+                ? ("force" as const)
+                : ("runtime-extensions-configured" as const),
             status: (input.apply ? "applied" : "available") as "applied" | "available",
           };
     const hasDataChanges = syncPlan.status !== "up-to-date";
@@ -3575,8 +3580,14 @@ async function workspaceLocalRestoreArchiveSource(input: {
     return undefined;
   }
 
+  const reviewableControlPlane = reviewableInstanceControlPlaneStorageSnapshot(controlPlane, {
+    context: "Formless instance local dev control-plane records",
+    packageResolver: input.activePackages.resolver,
+    sourceLabel: "Formless instance local dev control-plane storage state",
+  });
+
   assertWorkspaceControlPlanePackagesAvailable({
-    controlPlane,
+    controlPlane: reviewableControlPlane,
     operation: "local dev",
     packageResolver: input.activePackages.resolver,
   });
@@ -3584,13 +3595,13 @@ async function workspaceLocalRestoreArchiveSource(input: {
   const appState = await readCompleteWorkspaceAppState(
     input.workspaceRoot,
     input.manifest,
-    controlPlane,
+    reviewableControlPlane,
     input.activePackages,
   );
   const write = await writeComposedWorkspacePushArchive({
     archiveRoot: path.join(input.tempRoot, "archive"),
     appState,
-    controlPlane,
+    controlPlane: reviewableControlPlane,
     exportedAt: input.exportedAt,
     packageResolver: input.activePackages.resolver,
   });

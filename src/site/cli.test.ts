@@ -48,6 +48,7 @@ import type { StorageSnapshot, StoredRecord } from "@dpeek/formless-storage";
 import {
   INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
   INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
+  formatInstanceControlPlaneBoundaryEntityName,
   instanceControlPlaneSchema,
 } from "@dpeek/formless-instance-control-plane";
 import { computeSourceSchemaHash, type SourceSchemaHash } from "../shared/upgrade-migrations.ts";
@@ -150,7 +151,7 @@ describe("Formless CLI", () => {
       "                                      Run local workspace and print browser session URL",
       "  pull [--workspace <path>] [--target <alias>] [--dry-run]",
       "                                      Workspace source pull",
-      "  push [--workspace <path>] [--target <alias>] [--dry-run]",
+      "  push [--workspace <path>] [--target <alias>] [--dry-run] [--force]",
       "                                      Workspace source push",
       "  destroy [--workspace <path>] [--target <alias>] --confirm <workerName>",
       "  owner setup [--workspace <path>] [--target <alias>]",
@@ -196,8 +197,8 @@ describe("Formless CLI", () => {
         command: "formless push",
         dispatchKind: "workspacePush",
         operationKind: "push",
-        optionFields: ["workspacePath", "targetAlias", "dryRun"],
-        optionSyntax: ["[--workspace <path>]", "[--target <alias>]", "[--dry-run]"],
+        optionFields: ["workspacePath", "targetAlias", "dryRun", "force"],
+        optionSyntax: ["[--workspace <path>]", "[--target <alias>]", "[--dry-run]", "[--force]"],
         terminalDescription: "Workspace source push",
         terminalLabel: "push",
       },
@@ -217,11 +218,11 @@ describe("Formless CLI", () => {
       const definition = workspaceOperationDefinitionForKind(binding.operationKind);
       const definitionFieldKeys = new Set(definition.input.fields.map((field) => field.key));
 
-      expect(binding.options.map((option) => option.fieldKey)).toEqual([
-        "workspacePath",
-        "targetAlias",
-        "dryRun",
-      ]);
+      expect(binding.options.map((option) => option.fieldKey)).toEqual(
+        binding.operationKind === "push"
+          ? ["workspacePath", "targetAlias", "dryRun", "force"]
+          : ["workspacePath", "targetAlias", "dryRun"],
+      );
       expect(binding.options.every((option) => definitionFieldKeys.has(option.fieldKey))).toBe(
         true,
       );
@@ -294,6 +295,7 @@ describe("Formless CLI", () => {
     });
     expect(parseFormlessCliArgs(["push", "--workspace", "../personal"])).toEqual({
       dryRun: false,
+      force: false,
       kind: "workspacePush",
       targetAlias: null,
       workspacePath: "../personal",
@@ -302,6 +304,7 @@ describe("Formless CLI", () => {
       parseFormlessCliArgs(["push", "--workspace", "../personal", "--target", "remote"]),
     ).toEqual({
       dryRun: false,
+      force: false,
       kind: "workspacePush",
       targetAlias: "remote",
       workspacePath: "../personal",
@@ -317,6 +320,16 @@ describe("Formless CLI", () => {
       ]),
     ).toEqual({
       dryRun: true,
+      force: false,
+      kind: "workspacePush",
+      targetAlias: "remote",
+      workspacePath: "../personal",
+    });
+    expect(
+      parseFormlessCliArgs(["push", "--workspace", "../personal", "--target", "remote", "--force"]),
+    ).toEqual({
+      dryRun: false,
+      force: true,
       kind: "workspacePush",
       targetAlias: "remote",
       workspacePath: "../personal",
@@ -389,9 +402,6 @@ describe("Formless CLI", () => {
     expect(() => parseFormlessCliArgs(["pull", "--target", "Remote"])).toThrow(
       "Formless instance workspace target alias must start with a lowercase letter",
     );
-    expect(() => parseFormlessCliArgs(["push", "--force"])).toThrow(
-      "Unknown option for formless push: --force",
-    );
     expect(() => parseFormlessCliArgs(["pull", "--force"])).toThrow(
       "Unknown option for formless pull: --force",
     );
@@ -422,6 +432,7 @@ describe("Formless CLI", () => {
     });
     expect(parseFormlessCliArgs(["push"])).toEqual({
       dryRun: false,
+      force: false,
       kind: "workspacePush",
       targetAlias: null,
       workspacePath: null,
@@ -2093,6 +2104,65 @@ describe("Formless CLI", () => {
     expect(requests.some((request) => request.method === "POST")).toBe(false);
   });
 
+  it("forces provider reconciliation on repeat push without restoring archive data", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+    const requests: CapturedFetchRequest[] = [];
+    const logs: string[] = [];
+    const deployInputs: DeployFormlessInstanceInput[] = [];
+    const localDavid = appArchive("david", "David Peek", { records: [] });
+    const fetcher = pushArchiveFetch(
+      requests,
+      [installedSite("david", "David Peek")],
+      { david: { records: [] } },
+      [],
+      [],
+      controlPlaneRecords({ credentialRef: "formless-cloudflare-oauth:default" }),
+    );
+
+    await writeWorkspaceManifest(workspaceRoot);
+    await writeWorkspaceControlPlaneStorageSnapshot(
+      workspaceRoot,
+      controlPlaneRecords({ credentialRef: "formless-cloudflare-oauth:default" }),
+    );
+    await writeTestFormlessCloudflareOAuthCredential(workspaceRoot);
+    await writeWorkspaceAppStateFromArchive(workspaceRoot, localDavid);
+    await mkdir(path.join(workspaceRoot, ".formless"), { recursive: true });
+    await writeFile(
+      path.join(workspaceRoot, ".formless/instance.env"),
+      "FORMLESS_ADMIN_TOKEN=local-token\n",
+    );
+
+    await runFormlessCli(
+      ["push", "--workspace", workspaceRoot, "--force"],
+      cliDeps(tempDir, {
+        deploy: async (input) => {
+          deployInputs.push(input);
+
+          return { resourceEvidence: [], url: input.plan.expectedUrl.url };
+        },
+        fetch: fetcher,
+        logs,
+      }),
+    );
+
+    expect(deployInputs).toHaveLength(1);
+    expect(deployInputs[0]?.workspaceRuntimeExtensions).toBeUndefined();
+    expect(
+      requests.filter(
+        (request) =>
+          request.method === "POST" &&
+          new URL(request.url).pathname === "/api/formless/archive/restore",
+      ),
+    ).toEqual([]);
+    expect(logs).toHaveLength(1);
+    expect(logs[0]).toContain("Workspace operation: push (succeeded).");
+    expect(logs[0]).toContain("mode: apply.");
+    expect(logs[0]).toContain("runtimeRebuild: applied.");
+    expect(logs[0]).toContain('"reason":"force"');
+    expect(logs[0]).toContain("sync: up-to-date.");
+  });
+
   it("rebuilds runtime extensions on repeat push apply without restoring archive data", async () => {
     const tempDir = await makeTempDir();
     const workspaceRoot = path.join(tempDir, "personal-sites");
@@ -3502,8 +3572,10 @@ describe("Formless CLI", () => {
       await readFile(deploymentConfigSourcePath, "utf8"),
     ) as { records: StoredRecord[] };
 
+    const deploymentConfigEntity =
+      formatInstanceControlPlaneBoundaryEntityName("deployment-config");
     deploymentConfigSource.records = deploymentConfigSource.records.map((record) =>
-      record.entity === "deployment-config"
+      record.entity === "deployment-config" || record.entity === deploymentConfigEntity
         ? {
             ...record,
             values: {

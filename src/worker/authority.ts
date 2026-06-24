@@ -36,6 +36,7 @@ import { handleOwnerPasskeyDurableObjectRequest } from "./owner-passkeys.ts";
 import { handleInstanceDomainProviderDurableObjectRequest } from "./domain-provider-api.ts";
 import { handleInstanceDomainMappingsDurableObjectRequest } from "./instance-domain-mappings.ts";
 import { handleInstanceDeploymentRuntimeDurableObjectRequest } from "./deployment-runtime-api.ts";
+import { handleInstanceEmailRuntimeDurableObjectRequest } from "./email-runtime.ts";
 import { ensureRuntimeInstanceAuthConfig } from "./instance-auth-runtime.ts";
 import { handleLocalSessionBootstrapDurableObjectRequest } from "./local-session-bootstrap.ts";
 import {
@@ -43,6 +44,7 @@ import {
   PublicOperationError,
   selectPublicOperationRoute,
 } from "./public-operations.ts";
+import { scheduleSiteContactNotificationAfterPublicOperation } from "./site-contact-notifications.ts";
 import { turnstileSiteKeyFromEnv } from "../shared/turnstile-config.ts";
 import {
   handleAppStorageUpgradeStatusDurableObjectRequest,
@@ -68,7 +70,17 @@ export class FormlessAuthority extends DurableObject<Env> {
     const url = new URL(request.url);
 
     if (this.ctx.id.name === FORMLESS_INSTANCE_AUTHORITY_NAME) {
-      ensureRuntimeInstanceAuthConfig(this.ctx.storage, request, this.bindings);
+      try {
+        await ensureRuntimeInstanceAuthConfig(this.ctx.storage, request, this.bindings);
+      } catch (error) {
+        const launchFixtureError = launchFixtureConfigurationErrorMessage(error);
+
+        if (launchFixtureError !== undefined) {
+          return jsonResponse({ error: launchFixtureError }, 400);
+        }
+
+        throw error;
+      }
     }
 
     const localSessionBootstrapResponse = await handleLocalSessionBootstrapDurableObjectRequest(
@@ -140,6 +152,16 @@ export class FormlessAuthority extends DurableObject<Env> {
 
     if (instanceDeploymentRuntimeResponse) {
       return instanceDeploymentRuntimeResponse;
+    }
+
+    const instanceEmailRuntimeResponse = await handleInstanceEmailRuntimeDurableObjectRequest(
+      request,
+      this.ctx.storage,
+      this.bindings,
+    );
+
+    if (instanceEmailRuntimeResponse) {
+      return instanceEmailRuntimeResponse;
     }
 
     const instanceAppInstallsResponse = await handleInstanceAppInstallsDurableObjectRequest(
@@ -240,6 +262,13 @@ export class FormlessAuthority extends DurableObject<Env> {
         ensureStorageTables(this.ctx.storage);
         const { schema } = initializeStorageFromSource(this.ctx.storage, source);
         const result = await executePublicOperationRequest({
+          afterCommit: (response) =>
+            scheduleSiteContactNotificationAfterPublicOperation({
+              env: this.bindings,
+              identity: route.identity,
+              requestUrl: request.url,
+              response,
+            }),
           body,
           env: this.bindings,
           identity: route.identity,
@@ -627,4 +656,19 @@ function jsonResponse(body: unknown, status = 200, headers: HeadersInit = {}) {
     status,
     headers: responseHeaders,
   });
+}
+
+function launchFixtureConfigurationErrorMessage(error: unknown): string | undefined {
+  if (error instanceof LaunchFixtureConfigurationError) {
+    return error.message;
+  }
+
+  if (!(error instanceof Error)) {
+    return undefined;
+  }
+
+  return error.message.startsWith('Launch fixture "') ||
+    error.message.startsWith("Unknown launch fixture ")
+    ? error.message
+    : undefined;
 }

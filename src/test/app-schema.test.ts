@@ -4927,6 +4927,7 @@ describe("personal site sample schema", () => {
         postList: { label: "Post list" },
         projectList: { label: "Project list" },
         subscribeForm: { label: "Subscribe form" },
+        contactForm: { label: "Contact form" },
         group: { label: "Group" },
         section: { label: "Section" },
         cardGrid: { label: "Card grid" },
@@ -4996,6 +4997,10 @@ describe("personal site sample schema", () => {
       "body",
       "operationName",
       "buttonLabel",
+      "successLabel",
+      "nameLabel",
+      "emailLabel",
+      "messageLabel",
       "href",
       "mediaAssetId",
       "date",
@@ -5669,6 +5674,7 @@ describe("personal site sample schema", () => {
       "postList",
       "projectList",
       "subscribeForm",
+      "contactForm",
       "header",
       "headerPrimary",
       "headerSecondary",
@@ -5690,6 +5696,7 @@ describe("personal site sample schema", () => {
       "postList",
       "projectList",
       "subscribeForm",
+      "contactForm",
     ]);
     expect(groupChildren).toEqual([
       "group",
@@ -5705,6 +5712,7 @@ describe("personal site sample schema", () => {
       "postList",
       "projectList",
       "subscribeForm",
+      "contactForm",
     ]);
     expect(branchVariants.section).toEqual({
       children: [
@@ -5721,6 +5729,7 @@ describe("personal site sample schema", () => {
         "postList",
         "projectList",
         "subscribeForm",
+        "contactForm",
       ],
     });
     expect(branchVariants.cardGrid).toEqual({ children: ["card"] });
@@ -5763,6 +5772,7 @@ describe("personal site sample schema", () => {
     expect(branchVariants.postList).toBe("leaf");
     expect(branchVariants.projectList).toBe("leaf");
     expect(branchVariants.subscribeForm).toBe("leaf");
+    expect(branchVariants.contactForm).toBe("leaf");
     expect(branchVariants.header).toEqual({
       action: "leaf",
       children: ["headerPrimary", "headerSecondary"],
@@ -5789,6 +5799,7 @@ describe("personal site sample schema", () => {
       postList: { label: "Post list" },
       projectList: { label: "Project list" },
       subscribeForm: { label: "Subscribe form" },
+      contactForm: { label: "Contact form" },
       section: { label: "Section" },
       cardGrid: { label: "Card grid" },
       card: { label: "Card" },
@@ -5801,6 +5812,19 @@ describe("personal site sample schema", () => {
       subscribeForm: {
         label: "Subscribe form",
         fields: ["label", "body", "operationName", "buttonLabel"],
+      },
+      contactForm: {
+        label: "Contact form",
+        fields: [
+          "label",
+          "body",
+          "operationName",
+          "buttonLabel",
+          "successLabel",
+          "nameLabel",
+          "emailLabel",
+          "messageLabel",
+        ],
       },
       section: { label: "Section", fields: ["label", "body"] },
       cardGrid: { label: "Card grid", fields: ["label", "body"] },
@@ -6005,6 +6029,18 @@ describe("personal site sample schema", () => {
         buttonLabel: { editor: "text" },
       },
     });
+    expect(blockCreate.variants?.contactForm).toMatchObject({
+      presentation: "fields",
+      fields: {
+        body: { editor: "markdown" },
+        operationName: { editor: "text" },
+        buttonLabel: { editor: "text" },
+        successLabel: { editor: "text" },
+        nameLabel: { editor: "text" },
+        emailLabel: { editor: "text" },
+        messageLabel: { editor: "text" },
+      },
+    });
     expect(blockEdit.variants?.page).toMatchObject({
       presentation: "fields",
       fields: {
@@ -6078,6 +6114,18 @@ describe("personal site sample schema", () => {
         buttonLabel: { editor: "text", commit: "field-commit" },
       },
     });
+    expect(blockEdit.variants?.contactForm).toMatchObject({
+      presentation: "fields",
+      fields: {
+        body: { editor: "markdown", commit: "field-commit" },
+        operationName: { editor: "text", commit: "field-commit" },
+        buttonLabel: { editor: "text", commit: "field-commit" },
+        successLabel: { editor: "text", commit: "field-commit" },
+        nameLabel: { editor: "text", commit: "field-commit" },
+        emailLabel: { editor: "text", commit: "field-commit" },
+        messageLabel: { editor: "text", commit: "field-commit" },
+      },
+    });
 
     expect(siteCompositionHome.result).toMatchObject({
       type: "tree",
@@ -6101,6 +6149,7 @@ describe("personal site sample schema", () => {
               "postList",
               "projectList",
               "subscribeForm",
+              "contactForm",
             ],
           },
           group: {
@@ -6118,6 +6167,7 @@ describe("personal site sample schema", () => {
               "postList",
               "projectList",
               "subscribeForm",
+              "contactForm",
             ],
           },
           section: {
@@ -6135,6 +6185,7 @@ describe("personal site sample schema", () => {
               "postList",
               "projectList",
               "subscribeForm",
+              "contactForm",
             ],
           },
           cardGrid: {
@@ -6181,6 +6232,7 @@ describe("personal site sample schema", () => {
           postList: "leaf",
           projectList: "leaf",
           subscribeForm: "leaf",
+          contactForm: "leaf",
           header: {
             action: "leaf",
             children: ["headerPrimary", "headerSecondary"],

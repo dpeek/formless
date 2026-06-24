@@ -7,6 +7,10 @@ targets and derives display status from schema-owned deployment config
 observation cache. Push-owned deployers declare tracked Alchemy desired state,
 Alchemy owns provider reconciliation and provider resource state, and
 `deployment-config` records store only the latest display-safe observation.
+Email sending domain onboarding and Worker email bindings follow the same
+projected provider-resource boundary as HTTP route resources. Cloudflare Email
+Sending DNS records are provider-owned after Email Sending onboarding and are
+not projected as Formless-managed DNS resources.
 
 ## Requirements
 
@@ -35,6 +39,18 @@ mutation input without storing deployment attempts in runtime SQL tables.
 - **AND** latest deployment status remains a cache on the target
   `deployment-config` record, not separate attempt, lease, evidence, or
   provider-difference report records
+
+#### Scenario: Email resources share projected deploy graph
+
+- **WHEN** email domain and sender records project Cloudflare Email Service
+  resources
+- **THEN** those resources are applied through the same projected resource graph
+  as Worker, R2, Turnstile, DNS, and route-derived resources
+- **AND** Email Sending domain and Worker `send_email` binding resources use
+  stable logical ids
+- **AND** latest deployment status remains a cache on the target
+  `deployment-config` record, not separate email deployment attempt or provider
+  evidence records
 
 #### Scenario: Removed route resources reconcile through push
 
@@ -75,6 +91,8 @@ supported deployment target.
 - **AND** host mount routes project custom-domain and DNS resources
 - **AND** redirect routes project Worker custom-domain resources for redirect
   source hosts
+- **AND** enabled email domains and senders project Email Sending domain and
+  Worker email binding resources
 - **AND** redirect source-host route-derived resources are limited to Worker
   custom-domain resources
 - **AND** if control-plane route records are absent, no route-derived provider
@@ -90,8 +108,8 @@ supported deployment target.
 - **WHEN** user intent has not changed
 - **THEN** repeated desired-state reads for the same target produce the same
   hash
-- **AND** route-derived resource graph hashes are based on the Deploy package
-  control-plane projection output
+- **AND** route-derived and email-derived resource graph hashes are based on the
+  Deploy package control-plane projection output
 - **AND** timestamps, attempt history, evidence summaries, cleanup history,
   deployment config observation cache fields, and status display
   data do not change the desired-state hash
@@ -147,8 +165,44 @@ stable logical ids and provider resource declarations.
 - **WHEN** desired state contains provider-managed resources
 - **THEN** each graph resource has a stable logical id, kind, target id,
   provider family, inputs, and dependency metadata
-- **AND** logical ids are deterministic for the same enabled route and provider
-  deployment config intent
+- **AND** logical ids are deterministic for the same enabled route, email
+  domain, email sender, and provider deployment config intent
+
+### Requirement: Cloudflare Email Service Deployment
+
+The deployment runtime SHALL project Cloudflare Email Service resources without
+storing provider truth or provider secrets in control-plane records.
+
+#### Scenario: Email Sending resources
+
+- GIVEN a Cloudflare email domain is enabled for outbound sending
+- WHEN desired deployment state is read for the selected deployment target
+- THEN the resource graph includes provider resources for the Email Sending
+  domain or subdomain and Worker send-email binding
+- AND the send-email binding is constrained to the enabled verified sender
+  addresses selected for that domain
+- AND the Email Sending domain resource relies on Cloudflare Email Service to
+  create and own its required bounce, SPF, DKIM, and DMARC DNS records
+- AND the Worker runtime receives only the binding and display-safe
+  configuration needed to send through the platform email primitive
+
+#### Scenario: Dedicated sending subdomain by default
+
+- GIVEN an instance selects a primary route host for production identity
+- WHEN email defaults are initialized for deployment
+- THEN the deployment projection prefers a dedicated sending subdomain under
+  the same zone instead of apex sending
+- AND apex email DNS policy is changed only by Cloudflare Email Service after
+  the owner explicitly selects apex Email Sending onboarding
+
+#### Scenario: Provider-owned Email Sending DNS
+
+- GIVEN the deployer provisions or adopts a Cloudflare Email Sending domain
+- WHEN Cloudflare creates or reports the required Email Sending DNS records
+- THEN those records remain owned by Cloudflare Email Service rather than
+  Formless Alchemy DNS resources
+- AND the deployer does not preflight, update, delete, or adopt those DNS
+  records through generic Cloudflare DNS record reconciliation
 
 #### Scenario: Graph is not provider truth
 

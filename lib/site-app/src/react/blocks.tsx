@@ -24,6 +24,8 @@ import {
   submitSiteSubscribeForm,
   TURNSTILE_RESPONSE_FIELD_NAME,
 } from "./subscribe-form.ts";
+import { createSiteContactIdempotencyKey, submitSiteContactForm } from "./contact-form.ts";
+import { TurnstileChallenge } from "./turnstile.tsx";
 import type { SiteBlockNode, SitePlacementNode } from "../types.ts";
 
 const FEATURE_MEDIA_SLOT = "media";
@@ -95,6 +97,8 @@ function SiteBlockRenderer({
       return <ImageBlock block={block} />;
     case "subscribeForm":
       return <SubscribeFormBlock block={block} />;
+    case "contactForm":
+      return <ContactFormBlock block={block} />;
     case "postList":
     case "projectList":
       return <ContentListBlock block={block} />;
@@ -373,6 +377,7 @@ function SubscribeFormBlock({ block }: { block: SiteBlockNode }) {
   const idempotencyKey = useRef(createSiteSubscribeIdempotencyKey(block.id));
   const [status, setStatus] = useState<"idle" | "submitting" | "success" | "error">("idle");
   const [error, setError] = useState<string | undefined>();
+  const [challengeResetSignal, setChallengeResetSignal] = useState(0);
   const operation = block.publicOperation;
   const siteKey =
     operation?.challenge.kind === "turnstile" ? operation.challenge.siteKey : undefined;
@@ -416,6 +421,7 @@ function SubscribeFormBlock({ block }: { block: SiteBlockNode }) {
     } catch (submitError) {
       setStatus("error");
       setError(submitError instanceof Error ? submitError.message : "Subscribe request failed.");
+      setChallengeResetSignal((value) => value + 1);
     }
   }
 
@@ -443,12 +449,7 @@ function SubscribeFormBlock({ block }: { block: SiteBlockNode }) {
             type="email"
           />
         </label>
-        <div
-          className="cf-turnstile"
-          data-response-field-name={TURNSTILE_RESPONSE_FIELD_NAME}
-          data-sitekey={siteKey}
-          data-site-turnstile
-        />
+        <TurnstileChallenge resetSignal={challengeResetSignal} siteKey={siteKey} />
         <button
           className="inline-flex min-h-11 items-center justify-center rounded-md bg-zinc-950 px-4 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-400 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200 dark:disabled:bg-zinc-700 dark:disabled:text-zinc-300"
           disabled={disabled}
@@ -467,12 +468,156 @@ function SubscribeFormBlock({ block }: { block: SiteBlockNode }) {
           </p>
         ) : null}
       </form>
-      <script async defer src="https://challenges.cloudflare.com/turnstile/v0/api.js" />
     </section>
   );
 }
 
 function SubscribeFormHeading({ block }: { block: SiteBlockNode }) {
+  return (
+    <div className="space-y-2">
+      <h2 className="text-2xl font-semibold text-zinc-950 dark:text-zinc-50">{block.label}</h2>
+      {block.body ? (
+        <MarkdownRenderer
+          className={`text-base leading-7 text-zinc-700 dark:text-zinc-300 ${siteMarkdownLinkClassName}`}
+          content={block.body}
+          minHeadingLevel={3}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function ContactFormBlock({ block }: { block: SiteBlockNode }) {
+  const nameInputId = useId();
+  const emailInputId = useId();
+  const messageInputId = useId();
+  const idempotencyKey = useRef(createSiteContactIdempotencyKey(block.id));
+  const [status, setStatus] = useState<"idle" | "submitting" | "success" | "error">("idle");
+  const [error, setError] = useState<string | undefined>();
+  const [challengeResetSignal, setChallengeResetSignal] = useState(0);
+  const operation = block.publicOperation;
+  const siteKey =
+    operation?.challenge.kind === "turnstile" ? operation.challenge.siteKey : undefined;
+
+  if (!operation || !siteKey) {
+    return (
+      <section className="max-w-2xl space-y-3" data-block-type={block.type}>
+        <ContactFormHeading block={block} />
+        <p className="text-sm text-zinc-600 dark:text-zinc-300">Contact form unavailable.</p>
+      </section>
+    );
+  }
+
+  const publicOperation = operation;
+
+  async function onSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const formData = new FormData(event.currentTarget);
+    const name = stringFormValue(formData.get("name"));
+    const email = stringFormValue(formData.get("email"));
+    const message = stringFormValue(formData.get("message"));
+    const turnstileToken = stringFormValue(formData.get(TURNSTILE_RESPONSE_FIELD_NAME));
+
+    if (!name || !email || !message || !turnstileToken) {
+      setStatus("error");
+      setError("Complete the form and challenge.");
+      return;
+    }
+
+    setStatus("submitting");
+    setError(undefined);
+
+    try {
+      await submitSiteContactForm({
+        email,
+        idempotencyKey: idempotencyKey.current,
+        message,
+        name,
+        route: publicOperation.route,
+        siteBlockId: block.id,
+        turnstileToken,
+      });
+      setStatus("success");
+    } catch (submitError) {
+      setStatus("error");
+      setError(submitError instanceof Error ? submitError.message : "Contact request failed.");
+      setChallengeResetSignal((value) => value + 1);
+    }
+  }
+
+  const disabled = status === "submitting" || status === "success";
+  const nameLabel = block.nameLabel || "Name";
+  const emailLabel = block.emailLabel || "Email";
+  const messageLabel = block.messageLabel || "Message";
+
+  return (
+    <section className="max-w-2xl space-y-4" data-block-type={block.type}>
+      <ContactFormHeading block={block} />
+      <form
+        action={publicOperation.route}
+        className="grid gap-4"
+        data-site-contact-form={block.id}
+        data-site-contact-route={publicOperation.route}
+        method="post"
+        onSubmit={onSubmit}
+      >
+        <label className="grid gap-1 text-sm font-medium text-zinc-700 dark:text-zinc-200">
+          <span>{nameLabel}</span>
+          <input
+            className="min-h-11 rounded-md border border-zinc-300 bg-white px-3 text-base text-zinc-950 shadow-sm outline-none transition focus:border-zinc-500 focus:ring-2 focus:ring-zinc-200 disabled:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50 dark:focus:border-zinc-500 dark:focus:ring-zinc-800 dark:disabled:bg-zinc-900"
+            disabled={disabled}
+            id={nameInputId}
+            name="name"
+            required
+            type="text"
+          />
+        </label>
+        <label className="grid gap-1 text-sm font-medium text-zinc-700 dark:text-zinc-200">
+          <span>{emailLabel}</span>
+          <input
+            className="min-h-11 rounded-md border border-zinc-300 bg-white px-3 text-base text-zinc-950 shadow-sm outline-none transition focus:border-zinc-500 focus:ring-2 focus:ring-zinc-200 disabled:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50 dark:focus:border-zinc-500 dark:focus:ring-zinc-800 dark:disabled:bg-zinc-900"
+            disabled={disabled}
+            id={emailInputId}
+            name="email"
+            required
+            type="email"
+          />
+        </label>
+        <label className="grid gap-1 text-sm font-medium text-zinc-700 dark:text-zinc-200">
+          <span>{messageLabel}</span>
+          <textarea
+            className="min-h-32 rounded-md border border-zinc-300 bg-white px-3 py-2 text-base text-zinc-950 shadow-sm outline-none transition focus:border-zinc-500 focus:ring-2 focus:ring-zinc-200 disabled:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50 dark:focus:border-zinc-500 dark:focus:ring-zinc-800 dark:disabled:bg-zinc-900"
+            disabled={disabled}
+            id={messageInputId}
+            name="message"
+            required
+          />
+        </label>
+        <TurnstileChallenge resetSignal={challengeResetSignal} siteKey={siteKey} />
+        <button
+          className="inline-flex min-h-11 w-fit items-center justify-center rounded-md bg-zinc-950 px-4 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-400 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200 dark:disabled:bg-zinc-700 dark:disabled:text-zinc-300"
+          disabled={disabled}
+          type="submit"
+        >
+          {status === "submitting" ? "Sending..." : block.buttonLabel || "Send"}
+        </button>
+        {status === "success" ? (
+          <p className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
+            {block.successLabel || "Thanks. Your message was sent."}
+          </p>
+        ) : null}
+        {status === "error" ? (
+          <p className="text-sm font-medium text-red-700 dark:text-red-300">
+            {error ?? "Contact request failed."}
+          </p>
+        ) : null}
+      </form>
+    </section>
+  );
+}
+
+function ContactFormHeading({ block }: { block: SiteBlockNode }) {
   return (
     <div className="space-y-2">
       <h2 className="text-2xl font-semibold text-zinc-950 dark:text-zinc-50">{block.label}</h2>

@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vite-plus/test";
 import {
   INSTANCE_CONTROL_PLANE_BOUNDARY_SCHEMA_KEY,
+  INSTANCE_CONTROL_PLANE_INSTANCE_SETTINGS_ID,
   INSTANCE_CONTROL_PLANE_SOURCE_SCHEMA_HASH,
   INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
   formatInstanceControlPlaneBoundaryEntityName,
   instanceControlPlaneAppLaunchLinksFromRecords,
+  instanceControlPlaneProductionIdentityFromRecords,
   instanceControlPlaneAppInstallRecord,
   instanceControlPlaneAppInstallsFromRecords,
   instanceControlPlaneDefaultRoutesForInstall,
@@ -119,7 +121,15 @@ describe("instance control-plane schema contracts", () => {
     );
     expect(Object.keys(schema.entities)).not.toContain("appInstall");
     expect(referenceTargets.filter((target) => target.includes(":"))).toEqual([]);
-    expect(referenceTargets).toEqual(expect.arrayContaining(["app-install", "deployment-config"]));
+    expect(referenceTargets).toEqual(
+      expect.arrayContaining([
+        "app-install",
+        "deployment-config",
+        "email-domain",
+        "email-sender",
+        "route",
+      ]),
+    );
     expect(Object.keys(schema.entities)).not.toEqual(
       expect.arrayContaining(["deploy-target", "provider-config-ref", "deploy-desired-resource"]),
     );
@@ -136,6 +146,7 @@ describe("instance control-plane schema contracts", () => {
     expect(schema.screens?.apps.path).toBe("/");
     expect(schema.screens?.routes.path).toBe("/routes");
     expect(schema.screens?.deployments.path).toBe("/deployments");
+    expect(schema.screens?.settings.path).toBe("/settings");
     expect(schema.runtime?.owner).toBe("runtime");
     expect(schema.runtime).not.toHaveProperty("builder");
   });
@@ -191,6 +202,115 @@ describe("instance control-plane schema contracts", () => {
       "credentialRef",
       ...instanceControlPlaneDeploymentConfigObservedFields,
     ]);
+  });
+
+  it("defines instance settings and email intent records with validation", () => {
+    const schema = instanceControlPlaneSchema;
+    const settingsFields = schema.entities["instance-settings"]?.fields;
+    const emailDomainFields = schema.entities["email-domain"]?.fields;
+    const emailSenderFields = schema.entities["email-sender"]?.fields;
+    const records = controlPlaneRecords({
+      emailIntent: true,
+    });
+
+    expect(settingsFields).toMatchObject({
+      settingsId: { type: "text", required: true },
+      canonicalOrigin: { type: "text", required: false, format: "href" },
+      primaryRoute: { type: "reference", required: false, to: "route" },
+      authRoute: { type: "reference", required: false, to: "route" },
+      authOrigin: { type: "text", required: false, format: "href" },
+      authRelyingPartyId: { type: "text", required: false },
+      defaultEmailDomain: { type: "reference", required: false, to: "email-domain" },
+      defaultContactSender: { type: "reference", required: false, to: "email-sender" },
+      contactNotificationRecipient: { type: "text", required: false },
+      productionIdentityStatus: {
+        type: "enum",
+        required: true,
+        default: "unconfigured",
+      },
+    });
+    expect(emailDomainFields).toMatchObject({
+      enabled: { type: "boolean", required: true, default: true },
+      providerFamily: {
+        type: "enum",
+        required: true,
+        values: { cloudflare: { label: "Cloudflare" } },
+      },
+      domain: { type: "text", required: true },
+      primaryRoute: { type: "reference", required: false, to: "route" },
+      deploymentConfig: { type: "reference", required: false, to: "deployment-config" },
+      verificationStatus: { type: "enum", required: true, default: "unconfigured" },
+      dnsStatus: { type: "enum", required: false },
+      latestError: { type: "text", required: false, format: "longText" },
+    });
+    expect(emailSenderFields).toMatchObject({
+      enabled: { type: "boolean", required: true, default: true },
+      address: { type: "text", required: true },
+      displayName: { type: "text", required: false },
+      purpose: {
+        type: "enum",
+        required: true,
+        values: {
+          "contact-notification": { label: "Contact notification" },
+          system: { label: "System" },
+        },
+      },
+      emailDomain: { type: "reference", required: true, to: "email-domain" },
+      verificationStatus: { type: "enum", required: true, default: "unconfigured" },
+    });
+    expect(schema.runtime?.controlPlane?.entities["instance-settings"]).toEqual({
+      immutableFields: ["settingsId"],
+    });
+    expect(schema.runtime?.controlPlane?.entities["email-domain"]).toEqual({
+      immutableFields: ["providerFamily"],
+    });
+    expect(schema.runtime?.controlPlane?.entities["email-sender"]).toEqual({
+      immutableFields: ["emailDomain"],
+    });
+    expect(instanceControlPlaneProductionIdentityFromRecords(records)).toMatchObject({
+      authOrigin: "https://www.example.com",
+      canonicalOrigin: "https://www.example.com",
+      primaryRoute: "route:host:public-site:www.example.com",
+      relyingPartyId: "example.com",
+      relyingPartyName: "Example Instance",
+    });
+    expect(
+      parseInstanceControlPlaneStorageSnapshot(
+        "Instance archive controlPlane",
+        controlPlaneSnapshot({ records }),
+        { packageResolver: controlPlanePackageResolver },
+      ).records.map((record) => record.entity),
+    ).toEqual(expect.arrayContaining(["instance-settings", "email-domain", "email-sender"]));
+
+    expect(() =>
+      parseInstanceControlPlaneStorageSnapshot(
+        "Instance archive controlPlane",
+        controlPlaneSnapshot({
+          records: [
+            ...records,
+            {
+              ...records.find((record) => record.entity === "instance-settings")!,
+              id: "settings:duplicate",
+            },
+          ],
+        }),
+        { packageResolver: controlPlanePackageResolver },
+      ),
+    ).toThrow("at most one active instance:instance-settings");
+
+    expect(() =>
+      parseInstanceControlPlaneStorageSnapshot(
+        "Instance archive controlPlane",
+        controlPlaneSnapshot({
+          records: records.map((record) =>
+            record.entity === "email-sender"
+              ? { ...record, values: { ...record.values, address: "contact@other.example.com" } }
+              : record,
+          ),
+        }),
+        { packageResolver: controlPlanePackageResolver },
+      ),
+    ).toThrow('field "instance:email-sender.address" host must belong');
   });
 
   it("declares operation contracts for generated instance management records", () => {
@@ -402,9 +522,15 @@ describe("instance control-plane schema contracts", () => {
       "targetKind",
       "providerFamily",
     ]);
+    expect(instanceControlPlaneImmutableFields["instance-settings"]).toEqual(["settingsId"]);
+    expect(instanceControlPlaneImmutableFields["email-domain"]).toEqual(["providerFamily"]);
+    expect(instanceControlPlaneImmutableFields["email-sender"]).toEqual(["emailDomain"]);
     expect(instanceControlPlaneImmutableFields.route).toEqual(["kind"]);
     expect(isInstanceControlPlaneEntityName("app-install")).toBe(true);
     expect(isInstanceControlPlaneEntityName("deployment-config")).toBe(true);
+    expect(isInstanceControlPlaneEntityName("instance-settings")).toBe(true);
+    expect(isInstanceControlPlaneEntityName("email-domain")).toBe(true);
+    expect(isInstanceControlPlaneEntityName("email-sender")).toBe(true);
     expect(isInstanceControlPlaneEntityName("app-route")).toBe(false);
     expect(isInstanceControlPlaneEntityName("deploy-target")).toBe(false);
     expect(isInstanceControlPlaneEntityName("missing")).toBe(false);
@@ -1207,7 +1333,7 @@ function controlPlaneSnapshot(overrides: Partial<StorageSnapshot> = {}): Storage
 }
 
 function controlPlaneRecords(
-  options: { accountId?: string; observedCache?: boolean } = {},
+  options: { accountId?: string; emailIntent?: boolean; observedCache?: boolean } = {},
 ): StoredRecord[] {
   const now = "2026-05-28T00:00:00.000Z";
 
@@ -1240,6 +1366,73 @@ function controlPlaneRecords(
       createdAt: now,
       updatedAt: now,
     },
+    ...(options.emailIntent
+      ? [
+          {
+            id: "route:host:public-site:www.example.com",
+            entity: "route",
+            values: {
+              enabled: true,
+              matchHost: "www.example.com",
+              matchPath: "/",
+              matchPrefix: "/",
+              kind: "mount",
+              targetProfile: "public-site",
+              appInstall: "site",
+              surface: "public-site",
+              access: "anonymous",
+              deploymentConfig: "instance.primary",
+            },
+            createdAt: now,
+            updatedAt: now,
+          },
+          {
+            id: "settings:instance",
+            entity: "instance-settings",
+            values: {
+              settingsId: INSTANCE_CONTROL_PLANE_INSTANCE_SETTINGS_ID,
+              primaryRoute: "route:host:public-site:www.example.com",
+              authRelyingPartyId: "example.com",
+              authRelyingPartyName: "Example Instance",
+              defaultEmailDomain: "email-domain:mail.example.com",
+              defaultContactSender: "email-sender:contact@mail.example.com",
+              contactNotificationRecipient: "owner@example.com",
+              productionIdentityStatus: "configured",
+            },
+            createdAt: now,
+            updatedAt: now,
+          },
+          {
+            id: "email-domain:mail.example.com",
+            entity: "email-domain",
+            values: {
+              enabled: true,
+              providerFamily: "cloudflare",
+              domain: "mail.example.com",
+              primaryRoute: "route:host:public-site:www.example.com",
+              deploymentConfig: "instance.primary",
+              verificationStatus: "verified",
+              dnsStatus: "verified",
+            },
+            createdAt: now,
+            updatedAt: now,
+          },
+          {
+            id: "email-sender:contact@mail.example.com",
+            entity: "email-sender",
+            values: {
+              enabled: true,
+              address: "contact@mail.example.com",
+              displayName: "Contact",
+              purpose: "contact-notification",
+              emailDomain: "email-domain:mail.example.com",
+              verificationStatus: "verified",
+            },
+            createdAt: now,
+            updatedAt: now,
+          },
+        ]
+      : []),
     {
       id: "instance.primary",
       entity: "deployment-config",

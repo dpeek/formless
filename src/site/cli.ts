@@ -457,6 +457,7 @@ export async function runFormlessCli(
         workspaceCliCommandNameForOperation("push"),
         {
           dryRun: command.dryRun,
+          ...(command.force ? { force: true } : {}),
           kind: "push",
           targetAlias: command.targetAlias,
           workspacePath: command.workspacePath,
@@ -972,6 +973,7 @@ export async function saveLocalFormlessWorkspace(
 export async function pushFormlessInstanceWorkspace(
   input: {
     apply?: boolean;
+    force?: boolean;
     targetAlias?: string | null;
     workspacePath?: string;
   },

@@ -204,6 +204,9 @@ describe("Formless instance onboarding adapters", () => {
 
               return Response.json({ success: false }, { status: 404 });
             },
+            post: async () => {
+              throw new Error("POST should not be called during account discovery.");
+            },
           };
         },
       },
@@ -253,6 +256,9 @@ describe("Formless instance onboarding adapters", () => {
 
               return Response.json({ success: false }, { status: 404 });
             },
+            post: async () => {
+              throw new Error("POST should not be called during account discovery.");
+            },
           };
         },
       },
@@ -284,6 +290,9 @@ describe("Formless instance onboarding adapters", () => {
                 },
                 { status: 403 },
               ),
+            post: async () => {
+              throw new Error("POST should not be called during account discovery.");
+            },
           }),
         },
       ),
@@ -1080,6 +1089,9 @@ describe("Alchemy Formless instance deployment", () => {
               result: [{ id: "zone-1", name: "api.example.com", status: "active" }],
             });
           },
+          post: async () => {
+            throw new Error("POST should not be called by route resource deployment.");
+          },
         };
       },
       createCustomDomain: async (id, props) => {
@@ -1364,6 +1376,246 @@ describe("Alchemy Formless instance deployment", () => {
       "custom-domain",
       "finalize",
     ]);
+    expect(finalized).toBe(1);
+  });
+
+  it("declares email sending bindings and applies provider-owned email deployment resources", async () => {
+    const emailResourceCalls: Array<{ id: string; kind: string; props: unknown }> = [];
+    const events: string[] = [];
+    const secrets: string[] = [];
+    const workerCalls: Array<{ id: string; props: AlchemyFormlessInstanceDeploymentWorkerProps }> =
+      [];
+    const cloudflareApiCalls: Array<{ options: unknown; paths: string[] }> = [];
+    let finalized = 0;
+    const dependencies: AlchemyFormlessInstanceDeploymentDependencies = {
+      createApp: async () => {
+        events.push("app");
+
+        return {
+          finalize: async () => {
+            events.push("finalize");
+            finalized += 1;
+          },
+        };
+      },
+      createCloudflareApi: async (options) => {
+        const call = { options, paths: [] as string[] };
+        cloudflareApiCalls.push(call);
+
+        return {
+          get: async (requestPath) => {
+            call.paths.push(requestPath);
+
+            return Response.json({
+              success: true,
+              result: [{ id: "zone-mail", name: "example.com", status: "active" }],
+            });
+          },
+          post: async () => {
+            throw new Error("POST should not be called by injected email factories.");
+          },
+        };
+      },
+      createDurableObjectNamespace: () => {
+        events.push("durable-object");
+
+        return { type: "durable-object-namespace" };
+      },
+      createEmailSenderBinding: async (id, props) => {
+        events.push("email-binding");
+        emailResourceCalls.push({ id, kind: "SendEmailBinding", props });
+
+        return {
+          allowedSenderAddresses: props.allowedSenderAddresses,
+          bindingName: props.bindingName,
+          type: "send_email",
+        };
+      },
+      createEmailSendingDomain: async (id, props) => {
+        events.push("email-domain");
+        emailResourceCalls.push({ id, kind: "EmailSendingDomain", props });
+
+        return {
+          id: "email-domain-output",
+          name: props.name,
+          tag: "email-domain-tag",
+          zoneId: props.zoneId,
+        };
+      },
+      createR2Bucket: async () => {
+        events.push("r2");
+
+        return { type: "r2-bucket" };
+      },
+      createSecret: (value) => {
+        secrets.push(value);
+
+        return { index: secrets.length, type: "secret" };
+      },
+      createTurnstileWidget: async (_id, props) => {
+        events.push("turnstile");
+
+        return fakeTurnstileWidgetOutput({
+          domains: props.domains,
+          name: props.name,
+          verificationSecret: { type: "turnstile-secret" },
+        });
+      },
+      deployViteWorker: async (id, props) => {
+        events.push("worker");
+        workerCalls.push({ id, props });
+
+        return { url: "https://brother-instance.dpeek.workers.dev" };
+      },
+    };
+    const plan = planFormlessInstanceDeployment({
+      account: {
+        id: "account-123",
+        workersDevSubdomain: "dpeek",
+      },
+      instanceName: "brother-instance",
+      packageVersion: "0.1.8",
+    });
+    const deploymentResourceGraph: DeployResourceGraph = {
+      targetId: "instance.brother-instance",
+      resources: [
+        {
+          dependencies: [],
+          inputs: {
+            domain: "mail.example.com",
+            name: "mail.example.com",
+          },
+          kind: "cloudflare-email-sending-domain",
+          logicalId: "brother-instance-email-sending-domain-mail-example-com",
+          providerFamily: "cloudflare",
+          targetId: "instance.brother-instance",
+        },
+        {
+          dependencies: [
+            {
+              logicalId: "brother-instance-email-sending-domain-mail-example-com",
+              reason: "verified senders",
+            },
+          ],
+          inputs: {
+            allowedSenderAddresses: ["contact@mail.example.com"],
+            bindingName: "FORMLESS_EMAIL",
+            domain: "mail.example.com",
+            workerName: plan.resources.worker.name,
+          },
+          kind: "cloudflare-worker-send-email-binding",
+          logicalId: "brother-instance-worker-send-email-mail-example-com",
+          providerFamily: "cloudflare",
+          targetId: "instance.brother-instance",
+        },
+      ],
+    };
+    expect(JSON.stringify(deploymentResourceGraph)).not.toContain("cloudflare-email-dns-records");
+
+    const result = await deployFormlessInstanceWithAlchemy(
+      {
+        credentialProfile: null,
+        deploymentResourceGraph,
+        packageRoot: "/package",
+        plan,
+        secrets: {
+          ALCHEMY_PASSWORD: "alchemy-password",
+          CLOUDFLARE_API_TOKEN: "cf-token",
+          FORMLESS_ADMIN_TOKEN: "admin-secret",
+        },
+        stateRoot: "/state",
+      },
+      dependencies,
+    );
+
+    expect(workerCalls[0]?.props.bindings.FORMLESS_EMAIL).toEqual({
+      allowedSenderAddresses: ["contact@mail.example.com"],
+      bindingName: "FORMLESS_EMAIL",
+      type: "send_email",
+    });
+    expect(cloudflareApiCalls).toEqual([
+      {
+        options: {
+          accountId: "account-123",
+          apiToken: { index: 1, type: "secret" },
+        },
+        paths: [
+          "/zones?name=mail.example.com&status=active&account.id=account-123",
+          "/zones?name=example.com&status=active&account.id=account-123",
+        ],
+      },
+    ]);
+    expect(emailResourceCalls).toEqual([
+      {
+        id: "brother-instance-worker-send-email-mail-example-com",
+        kind: "SendEmailBinding",
+        props: {
+          allowedSenderAddresses: ["contact@mail.example.com"],
+          bindingName: "FORMLESS_EMAIL",
+          domain: "mail.example.com",
+          workerName: "brother-instance",
+        },
+      },
+      {
+        id: "brother-instance-email-sending-domain-mail-example-com",
+        kind: "EmailSendingDomain",
+        props: {
+          accountId: "account-123",
+          apiToken: { index: 1, type: "secret" },
+          domain: "mail.example.com",
+          name: "mail.example.com",
+          zoneId: "zone-mail",
+        },
+      },
+      {
+        id: "brother-instance-worker-send-email-mail-example-com",
+        kind: "SendEmailBinding",
+        props: {
+          accountId: "account-123",
+          allowedSenderAddresses: ["contact@mail.example.com"],
+          apiToken: { index: 1, type: "secret" },
+          bindingName: "FORMLESS_EMAIL",
+          domain: "mail.example.com",
+          workerName: "brother-instance",
+        },
+      },
+    ]);
+    expect(result.resourceEvidence).toEqual([
+      {
+        action: "updated",
+        alchemyResourceId: "brother-instance-email-sending-domain-mail-example-com",
+        displayName: "mail.example.com",
+        kind: "cloudflare-email-sending-domain",
+        logicalId: "brother-instance-email-sending-domain-mail-example-com",
+        providerFamily: "cloudflare",
+        providerResourceIds: ["email-domain-output", "email-domain-tag"],
+        targetId: "instance.brother-instance",
+      },
+      {
+        action: "updated",
+        alchemyResourceId: "brother-instance-worker-send-email-mail-example-com",
+        displayName: "mail.example.com",
+        kind: "cloudflare-worker-send-email-binding",
+        logicalId: "brother-instance-worker-send-email-mail-example-com",
+        providerFamily: "cloudflare",
+        providerResourceIds: ["FORMLESS_EMAIL"],
+        targetId: "instance.brother-instance",
+      },
+    ]);
+    expect(JSON.stringify(result)).not.toContain("cf-token");
+    expect(JSON.stringify(workerCalls)).not.toContain("cf-token");
+    expect(events).toEqual([
+      "app",
+      "r2",
+      "durable-object",
+      "turnstile",
+      "email-binding",
+      "worker",
+      "email-domain",
+      "email-binding",
+      "finalize",
+    ]);
+    expect(secrets).toEqual(["cf-token", "alchemy-password", "admin-secret"]);
     expect(finalized).toBe(1);
   });
 

@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vite-plus/test";
 import { computeSourceSchemaHash } from "@dpeek/formless-installed-apps";
+import { INSTANCE_CONTROL_PLANE_INSTANCE_SETTINGS_ID } from "@dpeek/formless-instance-control-plane";
 
 import {
   FORMLESS_RUNTIME_APP_INSTALL_ID_META_NAME,
@@ -54,7 +55,7 @@ afterAll(async () => {
 });
 
 describe("installed Site custom-domain Worker routing", () => {
-  it("seeds canonical auth config for local dev and deployed instance origins", async () => {
+  it("seeds auth config from local dev origin or configured production identity", async () => {
     const localHarness = await createCustomDomainHarness();
 
     try {
@@ -63,7 +64,9 @@ describe("installed Site custom-domain Worker routing", () => {
       await localHarness.dispose();
     }
 
-    await expectAuthConfigRp(harness, "personal.dpeek.workers.dev", "personal.dpeek.workers.dev");
+    await expectAuthConfigMissing(harness, "personal.dpeek.workers.dev");
+    await setupPrimaryProductionIdentity();
+    await expectAuthConfigRp(harness, "personal.dpeek.workers.dev", "example.com");
   }, 10_000);
 
   it("renders mapped host documents from installed Site storage", async () => {
@@ -541,6 +544,49 @@ async function expectAuthConfigRp(targetHarness: Harness, host: string, expected
   expect(capability.status).toBe(200);
   expect(options.status).toBe(200);
   expect(body.options.rp).toEqual({ id: expectedRpId, name: "Formless" });
+}
+
+async function expectAuthConfigMissing(targetHarness: Harness, host: string) {
+  const origin = `https://${host}`;
+  const options = await targetHarness.mf.dispatchFetch(
+    `${origin}/api/formless/passkeys/register/options`,
+    {
+      body: JSON.stringify({ setupToken }),
+      headers: { "Content-Type": "application/json", Origin: origin },
+      method: "POST",
+    },
+  );
+  const body = (await options.json()) as { error: string };
+
+  expect(options.status).toBe(400);
+  expect(body.error).toBe("Instance auth configuration is missing.");
+}
+
+async function setupPrimaryProductionIdentity() {
+  await createRouteRecord("route:primary-production", {
+    enabled: true,
+    matchHost: "www.example.com",
+    matchPath: "/",
+    matchPrefix: "/",
+    kind: "mount",
+    targetProfile: "instance",
+    surface: "admin",
+    access: "owner",
+  });
+
+  const primaryRoute = routeRecordIds.get("route:primary-production");
+
+  expect(primaryRoute).toBeDefined();
+
+  await postAdminJson(`${controlPlaneApi}/operations/instance-settings/create`, {
+    idempotencyKey: "instance-settings-primary-production",
+    input: {
+      settingsId: INSTANCE_CONTROL_PLANE_INSTANCE_SETTINGS_ID,
+      primaryRoute,
+      authRelyingPartyId: "example.com",
+      productionIdentityStatus: "configured",
+    },
+  });
 }
 
 async function setupMappedSite() {

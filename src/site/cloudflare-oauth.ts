@@ -18,6 +18,8 @@ export const FORMLESS_CLOUDFLARE_OAUTH_DEPLOY_SCOPES = [
   "workers-scripts.write",
   "dns.read",
   "dns.write",
+  "email-sending.read",
+  "email-sending.write",
   "zone.read",
   "challenge-widgets.read",
   "challenge-widgets.write",
@@ -257,7 +259,7 @@ export function assertFormlessCloudflareDeployScopesGranted(
 
   if (missing.length > 0) {
     throw new Error(
-      `Cloudflare OAuth credential is missing required deploy scopes: ${missing.join(", ")}.`,
+      `Cloudflare OAuth credential is missing required deploy scopes: ${missing.join(", ")}. Reconnect Cloudflare so Workers, R2, DNS, Turnstile, and Email Sending deploy permissions are granted.`,
     );
   }
 }
