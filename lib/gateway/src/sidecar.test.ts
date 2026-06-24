@@ -302,6 +302,41 @@ describe("sidecar workspace gateway adapter", () => {
     });
   });
 
+  it("prefers owner-session authorization over an expired bootstrap header", async () => {
+    const captured: Array<{ body?: unknown; headers: Record<string, string>; url: string }> = [];
+    const response = await handleWorkspaceGatewayLocalProxyRequest(
+      new Request(`http://local.test${WORKSPACE_GATEWAY_AUTO_SAVE_API_PATH}`, {
+        headers: {
+          Cookie: "formless_owner_session=valid",
+          Origin: "http://local.test",
+          [WORKSPACE_GATEWAY_BOOTSTRAP_HEADER]: bootstrapToken,
+        },
+      }),
+      {
+        ...gatewayEnv(),
+        [WORKSPACE_GATEWAY_SIDECAR_URL_ENV]: "http://127.0.0.1:9999",
+      },
+      {
+        proxyFetch: async (url, init) => {
+          captured.push(await capturedProxyRequest(url, init));
+
+          return Response.json({ autoSave: autoSaveState({ displayState: "saved" }) });
+        },
+        readOwnerSetupStatus: async () => ({ setupComplete: true }),
+        validateOwnerSession: async () => ({ ok: true }),
+      },
+    );
+
+    expect(response?.status).toBe(200);
+    await expect(response?.json()).resolves.toMatchObject({
+      autoSave: { displayState: "saved" },
+      csrfToken,
+    });
+    expect(captured).toHaveLength(1);
+    expect(captured[0]?.headers[WORKSPACE_GATEWAY_AUTHORIZATION_VIA_HEADER]).toBe("owner-session");
+    expect(captured[0]?.headers[WORKSPACE_GATEWAY_BOOTSTRAP_HEADER]).toBeUndefined();
+  });
+
   it("requires operation intent for bootstrap reads and validates sidecar read intent", async () => {
     const bootstrapWithoutIntent = await handleWorkspaceGatewayLocalProxyRequest(
       new Request(`http://local.test${WORKSPACE_GATEWAY_OPERATIONS_API_PATH}/op_save_00000001`, {

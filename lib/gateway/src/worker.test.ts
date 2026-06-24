@@ -270,6 +270,36 @@ describe("Worker workspace gateway proxy", () => {
     );
   });
 
+  it("prefers owner-session authorization over an expired bootstrap header", async () => {
+    const calls: ProxyCall[] = [];
+    const response = await handleWorkspaceGatewayProxyRequest(
+      new Request(`https://example.com${WORKSPACE_GATEWAY_AUTO_SAVE_API_PATH}`, {
+        headers: {
+          Cookie: ownerSessionCookie,
+          [WORKSPACE_GATEWAY_BOOTSTRAP_HEADER]: bootstrapToken,
+          Origin: "https://example.com",
+        },
+      }),
+      baseEnv,
+      {
+        capabilities: WORKSPACE_OPERATION_CAPABILITIES,
+        fetch: captureAutoSaveProxyCalls(calls, autoSaveState("clean")),
+        readOwnerSetupStatus: async () => ({ setupComplete: true }),
+        validateOwnerSession,
+      },
+    );
+    const body = await jsonBody(response);
+
+    expect(response?.status).toBe(200);
+    expect(body).toMatchObject({
+      autoSave: { displayState: "clean" },
+      csrfToken,
+    });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.headers.get(WORKSPACE_GATEWAY_AUTHORIZATION_VIA_HEADER)).toBe("owner-session");
+    expect(calls[0]?.headers.get(WORKSPACE_GATEWAY_BOOTSTRAP_HEADER)).toBeNull();
+  });
+
   it("requires matching CSRF cookie and header before forwarding browser mutations", async () => {
     const cases: Array<{ headers: Record<string, string>; label: string }> = [
       {

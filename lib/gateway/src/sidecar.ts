@@ -761,6 +761,37 @@ async function authorizeGatewayRequest(
     return { error: "Workspace gateway requests must be same-origin.", status: 403 };
   }
 
+  if (!request.headers.get("Origin") && matchesAdminBearer(request, env)) {
+    return authorizeGatewayOperationExecution(
+      { actor: "automation", via: "admin-bearer" },
+      dependencies.capabilities ?? WORKSPACE_OPERATION_CAPABILITIES,
+      intent,
+      context,
+    );
+  }
+
+  const ownerSession = await validateOwnerSession(request, dependencies);
+
+  if (ownerSession.ok) {
+    if (intent.mutating && !isSameOriginWithOrigin(request)) {
+      return {
+        error: "Workspace gateway browser mutations require a same-origin Origin header.",
+        status: 403,
+      };
+    }
+
+    if (intent.mutating && !validCsrfProof(request, env)) {
+      return { error: "Workspace gateway browser mutations require CSRF proof.", status: 403 };
+    }
+
+    return authorizeGatewayOperationExecution(
+      { actor: "browser", via: "owner-session" },
+      dependencies.capabilities ?? WORKSPACE_OPERATION_CAPABILITIES,
+      intent,
+      context,
+    );
+  }
+
   if (matchesBootstrapCapability(request, env)) {
     if (!intent.bootstrapAllowed) {
       return {
@@ -781,35 +812,11 @@ async function authorizeGatewayRequest(
     );
   }
 
-  if (!request.headers.get("Origin") && matchesAdminBearer(request, env)) {
-    return authorizeGatewayOperationExecution(
-      { actor: "automation", via: "admin-bearer" },
-      dependencies.capabilities ?? WORKSPACE_OPERATION_CAPABILITIES,
-      intent,
-      context,
-    );
-  }
-
   if (intent.mutating && !isSameOriginWithOrigin(request)) {
     return {
       error: "Workspace gateway browser mutations require a same-origin Origin header.",
       status: 403,
     };
-  }
-
-  const ownerSession = await validateOwnerSession(request, dependencies);
-
-  if (ownerSession.ok) {
-    if (intent.mutating && !validCsrfProof(request, env)) {
-      return { error: "Workspace gateway browser mutations require CSRF proof.", status: 403 };
-    }
-
-    return authorizeGatewayOperationExecution(
-      { actor: "browser", via: "owner-session" },
-      dependencies.capabilities ?? WORKSPACE_OPERATION_CAPABILITIES,
-      intent,
-      context,
-    );
   }
 
   return {
@@ -826,6 +833,30 @@ async function authorizeGatewayReadOperationRequest(
 ): Promise<GatewayAuthorization> {
   if (!isSameOriginOrNoOrigin(request)) {
     return { error: "Workspace gateway requests must be same-origin.", status: 403 };
+  }
+
+  if (!request.headers.get("Origin") && matchesAdminBearer(request, env)) {
+    return intent === undefined
+      ? { actor: "automation", via: "admin-bearer" }
+      : authorizeGatewayOperationExecution(
+          { actor: "automation", via: "admin-bearer" },
+          dependencies.capabilities ?? WORKSPACE_OPERATION_CAPABILITIES,
+          intent,
+          { mutating: false },
+        );
+  }
+
+  const ownerSession = await validateOwnerSession(request, dependencies);
+
+  if (ownerSession.ok) {
+    return intent === undefined
+      ? { actor: "browser", via: "owner-session" }
+      : authorizeGatewayOperationExecution(
+          { actor: "browser", via: "owner-session" },
+          dependencies.capabilities ?? WORKSPACE_OPERATION_CAPABILITIES,
+          intent,
+          { mutating: false },
+        );
   }
 
   if (matchesBootstrapCapability(request, env)) {
@@ -853,30 +884,6 @@ async function authorizeGatewayReadOperationRequest(
       intent,
       { mutating: false },
     );
-  }
-
-  if (!request.headers.get("Origin") && matchesAdminBearer(request, env)) {
-    return intent === undefined
-      ? { actor: "automation", via: "admin-bearer" }
-      : authorizeGatewayOperationExecution(
-          { actor: "automation", via: "admin-bearer" },
-          dependencies.capabilities ?? WORKSPACE_OPERATION_CAPABILITIES,
-          intent,
-          { mutating: false },
-        );
-  }
-
-  const ownerSession = await validateOwnerSession(request, dependencies);
-
-  if (ownerSession.ok) {
-    return intent === undefined
-      ? { actor: "browser", via: "owner-session" }
-      : authorizeGatewayOperationExecution(
-          { actor: "browser", via: "owner-session" },
-          dependencies.capabilities ?? WORKSPACE_OPERATION_CAPABILITIES,
-          intent,
-          { mutating: false },
-        );
   }
 
   return {
