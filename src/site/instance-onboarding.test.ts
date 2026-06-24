@@ -1027,6 +1027,12 @@ describe("Alchemy Formless instance deployment", () => {
             define: {
               __FORMLESS_WORKSPACE_APP_PACKAGES_JSON__: JSON.stringify("runtime-package-payload"),
             },
+            plugins: [
+              expect.objectContaining({
+                name: "formless-site-public-renderer-worker-virtual-modules",
+                setup: expect.any(Function),
+              }),
+            ],
           },
           compatibilityDate: FORMLESS_WORKER_COMPATIBILITY_DATE,
           cwd: "/package",
@@ -1523,7 +1529,7 @@ describe("Alchemy Formless instance deployment", () => {
           });
         },
         deployViteWorker: async (id, props) => {
-          tree.worker = { id, props };
+          tree.worker = JSON.parse(JSON.stringify({ id, props })) as unknown;
 
           return { url: "https://brother-instance.dpeek.workers.dev" };
         },

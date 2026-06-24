@@ -2,13 +2,16 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
+import { build } from "esbuild";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 import {
   SITE_PUBLIC_RENDERER_BROWSER_ENTRYPOINT_MODULE_ID,
+  SITE_PUBLIC_RENDERER_WORKER_VIRTUAL_MODULE_ID,
   SITE_PUBLIC_RENDERER_WORKER_ENTRYPOINT_MODULE_ID,
   resolveWorkspaceSitePublicRendererEntrypointsFromEnv,
+  sitePublicRendererWorkerVirtualModulesPlugin,
   sitePublicRendererVirtualModuleCode,
-} from "../../vite.config.ts";
+} from "./runtime-extension-bundler.ts";
 import {
   FORMLESS_SITE_PROJECT_ROOT_ENV_NAME,
   FORMLESS_WORKSPACE_RUNTIME_EXTENSIONS_ENV_NAME,
@@ -65,6 +68,59 @@ describe("workspace Site public renderer bundler resolution", () => {
     expect(sitePublicRendererVirtualModuleCode("worker", false)).toBe(
       "export const sitePublicRenderer = undefined;\n",
     );
+  });
+
+  it("resolves the Worker virtual module to the default renderer for esbuild bundles", async () => {
+    const result = await build({
+      bundle: true,
+      format: "esm",
+      plugins: [sitePublicRendererWorkerVirtualModulesPlugin({ env: {} })],
+      stdin: {
+        contents: `import { sitePublicRenderer } from ${JSON.stringify(SITE_PUBLIC_RENDERER_WORKER_VIRTUAL_MODULE_ID)};
+export const fallbackRenderer = sitePublicRenderer;
+`,
+        sourcefile: "entry.js",
+      },
+      write: false,
+    });
+    const output = result.outputFiles[0]?.text ?? "";
+
+    expect(output).toContain("sitePublicRenderer = void 0");
+    expect(output).toContain("fallbackRenderer");
+  });
+
+  it("resolves the Worker virtual module to the configured Worker entrypoint for esbuild bundles", async () => {
+    const workspaceRoot = await makeTempDir();
+    const browserEntrypoint = "src/site/public-renderer.browser.tsx";
+    const workerEntrypoint = "src/site/public-renderer.worker.tsx";
+    const env: NodeJS.ProcessEnv = {
+      [FORMLESS_SITE_PROJECT_ROOT_ENV_NAME]: workspaceRoot,
+      [FORMLESS_WORKSPACE_RUNTIME_EXTENSIONS_ENV_NAME]: JSON.stringify({
+        [SITE_PUBLIC_RENDERER_RUNTIME_EXTENSION_KEY]: {
+          browser: browserEntrypoint,
+          worker: workerEntrypoint,
+        },
+      }),
+    };
+
+    await writeCustomRendererFixture(workspaceRoot, browserEntrypoint, workerEntrypoint);
+
+    const result = await build({
+      bundle: true,
+      format: "esm",
+      plugins: [sitePublicRendererWorkerVirtualModulesPlugin({ env })],
+      stdin: {
+        contents: `import { sitePublicRenderer } from ${JSON.stringify(SITE_PUBLIC_RENDERER_WORKER_VIRTUAL_MODULE_ID)};
+export const rendered = sitePublicRenderer();
+`,
+        sourcefile: "entry.js",
+      },
+      write: false,
+    });
+    const output = result.outputFiles[0]?.text ?? "";
+
+    expect(output).toContain("worker renderer");
+    expect(output).toContain("rendered");
   });
 });
 

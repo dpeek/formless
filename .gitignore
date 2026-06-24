@@ -9,3 +9,6 @@ tmp
 .devstate
 .env
 .alchemy
+
+# Riptide artifacts (cloud-synced)
+.humanlayer/tasks/

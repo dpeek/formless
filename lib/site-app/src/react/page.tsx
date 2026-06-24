@@ -1,4 +1,12 @@
-import { createContext, useContext, type ComponentType, type ReactNode } from "react";
+import {
+  createContext,
+  useEffect,
+  useContext,
+  useState,
+  type ComponentType,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 
 import { primaryImagePlacement, type PublicSitePrimaryImageVariant } from "./media.tsx";
 import { publicSiteThemeVariables } from "./theme-style.ts";
@@ -15,6 +23,11 @@ type SitePageRendererParts = {
     variant: PublicSitePrimaryImageVariant;
   }>;
 };
+
+const SITE_BODY_CREASE_STYLE = {
+  backgroundImage:
+    "radial-gradient(ellipse at top center, rgb(0 0 0 / 0.3) 0%, rgb(0 0 0 / 0) 100%)",
+} satisfies CSSProperties;
 
 export const SitePageLinkModeContext = createContext<SitePageLinkMode>("preview");
 export const SitePageRouteBaseContext = createContext<`/${string}` | undefined>(undefined);
@@ -42,6 +55,11 @@ export function SitePageShell({
   const frame = tree.frame;
   const { Footer, Header } = parts;
   const themeVariables = publicSiteThemeVariables(tree.site, theme.theme);
+  const hasFooter = Boolean(frame.footer);
+  const footerCompletelyRevealed = useFooterCompletelyRevealed(hasFooter);
+  const bodyClassName = frame.header
+    ? "relative z-10 flex flex-1 flex-col bg-[color:var(--site-bg)] pt-24 sm:pt-28"
+    : "relative z-10 flex flex-1 flex-col bg-[color:var(--site-bg)]";
 
   return (
     <SitePageLinkModeContext.Provider value={linkMode}>
@@ -58,7 +76,20 @@ export function SitePageShell({
               style={themeVariables}
             >
               {frame.header ? <Header block={frame.header} /> : null}
-              <SiteRoutePage parts={parts} tree={tree} />
+              <div className={bodyClassName} data-site-body>
+                <SiteRoutePage parts={parts} tree={tree} />
+                {hasFooter ? (
+                  <div
+                    aria-hidden="true"
+                    className={`pointer-events-none absolute inset-x-0 -bottom-2.5 z-20 h-2.5 w-full transition-opacity duration-200 ${
+                      footerCompletelyRevealed ? "opacity-0" : "opacity-100"
+                    }`}
+                    data-site-body-crease
+                    data-site-footer-revealed={footerCompletelyRevealed ? "true" : "false"}
+                    style={SITE_BODY_CREASE_STYLE}
+                  />
+                ) : null}
+              </div>
               {frame.footer ? <Footer block={frame.footer} /> : null}
             </article>
           </SiteThemeContext.Provider>
@@ -66,6 +97,38 @@ export function SitePageShell({
       </SitePageRouteBaseContext.Provider>
     </SitePageLinkModeContext.Provider>
   );
+}
+
+function useFooterCompletelyRevealed(hasFooter: boolean): boolean {
+  const [isRevealed, setIsRevealed] = useState(!hasFooter);
+
+  useEffect(() => {
+    if (!hasFooter) {
+      setIsRevealed(true);
+      return;
+    }
+
+    function syncFooterState() {
+      const scrollHeight = Math.max(
+        document.documentElement.scrollHeight,
+        document.body?.scrollHeight ?? 0,
+      );
+      const viewportBottom = window.scrollY + window.innerHeight;
+
+      setIsRevealed(viewportBottom >= scrollHeight - 1);
+    }
+
+    syncFooterState();
+    window.addEventListener("scroll", syncFooterState, { passive: true });
+    window.addEventListener("resize", syncFooterState);
+
+    return () => {
+      window.removeEventListener("scroll", syncFooterState);
+      window.removeEventListener("resize", syncFooterState);
+    };
+  }, [hasFooter]);
+
+  return isRevealed;
 }
 
 function SiteRoutePage({ parts, tree }: { parts: SitePageRendererParts; tree: SitePageTree }) {

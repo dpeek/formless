@@ -2,6 +2,7 @@ import type { Dirent } from "node:fs";
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
+import type { Plugin as EsbuildPlugin } from "esbuild";
 import type { DeployEvidenceSummary, DeployResourceGraph } from "@dpeek/formless-deploy";
 
 import {
@@ -21,6 +22,7 @@ import {
   FORMLESS_SITE_PROJECT_ROOT_ENV_NAME,
   FORMLESS_WORKSPACE_RUNTIME_EXTENSIONS_ENV_NAME,
 } from "../shared/workspace-runtime-extensions.ts";
+import { sitePublicRendererWorkerVirtualModulesPlugin } from "./runtime-extension-bundler.ts";
 import {
   applyAlchemyDeployResourceGraph,
   type AlchemyDeployResourceZoneResolver,
@@ -308,6 +310,7 @@ export type AlchemyFormlessInstanceDeploymentWorkerProps = {
     define: {
       __FORMLESS_WORKSPACE_APP_PACKAGES_JSON__: string;
     };
+    plugins: EsbuildPlugin[];
   };
   compatibilityDate: typeof FORMLESS_WORKER_COMPATIBILITY_DATE;
   cwd: string;
@@ -906,6 +909,11 @@ async function declareFormlessInstanceAlchemyResourceTree(
       define: {
         __FORMLESS_WORKSPACE_APP_PACKAGES_JSON__: JSON.stringify(input.workspaceAppPackages ?? ""),
       },
+      plugins: [
+        sitePublicRendererWorkerVirtualModulesPlugin({
+          env: workerRuntimeExtensionBundlerEnv(input),
+        }),
+      ],
     },
     compatibilityDate: FORMLESS_WORKER_COMPATIBILITY_DATE,
     cwd: input.packageRoot,
@@ -1238,6 +1246,20 @@ function formlessInstanceAlchemyAssets(): AlchemyFormlessInstanceDeploymentWorke
     directory: "dist/client",
     not_found_handling: "single-page-application",
     run_worker_first: ["/*", "!/assets/*", "!/src/*", "!/@vite/*", "!/@react-refresh"],
+  };
+}
+
+function workerRuntimeExtensionBundlerEnv(input: {
+  workspaceRoot?: string;
+  workspaceRuntimeExtensions?: string;
+}): NodeJS.ProcessEnv {
+  return {
+    ...(input.workspaceRoot === undefined
+      ? {}
+      : { [FORMLESS_SITE_PROJECT_ROOT_ENV_NAME]: input.workspaceRoot }),
+    ...(input.workspaceRuntimeExtensions === undefined
+      ? {}
+      : { [FORMLESS_WORKSPACE_RUNTIME_EXTENSIONS_ENV_NAME]: input.workspaceRuntimeExtensions }),
   };
 }
 

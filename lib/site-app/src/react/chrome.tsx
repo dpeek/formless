@@ -1,4 +1,4 @@
-import type { ComponentType } from "react";
+import { useEffect, useState, type ComponentType, type CSSProperties } from "react";
 import { SiteThemeDarkIcon, SiteThemeLightIcon } from "@dpeek/formless-ui/icons";
 
 import { displayLabel, PlainText } from "./display.tsx";
@@ -8,6 +8,11 @@ import type { SiteBlockNode, SitePlacementNode } from "../types.ts";
 
 type SitePlacementRendererComponent = ComponentType<{ placement: SitePlacementNode }>;
 
+const SITE_HEADER_CREASE_STYLE = {
+  backgroundImage:
+    "radial-gradient(ellipse at top center, rgb(0 0 0 / 0.3) 0%, rgb(0 0 0 / 0) 100%)",
+} satisfies CSSProperties;
+
 export function SiteHeader({
   block,
   Placement,
@@ -16,9 +21,14 @@ export function SiteHeader({
   Placement: SitePlacementRendererComponent;
 }) {
   const { primary, secondary } = partitionHeaderPlacements(block.placements);
+  const hasScrolled = useWindowHasScrolled();
 
   return (
-    <header className="text-zinc-900 dark:text-zinc-100" data-site-header>
+    <header
+      className="fixed inset-x-0 top-0 z-30 bg-[color:var(--site-bg)] text-zinc-900 dark:text-zinc-100"
+      data-site-header
+      data-site-header-scrolled={hasScrolled ? "true" : "false"}
+    >
       <div className="mx-auto grid max-w-5xl grid-cols-[minmax(0,1fr)_auto] items-start gap-3 px-6 py-8 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:items-center">
         <HeaderNavigationContext.Provider value={true}>
           <nav
@@ -73,6 +83,14 @@ export function SiteHeader({
           </div>
         </HeaderNavigationContext.Provider>
       </div>
+      <div
+        aria-hidden="true"
+        className={`pointer-events-none absolute inset-x-0 top-full h-2.5 w-full transition-opacity duration-200 ${
+          hasScrolled ? "opacity-100" : "opacity-0"
+        }`}
+        data-site-header-crease
+        style={SITE_HEADER_CREASE_STYLE}
+      />
     </header>
   );
 }
@@ -118,7 +136,10 @@ export function SiteFooter({
   const { notes, sections } = partitionFooterPlacements(block.placements);
 
   return (
-    <footer className="border-t border-dashed" data-site-footer>
+    <footer
+      className="sticky bottom-0 z-0 bg-[color:var(--site-bg)] text-zinc-900 dark:text-zinc-100"
+      data-site-footer
+    >
       <div className="mx-auto flex max-w-5xl flex-col gap-8 px-6 py-18">
         {sections.length > 0 ? (
           <div className="flex max-w-lg flex-wrap justify-between gap-x-14 gap-y-8 text-sm">
@@ -137,6 +158,23 @@ export function SiteFooter({
       </div>
     </footer>
   );
+}
+
+function useWindowHasScrolled(): boolean {
+  const [hasScrolled, setHasScrolled] = useState(false);
+
+  useEffect(() => {
+    function syncScrollState() {
+      setHasScrolled(window.scrollY > 0);
+    }
+
+    syncScrollState();
+    window.addEventListener("scroll", syncScrollState, { passive: true });
+
+    return () => window.removeEventListener("scroll", syncScrollState);
+  }, []);
+
+  return hasScrolled;
 }
 
 function FooterNote({
