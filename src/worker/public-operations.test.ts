@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -49,6 +49,7 @@ const turnstileSiteKey = "test-turnstile-site-key";
 const turnstileSecret = "test-turnstile-secret";
 const mappedHost = "subscribe.example.com";
 const installId = "personal";
+const defaultSiteInstallId = "site";
 const recordPlanInstallId = "public-intake";
 
 let harness: Harness;
@@ -609,6 +610,117 @@ describe("public operation runtime", () => {
           response: "token-ok",
         },
       ]);
+    } finally {
+      await emailHarness.dispose();
+    }
+  });
+
+  it("schedules generic operation input notifications from installed Site forms targeting another app install", async () => {
+    const emailHarness = await createPublicOperationWorkerHarness({
+      bindings: {
+        FORMLESS_ADMIN_TOKEN: adminToken,
+        FORMLESS_TURNSTILE_SITE_KEY: turnstileSiteKey,
+        FORMLESS_TURNSTILE_SECRET_KEY: turnstileSecret,
+      },
+      turnstileVerify: turnstileVerifyResponse,
+    });
+    const publicIdempotencyKey = "cross-app-operation-input-notify";
+    const targetApiPrefix = `/api/app-installs/tasks/${recordPlanInstallId}`;
+
+    try {
+      await resetInstalledApp("site", defaultSiteInstallId, emailHarness);
+      await resetInstalledApp("tasks", recordPlanInstallId, emailHarness);
+      await installEmailStylePublicIntakeSchema(emailHarness, targetApiPrefix);
+      const emailConfig = await configureContactNotificationEmail(emailHarness);
+
+      const block = await postAdminRecordOperation(
+        {
+          idempotencyKey: "write-create-cross-app-operation-input-form",
+          entity: "block",
+          operationName: "create",
+          input: crossAppEmailStylePublicIntakeFormBlockValues(),
+        },
+        emailHarness,
+        `/api/app-installs/site/${defaultSiteInstallId}`,
+      );
+      const first = await postPublicOperation(
+        `${targetApiPrefix}/public/operations/intake-request/submit`,
+        publicEmailStyleIntakeBody({
+          idempotencyKey: publicIdempotencyKey,
+          sourceBlockId: block.record.id,
+        }),
+        emailHarness,
+      );
+      const firstBody = (await first.json()) as PublicOperationResponse;
+      const after = await getJson<BootstrapResponse>(`${targetApiPrefix}/bootstrap`, emailHarness);
+      const requests = emailStyleIntakeRecords(after.records);
+
+      expect(first.status).toBe(200);
+      expect(firstBody).toMatchObject({
+        invocationId: `operation:${emailStylePublicIntakeOperationKey}:${publicIdempotencyKey}`,
+        operation: {
+          entityName: "intake-request",
+          operationName: "submit",
+          canonicalKey: emailStylePublicIntakeOperationKey,
+          kind: "create",
+        },
+        status: "committed",
+      });
+      expect(requests).toHaveLength(1);
+
+      if (firstBody.output.type !== "create") {
+        throw new Error("Expected create output.");
+      }
+
+      const deliveryReplay = await postAdminJson<{
+        delivery: {
+          latestError?: string;
+          messageKind: string;
+          sourceOperationId?: string;
+          sourceRecordId?: string;
+          sourceStorageIdentity: string;
+          status: string;
+        };
+        replayed: boolean;
+      }>(
+        "/api/formless/email/deliveries/schedule",
+        {
+          canonicalOrigin: "https://www.example.com",
+          idempotencyKey: operationInputNotificationIdempotencyKey(
+            emailStylePublicIntakeOperationKey,
+            publicIdempotencyKey,
+          ),
+          message: {
+            subject: "Replay probe",
+            text: "Replay probe",
+          },
+          messageKind: "site-operation-input-notification",
+          recipients: [{ address: "owner@example.com", displayName: "Public operation" }],
+          replyTo: { address: "ada@example.com" },
+          sender: { id: emailConfig.sender.id },
+          source: {
+            operationId: firstBody.invocationId,
+            recordId: firstBody.output.record.id,
+            storageIdentity: `app:${recordPlanInstallId}`,
+          },
+        },
+        emailHarness,
+      );
+
+      expect(deliveryReplay).toMatchObject({
+        replayed: true,
+        delivery: {
+          latestError: "Email delivery binding is not configured.",
+          messageKind: "site-operation-input-notification",
+          sourceOperationId: firstBody.invocationId,
+          sourceRecordId: firstBody.output.record.id,
+          sourceStorageIdentity: `app:${recordPlanInstallId}`,
+          status: "failed",
+        },
+      });
+      expect(JSON.stringify(firstBody)).not.toContain("owner@example.com");
+      expect(JSON.stringify(firstBody)).not.toContain("contact@mail.example.com");
+      expect(JSON.stringify(firstBody)).not.toContain("operation-input-notification");
     } finally {
       await emailHarness.dispose();
     }
@@ -1859,8 +1971,12 @@ async function resetSchemaApp(schemaKey: "tasks" | "site", target: Harness = har
   expect(response.status).toBe(200);
 }
 
-async function resetInstalledApp(packageAppKey: "site" | "tasks", appInstallId: string) {
-  const response = await harness.fetch(
+async function resetInstalledApp(
+  packageAppKey: "site" | "tasks",
+  appInstallId: string,
+  target: Harness = harness,
+) {
+  const response = await target.fetch(
     `/api/app-installs/${packageAppKey}/${appInstallId}/reset/seed`,
     {
       body: "{}",
@@ -1881,11 +1997,14 @@ async function installSiteSchema(transform: (schema: AppSchema) => void) {
   await postAdminJson<SchemaUpdateResponse>("/api/site/schema", { schema });
 }
 
-async function installEmailStylePublicIntakeSchema(target: Harness = harness) {
-  const current = await getJson<SchemaResponse>("/api/site/schema", target);
+async function installEmailStylePublicIntakeSchema(
+  target: Harness = harness,
+  apiPrefix = "/api/site",
+) {
+  const current = await getJson<SchemaResponse>(`${apiPrefix}/schema`, target);
   const schema = schemaWithEmailStylePublicIntake(current.schema);
 
-  await postAdminJson<SchemaUpdateResponse>("/api/site/schema", { schema }, target);
+  await postAdminJson<SchemaUpdateResponse>(`${apiPrefix}/schema`, { schema }, target);
 }
 
 function publicSubscribeBody(input: {
@@ -2126,9 +2245,10 @@ async function postAdminJson<T = unknown>(path: string, body: unknown, target: H
 async function postAdminRecordOperation(
   body: Parameters<typeof recordOperationRequest>[0],
   target: Harness = harness,
+  apiPrefix = "/api/site",
 ) {
   const request = recordOperationRequest(body);
-  const response = await target.fetch(`/api/site${request.path.slice("/api".length)}`, {
+  const response = await target.fetch(`${apiPrefix}${request.path.slice("/api".length)}`, {
     body: JSON.stringify(request.body),
     headers: adminHeaders({ "Content-Type": "application/json" }),
     method: "POST",
@@ -2138,6 +2258,27 @@ async function postAdminRecordOperation(
   expect([200, 201], text).toContain(response.status);
 
   return request.response(JSON.parse(text));
+}
+
+function crossAppEmailStylePublicIntakeFormBlockValues(): Record<string, unknown> {
+  const values = {
+    ...emailStylePublicIntakeFormBlockValues,
+    operationTargetKind: "appInstall",
+    operationTargetPackageAppKey: "tasks",
+    operationTargetInstallId: recordPlanInstallId,
+  };
+
+  delete (values as Record<string, unknown>).operationTargetSchemaKey;
+
+  return values;
+}
+
+function operationInputNotificationIdempotencyKey(operationKey: string, key: string): string {
+  const digest = createHash("sha256")
+    .update(`operation-input-notification\n${operationKey}\n${key}`)
+    .digest("hex");
+
+  return `operation-input-notification:${digest}`;
 }
 
 async function configureContactNotificationEmail(target: Harness) {
@@ -2195,6 +2336,8 @@ async function configureContactNotificationEmail(target: Harness) {
     },
     target,
   );
+
+  return { domain, route, sender };
 }
 
 async function createControlPlaneRecord(

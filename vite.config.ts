@@ -74,12 +74,16 @@ const cloudflarePluginConfig: PluginConfig | undefined =
     : undefined;
 
 export default defineConfig({
-  build: {
-    manifest: "assets/formless-client-manifest.json",
-    rollupOptions: {
-      input: {
-        app: path.resolve(packageRoot, "index.html"),
-        "public-site": path.resolve(packageRoot, "src/public-site-main.tsx"),
+  environments: {
+    client: {
+      build: {
+        manifest: "assets/formless-client-manifest.json",
+        rollupOptions: {
+          input: {
+            app: path.resolve(packageRoot, "index.html"),
+            "public-site": path.resolve(packageRoot, "src/public-site-main.tsx"),
+          },
+        },
       },
     },
   },

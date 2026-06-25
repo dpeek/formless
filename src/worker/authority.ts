@@ -1,11 +1,17 @@
 import { DurableObject } from "cloudflare:workers";
 import type {
+  BootstrapResponse,
   SyncResponse,
   SyncSocketAttachment,
   SyncSocketServerMessage,
 } from "../shared/protocol.ts";
 import { isSyncSocketAttachment, isSyncSocketClientMessage } from "../shared/protocol.ts";
-import { parseAuthorityApiRoute, type AppStorageIdentity } from "../shared/app-storage-identity.ts";
+import {
+  installedAppStorageIdentity,
+  parseAuthorityApiRoute,
+  type AppStorageIdentity,
+} from "../shared/app-storage-identity.ts";
+import type { StoredRecord } from "@dpeek/formless-storage";
 import { handleInstanceArchiveDurableObjectRequest } from "./archive-api.ts";
 import {
   ensureStorageTables,
@@ -265,6 +271,14 @@ export class FormlessAuthority extends DurableObject<Env> {
         const { schema } = initializeStorageFromSource(this.ctx.storage, source);
         const result = await executePublicOperationRequest({
           afterCommit: async (response) => {
+            const operationInputNotificationRecords =
+              await publicOperationInputNotificationSourceRecords({
+                env: this.bindings,
+                identity: route.identity,
+                requestUrl: request.url,
+                response,
+              });
+
             await Promise.allSettled([
               scheduleSiteContactNotificationAfterPublicOperation({
                 env: this.bindings,
@@ -277,6 +291,9 @@ export class FormlessAuthority extends DurableObject<Env> {
                 identity: route.identity,
                 requestUrl: request.url,
                 response,
+                ...(operationInputNotificationRecords === undefined
+                  ? {}
+                  : { records: operationInputNotificationRecords }),
                 schema,
                 storage: this.ctx.storage,
               }),
@@ -481,6 +498,51 @@ function packageSchemaProvenanceForIdentity(
     packageRevision: packageApp.packageRevision,
     sourceSchemaHash: packageApp.sourceSchemaHash,
   };
+}
+
+async function publicOperationInputNotificationSourceRecords(input: {
+  env: Env;
+  identity: AppStorageIdentity;
+  requestUrl: string;
+  response: { invocation: { source: { siteBlockId?: string } } };
+}): Promise<readonly StoredRecord[] | undefined> {
+  if (input.response.invocation.source.siteBlockId === undefined) {
+    return undefined;
+  }
+
+  const defaultSiteIdentity = installedAppStorageIdentity(
+    {
+      installId: "site",
+      packageAppKey: "site",
+    },
+    activeAppPackageResolver(input.env),
+  );
+
+  if (!defaultSiteIdentity) {
+    return undefined;
+  }
+
+  if (
+    (input.identity.kind === "schemaKey" && input.identity.sourceSchemaKey === "site") ||
+    input.identity.authorityName === defaultSiteIdentity.authorityName
+  ) {
+    return undefined;
+  }
+
+  try {
+    const id = input.env.FORMLESS_AUTHORITY.idFromName(defaultSiteIdentity.authorityName);
+    const response = await input.env.FORMLESS_AUTHORITY.get(id).fetch(
+      new Request(new URL(`${defaultSiteIdentity.apiRoutePrefix}/bootstrap`, input.requestUrl), {
+        headers: { Accept: "application/json" },
+        method: "GET",
+      }),
+    );
+    const body = (await response.json()) as Partial<BootstrapResponse> & { error?: string };
+
+    return response.ok && Array.isArray(body.records) ? body.records : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function storageSourceFromSyncSocket(

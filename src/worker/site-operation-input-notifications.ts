@@ -38,7 +38,11 @@ export async function scheduleSiteOperationInputNotificationAfterPublicOperation
 
   try {
     const sourceRecords = input.records ?? sourceRecordsFromStorage(input.storage);
-    const sourceBlock = operationInputNotificationSourceBlock(sourceRecords, input.response);
+    const sourceBlock = operationInputNotificationSourceBlock(
+      sourceRecords,
+      input.response,
+      input.identity,
+    );
 
     if (!sourceBlock) {
       return;
@@ -119,6 +123,7 @@ function isCommittedPublicOperation(response: OperationInvocationResponse): bool
 function operationInputNotificationSourceBlock(
   records: readonly StoredRecord[],
   response: OperationInvocationResponse,
+  identity: AppStorageIdentity,
 ): StoredRecord | undefined {
   const siteBlockId = response.invocation.source.siteBlockId;
 
@@ -133,12 +138,38 @@ function operationInputNotificationSourceBlock(
   if (
     block?.values.type !== "publicOperationForm" ||
     block.values.operationNotificationMode !== "email" ||
-    block.values.operationKey !== response.invocation.operation.canonicalKey
+    block.values.operationKey !== response.invocation.operation.canonicalKey ||
+    !sourceBlockTargetsIdentity(block, identity)
   ) {
     return undefined;
   }
 
   return block;
+}
+
+function sourceBlockTargetsIdentity(block: StoredRecord, identity: AppStorageIdentity): boolean {
+  const targetKind = stringRecordValue(block.values.operationTargetKind);
+
+  if (!targetKind) {
+    return true;
+  }
+
+  if (targetKind === "schemaKey") {
+    return (
+      identity.kind === "schemaKey" &&
+      stringRecordValue(block.values.operationTargetSchemaKey) === identity.sourceSchemaKey
+    );
+  }
+
+  if (targetKind === "appInstall") {
+    return (
+      identity.kind === "appInstall" &&
+      stringRecordValue(block.values.operationTargetPackageAppKey) === identity.packageAppKey &&
+      stringRecordValue(block.values.operationTargetInstallId) === identity.installId
+    );
+  }
+
+  return false;
 }
 
 function operationInputNotificationSettings(
@@ -345,18 +376,8 @@ function renderOperationInputNotificationMessage(input: {
   ];
   const textFacts = facts.map((fact) => `${fact.label}: ${fact.value}`);
   const textFields = input.fields.map((field) => `${field.label}: ${field.value}`);
-  const htmlFacts = facts
-    .map((fact) => `<dt>${escapeHtml(fact.label)}</dt><dd>${escapeHtml(fact.value)}</dd>`)
-    .join("");
-  const htmlFields = input.fields
-    .map(
-      (field) =>
-        `<dt>${escapeHtml(field.label)}</dt><dd>${escapeHtml(field.value).replaceAll(
-          "\n",
-          "<br>",
-        )}</dd>`,
-    )
-    .join("");
+  const htmlFacts = renderKeyValueTable(facts);
+  const htmlFields = renderKeyValueTable(input.fields);
 
   return {
     subject: `New public operation input for ${input.operationKey}`.slice(0, 998),
@@ -371,15 +392,31 @@ function renderOperationInputNotificationMessage(input: {
     ].join("\n"),
     html: [
       "<p>New public operation form submission</p>",
-      "<dl>",
       htmlFacts,
-      "</dl>",
       "<p>Submitted input</p>",
-      "<dl>",
       htmlFields,
-      "</dl>",
     ].join(""),
   };
+}
+
+function renderKeyValueTable(rows: Array<{ label: string; value: string }>): string {
+  const tableStyle = "border-collapse:collapse;width:100%;margin:0 0 16px 0;";
+  const labelStyle =
+    "border:1px solid #d0d7de;padding:6px 8px;text-align:left;vertical-align:top;white-space:nowrap;";
+  const valueStyle = "border:1px solid #d0d7de;padding:6px 8px;vertical-align:top;";
+  const htmlRows = rows
+    .map(
+      (row) =>
+        `<tr><th scope="row" style="${labelStyle}">${escapeHtml(
+          row.label,
+        )}</th><td style="${valueStyle}">${escapeHtml(row.value).replaceAll(
+          "\n",
+          "<br>",
+        )}</td></tr>`,
+    )
+    .join("");
+
+  return `<table cellpadding="0" cellspacing="0" style="${tableStyle}"><tbody>${htmlRows}</tbody></table>`;
 }
 
 function createdRecordId(response: OperationInvocationResponse): { recordId: string } | object {

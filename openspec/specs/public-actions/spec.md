@@ -95,6 +95,8 @@ through an explicit actor policy and public binding.
 - AND the notification message is rendered from the submitted operation input,
   public-safe field labels, canonical operation key, target storage identity,
   request host and path, and Site block id when supplied
+- AND the HTML notification body renders operation facts and submitted input as
+  key-value tables
 - AND configured reply-to fields may use submitted scalar input values but
   missing or invalid reply-to values do not block the committed operation
 - AND the public operation response remains the operation-native create or

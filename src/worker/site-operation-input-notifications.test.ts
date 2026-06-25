@@ -3,9 +3,24 @@ import type { AppSchema, EntityOperationSchema } from "@dpeek/formless-schema";
 import type { RecordValues, StoredRecord } from "@dpeek/formless-storage";
 import { describe, expect, it } from "vite-plus/test";
 
-import { schemaKeyStorageIdentity } from "../shared/app-storage-identity.ts";
+import {
+  installedAppStorageIdentity,
+  schemaKeyStorageIdentity,
+  type AppStorageIdentity,
+} from "../shared/app-storage-identity.ts";
 import type { OperationInvocationResponse } from "../shared/operation-invocation.ts";
 import { scheduleSiteOperationInputNotificationAfterPublicOperation } from "./site-operation-input-notifications.ts";
+
+type OperationFormTarget =
+  | {
+      kind: "schemaKey";
+      schemaKey: string;
+    }
+  | {
+      installId: string;
+      kind: "appInstall";
+      packageAppKey: string;
+    };
 
 describe("Site operation input notification scheduling", () => {
   it("schedules structured operation input email from a committed public operation form", async () => {
@@ -64,6 +79,14 @@ describe("Site operation input notification scheduling", () => {
     expect(message.text).toContain("Tier: Priority");
     expect(message.text).toContain("Accepted terms: Yes");
     expect(message.text).toContain("Quantity: 3");
+    expect(message.html).toContain("<table");
+    expect(message.html).not.toContain("<dl>");
+    expect(message.html).toMatch(
+      /<tr><th scope="row"[^>]*>Target storage<\/th><td[^>]*>site<\/td><\/tr>/,
+    );
+    expect(message.html).toMatch(
+      /<tr><th scope="row"[^>]*>Request details &lt;safe label&gt;<\/th><td[^>]*>Need &lt;testing&gt; &amp; review\.<br>Second line\.<\/td><\/tr>/,
+    );
     expect(message.html).toContain("Request details &lt;safe label&gt;");
     expect(message.html).not.toContain("<testing>");
   });
@@ -113,6 +136,54 @@ describe("Site operation input notification scheduling", () => {
     });
 
     expect(scheduled).toEqual([]);
+  });
+
+  it("requires declared public operation form targets to match the committed operation target", async () => {
+    const scheduled: unknown[] = [];
+    const identity = installedAppStorageIdentity({ installId: "requests", packageAppKey: "tasks" });
+
+    if (!identity) {
+      throw new Error("Expected installed app identity.");
+    }
+
+    const matchingRecords = operationFormSourceRecords({
+      target: {
+        installId: "requests",
+        kind: "appInstall",
+        packageAppKey: "tasks",
+      },
+    });
+    const mismatchedRecords = operationFormSourceRecords({
+      target: {
+        installId: "other",
+        kind: "appInstall",
+        packageAppKey: "tasks",
+      },
+    });
+
+    expect(matchingRecords[0]?.values.operationTargetInstallId).toBe("requests");
+    expect(mismatchedRecords[0]?.values.operationTargetInstallId).toBe("other");
+
+    await scheduleSiteOperationInputNotificationAfterPublicOperation({
+      env: fakeNotificationEnv(notificationControlPlaneRecords(), scheduled),
+      identity,
+      records: matchingRecords,
+      requestUrl:
+        "https://www.example.com/api/app-installs/tasks/requests/public/operations/request/submit",
+      response: operationInputResponse({ identity }),
+      schema: operationInputSchema(),
+    });
+    await scheduleSiteOperationInputNotificationAfterPublicOperation({
+      env: fakeNotificationEnv(notificationControlPlaneRecords(), scheduled),
+      identity,
+      records: mismatchedRecords,
+      requestUrl:
+        "https://www.example.com/api/app-installs/tasks/requests/public/operations/request/submit",
+      response: operationInputResponse({ identity }),
+      schema: operationInputSchema(),
+    });
+
+    expect(scheduled).toHaveLength(1);
   });
 
   it("uses stable operation input notification idempotency for the same operation retry", async () => {
@@ -198,7 +269,11 @@ function notificationControlPlaneRecords(): StoredRecord[] {
 }
 
 function operationFormSourceRecords(
-  input: { mode?: "email" | "none"; replyToField?: string } = {},
+  input: {
+    mode?: "email" | "none";
+    replyToField?: string;
+    target?: OperationFormTarget;
+  } = {},
 ): StoredRecord[] {
   return [
     record("form-block", "block", {
@@ -209,8 +284,28 @@ function operationFormSourceRecords(
       ...(input.replyToField === undefined
         ? {}
         : { operationNotificationReplyToField: input.replyToField }),
+      ...operationFormTargetValues(input.target),
     }),
   ];
+}
+
+function operationFormTargetValues(target: OperationFormTarget | undefined): RecordValues {
+  if (!target) {
+    return {};
+  }
+
+  if (target.kind === "schemaKey") {
+    return {
+      operationTargetKind: "schemaKey",
+      operationTargetSchemaKey: target.schemaKey,
+    };
+  }
+
+  return {
+    operationTargetKind: "appInstall",
+    operationTargetPackageAppKey: target.packageAppKey,
+    operationTargetInstallId: target.installId,
+  };
 }
 
 function operationInputSchema(): AppSchema {
@@ -276,10 +371,11 @@ function requestSubmitOperation(): EntityOperationSchema {
 
 function operationInputResponse(
   input: {
+    identity?: AppStorageIdentity;
     input?: RecordValues;
   } = {},
 ): OperationInvocationResponse {
-  const identity = schemaKeyStorageIdentity("site");
+  const identity = input.identity ?? schemaKeyStorageIdentity("site");
   const values = input.input ?? {
     fullName: "Ada Lovelace",
     email: "ada@example.com",
