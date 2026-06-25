@@ -519,7 +519,7 @@ provider secrets or canonical provider state.
 
 The system SHALL provide a Gateway package slice under `lib/gateway/` for local
 workspace gateway transport contracts, browser adapters, Worker proxy adapters,
-and local sidecar HTTP adapters.
+shared local runtime proxy rules, and local sidecar HTTP adapters.
 
 #### Scenario: Gateway package scaffold
 
@@ -539,6 +539,8 @@ and local sidecar HTTP adapters.
 - WHEN they import the package
 - THEN they import from the package root or documented subpaths
 - AND they do not deep-import gateway package internals
+- AND package-internal shared proxy rules remain private implementation behind
+  documented Worker and sidecar adapter subpaths
 
 ### Requirement: Gateway Package Non-Ownership
 
@@ -549,11 +551,17 @@ owner session storage, runtime topology, provider execution, or app records.
 #### Scenario: Package owns gateway contracts and adapters
 
 - GIVEN workspace gateway route constants, proxy header contracts, operation
-  intent helpers, browser fetch behavior, Worker proxy behavior, or sidecar
-  HTTP routing helpers are needed
+  intent helpers, browser fetch behavior, shared local runtime proxy rules,
+  Worker proxy behavior, or sidecar HTTP routing helpers are needed
 - WHEN runtime-neutral, browser, Worker, or sidecar code consumes gateway
   capability behavior
 - THEN they come from `lib/gateway`
+- AND Worker proxy adapters and local Node runtime proxy adapters share one
+  package-owned proxy rules Module for route classification, operation intent
+  validation, browser actor policy, CSRF checks, sanitized sidecar forwarding,
+  and display-safe response wrapping
+- AND direct sidecar automation authorization and sidecar execution ingress
+  remain sidecar adapter behavior rather than browser proxy behavior
 - AND semantic workspace operation input shapes, display-safe operation state,
   operation result contracts, operation storage, actual save, check, pull,
   push, deploy, credential setup, owner session, runtime topology, Authority,

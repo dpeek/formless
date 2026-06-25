@@ -153,8 +153,8 @@ through the Gateway package slice.
 
 - **WHEN** runtime-neutral, browser, Worker, sidecar, CLI runtime, or
   tests need workspace gateway route constants, gateway proxy header
-  contracts, operation intent helpers, browser fetch behavior, Worker proxy
-  behavior, or sidecar HTTP routing helpers
+  contracts, operation intent helpers, browser fetch behavior, shared proxy
+  rules, Worker proxy behavior, or sidecar HTTP routing helpers
 - **THEN** they import those contracts and adapters from
   `@dpeek/formless-gateway`, `@dpeek/formless-gateway/client`,
   `@dpeek/formless-gateway/worker`, or `@dpeek/formless-gateway/sidecar`
@@ -164,6 +164,28 @@ through the Gateway package slice.
 - **AND** CLI runtime adapter modules may supply non-package-owned operation
   execution, Workspace package operation state, owner session, and runtime
   topology dependencies to the package sidecar adapter
+
+#### Scenario: Shared local runtime proxy rules
+
+- **WHEN** a Worker runtime proxy adapter or local Node runtime proxy adapter
+  handles a workspace gateway request before sidecar forwarding
+- **THEN** it uses one package-owned proxy rules Module to classify gateway
+  route and method intent, parse operation start input or read operation ids,
+  classify operation intent, apply actor policy from supplied owner session,
+  bootstrap, admin bearer, route eligibility, and capability facts, validate
+  CSRF proof for browser mutations, build display-safe sidecar proxy headers,
+  and wrap sidecar responses for browser-visible callers
+- **AND** the Worker proxy adapter and local Node runtime proxy adapter may
+  differ only in runtime seam facts such as route eligibility, owner session
+  validation, owner setup status, advertised capabilities, proxy fetcher, and
+  sidecar endpoint selection
+- **AND** the shared proxy rules Module does not own owner session validation,
+  owner setup status reads, runtime topology selection, sidecar endpoint
+  creation, operation execution, operation state storage, filesystem work, or
+  provider mutation
+- **AND** the sidecar execution adapter remains a separate Module that
+  revalidates proxied or direct automation authorization before invoking
+  injected workspace operation handlers
 
 #### Scenario: Workspace package owns semantic operation contracts
 

@@ -5,10 +5,7 @@ import {
   WORKSPACE_GATEWAY_ACTOR_HEADER,
   WORKSPACE_GATEWAY_AUTHORIZATION_VIA_HEADER,
   WORKSPACE_GATEWAY_AUTO_SAVE_API_PATH,
-  WORKSPACE_GATEWAY_BOOTSTRAP_HEADER,
   WORKSPACE_GATEWAY_BOOTSTRAP_TOKEN_ENV,
-  WORKSPACE_GATEWAY_CSRF_COOKIE_NAME,
-  WORKSPACE_GATEWAY_CSRF_HEADER,
   WORKSPACE_GATEWAY_CSRF_TOKEN_ENV,
   WORKSPACE_GATEWAY_ENABLED_ENV,
   WORKSPACE_GATEWAY_OPERATION_KIND_HEADER,
@@ -41,6 +38,13 @@ import {
   type WorkspaceGatewayStartInput,
   type WorkspaceGatewayStartInputParseResult,
 } from "./index.ts";
+import {
+  handleWorkspaceGatewayProxyRulesRequest,
+  isLoopbackSidecarEndpoint,
+  type WorkspaceGatewayProxyRulesEnv,
+  type WorkspaceGatewayProxyRulesOwnerSessionValidationResult,
+  type WorkspaceGatewayProxyRulesTarget,
+} from "./proxy-rules.ts";
 import {
   WORKSPACE_OPERATION_CAPABILITIES,
   type WorkspaceOperationRequiredCapability,
@@ -77,6 +81,7 @@ export type {
   WorkspaceGatewayResponse,
   WorkspaceGatewayStartInput,
 } from "./index.ts";
+export { isLoopbackSidecarEndpoint } from "./proxy-rules.ts";
 
 export type WorkspaceGatewaySidecarEnv = {
   FORMLESS_ADMIN_TOKEN?: string;
@@ -136,8 +141,7 @@ export type WorkspaceGatewaySidecarDependencies = {
 };
 
 export type WorkspaceGatewayOwnerSessionValidationResult =
-  | { ok: true }
-  | { ok: false; reason?: string };
+  WorkspaceGatewayProxyRulesOwnerSessionValidationResult;
 
 export type WorkspaceGatewayLocalProxyDependencies = {
   capabilities?: readonly WorkspaceOperationRequiredCapability[];
@@ -151,10 +155,7 @@ export type WorkspaceGatewayLocalProxyDependencies = {
     | WorkspaceGatewayOwnerSessionValidationResult;
 };
 
-export type WorkspaceGatewayProxyTarget = {
-  endpoint: string;
-  proxyToken: string;
-};
+export type WorkspaceGatewayProxyTarget = WorkspaceGatewayProxyRulesTarget;
 
 type GatewayAuthorization =
   | WorkspaceGatewaySidecarAuthorization
@@ -173,143 +174,13 @@ export async function handleWorkspaceGatewayLocalProxyRequest(
   env: WorkspaceGatewaySidecarEnv,
   dependencies: WorkspaceGatewayLocalProxyDependencies = {},
 ): Promise<Response | undefined> {
-  const url = new URL(request.url);
-
-  if (!isWorkspaceGatewayPath(url.pathname)) {
-    return undefined;
-  }
-
-  const proxyTarget = workspaceGatewayProxyTargetFromEnv(request, env, dependencies);
-
-  if (!proxyTarget) {
-    return displaySafeJson({ error: "Not found." }, 404);
-  }
-
-  if (url.pathname === WORKSPACE_GATEWAY_STATUS_API_PATH) {
-    if (request.method !== "GET") {
-      return methodNotAllowed(["GET"]);
-    }
-
-    const intent = workspaceGatewayStatusIntent();
-    const authorization = await authorizeGatewayRequest(request, env, dependencies, intent, {
-      mutating: false,
-    });
-
-    if ("error" in authorization) {
-      return displaySafeJson({ error: authorization.error }, authorization.status);
-    }
-
-    return proxyWorkspaceGatewayRequest(request, env, dependencies, proxyTarget, authorization, {
-      intent,
-    });
-  }
-
-  if (url.pathname === WORKSPACE_GATEWAY_AUTO_SAVE_API_PATH) {
-    if (request.method === "GET") {
-      const intent = workspaceGatewayAutoSaveStatusIntent();
-      const authorization = await authorizeGatewayRequest(request, env, dependencies, intent, {
-        mutating: false,
-      });
-
-      if ("error" in authorization) {
-        return displaySafeJson({ error: authorization.error }, authorization.status);
-      }
-
-      return proxyWorkspaceGatewayRequest(request, env, dependencies, proxyTarget, authorization, {
-        intent,
-      });
-    }
-
-    if (request.method === "POST") {
-      const parsed = await parseGatewayAutoSaveEnqueueInput(request.clone());
-
-      if (!parsed.ok) {
-        return displaySafeJson({ error: parsed.error }, 400);
-      }
-
-      const intent = workspaceGatewayAutoSaveEnqueueIntent();
-      const authorization = await authorizeGatewayRequest(request, env, dependencies, intent, {
-        mutating: true,
-      });
-
-      if ("error" in authorization) {
-        return displaySafeJson({ error: authorization.error }, authorization.status);
-      }
-
-      return proxyWorkspaceGatewayRequest(request, env, dependencies, proxyTarget, authorization, {
-        intent,
-      });
-    }
-
-    return methodNotAllowed(["GET", "POST"]);
-  }
-
-  if (url.pathname === WORKSPACE_GATEWAY_OPERATIONS_API_PATH) {
-    if (request.method !== "POST") {
-      return methodNotAllowed(["POST"]);
-    }
-
-    const parsed = await parseGatewayStartInput(request.clone());
-
-    if (!parsed.ok) {
-      return displaySafeJson({ error: parsed.error }, 400);
-    }
-
-    const intent = workspaceGatewayStartOperationIntent(parsed.input);
-    const authorization = await authorizeGatewayRequest(request, env, dependencies, intent, {
-      operationInput: parsed.input,
-    });
-
-    if ("error" in authorization) {
-      return displaySafeJson({ error: authorization.error }, authorization.status);
-    }
-
-    return proxyWorkspaceGatewayRequest(request, env, dependencies, proxyTarget, authorization, {
-      intent,
-    });
-  }
-
-  const operationMatch = workspaceGatewayOperationPath(url.pathname);
-
-  if (operationMatch) {
-    if (request.method !== "GET") {
-      return methodNotAllowed(["GET"]);
-    }
-
-    const parsedOperationId = parseWorkspaceGatewayOperationId(operationMatch.operationId);
-
-    if (!parsedOperationId.ok) {
-      return displaySafeJson({ error: parsedOperationId.error }, 400);
-    }
-
-    const readIntent = readOperationIntentFromRequest(request);
-
-    if (!readIntent.ok) {
-      return displaySafeJson({ error: readIntent.error }, 400);
-    }
-
-    const authorization = await authorizeGatewayReadOperationRequest(
-      request,
-      env,
-      dependencies,
-      readIntent.intent,
-    );
-
-    if ("error" in authorization) {
-      return displaySafeJson({ error: authorization.error }, authorization.status);
-    }
-
-    return proxyWorkspaceGatewayRequest(
-      request,
-      env,
-      dependencies,
-      proxyTarget,
-      authorization,
-      readIntent.intent === undefined ? {} : { intent: readIntent.intent },
-    );
-  }
-
-  return displaySafeJson({ error: "Not found." }, 404);
+  return handleWorkspaceGatewayProxyRulesRequest(request, proxyRulesEnvFromSidecarEnv(env), {
+    capabilities: dependencies.capabilities ?? WORKSPACE_OPERATION_CAPABILITIES,
+    fetch: dependencies.proxyFetch,
+    proxyTarget: () => workspaceGatewayProxyTargetFromEnv(request, env, dependencies),
+    readOwnerSetupStatus: dependencies.readOwnerSetupStatus,
+    validateOwnerSession: dependencies.validateOwnerSession,
+  });
 }
 
 export async function handleWorkspaceGatewaySidecarRequest(
@@ -590,22 +461,14 @@ export function workspaceGatewaySidecarRoot(env: WorkspaceGatewaySidecarEnv): st
   return workspaceRoot ? path.resolve(workspaceRoot) : undefined;
 }
 
-export function isLoopbackSidecarEndpoint(value: string): boolean {
-  let url: URL;
-
-  try {
-    url = new URL(value);
-  } catch {
-    return false;
-  }
-
-  return (
-    url.protocol === "http:" &&
-    (url.hostname === "127.0.0.1" ||
-      url.hostname === "localhost" ||
-      url.hostname === "[::1]" ||
-      url.hostname === "::1")
-  );
+function proxyRulesEnvFromSidecarEnv(
+  env: WorkspaceGatewaySidecarEnv,
+): WorkspaceGatewayProxyRulesEnv {
+  return {
+    adminToken: env.FORMLESS_ADMIN_TOKEN,
+    bootstrapToken: env[WORKSPACE_GATEWAY_BOOTSTRAP_TOKEN_ENV],
+    csrfToken: env[WORKSPACE_GATEWAY_CSRF_TOKEN_ENV],
+  };
 }
 
 function authorizeSidecarGatewayRequest(
@@ -750,148 +613,6 @@ function isWorkspaceGatewayAuthorizationVia(
   return value === "admin-bearer" || value === "bootstrap" || value === "owner-session";
 }
 
-async function authorizeGatewayRequest(
-  request: Request,
-  env: WorkspaceGatewaySidecarEnv,
-  dependencies: WorkspaceGatewayLocalProxyDependencies,
-  intent: WorkspaceGatewayOperationIntent,
-  context: GatewayOperationExecutionContext = {},
-): Promise<GatewayAuthorization> {
-  if (!isSameOriginOrNoOrigin(request)) {
-    return { error: "Workspace gateway requests must be same-origin.", status: 403 };
-  }
-
-  if (!request.headers.get("Origin") && matchesAdminBearer(request, env)) {
-    return authorizeGatewayOperationExecution(
-      { actor: "automation", via: "admin-bearer" },
-      dependencies.capabilities ?? WORKSPACE_OPERATION_CAPABILITIES,
-      intent,
-      context,
-    );
-  }
-
-  const ownerSession = await validateOwnerSession(request, dependencies);
-
-  if (ownerSession.ok) {
-    if (intent.mutating && !isSameOriginWithOrigin(request)) {
-      return {
-        error: "Workspace gateway browser mutations require a same-origin Origin header.",
-        status: 403,
-      };
-    }
-
-    if (intent.mutating && !validCsrfProof(request, env)) {
-      return { error: "Workspace gateway browser mutations require CSRF proof.", status: 403 };
-    }
-
-    return authorizeGatewayOperationExecution(
-      { actor: "browser", via: "owner-session" },
-      dependencies.capabilities ?? WORKSPACE_OPERATION_CAPABILITIES,
-      intent,
-      context,
-    );
-  }
-
-  if (matchesBootstrapCapability(request, env)) {
-    if (!intent.bootstrapAllowed) {
-      return {
-        error: "Workspace bootstrap authorization is limited to status operations.",
-        status: 403,
-      };
-    }
-
-    if (await ownerSetupComplete(request, dependencies)) {
-      return { error: "Workspace bootstrap authorization has expired.", status: 403 };
-    }
-
-    return authorizeGatewayOperationExecution(
-      { actor: "browser", via: "bootstrap" },
-      dependencies.capabilities ?? WORKSPACE_OPERATION_CAPABILITIES,
-      intent,
-      context,
-    );
-  }
-
-  if (intent.mutating && !isSameOriginWithOrigin(request)) {
-    return {
-      error: "Workspace gateway browser mutations require a same-origin Origin header.",
-      status: 403,
-    };
-  }
-
-  return {
-    error: "Workspace gateway authorization is required.",
-    status: 401,
-  };
-}
-
-async function authorizeGatewayReadOperationRequest(
-  request: Request,
-  env: WorkspaceGatewaySidecarEnv,
-  dependencies: WorkspaceGatewayLocalProxyDependencies,
-  intent: WorkspaceGatewayOperationIntent | undefined,
-): Promise<GatewayAuthorization> {
-  if (!isSameOriginOrNoOrigin(request)) {
-    return { error: "Workspace gateway requests must be same-origin.", status: 403 };
-  }
-
-  if (!request.headers.get("Origin") && matchesAdminBearer(request, env)) {
-    return intent === undefined
-      ? { actor: "automation", via: "admin-bearer" }
-      : authorizeGatewayOperationExecution(
-          { actor: "automation", via: "admin-bearer" },
-          dependencies.capabilities ?? WORKSPACE_OPERATION_CAPABILITIES,
-          intent,
-          { mutating: false },
-        );
-  }
-
-  const ownerSession = await validateOwnerSession(request, dependencies);
-
-  if (ownerSession.ok) {
-    return intent === undefined
-      ? { actor: "browser", via: "owner-session" }
-      : authorizeGatewayOperationExecution(
-          { actor: "browser", via: "owner-session" },
-          dependencies.capabilities ?? WORKSPACE_OPERATION_CAPABILITIES,
-          intent,
-          { mutating: false },
-        );
-  }
-
-  if (matchesBootstrapCapability(request, env)) {
-    if (!intent) {
-      return {
-        error: "Workspace gateway operation intent is required for bootstrap reads.",
-        status: 400,
-      };
-    }
-
-    if (!intent.bootstrapAllowed) {
-      return {
-        error: "Workspace bootstrap authorization is limited to status operations.",
-        status: 403,
-      };
-    }
-
-    if (await ownerSetupComplete(request, dependencies)) {
-      return { error: "Workspace bootstrap authorization has expired.", status: 403 };
-    }
-
-    return authorizeGatewayOperationExecution(
-      { actor: "browser", via: "bootstrap" },
-      dependencies.capabilities ?? WORKSPACE_OPERATION_CAPABILITIES,
-      intent,
-      { mutating: false },
-    );
-  }
-
-  return {
-    error: "Workspace gateway authorization is required.",
-    status: 401,
-  };
-}
-
 function authorizeGatewayOperationExecution(
   authorization: Exclude<GatewayAuthorization, { error: string }>,
   capabilities: readonly WorkspaceOperationRequiredCapability[],
@@ -912,183 +633,12 @@ function authorizeGatewayOperationExecution(
   return authorization;
 }
 
-async function proxyWorkspaceGatewayRequest(
-  request: Request,
-  env: WorkspaceGatewaySidecarEnv,
-  dependencies: WorkspaceGatewayLocalProxyDependencies,
-  proxyTarget: WorkspaceGatewayProxyTarget,
-  authorization: Exclude<GatewayAuthorization, { error: string }>,
-  options: { intent?: WorkspaceGatewayOperationIntent },
-): Promise<Response> {
-  let response: Response;
-
-  try {
-    response = await (dependencies.proxyFetch ?? fetch)(sidecarRequestUrl(request, proxyTarget), {
-      body: await proxyRequestBody(request),
-      headers: proxyWorkspaceGatewayHeaders(request, proxyTarget, authorization, options),
-      method: request.method,
-    });
-  } catch {
-    return displaySafeJson({ error: "Workspace gateway sidecar is unavailable." }, 502);
-  }
-
-  const contentType = response.headers.get("Content-Type") ?? "";
-
-  if (!contentType.includes("application/json")) {
-    return new Response(await response.arrayBuffer(), {
-      headers: displaySafeProxyHeaders(response.headers),
-      status: response.status,
-    });
-  }
-
-  const body = (await response.json()) as unknown;
-
-  if (response.status === 200 && typeof body === "object" && body !== null && "operation" in body) {
-    return gatewayOperationResponse(request, env, authorization, body.operation);
-  }
-
-  if (response.status === 200 && typeof body === "object" && body !== null && "autoSave" in body) {
-    return gatewayAutoSaveResponse(request, env, authorization, body.autoSave);
-  }
-
-  return displaySafeJson(body, response.status, displaySafeProxyHeaders(response.headers));
-}
-
-function gatewayOperationResponse(
-  request: Request,
-  env: WorkspaceGatewaySidecarEnv,
-  authorization: Exclude<GatewayAuthorization, { error: string }>,
-  operation: unknown,
-): Response {
-  const headers = new Headers();
-  const csrfToken = env[WORKSPACE_GATEWAY_CSRF_TOKEN_ENV]?.trim();
-  const includeCsrfToken =
-    authorization.via === "owner-session" && authorization.actor === "browser";
-
-  if (includeCsrfToken && csrfToken) {
-    headers.set(
-      "Set-Cookie",
-      `${WORKSPACE_GATEWAY_CSRF_COOKIE_NAME}=${csrfToken}; Path=/; SameSite=Lax${new URL(request.url).protocol === "https:" ? "; Secure" : ""}`,
-    );
-  }
-
-  return displaySafeJson(
-    {
-      ...(includeCsrfToken && csrfToken ? { csrfToken } : {}),
-      operation,
-    },
-    200,
-    headers,
-  );
-}
-
-function gatewayAutoSaveResponse(
-  request: Request,
-  env: WorkspaceGatewaySidecarEnv,
-  authorization: Exclude<GatewayAuthorization, { error: string }>,
-  autoSave: unknown,
-): Response {
-  const headers = gatewayBrowserResponseHeaders(request, env, authorization);
-
-  return displaySafeJson(
-    {
-      ...(headers.csrfToken === undefined ? {} : { csrfToken: headers.csrfToken }),
-      autoSave,
-    },
-    200,
-    headers.headers,
-  );
-}
-
 function sidecarOperationResponse(operation: unknown): Response {
   return displaySafeJson({ operation }, 200);
 }
 
 function sidecarAutoSaveResponse(autoSave: unknown): Response {
   return displaySafeJson({ autoSave }, 200);
-}
-
-function gatewayBrowserResponseHeaders(
-  request: Request,
-  env: WorkspaceGatewaySidecarEnv,
-  authorization: Exclude<GatewayAuthorization, { error: string }>,
-): { csrfToken?: string; headers: Headers } {
-  const headers = new Headers();
-  const csrfToken = env[WORKSPACE_GATEWAY_CSRF_TOKEN_ENV]?.trim();
-  const includeCsrfToken =
-    authorization.via === "owner-session" && authorization.actor === "browser";
-
-  if (includeCsrfToken && csrfToken) {
-    headers.set(
-      "Set-Cookie",
-      `${WORKSPACE_GATEWAY_CSRF_COOKIE_NAME}=${csrfToken}; Path=/; SameSite=Lax${new URL(request.url).protocol === "https:" ? "; Secure" : ""}`,
-    );
-  }
-
-  return {
-    ...(includeCsrfToken && csrfToken ? { csrfToken } : {}),
-    headers,
-  };
-}
-
-function sidecarRequestUrl(request: Request, proxyTarget: WorkspaceGatewayProxyTarget): string {
-  const requested = new URL(request.url);
-
-  return new URL(`${requested.pathname}${requested.search}`, proxyTarget.endpoint).toString();
-}
-
-async function proxyRequestBody(request: Request): Promise<ArrayBuffer | undefined> {
-  if (request.method === "GET" || request.method === "HEAD") {
-    return undefined;
-  }
-
-  return request.arrayBuffer();
-}
-
-function proxyWorkspaceGatewayHeaders(
-  request: Request,
-  proxyTarget: WorkspaceGatewayProxyTarget,
-  authorization: Exclude<GatewayAuthorization, { error: string }>,
-  options: { intent?: WorkspaceGatewayOperationIntent },
-): Headers {
-  const headers = new Headers(request.headers);
-
-  headers.delete("Authorization");
-  headers.delete("Cookie");
-  headers.delete(WORKSPACE_GATEWAY_BOOTSTRAP_HEADER);
-  headers.delete(WORKSPACE_GATEWAY_CSRF_HEADER);
-  headers.delete(WORKSPACE_GATEWAY_PROXY_AUTHORIZATION_HEADER);
-  headers.delete(WORKSPACE_GATEWAY_ACTOR_HEADER);
-  headers.delete(WORKSPACE_GATEWAY_AUTHORIZATION_VIA_HEADER);
-  headers.delete(WORKSPACE_GATEWAY_OPERATION_KIND_HEADER);
-  headers.set(WORKSPACE_GATEWAY_PROXY_AUTHORIZATION_HEADER, proxyTarget.proxyToken);
-  headers.set(WORKSPACE_GATEWAY_ACTOR_HEADER, authorization.actor);
-  headers.set(WORKSPACE_GATEWAY_AUTHORIZATION_VIA_HEADER, authorization.via);
-
-  if (options.intent) {
-    headers.set(WORKSPACE_GATEWAY_OPERATION_KIND_HEADER, options.intent.operation);
-  }
-
-  return headers;
-}
-
-function readOperationIntentFromRequest(
-  request: Request,
-): { intent?: WorkspaceGatewayOperationIntent; ok: true } | { error: string; ok: false } {
-  const operationKind = request.headers.get(WORKSPACE_GATEWAY_OPERATION_KIND_HEADER);
-
-  if (operationKind === null) {
-    return { ok: true };
-  }
-
-  if (!isWorkspaceGatewayOperationKind(operationKind)) {
-    return { error: "Workspace gateway operation intent is invalid.", ok: false };
-  }
-
-  return {
-    intent: workspaceGatewayReadOperationIntent(operationKind),
-    ok: true,
-  };
 }
 
 async function parseGatewayStartInput(request: {
@@ -1117,38 +667,6 @@ async function parseGatewayAutoSaveEnqueueInput(request: { json: () => Promise<u
   return parseWorkspaceGatewayAutoSaveEnqueueInput(body);
 }
 
-async function ownerSetupComplete(
-  request: Request,
-  dependencies: WorkspaceGatewayLocalProxyDependencies,
-): Promise<boolean> {
-  if (!dependencies.readOwnerSetupStatus) {
-    return false;
-  }
-
-  return (await dependencies.readOwnerSetupStatus(request)).setupComplete;
-}
-
-async function validateOwnerSession(
-  request: Request,
-  dependencies: WorkspaceGatewayLocalProxyDependencies,
-): Promise<WorkspaceGatewayOwnerSessionValidationResult> {
-  if (!dependencies.validateOwnerSession) {
-    return { ok: false, reason: "missing-validator" };
-  }
-
-  return dependencies.validateOwnerSession(request);
-}
-
-function matchesBootstrapCapability(request: Request, env: WorkspaceGatewaySidecarEnv): boolean {
-  const expected = env[WORKSPACE_GATEWAY_BOOTSTRAP_TOKEN_ENV]?.trim();
-
-  return (
-    expected !== undefined &&
-    expected !== "" &&
-    request.headers.get(WORKSPACE_GATEWAY_BOOTSTRAP_HEADER) === expected
-  );
-}
-
 function matchesAdminBearer(request: Request, env: WorkspaceGatewaySidecarEnv): boolean {
   const adminToken = env.FORMLESS_ADMIN_TOKEN?.trim();
   const authorization = request.headers.get("Authorization")?.trim();
@@ -1160,65 +678,10 @@ function matchesAdminBearer(request: Request, env: WorkspaceGatewaySidecarEnv): 
   return authorization.match(/^Bearer\s+(.+)$/i)?.[1] === adminToken;
 }
 
-function validCsrfProof(request: Request, env: WorkspaceGatewaySidecarEnv): boolean {
-  const expected = env[WORKSPACE_GATEWAY_CSRF_TOKEN_ENV]?.trim();
-
-  if (!expected) {
-    return false;
-  }
-
-  return (
-    request.headers.get(WORKSPACE_GATEWAY_CSRF_HEADER) === expected &&
-    requestCookie(request, WORKSPACE_GATEWAY_CSRF_COOKIE_NAME) === expected
-  );
-}
-
 function expectedProxyToken(env: WorkspaceGatewaySidecarEnv): string | undefined {
   const proxyToken = env[WORKSPACE_GATEWAY_PROXY_TOKEN_ENV]?.trim();
 
   return proxyToken ? proxyToken : undefined;
-}
-
-function isSameOriginOrNoOrigin(request: Request): boolean {
-  const origin = request.headers.get("Origin");
-
-  return origin === null || origin === new URL(request.url).origin;
-}
-
-function isSameOriginWithOrigin(request: Request): boolean {
-  return request.headers.get("Origin") === new URL(request.url).origin;
-}
-
-function requestCookie(request: Request, name: string): string | undefined {
-  const cookies = request.headers.get("Cookie");
-
-  if (!cookies) {
-    return undefined;
-  }
-
-  for (const part of cookies.split(";")) {
-    const [rawName, ...rawValue] = part.trim().split("=");
-
-    if (rawName === name) {
-      return rawValue.join("=");
-    }
-  }
-
-  return undefined;
-}
-
-function displaySafeProxyHeaders(headers: Headers): Headers {
-  const next = new Headers();
-
-  for (const key of ["Allow", "Content-Type"]) {
-    const value = headers.get(key);
-
-    if (value) {
-      next.set(key, value);
-    }
-  }
-
-  return next;
 }
 
 function displaySafeJson(body: unknown, status: number, headers: Headers = new Headers()) {
