@@ -3,11 +3,8 @@ import { afterEach, describe, expect, it } from "vite-plus/test";
 import {
   WORKSPACE_GATEWAY_ACTOR_HEADER,
   WORKSPACE_GATEWAY_AUTHORIZATION_VIA_HEADER,
-  WORKSPACE_GATEWAY_AUTO_SAVE_API_PATH,
   WORKSPACE_GATEWAY_BOOTSTRAP_HEADER,
   WORKSPACE_GATEWAY_BOOTSTRAP_TOKEN_ENV,
-  WORKSPACE_GATEWAY_CSRF_COOKIE_NAME,
-  WORKSPACE_GATEWAY_CSRF_HEADER,
   WORKSPACE_GATEWAY_CSRF_TOKEN_ENV,
   WORKSPACE_GATEWAY_ENABLED_ENV,
   WORKSPACE_GATEWAY_OPERATION_KIND_HEADER,
@@ -18,9 +15,9 @@ import {
   WORKSPACE_GATEWAY_SIDECAR_URL_ENV,
   WORKSPACE_GATEWAY_STATUS_API_PATH,
   createWorkspaceGatewaySidecarExecutionEnv,
-  handleWorkspaceGatewayLocalProxyRequest,
   handleWorkspaceGatewaySidecarRequest,
   startWorkspaceGatewaySidecar,
+  workspaceGatewayProxyTargetFromEnv,
   type WorkspaceGatewayAutoSaveState,
   type WorkspaceGatewayOperation,
   type WorkspaceGatewaySidecar,
@@ -70,12 +67,62 @@ describe("sidecar workspace gateway adapter", () => {
     });
   });
 
+  it("maps local proxy env to loopback sidecar targets", () => {
+    const request = new Request(`http://local.test${WORKSPACE_GATEWAY_STATUS_API_PATH}`);
+    const proxyEnv = {
+      ...gatewayEnv(),
+      [WORKSPACE_GATEWAY_SIDECAR_URL_ENV]: "http://127.0.0.1:9999",
+    };
+
+    expect(workspaceGatewayProxyTargetFromEnv(request, proxyEnv)).toEqual({
+      endpoint: "http://127.0.0.1:9999",
+      proxyToken,
+    });
+    expect(
+      workspaceGatewayProxyTargetFromEnv(request, {
+        ...proxyEnv,
+        [WORKSPACE_GATEWAY_ENABLED_ENV]: "0",
+      }),
+    ).toBeUndefined();
+    expect(
+      workspaceGatewayProxyTargetFromEnv(request, proxyEnv, { routeAvailable: false }),
+    ).toBeUndefined();
+    expect(
+      workspaceGatewayProxyTargetFromEnv(request, proxyEnv, { routeAvailable: () => false }),
+    ).toBeUndefined();
+    expect(
+      workspaceGatewayProxyTargetFromEnv(request, {
+        ...proxyEnv,
+        [WORKSPACE_GATEWAY_PROXY_TOKEN_ENV]: "",
+      }),
+    ).toBeUndefined();
+    expect(
+      workspaceGatewayProxyTargetFromEnv(request, {
+        ...proxyEnv,
+        [WORKSPACE_GATEWAY_SIDECAR_URL_ENV]: "http://example.com:9999",
+      }),
+    ).toBeUndefined();
+  });
+
   it("starts a loopback Node sidecar and routes proxied requests to operation handlers", async () => {
+    let statusCall:
+      | {
+          actor: string;
+          via: string;
+          workspaceRoot: string;
+        }
+      | undefined;
     const sidecar = await startWorkspaceGatewaySidecar(
       { env: gatewayEnv(), workspaceRoot },
       {
         createProxyToken: () => proxyToken,
-        operations: operationHandlers(),
+        operations: operationHandlers({
+          status: async ({ authorization, workspaceRoot }) => {
+            statusCall = { ...authorization, workspaceRoot };
+
+            return operation("status", { actor: authorization.actor });
+          },
+        }),
       },
     );
 
@@ -98,6 +145,18 @@ describe("sidecar workspace gateway adapter", () => {
         operation: "status",
       },
     });
+    expect(statusCall).toEqual({
+      actor: "browser",
+      via: "bootstrap",
+      workspaceRoot,
+    });
+
+    await sidecar.close();
+    await expect(
+      fetch(new URL(WORKSPACE_GATEWAY_STATUS_API_PATH, sidecar.endpoint), {
+        headers: sidecarProxyHeaders({ operation: "status", via: "bootstrap" }),
+      }),
+    ).rejects.toThrow();
   });
 
   it("rejects sidecar execution authorization failures before operation handlers run", async () => {
@@ -248,213 +307,7 @@ describe("sidecar workspace gateway adapter", () => {
     });
   });
 
-  it("proxies local runtime requests with sanitized internal sidecar headers and CSRF response wrapping", async () => {
-    const captured: Array<{ body?: string; headers: Record<string, string>; url: string }> = [];
-    const response = await handleWorkspaceGatewayLocalProxyRequest(
-      operationRequest(
-        { kind: "save" },
-        {
-          Authorization: `Bearer ${adminToken}`,
-          Cookie: `${WORKSPACE_GATEWAY_CSRF_COOKIE_NAME}=${csrfToken}; session=secret`,
-          Origin: "http://local.test",
-          [WORKSPACE_GATEWAY_CSRF_HEADER]: csrfToken,
-          [WORKSPACE_GATEWAY_PROXY_AUTHORIZATION_HEADER]: "browser-proxy-token",
-        },
-      ),
-      {
-        ...gatewayEnv(),
-        [WORKSPACE_GATEWAY_SIDECAR_URL_ENV]: "http://127.0.0.1:9999",
-      },
-      {
-        proxyFetch: async (url, init) => {
-          const requestUrl =
-            typeof url === "string" ? url : url instanceof URL ? url.toString() : url.url;
-
-          captured.push({
-            body: typeof init?.body === "string" ? init.body : undefined,
-            headers: Object.fromEntries(new Headers(init?.headers).entries()),
-            url: requestUrl,
-          });
-
-          return Response.json({ operation: operation("save", { actor: "browser" }) });
-        },
-        validateOwnerSession: async () => ({ ok: true }),
-      },
-    );
-    const body = (await response?.json()) as Record<string, unknown>;
-    const headers = captured[0]?.headers ?? {};
-
-    expect(response?.status).toBe(200);
-    expect(body).toMatchObject({
-      csrfToken,
-      operation: {
-        actor: "browser",
-        operation: "save",
-      },
-    });
-    expect(response?.headers.get("Set-Cookie")).toContain(
-      `${WORKSPACE_GATEWAY_CSRF_COOKIE_NAME}=${csrfToken}`,
-    );
-    expect(captured[0]?.url).toBe(`http://127.0.0.1:9999${WORKSPACE_GATEWAY_OPERATIONS_API_PATH}`);
-    expect(headers.authorization).toBeUndefined();
-    expect(headers.cookie).toBeUndefined();
-    expect(headers[WORKSPACE_GATEWAY_BOOTSTRAP_HEADER]).toBeUndefined();
-    expect(headers[WORKSPACE_GATEWAY_CSRF_HEADER]).toBeUndefined();
-    expect(headers[WORKSPACE_GATEWAY_PROXY_AUTHORIZATION_HEADER]).toBe(proxyToken);
-    expect(headers[WORKSPACE_GATEWAY_ACTOR_HEADER]).toBe("browser");
-    expect(headers[WORKSPACE_GATEWAY_AUTHORIZATION_VIA_HEADER]).toBe("owner-session");
-    expect(headers[WORKSPACE_GATEWAY_OPERATION_KIND_HEADER]).toBe("save");
-  });
-
-  it("proxies auto-save status and enqueue with bootstrap, owner session, CSRF, and capability checks", async () => {
-    const captured: Array<{ body?: unknown; headers: Record<string, string>; url: string }> = [];
-    const status = await handleWorkspaceGatewayLocalProxyRequest(
-      new Request(`http://local.test${WORKSPACE_GATEWAY_AUTO_SAVE_API_PATH}`, {
-        headers: {
-          Origin: "http://local.test",
-          [WORKSPACE_GATEWAY_BOOTSTRAP_HEADER]: bootstrapToken,
-        },
-      }),
-      {
-        ...gatewayEnv(),
-        [WORKSPACE_GATEWAY_SIDECAR_URL_ENV]: "http://127.0.0.1:9999",
-      },
-      {
-        proxyFetch: async (url, init) => {
-          captured.push(await capturedProxyRequest(url, init));
-
-          return Response.json({ autoSave: autoSaveState({ displayState: "clean" }) });
-        },
-      },
-    );
-    const missingCsrf = await handleWorkspaceGatewayLocalProxyRequest(
-      autoSaveRequest({ source: "app-operation" }, { Origin: "http://local.test" }),
-      {
-        ...gatewayEnv(),
-        [WORKSPACE_GATEWAY_SIDECAR_URL_ENV]: "http://127.0.0.1:9999",
-      },
-      {
-        proxyFetch: async () => Response.json({ autoSave: autoSaveState() }),
-        validateOwnerSession: async () => ({ ok: true }),
-      },
-    );
-    const enqueued = await handleWorkspaceGatewayLocalProxyRequest(
-      autoSaveRequest(
-        { source: "app-operation", storageIdentity: "app:site" },
-        {
-          Cookie: `${WORKSPACE_GATEWAY_CSRF_COOKIE_NAME}=${csrfToken}`,
-          Origin: "http://local.test",
-          [WORKSPACE_GATEWAY_CSRF_HEADER]: csrfToken,
-        },
-      ),
-      {
-        ...gatewayEnv(),
-        [WORKSPACE_GATEWAY_SIDECAR_URL_ENV]: "http://127.0.0.1:9999",
-      },
-      {
-        proxyFetch: async (url, init) => {
-          captured.push(await capturedProxyRequest(url, init));
-
-          return Response.json({ autoSave: autoSaveState({ displayState: "queued" }) });
-        },
-        validateOwnerSession: async () => ({ ok: true }),
-      },
-    );
-    const gated = await handleWorkspaceGatewayLocalProxyRequest(
-      autoSaveRequest(
-        { source: "app-operation" },
-        {
-          Cookie: `${WORKSPACE_GATEWAY_CSRF_COOKIE_NAME}=${csrfToken}`,
-          Origin: "http://local.test",
-          [WORKSPACE_GATEWAY_CSRF_HEADER]: csrfToken,
-        },
-      ),
-      {
-        ...gatewayEnv(),
-        [WORKSPACE_GATEWAY_SIDECAR_URL_ENV]: "http://127.0.0.1:9999",
-      },
-      {
-        capabilities: ["workspace-read"],
-        proxyFetch: async () => Response.json({ autoSave: autoSaveState() }),
-        validateOwnerSession: async () => ({ ok: true }),
-      },
-    );
-
-    expect(status?.status).toBe(200);
-    expect(missingCsrf?.status).toBe(403);
-    expect(enqueued?.status).toBe(200);
-    expect(gated?.status).toBe(403);
-    await expect(status?.json()).resolves.toMatchObject({
-      autoSave: { displayState: "clean" },
-    });
-    await expect(enqueued?.json()).resolves.toMatchObject({
-      autoSave: { displayState: "queued" },
-      csrfToken,
-    });
-    await expect(gated?.json()).resolves.toEqual({
-      error: 'Workspace operation "save" requires execution capability "workspace-source-write".',
-    });
-    expect(captured.map((call) => call.url)).toEqual([
-      `http://127.0.0.1:9999${WORKSPACE_GATEWAY_AUTO_SAVE_API_PATH}`,
-      `http://127.0.0.1:9999${WORKSPACE_GATEWAY_AUTO_SAVE_API_PATH}`,
-    ]);
-    expect(captured[0]?.headers[WORKSPACE_GATEWAY_OPERATION_KIND_HEADER]).toBe("status");
-    expect(captured[1]?.headers[WORKSPACE_GATEWAY_OPERATION_KIND_HEADER]).toBe("save");
-    expect(captured[1]?.body).toEqual({
-      source: "app-operation",
-      storageIdentity: "app:site",
-    });
-  });
-
-  it("prefers owner-session authorization over an expired bootstrap header", async () => {
-    const captured: Array<{ body?: unknown; headers: Record<string, string>; url: string }> = [];
-    const response = await handleWorkspaceGatewayLocalProxyRequest(
-      new Request(`http://local.test${WORKSPACE_GATEWAY_AUTO_SAVE_API_PATH}`, {
-        headers: {
-          Cookie: "formless_owner_session=valid",
-          Origin: "http://local.test",
-          [WORKSPACE_GATEWAY_BOOTSTRAP_HEADER]: bootstrapToken,
-        },
-      }),
-      {
-        ...gatewayEnv(),
-        [WORKSPACE_GATEWAY_SIDECAR_URL_ENV]: "http://127.0.0.1:9999",
-      },
-      {
-        proxyFetch: async (url, init) => {
-          captured.push(await capturedProxyRequest(url, init));
-
-          return Response.json({ autoSave: autoSaveState({ displayState: "saved" }) });
-        },
-        readOwnerSetupStatus: async () => ({ setupComplete: true }),
-        validateOwnerSession: async () => ({ ok: true }),
-      },
-    );
-
-    expect(response?.status).toBe(200);
-    await expect(response?.json()).resolves.toMatchObject({
-      autoSave: { displayState: "saved" },
-      csrfToken,
-    });
-    expect(captured).toHaveLength(1);
-    expect(captured[0]?.headers[WORKSPACE_GATEWAY_AUTHORIZATION_VIA_HEADER]).toBe("owner-session");
-    expect(captured[0]?.headers[WORKSPACE_GATEWAY_BOOTSTRAP_HEADER]).toBeUndefined();
-  });
-
-  it("requires operation intent for bootstrap reads and validates sidecar read intent", async () => {
-    const bootstrapWithoutIntent = await handleWorkspaceGatewayLocalProxyRequest(
-      new Request(`http://local.test${WORKSPACE_GATEWAY_OPERATIONS_API_PATH}/op_save_00000001`, {
-        headers: {
-          Origin: "http://local.test",
-          [WORKSPACE_GATEWAY_BOOTSTRAP_HEADER]: bootstrapToken,
-        },
-      }),
-      {
-        ...gatewayEnv(),
-        [WORKSPACE_GATEWAY_SIDECAR_URL_ENV]: "http://127.0.0.1:9999",
-      },
-      { proxyFetch: async () => Response.json({ operation: operation("save") }) },
-    );
+  it("requires sidecar operation intent for bootstrap reads and validates read intent", async () => {
     let readOperations = 0;
     const mismatchedSidecarIntent = await handleWorkspaceGatewaySidecarRequest(
       new Request(`http://127.0.0.1${WORKSPACE_GATEWAY_OPERATIONS_API_PATH}/op_save_00000001`, {
@@ -476,10 +329,6 @@ describe("sidecar workspace gateway adapter", () => {
       operationHandlers(),
     );
 
-    expect(bootstrapWithoutIntent?.status).toBe(400);
-    await expect(bootstrapWithoutIntent?.json()).resolves.toEqual({
-      error: "Workspace gateway operation intent is required for bootstrap reads.",
-    });
     expect(sidecarBootstrapWithoutIntent?.status).toBe(400);
     await expect(sidecarBootstrapWithoutIntent?.json()).resolves.toEqual({
       error: "Workspace gateway operation intent is required for bootstrap reads.",
@@ -529,17 +378,6 @@ function operationRequest(body: unknown, headers: Record<string, string> = {}): 
   });
 }
 
-function autoSaveRequest(body: unknown, headers: Record<string, string> = {}): Request {
-  return new Request(`http://local.test${WORKSPACE_GATEWAY_AUTO_SAVE_API_PATH}`, {
-    body: JSON.stringify(body),
-    headers: {
-      "Content-Type": "application/json",
-      ...headers,
-    },
-    method: "POST",
-  });
-}
-
 function operationHandlers(
   overrides: Partial<WorkspaceGatewaySidecarOperationHandlers> = {},
 ): WorkspaceGatewaySidecarOperationHandlers {
@@ -569,39 +407,6 @@ function autoSaveState(
     writeSources: [],
     ...overrides,
   };
-}
-
-async function capturedProxyRequest(
-  url: Parameters<typeof fetch>[0],
-  init: Parameters<typeof fetch>[1],
-): Promise<{ body?: unknown; headers: Record<string, string>; url: string }> {
-  const body = await requestBodyJson(init?.body);
-
-  return {
-    ...(body === undefined ? {} : { body }),
-    headers: Object.fromEntries(new Headers(init?.headers).entries()),
-    url: typeof url === "string" ? url : url instanceof URL ? url.toString() : url.url,
-  };
-}
-
-async function requestBodyJson(body: BodyInit | null | undefined): Promise<unknown> {
-  if (body === null || body === undefined) {
-    return undefined;
-  }
-
-  if (typeof body === "string") {
-    return JSON.parse(body);
-  }
-
-  if (body instanceof ArrayBuffer) {
-    return JSON.parse(new TextDecoder().decode(body));
-  }
-
-  if (body instanceof Uint8Array) {
-    return JSON.parse(new TextDecoder().decode(body));
-  }
-
-  return undefined;
 }
 
 function operation(

@@ -200,6 +200,23 @@ through the Gateway package slice.
   explicit allowlist rather than forwarding local runtime proxy or
   browser-visible environment facts wholesale
 
+#### Scenario: Shared proxy adapter contract coverage
+
+- **WHEN** Gateway tests cover behavior owned by the shared local runtime proxy
+  rules Module
+- **THEN** route classification, method rejection, operation intent parsing,
+  actor policy, bootstrap expiry, CSRF proof, sidecar header sanitization,
+  capability gating, sidecar forwarding, and browser-visible response wrapping
+  are exercised through shared contract fixtures
+- **AND** Worker proxy adapter tests cover only Worker-specific env parsing,
+  runtime route availability injection, dependency isolation, capability
+  injection, and Worker source boundary behavior
+- **AND** local Node sidecar adapter tests cover only local proxy env mapping,
+  loopback sidecar startup, sidecar execution ingress, direct automation
+  authorization, and operation handler invocation behavior
+- **AND** Worker and sidecar adapter tests do not duplicate the full shared proxy
+  behavior matrix with separate harnesses
+
 #### Scenario: Workspace package owns semantic operation contracts
 
 - **WHEN** Gateway browser, Worker, sidecar, CLI runtime, or tests need

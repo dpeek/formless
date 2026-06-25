@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import {
-  WORKSPACE_OPERATION_CAPABILITIES,
-  workspaceOperationDefinitionForKind,
-} from "@dpeek/formless-workspace";
+import { workspaceOperationDefinitionForKind } from "@dpeek/formless-workspace";
 import {
   WORKSPACE_GATEWAY_ACTOR_HEADER,
   WORKSPACE_GATEWAY_AUTHORIZATION_VIA_HEADER,
@@ -14,32 +11,35 @@ import {
   WORKSPACE_GATEWAY_OPERATION_KIND_HEADER,
   WORKSPACE_GATEWAY_OPERATIONS_API_PATH,
   WORKSPACE_GATEWAY_PROXY_AUTHORIZATION_HEADER,
-  type WorkspaceGatewayAutoSaveState,
-  type WorkspaceGatewayOperation,
-  type WorkspaceGatewayOperationKind,
 } from "./index.ts";
 import {
-  handleWorkspaceGatewayProxyRulesRequest,
-  type WorkspaceGatewayProxyRulesDependencies,
-  type WorkspaceGatewayProxyRulesEnv,
-  type WorkspaceGatewayProxyRulesTarget,
-} from "./proxy-rules.ts";
-
-const ownerSessionCookie = "formless_owner_session=valid";
-const csrfToken = "csrf-token";
-const bootstrapToken = "bootstrap-token";
-const adminToken = "admin-token";
-const proxyToken = "sidecar-proxy-token";
-const sidecarEndpoint = "http://127.0.0.1:9876";
-const baseEnv: WorkspaceGatewayProxyRulesEnv = {
   adminToken,
+  baseProxyRulesEnv,
   bootstrapToken,
+  browserMutationHeaders,
+  captureSidecarAutoSaveCalls,
+  captureSidecarOperationCalls,
   csrfToken,
-};
-const proxyTarget: WorkspaceGatewayProxyRulesTarget = {
-  endpoint: sidecarEndpoint,
+  expectGatewayAutoSaveResponse,
+  expectGatewayError,
+  expectGatewayOperationResponse,
+  expectNoSidecarCalls,
+  gatewayAutoSaveEnqueueRequest,
+  gatewayAutoSaveStatusRequest,
+  gatewayOperationReadRequest,
+  gatewayOperationStartRequest,
+  gatewayStatusRequest,
+  ownerSessionCookie,
+  proxyRulesDependencies,
+  proxyRulesTarget,
   proxyToken,
-};
+  sidecarEndpoint,
+  validateOwnerSession,
+  workspaceGatewayAutoSaveState,
+  workspaceGatewayOperation,
+  type CapturedSidecarCall,
+} from "./proxy-rules.contract-fixtures.ts";
+import { handleWorkspaceGatewayProxyRulesRequest } from "./proxy-rules.ts";
 
 describe("shared workspace gateway proxy rules", () => {
   it("classifies routes and rejects missing targets, disallowed methods, cross-origin callers, and invalid read ids before forwarding", async () => {
@@ -49,38 +49,45 @@ describe("shared workspace gateway proxy rules", () => {
       },
       {
         expectedStatus: 404,
-        request: new Request("https://example.com/api/formless/workspace/status"),
+        request: gatewayStatusRequest(),
         target: false,
       },
       {
+        expectedStatus: 404,
+        request: new Request("https://example.com/api/formless/workspace/unknown"),
+      },
+      {
         expectedStatus: 405,
-        request: new Request("https://example.com/api/formless/workspace/status", {
-          method: "POST",
-        }),
+        request: gatewayStatusRequest({ method: "POST" }),
+      },
+      {
+        expectedStatus: 405,
+        request: new Request(`https://example.com${WORKSPACE_GATEWAY_OPERATIONS_API_PATH}`),
+      },
+      {
+        expectedStatus: 405,
+        request: gatewayAutoSaveStatusRequest({ method: "PUT" }),
       },
       {
         expectedStatus: 403,
-        request: new Request("https://example.com/api/formless/workspace/status", {
+        request: gatewayStatusRequest({
           headers: { Origin: "https://evil.example.com" },
         }),
       },
       {
         expectedStatus: 400,
-        request: new Request("https://example.com/api/formless/workspace/operations/x"),
+        request: gatewayOperationReadRequest("x"),
       },
     ];
 
     for (const testCase of cases) {
-      let forwarded = false;
+      const calls: CapturedSidecarCall[] = [];
       const response = await handleWorkspaceGatewayProxyRulesRequest(
         testCase.request,
-        baseEnv,
-        dependencies({
-          fetch: async () => {
-            forwarded = true;
-            return Response.json({ operation: operation("status") });
-          },
-          proxyTarget: () => (testCase.target === false ? undefined : proxyTarget),
+        baseProxyRulesEnv,
+        proxyRulesDependencies({
+          fetch: captureSidecarOperationCalls(calls, workspaceGatewayOperation("status")),
+          proxyTarget: () => (testCase.target === false ? undefined : proxyRulesTarget),
         }),
       );
 
@@ -89,7 +96,7 @@ describe("shared workspace gateway proxy rules", () => {
       } else {
         expect(response?.status).toBe(testCase.expectedStatus);
       }
-      expect(forwarded).toBe(false);
+      expectNoSidecarCalls(calls);
     }
   });
 
@@ -105,56 +112,56 @@ describe("shared workspace gateway proxy rules", () => {
       { kind: "deployPlan" },
       { kind: "deployApply" },
     ]) {
-      let forwarded = false;
+      const calls: CapturedSidecarCall[] = [];
       const response = await handleWorkspaceGatewayProxyRulesRequest(
-        new Request("https://example.com/api/formless/workspace/operations", {
-          body: JSON.stringify(bodyInput),
+        gatewayOperationStartRequest(bodyInput, {
           headers: browserMutationHeaders(),
-          method: "POST",
         }),
-        baseEnv,
-        dependencies({
-          fetch: async () => {
-            forwarded = true;
-            return Response.json({ operation: operation("status") });
-          },
+        baseProxyRulesEnv,
+        proxyRulesDependencies({
+          fetch: captureSidecarOperationCalls(calls, workspaceGatewayOperation("status")),
           validateOwnerSession,
         }),
       );
-      const body = await jsonBody(response);
 
-      expect(response?.status).toBe(400);
-      expect(body.error).toBe(`Workspace gateway operation "${bodyInput.kind}" is not supported.`);
-      expect(forwarded).toBe(false);
+      await expectGatewayError({
+        error: `Workspace gateway operation "${bodyInput.kind}" is not supported.`,
+        response,
+        status: 400,
+      });
+      expectNoSidecarCalls(calls);
     }
   });
 
   it("proxies owner-session browser mutations with internal authorization and display-safe actor facts", async () => {
-    const calls: ProxyCall[] = [];
+    const calls: CapturedSidecarCall[] = [];
     const response = await handleWorkspaceGatewayProxyRulesRequest(
-      new Request("https://example.com/api/formless/workspace/operations", {
-        body: JSON.stringify({ check: true, kind: "save" }),
-        headers: {
-          ...browserMutationHeaders(),
-          Authorization: "Bearer browser-value",
-          [WORKSPACE_GATEWAY_OPERATION_KIND_HEADER]: "push",
-          [WORKSPACE_GATEWAY_PROXY_AUTHORIZATION_HEADER]: "browser-proxy-token",
+      gatewayOperationStartRequest(
+        { check: true, kind: "save" },
+        {
+          headers: {
+            ...browserMutationHeaders(),
+            Authorization: "Bearer browser-value",
+            [WORKSPACE_GATEWAY_OPERATION_KIND_HEADER]: "push",
+            [WORKSPACE_GATEWAY_PROXY_AUTHORIZATION_HEADER]: "browser-proxy-token",
+          },
         },
-        method: "POST",
-      }),
-      baseEnv,
-      dependencies({
-        fetch: captureProxyCalls(calls, operation("save")),
+      ),
+      baseProxyRulesEnv,
+      proxyRulesDependencies({
+        fetch: captureSidecarOperationCalls(calls, workspaceGatewayOperation("save")),
         validateOwnerSession,
       }),
     );
-    const body = await jsonBody(response);
 
-    expect(response?.status).toBe(200);
+    await expectGatewayOperationResponse({
+      csrfToken,
+      operation: { operation: "save" },
+      response,
+    });
     expect(response?.headers.get("Set-Cookie")).toContain(
       `${WORKSPACE_GATEWAY_CSRF_COOKIE_NAME}=${csrfToken}`,
     );
-    expect(body.csrfToken).toBe(csrfToken);
     expect(calls).toHaveLength(1);
     expect(calls[0]).toMatchObject({
       body: JSON.stringify({ check: true, kind: "save" }),
@@ -172,56 +179,61 @@ describe("shared workspace gateway proxy rules", () => {
   });
 
   it("proxies auto-save status and enqueue with bootstrap, owner-session, CSRF, and capability checks", async () => {
-    const calls: ProxyCall[] = [];
+    const calls: CapturedSidecarCall[] = [];
     const status = await handleWorkspaceGatewayProxyRulesRequest(
-      new Request(`https://example.com${WORKSPACE_GATEWAY_AUTO_SAVE_API_PATH}`, {
+      gatewayAutoSaveStatusRequest({
         headers: {
           [WORKSPACE_GATEWAY_BOOTSTRAP_HEADER]: bootstrapToken,
           Origin: "https://example.com",
         },
       }),
-      baseEnv,
-      dependencies({
-        fetch: captureAutoSaveProxyCalls(calls, autoSaveState("clean")),
+      baseProxyRulesEnv,
+      proxyRulesDependencies({
+        fetch: captureSidecarAutoSaveCalls(calls, workspaceGatewayAutoSaveState("clean")),
         readOwnerSetupStatus: async () => ({ setupComplete: false }),
       }),
     );
     const enqueued = await handleWorkspaceGatewayProxyRulesRequest(
-      new Request(`https://example.com${WORKSPACE_GATEWAY_AUTO_SAVE_API_PATH}`, {
-        body: JSON.stringify({ source: "app-operation", storageIdentity: "app:site" }),
-        headers: browserMutationHeaders(),
-        method: "POST",
-      }),
-      baseEnv,
-      dependencies({
-        fetch: captureAutoSaveProxyCalls(calls, autoSaveState("queued")),
+      gatewayAutoSaveEnqueueRequest(
+        { source: "app-operation", storageIdentity: "app:site" },
+        {
+          headers: browserMutationHeaders(),
+        },
+      ),
+      baseProxyRulesEnv,
+      proxyRulesDependencies({
+        fetch: captureSidecarAutoSaveCalls(calls, workspaceGatewayAutoSaveState("queued")),
         validateOwnerSession,
       }),
     );
     const gated = await handleWorkspaceGatewayProxyRulesRequest(
-      new Request(`https://example.com${WORKSPACE_GATEWAY_AUTO_SAVE_API_PATH}`, {
-        body: JSON.stringify({ source: "app-operation" }),
-        headers: browserMutationHeaders(),
-        method: "POST",
-      }),
-      baseEnv,
-      dependencies({
+      gatewayAutoSaveEnqueueRequest(
+        { source: "app-operation" },
+        {
+          headers: browserMutationHeaders(),
+        },
+      ),
+      baseProxyRulesEnv,
+      proxyRulesDependencies({
         capabilities: ["workspace-read"],
-        fetch: captureAutoSaveProxyCalls(calls, autoSaveState("queued")),
+        fetch: captureSidecarAutoSaveCalls(calls, workspaceGatewayAutoSaveState("queued")),
         validateOwnerSession,
       }),
     );
 
-    expect(status?.status).toBe(200);
-    await expect(status?.json()).resolves.toMatchObject({ autoSave: { displayState: "clean" } });
-    expect(enqueued?.status).toBe(200);
-    await expect(enqueued?.json()).resolves.toMatchObject({
+    await expectGatewayAutoSaveResponse({
+      autoSave: { displayState: "clean" },
+      response: status,
+    });
+    await expectGatewayAutoSaveResponse({
       autoSave: { displayState: "queued" },
       csrfToken,
+      response: enqueued,
     });
-    expect(gated?.status).toBe(403);
-    await expect(gated?.json()).resolves.toEqual({
+    await expectGatewayError({
       error: 'Workspace operation "save" requires execution capability "workspace-source-write".',
+      response: gated,
+      status: 403,
     });
     expect(calls.map((call) => call.url)).toEqual([
       `${sidecarEndpoint}${WORKSPACE_GATEWAY_AUTO_SAVE_API_PATH}`,
@@ -237,27 +249,27 @@ describe("shared workspace gateway proxy rules", () => {
   });
 
   it("prefers owner-session authorization over an expired bootstrap header", async () => {
-    const calls: ProxyCall[] = [];
+    const calls: CapturedSidecarCall[] = [];
     const response = await handleWorkspaceGatewayProxyRulesRequest(
-      new Request(`https://example.com${WORKSPACE_GATEWAY_AUTO_SAVE_API_PATH}`, {
+      gatewayAutoSaveStatusRequest({
         headers: {
           Cookie: ownerSessionCookie,
           [WORKSPACE_GATEWAY_BOOTSTRAP_HEADER]: bootstrapToken,
           Origin: "https://example.com",
         },
       }),
-      baseEnv,
-      dependencies({
-        fetch: captureAutoSaveProxyCalls(calls, autoSaveState("clean")),
+      baseProxyRulesEnv,
+      proxyRulesDependencies({
+        fetch: captureSidecarAutoSaveCalls(calls, workspaceGatewayAutoSaveState("clean")),
         readOwnerSetupStatus: async () => ({ setupComplete: true }),
         validateOwnerSession,
       }),
     );
 
-    expect(response?.status).toBe(200);
-    await expect(response?.json()).resolves.toMatchObject({
+    await expectGatewayAutoSaveResponse({
       autoSave: { displayState: "clean" },
       csrfToken,
+      response,
     });
     expect(calls).toHaveLength(1);
     expect(calls[0]?.headers.get(WORKSPACE_GATEWAY_AUTHORIZATION_VIA_HEADER)).toBe("owner-session");
@@ -289,253 +301,244 @@ describe("shared workspace gateway proxy rules", () => {
     ];
 
     for (const testCase of cases) {
-      let forwarded = false;
+      const calls: CapturedSidecarCall[] = [];
       const response = await handleWorkspaceGatewayProxyRulesRequest(
-        new Request("https://example.com/api/formless/workspace/operations", {
-          body: JSON.stringify({ kind: "push" }),
-          headers: {
-            ...testCase.headers,
-            "Content-Type": "application/json",
-            Origin: "https://example.com",
+        gatewayOperationStartRequest(
+          { kind: "push" },
+          {
+            headers: {
+              ...testCase.headers,
+              Origin: "https://example.com",
+            },
           },
-          method: "POST",
-        }),
-        baseEnv,
-        dependencies({
-          fetch: async () => {
-            forwarded = true;
-            return Response.json({ operation: operation("push") });
-          },
+        ),
+        baseProxyRulesEnv,
+        proxyRulesDependencies({
+          fetch: captureSidecarOperationCalls(calls, workspaceGatewayOperation("push")),
           validateOwnerSession,
         }),
       );
-      const body = await jsonBody(response);
 
-      expect(response?.status, testCase.label).toBe(403);
-      expect(body.error, testCase.label).toBe(
-        "Workspace gateway browser mutations require CSRF proof.",
-      );
-      expect(forwarded, testCase.label).toBe(false);
+      await expectGatewayError({
+        error: "Workspace gateway browser mutations require CSRF proof.",
+        label: testCase.label,
+        response,
+        status: 403,
+      });
+      expectNoSidecarCalls(calls, testCase.label);
     }
   });
 
   it("limits bootstrap authorization and validates read operation intent before forwarding", async () => {
-    const calls: ProxyCall[] = [];
+    const calls: CapturedSidecarCall[] = [];
     const status = await handleWorkspaceGatewayProxyRulesRequest(
-      new Request("https://example.com/api/formless/workspace/status", {
+      gatewayStatusRequest({
         headers: {
           [WORKSPACE_GATEWAY_BOOTSTRAP_HEADER]: bootstrapToken,
           Origin: "https://example.com",
         },
       }),
-      baseEnv,
-      dependencies({
-        fetch: captureProxyCalls(calls, operation("status")),
+      baseProxyRulesEnv,
+      proxyRulesDependencies({
+        fetch: captureSidecarOperationCalls(calls, workspaceGatewayOperation("status")),
         readOwnerSetupStatus: async () => ({ setupComplete: false }),
       }),
     );
     const save = await handleWorkspaceGatewayProxyRulesRequest(
-      new Request("https://example.com/api/formless/workspace/operations", {
-        body: JSON.stringify({ kind: "save" }),
-        headers: {
-          [WORKSPACE_GATEWAY_BOOTSTRAP_HEADER]: bootstrapToken,
-          "Content-Type": "application/json",
-          Origin: "https://example.com",
+      gatewayOperationStartRequest(
+        { kind: "save" },
+        {
+          headers: {
+            [WORKSPACE_GATEWAY_BOOTSTRAP_HEADER]: bootstrapToken,
+            Origin: "https://example.com",
+          },
         },
-        method: "POST",
-      }),
-      baseEnv,
-      dependencies({ readOwnerSetupStatus: async () => ({ setupComplete: false }) }),
+      ),
+      baseProxyRulesEnv,
+      proxyRulesDependencies({ readOwnerSetupStatus: async () => ({ setupComplete: false }) }),
     );
     const readWithoutIntent = await handleWorkspaceGatewayProxyRulesRequest(
-      new Request("https://example.com/api/formless/workspace/operations/op_status_00000001", {
+      gatewayOperationReadRequest("op_status_00000001", {
         headers: { [WORKSPACE_GATEWAY_BOOTSTRAP_HEADER]: bootstrapToken },
       }),
-      baseEnv,
-      dependencies({ readOwnerSetupStatus: async () => ({ setupComplete: false }) }),
+      baseProxyRulesEnv,
+      proxyRulesDependencies({ readOwnerSetupStatus: async () => ({ setupComplete: false }) }),
+    );
+    const readInvalidIntent = await handleWorkspaceGatewayProxyRulesRequest(
+      gatewayOperationReadRequest("op_status_00000001", {
+        headers: {
+          [WORKSPACE_GATEWAY_BOOTSTRAP_HEADER]: bootstrapToken,
+          [WORKSPACE_GATEWAY_OPERATION_KIND_HEADER]: "not-a-kind",
+        },
+      }),
+      baseProxyRulesEnv,
+      proxyRulesDependencies({ readOwnerSetupStatus: async () => ({ setupComplete: false }) }),
     );
     const readSaveIntent = await handleWorkspaceGatewayProxyRulesRequest(
-      new Request("https://example.com/api/formless/workspace/operations/op_save_00000001", {
+      gatewayOperationReadRequest("op_save_00000001", {
         headers: {
           [WORKSPACE_GATEWAY_BOOTSTRAP_HEADER]: bootstrapToken,
           [WORKSPACE_GATEWAY_OPERATION_KIND_HEADER]: "save",
         },
       }),
-      baseEnv,
-      dependencies({ readOwnerSetupStatus: async () => ({ setupComplete: false }) }),
+      baseProxyRulesEnv,
+      proxyRulesDependencies({ readOwnerSetupStatus: async () => ({ setupComplete: false }) }),
     );
     const expired = await handleWorkspaceGatewayProxyRulesRequest(
-      new Request("https://example.com/api/formless/workspace/status", {
+      gatewayStatusRequest({
         headers: { [WORKSPACE_GATEWAY_BOOTSTRAP_HEADER]: bootstrapToken },
       }),
-      baseEnv,
-      dependencies({ readOwnerSetupStatus: async () => ({ setupComplete: true }) }),
+      baseProxyRulesEnv,
+      proxyRulesDependencies({ readOwnerSetupStatus: async () => ({ setupComplete: true }) }),
     );
 
-    expect(status?.status).toBe(200);
-    expect(save?.status).toBe(403);
-    expect(readWithoutIntent?.status).toBe(400);
-    expect(readSaveIntent?.status).toBe(403);
-    expect(expired?.status).toBe(403);
+    await expectGatewayOperationResponse({
+      operation: { operation: "status" },
+      response: status,
+    });
+    await expectGatewayError({
+      error: "Workspace bootstrap authorization is limited to status operations.",
+      response: save,
+      status: 403,
+    });
+    await expectGatewayError({
+      error: "Workspace gateway operation intent is required for bootstrap reads.",
+      response: readWithoutIntent,
+      status: 400,
+    });
+    await expectGatewayError({
+      error: "Workspace gateway operation intent is invalid.",
+      response: readInvalidIntent,
+      status: 400,
+    });
+    await expectGatewayError({
+      error: "Workspace bootstrap authorization is limited to status operations.",
+      response: readSaveIntent,
+      status: 403,
+    });
+    await expectGatewayError({
+      error: "Workspace bootstrap authorization has expired.",
+      response: expired,
+      status: 403,
+    });
+    expect(calls).toHaveLength(1);
     expect(calls[0]?.headers.get(WORKSPACE_GATEWAY_AUTHORIZATION_VIA_HEADER)).toBe("bootstrap");
     expect(calls[0]?.headers.get(WORKSPACE_GATEWAY_OPERATION_KIND_HEADER)).toBe("status");
-    await expect(expired?.json()).resolves.toEqual({
-      error: "Workspace bootstrap authorization has expired.",
-    });
   });
 
   it("proxies non-browser admin bearer automation without CSRF browser state", async () => {
-    const calls: ProxyCall[] = [];
+    const calls: CapturedSidecarCall[] = [];
     const response = await handleWorkspaceGatewayProxyRulesRequest(
-      new Request("https://example.com/api/formless/workspace/operations", {
-        body: JSON.stringify({ dryRun: true, kind: "push" }),
-        headers: {
-          Authorization: `Bearer ${adminToken}`,
-          "Content-Type": "application/json",
+      gatewayOperationStartRequest(
+        { dryRun: true, kind: "push" },
+        {
+          headers: {
+            Authorization: `Bearer ${adminToken}`,
+          },
         },
-        method: "POST",
+      ),
+      baseProxyRulesEnv,
+      proxyRulesDependencies({
+        fetch: captureSidecarOperationCalls(calls, workspaceGatewayOperation("push")),
       }),
-      baseEnv,
-      dependencies({ fetch: captureProxyCalls(calls, operation("push")) }),
     );
-    const body = await jsonBody(response);
+    const body = await expectGatewayOperationResponse({
+      operation: { operation: "push" },
+      response,
+    });
 
-    expect(response?.status).toBe(200);
     expect(response?.headers.get("Set-Cookie")).toBeNull();
     expect(body.csrfToken).toBeUndefined();
     expect(calls[0]?.headers.get(WORKSPACE_GATEWAY_ACTOR_HEADER)).toBe("automation");
     expect(calls[0]?.headers.get(WORKSPACE_GATEWAY_AUTHORIZATION_VIA_HEADER)).toBe("admin-bearer");
     expect(calls[0]?.headers.get("Authorization")).toBeNull();
   });
+
+  it("rejects operations without advertised execution capabilities before forwarding", async () => {
+    const cases: Array<{ expectedError: string; request: Request }> = [
+      {
+        expectedError:
+          'Workspace operation "status" requires execution capability "workspace-read".',
+        request: gatewayStatusRequest({
+          headers: {
+            Cookie: ownerSessionCookie,
+          },
+        }),
+      },
+      {
+        expectedError:
+          'Workspace operation "credentialSetup" requires execution capability "credential-setup".',
+        request: gatewayOperationStartRequest(
+          { kind: "credentialSetup", provider: "cloudflare" },
+          {
+            headers: {
+              Authorization: `Bearer ${adminToken}`,
+            },
+          },
+        ),
+      },
+      {
+        expectedError:
+          'Workspace operation "push" requires execution capability "workspace-source-sync".',
+        request: gatewayOperationStartRequest(
+          { kind: "push" },
+          {
+            headers: browserMutationHeaders(),
+          },
+        ),
+      },
+    ];
+
+    for (const testCase of cases) {
+      const calls: CapturedSidecarCall[] = [];
+      const response = await handleWorkspaceGatewayProxyRulesRequest(
+        testCase.request,
+        baseProxyRulesEnv,
+        proxyRulesDependencies({
+          capabilities: [],
+          fetch: captureSidecarOperationCalls(calls, workspaceGatewayOperation("status")),
+          readOwnerSetupStatus: async () => ({ setupComplete: false }),
+          validateOwnerSession,
+        }),
+      );
+
+      await expectGatewayError({
+        error: testCase.expectedError,
+        response,
+        status: 403,
+      });
+      expectNoSidecarCalls(calls);
+    }
+  });
+
+  it("passes through display-safe non-JSON sidecar responses without browser CSRF wrapping", async () => {
+    const response = await handleWorkspaceGatewayProxyRulesRequest(
+      gatewayStatusRequest({
+        headers: {
+          Authorization: `Bearer ${adminToken}`,
+        },
+      }),
+      baseProxyRulesEnv,
+      proxyRulesDependencies({
+        fetch: async () =>
+          new Response("sidecar unavailable", {
+            headers: {
+              Allow: "GET",
+              "Content-Type": "text/plain",
+              "Set-Cookie": "secret=value",
+              "X-Secret": "hidden",
+            },
+            status: 503,
+          }),
+      }),
+    );
+
+    expect(response?.status).toBe(503);
+    expect(response).toBeDefined();
+    await expect(response!.text()).resolves.toBe("sidecar unavailable");
+    expect(response?.headers.get("Allow")).toBe("GET");
+    expect(response?.headers.get("Content-Type")).toContain("text/plain");
+    expect(response?.headers.get("Set-Cookie")).toBeNull();
+    expect(response?.headers.get("X-Secret")).toBeNull();
+  });
 });
-
-type ProxyCall = {
-  body?: string;
-  headers: Headers;
-  method?: string;
-  url: string;
-};
-
-function dependencies(
-  overrides: Partial<WorkspaceGatewayProxyRulesDependencies> = {},
-): WorkspaceGatewayProxyRulesDependencies {
-  return {
-    capabilities: WORKSPACE_OPERATION_CAPABILITIES,
-    fetch: async () => Response.json({ operation: operation("status") }),
-    proxyTarget: () => proxyTarget,
-    ...overrides,
-  };
-}
-
-function captureProxyCalls(
-  calls: ProxyCall[],
-  operationResponse: WorkspaceGatewayOperation,
-): typeof fetch {
-  return async (input, init) => {
-    calls.push({
-      ...(init?.body == null ? {} : { body: await requestBodyText(init.body) }),
-      headers: new Headers(init?.headers),
-      method: init?.method,
-      url: requestUrl(input),
-    });
-
-    return Response.json({ operation: operationResponse });
-  };
-}
-
-function captureAutoSaveProxyCalls(
-  calls: ProxyCall[],
-  autoSave: WorkspaceGatewayAutoSaveState,
-): typeof fetch {
-  return async (input, init) => {
-    calls.push({
-      ...(init?.body == null ? {} : { body: await requestBodyText(init.body) }),
-      headers: new Headers(init?.headers),
-      method: init?.method,
-      url: requestUrl(input),
-    });
-
-    return Response.json({ autoSave });
-  };
-}
-
-async function jsonBody(response: Response | undefined): Promise<Record<string, unknown>> {
-  expect(response).toBeDefined();
-
-  return (await response!.json()) as Record<string, unknown>;
-}
-
-function browserMutationHeaders(): Record<string, string> {
-  return {
-    Cookie: `${ownerSessionCookie}; ${WORKSPACE_GATEWAY_CSRF_COOKIE_NAME}=${csrfToken}`,
-    [WORKSPACE_GATEWAY_CSRF_HEADER]: csrfToken,
-    "Content-Type": "application/json",
-    Origin: "https://example.com",
-  };
-}
-
-function validateOwnerSession(request: Request) {
-  return request.headers.get("Cookie")?.includes(ownerSessionCookie)
-    ? { ok: true as const }
-    : { ok: false as const, reason: "missing-cookie" };
-}
-
-async function requestBodyText(body: BodyInit): Promise<string> {
-  if (typeof body === "string") {
-    return body;
-  }
-
-  if (body instanceof ArrayBuffer) {
-    return new TextDecoder().decode(body);
-  }
-
-  if (body instanceof Uint8Array) {
-    return new TextDecoder().decode(body);
-  }
-
-  return "";
-}
-
-function requestUrl(input: Parameters<typeof fetch>[0]) {
-  if (typeof input === "string") {
-    return input;
-  }
-
-  return input instanceof URL ? input.href : input.url;
-}
-
-function operation(operationKind: WorkspaceGatewayOperationKind): WorkspaceGatewayOperation {
-  return {
-    actor: "browser",
-    createdAt: "2026-06-03T00:00:00.000Z",
-    errors: [],
-    events: [],
-    id: `op_${operationKind}_00000001`,
-    input: { kind: operationKind },
-    kind: "formless.workspaceOperation",
-    logs: [],
-    operation: operationKind,
-    status: "succeeded",
-    summary: {
-      fields: {},
-      title: "Workspace operation",
-    },
-    updatedAt: "2026-06-03T00:00:01.000Z",
-    version: 1,
-    workspace: { label: "workspace" },
-  };
-}
-
-function autoSaveState(displayState: "clean" | "queued"): WorkspaceGatewayAutoSaveState {
-  return {
-    dirtyGeneration: displayState === "queued" ? 1 : 0,
-    displayState,
-    kind: "formless.workspaceAutoSaveState",
-    retryCount: 0,
-    savedGeneration: 0,
-    storageIdentities: displayState === "queued" ? ["app:site"] : [],
-    updatedAt: "2026-06-03T00:00:01.000Z",
-    version: 1,
-    writeSources: displayState === "queued" ? ["app-operation"] : [],
-  };
-}

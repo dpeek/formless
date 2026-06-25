@@ -32,7 +32,6 @@ import {
   WORKSPACE_GATEWAY_SIDECAR_URL_ENV,
   WORKSPACE_GATEWAY_STATUS_API_PATH,
   handleWorkspaceGatewayLocalProxyRequest,
-  handleWorkspaceGatewaySidecarRequest,
   startWorkspaceGatewaySidecar,
   type WorkspaceGatewaySidecar,
   type WorkspaceGatewaySidecarExecutionEnv,
@@ -40,7 +39,6 @@ import {
 import {
   DEFAULT_INSTANCE_WORKSPACE_LOCAL_STATE_ROOT,
   INSTANCE_WORKSPACE_MANIFEST_FILE as FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE,
-  WORKSPACE_BROWSER_OPERATION_KINDS,
   WORKSPACE_RECORD_STATE_FILE_KIND,
   defaultInstanceWorkspaceManifest as defaultFormlessInstanceWorkspaceManifest,
   formatInstanceWorkspaceManifest as formatFormlessInstanceWorkspaceManifest,
@@ -85,16 +83,6 @@ afterEach(async () => {
 describe("local workspace gateway", () => {
   it("is available only for local workspace runtime env and not Worker runtime profiles", async () => {
     const workspaceRoot = await makeTempDir();
-    const env = gatewayEnv(workspaceRoot);
-    const deps = gatewayDeps(workspaceRoot);
-
-    await expect(
-      handleWorkspaceGatewayLocalProxyRequest(
-        new Request("http://local.test/api/formless/app-installs"),
-        env,
-        createWorkspaceGatewayProxyDependencies(env, deps),
-      ),
-    ).resolves.toBeUndefined();
 
     await expect(
       gatewayJson(
@@ -119,111 +107,6 @@ describe("local workspace gateway", () => {
 
       expect(blocked.response.status).toBe(404);
     }
-  });
-
-  it("starts a loopback sidecar with generated endpoint, proxy token, and close lifecycle", async () => {
-    const workspaceRoot = await makeTempDir();
-    const sidecar = await startGatewaySidecar(
-      workspaceRoot,
-      gatewayDeps(workspaceRoot, { operationIds: ["op_sidecar_status_00000001"] }),
-    );
-    const endpoint = new URL(sidecar.endpoint);
-
-    expect(endpoint.hostname).toBe("127.0.0.1");
-    expect(endpoint.pathname).toBe("/");
-    expect(endpoint.protocol).toBe("http:");
-    expect(sidecar.proxyToken).toBe(proxyToken);
-
-    const status = await fetch(sidecarPath(sidecar, WORKSPACE_GATEWAY_STATUS_API_PATH), {
-      headers: sidecarProxyHeaders({ operation: "status", via: "bootstrap" }),
-    });
-
-    expect(status.status).toBe(200);
-    await expect(status.json()).resolves.toMatchObject({
-      operation: {
-        actor: "browser",
-        id: "op_sidecar_status_00000001",
-        operation: "status",
-      },
-    });
-
-    await sidecar.close();
-    await expect(
-      fetch(sidecarPath(sidecar, WORKSPACE_GATEWAY_STATUS_API_PATH), {
-        headers: sidecarProxyHeaders({ operation: "status", via: "bootstrap" }),
-      }),
-    ).rejects.toThrow();
-  });
-
-  it("rejects unavailable root and invalid internal proxy token before sidecar execution", async () => {
-    const workspaceRoot = await makeTempDir();
-    let credentialSetupCalls = 0;
-    const unavailableRoot = await handleWorkspaceGatewaySidecarRequest(
-      new Request(`http://127.0.0.1${WORKSPACE_GATEWAY_STATUS_API_PATH}`, {
-        headers: sidecarProxyHeaders({ operation: "status", via: "bootstrap" }),
-      }),
-      {
-        FORMLESS_LOCAL_WORKSPACE_GATEWAY: "1",
-        FORMLESS_WORKSPACE_GATEWAY_PROXY_TOKEN: proxyToken,
-      },
-      createWorkspaceGatewayOperationHandlers(gatewayDeps(workspaceRoot)),
-    );
-
-    expect(unavailableRoot?.status).toBe(404);
-
-    const rejected = await handleWorkspaceGatewaySidecarRequest(
-      operationRequest(
-        { kind: "credentialSetup", provider: "cloudflare" },
-        sidecarProxyHeaders({
-          operation: "credentialSetup",
-          token: "wrong-token",
-          via: "owner-session",
-        }),
-      ),
-      sidecarExecutionEnv(workspaceRoot, { FORMLESS_WORKSPACE_GATEWAY_PROXY_TOKEN: proxyToken }),
-      createWorkspaceGatewayOperationHandlers(
-        gatewayDeps(workspaceRoot, {
-          credentialSetup: async () => {
-            credentialSetupCalls += 1;
-            throw new Error("Unexpected credential setup.");
-          },
-        }),
-      ),
-    );
-
-    expect(rejected?.status).toBe(401);
-    await expect(rejected?.json()).resolves.toEqual({
-      error: "Workspace gateway proxy authorization is required.",
-    });
-    expect(credentialSetupCalls).toBe(0);
-  });
-
-  it("allows direct non-browser admin bearer automation at the sidecar", async () => {
-    const workspaceRoot = await makeTempDir();
-    const sidecar = await startGatewaySidecar(
-      workspaceRoot,
-      gatewayDeps(workspaceRoot, {
-        credentialSetupUrl: "https://dash.cloudflare.com/oauth2/authorize?client_id=formless",
-        operationIds: ["op_sidecar_admin_00000001"],
-      }),
-    );
-    const response = await fetch(sidecarPath(sidecar, WORKSPACE_GATEWAY_OPERATIONS_API_PATH), {
-      body: JSON.stringify({ kind: "credentialSetup", provider: "cloudflare" }),
-      headers: {
-        Authorization: `Bearer ${adminToken}`,
-        "Content-Type": "application/json",
-      },
-      method: "POST",
-    });
-
-    expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toMatchObject({
-      operation: {
-        actor: "automation",
-        id: "op_sidecar_admin_00000001",
-        operation: "credentialSetup",
-      },
-    });
   });
 
   it("persists sidecar operation progress and keeps direct sidecar responses display-safe", async () => {
@@ -289,7 +172,7 @@ describe("local workspace gateway", () => {
     expect(JSON.stringify(readBody)).not.toContain("raw adapter");
   });
 
-  it("allows the process-scoped bootstrap capability to read status only", async () => {
+  it("reads runtime workspace status through the local gateway", async () => {
     const workspaceRoot = await makeTempDir();
 
     await writeWorkspaceManifest(workspaceRoot);
@@ -325,126 +208,15 @@ describe("local workspace gateway", () => {
     await expect(stat(path.join(workspaceRoot, "media"))).rejects.toMatchObject({
       code: "ENOENT",
     });
-
-    const expired = await gatewayJson(
-      new Request(`http://local.test${WORKSPACE_GATEWAY_STATUS_API_PATH}`, {
-        headers: bootstrapHeaders(),
-      }),
-      { deps: gatewayDeps(workspaceRoot, { setupComplete: true }) },
-    );
-
-    expect(expired.response.status).toBe(403);
-    expect(expired.body.error).toBe("Workspace bootstrap authorization has expired.");
   });
 
-  it("rejects bootstrap escalation and arbitrary filesystem or shell-shaped input", async () => {
-    const workspaceRoot = await makeTempDir();
-
-    for (const body of [
-      { kind: "save" },
-      { kind: "pull" },
-      { kind: "push" },
-      { kind: "credentialSetup", provider: "cloudflare" },
-    ]) {
-      const rejected = await gatewayJson(operationRequest(body, bootstrapHeaders()), {
-        deps: gatewayDeps(workspaceRoot),
-      });
-
-      expect(rejected.response.status).toBe(403);
-      expect(rejected.body.error).toBe(
-        "Workspace bootstrap authorization is limited to status operations.",
-      );
-    }
-
-    const init = await gatewayJson(
-      operationRequest({ kind: "init", name: "personal-sites" }, bootstrapHeaders()),
-      {
-        deps: gatewayDeps(workspaceRoot),
-      },
-    );
-
-    expect(init.response.status).toBe(400);
-    expect(init.body.error).toBe('Workspace gateway operation "init" is not supported.');
-
-    for (const body of [
-      { kind: "status", workspacePath: "../outside" },
-      { kind: "status", command: "rm -rf /tmp/workspace" },
-      { kind: "status", rawAdapterOutput: "hidden" },
-      { kind: "status", providerState: { account: "raw" } },
-      { kind: "init", name: "CF_API_TOKEN=secret" },
-      { apiToken: "pasted-browser-token", kind: "credentialSetup", provider: "cloudflare" },
-      { globalApiKey: "pasted-browser-key", kind: "credentialSetup", provider: "cloudflare" },
-      {
-        cloudflareApiToken: "token-management-bootstrap",
-        kind: "credentialSetup",
-        provider: "cloudflare",
-      },
-    ]) {
-      const rejected = await gatewayJson(operationRequest(body, bootstrapHeaders()), {
-        deps: gatewayDeps(workspaceRoot),
-      });
-
-      expect(rejected.response.status).toBe(400);
-    }
-  });
-
-  it("gates local gateway starts on required execution capability before execution", async () => {
-    const workspaceRoot = await makeTempDir();
-    const cookie = await ownerCookie();
-    let credentialSetupCalls = 0;
-    const rejected = await gatewayJson(
-      operationRequest(
-        { kind: "credentialSetup", provider: "cloudflare" },
-        browserHeaders({ cookie, csrf: true }),
-      ),
-      {
-        deps: gatewayDeps(workspaceRoot, {
-          credentialSetup: async () => {
-            credentialSetupCalls += 1;
-            throw new Error("Credential setup should not execute.");
-          },
-          operationCapabilities: ["workspace-read"],
-        }),
-      },
-    );
-
-    expect(rejected.response.status).toBe(403);
-    expect(rejected.body.error).toBe(
-      'Workspace operation "credentialSetup" requires execution capability "credential-setup".',
-    );
-    expect(credentialSetupCalls).toBe(0);
-  });
-
-  it("requires same-origin owner session and CSRF proof for browser mutations", async () => {
+  it("runs browser credential setup through the local gateway without exposing secrets", async () => {
     const workspaceRoot = await makeTempDir();
     const cookie = await ownerCookie();
     const deps = gatewayDeps(workspaceRoot, {
       credentialSetupUrl: "https://dash.cloudflare.com/oauth2/authorize?client_id=formless",
-      operationIds: ["op_missing_csrf", "op_cross_origin", "op_credential_00000001"],
+      operationIds: ["op_credential_00000001"],
     });
-
-    const missingCsrf = await gatewayJson(
-      operationRequest(
-        { kind: "credentialSetup", profileLabel: "Default", provider: "cloudflare" },
-        browserHeaders({ cookie }),
-      ),
-      { deps },
-    );
-    expect(missingCsrf.response.status).toBe(403);
-    expect(missingCsrf.body.error).toBe("Workspace gateway browser mutations require CSRF proof.");
-
-    const crossOrigin = await gatewayJson(
-      operationRequest(
-        { kind: "credentialSetup", provider: "cloudflare" },
-        browserHeaders({
-          cookie,
-          csrf: true,
-          origin: "http://other.test",
-        }),
-      ),
-      { deps },
-    );
-    expect(crossOrigin.response.status).toBe(403);
 
     const accepted = await gatewayJson(
       operationRequest(
@@ -707,69 +479,6 @@ describe("local workspace gateway", () => {
     expect(serialized).not.toContain(proxyToken);
   });
 
-  it("allows admin bearer only for non-browser automation callers", async () => {
-    const workspaceRoot = await makeTempDir();
-    const deps = gatewayDeps(workspaceRoot, {
-      credentialSetupUrl: "https://dash.cloudflare.com/oauth2/authorize?client_id=formless",
-      operationIds: ["op_admin_00000001"],
-    });
-
-    const automation = await gatewayJson(
-      operationRequest(
-        { kind: "credentialSetup", provider: "cloudflare" },
-        { Authorization: `Bearer ${adminToken}` },
-      ),
-      { deps },
-    );
-
-    expect(automation.response.status).toBe(200);
-    expect(automation.body.operation).toMatchObject({
-      actor: "automation",
-      id: "op_admin_00000001",
-      operation: "credentialSetup",
-    });
-    expect(automation.body).not.toHaveProperty("csrfToken");
-
-    const browserBearer = await gatewayJson(
-      operationRequest(
-        { kind: "credentialSetup", provider: "cloudflare" },
-        {
-          Authorization: `Bearer ${adminToken}`,
-          Origin: "http://local.test",
-        },
-      ),
-      { deps: gatewayDeps(workspaceRoot) },
-    );
-
-    expect(browserBearer.response.status).toBe(401);
-  });
-
-  it("rejects unsupported standalone deployment gateway operations before execution", async () => {
-    const workspaceRoot = await makeTempDir();
-    const cookie = await ownerCookie();
-    let executed = false;
-
-    expect(WORKSPACE_BROWSER_OPERATION_KINDS).not.toContain("deploymentRefresh");
-    for (const kind of ["deployPlan", "deployApply", "deploymentRefresh"]) {
-      const rejected = await gatewayJson(
-        operationRequest({ kind }, browserHeaders({ cookie, csrf: true })),
-        {
-          deps: gatewayDeps(workspaceRoot, {
-            fetch: async () => {
-              executed = true;
-              return Response.json({});
-            },
-          }),
-        },
-      );
-
-      expect(rejected.response.status).toBe(400);
-      expect(rejected.body.error).toBe(`Workspace gateway operation "${kind}" is not supported.`);
-    }
-
-    expect(executed).toBe(false);
-  });
-
   it("scopes operation ids to the configured workspace root", async () => {
     const workspaceRoot = await makeTempDir();
     const otherWorkspaceRoot = await makeTempDir();
@@ -796,15 +505,6 @@ describe("local workspace gateway", () => {
     );
 
     expect(otherRead.response.status).toBe(404);
-
-    const invalid = await gatewayJson(
-      new Request(`http://local.test${WORKSPACE_GATEWAY_OPERATIONS_API_PATH}/..%2Fsecret`, {
-        headers: bootstrapHeaders(),
-      }),
-      { deps: gatewayDeps(workspaceRoot) },
-    );
-
-    expect(invalid.response.status).toBe(400);
   });
 
   it("redacts invalid authorization handoff output from trusted adapters", async () => {
