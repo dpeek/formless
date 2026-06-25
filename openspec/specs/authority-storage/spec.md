@@ -349,6 +349,26 @@ writes.
 - AND if any step fails validation or materialization, no plan step writes an
   app record, tombstone, operation handler replay row, or sync change row
 
+#### Scenario: Materialize record plan write requests
+
+- GIVEN an accepted command operation invocation has validated operation input
+  values keyed by declared operation input field name
+- WHEN Authority plans a record-plan command effect
+- THEN the record-plan materializer builds the ordered record-write requests
+  for all declared steps before the commit boundary writes records
+- AND step values resolve from validated operation input, literal scalar values,
+  generated ids, generated timestamps, actor context, source context, and
+  earlier step outputs
+- AND create step write ids are derived from the operation invocation id and
+  step name
+- AND patch, delete, and tombstone step targets resolve to active existing
+  records or records planned by earlier steps
+- AND the materializer returns enough step metadata for the operation output to
+  report step name, kind, entity, record id, and committed change id
+- AND idempotency reservation, audit row transitions, unique constraints,
+  lifecycle timestamps, sync change rows, and durable storage writes remain
+  Authority commit-boundary responsibilities
+
 #### Scenario: Return record plan outcome
 
 - GIVEN a command record plan commits

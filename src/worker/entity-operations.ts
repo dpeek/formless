@@ -9,9 +9,6 @@ import {
   type EntitySchema,
   type OperationHandlerEntityOperationEffectSchema,
   type RecordPlanEntityOperationEffectSchema,
-  type RecordPlanRecordIdExpressionSchema,
-  type RecordPlanStepSchema,
-  type RecordPlanValueExpressionSchema,
   type SchemaOperationActorKind,
 } from "@dpeek/formless-schema";
 import type {
@@ -20,8 +17,7 @@ import type {
 } from "../shared/app-storage-identity.ts";
 import type { AppPackageResolver } from "../shared/app-packages.ts";
 import { nowIsoString } from "../shared/clock.ts";
-import { createRecordId } from "../shared/ids.ts";
-import type { FieldValue, RecordValues, StoredRecord } from "@dpeek/formless-storage";
+import type { RecordValues, StoredRecord } from "@dpeek/formless-storage";
 import type { PublicOperationProof } from "../shared/protocol.ts";
 import type {
   OperationCommandOutput,
@@ -42,7 +38,6 @@ import {
 import { validateRecordWriteRequest } from "./authority-validation.ts";
 import {
   validateOperationCommandHandlerInputValues,
-  validateOperationRecordPlanInputValues,
   validateOperationRecordWriteValues,
 } from "./operation-input-validation.ts";
 import {
@@ -58,7 +53,6 @@ import {
   recordOperationInvocationFailed,
   recordOperationInvocationOutcome,
   replayedWrite,
-  type OperationRecordWritePlan,
   type RecordConstraintValidator,
   type WriteOutcome,
   writeRecordSetForCommandOperationOutcome,
@@ -68,6 +62,11 @@ import type {
   DeleteRecordWriteRequest,
   PatchRecordWriteRequest,
 } from "./record-write-requests.ts";
+import {
+  materializeRecordPlan,
+  recordPlanCommandInput,
+  recordPlanOperationOutput,
+} from "./record-plan-materializer.ts";
 
 type OperationStorageIdentity = AppStorageIdentity | InstanceControlPlaneStorageIdentity;
 
@@ -670,8 +669,8 @@ function executeRecordPlanOperationInvocationOutcome(
   validateConstraints?: RecordConstraintValidator,
 ): WriteOutcome<OperationInvocationOutput> {
   const operationId = requiredWriteIdentity(envelope);
-  const inputValues = recordPlanCommandInput(envelope, schema, storage);
-  const plans = recordPlanWritePlans(
+  const inputValues = recordPlanCommandInput({ envelope, schema, storage });
+  const materialization = materializeRecordPlan({
     storage,
     envelope,
     schema,
@@ -679,18 +678,22 @@ function executeRecordPlanOperationInvocationOutcome(
     inputValues,
     operationId,
     packageResolver,
-  );
+    plannedRecords: [],
+  });
 
   return mapWriteOutcome(
     writeRecordSetForCommandOperationOutcome(
       storage,
       operationId,
-      plans,
+      materialization.plans,
       operationRecordConstraintValidator(storage, schema, validateConstraints),
       { allowStoredReplay: false, now: envelope.receivedAt },
     ),
     (response) =>
-      filterCommandOperationOutputForActor(recordPlanOperationOutput(response, effect), envelope),
+      filterCommandOperationOutputForActor(
+        recordPlanOperationOutput(response, materialization),
+        envelope,
+      ),
   );
 }
 
@@ -702,413 +705,6 @@ function operationRecordConstraintValidator(
   return (entity, values, options) => {
     validateConstraints?.(entity, values, options);
     assertUniqueConstraints(storage, schema, entity, values, options);
-  };
-}
-
-type RecordPlanInputValues = Partial<Record<string, FieldValue>>;
-
-type RecordPlanPlanningState = {
-  operationId: string;
-  envelope: OperationInvocationEnvelope;
-  inputValues: RecordPlanInputValues;
-  packageResolver?: AppPackageResolver;
-  plannedRecordsById: Map<string, StoredRecord>;
-  schema: AppSchema;
-  stepOutputs: Map<string, StoredRecord>;
-  storage: DurableObjectStorage;
-};
-
-function recordPlanCommandInput(
-  envelope: OperationInvocationEnvelope,
-  schema: AppSchema,
-  storage: DurableObjectStorage,
-): RecordPlanInputValues {
-  if (envelope.input.type !== "command") {
-    throw new BadRequestError(
-      `Operation "${envelope.operation.canonicalKey}" requires command input.`,
-    );
-  }
-
-  return validateOperationRecordPlanInputValues({
-    envelope,
-    rawInput: envelope.input.input ?? {},
-    schema,
-    storage,
-  });
-}
-
-function recordPlanWritePlans(
-  storage: DurableObjectStorage,
-  envelope: OperationInvocationEnvelope,
-  schema: AppSchema,
-  effect: RecordPlanEntityOperationEffectSchema,
-  inputValues: RecordPlanInputValues,
-  operationId: string,
-  packageResolver?: AppPackageResolver,
-): OperationRecordWritePlan[] {
-  const state: RecordPlanPlanningState = {
-    operationId,
-    envelope,
-    inputValues,
-    packageResolver,
-    plannedRecordsById: new Map(),
-    schema,
-    stepOutputs: new Map(),
-    storage,
-  };
-
-  return effect.steps.map((step) => recordPlanWritePlanForStep(step, state));
-}
-
-function recordPlanWritePlanForStep(
-  step: RecordPlanStepSchema,
-  state: RecordPlanPlanningState,
-): OperationRecordWritePlan {
-  if (step.kind === "create") {
-    const recordId =
-      step.recordId === undefined
-        ? createRecordId()
-        : evaluateRecordPlanRecordIdExpression(step.recordId, state);
-
-    assertRecordPlanCreateIdAvailable(step, recordId, state);
-
-    const recordWrite = validateRecordPlanStepWrite(step, state, {
-      writeId: recordPlanStepWriteId(state.operationId, step.name),
-      entity: step.entity,
-      kind: "create",
-      values: evaluateRecordPlanValues(step.values, state),
-    });
-
-    if (recordWrite.kind !== "create") {
-      throw new Error(`Record plan create step "${step.name}" did not produce create values.`);
-    }
-
-    const values = recordWrite.values;
-    const record = {
-      id: recordId,
-      entity: step.entity,
-      values,
-      createdAt: state.envelope.receivedAt,
-      updatedAt: state.envelope.receivedAt,
-    } satisfies StoredRecord;
-
-    recordPlanRecordWritten(step, record, state);
-
-    return {
-      kind: "create",
-      entity: step.entity,
-      id: recordId,
-      values,
-    };
-  }
-
-  if (step.kind === "patch") {
-    const recordId = evaluateRecordPlanRecordIdExpression(step.recordId, state);
-    const existingRecord = requireRecordPlanTargetRecord(step, recordId, state);
-    const recordWrite = validateRecordPlanStepWrite(step, state, {
-      writeId: recordPlanStepWriteId(state.operationId, step.name),
-      entity: step.entity,
-      kind: "patch",
-      recordId,
-      values: evaluateRecordPlanValues(step.values, state),
-    });
-
-    if (!("recordValues" in recordWrite)) {
-      throw new Error(`Record plan patch step "${step.name}" did not produce record values.`);
-    }
-
-    const record = {
-      ...existingRecord,
-      values: recordWrite.recordValues,
-      updatedAt: state.envelope.receivedAt,
-    } satisfies StoredRecord;
-
-    recordPlanRecordWritten(step, record, state);
-
-    return {
-      kind: "patch",
-      record: (writtenRecords) =>
-        requireRecordPlanMaterializedTargetRecord(recordId, writtenRecords, state.storage),
-      values: recordWrite.recordValues,
-    };
-  }
-
-  const recordId = evaluateRecordPlanRecordIdExpression(step.recordId, state);
-  const existingRecord = requireRecordPlanTargetRecord(step, recordId, state);
-  validateRecordPlanStepWrite(step, state, {
-    writeId: recordPlanStepWriteId(state.operationId, step.name),
-    entity: step.entity,
-    kind: "delete",
-    recordId,
-  });
-
-  const record = {
-    ...existingRecord,
-    updatedAt: state.envelope.receivedAt,
-    deletedAt: state.envelope.receivedAt,
-  } satisfies StoredRecord;
-
-  recordPlanRecordWritten(step, record, state);
-
-  return {
-    kind: step.kind,
-    record: (writtenRecords) =>
-      requireRecordPlanMaterializedTargetRecord(recordId, writtenRecords, state.storage),
-  };
-}
-
-function validateRecordPlanStepWrite(
-  step: RecordPlanStepSchema,
-  state: RecordPlanPlanningState,
-  recordWrite: CreateRecordWriteRequest | PatchRecordWriteRequest | DeleteRecordWriteRequest,
-) {
-  const result = validateRecordWriteRequest(recordWrite, state.schema, state.storage, {
-    additionalRecords: [...state.plannedRecordsById.values()],
-    enforceGenericRecordWritePolicy: false,
-    packageResolver: state.packageResolver,
-  });
-
-  if ("outcome" in result) {
-    throw new BadRequestError(
-      `Record plan step "${step.name}" conflicts with an existing write identity.`,
-    );
-  }
-
-  return result.recordWrite;
-}
-
-function evaluateRecordPlanValues(
-  values: Record<string, RecordPlanValueExpressionSchema>,
-  state: RecordPlanPlanningState,
-): RecordValues {
-  const evaluated: RecordValues = {};
-
-  for (const [fieldName, expression] of Object.entries(values)) {
-    const result = evaluateRecordPlanValueExpression(expression, state);
-
-    if (result.kind === "set") {
-      evaluated[fieldName] = result.value;
-    }
-  }
-
-  return evaluated;
-}
-
-function evaluateRecordPlanValueExpression(
-  expression: RecordPlanValueExpressionSchema,
-  state: RecordPlanPlanningState,
-): { kind: "omit" } | { kind: "set"; value: FieldValue } {
-  if (expression.kind === "reference") {
-    const id = evaluateRecordPlanOptionalRecordIdExpression(expression.id, state);
-
-    return id === undefined ? { kind: "omit" } : { kind: "set", value: id };
-  }
-
-  if (expression.kind === "input") {
-    return Object.hasOwn(state.inputValues, expression.field)
-      ? { kind: "set", value: state.inputValues[expression.field] as FieldValue }
-      : { kind: "omit" };
-  }
-
-  if (expression.kind === "literal") {
-    return { kind: "set", value: expression.value };
-  }
-
-  if (expression.kind === "generatedId") {
-    return { kind: "set", value: createRecordPlanGeneratedId(expression.prefix) };
-  }
-
-  if (expression.kind === "generatedTimestamp") {
-    return { kind: "set", value: state.envelope.receivedAt };
-  }
-
-  if (expression.kind === "actor") {
-    return { kind: "set", value: state.envelope.actor.kind };
-  }
-
-  if (expression.kind === "source") {
-    return evaluateRecordPlanSourceExpression(expression.field, state.envelope);
-  }
-
-  const stepRecord = requireRecordPlanStepOutput(expression.step, state);
-
-  if (expression.output === "id") {
-    return { kind: "set", value: stepRecord.id };
-  }
-
-  return Object.hasOwn(stepRecord.values, expression.field)
-    ? { kind: "set", value: stepRecord.values[expression.field] }
-    : { kind: "omit" };
-}
-
-function evaluateRecordPlanSourceExpression(
-  field: "protocol" | "route" | "host" | "path",
-  envelope: OperationInvocationEnvelope,
-): { kind: "omit" } | { kind: "set"; value: FieldValue } {
-  const value = envelope.source[field];
-
-  return value === undefined ? { kind: "omit" } : { kind: "set", value };
-}
-
-function evaluateRecordPlanRecordIdExpression(
-  expression: RecordPlanRecordIdExpressionSchema,
-  state: RecordPlanPlanningState,
-): string {
-  const value = evaluateRecordPlanOptionalRecordIdExpression(expression, state);
-
-  if (typeof value !== "string" || value.trim() === "") {
-    throw new BadRequestError("Record plan record id expression must resolve to a string.");
-  }
-
-  return value;
-}
-
-function evaluateRecordPlanOptionalRecordIdExpression(
-  expression: RecordPlanRecordIdExpressionSchema,
-  state: RecordPlanPlanningState,
-): string | undefined {
-  if (expression.kind === "input") {
-    if (!Object.hasOwn(state.inputValues, expression.field)) {
-      return undefined;
-    }
-
-    const value = state.inputValues[expression.field];
-
-    if (typeof value !== "string") {
-      throw new BadRequestError(
-        `Record plan input field "${expression.field}" must resolve to a record id string.`,
-      );
-    }
-
-    return value;
-  }
-
-  if (expression.kind === "literal") {
-    if (typeof expression.value !== "string") {
-      throw new BadRequestError("Record plan literal record id must be a string.");
-    }
-
-    return expression.value;
-  }
-
-  if (expression.kind === "generatedId") {
-    return createRecordPlanGeneratedId(expression.prefix);
-  }
-
-  return requireRecordPlanStepOutput(expression.step, state).id;
-}
-
-function createRecordPlanGeneratedId(prefix: string | undefined) {
-  if (prefix === undefined) {
-    return createRecordId();
-  }
-
-  return `${prefix}_${crypto.randomUUID()}`;
-}
-
-function assertRecordPlanCreateIdAvailable(
-  step: RecordPlanStepSchema,
-  recordId: string,
-  state: RecordPlanPlanningState,
-) {
-  if (state.plannedRecordsById.has(recordId) || getStoredRecord(state.storage, recordId)) {
-    throw new BadRequestError(
-      `Record plan step "${step.name}" creates duplicate record "${recordId}".`,
-    );
-  }
-}
-
-function requireRecordPlanTargetRecord(
-  step: RecordPlanStepSchema,
-  recordId: string,
-  state: RecordPlanPlanningState,
-): StoredRecord {
-  const record = state.plannedRecordsById.get(recordId) ?? getStoredRecord(state.storage, recordId);
-
-  if (!record) {
-    throw new BadRequestError(`Unknown record "${recordId}".`);
-  }
-
-  if (record.entity !== step.entity) {
-    throw new BadRequestError("Record plan step entity must match the stored record entity.");
-  }
-
-  if (record.deletedAt) {
-    throw new BadRequestError(`Cannot write tombstoned record "${recordId}".`);
-  }
-
-  return record;
-}
-
-function requireRecordPlanMaterializedTargetRecord(
-  recordId: string,
-  writtenRecords: StoredRecord[],
-  storage: DurableObjectStorage,
-): StoredRecord {
-  const record =
-    [...writtenRecords].reverse().find((candidate) => candidate.id === recordId) ??
-    getStoredRecord(storage, recordId);
-
-  if (!record) {
-    throw new BadRequestError(`Unknown record "${recordId}".`);
-  }
-
-  return record;
-}
-
-function requireRecordPlanStepOutput(
-  stepName: string,
-  state: RecordPlanPlanningState,
-): StoredRecord {
-  const record = state.stepOutputs.get(stepName);
-
-  if (!record) {
-    throw new BadRequestError(`Record plan references unknown step "${stepName}".`);
-  }
-
-  return record;
-}
-
-function recordPlanRecordWritten(
-  step: RecordPlanStepSchema,
-  record: StoredRecord,
-  state: RecordPlanPlanningState,
-) {
-  state.plannedRecordsById.set(record.id, record);
-  state.stepOutputs.set(step.name, record);
-}
-
-function recordPlanStepWriteId(operationId: string, stepName: string) {
-  return `${operationId}:${stepName}`;
-}
-
-function recordPlanOperationOutput(
-  output: OperationCommandOutput,
-  effect: RecordPlanEntityOperationEffectSchema,
-): OperationCommandOutput {
-  if (output.changes.length !== effect.steps.length) {
-    throw new Error("Record plan output change count does not match step count.");
-  }
-
-  return {
-    ...output,
-    recordPlan: {
-      steps: effect.steps.map((step, index) => {
-        const change = output.changes[index];
-
-        if (!change) {
-          throw new Error(`Record plan step "${step.name}" has no committed change.`);
-        }
-
-        return {
-          name: step.name,
-          kind: step.kind,
-          entity: step.entity,
-          recordId: change.recordId,
-          changeId: String(change.seq),
-        };
-      }),
-    },
   };
 }
 
