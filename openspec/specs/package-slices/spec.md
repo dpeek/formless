@@ -436,7 +436,7 @@ archive filesystem adapters.
 
 #### Scenario: Archive package exports
 
-- GIVEN CLI, Site runtime, Worker restore APIs, Workspace operations, upgrade
+- GIVEN CLI runtime, Worker restore APIs, Workspace operations, upgrade
   planning, or tests need portable archive behavior
 - WHEN they import archive contracts, parsers, restore planning,
   or local archive file adapters
@@ -470,7 +470,7 @@ execution, workspace operation execution, or CLI command policy.
   mutation, provider mutation, workspace save/check/pull/push/deploy, or CLI
   command policy is needed
 - WHEN those behaviors are implemented
-- THEN CLI, Site runtime, Archive workflows, Workspace runtime, Worker runtime,
+- THEN CLI runtime, Archive workflows, Workspace runtime, Worker runtime,
   Authority, Media runtime, Deploy runtime, or provider adapters own the
   execution
 - AND the Archive package only supplies contracts, parser/formatter behavior,
@@ -534,7 +534,7 @@ and local sidecar HTTP adapters.
 
 #### Scenario: Gateway package exports
 
-- GIVEN app, client, Worker, CLI, Site runtime, or tests need workspace gateway
+- GIVEN app, client, Worker, CLI runtime, or tests need workspace gateway
   behavior
 - WHEN they import the package
 - THEN they import from the package root or documented subpaths
@@ -640,7 +640,7 @@ workspace operation contracts, and local Node filesystem adapters.
 
 #### Scenario: Workspace package exports
 
-- GIVEN CLI, Site runtime, Gateway runtime adapters, archive workflows, tests,
+- GIVEN CLI runtime, Gateway runtime adapters, archive workflows, tests,
   or local agent workflows need workspace source, local state, operation, or
   storage snapshot behavior
 - WHEN they import the package
@@ -687,7 +687,7 @@ runtime storage, provider execution, or app records.
   restore, export, import, mutate provider state, read Authority storage, or
   select runtime topology
 - WHEN those behaviors are implemented
-- THEN CLI, Site runtime, Gateway runtime adapters, Archive workflows, Deploy
+- THEN CLI runtime, Gateway runtime adapters, Archive workflows, Deploy
   runtime, Worker runtime, or provider adapters own the execution
 - AND the Workspace package only supplies contracts, pure helpers, display-safe
   state handling, and local filesystem adapters for workspace source or ignored

@@ -1213,8 +1213,8 @@ describe("Formless CLI", () => {
       runtime: {
         extensions: {
           [SITE_PUBLIC_RENDERER_RUNTIME_EXTENSION_KEY]: {
-            browser: "src/site/public-renderer.browser.tsx",
-            worker: "src/site/public-renderer.worker.tsx",
+            browser: "renderers/site-public.browser.tsx",
+            worker: "renderers/site-public.worker.tsx",
           },
         },
       },
@@ -1256,8 +1256,8 @@ describe("Formless CLI", () => {
     expect(deployInputs[0]?.workspaceRoot).toBe(workspaceRoot);
     expect(JSON.parse(deployInputs[0]?.workspaceRuntimeExtensions ?? "")).toEqual({
       [SITE_PUBLIC_RENDERER_RUNTIME_EXTENSION_KEY]: {
-        browser: "src/site/public-renderer.browser.tsx",
-        worker: "src/site/public-renderer.worker.tsx",
+        browser: "renderers/site-public.browser.tsx",
+        worker: "renderers/site-public.worker.tsx",
       },
     });
     expect(deployInputs[0]?.workspaceAppPackages ?? "").not.toContain("public-renderer");
@@ -2451,8 +2451,8 @@ describe("Formless CLI", () => {
       runtime: {
         extensions: {
           [SITE_PUBLIC_RENDERER_RUNTIME_EXTENSION_KEY]: {
-            browser: "src/site/public-renderer.browser.tsx",
-            worker: "src/site/public-renderer.worker.tsx",
+            browser: "renderers/site-public.browser.tsx",
+            worker: "renderers/site-public.worker.tsx",
           },
         },
       },
@@ -2485,8 +2485,8 @@ describe("Formless CLI", () => {
     expect(deployInputs).toHaveLength(1);
     expect(JSON.parse(deployInputs[0]?.workspaceRuntimeExtensions ?? "")).toEqual({
       [SITE_PUBLIC_RENDERER_RUNTIME_EXTENSION_KEY]: {
-        browser: "src/site/public-renderer.browser.tsx",
-        worker: "src/site/public-renderer.worker.tsx",
+        browser: "renderers/site-public.browser.tsx",
+        worker: "renderers/site-public.worker.tsx",
       },
     });
     expect(
@@ -2533,8 +2533,8 @@ describe("Formless CLI", () => {
       runtime: {
         extensions: {
           [SITE_PUBLIC_RENDERER_RUNTIME_EXTENSION_KEY]: {
-            browser: "src/site/public-renderer.browser.tsx",
-            worker: "src/site/public-renderer.worker.tsx",
+            browser: "renderers/site-public.browser.tsx",
+            worker: "renderers/site-public.worker.tsx",
           },
         },
       },
@@ -3626,8 +3626,8 @@ describe("Formless CLI", () => {
       runtime: {
         extensions: {
           [SITE_PUBLIC_RENDERER_RUNTIME_EXTENSION_KEY]: {
-            browser: "src/site/public-renderer.browser.tsx",
-            worker: "src/site/public-renderer.worker.tsx",
+            browser: "renderers/site-public.browser.tsx",
+            worker: "renderers/site-public.worker.tsx",
           },
         },
       },
@@ -3676,8 +3676,8 @@ describe("Formless CLI", () => {
     expect(runtimePackages).not.toContain("public-renderer");
     expect(JSON.parse(runtimeExtensions ?? "")).toEqual({
       [SITE_PUBLIC_RENDERER_RUNTIME_EXTENSION_KEY]: {
-        browser: "src/site/public-renderer.browser.tsx",
-        worker: "src/site/public-renderer.worker.tsx",
+        browser: "renderers/site-public.browser.tsx",
+        worker: "renderers/site-public.worker.tsx",
       },
     });
 

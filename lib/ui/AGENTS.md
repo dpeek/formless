@@ -19,7 +19,7 @@ Read this when editing `lib/ui/*`.
 - App routes in `src/app`.
 - Worker routes in `src/worker`.
 - Runtime schema parsing in `src/shared`.
-- Product-specific Site behavior in `src/site` or `src/app/site-renderer`.
+- Product-specific Site behavior in `src/cli` or `src/app/site-renderer`.
 
 ## Map
 

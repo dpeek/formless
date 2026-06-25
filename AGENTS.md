@@ -55,7 +55,7 @@ Data stays flat. Compose in query, view, projection, action layer.
 - `src/client/`: browser replica, projections, generated view models.
 - `src/app/`: React routes, generated UI, Site renderer.
 - `src/worker/`: Worker routes, Authority, storage, installed apps, public SSR.
-- `src/site/`: Formless CLI implementation, project files, publish, archives, domains.
+- `src/cli/`: Formless CLI implementation, project files, publish, archives, domains.
 - `src/media/`: core media model and providers.
 - `src/test/`: shared test fixtures.
 - `schema/apps/`: bundled Tasks and CRM app schemas and seed records.

@@ -142,7 +142,7 @@ package slice.
 
 #### Scenario: Package owns portable archive contracts
 
-- **WHEN** CLI, Site runtime, Worker restore APIs, Workspace operations,
+- **WHEN** CLI runtime, Worker restore APIs, Workspace operations,
   sync planning, tests, or package slices need archive envelope kinds,
   archive version constants, archive capability parsing, archive formatting,
   restore dry-run planning, media manifest validation, or deterministic local
@@ -171,7 +171,7 @@ package slice.
   Authority reads or writes, Durable Object storage, browser replica state,
   media object mutation, provider mutation, workspace save/check/pull/push,
   or CLI command policy is needed
-- **THEN** those behaviors remain owned by CLI, Site runtime, Archive workflows,
+- **THEN** those behaviors remain owned by CLI runtime, Archive workflows,
   Workspace runtime, Worker runtime, Authority, Media runtime, Deploy runtime,
   or provider adapters
 - **AND** the Archive package supplies contracts, parser/formatter behavior,
@@ -392,7 +392,7 @@ semantic operation contracts through the Workspace package slice.
 
 #### Scenario: Package owns workspace source contracts
 
-- **WHEN** CLI, Site runtime, Gateway runtime adapters, archive workflows,
+- **WHEN** CLI runtime, Gateway runtime adapters, archive workflows,
   tests, or local agent workflows need `formless.json` manifest parsing,
   manifest package link parsing, workspace path defaults, workspace target URL
   normalization, workspace storage snapshot contracts, ignored local state
@@ -422,7 +422,7 @@ semantic operation contracts through the Workspace package slice.
 - **WHEN** workspace save, pull, push, credential setup, app install,
   control-plane mutation, Authority reads, provider mutation, Gateway
   authorization, or runtime topology selection is needed
-- **THEN** those behaviors remain owned by CLI, Site runtime, Archive
+- **THEN** those behaviors remain owned by CLI runtime, Archive
   workflows, Deploy runtime, Worker runtime, Gateway runtime adapters, or
   provider adapters
 - **AND** the Workspace package supplies source/state contracts, pure helpers,

@@ -19,7 +19,7 @@ Read this when editing `lib/gateway/*`.
 - Runtime topology selection or route eligibility policy.
 - Workspace save, check, pull, push, deploy, cleanup, or credential setup execution.
 - Semantic workspace operation input, result, event, log, summary, redaction, or persistence contracts.
-- Site runtime adapter modules that inject operation execution, owner session, and route eligibility dependencies.
+- CLI runtime adapter modules that inject operation execution, owner session, and route eligibility dependencies.
 - Operation persistence implementation.
 - Filesystem source writes or ignored workspace state storage.
 - Provider credentials, provider mutation, Alchemy state, or Cloudflare mutation.

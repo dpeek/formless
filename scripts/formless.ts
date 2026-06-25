@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import { pathToFileURL } from "node:url";
 
-import { runFormlessCli } from "../src/site/cli.ts";
+import { runFormlessCli } from "../src/cli/cli.ts";
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   runFormlessCli(process.argv.slice(2)).catch((error: unknown) => {

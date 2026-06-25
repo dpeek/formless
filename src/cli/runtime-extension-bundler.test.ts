@@ -29,8 +29,8 @@ afterEach(async () => {
 describe("workspace Site public renderer bundler resolution", () => {
   it("resolves browser and Worker renderer entrypoints from workspace-relative custom renderer config", async () => {
     const workspaceRoot = await makeTempDir();
-    const browserEntrypoint = "src/site/public-renderer.browser.tsx";
-    const workerEntrypoint = "src/site/public-renderer.worker.tsx";
+    const browserEntrypoint = "renderers/site-public.browser.tsx";
+    const workerEntrypoint = "renderers/site-public.worker.tsx";
 
     await writeCustomRendererFixture(workspaceRoot, browserEntrypoint, workerEntrypoint);
 
@@ -91,8 +91,8 @@ export const fallbackRenderer = sitePublicRenderer;
 
   it("resolves the Worker virtual module to the configured Worker entrypoint for esbuild bundles", async () => {
     const workspaceRoot = await makeTempDir();
-    const browserEntrypoint = "src/site/public-renderer.browser.tsx";
-    const workerEntrypoint = "src/site/public-renderer.worker.tsx";
+    const browserEntrypoint = "renderers/site-public.browser.tsx";
+    const workerEntrypoint = "renderers/site-public.worker.tsx";
     const env: NodeJS.ProcessEnv = {
       [FORMLESS_SITE_PROJECT_ROOT_ENV_NAME]: workspaceRoot,
       [FORMLESS_WORKSPACE_RUNTIME_EXTENSIONS_ENV_NAME]: JSON.stringify({

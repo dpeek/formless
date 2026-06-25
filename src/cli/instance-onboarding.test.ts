@@ -921,8 +921,8 @@ describe("Alchemy Formless instance deployment", () => {
     });
     const workspaceRuntimeExtensions = JSON.stringify({
       [SITE_PUBLIC_RENDERER_RUNTIME_EXTENSION_KEY]: {
-        browser: "src/site/public-renderer.browser.tsx",
-        worker: "src/site/public-renderer.worker.tsx",
+        browser: "renderers/site-public.browser.tsx",
+        worker: "renderers/site-public.worker.tsx",
       },
     });
 

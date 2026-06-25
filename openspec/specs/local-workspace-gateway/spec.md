@@ -126,7 +126,7 @@ reviewable workspace source when a local workspace gateway is available.
 - **AND** the sidecar refuses proxied or direct requests that lack accepted
   proxy or automation authorization before filesystem, local Authority,
   secret-state, Cloudflare, Alchemy, or provider work begins
-- **AND** the Site runtime operation handler rechecks the same operation
+- **AND** the local workspace operation handler rechecks the same operation
   contract before invoking workspace operation bodies
 
 ### Requirement: Gateway Package Boundary
@@ -136,7 +136,7 @@ through the Gateway package slice.
 
 #### Scenario: Package owns gateway interface
 
-- **WHEN** runtime-neutral, browser, Worker, sidecar, CLI, Site runtime, or
+- **WHEN** runtime-neutral, browser, Worker, sidecar, CLI runtime, or
   tests need workspace gateway route constants, gateway proxy header
   contracts, operation intent helpers, browser fetch behavior, Worker proxy
   behavior, or sidecar HTTP routing helpers
@@ -146,13 +146,13 @@ through the Gateway package slice.
 - **AND** they import package-owned gateway behavior only through exported
   Gateway package entrypoints, not source-tree modules or unexported package
   internals
-- **AND** Site runtime adapter modules may supply non-package-owned operation
+- **AND** CLI runtime adapter modules may supply non-package-owned operation
   execution, Workspace package operation state, owner session, and runtime
   topology dependencies to the package sidecar adapter
 
 #### Scenario: Workspace package owns semantic operation contracts
 
-- **WHEN** Gateway browser, Worker, sidecar, Site runtime, or tests need
+- **WHEN** Gateway browser, Worker, sidecar, CLI runtime, or tests need
   semantic workspace operation input shapes, display-safe operation state,
   operation result shapes, execution requirement declarations, operation state
   redaction, or operation persistence

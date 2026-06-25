@@ -59,7 +59,7 @@
  * POC boundary:
  *   This script proves real Cloudflare OAuth credentials can be handed to
  *   Alchemy as explicit apiToken options without committing secrets. The
- *   product credential store and refresh path live in src/site/cloudflare-oauth.ts
+ *   product credential store and refresh path live in src/cli/cloudflare-oauth.ts
  *   and local ignored .formless/cloudflare-oauth state, not in this POC.
  */
 
@@ -76,8 +76,8 @@ import {
   FORMLESS_CLOUDFLARE_OAUTH_CLIENT_ID,
   FORMLESS_CLOUDFLARE_OAUTH_DEPLOY_SCOPES,
   FORMLESS_CLOUDFLARE_OAUTH_REDIRECT_URI,
-} from "../src/site/cloudflare-oauth.ts";
-import { CloudflareTurnstileWidget } from "../src/site/turnstile-alchemy.ts";
+} from "../src/cli/cloudflare-oauth.ts";
+import { CloudflareTurnstileWidget } from "../src/cli/turnstile-alchemy.ts";
 
 const cloudflareApiBaseUrl = "https://api.cloudflare.com/client/v4";
 const openIdConfigurationUrl = "https://dash.cloudflare.com/.well-known/openid-configuration";

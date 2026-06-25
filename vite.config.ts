@@ -35,7 +35,7 @@ import {
   resolveWorkspaceSitePublicRendererEntrypointsFromEnv,
   sitePublicRendererVirtualModuleCode,
   type SitePublicRendererResolvedEntrypoints,
-} from "./src/site/runtime-extension-bundler.ts";
+} from "./src/cli/runtime-extension-bundler.ts";
 
 export {
   SITE_PUBLIC_RENDERER_BROWSER_ENTRYPOINT_MODULE_ID,

@@ -178,8 +178,8 @@ describe("instance workspace manifest", () => {
       runtime: {
         extensions: {
           [sitePublicRendererExtensionKey]: {
-            browser: "src/site/public-renderer.browser.tsx",
-            worker: "src/site/public-renderer.worker.tsx",
+            browser: "renderers/site-public.browser.tsx",
+            worker: "renderers/site-public.worker.tsx",
           },
         },
       },
@@ -189,8 +189,8 @@ describe("instance workspace manifest", () => {
     expect(manifest.runtime).toEqual({
       extensions: {
         [sitePublicRendererExtensionKey]: {
-          browser: "src/site/public-renderer.browser.tsx",
-          worker: "src/site/public-renderer.worker.tsx",
+          browser: "renderers/site-public.browser.tsx",
+          worker: "renderers/site-public.worker.tsx",
         },
       },
     });
@@ -198,8 +198,8 @@ describe("instance workspace manifest", () => {
       runtime: {
         extensions: {
           [sitePublicRendererExtensionKey]: {
-            browser: "src/site/public-renderer.browser.tsx",
-            worker: "src/site/public-renderer.worker.tsx",
+            browser: "renderers/site-public.browser.tsx",
+            worker: "renderers/site-public.worker.tsx",
           },
         },
       },
@@ -278,7 +278,7 @@ describe("instance workspace manifest", () => {
               extensions: {
                 [sitePublicRendererExtensionKey]: {
                   browser,
-                  worker: "src/site/public-renderer.worker.tsx",
+                  worker: "renderers/site-public.worker.tsx",
                 },
               },
             },
@@ -311,8 +311,8 @@ describe("instance workspace manifest", () => {
         runtime: {
           extensions: {
             [sitePublicRendererExtensionKey]: {
-              browser: "src/site/public-renderer.browser.tsx",
-              worker: "src/site/public-renderer.worker.tsx",
+              browser: "renderers/site-public.browser.tsx",
+              worker: "renderers/site-public.worker.tsx",
               apiToken: "secret",
             },
           },
@@ -333,12 +333,12 @@ describe("instance workspace manifest", () => {
   "runtime": {
     "extensions": {
       "site.publicRenderer": {
-        "browser": "src/site/first.browser.tsx",
-        "worker": "src/site/first.worker.tsx"
+        "browser": "renderers/first.browser.tsx",
+        "worker": "renderers/first.worker.tsx"
       },
       "site.publicRenderer": {
-        "browser": "src/site/second.browser.tsx",
-        "worker": "src/site/second.worker.tsx"
+        "browser": "renderers/second.browser.tsx",
+        "worker": "renderers/second.worker.tsx"
       }
     }
   }
