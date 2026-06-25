@@ -218,6 +218,27 @@ local execution binding handles it.
 - **AND** the first implementation does not require moving all operation bodies
   into one shared operation module
 
+#### Scenario: CLI workspace operation runner boundary
+
+- **WHEN** Formless CLI, local gateway, auto-save, or CLI runtime adapter code
+  starts a workspace operation
+- **THEN** the CLI workspace operation runner owns actor, capability, and
+  execution requirement checks, workspace root resolution, operation id
+  creation, display-safe input capture, queued/running/succeeded/failed
+  operation state transitions, log and error persistence, result persistence,
+  and result redaction
+- **AND** operation body selection is delegated to operation-domain
+  implementations keyed by the workspace operation definition's handler key
+- **AND** the runner interface does not require deployment provider, credential
+  setup, health check, owner setup, package build, local secret environment, or
+  token-generation dependencies for operations whose effective execution
+  requirements do not need them
+- **AND** push dry-runs that do not perform apply, provider reconciliation, or
+  local writeback are not required to provide provider mutation dependencies
+- **AND** deployment step ids, deployment step labels, and domain-specific
+  operation summaries are emitted by deployment or source-sync handlers rather
+  than by the generic runner
+
 #### Scenario: Formless CLI binding from operation definition
 
 - **WHEN** the CLI exposes a workspace command for a defined operation

@@ -7,6 +7,7 @@ import {
   INSTANCE_WORKSPACE_MANIFEST_FILE as FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE,
   defaultInstanceWorkspaceManifest as defaultFormlessInstanceWorkspaceManifest,
   formatInstanceWorkspaceManifest as formatFormlessInstanceWorkspaceManifest,
+  parseInstanceWorkspaceManifestJson as parseFormlessInstanceWorkspaceManifestJson,
   type InstanceWorkspaceManifest,
 } from "@dpeek/formless-workspace";
 import { SITE_PUBLIC_RENDERER_RUNTIME_EXTENSION_KEY } from "../shared/workspace-runtime-extensions.ts";
@@ -30,6 +31,7 @@ import {
   listWorkspaceOperationStates,
   readWorkspaceOperationState,
   updateWorkspaceOperationState,
+  writeInstanceWorkspaceAppStorageSnapshot,
   workspaceOperationStatePath,
   writeInstanceWorkspaceControlPlaneStorageSnapshot,
 } from "@dpeek/formless-workspace/node";
@@ -77,8 +79,33 @@ describe("Formless workspace operations", () => {
 
     expect(state).toMatchObject({
       actor: "browser",
+      completedAt: "2026-06-02T00:00:02.000Z",
+      createdAt: "2026-06-02T00:00:00.000Z",
       id: "op_status_00000001",
+      input: { includeDeploymentStatus: false },
+      logs: [
+        {
+          at: "2026-06-02T00:00:01.000Z",
+          id: "op_status_00000001-log-1",
+          level: "info",
+          message: "status started.",
+        },
+        {
+          at: "2026-06-02T00:00:02.000Z",
+          id: "op_status_00000001-log-2",
+          level: "info",
+          message: "status completed.",
+        },
+      ],
       operation: "status",
+      result: {
+        details: {
+          runtimeExtensions: [],
+          selectedTarget: null,
+          targetUrl: null,
+        },
+      },
+      startedAt: "2026-06-02T00:00:01.000Z",
       status: "succeeded",
       summary: {
         fields: {
@@ -88,8 +115,10 @@ describe("Formless workspace operations", () => {
         },
         title: "Workspace status",
       },
+      updatedAt: "2026-06-02T00:00:02.000Z",
       workspace: { label: "personal-sites" },
     });
+    expect(state.input).not.toHaveProperty("workspacePath");
     await expect(
       stat(path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE)),
     ).resolves.toMatchObject({});
@@ -116,6 +145,21 @@ describe("Formless workspace operations", () => {
     );
 
     expect(persisted.status).toBe("succeeded");
+    expect(persisted).toMatchObject({
+      input: { includeDeploymentStatus: false },
+      logs: [
+        { level: "info", message: "status started." },
+        { level: "info", message: "status completed." },
+      ],
+      summary: {
+        fields: {
+          automationToken: "[redacted]",
+          initialized: true,
+          remoteStatus: "skipped",
+        },
+        title: "Workspace status",
+      },
+    });
     expect(persistedText).not.toContain(workspaceRoot);
     expect(persistedText).not.toContain(tempDir);
   });
@@ -180,6 +224,37 @@ describe("Formless workspace operations", () => {
     await expect(stat(workspaceRoot)).rejects.toMatchObject({ code: "ENOENT" });
   });
 
+  it("rejects actor and capability failures before workspace root resolution", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "missing-workspace");
+
+    await expect(
+      runFormlessWorkspaceOperation(
+        {
+          kind: "status",
+          workspacePath: workspaceRoot,
+        },
+        operationDeps(tempDir),
+        { actor: "anonymous" as never },
+      ),
+    ).rejects.toThrow('Workspace operation "status" is not allowed for actor "anonymous".');
+    await expect(stat(workspaceRoot)).rejects.toMatchObject({ code: "ENOENT" });
+
+    await expect(
+      runFormlessWorkspaceOperation(
+        {
+          kind: "status",
+          workspacePath: workspaceRoot,
+        },
+        operationDeps(tempDir),
+        { actor: "browser", capabilities: [] },
+      ),
+    ).rejects.toThrow(
+      'Workspace operation "status" requires execution capability "workspace-read".',
+    );
+    await expect(stat(workspaceRoot)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
   it("records stale save check failure without rewriting reviewable source", async () => {
     const tempDir = await makeTempDir();
     const workspaceRoot = path.join(tempDir, "personal-sites");
@@ -213,6 +288,35 @@ describe("Formless workspace operations", () => {
     expect(state.summary.fields.error).toBe(
       'Formless workspace source is stale: state/apps/david.json, state/instance.json. Run "npx formless save".',
     );
+    const persisted = await readWorkspaceOperationState({
+      operationId: "op_save_00000001",
+      workspaceRoot,
+    });
+
+    expect(persisted).toMatchObject({
+      errors: [
+        {
+          message:
+            'Formless workspace source is stale: state/apps/david.json, state/instance.json. Run "npx formless save".',
+        },
+      ],
+      logs: [
+        { level: "info", message: "save started." },
+        {
+          level: "error",
+          message:
+            'Formless workspace source is stale: state/apps/david.json, state/instance.json. Run "npx formless save".',
+        },
+      ],
+      status: "failed",
+      summary: {
+        fields: {
+          error:
+            'Formless workspace source is stale: state/apps/david.json, state/instance.json. Run "npx formless save".',
+        },
+        title: "Operation failed",
+      },
+    });
     await expect(
       readFile(path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE), "utf8"),
     ).resolves.toBe(manifestBefore);
@@ -304,6 +408,235 @@ describe("Formless workspace operations", () => {
         observedSummary: expect.any(String),
       },
     });
+  });
+
+  it("runs non-push status without push-only or provider mutation dependencies", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+
+    await writeWorkspaceManifest(workspaceRoot);
+
+    const state = await runFormlessWorkspaceOperation(
+      {
+        kind: "status",
+        workspacePath: workspaceRoot,
+      },
+      operationDepsWithAccessGuards(
+        operationDeps(tempDir, {
+          operationIds: ["op_status_minimal_00000001"],
+          timestamps: [
+            "2026-06-02T00:05:30.000Z",
+            "2026-06-02T00:05:31.000Z",
+            "2026-06-02T00:05:32.000Z",
+          ],
+        }),
+        [
+          "accountDiscovery",
+          "credentialSetup",
+          "deploymentAdapter",
+          "healthCheck",
+          "localSecretEnv",
+          "packageRoot",
+          "packageVersion",
+          "randomToken",
+          "setupCapability",
+        ],
+      ),
+      { actor: "browser", capabilities: ["workspace-read"] },
+    );
+
+    expect(state).toMatchObject({
+      operation: "status",
+      status: "succeeded",
+      summary: {
+        fields: {
+          initialized: true,
+          remoteStatus: "skipped",
+        },
+        title: "Workspace status",
+      },
+    });
+  });
+
+  it("continues running credential setup through runner-owned operation state", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+    let continuationCalls = 0;
+    const operationId = "op_credential_continue_00000001";
+
+    await writeWorkspaceManifest(workspaceRoot);
+
+    const state = await runFormlessWorkspaceOperation(
+      {
+        kind: "credentialSetup",
+        provider: "cloudflare",
+        workspacePath: workspaceRoot,
+      },
+      operationDeps(tempDir, {
+        credentialSetup: async (input) => ({
+          continue: async () => {
+            continuationCalls += 1;
+
+            return {
+              result: {
+                summary: {
+                  fields: {
+                    provider: input.provider,
+                    status: "validated",
+                  },
+                  title: "Cloudflare credentials ready",
+                },
+              },
+              status: "succeeded",
+            };
+          },
+          events: [
+            {
+              at: "2026-06-02T00:06:12.000Z",
+              profileLabel: "Default",
+              provider: "cloudflare",
+              status: "waiting",
+              type: "externalAuthorizationUrl",
+              url: "https://dash.cloudflare.com/oauth2/authorize?client_id=formless",
+            },
+          ],
+          result: {
+            summary: {
+              fields: {
+                provider: input.provider,
+                status: "waiting-for-authorization",
+              },
+              title: "Cloudflare authorization required",
+            },
+          },
+          status: "running",
+        }),
+        operationIds: [operationId],
+        timestamps: [
+          "2026-06-02T00:06:10.000Z",
+          "2026-06-02T00:06:11.000Z",
+          "2026-06-02T00:06:12.000Z",
+          "2026-06-02T00:06:13.000Z",
+        ],
+      }),
+      { actor: "browser" },
+    );
+
+    expect(state).toMatchObject({
+      events: [
+        {
+          provider: "cloudflare",
+          status: "waiting",
+          type: "externalAuthorizationUrl",
+          url: "https://dash.cloudflare.com/oauth2/authorize?client_id=formless",
+        },
+      ],
+      id: operationId,
+      input: { provider: "cloudflare" },
+      operation: "credentialSetup",
+      status: "running",
+      summary: {
+        fields: {
+          provider: "cloudflare",
+          status: "waiting-for-authorization",
+        },
+        title: "Cloudflare authorization required",
+      },
+    });
+    expect(state.input).not.toHaveProperty("workspacePath");
+
+    await waitUntil(async () => {
+      const persisted = await readWorkspaceOperationState({ operationId, workspaceRoot });
+
+      return persisted.status === "succeeded";
+    });
+
+    const persisted = await readWorkspaceOperationState({ operationId, workspaceRoot });
+
+    expect(continuationCalls).toBe(1);
+    expect(persisted).toMatchObject({
+      logs: [
+        { message: "credentialSetup started." },
+        { message: "credentialSetup awaiting authorization." },
+        { message: "credentialSetup completed." },
+      ],
+      operation: "credentialSetup",
+      status: "succeeded",
+      summary: {
+        fields: {
+          provider: "cloudflare",
+          status: "validated",
+        },
+        title: "Cloudflare credentials ready",
+      },
+    });
+    expect(JSON.stringify(persisted)).not.toContain(workspaceRoot);
+  });
+
+  it("runs push dry-run without provider mutation dependencies", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+    const requests: CapturedRequest[] = [];
+
+    await writeWorkspaceManifest(workspaceRoot);
+    await writeDeployStorageSnapshot(workspaceRoot);
+    await writeWorkspaceAppStorageSnapshot(workspaceRoot);
+    await mkdir(path.join(workspaceRoot, ".formless"), { recursive: true });
+    await writeFile(
+      path.join(workspaceRoot, ".formless/instance.env"),
+      "FORMLESS_ADMIN_TOKEN=local-token\n",
+    );
+
+    const state = await runFormlessWorkspaceOperation(
+      {
+        dryRun: true,
+        kind: "push",
+        workspacePath: workspaceRoot,
+      },
+      operationDeps(tempDir, {
+        accountDiscovery: {
+          listAccounts: async () => [{ id: "account-123", workersDevSubdomain: "dpeek" }],
+        },
+        fetch: deployApplyFetch(requests),
+        operationIds: ["op_push_dry_run_00000001"],
+        packageVersion: packageJson.version,
+        timestamps: [
+          "2026-06-02T00:06:00.000Z",
+          "2026-06-02T00:06:01.000Z",
+          "2026-06-02T00:06:02.000Z",
+        ],
+      }),
+    );
+
+    expect(state).toMatchObject({
+      operation: "push",
+      result: {
+        summary: {
+          fields: {
+            mode: "dry-run",
+            noop: true,
+            sync: "up-to-date",
+          },
+          title: "Workspace push planned",
+        },
+      },
+      status: "succeeded",
+      summary: {
+        fields: {
+          mode: "dry-run",
+          noop: true,
+          sync: "up-to-date",
+        },
+        title: "Workspace push planned",
+      },
+    });
+    const requestPaths = requests.map((request) => new URL(request.url).pathname);
+
+    expect(requests.every((request) => request.method === "GET")).toBe(true);
+    expect(requestPaths).toContain("/api/formless/control-plane/snapshot");
+    expect(requestPaths).toContain("/api/app-installs/site/david/snapshot");
+    expect(requestPaths).not.toContain("/api/formless/archive/restore");
+    expect(requestPaths).not.toContain("/api/formless/deployments/desired-state");
   });
 
   it("persists display-safe deployment observation and cleanup summaries with secret redaction", async () => {
@@ -414,6 +747,7 @@ function operationDeps(
   cwd: string,
   options: {
     accountDiscovery?: FormlessInstanceAccountDiscoveryAdapter;
+    credentialSetup?: RunFormlessWorkspaceOperationDependencies["credentialSetup"];
     deploymentAdapter?: {
       deploy: (input: DeployFormlessInstanceInput) => Promise<DeployFormlessInstanceResult>;
     };
@@ -432,56 +766,63 @@ function operationDeps(
   const randomTokens = [...(options.randomTokens ?? [])];
 
   return {
-    accountDiscovery: options.accountDiscovery ?? {
-      listAccounts: async () => [{ id: "account-123", workersDevSubdomain: "dpeek" }],
-    },
+    ...(options.accountDiscovery === undefined
+      ? {}
+      : { accountDiscovery: options.accountDiscovery }),
     createOperationId: () => operationIds.shift() ?? "op_test_00000000",
+    ...(options.credentialSetup === undefined ? {} : { credentialSetup: options.credentialSetup }),
     cwd,
-    deploymentAdapter: options.deploymentAdapter ?? {
-      deploy: async (input: DeployFormlessInstanceInput) => ({
-        resourceEvidence: [],
-        url: input.plan.expectedUrl.url,
-      }),
-    },
+    ...(options.deploymentAdapter === undefined
+      ? {}
+      : { deploymentAdapter: options.deploymentAdapter }),
     ...(options.env === undefined ? {} : { env: options.env }),
     fetch: options.fetch ?? fetch,
-    healthCheck: options.healthCheck ?? {
-      check: async (input: { expectedVersion: string; url: string }) => ({
-        cacheControl: "no-store",
-        metadataUrl: new URL("/api/formless/deploy", `${input.url}/`).toString(),
-        packageVersion: input.expectedVersion,
-        runtimeProtocolVersion: FORMLESS_RUNTIME_PROTOCOL_VERSION,
-        storageMigrationSet: FORMLESS_STORAGE_MIGRATION_SET_ID,
-        url: input.url,
-        version: input.expectedVersion,
-      }),
-    },
-    localSecretEnv: {
-      ensure: async (input: { root: string }) => ({
-        created: false,
-        path: path.join(input.root, "deploy.env"),
-        secrets: { ALCHEMY_PASSWORD: "alchemy-password" },
-      }),
-    },
+    ...(options.healthCheck === undefined ? {} : { healthCheck: options.healthCheck }),
     now: timestampSequence(...(options.timestamps ?? ["2026-06-02T00:00:00.000Z"])),
-    packageRoot: options.packageRoot ?? process.cwd(),
-    packageVersion: options.packageVersion ?? packageJson.version,
-    randomToken: () => randomTokens.shift() ?? "generated-token",
-    setupCapability: {
-      create: async (input: { adminToken: string; deploymentUrl: string; setupToken: string }) => {
-        options.setupInputs?.push(input);
+    ...(options.packageRoot === undefined ? {} : { packageRoot: options.packageRoot }),
+    ...(options.packageVersion === undefined ? {} : { packageVersion: options.packageVersion }),
+    ...(options.randomTokens === undefined
+      ? {}
+      : { randomToken: () => randomTokens.shift() ?? "generated-token" }),
+    ...(options.setupInputs === undefined
+      ? {}
+      : {
+          setupCapability: {
+            create: async (input: {
+              adminToken: string;
+              deploymentUrl: string;
+              setupToken: string;
+            }) => {
+              options.setupInputs?.push(input);
 
-        return {
-          capabilityCreated: true,
-          endpointUrl: new URL(
-            "/api/formless/setup/capability",
-            `${input.deploymentUrl}/`,
-          ).toString(),
-          setupComplete: false,
-        };
-      },
-    },
+              return {
+                capabilityCreated: true,
+                endpointUrl: new URL(
+                  "/api/formless/setup/capability",
+                  `${input.deploymentUrl}/`,
+                ).toString(),
+                setupComplete: false,
+              };
+            },
+          },
+        }),
   } as RunFormlessWorkspaceOperationDependencies;
+}
+
+function operationDepsWithAccessGuards(
+  dependencies: RunFormlessWorkspaceOperationDependencies,
+  guardedKeys: readonly string[],
+): RunFormlessWorkspaceOperationDependencies {
+  for (const key of guardedKeys) {
+    Object.defineProperty(dependencies, key, {
+      configurable: true,
+      get() {
+        throw new Error(`Unexpected dependency access: ${key}`);
+      },
+    });
+  }
+
+  return dependencies;
 }
 
 function timestampSequence(...timestamps: string[]): () => string {
@@ -489,6 +830,20 @@ function timestampSequence(...timestamps: string[]): () => string {
 
   return () =>
     timestamps[index++ % timestamps.length] ?? timestamps.at(-1) ?? new Date(0).toISOString();
+}
+
+async function waitUntil(condition: () => Promise<boolean>, timeoutMs = 1000): Promise<void> {
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt < timeoutMs) {
+    if (await condition()) {
+      return;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+
+  throw new Error("Timed out waiting for condition.");
 }
 
 async function writeWorkspaceManifest(
@@ -523,6 +878,34 @@ async function writeDeployStorageSnapshot(
     manifest,
     packageResolver: bundledAppPackageResolver,
     snapshot: controlPlaneSnapshot(deployControlPlaneRecords(options)),
+    workspaceRoot,
+  });
+}
+
+async function writeWorkspaceAppStorageSnapshot(
+  workspaceRoot: string,
+  installId: string = "david",
+  records: StoredRecord[] = [],
+) {
+  const manifest = parseFormlessInstanceWorkspaceManifestJson(
+    await readFile(path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE), "utf8"),
+  );
+  const facts = packageAppFactsForKey("site", bundledAppPackageResolver);
+
+  if (!facts) {
+    throw new Error("Missing bundled package facts for site.");
+  }
+
+  await writeInstanceWorkspaceAppStorageSnapshot({
+    installId,
+    manifest,
+    schemaProvenance: {
+      kind: "package-app",
+      packageAppKey: "site",
+      packageRevision: facts.packageRevision,
+      sourceSchemaHash: facts.sourceSchemaHash,
+    },
+    snapshot: snapshot(records, `app:${installId}`),
     workspaceRoot,
   });
 }

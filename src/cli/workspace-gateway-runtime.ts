@@ -8,8 +8,6 @@ import {
   WORKSPACE_GATEWAY_ROOT_ENV,
 } from "@dpeek/formless-gateway/sidecar";
 import type {
-  WorkspaceGatewayActor,
-  WorkspaceGatewayCredentialSetupStartInput,
   WorkspaceGatewayOperation,
   WorkspaceGatewayStartInput,
 } from "@dpeek/formless-gateway";
@@ -17,41 +15,34 @@ import { isWorkspaceGatewayOperationKind } from "@dpeek/formless-gateway";
 import {
   DEFAULT_INSTANCE_WORKSPACE_LOCAL_STATE_ROOT,
   WORKSPACE_OPERATION_CAPABILITIES,
-  assertWorkspaceOperationExecutionAllowed,
-  assertWorkspaceOperationExecutionRequirements,
   initialWorkspaceAutoSaveState,
   nextWorkspaceAutoSaveEnqueuedState,
   nextWorkspaceAutoSaveFailedState,
   nextWorkspaceAutoSaveSavedState,
   nextWorkspaceAutoSaveSavingState,
   nextWorkspaceAutoSaveSuppressedState,
-  workspaceOperationInputDisplay,
-  type RunnableWorkspaceOperationInput,
   type WorkspaceAutoSaveEnqueueInput,
   type WorkspaceAutoSaveState,
   type WorkspaceAutoSaveSuppressionReason,
   type WorkspaceAutoSaveWriteSource,
-  type WorkspaceOperationEvent,
+  type WorkspaceOperationInput,
   type WorkspaceOperationRequiredCapability,
-  type WorkspaceOperationResult,
   type WorkspaceOperationState,
-  type WorkspaceOperationStatus,
 } from "@dpeek/formless-workspace";
 import {
-  createWorkspaceOperationState,
   readInstanceWorkspaceAutoSaveState,
   readWorkspaceOperationState,
-  updateWorkspaceOperationState,
   writeInstanceWorkspaceAutoSaveState,
 } from "@dpeek/formless-workspace/node";
 
 import { resolveRuntimeProfileKind } from "../shared/runtime-topology.ts";
 import { validateOwnerSessionCookie } from "../worker/owner-session.ts";
 import { alchemyFormlessInstanceAccountDiscoveryAdapter } from "./instance-onboarding.ts";
-import { setupCloudflareCredentialsWithFormlessOAuth } from "./instance-workspace-credential-setup.ts";
 import {
   runFormlessWorkspaceOperation,
   type RunFormlessWorkspaceOperationDependencies,
+  type WorkspaceCredentialSetupOperationAdapterInput,
+  type WorkspaceCredentialSetupOperationAdapterResult,
 } from "./instance-workspace-operations.ts";
 
 export type WorkspaceGatewayRuntimeEnv = WorkspaceGatewaySidecarEnv & {
@@ -59,19 +50,11 @@ export type WorkspaceGatewayRuntimeEnv = WorkspaceGatewaySidecarEnv & {
   FORMLESS_RUNTIME_PROFILE?: string;
 };
 
-export type WorkspaceGatewayCredentialSetupAdapterInput = {
-  accountId?: string | undefined;
-  profileLabel?: string | undefined;
-  provider: "cloudflare";
-  workspaceRoot: string;
-};
+export type WorkspaceGatewayCredentialSetupAdapterInput =
+  WorkspaceCredentialSetupOperationAdapterInput;
 
-export type WorkspaceGatewayCredentialSetupAdapterResult = {
-  continue?: () => Promise<WorkspaceGatewayCredentialSetupAdapterResult>;
-  events?: readonly Omit<WorkspaceOperationEvent, "id">[];
-  result?: WorkspaceOperationResult;
-  status?: WorkspaceOperationStatus;
-};
+export type WorkspaceGatewayCredentialSetupAdapterResult =
+  WorkspaceCredentialSetupOperationAdapterResult;
 
 export type WorkspaceGatewayRuntimeDependencies = RunFormlessWorkspaceOperationDependencies & {
   autoSaveDebounceMs?: number;
@@ -162,21 +145,14 @@ export function createWorkspaceGatewayOperationHandlers(
       );
 
       return requireWorkspaceGatewayOperation(
-        operationInput.kind === "credentialSetup"
-          ? await runCredentialSetupGatewayOperation(
-              operationInput,
-              dependencies,
-              workspaceRoot,
-              authorization.actor,
-            )
-          : await runFormlessWorkspaceOperation(
-              withWorkspaceRoot(operationInput, workspaceRoot),
-              operationDependencies(dependencies, workspaceRoot),
-              {
-                actor: authorization.actor,
-                capabilities: workspaceGatewayRuntimeCapabilities(dependencies),
-              },
-            ),
+        await runFormlessWorkspaceOperation(
+          withWorkspaceRoot(operationInput, workspaceRoot),
+          operationDependencies(dependencies, workspaceRoot),
+          {
+            actor: authorization.actor,
+            capabilities: workspaceGatewayRuntimeCapabilities(dependencies),
+          },
+        ),
       );
     },
     status: async ({ authorization, workspaceRoot }) => {
@@ -495,165 +471,6 @@ function workspaceGatewayRouteAvailable(
   return profileKind === "instance" || profileKind === "dev";
 }
 
-async function runCredentialSetupGatewayOperation(
-  input: WorkspaceGatewayCredentialSetupStartInput,
-  dependencies: WorkspaceGatewayRuntimeDependencies,
-  workspaceRoot: string,
-  actor: WorkspaceGatewayActor,
-) {
-  assertWorkspaceOperationExecutionAllowed({
-    actor,
-    capabilities: workspaceGatewayRuntimeCapabilities(dependencies),
-    kind: input.kind,
-  });
-  assertWorkspaceOperationExecutionRequirements(input);
-
-  let operation = await createWorkspaceOperationState({
-    actor,
-    id: dependencies.createOperationId?.(),
-    input: workspaceOperationInputDisplay(input),
-    now: dependencies.now,
-    operation: "credentialSetup",
-    workspaceRoot,
-  });
-
-  operation = await updateWorkspaceOperationState(operation.id, {
-    logs: [{ at: dependencies.now(), level: "info", message: "credentialSetup started." }],
-    status: "running",
-    workspaceRoot,
-  });
-
-  try {
-    const result = await (
-      dependencies.credentialSetup ??
-      ((credentialInput) => defaultCloudflareCredentialSetupAdapter(credentialInput, dependencies))
-    )({
-      accountId: input.accountId ?? undefined,
-      profileLabel: input.profileLabel ?? undefined,
-      provider: input.provider,
-      workspaceRoot,
-    });
-    const summary = result.result?.summary ?? {
-      fields: { provider: input.provider },
-      title: "Credential setup started",
-    };
-    const status = result.status ?? "succeeded";
-    const completed = await updateWorkspaceOperationState(operation.id, {
-      events: result.events,
-      logs: [
-        {
-          at: dependencies.now(),
-          level: "info",
-          message:
-            status === "running"
-              ? "credentialSetup awaiting authorization."
-              : "credentialSetup completed.",
-        },
-      ],
-      result: result.result ?? { summary },
-      status,
-      summary,
-      workspaceRoot,
-    });
-
-    if (status === "running" && result.continue) {
-      void completeCredentialSetupGatewayOperation({
-        continueCredentialSetup: result.continue,
-        dependencies,
-        operationId: operation.id,
-        workspaceRoot,
-      });
-    }
-
-    return completed;
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-
-    return await updateWorkspaceOperationState(operation.id, {
-      errors: [{ message }],
-      logs: [{ at: dependencies.now(), level: "error", message }],
-      status: "failed",
-      summary: {
-        fields: { error: message },
-        title: "Operation failed",
-      },
-      workspaceRoot,
-    });
-  }
-}
-
-async function completeCredentialSetupGatewayOperation(input: {
-  continueCredentialSetup: () => Promise<WorkspaceGatewayCredentialSetupAdapterResult>;
-  dependencies: Pick<WorkspaceGatewayRuntimeDependencies, "now">;
-  operationId: string;
-  workspaceRoot: string;
-}) {
-  try {
-    const result = await input.continueCredentialSetup();
-    const summary = result.result?.summary ?? {
-      fields: {},
-      title: "Credential setup completed",
-    };
-    const status = result.status ?? "succeeded";
-    const completed = await updateWorkspaceOperationState(input.operationId, {
-      events: result.events,
-      logs: [
-        {
-          at: input.dependencies.now(),
-          level: "info",
-          message:
-            status === "running"
-              ? "credentialSetup awaiting authorization."
-              : "credentialSetup completed.",
-        },
-      ],
-      result: result.result ?? { summary },
-      status,
-      summary,
-      workspaceRoot: input.workspaceRoot,
-    });
-
-    if (status === "running" && result.continue) {
-      void completeCredentialSetupGatewayOperation({
-        continueCredentialSetup: result.continue,
-        dependencies: input.dependencies,
-        operationId: input.operationId,
-        workspaceRoot: input.workspaceRoot,
-      });
-    }
-
-    return completed;
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-
-    return updateWorkspaceOperationState(input.operationId, {
-      errors: [{ message }],
-      logs: [{ at: input.dependencies.now(), level: "error", message }],
-      status: "failed",
-      summary: {
-        fields: { error: message },
-        title: "Operation failed",
-      },
-      workspaceRoot: input.workspaceRoot,
-    });
-  }
-}
-
-async function defaultCloudflareCredentialSetupAdapter(
-  input: WorkspaceGatewayCredentialSetupAdapterInput,
-  dependencies: Pick<WorkspaceGatewayRuntimeDependencies, "accountDiscovery" | "env" | "now">,
-): Promise<WorkspaceGatewayCredentialSetupAdapterResult> {
-  return setupCloudflareCredentialsWithFormlessOAuth(
-    {
-      accountId: input.accountId,
-      env: dependencies.env,
-      profileLabel: input.profileLabel,
-      workspaceRoot: input.workspaceRoot,
-    },
-    { now: dependencies.now },
-  );
-}
-
 function operationDependencies(
   dependencies: WorkspaceGatewayRuntimeDependencies,
   workspaceRoot: string,
@@ -663,6 +480,9 @@ function operationDependencies(
       ? {}
       : { accountDiscovery: dependencies.accountDiscovery }),
     createOperationId: dependencies.createOperationId,
+    ...(dependencies.credentialSetup === undefined
+      ? {}
+      : { credentialSetup: dependencies.credentialSetup }),
     cwd: workspaceRoot,
     ...(dependencies.deploymentAdapter === undefined
       ? {}
@@ -686,13 +506,13 @@ function operationDependencies(
 }
 
 function withWorkspaceRoot(
-  input: Exclude<WorkspaceGatewayStartInput, WorkspaceGatewayCredentialSetupStartInput>,
+  input: WorkspaceGatewayStartInput,
   workspaceRoot: string,
-): RunnableWorkspaceOperationInput {
+): WorkspaceOperationInput {
   return {
     ...input,
     workspacePath: workspaceRoot,
-  } as RunnableWorkspaceOperationInput;
+  } as WorkspaceOperationInput;
 }
 
 function workspaceGatewayRuntimeCapabilities(

@@ -458,6 +458,14 @@ export type PushFormlessInstanceWorkspaceDependencies = {
   setupCapability: FormlessInstanceOwnerSetupCapabilityAdapter;
 };
 
+export type PushFormlessInstanceWorkspaceDryRunDependencies =
+  PlanDeployLocalFormlessWorkspaceDependencies &
+    Pick<PushFormlessInstanceWorkspaceDependencies, "cwd" | "env" | "fetch" | "now">;
+
+export type PushFormlessInstanceWorkspaceExecutionDependencies =
+  | PushFormlessInstanceWorkspaceDryRunDependencies
+  | PushFormlessInstanceWorkspaceDependencies;
+
 export type PushFormlessInstanceWorkspaceSource = {
   archivePath: string;
   appCount: number;
@@ -1499,7 +1507,7 @@ export async function saveLocalFormlessWorkspace(
 
 export async function pushFormlessInstanceWorkspace(
   input: PushFormlessInstanceWorkspaceInput,
-  dependencies: PushFormlessInstanceWorkspaceDependencies,
+  dependencies: PushFormlessInstanceWorkspaceExecutionDependencies,
 ): Promise<PushFormlessInstanceWorkspaceResult> {
   const planned = await planDeployLocalFormlessWorkspace(
     {
@@ -1514,12 +1522,14 @@ export async function pushFormlessInstanceWorkspace(
   const selectedTarget = input.targetOverride ?? planned.selectedTarget;
   const tempRoot = await createWorkspaceTempRoot(workspaceRoot, "push");
   const composedArchiveRoot = path.join(tempRoot, "archive");
+  const applyDependencies =
+    input.apply === true ? requireWorkspacePushApplyDependencies(dependencies) : undefined;
 
   try {
     const exportedAt = dependencies.now();
     const providerApply =
       input.apply && planned.existingSelectedTarget === undefined
-        ? await applyWorkspacePushProviderReconciliation(planned, dependencies)
+        ? await applyWorkspacePushProviderReconciliation(planned, applyDependencies!)
         : undefined;
     const adminToken =
       providerApply?.adminToken ?? (await readWorkspaceAdminToken(workspaceRoot, dependencies));
@@ -1720,7 +1730,7 @@ export async function pushFormlessInstanceWorkspace(
 
     const provider =
       input.apply && providerApply === undefined
-        ? await applyWorkspacePushProviderReconciliation(planned, dependencies)
+        ? await applyWorkspacePushProviderReconciliation(planned, applyDependencies!)
         : providerApply;
     const firstApplyDryRun =
       hasDataChanges && input.apply && dryRun === undefined && !forcedRecoveryActive
@@ -1801,6 +1811,57 @@ export async function pushFormlessInstanceWorkspace(
   } finally {
     await rm(tempRoot, { force: true, recursive: true });
   }
+}
+
+function requireWorkspacePushApplyDependencies(
+  dependencies: PushFormlessInstanceWorkspaceDryRunDependencies,
+): PushFormlessInstanceWorkspaceDependencies {
+  const {
+    deploymentAdapter,
+    healthCheck,
+    localSecretEnv,
+    packageRoot,
+    randomToken,
+    setupCapability,
+  } = dependencies as Partial<PushFormlessInstanceWorkspaceDependencies>;
+  const missing: string[] = [];
+
+  if (deploymentAdapter === undefined) missing.push("deploymentAdapter");
+  if (healthCheck === undefined) missing.push("healthCheck");
+  if (localSecretEnv === undefined) missing.push("localSecretEnv");
+  if (packageRoot === undefined) missing.push("packageRoot");
+  if (randomToken === undefined) missing.push("randomToken");
+  if (setupCapability === undefined) missing.push("setupCapability");
+
+  if (missing.length > 0) {
+    throw new Error(`Workspace push apply requires operation dependencies: ${missing.join(", ")}.`);
+  }
+
+  if (
+    deploymentAdapter === undefined ||
+    healthCheck === undefined ||
+    localSecretEnv === undefined ||
+    packageRoot === undefined ||
+    randomToken === undefined ||
+    setupCapability === undefined
+  ) {
+    throw new Error("Workspace push apply dependencies are incomplete.");
+  }
+
+  return {
+    accountDiscovery: dependencies.accountDiscovery,
+    cwd: dependencies.cwd,
+    deploymentAdapter,
+    ...(dependencies.env === undefined ? {} : { env: dependencies.env }),
+    fetch: dependencies.fetch,
+    healthCheck,
+    localSecretEnv,
+    now: dependencies.now,
+    packageRoot,
+    packageVersion: dependencies.packageVersion,
+    randomToken,
+    setupCapability,
+  };
 }
 
 type WorkspacePushProviderReconciliationResult = {

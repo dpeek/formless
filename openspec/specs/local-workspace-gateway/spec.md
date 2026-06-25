@@ -42,6 +42,21 @@ runtime profiles through a filesystem-capable local gateway sidecar process.
   workspace source push operation unless a later workspace operation definition
   explicitly promotes a deployment-facing operation
 
+#### Scenario: Gateway operation execution adapter
+
+- **WHEN** a gateway sidecar starts workspace status, save, check, pull, push,
+  or credential setup
+- **THEN** Gateway transport and sidecar adapters authorize, parse, and forward
+  operation intent
+- **AND** CLI runtime execution adapters use the workspace operation runner for
+  operation state lifecycle, display-safe input, errors, logs, results, and
+  redaction
+- **AND** credential setup may surface external authorization events and
+  continue asynchronously while using the same display-safe operation state
+  contract
+- **AND** Gateway adapters do not duplicate operation lifecycle transitions,
+  operation body dispatch, or provider-specific step vocabulary
+
 ### Requirement: Local Workspace Auto-Save
 
 The system SHALL automatically persist committed local runtime writes to
