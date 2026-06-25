@@ -234,6 +234,27 @@ invocation envelope before validating input or committing effects.
 - AND source records identify public writes by canonical operation key rather
   than display label
 
+#### Scenario: Browser client request envelope
+
+- GIVEN browser code submits a public operation from a public form
+- WHEN the browser client helper builds the request body
+- THEN the body contains submitted public input values, a
+  `proof.turnstileToken` value, optional `source.siteBlockId`, and optional
+  idempotency key using the public operation request envelope
+- AND product-specific forms remain responsible for mapping their own UI fields
+  into the submitted public input values
+
+#### Scenario: Browser client response guards
+
+- GIVEN browser code receives a public operation JSON response
+- WHEN the browser client helper validates the response
+- THEN it accepts committed or replayed public operation responses with command
+  or create output shapes
+- AND it rejects malformed responses before product-specific form UI treats the
+  submission as successful
+- AND public-safe `{ error: string }` response bodies are extracted through one
+  browser-safe helper
+
 #### Scenario: Rejected public attempt is auditable
 
 - GIVEN a target-scoped public operation route resolves a declared operation

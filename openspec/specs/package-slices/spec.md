@@ -574,7 +574,8 @@ owner session storage, runtime topology, provider execution, or app records.
 ### Requirement: Public Operations Package Slice
 
 The system SHALL provide a Public Operations package slice under
-`lib/public-operations/` for reusable public operation route contracts.
+`lib/public-operations/` for reusable public operation route contracts and
+browser-safe public operation client protocol helpers.
 
 #### Scenario: Public Operations package scaffold
 
@@ -591,7 +592,9 @@ The system SHALL provide a Public Operations package slice under
 #### Scenario: Public Operations package exports
 
 - GIVEN Site projection, Worker routing, browser clients, or tests need public
-  operation route grammar
+  operation route grammar, browser request envelope helpers, browser response
+  guards, browser error extraction, browser idempotency key helpers, or
+  Turnstile response token extraction
 - WHEN they import public operation package behavior
 - THEN they import from `@dpeek/formless-public-operations`
 - AND they do not deep-import public operation package internals
@@ -599,9 +602,9 @@ The system SHALL provide a Public Operations package slice under
 ### Requirement: Public Operations Package Non-Ownership
 
 The Public Operations package SHALL own reusable public operation route
-contracts without owning target resolution, schema operation declarations, app
-storage, challenge verification, notification delivery, Site records, or
-product-specific form UI.
+contracts and browser-safe public operation client protocol helpers without
+owning target resolution, schema operation declarations, app storage, challenge
+verification, notification delivery, Site records, or product-specific form UI.
 
 #### Scenario: Package owns public operation route contracts
 
@@ -615,6 +618,18 @@ product-specific form UI.
   operation execution, operation audit storage, notification delivery, and
   product-specific subscribe, contact, or generic form UI remain outside the
   package contract
+
+#### Scenario: Package owns browser-safe client helpers
+
+- GIVEN public Site browser forms submit to public operation routes
+- WHEN browser code builds the submit envelope, posts JSON, extracts a
+  public-safe error, validates a public operation response, creates a form
+  idempotency key, or reads the Turnstile response token from `FormData`
+- THEN shared protocol behavior comes from `lib/public-operations`
+- AND product-specific form input mapping, schema-field form coercion,
+  rendered controls, success/error UI, challenge widget rendering, route
+  projection, challenge verification, operation execution, and notification
+  scheduling remain outside the package contract
 
 ### Requirement: Schema Package Slice
 

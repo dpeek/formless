@@ -403,6 +403,12 @@ The system SHALL render subscribe form blocks as public forms on preview, instal
 - WHEN the public renderer renders the block
 - THEN the page renders an email input, submit control, and Turnstile widget using the public site key
 - AND form submission posts to the target public operation route with the email input, source block id, idempotency key, and Turnstile token
+- AND browser request envelope construction, JSON submission, response
+  validation, public-safe error extraction, idempotency key generation, and
+  Turnstile response token extraction use shared public operation browser
+  client helpers
+- AND subscribe-specific email input mapping and rendered form UI remain owned
+  by the Site app renderer
 
 #### Scenario: Render successful subscribe outcome
 
@@ -426,6 +432,12 @@ installed, and mapped public Site routes.
 - AND form submission posts to the target public operation route with the
   declared contact message input, source block id, idempotency key, and
   Turnstile token
+- AND browser request envelope construction, JSON submission, response
+  validation, public-safe error extraction, idempotency key generation, and
+  Turnstile response token extraction use shared public operation browser
+  client helpers
+- AND contact-specific input mapping and rendered form UI remain owned by the
+  Site app renderer
 
 #### Scenario: Render successful contact outcome
 
@@ -452,8 +464,14 @@ forms on preview, installed, and mapped public Site routes.
 - AND form submission posts to the target public operation route with the
   declared operation input values, source block id, idempotency key, and
   Turnstile token
+- AND browser request envelope construction, JSON submission, response
+  validation, public-safe error extraction, idempotency key generation, and
+  Turnstile response token extraction use shared public operation browser
+  client helpers
 - AND browser coercion preserves booleans as booleans, numbers as finite
   numbers, dates as `YYYY-MM-DD` strings, and enum values as declared strings
+- AND schema-driven form input coercion and rendered controls remain owned by
+  the Site app renderer
 
 #### Scenario: Render successful public operation form outcome
 

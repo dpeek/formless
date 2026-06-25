@@ -1,4 +1,5 @@
 export const PUBLIC_OPERATION_ROUTE_SUFFIX_PREFIX = "/public/operations" as const;
+export const TURNSTILE_RESPONSE_FIELD_NAME = "cf-turnstile-response" as const;
 
 export type PublicOperationRouteParts = {
   entityKey: string;
@@ -13,6 +14,92 @@ export type PublicOperationTargetRouteInput = PublicOperationRouteParts & {
 };
 
 export type PublicOperationRouteErrorCode = "empty-segment" | "invalid-escape" | "invalid-shape";
+
+export type PublicOperationInputValue = string | boolean | number;
+export type PublicOperationInputValues = Record<string, PublicOperationInputValue>;
+
+export type PublicOperationProofInput = {
+  turnstileToken: string;
+};
+
+export type PublicOperationRequestSource = {
+  siteBlockId: string;
+};
+
+export type PublicOperationRequestEnvelope = {
+  input: PublicOperationInputValues;
+  proof: PublicOperationProofInput;
+  source?: PublicOperationRequestSource;
+  idempotencyKey?: string;
+};
+
+export type PublicOperationRequestBodyInput = {
+  idempotencyKey?: string;
+  input: PublicOperationInputValues;
+  siteBlockId?: string;
+  turnstileToken: string;
+};
+
+export type PublicOperationResponseStatus = "committed" | "replayed";
+
+export type PublicOperationResponseOperation = {
+  canonicalKey: string;
+  entityName: string;
+  operationName: string;
+  kind: "command" | "create";
+};
+
+export type PublicOperationCommandOutput = {
+  affectedChangeIds: string[];
+  cursor: number;
+  recordPlan?: unknown;
+  type: "command";
+};
+
+export type PublicOperationCreateOutput = {
+  affectedChangeIds: string[];
+  changes?: unknown[];
+  cursor: number;
+  record: unknown;
+  type: "create";
+};
+
+export type PublicOperationCommandResponse = {
+  invocationId: string;
+  operation: PublicOperationResponseOperation & {
+    kind: "command";
+  };
+  output: PublicOperationCommandOutput;
+  status: PublicOperationResponseStatus;
+};
+
+export type PublicOperationCreateResponse = {
+  invocationId: string;
+  operation: PublicOperationResponseOperation & {
+    kind: "create";
+  };
+  output: PublicOperationCreateOutput;
+  status: PublicOperationResponseStatus;
+};
+
+export type PublicOperationResponse =
+  | PublicOperationCommandResponse
+  | PublicOperationCreateResponse;
+
+export type SubmitPublicOperationJsonInput<ResponseBody extends PublicOperationResponse> = {
+  body: PublicOperationRequestEnvelope;
+  fetcher?: typeof fetch;
+  invalidResponseMessage?: string;
+  responseGuard: (value: unknown) => value is ResponseBody;
+  route: string;
+  submitErrorMessage?: string;
+};
+
+export type PublicOperationIdempotencyKeyInput = {
+  purpose: string;
+  randomId?: string;
+  siteBlockId: string;
+};
 
 export class PublicOperationRouteError extends Error {
   readonly code: PublicOperationRouteErrorCode;
@@ -57,6 +144,106 @@ export function buildPublicOperationTargetRoute(
   return `${input.targetApiRoutePrefix}${buildPublicOperationRouteSuffix(input)}`;
 }
 
+export function buildPublicOperationRequestBody(
+  input: PublicOperationRequestBodyInput,
+): PublicOperationRequestEnvelope {
+  return {
+    input: input.input,
+    proof: {
+      turnstileToken: input.turnstileToken,
+    },
+    ...(input.siteBlockId === undefined
+      ? {}
+      : {
+          source: {
+            siteBlockId: input.siteBlockId,
+          },
+        }),
+    ...(input.idempotencyKey === undefined
+      ? {}
+      : {
+          idempotencyKey: input.idempotencyKey,
+        }),
+  };
+}
+
+export async function submitPublicOperationJson<ResponseBody extends PublicOperationResponse>(
+  input: SubmitPublicOperationJsonInput<ResponseBody>,
+): Promise<ResponseBody> {
+  const fetcher = input.fetcher ?? fetch;
+  const response = await fetcher(input.route, {
+    body: JSON.stringify(input.body),
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    method: "POST",
+  });
+  const body = (await response.json()) as unknown;
+
+  if (!response.ok) {
+    throw new Error(
+      publicOperationErrorMessage(body) ??
+        input.submitErrorMessage ??
+        "Public operation request failed.",
+    );
+  }
+
+  if (!input.responseGuard(body)) {
+    throw new Error(
+      input.invalidResponseMessage ?? "Public operation request returned an invalid response.",
+    );
+  }
+
+  return body;
+}
+
+export function publicOperationErrorMessage(value: unknown): string | undefined {
+  return isRecord(value) && typeof value.error === "string" ? value.error : undefined;
+}
+
+export function isPublicOperationResponse(value: unknown): value is PublicOperationResponse {
+  return isPublicOperationCommandResponse(value) || isPublicOperationCreateResponse(value);
+}
+
+export function isPublicOperationCommandResponse(
+  value: unknown,
+): value is PublicOperationCommandResponse {
+  return (
+    hasPublicOperationResponseBasics(value, "command") &&
+    hasPublicOperationOutputBasics(value.output, "command")
+  );
+}
+
+export function isPublicOperationCreateResponse(
+  value: unknown,
+): value is PublicOperationCreateResponse {
+  return (
+    hasPublicOperationResponseBasics(value, "create") &&
+    hasPublicOperationOutputBasics(value.output, "create") &&
+    "record" in value.output
+  );
+}
+
+export function createPublicOperationIdempotencyKey(
+  input: PublicOperationIdempotencyKeyInput,
+): string {
+  const randomId =
+    input.randomId ?? globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2);
+
+  return `${input.purpose}:${input.siteBlockId}:${randomId}`;
+}
+
+export function turnstileResponseTokenFromFormData(formData: FormData): string | undefined {
+  for (const value of formData.getAll(TURNSTILE_RESPONSE_FIELD_NAME)) {
+    if (typeof value === "string" && value.trim() !== "") {
+      return value;
+    }
+  }
+
+  return undefined;
+}
+
 export function encodePublicOperationRouteSegment(segment: string): string {
   assertNonEmptyRouteSegment(segment);
 
@@ -94,4 +281,47 @@ function invalidShape(): PublicOperationRouteError {
     "invalid-shape",
     "Public operation route suffix must use /public/operations/:entityKey/:operationKey.",
   );
+}
+
+function hasPublicOperationResponseBasics(
+  value: unknown,
+  kind: "command" | "create",
+): value is {
+  invocationId: string;
+  operation: PublicOperationResponseOperation;
+  output: Record<string, unknown>;
+  status: PublicOperationResponseStatus;
+} {
+  return (
+    isRecord(value) &&
+    typeof value.invocationId === "string" &&
+    (value.status === "committed" || value.status === "replayed") &&
+    isRecord(value.operation) &&
+    typeof value.operation.entityName === "string" &&
+    typeof value.operation.operationName === "string" &&
+    typeof value.operation.canonicalKey === "string" &&
+    value.operation.kind === kind &&
+    isRecord(value.output)
+  );
+}
+
+function hasPublicOperationOutputBasics(
+  output: Record<string, unknown>,
+  type: "command" | "create",
+): output is Record<string, unknown> & {
+  affectedChangeIds: string[];
+  cursor: number;
+  type: "command" | "create";
+} {
+  return (
+    output.type === type &&
+    typeof output.cursor === "number" &&
+    Array.isArray(output.affectedChangeIds) &&
+    output.affectedChangeIds.every((changeId) => typeof changeId === "string") &&
+    (!("changes" in output) || Array.isArray(output.changes))
+  );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

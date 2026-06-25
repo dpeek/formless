@@ -10,7 +10,9 @@ Read this when editing `lib/public-operations/*`.
 - Public operation path segment encoding and decoding.
 - Public operation suffix parsing and validation.
 - Target public operation route construction from a runtime-owned API route prefix.
-- Package-local deterministic route contract tests.
+- Browser-safe public operation request envelope, JSON submit, response guard,
+  public-safe error extraction, idempotency key, and Turnstile token helpers.
+- Package-local deterministic route and browser protocol contract tests.
 
 ## Does Not Own
 
@@ -25,13 +27,14 @@ Read this when editing `lib/public-operations/*`.
 - `package.json`: package metadata and root public export for
   `@dpeek/formless-public-operations`.
 - `tsconfig.json`: package-local TypeScript project extending the repo config.
-- `src/index.ts`: runtime-neutral package root entrypoint and pure route helpers.
+- `src/index.ts`: runtime-neutral package root entrypoint, pure route helpers,
+  and browser-safe public operation protocol helpers.
 - `src/*.test.ts`: package-local contract coverage.
 
 ## Read Path
 
 1. Read this file.
-2. Read `src/index.ts` when changing route helper behavior.
+2. Read `src/index.ts` when changing route or browser protocol helper behavior.
 3. Read matching package-local tests when changing behavior.
 
 ## Rules

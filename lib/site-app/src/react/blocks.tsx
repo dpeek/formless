@@ -29,6 +29,7 @@ import {
   createPublicOperationFormIdempotencyKey,
   publicOperationFormInputValuesFromFormData,
   submitPublicOperationForm,
+  turnstileResponseTokenFromFormData as publicOperationFormTurnstileResponseTokenFromFormData,
 } from "./public-operation-form.ts";
 import { TurnstileChallenge } from "./turnstile.tsx";
 import type {
@@ -676,7 +677,7 @@ function PublicOperationFormBlock({ block }: { block: SiteBlockNode }) {
     event.preventDefault();
 
     const formData = new FormData(event.currentTarget);
-    const turnstileToken = turnstileResponseTokenFromFormData(formData);
+    const turnstileToken = publicOperationFormTurnstileResponseTokenFromFormData(formData);
     const inputResult = publicOperationFormInputValuesFromFormData(publicOperationFields, formData);
 
     if (!inputResult.ok) {
