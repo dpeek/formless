@@ -27,7 +27,9 @@ import {
   emailStylePublicIntakeOperationKey,
   schemaWithEmailStylePublicIntake,
 } from "../test/public-intake-schema.ts";
+import { BadRequestError } from "./errors.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
+import { selectPublicOperationRoute } from "./public-operations.ts";
 import type { StoredOperationInvocation } from "./storage.ts";
 
 type Harness = Awaited<ReturnType<typeof createWorkerHarness>>;
@@ -102,6 +104,86 @@ afterAll(async () => {
 });
 
 describe("public operation runtime", () => {
+  it("selects valid public operation route suffixes", () => {
+    expect(
+      selectPublicOperationRoute({
+        method: "POST",
+        path: "/public/operations/contact-message/submit",
+      }),
+    ).toEqual({
+      entityName: "contact-message",
+      operationName: "submit",
+      path: "/public/operations/contact-message/submit",
+    });
+
+    expect(
+      selectPublicOperationRoute({
+        method: "POST",
+        path: "/public/operations/contact%2Fmessage/submit%20request",
+      }),
+    ).toEqual({
+      entityName: "contact/message",
+      operationName: "submit request",
+      path: "/public/operations/contact%2Fmessage/submit%20request",
+    });
+  });
+
+  it("ignores non-public-operation routes", () => {
+    expect(
+      selectPublicOperationRoute({
+        method: "GET",
+        path: "/public/operations/contact-message/submit",
+      }),
+    ).toBeUndefined();
+    expect(
+      selectPublicOperationRoute({
+        method: "POST",
+        path: "/public/operations",
+      }),
+    ).toBeUndefined();
+  });
+
+  it("rejects invalid public operation route suffix shape", () => {
+    expectBadPublicOperationRoute(
+      "/public/operations/contact-message",
+      "Public operation route must use /public/operations/:entity/:operation.",
+    );
+    expectBadPublicOperationRoute(
+      "/public/operations/contact-message/submit/extra",
+      "Public operation route must use /public/operations/:entity/:operation.",
+    );
+    expectBadPublicOperationRoute(
+      "/public/operations//submit",
+      "Public operation route must use /public/operations/:entity/:operation.",
+    );
+    expectBadPublicOperationRoute(
+      "/public/operations/contact-message/",
+      "Public operation route must use /public/operations/:entity/:operation.",
+    );
+  });
+
+  it("rejects invalid public operation path encoding", () => {
+    expectBadPublicOperationRoute(
+      "/public/operations/contact-message/%",
+      "Public operation route segments must be valid URL path text.",
+    );
+    expectBadPublicOperationRoute(
+      "/public/operations/%E0%A4%A/submit",
+      "Public operation route segments must be valid URL path text.",
+    );
+  });
+
+  it("rejects empty decoded public operation entity and operation segments", () => {
+    expectBadPublicOperationRoute(
+      "/public/operations/%20/submit",
+      "Public operation entity and operation must be non-empty.",
+    );
+    expectBadPublicOperationRoute(
+      "/public/operations/contact-message/%20",
+      "Public operation entity and operation must be non-empty.",
+    );
+  });
+
   it("executes schema-key public subscribe operations without opening generic writes", async () => {
     const before = await getJson<BootstrapResponse>("/api/site/bootstrap");
     const retiredRecordWriteRoute = await harness.fetch("/api/site/mutations", {
@@ -1755,6 +1837,18 @@ describe("public operation runtime", () => {
     }
   });
 });
+
+function expectBadPublicOperationRoute(path: string, message: string): void {
+  try {
+    selectPublicOperationRoute({ method: "POST", path });
+  } catch (error) {
+    expect(error).toBeInstanceOf(BadRequestError);
+    expect((error as Error).message).toBe(message);
+    return;
+  }
+
+  throw new Error(`Expected bad public operation route for ${path}.`);
+}
 
 async function createPublicOperationWorkerHarness(input: {
   bindings: Record<string, string>;

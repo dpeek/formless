@@ -21,6 +21,7 @@ import {
   type EntityOperationSchema,
 } from "@dpeek/formless-schema";
 import { coreImageMediaDeliveryFactsForAssetId } from "@dpeek/formless-media";
+import { buildPublicOperationTargetRoute } from "@dpeek/formless-public-operations";
 import {
   resolveSiteRoute,
   routeInfoForResolution,
@@ -478,9 +479,11 @@ function projectedPublicOperationFields(
     entityName: operation.entityName,
     operationName,
     canonicalKey: operation.canonicalKey,
-    route: `${context.publicOperationApiRoutePrefix}/public/operations/${encodeURIComponent(
-      operation.entityName,
-    )}/${encodeURIComponent(operationName)}`,
+    route: buildPublicOperationTargetRoute({
+      targetApiRoutePrefix: context.publicOperationApiRoutePrefix,
+      entityKey: operation.entityName,
+      operationKey: operationName,
+    }),
     challenge: {
       kind: "turnstile",
       siteKey: context.turnstileSiteKey,
@@ -547,9 +550,11 @@ function projectedGenericPublicOperationFields(
     operationName: operation.operationName,
     canonicalKey: operation.canonicalKey,
     target: target.route,
-    route: `${target.route.apiRoutePrefix}/public/operations/${encodeURIComponent(
-      operation.entityName,
-    )}/${encodeURIComponent(operation.operationName)}`,
+    route: buildPublicOperationTargetRoute({
+      targetApiRoutePrefix: target.route.apiRoutePrefix,
+      entityKey: operation.entityName,
+      operationKey: operation.operationName,
+    }),
     challenge: {
       kind: "turnstile",
       siteKey: context.turnstileSiteKey,

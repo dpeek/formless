@@ -1,5 +1,9 @@
 import type { AppStorageIdentity } from "../shared/app-storage-identity.ts";
 import type { RecordValues } from "@dpeek/formless-storage";
+import {
+  PublicOperationRouteError,
+  parsePublicOperationRouteSuffix,
+} from "@dpeek/formless-public-operations";
 import type {
   PublicOperationChallengeVerification,
   PublicOperationProof,
@@ -117,33 +121,34 @@ export function selectPublicOperationRoute(input: {
     return undefined;
   }
 
-  const segments = input.path.slice(publicOperationRoutePrefix.length).split("/");
-
-  if (segments.length !== 2 || !segments[0] || !segments[1]) {
-    throw new BadRequestError(
-      "Public operation route must use /public/operations/:entity/:operation.",
-    );
-  }
-
-  let entityName: string;
-  let operationName: string;
-
+  let routeParts: ReturnType<typeof parsePublicOperationRouteSuffix>;
   try {
-    entityName = decodeURIComponent(segments[0]);
-    operationName = decodeURIComponent(segments[1]);
-  } catch {
-    throw new BadRequestError("Public operation route segments must be valid URL path text.");
-  }
-
-  if (entityName.trim() === "" || operationName.trim() === "") {
-    throw new BadRequestError("Public operation entity and operation must be non-empty.");
+    routeParts = parsePublicOperationRouteSuffix(input.path);
+  } catch (error) {
+    throw publicOperationRouteBadRequest(error);
   }
 
   return {
-    entityName,
-    operationName,
+    entityName: routeParts.entityKey,
+    operationName: routeParts.operationKey,
     path: input.path,
   };
+}
+
+function publicOperationRouteBadRequest(error: unknown): BadRequestError {
+  if (error instanceof PublicOperationRouteError) {
+    if (error.code === "invalid-escape") {
+      return new BadRequestError("Public operation route segments must be valid URL path text.");
+    }
+
+    if (error.code === "empty-segment") {
+      return new BadRequestError("Public operation entity and operation must be non-empty.");
+    }
+  }
+
+  return new BadRequestError(
+    "Public operation route must use /public/operations/:entity/:operation.",
+  );
 }
 
 export async function executePublicOperationRequest(

@@ -166,6 +166,9 @@ The system SHALL project subscribe form blocks into public Site trees without ex
 - THEN the projected block includes the operation key and target public operation route
 - AND the referenced operation is a public-eligible create, record-plan, or
   subscribe operation handler
+- AND the target public operation route is built through the shared public
+  operation route contract from the runtime-owned target API route prefix,
+  entity key, and operation key
 - AND the projected block does not include Turnstile secrets or subscriber data
 
 #### Scenario: Warn for missing public operation
@@ -188,6 +191,9 @@ exposing private challenge, email provider, or runtime secrets.
   operation route
 - AND the referenced operation is a public-eligible create, record-plan, or
   operation handler command that stores flat contact message data
+- AND the target public operation route is built through the shared public
+  operation route contract from the runtime-owned target API route prefix,
+  entity key, and operation key
 - AND the projected block does not include Turnstile secrets, email provider
   credentials, sender verification facts, or private notification recipients
 
@@ -217,6 +223,9 @@ runtime secrets.
 - AND projected field metadata uses the schema-owned public-safe operation input
   projection and includes only field names, labels, required flags, supported
   scalar control types, and enum option labels
+- AND the target public operation route is built through the shared public
+  operation route contract from the runtime-owned target API route prefix,
+  entity key, and operation key
 - AND target route facts and public challenge site-key facts are supplied by
   runtime target resolution and challenge configuration, not by the target
   operation input projection

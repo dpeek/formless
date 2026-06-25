@@ -571,6 +571,51 @@ owner session storage, runtime topology, provider execution, or app records.
   Workspace operation states, but canonical operation declarations remain in
   the Workspace package
 
+### Requirement: Public Operations Package Slice
+
+The system SHALL provide a Public Operations package slice under
+`lib/public-operations/` for reusable public operation route contracts.
+
+#### Scenario: Public Operations package scaffold
+
+- GIVEN the Public Operations package slice is introduced
+- WHEN the package is scaffolded
+- THEN it contains package-local `AGENTS.md`, `package.json`, `tsconfig.json`,
+  and `src/` entrypoints for public contracts and runtime-neutral helpers
+- AND the package is published as `@dpeek/formless-public-operations` with a
+  root public subpath
+- AND it follows package slice import and documentation boundaries
+- AND it does not expose React, Worker, Node, sidecar, app-schema, app-record,
+  challenge, notification, or operation execution ownership subpaths
+
+#### Scenario: Public Operations package exports
+
+- GIVEN Site projection, Worker routing, browser clients, or tests need public
+  operation route grammar
+- WHEN they import public operation package behavior
+- THEN they import from `@dpeek/formless-public-operations`
+- AND they do not deep-import public operation package internals
+
+### Requirement: Public Operations Package Non-Ownership
+
+The Public Operations package SHALL own reusable public operation route
+contracts without owning target resolution, schema operation declarations, app
+storage, challenge verification, notification delivery, Site records, or
+product-specific form UI.
+
+#### Scenario: Package owns public operation route contracts
+
+- GIVEN target-scoped public operation routes are built or parsed
+- WHEN runtime-neutral, Site projection, browser, Worker, or tests consume public
+  operation route behavior
+- THEN path suffix construction, segment encoding, segment decoding, and suffix
+  validation come from `lib/public-operations`
+- AND target API route prefixes, app storage identities, mapped-host policy,
+  Authority routing, public operation eligibility, Turnstile verification,
+  operation execution, operation audit storage, notification delivery, and
+  product-specific subscribe, contact, or generic form UI remain outside the
+  package contract
+
 ### Requirement: Schema Package Slice
 
 The system SHALL provide a Schema package slice under `lib/schema/` for

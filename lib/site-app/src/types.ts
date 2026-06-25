@@ -55,13 +55,13 @@ export type SitePublicOperationTargetNode =
   | {
       kind: "schemaKey";
       schemaKey: string;
-      apiRoutePrefix: string;
+      apiRoutePrefix: `/${string}`;
     }
   | {
       kind: "appInstall";
       packageAppKey: string;
       installId: string;
-      apiRoutePrefix: string;
+      apiRoutePrefix: `/${string}`;
     };
 
 export type SitePublicOperationInputFieldOptionNode = {

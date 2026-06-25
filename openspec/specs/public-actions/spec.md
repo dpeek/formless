@@ -166,6 +166,19 @@ operation endpoints.
 - THEN the runtime resolves the matching schema-key storage identity
 - AND public operation effects are committed only to that schema-key storage identity
 
+#### Scenario: Shared public operation route contract
+
+- GIVEN public Site projection builds a target public operation route or Worker
+  code parses an Authority-relative public operation path
+- WHEN route construction or parsing evaluates the public operation suffix
+- THEN one public operation route contract owns
+  `/public/operations/:entityKey/:operationKey` path construction, segment
+  encoding, segment decoding, and suffix shape validation
+- AND target app storage identity resolution remains runtime-owned outside that
+  route contract
+- AND invalid public operation suffixes fail before public operation policy,
+  JSON body parsing, or app storage initialization
+
 #### Scenario: Generic write routes stay protected
 
 - GIVEN a visitor lacks owner session or admin bearer authorization
