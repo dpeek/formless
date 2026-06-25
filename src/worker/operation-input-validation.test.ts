@@ -1,6 +1,8 @@
-import type { AppSchema, EntityOperationSchema } from "@dpeek/formless-schema";
+import type { AppSchema, EntityOperationSchema, EntitySchema } from "@dpeek/formless-schema";
+import type { StoredRecord } from "@dpeek/formless-storage";
 import { describe, expect, it } from "vite-plus/test";
 import { sourceLikeTaskSchema } from "../test/schema-builders.ts";
+import { BadRequestError } from "./errors.ts";
 import {
   validateOperationCommandHandlerInputValues,
   validateOperationRecordPlanInputValues,
@@ -231,6 +233,101 @@ describe("operation input validation", () => {
     ).toThrow('Field "priority" must be a known enum value.');
   });
 
+  it("keeps storage-backed reference checks in the Worker adapter", () => {
+    const operation = createTaskOperation({
+      fields: {
+        taskTitle: { field: "title", required: true },
+        taskProject: { field: "project", required: true },
+      },
+    });
+    const schema = schemaWithTaskProjectReference();
+
+    expect(
+      validateOperationRecordWriteValues(
+        operationInputRequest({
+          operation,
+          rawInput: {
+            taskTitle: "Referenced task",
+            taskProject: "project-1",
+          },
+          schema,
+          storage: storageWithRecords([projectRecord("project-1")]),
+        }),
+      ),
+    ).toEqual({
+      title: "Referenced task",
+      project: "project-1",
+    });
+
+    expect(() =>
+      validateOperationRecordWriteValues(
+        operationInputRequest({
+          operation,
+          rawInput: {
+            taskTitle: "Missing project task",
+            taskProject: "missing-project",
+          },
+          schema,
+          storage: storageWithRecords([]),
+        }),
+      ),
+    ).toThrow('Field "project" references unknown project record "missing-project".');
+
+    expect(() =>
+      validateOperationRecordWriteValues(
+        operationInputRequest({
+          operation,
+          rawInput: {
+            taskTitle: "Wrong entity task",
+            taskProject: "task-1",
+          },
+          schema,
+          storage: storageWithRecords([taskRecord("task-1")]),
+        }),
+      ),
+    ).toThrow('Field "project" must reference a project record.');
+
+    expect(() =>
+      validateOperationRecordWriteValues(
+        operationInputRequest({
+          operation,
+          rawInput: {
+            taskTitle: "Tombstoned project task",
+            taskProject: "project-2",
+          },
+          schema,
+          storage: storageWithRecords([projectRecord("project-2", { deleted: true })]),
+        }),
+      ),
+    ).toThrow('Field "project" cannot reference tombstoned record "project-2".');
+  });
+
+  it("wraps schema projection errors in runtime BadRequestError", () => {
+    let thrown: unknown;
+
+    try {
+      validateOperationRecordWriteValues(
+        operationInputRequest({
+          operation: createTaskOperation({
+            fields: {
+              invalidMapping: { field: "missingEntityField", required: true },
+            },
+          }),
+          rawInput: {
+            invalidMapping: "value",
+          },
+        }),
+      );
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(BadRequestError);
+    expect(thrown).toMatchObject({
+      message: 'Operation input field "invalidMapping" is invalid.',
+    });
+  });
+
   it("rejects record write and record-plan input values when no input contract exists", () => {
     const operation = noInputCommandTaskOperation();
 
@@ -336,6 +433,7 @@ function operationInputRequest(input: {
   operationName?: string;
   rawInput: unknown;
   schema?: AppSchema;
+  storage?: DurableObjectStorage;
 }): OperationInputValidationRequest {
   return {
     entityName: "task",
@@ -343,7 +441,89 @@ function operationInputRequest(input: {
     operation: input.operation,
     rawInput: input.rawInput,
     schema: input.schema ?? sourceLikeTaskSchema(),
-    storage,
+    storage: input.storage ?? storage,
+  };
+}
+
+function schemaWithTaskProjectReference(): AppSchema {
+  const schema = sourceLikeTaskSchema();
+  const taskEntity = schema.entities.task;
+
+  if (!taskEntity) {
+    throw new Error("Expected task entity.");
+  }
+
+  schema.entities.task = {
+    ...taskEntity,
+    fields: {
+      ...taskEntity.fields,
+      project: {
+        type: "reference",
+        required: false,
+        label: "Project",
+        to: "project",
+        displayField: "name",
+      },
+    },
+  };
+  schema.entities.project = {
+    label: "Project",
+    fields: {
+      name: { type: "text", required: true, label: "Name" },
+    },
+  } satisfies EntitySchema;
+
+  return schema;
+}
+
+function storageWithRecords(records: StoredRecord[]): DurableObjectStorage {
+  return {
+    sql: {
+      exec<T = unknown>(_query: string, recordId: unknown) {
+        const record = records.find((candidate) => candidate.id === recordId);
+
+        return {
+          next(): IteratorResult<T> {
+            if (!record) {
+              return { done: true, value: undefined as T };
+            }
+
+            return {
+              done: false,
+              value: {
+                id: record.id,
+                entity: record.entity,
+                values_json: JSON.stringify(record.values),
+                created_at: record.createdAt,
+                updated_at: record.updatedAt,
+                deleted_at: record.deletedAt ?? null,
+              } as T,
+            };
+          },
+        };
+      },
+    },
+  } as unknown as DurableObjectStorage;
+}
+
+function projectRecord(id: string, options: { deleted?: boolean } = {}): StoredRecord {
+  return {
+    id,
+    entity: "project",
+    values: { name: "Reference project" },
+    createdAt: "2026-06-25T00:00:00.000Z",
+    updatedAt: "2026-06-25T00:00:00.000Z",
+    deletedAt: options.deleted ? "2026-06-25T00:01:00.000Z" : undefined,
+  };
+}
+
+function taskRecord(id: string): StoredRecord {
+  return {
+    id,
+    entity: "task",
+    values: { title: "Wrong target", done: false },
+    createdAt: "2026-06-25T00:00:00.000Z",
+    updatedAt: "2026-06-25T00:00:00.000Z",
   };
 }
 

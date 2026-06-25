@@ -311,18 +311,19 @@ materialization.
 - GIVEN generated UI, protocol, public, automation, CLI, or runner callers submit
   operation input
 - WHEN Authority validates the operation invocation before materialization
-- THEN validation uses the declared operation input contract for unknown fields,
-  required fields, system field rejection, entity-backed field behavior, inline
-  scalar field behavior, and storage-backed reference checks
+- THEN validation uses schema-owned operation input projection for unknown
+  fields, required fields, system field rejection, operation input-name
+  preservation, entity-backed field targets, and inline scalar field behavior
 - AND validation preserves current operation input error modes for rejected
   invocations
 - AND create and update materializers receive entity-field write values after
   operation input validation
 - AND command record plans and operation handlers receive operation input values
   keyed by declared operation input field name
-- AND storage-backed facts such as reference existence, tombstone state, unique
-  constraints, idempotency, audit rows, and write-log classification remain
-  Authority-owned
+- AND Authority adapters add storage-backed reference existence, target entity,
+  tombstone state, unique constraint, idempotency, audit row, and write-log
+  classification checks
+- AND storage-backed facts remain Authority-owned
 
 ### Requirement: Operation Record Plan Materialization
 

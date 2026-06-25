@@ -1,12 +1,12 @@
 import {
   formatEntityOperationKey,
-  isSystemFieldName,
+  projectOperationInputValues,
   type AppSchema,
-  type EntityOperationInputFieldSchema,
   type EntityOperationSchema,
   type EntitySchema,
+  type OperationInputValueProjection,
 } from "@dpeek/formless-schema";
-import type { FieldValue, RecordValues } from "@dpeek/formless-storage";
+import type { RecordValues } from "@dpeek/formless-storage";
 import type { OperationInvocationEnvelope } from "../shared/operation-invocation.ts";
 import { validateRecordValues } from "./authority-validation.ts";
 import { BadRequestError } from "./errors.ts";
@@ -34,27 +34,28 @@ type NormalizedOperationInputValidationRequest = OperationInputValidationRequest
   context: string;
 };
 
-type ValidatedOperationInputField =
-  | { kind: "omit" }
-  | { kind: "set"; fieldName: string; inputName: string; value: FieldValue };
-
 export function validateOperationRecordWriteValues(
   input: OperationInputValidationRequest | OperationEnvelopeInputValidationRequest,
 ): Record<string, unknown> {
-  const validated = validateOperationInputContract(input, (result) => result.fieldName);
   const request = normalizeOperationInputValidationRequest(input);
+  const projection = projectWorkerOperationInputValues(request);
+  assertStorageBackedOperationInputValues(request, projection.recordWriteValues);
 
   if (request.operation.kind !== "update") {
-    return validated;
+    return projection.recordWriteValues;
   }
 
-  return operationPatchRecordWriteValues(request);
+  return projection.recordWritePatchValues;
 }
 
 export function validateOperationRecordPlanInputValues(
   input: OperationInputValidationRequest | OperationEnvelopeInputValidationRequest,
 ): RecordValues {
-  return validateOperationInputContract(input, (result) => result.inputName);
+  const request = normalizeOperationInputValidationRequest(input);
+  const projection = projectWorkerOperationInputValues(request);
+  assertStorageBackedOperationInputValues(request, projection.recordWriteValues);
+
+  return projection.operationInputValues;
 }
 
 export function validateOperationCommandHandlerInputValues(
@@ -64,7 +65,11 @@ export function validateOperationCommandHandlerInputValues(
     return operationInputValidationRawInput(input);
   }
 
-  return validateOperationInputContract(input, (result) => result.inputName);
+  const request = normalizeOperationInputValidationRequest(input);
+  const projection = projectWorkerOperationInputValues(request);
+  assertStorageBackedOperationInputValues(request, projection.recordWriteValues);
+
+  return projection.operationInputValues;
 }
 
 function operationInputValidationOperation(
@@ -77,90 +82,6 @@ function operationInputValidationRawInput(
   input: OperationInputValidationRequest | OperationEnvelopeInputValidationRequest,
 ): unknown {
   return input.rawInput;
-}
-
-function operationPatchRecordWriteValues(
-  request: NormalizedOperationInputValidationRequest,
-): Record<string, unknown> {
-  const rawValues = parseRecord(request.context, request.rawInput);
-  const fields = request.operation.input?.fields ?? {};
-
-  return Object.fromEntries(
-    Object.entries(fields).flatMap(([inputName, field]) => {
-      if (!("field" in field) || !Object.hasOwn(rawValues, inputName)) {
-        return [];
-      }
-
-      return [[field.field, rawValues[inputName]]];
-    }),
-  );
-}
-
-function validateOperationInputContract(
-  input: OperationInputValidationRequest | OperationEnvelopeInputValidationRequest,
-  resultFieldName: (result: Extract<ValidatedOperationInputField, { kind: "set" }>) => string,
-): RecordValues {
-  const request = normalizeOperationInputValidationRequest(input);
-  const inputContract = request.operation.input;
-
-  if (!inputContract) {
-    if (request.rawInput === undefined) {
-      return {};
-    }
-
-    const values = parseRecord(request.context, request.rawInput);
-    if (Object.keys(values).length > 0) {
-      throw new BadRequestError(
-        `Operation "${request.canonicalKey}" does not declare input fields.`,
-      );
-    }
-
-    return {};
-  }
-
-  const entity = request.schema.entities[request.entityName];
-  if (!entity) {
-    throw new BadRequestError(`Unknown entity "${request.entityName}".`);
-  }
-
-  const values = parseRecord(request.context, request.rawInput);
-
-  for (const fieldName of Object.keys(values)) {
-    if (!inputContract.fields[fieldName]) {
-      assertOperationInputDoesNotOwnSystemField(request.context, fieldName);
-      throw new BadRequestError(`${request.context} includes undeclared field "${fieldName}".`);
-    }
-  }
-
-  const validated: RecordValues = {};
-
-  for (const [inputName, field] of Object.entries(inputContract.fields)) {
-    const fieldWasProvided = Object.hasOwn(values, inputName);
-    const result =
-      "field" in field
-        ? validateOperationEntityInputField(
-            request.context,
-            inputName,
-            field,
-            values[inputName],
-            fieldWasProvided,
-            entity,
-            request.storage,
-          )
-        : validateOperationInlineInputField(
-            request.context,
-            inputName,
-            field,
-            values[inputName],
-            fieldWasProvided,
-          );
-
-    if (result.kind === "set") {
-      validated[resultFieldName(result)] = result.value;
-    }
-  }
-
-  return validated;
 }
 
 function normalizeOperationInputValidationRequest(
@@ -189,141 +110,6 @@ function normalizeOperationInputValidationRequest(
   };
 }
 
-function assertOperationInputDoesNotOwnSystemField(context: string, fieldName: string) {
-  if (isSystemFieldName(fieldName)) {
-    throw new BadRequestError(`${context} must not include system field "${fieldName}".`);
-  }
-}
-
-function validateOperationEntityInputField(
-  context: string,
-  inputName: string,
-  field: Extract<EntityOperationInputFieldSchema, { field: string }>,
-  value: unknown,
-  provided: boolean,
-  entity: EntitySchema,
-  storage: DurableObjectStorage,
-): ValidatedOperationInputField {
-  const entityField = entity.fields[field.field];
-
-  if (!entityField) {
-    throw new BadRequestError(`${context} field "${inputName}" is invalid.`);
-  }
-
-  const required = field.required ?? false;
-
-  if (!provided) {
-    if (required) {
-      throw new BadRequestError(`${context} field "${inputName}" is required.`);
-    }
-
-    return { kind: "omit" };
-  }
-
-  const validated = validateRecordValues(
-    { [field.field]: value },
-    {
-      ...entity,
-      fields: {
-        [field.field]: {
-          ...entityField,
-          required,
-        },
-      },
-    },
-    storage,
-  );
-
-  if (!Object.hasOwn(validated, field.field)) {
-    return { kind: "omit" };
-  }
-
-  return {
-    kind: "set",
-    fieldName: field.field,
-    inputName,
-    value: validated[field.field],
-  };
-}
-
-function validateOperationInlineInputField(
-  context: string,
-  fieldName: string,
-  field: Exclude<EntityOperationInputFieldSchema, { field: string }>,
-  value: unknown,
-  provided: boolean,
-): ValidatedOperationInputField {
-  if (!provided) {
-    if (field.required) {
-      throw new BadRequestError(`${context} field "${fieldName}" is required.`);
-    }
-
-    return { kind: "omit" };
-  }
-
-  if (field.type === "text") {
-    if (typeof value !== "string") {
-      throw new BadRequestError(`${context} field "${fieldName}" must be text.`);
-    }
-
-    if (value.trim() === "") {
-      if (field.required) {
-        throw new BadRequestError(`${context} field "${fieldName}" cannot be empty.`);
-      }
-
-      return { kind: "omit" };
-    }
-
-    return { kind: "set", fieldName, inputName: fieldName, value };
-  }
-
-  if (field.type === "boolean") {
-    if (typeof value !== "boolean") {
-      throw new BadRequestError(`${context} field "${fieldName}" must be a boolean.`);
-    }
-
-    return { kind: "set", fieldName, inputName: fieldName, value };
-  }
-
-  if (field.type === "date") {
-    if (typeof value !== "string") {
-      throw new BadRequestError(`${context} field "${fieldName}" must be a date.`);
-    }
-
-    if (value.trim() === "") {
-      if (field.required) {
-        throw new BadRequestError(`${context} field "${fieldName}" cannot be empty.`);
-      }
-
-      return { kind: "omit" };
-    }
-
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-      throw new BadRequestError(`${context} field "${fieldName}" must be a YYYY-MM-DD date.`);
-    }
-
-    return { kind: "set", fieldName, inputName: fieldName, value };
-  }
-
-  if (field.type === "number") {
-    if (typeof value !== "number" || !Number.isFinite(value)) {
-      throw new BadRequestError(`${context} field "${fieldName}" must be a finite number.`);
-    }
-
-    return { kind: "set", fieldName, inputName: fieldName, value };
-  }
-
-  if (field.type === "enum") {
-    if (typeof value !== "string" || value === "" || !Object.hasOwn(field.values, value)) {
-      throw new BadRequestError(`${context} field "${fieldName}" must be a known enum value.`);
-    }
-
-    return { kind: "set", fieldName, inputName: fieldName, value };
-  }
-
-  return assertUnsupportedOperationInputField(field);
-}
-
 function operationCanonicalKey(route: { entityName: string; operationName: string }) {
   return formatEntityOperationKey({
     entityKey: route.entityName,
@@ -331,14 +117,81 @@ function operationCanonicalKey(route: { entityName: string; operationName: strin
   });
 }
 
-function parseRecord(context: string, value: unknown): Record<string, unknown> {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new BadRequestError(`${context} must be an object.`);
-  }
+function projectWorkerOperationInputValues(
+  request: NormalizedOperationInputValidationRequest,
+): OperationInputValueProjection {
+  try {
+    return projectOperationInputValues({
+      canonicalOperationKey: request.canonicalKey,
+      context: request.context,
+      entity: operationInputValidationEntity(request),
+      operation: request.operation,
+      rawInput: request.rawInput,
+    });
+  } catch (error) {
+    if (error instanceof BadRequestError) {
+      throw error;
+    }
 
-  return value as Record<string, unknown>;
+    throw new BadRequestError(
+      error instanceof Error ? error.message : "Operation input is invalid.",
+    );
+  }
 }
 
-function assertUnsupportedOperationInputField(field: never): never {
-  throw new Error(`Unsupported operation input field "${String(field)}".`);
+function operationInputValidationEntity(
+  request: NormalizedOperationInputValidationRequest,
+): EntitySchema {
+  const entity = request.schema.entities[request.entityName];
+
+  if (entity) {
+    return entity;
+  }
+
+  if (!request.operation.input) {
+    return { label: request.entityName, fields: {} };
+  }
+
+  throw new BadRequestError(`Unknown entity "${request.entityName}".`);
+}
+
+function assertStorageBackedOperationInputValues(
+  request: NormalizedOperationInputValidationRequest,
+  recordWriteValues: RecordValues,
+) {
+  const inputContract = request.operation.input;
+
+  if (!inputContract) {
+    return;
+  }
+
+  const entity = request.schema.entities[request.entityName];
+  if (!entity) {
+    throw new BadRequestError(`Unknown entity "${request.entityName}".`);
+  }
+
+  for (const field of Object.values(inputContract.fields)) {
+    if (!("field" in field) || !Object.hasOwn(recordWriteValues, field.field)) {
+      continue;
+    }
+
+    const entityField = entity.fields[field.field];
+    if (!entityField) {
+      continue;
+    }
+
+    validateRecordValues(
+      { [field.field]: recordWriteValues[field.field] },
+      {
+        ...entity,
+        fields: {
+          [field.field]: {
+            ...entityField,
+            required: field.required ?? false,
+          },
+        },
+      },
+      request.storage,
+    );
+  }
 }

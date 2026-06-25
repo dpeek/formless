@@ -254,12 +254,15 @@ input contract before challenge verification commits records.
 
 - GIVEN an anonymous public operation request is accepted for evaluation
 - WHEN the public operation executor validates submitted input
-- THEN validation uses the declared operation input field names from the source
-  operation
+- THEN validation uses schema-owned operation input projection for the declared
+  operation input field names from the source operation
 - AND public create operations map validated entity-backed input to stored
   entity field names only for create materialization
 - AND public record-plan and operation-handler commands keep validated input
   keyed by declared operation input field name
+- AND storage-backed reference checks, challenge proof validation, idempotency
+  reservation, audit rows, target app storage identity, and public response
+  filtering remain public runtime or Authority-owned
 - AND invalid public input is rejected before challenge verification or
   successful outcome reservation
 

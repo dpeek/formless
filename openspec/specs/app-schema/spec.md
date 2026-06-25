@@ -537,6 +537,22 @@ public forms, automation, audit, and authorization.
 - AND operation handlers and record-plan input expressions continue to receive
   operation input names rather than stored entity field names
 
+#### Scenario: Project operation input values from schema facts
+
+- GIVEN an operation declares input fields
+- WHEN the schema package projects submitted operation input
+- THEN projection uses the declared operation input field names as the external
+  contract
+- AND projection derives required flags, inline scalar validation, entity-backed
+  field targets, and storage-free scalar field behavior from the parsed schema
+- AND projection can return operation-input keyed values for command handlers
+  and record plans
+- AND projection can return entity-field keyed values for create and update
+  record-write materialization
+- AND active reference lookup, tombstone state, unique constraints, idempotency,
+  audit rows, challenge proof validation, source routing, and writes are not
+  schema facts
+
 #### Scenario: Validate operation effects
 
 - GIVEN an entity operation declares an effect
