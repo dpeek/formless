@@ -1,11 +1,9 @@
 import {
   formatEntityOperationKey,
   isEntityOperationWriteKind,
-  isSystemFieldName,
   matchesQuery,
   type AppSchema,
   type EntityOperationActorKind,
-  type EntityOperationInputFieldSchema,
   type EntityOperationKind,
   type EntityOperationSchema,
   type EntitySchema,
@@ -41,7 +39,12 @@ import {
   executeOperationHandlerCreateTriggers,
   executeOperationHandlerOutcome,
 } from "./operation-handlers.ts";
-import { validateRecordWriteRequest, validateRecordValues } from "./authority-validation.ts";
+import { validateRecordWriteRequest } from "./authority-validation.ts";
+import {
+  validateOperationCommandHandlerInputValues,
+  validateOperationRecordPlanInputValues,
+  validateOperationRecordWriteValues,
+} from "./operation-input-validation.ts";
 import {
   committedWrite,
   createStoredRecordOutcome,
@@ -726,12 +729,12 @@ function recordPlanCommandInput(
     );
   }
 
-  return validateOperationInputContractByInputName(
+  return validateOperationRecordPlanInputValues({
     envelope,
-    envelope.input.input ?? {},
+    rawInput: envelope.input.input ?? {},
     schema,
     storage,
-  );
+  });
 }
 
 function recordPlanWritePlans(
@@ -872,75 +875,6 @@ function validateRecordPlanStepWrite(
   }
 
   return result.recordWrite;
-}
-
-function validateOperationInputContractByInputName(
-  envelope: OperationInvocationEnvelope,
-  rawInput: unknown,
-  schema: AppSchema,
-  storage: DurableObjectStorage,
-): RecordPlanInputValues {
-  const context = "Operation input";
-  const inputContract = envelope.schemaOperation.input;
-
-  if (!inputContract) {
-    if (rawInput === undefined) {
-      return {};
-    }
-
-    const values = parseRecord(context, rawInput);
-    if (Object.keys(values).length > 0) {
-      throw new BadRequestError(
-        `Operation "${envelope.operation.canonicalKey}" does not declare input fields.`,
-      );
-    }
-
-    return {};
-  }
-
-  const entity = schema.entities[envelope.operation.entityName];
-  if (!entity) {
-    throw new BadRequestError(`Unknown entity "${envelope.operation.entityName}".`);
-  }
-
-  const values = parseRecord(context, rawInput);
-
-  for (const fieldName of Object.keys(values)) {
-    if (!inputContract.fields[fieldName]) {
-      assertOperationInputDoesNotOwnSystemField(context, fieldName);
-      throw new BadRequestError(`${context} includes undeclared field "${fieldName}".`);
-    }
-  }
-
-  const validated: RecordPlanInputValues = {};
-
-  for (const [inputName, field] of Object.entries(inputContract.fields)) {
-    const fieldWasProvided = Object.hasOwn(values, inputName);
-    const result =
-      "field" in field
-        ? validateOperationEntityInputField(
-            context,
-            inputName,
-            field,
-            values[inputName],
-            fieldWasProvided,
-            entity,
-            storage,
-          )
-        : validateOperationInlineInputField(
-            context,
-            inputName,
-            field,
-            values[inputName],
-            fieldWasProvided,
-          );
-
-    if (result.kind === "set") {
-      validated[inputName] = result.value;
-    }
-  }
-
-  return validated;
 }
 
 function evaluateRecordPlanValues(
@@ -1189,9 +1123,12 @@ function privateCommandOperationInput(
     );
   }
 
-  const commandInput = envelope.schemaOperation.input
-    ? validateOperationInputContract(envelope, envelope.input.input ?? {}, schema, storage)
-    : envelope.input.input;
+  const commandInput = validateOperationCommandHandlerInputValues({
+    envelope,
+    rawInput: envelope.input.input ?? {},
+    schema,
+    storage,
+  });
 
   return commandInputWithRecordId(envelope, commandInput);
 }
@@ -1381,7 +1318,12 @@ function operationCreateRecordWriteRequest(
       writeId,
       entity: envelope.operation.entityName,
       kind: "create",
-      values: validateOperationInputContract(envelope, envelope.input.values, schema, storage),
+      values: validateOperationRecordWriteValues({
+        envelope,
+        rawInput: envelope.input.values,
+        schema,
+        storage,
+      }),
     } satisfies Omit<CreateRecordWriteRequest, "values"> & { values: unknown };
   }
 
@@ -1403,7 +1345,12 @@ function operationPatchRecordWriteRequest(
       entity: envelope.operation.entityName,
       kind: "patch",
       recordId: envelope.input.recordId,
-      values: operationPatchValues(envelope, schema, storage),
+      values: validateOperationRecordWriteValues({
+        envelope,
+        rawInput: envelope.input.values,
+        schema,
+        storage,
+      }),
     } satisfies Omit<PatchRecordWriteRequest, "values"> & { values: unknown };
   }
 
@@ -1427,267 +1374,6 @@ function operationDeleteRecordWriteRequest(envelope: OperationInvocationEnvelope
   throw new BadRequestError(
     `Operation "${envelope.operation.canonicalKey}" cannot materialize a delete.`,
   );
-}
-
-function operationPatchValues(
-  envelope: OperationInvocationEnvelope,
-  schema: AppSchema,
-  storage: DurableObjectStorage,
-): Record<string, unknown> {
-  validateOperationInputContract(
-    envelope,
-    envelope.input.type === "update" ? envelope.input.values : {},
-    schema,
-    storage,
-  );
-
-  if (envelope.input.type !== "update") {
-    throw new BadRequestError(
-      `Operation "${envelope.operation.canonicalKey}" requires update input.`,
-    );
-  }
-
-  const rawValues = parseRecord("Operation input", envelope.input.values);
-  const fields = envelope.schemaOperation.input?.fields ?? {};
-
-  return Object.fromEntries(
-    Object.entries(fields).flatMap(([inputName, field]) => {
-      if (!("field" in field) || !Object.hasOwn(rawValues, inputName)) {
-        return [];
-      }
-
-      return [[field.field, rawValues[inputName]]];
-    }),
-  );
-}
-
-export function validateEntityOperationInputContract(input: {
-  context?: string;
-  entityName: string;
-  mapToInputNames?: boolean;
-  operation: EntityOperationSchema;
-  operationName: string;
-  rawInput: unknown;
-  schema: AppSchema;
-  storage: DurableObjectStorage;
-}): RecordValues {
-  const context = input.context ?? "Operation input";
-  const inputContract = input.operation.input;
-  const canonicalKey = operationCanonicalKey({
-    entityName: input.entityName,
-    operationName: input.operationName,
-  });
-
-  if (!inputContract) {
-    if (input.rawInput === undefined) {
-      return {};
-    }
-
-    const values = parseRecord(context, input.rawInput);
-    if (Object.keys(values).length > 0) {
-      throw new BadRequestError(`Operation "${canonicalKey}" does not declare input fields.`);
-    }
-
-    return {};
-  }
-
-  const entity = input.schema.entities[input.entityName];
-  if (!entity) {
-    throw new BadRequestError(`Unknown entity "${input.entityName}".`);
-  }
-
-  const values = parseRecord(context, input.rawInput);
-
-  for (const fieldName of Object.keys(values)) {
-    if (!inputContract.fields[fieldName]) {
-      assertOperationInputDoesNotOwnSystemField(context, fieldName);
-      throw new BadRequestError(`${context} includes undeclared field "${fieldName}".`);
-    }
-  }
-
-  const mappedValues: RecordValues = {};
-
-  for (const [inputName, field] of Object.entries(inputContract.fields)) {
-    const fieldWasProvided = Object.hasOwn(values, inputName);
-    const result =
-      "field" in field
-        ? validateOperationEntityInputField(
-            context,
-            inputName,
-            field,
-            values[inputName],
-            fieldWasProvided,
-            entity,
-            input.storage,
-          )
-        : validateOperationInlineInputField(
-            context,
-            inputName,
-            field,
-            values[inputName],
-            fieldWasProvided,
-          );
-
-    if (result.kind === "set") {
-      mappedValues[input.mapToInputNames ? inputName : result.fieldName] = result.value;
-    }
-  }
-
-  return mappedValues;
-}
-
-function assertOperationInputDoesNotOwnSystemField(context: string, fieldName: string) {
-  if (isSystemFieldName(fieldName)) {
-    throw new BadRequestError(`${context} must not include system field "${fieldName}".`);
-  }
-}
-
-function validateOperationInputContract(
-  envelope: OperationInvocationEnvelope,
-  rawInput: unknown,
-  schema: AppSchema,
-  storage: DurableObjectStorage,
-): RecordValues {
-  return validateEntityOperationInputContract({
-    entityName: envelope.operation.entityName,
-    operation: envelope.schemaOperation,
-    operationName: envelope.operation.operationName,
-    rawInput,
-    schema,
-    storage,
-  });
-}
-
-function validateOperationEntityInputField(
-  context: string,
-  inputName: string,
-  field: Extract<EntityOperationInputFieldSchema, { field: string }>,
-  value: unknown,
-  provided: boolean,
-  entity: EntitySchema,
-  storage: DurableObjectStorage,
-): { kind: "omit" } | { kind: "set"; fieldName: string; value: RecordValues[string] } {
-  const entityField = entity.fields[field.field];
-
-  if (!entityField) {
-    throw new BadRequestError(`${context} field "${inputName}" is invalid.`);
-  }
-
-  const required = field.required ?? false;
-
-  if (!provided) {
-    if (required) {
-      throw new BadRequestError(`${context} field "${inputName}" is required.`);
-    }
-
-    return { kind: "omit" };
-  }
-
-  const validated = validateRecordValues(
-    { [field.field]: value },
-    {
-      ...entity,
-      fields: {
-        [field.field]: {
-          ...entityField,
-          required,
-        },
-      },
-    },
-    storage,
-  );
-
-  if (!Object.hasOwn(validated, field.field)) {
-    return { kind: "omit" };
-  }
-
-  return {
-    kind: "set",
-    fieldName: field.field,
-    value: validated[field.field],
-  };
-}
-
-function validateOperationInlineInputField(
-  context: string,
-  fieldName: string,
-  field: Exclude<EntityOperationInputFieldSchema, { field: string }>,
-  value: unknown,
-  provided: boolean,
-): { kind: "omit" } | { kind: "set"; fieldName: string; value: RecordValues[string] } {
-  if (!provided) {
-    if (field.required) {
-      throw new BadRequestError(`${context} field "${fieldName}" is required.`);
-    }
-
-    return { kind: "omit" };
-  }
-
-  if (field.type === "text") {
-    if (typeof value !== "string") {
-      throw new BadRequestError(`${context} field "${fieldName}" must be text.`);
-    }
-
-    if (value.trim() === "") {
-      if (field.required) {
-        throw new BadRequestError(`${context} field "${fieldName}" cannot be empty.`);
-      }
-
-      return { kind: "omit" };
-    }
-
-    return { kind: "set", fieldName, value };
-  }
-
-  if (field.type === "boolean") {
-    if (typeof value !== "boolean") {
-      throw new BadRequestError(`${context} field "${fieldName}" must be a boolean.`);
-    }
-
-    return { kind: "set", fieldName, value };
-  }
-
-  if (field.type === "date") {
-    if (typeof value !== "string") {
-      throw new BadRequestError(`${context} field "${fieldName}" must be a date.`);
-    }
-
-    if (value.trim() === "") {
-      if (field.required) {
-        throw new BadRequestError(`${context} field "${fieldName}" cannot be empty.`);
-      }
-
-      return { kind: "omit" };
-    }
-
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-      throw new BadRequestError(`${context} field "${fieldName}" must be a YYYY-MM-DD date.`);
-    }
-
-    return { kind: "set", fieldName, value };
-  }
-
-  if (field.type === "number") {
-    if (typeof value !== "number" || !Number.isFinite(value)) {
-      throw new BadRequestError(`${context} field "${fieldName}" must be a finite number.`);
-    }
-
-    return { kind: "set", fieldName, value };
-  }
-
-  if (field.type === "enum") {
-    if (typeof value !== "string" || value === "" || !Object.hasOwn(field.values, value)) {
-      throw new BadRequestError(`${context} field "${fieldName}" must be a known enum value.`);
-    }
-
-    return { kind: "set", fieldName, value };
-  }
-
-  return assertUnsupportedOperationInputField(field);
-}
-
-function assertUnsupportedOperationInputField(field: never): never {
-  throw new Error(`Unsupported operation input field "${String(field)}".`);
 }
 
 function operationInvocationEnvelope(input: {

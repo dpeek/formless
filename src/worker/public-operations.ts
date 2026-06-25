@@ -21,9 +21,12 @@ import { turnstileSecretKeyFromEnv, type TurnstileRuntimeEnv } from "../shared/t
 import {
   buildPublicOperationInvocationEnvelope,
   executeWriteOperationInvocation,
-  validateEntityOperationInputContract,
 } from "./entity-operations.ts";
 import { BadRequestError } from "./errors.ts";
+import {
+  validateOperationCommandHandlerInputValues,
+  validateOperationRecordPlanInputValues,
+} from "./operation-input-validation.ts";
 import {
   getOperationInvocationById,
   recordOperationInvocationAccepted,
@@ -314,22 +317,36 @@ function parsePublicOperationRequest(
   }
 
   return {
-    input: validateEntityOperationInputContract({
-      context: "Public operation input",
-      entityName: selected.entityName,
-      mapToInputNames: selected.operation.effect?.type === "recordPlan",
-      operation: selected.operation,
-      operationName: selected.operationName,
-      rawInput: envelopeFields.input,
-      schema,
-      storage,
-    }),
+    input: validatePublicOperationInputValues(envelopeFields, selected, schema, storage),
     proof: parsePublicOperationProof(envelopeFields.proof),
     ...(envelopeFields.source === undefined ? {} : { source: envelopeFields.source }),
     ...(envelopeFields.idempotencyKey === undefined
       ? {}
       : { idempotencyKey: envelopeFields.idempotencyKey }),
   };
+}
+
+function validatePublicOperationInputValues(
+  envelopeFields: PublicOperationRequestEnvelopeFields,
+  selected: SelectedPublicOperation,
+  schema: AppSchema,
+  storage: DurableObjectStorage,
+): RecordValues {
+  const input = {
+    context: "Public operation input",
+    entityName: selected.entityName,
+    operation: selected.operation,
+    operationName: selected.operationName,
+    rawInput: envelopeFields.input,
+    schema,
+    storage,
+  };
+
+  if (selected.operation.effect?.type === "recordPlan") {
+    return validateOperationRecordPlanInputValues(input);
+  }
+
+  return validateOperationCommandHandlerInputValues(input) as RecordValues;
 }
 
 function parsePublicOperationRequestEnvelopeFields(

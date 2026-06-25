@@ -306,6 +306,24 @@ materialization.
 - AND accepted write paths derive lifecycle metadata from Authority-owned write
   context, not caller-provided values
 
+#### Scenario: Validate operation input contract consistently
+
+- GIVEN generated UI, protocol, public, automation, CLI, or runner callers submit
+  operation input
+- WHEN Authority validates the operation invocation before materialization
+- THEN validation uses the declared operation input contract for unknown fields,
+  required fields, system field rejection, entity-backed field behavior, inline
+  scalar field behavior, and storage-backed reference checks
+- AND validation preserves current operation input error modes for rejected
+  invocations
+- AND create and update materializers receive entity-field write values after
+  operation input validation
+- AND command record plans and operation handlers receive operation input values
+  keyed by declared operation input field name
+- AND storage-backed facts such as reference existence, tombstone state, unique
+  constraints, idempotency, audit rows, and write-log classification remain
+  Authority-owned
+
 ### Requirement: Operation Record Plan Materialization
 
 The system SHALL materialize declarative command record plans through the same
@@ -321,6 +339,8 @@ writes.
 - AND create, patch, delete, and tombstone steps reuse the same field,
   reference, unique constraint, operation, and state-machine write protections
   as the equivalent single-record operation effects
+- AND operation input expressions resolve from the declared operation input
+  field names, not from stored entity field names
 - AND later steps can reference ids and scalar outputs from earlier successful
   steps in the same plan
 - AND all committed steps share the invocation id, app storage identity, actor,

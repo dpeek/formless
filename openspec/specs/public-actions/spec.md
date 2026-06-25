@@ -237,6 +237,19 @@ invocation envelope before validating input or committing effects.
 The system MUST validate public operation input against the operation's public
 input contract before challenge verification commits records.
 
+#### Scenario: Public validation uses operation input names
+
+- GIVEN an anonymous public operation request is accepted for evaluation
+- WHEN the public operation executor validates submitted input
+- THEN validation uses the declared operation input field names from the source
+  operation
+- AND public create operations map validated entity-backed input to stored
+  entity field names only for create materialization
+- AND public record-plan and operation-handler commands keep validated input
+  keyed by declared operation input field name
+- AND invalid public input is rejected before challenge verification or
+  successful outcome reservation
+
 #### Scenario: Unknown public input field
 
 - GIVEN a public operation request includes a field not declared by the

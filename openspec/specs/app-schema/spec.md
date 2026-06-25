@@ -526,6 +526,17 @@ public forms, automation, audit, and authorization.
 - AND inline scalar input fields can be declared for command-only input that is
   not stored directly on the target record
 
+#### Scenario: Keep operation input names as the interaction contract
+
+- GIVEN an operation declares input fields
+- WHEN callers, public forms, command handlers, or record plans refer to
+  operation input
+- THEN those surfaces use the declared operation input field names
+- AND create and update materialization may map entity-backed operation input
+  fields to stored entity field names only at the record write layer
+- AND operation handlers and record-plan input expressions continue to receive
+  operation input names rather than stored entity field names
+
 #### Scenario: Validate operation effects
 
 - GIVEN an entity operation declares an effect
@@ -709,6 +720,8 @@ anonymous public bindings.
 - THEN field names, scalar types, required flags, and labels are validated
 - AND the parsed operation exposes that input contract to the public operation
   executor
+- AND the public input contract does not redefine operation effect, output,
+  idempotency, audit, app storage identity, or stored entity field names
 
 #### Scenario: Project public-safe input fields
 
