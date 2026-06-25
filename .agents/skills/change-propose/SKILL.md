@@ -14,8 +14,8 @@ Use local `changes/<change-id>` branches as the queue. Do not create `openspec/c
 3. Check existing branches: `bun agents changes --json`.
 4. Create or check out the queue branch from local main: `git checkout -b changes/<change-id> main`.
 5. Draft a first-pass spec patch directly in the affected canonical spec files.
-6. Write one structured metadata commit with the spec patch, proposal, design, tasks, evidence, blockers, and trailers.
-7. Leave `Formless-Change-State: draft` until the first-pass spec patch and task sections are ready; set it to `ready` when workers may claim it.
+6. Write one structured metadata commit with the spec patch, proposal, design, self-contained tasks, evidence, blockers, and trailers.
+7. Leave `Formless-Change-State: draft` until the first-pass spec patch and task sections are ready for automated workers to claim; set it to `ready` only when every task is real implementation or task-specific test work.
 
 ## First-Pass Spec Patch
 
@@ -25,6 +25,18 @@ The proposal branch starts with a direct canonical spec edit. This mirrors the o
 - Keep the patch source-faithful to the proposal and design.
 - Capture the intended behavior at reviewable contract level; implementation workers may refine it as they ship sections.
 - Do not mark the change `ready` without a first-pass spec patch unless the work is docs or workflow-only and the metadata records why no capability spec changes.
+
+## Task Queue Rules
+
+Treat each task section as one automated worker session.
+
+- Each task section must be self-contained, independently claimable, and able to leave a meaningful code, spec, or focused test delta.
+- Order task sections so they are sequentially implementable: each completed section should leave the branch coherent and closer to the final shape without depending on a later catch-all cleanup task to make the earlier work valid.
+- Do not create task sections that repeat skill or `AGENTS.md` instructions, such as updating metadata, recording evidence, running final checks, validating specs, finalizing, or following normal branch hygiene.
+- Do not make the final task "test and make sure everything passes"; workers already run required checks and record evidence at the end of implementation sessions.
+- Include tests only when they are task-specific deliverables, for example "add focused regression coverage for credential redaction", not generic validation.
+- If a later task is only the expected aggregate outcome of earlier tasks, fold that acceptance criterion into the earlier task sections or `## Design` instead of creating a separate worker session.
+- If a task would only tell the next agent how to work, move that guidance into `## Design`, `## Evidence`, or omit it.
 
 ## Change Commit
 
