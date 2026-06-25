@@ -296,6 +296,35 @@ local execution binding handles it.
   stale acknowledgement, install-set replacement, deploy plan/apply, or
   migration policy inputs
 
+#### Scenario: CLI command adapter boundary
+
+- **WHEN** Formless CLI dispatches a parsed public command
+- **THEN** top-level CLI entrypoints assemble process dependencies and select
+  the command family without owning workspace operation input translation,
+  operation execution, terminal preflight prompts, or workspace operation
+  result formatting
+- **AND** CLI command adapter modules translate parsed command values into
+  workspace operation inputs selected from the operation definition and CLI
+  binding table
+- **AND** CLI command adapter modules invoke workspace operations with actor
+  `cli`, CLI execution capabilities, and CLI-owned dependency assembly without
+  bypassing the workspace operation runner
+- **AND** CLI terminal preflight for provider credentials, browser opening,
+  account selection, and non-interactive guidance stays in CLI command adapter
+  modules before provider mutation begins
+- **AND** provider credential helpers continue to own OAuth credential storage,
+  token refresh, selected-account facts, and provider bearer resolution behind
+  narrow interfaces
+- **AND** CLI terminal formatters own command output strings, no-op output,
+  operation summaries, display-safe field rendering, path rendering, and
+  command-specific result text
+- **AND** operation-domain modules emit display-safe operation results and
+  summaries but do not own public CLI command spelling, terminal prompts, or
+  terminal output layout
+- **AND** Gateway adapters and local runtime proxy code do not own CLI command
+  parsing, terminal preflight prompts, terminal output layout, or direct CLI
+  dependency assembly
+
 #### Scenario: Gateway binding from operation definition
 
 - **WHEN** a browser or automation caller starts a workspace operation through

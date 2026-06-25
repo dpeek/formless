@@ -19,14 +19,12 @@ import {
   cloudflareDomainClientFromEnv,
   type CloudflareDomainClient,
 } from "./cloudflare-domain-client.ts";
+import { formlessCliUsage, parseFormlessCliArgs } from "./cli-command.ts";
 import {
-  formlessCliUsage,
-  parseFormlessCliArgs,
-  formlessCliWorkspaceOperationBindingForCommand,
-  formlessCliWorkspaceOperationCommandNameForKind,
-  type FormlessCliWorkspaceOperationCommandName,
-  type FormlessCliWorkspaceOperationKind,
-} from "./cli-command.ts";
+  runFormlessCliWorkspacePushCredentialPreflight,
+  type FormlessCliCloudflareOAuthAccountSelectionInput,
+} from "./cli-push-credential-preflight.ts";
+import { runFormlessCliWorkspaceOperationCommand } from "./cli-workspace-command-adapter.ts";
 import type {
   InstanceDomainProviderManualCleanupResponse,
   InstanceDomainProviderPlanResponse,
@@ -83,7 +81,6 @@ import {
   destroyLocalFormlessWorkspace as destroyLocalFormlessWorkspaceCommand,
   deployFormlessInstanceWorkspace as deployFormlessInstanceWorkspaceCommand,
   deployLocalFormlessWorkspace as deployLocalFormlessWorkspaceCommand,
-  preflightPushFormlessCloudflareOAuthCredential,
   pushFormlessInstanceWorkspace as pushFormlessInstanceWorkspaceCommand,
   resolveFormlessInstanceWorkspaceProviderContext,
   type DestroyLocalFormlessWorkspaceInput,
@@ -106,24 +103,7 @@ import {
   type InitFormlessInstanceWorkspaceResult,
 } from "./instance-workspace-lifecycle.ts";
 import { resolveFormlessInstanceWorkspaceRoot as resolveFormlessInstanceWorkspaceRootCommand } from "./instance-workspace-foundation.ts";
-import {
-  setupCloudflareCredentialsWithFormlessOAuth,
-  type AlchemyCloudflareCredentialSetupResult,
-} from "./instance-workspace-credential-setup.ts";
-import type {
-  FormlessCloudflareOAuthAccount,
-  FormlessCloudflareOAuthAdapter,
-} from "./cloudflare-oauth.ts";
-import { runFormlessWorkspaceOperation } from "./instance-workspace-operations.ts";
-import {
-  WORKSPACE_OPERATION_CAPABILITIES,
-  assertWorkspaceOperationExecutionAllowed,
-  workspaceOperationInputDefaults,
-  type RunnableWorkspaceOperationInput,
-  type WorkspaceOperationDisplayObject,
-  type WorkspaceOperationDisplayValue,
-  type WorkspaceOperationState,
-} from "@dpeek/formless-workspace";
+import type { FormlessCloudflareOAuthAdapter } from "./cloudflare-oauth.ts";
 import {
   disableFormlessInstanceDomainRedirect,
   disableFormlessInstanceDomainRoute,
@@ -156,6 +136,7 @@ export {
   parseFormlessCliArgs,
   type FormlessCliCommand,
 } from "./cli-command.ts";
+export type { FormlessCliCloudflareOAuthAccountSelectionInput } from "./cli-push-credential-preflight.ts";
 export {
   CF_API_TOKEN_ENV_NAME,
   CLOUDFLARE_API_TOKEN_ENV_NAME,
@@ -386,12 +367,6 @@ export type FormlessCliDependencies = {
   setupCapability: FormlessInstanceOwnerSetupCapabilityAdapter;
 };
 
-export type FormlessCliCloudflareOAuthAccountSelectionInput = {
-  accounts: readonly FormlessCloudflareOAuthAccount[];
-  credentialRef: string;
-  targetAlias: string;
-};
-
 async function resolveTopLevelFormlessWorkspacePath(
   input: { workspacePath?: string | null },
   dependencies: Pick<FormlessCliDependencies, "cwd">,
@@ -447,42 +422,21 @@ export async function runFormlessCli(
       return;
     }
     case "workspacePull": {
-      const result = await runCliWorkspaceOperation(
-        workspaceCliCommandNameForOperation("pull"),
-        {
-          dryRun: command.dryRun,
-          kind: "pull",
-          targetAlias: command.targetAlias,
-          workspacePath: command.workspacePath,
-        },
-        dependencies,
-      );
-      dependencies.log(formatCliWorkspaceOperationOutput(result));
+      const output = await runFormlessCliWorkspaceOperationCommand(command, {
+        ...dependencies,
+        packageVersion: packageJson.version,
+      });
+      dependencies.log(output);
       return;
     }
     case "workspacePush": {
-      if (!command.dryRun) {
-        await runCliWorkspacePushCloudflareOAuthPreflight(
-          {
-            targetAlias: command.targetAlias,
-            workspacePath: command.workspacePath ?? undefined,
-          },
-          dependencies,
-        );
-      }
+      await runFormlessCliWorkspacePushCredentialPreflight(command, dependencies);
 
-      const result = await runCliWorkspaceOperation(
-        workspaceCliCommandNameForOperation("push"),
-        {
-          dryRun: command.dryRun,
-          ...(command.force ? { force: true } : {}),
-          kind: "push",
-          targetAlias: command.targetAlias,
-          workspacePath: command.workspacePath,
-        },
-        dependencies,
-      );
-      dependencies.log(formatCliWorkspaceOperationOutput(result));
+      const output = await runFormlessCliWorkspaceOperationCommand(command, {
+        ...dependencies,
+        packageVersion: packageJson.version,
+      });
+      dependencies.log(output);
       return;
     }
     case "workspaceDestroy": {
@@ -567,306 +521,6 @@ function workspaceDevServerCommandForEnv(
     args: [...command.args, ...extraArgs],
     label: `${command.label} ${extraArgs.join(" ")}`,
   };
-}
-
-function workspaceCliCommandNameForOperation(
-  kind: FormlessCliWorkspaceOperationKind,
-): FormlessCliWorkspaceOperationCommandName {
-  return formlessCliWorkspaceOperationCommandNameForKind(kind);
-}
-
-async function runCliWorkspaceOperation(
-  commandName: string,
-  input: RunnableWorkspaceOperationInput,
-  dependencies: FormlessCliDependencies,
-): Promise<WorkspaceOperationState> {
-  const operationInput = workspaceOperationInputForCliCommand(commandName, input);
-  return runCliWorkspaceOperationInput(operationInput, dependencies);
-}
-
-async function runCliWorkspaceOperationInput(
-  input: RunnableWorkspaceOperationInput,
-  dependencies: FormlessCliDependencies,
-): Promise<WorkspaceOperationState> {
-  const operationInput = workspaceOperationInputForCliActor(input);
-  const state = await runFormlessWorkspaceOperation(
-    operationInput,
-    {
-      ...dependencies,
-      packageVersion: packageJson.version,
-    },
-    { actor: "cli", capabilities: WORKSPACE_OPERATION_CAPABILITIES },
-  );
-
-  if (state.status === "failed") {
-    if (shouldPrintFailedWorkspaceOperation(state)) {
-      dependencies.log(formatCliWorkspaceOperationResult(state));
-    }
-
-    throw new Error(state.errors[0]?.message ?? "Workspace operation failed.");
-  }
-
-  return state;
-}
-
-async function runCliWorkspacePushCloudflareOAuthPreflight(
-  input: { targetAlias?: string | null; workspacePath?: string },
-  dependencies: FormlessCliDependencies,
-): Promise<void> {
-  const preflight = await preflightPushFormlessCloudflareOAuthCredential(input, dependencies);
-
-  if (!preflight.needsSetup) {
-    return;
-  }
-
-  const setupInput = {
-    deploymentConfigId: preflight.deploymentConfigId,
-    profileLabel: preflight.credentialId,
-    provider: "cloudflare" as const,
-    targetAlias: preflight.selectedTarget.alias,
-    workspaceRoot: preflight.workspaceRoot,
-  };
-  const setupDependencies = {
-    now: dependencies.now,
-    ...(dependencies.cloudflareOAuth === undefined ? {} : { oauth: dependencies.cloudflareOAuth }),
-  };
-  const setup = await setupCloudflareCredentialsWithFormlessOAuth(setupInput, setupDependencies);
-  const completed = await completeCliCloudflareOAuthSetup(setup, dependencies);
-
-  if (cliCloudflareOAuthSetupRequiresAccountSelection(completed)) {
-    const selection = cliCloudflareOAuthAccountSelectionInput(
-      completed,
-      preflight.selectedTarget.alias,
-    );
-    const selectedAccountId = await selectCliCloudflareOAuthAccount(selection, dependencies);
-
-    if (selectedAccountId === null || selectedAccountId === undefined) {
-      throw new Error(formatCliCloudflareOAuthNonInteractiveAccountSelectionError(selection));
-    }
-
-    const selectedSetup = await setupCloudflareCredentialsWithFormlessOAuth(
-      { ...setupInput, accountId: selectedAccountId },
-      setupDependencies,
-    );
-    const selectedCompleted = await completeCliCloudflareOAuthSetup(selectedSetup, dependencies);
-
-    assertCliCloudflareOAuthSetupCompleted(selectedCompleted);
-    return;
-  }
-
-  assertCliCloudflareOAuthSetupCompleted(completed);
-}
-
-async function completeCliCloudflareOAuthSetup(
-  setup: AlchemyCloudflareCredentialSetupResult,
-  dependencies: Pick<FormlessCliDependencies, "log" | "openBrowser">,
-): Promise<AlchemyCloudflareCredentialSetupResult> {
-  await openCliCloudflareOAuthAuthorizationUrls(setup, dependencies);
-
-  return setup.continue === undefined ? setup : setup.continue();
-}
-
-async function openCliCloudflareOAuthAuthorizationUrls(
-  setup: AlchemyCloudflareCredentialSetupResult,
-  dependencies: Pick<FormlessCliDependencies, "log" | "openBrowser">,
-): Promise<void> {
-  for (const event of setup.events ?? []) {
-    if (event.type !== "externalAuthorizationUrl") {
-      continue;
-    }
-
-    dependencies.log(`Cloudflare authorization URL: ${event.url}`);
-    await dependencies.openBrowser(event.url);
-  }
-}
-
-function assertCliCloudflareOAuthSetupCompleted(
-  setup: AlchemyCloudflareCredentialSetupResult,
-): void {
-  if (setup.status !== "succeeded" || setup.result?.summary.fields.status !== "validated") {
-    throw new Error("Cloudflare credential setup requires a selected account before push.");
-  }
-}
-
-function cliCloudflareOAuthSetupRequiresAccountSelection(
-  setup: AlchemyCloudflareCredentialSetupResult,
-): boolean {
-  return (
-    setup.status === "succeeded" &&
-    setup.result?.summary.fields.status === "account-selection-required"
-  );
-}
-
-function cliCloudflareOAuthAccountSelectionInput(
-  setup: AlchemyCloudflareCredentialSetupResult,
-  targetAlias: string,
-): FormlessCliCloudflareOAuthAccountSelectionInput {
-  const details = setup.result?.details;
-
-  if (!isPlainCliObject(details)) {
-    throw new Error("Cloudflare account selection details were missing from credential setup.");
-  }
-
-  const credentialRef = stringCliField(details.credentialRef);
-  const accounts = Array.isArray(details.accounts)
-    ? details.accounts.map(parseDisplaySafeCliCloudflareOAuthAccount)
-    : undefined;
-
-  if (credentialRef === undefined || accounts === undefined) {
-    throw new Error("Cloudflare account selection details were incomplete.");
-  }
-
-  return { accounts, credentialRef, targetAlias };
-}
-
-async function selectCliCloudflareOAuthAccount(
-  input: FormlessCliCloudflareOAuthAccountSelectionInput,
-  dependencies: Pick<FormlessCliDependencies, "log" | "selectCloudflareAccount">,
-): Promise<string | null | undefined> {
-  dependencies.log("Cloudflare account selection required:");
-
-  input.accounts.forEach((account, index) => {
-    dependencies.log(`  ${index + 1}. ${formatCliCloudflareOAuthAccount(account)}`);
-  });
-
-  const selector =
-    dependencies.selectCloudflareAccount ??
-    ((selection: FormlessCliCloudflareOAuthAccountSelectionInput) =>
-      selectInteractiveCloudflareOAuthAccount(selection));
-
-  return selector(input);
-}
-
-async function selectInteractiveCloudflareOAuthAccount(
-  input: FormlessCliCloudflareOAuthAccountSelectionInput,
-): Promise<string | null> {
-  if (!process.stdin.isTTY || !process.stdout.isTTY) {
-    return null;
-  }
-
-  const readline = createInterface({
-    input: process.stdin,
-    output: process.stdout,
-  });
-
-  try {
-    while (true) {
-      const answer = await readline.question(
-        `Select Cloudflare account [1-${input.accounts.length}]: `,
-      );
-      const selectedAccount = cliCloudflareOAuthAccountForAnswer(input.accounts, answer);
-
-      if (selectedAccount) {
-        return selectedAccount.id;
-      }
-
-      console.log("Invalid Cloudflare account selection.");
-    }
-  } finally {
-    readline.close();
-  }
-}
-
-function cliCloudflareOAuthAccountForAnswer(
-  accounts: readonly FormlessCloudflareOAuthAccount[],
-  answer: string,
-): FormlessCloudflareOAuthAccount | undefined {
-  const trimmed = answer.trim();
-  const selectedIndex = Number(trimmed);
-
-  if (Number.isInteger(selectedIndex)) {
-    return accounts[selectedIndex - 1];
-  }
-
-  return accounts.find((account) => account.id === trimmed);
-}
-
-function formatCliCloudflareOAuthNonInteractiveAccountSelectionError(
-  input: FormlessCliCloudflareOAuthAccountSelectionInput,
-): string {
-  return [
-    "Multiple Cloudflare accounts were found for the Formless OAuth credential.",
-    "Run `formless push` from an interactive terminal and select one account before provider mutation.",
-    `Target: ${input.targetAlias}.`,
-    `Credential: ${input.credentialRef}.`,
-    "Available accounts:",
-    ...input.accounts.map(
-      (account, index) => `  ${index + 1}. ${formatCliCloudflareOAuthAccount(account)}`,
-    ),
-  ].join("\n");
-}
-
-function formatCliCloudflareOAuthAccount(account: FormlessCloudflareOAuthAccount): string {
-  return [
-    `id=${account.id}`,
-    ...(account.name === undefined ? [] : [`name=${account.name}`]),
-    `workers.dev=${account.workersDevSubdomain}.workers.dev`,
-  ].join(" ");
-}
-
-function parseDisplaySafeCliCloudflareOAuthAccount(value: unknown): FormlessCloudflareOAuthAccount {
-  if (!isPlainCliObject(value)) {
-    throw new Error("Cloudflare account selection details included an invalid account.");
-  }
-
-  const id = stringCliField(value.id);
-  const name = stringCliField(value.name);
-  const workersDevSubdomain = stringCliField(value.workersDevSubdomain);
-
-  if (id === undefined || workersDevSubdomain === undefined) {
-    throw new Error("Cloudflare account selection details included an incomplete account.");
-  }
-
-  return {
-    id,
-    ...(name === undefined ? {} : { name }),
-    workersDevSubdomain,
-  };
-}
-
-function isPlainCliObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function stringCliField(value: unknown): string | undefined {
-  return typeof value === "string" ? value : undefined;
-}
-
-function shouldPrintFailedWorkspaceOperation(state: WorkspaceOperationState): boolean {
-  void state;
-
-  return false;
-}
-
-function workspaceOperationInputForCliCommand(
-  commandName: string,
-  input: RunnableWorkspaceOperationInput,
-): RunnableWorkspaceOperationInput {
-  const binding = formlessCliWorkspaceOperationBindingForCommand(commandName);
-
-  if (binding.operationKind !== input.kind) {
-    throw new Error(
-      `Formless CLI command "${commandName}" is bound to operation ` +
-        `"${binding.operationKind}", expected "${input.kind}".`,
-    );
-  }
-
-  return workspaceOperationInputForCliActor(input);
-}
-
-function workspaceOperationInputForCliActor(
-  input: RunnableWorkspaceOperationInput,
-): RunnableWorkspaceOperationInput {
-  assertWorkspaceOperationExecutionAllowed({
-    actor: "cli",
-    capabilities: WORKSPACE_OPERATION_CAPABILITIES,
-    kind: input.kind,
-  });
-
-  return {
-    ...workspaceOperationInputDefaults(input.kind),
-    ...input,
-  } as RunnableWorkspaceOperationInput;
 }
 
 export async function exportInstanceArchive(
@@ -1662,71 +1316,6 @@ function runCommandWithSpawn(
       );
     });
   });
-}
-
-function formatCliWorkspaceOperationResult(state: WorkspaceOperationState): string {
-  return [
-    `Workspace operation: ${formatWorkspaceOperationLabel(state.operation)} (${state.status}).`,
-    "Workspace source: layout-only manifest, storage snapshots, media payloads.",
-    `Summary: ${state.summary.title}.`,
-    ...formatCliDisplayFields(state.summary.fields),
-    ...(state.result?.details === undefined
-      ? []
-      : ["Details:", ...formatCliDisplayFields(state.result.details)]),
-    ...(state.result?.deployment === undefined
-      ? []
-      : ["Deployment execution summary:", ...formatCliDisplayFields(state.result.deployment)]),
-  ].join("\n");
-}
-
-function formatCliWorkspaceOperationOutput(state: WorkspaceOperationState): string {
-  return isNoopCliWorkspaceOperation(state)
-    ? "Everything up to date."
-    : formatCliWorkspaceOperationResult(state);
-}
-
-function isNoopCliWorkspaceOperation(state: WorkspaceOperationState): boolean {
-  return (
-    state.status === "succeeded" &&
-    (state.operation === "pull" || state.operation === "push") &&
-    state.summary.fields.noop === true &&
-    state.summary.fields.runtimeRebuild === undefined
-  );
-}
-
-function formatWorkspaceOperationLabel(operation: WorkspaceOperationState["operation"]) {
-  switch (operation) {
-    case "credentialSetup":
-      return "credential setup";
-    case "deploymentRefresh":
-      return "deployment refresh";
-    default:
-      return operation;
-  }
-}
-
-function formatCliDisplayFields(fields: WorkspaceOperationDisplayObject): string[] {
-  return Object.entries(fields)
-    .sort(([left], [right]) => left.localeCompare(right))
-    .map(([key, value]) => `${key}: ${formatCliDisplayValue(value)}.`);
-}
-
-function formatCliDisplayValue(value: WorkspaceOperationDisplayValue): string {
-  if (value === null) {
-    return "none";
-  }
-
-  if (Array.isArray(value)) {
-    return value.length === 0
-      ? "none"
-      : value.map((entry) => formatCliDisplayValue(entry)).join(", ");
-  }
-
-  if (typeof value === "object") {
-    return JSON.stringify(value);
-  }
-
-  return String(value);
 }
 
 function formatInstanceWorkspaceTokenAdoptResult(
