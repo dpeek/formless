@@ -171,7 +171,9 @@ For `bun agents watch <worker-name>`:
 - Preserve user changes.
 - Keep data model flat.
 - Compose in view/query/projection/action layer.
-- Backwards compat is not yet a concern: no shims, re-exports, migrations and new schema versions.
+- Current-state only: backwards compatibility is not a project goal unless an explicit spec/task says otherwise.
+- Do not add shims, re-exports, redirects, migrations, schema versions, deprecated CLI commands, explicit 404 handlers, tests, proof, or docs for removed/deprecated behavior.
+- Specs describe current or desired behavior. When behavior is removed, delete or update old code, tests, and spec facts instead of preserving rejection or alias paths.
 - Tests must not depend on exact `lib/site-app/seed-records.json` content.
 - Use `src/test/site-records.ts` fixtures for Site record shape.
 - Claims in docs must point to code, schema, tests, specs, or shipped behavior.
