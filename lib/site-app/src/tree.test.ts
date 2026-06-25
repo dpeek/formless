@@ -1318,7 +1318,7 @@ describe("site page tree projection", () => {
     );
   });
 
-  it("projects public operation form schema-key facts and scalar input metadata", () => {
+  it("projects public operation form schema-key target, route, challenge, and public field facts", () => {
     const records = [
       ...baseTreeRecords(),
       blockRecord("rec_site_block_public_intake", {
@@ -1393,48 +1393,12 @@ describe("site page tree projection", () => {
           kind: "turnstile",
           siteKey: "public-site-key",
         },
-        fields: [
-          {
+        fields: expect.arrayContaining([
+          expect.objectContaining({
             name: "fullName",
             label: "Your name",
-            required: true,
-            control: "text",
-          },
-          {
-            name: "details",
-            label: "Request details",
-            required: true,
-            control: "longText",
-          },
-          {
-            name: "tier",
-            label: "Tier",
-            required: true,
-            control: "enum",
-            options: [
-              { value: "standard", label: "Standard" },
-              { value: "priority", label: "Priority" },
-            ],
-          },
-          {
-            name: "acceptedTerms",
-            label: "Accepted terms",
-            required: false,
-            control: "boolean",
-          },
-          {
-            name: "neededBy",
-            label: "Needed by",
-            required: false,
-            control: "date",
-          },
-          {
-            name: "quantity",
-            label: "Quantity",
-            required: false,
-            control: "number",
-          },
-        ],
+          }),
+        ]),
       },
     });
     expect(form).not.toHaveProperty("operationTargetSchemaKey");
@@ -1487,7 +1451,7 @@ describe("site page tree projection", () => {
     });
   });
 
-  it("warns and omits public operation form bindings for unavailable targets and required unsupported inputs", () => {
+  it("warns and omits public operation form bindings for unavailable targets and unsupported required inputs", () => {
     const records = [
       ...baseTreeRecords(),
       blockRecord("rec_site_block_missing_target_intake", {
@@ -1502,20 +1466,6 @@ describe("site page tree projection", () => {
         label: "Required reference",
         operationTargetKind: "schemaKey",
         operationTargetSchemaKey: "crm",
-        operationKey: "request.submit",
-      }),
-      blockRecord("rec_site_block_required_query_choice_intake", {
-        type: "publicOperationForm",
-        label: "Required query choice",
-        operationTargetKind: "schemaKey",
-        operationTargetSchemaKey: "catalog",
-        operationKey: "request.submit",
-      }),
-      blockRecord("rec_site_block_optional_reference_intake", {
-        type: "publicOperationForm",
-        label: "Optional reference",
-        operationTargetKind: "schemaKey",
-        operationTargetSchemaKey: "optional-crm",
         operationKey: "request.submit",
       }),
       placementRecord(
@@ -1534,29 +1484,11 @@ describe("site page tree projection", () => {
           order: 5000,
         },
       ),
-      placementRecord(
-        "rec_site_place_home_required_query_choice_intake",
-        "rec_site_content_home",
-        "rec_site_block_required_query_choice_intake",
-        {
-          order: 6000,
-        },
-      ),
-      placementRecord(
-        "rec_site_place_home_optional_reference_intake",
-        "rec_site_content_home",
-        "rec_site_block_optional_reference_intake",
-        {
-          order: 7000,
-        },
-      ),
     ];
     const result = buildSitePageTree(siteSourceSchema, records, "home", {
       generatedAt,
       publicOperationTargetResolver: publicOperationTargetResolver({
-        catalog: requiredQueryChoiceIntakeSchema,
         crm: requiredReferenceIntakeSchema,
-        "optional-crm": optionalReferenceIntakeSchema,
       }),
       turnstileSiteKey: "public-site-key",
     });
@@ -1566,29 +1498,9 @@ describe("site page tree projection", () => {
       tree.page,
       "rec_site_place_home_required_reference_intake",
     );
-    const requiredQueryChoice = childForPlacement(
-      tree.page,
-      "rec_site_place_home_required_query_choice_intake",
-    );
-    const optionalReference = childForPlacement(
-      tree.page,
-      "rec_site_place_home_optional_reference_intake",
-    );
 
     expect(missingTarget.publicOperation).toBeUndefined();
     expect(requiredReference.publicOperation).toBeUndefined();
-    expect(requiredQueryChoice.publicOperation).toBeUndefined();
-    expect(optionalReference.publicOperation).toMatchObject({
-      canonicalKey: "request.submit",
-      fields: [
-        {
-          name: "fullName",
-          label: "Full name",
-          required: true,
-          control: "text",
-        },
-      ],
-    });
     expect(result.meta.warnings).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -1598,17 +1510,6 @@ describe("site page tree projection", () => {
         expect.objectContaining({
           code: "unsupported-public-operation-input",
           recordId: "rec_site_block_required_reference_intake",
-        }),
-        expect.objectContaining({
-          code: "unsupported-public-operation-input",
-          recordId: "rec_site_block_required_query_choice_intake",
-        }),
-      ]),
-    );
-    expect(result.meta.warnings).not.toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          recordId: "rec_site_block_optional_reference_intake",
         }),
       ]),
     );
@@ -1917,141 +1818,6 @@ const requiredReferenceIntakeSchema = {
               owner: {
                 field: "owner",
                 required: true,
-              },
-            },
-          },
-          effect: {
-            type: "createRecord",
-          },
-          output: {
-            type: "create",
-          },
-          idempotency: {
-            required: true,
-          },
-          audit: {
-            input: "summary",
-          },
-          policy: anonymousTurnstilePolicy,
-        },
-      },
-    },
-  },
-  queries: {},
-  itemViews: {},
-  tableViews: {},
-  views: {},
-} satisfies AppSchema;
-
-const requiredQueryChoiceIntakeSchema = {
-  version: 1,
-  entities: {
-    "catalog-item": {
-      label: "Catalog item",
-      fields: {
-        label: {
-          type: "text",
-          required: true,
-          label: "Label",
-        },
-      },
-    },
-    request: {
-      label: "Request",
-      fields: {
-        name: {
-          type: "text",
-          required: true,
-          label: "Name",
-        },
-      },
-      operations: {
-        submit: {
-          label: "Submit request",
-          kind: "create",
-          scope: "collection",
-          input: {
-            fields: {
-              catalogItem: {
-                type: "queryChoice",
-                required: true,
-                label: "Catalog item",
-                query: "catalogItems",
-              } as never,
-            },
-          },
-          effect: {
-            type: "createRecord",
-          },
-          output: {
-            type: "create",
-          },
-          idempotency: {
-            required: true,
-          },
-          audit: {
-            input: "summary",
-          },
-          policy: anonymousTurnstilePolicy,
-        },
-      },
-    },
-  },
-  queries: {
-    catalogItems: {
-      label: "Catalog items",
-      entity: "catalog-item",
-      expression: { kind: "all" },
-    },
-  },
-  itemViews: {},
-  tableViews: {},
-  views: {},
-} satisfies AppSchema;
-
-const optionalReferenceIntakeSchema = {
-  version: 1,
-  entities: {
-    owner: {
-      label: "Owner",
-      fields: {
-        label: {
-          type: "text",
-          required: true,
-          label: "Label",
-        },
-      },
-    },
-    request: {
-      label: "Request",
-      fields: {
-        name: {
-          type: "text",
-          required: true,
-          label: "Name",
-        },
-        owner: {
-          type: "reference",
-          required: false,
-          label: "Owner",
-          to: "owner",
-          displayField: "label",
-        },
-      },
-      operations: {
-        submit: {
-          label: "Submit request",
-          kind: "create",
-          scope: "collection",
-          input: {
-            fields: {
-              fullName: {
-                field: "name",
-                required: true,
-                label: "Full name",
-              },
-              owner: {
-                field: "owner",
               },
             },
           },

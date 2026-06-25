@@ -5,8 +5,9 @@ import {
 import type {
   AppSchema,
   EntityOperationInputFieldSchema,
-  FieldSchema,
+  PublicSafeOperationInputField,
 } from "@dpeek/formless-schema";
+import { projectPublicSafeOperationInputFields } from "@dpeek/formless-schema";
 import type { StoredRecord } from "@dpeek/formless-storage";
 import type { AppStorageIdentity } from "../shared/app-storage-identity.ts";
 import { parseEmailDeliveryAddress, type EmailDeliveryAddress } from "../shared/email-runtime.ts";
@@ -213,20 +214,19 @@ function operationInputNotificationFields(input: {
   schema: AppSchema;
 }): Array<{ label: string; value: string }> {
   const entity = input.schema.entities[input.response.invocation.operation.entityName];
-  const fields = input.response.invocation.schemaOperation.input?.fields;
 
-  if (!entity || !fields) {
+  if (!entity) {
     return [];
   }
 
-  return Object.entries(fields).flatMap(([inputName, field]) => {
-    const schemaField = notificationFieldSchema(field, entity.fields);
+  const projection = projectPublicSafeOperationInputFields({
+    entity,
+    operation: input.response.invocation.schemaOperation,
+  });
+  const operationFields = input.response.invocation.schemaOperation.input?.fields ?? {};
 
-    if (!schemaField || !supportedNotificationField(schemaField)) {
-      return [];
-    }
-
-    const value = submittedInputFieldValue(input.input, inputName, field);
+  return projection.fields.flatMap((field) => {
+    const value = submittedInputFieldValue(input.input, field.name, operationFields[field.name]);
 
     if (value === undefined) {
       return [];
@@ -234,97 +234,36 @@ function operationInputNotificationFields(input: {
 
     return [
       {
-        label: field.label ?? schemaField.label ?? inputName,
-        value: displayOperationInputValue(schemaField, value),
+        label: field.label,
+        value: displayOperationInputValue(field, value),
       },
     ];
   });
 }
 
-function notificationFieldSchema(
-  field: EntityOperationInputFieldSchema,
-  entityFields: Record<string, FieldSchema>,
-): FieldSchema | undefined {
-  if ("field" in field) {
-    return entityFields[field.field];
-  }
-
-  if (field.type === "text") {
-    return {
-      type: "text",
-      required: field.required,
-      label: field.label,
-    };
-  }
-
-  if (field.type === "boolean") {
-    return {
-      type: "boolean",
-      required: field.required,
-      label: field.label,
-    };
-  }
-
-  if (field.type === "date") {
-    return {
-      type: "date",
-      required: field.required,
-      label: field.label,
-    };
-  }
-
-  if (field.type === "number") {
-    return {
-      type: "number",
-      required: field.required,
-      label: field.label,
-    };
-  }
-
-  if (field.type === "enum") {
-    return {
-      type: "enum",
-      required: field.required,
-      label: field.label,
-      values: field.values,
-    };
-  }
-
-  return undefined;
-}
-
-function supportedNotificationField(
-  field: FieldSchema,
-): field is Exclude<FieldSchema, { type: "reference" }> {
-  return field.type !== "reference";
-}
-
 function submittedInputFieldValue(
   input: Record<string, unknown>,
   inputName: string,
-  field: EntityOperationInputFieldSchema,
+  field: EntityOperationInputFieldSchema | undefined,
 ): unknown {
   if (Object.hasOwn(input, inputName)) {
     return input[inputName];
   }
 
-  if ("field" in field && Object.hasOwn(input, field.field)) {
+  if (field && "field" in field && Object.hasOwn(input, field.field)) {
     return input[field.field];
   }
 
   return undefined;
 }
 
-function displayOperationInputValue(
-  field: Exclude<FieldSchema, { type: "reference" }>,
-  value: unknown,
-) {
-  if (field.type === "boolean") {
+function displayOperationInputValue(field: PublicSafeOperationInputField, value: unknown) {
+  if (field.control === "boolean") {
     return value === true ? "Yes" : value === false ? "No" : String(value);
   }
 
-  if (field.type === "enum" && typeof value === "string") {
-    return field.values[value]?.label ?? value;
+  if (field.control === "enum" && typeof value === "string") {
+    return field.options?.find((option) => option.value === value)?.label ?? value;
   }
 
   if (typeof value === "number") {

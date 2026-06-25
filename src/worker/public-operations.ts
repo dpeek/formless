@@ -6,11 +6,11 @@ import type {
   PublicOperationRequestSource,
   PublicOperationResponse,
 } from "../shared/protocol.ts";
-import type { AppSchema, EntityOperationSchema, EntitySchema } from "@dpeek/formless-schema";
+import type { AppSchema, EntityOperationSchema } from "@dpeek/formless-schema";
 import {
   formatEntityOperationKey,
-  getOperationHandlerCapabilities,
-  isOperationHandlerEffect,
+  isAnonymousPublicOperationExecutable,
+  selectAnonymousPublicOperation,
 } from "@dpeek/formless-schema";
 import { nowIsoString } from "../shared/clock.ts";
 import type {
@@ -66,7 +66,6 @@ type PublicOperationExecutionInput = {
 };
 
 type SelectedPublicOperation = {
-  entity: EntitySchema;
   entityName: string;
   operation: EntityOperationSchema;
   operationName: string;
@@ -174,7 +173,7 @@ export async function executePublicOperationRequest(
       : { siteBlockId: envelopeFields.source.siteBlockId }),
   });
 
-  assertPublicOperationInvocationAllowed(input.storage, unverifiedEnvelope);
+  assertPublicOperationInvocationAllowed(input.storage, unverifiedEnvelope, input.schema);
   recordOperationInvocationAccepted(input.storage, unverifiedEnvelope);
 
   let parsed: ParsedPublicOperationRequest;
@@ -252,23 +251,11 @@ function selectPublicOperation(
     throw new PublicOperationError("Public operation is not available.", 404);
   }
 
-  const publicCommand =
-    operation.kind === "command" &&
-    (operation.effect?.type === "recordPlan" ||
-      (isOperationHandlerEffect(operation.effect) &&
-        getOperationHandlerCapabilities(operation.effect.handler).publicExecution));
-  const publicCreate =
-    operation.kind === "create" &&
-    operation.scope === "collection" &&
-    operation.effect?.type === "createRecord" &&
-    operation.output.type === "create";
-
-  if (!publicCommand && !publicCreate) {
+  if (!isAnonymousPublicOperationExecutable(operation)) {
     throw new PublicOperationError("Public operation is not available.", 404);
   }
 
   return {
-    entity,
     entityName: route.entityName,
     operation,
     operationName: route.operationName,
@@ -301,14 +288,14 @@ function assertPublicOperationOrigin(request: Request, operation: EntityOperatio
 function assertPublicOperationInvocationAllowed(
   storage: DurableObjectStorage,
   envelope: OperationInvocationEnvelope,
+  schema: AppSchema,
 ) {
-  const access = envelope.schemaOperation.policy?.access;
-  const allowed =
-    envelope.schemaOperation.policy?.actors.includes("anonymous") &&
-    access?.actor === "anonymous" &&
-    access.challenge.kind === "turnstile";
+  const operation = selectAnonymousPublicOperation(schema, {
+    entityName: envelope.operation.entityName,
+    operationName: envelope.operation.operationName,
+  });
 
-  if (!allowed) {
+  if (operation.kind !== "available") {
     const error = new PublicOperationError("Public operation is not available.", 404);
 
     recordOperationInvocationRejected(storage, envelope, error);

@@ -677,6 +677,18 @@ operation input contracts, and public operation bindings only.
 - THEN parsing fails
 - AND the invalid app schema is not used for generated UI or writes
 
+#### Scenario: Select public operation eligibility from schema facts
+
+- GIVEN runtime, Site tree projection, notification projection, or tests need to
+  decide whether an operation is eligible for anonymous public execution
+- WHEN public operation eligibility is selected
+- THEN the decision is derived from schema-owned operation facts including
+  operation kind, effect, output contract, actor policy, access challenge, and
+  origin policy
+- AND target route resolution, app storage identity, runtime challenge
+  configuration, provider secrets, request origin evaluation, storage writes,
+  and delivery side effects are not schema facts
+
 #### Scenario: Export operation-named public contracts
 
 - GIVEN app, client, Worker, Site runtime, or tests need public execution
@@ -698,10 +710,12 @@ anonymous public bindings.
 - AND the parsed operation exposes that input contract to the public operation
   executor
 
-#### Scenario: Project public input fields for generic forms
+#### Scenario: Project public-safe input fields
 
-- GIVEN a public operation form binding references an anonymous public operation
-- WHEN public form field metadata is projected for browser rendering
+- GIVEN a public operation form binding or operation input notification needs
+  public-safe input field metadata for an anonymous public operation
+- WHEN public-safe input field metadata is projected for browser rendering or
+  submitted input display
 - THEN the projection is derived from `operation.input.fields`
 - AND entity-backed operation input fields reuse public-safe entity field
   labels, required flags, scalar types, enum values, and text presentation facts
@@ -714,6 +728,8 @@ anonymous public bindings.
   customer facts are not projected as generic public form fields
 - AND an operation whose required input cannot be represented by the generic
   public form field projection is unavailable to that generic form binding
+- AND email layout, reply-to parsing, runtime notification configuration, and
+  delivery scheduling remain outside the schema-owned projection
 
 #### Scenario: Require public input for anonymous operation
 

@@ -13,15 +13,12 @@ import type {
   StoredRecord,
 } from "./types.ts";
 import {
-  formatEntityOperationKey,
-  getOperationHandlerCapabilities,
-  isOperationHandlerEffect,
   isOperationHandlerEffectForKind,
-  parseEntityOperationKey,
+  projectPublicSafeOperationInputFields,
+  selectAnonymousPublicOperation,
+  selectAnonymousPublicOperationByKey,
   type AppSchema,
   type EntityOperationSchema,
-  type EntityOperationInputFieldSchema,
-  type FieldSchema,
 } from "@dpeek/formless-schema";
 import { coreImageMediaDeliveryFactsForAssetId } from "@dpeek/formless-media";
 import {
@@ -647,54 +644,25 @@ function selectGenericPublicOperation(
       operation: EntityOperationSchema;
     }
   | { kind: "unavailable"; code: string; message: string } {
-  let parsed: ReturnType<typeof parseEntityOperationKey>;
+  const operation = selectAnonymousPublicOperationByKey(schema, operationKey);
 
-  try {
-    parsed = parseEntityOperationKey("Public operation form operation key", operationKey);
-  } catch (error) {
+  if (operation.kind !== "available") {
     return {
       kind: "unavailable",
-      code: "invalid-public-operation",
-      message: error instanceof Error ? error.message : "Public operation key is invalid.",
-    };
-  }
-
-  const entity = schema.entities[parsed.entityKey];
-  const operation = entity?.operations?.[parsed.operationKey];
-
-  if (!entity || !operation) {
-    return {
-      kind: "unavailable",
-      code: "missing-public-operation",
-      message: `Public operation form operation "${operationKey}" does not exist.`,
-    };
-  }
-
-  if (!publicOperationExecutable(operation) || !anonymousTurnstileSameOrigin(operation)) {
-    return {
-      kind: "unavailable",
-      code: "invalid-public-operation",
-      message: `Public operation form operation "${operationKey}" is not publicly executable.`,
-    };
-  }
-
-  if (!operation.input) {
-    return {
-      kind: "unavailable",
-      code: "invalid-public-operation",
-      message: `Public operation form operation "${operationKey}" does not declare input fields.`,
+      code:
+        operation.reason === "missing-operation"
+          ? "missing-public-operation"
+          : "invalid-public-operation",
+      message: operation.message,
     };
   }
 
   return {
     kind: "available",
-    entityName: parsed.entityKey,
-    operationName: parsed.operationKey,
-    canonicalKey: formatEntityOperationKey({
-      entityKey: parsed.entityKey,
-      operationKey: parsed.operationKey,
-    }),
-    operation,
+    entityName: operation.entityName,
+    operationName: operation.operationName,
+    canonicalKey: operation.canonicalKey,
+    operation: operation.operation,
   };
 }
 
@@ -705,101 +673,30 @@ function projectPublicOperationInputFields(input: {
   schema: AppSchema;
   warnings: SiteTreeWarning[];
 }): SitePublicOperationInputFieldNode[] | undefined {
-  if (!input.operation.input) {
-    return [];
-  }
-
   const entity = input.schema.entities[input.entityName];
-  const fields: SitePublicOperationInputFieldNode[] = [];
 
-  for (const [inputName, field] of Object.entries(input.operation.input.fields)) {
-    const projected = projectPublicOperationInputField(inputName, field, entity?.fields ?? {});
-
-    if (projected) {
-      fields.push(projected);
-      continue;
-    }
-
-    if (operationInputFieldRequired(field)) {
-      input.warnings.push({
-        code: "unsupported-public-operation-input",
-        recordId: input.recordId,
-        message: `Public operation form block "${input.recordId}" cannot render required input field "${inputName}".`,
-      });
-      return undefined;
-    }
+  if (!entity) {
+    return undefined;
   }
 
-  return fields;
-}
+  const projection = projectPublicSafeOperationInputFields({
+    entity,
+    operation: input.operation,
+  });
 
-function projectPublicOperationInputField(
-  inputName: string,
-  field: EntityOperationInputFieldSchema,
-  entityFields: Record<string, FieldSchema>,
-): SitePublicOperationInputFieldNode | undefined {
-  if ("field" in field) {
-    const entityField = entityFields[field.field];
-
-    if (!entityField) {
-      return undefined;
-    }
-
-    return projectScalarPublicOperationInputField(
-      inputName,
-      field.label,
-      field.required ?? false,
-      entityField,
-    );
+  for (const inputName of projection.unsupportedRequiredFields) {
+    input.warnings.push({
+      code: "unsupported-public-operation-input",
+      recordId: input.recordId,
+      message: `Public operation form block "${input.recordId}" cannot render required input field "${inputName}".`,
+    });
   }
 
-  return projectScalarPublicOperationInputField(inputName, field.label, field.required, field);
-}
-
-function projectScalarPublicOperationInputField(
-  inputName: string,
-  label: string | undefined,
-  required: boolean,
-  field: FieldSchema,
-): SitePublicOperationInputFieldNode | undefined {
-  const fieldLabel = label ?? field.label ?? inputName;
-
-  if (field.type === "text") {
-    return {
-      name: inputName,
-      label: fieldLabel,
-      required,
-      control: field.format === "longText" || field.format === "markdown" ? "longText" : "text",
-    };
+  if (projection.unsupportedRequiredFields.length > 0) {
+    return undefined;
   }
 
-  if (field.type === "boolean" || field.type === "date" || field.type === "number") {
-    return {
-      name: inputName,
-      label: fieldLabel,
-      required,
-      control: field.type,
-    };
-  }
-
-  if (field.type === "enum") {
-    return {
-      name: inputName,
-      label: fieldLabel,
-      required,
-      control: "enum",
-      options: Object.entries(field.values).map(([value, option]) => ({
-        value,
-        label: option.label,
-      })),
-    };
-  }
-
-  return undefined;
-}
-
-function operationInputFieldRequired(field: EntityOperationInputFieldSchema): boolean {
-  return "field" in field ? field.required === true : field.required;
+  return projection.fields;
 }
 
 function selectPublicContactOperation(
@@ -818,12 +715,14 @@ function selectPublicContactOperation(
     };
   }
 
-  const publicContactOperations = candidates.filter(({ entityName, operation }) => {
-    if (entityName !== "contact-message" || !anonymousTurnstileSameOrigin(operation)) {
-      return false;
+  const publicContactOperations = candidates.flatMap(({ entityName }) => {
+    if (entityName !== "contact-message") {
+      return [];
     }
 
-    return publicOperationExecutable(operation);
+    const operation = selectAnonymousPublicOperation(schema, { entityName, operationName });
+
+    return operation.kind === "available" ? [operation] : [];
   });
 
   if (publicContactOperations.length !== 1) {
@@ -843,10 +742,7 @@ function selectPublicContactOperation(
   return {
     kind: "available",
     entityName: publicOperation.entityName,
-    canonicalKey: formatEntityOperationKey({
-      entityKey: publicOperation.entityName,
-      operationKey: operationName,
-    }),
+    canonicalKey: publicOperation.canonicalKey,
   };
 }
 
@@ -866,12 +762,14 @@ function selectPublicSubscribeOperation(
     };
   }
 
-  const publicSubscribeOperations = candidates.filter(({ operation }) => {
-    return (
-      operation.kind === "command" &&
-      isOperationHandlerEffectForKind(operation.effect, "subscribe") &&
-      anonymousTurnstileSameOrigin(operation)
-    );
+  const publicSubscribeOperations = candidates.flatMap(({ entityName }) => {
+    const operation = selectAnonymousPublicOperation(schema, { entityName, operationName });
+
+    return operation.kind === "available" &&
+      operation.operation.kind === "command" &&
+      isOperationHandlerEffectForKind(operation.operation.effect, "subscribe")
+      ? [operation]
+      : [];
   });
 
   if (publicSubscribeOperations.length !== 1) {
@@ -891,10 +789,7 @@ function selectPublicSubscribeOperation(
   return {
     kind: "available",
     entityName: publicOperation.entityName,
-    canonicalKey: formatEntityOperationKey({
-      entityKey: publicOperation.entityName,
-      operationKey: operationName,
-    }),
+    canonicalKey: publicOperation.canonicalKey,
   };
 }
 
@@ -912,33 +807,6 @@ function operationCandidates(
       (candidate): candidate is { entityName: string; operation: EntityOperationSchema } =>
         candidate !== undefined,
     );
-}
-
-function anonymousTurnstileSameOrigin(operation: EntityOperationSchema): boolean {
-  const access = operation.policy?.access;
-
-  return (
-    operation.policy?.actors.includes("anonymous") === true &&
-    access !== undefined &&
-    access?.actor === "anonymous" &&
-    access.challenge.kind === "turnstile" &&
-    access.origin.kind === "same-origin"
-  );
-}
-
-function publicOperationExecutable(operation: EntityOperationSchema): boolean {
-  const publicCreate =
-    operation.kind === "create" &&
-    operation.scope === "collection" &&
-    operation.effect?.type === "createRecord" &&
-    operation.output.type === "create";
-  const publicCommand =
-    operation.kind === "command" &&
-    (operation.effect?.type === "recordPlan" ||
-      (isOperationHandlerEffect(operation.effect) &&
-        getOperationHandlerCapabilities(operation.effect.handler).publicExecution));
-
-  return publicCreate || publicCommand;
 }
 
 function projectedMediaFields(

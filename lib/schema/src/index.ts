@@ -17,6 +17,7 @@ export * from "./schema-operation-execution.ts";
 export * from "./schema-operations.ts";
 export * from "./schema-ordering.ts";
 export * from "./schema-parse-helpers.ts";
+export * from "./schema-public-operations.ts";
 export * from "./schema-read-models.ts";
 export * from "./schema-relationships.ts";
 export * from "./schema-runtime.ts";

@@ -51,6 +51,16 @@ through an explicit actor policy and public binding.
 - AND the executor does not require owner session or admin bearer authorization
   for that request
 
+#### Scenario: Executor uses schema-owned eligibility
+
+- GIVEN an anonymous public operation route resolves to a declared operation
+- WHEN the public operation executor evaluates operation eligibility
+- THEN it consumes the schema-owned public operation eligibility facts for the
+  declared operation
+- AND target route resolution, request origin evaluation, Turnstile secret
+  verification, app storage identity selection, Authority writes, audit rows,
+  idempotency, and post-commit delivery side effects remain runtime-owned
+
 #### Scenario: Execute public operations
 
 - GIVEN an entity operation declares anonymous public policy

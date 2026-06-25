@@ -214,9 +214,12 @@ runtime secrets.
   operation route, challenge facts required for browser rendering, and
   public-safe operation input field metadata
 - AND the target may be a schema-key app route or an installed app route
-- AND projected field metadata is derived from `operation.input.fields` and
-  includes only field names, labels, required flags, supported scalar control
-  types, and enum option labels
+- AND projected field metadata uses the schema-owned public-safe operation input
+  projection and includes only field names, labels, required flags, supported
+  scalar control types, and enum option labels
+- AND target route facts and public challenge site-key facts are supplied by
+  runtime target resolution and challenge configuration, not by the target
+  operation input projection
 - AND the projected block does not include Turnstile secrets, raw Authority
   storage records, app install records, private app records, email provider
   credentials, sender verification facts, or private notification recipients
@@ -225,8 +228,8 @@ runtime secrets.
 
 - GIVEN a `publicOperationForm` block references an operation that is missing,
   not publicly executable, targets an unavailable app storage identity, lacks
-  challenge configuration, or has required input outside the generic form field
-  subset
+  challenge configuration, or has required input outside the schema-owned public
+  form field projection subset
 - WHEN the public tree is projected
 - THEN the public tree includes a warning
 - AND public rendering does not expose a working form for that block
