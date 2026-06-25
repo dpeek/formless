@@ -70,6 +70,7 @@ import {
   WORKSPACE_GATEWAY_BOOTSTRAP_TOKEN_ENV,
   WORKSPACE_GATEWAY_CSRF_TOKEN_ENV,
   WORKSPACE_GATEWAY_PROXY_TOKEN_ENV,
+  WORKSPACE_GATEWAY_ROOT_ENV,
   WORKSPACE_GATEWAY_SIDECAR_URL_ENV,
 } from "@dpeek/formless-gateway";
 import {
@@ -3319,40 +3320,63 @@ describe("Formless CLI", () => {
     }
   });
 
-  it("keeps workspace dev browser gateway config same-origin without sidecar proxy config", async () => {
+  it("keeps workspace dev browser gateway config same-origin with sidecar secrets server-only", async () => {
     const workspaceRoot = await makeTempDir();
     const env = formlessInstanceWorkspaceDevEnv(
       {
+        FORMLESS_ADMIN_TOKEN: "ambient-admin-token",
         FORMLESS_LOCAL_WORKSPACE_GATEWAY: "1",
+        FORMLESS_OWNER_SESSION_SECRET: "ambient-owner-session-secret",
         [LOCAL_SESSION_BOOTSTRAP_TOKEN_ENV]: "old-session-bootstrap-token",
         [WORKSPACE_GATEWAY_PROXY_TOKEN_ENV]: "old-proxy-token",
+        [WORKSPACE_GATEWAY_ROOT_ENV]: "/old/root",
         [WORKSPACE_GATEWAY_SIDECAR_URL_ENV]: "http://127.0.0.1:1/",
-        FORMLESS_WORKSPACE_GATEWAY_ROOT: "/old/root",
+        VITE_FORMLESS_ADMIN_TOKEN: "vite-admin-token",
+        VITE_FORMLESS_LOCAL_SESSION_BOOTSTRAP_TOKEN: "vite-local-session-bootstrap-token",
+        VITE_FORMLESS_OWNER_SESSION_SECRET: "vite-owner-session-secret",
+        VITE_FORMLESS_WORKSPACE_GATEWAY_ROOT: "/vite/root",
         VITE_FORMLESS_WORKSPACE_GATEWAY_PROXY_TOKEN: "browser-proxy-token",
         VITE_FORMLESS_WORKSPACE_GATEWAY_SIDECAR_URL: "http://127.0.0.1:1/",
       },
       workspaceRoot,
       defaultFormlessInstanceWorkspaceManifest({ name: "local-workspace" }),
-      null,
+      {
+        endpoint: "http://127.0.0.1:4321/",
+        proxyToken: "sidecar-proxy-token",
+      },
     );
+    const browserVisibleEnv = Object.fromEntries(
+      Object.entries(env).filter(([key]) => key.startsWith("VITE_")),
+    );
+    const serializedBrowserVisibleEnv = JSON.stringify(browserVisibleEnv);
 
     expect(env).toMatchObject({
-      FORMLESS_ADMIN_TOKEN: expect.any(String),
-      FORMLESS_OWNER_SESSION_SECRET: expect.any(String),
+      FORMLESS_ADMIN_TOKEN: "ambient-admin-token",
+      FORMLESS_OWNER_SESSION_SECRET: "ambient-owner-session-secret",
       [FORMLESS_TURNSTILE_SECRET_KEY_ENV_NAME]: FORMLESS_TURNSTILE_ALWAYS_PASS_SECRET_KEY,
       [FORMLESS_TURNSTILE_SITE_KEY_ENV_NAME]: FORMLESS_TURNSTILE_ALWAYS_PASS_SITE_KEY,
       [LOCAL_SESSION_BOOTSTRAP_TOKEN_ENV]: expect.any(String),
+      [WORKSPACE_GATEWAY_PROXY_TOKEN_ENV]: "sidecar-proxy-token",
+      [WORKSPACE_GATEWAY_SIDECAR_URL_ENV]: "http://127.0.0.1:4321/",
       FORMLESS_RUNTIME_PROFILE: "instance",
       VITE_FORMLESS_WORKSPACE_GATEWAY_API: "/api/formless/workspace",
       VITE_FORMLESS_WORKSPACE_GATEWAY_BOOTSTRAP_TOKEN: expect.any(String),
     });
     expect(env[LOCAL_SESSION_BOOTSTRAP_TOKEN_ENV]).not.toBe("old-session-bootstrap-token");
-    expect(env).not.toHaveProperty(WORKSPACE_GATEWAY_PROXY_TOKEN_ENV);
-    expect(env).not.toHaveProperty(WORKSPACE_GATEWAY_SIDECAR_URL_ENV);
     expect(env).not.toHaveProperty("FORMLESS_LOCAL_WORKSPACE_GATEWAY");
-    expect(env).not.toHaveProperty("FORMLESS_WORKSPACE_GATEWAY_ROOT");
+    expect(env).not.toHaveProperty(WORKSPACE_GATEWAY_ROOT_ENV);
+    expect(browserVisibleEnv).not.toHaveProperty("VITE_FORMLESS_ADMIN_TOKEN");
+    expect(browserVisibleEnv).not.toHaveProperty("VITE_FORMLESS_LOCAL_SESSION_BOOTSTRAP_TOKEN");
+    expect(browserVisibleEnv).not.toHaveProperty("VITE_FORMLESS_OWNER_SESSION_SECRET");
+    expect(browserVisibleEnv).not.toHaveProperty("VITE_FORMLESS_WORKSPACE_GATEWAY_ROOT");
     expect(env).not.toHaveProperty("VITE_FORMLESS_WORKSPACE_GATEWAY_PROXY_TOKEN");
     expect(env).not.toHaveProperty("VITE_FORMLESS_WORKSPACE_GATEWAY_SIDECAR_URL");
+    expect(serializedBrowserVisibleEnv).not.toContain("ambient-admin-token");
+    expect(serializedBrowserVisibleEnv).not.toContain("ambient-owner-session-secret");
+    expect(serializedBrowserVisibleEnv).not.toContain("old-session-bootstrap-token");
+    expect(serializedBrowserVisibleEnv).not.toContain("sidecar-proxy-token");
+    expect(serializedBrowserVisibleEnv).not.toContain("http://127.0.0.1:4321");
+    expect(serializedBrowserVisibleEnv).not.toContain(workspaceRoot);
   });
 
   it("keeps explicit workspace dev Turnstile keys when provided", async () => {

@@ -3,7 +3,7 @@ import path from "node:path";
 import {
   createWorkspaceGatewayLocalProxyMiddleware,
   type WorkspaceGatewayLocalProxyDependencies,
-  type WorkspaceGatewaySidecarEnv,
+  type WorkspaceGatewayLocalProxyEnv,
   type WorkspaceGatewaySidecarOperationHandlers,
   WORKSPACE_GATEWAY_ROOT_ENV,
 } from "@dpeek/formless-gateway/sidecar";
@@ -45,7 +45,7 @@ import {
   type WorkspaceCredentialSetupOperationAdapterResult,
 } from "./instance-workspace-operations.ts";
 
-export type WorkspaceGatewayRuntimeEnv = WorkspaceGatewaySidecarEnv & {
+export type WorkspaceGatewayRuntimeEnv = WorkspaceGatewayLocalProxyEnv & {
   FORMLESS_OWNER_SESSION_SECRET?: string;
   FORMLESS_RUNTIME_PROFILE?: string;
 };

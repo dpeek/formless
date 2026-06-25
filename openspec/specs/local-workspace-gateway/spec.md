@@ -25,6 +25,10 @@ runtime profiles through a filesystem-capable local gateway sidecar process.
   same-origin, local-only API family served by the local runtime
 - **AND** local runtime gateway routes proxy authorized requests to the sidecar
   over HTTP
+- **AND** the local runtime proxy receives only browser/proxy authorization,
+  route eligibility, and sidecar target facts
+- **AND** the sidecar process receives only execution authorization, workspace
+  root, and operation handler facts needed for filesystem-capable work
 - **AND** the same API family is unavailable in deployed instance, app,
   site-authoring, and published Site profiles
 
@@ -127,6 +131,9 @@ reviewable workspace source when a local workspace gateway is available.
 - **AND** Worker runtime code only performs route policy, browser
   authorization, operation intent validation, display-safe response forwarding,
   and HTTP proxying
+- **AND** sidecar execution code does not depend on browser-only bootstrap or
+  CSRF facts, sidecar endpoint selection, runtime topology facts, or
+  browser-visible runtime configuration
 
 #### Scenario: Revalidate execution requirements after request hop
 
@@ -179,6 +186,9 @@ through the Gateway package slice.
   differ only in runtime seam facts such as route eligibility, owner session
   validation, owner setup status, advertised capabilities, proxy fetcher, and
   sidecar endpoint selection
+- **AND** the local Node runtime proxy adapter and sidecar execution adapter use
+  separate injected environment fact sets instead of sharing one sidecar-wide
+  environment bag
 - **AND** the shared proxy rules Module does not own owner session validation,
   owner setup status reads, runtime topology selection, sidecar endpoint
   creation, operation execution, operation state storage, filesystem work, or
@@ -186,6 +196,9 @@ through the Gateway package slice.
 - **AND** the sidecar execution adapter remains a separate Module that
   revalidates proxied or direct automation authorization before invoking
   injected workspace operation handlers
+- **AND** sidecar startup builds the process execution environment from an
+  explicit allowlist rather than forwarding local runtime proxy or
+  browser-visible environment facts wholesale
 
 #### Scenario: Workspace package owns semantic operation contracts
 
@@ -292,6 +305,24 @@ bootstrap boundary.
   filesystem, Cloudflare, Alchemy, or provider mutation begins
 - **AND** admin bearer tokens are not accepted through browser login or exposed
   to browser state
+
+#### Scenario: Local gateway secret placement
+
+- **WHEN** `formless dev` creates local gateway process tokens, sidecar
+  execution configuration, child runtime environment, and browser-visible Vite
+  configuration
+- **THEN** sidecar endpoint facts may reach only the local runtime process that
+  proxies to the sidecar
+- **AND** sidecar proxy tokens may reach only the local runtime proxy and
+  sidecar execution boundary
+- **AND** the sidecar process may receive only the internal proxy token, admin
+  automation token, enabled flag, workspace root, and injected operation
+  handlers needed to authorize and execute local workspace operations
+- **AND** browser-visible environment only contains same-origin gateway API and
+  bootstrap facts that are safe for browser use
+- **AND** browser-visible environment does not contain sidecar proxy tokens,
+  sidecar endpoint URLs, workspace root facts, admin tokens, owner session
+  secrets, or raw local session bootstrap tokens
 
 #### Scenario: CLI or automation starts operation
 

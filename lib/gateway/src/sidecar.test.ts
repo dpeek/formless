@@ -9,6 +9,7 @@ import {
   WORKSPACE_GATEWAY_CSRF_COOKIE_NAME,
   WORKSPACE_GATEWAY_CSRF_HEADER,
   WORKSPACE_GATEWAY_CSRF_TOKEN_ENV,
+  WORKSPACE_GATEWAY_ENABLED_ENV,
   WORKSPACE_GATEWAY_OPERATION_KIND_HEADER,
   WORKSPACE_GATEWAY_OPERATIONS_API_PATH,
   WORKSPACE_GATEWAY_PROXY_AUTHORIZATION_HEADER,
@@ -16,6 +17,7 @@ import {
   WORKSPACE_GATEWAY_ROOT_ENV,
   WORKSPACE_GATEWAY_SIDECAR_URL_ENV,
   WORKSPACE_GATEWAY_STATUS_API_PATH,
+  createWorkspaceGatewaySidecarExecutionEnv,
   handleWorkspaceGatewayLocalProxyRequest,
   handleWorkspaceGatewaySidecarRequest,
   startWorkspaceGatewaySidecar,
@@ -37,6 +39,37 @@ afterEach(async () => {
 });
 
 describe("sidecar workspace gateway adapter", () => {
+  it("builds sidecar startup execution env from an explicit allowlist", () => {
+    const broadRuntimeEnv: Record<string, string> = {
+      FORMLESS_ADMIN_TOKEN: adminToken,
+      FORMLESS_LOCAL_WORKSPACE_GATEWAY: "0",
+      FORMLESS_RUNTIME_PROFILE: "publishedSite",
+      [WORKSPACE_GATEWAY_BOOTSTRAP_TOKEN_ENV]: bootstrapToken,
+      [WORKSPACE_GATEWAY_CSRF_TOKEN_ENV]: csrfToken,
+      [WORKSPACE_GATEWAY_PROXY_TOKEN_ENV]: "stale-proxy-token",
+      [WORKSPACE_GATEWAY_ROOT_ENV]: "/stale/root",
+      [WORKSPACE_GATEWAY_SIDECAR_URL_ENV]: "http://127.0.0.1:1",
+      VITE_FORMLESS_RUNTIME_PROFILE: "publishedSite",
+      VITE_FORMLESS_WORKSPACE_GATEWAY_API: "http://127.0.0.1:1/api/formless/workspace",
+      VITE_FORMLESS_WORKSPACE_GATEWAY_BOOTSTRAP_TOKEN: bootstrapToken,
+      VITE_FORMLESS_WORKSPACE_GATEWAY_PROXY_TOKEN: "browser-proxy-token",
+      VITE_FORMLESS_WORKSPACE_GATEWAY_SIDECAR_URL: "http://127.0.0.1:1",
+    };
+
+    expect(
+      createWorkspaceGatewaySidecarExecutionEnv({
+        env: broadRuntimeEnv,
+        proxyToken,
+        workspaceRoot,
+      }),
+    ).toEqual({
+      FORMLESS_ADMIN_TOKEN: adminToken,
+      [WORKSPACE_GATEWAY_ENABLED_ENV]: "1",
+      [WORKSPACE_GATEWAY_PROXY_TOKEN_ENV]: proxyToken,
+      [WORKSPACE_GATEWAY_ROOT_ENV]: workspaceRoot,
+    });
+  });
+
   it("starts a loopback Node sidecar and routes proxied requests to operation handlers", async () => {
     const sidecar = await startWorkspaceGatewaySidecar(
       { env: gatewayEnv(), workspaceRoot },
@@ -67,12 +100,28 @@ describe("sidecar workspace gateway adapter", () => {
     });
   });
 
-  it("rejects unavailable roots, invalid proxy tokens, invalid actor facts, and direct browser bearer", async () => {
-    let starts = 0;
+  it("rejects sidecar execution authorization failures before operation handlers run", async () => {
+    const calls: string[] = [];
     const handlers = operationHandlers({
+      autoSaveStatus: async () => {
+        calls.push("autoSaveStatus");
+        return autoSaveState();
+      },
+      enqueueAutoSave: async () => {
+        calls.push("enqueueAutoSave");
+        return autoSaveState({ displayState: "queued" });
+      },
+      readOperation: async () => {
+        calls.push("readOperation");
+        return operation("status");
+      },
       startOperation: async ({ authorization, operationInput }) => {
-        starts += 1;
+        calls.push("startOperation");
         return operation(operationInput.kind, { actor: authorization.actor });
+      },
+      status: async ({ authorization }) => {
+        calls.push("status");
+        return operation("status", { actor: authorization.actor });
       },
     });
     const missingRoot = await handleWorkspaceGatewaySidecarRequest(
@@ -83,6 +132,11 @@ describe("sidecar workspace gateway adapter", () => {
         FORMLESS_LOCAL_WORKSPACE_GATEWAY: "1",
         [WORKSPACE_GATEWAY_PROXY_TOKEN_ENV]: proxyToken,
       },
+      handlers,
+    );
+    const missingProxyToken = await handleWorkspaceGatewaySidecarRequest(
+      operationRequest({ kind: "save" }),
+      gatewayEnv(),
       handlers,
     );
     const wrongProxyToken = await handleWorkspaceGatewaySidecarRequest(
@@ -104,6 +158,14 @@ describe("sidecar workspace gateway adapter", () => {
       gatewayEnv(),
       handlers,
     );
+    const invalidOperationIntent = await handleWorkspaceGatewaySidecarRequest(
+      operationRequest(
+        { kind: "save" },
+        sidecarProxyHeaders({ operation: "status", via: "owner-session" }),
+      ),
+      gatewayEnv(),
+      handlers,
+    );
     const browserBearer = await handleWorkspaceGatewaySidecarRequest(
       operationRequest(
         { kind: "save" },
@@ -115,12 +177,54 @@ describe("sidecar workspace gateway adapter", () => {
       gatewayEnv(),
       handlers,
     );
+    const bootstrapEscalation = await handleWorkspaceGatewaySidecarRequest(
+      operationRequest(
+        { kind: "save" },
+        sidecarProxyHeaders({ operation: "save", via: "bootstrap" }),
+      ),
+      gatewayEnv(),
+      handlers,
+    );
+    const directBootstrapHeader = await handleWorkspaceGatewaySidecarRequest(
+      new Request(`http://127.0.0.1${WORKSPACE_GATEWAY_STATUS_API_PATH}`, {
+        headers: {
+          [WORKSPACE_GATEWAY_BOOTSTRAP_HEADER]: bootstrapToken,
+        },
+      }),
+      gatewayEnv(),
+      handlers,
+    );
 
     expect(missingRoot?.status).toBe(404);
+    expect(missingProxyToken?.status).toBe(401);
     expect(wrongProxyToken?.status).toBe(401);
     expect(invalidActor?.status).toBe(400);
+    expect(invalidOperationIntent?.status).toBe(400);
     expect(browserBearer?.status).toBe(401);
-    expect(starts).toBe(0);
+    expect(bootstrapEscalation?.status).toBe(403);
+    expect(directBootstrapHeader?.status).toBe(401);
+    await expect(missingProxyToken?.json()).resolves.toEqual({
+      error: "Workspace gateway proxy authorization is required.",
+    });
+    await expect(wrongProxyToken?.json()).resolves.toEqual({
+      error: "Workspace gateway proxy authorization is required.",
+    });
+    await expect(invalidActor?.json()).resolves.toEqual({
+      error: "Workspace gateway proxy actor facts are invalid.",
+    });
+    await expect(invalidOperationIntent?.json()).resolves.toEqual({
+      error: "Workspace gateway operation intent is invalid.",
+    });
+    await expect(browserBearer?.json()).resolves.toEqual({
+      error: "Workspace gateway proxy authorization is required.",
+    });
+    await expect(bootstrapEscalation?.json()).resolves.toEqual({
+      error: "Workspace bootstrap authorization is limited to status operations.",
+    });
+    await expect(directBootstrapHeader?.json()).resolves.toEqual({
+      error: "Workspace gateway proxy authorization is required.",
+    });
+    expect(calls).toEqual([]);
   });
 
   it("allows direct non-browser admin bearer automation at the sidecar", async () => {
@@ -351,13 +455,17 @@ describe("sidecar workspace gateway adapter", () => {
       },
       { proxyFetch: async () => Response.json({ operation: operation("save") }) },
     );
+    let readOperations = 0;
     const mismatchedSidecarIntent = await handleWorkspaceGatewaySidecarRequest(
       new Request(`http://127.0.0.1${WORKSPACE_GATEWAY_OPERATIONS_API_PATH}/op_save_00000001`, {
         headers: sidecarProxyHeaders({ operation: "status", via: "owner-session" }),
       }),
       gatewayEnv(),
       operationHandlers({
-        readOperation: async () => operation("save"),
+        readOperation: async () => {
+          readOperations += 1;
+          return operation("save");
+        },
       }),
     );
     const sidecarBootstrapWithoutIntent = await handleWorkspaceGatewaySidecarRequest(
@@ -380,6 +488,7 @@ describe("sidecar workspace gateway adapter", () => {
     await expect(mismatchedSidecarIntent?.json()).resolves.toEqual({
       error: "Workspace operation intent does not match operation state.",
     });
+    expect(readOperations).toBe(1);
   });
 });
 

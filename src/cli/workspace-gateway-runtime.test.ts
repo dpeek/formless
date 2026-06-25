@@ -35,6 +35,7 @@ import {
   handleWorkspaceGatewaySidecarRequest,
   startWorkspaceGatewaySidecar,
   type WorkspaceGatewaySidecar,
+  type WorkspaceGatewaySidecarExecutionEnv,
 } from "@dpeek/formless-gateway/sidecar";
 import {
   DEFAULT_INSTANCE_WORKSPACE_LOCAL_STATE_ROOT,
@@ -179,7 +180,7 @@ describe("local workspace gateway", () => {
           via: "owner-session",
         }),
       ),
-      gatewayEnv(workspaceRoot, { FORMLESS_WORKSPACE_GATEWAY_PROXY_TOKEN: proxyToken }),
+      sidecarExecutionEnv(workspaceRoot, { FORMLESS_WORKSPACE_GATEWAY_PROXY_TOKEN: proxyToken }),
       createWorkspaceGatewayOperationHandlers(
         gatewayDeps(workspaceRoot, {
           credentialSetup: async () => {
@@ -1123,7 +1124,7 @@ async function gatewayJson(
 async function startGatewaySidecar(
   workspaceRoot: string,
   deps: WorkspaceGatewayRuntimeDependencies,
-  env: WorkspaceGatewayRuntimeEnv = gatewayEnv(workspaceRoot),
+  env: WorkspaceGatewaySidecarExecutionEnv = sidecarExecutionEnv(workspaceRoot),
 ): Promise<WorkspaceGatewaySidecar> {
   const sidecar = await startWorkspaceGatewaySidecar(
     {
@@ -1182,7 +1183,7 @@ function operationRequest(body: unknown, headers: Record<string, string> = {}): 
 }
 
 function gatewayEnv(
-  workspaceRoot: string,
+  _workspaceRoot: string,
   overrides: Partial<WorkspaceGatewayRuntimeEnv> = {},
 ): WorkspaceGatewayRuntimeEnv {
   return {
@@ -1192,6 +1193,18 @@ function gatewayEnv(
     FORMLESS_RUNTIME_PROFILE: "instance",
     FORMLESS_WORKSPACE_GATEWAY_BOOTSTRAP_TOKEN: bootstrapToken,
     FORMLESS_WORKSPACE_GATEWAY_CSRF_TOKEN: csrfToken,
+    ...overrides,
+  };
+}
+
+function sidecarExecutionEnv(
+  workspaceRoot: string,
+  overrides: Partial<WorkspaceGatewaySidecarExecutionEnv> = {},
+): WorkspaceGatewaySidecarExecutionEnv {
+  return {
+    FORMLESS_ADMIN_TOKEN: adminToken,
+    FORMLESS_LOCAL_WORKSPACE_GATEWAY: "1",
+    FORMLESS_WORKSPACE_GATEWAY_PROXY_TOKEN: proxyToken,
     FORMLESS_WORKSPACE_GATEWAY_ROOT: workspaceRoot,
     ...overrides,
   };

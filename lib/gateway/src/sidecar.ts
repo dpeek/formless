@@ -2,39 +2,27 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import path from "node:path";
 
 import {
-  WORKSPACE_GATEWAY_ACTOR_HEADER,
-  WORKSPACE_GATEWAY_AUTHORIZATION_VIA_HEADER,
   WORKSPACE_GATEWAY_AUTO_SAVE_API_PATH,
   WORKSPACE_GATEWAY_BOOTSTRAP_TOKEN_ENV,
   WORKSPACE_GATEWAY_CSRF_TOKEN_ENV,
   WORKSPACE_GATEWAY_ENABLED_ENV,
-  WORKSPACE_GATEWAY_OPERATION_KIND_HEADER,
   WORKSPACE_GATEWAY_OPERATIONS_API_PATH,
-  WORKSPACE_GATEWAY_PROXY_AUTHORIZATION_HEADER,
   WORKSPACE_GATEWAY_PROXY_TOKEN_ENV,
   WORKSPACE_GATEWAY_ROOT_ENV,
   WORKSPACE_GATEWAY_SIDECAR_URL_ENV,
   WORKSPACE_GATEWAY_STATUS_API_PATH,
-  isWorkspaceGatewayOperationKind,
   isWorkspaceGatewayPath,
   parseWorkspaceGatewayAutoSaveEnqueueInput,
   parseWorkspaceGatewayOperationId,
   parseWorkspaceGatewayStartInput,
   workspaceGatewayAutoSaveEnqueueIntent,
   workspaceGatewayAutoSaveStatusIntent,
-  workspaceGatewayOperationExecutionDecision,
   workspaceGatewayOperationPath,
-  workspaceGatewayReadOperationIntent,
   workspaceGatewayStartOperationIntent,
   workspaceGatewayStatusIntent,
-  type WorkspaceGatewayActor,
-  type WorkspaceGatewayActorFacts,
   type WorkspaceGatewayAutoSaveEnqueueInput,
   type WorkspaceGatewayAutoSaveState,
-  type WorkspaceGatewayAuthorizationVia,
   type WorkspaceGatewayOperation,
-  type WorkspaceGatewayOperationIntent,
-  type WorkspaceGatewayOperationKind,
   type WorkspaceGatewayStartInput,
   type WorkspaceGatewayStartInputParseResult,
 } from "./index.ts";
@@ -45,6 +33,15 @@ import {
   type WorkspaceGatewayProxyRulesOwnerSessionValidationResult,
   type WorkspaceGatewayProxyRulesTarget,
 } from "./proxy-rules.ts";
+import {
+  authorizeWorkspaceGatewaySidecarExecutionReadRequest,
+  authorizeWorkspaceGatewaySidecarExecutionRequest,
+  readWorkspaceGatewaySidecarOperationIntent,
+  validateWorkspaceGatewaySidecarOperationStateIntent,
+  type WorkspaceGatewaySidecarExecutionAuthorization,
+  type WorkspaceGatewaySidecarExecutionAuthorizationEnv,
+  type WorkspaceGatewaySidecarExecutionContext,
+} from "./sidecar-execution.ts";
 import {
   WORKSPACE_OPERATION_CAPABILITIES,
   type WorkspaceOperationRequiredCapability,
@@ -83,14 +80,20 @@ export type {
 } from "./index.ts";
 export { isLoopbackSidecarEndpoint } from "./proxy-rules.ts";
 
-export type WorkspaceGatewaySidecarEnv = {
+export type WorkspaceGatewayLocalProxyEnv = {
   FORMLESS_ADMIN_TOKEN?: string;
   FORMLESS_LOCAL_WORKSPACE_GATEWAY?: string;
   FORMLESS_WORKSPACE_GATEWAY_BOOTSTRAP_TOKEN?: string;
   FORMLESS_WORKSPACE_GATEWAY_CSRF_TOKEN?: string;
   FORMLESS_WORKSPACE_GATEWAY_PROXY_TOKEN?: string;
-  FORMLESS_WORKSPACE_GATEWAY_ROOT?: string;
   FORMLESS_WORKSPACE_GATEWAY_SIDECAR_URL?: string;
+};
+
+export type WorkspaceGatewaySidecarExecutionEnv = {
+  FORMLESS_ADMIN_TOKEN?: string;
+  FORMLESS_LOCAL_WORKSPACE_GATEWAY?: string;
+  FORMLESS_WORKSPACE_GATEWAY_PROXY_TOKEN?: string;
+  FORMLESS_WORKSPACE_GATEWAY_ROOT?: string;
 };
 
 export type WorkspaceGatewaySidecar = {
@@ -99,10 +102,7 @@ export type WorkspaceGatewaySidecar = {
   proxyToken: string;
 };
 
-export type WorkspaceGatewaySidecarAuthorization = {
-  actor: WorkspaceGatewayActor;
-  via: WorkspaceGatewayAuthorizationVia;
-};
+export type WorkspaceGatewaySidecarAuthorization = WorkspaceGatewaySidecarExecutionAuthorization;
 
 export type WorkspaceGatewaySidecarOperationHandlers = {
   autoSaveStatus: (input: {
@@ -157,24 +157,12 @@ export type WorkspaceGatewayLocalProxyDependencies = {
 
 export type WorkspaceGatewayProxyTarget = WorkspaceGatewayProxyRulesTarget;
 
-type GatewayAuthorization =
-  | WorkspaceGatewaySidecarAuthorization
-  | {
-      error: string;
-      status: number;
-    };
-
-type GatewayOperationExecutionContext = {
-  mutating?: boolean;
-  operationInput?: WorkspaceGatewayStartInput;
-};
-
 export async function handleWorkspaceGatewayLocalProxyRequest(
   request: Request,
-  env: WorkspaceGatewaySidecarEnv,
+  env: WorkspaceGatewayLocalProxyEnv,
   dependencies: WorkspaceGatewayLocalProxyDependencies = {},
 ): Promise<Response | undefined> {
-  return handleWorkspaceGatewayProxyRulesRequest(request, proxyRulesEnvFromSidecarEnv(env), {
+  return handleWorkspaceGatewayProxyRulesRequest(request, proxyRulesEnvFromLocalProxyEnv(env), {
     capabilities: dependencies.capabilities ?? WORKSPACE_OPERATION_CAPABILITIES,
     fetch: dependencies.proxyFetch,
     proxyTarget: () => workspaceGatewayProxyTargetFromEnv(request, env, dependencies),
@@ -185,7 +173,7 @@ export async function handleWorkspaceGatewayLocalProxyRequest(
 
 export async function handleWorkspaceGatewaySidecarRequest(
   request: Request,
-  env: WorkspaceGatewaySidecarEnv,
+  env: WorkspaceGatewaySidecarExecutionEnv,
   handlers: WorkspaceGatewaySidecarOperationHandlers,
 ): Promise<Response | undefined> {
   const url = new URL(request.url);
@@ -315,17 +303,17 @@ export async function handleWorkspaceGatewaySidecarRequest(
       return displaySafeJson({ error: parsedOperationId.error }, 400);
     }
 
-    const proxiedOperation = parseProxiedOperationKind(request);
+    const proxiedOperation = readWorkspaceGatewaySidecarOperationIntent(request);
 
     if (!proxiedOperation.ok) {
       return displaySafeJson({ error: proxiedOperation.error }, 400);
     }
 
-    const readIntent =
-      proxiedOperation.operation === undefined
-        ? undefined
-        : workspaceGatewayReadOperationIntent(proxiedOperation.operation);
-    const authorization = authorizeSidecarGatewayReadOperationRequest(request, env, readIntent);
+    const authorization = authorizeSidecarGatewayReadOperationRequest(
+      request,
+      env,
+      proxiedOperation.intent,
+    );
 
     if ("error" in authorization) {
       return displaySafeJson({ error: authorization.error }, authorization.status);
@@ -342,22 +330,14 @@ export async function handleWorkspaceGatewaySidecarRequest(
       return displaySafeJson({ error: "Workspace operation was not found." }, 404);
     }
 
-    if (proxiedOperation.operation && proxiedOperation.operation !== operation.operation) {
-      return displaySafeJson(
-        { error: "Workspace operation intent does not match operation state." },
-        400,
-      );
-    }
+    const stateIntent = validateWorkspaceGatewaySidecarOperationStateIntent({
+      authorization,
+      expectedOperation: proxiedOperation.operation,
+      operation,
+    });
 
-    if (
-      authorization.via === "bootstrap" &&
-      (!isWorkspaceGatewayOperationKind(operation.operation) ||
-        !workspaceGatewayReadOperationIntent(operation.operation).bootstrapAllowed)
-    ) {
-      return displaySafeJson(
-        { error: "Workspace bootstrap authorization is limited to status operations." },
-        403,
-      );
+    if (!stateIntent.ok) {
+      return displaySafeJson({ error: stateIntent.error }, stateIntent.status);
     }
 
     return sidecarOperationResponse(operation);
@@ -368,18 +348,17 @@ export async function handleWorkspaceGatewaySidecarRequest(
 
 export async function startWorkspaceGatewaySidecar(
   input: {
-    env?: WorkspaceGatewaySidecarEnv;
+    env?: WorkspaceGatewaySidecarExecutionEnv;
     workspaceRoot: string;
   },
   dependencies: WorkspaceGatewaySidecarDependencies,
 ): Promise<WorkspaceGatewaySidecar> {
   const proxyToken = dependencies.createProxyToken();
-  const sidecarEnv: WorkspaceGatewaySidecarEnv = {
-    ...input.env,
-    [WORKSPACE_GATEWAY_ENABLED_ENV]: "1",
-    [WORKSPACE_GATEWAY_PROXY_TOKEN_ENV]: proxyToken,
-    [WORKSPACE_GATEWAY_ROOT_ENV]: input.workspaceRoot,
-  };
+  const sidecarEnv = createWorkspaceGatewaySidecarExecutionEnv({
+    env: input.env,
+    proxyToken,
+    workspaceRoot: input.workspaceRoot,
+  });
   const server = createServer((req, res) => {
     void createWorkspaceGatewaySidecarNodeHandler(sidecarEnv, dependencies.operations)(req, res);
   });
@@ -392,8 +371,23 @@ export async function startWorkspaceGatewaySidecar(
   };
 }
 
+export function createWorkspaceGatewaySidecarExecutionEnv(input: {
+  env?: WorkspaceGatewaySidecarExecutionEnv;
+  proxyToken: string;
+  workspaceRoot: string;
+}): WorkspaceGatewaySidecarExecutionEnv {
+  return {
+    ...(input.env?.FORMLESS_ADMIN_TOKEN === undefined
+      ? {}
+      : { FORMLESS_ADMIN_TOKEN: input.env.FORMLESS_ADMIN_TOKEN }),
+    [WORKSPACE_GATEWAY_ENABLED_ENV]: "1",
+    [WORKSPACE_GATEWAY_PROXY_TOKEN_ENV]: input.proxyToken,
+    [WORKSPACE_GATEWAY_ROOT_ENV]: input.workspaceRoot,
+  };
+}
+
 export function createWorkspaceGatewayLocalProxyMiddleware(
-  env: WorkspaceGatewaySidecarEnv,
+  env: WorkspaceGatewayLocalProxyEnv,
   dependencies: WorkspaceGatewayLocalProxyDependencies = {},
 ) {
   return async (req: IncomingMessage, res: ServerResponse, next: () => void) => {
@@ -410,7 +404,7 @@ export function createWorkspaceGatewayLocalProxyMiddleware(
 }
 
 export function createWorkspaceGatewaySidecarNodeHandler(
-  env: WorkspaceGatewaySidecarEnv,
+  env: WorkspaceGatewaySidecarExecutionEnv,
   handlers: WorkspaceGatewaySidecarOperationHandlers,
 ) {
   return async (req: IncomingMessage, res: ServerResponse) => {
@@ -425,7 +419,7 @@ export function createWorkspaceGatewaySidecarNodeHandler(
 
 export function workspaceGatewayProxyTargetFromEnv(
   request: Request,
-  env: WorkspaceGatewaySidecarEnv,
+  env: WorkspaceGatewayLocalProxyEnv,
   dependencies: Pick<WorkspaceGatewayLocalProxyDependencies, "routeAvailable"> = {},
 ): WorkspaceGatewayProxyTarget | undefined {
   if (env[WORKSPACE_GATEWAY_ENABLED_ENV] !== "1") {
@@ -442,7 +436,7 @@ export function workspaceGatewayProxyTargetFromEnv(
   }
 
   const endpoint = env[WORKSPACE_GATEWAY_SIDECAR_URL_ENV]?.trim();
-  const proxyToken = expectedProxyToken(env);
+  const proxyToken = localProxyToken(env);
 
   if (!endpoint || !proxyToken || !isLoopbackSidecarEndpoint(endpoint)) {
     return undefined;
@@ -451,7 +445,9 @@ export function workspaceGatewayProxyTargetFromEnv(
   return { endpoint, proxyToken };
 }
 
-export function workspaceGatewaySidecarRoot(env: WorkspaceGatewaySidecarEnv): string | undefined {
+export function workspaceGatewaySidecarRoot(
+  env: WorkspaceGatewaySidecarExecutionEnv,
+): string | undefined {
   if (env[WORKSPACE_GATEWAY_ENABLED_ENV] !== "1") {
     return undefined;
   }
@@ -461,8 +457,8 @@ export function workspaceGatewaySidecarRoot(env: WorkspaceGatewaySidecarEnv): st
   return workspaceRoot ? path.resolve(workspaceRoot) : undefined;
 }
 
-function proxyRulesEnvFromSidecarEnv(
-  env: WorkspaceGatewaySidecarEnv,
+function proxyRulesEnvFromLocalProxyEnv(
+  env: WorkspaceGatewayLocalProxyEnv,
 ): WorkspaceGatewayProxyRulesEnv {
   return {
     adminToken: env.FORMLESS_ADMIN_TOKEN,
@@ -473,164 +469,28 @@ function proxyRulesEnvFromSidecarEnv(
 
 function authorizeSidecarGatewayRequest(
   request: Request,
-  env: WorkspaceGatewaySidecarEnv,
-  intent: WorkspaceGatewayOperationIntent,
-  context: GatewayOperationExecutionContext = {},
-): GatewayAuthorization {
-  const proxied = authorizeSidecarProxyRequest(request, env, intent, context);
-
-  if (proxied) {
-    return proxied;
-  }
-
-  return authorizeDirectSidecarAutomationRequest(request, env, intent, context);
+  env: WorkspaceGatewaySidecarExecutionEnv,
+  intent: Parameters<typeof authorizeWorkspaceGatewaySidecarExecutionRequest>[2],
+  context: WorkspaceGatewaySidecarExecutionContext = {},
+) {
+  return authorizeWorkspaceGatewaySidecarExecutionRequest(
+    request,
+    sidecarExecutionAuthorizationEnvFromEnv(env),
+    intent,
+    context,
+  );
 }
 
 function authorizeSidecarGatewayReadOperationRequest(
   request: Request,
-  env: WorkspaceGatewaySidecarEnv,
-  intent?: WorkspaceGatewayOperationIntent,
-): GatewayAuthorization {
-  const proxied = authorizeSidecarProxyRequest(request, env, intent, { mutating: false });
-
-  if (proxied) {
-    return proxied;
-  }
-
-  return authorizeDirectSidecarAutomationRequest(request, env, intent, { mutating: false });
-}
-
-function authorizeSidecarProxyRequest(
-  request: Request,
-  env: WorkspaceGatewaySidecarEnv,
-  intent?: WorkspaceGatewayOperationIntent,
-  context: GatewayOperationExecutionContext = {},
-): GatewayAuthorization | undefined {
-  const proxyToken = request.headers.get(WORKSPACE_GATEWAY_PROXY_AUTHORIZATION_HEADER);
-
-  if (proxyToken === null) {
-    return undefined;
-  }
-
-  if (proxyToken !== expectedProxyToken(env)) {
-    return { error: "Workspace gateway proxy authorization is required.", status: 401 };
-  }
-
-  const actorFacts = proxiedActorFacts(request);
-
-  if (!actorFacts) {
-    return { error: "Workspace gateway proxy actor facts are invalid.", status: 400 };
-  }
-
-  if (actorFacts.via === "bootstrap" && intent === undefined) {
-    return {
-      error: "Workspace gateway operation intent is required for bootstrap reads.",
-      status: 400,
-    };
-  }
-
-  if (actorFacts.via === "bootstrap" && intent && !intent.bootstrapAllowed) {
-    return {
-      error: "Workspace bootstrap authorization is limited to status operations.",
-      status: 403,
-    };
-  }
-
-  return intent === undefined
-    ? actorFacts
-    : authorizeGatewayOperationExecution(
-        actorFacts,
-        WORKSPACE_OPERATION_CAPABILITIES,
-        intent,
-        context,
-      );
-}
-
-function authorizeDirectSidecarAutomationRequest(
-  request: Request,
-  env: WorkspaceGatewaySidecarEnv,
-  intent?: WorkspaceGatewayOperationIntent,
-  context: GatewayOperationExecutionContext = {},
-): GatewayAuthorization {
-  if (!request.headers.get("Origin") && matchesAdminBearer(request, env)) {
-    const authorization = { actor: "automation", via: "admin-bearer" } as const;
-
-    return intent === undefined
-      ? authorization
-      : authorizeGatewayOperationExecution(
-          authorization,
-          WORKSPACE_OPERATION_CAPABILITIES,
-          intent,
-          context,
-        );
-  }
-
-  return { error: "Workspace gateway proxy authorization is required.", status: 401 };
-}
-
-function proxiedActorFacts(request: Request): WorkspaceGatewayActorFacts | undefined {
-  const actor = request.headers.get(WORKSPACE_GATEWAY_ACTOR_HEADER);
-  const via = request.headers.get(WORKSPACE_GATEWAY_AUTHORIZATION_VIA_HEADER);
-
-  if (!isWorkspaceGatewayActor(actor) || !isWorkspaceGatewayAuthorizationVia(via)) {
-    return undefined;
-  }
-
-  if ((via === "bootstrap" || via === "owner-session") && actor !== "browser") {
-    return undefined;
-  }
-
-  if (via === "admin-bearer" && actor === "browser") {
-    return undefined;
-  }
-
-  return { actor, via };
-}
-
-function parseProxiedOperationKind(
-  request: Request,
-): { ok: true; operation?: WorkspaceGatewayOperationKind } | { error: string; ok: false } {
-  const operation = request.headers.get(WORKSPACE_GATEWAY_OPERATION_KIND_HEADER);
-
-  if (operation === null) {
-    return { ok: true };
-  }
-
-  if (!isWorkspaceGatewayOperationKind(operation)) {
-    return { error: "Workspace gateway operation intent is invalid.", ok: false };
-  }
-
-  return { ok: true, operation };
-}
-
-function isWorkspaceGatewayActor(value: unknown): value is WorkspaceGatewayActor {
-  return value === "automation" || value === "browser" || value === "cli" || value === "system";
-}
-
-function isWorkspaceGatewayAuthorizationVia(
-  value: unknown,
-): value is WorkspaceGatewayAuthorizationVia {
-  return value === "admin-bearer" || value === "bootstrap" || value === "owner-session";
-}
-
-function authorizeGatewayOperationExecution(
-  authorization: Exclude<GatewayAuthorization, { error: string }>,
-  capabilities: readonly WorkspaceOperationRequiredCapability[],
-  intent: WorkspaceGatewayOperationIntent,
-  context: GatewayOperationExecutionContext = {},
-): GatewayAuthorization {
-  const decision = workspaceGatewayOperationExecutionDecision({
-    actor: authorization.actor,
-    capabilities,
+  env: WorkspaceGatewaySidecarExecutionEnv,
+  intent?: Parameters<typeof authorizeWorkspaceGatewaySidecarExecutionReadRequest>[2],
+) {
+  return authorizeWorkspaceGatewaySidecarExecutionReadRequest(
+    request,
+    sidecarExecutionAuthorizationEnvFromEnv(env),
     intent,
-    ...context,
-  });
-
-  if (!decision.ok) {
-    return { error: decision.error, status: 403 };
-  }
-
-  return authorization;
+  );
 }
 
 function sidecarOperationResponse(operation: unknown): Response {
@@ -667,21 +527,19 @@ async function parseGatewayAutoSaveEnqueueInput(request: { json: () => Promise<u
   return parseWorkspaceGatewayAutoSaveEnqueueInput(body);
 }
 
-function matchesAdminBearer(request: Request, env: WorkspaceGatewaySidecarEnv): boolean {
-  const adminToken = env.FORMLESS_ADMIN_TOKEN?.trim();
-  const authorization = request.headers.get("Authorization")?.trim();
-
-  if (!adminToken || !authorization) {
-    return false;
-  }
-
-  return authorization.match(/^Bearer\s+(.+)$/i)?.[1] === adminToken;
-}
-
-function expectedProxyToken(env: WorkspaceGatewaySidecarEnv): string | undefined {
+function localProxyToken(env: WorkspaceGatewayLocalProxyEnv): string | undefined {
   const proxyToken = env[WORKSPACE_GATEWAY_PROXY_TOKEN_ENV]?.trim();
 
   return proxyToken ? proxyToken : undefined;
+}
+
+function sidecarExecutionAuthorizationEnvFromEnv(
+  env: WorkspaceGatewaySidecarExecutionEnv,
+): WorkspaceGatewaySidecarExecutionAuthorizationEnv {
+  return {
+    adminToken: env.FORMLESS_ADMIN_TOKEN,
+    proxyToken: env[WORKSPACE_GATEWAY_PROXY_TOKEN_ENV],
+  };
 }
 
 function displaySafeJson(body: unknown, status: number, headers: Headers = new Headers()) {
