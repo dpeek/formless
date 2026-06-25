@@ -85,6 +85,30 @@ workspace operations that are promoted to public CLI bindings.
   as available without mutating local source, remote instance data, Cloudflare
   resources, or Alchemy state
 
+#### Scenario: Forced push recovery from invalid remote source
+
+- **GIVEN** the package CLI is installed and local workspace source can be
+  composed into a valid instance archive
+- **AND** the selected remote target's current instance archive cannot be parsed
+  or validated because remote app or control-plane records are incompatible
+  with the current schema
+- **WHEN** a user runs `formless push --force`
+- **THEN** the command may bypass normal remote sync comparison for that target
+  validation failure
+- **AND** it reconciles the selected remote target as an exact replacement from
+  the validated local workspace archive
+- **AND** invalid remote record values are not merged into, preserved in, or
+  written back to local workspace source or the replacement archive
+- **AND** the command reports that ordinary remote comparison, restore dry-run,
+  or backup evidence was unavailable when target validation prevented producing
+  it
+- **AND** auth failures, network failures, provider failures, unsupported
+  packages, invalid local workspace source, and invalid local archives still
+  fail before target mutation
+- **AND** `formless push --force --dry-run` remains read-only and reports that
+  forced recovery would replace the unreadable target without mutating local
+  source, remote instance data, Cloudflare resources, or Alchemy state
+
 #### Scenario: Unsupported command families
 
 - **GIVEN** the package CLI is installed

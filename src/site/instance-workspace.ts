@@ -470,6 +470,24 @@ export type PushFormlessInstanceWorkspaceRuntimeRebuild = {
   status: "applied" | "available";
 };
 
+export type PushFormlessInstanceWorkspaceForcedRecoveryPlan = {
+  action: "replace-unreadable-target";
+  evidence: {
+    backup: PushFormlessInstanceWorkspaceForcedRecoveryEvidence;
+    remoteComparison: PushFormlessInstanceWorkspaceForcedRecoveryEvidence;
+    restoreDryRun: PushFormlessInstanceWorkspaceForcedRecoveryEvidence;
+  };
+  remoteReadError: string;
+  remoteReadFailureType: "parse" | "validation";
+  reason: "remote-archive-parse-or-validation-failed";
+  status: "applied" | "planned";
+};
+
+export type PushFormlessInstanceWorkspaceForcedRecoveryEvidence = {
+  reason: "target-archive-unreadable";
+  status: "unavailable";
+};
+
 export type PushFormlessInstanceWorkspaceResult = {
   applyResult?: RestorePortableArchiveResult;
   backup?: ArchiveDiskWriteResult;
@@ -482,6 +500,7 @@ export type PushFormlessInstanceWorkspaceResult = {
   localSecretEnv?: EnsureFormlessInstanceLocalSecretEnvResult;
   mode: "apply" | "dry-run";
   noop: boolean;
+  forcedRecovery?: PushFormlessInstanceWorkspaceForcedRecoveryPlan;
   ownerSetup?: DeployLocalFormlessWorkspaceOwnerSetup;
   plan?: FormlessInstanceDeploymentPlan;
   runtimeRebuild?: PushFormlessInstanceWorkspaceRuntimeRebuild;
@@ -639,6 +658,7 @@ export type DeployLocalFormlessWorkspaceInput = {
 };
 
 export type PlanDeployLocalFormlessWorkspaceInput = DeployLocalFormlessWorkspaceInput & {
+  allowUnreadableTargetRecovery?: boolean;
   credentialAccess?: "mutable" | "read-only";
 };
 
@@ -1483,6 +1503,7 @@ export async function pushFormlessInstanceWorkspace(
 ): Promise<PushFormlessInstanceWorkspaceResult> {
   const planned = await planDeployLocalFormlessWorkspace(
     {
+      allowUnreadableTargetRecovery: input.force === true,
       credentialAccess: input.apply ? "mutable" : "read-only",
       targetAlias: input.targetOverride?.alias ?? input.targetAlias,
       workspacePath: input.workspacePath,
@@ -1558,11 +1579,19 @@ export async function pushFormlessInstanceWorkspace(
       exportedAt,
       packageResolver: activePackages.resolver,
     });
-    const remoteArchive =
+    await assertWorkspacePushArchiveReadable({
+      archiveRoot: composedArchiveRoot,
+      packageResolver: activePackages.resolver,
+    });
+    const remoteRead =
       planned.existingSelectedTarget === undefined
-        ? emptyRemoteInstanceArchiveDirectory(exportedAt)
+        ? {
+            archive: emptyRemoteInstanceArchiveDirectory(exportedAt),
+            status: "readable" as const,
+          }
         : await readRemoteWorkspaceArchiveForPush(
             {
+              allowForcedRecovery: input.force === true,
               adminToken,
               packageResolver: activePackages.resolver,
               remoteArchiveRoot: path.join(tempRoot, "remote-check"),
@@ -1570,19 +1599,41 @@ export async function pushFormlessInstanceWorkspace(
             },
             dependencies,
           );
-    const syncPlan = createWorkspaceSyncPlan({
-      domainDesiredDrift,
-      localControlPlane,
-      localAppState: new Map(localAppState.map((state) => [state.appArchive.app.installId, state])),
-      localDomains: localDomainIntents,
-      manifest: planned.manifest,
-      packageResolver: activePackages.resolver,
-      remoteArchive,
-      remoteDomains: liveDomains,
-      sourceLabel: "workspace",
-      sourceSide: "local",
-      targetLabel: selectedTarget.alias,
-    });
+    const localAppStateByInstall = new Map(
+      localAppState.map((state) => [state.appArchive.app.installId, state]),
+    );
+    const syncPlan =
+      remoteRead.status === "readable"
+        ? createWorkspaceSyncPlan({
+            domainDesiredDrift,
+            localControlPlane,
+            localAppState: localAppStateByInstall,
+            localDomains: localDomainIntents,
+            manifest: planned.manifest,
+            packageResolver: activePackages.resolver,
+            remoteArchive: remoteRead.archive,
+            remoteDomains: liveDomains,
+            sourceLabel: "workspace",
+            sourceSide: "local",
+            targetLabel: selectedTarget.alias,
+          })
+        : createWorkspaceForcedRecoverySyncPlan({
+            domainDesiredDrift,
+            failure: remoteRead.failure,
+            localControlPlane,
+            localAppState: localAppStateByInstall,
+            localDomains: localDomainIntents,
+            manifest: planned.manifest,
+            packageResolver: activePackages.resolver,
+            targetLabel: selectedTarget.alias,
+          });
+    const forcedRecovery =
+      remoteRead.status === "unreadable"
+        ? forcedRecoveryPlanFromRemoteReadFailure(remoteRead.failure, {
+            status: input.apply ? "applied" : "planned",
+          })
+        : undefined;
+    const forcedRecoveryActive = forcedRecovery !== undefined;
     const runtimeRebuild =
       planned.workspaceRuntimeExtensions === undefined && input.force !== true
         ? undefined
@@ -1594,6 +1645,19 @@ export async function pushFormlessInstanceWorkspace(
             status: (input.apply ? "applied" : "available") as "applied" | "available",
           };
     const hasDataChanges = syncPlan.status !== "up-to-date";
+
+    if (forcedRecovery !== undefined && !input.apply) {
+      return {
+        forcedRecovery,
+        mode: "dry-run",
+        noop: false,
+        ...(runtimeRebuild === undefined ? {} : { runtimeRebuild }),
+        selectedTarget,
+        source,
+        syncPlan,
+        workspaceRoot,
+      };
+    }
 
     if (!hasDataChanges && runtimeRebuild === undefined) {
       return {
@@ -1619,7 +1683,7 @@ export async function pushFormlessInstanceWorkspace(
     }
 
     const backup =
-      input.apply && hasDataChanges
+      input.apply && hasDataChanges && !forcedRecoveryActive
         ? planned.existingSelectedTarget === undefined
           ? undefined
           : await exportInstanceArchive(
@@ -1632,7 +1696,8 @@ export async function pushFormlessInstanceWorkspace(
               dependencies,
             )
         : undefined;
-    const dryRunBeforeProvider = hasDataChanges && planned.existingSelectedTarget !== undefined;
+    const dryRunBeforeProvider =
+      hasDataChanges && planned.existingSelectedTarget !== undefined && !forcedRecoveryActive;
     const dryRun =
       hasDataChanges &&
       planned.existingSelectedTarget !== undefined &&
@@ -1658,7 +1723,7 @@ export async function pushFormlessInstanceWorkspace(
         ? await applyWorkspacePushProviderReconciliation(planned, dependencies)
         : providerApply;
     const firstApplyDryRun =
-      hasDataChanges && input.apply && dryRun === undefined
+      hasDataChanges && input.apply && dryRun === undefined && !forcedRecoveryActive
         ? await restoreWorkspacePushArchive(
             {
               adminToken: provider?.adminToken ?? adminToken,
@@ -1724,6 +1789,7 @@ export async function pushFormlessInstanceWorkspace(
             secretPath: provider.secretPath,
           }),
       ...(restoreDryRun === undefined ? {} : { dryRun: restoreDryRun }),
+      ...(forcedRecovery === undefined ? {} : { forcedRecovery }),
       mode: input.apply ? "apply" : "dry-run",
       noop: !hasDataChanges && provider === undefined,
       ...(runtimeRebuild === undefined ? {} : { runtimeRebuild }),
@@ -1877,32 +1943,139 @@ async function applyWorkspacePushProviderReconciliation(
 
 async function readRemoteWorkspaceArchiveForPush(
   input: {
+    allowForcedRecovery: boolean;
     adminToken: string | null;
     packageResolver: AppPackageResolver;
     remoteArchiveRoot: string;
     selectedTarget: FormlessInstanceWorkspaceTarget;
   },
   dependencies: Pick<PushFormlessInstanceWorkspaceDependencies, "cwd" | "fetch" | "now">,
-): Promise<WorkspaceArchiveDirectory> {
-  await exportInstanceArchive(
-    {
-      adminToken: input.adminToken,
-      outDir: input.remoteArchiveRoot,
-      packageResolver: input.packageResolver,
-      target: input.selectedTarget.url,
-    },
-    dependencies,
-  );
+): Promise<WorkspacePushRemoteArchiveReadResult> {
+  try {
+    await exportInstanceArchive(
+      {
+        adminToken: input.adminToken,
+        outDir: input.remoteArchiveRoot,
+        packageResolver: input.packageResolver,
+        target: input.selectedTarget.url,
+      },
+      dependencies,
+    );
 
-  const remoteArchive = await readArchiveDirectoryForCheck(input.remoteArchiveRoot, {
+    const remoteArchive = await readArchiveDirectoryForCheck(input.remoteArchiveRoot, {
+      packageResolver: input.packageResolver,
+    });
+
+    if (!remoteArchive || remoteArchive.archive.kind !== INSTANCE_ARCHIVE_KIND) {
+      throw new Error("Formless instance push could not read remote archive state.");
+    }
+
+    return {
+      archive: remoteArchive,
+      status: "readable",
+    };
+  } catch (error) {
+    const failure = classifyForcedPushRemoteArchiveReadFailure(error);
+
+    if (!input.allowForcedRecovery || failure === undefined) {
+      throw error;
+    }
+
+    return {
+      failure,
+      status: "unreadable",
+    };
+  }
+}
+
+async function assertWorkspacePushArchiveReadable(input: {
+  archiveRoot: string;
+  packageResolver: AppPackageResolver;
+}): Promise<void> {
+  const archive = await readArchiveDirectoryForCheck(input.archiveRoot, {
     packageResolver: input.packageResolver,
   });
 
-  if (!remoteArchive || remoteArchive.archive.kind !== INSTANCE_ARCHIVE_KIND) {
-    throw new Error("Formless instance push could not read remote archive state.");
+  if (!archive || archive.archive.kind !== INSTANCE_ARCHIVE_KIND) {
+    throw new Error("Workspace push requires a valid formless.instanceArchive archive.");
+  }
+}
+
+type WorkspacePushRemoteArchiveReadFailure = {
+  message: string;
+  type: "parse" | "validation";
+};
+
+type WorkspacePushRemoteArchiveReadResult =
+  | {
+      archive: WorkspaceArchiveDirectory;
+      status: "readable";
+    }
+  | {
+      failure: WorkspacePushRemoteArchiveReadFailure;
+      status: "unreadable";
+    };
+
+function classifyForcedPushRemoteArchiveReadFailure(
+  error: unknown,
+): WorkspacePushRemoteArchiveReadFailure | undefined {
+  if (error instanceof SyntaxError) {
+    return {
+      message: error.message,
+      type: "parse",
+    };
   }
 
-  return remoteArchive;
+  if (!(error instanceof Error)) {
+    return undefined;
+  }
+
+  const message = error.message;
+
+  if (
+    message.startsWith("Instance archive ") ||
+    message.startsWith("App archive ") ||
+    message.startsWith("Storage snapshot ") ||
+    message.includes("Instance archive controlPlane") ||
+    message.includes("Instance archive apps[") ||
+    message.includes("controlPlane records")
+  ) {
+    return {
+      message,
+      type: "validation",
+    };
+  }
+
+  return undefined;
+}
+
+function forcedRecoveryPlanFromRemoteReadFailure(
+  failure: WorkspacePushRemoteArchiveReadFailure,
+  input: {
+    status: PushFormlessInstanceWorkspaceForcedRecoveryPlan["status"];
+  },
+): PushFormlessInstanceWorkspaceForcedRecoveryPlan {
+  return {
+    action: "replace-unreadable-target",
+    evidence: forcedRecoveryUnavailableEvidence(),
+    reason: "remote-archive-parse-or-validation-failed",
+    remoteReadFailureType: failure.type,
+    remoteReadError: failure.message,
+    status: input.status,
+  };
+}
+
+function forcedRecoveryUnavailableEvidence(): PushFormlessInstanceWorkspaceForcedRecoveryPlan["evidence"] {
+  const unavailable: PushFormlessInstanceWorkspaceForcedRecoveryEvidence = {
+    reason: "target-archive-unreadable",
+    status: "unavailable",
+  };
+
+  return {
+    backup: unavailable,
+    remoteComparison: unavailable,
+    restoreDryRun: unavailable,
+  };
 }
 
 function emptyRemoteInstanceArchiveDirectory(exportedAt: string): WorkspaceArchiveDirectory {
@@ -2559,7 +2732,7 @@ export async function planDeployLocalFormlessWorkspace(
   let existingSelectedTarget = configuredSelectedTarget;
   let preflight: CheckFormlessInstanceWorkspaceResult | undefined;
 
-  if (configuredSelectedTarget) {
+  if (configuredSelectedTarget && input.allowUnreadableTargetRecovery !== true) {
     try {
       preflight = await checkFormlessInstanceWorkspace(
         {
@@ -4641,6 +4814,108 @@ function createWorkspaceSyncPlan(input: {
     source,
     target,
     status: source.fingerprint === target.fingerprint ? "up-to-date" : "changes",
+  };
+}
+
+function createWorkspaceForcedRecoverySyncPlan(input: {
+  domainDesiredDrift: FormlessInstanceWorkspaceDomainDesiredDrift[];
+  failure: WorkspacePushRemoteArchiveReadFailure;
+  localControlPlane: WorkspaceControlPlaneRecords | undefined;
+  localAppState: ReadonlyMap<string, WorkspaceAppStateArchive>;
+  localDomains: readonly FormlessInstanceWorkspaceDomainIntent[];
+  manifest: FormlessInstanceWorkspaceManifest;
+  packageResolver: AppPackageResolver;
+  targetLabel: string;
+}): FormlessInstanceWorkspaceSyncPlan {
+  const localApps = controlPlaneAppInstallRecords(input.localControlPlane);
+  const localAppArchivePayloads = [...input.localAppState.values()].map(
+    (state) => state.appArchive,
+  );
+  const changedStatePaths = new Set<string>(
+    localApps.map((app) => instanceWorkspaceAppStateRelativePath(input.manifest, app.installId)),
+  );
+  const changedControlPlaneRecords = new Set<string>(
+    comparableControlPlaneIntentRecords(input.localControlPlane, input.packageResolver).keys(),
+  );
+  const changedRecords = new Set<string>();
+  const changedMedia = new Set<string>();
+
+  if (changedControlPlaneRecords.size > 0) {
+    changedStatePaths.add(instanceWorkspaceInstanceStateRelativePath(input.manifest));
+  }
+
+  for (const archive of localAppArchivePayloads) {
+    if (archiveRecordCount(archive) > 0) {
+      changedRecords.add(archive.app.installId);
+    }
+
+    if (archive.media.objects.length > 0) {
+      changedMedia.add(archive.app.installId);
+    }
+  }
+
+  const changedDomainCount =
+    input.domainDesiredDrift.length > 0
+      ? input.domainDesiredDrift.length
+      : input.localDomains.length;
+  const changedAreas = workspaceSyncPlanChangedAreas({
+    changedControlPlaneRecordCount: changedControlPlaneRecords.size,
+    changedDomainCount,
+    changedMediaCount: changedMedia.size,
+    changedRecordCount: changedRecords.size,
+    extraInstallCount: 0,
+    missingInstallCount: localApps.length,
+    packageMismatchCount: 0,
+  });
+  const source = workspaceSyncPlanEndpoint({
+    appCount: localApps.length,
+    apps: localApps.map((app) =>
+      comparableWorkspaceSyncApp(
+        app.installId,
+        input.localAppState.get(app.installId),
+        app.packageAppKey,
+      ),
+    ),
+    controlPlane: input.localControlPlane,
+    controlPlaneRecordCount: input.localControlPlane?.records.length ?? 0,
+    domains: input.localDomains,
+    label: "workspace",
+    mediaCount: localAppArchivePayloads.reduce((count, app) => count + app.media.objects.length, 0),
+    packageResolver: input.packageResolver,
+    recordCount: localAppArchivePayloads.reduce((count, app) => count + archiveRecordCount(app), 0),
+  });
+  const target: FormlessInstanceWorkspaceSyncPlanEndpoint = {
+    appCount: 0,
+    controlPlaneRecordCount: 0,
+    domainCount: 0,
+    fingerprint: workspaceSyncFingerprint({
+      message: input.failure.message,
+      reason: "remote-archive-parse-or-validation-failed",
+      target: input.targetLabel,
+    }),
+    label: input.targetLabel,
+    mediaCount: 0,
+    recordCount: 0,
+  };
+
+  return {
+    changedAreas,
+    changedControlPlaneRecords: [...changedControlPlaneRecords].sort((left, right) =>
+      left.localeCompare(right),
+    ),
+    changedDomainCount,
+    changedMedia: [...changedMedia].sort((left, right) => left.localeCompare(right)),
+    changedRecords: [...changedRecords].sort((left, right) => left.localeCompare(right)),
+    changedStatePaths: [...changedStatePaths].sort((left, right) => left.localeCompare(right)),
+    domainDesiredDrift: input.domainDesiredDrift,
+    extraInstalls: [],
+    missingInstalls: localApps
+      .map((app) => app.installId)
+      .sort((left, right) => left.localeCompare(right)),
+    packageMismatches: [],
+    source,
+    status: "changes",
+    target,
   };
 }
 

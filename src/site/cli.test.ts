@@ -2260,6 +2260,177 @@ describe("Formless CLI", () => {
     expect(logs[0]).toContain("sync: up-to-date.");
   });
 
+  it("recovers invalid remote control-plane records with forced push replacement", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+    const requests: CapturedFetchRequest[] = [];
+    const logs: string[] = [];
+    const deployInputs: DeployFormlessInstanceInput[] = [];
+    const fetcher = pushArchiveFetch(
+      requests,
+      [installedSite("david", "David Peek")],
+      { david: { records: [] } },
+      [restoreReport({ replacedInstalls: ["david"] })],
+      [],
+      invalidRemoteControlPlaneRecords({ credentialRef: "formless-cloudflare-oauth:default" }),
+    );
+
+    await writePushRecoveryWorkspace(workspaceRoot);
+
+    await runFormlessCli(
+      ["push", "--workspace", workspaceRoot, "--force"],
+      cliDeps(tempDir, {
+        deploy: async (input) => {
+          deployInputs.push(input);
+
+          return { resourceEvidence: [], url: input.plan.expectedUrl.url };
+        },
+        fetch: fetcher,
+        logs,
+      }),
+    );
+
+    const restoreRequests = requests.filter(
+      (request) =>
+        request.method === "POST" &&
+        new URL(request.url).pathname === "/api/formless/archive/restore",
+    );
+    const restoreBody = capturedRequestJson<{
+      archive: InstanceArchive;
+      exactInstanceReplacement: boolean;
+    }>(restoreRequests[0]);
+
+    expect(deployInputs).toHaveLength(1);
+    expect(restoreRequests).toHaveLength(1);
+    expect(restoreBody.exactInstanceReplacement).toBe(true);
+    expect(restoreBody.archive.restorePolicy).toEqual({
+      dryRun: false,
+      installCollisions: "replace",
+    });
+    expect(restoreBody.archive.controlPlane?.records.map((record) => record.id)).not.toContain(
+      "remote-invalid-control-plane-record",
+    );
+    expect(JSON.stringify(restoreBody.archive)).not.toContain("legacy-control-plane-record");
+    expect(logs).toHaveLength(1);
+    expect(logs[0]).toContain("Workspace operation: push (succeeded).");
+    expect(logs[0]).toContain("mode: apply.");
+    expect(logs[0]).toContain("forcedRecovery: applied.");
+    expect(logs[0]).toContain("backupEvidence: unavailable.");
+    expect(logs[0]).toContain("remoteComparisonEvidence: unavailable.");
+    expect(logs[0]).toContain("restoreDryRunEvidence: unavailable.");
+    expect(logs[0]).toContain('"action":"replace-unreadable-target"');
+    expect(logs[0]).toContain('"remoteReadFailureType":"validation"');
+  });
+
+  it("keeps normal push strict when remote control-plane records are invalid", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+    const requests: CapturedFetchRequest[] = [];
+    const logs: string[] = [];
+    const deployInputs: DeployFormlessInstanceInput[] = [];
+    const fetcher = pushArchiveFetch(
+      requests,
+      [installedSite("david", "David Peek")],
+      { david: { records: [] } },
+      [],
+      [],
+      invalidRemoteControlPlaneRecords({ credentialRef: "formless-cloudflare-oauth:default" }),
+    );
+
+    await writePushRecoveryWorkspace(workspaceRoot);
+
+    await expect(
+      runFormlessCli(
+        ["push", "--workspace", workspaceRoot],
+        cliDeps(tempDir, {
+          deploy: async (input) => {
+            deployInputs.push(input);
+
+            return { resourceEvidence: [], url: input.plan.expectedUrl.url };
+          },
+          fetch: fetcher,
+          logs,
+        }),
+      ),
+    ).rejects.toThrow(
+      'Instance archive controlPlane does not support entity "legacy-control-plane-record".',
+    );
+
+    expect(deployInputs).toEqual([]);
+    expect(
+      requests.some(
+        (request) =>
+          request.method === "POST" &&
+          new URL(request.url).pathname === "/api/formless/archive/restore",
+      ),
+    ).toBe(false);
+    expect(logs).toEqual([]);
+  });
+
+  it("keeps forced push dry-run read-only while reporting invalid remote recovery", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+    const requests: CapturedFetchRequest[] = [];
+    const logs: string[] = [];
+    const deployInputs: DeployFormlessInstanceInput[] = [];
+    const fetcher = pushArchiveFetch(
+      requests,
+      [installedSite("david", "David Peek")],
+      { david: { records: [] } },
+      [],
+      [],
+      invalidRemoteControlPlaneRecords({ credentialRef: "formless-cloudflare-oauth:default" }),
+    );
+
+    await writePushRecoveryWorkspace(workspaceRoot);
+    const manifestBefore = await readFile(
+      path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE),
+      "utf8",
+    );
+    const instanceStateBefore = await readFile(
+      path.join(workspaceRoot, "state/instance.json"),
+      "utf8",
+    );
+    const appStateBefore = await readFile(
+      path.join(workspaceRoot, "state/apps/david.json"),
+      "utf8",
+    );
+
+    await runFormlessCli(
+      ["push", "--workspace", workspaceRoot, "--force", "--dry-run"],
+      cliDeps(tempDir, {
+        deploy: async (input) => {
+          deployInputs.push(input);
+
+          return { resourceEvidence: [], url: input.plan.expectedUrl.url };
+        },
+        fetch: fetcher,
+        logs,
+      }),
+    );
+
+    expect(deployInputs).toEqual([]);
+    expect(requests.some((request) => request.method === "POST")).toBe(false);
+    await expect(
+      readFile(path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE), "utf8"),
+    ).resolves.toBe(manifestBefore);
+    await expect(readFile(path.join(workspaceRoot, "state/instance.json"), "utf8")).resolves.toBe(
+      instanceStateBefore,
+    );
+    await expect(readFile(path.join(workspaceRoot, "state/apps/david.json"), "utf8")).resolves.toBe(
+      appStateBefore,
+    );
+    expect(logs).toHaveLength(1);
+    expect(logs[0]).toContain("Workspace operation: push (succeeded).");
+    expect(logs[0]).toContain("mode: dry-run.");
+    expect(logs[0]).toContain("forcedRecovery: planned.");
+    expect(logs[0]).toContain("runtimeRebuild: available.");
+    expect(logs[0]).toContain("backupEvidence: unavailable.");
+    expect(logs[0]).toContain("remoteComparisonEvidence: unavailable.");
+    expect(logs[0]).toContain("restoreDryRunEvidence: unavailable.");
+    expect(logs[0]).toContain('"action":"replace-unreadable-target"');
+  });
+
   it("rebuilds runtime extensions on repeat push apply without restoring archive data", async () => {
     const tempDir = await makeTempDir();
     const workspaceRoot = path.join(tempDir, "personal-sites");
@@ -4981,6 +5152,24 @@ async function writeWorkspaceControlPlaneStorageSnapshot(
   });
 }
 
+async function writePushRecoveryWorkspace(workspaceRoot: string): Promise<void> {
+  await writeWorkspaceManifest(workspaceRoot);
+  await writeWorkspaceControlPlaneStorageSnapshot(
+    workspaceRoot,
+    controlPlaneRecords({ credentialRef: "formless-cloudflare-oauth:default" }),
+  );
+  await writeTestFormlessCloudflareOAuthCredential(workspaceRoot);
+  await writeWorkspaceAppStateFromArchive(
+    workspaceRoot,
+    appArchive("david", "David Peek", { records: [] }),
+  );
+  await mkdir(path.join(workspaceRoot, ".formless"), { recursive: true });
+  await writeFile(
+    path.join(workspaceRoot, ".formless/instance.env"),
+    "FORMLESS_ADMIN_TOKEN=local-token\n",
+  );
+}
+
 type TestWorkspaceApp = ReturnType<typeof workspaceApp> & {
   routes?: {
     admin?: `/apps/${string}`;
@@ -5647,6 +5836,23 @@ function missingWorkersDevScriptResponse(): Response {
     },
     { status: 500 },
   );
+}
+
+function invalidRemoteControlPlaneRecords(
+  options: Parameters<typeof controlPlaneRecords>[0] = {},
+): StoredRecord[] {
+  const now = "2026-05-26T00:00:00.000Z";
+
+  return [
+    ...controlPlaneRecords(options),
+    {
+      id: "remote-invalid-control-plane-record",
+      entity: "legacy-control-plane-record",
+      values: {},
+      createdAt: now,
+      updatedAt: now,
+    },
+  ];
 }
 
 function controlPlaneRecordsWithProviderObservation(

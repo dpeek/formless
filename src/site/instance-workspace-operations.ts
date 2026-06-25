@@ -447,14 +447,19 @@ function summarizePushResult(
   const details: WorkspaceOperationDisplayObject = {
     applyRestore: result.applyResult ? summarizeRestore(result.applyResult) : null,
     dryRunRestore: result.dryRun ? summarizeRestore(result.dryRun) : null,
+    forcedRecovery: result.forcedRecovery ?? null,
     syncPlan: summarizeSyncPlan(result.syncPlan),
     target: result.selectedTarget.alias,
   };
   const fields: WorkspaceOperationDisplayObject = {
     applyRestoreOk: result.applyResult?.remote.ok ?? null,
+    backupEvidence: result.forcedRecovery?.evidence.backup.status ?? null,
     dryRunRestoreOk: result.dryRun?.remote.ok ?? null,
+    forcedRecovery: result.forcedRecovery?.status ?? null,
     mode: result.mode,
     noop: result.noop,
+    remoteComparisonEvidence: result.forcedRecovery?.evidence.remoteComparison.status ?? null,
+    restoreDryRunEvidence: result.forcedRecovery?.evidence.restoreDryRun.status ?? null,
     sourceApps: result.source.appCount,
     sourceMedia: result.source.mediaCount,
     sourceRecords: result.source.recordCount,
