@@ -325,6 +325,32 @@ local execution binding handles it.
   parsing, terminal preflight prompts, terminal output layout, or direct CLI
   dependency assembly
 
+#### Scenario: Provider credential boundary for deployment execution
+
+- **WHEN** Formless CLI plans, applies, refreshes, or destroys a
+  provider-backed workspace deployment
+- **THEN** provider credential modules own deployment credential source
+  selection, Cloudflare account resolution, OAuth credential reads and refresh,
+  manual provider token fallback, and provider bearer material
+- **AND** deployment implementation modules request a deployment credential
+  context through a narrow CLI-owned interface that returns only display-safe
+  selected account facts, credential reference or profile facts, and provider
+  bearer material needed by provider adapters
+- **AND** deployment implementation modules pass provider bearer material to
+  deploy, destroy, health-check, and route-provider cleanup adapters without
+  reading OAuth secret records, browser authorization callbacks, ignored
+  credential files, provider profile files, or Cloudflare API token environment
+  variables directly
+- **AND** read-only planning and dry-run paths may use display-safe account and
+  credential facts without refreshing or exposing provider bearer values
+- **AND** deployment operation state, summaries, deploy state, workspace
+  manifests, archives, browser-visible records, and terminal output do not
+  expose OAuth tokens, manual provider API tokens, refresh tokens, or raw
+  provider credential records
+- **AND** credential onboarding, browser authorization, terminal account
+  selection, and non-interactive credential guidance remain outside deployment
+  execution and complete before provider mutation begins
+
 #### Scenario: Gateway binding from operation definition
 
 - **WHEN** a browser or automation caller starts a workspace operation through

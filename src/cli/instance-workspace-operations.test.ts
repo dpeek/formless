@@ -1,4 +1,5 @@
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import type { Dirent } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -19,6 +20,7 @@ import {
 } from "../shared/deploy-metadata.ts";
 import { listInstallableAppPackages, packageAppFactsForKey } from "@dpeek/formless-installed-apps";
 import { bundledAppPackageResolver } from "../shared/app-packages.ts";
+import { testSiteSeedRecords } from "../test/site-records.ts";
 import { STORAGE_SNAPSHOT_KIND, STORAGE_SNAPSHOT_VERSION } from "@dpeek/formless-storage";
 import type { StorageSnapshot, StoredRecord } from "@dpeek/formless-storage";
 import {
@@ -37,10 +39,21 @@ import {
 } from "@dpeek/formless-workspace/node";
 import { siteSourceSchema } from "../test/schema-apps.ts";
 import {
+  ALCHEMY_PASSWORD_ENV_NAME,
+  FORMLESS_INSTANCE_LOCAL_ENV_FILE,
+  FORMLESS_INSTANCE_STATE_FILE,
   type DeployFormlessInstanceInput,
   type DeployFormlessInstanceResult,
   type FormlessInstanceAccountDiscoveryAdapter,
 } from "./instance-onboarding.ts";
+import {
+  FORMLESS_CLOUDFLARE_OAUTH_DEPLOY_SCOPES,
+  createFormlessCloudflareOAuthCredential,
+  formatFormlessCloudflareOAuthCredentialRef,
+  writeFormlessCloudflareOAuthCredential,
+  type FormlessCloudflareOAuthTokenSet,
+} from "./cloudflare-oauth.ts";
+import { formatCliWorkspaceOperationOutput } from "./cli-workspace-operation-formatter.ts";
 import {
   runFormlessWorkspaceOperation,
   type RunFormlessWorkspaceOperationDependencies,
@@ -639,6 +652,293 @@ describe("Formless workspace operations", () => {
     expect(requestPaths).not.toContain("/api/formless/deployments/desired-state");
   });
 
+  it("keeps OAuth credential material out of push operation state and deployment artifacts", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+    const credentialRef = formatFormlessCloudflareOAuthCredentialRef("deploy");
+    const requests: CapturedRequest[] = [];
+    const deployInputs: DeployFormlessInstanceInput[] = [];
+    const healthInputs: unknown[] = [];
+    const operationId = "op_push_oauth_display_safe_00000001";
+
+    await writeWorkspaceManifest(workspaceRoot);
+    await writeDeployStorageSnapshot(workspaceRoot, { credentialRef });
+    await writeWorkspaceAppStorageSnapshot(workspaceRoot, "david", testSiteSeedRecords.slice(0, 1));
+    await mkdir(path.join(workspaceRoot, ".formless"), { recursive: true });
+    await writeFile(
+      path.join(workspaceRoot, ".formless/instance.env"),
+      "FORMLESS_ADMIN_TOKEN=local-admin-token\n",
+    );
+    await writeFormlessCloudflareOAuthCredential({
+      credential: createFormlessCloudflareOAuthCredential({
+        id: "deploy",
+        selectedAccount: {
+          id: "account-123",
+          name: "Personal",
+          workersDevSubdomain: "dpeek",
+        },
+        token: providerOAuthToken(),
+        updatedAt: "2026-06-02T00:00:00.000Z",
+      }),
+      workspaceRoot,
+    });
+
+    const state = await runFormlessWorkspaceOperation(
+      {
+        force: true,
+        kind: "push",
+        workspacePath: workspaceRoot,
+      },
+      operationDeps(tempDir, {
+        accountDiscovery: unusedAccountDiscovery,
+        deploymentAdapter: {
+          deploy: async (input) => {
+            deployInputs.push(input);
+
+            return {
+              rawCredentialRecord: {
+                accessToken: "oauth-access-token",
+                refreshToken: "oauth-refresh-token",
+              },
+              resourceEvidence: [
+                {
+                  action: "updated",
+                  kind: "cloudflare-worker-custom-domain",
+                  logicalId: "custom-domain:www.example.com",
+                  providerFamily: "cloudflare",
+                  providerResourceIds: ["provider-resource-secret-token"],
+                  targetId: "instance.primary",
+                },
+              ],
+              url: "https://personal.dpeek.workers.dev",
+            } as DeployFormlessInstanceResult;
+          },
+        },
+        env: {
+          ALCHEMY_STATE_TOKEN: "alchemy-state-token",
+          CF_API_TOKEN: "cf-manual-provider-token",
+          CLOUDFLARE_API_TOKEN: "manual-provider-token",
+        },
+        fetch: deployApplyFetch(requests),
+        healthCheck: {
+          check: async (input) => {
+            healthInputs.push(input);
+            return deployMetadata(input.url);
+          },
+        },
+        localSecretEnv: localSecretEnvStore("alchemy-secret"),
+        operationIds: [operationId],
+        packageRoot: tempDir,
+        packageVersion: packageJson.version,
+        randomTokens: ["unused-random-token"],
+        setupInputs: [],
+        timestamps: [
+          "2026-06-02T00:07:00.000Z",
+          "2026-06-02T00:07:01.000Z",
+          "2026-06-02T00:07:02.000Z",
+          "2026-06-02T00:07:03.000Z",
+          "2026-06-02T00:07:04.000Z",
+          "2026-06-02T00:07:05.000Z",
+          "2026-06-02T00:07:06.000Z",
+        ],
+      }),
+      { actor: "browser" },
+    );
+
+    expect(deployInputs[0]).toMatchObject({
+      providerBearer: {
+        credentialRef,
+        source: "formless-cloudflare-oauth",
+        token: "oauth-access-token",
+      },
+      secrets: {
+        ALCHEMY_PASSWORD: "alchemy-secret",
+        CLOUDFLARE_API_TOKEN: "oauth-access-token",
+        FORMLESS_ADMIN_TOKEN: "local-admin-token",
+      },
+    });
+    expect(healthInputs[0]).toMatchObject({
+      providerBearer: {
+        credentialRef,
+        source: "formless-cloudflare-oauth",
+        token: "oauth-access-token",
+      },
+    });
+    expect(state.result?.deployment).toMatchObject({
+      accountId: "account-123",
+      accountName: "Personal",
+      credentialRef,
+      deploymentUrl: "https://personal.dpeek.workers.dev",
+      providerFamily: "cloudflare",
+      target: "instance.primary",
+      targetUrl: "https://personal.dpeek.workers.dev",
+      workerName: "personal",
+      workersDevSubdomain: "dpeek",
+    });
+
+    const persistedText = await readFile(
+      workspaceOperationStatePath(workspaceRoot, operationId),
+      "utf8",
+    );
+    const terminalOutput = formatCliWorkspaceOperationOutput(state);
+    const manifestText = await readFile(
+      path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE),
+      "utf8",
+    );
+    const deploymentStateText = await readFile(
+      path.join(workspaceRoot, ".formless/deploy/personal", FORMLESS_INSTANCE_STATE_FILE),
+      "utf8",
+    );
+    const deploySecretText = await readFile(
+      path.join(workspaceRoot, ".formless/deploy/personal", FORMLESS_INSTANCE_LOCAL_ENV_FILE),
+      "utf8",
+    );
+    const archiveRestoreBodies = requests
+      .filter((request) => new URL(request.url).pathname === "/api/formless/archive/restore")
+      .map((request) => request.body ?? "")
+      .join("\n");
+    const backupArchiveText = await readTextFilesUnder(
+      path.join(workspaceRoot, ".formless/backups"),
+    );
+    const browserVisibleState = JSON.stringify(state);
+
+    expect(archiveRestoreBodies).not.toBe("");
+    expect(terminalOutput).toContain(`credentialRef: ${credentialRef}.`);
+    expect(deploySecretText).not.toContain("oauth-access-token");
+    expect(deploySecretText).not.toContain("oauth-refresh-token");
+    expect(deploySecretText).not.toContain("manual-provider-token");
+    expect(deploySecretText).not.toContain("cf-manual-provider-token");
+    assertTextExcludesSecrets(
+      {
+        archiveRestoreBodies,
+        backupArchiveText,
+        browserVisibleState,
+        deploymentStateText,
+        manifestText,
+        persistedText,
+        terminalOutput,
+      },
+      [
+        "oauth-access-token",
+        "oauth-refresh-token",
+        "manual-provider-token",
+        "cf-manual-provider-token",
+        "provider-resource-secret-token",
+        "local-admin-token",
+        "alchemy-secret",
+        "alchemy-state-token",
+        '"accessToken"',
+        '"refreshToken"',
+        "rawCredentialRecord",
+      ],
+    );
+  });
+
+  it("keeps manual provider API tokens out of push operation state and terminal output", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+    const requests: CapturedRequest[] = [];
+    const deployInputs: DeployFormlessInstanceInput[] = [];
+    const operationId = "op_push_manual_token_display_safe_00000001";
+
+    await writeWorkspaceManifest(workspaceRoot);
+    await writeDeployStorageSnapshot(workspaceRoot, { credentialRef: "alchemy-profile:team" });
+    await writeWorkspaceAppStorageSnapshot(workspaceRoot);
+    await mkdir(path.join(workspaceRoot, ".formless"), { recursive: true });
+    await writeFile(
+      path.join(workspaceRoot, ".formless/instance.env"),
+      "FORMLESS_ADMIN_TOKEN=local-admin-token\n",
+    );
+
+    const state = await runFormlessWorkspaceOperation(
+      {
+        force: true,
+        kind: "push",
+        workspacePath: workspaceRoot,
+      },
+      operationDeps(tempDir, {
+        accountDiscovery: {
+          listAccounts: async () => [
+            {
+              id: "account-123",
+              name: "Team",
+              workersDevSubdomain: "dpeek",
+            },
+          ],
+        },
+        deploymentAdapter: {
+          deploy: async (input) => {
+            deployInputs.push(input);
+            return {
+              rawAdapterOutput: "CLOUDFLARE_API_TOKEN=manual-provider-token",
+              url: "https://personal.dpeek.workers.dev",
+            } as DeployFormlessInstanceResult;
+          },
+        },
+        env: {
+          CLOUDFLARE_API_TOKEN: "manual-provider-token",
+        },
+        fetch: deployApplyFetch(requests),
+        healthCheck: {
+          check: async (input) => deployMetadata(input.url),
+        },
+        localSecretEnv: localSecretEnvStore("alchemy-secret"),
+        operationIds: [operationId],
+        packageRoot: tempDir,
+        packageVersion: packageJson.version,
+        randomTokens: ["unused-random-token"],
+        setupInputs: [],
+        timestamps: [
+          "2026-06-02T00:08:00.000Z",
+          "2026-06-02T00:08:01.000Z",
+          "2026-06-02T00:08:02.000Z",
+          "2026-06-02T00:08:03.000Z",
+          "2026-06-02T00:08:04.000Z",
+        ],
+      }),
+      { actor: "browser" },
+    );
+
+    expect(deployInputs[0]).toMatchObject({
+      credentialProfile: "team",
+      providerBearer: {
+        envName: "CLOUDFLARE_API_TOKEN",
+        source: "manual-cloudflare-api-token",
+        token: "manual-provider-token",
+      },
+      secrets: {
+        ALCHEMY_PASSWORD: "alchemy-secret",
+        CLOUDFLARE_API_TOKEN: "manual-provider-token",
+        FORMLESS_ADMIN_TOKEN: "local-admin-token",
+      },
+    });
+    expect(state.result?.deployment).toMatchObject({
+      accountId: "account-123",
+      accountName: "Team",
+      profile: "team",
+      profileRef: "alchemy-profile:team",
+      providerFamily: "cloudflare",
+      target: "instance.primary",
+    });
+
+    const persistedText = await readFile(
+      workspaceOperationStatePath(workspaceRoot, operationId),
+      "utf8",
+    );
+    const terminalOutput = formatCliWorkspaceOperationOutput(state);
+
+    expect(terminalOutput).toContain("profile: team.");
+    expect(terminalOutput).toContain("profileRef: alchemy-profile:team.");
+    assertTextExcludesSecrets(
+      {
+        persistedText,
+        terminalOutput,
+        browserVisibleState: JSON.stringify(state),
+      },
+      ["manual-provider-token", "local-admin-token", "alchemy-secret", "rawAdapterOutput"],
+    );
+  });
+
   it("persists display-safe deployment observation and cleanup summaries with secret redaction", async () => {
     const workspaceRoot = await makeTempDir();
     const state = await createWorkspaceOperationState({
@@ -754,6 +1054,7 @@ function operationDeps(
     env?: NodeJS.ProcessEnv;
     fetch?: typeof fetch;
     healthCheck?: RunFormlessWorkspaceOperationDependencies["healthCheck"];
+    localSecretEnv?: RunFormlessWorkspaceOperationDependencies["localSecretEnv"];
     packageRoot?: string;
     operationIds?: string[];
     packageVersion?: string;
@@ -778,6 +1079,7 @@ function operationDeps(
     ...(options.env === undefined ? {} : { env: options.env }),
     fetch: options.fetch ?? fetch,
     ...(options.healthCheck === undefined ? {} : { healthCheck: options.healthCheck }),
+    ...(options.localSecretEnv === undefined ? {} : { localSecretEnv: options.localSecretEnv }),
     now: timestampSequence(...(options.timestamps ?? ["2026-06-02T00:00:00.000Z"])),
     ...(options.packageRoot === undefined ? {} : { packageRoot: options.packageRoot }),
     ...(options.packageVersion === undefined ? {} : { packageVersion: options.packageVersion }),
@@ -844,6 +1146,96 @@ async function waitUntil(condition: () => Promise<boolean>, timeoutMs = 1000): P
   }
 
   throw new Error("Timed out waiting for condition.");
+}
+
+function providerOAuthToken(): FormlessCloudflareOAuthTokenSet {
+  return {
+    accessToken: "oauth-access-token",
+    expiresAt: "2026-06-02T01:00:00.000Z",
+    grantedScopes: [...FORMLESS_CLOUDFLARE_OAUTH_DEPLOY_SCOPES],
+    refreshToken: "oauth-refresh-token",
+  };
+}
+
+const unusedAccountDiscovery = {
+  listAccounts: async () => {
+    throw new Error("Stored OAuth selected account should avoid account discovery.");
+  },
+} satisfies FormlessInstanceAccountDiscoveryAdapter;
+
+function deployMetadata(url: string) {
+  return {
+    cacheControl: "no-store",
+    metadataUrl: `${url}/api/formless/deploy`,
+    packageVersion: packageJson.version,
+    runtimeProtocolVersion: FORMLESS_RUNTIME_PROTOCOL_VERSION,
+    storageMigrationSet: FORMLESS_STORAGE_MIGRATION_SET_ID,
+    url,
+    version: packageJson.version,
+  };
+}
+
+function localSecretEnvStore(
+  secret: string,
+): RunFormlessWorkspaceOperationDependencies["localSecretEnv"] {
+  return {
+    ensure: async (input) => {
+      const filePath = path.join(input.root, FORMLESS_INSTANCE_LOCAL_ENV_FILE);
+
+      await mkdir(path.dirname(filePath), { recursive: true });
+      await writeFile(filePath, `${ALCHEMY_PASSWORD_ENV_NAME}=${secret}\n`);
+
+      return {
+        created: true,
+        path: filePath,
+        secrets: {
+          ALCHEMY_PASSWORD: secret,
+        },
+      };
+    },
+  };
+}
+
+async function readTextFilesUnder(root: string): Promise<string> {
+  let entries: Dirent<string>[];
+
+  try {
+    entries = await readdir(root, { withFileTypes: true });
+  } catch (error) {
+    const code =
+      typeof error === "object" && error !== null && "code" in error ? error.code : undefined;
+
+    if (code === "ENOENT") {
+      return "";
+    }
+
+    throw error;
+  }
+
+  const contents: string[] = [];
+
+  for (const entry of entries) {
+    const entryPath = path.join(root, entry.name);
+
+    if (entry.isDirectory()) {
+      contents.push(await readTextFilesUnder(entryPath));
+    } else if (entry.isFile()) {
+      contents.push(await readFile(entryPath, "utf8"));
+    }
+  }
+
+  return contents.join("\n");
+}
+
+function assertTextExcludesSecrets(
+  texts: Record<string, string>,
+  secretNeedles: readonly string[],
+): void {
+  for (const [label, text] of Object.entries(texts)) {
+    for (const secret of secretNeedles) {
+      expect(text, `${label} should not include ${secret}`).not.toContain(secret);
+    }
+  }
 }
 
 async function writeWorkspaceManifest(

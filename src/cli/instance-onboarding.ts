@@ -165,11 +165,21 @@ export type FormlessInstanceDeploymentSecrets = {
   FORMLESS_ADMIN_TOKEN: string;
 };
 
+export type FormlessInstanceProviderBearerMaterial = {
+  credentialRef?: string;
+  envName?: "CLOUDFLARE_API_TOKEN" | "CF_API_TOKEN";
+  kind: "cloudflare-api-token";
+  providerFamily: "cloudflare";
+  source: "formless-cloudflare-oauth" | "manual-cloudflare-api-token";
+  token: string;
+};
+
 export type DeployFormlessInstanceInput = {
   credentialProfile: string | null;
   deploymentResourceGraph?: DeployResourceGraph;
   packageRoot: string;
   plan: FormlessInstanceDeploymentPlan;
+  providerBearer?: FormlessInstanceProviderBearerMaterial;
   secrets: FormlessInstanceDeploymentSecrets;
   stateRoot: string;
   workspaceAppPackages?: string;
@@ -188,6 +198,7 @@ export type DestroyFormlessInstanceInput = {
   domainProviderResources?: DeployResourceGraph;
   packageRoot: string;
   plan: FormlessInstanceDeploymentPlan;
+  providerBearer?: FormlessInstanceProviderBearerMaterial;
   secrets: Omit<FormlessInstanceDeploymentSecrets, "FORMLESS_ADMIN_TOKEN">;
   stateRoot: string;
 };
@@ -217,6 +228,7 @@ export type FormlessInstanceDeploymentAdapter = {
 
 export type CheckFormlessInstanceDeployMetadataInput = {
   expectedVersion: string;
+  providerBearer?: FormlessInstanceProviderBearerMaterial;
   url: string;
 };
 
@@ -975,7 +987,7 @@ export async function deployFormlessInstanceWithAlchemy(
   );
   const cloudflareApiToken = parseOptionalString(
     "Cloudflare API token",
-    input.secrets.CLOUDFLARE_API_TOKEN,
+    providerBearerCloudflareApiToken(input.providerBearer) ?? input.secrets.CLOUDFLARE_API_TOKEN,
   );
   const profileOptions = credentialProfile ? { profile: credentialProfile } : {};
   const adoptExistingDeployment = plan.adoptExistingDeployment;
@@ -1018,6 +1030,12 @@ export async function deployFormlessInstanceWithAlchemy(
   return parseDeployFormlessInstanceResult(resourceTree);
 }
 
+function providerBearerCloudflareApiToken(
+  providerBearer: FormlessInstanceProviderBearerMaterial | undefined,
+): string | undefined {
+  return providerBearer?.kind === "cloudflare-api-token" ? providerBearer.token : undefined;
+}
+
 export async function destroyFormlessInstanceWithAlchemy(
   input: DestroyFormlessInstanceInput,
   dependencies?: AlchemyFormlessInstanceDeploymentDependencies,
@@ -1033,7 +1051,7 @@ export async function destroyFormlessInstanceWithAlchemy(
   );
   const cloudflareApiToken = parseOptionalString(
     "Cloudflare API token",
-    input.secrets.CLOUDFLARE_API_TOKEN,
+    providerBearerCloudflareApiToken(input.providerBearer) ?? input.secrets.CLOUDFLARE_API_TOKEN,
   );
   const profileOptions = credentialProfile ? { profile: credentialProfile } : {};
   const adoptExistingDeployment = plan.adoptExistingDeployment;

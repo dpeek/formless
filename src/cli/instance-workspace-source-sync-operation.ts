@@ -10,6 +10,7 @@ import {
 import type { RestorePortableArchiveResult } from "./archive-workflows.ts";
 import {
   pushFormlessInstanceWorkspace,
+  type LocalWorkspaceDeploymentDisplayFacts,
   type PushFormlessInstanceWorkspaceDependencies,
   type PushFormlessInstanceWorkspaceDryRunDependencies,
   type PushFormlessInstanceWorkspaceResult,
@@ -271,12 +272,52 @@ function summarizePushResult(
     fields.runtimeRebuild = result.runtimeRebuild.status;
   }
 
+  const deployment = summarizePushDeployment(result);
+
   return {
+    ...(deployment === undefined ? {} : { deployment }),
     details,
     summary: {
       fields,
       title: result.mode === "apply" ? "Workspace push applied" : "Workspace push planned",
     },
+  };
+}
+
+function summarizePushDeployment(
+  result: PushFormlessInstanceWorkspaceResult,
+): WorkspaceOperationDisplayObject | undefined {
+  const display: LocalWorkspaceDeploymentDisplayFacts | undefined = result.deploymentDisplay;
+
+  if (display === undefined) {
+    return undefined;
+  }
+
+  return {
+    ...deploymentDisplayFields(display),
+    deploymentUrl: result.deployment?.url ?? display.targetUrl,
+    desiredStateVersion: result.deploymentObservation?.desiredState.versionId ?? null,
+    evidenceCount: result.deploymentObservation?.evidenceCount ?? null,
+    healthCheckVersion: result.healthCheck?.version ?? null,
+    observedStatus: result.deploymentObservation?.observedStatus ?? null,
+    resourceCount: result.deploymentObservation?.resourceCount ?? null,
+  };
+}
+
+function deploymentDisplayFields(
+  display: LocalWorkspaceDeploymentDisplayFacts,
+): WorkspaceOperationDisplayObject {
+  return {
+    accountId: display.accountId,
+    ...(display.accountName === undefined ? {} : { accountName: display.accountName }),
+    ...(display.credentialRef === undefined ? {} : { credentialRef: display.credentialRef }),
+    ...(display.profile === undefined ? {} : { profile: display.profile }),
+    ...(display.profileRef === undefined ? {} : { profileRef: display.profileRef }),
+    providerFamily: display.providerFamily,
+    target: display.target,
+    targetUrl: display.targetUrl,
+    workerName: display.workerName,
+    workersDevSubdomain: display.workersDevSubdomain,
   };
 }
 

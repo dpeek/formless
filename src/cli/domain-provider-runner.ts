@@ -20,6 +20,7 @@ import {
   requestFormlessInstanceDomainProviderDelete,
   type FormlessInstanceTargetClientDependencies,
 } from "./instance-target-client.ts";
+import type { FormlessInstanceProviderBearerMaterial } from "./instance-onboarding.ts";
 
 export const ALCHEMY_STATE_TOKEN_ENV_NAME = "ALCHEMY_STATE_TOKEN";
 
@@ -38,6 +39,7 @@ export type RunFormlessInstanceDomainProviderDeleteInput = {
   host?: string | null;
   kind?: DomainProviderResourceKind | null;
   logicalId?: string | null;
+  providerBearer?: FormlessInstanceProviderBearerMaterial;
   runnerId?: string | null;
   targetUrl: string;
 };
@@ -58,6 +60,7 @@ export type RunFormlessInstanceDomainProviderDeleteDependencies =
     runtime?: (input: {
       accountId: string;
       env: NodeJS.ProcessEnv;
+      providerBearer?: FormlessInstanceProviderBearerMaterial;
     }) => Promise<DomainProviderAlchemyRuntime>;
   };
 
@@ -93,6 +96,7 @@ export async function runFormlessInstanceDomainProviderDelete(
     const runtime = await (dependencies.runtime ?? nodeAlchemyDomainProviderRuntime)({
       accountId,
       env: dependencies.env,
+      ...(input.providerBearer === undefined ? {} : { providerBearer: input.providerBearer }),
     });
 
     const alchemy = await destroyDomainProviderDeleteTargets({
@@ -223,6 +227,7 @@ export async function nodeAlchemyDomainProviderRuntime(input: {
   appName?: string;
   apiToken?: string;
   env: NodeJS.ProcessEnv;
+  providerBearer?: FormlessInstanceProviderBearerMaterial;
   rootDir?: string;
   stage?: string;
 }): Promise<DomainProviderAlchemyRuntime> {
@@ -231,6 +236,7 @@ export async function nodeAlchemyDomainProviderRuntime(input: {
     input.rootDir === undefined ? requiredEnv(input.env, ALCHEMY_STATE_TOKEN_ENV_NAME) : undefined;
   const cloudflareApiToken =
     optionalApiToken(input.apiToken) ??
+    providerBearerCloudflareApiToken(input.providerBearer) ??
     (input.rootDir === undefined
       ? cloudflareApiTokenFromEnv(input.env)
       : optionalCloudflareApiTokenFromEnv(input.env));
@@ -352,6 +358,12 @@ function optionalApiToken(value: string | undefined): string | undefined {
   const token = value?.trim();
 
   return token || undefined;
+}
+
+function providerBearerCloudflareApiToken(
+  providerBearer: FormlessInstanceProviderBearerMaterial | undefined,
+): string | undefined {
+  return providerBearer?.kind === "cloudflare-api-token" ? providerBearer.token : undefined;
 }
 
 function requiredEnv(env: NodeJS.ProcessEnv, name: string): string {

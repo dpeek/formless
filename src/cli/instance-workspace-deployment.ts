@@ -47,10 +47,6 @@ import {
 import { parseOwnerSetupToken } from "../shared/protocol.ts";
 import { runtimeWorkspaceExtensionsEnvValue } from "../shared/workspace-runtime-extensions.ts";
 import type { DomainProviderPlan } from "../shared/domain-provider-protocol.ts";
-import {
-  CF_API_TOKEN_ENV_NAME,
-  CLOUDFLARE_API_TOKEN_ENV_NAME,
-} from "./cloudflare-domain-client.ts";
 import { exportInstanceArchive, type RestorePortableArchiveResult } from "./archive-workflows.ts";
 import {
   ALCHEMY_PASSWORD_ENV_NAME,
@@ -88,13 +84,10 @@ import {
   requireFormlessCliWorkspaceTarget,
 } from "./instance-target-context.ts";
 import {
-  alchemyProfileDeploymentCredential,
-  defaultLocalWorkspaceDeploymentCredential,
-  deploymentCredentialProfile,
   hasLocalWorkspaceFormlessCloudflareOAuthCredential,
-  optionalCloudflareApiToken,
-  resolveLocalWorkspaceCloudflareApiToken,
-  resolveLocalWorkspaceDeploymentAccount,
+  resolveLocalWorkspaceDeploymentCredentialContext,
+  type FormlessCliDeploymentCredentialReference,
+  type FormlessCliProviderBearerMaterial,
   selectLocalWorkspaceDeploymentSource,
   type LocalWorkspaceDeploymentCredential,
 } from "./instance-provider-credentials.ts";
@@ -188,6 +181,7 @@ export type PushFormlessInstanceWorkspaceResult = {
   applyResult?: RestorePortableArchiveResult;
   backup?: ArchiveDiskWriteResult;
   deployment?: DeployFormlessInstanceResult;
+  deploymentDisplay: LocalWorkspaceDeploymentDisplayFacts;
   deploymentObservation?: DeployLocalFormlessWorkspaceObservation;
   deploymentStatePath?: string;
   deploymentStateRoot?: string;
@@ -277,7 +271,7 @@ export type DeployLocalFormlessWorkspaceDependencies =
 
 export type PlanDeployLocalFormlessWorkspaceDependencies = Pick<
   DeployLocalFormlessWorkspaceDependencies,
-  "accountDiscovery" | "cwd" | "fetch" | "now" | "packageVersion"
+  "accountDiscovery" | "cwd" | "env" | "fetch" | "now" | "packageVersion"
 >;
 
 export type PlanDeployLocalFormlessWorkspaceResult = LocalWorkspaceDeploymentPlanResult & {
@@ -292,13 +286,14 @@ export type PlanDeployLocalFormlessWorkspaceResult = LocalWorkspaceDeploymentPla
 
 export type PlanDeployFormlessInstanceWorkspaceDependencies = Pick<
   DeployFormlessInstanceWorkspaceDependencies,
-  "cwd" | "packageVersion"
+  "cwd" | "env" | "packageVersion"
 >;
 
 export type PlanDeployFormlessInstanceWorkspaceResult = {
   credential: LocalWorkspaceDeploymentCredential;
   credentialProfile: string | null;
   plan: FormlessInstanceDeploymentPlan;
+  providerBearer?: FormlessCliProviderBearerMaterial;
   selectedTarget: FormlessInstanceWorkspaceTarget;
   workspaceAppPackages?: string;
   workspaceRuntimeExtensions?: string;
@@ -419,6 +414,7 @@ export type FormlessInstanceWorkspaceProviderContext = {
   localSecretPath: string;
   manifest: FormlessInstanceWorkspaceManifest;
   plan: FormlessInstanceDeploymentPlan;
+  providerBearer?: FormlessCliProviderBearerMaterial;
   secrets: {
     ALCHEMY_PASSWORD: string;
     CLOUDFLARE_API_TOKEN?: string;
@@ -497,6 +493,7 @@ export async function pushFormlessInstanceWorkspace(
 
     if (forcedRecovery !== undefined && !input.apply) {
       return {
+        deploymentDisplay: planned.deploymentDisplay,
         forcedRecovery,
         mode: "dry-run",
         noop: false,
@@ -510,6 +507,7 @@ export async function pushFormlessInstanceWorkspace(
 
     if (!hasDataChanges && runtimeRebuild === undefined) {
       return {
+        deploymentDisplay: planned.deploymentDisplay,
         mode: input.apply ? "apply" : "dry-run",
         noop: true,
         selectedTarget,
@@ -521,6 +519,7 @@ export async function pushFormlessInstanceWorkspace(
 
     if (!hasDataChanges && !input.apply) {
       return {
+        deploymentDisplay: planned.deploymentDisplay,
         mode: "dry-run",
         noop: true,
         ...(runtimeRebuild === undefined ? {} : { runtimeRebuild }),
@@ -639,6 +638,7 @@ export async function pushFormlessInstanceWorkspace(
           }),
       ...(restoreDryRun === undefined ? {} : { dryRun: restoreDryRun }),
       ...(forcedRecovery === undefined ? {} : { forcedRecovery }),
+      deploymentDisplay: planned.deploymentDisplay,
       mode: input.apply ? "apply" : "dry-run",
       noop: !hasDataChanges && provider === undefined,
       ...(runtimeRebuild === undefined ? {} : { runtimeRebuild }),
@@ -755,14 +755,7 @@ async function applyWorkspacePushProviderReconciliation(
     deploymentStateRoot,
     env: dependencies.env,
   });
-  const cloudflareApiToken =
-    (await resolveLocalWorkspaceCloudflareApiToken({
-      credential: planned.credential,
-      env: dependencies.env,
-      fetch: dependencies.fetch,
-      now: dependencies.now,
-      workspaceRoot,
-    })) ?? deploymentSecrets.secrets.CLOUDFLARE_API_TOKEN;
+  const cloudflareApiToken = providerBearerCloudflareApiToken(planned.providerBearer);
   const deploymentStatePath = await writeLocalWorkspaceDeploymentState({
     credentialProfile: planned.credentialProfile,
     deploymentStateRoot,
@@ -775,6 +768,7 @@ async function applyWorkspacePushProviderReconciliation(
       deploymentResourceGraph: planned.desiredState.resourceGraph,
       packageRoot: dependencies.packageRoot,
       plan: planned.plan,
+      ...(planned.providerBearer === undefined ? {} : { providerBearer: planned.providerBearer }),
       secrets: {
         ALCHEMY_PASSWORD: deploymentSecrets.secrets.ALCHEMY_PASSWORD,
         ...(cloudflareApiToken === undefined ? {} : { CLOUDFLARE_API_TOKEN: cloudflareApiToken }),
@@ -801,6 +795,7 @@ async function applyWorkspacePushProviderReconciliation(
       dependencies,
       deploymentUrl,
       plan: planned.plan,
+      providerBearer: planned.providerBearer,
       selectedTarget: planned.selectedTarget,
     });
     const ownerSetup =
@@ -856,6 +851,23 @@ export async function refreshFormlessInstanceDeploymentObservation(
     targetAlias: input.targetAlias,
     workspaceRoot,
   });
+  const activePackages = await createActiveWorkspaceAppPackages(workspaceRoot);
+  const controlPlane = await readInstanceWorkspaceControlPlaneStorageSnapshot({
+    manifest,
+    packageResolver: activePackages.resolver,
+    workspaceRoot,
+  });
+  const deploymentSource = selectLocalWorkspaceDeploymentSource(controlPlane, input.targetAlias, {
+    commandName: "deployment refresh",
+  });
+
+  await resolveLocalWorkspaceDeploymentCredentialContext({
+    credential: deploymentSource.credential,
+    credentialAccess: "read-only",
+    deploymentConfig: deploymentSource.deploymentConfig,
+    workspaceRoot,
+  });
+
   const adminToken = await readWorkspaceAdminToken(workspaceRoot, dependencies);
 
   if (!adminToken) {
@@ -936,14 +948,7 @@ export async function deployLocalFormlessWorkspace(
     deploymentStateRoot,
     env: dependencies.env,
   });
-  const cloudflareApiToken =
-    (await resolveLocalWorkspaceCloudflareApiToken({
-      credential: planned.credential,
-      env: dependencies.env,
-      fetch: dependencies.fetch,
-      now: dependencies.now,
-      workspaceRoot,
-    })) ?? deploymentSecrets.secrets.CLOUDFLARE_API_TOKEN;
+  const cloudflareApiToken = providerBearerCloudflareApiToken(planned.providerBearer);
 
   const deploymentStatePath = await writeLocalWorkspaceDeploymentState({
     credentialProfile: planned.credentialProfile,
@@ -956,6 +961,7 @@ export async function deployLocalFormlessWorkspace(
       deploymentResourceGraph: planned.desiredState.resourceGraph,
       packageRoot: dependencies.packageRoot,
       plan: planned.plan,
+      ...(planned.providerBearer === undefined ? {} : { providerBearer: planned.providerBearer }),
       secrets: {
         ALCHEMY_PASSWORD: deploymentSecrets.secrets.ALCHEMY_PASSWORD,
         ...(cloudflareApiToken === undefined ? {} : { CLOUDFLARE_API_TOKEN: cloudflareApiToken }),
@@ -982,6 +988,7 @@ export async function deployLocalFormlessWorkspace(
       dependencies,
       deploymentUrl,
       plan: planned.plan,
+      providerBearer: planned.providerBearer,
       selectedTarget: planned.selectedTarget,
     });
 
@@ -1140,11 +1147,13 @@ async function checkLocalWorkspaceDeploymentHealth(input: {
   dependencies: Pick<DeployLocalFormlessWorkspaceDependencies, "healthCheck">;
   deploymentUrl: string;
   plan: FormlessInstanceDeploymentPlan;
+  providerBearer?: FormlessCliProviderBearerMaterial;
   selectedTarget: FormlessInstanceWorkspaceTarget;
 }): Promise<CheckFormlessInstanceDeployMetadataResult> {
   try {
     return await input.dependencies.healthCheck.check({
       expectedVersion: input.plan.packageVersion,
+      ...(input.providerBearer === undefined ? {} : { providerBearer: input.providerBearer }),
       url: input.deploymentUrl,
     });
   } catch {
@@ -1297,22 +1306,26 @@ export async function planDeployLocalFormlessWorkspace(
     }
   }
 
-  const account = await resolveLocalWorkspaceDeploymentAccount({
+  const credentialContext = await resolveLocalWorkspaceDeploymentCredentialContext({
     accountDiscovery: dependencies.accountDiscovery,
     credential: deploymentSource.credential,
     credentialAccess: input.credentialAccess ?? "mutable",
     deploymentConfig: deploymentSource.deploymentConfig,
+    env: dependencies.env,
     fetch: dependencies.fetch,
     now: dependencies.now,
     workspaceRoot,
   });
   const planned = planLocalWorkspaceDeployment({
-    account,
+    account: credentialContext.account,
     adoptExistingDeployment: existingSelectedTarget !== undefined,
-    credential: deploymentSource.credential,
+    credential: credentialContext.credential,
+    credentialReference: credentialContext.credentialReference,
+    credentialProfile: credentialContext.credentialProfile,
     deploymentConfig: deploymentSource.deploymentConfig,
     manifest,
     packageVersion: dependencies.packageVersion,
+    providerBearer: credentialContext.providerBearer,
     targetAlias: input.targetAlias,
   });
   const desiredState = projectLocalWorkspaceDeploymentDesiredState({
@@ -1447,15 +1460,12 @@ export async function deployFormlessInstanceWorkspace(
     createSecret: dependencies.randomToken,
     root: deploymentStateRoot,
   });
-  const cloudflareApiToken = await resolveLocalWorkspaceCloudflareApiToken({
-    credential: planned.credential,
-    env: dependencies.env,
-    workspaceRoot,
-  });
+  const cloudflareApiToken = providerBearerCloudflareApiToken(planned.providerBearer);
   const deployment = await dependencies.deploymentAdapter.deploy({
     credentialProfile: planned.credentialProfile,
     packageRoot: dependencies.packageRoot,
     plan,
+    ...(planned.providerBearer === undefined ? {} : { providerBearer: planned.providerBearer }),
     secrets: {
       ALCHEMY_PASSWORD: localSecretEnv.secrets.ALCHEMY_PASSWORD,
       ...(cloudflareApiToken === undefined ? {} : { CLOUDFLARE_API_TOKEN: cloudflareApiToken }),
@@ -1480,6 +1490,7 @@ export async function deployFormlessInstanceWorkspace(
 
   const healthCheck = await dependencies.healthCheck.check({
     expectedVersion: plan.packageVersion,
+    ...(planned.providerBearer === undefined ? {} : { providerBearer: planned.providerBearer }),
     url: deploymentUrl,
   });
 
@@ -1536,12 +1547,21 @@ export async function planDeployFormlessInstanceWorkspace(
   });
   const workspaceAppPackages = runtimeWorkspaceAppPackagesEnvValue(activePackages);
   const workspaceRuntimeExtensions = runtimeWorkspaceExtensionsEnvValue(manifest);
-  const credential = deploymentSource.credential ?? defaultLocalWorkspaceDeploymentCredential();
+  const credentialContext = await resolveLocalWorkspaceDeploymentCredentialContext({
+    credential: deploymentSource.credential,
+    credentialAccess: "mutable",
+    deploymentConfig: deploymentSource.deploymentConfig,
+    env: dependencies.env,
+    workspaceRoot,
+  });
 
   return {
-    credential,
-    credentialProfile: deploymentCredentialProfile(credential),
+    credential: credentialContext.credential,
+    credentialProfile: credentialContext.credentialProfile,
     plan,
+    ...(credentialContext.providerBearer === undefined
+      ? {}
+      : { providerBearer: credentialContext.providerBearer }),
     selectedTarget,
     ...(workspaceAppPackages === undefined ? {} : { workspaceAppPackages }),
     ...(workspaceRuntimeExtensions === undefined ? {} : { workspaceRuntimeExtensions }),
@@ -1604,6 +1624,9 @@ export async function destroyFormlessInstanceWorkspace(
     domainProviderResources: routeProviderResources.resourceGraph,
     packageRoot: dependencies.packageRoot,
     plan,
+    ...(providerContext.providerBearer === undefined
+      ? {}
+      : { providerBearer: providerContext.providerBearer }),
     secrets: providerContext.secrets,
     stateRoot: providerContext.deploymentStateRoot,
   });
@@ -1677,25 +1700,31 @@ export async function resolveFormlessInstanceWorkspaceProviderContext(
     deploymentStateRoot,
     env: dependencies.env,
   });
-  const credential =
-    deploymentSource.credential ??
-    alchemyProfileDeploymentCredential(localSecretEnv.credentialProfile);
-  const cloudflareApiToken =
-    (await resolveLocalWorkspaceCloudflareApiToken({
-      credential,
+  const credentialContext = await resolveLocalWorkspaceDeploymentCredentialContext({
+    credential: deploymentSource.credential,
+    credentialAccess: "mutable",
+    credentialProfileFallback: localSecretEnv.credentialProfile,
+    deploymentConfig: deploymentSource.deploymentConfig,
+    env: providerCredentialEnvWithDeploySecrets({
       env: dependencies.env,
-      workspaceRoot,
-    })) ?? localSecretEnv.secrets.CLOUDFLARE_API_TOKEN;
+      values: localSecretEnv.values,
+    }),
+    workspaceRoot,
+  });
+  const cloudflareApiToken = providerBearerCloudflareApiToken(credentialContext.providerBearer);
 
   return {
     activePackages,
-    credential,
-    credentialProfile: deploymentCredentialProfile(credential),
+    credential: credentialContext.credential,
+    credentialProfile: credentialContext.credentialProfile,
     deploymentStatePath,
     deploymentStateRoot,
     localSecretPath: localSecretEnv.path,
     manifest,
     plan,
+    ...(credentialContext.providerBearer === undefined
+      ? {}
+      : { providerBearer: credentialContext.providerBearer }),
     secrets: {
       ALCHEMY_PASSWORD: localSecretEnv.secrets.ALCHEMY_PASSWORD,
       ...(cloudflareApiToken === undefined ? {} : { CLOUDFLARE_API_TOKEN: cloudflareApiToken }),
@@ -1709,9 +1738,24 @@ type LocalWorkspaceDeploymentPlanResult = {
   credential: LocalWorkspaceDeploymentCredential;
   credentialProfile: string | null;
   credentialProfileFromConfig: boolean;
+  deploymentDisplay: LocalWorkspaceDeploymentDisplayFacts;
   manifest: FormlessInstanceWorkspaceManifest;
   plan: FormlessInstanceDeploymentPlan;
+  providerBearer?: FormlessCliProviderBearerMaterial;
   selectedTarget: FormlessInstanceWorkspaceTarget;
+};
+
+export type LocalWorkspaceDeploymentDisplayFacts = {
+  accountId: string;
+  accountName?: string;
+  credentialRef?: string;
+  profile?: string;
+  profileRef?: string;
+  providerFamily: "cloudflare";
+  target: string;
+  targetUrl: string;
+  workerName: string;
+  workersDevSubdomain: string;
 };
 
 type LocalWorkspaceDeploymentDesiredState = {
@@ -1727,14 +1771,17 @@ type LocalWorkspaceDeploymentDesiredState = {
 function planLocalWorkspaceDeployment(input: {
   account: FormlessInstanceDeploymentAccount;
   adoptExistingDeployment: boolean;
-  credential?: LocalWorkspaceDeploymentCredential;
+  credential: LocalWorkspaceDeploymentCredential;
+  credentialReference: FormlessCliDeploymentCredentialReference;
+  credentialProfile: string | null;
   deploymentConfig?: StoredRecord;
   manifest: FormlessInstanceWorkspaceManifest;
   packageVersion: string;
+  providerBearer?: FormlessCliProviderBearerMaterial;
   targetAlias?: string | null;
 }): LocalWorkspaceDeploymentPlanResult {
-  const credential = input.credential ?? defaultLocalWorkspaceDeploymentCredential();
-  const credentialProfile = deploymentCredentialProfile(credential);
+  const credential = input.credential;
+  const credentialProfile = input.credentialProfile;
   const credentialProfileFromConfig = input.credential?.kind === "alchemy-profile";
   const workerName = formlessCliDeploymentWorkerNameFromConfigOrManifest({
     deploymentConfig: input.deploymentConfig,
@@ -1771,9 +1818,44 @@ function planLocalWorkspaceDeployment(input: {
     credential,
     credentialProfile,
     credentialProfileFromConfig,
+    deploymentDisplay: localWorkspaceDeploymentDisplayFacts({
+      account: input.account,
+      credentialReference: input.credentialReference,
+      plan,
+      providerFamily: "cloudflare",
+      selectedTarget,
+    }),
     manifest: input.manifest,
     plan,
+    ...(input.providerBearer === undefined ? {} : { providerBearer: input.providerBearer }),
     selectedTarget,
+  };
+}
+
+function localWorkspaceDeploymentDisplayFacts(input: {
+  account: FormlessInstanceDeploymentAccount;
+  credentialReference: FormlessCliDeploymentCredentialReference;
+  plan: FormlessInstanceDeploymentPlan;
+  providerFamily: "cloudflare";
+  selectedTarget: FormlessInstanceWorkspaceTarget;
+}): LocalWorkspaceDeploymentDisplayFacts {
+  const credentialFacts =
+    input.credentialReference.kind === "formless-cloudflare-oauth"
+      ? { credentialRef: input.credentialReference.credentialRef }
+      : {
+          profile: input.credentialReference.profile,
+          profileRef: input.credentialReference.profileRef,
+        };
+
+  return {
+    accountId: input.account.id,
+    ...(input.account.name === undefined ? {} : { accountName: input.account.name }),
+    ...credentialFacts,
+    providerFamily: input.providerFamily,
+    target: input.selectedTarget.alias,
+    targetUrl: input.selectedTarget.url,
+    workerName: input.plan.resources.worker.name,
+    workersDevSubdomain: input.account.workersDevSubdomain,
   };
 }
 
@@ -1939,8 +2021,8 @@ async function readDestroyLocalDeploySecretEnv(input: {
   path: string;
   secrets: {
     ALCHEMY_PASSWORD: string;
-    CLOUDFLARE_API_TOKEN?: string;
   };
+  values: Record<string, string>;
 }> {
   const secretPath = path.join(input.deploymentStateRoot, FORMLESS_INSTANCE_LOCAL_ENV_FILE);
   const contents = await readTextFileIfExists(secretPath);
@@ -1955,10 +2037,6 @@ async function readDestroyLocalDeploySecretEnv(input: {
     ALCHEMY_PASSWORD_ENV_NAME,
     secretPath,
   );
-  const cloudflareApiToken =
-    optionalCloudflareApiToken(input.env) ??
-    optionalDeploySecretValue(values[CLOUDFLARE_API_TOKEN_ENV_NAME]) ??
-    optionalDeploySecretValue(values[CF_API_TOKEN_ENV_NAME]);
   const credentialProfile =
     optionalDeploySecretValue(input.env?.ALCHEMY_PROFILE) ??
     optionalDeploySecretValue(values.ALCHEMY_PROFILE) ??
@@ -1969,8 +2047,8 @@ async function readDestroyLocalDeploySecretEnv(input: {
     path: secretPath,
     secrets: {
       ALCHEMY_PASSWORD: alchemyPassword,
-      ...(cloudflareApiToken === undefined ? {} : { CLOUDFLARE_API_TOKEN: cloudflareApiToken }),
     },
+    values,
   };
 }
 
@@ -1994,6 +2072,22 @@ function optionalDeploySecretValue(value: string | undefined): string | undefine
   const normalized = value?.trim();
 
   return normalized ? normalized : undefined;
+}
+
+function providerCredentialEnvWithDeploySecrets(input: {
+  env: NodeJS.ProcessEnv | undefined;
+  values: Record<string, string>;
+}): NodeJS.ProcessEnv {
+  return {
+    ...input.values,
+    ...input.env,
+  };
+}
+
+function providerBearerCloudflareApiToken(
+  providerBearer: FormlessCliProviderBearerMaterial | undefined,
+): string | undefined {
+  return providerBearer?.kind === "cloudflare-api-token" ? providerBearer.token : undefined;
 }
 
 function domainProviderPlanFromDeploymentPlan(

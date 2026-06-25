@@ -1023,6 +1023,9 @@ export async function runFormlessInstanceDomainProviderDeleteFromWorkspace(
       host: input.host,
       kind: input.resourceKind,
       logicalId: input.logicalId,
+      ...(providerContext.providerBearer === undefined
+        ? {}
+        : { providerBearer: providerContext.providerBearer }),
       runnerId: input.runnerId,
       targetUrl: status.selectedTarget.url,
     },
@@ -1041,25 +1044,36 @@ export function workspaceDomainProviderAlchemyRuntime(
   context: FormlessInstanceWorkspaceProviderContext,
   createRuntime: typeof nodeAlchemyDomainProviderRuntime = nodeAlchemyDomainProviderRuntime,
 ): RunFormlessInstanceDomainProviderDeleteDependencies["runtime"] {
-  return ({ accountId, env }) =>
-    createRuntime({
+  return ({ accountId, env, providerBearer }) => {
+    const resolvedProviderBearer = context.providerBearer ?? providerBearer;
+    const cloudflareApiToken =
+      providerBearerCloudflareApiToken(resolvedProviderBearer) ??
+      context.secrets.CLOUDFLARE_API_TOKEN;
+
+    return createRuntime({
       accountId,
       appName: FORMLESS_ALCHEMY_APP_NAME,
-      ...(context.secrets.CLOUDFLARE_API_TOKEN === undefined
-        ? {}
-        : { apiToken: context.secrets.CLOUDFLARE_API_TOKEN }),
-      env: workspaceDomainProviderEnv(env, context),
+      ...(cloudflareApiToken === undefined ? {} : { apiToken: cloudflareApiToken }),
+      ...(resolvedProviderBearer === undefined ? {} : { providerBearer: resolvedProviderBearer }),
+      env: workspaceDomainProviderEnv(env, context, cloudflareApiToken),
       rootDir: context.deploymentStateRoot,
       stage: context.plan.instanceName,
     });
+  };
+}
+
+function providerBearerCloudflareApiToken(
+  providerBearer: { kind: "cloudflare-api-token"; token: string } | undefined,
+): string | undefined {
+  return providerBearer?.kind === "cloudflare-api-token" ? providerBearer.token : undefined;
 }
 
 function workspaceDomainProviderEnv(
   env: NodeJS.ProcessEnv,
   context: FormlessInstanceWorkspaceProviderContext,
+  cloudflareApiToken?: string,
 ): NodeJS.ProcessEnv {
-  const baseEnv =
-    context.secrets.CLOUDFLARE_API_TOKEN === undefined ? env : omitCloudflareApiTokenEnv(env);
+  const baseEnv = cloudflareApiToken === undefined ? env : omitCloudflareApiTokenEnv(env);
 
   return {
     ...baseEnv,

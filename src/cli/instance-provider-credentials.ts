@@ -40,6 +40,47 @@ export type LocalWorkspaceDeploymentCredential =
       kind: "formless-cloudflare-oauth";
     };
 
+export type FormlessCliProviderCredentialAccess = "mutable" | "read-only";
+
+export type FormlessCliDeploymentCredentialReference =
+  | {
+      credentialProfile: string | null;
+      kind: "alchemy-profile";
+      profile: string;
+      profileRef: string;
+    }
+  | {
+      credentialId: string;
+      credentialRef: string;
+      kind: "formless-cloudflare-oauth";
+    };
+
+export type FormlessCliProviderBearerMaterial =
+  | {
+      credentialRef: string;
+      kind: "cloudflare-api-token";
+      providerFamily: "cloudflare";
+      source: "formless-cloudflare-oauth";
+      token: string;
+    }
+  | {
+      envName: typeof CLOUDFLARE_API_TOKEN_ENV_NAME | typeof CF_API_TOKEN_ENV_NAME;
+      kind: "cloudflare-api-token";
+      providerFamily: "cloudflare";
+      source: "manual-cloudflare-api-token";
+      token: string;
+    };
+
+export type FormlessCliProviderCredentialContext = {
+  access: FormlessCliProviderCredentialAccess;
+  account: FormlessInstanceDeploymentAccount;
+  credential: LocalWorkspaceDeploymentCredential;
+  credentialProfile: string | null;
+  credentialReference: FormlessCliDeploymentCredentialReference;
+  providerBearer?: FormlessCliProviderBearerMaterial;
+  providerFamily: "cloudflare";
+};
+
 export type LocalWorkspaceDeploymentSource = {
   credential?: LocalWorkspaceDeploymentCredential;
   credentialProfile?: string | null;
@@ -141,6 +182,94 @@ export function deploymentCredentialProfile(
   return credential.kind === "alchemy-profile" ? credential.credentialProfile : null;
 }
 
+export function alchemyProfileRef(credentialProfile: string | null): string {
+  return `${FORMLESS_ALCHEMY_PROFILE_REF_PREFIX}${credentialProfile ?? FORMLESS_ALCHEMY_DEFAULT_PROFILE}`;
+}
+
+export function deploymentCredentialReference(
+  credential: LocalWorkspaceDeploymentCredential,
+): FormlessCliDeploymentCredentialReference {
+  if (credential.kind === "formless-cloudflare-oauth") {
+    return {
+      credentialId: credential.credentialId,
+      credentialRef: credential.credentialRef,
+      kind: "formless-cloudflare-oauth",
+    };
+  }
+
+  return {
+    credentialProfile: credential.credentialProfile,
+    kind: "alchemy-profile",
+    profile: credential.credentialProfile ?? FORMLESS_ALCHEMY_DEFAULT_PROFILE,
+    profileRef: alchemyProfileRef(credential.credentialProfile),
+  };
+}
+
+export async function resolveLocalWorkspaceDeploymentCredentialContext(input: {
+  accountDiscovery?: FormlessInstanceAccountDiscoveryAdapter;
+  credentialAccess: FormlessCliProviderCredentialAccess;
+  credential?: LocalWorkspaceDeploymentCredential;
+  credentialProfileFallback?: string | null;
+  deploymentConfig?: StoredRecord;
+  env?: NodeJS.ProcessEnv;
+  fetch?: typeof fetch;
+  now?: () => string;
+  oauth?: Pick<FormlessCloudflareOAuthAdapter, "listAccounts" | "refresh">;
+  workspaceRoot: string;
+}): Promise<FormlessCliProviderCredentialContext> {
+  const credential =
+    input.credential ??
+    (input.credentialProfileFallback === undefined
+      ? defaultLocalWorkspaceDeploymentCredential()
+      : alchemyProfileDeploymentCredential(input.credentialProfileFallback));
+  const credentialProfile = deploymentCredentialProfile(credential);
+  const credentialReference = deploymentCredentialReference(credential);
+  const configuredAccountId = stringRecordValue(input.deploymentConfig, "accountId");
+
+  if (credential.kind === "formless-cloudflare-oauth") {
+    const oauthCredentialReference = {
+      credentialId: credential.credentialId,
+      credentialRef: credential.credentialRef,
+      kind: "formless-cloudflare-oauth",
+    } satisfies Extract<
+      FormlessCliDeploymentCredentialReference,
+      { kind: "formless-cloudflare-oauth" }
+    >;
+
+    return resolveFormlessCloudflareOAuthDeploymentCredentialContext({
+      configuredAccountId,
+      credential,
+      credentialAccess: input.credentialAccess,
+      credentialProfile,
+      credentialReference: oauthCredentialReference,
+      deploymentConfig: input.deploymentConfig,
+      ...(input.fetch === undefined ? {} : { fetch: input.fetch }),
+      ...(input.now === undefined ? {} : { now: input.now }),
+      ...(input.oauth === undefined ? {} : { oauth: input.oauth }),
+      workspaceRoot: input.workspaceRoot,
+    });
+  }
+
+  const account = await resolveAlchemyProfileDeploymentAccount({
+    accountDiscovery: input.accountDiscovery,
+    configuredAccountId,
+    credentialProfile,
+    deploymentConfig: input.deploymentConfig,
+  });
+  const manualBearer =
+    input.credentialAccess === "mutable" ? manualCloudflareApiTokenBearer(input.env) : undefined;
+
+  return {
+    access: input.credentialAccess,
+    account,
+    credential,
+    credentialProfile,
+    credentialReference,
+    ...(manualBearer === undefined ? {} : { providerBearer: manualBearer }),
+    providerFamily: "cloudflare",
+  };
+}
+
 export async function resolveLocalWorkspaceDeploymentAccount(input: {
   accountDiscovery: FormlessInstanceAccountDiscoveryAdapter;
   credentialAccess: "mutable" | "read-only";
@@ -194,24 +323,12 @@ export async function resolveLocalWorkspaceDeploymentAccount(input: {
     });
   }
 
-  const accounts = await input.accountDiscovery.listAccounts({ credentialProfile });
-
-  if (!Array.isArray(accounts)) {
-    throw new Error("Cloudflare account discovery adapter must return an account array.");
-  }
-
-  const account =
-    configuredAccountId === undefined || configuredAccountId === ""
-      ? selectOnlyFormlessInstanceAccount({ accounts, credentialProfile })
-      : accounts.find((candidate) => candidate.id === configuredAccountId);
-
-  if (!account) {
-    throw new Error(
-      `Cloudflare account ${configuredAccountId} was not found for the selected credentials.`,
-    );
-  }
-
-  return account;
+  return resolveAlchemyProfileDeploymentAccount({
+    accountDiscovery: input.accountDiscovery,
+    configuredAccountId,
+    credentialProfile,
+    deploymentConfig: input.deploymentConfig,
+  });
 }
 
 export async function hasLocalWorkspaceFormlessCloudflareOAuthCredential(input: {
@@ -227,10 +344,39 @@ export async function hasLocalWorkspaceFormlessCloudflareOAuthCredential(input: 
 }
 
 export function optionalCloudflareApiToken(env: NodeJS.ProcessEnv | undefined): string | undefined {
-  const token =
-    env?.[CLOUDFLARE_API_TOKEN_ENV_NAME]?.trim() ?? env?.[CF_API_TOKEN_ENV_NAME]?.trim();
+  return manualCloudflareApiTokenBearer(env)?.token;
+}
 
-  return token ? token : undefined;
+function manualCloudflareApiTokenBearer(
+  env: NodeJS.ProcessEnv | undefined,
+):
+  | Extract<FormlessCliProviderBearerMaterial, { source: "manual-cloudflare-api-token" }>
+  | undefined {
+  const cloudflareApiToken = env?.[CLOUDFLARE_API_TOKEN_ENV_NAME]?.trim();
+
+  if (cloudflareApiToken) {
+    return {
+      envName: CLOUDFLARE_API_TOKEN_ENV_NAME,
+      kind: "cloudflare-api-token",
+      providerFamily: "cloudflare",
+      source: "manual-cloudflare-api-token",
+      token: cloudflareApiToken,
+    };
+  }
+
+  const cfApiToken = env?.[CF_API_TOKEN_ENV_NAME]?.trim();
+
+  if (cfApiToken) {
+    return {
+      envName: CF_API_TOKEN_ENV_NAME,
+      kind: "cloudflare-api-token",
+      providerFamily: "cloudflare",
+      source: "manual-cloudflare-api-token",
+      token: cfApiToken,
+    };
+  }
+
+  return undefined;
 }
 
 export async function resolveLocalWorkspaceCloudflareApiToken(input: {
@@ -269,6 +415,126 @@ export function rotateCommandEnv(
     ...env,
     ...(accountId === undefined ? {} : { CLOUDFLARE_ACCOUNT_ID: accountId }),
   };
+}
+
+async function resolveFormlessCloudflareOAuthDeploymentCredentialContext(input: {
+  configuredAccountId: string | undefined;
+  credential: Extract<LocalWorkspaceDeploymentCredential, { kind: "formless-cloudflare-oauth" }>;
+  credentialAccess: FormlessCliProviderCredentialAccess;
+  credentialProfile: string | null;
+  credentialReference: Extract<
+    FormlessCliDeploymentCredentialReference,
+    { kind: "formless-cloudflare-oauth" }
+  >;
+  deploymentConfig: StoredRecord | undefined;
+  fetch?: typeof fetch;
+  now?: () => string;
+  oauth?: Pick<FormlessCloudflareOAuthAdapter, "listAccounts" | "refresh">;
+  workspaceRoot: string;
+}): Promise<FormlessCliProviderCredentialContext> {
+  if (input.credentialAccess === "read-only") {
+    const account = await resolveReadOnlyLocalWorkspaceCloudflareOAuthAccount({
+      configuredAccountId: input.configuredAccountId,
+      credential: input.credential,
+      deploymentConfig: input.deploymentConfig,
+      workspaceRoot: input.workspaceRoot,
+    });
+
+    return {
+      access: input.credentialAccess,
+      account,
+      credential: input.credential,
+      credentialProfile: input.credentialProfile,
+      credentialReference: input.credentialReference,
+      providerFamily: "cloudflare",
+    };
+  }
+
+  const now = input.now ?? (() => new Date().toISOString());
+  const oauth =
+    input.oauth ??
+    createNodeFormlessCloudflareOAuthAdapter({
+      ...(input.fetch === undefined ? {} : { fetch: input.fetch }),
+      now,
+    });
+  const storedCredential = await readRefreshedLocalWorkspaceCloudflareOAuthCredential({
+    credential: input.credential,
+    now,
+    oauth,
+    workspaceRoot: input.workspaceRoot,
+  });
+  const storedAccount = deploymentAccountFromStoredFormlessCloudflareOAuthCredential({
+    configuredAccountId: input.configuredAccountId,
+    credential: input.credential,
+    storedCredential,
+  });
+  const account =
+    storedAccount ??
+    selectFormlessCloudflareOAuthDeploymentAccount({
+      accounts: await oauth.listAccounts(storedCredential.token),
+      configuredAccountId: input.configuredAccountId,
+      credential: input.credential,
+      selectedAccount: storedCredential.selectedAccount,
+    });
+
+  return {
+    access: input.credentialAccess,
+    account,
+    credential: input.credential,
+    credentialProfile: input.credentialProfile,
+    credentialReference: input.credentialReference,
+    providerBearer: {
+      credentialRef: input.credential.credentialRef,
+      kind: "cloudflare-api-token",
+      providerFamily: "cloudflare",
+      source: "formless-cloudflare-oauth",
+      token: storedCredential.token.accessToken,
+    },
+    providerFamily: "cloudflare",
+  };
+}
+
+async function resolveAlchemyProfileDeploymentAccount(input: {
+  accountDiscovery: FormlessInstanceAccountDiscoveryAdapter | undefined;
+  configuredAccountId: string | undefined;
+  credentialProfile: string | null;
+  deploymentConfig?: StoredRecord;
+}): Promise<FormlessInstanceDeploymentAccount> {
+  if (input.accountDiscovery === undefined) {
+    const accountId = input.configuredAccountId?.trim();
+
+    if (!accountId) {
+      throw new Error(
+        "Formless deployment credential context requires deployment-config.accountId.",
+      );
+    }
+
+    return deploymentAccountFromDeploymentConfig(input.deploymentConfig, accountId);
+  }
+
+  const accounts = await input.accountDiscovery.listAccounts({
+    credentialProfile: input.credentialProfile,
+  });
+
+  if (!Array.isArray(accounts)) {
+    throw new Error("Cloudflare account discovery adapter must return an account array.");
+  }
+
+  const account =
+    input.configuredAccountId === undefined || input.configuredAccountId === ""
+      ? selectOnlyFormlessInstanceAccount({
+          accounts,
+          credentialProfile: input.credentialProfile,
+        })
+      : accounts.find((candidate) => candidate.id === input.configuredAccountId);
+
+  if (!account) {
+    throw new Error(
+      `Cloudflare account ${input.configuredAccountId} was not found for the selected credentials.`,
+    );
+  }
+
+  return account;
 }
 
 function deploymentAccountFromStoredFormlessCloudflareOAuthCredential(input: {
