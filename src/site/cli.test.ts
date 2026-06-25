@@ -59,6 +59,12 @@ import {
   SITE_PUBLIC_RENDERER_RUNTIME_EXTENSION_KEY,
 } from "../shared/workspace-runtime-extensions.ts";
 import {
+  FORMLESS_TURNSTILE_ALWAYS_PASS_SECRET_KEY,
+  FORMLESS_TURNSTILE_ALWAYS_PASS_SITE_KEY,
+  FORMLESS_TURNSTILE_SECRET_KEY_ENV_NAME,
+  FORMLESS_TURNSTILE_SITE_KEY_ENV_NAME,
+} from "../shared/turnstile-config.ts";
+import {
   LOCAL_SESSION_BOOTSTRAP_API_PATH,
   LOCAL_SESSION_BOOTSTRAP_TOKEN_ENV,
   WORKSPACE_GATEWAY_BOOTSTRAP_TOKEN_ENV,
@@ -1183,7 +1189,21 @@ describe("Formless CLI", () => {
           url: requestUrl,
         });
 
-        return new Response("workers_dev_script_not_found", { status: 404 });
+        return missingWorkersDevScriptResponse();
+      }
+
+      if (method === "GET" && parsedUrl.pathname === "/api/formless/deployments/desired-state") {
+        requests.push({
+          body: init?.body,
+          headers: normalizeHeaders(init?.headers),
+          method,
+          url: requestUrl,
+        });
+
+        return Response.json(
+          { error: 'Deployment target "instance.primary" was not found.' },
+          { status: 404 },
+        );
       }
 
       return readFetch(url, init);
@@ -1249,6 +1269,11 @@ describe("Formless CLI", () => {
       },
     ]);
     expect(restoreRequests).toHaveLength(2);
+    expect(
+      requests.some(
+        (request) => new URL(request.url).pathname === "/api/formless/deployments/desired-state",
+      ),
+    ).toBe(false);
     expect(restoreRequests.map((request) => request.headers.authorization)).toEqual([
       "Bearer generated-token",
       "Bearer generated-token",
@@ -1291,6 +1316,78 @@ describe("Formless CLI", () => {
     expect(logs).toHaveLength(1);
     expect(logs[0]).toContain("Workspace operation: push (succeeded).");
     expect(logs[0]).toContain("mode: apply.");
+  });
+
+  it("reports first push dry-run when the target Worker has not been deployed", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+    const requests: CapturedFetchRequest[] = [];
+    const logs: string[] = [];
+    const deployInputs: DeployFormlessInstanceInput[] = [];
+    const localDavid = appArchive("david", "David Peek");
+    let missingTargetReads = 0;
+    const firstPushFetch: typeof fetch = async (url, init) => {
+      const requestUrl =
+        typeof url === "string" ? url : url instanceof URL ? url.toString() : url.url;
+      const parsedUrl = new URL(requestUrl);
+      const method = init?.method ?? "GET";
+
+      requests.push({
+        body: init?.body,
+        headers: normalizeHeaders(init?.headers),
+        method,
+        url: requestUrl,
+      });
+
+      if (
+        method === "GET" &&
+        parsedUrl.pathname === "/api/formless/app-installs" &&
+        missingTargetReads === 0
+      ) {
+        missingTargetReads += 1;
+
+        return missingWorkersDevScriptResponse();
+      }
+
+      throw new Error(`Unexpected request in missing target dry-run: ${method} ${requestUrl}`);
+    };
+
+    await writeWorkspaceManifest(workspaceRoot);
+    await writeWorkspaceControlPlaneStorageSnapshot(
+      workspaceRoot,
+      controlPlaneRecords({ credentialRef: "formless-cloudflare-oauth:default" }),
+    );
+    await writeTestFormlessCloudflareOAuthCredential(workspaceRoot);
+    await writeWorkspaceAppStateFromArchive(workspaceRoot, localDavid);
+    await mkdir(path.join(workspaceRoot, ".formless"), { recursive: true });
+    await writeFile(
+      path.join(workspaceRoot, ".formless/instance.env"),
+      "FORMLESS_ADMIN_TOKEN=local-token\n",
+    );
+
+    await runFormlessCli(
+      ["push", "--workspace", workspaceRoot, "--dry-run"],
+      cliDeps(tempDir, {
+        deploy: async (input) => {
+          deployInputs.push(input);
+
+          return { url: input.plan.expectedUrl.url };
+        },
+        fetch: firstPushFetch,
+        logs,
+      }),
+    );
+
+    expect(missingTargetReads).toBe(1);
+    expect(deployInputs).toEqual([]);
+    expect(requests.map((request) => `${request.method} ${request.url}`)).toEqual([
+      "GET https://personal.dpeek.workers.dev/api/formless/app-installs",
+    ]);
+    expect(logs).toHaveLength(1);
+    expect(logs[0]).toContain("Workspace operation: push (succeeded).");
+    expect(logs[0]).toContain("mode: dry-run.");
+    expect(logs[0]).toContain("dryRunRestoreOk: none.");
+    expect(logs[0]).toContain("sync: changes.");
   });
 
   it("runs Cloudflare OAuth preflight before non-dry-run push with an Alchemy credential ref", async () => {
@@ -3071,6 +3168,8 @@ describe("Formless CLI", () => {
     expect(env).toMatchObject({
       FORMLESS_ADMIN_TOKEN: expect.any(String),
       FORMLESS_OWNER_SESSION_SECRET: expect.any(String),
+      [FORMLESS_TURNSTILE_SECRET_KEY_ENV_NAME]: FORMLESS_TURNSTILE_ALWAYS_PASS_SECRET_KEY,
+      [FORMLESS_TURNSTILE_SITE_KEY_ENV_NAME]: FORMLESS_TURNSTILE_ALWAYS_PASS_SITE_KEY,
       [LOCAL_SESSION_BOOTSTRAP_TOKEN_ENV]: expect.any(String),
       FORMLESS_RUNTIME_PROFILE: "instance",
       VITE_FORMLESS_WORKSPACE_GATEWAY_API: "/api/formless/workspace",
@@ -3083,6 +3182,22 @@ describe("Formless CLI", () => {
     expect(env).not.toHaveProperty("FORMLESS_WORKSPACE_GATEWAY_ROOT");
     expect(env).not.toHaveProperty("VITE_FORMLESS_WORKSPACE_GATEWAY_PROXY_TOKEN");
     expect(env).not.toHaveProperty("VITE_FORMLESS_WORKSPACE_GATEWAY_SIDECAR_URL");
+  });
+
+  it("keeps explicit workspace dev Turnstile keys when provided", async () => {
+    const workspaceRoot = await makeTempDir();
+    const env = formlessInstanceWorkspaceDevEnv(
+      {
+        [FORMLESS_TURNSTILE_SECRET_KEY_ENV_NAME]: "explicit-turnstile-secret",
+        [FORMLESS_TURNSTILE_SITE_KEY_ENV_NAME]: "explicit-turnstile-site-key",
+      },
+      workspaceRoot,
+      defaultFormlessInstanceWorkspaceManifest({ name: "local-workspace" }),
+      null,
+    );
+
+    expect(env[FORMLESS_TURNSTILE_SECRET_KEY_ENV_NAME]).toBe("explicit-turnstile-secret");
+    expect(env[FORMLESS_TURNSTILE_SITE_KEY_ENV_NAME]).toBe("explicit-turnstile-site-key");
   });
 
   it("starts workspace dev from an empty current directory for browser onboarding", async () => {
@@ -5518,6 +5633,20 @@ function controlPlaneRecords(
       updatedAt: now,
     },
   ];
+}
+
+function missingWorkersDevScriptResponse(): Response {
+  return Response.json(
+    {
+      detail: "The Worker script required to render this page could not be found.",
+      error_category: "worker",
+      error_code: 1104,
+      error_name: "worker_script_not_found",
+      status: 500,
+      title: "Error 1104: Script not found",
+    },
+    { status: 500 },
+  );
 }
 
 function controlPlaneRecordsWithProviderObservation(

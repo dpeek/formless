@@ -22,7 +22,7 @@ import { PagePlacementFlow, useSitePageLinkMode, useSitePageRouteBase } from "./
 import {
   createSiteSubscribeIdempotencyKey,
   submitSiteSubscribeForm,
-  TURNSTILE_RESPONSE_FIELD_NAME,
+  turnstileResponseTokenFromFormData,
 } from "./subscribe-form.ts";
 import { createSiteContactIdempotencyKey, submitSiteContactForm } from "./contact-form.ts";
 import {
@@ -413,7 +413,7 @@ function SubscribeFormBlock({ block }: { block: SiteBlockNode }) {
 
     const formData = new FormData(event.currentTarget);
     const email = stringFormValue(formData.get("email"));
-    const turnstileToken = stringFormValue(formData.get(TURNSTILE_RESPONSE_FIELD_NAME));
+    const turnstileToken = turnstileResponseTokenFromFormData(formData);
 
     if (!email || !turnstileToken) {
       setStatus("error");
@@ -532,7 +532,7 @@ function ContactFormBlock({ block }: { block: SiteBlockNode }) {
     const name = stringFormValue(formData.get("name"));
     const email = stringFormValue(formData.get("email"));
     const message = stringFormValue(formData.get("message"));
-    const turnstileToken = stringFormValue(formData.get(TURNSTILE_RESPONSE_FIELD_NAME));
+    const turnstileToken = turnstileResponseTokenFromFormData(formData);
 
     if (!name || !email || !message || !turnstileToken) {
       setStatus("error");
@@ -676,7 +676,7 @@ function PublicOperationFormBlock({ block }: { block: SiteBlockNode }) {
     event.preventDefault();
 
     const formData = new FormData(event.currentTarget);
-    const turnstileToken = stringFormValue(formData.get(TURNSTILE_RESPONSE_FIELD_NAME));
+    const turnstileToken = turnstileResponseTokenFromFormData(formData);
     const inputResult = publicOperationFormInputValuesFromFormData(publicOperationFields, formData);
 
     if (!inputResult.ok) {

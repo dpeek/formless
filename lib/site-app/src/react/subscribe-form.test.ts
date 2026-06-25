@@ -1,8 +1,22 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { siteSubscribeFormRequestBody, submitSiteSubscribeForm } from "./subscribe-form.ts";
+import {
+  TURNSTILE_RESPONSE_FIELD_NAME,
+  siteSubscribeFormRequestBody,
+  submitSiteSubscribeForm,
+  turnstileResponseTokenFromFormData,
+} from "./subscribe-form.ts";
 
 describe("public Site subscribe form submit helpers", () => {
+  it("extracts the first non-empty Turnstile response from duplicate response fields", () => {
+    const formData = new FormData();
+
+    formData.append(TURNSTILE_RESPONSE_FIELD_NAME, "");
+    formData.append(TURNSTILE_RESPONSE_FIELD_NAME, "token-ok");
+
+    expect(turnstileResponseTokenFromFormData(formData)).toBe("token-ok");
+  });
+
   it("builds the public operation body from email, source block id, idempotency key, and Turnstile token", () => {
     expect(
       siteSubscribeFormRequestBody({

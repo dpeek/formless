@@ -13,6 +13,7 @@ type TurnstileRenderOptions = {
   "error-callback": () => void;
   "expired-callback": () => void;
   "response-field": boolean;
+  "response-field-name": string;
   sitekey: string;
 };
 
@@ -59,7 +60,8 @@ export function TurnstileChallenge({
           "expired-callback": () => {
             setTurnstileToken(tokenInputRef.current, "");
           },
-          "response-field": false,
+          "response-field": true,
+          "response-field-name": TURNSTILE_RESPONSE_FIELD_NAME,
           sitekey: siteKey,
         });
 

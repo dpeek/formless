@@ -8,13 +8,12 @@ import {
   deployDeploymentAppliedSummary,
   deployDeploymentObservationPatch,
   deployDeploymentObservationPatchFromLatestStatus,
-  deployDesiredStateDisplaySummary,
   deployDesiredStateProjectionInputFromControlPlaneRecords,
   deployDisplaySafeFailureSummary,
   deployLatestStatusDisplaySummary,
+  materializeDeployDesiredStateVersion,
   projectDeployControlPlaneDesiredState,
   deployResourceCountsByKind,
-  stableDeployJsonStringify,
   type DeployDesiredStateResponse,
   type DeployDesiredStateVersionRef,
   type DeployEvidenceSummary,
@@ -76,6 +75,12 @@ import {
 import { STORAGE_SNAPSHOT_KIND, STORAGE_SNAPSHOT_VERSION } from "@dpeek/formless-storage";
 import type { RecordValues, StorageSnapshot, StoredRecord } from "@dpeek/formless-storage";
 import { parseOwnerSetupToken, type AppInstallsResponse } from "../shared/protocol.ts";
+import {
+  FORMLESS_TURNSTILE_ALWAYS_PASS_SECRET_KEY,
+  FORMLESS_TURNSTILE_ALWAYS_PASS_SITE_KEY,
+  FORMLESS_TURNSTILE_SECRET_KEY_ENV_NAME,
+  FORMLESS_TURNSTILE_SITE_KEY_ENV_NAME,
+} from "../shared/turnstile-config.ts";
 import {
   FORMLESS_WORKSPACE_APP_PACKAGES_ENV_NAME,
   formatRuntimeWorkspaceAppPackages,
@@ -1629,7 +1634,9 @@ export async function pushFormlessInstanceWorkspace(
         : undefined;
     const dryRunBeforeProvider = hasDataChanges && planned.existingSelectedTarget !== undefined;
     const dryRun =
-      hasDataChanges && (!input.apply || dryRunBeforeProvider)
+      hasDataChanges &&
+      planned.existingSelectedTarget !== undefined &&
+      (!input.apply || dryRunBeforeProvider)
         ? await restoreWorkspacePushArchive(
             {
               adminToken: providerApply?.adminToken ?? adminToken,
@@ -2332,27 +2339,21 @@ async function writeLocalWorkspaceDeploymentObservation(
   },
   dependencies: Pick<DeployLocalFormlessWorkspaceDependencies, "fetch" | "now">,
 ): Promise<DeployLocalFormlessWorkspaceObservation> {
-  const runtimeDesiredState = await readFormlessInstanceDeploymentDesiredState(
-    {
-      adminToken: input.adminToken,
-      targetId: input.desiredState.targetId,
-      targetUrl: input.targetUrl,
+  const observedAt = dependencies.now();
+  const desiredStateVersion = await materializeDeployDesiredStateVersion({
+    now: observedAt,
+    resourceGraph: input.desiredState.resourceGraph,
+    source: {
+      fingerprint: input.desiredState.sourceFingerprint,
+      intentRevision: input.desiredState.resourceGraph.resources.length,
     },
-    dependencies,
-  );
-
-  assertRuntimeDesiredStateMatchesLocalProjection({
-    local: input.desiredState,
-    runtime: runtimeDesiredState.desiredState,
+    targetId: input.desiredState.targetId,
   });
-
-  const desiredState = deployDesiredStateVersionRef(
-    runtimeDesiredState.desiredState as DeployDesiredStateVersionLike,
-  );
+  const desiredState = deployDesiredStateVersionRef(desiredStateVersion);
   const runnerId = "local-gateway";
   const observation = deployDeploymentObservationPatch({
     desiredState,
-    observedAt: dependencies.now(),
+    observedAt,
     observedError: input.observedError,
     observedStatus: input.observedStatus,
     observedSummary: input.summary,
@@ -2379,8 +2380,8 @@ async function writeLocalWorkspaceDeploymentObservation(
     ...(observedError === undefined ? {} : { observedError }),
     observedStatus: observation.observedStatus,
     observedSummary: observation.observedSummary ?? "",
-    resourceCount: runtimeDesiredState.desiredState.display.resourceCount,
-    resourcesByKind: runtimeDesiredState.desiredState.display.resourcesByKind,
+    resourceCount: desiredStateVersion.display.resourceCount,
+    resourcesByKind: desiredStateVersion.display.resourcesByKind,
     runnerId,
     targetId: desiredState.targetId,
   };
@@ -2512,32 +2513,6 @@ function countBy<T>(items: readonly T[], selectKey: (item: T) => string): Record
   }
 
   return counts;
-}
-
-function assertRuntimeDesiredStateMatchesLocalProjection(input: {
-  local: LocalWorkspaceDeploymentDesiredState;
-  runtime: DeployDesiredStateResponse["desiredState"];
-}): void {
-  if (input.runtime.targetId !== input.local.targetId) {
-    throw new Error(
-      `Local push provider desired-state target "${input.local.targetId}" did not match runtime target "${input.runtime.targetId}".`,
-    );
-  }
-
-  const localDisplay = deployDesiredStateDisplaySummary(input.local.resourceGraph);
-
-  if (input.runtime.display.resourceCount !== localDisplay.resourceCount) {
-    throw new Error(
-      `Local push provider desired-state resource count ${localDisplay.resourceCount} did not match runtime resource count ${input.runtime.display.resourceCount}.`,
-    );
-  }
-
-  if (
-    stableDeployJsonStringify(input.runtime.display.resourcesByKind) !==
-    stableDeployJsonStringify(localDisplay.resourcesByKind)
-  ) {
-    throw new Error("Local push provider desired-state resource kinds did not match runtime.");
-  }
 }
 
 function localWorkspaceDeployFailureSummary(_error: unknown): DeployFailureSummary {
@@ -2722,8 +2697,10 @@ function isMissingWorkersDevScriptError(error: unknown): boolean {
   const message = (error instanceof Error ? error.message : String(error)).toLowerCase();
 
   return (
+    message.includes("worker_script_not_found") ||
     message.includes("workers_dev_script_not_found") ||
-    (message.includes("error 1042") && message.includes("no workers script"))
+    (message.includes("error 1042") && message.includes("no workers script")) ||
+    (message.includes("error 1104") && message.includes("script not found"))
   );
 }
 
@@ -3117,11 +3094,21 @@ export function formlessInstanceWorkspaceDevEnv(
         ? env.FORMLESS_OWNER_SESSION_SECRET
         : randomWorkspaceGatewayToken(),
   };
+  const turnstileSecretKey = env[FORMLESS_TURNSTILE_SECRET_KEY_ENV_NAME];
+  const turnstileSiteKey = env[FORMLESS_TURNSTILE_SITE_KEY_ENV_NAME];
   const nextEnv: NodeJS.ProcessEnv = {
     ...env,
     [FORMLESS_INSTANCE_WORKSPACE_ADMIN_TOKEN_ENV_NAME]: localDevSecrets.adminToken,
     FORMLESS_LAUNCH_FIXTURE: "empty",
     [FORMLESS_INSTANCE_WORKSPACE_OWNER_SESSION_SECRET_ENV_NAME]: localDevSecrets.ownerSessionSecret,
+    [FORMLESS_TURNSTILE_SECRET_KEY_ENV_NAME]:
+      turnstileSecretKey && turnstileSecretKey.trim() !== ""
+        ? turnstileSecretKey
+        : FORMLESS_TURNSTILE_ALWAYS_PASS_SECRET_KEY,
+    [FORMLESS_TURNSTILE_SITE_KEY_ENV_NAME]:
+      turnstileSiteKey && turnstileSiteKey.trim() !== ""
+        ? turnstileSiteKey
+        : FORMLESS_TURNSTILE_ALWAYS_PASS_SITE_KEY,
     [LOCAL_SESSION_BOOTSTRAP_TOKEN_ENV]:
       options.localSessionBootstrapToken ?? randomWorkspaceGatewayToken(),
     [FORMLESS_SITE_PROJECT_ROOT_ENV_NAME]: workspaceRoot,

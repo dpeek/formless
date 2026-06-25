@@ -86,6 +86,16 @@ export function createSiteSubscribeIdempotencyKey(blockId: string): string {
   return `site-subscribe:${blockId}:${randomId}`;
 }
 
+export function turnstileResponseTokenFromFormData(formData: FormData): string | undefined {
+  for (const value of formData.getAll(TURNSTILE_RESPONSE_FIELD_NAME)) {
+    if (typeof value === "string" && value.trim() !== "") {
+      return value;
+    }
+  }
+
+  return undefined;
+}
+
 function publicOperationErrorMessage(value: unknown): string | undefined {
   return isRecord(value) && typeof value.error === "string" ? value.error : undefined;
 }
