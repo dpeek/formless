@@ -18,11 +18,13 @@ import {
 import {
   getFormlessInstanceWorkspaceStatus,
   initLocalFormlessWorkspaceOnboarding,
-  saveLocalFormlessWorkspace,
   type FormlessInstanceWorkspaceStatusResult,
   type InitFormlessInstanceWorkspaceResult,
+} from "./instance-workspace-lifecycle.ts";
+import {
+  saveLocalFormlessWorkspace,
   type SaveLocalFormlessWorkspaceResult,
-} from "./instance-workspace.ts";
+} from "./instance-workspace-source-sync.ts";
 import { runDeploymentRefreshWorkspaceOperation } from "./instance-workspace-deployment-operation.ts";
 import {
   setupCloudflareCredentialsWithFormlessOAuth,

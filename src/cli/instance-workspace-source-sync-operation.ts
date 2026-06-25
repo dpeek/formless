@@ -9,16 +9,18 @@ import {
 
 import type { RestorePortableArchiveResult } from "./archive-workflows.ts";
 import {
-  checkLocalFormlessWorkspace,
-  pullFormlessInstanceWorkspace,
   pushFormlessInstanceWorkspace,
-  type CheckLocalFormlessWorkspaceResult,
-  type FormlessInstanceWorkspaceSyncPlan,
-  type PullFormlessInstanceWorkspaceResult,
   type PushFormlessInstanceWorkspaceDependencies,
   type PushFormlessInstanceWorkspaceDryRunDependencies,
   type PushFormlessInstanceWorkspaceResult,
-} from "./instance-workspace.ts";
+} from "./instance-workspace-deployment.ts";
+import {
+  checkLocalFormlessWorkspace,
+  pullFormlessInstanceWorkspace,
+  type CheckLocalFormlessWorkspaceResult,
+  type FormlessInstanceWorkspaceSyncPlan,
+  type PullFormlessInstanceWorkspaceResult,
+} from "./instance-workspace-source-sync.ts";
 import type { RunFormlessWorkspaceOperationDependencies } from "./instance-workspace-operations.ts";
 
 export async function runCheckWorkspaceSourceOperation(

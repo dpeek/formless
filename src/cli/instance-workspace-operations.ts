@@ -20,10 +20,8 @@ import {
   updateWorkspaceOperationState,
 } from "@dpeek/formless-workspace/node";
 
-import {
-  resolveFormlessInstanceWorkspaceRoot,
-  type DeployLocalFormlessWorkspaceDependencies,
-} from "./instance-workspace.ts";
+import type { DeployLocalFormlessWorkspaceDependencies } from "./instance-workspace-deployment.ts";
+import { resolveFormlessInstanceWorkspaceRoot } from "./instance-workspace-foundation.ts";
 import {
   runWorkspaceOperationDomainHandler,
   type WorkspaceOperationDomainHandlerResult,

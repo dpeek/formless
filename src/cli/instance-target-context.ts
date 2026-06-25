@@ -1,22 +1,21 @@
-import { readFile } from "node:fs/promises";
-import path from "node:path";
-
 import {
-  INSTANCE_WORKSPACE_MANIFEST_FILE,
   normalizeInstanceWorkspaceTargetUrl,
-  parseInstanceWorkspaceManifestJson,
   type InstanceWorkspaceManifest,
   type InstanceWorkspaceTarget,
 } from "@dpeek/formless-workspace";
 import {
   INSTANCE_WORKSPACE_ADMIN_TOKEN_ENV_NAME,
-  createWorkspaceAppPackageResolver,
   readInstanceWorkspaceControlPlaneStorageSnapshot,
   readInstanceWorkspaceSecretState,
   type InstanceWorkspaceSecretState,
 } from "@dpeek/formless-workspace/node";
 import type { StoredRecord } from "@dpeek/formless-storage";
-import { bundledAppPackageManifests } from "../shared/app-packages.ts";
+import {
+  createActiveWorkspaceAppPackages,
+  readWorkspaceManifest,
+  workspaceRootForInput,
+} from "./instance-workspace-foundation.ts";
+import { stringRecordValue } from "./instance-workspace-control-plane.ts";
 
 export type FormlessCliAdminTokenSource = "env" | "explicit" | "missing" | "stored";
 
@@ -49,6 +48,28 @@ export type RequiredFormlessCliTargetContext = FormlessCliTargetContext & {
   targetUrl: string;
 };
 
+export type FormlessCliWorkspaceTargetCommandName =
+  | "check"
+  | "deployment refresh"
+  | "deploy"
+  | "destroy"
+  | "domains plan"
+  | "domains run"
+  | "pull"
+  | "push"
+  | "status"
+  | "token adopt"
+  | "token rotate";
+
+export type FormlessCliDeploymentConfigSource = {
+  deploymentConfig?: StoredRecord;
+};
+
+export type FormlessCliWorkersDevTargetFacts = {
+  workerName: string;
+  workersDevSubdomain: string;
+};
+
 export type ResolveFormlessCliTargetContextInput = {
   commandName: string;
   cwd: string;
@@ -66,8 +87,8 @@ export async function resolveFormlessCliTargetContext(
   input: ResolveFormlessCliTargetContextInput,
   dependencies: ResolveFormlessCliTargetContextDependencies,
 ): Promise<FormlessCliTargetContext> {
-  const workspaceRoot = path.resolve(input.cwd, input.workspacePath ?? ".");
-  const { manifest, manifestPath } = await readFormlessCliWorkspaceManifest(workspaceRoot);
+  const workspaceRoot = workspaceRootForInput(input.cwd, input.workspacePath ?? ".");
+  const { manifest, manifestPath } = await readWorkspaceManifest(workspaceRoot);
   const selectedTarget = await resolveFormlessCliWorkspaceTarget({
     commandName: input.commandName,
     manifest,
@@ -114,6 +135,24 @@ export async function requireFormlessCliTargetContext(
   }
 
   return context as RequiredFormlessCliTargetContext;
+}
+
+export async function requireFormlessCliWorkspaceTarget(input: {
+  commandName: FormlessCliWorkspaceTargetCommandName;
+  manifest: InstanceWorkspaceManifest;
+  targetAlias: string | null | undefined;
+  workspaceRoot: string;
+}): Promise<InstanceWorkspaceTarget> {
+  const target = await resolveFormlessCliWorkspaceTarget({
+    ...input,
+    required: true,
+  });
+
+  if (!target) {
+    throw new Error(`Formless instance ${input.commandName} requires a workspace target.`);
+  }
+
+  return target;
 }
 
 export function resolveFormlessCliAdminToken(input: {
@@ -230,30 +269,17 @@ export function formlessCliWorkspaceStatusSecretStateLabel(
   return context.secretState.adminToken ? "stored" : "missing";
 }
 
-async function readFormlessCliWorkspaceManifest(workspaceRoot: string): Promise<{
-  manifest: InstanceWorkspaceManifest;
-  manifestPath: string;
-}> {
-  const manifestPath = path.join(workspaceRoot, INSTANCE_WORKSPACE_MANIFEST_FILE);
-
-  return {
-    manifest: parseInstanceWorkspaceManifestJson(await readFile(manifestPath, "utf8")),
-    manifestPath,
-  };
-}
-
-async function resolveFormlessCliWorkspaceTarget(input: {
+export async function resolveFormlessCliWorkspaceTarget(input: {
   commandName: string;
   manifest: InstanceWorkspaceManifest;
   required: boolean;
   targetAlias: string | null | undefined;
   workspaceRoot: string;
 }): Promise<InstanceWorkspaceTarget | undefined> {
-  const activePackages = await createWorkspaceAppPackageResolver({
-    bundledManifests: bundledAppPackageManifests,
-    manifest: input.manifest,
-    workspaceRoot: input.workspaceRoot,
-  });
+  const activePackages = await createActiveWorkspaceAppPackages(
+    input.workspaceRoot,
+    input.manifest,
+  );
   const controlPlane = await readInstanceWorkspaceControlPlaneStorageSnapshot({
     manifest: input.manifest,
     packageResolver: activePackages.resolver,
@@ -273,7 +299,7 @@ async function resolveFormlessCliWorkspaceTarget(input: {
     : formlessCliTargetFromDeploymentConfig(deploymentConfig, input.commandName);
 }
 
-function selectFormlessCliDeploymentConfig(
+export function selectFormlessCliDeploymentConfig(
   records: readonly StoredRecord[],
   targetAlias: string | null | undefined,
   options: { commandName: string; required: boolean },
@@ -329,7 +355,59 @@ function selectFormlessCliDeploymentConfig(
   );
 }
 
-function formlessCliTargetFromDeploymentConfig(
+export function selectFormlessCliCredentialSetupDeploymentConfig(
+  records: readonly StoredRecord[],
+  input: {
+    deploymentConfigId?: string | null;
+    targetAlias?: string | null;
+  } = {},
+): StoredRecord | undefined {
+  const targets = records.filter(
+    (record) =>
+      record.entity === "deployment-config" &&
+      record.values.targetKind === "instance" &&
+      record.values.enabled !== false &&
+      record.deletedAt === undefined,
+  );
+  const requestedDeploymentConfigId = input.deploymentConfigId?.trim();
+  const requestedTargetId = normalizeOptionalFormlessCliTargetAlias(input.targetAlias);
+
+  if (requestedDeploymentConfigId) {
+    const target = targets.find((record) => record.id === requestedDeploymentConfigId);
+
+    if (!target) {
+      throw new Error(
+        `Formless Cloudflare OAuth credential setup target "${requestedDeploymentConfigId}" was not found.`,
+      );
+    }
+
+    return target;
+  }
+
+  if (requestedTargetId) {
+    const target = targets.find(
+      (record) =>
+        record.id === requestedTargetId ||
+        stringRecordValue(record, "targetId") === requestedTargetId,
+    );
+
+    if (!target) {
+      throw new Error(
+        `Formless Cloudflare OAuth credential setup target "${requestedTargetId}" was not found.`,
+      );
+    }
+
+    return target;
+  }
+
+  const primary = targets.find(
+    (record) => stringRecordValue(record, "targetId") === formlessCliPrimaryTargetId(),
+  );
+
+  return primary ?? (targets.length === 1 ? targets[0] : undefined);
+}
+
+export function formlessCliTargetFromDeploymentConfig(
   record: StoredRecord,
   commandName: string,
 ): InstanceWorkspaceTarget {
@@ -348,10 +426,131 @@ function formlessCliTargetFromDeploymentConfig(
   };
 }
 
-function formatFormlessCliSelectedTargetDisplay(
+export function formlessCliDeploymentConfigRecordFromTarget(input: {
+  targetAlias: string;
+  targetUrl: string;
+}): StoredRecord {
+  const now = "1970-01-01T00:00:00.000Z";
+  const workerName = formlessCliWorkerNameFromWorkersDevUrl(input.targetUrl);
+
+  return {
+    id: input.targetAlias,
+    entity: "deployment-config",
+    values: {
+      targetId: input.targetAlias,
+      targetKind: "instance",
+      label: input.targetAlias,
+      enabled: true,
+      targetUrl: normalizeInstanceWorkspaceTargetUrl(input.targetUrl),
+      providerFamily: "cloudflare",
+      ...(workerName === undefined ? {} : { workerName }),
+      createdAt: now,
+      updatedAt: now,
+    },
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+export function formatFormlessCliSelectedTargetDisplay(
   target: InstanceWorkspaceTarget | undefined,
 ): string {
   return target ? `${target.alias} (${target.url})` : "<none>";
+}
+
+export function formlessCliDeploymentWorkerNameFromConfigOrManifest(input: {
+  deploymentConfig?: StoredRecord;
+  manifest: InstanceWorkspaceManifest;
+}): string {
+  const workerName = stringRecordValue(input.deploymentConfig, "workerName")?.trim();
+
+  return workerName === undefined || workerName === "" ? input.manifest.name : workerName;
+}
+
+export function formlessCliWorkersDevTargetUrl(input: {
+  workerName: string;
+  workersDevSubdomain: string;
+}): string {
+  return `https://${input.workerName}.${input.workersDevSubdomain}.${formlessCliWorkersDevDomain()}`;
+}
+
+export function formlessCliWorkersDevTargetFacts(
+  targetUrl: string,
+  expectedWorkerName: string | undefined,
+): FormlessCliWorkersDevTargetFacts {
+  const url = new URL(normalizeInstanceWorkspaceTargetUrl(targetUrl));
+  const suffix = `.${formlessCliWorkersDevDomain()}`;
+
+  if (url.protocol !== "https:" || !url.hostname.endsWith(suffix)) {
+    throw new Error("Formless push provider reconciliation supports workers.dev target URLs only.");
+  }
+
+  const labels = url.hostname.slice(0, -suffix.length).split(".");
+
+  if (labels.length !== 2) {
+    throw new Error("Formless push provider reconciliation requires a workers.dev target host.");
+  }
+
+  const [workerName, workersDevSubdomain] = labels;
+
+  if (!workerName || !workersDevSubdomain) {
+    throw new Error("Formless push provider reconciliation requires a workers.dev target host.");
+  }
+
+  if (expectedWorkerName !== undefined && expectedWorkerName !== workerName) {
+    throw new Error(
+      `Formless push provider target worker "${workerName}" does not match deployment-config.workerName or manifest name "${expectedWorkerName}".`,
+    );
+  }
+
+  return { workerName, workersDevSubdomain };
+}
+
+export function formlessCliSelectWorkspaceWorkerName(
+  deploymentConfig: StoredRecord | undefined,
+  target: InstanceWorkspaceTarget | undefined,
+): string {
+  const workerName =
+    stringRecordValue(deploymentConfig, "workerName") ??
+    formlessCliWorkerNameFromWorkersDevUrl(target?.url);
+
+  if (!workerName) {
+    throw new Error(
+      "Formless instance command requires deployment-config.workerName or a workers.dev target URL.",
+    );
+  }
+
+  return workerName;
+}
+
+export function formlessCliWorkerNameFromWorkersDevUrl(
+  targetUrl: string | undefined,
+): string | undefined {
+  if (!targetUrl) {
+    return undefined;
+  }
+
+  const host = new URL(normalizeInstanceWorkspaceTargetUrl(targetUrl)).hostname;
+  const suffix = `.${formlessCliWorkersDevDomain()}`;
+
+  if (!host.endsWith(suffix)) {
+    return undefined;
+  }
+
+  const withoutSuffix = host.slice(0, -suffix.length);
+  const [workerName] = withoutSuffix.split(".");
+
+  return workerName || undefined;
+}
+
+export function formlessCliPrimaryTargetId() {
+  return "instance.primary";
+}
+
+function normalizeOptionalFormlessCliTargetAlias(value: string | null | undefined) {
+  const normalized = value?.trim();
+
+  return normalized ? normalized : undefined;
 }
 
 function redactedResolvedAdminToken(
@@ -371,15 +570,6 @@ function normalizedFormlessCliAdminToken(value: string | null | undefined): stri
   return token ? token : null;
 }
 
-function formlessCliPrimaryTargetId() {
-  return "instance.primary";
-}
-
-function stringRecordValue(
-  record: StoredRecord | undefined,
-  fieldName: string,
-): string | undefined {
-  const value = record?.values[fieldName];
-
-  return typeof value === "string" ? value : undefined;
+function formlessCliWorkersDevDomain() {
+  return "workers.dev";
 }

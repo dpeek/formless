@@ -7,7 +7,7 @@ import {
 import {
   refreshFormlessInstanceDeploymentObservation,
   type RefreshFormlessInstanceDeploymentObservationResult,
-} from "./instance-workspace.ts";
+} from "./instance-workspace-deployment.ts";
 import type { RunFormlessWorkspaceOperationDependencies } from "./instance-workspace-operations.ts";
 
 export async function runDeploymentRefreshWorkspaceOperation(

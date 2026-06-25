@@ -4,24 +4,11 @@ import { createServer } from "node:http";
 import { homedir } from "node:os";
 import path from "node:path";
 
+import type { StoredRecord } from "@dpeek/formless-storage";
 import {
-  INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
-  INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
-  instanceControlPlaneSchema,
-} from "@dpeek/formless-instance-control-plane";
-import { STORAGE_SNAPSHOT_KIND, STORAGE_SNAPSHOT_VERSION } from "@dpeek/formless-storage";
-import type { RecordValues, StorageSnapshot, StoredRecord } from "@dpeek/formless-storage";
-import {
-  INSTANCE_WORKSPACE_MANIFEST_FILE,
-  parseInstanceWorkspaceManifestJson,
-  type InstanceWorkspaceManifest,
-} from "@dpeek/formless-workspace";
-import {
-  createWorkspaceAppPackageResolver,
   readInstanceWorkspaceControlPlaneStorageSnapshot,
   writeInstanceWorkspaceControlPlaneStorageSnapshot,
 } from "@dpeek/formless-workspace/node";
-import { bundledAppPackageManifests } from "../shared/app-packages.ts";
 import {
   FORMLESS_CLOUDFLARE_OAUTH_CLIENT_ID,
   FORMLESS_CLOUDFLARE_OAUTH_DEPLOY_SCOPES,
@@ -49,10 +36,31 @@ import type {
   WorkspaceOperationResult,
   WorkspaceOperationStatus,
 } from "@dpeek/formless-workspace";
+import {
+  createActiveWorkspaceAppPackages,
+  readWorkspaceManifest,
+} from "./instance-workspace-foundation.ts";
+import {
+  stringRecordValue,
+  withoutControlPlaneLifecycleValues,
+  workspaceControlPlaneSnapshotFromRecords,
+} from "./instance-workspace-control-plane.ts";
+import {
+  FORMLESS_ALCHEMY_DEFAULT_PROFILE,
+  FORMLESS_ALCHEMY_PROFILE_REF_PREFIX,
+} from "./instance-provider-credentials.ts";
+import {
+  formlessCliPrimaryTargetId,
+  formlessCliWorkersDevTargetUrl,
+  selectFormlessCliCredentialSetupDeploymentConfig,
+} from "./instance-target-context.ts";
+
+export {
+  FORMLESS_ALCHEMY_DEFAULT_PROFILE,
+  FORMLESS_ALCHEMY_PROFILE_REF_PREFIX,
+} from "./instance-provider-credentials.ts";
 
 export const FORMLESS_ALCHEMY_CLOUDFLARE_PROVIDER = "cloudflare";
-export const FORMLESS_ALCHEMY_DEFAULT_PROFILE = "default";
-export const FORMLESS_ALCHEMY_PROFILE_REF_PREFIX = "alchemy-profile:";
 
 export type AlchemyCloudflareCredentialSetupInput = {
   accountId?: string | null;
@@ -152,9 +160,6 @@ const alchemyCloudflareDefaultScopes = [
   "workers:write",
   "zone:read",
 ] as const;
-
-const formlessWorkspaceDeployTargetId = "instance.primary";
-const workersDevDomain = "workers.dev";
 
 export async function setupCloudflareCredentialsWithFormlessOAuth(
   input: AlchemyCloudflareCredentialSetupInput,
@@ -332,18 +337,14 @@ async function writeFormlessOAuthDeploymentConfigSource(input: {
   targetAlias?: string | null;
   workspaceRoot: string;
 }): Promise<{ accountId: string; targetId: string; targetUrl: string; workerName: string }> {
-  const manifest = await readCredentialSetupWorkspaceManifest(input.workspaceRoot);
-  const activePackages = await createWorkspaceAppPackageResolver({
-    bundledManifests: bundledAppPackageManifests,
-    manifest,
-    workspaceRoot: input.workspaceRoot,
-  });
+  const { manifest } = await readWorkspaceManifest(input.workspaceRoot);
+  const activePackages = await createActiveWorkspaceAppPackages(input.workspaceRoot, manifest);
   const current = await readInstanceWorkspaceControlPlaneStorageSnapshot({
     manifest,
     packageResolver: activePackages.resolver,
     workspaceRoot: input.workspaceRoot,
   });
-  const existing = selectCredentialSetupDeploymentConfig(current?.records ?? [], {
+  const existing = selectFormlessCliCredentialSetupDeploymentConfig(current?.records ?? [], {
     deploymentConfigId: input.deploymentConfigId,
     targetAlias: input.targetAlias,
   });
@@ -351,10 +352,13 @@ async function writeFormlessOAuthDeploymentConfigSource(input: {
     stringRecordValue(existing, "targetId") ??
     existing?.id ??
     normalizeOptionalTargetAlias(input.targetAlias) ??
-    formlessWorkspaceDeployTargetId;
+    formlessCliPrimaryTargetId();
   const workerName =
     stringRecordValue(existing, "workerName") ?? normalizeFormlessInstanceName(manifest.name);
-  const targetUrl = `https://${workerName}.${input.account.workersDevSubdomain}.${workersDevDomain}`;
+  const targetUrl = formlessCliWorkersDevTargetUrl({
+    workerName,
+    workersDevSubdomain: input.account.workersDevSubdomain,
+  });
   const deploymentConfigRecord: StoredRecord = {
     id: existing?.id ?? targetId,
     entity: "deployment-config",
@@ -453,85 +457,6 @@ function formlessOAuthCredentialSetupAccountSelectionResult(input: {
       },
       title: "Cloudflare account selection required",
     },
-  };
-}
-
-async function readCredentialSetupWorkspaceManifest(
-  workspaceRoot: string,
-): Promise<InstanceWorkspaceManifest> {
-  return parseInstanceWorkspaceManifestJson(
-    await readFile(path.join(workspaceRoot, INSTANCE_WORKSPACE_MANIFEST_FILE), "utf8"),
-  );
-}
-
-function selectCredentialSetupDeploymentConfig(
-  records: readonly StoredRecord[],
-  input: {
-    deploymentConfigId?: string | null;
-    targetAlias?: string | null;
-  } = {},
-): StoredRecord | undefined {
-  const targets = records.filter(
-    (record) =>
-      record.entity === "deployment-config" &&
-      record.values.targetKind === "instance" &&
-      record.values.enabled !== false &&
-      record.deletedAt === undefined,
-  );
-  const requestedDeploymentConfigId = input.deploymentConfigId?.trim();
-  const requestedTargetId = normalizeOptionalTargetAlias(input.targetAlias);
-
-  if (requestedDeploymentConfigId) {
-    const target = targets.find((record) => record.id === requestedDeploymentConfigId);
-
-    if (!target) {
-      throw new Error(
-        `Formless Cloudflare OAuth credential setup target "${requestedDeploymentConfigId}" was not found.`,
-      );
-    }
-
-    return target;
-  }
-
-  if (requestedTargetId) {
-    const target = targets.find(
-      (record) =>
-        record.id === requestedTargetId ||
-        stringRecordValue(record, "targetId") === requestedTargetId,
-    );
-
-    if (!target) {
-      throw new Error(
-        `Formless Cloudflare OAuth credential setup target "${requestedTargetId}" was not found.`,
-      );
-    }
-
-    return target;
-  }
-
-  const primary = targets.find(
-    (record) => stringRecordValue(record, "targetId") === formlessWorkspaceDeployTargetId,
-  );
-
-  return primary ?? (targets.length === 1 ? targets[0] : undefined);
-}
-
-function workspaceControlPlaneSnapshotFromRecords(input: {
-  current: StorageSnapshot | undefined;
-  exportedAt: string;
-  records: StoredRecord[];
-  schemaUpdatedAt: string;
-}): StorageSnapshot {
-  return {
-    kind: STORAGE_SNAPSHOT_KIND,
-    version: STORAGE_SNAPSHOT_VERSION,
-    storageIdentity: INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
-    schemaKey: input.current?.schemaKey ?? INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
-    exportedAt: input.exportedAt,
-    schemaUpdatedAt: input.schemaUpdatedAt,
-    sourceCursor: input.records.length,
-    schema: input.current?.schema ?? instanceControlPlaneSchema,
-    records: input.records,
   };
 }
 
@@ -735,23 +660,6 @@ function displaySafeAccount(account: FormlessInstanceDeploymentAccount): Record<
     ...(account.name === undefined ? {} : { name: account.name }),
     workersDevSubdomain: account.workersDevSubdomain,
   };
-}
-
-function stringRecordValue(
-  record: StoredRecord | undefined,
-  fieldName: string,
-): string | undefined {
-  const value = record?.values[fieldName];
-
-  return typeof value === "string" ? value : undefined;
-}
-
-function withoutControlPlaneLifecycleValues(values: RecordValues): RecordValues {
-  return Object.fromEntries(
-    Object.entries(values).filter(
-      ([fieldName]) => fieldName !== "createdAt" && fieldName !== "updatedAt",
-    ),
-  ) as RecordValues;
 }
 
 function normalizeAlchemyProfile(

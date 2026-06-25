@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -28,6 +28,20 @@ import {
 } from "../shared/deploy-metadata.ts";
 import { bundledAppPackageResolver } from "../shared/app-packages.ts";
 import { siteSourceSchema } from "../test/schema-apps.ts";
+import {
+  ALCHEMY_PASSWORD_ENV_NAME,
+  FORMLESS_INSTANCE_LOCAL_ENV_FILE,
+  FORMLESS_INSTANCE_STATE_FILE,
+  createFormlessInstanceState,
+  formatFormlessInstanceState,
+  planFormlessInstanceDeployment,
+  type DeployFormlessInstanceInput,
+  type DestroyFormlessInstanceInput,
+} from "./instance-onboarding.ts";
+import {
+  destroyFormlessInstanceWorkspace,
+  pushFormlessInstanceWorkspace,
+} from "./instance-workspace-deployment.ts";
 import { runDeploymentRefreshWorkspaceOperation } from "./instance-workspace-deployment-operation.ts";
 import {
   runWorkspaceOperationDomainHandler,
@@ -204,6 +218,157 @@ describe("deployment refresh operation domain", () => {
   });
 });
 
+describe("deployment runtime domain", () => {
+  it("records display-safe failure observations when provider reconciliation fails", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+    const requests: CapturedRequest[] = [];
+    const deployInputs: DeployFormlessInstanceInput[] = [];
+
+    await writeWorkspaceManifest(workspaceRoot);
+    await writeDeployStorageSnapshot(workspaceRoot);
+    await writeWorkspaceAppStorageSnapshot(workspaceRoot);
+    await mkdir(path.join(workspaceRoot, ".formless"), { recursive: true });
+    await writeFile(
+      path.join(workspaceRoot, ".formless/instance.env"),
+      "FORMLESS_ADMIN_TOKEN=local-token\n",
+    );
+
+    await expect(
+      pushFormlessInstanceWorkspace(
+        {
+          apply: true,
+          force: true,
+          workspacePath: workspaceRoot,
+        },
+        {
+          accountDiscovery: {
+            listAccounts: async () => [{ id: "account-123", workersDevSubdomain: "dpeek" }],
+          },
+          cwd: tempDir,
+          deploymentAdapter: {
+            deploy: async (input) => {
+              deployInputs.push(input);
+              throw new Error("provider outage CF_API_TOKEN=raw-token");
+            },
+          },
+          fetch: deployFetch(requests),
+          healthCheck: {
+            check: async () => {
+              throw new Error("Health check should not run after deploy failure.");
+            },
+          },
+          localSecretEnv: localSecretEnvStore(),
+          now: timestampSequence("2026-06-02T00:08:00.000Z", "2026-06-02T00:08:01.000Z"),
+          packageRoot: tempDir,
+          packageVersion: packageJson.version,
+          randomToken: () => "generated-secret",
+          setupCapability: {
+            create: async () => {
+              throw new Error("Owner setup should not run after deploy failure.");
+            },
+          },
+        },
+      ),
+    ).rejects.toThrow("provider outage");
+
+    const observation = capturedRequestJson<{
+      input: {
+        observedError: string;
+        observedStatus: string;
+        observedSummary: string;
+      };
+      recordId: string;
+    }>(requestByPath(requests, "/api/formless/control-plane/operations/deployment-config/update"));
+
+    expect(deployInputs).toHaveLength(1);
+    expect(deployInputs[0]).toMatchObject({
+      credentialProfile: null,
+      packageRoot: tempDir,
+      secrets: {
+        ALCHEMY_PASSWORD: "generated-secret",
+        FORMLESS_ADMIN_TOKEN: "local-token",
+      },
+    });
+    expect(observation).toMatchObject({
+      input: {
+        observedError: "Local workspace push provider reconciliation failed.",
+        observedStatus: "failed",
+        observedSummary: "Local workspace push provider reconciliation failed.",
+      },
+      recordId: "instance.primary",
+    });
+    expect(JSON.stringify(observation.input)).not.toContain("raw-token");
+  });
+
+  it("tears down selected provider state and removes ignored deploy state", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+    const destroyInputs: DestroyFormlessInstanceInput[] = [];
+    const plan = deploymentPlan();
+    const deploymentStateRoot = path.join(workspaceRoot, ".formless/deploy/personal");
+
+    await writeWorkspaceManifest(workspaceRoot);
+    await writeDeployStorageSnapshot(workspaceRoot);
+    await writeDeploymentLocalState(deploymentStateRoot, plan);
+
+    const result = await destroyFormlessInstanceWorkspace(
+      {
+        confirm: "personal",
+        workspacePath: workspaceRoot,
+      },
+      {
+        cwd: tempDir,
+        deploymentAdapter: {
+          deploy: async () => {
+            throw new Error("Deploy should not run during destroy.");
+          },
+          destroy: async (input) => {
+            destroyInputs.push(input);
+
+            return {
+              resources: {
+                alchemyState: "destroyed",
+                customDomains: 1,
+                dnsRecords: 1,
+                durableObjectNamespace: "destroyed",
+                mediaBucket: "destroyed",
+                turnstileWidget: "skipped",
+                worker: "destroyed",
+                workerAssets: "destroyed",
+                workerSecrets: "destroyed",
+              },
+            };
+          },
+        },
+        env: {},
+        packageRoot: tempDir,
+        packageVersion: packageJson.version,
+      },
+    );
+
+    expect(destroyInputs).toHaveLength(1);
+    expect(destroyInputs[0]).toMatchObject({
+      credentialProfile: null,
+      packageRoot: tempDir,
+      secrets: {
+        ALCHEMY_PASSWORD: "alchemy-secret",
+        CLOUDFLARE_API_TOKEN: "cf-token",
+      },
+      stateRoot: deploymentStateRoot,
+    });
+    expect(destroyInputs[0].domainProviderResources?.resources.length).toBeGreaterThan(0);
+    expect(result.routeProviderResources).toMatchObject({
+      enabledHosts: ["www.example.com"],
+      routeCount: 1,
+      source: "instance:route",
+    });
+    await expect(
+      readFile(path.join(deploymentStateRoot, FORMLESS_INSTANCE_STATE_FILE), "utf8"),
+    ).rejects.toMatchObject({ code: "ENOENT" });
+  });
+});
+
 describe("credential setup operation domain", () => {
   it("forwards display-safe authorization events and continuation results", async () => {
     const workspaceRoot = "/workspace/personal-sites";
@@ -320,6 +485,48 @@ describe("credential setup operation domain", () => {
     });
   });
 });
+
+function localSecretEnvStore() {
+  return {
+    ensure: async (input: { createSecret: () => string; root: string }) => {
+      const secret = input.createSecret();
+      const secretPath = path.join(input.root, FORMLESS_INSTANCE_LOCAL_ENV_FILE);
+
+      await mkdir(input.root, { recursive: true });
+      await writeFile(secretPath, `${ALCHEMY_PASSWORD_ENV_NAME}=${secret}\n`);
+
+      return {
+        created: true,
+        path: secretPath,
+        secrets: { ALCHEMY_PASSWORD: secret },
+      };
+    },
+  };
+}
+
+function deploymentPlan() {
+  return planFormlessInstanceDeployment({
+    account: { id: "account-123", workersDevSubdomain: "dpeek" },
+    adoptExistingDeployment: true,
+    instanceName: "personal",
+    packageVersion: packageJson.version,
+  });
+}
+
+async function writeDeploymentLocalState(
+  deploymentStateRoot: string,
+  plan: ReturnType<typeof deploymentPlan>,
+) {
+  await mkdir(deploymentStateRoot, { recursive: true });
+  await writeFile(
+    path.join(deploymentStateRoot, FORMLESS_INSTANCE_STATE_FILE),
+    formatFormlessInstanceState(createFormlessInstanceState({ credentialProfile: null, plan })),
+  );
+  await writeFile(
+    path.join(deploymentStateRoot, FORMLESS_INSTANCE_LOCAL_ENV_FILE),
+    `${ALCHEMY_PASSWORD_ENV_NAME}=alchemy-secret\nCLOUDFLARE_API_TOKEN=cf-token\n`,
+  );
+}
 
 function operationDeps(
   cwd: string,

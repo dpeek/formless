@@ -218,6 +218,33 @@ local execution binding handles it.
 - **AND** the first implementation does not require moving all operation bodies
   into one shared operation module
 
+#### Scenario: CLI workspace implementation domains
+
+- **WHEN** Formless CLI implements local workspace operation bodies and direct
+  local workspace commands
+- **THEN** workspace source sync behavior is owned by source-sync implementation
+  modules that read and write reviewable workspace source, validate app and
+  media state, compose portable archive sync payloads, compare source and
+  target state, and apply pull, save, check, and push data results
+- **AND** deployment refresh, deployment planning, provider reconciliation,
+  deployment observation writes, deploy-state reads and writes, destroy provider
+  teardown, and deployment step vocabulary are owned by deployment
+  implementation modules
+- **AND** workspace target and context resolution are owned by focused helpers
+  that select workspace roots, deployment-config records, target URLs, admin
+  bearer context, and display-safe target facts without owning source sync,
+  provider mutation, or terminal formatting bodies
+- **AND** provider credential resolution is owned by credential helpers that
+  expose selected account and provider bearer facts through narrow interfaces
+  without exposing OAuth token storage, browser authorization flows, ignored
+  secret files, or provider profile details to source sync, gateway, or
+  terminal formatting code
+- **AND** broad compatibility entrypoints may remain as thin facades while CLI
+  callers, operation handlers, and tests move to domain modules
+- **AND** domain modules have focused tests for operation-body behavior, while
+  CLI and gateway integration tests cover binding, authorization, routing, and
+  display-safe progress boundaries
+
 #### Scenario: CLI workspace operation runner boundary
 
 - **WHEN** Formless CLI, local gateway, auto-save, or CLI runtime adapter code
