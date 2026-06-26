@@ -346,6 +346,28 @@ local execution binding handles it.
   integration tests cover dispatch, dependency wiring, behavior, and secret
   redaction without duplicating every formatter case
 
+#### Scenario: Local workspace operation test topology
+
+- **WHEN** local workspace operation behavior is covered by tests
+- **THEN** operation-domain suites own source sync, deployment refresh,
+  deployment planning, provider reconciliation, destroy, credential setup,
+  target/context resolution, and display-safe operation result construction at
+  operation-body level
+- **AND** CLI command integration suites keep representative coverage for
+  command parsing and binding, dependency assembly, terminal preflight,
+  account selection, runner invocation, no-op behavior, redaction boundaries,
+  and public command behavior without duplicating each domain branch
+- **AND** Gateway runtime integration suites own transport authorization,
+  proxy and sidecar routing, operation id scoping, browser-visible state
+  redaction, and auto-save enqueue/read behavior without asserting source sync
+  or deployment execution internals
+- **AND** formatter suites own exact terminal strings, line ordering, labels,
+  path rendering, and display-safe value rendering for direct command and
+  workspace operation output
+- **AND** shared operation fixtures may be composed from domain-level helpers
+  only when dependencies remain explicit and CLI or Gateway suites do not become
+  the owner of operation-body behavior
+
 #### Scenario: Provider credential boundary for deployment execution
 
 - **WHEN** Formless CLI plans, applies, refreshes, or destroys a

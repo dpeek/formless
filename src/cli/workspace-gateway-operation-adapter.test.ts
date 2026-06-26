@@ -88,12 +88,19 @@ describe("workspace gateway operation adapter", () => {
   it("forwards actor, capabilities, and configured workspace root to the operation runner", async () => {
     const workspaceRoot = await makeTempDir();
     const scheduler = autoSaveScheduler();
-    const credentialSetupInputs: Array<{ provider: string; workspaceRoot: string }> = [];
+    const credentialSetupInputs: Array<{
+      accountId?: string;
+      profileLabel?: string;
+      provider: string;
+      workspaceRoot: string;
+    }> = [];
     const handlers = createWorkspaceGatewayOperationHandlers(
       adapterDeps(workspaceRoot, {
         autoSaveScheduler: scheduler.scheduler,
         credentialSetup: async (input) => {
           credentialSetupInputs.push({
+            accountId: input.accountId,
+            profileLabel: input.profileLabel,
             provider: input.provider,
             workspaceRoot: input.workspaceRoot,
           });
@@ -106,6 +113,7 @@ describe("workspace gateway operation adapter", () => {
               summary: {
                 fields: {
                   provider: input.provider,
+                  selectedAccountId: input.accountId ?? "",
                   token: "FORMLESS_TOKEN=secret",
                   workspaceRoot: input.workspaceRoot,
                 },
@@ -122,17 +130,33 @@ describe("workspace gateway operation adapter", () => {
 
     const operation = await handlers.startOperation({
       authorization: { actor: "browser", via: "owner-session" },
-      operationInput: { kind: "credentialSetup", provider: "cloudflare" },
+      operationInput: {
+        accountId: "acct_personal",
+        kind: "credentialSetup",
+        profileLabel: "personal",
+        provider: "cloudflare",
+      },
       request: new Request("http://local.test/api/formless/workspace-gateway/operations"),
       workspaceRoot,
     });
     const serialized = JSON.stringify(operation);
 
-    expect(credentialSetupInputs).toEqual([{ provider: "cloudflare", workspaceRoot }]);
+    expect(credentialSetupInputs).toEqual([
+      {
+        accountId: "acct_personal",
+        profileLabel: "personal",
+        provider: "cloudflare",
+        workspaceRoot,
+      },
+    ]);
     expect(operation).toMatchObject({
       actor: "browser",
       id: "op_credential_adapter_00000001",
-      input: { provider: "cloudflare" },
+      input: {
+        accountId: "acct_personal",
+        profileLabel: "personal",
+        provider: "cloudflare",
+      },
       operation: "credentialSetup",
       status: "succeeded",
     });

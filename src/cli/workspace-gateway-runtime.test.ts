@@ -1,23 +1,8 @@
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { afterEach, describe, expect, it } from "vite-plus/test";
-import packageJson from "../../package.json";
-
-import {
-  FORMLESS_RUNTIME_PROTOCOL_VERSION,
-  FORMLESS_STORAGE_MIGRATION_SET_ID,
-} from "../shared/deploy-metadata.ts";
-import { packageAppFactsForKey, listInstallableAppPackages } from "@dpeek/formless-installed-apps";
-import { bundledAppPackageResolver } from "../shared/app-packages.ts";
-import { STORAGE_SNAPSHOT_KIND, STORAGE_SNAPSHOT_VERSION } from "@dpeek/formless-storage";
-import type { StorageSnapshot, StoredRecord } from "@dpeek/formless-storage";
-import {
-  INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
-  INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
-  instanceControlPlaneSchema,
-} from "@dpeek/formless-instance-control-plane";
 import {
   WORKSPACE_GATEWAY_ACTOR_HEADER,
   WORKSPACE_GATEWAY_AUTHORIZATION_VIA_HEADER,
@@ -37,21 +22,12 @@ import {
   type WorkspaceGatewaySidecarExecutionEnv,
 } from "@dpeek/formless-gateway/sidecar";
 import {
-  DEFAULT_INSTANCE_WORKSPACE_LOCAL_STATE_ROOT,
   INSTANCE_WORKSPACE_MANIFEST_FILE as FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE,
-  WORKSPACE_RECORD_STATE_FILE_KIND,
   defaultInstanceWorkspaceManifest as defaultFormlessInstanceWorkspaceManifest,
   formatInstanceWorkspaceManifest as formatFormlessInstanceWorkspaceManifest,
-  initialWorkspaceAutoSaveState,
-  nextWorkspaceAutoSaveEnqueuedState,
-  nextWorkspaceAutoSaveFailedState,
 } from "@dpeek/formless-workspace";
 import { createOwnerSessionCookie } from "../worker/owner-session.ts";
-import { siteSourceSchema } from "../test/schema-apps.ts";
-import {
-  readInstanceWorkspaceAutoSaveState,
-  writeInstanceWorkspaceAutoSaveState,
-} from "@dpeek/formless-workspace/node";
+import { readInstanceWorkspaceAutoSaveState } from "@dpeek/formless-workspace/node";
 import {
   createWorkspaceAutoSaveScheduler,
   createWorkspaceGatewayOperationHandlers,
@@ -229,15 +205,7 @@ describe("local workspace gateway", () => {
     expect(accepted.response.status).toBe(200);
     expect(accepted.body.operation).toMatchObject({
       actor: "browser",
-      events: [
-        {
-          profileLabel: "Default",
-          provider: "cloudflare",
-          status: "waiting",
-          type: "externalAuthorizationUrl",
-          url: "https://dash.cloudflare.com/oauth2/authorize?client_id=formless",
-        },
-      ],
+      id: "op_credential_00000001",
       operation: "credentialSetup",
       status: "succeeded",
     });
@@ -310,91 +278,9 @@ describe("local workspace gateway", () => {
     expect(JSON.stringify(enqueued.body)).not.toContain(workspaceRoot);
   });
 
-  it("passes browser-selected Cloudflare account id to credential setup without token input", async () => {
+  it("proxies Cloudflare credential setup through the sidecar without exposing local secrets", async () => {
     const workspaceRoot = await makeTempDir();
     const cookie = await ownerCookie();
-    const credentialSetupInputs: Array<{
-      accountId?: string;
-      profileLabel?: string;
-      provider: "cloudflare";
-    }> = [];
-    const accepted = await gatewayJson(
-      operationRequest(
-        {
-          accountId: "acct_personal",
-          kind: "credentialSetup",
-          profileLabel: "personal",
-          provider: "cloudflare",
-        },
-        browserHeaders({ cookie, csrf: true }),
-      ),
-      {
-        deps: gatewayDeps(workspaceRoot, {
-          credentialSetup: async (input) => {
-            credentialSetupInputs.push({
-              accountId: input.accountId,
-              profileLabel: input.profileLabel,
-              provider: input.provider,
-            });
-
-            return {
-              result: {
-                summary: {
-                  fields: {
-                    profile: input.profileLabel ?? "default",
-                    provider: input.provider,
-                    selectedAccountId: input.accountId ?? "",
-                    status: "validated",
-                  },
-                  title: "Cloudflare credentials ready",
-                },
-              },
-              status: "succeeded",
-            };
-          },
-          operationIds: ["op_credential_account_00000001"],
-        }),
-      },
-    );
-
-    expect(accepted.response.status).toBe(200);
-    expect(credentialSetupInputs).toEqual([
-      {
-        accountId: "acct_personal",
-        profileLabel: "personal",
-        provider: "cloudflare",
-      },
-    ]);
-    expect(accepted.body.operation).toMatchObject({
-      id: "op_credential_account_00000001",
-      input: {
-        accountId: "acct_personal",
-        profileLabel: "personal",
-        provider: "cloudflare",
-      },
-      operation: "credentialSetup",
-      status: "succeeded",
-      summary: {
-        fields: {
-          profile: "personal",
-          provider: "cloudflare",
-          selectedAccountId: "acct_personal",
-          status: "validated",
-        },
-        title: "Cloudflare credentials ready",
-      },
-    });
-    expect(JSON.stringify(accepted.body)).not.toContain("pasted-browser-token");
-  });
-
-  it("runs Cloudflare credential setup through the sidecar without exposing local secrets", async () => {
-    const workspaceRoot = await makeTempDir();
-    const cookie = await ownerCookie();
-    const credentialSetupInputs: Array<{
-      profileLabel?: string;
-      provider: "cloudflare";
-      workspaceRoot: string;
-    }> = [];
     const accepted = await gatewayJson(
       operationRequest(
         {
@@ -407,12 +293,6 @@ describe("local workspace gateway", () => {
       {
         deps: gatewayDeps(workspaceRoot, {
           credentialSetup: async (input) => {
-            credentialSetupInputs.push({
-              profileLabel: input.profileLabel,
-              provider: input.provider,
-              workspaceRoot: input.workspaceRoot,
-            });
-
             return {
               events: [
                 {
@@ -449,24 +329,8 @@ describe("local workspace gateway", () => {
     const serialized = JSON.stringify(accepted.body);
 
     expect(accepted.response.status).toBe(200);
-    expect(credentialSetupInputs).toEqual([
-      {
-        profileLabel: "personal",
-        provider: "cloudflare",
-        workspaceRoot,
-      },
-    ]);
     expect(accepted.body.operation).toMatchObject({
       actor: "browser",
-      events: [
-        {
-          profileLabel: "personal",
-          provider: "cloudflare",
-          status: "waiting",
-          type: "externalAuthorizationUrl",
-          url: "https://dash.cloudflare.com/oauth2/authorize?client_id=formless",
-        },
-      ],
       id: "op_credential_sidecar_00000001",
       operation: "credentialSetup",
       status: "running",
@@ -533,258 +397,6 @@ describe("local workspace gateway", () => {
     });
     expect(JSON.stringify(rejected.body)).not.toContain("https://example.com");
     expect(JSON.stringify(rejected.body)).not.toContain("token=secret");
-  });
-});
-
-describe("workspace auto-save scheduler", () => {
-  it("executes queued default auto-save through Authority-backed compact workspace writers", async () => {
-    const workspaceRoot = await makeTempDir();
-    const requests: CapturedRequest[] = [];
-    const handlers = createWorkspaceGatewayOperationHandlers(
-      gatewayDeps(workspaceRoot, {
-        autoSaveDebounceMs: 0,
-        fetch: workspaceSaveFetch(requests, "site"),
-        operationIds: ["op_auto_save_00000001"],
-        timestamps: [
-          "2026-06-02T02:10:00.000Z",
-          "2026-06-02T02:10:01.000Z",
-          "2026-06-02T02:10:02.000Z",
-          "2026-06-02T02:10:03.000Z",
-          "2026-06-02T02:10:04.000Z",
-          "2026-06-02T02:10:05.000Z",
-          "2026-06-02T02:10:06.000Z",
-        ],
-      }),
-    );
-
-    await writeWorkspaceManifest(workspaceRoot);
-    await mkdir(path.join(workspaceRoot, ".formless/local"), { recursive: true });
-    await writeFile(
-      path.join(workspaceRoot, ".formless/local/dev.env"),
-      "FORMLESS_ADMIN_TOKEN=local-save-token\nFORMLESS_OWNER_SESSION_SECRET=local-owner-secret\n",
-    );
-    await handlers.enqueueAutoSave({
-      authorization: { actor: "browser", via: "owner-session" },
-      enqueue: { source: "app-operation", storageIdentity: "app:site" },
-      request: new Request("http://local.test"),
-      workspaceRoot,
-    });
-    await waitUntil(async () => {
-      const state = await readInstanceWorkspaceAutoSaveState(
-        path.join(workspaceRoot, DEFAULT_INSTANCE_WORKSPACE_LOCAL_STATE_ROOT),
-      );
-
-      return state?.displayState === "saved";
-    });
-
-    const autoSaveState = await readInstanceWorkspaceAutoSaveState(
-      path.join(workspaceRoot, DEFAULT_INSTANCE_WORKSPACE_LOCAL_STATE_ROOT),
-    );
-    const instanceState = JSON.parse(
-      await readFile(path.join(workspaceRoot, "state/instance.json"), "utf8"),
-    ) as {
-      kind: string;
-      schema?: unknown;
-      schemaProvenance?: { kind: string };
-      storageIdentity: string;
-    };
-    const appState = JSON.parse(
-      await readFile(path.join(workspaceRoot, "state/apps/site.json"), "utf8"),
-    ) as {
-      kind: string;
-      schema?: unknown;
-      schemaProvenance?: { kind: string };
-      storageIdentity: string;
-    };
-
-    expect(autoSaveState).toMatchObject({
-      dirtyGeneration: 1,
-      displayState: "saved",
-      savedGeneration: 1,
-      storageIdentities: [],
-      suppressed: { reason: "auto-save" },
-      writeSources: [],
-    });
-    expect(instanceState).toMatchObject({
-      kind: WORKSPACE_RECORD_STATE_FILE_KIND,
-      schemaProvenance: { kind: "instance-control-plane" },
-      storageIdentity: INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
-    });
-    expect(instanceState.schema).toBeUndefined();
-    expect(appState).toMatchObject({
-      kind: WORKSPACE_RECORD_STATE_FILE_KIND,
-      schemaProvenance: { kind: "package-app" },
-      storageIdentity: "app:site",
-    });
-    expect(appState.schema).toBeUndefined();
-    await expect(stat(path.join(workspaceRoot, "archives"))).rejects.toMatchObject({
-      code: "ENOENT",
-    });
-    await expect(stat(path.join(workspaceRoot, "state/media"))).rejects.toMatchObject({
-      code: "ENOENT",
-    });
-    expect(requests.map((request) => `${request.method} ${request.url}`)).toEqual([
-      "GET http://localhost:5173/api/formless/app-installs",
-      "GET http://localhost:5173/api/formless/control-plane/snapshot?actorKind=cliDeployer",
-      "GET http://localhost:5173/api/app-installs/site/site/snapshot",
-    ]);
-    expect(requests.map((request) => request.headers.authorization)).toEqual([
-      "Bearer local-save-token",
-      "Bearer local-save-token",
-      "Bearer local-save-token",
-    ]);
-  });
-
-  it("lets manual gateway save flush failed dirty auto-save state", async () => {
-    const workspaceRoot = await makeTempDir();
-    const requests: CapturedRequest[] = [];
-    const cookie = await ownerCookie();
-    const localStateRoot = path.join(workspaceRoot, DEFAULT_INSTANCE_WORKSPACE_LOCAL_STATE_ROOT);
-    const failedState = nextWorkspaceAutoSaveFailedState(
-      nextWorkspaceAutoSaveEnqueuedState(
-        initialWorkspaceAutoSaveState({
-          now: () => "2026-06-02T02:20:00.000Z",
-        }),
-        {
-          now: () => "2026-06-02T02:20:01.000Z",
-          source: "app-operation",
-          storageIdentity: "app:site",
-        },
-      ),
-      {
-        error: new Error(`${workspaceRoot}/state failed`),
-        now: () => "2026-06-02T02:20:02.000Z",
-        workspaceRoot,
-      },
-    );
-
-    await writeWorkspaceManifest(workspaceRoot);
-    await writeInstanceWorkspaceAutoSaveState({
-      localStateRoot,
-      state: failedState,
-      workspaceRoot,
-    });
-    await writeFile(
-      path.join(workspaceRoot, ".formless/local/dev.env"),
-      "FORMLESS_ADMIN_TOKEN=local-save-token\nFORMLESS_OWNER_SESSION_SECRET=local-owner-secret\n",
-    );
-
-    const saved = await gatewayJson(
-      operationRequest({ kind: "save" }, browserHeaders({ cookie, csrf: true })),
-      {
-        deps: gatewayDeps(workspaceRoot, {
-          fetch: workspaceSaveFetch(requests, "site"),
-          operationIds: ["op_manual_save_00000001"],
-          timestamps: [
-            "2026-06-02T02:20:03.000Z",
-            "2026-06-02T02:20:04.000Z",
-            "2026-06-02T02:20:05.000Z",
-            "2026-06-02T02:20:06.000Z",
-            "2026-06-02T02:20:07.000Z",
-          ],
-        }),
-      },
-    );
-    const autoSaveState = await readInstanceWorkspaceAutoSaveState(localStateRoot);
-
-    expect(saved.body.operation).toMatchObject({
-      operation: "save",
-      status: "succeeded",
-    });
-    expect(autoSaveState).toMatchObject({
-      dirtyGeneration: 1,
-      displayState: "saved",
-      retryCount: 0,
-      savedGeneration: 1,
-      storageIdentities: [],
-      suppressed: { reason: "manual-save" },
-      writeSources: [],
-    });
-  });
-
-  it("coalesces dirty generations, serializes saves, and records retryable failures", async () => {
-    const workspaceRoot = await makeTempDir();
-    const scheduled: Array<{ callback: () => void; delayMs: number }> = [];
-    const saves: Array<{ dirtyGeneration: number; sources: readonly string[] }> = [];
-    let failNextSave = true;
-    const scheduler = createWorkspaceAutoSaveScheduler({
-      clearTimeout: () => undefined,
-      debounceMs: 50,
-      maxRetries: 1,
-      now: timestampSequence(
-        "2026-06-02T02:00:00.000Z",
-        "2026-06-02T02:00:01.000Z",
-        "2026-06-02T02:00:02.000Z",
-        "2026-06-02T02:00:03.000Z",
-        "2026-06-02T02:00:04.000Z",
-        "2026-06-02T02:00:05.000Z",
-        "2026-06-02T02:00:06.000Z",
-        "2026-06-02T02:00:07.000Z",
-      ),
-      retryBackoffMs: (retryCount) => retryCount * 100,
-      save: async (input) => {
-        saves.push({
-          dirtyGeneration: input.dirtyGeneration,
-          sources: input.writeSources,
-        });
-
-        if (failNextSave) {
-          failNextSave = false;
-          throw new Error(`${workspaceRoot}/state failed`);
-        }
-      },
-      setTimeout: (callback, delayMs) => {
-        scheduled.push({ callback, delayMs });
-        return callback;
-      },
-    });
-
-    await scheduler.enqueue({
-      source: "app-operation",
-      storageIdentity: "app:site",
-      workspaceRoot,
-    });
-    await scheduler.enqueue({
-      source: "deployment-intent",
-      storageIdentity: "instance:control-plane",
-      workspaceRoot,
-    });
-
-    expect(scheduled.map((entry) => entry.delayMs)).toEqual([50, 50]);
-
-    const failed = await scheduler.runNow(workspaceRoot);
-
-    expect(failed).toMatchObject({
-      dirtyGeneration: 2,
-      displayState: "failed",
-      retryCount: 1,
-      savedGeneration: 0,
-      storageIdentities: ["app:site", "instance:control-plane"],
-      writeSources: ["app-operation", "deployment-intent"],
-    });
-    expect(failed.error?.message).toBe("<workspace>/state failed");
-    expect(scheduled.map((entry) => entry.delayMs)).toEqual([50, 50, 100]);
-
-    const saved = await scheduler.runNow(workspaceRoot);
-
-    expect(saved).toMatchObject({
-      dirtyGeneration: 2,
-      displayState: "saved",
-      retryCount: 0,
-      savedGeneration: 2,
-      storageIdentities: [],
-      writeSources: [],
-    });
-    expect(saves).toEqual([
-      {
-        dirtyGeneration: 2,
-        sources: ["app-operation", "deployment-intent"],
-      },
-      {
-        dirtyGeneration: 2,
-        sources: ["app-operation", "deployment-intent"],
-      },
-    ]);
   });
 });
 
@@ -913,33 +525,18 @@ function sidecarExecutionEnv(
 function gatewayDeps(
   workspaceRoot: string,
   options: {
-    accountDiscovery?: {
-      listAccounts: () => Promise<Array<{ id: string; workersDevSubdomain: string }>>;
-    };
     autoSaveDebounceMs?: number;
     autoSaveScheduler?: WorkspaceAutoSaveScheduler;
     credentialSetup?: WorkspaceGatewayRuntimeDependencies["credentialSetup"];
     credentialSetupUrl?: string;
-    deploymentAdapter?: {
-      deploy: (input: { plan: { expectedUrl: { url: string } } }) => Promise<{ url: string }>;
-    };
-    fetch?: typeof fetch;
     operationIds?: string[];
     operationCapabilities?: WorkspaceGatewayRuntimeDependencies["operationCapabilities"];
-    packageRoot?: string;
-    packageVersion?: string;
-    randomTokens?: string[];
-    setupComplete?: boolean;
     timestamps?: string[];
   } = {},
 ): WorkspaceGatewayRuntimeDependencies {
   const operationIds = [...(options.operationIds ?? [])];
-  const randomTokens = [...(options.randomTokens ?? [])];
 
   return {
-    accountDiscovery: options.accountDiscovery ?? {
-      listAccounts: async () => [{ id: "account-123", workersDevSubdomain: "dpeek" }],
-    },
     ...(options.autoSaveDebounceMs === undefined
       ? {}
       : { autoSaveDebounceMs: options.autoSaveDebounceMs }),
@@ -975,50 +572,12 @@ function gatewayDeps(
             },
           })),
     cwd: workspaceRoot,
-    deploymentAdapter: options.deploymentAdapter ?? {
-      deploy: async (input: { plan: { expectedUrl: { url: string } } }) => ({
-        url: input.plan.expectedUrl.url,
-      }),
-    },
-    fetch:
-      options.fetch ??
-      (async () => Response.json({ setupComplete: options.setupComplete ?? false })),
-    healthCheck: {
-      check: async (input: { expectedVersion: string; url: string }) => ({
-        cacheControl: "no-store",
-        metadataUrl: new URL("/api/formless/deploy", `${input.url}/`).toString(),
-        packageVersion: input.expectedVersion,
-        runtimeProtocolVersion: FORMLESS_RUNTIME_PROTOCOL_VERSION,
-        storageMigrationSet: FORMLESS_STORAGE_MIGRATION_SET_ID,
-        url: input.url,
-        version: input.expectedVersion,
-      }),
-    },
-    localSecretEnv: {
-      ensure: async (input: { root: string }) => ({
-        created: false,
-        path: path.join(input.root, "deploy.env"),
-        secrets: { ALCHEMY_PASSWORD: "alchemy-password" },
-      }),
-    },
+    fetch: async () => Response.json({ setupComplete: false }),
     now: timestampSequence(...(options.timestamps ?? ["2026-06-02T01:00:00.000Z"])),
     ...(options.operationCapabilities === undefined
       ? {}
       : { operationCapabilities: options.operationCapabilities }),
-    packageRoot: options.packageRoot ?? process.cwd(),
-    packageVersion: options.packageVersion ?? packageJson.version,
-    randomToken: () => randomTokens.shift() ?? "generated-token",
-    readOwnerSetupStatus: async () => ({ setupComplete: options.setupComplete ?? false }),
-    setupCapability: {
-      create: async (input: { deploymentUrl: string }) => ({
-        capabilityCreated: true,
-        endpointUrl: new URL(
-          "/api/formless/setup/capability",
-          `${input.deploymentUrl}/`,
-        ).toString(),
-        setupComplete: false,
-      }),
-    },
+    readOwnerSetupStatus: async () => ({ setupComplete: false }),
   };
 }
 
@@ -1062,20 +621,6 @@ function timestampSequence(...timestamps: string[]): () => string {
     timestamps[index++ % timestamps.length] ?? timestamps.at(-1) ?? new Date(0).toISOString();
 }
 
-async function waitUntil(condition: () => Promise<boolean>, timeoutMs = 1000): Promise<void> {
-  const startedAt = Date.now();
-
-  while (Date.now() - startedAt < timeoutMs) {
-    if (await condition()) {
-      return;
-    }
-
-    await new Promise((resolve) => setTimeout(resolve, 10));
-  }
-
-  throw new Error("Timed out waiting for condition.");
-}
-
 async function makeTempDir(): Promise<string> {
   const tempDir = await mkdtemp(path.join(tmpdir(), "formless-workspace-gateway-test-"));
 
@@ -1091,138 +636,4 @@ async function writeWorkspaceManifest(workspaceRoot: string) {
     path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE),
     formatFormlessInstanceWorkspaceManifest(manifest),
   );
-}
-
-type CapturedRequest = {
-  body?: string;
-  headers: Record<string, string>;
-  method: string;
-  url: string;
-};
-
-function workspaceSaveFetch(requests: CapturedRequest[], installId: string): typeof fetch {
-  return async (url, init) => {
-    const requestUrl =
-      typeof url === "string" ? url : url instanceof URL ? url.toString() : url.url;
-    const parsedUrl = new URL(requestUrl);
-
-    requests.push({
-      body: typeof init?.body === "string" ? init.body : undefined,
-      headers: normalizeHeaders(init?.headers),
-      method: init?.method ?? "GET",
-      url: requestUrl,
-    });
-
-    if (parsedUrl.pathname === "/api/formless/app-installs") {
-      return Response.json({
-        installs: [installedSite(installId, "Site")],
-        packages: listInstallableAppPackages(bundledAppPackageResolver),
-      });
-    }
-
-    if (parsedUrl.pathname === "/api/formless/control-plane/snapshot") {
-      return Response.json(controlPlaneSnapshot(gatewayControlPlaneRecords(installId)));
-    }
-
-    if (parsedUrl.pathname === `/api/app-installs/site/${installId}/snapshot`) {
-      return Response.json(snapshot([], `app:${installId}`));
-    }
-
-    return Response.json({ error: "not found" }, { status: 404 });
-  };
-}
-
-function installedSite(installId: string, label: string) {
-  const facts = packageAppFactsForKey("site", bundledAppPackageResolver);
-
-  if (!facts) {
-    throw new Error("Missing bundled package facts for site.");
-  }
-
-  return {
-    adminRoute: `/apps/${installId}` as `/apps/${string}`,
-    createdAt: "2026-05-01T00:00:00.000Z",
-    installId,
-    label,
-    packageAppKey: "site" as const,
-    packageRevision: facts.packageRevision,
-    publicRoute: `/sites/${installId}` as `/sites/${string}`,
-    publicRoutePrefix: `/sites/${installId}/` as `/sites/${string}/`,
-    sourceSchemaHash: facts.sourceSchemaHash,
-    status: "installed" as const,
-    updatedAt: "2026-05-01T00:00:00.000Z",
-  };
-}
-
-function snapshot(
-  records: StoredRecord[],
-  storageIdentity: `app:${string}` = "app:david",
-): StorageSnapshot {
-  return {
-    exportedAt: "2026-05-12T02:00:00.000Z",
-    kind: STORAGE_SNAPSHOT_KIND,
-    records,
-    schema: siteSourceSchema,
-    schemaKey: "site",
-    schemaUpdatedAt: "2026-05-01T00:00:00.000Z",
-    sourceCursor: 1,
-    storageIdentity,
-    version: STORAGE_SNAPSHOT_VERSION,
-  };
-}
-
-function controlPlaneSnapshot(records: StoredRecord[]): StorageSnapshot {
-  return {
-    exportedAt: "2026-05-12T02:00:00.000Z",
-    kind: STORAGE_SNAPSHOT_KIND,
-    records,
-    schema: instanceControlPlaneSchema,
-    schemaKey: INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
-    schemaUpdatedAt: "2026-05-01T00:00:00.000Z",
-    sourceCursor: records.length,
-    storageIdentity: INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
-    version: STORAGE_SNAPSHOT_VERSION,
-  };
-}
-
-function gatewayControlPlaneRecords(installId: string): StoredRecord[] {
-  const now = "2026-05-26T00:00:00.000Z";
-
-  return [
-    {
-      createdAt: now,
-      updatedAt: now,
-      entity: "app-install",
-      id: installId,
-      values: {
-        createdAt: now,
-        installId,
-        label: "Site",
-        packageAppKey: "site",
-        status: "installed",
-        storageIdentity: `app:${installId}`,
-        updatedAt: now,
-      },
-    },
-    {
-      createdAt: now,
-      updatedAt: now,
-      entity: "route",
-      id: `route:${installId}:admin`,
-      values: {
-        appInstall: installId,
-        createdAt: now,
-        enabled: true,
-        kind: "mount",
-        matchPath: `/apps/${installId}`,
-        surface: "admin",
-        targetProfile: "app",
-        updatedAt: now,
-      },
-    },
-  ];
-}
-
-function normalizeHeaders(headers: HeadersInit | undefined): Record<string, string> {
-  return Object.fromEntries(new Headers(headers).entries());
 }
