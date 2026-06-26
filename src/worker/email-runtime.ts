@@ -1,7 +1,9 @@
 import type { StoredRecord } from "@dpeek/formless-storage";
 import {
   EMAIL_DELIVERY_SCHEDULE_API_PATH,
+  emailDeliverySendRuntimeJob,
   parseEmailDeliveryAddress,
+  parseEmailDeliverySendRuntimeJob,
   parseEmailDeliveryRenderedMessage,
   parseEmailDeliveryScheduleRequest,
   type EmailDeliveryAddress,
@@ -9,6 +11,7 @@ import {
   type EmailDeliveryRenderedMessage,
   type EmailDeliveryScheduleRequest,
   type EmailDeliveryScheduleResponse,
+  type EmailDeliverySendRuntimeJob,
   type EmailDeliverySender,
 } from "../shared/email-runtime.ts";
 import { nowIsoString } from "../shared/clock.ts";
@@ -20,10 +23,15 @@ import {
   createEmailDeliveryIfAbsent,
   markEmailDeliveryAccepted,
   markEmailDeliveryFailed,
+  markEmailDeliveryQueued,
   markEmailDeliverySending,
+  readEmailDeliveryById,
+  readEmailDeliveryQueueHandoff,
+  readEmailDeliveryRenderedMessageById,
 } from "./email-runtime-state.ts";
 
 export const INTERNAL_EMAIL_DELIVERY_SCHEDULE_PATH = "/_internal/email/deliveries/schedule";
+export const INTERNAL_EMAIL_DELIVERY_ATTEMPT_PATH = "/_internal/email/deliveries/attempt";
 
 type EmailRuntimeApiEnv = AuthorityAdminGuardEnv &
   DeploymentControlPlaneClientEnv & {
@@ -33,8 +41,13 @@ type EmailRuntimeApiEnv = AuthorityAdminGuardEnv &
 
 type DurableObjectEmailRuntimeEnv = AuthorityAdminGuardEnv &
   DeploymentControlPlaneClientEnv & {
+    FORMLESS_EMAIL_DELIVERY_QUEUE?: EmailDeliveryQueueBinding;
     FORMLESS_EMAIL?: CloudflareSendEmailBinding;
   };
+
+type EmailDeliveryQueueConsumerEnv = {
+  FORMLESS_AUTHORITY: DurableObjectNamespace;
+};
 
 export type CloudflareSendEmailAddress = string | { email: string; name: string };
 
@@ -51,16 +64,33 @@ export type CloudflareSendEmailBinding = {
   send(message: CloudflareSendEmailMessage): Promise<{ messageId: string }>;
 };
 
+export type EmailDeliveryQueueBinding = {
+  send(message: EmailDeliverySendRuntimeJob): Promise<unknown>;
+};
+
 export type ScheduleEmailDeliveryInput = {
   controlPlaneRecords: readonly StoredRecord[];
+  emailDeliveryQueue?: EmailDeliveryQueueBinding;
   now?: string;
   request: EmailDeliveryScheduleRequest;
-  sendEmail?: CloudflareSendEmailBinding;
   storage: DurableObjectStorage;
+  targetAuthorityName: string;
 };
 
 export type ScheduleEmailDeliveryResult = EmailDeliveryScheduleResponse & {
-  sent: boolean;
+  queued: boolean;
+};
+
+export type EmailDeliveryAttemptDisposition =
+  | "accepted"
+  | "already-accepted"
+  | "permanent-failure"
+  | "retry";
+
+export type EmailDeliveryAttemptResult = {
+  delivery?: EmailDeliveryRecord;
+  disposition: EmailDeliveryAttemptDisposition;
+  error?: string;
 };
 
 export async function handleInstanceEmailRuntimeApiRequest(
@@ -85,13 +115,25 @@ export async function handleInstanceEmailRuntimeDurableObjectRequest(
   const isSchedulePath =
     url.pathname === INTERNAL_EMAIL_DELIVERY_SCHEDULE_PATH ||
     url.pathname === EMAIL_DELIVERY_SCHEDULE_API_PATH;
+  const isAttemptPath = url.pathname === INTERNAL_EMAIL_DELIVERY_ATTEMPT_PATH;
 
-  if (!isSchedulePath) {
+  if (!isSchedulePath && !isAttemptPath) {
     return undefined;
   }
 
   if (request.method !== "POST") {
     return jsonResponse({ error: "Method not allowed." }, 405, { Allow: "POST" });
+  }
+
+  if (isAttemptPath) {
+    const job = parseEmailDeliverySendRuntimeJob(await readJson(request));
+    const result = await attemptEmailDelivery({
+      deliveryId: job.deliveryId,
+      sendEmail: env.FORMLESS_EMAIL,
+      storage,
+    });
+
+    return jsonResponse(result);
   }
 
   if (url.pathname !== INTERNAL_EMAIL_DELIVERY_SCHEDULE_PATH) {
@@ -115,9 +157,10 @@ export async function handleInstanceEmailRuntimeDurableObjectRequest(
       })) ?? [];
     const result = await scheduleEmailDelivery({
       controlPlaneRecords,
+      emailDeliveryQueue: env.FORMLESS_EMAIL_DELIVERY_QUEUE,
       request: scheduleRequest,
-      sendEmail: env.FORMLESS_EMAIL,
       storage,
+      targetAuthorityName: FORMLESS_INSTANCE_AUTHORITY_NAME,
     });
 
     return jsonResponse({
@@ -127,6 +170,24 @@ export async function handleInstanceEmailRuntimeDurableObjectRequest(
   } catch (error) {
     return jsonResponse({ error: displaySafeEmailError(error) }, 400);
   }
+}
+
+export async function handleInstanceEmailDeliveryQueueBatch(
+  batch: MessageBatch<unknown>,
+  env: EmailDeliveryQueueConsumerEnv,
+): Promise<void> {
+  await Promise.all(
+    batch.messages.map(async (message) => {
+      const disposition = await consumeEmailDeliveryQueueMessage(message.body, env);
+
+      if (disposition === "retry") {
+        message.retry();
+        return;
+      }
+
+      message.ack();
+    }),
+  );
 }
 
 export async function schedulePlatformEmailDelivery(input: {
@@ -169,13 +230,16 @@ export async function scheduleEmailDelivery(
     input.controlPlaneRecords,
     input.request.sender.id,
   );
-  const message = parseEmailDeliveryRenderedMessage(
-    "Email delivery rendered message",
-    input.request.message,
-  );
+  const request = {
+    ...input.request,
+    message: parseEmailDeliveryRenderedMessage(
+      "Email delivery rendered message",
+      input.request.message,
+    ),
+  };
   const ensured = createEmailDeliveryIfAbsent(input.storage, {
     now,
-    request: input.request,
+    request,
     sender,
   });
 
@@ -183,17 +247,110 @@ export async function scheduleEmailDelivery(
     return {
       delivery: ensured.delivery,
       replayed: ensured.replayed,
-      sent: false,
+      queued: false,
+    };
+  }
+
+  const existingHandoff = readEmailDeliveryQueueHandoff(input.storage, ensured.delivery.id);
+
+  if (existingHandoff) {
+    return {
+      delivery: ensured.delivery,
+      replayed: ensured.replayed,
+      queued: false,
+    };
+  }
+
+  const job = await enqueueEmailDeliverySendRuntimeJob({
+    delivery: ensured.delivery,
+    enqueuedAt: now,
+    queue: input.emailDeliveryQueue,
+    targetAuthorityName: input.targetAuthorityName,
+  });
+
+  markEmailDeliveryQueued(input.storage, {
+    deliveryId: ensured.delivery.id,
+    enqueuedAt: job.enqueuedAt,
+    jobId: job.jobId,
+  });
+
+  return {
+    delivery: ensured.delivery,
+    replayed: ensured.replayed,
+    queued: true,
+  };
+}
+
+export async function enqueueEmailDeliverySendRuntimeJob(input: {
+  delivery: EmailDeliveryRecord;
+  enqueuedAt: string;
+  queue?: EmailDeliveryQueueBinding;
+  targetAuthorityName: string;
+}): Promise<EmailDeliverySendRuntimeJob> {
+  if (!input.queue) {
+    throw new DisplaySafeEmailRuntimeError("Email delivery queue is not configured.");
+  }
+
+  const job = emailDeliverySendRuntimeJob({
+    deliveryId: input.delivery.id,
+    enqueuedAt: input.enqueuedAt,
+    idempotencyKey: input.delivery.idempotencyKey,
+    targetAuthorityName: input.targetAuthorityName,
+  });
+
+  try {
+    await input.queue.send(job);
+  } catch {
+    throw new DisplaySafeEmailRuntimeError("Email delivery queue handoff failed.");
+  }
+
+  return job;
+}
+
+export async function attemptEmailDelivery(input: {
+  deliveryId: string;
+  now?: string;
+  sendEmail?: CloudflareSendEmailBinding;
+  storage: DurableObjectStorage;
+}): Promise<EmailDeliveryAttemptResult> {
+  const delivery = readEmailDeliveryById(input.storage, input.deliveryId);
+
+  if (!delivery) {
+    return {
+      disposition: "permanent-failure",
+      error: "Email delivery record was not found.",
+    };
+  }
+
+  if (delivery.status === "accepted") {
+    return {
+      delivery,
+      disposition: "already-accepted",
+    };
+  }
+
+  const message = readEmailDeliveryRenderedMessageById(input.storage, delivery.id);
+  const now = input.now ?? nowIsoString();
+
+  if (!message) {
+    return {
+      delivery: markEmailDeliveryFailed(input.storage, {
+        deliveryId: delivery.id,
+        latestError: "Email delivery message state was not found.",
+        now,
+      }),
+      disposition: "permanent-failure",
+      error: "Email delivery message state was not found.",
     };
   }
 
   const sending = markEmailDeliverySending(input.storage, {
-    deliveryId: ensured.delivery.id,
+    deliveryId: delivery.id,
     now,
   });
 
   try {
-    const providerResult = await sendCloudflareEmailDelivery({
+    const accepted = await sendCloudflareEmailDelivery({
       delivery: sending,
       message,
       sendEmail: input.sendEmail,
@@ -201,22 +358,24 @@ export async function scheduleEmailDelivery(
 
     return {
       delivery: markEmailDeliveryAccepted(input.storage, {
-        deliveryId: sending.id,
+        deliveryId: delivery.id,
         now,
-        providerMessageId: providerResult.messageId,
+        providerMessageId: accepted.messageId,
       }),
-      replayed: ensured.replayed,
-      sent: true,
+      disposition: "accepted",
     };
   } catch (error) {
+    const failure = displaySafeEmailAttemptFailure(error);
+    const failed = markEmailDeliveryFailed(input.storage, {
+      deliveryId: delivery.id,
+      latestError: failure.message,
+      now,
+    });
+
     return {
-      delivery: markEmailDeliveryFailed(input.storage, {
-        deliveryId: sending.id,
-        latestError: displaySafeEmailError(error),
-        now,
-      }),
-      replayed: ensured.replayed,
-      sent: false,
+      delivery: failed,
+      disposition: failure.retryable ? "retry" : "permanent-failure",
+      error: failure.message,
     };
   }
 }
@@ -299,8 +458,59 @@ export async function sendCloudflareEmailDelivery(input: {
       throw error;
     }
 
-    throw new DisplaySafeEmailRuntimeError("Email provider delivery failed.");
+    throw new DisplaySafeEmailRuntimeError("Email provider delivery failed.", {
+      retryable: true,
+    });
   }
+}
+
+async function consumeEmailDeliveryQueueMessage(
+  body: unknown,
+  env: EmailDeliveryQueueConsumerEnv,
+): Promise<"ack" | "retry"> {
+  let job: EmailDeliverySendRuntimeJob;
+
+  try {
+    job = parseEmailDeliverySendRuntimeJob(body);
+  } catch {
+    return "ack";
+  }
+
+  try {
+    const result = await requestEmailDeliveryAttempt({
+      env,
+      job,
+    });
+
+    return result.disposition === "retry" ? "retry" : "ack";
+  } catch {
+    return "retry";
+  }
+}
+
+async function requestEmailDeliveryAttempt(input: {
+  env: EmailDeliveryQueueConsumerEnv;
+  job: EmailDeliverySendRuntimeJob;
+}): Promise<EmailDeliveryAttemptResult> {
+  const id = input.env.FORMLESS_AUTHORITY.idFromName(input.job.targetAuthorityName);
+  const response = await input.env.FORMLESS_AUTHORITY.get(id).fetch(
+    new Request(new URL(INTERNAL_EMAIL_DELIVERY_ATTEMPT_PATH, "https://formless.internal"), {
+      body: JSON.stringify(input.job),
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      method: "POST",
+    }),
+  );
+  const body = await readJsonResponse(response);
+  const result = parseEmailDeliveryAttemptResult(body);
+
+  if (!response.ok || !result) {
+    throw new Error("Email delivery attempt request failed.");
+  }
+
+  return result;
 }
 
 function activeControlPlaneRecord(
@@ -327,6 +537,42 @@ function displaySafeEmailError(error: unknown): string {
   return "Email delivery failed.";
 }
 
+function displaySafeEmailAttemptFailure(error: unknown): {
+  message: string;
+  retryable: boolean;
+} {
+  if (error instanceof DisplaySafeEmailRuntimeError) {
+    return {
+      message: error.message,
+      retryable: error.retryable,
+    };
+  }
+
+  return {
+    message: "Email delivery failed.",
+    retryable: true,
+  };
+}
+
+function parseEmailDeliveryAttemptResult(value: unknown): EmailDeliveryAttemptResult | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  if (
+    value.disposition !== "accepted" &&
+    value.disposition !== "already-accepted" &&
+    value.disposition !== "permanent-failure" &&
+    value.disposition !== "retry"
+  ) {
+    return undefined;
+  }
+
+  return {
+    disposition: value.disposition,
+  };
+}
+
 function optionalRecordString(key: string, value: unknown): { [key: string]: string } | object {
   const parsed = stringRecordValue(value);
 
@@ -345,6 +591,14 @@ async function readJson(request: Request): Promise<unknown> {
   }
 }
 
+async function readJsonResponse(response: Response): Promise<unknown> {
+  try {
+    return await response.json();
+  } catch {
+    return undefined;
+  }
+}
+
 function jsonResponse(body: unknown, status = 200, headers: HeadersInit = {}) {
   const responseHeaders = new Headers(headers);
 
@@ -360,4 +614,15 @@ function jsonResponse(body: unknown, status = 200, headers: HeadersInit = {}) {
   });
 }
 
-class DisplaySafeEmailRuntimeError extends Error {}
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+class DisplaySafeEmailRuntimeError extends Error {
+  readonly retryable: boolean;
+
+  constructor(message: string, options: { retryable?: boolean } = {}) {
+    super(message);
+    this.retryable = options.retryable === true;
+  }
+}

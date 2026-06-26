@@ -51,6 +51,7 @@ import {
 } from "./instance-onboarding.ts";
 
 const setupToken = "abcDEF0123456789_-abcDEF0123456789_-";
+type CreateQueue = NonNullable<AlchemyFormlessInstanceDeploymentDependencies["createQueue"]>;
 
 describe("Formless instance onboarding planner", () => {
   it("plans deterministic workers.dev resources from a normalized instance name", () => {
@@ -91,6 +92,12 @@ describe("Formless instance onboarding planner", () => {
         mediaBucket: {
           bindingName: "FORMLESS_MEDIA",
           name: "brothers-remote-instance-media",
+        },
+        emailDeliveryQueue: {
+          bindingName: "FORMLESS_EMAIL_DELIVERY_QUEUE",
+          consumerMaxRetries: 3,
+          deadLetterQueueName: "brothers-remote-instance-email-delivery-dlq",
+          name: "brothers-remote-instance-email-delivery",
         },
         worker: {
           name: "brothers-remote-instance",
@@ -139,6 +146,12 @@ describe("Formless instance onboarding planner", () => {
     expect(plan.instanceName).toBe("formless");
     expect(plan.resources.worker.name).toBe("formless");
     expect(plan.resources.mediaBucket.name).toBe("formless-media");
+    expect(plan.resources.emailDeliveryQueue).toEqual({
+      bindingName: "FORMLESS_EMAIL_DELIVERY_QUEUE",
+      consumerMaxRetries: 3,
+      deadLetterQueueName: "formless-email-delivery-dlq",
+      name: "formless-email-delivery",
+    });
     expect(plan.expectedUrl.url).toBe("https://formless.dpeek.workers.dev");
   });
 
@@ -861,6 +874,12 @@ describe("Alchemy Formless instance deployment", () => {
       id: string;
       props: unknown;
     }> = [];
+    const deploymentEvents: string[] = [];
+    const queues: Array<{
+      id: string;
+      output: Awaited<ReturnType<CreateQueue>>;
+      props: unknown;
+    }> = [];
     const secrets: string[] = [];
     const turnstiles: Array<{
       id: string;
@@ -888,6 +907,13 @@ describe("Alchemy Formless instance deployment", () => {
         namespaces.push({ id, props });
         return authorityNamespace;
       },
+      createQueue: async (id, props) => {
+        deploymentEvents.push(id);
+        const output = fakeQueue(id, props);
+        queues.push({ id, output, props });
+
+        return output;
+      },
       createR2Bucket: async (id, props) => {
         buckets.push({ id, props });
         return mediaBucket;
@@ -906,6 +932,7 @@ describe("Alchemy Formless instance deployment", () => {
         });
       },
       deployViteWorker: async (id, props) => {
+        deploymentEvents.push("worker");
         workers.push({ id, props });
         return { url: props.name ? "https://brother-instance.dpeek.workers.dev" : null };
       },
@@ -944,6 +971,7 @@ describe("Alchemy Formless instance deployment", () => {
     );
 
     expect(result).toEqual({ url: "https://brother-instance.dpeek.workers.dev" });
+    expect(deploymentEvents).toEqual(["email-delivery-dlq", "email-delivery", "worker"]);
     expect(apps).toEqual([
       {
         name: "formless-instance",
@@ -975,6 +1003,28 @@ describe("Alchemy Formless instance deployment", () => {
         props: {
           className: "FormlessAuthority",
           sqlite: true,
+        },
+      },
+    ]);
+    expect(queues).toEqual([
+      {
+        id: "email-delivery-dlq",
+        output: queues[0]?.output,
+        props: {
+          accountId: "account-123",
+          adopt: false,
+          name: "brother-instance-email-delivery-dlq",
+          profile: "personal",
+        },
+      },
+      {
+        id: "email-delivery",
+        output: queues[1]?.output,
+        props: {
+          accountId: "account-123",
+          adopt: false,
+          name: "brother-instance-email-delivery",
+          profile: "personal",
         },
       },
     ]);
@@ -1012,6 +1062,7 @@ describe("Alchemy Formless instance deployment", () => {
             FORMLESS_DOMAIN_PROVIDER_INSTANCE_ID: "brother-instance",
             FORMLESS_DOMAIN_PROVIDER_WORKER_NAME: "brother-instance",
             FORMLESS_INSTANCE_AUTH_ORIGIN: "https://brother-instance.dpeek.workers.dev",
+            FORMLESS_EMAIL_DELIVERY_QUEUE: queues[1]?.output,
             FORMLESS_MEDIA: mediaBucket,
             FORMLESS_RUNTIME_PROFILE: "instance",
             FORMLESS_TURNSTILE_SECRET_KEY: turnstileSecret,
@@ -1046,6 +1097,15 @@ describe("Alchemy Formless instance deployment", () => {
           compatibilityDate: FORMLESS_WORKER_COMPATIBILITY_DATE,
           cwd: "/package",
           entrypoint: "src/worker/index.ts",
+          eventSources: [
+            {
+              queue: queues[1]?.output,
+              settings: {
+                deadLetterQueue: queues[0]?.output,
+                maxRetries: 3,
+              },
+            },
+          ],
           name: "brother-instance",
           previewSubdomains: false,
           profile: "personal",
@@ -1053,6 +1113,7 @@ describe("Alchemy Formless instance deployment", () => {
         },
       },
     ]);
+    expect(workers[0]?.props.build.env).not.toHaveProperty("FORMLESS_EMAIL_DELIVERY_QUEUE");
     expect(finalized).toBe(1);
   });
 
@@ -1061,6 +1122,11 @@ describe("Alchemy Formless instance deployment", () => {
     const cloudflareApiCalls: Array<{ options: unknown; paths: string[] }> = [];
     const events: string[] = [];
     const routeResourceCalls: Array<{ id: string; kind: string; props: unknown }> = [];
+    const queueCalls: Array<{
+      id: string;
+      output: Awaited<ReturnType<CreateQueue>>;
+      props: unknown;
+    }> = [];
     const secrets: string[] = [];
     const turnstileCalls: Array<{ id: string; props: unknown }> = [];
     const workerCalls: Array<{ id: string; props: AlchemyFormlessInstanceDeploymentWorkerProps }> =
@@ -1114,6 +1180,12 @@ describe("Alchemy Formless instance deployment", () => {
         events.push("durable-object");
 
         return { type: "durable-object-namespace" };
+      },
+      createQueue: async (id, props) => {
+        const output = fakeQueue(id, props);
+        queueCalls.push({ id, output, props });
+
+        return output;
       },
       createDnsRecords: async (id, props) => {
         events.push("dns-records");
@@ -1293,6 +1365,28 @@ describe("Alchemy Formless instance deployment", () => {
         },
       },
     ]);
+    expect(queueCalls).toEqual([
+      {
+        id: "email-delivery-dlq",
+        output: queueCalls[0]?.output,
+        props: {
+          accountId: "account-123",
+          adopt: false,
+          apiToken: { index: 1, type: "secret" },
+          name: "brother-instance-email-delivery-dlq",
+        },
+      },
+      {
+        id: "email-delivery",
+        output: queueCalls[1]?.output,
+        props: {
+          accountId: "account-123",
+          adopt: false,
+          apiToken: { index: 1, type: "secret" },
+          name: "brother-instance-email-delivery",
+        },
+      },
+    ]);
     expect(workerCalls[0]?.props).toMatchObject({
       accountId: "account-123",
       apiToken: { index: 1, type: "secret" },
@@ -1305,8 +1399,18 @@ describe("Alchemy Formless instance deployment", () => {
         CLOUDFLARE_API_TOKEN: { index: 1, type: "secret" },
         FORMLESS_ADMIN_TOKEN: { index: 3, type: "secret" },
         FORMLESS_AUTHORITY: { type: "durable-object-namespace" },
+        FORMLESS_EMAIL_DELIVERY_QUEUE: queueCalls[1]?.output,
         FORMLESS_MEDIA: { type: "r2-bucket" },
       },
+      eventSources: [
+        {
+          queue: queueCalls[1]?.output,
+          settings: {
+            deadLetterQueue: queueCalls[0]?.output,
+            maxRetries: 3,
+          },
+        },
+      ],
       name: "brother-instance",
     });
     expect(dnsCall?.props).toMatchObject({
@@ -1361,6 +1465,7 @@ describe("Alchemy Formless instance deployment", () => {
     expect(result.resourceEvidence).toHaveLength(3);
     expect(JSON.stringify(bucketCalls)).not.toContain("cf-token");
     expect(JSON.stringify(cloudflareApiCalls)).not.toContain("cf-token");
+    expect(JSON.stringify(queueCalls)).not.toContain("cf-token");
     expect(JSON.stringify(result)).not.toContain("cf-token");
     expect(JSON.stringify(routeResourceCalls)).not.toContain("cf-token");
     expect(JSON.stringify(turnstileCalls)).not.toContain("cf-token");
@@ -1421,6 +1526,7 @@ describe("Alchemy Formless instance deployment", () => {
 
         return { type: "durable-object-namespace" };
       },
+      createQueue: async (id, props) => fakeQueue(id, props),
       createEmailSenderBinding: async (id, props) => {
         events.push("email-binding");
         emailResourceCalls.push({ id, kind: "SendEmailBinding", props });
@@ -1652,6 +1758,7 @@ describe("Alchemy Formless instance deployment", () => {
       createDnsRecords: async () => {
         throw new Error("DNS records are outside this test.");
       },
+      createQueue: async (id, props) => fakeQueue(id, props),
       createR2Bucket: async (_id, props) => {
         buckets.push({ props });
         return {};
@@ -1742,6 +1849,7 @@ describe("Alchemy Formless instance deployment", () => {
   it("declares the same core Alchemy resource tree for deploy and destroy", async () => {
     type CapturedResourceTree = {
       authority?: unknown;
+      emailDeliveryQueues?: unknown[];
       media?: unknown;
       turnstile?: unknown;
       worker?: unknown;
@@ -1764,6 +1872,11 @@ describe("Alchemy Formless instance deployment", () => {
           tree.authority = { id, props };
 
           return { type: "durable-object-namespace" };
+        },
+        createQueue: async (id, props) => {
+          tree.emailDeliveryQueues = [...(tree.emailDeliveryQueues ?? []), { id, props }];
+
+          return fakeQueue(id, props);
         },
         createR2Bucket: async (id, props) => {
           tree.media = { id, props };
@@ -1892,6 +2005,12 @@ describe("Alchemy Formless instance deployment", () => {
         namespaces.push({ props });
 
         return { type: "durable-object-namespace" };
+      },
+      createQueue: async (id, props) => {
+        captureProviderCredentialEnv();
+        events.push(id);
+
+        return fakeQueue(id, props);
       },
       createDnsRecords: async (id, props) => {
         captureProviderCredentialEnv();
@@ -2157,6 +2276,8 @@ describe("Alchemy Formless instance deployment", () => {
       "r2",
       "durable-object",
       "turnstile",
+      "email-delivery-dlq",
+      "email-delivery",
       "worker",
       "custom-domain",
       "custom-domain",
@@ -2481,6 +2602,24 @@ describe("Formless instance state", () => {
     ).toThrow("formless.instance.json workersDevUrl must be a workers.dev origin URL.");
   });
 });
+
+function fakeQueue(
+  id: Parameters<CreateQueue>[0],
+  props: Parameters<CreateQueue>[1],
+): Awaited<ReturnType<CreateQueue>> {
+  return {
+    accountId: props.accountId,
+    createdOn: "2026-06-26T00:00:00.000Z",
+    dev: {
+      id,
+      remote: false,
+    },
+    id: `${id}-queue-id`,
+    modifiedOn: "2026-06-26T00:00:00.000Z",
+    name: props.name,
+    type: "queue",
+  } as Awaited<ReturnType<CreateQueue>>;
+}
 
 function fakeTurnstileWidgetOutput(
   input: {

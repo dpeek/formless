@@ -53,6 +53,9 @@ describe("public Site SSR characterization", () => {
     expect(wrangler).toContain('"!/site/*"');
     expect(wrangler).toContain('"!/assets/*"');
     expect(wrangler).toContain('"!/src/*"');
+    expect(wrangler).toContain('"binding": "FORMLESS_EMAIL_DELIVERY_QUEUE"');
+    expect(wrangler).toContain('"queue": "formless-email-delivery"');
+    expect(wrangler).toContain('"dead_letter_queue": "formless-email-delivery-dlq"');
     expect(wrangler).not.toContain('"!/favicon.svg"');
     expect(wrangler).not.toContain('"!/favicon.ico"');
     expect(wrangler).not.toContain('"!/apple-touch-icon.png"');

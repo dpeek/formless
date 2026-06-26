@@ -4,6 +4,7 @@ import {
   parseEmailDeliveryAddress,
   type EmailDeliveryAddress,
   type EmailDeliveryRecord,
+  type EmailDeliveryRenderedMessage,
   type EmailDeliveryScheduleRequest,
   type EmailDeliverySender,
   type EmailDeliveryStatus,
@@ -35,6 +36,20 @@ type EmailDeliveryRow = {
   updated_at: string;
 };
 
+type EmailDeliveryMessageRow = {
+  delivery_id: string;
+  html_body: string | null;
+  subject: string;
+  text_body: string;
+  updated_at: string;
+};
+
+type EmailDeliveryQueueHandoffRow = {
+  delivery_id: string;
+  enqueued_at: string;
+  job_id: string;
+};
+
 export type CreateEmailDeliveryInput = {
   now: string;
   request: EmailDeliveryScheduleRequest;
@@ -44,6 +59,12 @@ export type CreateEmailDeliveryInput = {
 export type CreateEmailDeliveryResult = {
   delivery: EmailDeliveryRecord;
   replayed: boolean;
+};
+
+export type EmailDeliveryQueueHandoff = {
+  deliveryId: string;
+  jobId: string;
+  enqueuedAt: string;
 };
 
 export const emailDeliveryTableSql = `
@@ -75,11 +96,33 @@ export const emailDeliveryTableSql = `
   )
 `;
 
+const emailDeliveryMessageTableSql = `
+  CREATE TABLE IF NOT EXISTS instance_email_delivery_messages (
+    delivery_id TEXT PRIMARY KEY,
+    subject TEXT NOT NULL,
+    text_body TEXT NOT NULL,
+    html_body TEXT,
+    updated_at TEXT NOT NULL
+  )
+`;
+
+const emailDeliveryQueueHandoffTableSql = `
+  CREATE TABLE IF NOT EXISTS instance_email_delivery_queue_handoffs (
+    delivery_id TEXT PRIMARY KEY,
+    job_id TEXT NOT NULL,
+    enqueued_at TEXT NOT NULL
+  )
+`;
+
 export function ensureEmailDeliveryTables(storage: DurableObjectStorage) {
   storage.sql.exec(emailDeliveryTableSql);
+  storage.sql.exec(emailDeliveryMessageTableSql);
+  storage.sql.exec(emailDeliveryQueueHandoffTableSql);
 }
 
 export function resetEmailDeliveryStorage(storage: DurableObjectStorage) {
+  storage.sql.exec("DROP TABLE IF EXISTS instance_email_delivery_queue_handoffs");
+  storage.sql.exec("DROP TABLE IF EXISTS instance_email_delivery_messages");
   storage.sql.exec("DROP TABLE IF EXISTS instance_email_deliveries");
 }
 
@@ -101,46 +144,65 @@ export function createEmailDeliveryIfAbsent(
 
   const deliveryId = `email_delivery_${crypto.randomUUID()}`;
 
-  storage.sql.exec(
-    `
-      INSERT INTO instance_email_deliveries (
-        delivery_id,
-        idempotency_scope,
-        message_kind,
-        source_storage_identity,
-        source_operation_id,
-        source_record_id,
-        idempotency_key,
-        sender_id,
-        sender_address,
-        sender_display_name,
-        recipients_json,
-        reply_to_json,
-        canonical_origin,
-        status,
-        provider_family,
-        attempt_count,
-        created_at,
-        updated_at
-      )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'cloudflare', 0, ?, ?)
-    `,
-    deliveryId,
-    idempotencyScope,
-    input.request.messageKind,
-    input.request.source.storageIdentity,
-    input.request.source.operationId ?? null,
-    input.request.source.recordId ?? null,
-    input.request.idempotencyKey,
-    input.sender.id,
-    input.sender.address,
-    input.sender.displayName ?? null,
-    JSON.stringify(input.request.recipients),
-    input.request.replyTo === undefined ? null : JSON.stringify(input.request.replyTo),
-    input.request.canonicalOrigin,
-    input.now,
-    input.now,
-  );
+  storage.transactionSync(() => {
+    storage.sql.exec(
+      `
+        INSERT INTO instance_email_deliveries (
+          delivery_id,
+          idempotency_scope,
+          message_kind,
+          source_storage_identity,
+          source_operation_id,
+          source_record_id,
+          idempotency_key,
+          sender_id,
+          sender_address,
+          sender_display_name,
+          recipients_json,
+          reply_to_json,
+          canonical_origin,
+          status,
+          provider_family,
+          attempt_count,
+          created_at,
+          updated_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'cloudflare', 0, ?, ?)
+      `,
+      deliveryId,
+      idempotencyScope,
+      input.request.messageKind,
+      input.request.source.storageIdentity,
+      input.request.source.operationId ?? null,
+      input.request.source.recordId ?? null,
+      input.request.idempotencyKey,
+      input.sender.id,
+      input.sender.address,
+      input.sender.displayName ?? null,
+      JSON.stringify(input.request.recipients),
+      input.request.replyTo === undefined ? null : JSON.stringify(input.request.replyTo),
+      input.request.canonicalOrigin,
+      input.now,
+      input.now,
+    );
+    storage.sql.exec(
+      `
+        INSERT INTO instance_email_delivery_messages (
+          delivery_id,
+          subject,
+          text_body,
+          html_body,
+          updated_at
+        )
+        VALUES (?, ?, ?, ?, ?)
+      `,
+      deliveryId,
+      input.request.message.subject,
+      input.request.message.text,
+      input.request.message.html ?? null,
+      input.now,
+    );
+  });
 
   const delivery = readEmailDeliveryById(storage, deliveryId);
 
@@ -152,6 +214,89 @@ export function createEmailDeliveryIfAbsent(
     delivery,
     replayed: false,
   };
+}
+
+export function readEmailDeliveryRenderedMessageById(
+  storage: DurableObjectStorage,
+  deliveryId: string,
+): EmailDeliveryRenderedMessage | undefined {
+  ensureEmailDeliveryTables(storage);
+
+  const row = storage.sql
+    .exec<EmailDeliveryMessageRow>(
+      `
+        SELECT *
+        FROM instance_email_delivery_messages
+        WHERE delivery_id = ?
+      `,
+      deliveryId,
+    )
+    .toArray()[0];
+
+  return row === undefined
+    ? undefined
+    : {
+        subject: row.subject,
+        text: row.text_body,
+        ...(row.html_body === null ? {} : { html: row.html_body }),
+      };
+}
+
+export function readEmailDeliveryQueueHandoff(
+  storage: DurableObjectStorage,
+  deliveryId: string,
+): EmailDeliveryQueueHandoff | undefined {
+  ensureEmailDeliveryTables(storage);
+
+  const row = storage.sql
+    .exec<EmailDeliveryQueueHandoffRow>(
+      `
+        SELECT *
+        FROM instance_email_delivery_queue_handoffs
+        WHERE delivery_id = ?
+      `,
+      deliveryId,
+    )
+    .toArray()[0];
+
+  return row === undefined
+    ? undefined
+    : {
+        deliveryId: row.delivery_id,
+        jobId: row.job_id,
+        enqueuedAt: row.enqueued_at,
+      };
+}
+
+export function markEmailDeliveryQueued(
+  storage: DurableObjectStorage,
+  input: { deliveryId: string; enqueuedAt: string; jobId: string },
+): EmailDeliveryQueueHandoff {
+  ensureEmailDeliveryTables(storage);
+  storage.sql.exec(
+    `
+      INSERT INTO instance_email_delivery_queue_handoffs (
+        delivery_id,
+        job_id,
+        enqueued_at
+      )
+      VALUES (?, ?, ?)
+      ON CONFLICT(delivery_id) DO UPDATE SET
+        job_id = excluded.job_id,
+        enqueued_at = excluded.enqueued_at
+    `,
+    input.deliveryId,
+    input.jobId,
+    input.enqueuedAt,
+  );
+
+  const handoff = readEmailDeliveryQueueHandoff(storage, input.deliveryId);
+
+  if (!handoff) {
+    throw new Error(`Could not read email delivery queue handoff "${input.deliveryId}".`);
+  }
+
+  return handoff;
 }
 
 export function markEmailDeliverySending(
@@ -166,6 +311,7 @@ export function markEmailDeliverySending(
         status = 'sending',
         attempt_count = attempt_count + 1,
         latest_error = NULL,
+        failed_at = NULL,
         first_attempted_at = COALESCE(first_attempted_at, ?),
         latest_attempted_at = ?,
         updated_at = ?
@@ -193,6 +339,7 @@ export function markEmailDeliveryAccepted(
         provider_message_id = ?,
         latest_error = NULL,
         accepted_at = ?,
+        failed_at = NULL,
         updated_at = ?
       WHERE delivery_id = ?
     `,

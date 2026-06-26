@@ -1,6 +1,8 @@
 export const EMAIL_RUNTIME_API_ROUTE_PREFIX = "/api/formless/email";
 export const EMAIL_DELIVERY_SCHEDULE_API_PATH =
   `${EMAIL_RUNTIME_API_ROUTE_PREFIX}/deliveries/schedule` as const;
+export const EMAIL_DELIVERY_SEND_RUNTIME_JOB_KIND = "email.delivery.send";
+export const EMAIL_DELIVERY_SEND_RUNTIME_JOB_SCHEMA_VERSION = 1;
 
 export type EmailDeliveryStatus = "accepted" | "failed" | "pending" | "sending";
 
@@ -74,6 +76,16 @@ export type EmailDeliveryScheduleResponse = {
   replayed: boolean;
 };
 
+export type EmailDeliverySendRuntimeJob = {
+  schemaVersion: typeof EMAIL_DELIVERY_SEND_RUNTIME_JOB_SCHEMA_VERSION;
+  kind: typeof EMAIL_DELIVERY_SEND_RUNTIME_JOB_KIND;
+  jobId: string;
+  idempotencyKey: string;
+  enqueuedAt: string;
+  targetAuthorityName: string;
+  deliveryId: string;
+};
+
 export type EmailMessageRenderInput<Kind extends string = string, Facts = unknown> = {
   canonicalOrigin: string;
   facts: Facts;
@@ -87,6 +99,7 @@ export type EmailMessageRenderer<Kind extends string = string, Facts = unknown> 
 export type EmailMessageRendererRegistry = Readonly<Record<string, EmailMessageRenderer>>;
 
 const idLikePattern = /^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,255}$/;
+const runtimeJobTargetPattern = /^[A-Za-z0-9_][A-Za-z0-9._:@/-]{0,255}$/;
 const emailHostPattern = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$/;
 const allowedAddressLocalPattern = /^[^\s@<>()[\]\\,;:"']+$/;
 
@@ -116,6 +129,76 @@ export function parseEmailDeliveryScheduleRequest(value: unknown): EmailDelivery
     canonicalOrigin: parseEmailDeliveryCanonicalOrigin(value.canonicalOrigin),
     message: parseEmailDeliveryRenderedMessage("Email delivery message", value.message),
   };
+}
+
+export function emailDeliverySendRuntimeJob(
+  input: Pick<
+    EmailDeliverySendRuntimeJob,
+    "deliveryId" | "enqueuedAt" | "idempotencyKey" | "targetAuthorityName"
+  >,
+): EmailDeliverySendRuntimeJob {
+  return parseEmailDeliverySendRuntimeJob({
+    schemaVersion: EMAIL_DELIVERY_SEND_RUNTIME_JOB_SCHEMA_VERSION,
+    kind: EMAIL_DELIVERY_SEND_RUNTIME_JOB_KIND,
+    jobId: emailDeliverySendRuntimeJobId(input.deliveryId),
+    idempotencyKey: input.idempotencyKey,
+    enqueuedAt: input.enqueuedAt,
+    targetAuthorityName: input.targetAuthorityName,
+    deliveryId: input.deliveryId,
+  });
+}
+
+export function parseEmailDeliverySendRuntimeJob(value: unknown): EmailDeliverySendRuntimeJob {
+  if (!isRecord(value)) {
+    throw new Error("Email delivery send runtime job must be an object.");
+  }
+
+  assertAllowedKeys("Email delivery send runtime job", value, [
+    "deliveryId",
+    "enqueuedAt",
+    "idempotencyKey",
+    "jobId",
+    "kind",
+    "schemaVersion",
+    "targetAuthorityName",
+  ]);
+
+  if (value.schemaVersion !== EMAIL_DELIVERY_SEND_RUNTIME_JOB_SCHEMA_VERSION) {
+    throw new Error("Email delivery send runtime job schemaVersion is unsupported.");
+  }
+
+  if (value.kind !== EMAIL_DELIVERY_SEND_RUNTIME_JOB_KIND) {
+    throw new Error("Email delivery send runtime job kind is unsupported.");
+  }
+
+  return {
+    schemaVersion: EMAIL_DELIVERY_SEND_RUNTIME_JOB_SCHEMA_VERSION,
+    kind: EMAIL_DELIVERY_SEND_RUNTIME_JOB_KIND,
+    jobId: parseEmailRuntimeId("Email delivery send runtime job id", value.jobId),
+    idempotencyKey: parseEmailRuntimeId(
+      "Email delivery send runtime job idempotency key",
+      value.idempotencyKey,
+    ),
+    enqueuedAt: parseEmailRuntimeTimestamp(
+      "Email delivery send runtime job enqueue timestamp",
+      value.enqueuedAt,
+    ),
+    targetAuthorityName: parseEmailRuntimeTargetName(
+      "Email delivery send runtime job target authority name",
+      value.targetAuthorityName,
+    ),
+    deliveryId: parseEmailRuntimeId(
+      "Email delivery send runtime job delivery id",
+      value.deliveryId,
+    ),
+  };
+}
+
+export function emailDeliverySendRuntimeJobId(deliveryId: string): string {
+  return `email.delivery.send:${parseEmailRuntimeId(
+    "Email delivery send runtime job delivery id",
+    deliveryId,
+  )}`;
 }
 
 export function parseEmailDeliveryAddress(context: string, value: unknown): EmailDeliveryAddress {
@@ -275,6 +358,27 @@ function parseEmailRuntimeId(context: string, value: unknown): string {
   }
 
   return text;
+}
+
+function parseEmailRuntimeTargetName(context: string, value: unknown): string {
+  const text = parseDisplaySafeText(context, value, 256);
+
+  if (!runtimeJobTargetPattern.test(text)) {
+    throw new Error(`${context} is invalid.`);
+  }
+
+  return text;
+}
+
+function parseEmailRuntimeTimestamp(context: string, value: unknown): string {
+  const text = parseDisplaySafeText(context, value, 64);
+  const date = new Date(text);
+
+  if (Number.isNaN(date.getTime())) {
+    throw new Error(`${context} must be a valid timestamp.`);
+  }
+
+  return date.toISOString();
 }
 
 function optionalEmailRuntimeId(context: string, value: unknown): string | undefined {

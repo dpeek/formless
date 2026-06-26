@@ -3,10 +3,10 @@
 ## Purpose
 
 Email runtime owns instance-scoped outbound email configuration, Cloudflare
-Email Service deployment intent, and delivery status records. It gives Site
-contact notifications one platform email primitive without making the Site app
-own provider setup, provider-owned DNS authentication, sender validation, or
-delivery evidence.
+Email Service deployment intent, queue-backed delivery handoff, and delivery
+status records. It gives Site contact notifications one platform email
+primitive without making the Site app own provider setup, provider-owned DNS
+authentication, sender validation, or delivery evidence.
 
 ## Requirements
 
@@ -124,6 +124,10 @@ app-specific provider calls.
   storage identity, source operation or record id, idempotency key, sender,
   recipients, reply-to address, canonical origin, status, provider message id,
   latest display-safe error, and timestamps
+- AND rendered subject, text, and HTML bodies are stored only in internal
+  delivery state needed by the delivery attempt runtime
+- AND public delivery records, snapshots, archives, public operation responses,
+  and app records do not expose rendered provider message bodies
 - AND it stores no raw provider credentials, OAuth tokens, Alchemy state,
   Turnstile proof values, or private challenge material
 
@@ -135,6 +139,44 @@ app-specific provider calls.
 - THEN the runtime returns or advances the existing delivery record
 - AND it does not send duplicate email for an already accepted provider
   delivery
+- AND duplicate queue messages for an already accepted delivery no-op without
+  calling the provider again
+
+#### Scenario: Queue-backed delivery handoff
+
+- GIVEN runtime code schedules an email delivery
+- WHEN sender configuration and rendered message content are valid
+- THEN the instance Authority creates or reuses the `email-delivery` record by
+  idempotency scope
+- AND the Authority enqueues one `email.delivery.send` runtime job on
+  `FORMLESS_EMAIL_DELIVERY_QUEUE`
+- AND the schedule path awaits the queue write before returning
+- AND the schedule path does not wait for Cloudflare Email Sending provider
+  delivery
+- AND the queue message is a small envelope containing only schema version, job
+  kind, job id, idempotency key, enqueue timestamp, target instance Authority
+  name, and delivery id
+- AND the queue message does not contain recipients, sender addresses, reply-to
+  addresses, subject, text body, HTML body, provider credentials, Turnstile
+  proof values, or private challenge material
+
+#### Scenario: Queue consumer delivery attempt
+
+- GIVEN the `email-delivery` queue delivers one or more `email.delivery.send`
+  messages to the Formless Worker
+- WHEN the queue consumer processes the batch
+- THEN it routes each message to the instance Authority by delivery id for one
+  delivery attempt
+- AND the Authority reads the internal rendered message state, no-ops already
+  accepted deliveries, marks attempt state before calling the provider, calls
+  `FORMLESS_EMAIL.send()`, and records accepted or failed status with
+  display-safe error text
+- AND retryable provider failures mark the individual queue message for retry
+  without forcing unrelated messages in the same batch to redeliver
+- AND permanent runtime configuration failures mark the delivery failed and
+  acknowledge the individual queue message
+- AND accepted deliveries and permanent failures are terminal for that queue
+  message
 
 #### Scenario: Sender and reply-to validation
 

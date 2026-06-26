@@ -24,6 +24,7 @@ type DurableObjectBindings = Record<
 type WorkerHarnessOptions = {
   bindings?: Record<string, string>;
   compatibilityDate?: string;
+  queueProducers?: Record<string, { deliveryDelay?: number; queueName: string }> | string[];
   r2Buckets?: string[];
   serviceBindings?: Record<string, ServiceBindingHandler>;
 };
@@ -58,6 +59,7 @@ export async function createWorkerHarness(
     modules: true,
     modulesRoot: bundle.modulesRoot,
     modulesRules: [{ type: "CompiledWasm", include: ["**/*.wasm"] }],
+    queueProducers: options.queueProducers,
     r2Buckets: options.r2Buckets,
     r2Persist: false,
     scriptPath: bundle.scriptPath,

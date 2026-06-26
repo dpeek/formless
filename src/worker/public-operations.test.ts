@@ -17,6 +17,10 @@ import type {
   SchemaResponse,
   SchemaUpdateResponse,
 } from "../shared/protocol.ts";
+import type {
+  EmailDeliveryScheduleRequest,
+  EmailDeliveryScheduleResponse,
+} from "../shared/email-runtime.ts";
 import type { OperationInvocationResponse } from "../shared/operation-invocation.ts";
 import type { SitePageTreeResponse } from "@dpeek/formless-site-app";
 import { recordOperationRequest, operationWriteRequest } from "../test/authority-write.ts";
@@ -571,7 +575,7 @@ describe("public operation runtime", () => {
 
     try {
       await resetSchemaApp("site", emailHarness);
-      await configureContactNotificationEmail(emailHarness);
+      const emailConfig = await configureContactNotificationEmail(emailHarness);
 
       const first = await postPublicOperation(
         "/api/site/public/operations/contact-message/submit",
@@ -595,9 +599,52 @@ describe("public operation runtime", () => {
       expect(firstBody.status).toBe("committed");
       expect(replayBody).toEqual({ ...firstBody, status: "replayed" });
       expect(contactMessageRecords(after.records)).toHaveLength(1);
+      if (firstBody.output.type !== "create") {
+        throw new Error("Expected create output.");
+      }
+      const deliveryReplay = await postEmailDeliveryScheduleReplay(
+        {
+          canonicalOrigin: "https://www.example.com",
+          idempotencyKey: contactNotificationIdempotencyKey(
+            firstBody.invocationId,
+            "contact-create-email-notify",
+          ),
+          message: {
+            subject: "Replay probe",
+            text: "Replay probe",
+          },
+          messageKind: "site-contact-notification",
+          recipients: [{ address: "owner@example.com", displayName: "Site contact" }],
+          replyTo: { address: "ada@example.com", displayName: "Ada Lovelace" },
+          sender: { id: emailConfig.sender.id },
+          source: {
+            operationId: firstBody.invocationId,
+            recordId: firstBody.output.record.id,
+            storageIdentity: "site",
+          },
+        },
+        emailHarness,
+      );
+
+      expect(deliveryReplay).toMatchObject({
+        replayed: true,
+        delivery: {
+          attemptCount: 0,
+          messageKind: "site-contact-notification",
+          sourceOperationId: firstBody.invocationId,
+          sourceRecordId: firstBody.output.record.id,
+          sourceStorageIdentity: "site",
+          status: "pending",
+        },
+      });
+      expect(deliveryReplay.delivery).not.toHaveProperty("providerMessageId");
+      expect(deliveryReplay.delivery).not.toHaveProperty("latestError");
       expect(JSON.stringify(firstBody)).not.toContain("owner@example.com");
       expect(JSON.stringify(firstBody)).not.toContain("contact@mail.example.com");
+      expect(JSON.stringify(firstBody)).not.toContain("email.delivery.send");
+      expect(JSON.stringify(firstBody)).not.toContain("email_delivery_");
       expect(JSON.stringify(firstBody)).not.toContain("providerMessageId");
+      expect(JSON.stringify(firstBody)).not.toContain("latestError");
       expect(JSON.stringify(replayBody)).not.toContain("providerMessageId");
       expect(JSON.stringify(replayBody)).not.toContain("token-replay");
       expectTurnstileRequests(turnstileRequests, [
@@ -651,6 +698,48 @@ describe("public operation runtime", () => {
     }
   });
 
+  it("keeps queue handoff failures out of committed public operation responses", async () => {
+    const missingQueueHarness = await createPublicOperationWorkerHarness({
+      bindings: {
+        FORMLESS_ADMIN_TOKEN: adminToken,
+        FORMLESS_TURNSTILE_SITE_KEY: turnstileSiteKey,
+        FORMLESS_TURNSTILE_SECRET_KEY: turnstileSecret,
+      },
+      emailDeliveryQueue: "missing",
+      turnstileVerify: turnstileVerifyResponse,
+    });
+
+    try {
+      await resetSchemaApp("site", missingQueueHarness);
+      await configureContactNotificationEmail(missingQueueHarness);
+
+      const accepted = await postPublicOperation(
+        "/api/site/public/operations/contact-message/submit",
+        publicContactMessageBody({ idempotencyKey: "contact-create-email-queue-missing" }),
+        missingQueueHarness,
+      );
+      const body = (await accepted.json()) as PublicOperationResponse;
+      const after = await getJson<BootstrapResponse>("/api/site/bootstrap", missingQueueHarness);
+
+      expect(accepted.status).toBe(200);
+      expect(body).toMatchObject({
+        operation: {
+          entityName: "contact-message",
+          operationName: "submit",
+          kind: "create",
+        },
+        status: "committed",
+      });
+      expect(contactMessageRecords(after.records)).toHaveLength(1);
+      expect(JSON.stringify(body)).not.toContain("Email delivery queue");
+      expect(JSON.stringify(body)).not.toContain("owner@example.com");
+      expect(JSON.stringify(body)).not.toContain("providerMessageId");
+      expect(JSON.stringify(body)).not.toContain("latestError");
+    } finally {
+      await missingQueueHarness.dispose();
+    }
+  });
+
   it("keeps configured generic operation input notifications out of public command responses", async () => {
     const emailHarness = await createPublicOperationWorkerHarness({
       bindings: {
@@ -663,7 +752,7 @@ describe("public operation runtime", () => {
 
     try {
       await resetSchemaApp("site", emailHarness);
-      await configureContactNotificationEmail(emailHarness);
+      const emailConfig = await configureContactNotificationEmail(emailHarness);
       const block = await postAdminRecordOperation(
         {
           idempotencyKey: "write-create-generic-operation-input-form",
@@ -706,9 +795,47 @@ describe("public operation runtime", () => {
       expect(replay.status).toBe(200);
       expect(firstBody.status).toBe("committed");
       expect(replayBody).toEqual({ ...firstBody, status: "replayed" });
+      const deliveryReplay = await postEmailDeliveryScheduleReplay(
+        {
+          canonicalOrigin: "https://www.example.com",
+          idempotencyKey: operationInputNotificationIdempotencyKey(
+            "subscription.subscribe",
+            "generic-operation-input-notify",
+          ),
+          message: {
+            subject: "Replay probe",
+            text: "Replay probe",
+          },
+          messageKind: "site-operation-input-notification",
+          recipients: [{ address: "owner@example.com", displayName: "Public operation" }],
+          replyTo: { address: "visitor@example.com" },
+          sender: { id: emailConfig.sender.id },
+          source: {
+            operationId: firstBody.invocationId,
+            storageIdentity: "site",
+          },
+        },
+        emailHarness,
+      );
+
+      expect(deliveryReplay).toMatchObject({
+        replayed: true,
+        delivery: {
+          attemptCount: 0,
+          messageKind: "site-operation-input-notification",
+          sourceOperationId: firstBody.invocationId,
+          sourceStorageIdentity: "site",
+          status: "pending",
+        },
+      });
+      expect(deliveryReplay.delivery).not.toHaveProperty("providerMessageId");
+      expect(deliveryReplay.delivery).not.toHaveProperty("latestError");
       expect(JSON.stringify(firstBody)).not.toContain("owner@example.com");
       expect(JSON.stringify(firstBody)).not.toContain("contact@mail.example.com");
       expect(JSON.stringify(firstBody)).not.toContain("providerMessageId");
+      expect(JSON.stringify(firstBody)).not.toContain("email.delivery.send");
+      expect(JSON.stringify(firstBody)).not.toContain("email_delivery_");
+      expect(JSON.stringify(firstBody)).not.toContain("latestError");
       expect(JSON.stringify(firstBody)).not.toContain("operation-input-notification");
       expect(JSON.stringify(firstBody)).not.toContain("token-ok");
       expect(JSON.stringify(replayBody)).not.toContain("operation-input-notification");
@@ -900,14 +1027,14 @@ describe("public operation runtime", () => {
       expect(deliveryReplay).toMatchObject({
         replayed: true,
         delivery: {
-          latestError: "Email delivery binding is not configured.",
           messageKind: "site-operation-input-notification",
           sourceOperationId: firstBody.invocationId,
           sourceRecordId: firstBody.output.record.id,
           sourceStorageIdentity: `app:${recordPlanInstallId}`,
-          status: "failed",
+          status: "pending",
         },
       });
+      expect(deliveryReplay.delivery).not.toHaveProperty("latestError");
       expect(JSON.stringify(firstBody)).not.toContain("owner@example.com");
       expect(JSON.stringify(firstBody)).not.toContain("contact@mail.example.com");
       expect(JSON.stringify(firstBody)).not.toContain("operation-input-notification");
@@ -2039,6 +2166,7 @@ function expectBadPublicOperationRoute(path: string, message: string): void {
 
 async function createPublicOperationWorkerHarness(input: {
   bindings: Record<string, string>;
+  emailDeliveryQueue?: "enabled" | "missing";
   turnstileVerify: (request: Request) => Promise<Response> | Response;
 }) {
   return createWorkerHarness(
@@ -2049,6 +2177,15 @@ async function createPublicOperationWorkerHarness(input: {
     {
       bindings: input.bindings,
       compatibilityDate: "2026-04-28",
+      ...(input.emailDeliveryQueue === "missing"
+        ? {}
+        : {
+            queueProducers: {
+              FORMLESS_EMAIL_DELIVERY_QUEUE: {
+                queueName: "formless-email-delivery",
+              },
+            },
+          }),
       r2Buckets: ["FORMLESS_MEDIA"],
       serviceBindings: {
         FORMLESS_TURNSTILE_SITEVERIFY: input.turnstileVerify,
@@ -2523,6 +2660,21 @@ async function postAdminJson<T = unknown>(path: string, body: unknown, target: H
   return request.response(JSON.parse(text)) as T;
 }
 
+async function postEmailDeliveryScheduleReplay(
+  body: EmailDeliveryScheduleRequest,
+  target: Harness,
+): Promise<EmailDeliveryScheduleResponse> {
+  const replay = await postAdminJson<EmailDeliveryScheduleResponse>(
+    "/api/formless/email/deliveries/schedule",
+    body,
+    target,
+  );
+
+  expect(replay.replayed).toBe(true);
+
+  return replay;
+}
+
 async function postAdminRecordOperation(
   body: Parameters<typeof recordOperationRequest>[0],
   target: Harness = harness,
@@ -2560,6 +2712,12 @@ function operationInputNotificationIdempotencyKey(operationKey: string, key: str
     .digest("hex");
 
   return `operation-input-notification:${digest}`;
+}
+
+function contactNotificationIdempotencyKey(invocationId: string, key: string): string {
+  const digest = createHash("sha256").update(`${invocationId}\n${key}`).digest("hex");
+
+  return `contact-notification:${digest}`;
 }
 
 async function configureContactNotificationEmail(target: Harness) {

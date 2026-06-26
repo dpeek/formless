@@ -3,6 +3,7 @@ import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import type { Plugin as EsbuildPlugin } from "esbuild";
+import type { Queue as CloudflareQueue } from "alchemy/cloudflare";
 import type { DeployEvidenceSummary, DeployResourceGraph } from "@dpeek/formless-deploy";
 
 import {
@@ -53,6 +54,8 @@ export const FORMLESS_OWNER_SETUP_ROUTE_PATH = "/setup";
 const FORMLESS_OWNER_SETUP_CAPABILITY_API_PATH = "/api/formless/setup/capability";
 const FORMLESS_INSTANCE_WORKER_BUILD_COMMAND = "node_modules/.bin/vp build";
 const CLOUDFLARE_API_TOKEN_ENV_NAME = "CLOUDFLARE_API_TOKEN";
+const FORMLESS_EMAIL_DELIVERY_QUEUE_BINDING_NAME = "FORMLESS_EMAIL_DELIVERY_QUEUE";
+const FORMLESS_EMAIL_DELIVERY_QUEUE_MAX_RETRIES = 3;
 const CLOUDFLARE_CREDENTIAL_ENV_NAMES = [
   "CF_API_TOKEN",
   "CLOUDFLARE_API_KEY",
@@ -133,6 +136,12 @@ export type FormlessInstanceDeploymentPlan = {
     };
     mediaBucket: {
       bindingName: "FORMLESS_MEDIA";
+      name: string;
+    };
+    emailDeliveryQueue: {
+      bindingName: typeof FORMLESS_EMAIL_DELIVERY_QUEUE_BINDING_NAME;
+      consumerMaxRetries: typeof FORMLESS_EMAIL_DELIVERY_QUEUE_MAX_RETRIES;
+      deadLetterQueueName: string;
       name: string;
     };
     worker: {
@@ -331,6 +340,13 @@ export type AlchemyFormlessInstanceDeploymentWorkerProps = {
   compatibilityDate: typeof FORMLESS_WORKER_COMPATIBILITY_DATE;
   cwd: string;
   entrypoint: "src/worker/index.ts";
+  eventSources: Array<{
+    queue: unknown;
+    settings: {
+      deadLetterQueue: unknown;
+      maxRetries: typeof FORMLESS_EMAIL_DELIVERY_QUEUE_MAX_RETRIES;
+    };
+  }>;
   name: string;
   previewSubdomains: false;
   profile?: string;
@@ -338,6 +354,13 @@ export type AlchemyFormlessInstanceDeploymentWorkerProps = {
 };
 
 export type AlchemyFormlessInstanceDeploymentTurnstileWidgetProps = TurnstileWidgetProps;
+export type AlchemyFormlessInstanceDeploymentQueueProps = {
+  adopt: boolean;
+  accountId: string;
+  apiToken?: unknown;
+  name: string;
+  profile?: string;
+};
 
 export type AlchemyFormlessInstanceDeploymentDependencies = {
   createApp: (
@@ -360,6 +383,10 @@ export type AlchemyFormlessInstanceDeploymentDependencies = {
   createDnsRecords?: AlchemyDomainProviderFactories["DnsRecords"];
   createEmailSenderBinding?: AlchemyDomainProviderFactories["SendEmailBinding"];
   createEmailSendingDomain?: AlchemyDomainProviderFactories["EmailSendingDomain"];
+  createQueue?: (
+    id: "email-delivery" | "email-delivery-dlq",
+    props: AlchemyFormlessInstanceDeploymentQueueProps,
+  ) => Promise<CloudflareQueue>;
   createR2Bucket: (
     id: "media",
     props: {
@@ -534,6 +561,7 @@ export function planFormlessInstanceDeployment(
   const packageVersion = parseRequiredString("Package version", input.packageVersion);
   const adoptExistingDeployment = input.adoptExistingDeployment === true;
   const workerName = instanceName;
+  const emailDeliveryQueueName = `${workerName}-email-delivery`;
   const mediaBucketName =
     parseOptionalString(
       "Formless instance media bucket name",
@@ -565,6 +593,12 @@ export function planFormlessInstanceDeployment(
       mediaBucket: {
         bindingName: "FORMLESS_MEDIA",
         name: mediaBucketName,
+      },
+      emailDeliveryQueue: {
+        bindingName: FORMLESS_EMAIL_DELIVERY_QUEUE_BINDING_NAME,
+        consumerMaxRetries: FORMLESS_EMAIL_DELIVERY_QUEUE_MAX_RETRIES,
+        deadLetterQueueName: `${emailDeliveryQueueName}-dlq`,
+        name: emailDeliveryQueueName,
       },
       worker: {
         name: workerName,
@@ -886,6 +920,11 @@ async function declareFormlessInstanceAlchemyResourceTree(
     dependencies: input.dependencies,
     resourceGraph: input.resourceGraph,
   });
+  const emailDeliveryQueues = await createEmailDeliveryQueues({
+    cloudflareResourceOptions,
+    dependencies: input.dependencies,
+    plan: input.plan,
+  });
   const worker = await input.dependencies.deployViteWorker("worker", {
     adopt: input.adoptExistingDeployment,
     ...cloudflareResourceOptions,
@@ -893,6 +932,7 @@ async function declareFormlessInstanceAlchemyResourceTree(
     bindings: {
       [input.plan.resources.authority.bindingName]: authorityNamespace,
       [input.plan.resources.mediaBucket.bindingName]: mediaBucket,
+      [input.plan.resources.emailDeliveryQueue.bindingName]: emailDeliveryQueues.emailDeliveryQueue,
       ALCHEMY_PASSWORD: input.dependencies.createSecret(input.alchemyPassword),
       ...(input.cloudflareApiToken === undefined
         ? {}
@@ -941,6 +981,15 @@ async function declareFormlessInstanceAlchemyResourceTree(
     compatibilityDate: FORMLESS_WORKER_COMPATIBILITY_DATE,
     cwd: input.packageRoot,
     entrypoint: "src/worker/index.ts",
+    eventSources: [
+      {
+        queue: emailDeliveryQueues.emailDeliveryQueue,
+        settings: {
+          deadLetterQueue: emailDeliveryQueues.deadLetterQueue,
+          maxRetries: input.plan.resources.emailDeliveryQueue.consumerMaxRetries,
+        },
+      },
+    ],
     name: input.plan.resources.worker.name,
     previewSubdomains: false,
     url: input.plan.resources.worker.workersDevEnabled,
@@ -1386,6 +1435,37 @@ async function workerEmailBindingsFromDeployResourceGraph(input: {
   return bindings;
 }
 
+async function createEmailDeliveryQueues(input: {
+  cloudflareResourceOptions: AlchemyCloudflareApiOptions & { accountId: string };
+  dependencies: AlchemyFormlessInstanceDeploymentDependencies;
+  plan: FormlessInstanceDeploymentPlan;
+}): Promise<{
+  deadLetterQueue: CloudflareQueue;
+  emailDeliveryQueue: CloudflareQueue;
+}> {
+  const createQueue = input.dependencies.createQueue;
+
+  if (createQueue === undefined) {
+    throw new Error("Formless instance deploy requires a Cloudflare Queue factory.");
+  }
+
+  const deadLetterQueue = await createQueue("email-delivery-dlq", {
+    adopt: input.plan.adoptExistingDeployment,
+    ...input.cloudflareResourceOptions,
+    name: input.plan.resources.emailDeliveryQueue.deadLetterQueueName,
+  });
+  const emailDeliveryQueue = await createQueue("email-delivery", {
+    adopt: input.plan.adoptExistingDeployment,
+    ...input.cloudflareResourceOptions,
+    name: input.plan.resources.emailDeliveryQueue.name,
+  });
+
+  return {
+    deadLetterQueue,
+    emailDeliveryQueue,
+  };
+}
+
 function workerEmailBindingPropsFromDeployResource(
   resource: DeployResourceGraph["resources"][number],
 ): CloudflareWorkerSendEmailBindingProps {
@@ -1776,6 +1856,7 @@ async function nodeAlchemyFormlessInstanceDependencies(): Promise<AlchemyFormles
       createCloudflareEmailSendingDomainResource(id, props, (options) =>
         cloudflare.createCloudflareApi(options as never),
       ),
+    createQueue: (id, props) => cloudflare.Queue(id, props as never),
     createR2Bucket: (id, props) => cloudflare.R2Bucket(id, props as never),
     createSecret: (value) => alchemy.secret(value),
     createTurnstileWidget: (id, props) => CloudflareTurnstileWidget(id, props),

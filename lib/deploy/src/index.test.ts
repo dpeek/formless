@@ -381,6 +381,8 @@ describe("Deploy control-plane projection helpers", () => {
       "cloudflare-worker-send-email-binding": 1,
     });
     expect(JSON.stringify(projection.resourceGraph)).not.toContain("cloudflare-email-dns-records");
+    expect(JSON.stringify(projection.resourceGraph)).not.toContain("FORMLESS_EMAIL_DELIVERY_QUEUE");
+    expect(JSON.stringify(projection.resourceGraph)).not.toContain("email-delivery");
     expect(deployProjectionCanonicalJson(projection)).toContain("pending@mail.example.com");
     expect(deployProjectionCanonicalJson(projection)).not.toContain("disabled@mail.example.com");
     expect(await computeDeployProjectionHash(projection)).toBe(

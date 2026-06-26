@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vite-plus/test";
 import {
+  EMAIL_DELIVERY_SEND_RUNTIME_JOB_KIND,
+  EMAIL_DELIVERY_SEND_RUNTIME_JOB_SCHEMA_VERSION,
   emailDeliveryIdempotencyScope,
+  emailDeliverySendRuntimeJob,
+  parseEmailDeliverySendRuntimeJob,
   parseEmailDeliveryScheduleRequest,
   renderEmailDeliveryMessage,
 } from "./email-runtime.ts";
@@ -90,5 +94,72 @@ describe("email runtime contracts", () => {
       text: "Open https://www.example.com/admin",
       html: '<p>Open <a href="https://www.example.com/admin">admin</a></p>',
     });
+  });
+
+  it("parses email delivery send runtime job envelopes", () => {
+    const job = parseEmailDeliverySendRuntimeJob({
+      schemaVersion: EMAIL_DELIVERY_SEND_RUNTIME_JOB_SCHEMA_VERSION,
+      kind: EMAIL_DELIVERY_SEND_RUNTIME_JOB_KIND,
+      jobId: "email.delivery.send:email_delivery_123",
+      idempotencyKey: "contact-message-1",
+      enqueuedAt: "2026-06-24T00:01:00.000Z",
+      targetAuthorityName: "__formless_instance__",
+      deliveryId: "email_delivery_123",
+    });
+
+    expect(job).toEqual({
+      schemaVersion: 1,
+      kind: "email.delivery.send",
+      jobId: "email.delivery.send:email_delivery_123",
+      idempotencyKey: "contact-message-1",
+      enqueuedAt: "2026-06-24T00:01:00.000Z",
+      targetAuthorityName: "__formless_instance__",
+      deliveryId: "email_delivery_123",
+    });
+    expect(
+      emailDeliverySendRuntimeJob({
+        deliveryId: "email_delivery_123",
+        enqueuedAt: "2026-06-24T00:01:00.000Z",
+        idempotencyKey: "contact-message-1",
+        targetAuthorityName: "__formless_instance__",
+      }),
+    ).toEqual(job);
+  });
+
+  it("rejects invalid or overfull email delivery send runtime job envelopes", () => {
+    const validJob = {
+      schemaVersion: 1,
+      kind: "email.delivery.send",
+      jobId: "email.delivery.send:email_delivery_123",
+      idempotencyKey: "contact-message-1",
+      enqueuedAt: "2026-06-24T00:01:00.000Z",
+      targetAuthorityName: "__formless_instance__",
+      deliveryId: "email_delivery_123",
+    };
+
+    expect(() =>
+      parseEmailDeliverySendRuntimeJob({
+        ...validJob,
+        schemaVersion: 2,
+      }),
+    ).toThrow("Email delivery send runtime job schemaVersion is unsupported.");
+    expect(() =>
+      parseEmailDeliverySendRuntimeJob({
+        ...validJob,
+        kind: "email.delivery.broadcast",
+      }),
+    ).toThrow("Email delivery send runtime job kind is unsupported.");
+    expect(() =>
+      parseEmailDeliverySendRuntimeJob({
+        ...validJob,
+        recipients: [{ address: "owner@example.com" }],
+      }),
+    ).toThrow('Email delivery send runtime job field "recipients" is not supported.');
+    expect(() =>
+      parseEmailDeliverySendRuntimeJob({
+        ...validJob,
+        text: "Plain text body",
+      }),
+    ).toThrow('Email delivery send runtime job field "text" is not supported.');
   });
 });

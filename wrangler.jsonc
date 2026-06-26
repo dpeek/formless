@@ -35,6 +35,21 @@
       "bucket_name": "formless-site-media",
     },
   ],
+  "queues": {
+    "producers": [
+      {
+        "binding": "FORMLESS_EMAIL_DELIVERY_QUEUE",
+        "queue": "formless-email-delivery",
+      },
+    ],
+    "consumers": [
+      {
+        "queue": "formless-email-delivery",
+        "max_retries": 3,
+        "dead_letter_queue": "formless-email-delivery-dlq",
+      },
+    ],
+  },
   "migrations": [
     {
       "tag": "v1",

@@ -13,7 +13,9 @@ import {
 import { handleInstanceDomainProviderApiRequest } from "./domain-provider-api.ts";
 import { handleInstanceDeploymentRuntimeApiRequest } from "./deployment-runtime-api.ts";
 import {
+  handleInstanceEmailDeliveryQueueBatch,
   handleInstanceEmailRuntimeApiRequest,
+  type EmailDeliveryQueueBinding,
   type CloudflareSendEmailBinding,
 } from "./email-runtime.ts";
 import { handleInstanceAppInstallsApiRequest } from "./instance-app-installs.ts";
@@ -66,6 +68,7 @@ export type Env = TurnstileRuntimeEnv & {
   FORMLESS_DOMAIN_PROVIDER_INSTANCE_ID?: string;
   FORMLESS_DOMAIN_PROVIDER_WORKER_NAME?: string;
   FORMLESS_EMAIL?: CloudflareSendEmailBinding;
+  FORMLESS_EMAIL_DELIVERY_QUEUE?: EmailDeliveryQueueBinding;
   FORMLESS_DOMAIN_PROVIDER_ZONE_ID?: string;
   FORMLESS_DOMAIN_PROVIDER_ZONE_NAME?: string;
   FORMLESS_DOMAIN_PROVIDER_ZONES?: string;
@@ -332,6 +335,9 @@ export default {
     }
 
     return new Response(null, { status: 404 });
+  },
+  async queue(batch, env) {
+    await handleInstanceEmailDeliveryQueueBatch(batch, env);
   },
 } satisfies ExportedHandler<Env>;
 

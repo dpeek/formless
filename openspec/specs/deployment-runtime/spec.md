@@ -186,6 +186,22 @@ storing provider truth or provider secrets in control-plane records.
 - AND the Worker runtime receives only the binding and display-safe
   configuration needed to send through the platform email primitive
 
+#### Scenario: Email delivery queue resources
+
+- GIVEN a Formless instance target is deployed
+- WHEN the deployer declares base runtime resources for the Worker
+- THEN it declares a Cloudflare Queue named
+  `<instance-worker-name>-email-delivery`
+- AND it declares a dead-letter queue named
+  `<instance-worker-name>-email-delivery-dlq`
+- AND the Worker receives the producer binding
+  `FORMLESS_EMAIL_DELIVERY_QUEUE`
+- AND the same Worker is registered as the queue consumer with DLQ-backed retry
+  handling
+- AND email delivery queue resources are base runtime resources rather than
+  schema-owned control-plane records or desired-state graph resources derived
+  from email domain or sender intent
+
 #### Scenario: Dedicated sending subdomain by default
 
 - GIVEN an instance selects a primary route host for production identity
