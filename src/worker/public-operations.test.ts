@@ -603,6 +603,30 @@ describe("public operation runtime", () => {
 
     await resetInstalledApp("crm", defaultCrmInstallId);
 
+    const initialSiteTree = await getJson<SitePageTreeResponse>("/api/site/tree/home");
+    const siteSubscribeBlock = await postAdminRecordOperation({
+      idempotencyKey: "crm-installed-subscribe-site-form-block",
+      entity: "block",
+      operationName: "create",
+      input: {
+        type: "subscribeForm",
+        label: "Join the CRM isolation list",
+        operationName: "subscribe",
+        buttonLabel: "Join",
+      },
+    });
+    await postAdminRecordOperation({
+      idempotencyKey: "crm-installed-subscribe-site-form-placement",
+      entity: "block-placement",
+      operationName: "create",
+      input: {
+        parent: initialSiteTree.page.id,
+        block: siteSubscribeBlock.record.id,
+        order: 4500,
+        label: "Join the CRM isolation list",
+      },
+    });
+
     const crmBefore = await getJson<BootstrapResponse>(`${crmApiPrefix}/bootstrap`);
     const siteBefore = await getJson<BootstrapResponse>("/api/site/bootstrap");
     const siteTree = await getJson<SitePageTreeResponse>("/api/site/tree/home");
@@ -631,7 +655,7 @@ describe("public operation runtime", () => {
         record.values.audience === defaultAudiences[0]?.id,
     );
     const siteSubscribeForm = siteTree.page.placements.find(
-      (placement) => placement.block.type === "subscribeForm",
+      (placement) => placement.block.id === siteSubscribeBlock.record.id,
     );
 
     expect(accepted.status).toBe(200);

@@ -3,7 +3,7 @@ import { mkdtemp, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { build, type Plugin } from "esbuild";
-import { Miniflare } from "miniflare";
+import { Miniflare, type WorkerOptions } from "miniflare";
 import { SITE_PUBLIC_RENDERER_WORKER_VIRTUAL_MODULE_ID } from "../shared/workspace-runtime-extensions.ts";
 
 type DispatchFetchInit = Parameters<Miniflare["dispatchFetch"]>[1];
@@ -21,13 +21,10 @@ type DurableObjectBindings = Record<
   }
 >;
 
-type WorkerHarnessOptions = {
-  bindings?: Record<string, string>;
-  compatibilityDate?: string;
-  queueProducers?:
-    | Record<string, string | { deliveryDelay?: number; queueName: string }>
-    | string[];
-  r2Buckets?: string[];
+type WorkerHarnessOptions = Pick<
+  WorkerOptions,
+  "bindings" | "compatibilityDate" | "queueProducers" | "r2Buckets"
+> & {
   serviceBindings?: Record<string, ServiceBindingHandler>;
 };
 

@@ -759,6 +759,10 @@ function filterCommandOperationOutputForActor(
   const allowedFields = envelope.operation.policy?.responseFields?.[envelope.actor.kind];
 
   if (allowedFields === undefined) {
+    if (envelope.actor.kind === "anonymous" && envelope.source.protocol === "public") {
+      return { ...output, changes: [] };
+    }
+
     return output;
   }
 
