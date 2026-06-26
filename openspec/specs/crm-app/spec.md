@@ -79,6 +79,15 @@ The CRM source schema SHALL model CRM state as flat entity records with referenc
 - **THEN** normalized email address is unique within the app storage identity
 - **AND** the email-address and audience pair is unique within the app storage identity
 
+#### Scenario: CRM subscription consent source
+
+- **WHEN** CRM subscription records are created by a public subscribe operation
+- **THEN** the subscription records the source kind, target app storage identity,
+  canonical operation key, request host, request path, and Site block id when
+  supplied
+- **AND** raw visitor IP address and user-agent values are not required CRM
+  subscription fields
+
 ### Requirement: Generated CRM Admin Workflows
 
 The CRM source schema SHALL define generated screens and views for owner review and maintenance of CRM records.
@@ -101,25 +110,62 @@ The CRM source schema SHALL define generated screens and views for owner review 
 - **THEN** the owner can inspect campaigns, campaign messages, broadcasts, broadcast recipients, and delivery events
 - **AND** broadcast review surfaces show recipient and delivery status without requiring queued email sending
 
-### Requirement: CRM First-Change Boundaries
+### Requirement: CRM Public Subscribe Operation
 
-CRM SHALL remain a standalone app package in this change and SHALL NOT take over Site subscription writes or email delivery.
+CRM SHALL expose a public subscribe operation that writes CRM contact,
+email-address, audience, and subscription records in the target CRM app storage
+identity.
+
+#### Scenario: CRM subscribe operation declaration
+
+- **GIVEN** the bundled CRM source schema is parsed
+- **WHEN** public operations are selected
+- **THEN** `subscription.subscribe` is an anonymous Turnstile-protected command
+  operation
+- **AND** the operation uses the `subscribe` operation handler
+- **AND** the operation input accepts a required public `email` field
+
+#### Scenario: CRM public subscribe route
+
+- **GIVEN** a CRM app install exists with install id `crm`
+- **WHEN** a visitor posts valid public subscribe input to
+  `/api/app-installs/crm/crm/public/operations/subscription/subscribe`
+- **THEN** the runtime creates or reuses a CRM contact record
+- **AND** creates or reuses a CRM email-address record with a normalized address
+- **AND** creates or reuses a default CRM audience record
+- **AND** creates or updates one CRM subscription record with status
+  `subscribed`
+- **AND** the public response is command-shaped and does not expose protected
+  storage, challenge, or provider details
+
+#### Scenario: CRM duplicate and resubscribe behavior
+
+- **GIVEN** a CRM email address is already subscribed to the target audience
+- **WHEN** the same visitor subscribes again
+- **THEN** CRM keeps one email-address record and one subscription record for
+  that email-address audience pair
+- **AND** the operation returns a successful subscribed outcome
+
+- **GIVEN** a CRM subscription is `unsubscribed`
+- **WHEN** the visitor subscribes again with that email address
+- **THEN** the existing CRM subscription is updated to `subscribed`
+- **AND** the consent timestamp and source context are refreshed
+
+### Requirement: CRM Subscribe Boundaries
+
+CRM SHALL own public subscribe writes for CRM records without taking over Site
+subscribe block routing or email delivery in this slice.
 
 #### Scenario: Site subscribe behavior unchanged
 
 - **GIVEN** Site subscribe forms and Site-owned subscriber records exist
-- **WHEN** CRM is added as a bundled package app
+- **WHEN** CRM public subscribe is available
 - **THEN** Site subscribe forms continue to target the existing Site subscribe behavior
 - **AND** no Site subscribe form writes CRM records in this change
 
-#### Scenario: No public CRM write route
-
-- **WHEN** the CRM source schema and package app are installed
-- **THEN** CRM does not expose an anonymous public subscribe operation binding
-- **AND** CRM write operations require existing owner or admin authorization
-
 #### Scenario: No email queue execution
 
-- **WHEN** CRM campaign, broadcast, recipient, or delivery-event records are stored
+- **WHEN** CRM public subscribe, campaign, broadcast, recipient, or
+  delivery-event records are stored
 - **THEN** no queued email sending job is scheduled by this change
 - **AND** delivery-event records are review data, not provider execution evidence from a new sending runtime

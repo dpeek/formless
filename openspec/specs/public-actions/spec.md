@@ -142,7 +142,7 @@ through an explicit actor policy and public binding.
 
 #### Scenario: Execute public operation handler command
 
-- GIVEN a Site app declares an anonymous public command operation with an
+- GIVEN an app declares an anonymous public command operation with an
   `operationHandler` effect whose handler is public-eligible
 - WHEN a visitor posts declared input and proof data to the target-scoped public
   operation route
@@ -154,6 +154,21 @@ through an explicit actor policy and public binding.
   canonical operation key, and Site block id through the operation envelope
 - AND public execution tests, fixtures, and response helpers use operation names
   consistently
+
+#### Scenario: Execute CRM public subscribe operation
+
+- GIVEN an installed CRM app declares `subscription.subscribe` as an anonymous
+  public command operation with the `subscribe` operation handler
+- WHEN a visitor posts valid subscribe input to
+  `/api/app-installs/crm/crm/public/operations/subscription/subscribe`
+- THEN the public operation executor commits the handler-planned CRM records to
+  the CRM install storage identity
+- AND the executor returns command-shaped public output without exposing the
+  submitted email address, Turnstile proof, provider details, or protected
+  internal storage state
+- AND replaying the same idempotency key returns the original committed public
+  operation response without duplicating CRM contact, email-address, audience,
+  or subscription records
 
 ### Requirement: Target-Scoped Public Operation API
 

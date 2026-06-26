@@ -109,6 +109,47 @@ describe("crm source schema", () => {
       kind: "unique",
       fields: ["emailAddress", "audience"],
     });
+    expect(crmSchema.entities.contact?.fields.source).toMatchObject({
+      type: "enum",
+      default: "owner",
+      values: expect.objectContaining({
+        owner: { label: "Owner" },
+        import: { label: "Import" },
+        publicOperation: { label: "Public operation" },
+      }),
+    });
+    expect(crmSchema.entities.subscription?.fields.sourceKind).toMatchObject({
+      type: "enum",
+      default: "owner",
+      values: expect.objectContaining({
+        owner: { label: "Owner" },
+        import: { label: "Import" },
+        publicOperation: { label: "Public operation" },
+      }),
+    });
+    expect(crmSchema.entities.subscription?.fields.sourceTargetKind).toMatchObject({
+      type: "enum",
+      required: false,
+      values: {
+        schemaKey: { label: "Schema key" },
+        appInstall: { label: "App install" },
+      },
+    });
+    for (const fieldName of [
+      "sourcePackageAppKey",
+      "sourceSchemaKey",
+      "sourceInstallId",
+      "sourceApiRoutePrefix",
+      "sourceOperationKey",
+      "sourceHost",
+      "sourcePath",
+      "sourceSiteBlockId",
+    ]) {
+      expect(crmSchema.entities.subscription?.fields[fieldName]).toMatchObject({
+        type: "text",
+        required: false,
+      });
+    }
     expect(crmSchema.relationships?.contactEmailAddresses).toMatchObject({
       kind: "toMany",
       from: { entity: "contact" },
@@ -153,7 +194,7 @@ describe("crm source schema", () => {
       contact: ["create", "update"],
       "email-address": ["create", "update"],
       audience: ["create", "update"],
-      subscription: ["create", "update"],
+      subscription: ["create", "update", "subscribe"],
       campaign: ["create", "update"],
       "campaign-message": ["create", "update"],
       broadcast: ["create", "update"],
@@ -275,10 +316,40 @@ describe("crm source schema", () => {
     ]);
   });
 
-  it("does not expose CRM subscribe as an anonymous public operation", () => {
+  it("exposes CRM subscribe as an anonymous public handler operation", () => {
     expect(selectAnonymousPublicOperationByKey(crmSchema, "subscription.subscribe")).toMatchObject({
-      kind: "unavailable",
-      reason: "missing-operation",
+      kind: "available",
+      canonicalKey: "subscription.subscribe",
+      entityName: "subscription",
+      executionKind: "handlerCommand",
+      operationName: "subscribe",
+      operation: {
+        kind: "command",
+        scope: "collection",
+        input: {
+          fields: {
+            email: {
+              type: "text",
+              required: true,
+              label: "Email",
+            },
+          },
+        },
+        effect: {
+          type: "operationHandler",
+          handler: "subscribe",
+          config: {},
+        },
+        output: { type: "command" },
+        policy: {
+          actors: ["anonymous"],
+          access: {
+            actor: "anonymous",
+            challenge: { kind: "turnstile" },
+            origin: { kind: "same-origin" },
+          },
+        },
+      },
     });
   });
 

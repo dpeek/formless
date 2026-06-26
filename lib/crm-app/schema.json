@@ -174,6 +174,9 @@
             },
             "event": {
               "label": "Event"
+            },
+            "publicOperation": {
+              "label": "Public operation"
             }
           }
         },
@@ -555,6 +558,9 @@
             },
             "event": {
               "label": "Event"
+            },
+            "publicOperation": {
+              "label": "Public operation"
             }
           }
         },
@@ -562,6 +568,59 @@
           "type": "text",
           "required": false,
           "label": "Source"
+        },
+        "sourceTargetKind": {
+          "type": "enum",
+          "required": false,
+          "label": "Target kind",
+          "values": {
+            "schemaKey": {
+              "label": "Schema key"
+            },
+            "appInstall": {
+              "label": "App install"
+            }
+          }
+        },
+        "sourcePackageAppKey": {
+          "type": "text",
+          "required": false,
+          "label": "Package app key"
+        },
+        "sourceSchemaKey": {
+          "type": "text",
+          "required": false,
+          "label": "Source schema key"
+        },
+        "sourceInstallId": {
+          "type": "text",
+          "required": false,
+          "label": "Install id"
+        },
+        "sourceApiRoutePrefix": {
+          "type": "text",
+          "required": false,
+          "label": "API route prefix"
+        },
+        "sourceOperationKey": {
+          "type": "text",
+          "required": false,
+          "label": "Operation key"
+        },
+        "sourceHost": {
+          "type": "text",
+          "required": false,
+          "label": "Host"
+        },
+        "sourcePath": {
+          "type": "text",
+          "required": false,
+          "label": "Path"
+        },
+        "sourceSiteBlockId": {
+          "type": "text",
+          "required": false,
+          "label": "Site block"
         }
       },
       "constraints": {
@@ -594,6 +653,33 @@
               },
               "sourceLabel": {
                 "field": "sourceLabel"
+              },
+              "sourceTargetKind": {
+                "field": "sourceTargetKind"
+              },
+              "sourcePackageAppKey": {
+                "field": "sourcePackageAppKey"
+              },
+              "sourceSchemaKey": {
+                "field": "sourceSchemaKey"
+              },
+              "sourceInstallId": {
+                "field": "sourceInstallId"
+              },
+              "sourceApiRoutePrefix": {
+                "field": "sourceApiRoutePrefix"
+              },
+              "sourceOperationKey": {
+                "field": "sourceOperationKey"
+              },
+              "sourceHost": {
+                "field": "sourceHost"
+              },
+              "sourcePath": {
+                "field": "sourcePath"
+              },
+              "sourceSiteBlockId": {
+                "field": "sourceSiteBlockId"
               }
             }
           },
@@ -633,6 +719,33 @@
               },
               "sourceLabel": {
                 "field": "sourceLabel"
+              },
+              "sourceTargetKind": {
+                "field": "sourceTargetKind"
+              },
+              "sourcePackageAppKey": {
+                "field": "sourcePackageAppKey"
+              },
+              "sourceSchemaKey": {
+                "field": "sourceSchemaKey"
+              },
+              "sourceInstallId": {
+                "field": "sourceInstallId"
+              },
+              "sourceApiRoutePrefix": {
+                "field": "sourceApiRoutePrefix"
+              },
+              "sourceOperationKey": {
+                "field": "sourceOperationKey"
+              },
+              "sourceHost": {
+                "field": "sourceHost"
+              },
+              "sourcePath": {
+                "field": "sourcePath"
+              },
+              "sourceSiteBlockId": {
+                "field": "sourceSiteBlockId"
               }
             }
           },
@@ -647,6 +760,46 @@
           },
           "audit": {
             "input": "summary"
+          }
+        },
+        "subscribe": {
+          "label": "Subscribe",
+          "kind": "command",
+          "scope": "collection",
+          "input": {
+            "fields": {
+              "email": {
+                "type": "text",
+                "required": true,
+                "label": "Email"
+              }
+            }
+          },
+          "effect": {
+            "type": "operationHandler",
+            "handler": "subscribe",
+            "config": {}
+          },
+          "output": {
+            "type": "command"
+          },
+          "idempotency": {
+            "required": true
+          },
+          "audit": {
+            "input": "summary"
+          },
+          "policy": {
+            "actors": ["anonymous"],
+            "access": {
+              "actor": "anonymous",
+              "challenge": {
+                "kind": "turnstile"
+              },
+              "origin": {
+                "kind": "same-origin"
+              }
+            }
           }
         }
       }

@@ -2,13 +2,15 @@
 
 ## Purpose
 
-Contact subscriptions model public subscribe intent as flat Site-owned records for contacts, email addresses, audiences, and consent state.
+Contact subscriptions model public subscribe intent as flat app-owned records
+for contacts, email addresses, audiences, and consent state.
 
 ## Requirements
 
 ### Requirement: Contact Subscription Records
 
-The system SHALL model contacts, email addresses, audiences, and subscriptions as flat records suitable for generated admin surfaces and future CRM workflows.
+The system SHALL model contacts, email addresses, audiences, and subscriptions
+as flat records suitable for generated admin surfaces and CRM workflows.
 
 #### Scenario: Flat contact subscription model
 
@@ -31,7 +33,8 @@ The system SHALL model contacts, email addresses, audiences, and subscriptions a
 
 ### Requirement: Default Audience
 
-The system SHALL provide a default audience for Site subscribe forms before topics or segments exist.
+The system SHALL provide a default audience for public subscribe operations
+before explicit audience targeting, topics, or segments exist.
 
 #### Scenario: Subscribe without explicit audience
 
@@ -66,6 +69,15 @@ The system SHALL provide a public subscribe operation that upserts reusable cont
 - THEN the runtime updates the subscription status to `subscribed`
 - AND records the new consent timestamp
 
+#### Scenario: CRM owns CRM subscribe records
+
+- GIVEN a visitor submits a valid email address to a CRM public subscribe
+  operation
+- WHEN the operation commits records
+- THEN contact, email-address, audience, and subscription records are written to
+  the CRM app storage identity
+- AND Site-owned subscription records are not written by that CRM operation
+
 ### Requirement: Subscription Consent Source
 
 The system SHALL preserve source context for public subscription consent.
@@ -88,7 +100,7 @@ The system SHALL expose collected email addresses and subscription state through
 
 #### Scenario: Owner reviews subscribers
 
-- GIVEN the Site app admin surface renders contact subscription data
+- GIVEN the owning app admin surface renders contact subscription data
 - WHEN the owner opens the generated admin screens
 - THEN the owner can inspect email addresses, audiences, subscription status, consent time, and source context
-- AND the public Site renderer does not expose the subscriber list
+- AND public renderers do not expose subscriber lists

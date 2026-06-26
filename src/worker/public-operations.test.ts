@@ -56,6 +56,7 @@ const turnstileSecret = "test-turnstile-secret";
 const mappedHost = "subscribe.example.com";
 const installId = "personal";
 const defaultSiteInstallId = "site";
+const defaultCrmInstallId = "crm";
 const recordPlanInstallId = "public-intake";
 
 let harness: Harness;
@@ -475,6 +476,94 @@ describe("public operation runtime", () => {
     });
   });
 
+  it("stores public-safe installed CRM subscribe invocation facts", async () => {
+    const crmRoute = `/api/app-installs/crm/${defaultCrmInstallId}/public/operations/subscription/subscribe`;
+    const accepted = await postPublicOperationHarness(
+      crmRoute,
+      publicSubscribeBody({
+        idempotencyKey: "crm-invocation-safe",
+        input: { email: "Crm.Audit@Example.com" },
+        token: "crm-audit-token",
+      }),
+    );
+    const body = (await accepted.json()) as PublicOperationResponse;
+    const state = await readPublicOperationHarnessState();
+    const records = contactSubscriptionRecords(state.records);
+    const emailAddresses = records.emailAddresses.filter(
+      (record) => record.values.normalizedAddress === "crm.audit@example.com",
+    );
+
+    expect(accepted.status).toBe(200);
+    expect(body).toMatchObject({
+      invocationId: "operation:subscription.subscribe:crm-invocation-safe",
+      operation: {
+        entityName: "subscription",
+        operationName: "subscribe",
+        canonicalKey: "subscription.subscribe",
+        kind: "command",
+      },
+      status: "committed",
+    });
+    expect(body.output.type).toBe("command");
+    expect(state.commandExecutionCount).toBe(0);
+    expect(emailAddresses).toHaveLength(1);
+    expect(state.invocations).toHaveLength(1);
+    expect(state.invocations[0]).toMatchObject({
+      affectedChangeIds: body.output.affectedChangeIds,
+      appStorageIdentity: {
+        kind: "appInstall",
+        packageAppKey: "crm",
+        sourceSchemaKey: "crm",
+        installId: defaultCrmInstallId,
+        apiRoutePrefix: `/api/app-installs/crm/${defaultCrmInstallId}`,
+      },
+      auditInput: {
+        kind: "summary",
+        summary: {
+          inputFields: ["email"],
+          inputType: "object",
+          type: "command",
+        },
+      },
+      authDecision: "allowed",
+      idempotency: {
+        key: "crm-invocation-safe",
+        source: "caller",
+        writeIdentity: "operation:subscription.subscribe:crm-invocation-safe",
+      },
+      operationKey: "subscription.subscribe",
+      operationKind: "command",
+      source: {
+        host: "example.com",
+        path: crmRoute,
+        protocol: "public",
+        siteBlockId: "rec_site_subscribe_form",
+      },
+      status: "committed",
+      statusHistory: [
+        expect.objectContaining({ status: "accepted" }),
+        expect.objectContaining({ status: "committed" }),
+      ],
+    });
+    expect(state.invocations[0]?.output).toMatchObject({
+      type: "command",
+      affectedChangeIds: body.output.affectedChangeIds,
+      cursor: body.output.cursor,
+    });
+    expect(JSON.stringify(body)).not.toContain("Crm.Audit@Example.com");
+    expect(JSON.stringify(body)).not.toContain("crm.audit@example.com");
+    expect(JSON.stringify(body)).not.toContain("crm-audit-token");
+    expect(JSON.stringify(body)).not.toContain("turnstileToken");
+    expect(JSON.stringify(body)).not.toContain(turnstileSecret);
+    expect(JSON.stringify(body)).not.toContain("providerMessageId");
+    expect(JSON.stringify(state.invocations[0])).not.toContain("Crm.Audit@Example.com");
+    expect(JSON.stringify(state.invocations[0])).not.toContain("crm.audit@example.com");
+    expect(JSON.stringify(state.invocations[0])).not.toContain("crm-audit-token");
+    expect(JSON.stringify(state.invocations[0])).not.toContain("turnstileToken");
+    expect(JSON.stringify(state.invocations[0])).not.toContain(turnstileSecret);
+    expect(JSON.stringify(state.invocations[0])).not.toContain("providerMessageId");
+  });
+
   it("supports installed app public operation routes with accepted replay idempotency", async () => {
     const first = await postPublicOperation(
       `/api/app-installs/site/${installId}/public/operations/subscription/subscribe`,
@@ -506,6 +595,218 @@ describe("public operation runtime", () => {
         response: "token-ok",
       },
     ]);
+  });
+
+  it("executes installed CRM public subscribe operations in CRM install storage", async () => {
+    const crmApiPrefix = `/api/app-installs/crm/${defaultCrmInstallId}`;
+    const crmRoute = `${crmApiPrefix}/public/operations/subscription/subscribe`;
+
+    await resetInstalledApp("crm", defaultCrmInstallId);
+
+    const crmBefore = await getJson<BootstrapResponse>(`${crmApiPrefix}/bootstrap`);
+    const siteBefore = await getJson<BootstrapResponse>("/api/site/bootstrap");
+    const siteTree = await getJson<SitePageTreeResponse>("/api/site/tree/home");
+    const accepted = await postPublicOperation(
+      crmRoute,
+      publicSubscribeBody({
+        idempotencyKey: "crm-installed-subscribe",
+        input: { email: "Crm.Visitor@Example.com" },
+      }),
+    );
+    const body = (await accepted.json()) as PublicOperationResponse;
+    const crmAfter = await getJson<BootstrapResponse>(`${crmApiPrefix}/bootstrap`);
+    const siteAfter = await getJson<BootstrapResponse>("/api/site/bootstrap");
+    const beforeRecords = contactSubscriptionRecords(crmBefore.records);
+    const records = contactSubscriptionRecords(crmAfter.records);
+    const contacts = records.contacts.filter(
+      (record) => record.values.label === "crm.visitor@example.com",
+    );
+    const emailAddresses = records.emailAddresses.filter(
+      (record) => record.values.normalizedAddress === "crm.visitor@example.com",
+    );
+    const defaultAudiences = records.audiences.filter((record) => record.values.key === "default");
+    const subscriptions = records.subscriptions.filter(
+      (record) =>
+        record.values.emailAddress === emailAddresses[0]?.id &&
+        record.values.audience === defaultAudiences[0]?.id,
+    );
+    const siteSubscribeForm = siteTree.page.placements.find(
+      (placement) => placement.block.type === "subscribeForm",
+    );
+
+    expect(accepted.status).toBe(200);
+    expect(body).toMatchObject({
+      invocationId: "operation:subscription.subscribe:crm-installed-subscribe",
+      operation: {
+        entityName: "subscription",
+        operationName: "subscribe",
+        canonicalKey: "subscription.subscribe",
+        kind: "command",
+      },
+      output: {
+        type: "command",
+        cursor: crmAfter.cursor,
+      },
+      status: "committed",
+    });
+    expect(body.output.affectedChangeIds).toHaveLength(4);
+    expect(Object.keys(body.output).sort()).toEqual(["affectedChangeIds", "cursor", "type"]);
+    expect(body.output).not.toHaveProperty("response");
+    expect(JSON.stringify(body)).not.toContain("Crm.Visitor@Example.com");
+    expect(JSON.stringify(body)).not.toContain("crm.visitor@example.com");
+    expect(JSON.stringify(body)).not.toContain("token-ok");
+    expect(JSON.stringify(body)).not.toContain("turnstileToken");
+    expect(JSON.stringify(body)).not.toContain(turnstileSecret);
+    expect(JSON.stringify(body)).not.toContain("providerMessageId");
+    expect(crmAfter.records.length).toBe(crmBefore.records.length + 4);
+    expect(records.contacts).toHaveLength(beforeRecords.contacts.length + 1);
+    expect(records.emailAddresses).toHaveLength(beforeRecords.emailAddresses.length + 1);
+    expect(records.audiences).toHaveLength(beforeRecords.audiences.length + 1);
+    expect(records.subscriptions).toHaveLength(beforeRecords.subscriptions.length + 1);
+    expect(contacts).toHaveLength(1);
+    expect(contacts[0]?.values).toMatchObject({
+      label: "crm.visitor@example.com",
+      lifecycle: "lead",
+      source: "owner",
+    });
+    expect(emailAddresses).toHaveLength(1);
+    expect(emailAddresses[0]?.values).toMatchObject({
+      contact: contacts[0]?.id,
+      address: "Crm.Visitor@Example.com",
+      normalizedAddress: "crm.visitor@example.com",
+      status: "active",
+      primary: true,
+    });
+    expect(defaultAudiences).toHaveLength(1);
+    expect(defaultAudiences[0]?.values).toMatchObject({
+      key: "default",
+      label: "Default audience",
+      status: "active",
+    });
+    expect(subscriptions).toHaveLength(1);
+    expect(subscriptions[0]?.values).toMatchObject({
+      emailAddress: emailAddresses[0]?.id,
+      audience: defaultAudiences[0]?.id,
+      status: "subscribed",
+      sourceKind: "publicOperation",
+      sourceTargetKind: "appInstall",
+      sourcePackageAppKey: "crm",
+      sourceSchemaKey: "crm",
+      sourceInstallId: defaultCrmInstallId,
+      sourceApiRoutePrefix: crmApiPrefix,
+      sourceOperationKey: "subscription.subscribe",
+      sourceHost: "example.com",
+      sourcePath: crmRoute,
+      sourceSiteBlockId: "rec_site_subscribe_form",
+    });
+    expect(subscriptions[0]?.values.consentedAt).toEqual(expect.any(String));
+    expect(subscriptions[0]?.values).not.toHaveProperty("sourceIp");
+    expect(subscriptions[0]?.values).not.toHaveProperty("sourceUserAgent");
+    expect(siteAfter.records).toEqual(siteBefore.records);
+    expect(siteSubscribeForm?.block.publicOperation).toMatchObject({
+      entityName: "subscription",
+      operationName: "subscribe",
+      canonicalKey: "subscription.subscribe",
+      route: "/api/site/public/operations/subscription/subscribe",
+    });
+    expect(JSON.stringify(siteTree)).not.toContain(crmRoute);
+    expectTurnstileRequests(turnstileRequests, [
+      {
+        secret: turnstileSecret,
+        response: "token-ok",
+      },
+    ]);
+  });
+
+  it("keeps installed CRM duplicate subscribe and resubscribe idempotent by membership", async () => {
+    const crmApiPrefix = `/api/app-installs/crm/${defaultCrmInstallId}`;
+    const crmRoute = `${crmApiPrefix}/public/operations/subscription/subscribe`;
+
+    await resetInstalledApp("crm", defaultCrmInstallId);
+
+    const first = await postPublicOperation(
+      crmRoute,
+      publicSubscribeBody({
+        idempotencyKey: "crm-duplicate-first",
+        input: { email: "Crm.Duplicate@Example.com" },
+      }),
+    );
+    const duplicate = await postPublicOperation(
+      crmRoute,
+      publicSubscribeBody({
+        idempotencyKey: "crm-duplicate-second",
+        input: { email: "crm.duplicate@example.com" },
+      }),
+    );
+    const afterDuplicate = await getJson<BootstrapResponse>(`${crmApiPrefix}/bootstrap`);
+    const duplicateRecords = contactSubscriptionRecords(afterDuplicate.records);
+    const emailAddresses = duplicateRecords.emailAddresses.filter(
+      (record) => record.values.normalizedAddress === "crm.duplicate@example.com",
+    );
+    const defaultAudience = duplicateRecords.audiences.find(
+      (record) => record.values.key === "default",
+    );
+    const duplicateSubscriptions = duplicateRecords.subscriptions.filter(
+      (record) =>
+        record.values.emailAddress === emailAddresses[0]?.id &&
+        record.values.audience === defaultAudience?.id,
+    );
+    const subscription = duplicateSubscriptions[0];
+
+    if (!subscription) {
+      throw new Error("Expected installed CRM subscription record.");
+    }
+
+    await patchSubscriptionStatus(
+      subscription.id,
+      "unsubscribed",
+      harness,
+      `/api/app-installs/crm/${defaultCrmInstallId}`,
+    );
+
+    const resubscribe = await postPublicOperation(
+      crmRoute,
+      publicSubscribeBody({
+        idempotencyKey: "crm-resubscribe",
+        input: { email: "crm.duplicate@example.com" },
+        sourceBlockId: "rec_site_subscribe_form_resubscribe",
+      }),
+    );
+    const afterResubscribe = await getJson<BootstrapResponse>(`${crmApiPrefix}/bootstrap`);
+    const resubscribeRecords = contactSubscriptionRecords(afterResubscribe.records);
+    const resubscribeEmailAddresses = resubscribeRecords.emailAddresses.filter(
+      (record) => record.values.normalizedAddress === "crm.duplicate@example.com",
+    );
+    const resubscribeDefaultAudience = resubscribeRecords.audiences.find(
+      (record) => record.values.key === "default",
+    );
+    const resubscribeSubscriptions = resubscribeRecords.subscriptions.filter(
+      (record) =>
+        record.values.emailAddress === resubscribeEmailAddresses[0]?.id &&
+        record.values.audience === resubscribeDefaultAudience?.id,
+    );
+
+    expect(first.status).toBe(200);
+    expect(duplicate.status).toBe(200);
+    expect(emailAddresses).toHaveLength(1);
+    expect(duplicateSubscriptions).toHaveLength(1);
+    expect(duplicateSubscriptions[0]?.values.status).toBe("subscribed");
+    expect(resubscribe.status).toBe(200);
+    expect(resubscribeEmailAddresses).toHaveLength(1);
+    expect(resubscribeSubscriptions).toHaveLength(1);
+    expect(resubscribeSubscriptions[0]?.id).toBe(subscription.id);
+    expect(resubscribeSubscriptions[0]?.values).toMatchObject({
+      status: "subscribed",
+      sourceKind: "publicOperation",
+      sourceTargetKind: "appInstall",
+      sourcePackageAppKey: "crm",
+      sourceSchemaKey: "crm",
+      sourceInstallId: defaultCrmInstallId,
+      sourceApiRoutePrefix: crmApiPrefix,
+      sourceOperationKey: "subscription.subscribe",
+      sourcePath: crmRoute,
+      sourceSiteBlockId: "rec_site_subscribe_form_resubscribe",
+    });
   });
 
   it("executes schema-key public create operations with create-shaped output", async () => {
@@ -2390,7 +2691,7 @@ async function resetSchemaApp(schemaKey: "tasks" | "site", target: Harness = har
 }
 
 async function resetInstalledApp(
-  packageAppKey: "site" | "tasks",
+  packageAppKey: "crm" | "site" | "tasks",
   appInstallId: string,
   target: Harness = harness,
 ) {
@@ -2626,14 +2927,23 @@ function taskRecordPlanRecords(records: StoredRecord[]) {
   };
 }
 
-async function patchSubscriptionStatus(recordId: string, status: "subscribed" | "unsubscribed") {
-  return postAdminRecordOperation({
-    idempotencyKey: `test-subscription-status-${status}`,
-    entity: "subscription",
-    operationName: "update",
-    recordId,
-    input: { status },
-  });
+async function patchSubscriptionStatus(
+  recordId: string,
+  status: "subscribed" | "unsubscribed",
+  target: Harness = harness,
+  apiPrefix = "/api/site",
+) {
+  return postAdminRecordOperation(
+    {
+      idempotencyKey: `test-subscription-status-${status}`,
+      entity: "subscription",
+      operationName: "update",
+      recordId,
+      input: { status },
+    },
+    target,
+    apiPrefix,
+  );
 }
 
 async function getJson<T>(path: string, target: Harness = harness) {
