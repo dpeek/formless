@@ -865,9 +865,44 @@ export type OperationHandlerJoinSchema = {
   right: OperationHandlerJoinSourceSchema;
 };
 
+export type OperationHandlerInputStringRecordIdExpectation = {
+  type: "stringRecordId";
+  required: true;
+};
+
+export type OperationHandlerInputStringRecordIdArrayExpectation = {
+  type: "stringRecordIdArray";
+  required: true;
+  nonEmpty: true;
+  rejectDuplicates: true;
+};
+
+export type OperationHandlerInputScalarRecordValueMapExpectation = {
+  type: "scalarRecordValueMap";
+  required: boolean;
+};
+
+export type OperationHandlerInputTextExpectation = {
+  type: "text";
+  required: true;
+};
+
+export type OperationHandlerInputFieldExpectation =
+  | OperationHandlerInputStringRecordIdExpectation
+  | OperationHandlerInputStringRecordIdArrayExpectation
+  | OperationHandlerInputScalarRecordValueMapExpectation
+  | OperationHandlerInputTextExpectation;
+
+export type OperationHandlerInputExpectation = {
+  type: "object";
+  required: true;
+  fields: Record<string, OperationHandlerInputFieldExpectation>;
+};
+
 export type OperationHandlerCapabilities = {
   createAfterCreateHook: boolean;
   publicExecution: boolean;
+  input?: OperationHandlerInputExpectation;
 };
 
 export type OperationHandlerKind =

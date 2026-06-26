@@ -423,6 +423,22 @@ The system SHALL materialize command behavior through operation handler modules.
 - AND handler execution uses operation input, effect configuration, and
   operation invocation output
 
+#### Scenario: Validate handler input shape from capability facts
+
+- GIVEN an accepted command operation invocation has effect type
+  `operationHandler`
+- WHEN Authority prepares the handler input
+- THEN runtime validation may use handler capability facts for structural input
+  shape checks before handler business logic executes
+- AND structural checks cover required object input, required string record ids,
+  required text fields, non-empty arrays of string record ids, duplicate id
+  rejection, and scalar record-value maps where the handler declares those
+  expectations
+- AND handler-specific business validation, storage-backed record lookup,
+  relationship target validation, tombstone checks, record value validation,
+  unique constraints, provider calls, and writes remain handler or Authority
+  execution responsibilities
+
 #### Scenario: Handler-owned dynamic behavior
 
 - GIVEN command behavior requires query fan-out, selected-record array input,

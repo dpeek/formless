@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { getOperationHandlerCapabilities, parseAppSchema, stringifySchema } from "./index.ts";
+import {
+  getOperationHandlerCapabilities,
+  parseAppSchema,
+  requiredOperationHandlerObjectInput,
+  requiredOperationHandlerStringRecordIdInput,
+  stringifySchema,
+} from "./index.ts";
 
 describe("schema state machines", () => {
   it("parses enum-backed state machines, transition operations, events, and stringify output", () => {
@@ -50,6 +56,9 @@ describe("schema state machines", () => {
     expect(getOperationHandlerCapabilities("transition-state")).toEqual({
       createAfterCreateHook: false,
       publicExecution: false,
+      input: requiredOperationHandlerObjectInput({
+        recordId: requiredOperationHandlerStringRecordIdInput(),
+      }),
     });
     expect(parseAppSchema(JSON.parse(stringifySchema(schema)))).toEqual(schema);
   });

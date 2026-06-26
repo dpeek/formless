@@ -11,6 +11,12 @@ import type {
   OperationHandlerConfigSchemaByKind,
   OperationHandlerEffectSchemaForKind,
   OperationHandlerEntityOperationEffectSchema,
+  OperationHandlerInputExpectation,
+  OperationHandlerInputFieldExpectation,
+  OperationHandlerInputScalarRecordValueMapExpectation,
+  OperationHandlerInputStringRecordIdArrayExpectation,
+  OperationHandlerInputStringRecordIdExpectation,
+  OperationHandlerInputTextExpectation,
   OperationHandlerJoinSchema,
   OperationHandlerKind,
   OperationHandlerKindBySelectionCapability,
@@ -37,12 +43,51 @@ export const entityOperationCommandEffectTypes = [
 const operationHandlerCapabilities = {
   "clear-completed": { createAfterCreateHook: false, publicExecution: false },
   "create-missing-join-records": { createAfterCreateHook: true, publicExecution: false },
-  "create-selected-join-record": { createAfterCreateHook: false, publicExecution: false },
-  "remove-selected-join-records": { createAfterCreateHook: false, publicExecution: false },
-  "create-tree-child": { createAfterCreateHook: false, publicExecution: false },
-  "remove-tree-placement": { createAfterCreateHook: false, publicExecution: false },
-  subscribe: { createAfterCreateHook: false, publicExecution: true },
-  "transition-state": { createAfterCreateHook: false, publicExecution: false },
+  "create-selected-join-record": {
+    createAfterCreateHook: false,
+    publicExecution: false,
+    input: requiredOperationHandlerObjectInput({
+      fromRecordId: requiredOperationHandlerStringRecordIdInput(),
+      toRecordId: requiredOperationHandlerStringRecordIdInput(),
+    }),
+  },
+  "remove-selected-join-records": {
+    createAfterCreateHook: false,
+    publicExecution: false,
+    input: requiredOperationHandlerObjectInput({
+      recordIds: requiredOperationHandlerStringRecordIdArrayInput(),
+    }),
+  },
+  "create-tree-child": {
+    createAfterCreateHook: false,
+    publicExecution: false,
+    input: requiredOperationHandlerObjectInput({
+      parentRecordId: requiredOperationHandlerStringRecordIdInput(),
+      childValues: requiredOperationHandlerScalarRecordValueMapInput(),
+      placementValues: optionalOperationHandlerScalarRecordValueMapInput(),
+    }),
+  },
+  "remove-tree-placement": {
+    createAfterCreateHook: false,
+    publicExecution: false,
+    input: requiredOperationHandlerObjectInput({
+      placementId: requiredOperationHandlerStringRecordIdInput(),
+    }),
+  },
+  subscribe: {
+    createAfterCreateHook: false,
+    publicExecution: true,
+    input: requiredOperationHandlerObjectInput({
+      email: requiredOperationHandlerTextInput(),
+    }),
+  },
+  "transition-state": {
+    createAfterCreateHook: false,
+    publicExecution: false,
+    input: requiredOperationHandlerObjectInput({
+      recordId: requiredOperationHandlerStringRecordIdInput(),
+    }),
+  },
 } satisfies Record<OperationHandlerKind, OperationHandlerCapabilities>;
 
 const operationHandlerKindBySelectionCapability = {
@@ -62,6 +107,59 @@ export function getOperationHandlerCapabilities(
   kind: OperationHandlerKind,
 ): OperationHandlerCapabilities {
   return operationHandlerCapabilities[kind];
+}
+
+export function getOperationHandlerInputExpectation(
+  kind: OperationHandlerKind,
+): OperationHandlerInputExpectation | undefined {
+  return getOperationHandlerCapabilities(kind).input;
+}
+
+export function requiredOperationHandlerObjectInput(
+  fields: Record<string, OperationHandlerInputFieldExpectation>,
+): OperationHandlerInputExpectation {
+  return {
+    type: "object",
+    required: true,
+    fields,
+  };
+}
+
+export function requiredOperationHandlerStringRecordIdInput(): OperationHandlerInputStringRecordIdExpectation {
+  return {
+    type: "stringRecordId",
+    required: true,
+  };
+}
+
+export function requiredOperationHandlerStringRecordIdArrayInput(): OperationHandlerInputStringRecordIdArrayExpectation {
+  return {
+    type: "stringRecordIdArray",
+    required: true,
+    nonEmpty: true,
+    rejectDuplicates: true,
+  };
+}
+
+export function requiredOperationHandlerScalarRecordValueMapInput(): OperationHandlerInputScalarRecordValueMapExpectation {
+  return {
+    type: "scalarRecordValueMap",
+    required: true,
+  };
+}
+
+export function optionalOperationHandlerScalarRecordValueMapInput(): OperationHandlerInputScalarRecordValueMapExpectation {
+  return {
+    type: "scalarRecordValueMap",
+    required: false,
+  };
+}
+
+export function requiredOperationHandlerTextInput(): OperationHandlerInputTextExpectation {
+  return {
+    type: "text",
+    required: true,
+  };
 }
 
 export function getOperationHandlerKindForSelectionCapability<

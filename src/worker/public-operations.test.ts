@@ -2362,6 +2362,21 @@ describe("public operation runtime", () => {
     expect(records.subscriptions[0]?.values.status).toBe("subscribed");
   });
 
+  it("keeps subscribe email address validation in handler execution", async () => {
+    const rejected = await postPublicOperation(
+      "/api/site/public/operations/subscription/subscribe",
+      publicSubscribeBody({
+        idempotencyKey: "subscribe-invalid-email",
+        input: { email: "not an email address" },
+      }),
+    );
+
+    expect(rejected.status).toBe(400);
+    expect((await rejected.json()) as { error: string }).toEqual({
+      error: 'Subscribe operation public input "email" must be an email address.',
+    });
+  });
+
   it("resubscribes an existing unsubscribed membership", async () => {
     const first = await postPublicOperation(
       "/api/site/public/operations/subscription/subscribe",

@@ -488,6 +488,19 @@ operation-native handler effects.
 - AND handler dispatch uses the operation invocation envelope and typed handler
   configuration
 
+#### Scenario: Declare operation handler input expectations
+
+- GIVEN a command operation references an operation handler kind
+- WHEN runtime, generated UI, public execution, or tests inspect that handler
+- THEN handler capability facts may describe structural input expectations such
+  as required object fields, required text fields, string record ids, arrays of
+  string record ids, or scalar record-value maps
+- AND handler input expectation facts are named by handler kind and remain
+  separate from operation input field declarations and handler configuration
+- AND handler input expectation facts do not own handler business rules,
+  storage-backed record lookup, relationship target validation, tombstone
+  checks, record value validation, provider calls, or writes
+
 ### Requirement: Entity Operations
 
 The system SHALL let app schemas declare entity-local operations as the shared

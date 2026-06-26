@@ -6,13 +6,22 @@ import {
   entityOperationBindingKinds,
   entityOperationCommandEffectTypes,
   formatEntityOperationKey,
+  getOperationHandlerCapabilities,
+  getOperationHandlerInputExpectation,
   isEntityOperationBindingKind,
   isEntityOperationCommandEffect,
   isEntityOperationReadKind,
   isEntityOperationWriteKind,
+  isOperationHandlerPubliclyExecutable,
   operationHandlerKinds,
+  optionalOperationHandlerScalarRecordValueMapInput,
   parseAppSchema,
   parseEntityOperationKey,
+  requiredOperationHandlerObjectInput,
+  requiredOperationHandlerScalarRecordValueMapInput,
+  requiredOperationHandlerStringRecordIdArrayInput,
+  requiredOperationHandlerStringRecordIdInput,
+  requiredOperationHandlerTextInput,
   stringifySchema,
 } from "./index.ts";
 
@@ -213,6 +222,51 @@ describe("schema entity operations", () => {
     expect(entityOperationCommandEffectTypes).toEqual(["operationHandler", "recordPlan"]);
     expect(isEntityOperationCommandEffect(clearCompletedEffect)).toBe(true);
     expect(isEntityOperationCommandEffect(submitIntakeEffect)).toBe(true);
+  });
+
+  it("exposes handler input expectations without changing capability eligibility", () => {
+    expect(getOperationHandlerInputExpectation("clear-completed")).toBeUndefined();
+    expect(getOperationHandlerInputExpectation("create-missing-join-records")).toBeUndefined();
+    expect(getOperationHandlerInputExpectation("create-selected-join-record")).toEqual(
+      requiredOperationHandlerObjectInput({
+        fromRecordId: requiredOperationHandlerStringRecordIdInput(),
+        toRecordId: requiredOperationHandlerStringRecordIdInput(),
+      }),
+    );
+    expect(getOperationHandlerInputExpectation("remove-selected-join-records")).toEqual(
+      requiredOperationHandlerObjectInput({
+        recordIds: requiredOperationHandlerStringRecordIdArrayInput(),
+      }),
+    );
+    expect(getOperationHandlerInputExpectation("create-tree-child")).toEqual(
+      requiredOperationHandlerObjectInput({
+        parentRecordId: requiredOperationHandlerStringRecordIdInput(),
+        childValues: requiredOperationHandlerScalarRecordValueMapInput(),
+        placementValues: optionalOperationHandlerScalarRecordValueMapInput(),
+      }),
+    );
+    expect(getOperationHandlerInputExpectation("remove-tree-placement")).toEqual(
+      requiredOperationHandlerObjectInput({
+        placementId: requiredOperationHandlerStringRecordIdInput(),
+      }),
+    );
+    expect(getOperationHandlerInputExpectation("subscribe")).toEqual(
+      requiredOperationHandlerObjectInput({
+        email: requiredOperationHandlerTextInput(),
+      }),
+    );
+    expect(getOperationHandlerInputExpectation("transition-state")).toEqual(
+      requiredOperationHandlerObjectInput({
+        recordId: requiredOperationHandlerStringRecordIdInput(),
+      }),
+    );
+
+    expect(getOperationHandlerCapabilities("subscribe").publicExecution).toBe(true);
+    expect(isOperationHandlerPubliclyExecutable("subscribe")).toBe(true);
+    expect(isOperationHandlerPubliclyExecutable("create-selected-join-record")).toBe(false);
+    expect(
+      getOperationHandlerCapabilities("create-missing-join-records").createAfterCreateHook,
+    ).toBe(true);
   });
 
   it("rejects unsupported command effect types", () => {

@@ -1182,6 +1182,51 @@ describe("authority operation execution", () => {
     });
   });
 
+  it("rejects invalid operation handler input shape before command materialization", async () => {
+    const bootstrap = await executeOperation<BootstrapResponse>({
+      method: "GET",
+      path: "/bootstrap",
+    });
+    const schema = schemaWithTransitionCommandOperation(bootstrap.body.result.body.schema);
+    const beforeCursor = bootstrap.body.result.body.cursor;
+    const schemaUpdatedAt = bootstrap.body.result.body.schemaUpdatedAt;
+
+    await executeOperation({
+      method: "POST",
+      path: "/schema",
+      body: { schema },
+    });
+
+    const rejected = await executeOperationFailure({
+      method: "POST",
+      path: "/operations/task/startTask",
+      body: {
+        idempotencyKey: "transition-command-invalid-shape",
+        input: { recordId: "" },
+      },
+    });
+    const sync = await executeOperation<SyncResponse>({
+      method: "GET",
+      path: "/sync",
+      search: `after=${beforeCursor}&schemaUpdatedAt=${encodeURIComponent(schemaUpdatedAt)}`,
+    });
+    const rows = await readOperationInvocations();
+
+    expect(rejected.response.status).toBe(400);
+    expect(rejected.body).toEqual({
+      error: 'Operation "task.startTask" input recordId must be non-empty.',
+      writes: [],
+    });
+    expect(sync.body.result.body.changes).toEqual([]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      affectedChangeIds: [],
+      errorMessage: 'Operation "task.startTask" input recordId must be non-empty.',
+      operationKey: "task.startTask",
+      status: "failed",
+    });
+  });
+
   it("materializes record-plan command operations through operation writes", async () => {
     const bootstrap = await executeOperation<BootstrapResponse>({
       method: "GET",

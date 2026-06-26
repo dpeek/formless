@@ -10,8 +10,14 @@ import { testSiteSeedRecords } from "./site-records.ts";
 import {
   formatQualifiedEntityName,
   getOperationHandlerCapabilities,
+  optionalOperationHandlerScalarRecordValueMapInput,
   parseAppSchema,
   parseQualifiedEntityName,
+  requiredOperationHandlerObjectInput,
+  requiredOperationHandlerScalarRecordValueMapInput,
+  requiredOperationHandlerStringRecordIdArrayInput,
+  requiredOperationHandlerStringRecordIdInput,
+  requiredOperationHandlerTextInput,
   stringifySchema,
 } from "@dpeek/formless-schema";
 import type {
@@ -6955,12 +6961,51 @@ describe("schema operation handler contracts", () => {
     const capabilitiesByKind = {
       "clear-completed": { createAfterCreateHook: false, publicExecution: false },
       "create-missing-join-records": { createAfterCreateHook: true, publicExecution: false },
-      "create-selected-join-record": { createAfterCreateHook: false, publicExecution: false },
-      "remove-selected-join-records": { createAfterCreateHook: false, publicExecution: false },
-      "create-tree-child": { createAfterCreateHook: false, publicExecution: false },
-      "remove-tree-placement": { createAfterCreateHook: false, publicExecution: false },
-      subscribe: { createAfterCreateHook: false, publicExecution: true },
-      "transition-state": { createAfterCreateHook: false, publicExecution: false },
+      "create-selected-join-record": {
+        createAfterCreateHook: false,
+        publicExecution: false,
+        input: requiredOperationHandlerObjectInput({
+          fromRecordId: requiredOperationHandlerStringRecordIdInput(),
+          toRecordId: requiredOperationHandlerStringRecordIdInput(),
+        }),
+      },
+      "remove-selected-join-records": {
+        createAfterCreateHook: false,
+        publicExecution: false,
+        input: requiredOperationHandlerObjectInput({
+          recordIds: requiredOperationHandlerStringRecordIdArrayInput(),
+        }),
+      },
+      "create-tree-child": {
+        createAfterCreateHook: false,
+        publicExecution: false,
+        input: requiredOperationHandlerObjectInput({
+          parentRecordId: requiredOperationHandlerStringRecordIdInput(),
+          childValues: requiredOperationHandlerScalarRecordValueMapInput(),
+          placementValues: optionalOperationHandlerScalarRecordValueMapInput(),
+        }),
+      },
+      "remove-tree-placement": {
+        createAfterCreateHook: false,
+        publicExecution: false,
+        input: requiredOperationHandlerObjectInput({
+          placementId: requiredOperationHandlerStringRecordIdInput(),
+        }),
+      },
+      subscribe: {
+        createAfterCreateHook: false,
+        publicExecution: true,
+        input: requiredOperationHandlerObjectInput({
+          email: requiredOperationHandlerTextInput(),
+        }),
+      },
+      "transition-state": {
+        createAfterCreateHook: false,
+        publicExecution: false,
+        input: requiredOperationHandlerObjectInput({
+          recordId: requiredOperationHandlerStringRecordIdInput(),
+        }),
+      },
     } satisfies Record<OperationHandlerKind, OperationHandlerCapabilities>;
 
     for (const [kind, capabilities] of Object.entries(capabilitiesByKind)) {

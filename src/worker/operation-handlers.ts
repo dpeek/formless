@@ -21,6 +21,10 @@ import { validateRecordValues } from "./authority-validation.ts";
 import { assertUniqueConstraints } from "./constraints.ts";
 import { BadRequestError } from "./errors.ts";
 import {
+  validateOperationHandlerInputValues,
+  type OperationHandlerInputValuesByKind,
+} from "./operation-handler-input-validation.ts";
+import {
   getActiveRecordsByEntity,
   getStoredRecord,
   type OperationRecordWritePlan,
@@ -193,7 +197,7 @@ function executeSubscribeHandler(context: OperationHandlerExecutionContext) {
     );
   }
 
-  const input = requireInputRecord(context, "requires public input");
+  const input = requireHandlerInput(context, "subscribe");
   const contactEntity = requireSubscribeEntity(context.schema, "contact");
   const emailAddressEntity = requireSubscribeEntity(context.schema, "email-address");
   const audienceEntity = requireSubscribeEntity(context.schema, "audience");
@@ -1003,62 +1007,13 @@ function requireCreateSelectedJoinRecordInput(context: OperationHandlerExecution
   fromRecordId: string;
   toRecordId: string;
 } {
-  const input = requireInputRecord(context, "requires input with fromRecordId and toRecordId");
-  const fromRecordId = input.fromRecordId;
-  const toRecordId = input.toRecordId;
-
-  if (typeof fromRecordId !== "string" || fromRecordId.trim() === "") {
-    throw new BadRequestError(
-      `Operation "${context.envelope.operation.canonicalKey}" input fromRecordId must be non-empty.`,
-    );
-  }
-
-  if (typeof toRecordId !== "string" || toRecordId.trim() === "") {
-    throw new BadRequestError(
-      `Operation "${context.envelope.operation.canonicalKey}" input toRecordId must be non-empty.`,
-    );
-  }
-
-  return { fromRecordId, toRecordId };
+  return requireHandlerInput(context, "create-selected-join-record");
 }
 
 function requireRemoveSelectedJoinRecordsInput(context: OperationHandlerExecutionContext): {
   recordIds: string[];
 } {
-  const input = requireInputRecord(context, "requires input with recordIds");
-
-  if (!Array.isArray(input.recordIds)) {
-    throw new BadRequestError(
-      `Operation "${context.envelope.operation.canonicalKey}" requires input with recordIds.`,
-    );
-  }
-
-  if (input.recordIds.length === 0) {
-    throw new BadRequestError(
-      `Operation "${context.envelope.operation.canonicalKey}" input recordIds must not be empty.`,
-    );
-  }
-
-  const seen = new Set<string>();
-  const recordIds = input.recordIds.map((recordId, index) => {
-    if (typeof recordId !== "string" || recordId.trim() === "") {
-      throw new BadRequestError(
-        `Operation "${context.envelope.operation.canonicalKey}" input recordIds[${index}] must be non-empty.`,
-      );
-    }
-
-    if (seen.has(recordId)) {
-      throw new BadRequestError(
-        `Operation "${context.envelope.operation.canonicalKey}" input recordIds must not contain duplicates.`,
-      );
-    }
-
-    seen.add(recordId);
-
-    return recordId;
-  });
-
-  return { recordIds };
+  return requireHandlerInput(context, "remove-selected-join-records");
 }
 
 function requireCreateTreeChildInput(context: OperationHandlerExecutionContext): {
@@ -1066,81 +1021,39 @@ function requireCreateTreeChildInput(context: OperationHandlerExecutionContext):
   childValues: RecordValues;
   placementValues?: RecordValues;
 } {
-  const input = requireInputRecord(context, "requires input with parentRecordId and childValues");
-
-  if (typeof input.parentRecordId !== "string" || input.parentRecordId.trim() === "") {
-    throw new BadRequestError(
-      `Operation "${context.envelope.operation.canonicalKey}" input parentRecordId must be non-empty.`,
-    );
-  }
-
-  if (!isRecord(input.childValues)) {
-    throw new BadRequestError(
-      `Operation "${context.envelope.operation.canonicalKey}" requires input with parentRecordId and childValues.`,
-    );
-  }
-
-  if (!Object.values(input.childValues).every(isFieldValue)) {
-    throw new BadRequestError(
-      `Operation "${context.envelope.operation.canonicalKey}" input childValues must contain scalar field values.`,
-    );
-  }
-
-  if (
-    input.placementValues !== undefined &&
-    (!isRecord(input.placementValues) || !Object.values(input.placementValues).every(isFieldValue))
-  ) {
-    throw new BadRequestError(
-      `Operation "${context.envelope.operation.canonicalKey}" input placementValues must contain scalar field values.`,
-    );
-  }
-
-  return {
-    parentRecordId: input.parentRecordId,
-    childValues: input.childValues as RecordValues,
-    ...(input.placementValues === undefined
-      ? {}
-      : { placementValues: input.placementValues as RecordValues }),
-  };
+  return requireHandlerInput(context, "create-tree-child");
 }
 
 function requireRemoveTreePlacementInput(context: OperationHandlerExecutionContext): {
   placementId: string;
 } {
-  const input = requireInputRecord(context, "requires input with placementId");
-
-  if (typeof input.placementId !== "string" || input.placementId.trim() === "") {
-    throw new BadRequestError(
-      `Operation "${context.envelope.operation.canonicalKey}" input placementId must be non-empty.`,
-    );
-  }
-
-  return { placementId: input.placementId };
+  return requireHandlerInput(context, "remove-tree-placement");
 }
 
 function requireTransitionStateInput(context: OperationHandlerExecutionContext): {
   recordId: string;
 } {
-  const input = requireInputRecord(context, "requires input with recordId");
+  return requireHandlerInput(context, "transition-state");
+}
 
-  if (typeof input.recordId !== "string" || input.recordId.trim() === "") {
-    throw new BadRequestError(
-      `Operation "${context.envelope.operation.canonicalKey}" input recordId must be non-empty.`,
+function requireHandlerInput<Kind extends OperationHandlerKind>(
+  context: OperationHandlerExecutionContext,
+  kind: Kind,
+): Exclude<OperationHandlerInputValuesByKind[Kind], undefined> {
+  requireHandlerEffect(context, kind);
+  const input = validateOperationHandlerInputValues({
+    canonicalOperationKey: context.envelope.operation.canonicalKey,
+    handler: kind,
+    input: context.input,
+  });
+
+  if (input === undefined) {
+    throw new Error(
+      `Operation handler "${context.envelope.operation.canonicalKey}" missing validated input.`,
     );
   }
 
-  return { recordId: input.recordId };
-}
-
-function requireInputRecord(
-  context: OperationHandlerExecutionContext,
-  message: string,
-): Record<string, unknown> {
-  if (!isRecord(context.input)) {
-    throw new BadRequestError(`Operation "${context.envelope.operation.canonicalKey}" ${message}.`);
-  }
-
-  return context.input;
+  return input as Exclude<OperationHandlerInputValuesByKind[Kind], undefined>;
 }
 
 function requireActiveEndpointRecord(
@@ -1333,16 +1246,4 @@ function operationKey(entityName: string, operationName: string) {
 
 function entityHasOperationKind(entity: EntitySchema, kind: EntityOperationKind): boolean {
   return Object.values(entity.operations ?? {}).some((operation) => operation.kind === kind);
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function isFieldValue(value: unknown): value is RecordValues[string] {
-  return typeof value === "string" || typeof value === "boolean" || isFiniteNumber(value);
-}
-
-function isFiniteNumber(value: unknown): value is number {
-  return typeof value === "number" && Number.isFinite(value);
 }
