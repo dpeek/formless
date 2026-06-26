@@ -16,8 +16,12 @@ import {
   selectAnonymousPublicOperation,
 } from "@dpeek/formless-schema";
 import type { RecordValues } from "@dpeek/formless-storage";
-import { buildPublicOperationInvocationEnvelope } from "./entity-operations.ts";
 import { BadRequestError } from "./errors.ts";
+import {
+  buildUnverifiedPublicOperationInvocationEnvelope,
+  buildVerifiedPublicOperationInvocationEnvelope,
+  type PublicOperationInvocationSourceFacts,
+} from "./operation-invocation-envelopes.ts";
 
 export type PublicOperationExecutorRoute = {
   entityName: string;
@@ -52,19 +56,6 @@ export type PublicOperationChallengeAdapterInput = {
   unverifiedEnvelope: OperationInvocationEnvelope;
 };
 
-export type PublicOperationVerifiedEnvelopeInput = PublicOperationPrepareExecutionEnvelopeInput & {
-  verification: PublicOperationChallengeVerification;
-};
-
-export type PublicOperationPrepareExecutionEnvelopeInput = {
-  idempotencyKey: string;
-  parsed: ParsedPublicOperationRequest;
-  receivedAt: string;
-  requestUrlFacts: PublicOperationRequestUrlFacts;
-  selected: SelectedPublicOperation;
-  unverifiedEnvelope: OperationInvocationEnvelope;
-};
-
 export type PublicOperationInputValidationAdapter = {
   validate(input: { rawInput: unknown; selected: SelectedPublicOperation }): RecordValues;
 };
@@ -73,10 +64,6 @@ export type PublicOperationChallengeAdapter = {
   verify(
     input: PublicOperationChallengeAdapterInput,
   ): Promise<PublicOperationChallengeVerification> | PublicOperationChallengeVerification;
-};
-
-export type PublicOperationEnvelopeAdapter = {
-  buildVerified(input: PublicOperationVerifiedEnvelopeInput): OperationInvocationEnvelope;
 };
 
 export type PublicOperationLifecycleAdapter = {
@@ -107,7 +94,6 @@ export type PublicOperationExecutorAdapters = {
   afterCommit: PublicOperationAfterCommitAdapter;
   authority: PublicOperationAuthorityExecutionAdapter;
   challenge: PublicOperationChallengeAdapter;
-  envelope: PublicOperationEnvelopeAdapter;
   lifecycle: PublicOperationLifecycleAdapter;
   response: PublicOperationResponseAdapter;
   validation: PublicOperationInputValidationAdapter;
@@ -163,19 +149,20 @@ export async function executePublicOperationExecutor(
       source: envelopeFields.source,
     }));
   const requestUrlFacts = publicRequestUrlFacts(input.request);
-  const unverifiedEnvelope = buildPublicOperationInvocationEnvelope({
-    entityName: input.route.entityName,
-    host: requestUrlFacts.host,
+  const unverifiedEnvelope = buildUnverifiedPublicOperationInvocationEnvelope({
     identity: input.identity,
     idempotencyKey,
-    operationName: input.route.operationName,
-    path: requestUrlFacts.path,
     publicInput: envelopeFields.input,
     receivedAt,
+    route: {
+      entityName: input.route.entityName,
+      operationName: input.route.operationName,
+    },
     schema: input.schema,
-    ...(envelopeFields.source?.siteBlockId === undefined
-      ? {}
-      : { siteBlockId: envelopeFields.source.siteBlockId }),
+    source: publicOperationSourceFacts({
+      requestUrlFacts,
+      source: envelopeFields.source,
+    }),
   });
 
   let parsed: ParsedPublicOperationRequest | undefined;
@@ -203,9 +190,24 @@ export async function executePublicOperationExecutor(
       };
       const verification = await input.adapters.challenge.verify(stage);
 
-      return input.adapters.envelope.buildVerified({
-        ...stage,
-        verification,
+      return buildVerifiedPublicOperationInvocationEnvelope({
+        identity: input.identity,
+        idempotencyKey,
+        proof: {
+          turnstileToken: parsed.proof.turnstileToken,
+          verification,
+        },
+        publicInput: parsed.input,
+        receivedAt,
+        route: {
+          entityName: selected.entityName,
+          operationName: selected.operationName,
+        },
+        schema: input.schema,
+        source: publicOperationSourceFacts({
+          requestUrlFacts,
+          source: parsed.source,
+        }),
       });
     },
   });
@@ -396,6 +398,17 @@ function publicRequestUrlFacts(request: Request): PublicOperationRequestUrlFacts
     host: originalHost ?? url.host,
     origin,
     path: url.pathname,
+  };
+}
+
+function publicOperationSourceFacts(input: {
+  requestUrlFacts: PublicOperationRequestUrlFacts;
+  source: PublicOperationRequestSource | undefined;
+}): PublicOperationInvocationSourceFacts {
+  return {
+    host: input.requestUrlFacts.host,
+    path: input.requestUrlFacts.path,
+    ...(input.source?.siteBlockId === undefined ? {} : { siteBlockId: input.source.siteBlockId }),
   };
 }
 

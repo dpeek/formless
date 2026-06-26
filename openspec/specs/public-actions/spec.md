@@ -235,6 +235,11 @@ invocation envelope before validating input or committing effects.
 - THEN the envelope includes actor mode `anonymous`, target app storage identity,
   canonical operation key, request host, request path, source block id when
   supplied, public input, proof data, idempotency key, and received timestamp
+- AND the public executor builds an auditable unverified envelope before proof
+  parsing or challenge verification using only request source facts, public
+  input, idempotency, and received timestamp
+- AND verified public execution rebuilds the envelope through the same public
+  source-kind boundary with verified proof facts before Authority execution
 
 #### Scenario: Source context is preserved
 
@@ -297,8 +302,8 @@ invocation envelope before validating input or committing effects.
 - THEN accepted, rejected, failed, replayed, and committed invocation statuses
   are recorded through the shared operation invocation lifecycle
 - AND target route resolution, request URL fact selection, challenge proof
-  verification, verified-envelope construction, invocation lifecycle rows,
-  durable writes, public response filtering, and after-commit side effects
+  verification, public source-kind envelope construction, invocation lifecycle
+  rows, durable writes, public response filtering, and after-commit side effects
   remain explicit runtime adapters
 
 #### Scenario: Stage public operation execution
@@ -306,10 +311,11 @@ invocation envelope before validating input or committing effects.
 - GIVEN a target-scoped public operation route resolves a declared operation
 - WHEN the public operation executor evaluates the request
 - THEN the executor stages operation selection, public request envelope parsing,
-  idempotency derivation, auditable unverified envelope construction, origin
-  evaluation, input and proof validation, replay detection, challenge
-  verification, verified envelope construction, Authority execution, public
-  response filtering, and after-commit side effects in that order
+  idempotency derivation, auditable unverified public source-kind envelope
+  construction, origin evaluation, input and proof validation, replay detection,
+  challenge verification, verified public source-kind envelope construction,
+  Authority execution, public response filtering, and after-commit side effects
+  in that order
 - AND each stage receives only the public request facts, schema facts, storage
   facts, challenge adapter, lifecycle adapter, Authority execution adapter,
   public response adapter, or after-commit adapter it needs

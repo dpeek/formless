@@ -34,11 +34,11 @@ import {
 } from "../shared/upgrade-migrations.ts";
 import {
   assertOperationInvocationAuthorized,
-  buildProtocolOperationInvocationEnvelope,
   executeReadOperationInvocation,
   executeWriteOperationInvocation,
   parseEntityOperationRoute,
 } from "./entity-operations.ts";
+import { buildProtocolOperationInvocationEnvelope } from "./operation-invocation-envelopes.ts";
 import {
   validateSchemaUpdateRequest,
   validateSourceSchemaReset,

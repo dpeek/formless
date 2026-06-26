@@ -3,6 +3,7 @@ import { describe, expect, it } from "vite-plus/test";
 
 import { schemaKeyStorageIdentity } from "../shared/app-storage-identity.ts";
 import type {
+  OperationInvocationEnvelope,
   OperationInvocationOutput,
   OperationInvocationResponse,
 } from "../shared/operation-invocation.ts";
@@ -47,6 +48,24 @@ describe("public operation executor adapters", () => {
     expect(events).toEqual(["shape", "afterCommit"]);
     expect(harness.state.afterCommitResponses).toHaveLength(1);
     expect(harness.state.authorityCalls).toBe(1);
+    expect(harness.state.authorityEnvelopes[0]).toMatchObject({
+      actor: { kind: "anonymous" },
+      idempotency: {
+        key: "adapter-create",
+        source: "caller",
+        writeIdentity: "operation:contact-message.submit:adapter-create",
+      },
+      operation: {
+        canonicalKey: "contact-message.submit",
+        kind: "create",
+      },
+      source: {
+        host: "example.com",
+        path: "/api/site/public/operations/contact-message/submit",
+        protocol: "public",
+        siteBlockId: "rec_site_contact_form",
+      },
+    });
     expect(harness.state.challengeCalls).toBe(1);
     expect(harness.state.shapedResponses).toHaveLength(1);
   });
@@ -88,6 +107,7 @@ function publicOperationExecutorHarness(input: {
 }) {
   const state = {
     afterCommitResponses: [] as OperationInvocationResponse[],
+    authorityEnvelopes: [] as OperationInvocationEnvelope[],
     authorityCalls: 0,
     challengeCalls: 0,
     shapedResponses: [] as OperationInvocationResponse[],
@@ -102,6 +122,7 @@ function publicOperationExecutorHarness(input: {
     authority: {
       execute: ({ envelope }) => {
         state.authorityCalls += 1;
+        state.authorityEnvelopes.push(envelope);
 
         return operationInvocationResponse(envelope, input.output, "committed");
       },
@@ -116,9 +137,6 @@ function publicOperationExecutorHarness(input: {
           verifiedAt: "2026-06-26T00:00:00.000Z",
         } as const;
       },
-    },
-    envelope: {
-      buildVerified: ({ unverifiedEnvelope }) => unverifiedEnvelope,
     },
     lifecycle: {
       execute: async (stage) => {

@@ -239,6 +239,12 @@ materialization.
   identity, entity, record id or selection when relevant, actor, source
   protocol, source route or UI surface when relevant, input, idempotency key
   when required, and received timestamp
+- AND envelope construction is owned by source-kind builders that map protocol,
+  generated UI, automation, CLI, runner, or public source facts into the
+  canonical invocation shape
+- AND route handlers and public executors pass source-kind facts into the
+  envelope boundary instead of assembling actor, source, input, idempotency, and
+  operation snapshots independently
 - AND unsupported generic write protocol routes do not select Authority write
   operations
 - AND anonymous public callers can build an operation invocation envelope only

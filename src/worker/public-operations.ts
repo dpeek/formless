@@ -6,10 +6,7 @@ import {
 import type { PublicOperationResponse } from "../shared/protocol.ts";
 import type { AppSchema } from "@dpeek/formless-schema";
 import type { OperationInvocationResponse } from "../shared/operation-invocation.ts";
-import {
-  buildPublicOperationInvocationEnvelope,
-  executeWriteOperationInvocation,
-} from "./entity-operations.ts";
+import { executeWriteOperationInvocation } from "./entity-operations.ts";
 import { BadRequestError } from "./errors.ts";
 import { executePublicOperationInvocationLifecycle } from "./operation-invocation-lifecycle.ts";
 import { validatePublicOperationInputValues } from "./operation-input-validation.ts";
@@ -19,10 +16,8 @@ import {
   type PublicOperationExecutorAdapters,
   type PublicOperationExecutorResult,
   type PublicOperationExecutorRoute,
-  type PublicOperationVerifiedEnvelopeInput,
 } from "./public-operation-executor.ts";
 import {
-  buildVerifiedPublicOperationTurnstileProof,
   type PublicOperationTurnstileChallengeEnv,
   verifyPublicOperationTurnstileChallenge,
 } from "./public-operation-turnstile-challenge.ts";
@@ -135,9 +130,6 @@ function publicOperationExecutorAdapters(
           token: stage.parsed.proof.turnstileToken,
         }),
     },
-    envelope: {
-      buildVerified: (stage) => buildVerifiedPublicOperationEnvelope(input, stage),
-    },
     lifecycle: {
       execute: (stage) =>
         executePublicOperationInvocationLifecycle({
@@ -161,30 +153,6 @@ function publicOperationExecutorAdapters(
         }),
     },
   };
-}
-
-function buildVerifiedPublicOperationEnvelope(
-  input: PublicOperationExecutionInput,
-  stage: PublicOperationVerifiedEnvelopeInput,
-) {
-  return buildPublicOperationInvocationEnvelope({
-    entityName: input.route.entityName,
-    host: stage.requestUrlFacts.host,
-    identity: input.identity,
-    idempotencyKey: stage.idempotencyKey,
-    operationName: input.route.operationName,
-    path: stage.requestUrlFacts.path,
-    proof: buildVerifiedPublicOperationTurnstileProof({
-      token: stage.parsed.proof.turnstileToken,
-      verification: stage.verification,
-    }),
-    publicInput: stage.parsed.input,
-    receivedAt: stage.receivedAt,
-    schema: input.schema,
-    ...(stage.parsed.source?.siteBlockId === undefined
-      ? {}
-      : { siteBlockId: stage.parsed.source.siteBlockId }),
-  });
 }
 
 function shapePublicOperationResponse(
