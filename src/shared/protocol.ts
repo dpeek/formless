@@ -142,6 +142,10 @@ export type BrowserReplicaSchemaProvenance =
   | {
       kind: "instance-control-plane";
       sourceSchemaHash: SourceSchemaHash;
+    }
+  | {
+      kind: "identity-control-plane";
+      sourceSchemaHash: SourceSchemaHash;
     };
 
 export type BrowserReplicaUpgradeFacts = {
@@ -329,7 +333,7 @@ function isBrowserReplicaSchemaProvenance(value: unknown): value is BrowserRepli
     return false;
   }
 
-  if (value.kind === "instance-control-plane") {
+  if (value.kind === "instance-control-plane" || value.kind === "identity-control-plane") {
     return true;
   }
 

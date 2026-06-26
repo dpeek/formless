@@ -589,7 +589,9 @@ async function addBrowserReplicaWriteHeaders(
     readSchemaProvenance(identity),
   ]);
   const packageFacts =
-    schemaProvenance || identity.kind === "instanceControlPlane"
+    schemaProvenance ||
+    identity.kind === "identityControlPlane" ||
+    identity.kind === "instanceControlPlane"
       ? undefined
       : packageAppFactsForKey(
           identity.packageAppKey,
@@ -610,7 +612,10 @@ async function addBrowserReplicaWriteHeaders(
     return;
   }
 
-  if (schemaProvenance?.kind === "instance-control-plane") {
+  if (
+    schemaProvenance?.kind === "identity-control-plane" ||
+    schemaProvenance?.kind === "instance-control-plane"
+  ) {
     headers.set(FORMLESS_CLIENT_SOURCE_SCHEMA_HASH_HEADER, schemaProvenance.sourceSchemaHash);
     return;
   }

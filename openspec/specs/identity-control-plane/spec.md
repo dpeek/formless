@@ -54,6 +54,61 @@ schema source.
   React, Worker, provider SDK, filesystem, app package registry, or live
   network behavior
 
+### Requirement: Identity Runtime Storage Mount
+
+The system SHALL mount the identity control-plane schema as its own
+runtime-owned Authority storage.
+
+#### Scenario: Identity API route
+
+- GIVEN a Worker request path starts with `/api/formless/identity/`
+- WHEN the request path selects a normal Authority operation route
+- THEN the Worker forwards the request to the Authority Durable Object named
+  `instance:identity`
+- AND the Durable Object handles the request with identity-control-plane schema
+  key `identity-control-plane`, storage identity `instance:identity`, API route
+  prefix `/api/formless/identity`, and schema provenance from
+  `@dpeek/formless-identity-control-plane`
+- AND generic source-app and installed-app API route parsing does not claim the
+  identity control-plane route
+
+#### Scenario: Identity storage initialization
+
+- GIVEN identity control-plane storage is initialized
+- WHEN the first bootstrap, read, or write operation runs
+- THEN storage is initialized from the identity control-plane schema source
+- AND it includes one active built-in `role` record for each supported runtime
+  role key
+- AND each built-in role record has a deterministic id derived from the role
+  key, such as `role:instance.owner` for `instance.owner`
+- AND the built-in role records are normal flat identity records that can be
+  referenced by role-assignment records
+
+#### Scenario: Identity management authorization
+
+- GIVEN an identity control-plane API request selects a read or write operation
+- WHEN the request is authorized
+- THEN existing owner session and admin bearer authorization protect the request
+  until a later instance-auth change replaces owner-only checks with
+  principal-role checks
+- AND anonymous browser requests cannot bootstrap, read, or mutate identity
+  control-plane records
+- AND admin bearer authorization remains separate from browser login and
+  identity-control-plane records
+
+#### Scenario: Runtime identity write validation
+
+- GIVEN an identity control-plane write operation creates, patches, or deletes
+  reviewable identity records
+- WHEN the runtime validates the write before commit
+- THEN it validates the candidate identity record set with
+  identity-control-plane validation helpers
+- AND selected-target uniqueness for memberships, role assignments, and app
+  registrations is enforced before commit
+- AND invalid references, unsupported entity names, duplicate active role keys,
+  duplicate normalized active emails, and duplicate selected-target facts reject
+  the write without a partial commit
+
 ### Requirement: Principal And Email Records
 
 The system SHALL represent every authenticated human or future service subject

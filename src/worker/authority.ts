@@ -32,6 +32,7 @@ import { executeAuthorityOperation, selectAuthorityOperation } from "./authority
 import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
 import { handleInstanceAppInstallsDurableObjectRequest } from "./instance-app-installs.ts";
 import { handleInstanceControlPlaneDurableObjectRequest } from "./instance-control-plane.ts";
+import { handleIdentityControlPlaneDurableObjectRequest } from "./identity-control-plane.ts";
 import {
   LaunchFixtureConfigurationError,
   launchFixtureStorageSourceForAuthorityName,
@@ -190,6 +191,16 @@ export class FormlessAuthority extends DurableObject<Env> {
 
     if (instanceControlPlaneResponse) {
       return instanceControlPlaneResponse;
+    }
+
+    const identityControlPlaneResponse = await handleIdentityControlPlaneDurableObjectRequest(
+      request,
+      this.ctx.storage,
+      this.bindings,
+    );
+
+    if (identityControlPlaneResponse) {
+      return identityControlPlaneResponse;
     }
 
     const instanceArchiveResponse = await handleInstanceArchiveDurableObjectRequest(

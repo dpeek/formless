@@ -9,6 +9,11 @@ import {
   INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
   INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
 } from "@dpeek/formless-instance-control-plane";
+import {
+  IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX,
+  IDENTITY_CONTROL_PLANE_SCHEMA_KEY,
+  IDENTITY_CONTROL_PLANE_STORAGE_IDENTITY,
+} from "@dpeek/formless-identity-control-plane";
 import { findSchemaAppDefinition, getSchemaAppDefinition, type SchemaKey } from "./schema-apps.ts";
 
 export type AppStorageIdentity = SchemaKeyStorageIdentity | InstalledAppStorageIdentity;
@@ -18,6 +23,15 @@ export type InstanceControlPlaneStorageIdentity = {
   schemaKey: typeof INSTANCE_CONTROL_PLANE_SCHEMA_KEY;
   authorityName: typeof INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY;
   apiRoutePrefix: typeof INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX;
+  browserDatabaseName: string;
+  broadcastChannelName: string;
+};
+
+export type IdentityControlPlaneStorageIdentity = {
+  kind: "identityControlPlane";
+  schemaKey: typeof IDENTITY_CONTROL_PLANE_SCHEMA_KEY;
+  authorityName: typeof IDENTITY_CONTROL_PLANE_STORAGE_IDENTITY;
+  apiRoutePrefix: typeof IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX;
   browserDatabaseName: string;
   broadcastChannelName: string;
 };
@@ -114,6 +128,19 @@ export function instanceControlPlaneStorageIdentity(): InstanceControlPlaneStora
   };
 }
 
+export function identityControlPlaneStorageIdentity(): IdentityControlPlaneStorageIdentity {
+  const storageName = browserStorageName(IDENTITY_CONTROL_PLANE_STORAGE_IDENTITY);
+
+  return {
+    kind: "identityControlPlane",
+    schemaKey: IDENTITY_CONTROL_PLANE_SCHEMA_KEY,
+    authorityName: IDENTITY_CONTROL_PLANE_STORAGE_IDENTITY,
+    apiRoutePrefix: IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX,
+    browserDatabaseName: storageName,
+    broadcastChannelName: storageName,
+  };
+}
+
 export function parseAuthorityApiRoute(
   pathname: string,
   resolver?: AppPackageResolver,
@@ -142,6 +169,31 @@ export function parseInstanceControlPlaneApiRoute(pathname: string):
 
   return {
     identity: instanceControlPlaneStorageIdentity(),
+    path: suffix as `/${string}`,
+  };
+}
+
+export function parseIdentityControlPlaneApiRoute(pathname: string):
+  | {
+      identity: IdentityControlPlaneStorageIdentity;
+      path: `/${string}`;
+    }
+  | undefined {
+  if (
+    pathname !== IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX &&
+    !pathname.startsWith(`${IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX}/`)
+  ) {
+    return undefined;
+  }
+
+  const suffix = pathname.slice(IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX.length);
+
+  if (!suffix.startsWith("/") || suffix === "/") {
+    return undefined;
+  }
+
+  return {
+    identity: identityControlPlaneStorageIdentity(),
     path: suffix as `/${string}`,
   };
 }

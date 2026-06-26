@@ -21,6 +21,7 @@ import {
 import { handleInstanceAppInstallsApiRequest } from "./instance-app-installs.ts";
 import { handleInstanceControlPlaneApiRequest } from "./instance-control-plane.ts";
 import { handleInstanceDomainMappingsApiRequest } from "./instance-domain-mappings.ts";
+import { handleIdentityControlPlaneApiRequest } from "./identity-control-plane.ts";
 import { resolveInstanceRuntimeRouteForRequest } from "./instance-runtime-routes.ts";
 import { mappedAppHostFromRuntimeRoute } from "./mapped-app-host.ts";
 import { handleOwnerSetupApiRequest } from "./owner-setup.ts";
@@ -234,6 +235,12 @@ export default {
 
     if (instanceControlPlaneResponse) {
       return instanceControlPlaneResponse;
+    }
+
+    const identityControlPlaneResponse = await handleIdentityControlPlaneApiRequest(request, env);
+
+    if (identityControlPlaneResponse) {
+      return identityControlPlaneResponse;
     }
 
     const instanceDomainProviderResponse = await handleInstanceDomainProviderApiRequest(

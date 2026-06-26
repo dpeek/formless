@@ -21,6 +21,7 @@ import type {
 import {
   installedAppStorageIdentity,
   type AppStorageIdentity,
+  type IdentityControlPlaneStorageIdentity,
   type InstanceControlPlaneStorageIdentity,
 } from "../shared/app-storage-identity.ts";
 import type { PackageAppKey } from "@dpeek/formless-installed-apps";
@@ -179,7 +180,10 @@ type AuthorityOperationExecutionInput = {
   actorKind?: SchemaOperationActorKind;
   app: WorkerSchemaAppDefinition;
   body?: unknown;
-  identity: AppStorageIdentity | InstanceControlPlaneStorageIdentity;
+  identity:
+    | AppStorageIdentity
+    | IdentityControlPlaneStorageIdentity
+    | InstanceControlPlaneStorageIdentity;
   operation: AuthorityOperation;
   packageResolver?: AppPackageResolver;
   requestHeaders?: Headers;
@@ -344,7 +348,10 @@ export function executeAuthorityOperation(
     }
 
     case "siteTree": {
-      if (input.identity.kind === "instanceControlPlane") {
+      if (
+        input.identity.kind === "identityControlPlane" ||
+        input.identity.kind === "instanceControlPlane"
+      ) {
         throw new BadRequestError("Site page trees are only available for app storage.");
       }
 
@@ -677,7 +684,10 @@ function parseOptionalSourceSchemaHashHeader(headers: Headers | undefined) {
 
 function browserReplicaUpgradeHeaders(
   storage: DurableObjectStorage,
-  identity: AppStorageIdentity | InstanceControlPlaneStorageIdentity,
+  identity:
+    | AppStorageIdentity
+    | IdentityControlPlaneStorageIdentity
+    | InstanceControlPlaneStorageIdentity,
   packageResolver?: AppPackageResolver,
 ): HeadersInit {
   const facts = browserReplicaUpgradeFacts(storage, identity, packageResolver);
@@ -702,14 +712,21 @@ function browserReplicaUpgradeHeaders(
 
 function browserReplicaUpgradeFacts(
   storage: DurableObjectStorage,
-  identity: AppStorageIdentity | InstanceControlPlaneStorageIdentity,
+  identity:
+    | AppStorageIdentity
+    | IdentityControlPlaneStorageIdentity
+    | InstanceControlPlaneStorageIdentity,
   packageResolver?: AppPackageResolver,
 ): BrowserReplicaUpgradeFacts {
   const storedSchema = readCurrentStoredSchema(storage);
 
-  if (identity.kind === "instanceControlPlane") {
+  if (identity.kind === "instanceControlPlane" || identity.kind === "identityControlPlane") {
+    const expectedProvenanceKind =
+      identity.kind === "instanceControlPlane"
+        ? "instance-control-plane"
+        : "identity-control-plane";
     const schemaProvenance =
-      storedSchema?.schemaProvenance?.kind === "instance-control-plane"
+      storedSchema?.schemaProvenance?.kind === expectedProvenanceKind
         ? storedSchema.schemaProvenance
         : null;
 

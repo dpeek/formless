@@ -41,6 +41,7 @@
     "@dpeek/formless-crm-app": "^0.1.0",
     "@dpeek/formless-deploy": "^0.1.0",
     "@dpeek/formless-gateway": "^0.1.0",
+    "@dpeek/formless-identity-control-plane": "^0.1.0",
     "@dpeek/formless-installed-apps": "^0.1.0",
     "@dpeek/formless-instance-control-plane": "^0.1.0",
     "@dpeek/formless-media": "^0.1.0",

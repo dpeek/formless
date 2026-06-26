@@ -163,7 +163,13 @@ export type InstanceControlPlaneSchemaProvenance = {
   sourceSchemaHash: SourceSchemaHash;
 };
 
+export type IdentityControlPlaneSchemaProvenance = {
+  kind: "identity-control-plane";
+  sourceSchemaHash: SourceSchemaHash;
+};
+
 export type StorageSchemaProvenance =
+  | IdentityControlPlaneSchemaProvenance
   | PackageAppSchemaProvenance
   | InstanceControlPlaneSchemaProvenance;
 
@@ -3342,6 +3348,10 @@ function schemaProvenancesEqual(
     return true;
   }
 
+  if (left.kind === "identity-control-plane" && right.kind === "identity-control-plane") {
+    return true;
+  }
+
   return (
     left.kind === "package-app" &&
     right.kind === "package-app" &&
@@ -3398,6 +3408,13 @@ function parseStoredSchemaProvenance(value: string | null): StorageSchemaProvena
     };
   }
 
+  if (parsed.kind === "identity-control-plane") {
+    return {
+      kind: "identity-control-plane",
+      sourceSchemaHash: parsed.sourceSchemaHash,
+    };
+  }
+
   if (
     parsed.kind === "package-app" &&
     typeof parsed.packageAppKey === "string" &&
@@ -3436,6 +3453,10 @@ function activeSchemaRefreshBlockedMessage(blocker: ActiveSchemaRefreshBlocker) 
 function formatSchemaProvenance(provenance: StorageSchemaProvenance) {
   if (provenance.kind === "instance-control-plane") {
     return `kind=instance-control-plane sourceSchemaHash=${provenance.sourceSchemaHash}`;
+  }
+
+  if (provenance.kind === "identity-control-plane") {
+    return `kind=identity-control-plane sourceSchemaHash=${provenance.sourceSchemaHash}`;
   }
 
   return `kind=package-app packageAppKey=${provenance.packageAppKey} packageRevision=${provenance.packageRevision} sourceSchemaHash=${provenance.sourceSchemaHash}`;

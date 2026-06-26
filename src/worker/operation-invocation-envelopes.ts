@@ -10,6 +10,7 @@ import {
 } from "@dpeek/formless-schema";
 import type {
   AppStorageIdentity,
+  IdentityControlPlaneStorageIdentity,
   InstanceControlPlaneStorageIdentity,
 } from "../shared/app-storage-identity.ts";
 import { nowIsoString } from "../shared/clock.ts";
@@ -26,7 +27,10 @@ import type {
 } from "../shared/operation-invocation.ts";
 import { BadRequestError } from "./errors.ts";
 
-type OperationStorageIdentity = AppStorageIdentity | InstanceControlPlaneStorageIdentity;
+type OperationStorageIdentity =
+  | AppStorageIdentity
+  | IdentityControlPlaneStorageIdentity
+  | InstanceControlPlaneStorageIdentity;
 
 type EntityOperationRoute = {
   entityName: string;

@@ -9,6 +9,7 @@ import type {
 } from "@dpeek/formless-schema";
 import type {
   AppStorageIdentity,
+  IdentityControlPlaneStorageIdentity,
   InstanceControlPlaneStorageIdentity,
 } from "./app-storage-identity.ts";
 import type { StoredRecord } from "@dpeek/formless-storage";
@@ -90,7 +91,10 @@ export type OperationInvocationOperation = {
 
 export type OperationInvocationEnvelope = {
   invocationId: string;
-  appStorageIdentity: AppStorageIdentity | InstanceControlPlaneStorageIdentity;
+  appStorageIdentity:
+    | AppStorageIdentity
+    | IdentityControlPlaneStorageIdentity
+    | InstanceControlPlaneStorageIdentity;
   actor: OperationInvocationActor;
   source: OperationInvocationSource;
   input: OperationInvocationInput;

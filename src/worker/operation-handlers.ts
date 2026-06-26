@@ -1188,7 +1188,10 @@ function findActiveRecordByField(
 }
 
 function subscribeSourceValues(envelope: OperationInvocationEnvelope): RecordValues {
-  if (envelope.appStorageIdentity.kind === "instanceControlPlane") {
+  if (
+    envelope.appStorageIdentity.kind === "identityControlPlane" ||
+    envelope.appStorageIdentity.kind === "instanceControlPlane"
+  ) {
     throw new BadRequestError("Public operations are only available for app storage.");
   }
 
