@@ -65,6 +65,26 @@ runtime profiles through a filesystem-capable local gateway sidecar process.
 - **AND** Gateway adapters do not duplicate operation lifecycle transitions,
   operation body dispatch, or provider-specific step vocabulary
 
+#### Scenario: CLI runtime operation adapter
+
+- **WHEN** the local gateway sidecar invokes runtime-supplied workspace
+  operation handlers
+- **THEN** CLI runtime operation adapters bind gateway actor facts to the
+  workspace operation runner, scope operation ids and workspace paths to the
+  configured workspace root, project only the dependencies required by the
+  operation's effective execution requirements, and return display-safe
+  Workspace package operation state
+- **AND** auto-save status, enqueue, suppression, retry, and explicit run-now
+  behavior are owned by a CLI runtime adapter module rather than by Gateway
+  transport adapters or source-sync operation bodies
+- **AND** Gateway package code does not read or write workspace files,
+  operation state files, ignored secret state, Authority snapshots, provider
+  credentials, or deployment provider state while forwarding operation requests
+- **AND** local gateway runtime adapter tests can cover operation forwarding,
+  workspace root scoping, auto-save state behavior, capability forwarding, and
+  display-safe response boundaries without duplicating Gateway package proxy
+  route and authorization contract tests
+
 ### Requirement: Local Workspace Auto-Save
 
 The system SHALL automatically persist committed local runtime writes to

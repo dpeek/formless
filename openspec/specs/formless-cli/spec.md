@@ -363,6 +363,25 @@ local execution binding handles it.
 - **AND** unsupported operations are rejected because no browser gateway binding
   is declared, not because a separate gateway-only enum omits them
 
+#### Scenario: Local gateway runtime operation adapter boundary
+
+- **WHEN** Formless CLI supplies operation handlers to the local workspace
+  gateway sidecar
+- **THEN** CLI runtime operation adapter modules own workspace root scoping,
+  operation runner invocation, actor and capability forwarding, operation state
+  reads, auto-save scheduling, and auto-save suppression decisions
+- **AND** Gateway package adapters continue to own transport authorization,
+  route parsing, sidecar proxy request and response shape, and browser-visible
+  response wrapping without owning local workspace operation execution
+- **AND** local gateway lifecycle code may start sidecars and assemble process
+  environment facts without owning operation handler dependency projection,
+  operation body dispatch, operation state persistence, or auto-save execution
+- **AND** operation-domain modules continue to own source sync, credential setup,
+  deployment, provider reconciliation, and summary vocabulary behind the runner
+- **AND** runtime operation adapters do not own public CLI command parsing,
+  terminal formatting, OAuth browser flows, provider secret storage, runtime
+  topology definitions, or owner session cookie validation logic
+
 ### Requirement: Local First Onboarding
 
 The CLI SHALL start the local Formless workspace runtime through `formless dev`
