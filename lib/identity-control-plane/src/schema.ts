@@ -388,13 +388,6 @@ export const identityControlPlaneSourceSchema = {
           updateFields: ["status"],
         },
       ),
-      constraints: {
-        uniqueGroupMembership: { kind: "unique", fields: ["principal", "targetGroup"] },
-        uniqueOrganizationMembership: {
-          kind: "unique",
-          fields: ["principal", "targetOrganization"],
-        },
-      },
     },
     role: {
       label: "Role",
@@ -448,20 +441,6 @@ export const identityControlPlaneSourceSchema = {
           updateFields: ["status"],
         },
       ),
-      constraints: {
-        uniquePrincipalAssignment: {
-          kind: "unique",
-          fields: ["role", "targetPrincipal", "scopeKind", "appInstallId", "scopeOrganization"],
-        },
-        uniqueGroupAssignment: {
-          kind: "unique",
-          fields: ["role", "targetGroup", "scopeKind", "appInstallId", "scopeOrganization"],
-        },
-        uniqueOrganizationAssignment: {
-          kind: "unique",
-          fields: ["role", "targetOrganization", "scopeKind", "appInstallId", "scopeOrganization"],
-        },
-      },
     },
     "app-registration": {
       label: "App registration",
@@ -495,16 +474,6 @@ export const identityControlPlaneSourceSchema = {
           updateFields: ["status", "selectedOrganization"],
         },
       ),
-      constraints: {
-        uniquePrincipalAppRegistration: {
-          kind: "unique",
-          fields: ["appInstallId", "targetPrincipal"],
-        },
-        uniqueOrganizationAppRegistration: {
-          kind: "unique",
-          fields: ["appInstallId", "targetOrganization"],
-        },
-      },
     },
     invitation: {
       label: "Invitation",

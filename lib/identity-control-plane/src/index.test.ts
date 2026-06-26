@@ -174,6 +174,7 @@ describe("identity control-plane schema contracts", () => {
       targetOrganization: { type: "reference", required: false, to: "organization" },
       status: { type: "enum", required: true },
     });
+    expect(schema.entities.membership.constraints ?? {}).toEqual({});
     expect(schema.entities.role.fields).toMatchObject({
       key: {
         type: "enum",
@@ -220,6 +221,7 @@ describe("identity control-plane schema contracts", () => {
       scopeOrganization: { type: "reference", required: false, to: "organization" },
       status: { type: "enum", required: true },
     });
+    expect(schema.entities["role-assignment"].constraints ?? {}).toEqual({});
     expect(schema.entities["app-registration"].fields).toMatchObject({
       appInstallId: { type: "text", required: true },
       targetKind: {
@@ -235,6 +237,7 @@ describe("identity control-plane schema contracts", () => {
       status: { type: "enum", required: true },
       selectedOrganization: { type: "reference", required: false, to: "organization" },
     });
+    expect(schema.entities["app-registration"].constraints ?? {}).toEqual({});
     expect(schema.entities.invitation.fields).toMatchObject({
       targetEmail: { type: "text", required: true },
       targetSurface: {
@@ -592,6 +595,89 @@ describe("identity control-plane schema contracts", () => {
         ),
       ),
     ).toThrow("cannot store private auth state");
+  });
+
+  it("validates target-aware active identity uniqueness", () => {
+    const records = identityRecords();
+    const recordsWithAlternateTargets = [
+      ...records,
+      identityRecord("group", "group:reviewers", {
+        displayName: "Reviewers",
+        status: "active",
+      }),
+      identityRecord("organization", "organization:globex", {
+        displayName: "Globex",
+        status: "active",
+      }),
+      membershipRecord("membership:ada-reviewers", {
+        targetGroup: "group:reviewers",
+      }),
+      membershipRecord("membership:ada-acme", {
+        targetGroup: undefined,
+        targetKind: "organization",
+        targetOrganization: "organization:acme",
+      }),
+      membershipRecord("membership:ada-globex", {
+        targetGroup: undefined,
+        targetKind: "organization",
+        targetOrganization: "organization:globex",
+      }),
+      roleAssignmentRecord("role-assignment:grace-owner", {
+        targetPrincipal: "principal:grace",
+      }),
+      appRegistrationRecord("app-registration:site-grace", {
+        targetPrincipal: "principal:grace",
+      }),
+    ];
+
+    expect(() =>
+      validateIdentityControlPlaneRecords("Identity records", recordsWithAlternateTargets),
+    ).not.toThrow();
+    expect(() =>
+      validateIdentityControlPlaneRecords("Identity records", [
+        ...records,
+        membershipRecord("membership:ada-group-duplicate"),
+      ]),
+    ).toThrow('violates identity uniqueness "auth:membership.uniqueActiveMembership"');
+    expect(() =>
+      validateIdentityControlPlaneRecords("Identity records", [
+        ...records,
+        {
+          ...membershipRecord("membership:ada-group-tombstoned-duplicate"),
+          deletedAt: testNow,
+        },
+      ]),
+    ).not.toThrow();
+    expect(() =>
+      validateIdentityControlPlaneRecords("Identity records", [
+        ...records,
+        roleAssignmentRecord("role-assignment:ada-owner-duplicate"),
+      ]),
+    ).toThrow('violates identity uniqueness "auth:role-assignment.uniqueActiveAssignment"');
+    expect(() =>
+      validateIdentityControlPlaneRecords("Identity records", [
+        ...records,
+        {
+          ...roleAssignmentRecord("role-assignment:ada-owner-tombstoned-duplicate"),
+          deletedAt: testNow,
+        },
+      ]),
+    ).not.toThrow();
+    expect(() =>
+      validateIdentityControlPlaneRecords("Identity records", [
+        ...records,
+        appRegistrationRecord("app-registration:site-ada-duplicate"),
+      ]),
+    ).toThrow('violates identity uniqueness "auth:app-registration.uniqueActiveRegistration"');
+    expect(() =>
+      validateIdentityControlPlaneRecords("Identity records", [
+        ...records,
+        {
+          ...appRegistrationRecord("app-registration:site-ada-tombstoned-duplicate"),
+          deletedAt: testNow,
+        },
+      ]),
+    ).not.toThrow();
   });
 });
 

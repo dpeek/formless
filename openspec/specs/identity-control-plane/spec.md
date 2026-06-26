@@ -110,6 +110,8 @@ boundaries as flat identity records.
 - AND supported target kinds are `group` and `organization`
 - AND the target reference resolves to the target kind selected by the record
 - AND supported first-pass statuses are `active`, `invited`, and `disabled`
+- AND active memberships are unique by principal, target kind, and selected
+  target record
 - AND membership facts do not duplicate app-specific account or profile records
 
 ### Requirement: Roles And Role Assignments
@@ -146,6 +148,8 @@ flat role assignment records.
 - AND `instance` scope does not require a scope id
 - AND `app-install` and `organization` scopes require a scope id
 - AND supported first-pass statuses are `active` and `disabled`
+- AND active role assignments are unique by role, target kind, selected target
+  record, scope kind, and selected scope id
 - AND the first owner is represented as an `instance.owner` role assignment for
   a principal at instance scope when owner identity is moved to the principal
   model by a later instance-auth change
@@ -164,6 +168,8 @@ facts without storing raw auth secrets.
   as flat values
 - AND supported target kinds are `principal` and `organization`
 - AND supported first-pass statuses are `active`, `pending`, and `disabled`
+- AND active app registrations are unique by app install id, target kind, and
+  selected target record
 - AND app-specific profile or account records remain app-owned records and
   reference identity records by id when cross-schema identity references are
   enabled by a later app-schema change
@@ -179,6 +185,55 @@ facts without storing raw auth secrets.
   `expired`
 - AND raw invite tokens, token hashes, verification challenge secrets, delivery
   provider responses, and email recovery secrets remain private runtime state
+
+### Requirement: Target-Aware Identity Uniqueness
+
+The system SHALL enforce identity uniqueness according to the record's selected
+target and scope rather than raw optional fields.
+
+#### Scenario: Do not use generic unique constraints for alternative targets
+
+- GIVEN an identity record uses a selector such as target kind or scope kind
+- AND the selected value decides which reference or scope field is meaningful
+- WHEN the identity control-plane schema declares uniqueness
+- THEN it does not declare generic App schema unique constraints over mutually
+  exclusive optional target or scope fields
+- AND selected-target uniqueness is enforced by identity-control-plane
+  validation helpers or runtime-owned identity operation validation
+- AND unselected optional target and scope fields are ignored for uniqueness
+  decisions
+
+#### Scenario: Membership uniqueness allows multiple containers
+
+- GIVEN one active principal belongs to two different groups
+- OR the same active principal belongs to two different organizations
+- WHEN identity-control-plane records are validated
+- THEN the records are valid
+- AND a duplicate active membership for the same principal, target kind, and
+  selected target record is rejected
+- AND tombstoned duplicate memberships do not block the active membership
+
+#### Scenario: Role assignment uniqueness allows multiple targets
+
+- GIVEN two different active principals receive the same role in the same scope
+- OR the same active principal receives the same role in two different app
+  install scopes
+- WHEN identity-control-plane records are validated
+- THEN the records are valid
+- AND a duplicate active assignment for the same role, target kind, selected
+  target record, scope kind, and selected scope id is rejected
+- AND tombstoned duplicate role assignments do not block the active assignment
+
+#### Scenario: App registration uniqueness allows multiple users
+
+- GIVEN two different active principals register for the same app install
+- OR one active principal registers for two different app installs
+- WHEN identity-control-plane records are validated
+- THEN the records are valid
+- AND a duplicate active registration for the same app install id, target kind,
+  and selected target record is rejected
+- AND tombstoned duplicate app registrations do not block the active
+  registration
 
 ### Requirement: Identity Boundary For Future App References
 

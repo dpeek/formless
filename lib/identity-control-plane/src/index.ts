@@ -26,7 +26,7 @@ export * from "./types.ts";
 export { identityControlPlaneSourceSchema } from "./schema.ts";
 
 export const IDENTITY_CONTROL_PLANE_SOURCE_SCHEMA_HASH =
-  "sha256:22f6e31738ffcf62b7d412c4516b2745b7daed8b95dfa06273fa3509cd2109a3" satisfies SourceSchemaHash;
+  "sha256:7ad96491387d5ceb2df2d50d8ad231b5928b20833f445843d945a1c57c201742" satisfies SourceSchemaHash;
 
 export const identityControlPlaneSchemaProvenance = {
   kind: "identity-control-plane",
@@ -202,6 +202,9 @@ export function validateIdentityControlPlaneRecords(
 
   validateUniqueNormalizedEmails(context, records);
   validateUniqueRoleKeys(context, records);
+  validateUniqueActiveMemberships(context, records);
+  validateUniqueActiveRoleAssignments(context, records);
+  validateUniqueActiveAppRegistrations(context, records);
 }
 
 export function reviewableIdentityControlPlaneRecordValues(
@@ -370,6 +373,68 @@ function validateUniqueRoleKeys(context: string, records: readonly StoredRecord[
   }
 }
 
+function validateUniqueActiveMemberships(context: string, records: readonly StoredRecord[]) {
+  const seen = new Set<string>();
+
+  for (const record of activeStatusRecordsForEntity(records, "membership")) {
+    const key = identityUniqueKey([
+      requiredStringValue(context, record, "principal"),
+      requiredStringValue(context, record, "targetKind"),
+      selectedMembershipTargetValue(context, record),
+    ]);
+
+    if (seen.has(key)) {
+      throw new Error(
+        `${context} violates identity uniqueness "${formatIdentityControlPlaneBoundaryEntityName("membership")}.uniqueActiveMembership".`,
+      );
+    }
+
+    seen.add(key);
+  }
+}
+
+function validateUniqueActiveRoleAssignments(context: string, records: readonly StoredRecord[]) {
+  const seen = new Set<string>();
+
+  for (const record of activeStatusRecordsForEntity(records, "role-assignment")) {
+    const key = identityUniqueKey([
+      requiredStringValue(context, record, "role"),
+      requiredStringValue(context, record, "targetKind"),
+      selectedRoleAssignmentTargetValue(context, record),
+      requiredStringValue(context, record, "scopeKind"),
+      selectedRoleAssignmentScopeValue(context, record),
+    ]);
+
+    if (seen.has(key)) {
+      throw new Error(
+        `${context} violates identity uniqueness "${formatIdentityControlPlaneBoundaryEntityName("role-assignment")}.uniqueActiveAssignment".`,
+      );
+    }
+
+    seen.add(key);
+  }
+}
+
+function validateUniqueActiveAppRegistrations(context: string, records: readonly StoredRecord[]) {
+  const seen = new Set<string>();
+
+  for (const record of activeStatusRecordsForEntity(records, "app-registration")) {
+    const key = identityUniqueKey([
+      requiredStringValue(context, record, "appInstallId"),
+      requiredStringValue(context, record, "targetKind"),
+      selectedAppRegistrationTargetValue(context, record),
+    ]);
+
+    if (seen.has(key)) {
+      throw new Error(
+        `${context} violates identity uniqueness "${formatIdentityControlPlaneBoundaryEntityName("app-registration")}.uniqueActiveRegistration".`,
+      );
+    }
+
+    seen.add(key);
+  }
+}
+
 function activeRecordsForEntity(
   records: readonly StoredRecord[],
   entityName: IdentityControlPlaneEntityName,
@@ -377,6 +442,15 @@ function activeRecordsForEntity(
   return records.filter(
     (record) =>
       identityControlPlaneRecordSourceEntityName(record.entity) === entityName && !record.deletedAt,
+  );
+}
+
+function activeStatusRecordsForEntity(
+  records: readonly StoredRecord[],
+  entityName: IdentityControlPlaneEntityName,
+) {
+  return activeRecordsForEntity(records, entityName).filter(
+    (record) => record.values.status === "active",
   );
 }
 
@@ -415,6 +489,58 @@ function validateAppRegistrationRecord(context: string, record: StoredRecord) {
     organization: "targetOrganization",
     principal: "targetPrincipal",
   });
+}
+
+function selectedMembershipTargetValue(context: string, record: StoredRecord): string {
+  const targetKind = requiredStringValue(context, record, "targetKind");
+
+  if (targetKind === "group") {
+    return requiredStringValue(context, record, "targetGroup");
+  }
+
+  return requiredStringValue(context, record, "targetOrganization");
+}
+
+function selectedRoleAssignmentTargetValue(context: string, record: StoredRecord): string {
+  const targetKind = requiredStringValue(context, record, "targetKind");
+
+  if (targetKind === "group") {
+    return requiredStringValue(context, record, "targetGroup");
+  }
+
+  if (targetKind === "organization") {
+    return requiredStringValue(context, record, "targetOrganization");
+  }
+
+  return requiredStringValue(context, record, "targetPrincipal");
+}
+
+function selectedRoleAssignmentScopeValue(context: string, record: StoredRecord): string {
+  const scopeKind = requiredStringValue(context, record, "scopeKind");
+
+  if (scopeKind === "app-install") {
+    return requiredStringValue(context, record, "appInstallId");
+  }
+
+  if (scopeKind === "organization") {
+    return requiredStringValue(context, record, "scopeOrganization");
+  }
+
+  return "";
+}
+
+function selectedAppRegistrationTargetValue(context: string, record: StoredRecord): string {
+  const targetKind = requiredStringValue(context, record, "targetKind");
+
+  if (targetKind === "organization") {
+    return requiredStringValue(context, record, "targetOrganization");
+  }
+
+  return requiredStringValue(context, record, "targetPrincipal");
+}
+
+function identityUniqueKey(values: readonly string[]) {
+  return JSON.stringify(values);
 }
 
 function assertSelectedTargetField(
