@@ -1,5 +1,4 @@
 import type { AppStorageIdentity } from "../shared/app-storage-identity.ts";
-import type { RecordValues } from "@dpeek/formless-storage";
 import {
   PublicOperationRouteError,
   parsePublicOperationRouteSuffix,
@@ -7,20 +6,11 @@ import {
 import type {
   PublicOperationChallengeVerification,
   PublicOperationProof,
-  PublicOperationRequestSource,
   PublicOperationResponse,
 } from "../shared/protocol.ts";
-import type { AppSchema, EntityOperationSchema } from "@dpeek/formless-schema";
-import {
-  formatEntityOperationKey,
-  isAnonymousPublicOperationExecutable,
-  selectAnonymousPublicOperation,
-} from "@dpeek/formless-schema";
+import type { AppSchema } from "@dpeek/formless-schema";
+import type { OperationInvocationResponse } from "../shared/operation-invocation.ts";
 import { nowIsoString } from "../shared/clock.ts";
-import type {
-  OperationInvocationEnvelope,
-  OperationInvocationResponse,
-} from "../shared/operation-invocation.ts";
 import { turnstileSecretKeyFromEnv, type TurnstileRuntimeEnv } from "../shared/turnstile-config.ts";
 import {
   buildPublicOperationInvocationEnvelope,
@@ -29,23 +19,31 @@ import {
 import { BadRequestError } from "./errors.ts";
 import { executePublicOperationInvocationLifecycle } from "./operation-invocation-lifecycle.ts";
 import { validatePublicOperationInputValues } from "./operation-input-validation.ts";
+import {
+  executePublicOperationExecutor,
+  PublicOperationError,
+  type PublicOperationExecutorAdapters,
+  type PublicOperationExecutorResult,
+  type PublicOperationExecutorRoute,
+  type PublicOperationVerifiedEnvelopeInput,
+} from "./public-operation-executor.ts";
 import { type WriteOutcome } from "./storage.ts";
 
 export type PublicOperationEnv = TurnstileRuntimeEnv & {
   FORMLESS_TURNSTILE_SITEVERIFY?: Fetcher;
 };
 
-export type PublicOperationRoute = {
-  entityName: string;
-  operationName: string;
-  path: string;
-};
+export { PublicOperationError };
 
-export type PublicOperationResult = {
-  body: PublicOperationResponse | { error: string };
-  headers?: HeadersInit;
-  status?: number;
-};
+export type PublicOperationRoute = PublicOperationExecutorRoute;
+
+export type PublicOperationResult =
+  | PublicOperationExecutorResult
+  | {
+      body: PublicOperationResponse | { error: string };
+      headers?: HeadersInit;
+      status?: number;
+    };
 
 export type PublicOperationWriteNotifier = {
   apply<T>(write: () => WriteOutcome<T>): WriteOutcome<T>;
@@ -63,26 +61,6 @@ type PublicOperationExecutionInput = {
   writes: PublicOperationWriteNotifier;
 };
 
-type SelectedPublicOperation = {
-  entityName: string;
-  operation: EntityOperationSchema;
-  operationName: string;
-};
-
-type ParsedPublicOperationRequest = {
-  input: RecordValues;
-  proof: { turnstileToken: string };
-  source?: PublicOperationRequestSource;
-  idempotencyKey?: string;
-};
-
-type PublicOperationRequestEnvelopeFields = {
-  input: unknown;
-  proof: unknown;
-  source?: PublicOperationRequestSource;
-  idempotencyKey?: string;
-};
-
 type TurnstileSiteverifyResponse = {
   success?: unknown;
   challenge_ts?: unknown;
@@ -90,19 +68,7 @@ type TurnstileSiteverifyResponse = {
 };
 
 const publicOperationRoutePrefix = "/public/operations/";
-const originalRequestHostHeader = "x-formless-original-request-host";
-const originalRequestOriginHeader = "x-formless-original-request-origin";
 const turnstileSiteverifyUrl = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
-
-export class PublicOperationError extends Error {
-  readonly status: number;
-
-  constructor(message: string, status: number) {
-    super(message);
-    this.name = "PublicOperationError";
-    this.status = status;
-  }
-}
 
 export function selectPublicOperationRoute(input: {
   method: string;
@@ -145,247 +111,87 @@ function publicOperationRouteBadRequest(error: unknown): BadRequestError {
 export async function executePublicOperationRequest(
   input: PublicOperationExecutionInput,
 ): Promise<PublicOperationResult> {
-  const selected = selectPublicOperation(input.schema, input.route);
-  const envelopeFields = parsePublicOperationRequestEnvelopeFields(input.body);
-  const receivedAt = nowIsoString();
-  const idempotencyKey =
-    envelopeFields.idempotencyKey ??
-    (await derivePublicOperationIdempotencyKey({
-      entityName: input.route.entityName,
-      input: envelopeFields.input,
-      operationName: input.route.operationName,
-      source: envelopeFields.source,
-    }));
-  const requestUrlFacts = publicRequestUrlFacts(input.request);
-  const unverifiedEnvelope = buildPublicOperationInvocationEnvelope({
-    entityName: input.route.entityName,
-    host: requestUrlFacts.host,
+  return executePublicOperationExecutor({
+    adapters: publicOperationExecutorAdapters(input),
+    body: input.body,
     identity: input.identity,
-    idempotencyKey,
-    operationName: input.route.operationName,
-    path: requestUrlFacts.path,
-    publicInput: envelopeFields.input,
-    receivedAt,
+    request: input.request,
+    route: input.route,
     schema: input.schema,
-    ...(envelopeFields.source?.siteBlockId === undefined
-      ? {}
-      : { siteBlockId: envelopeFields.source.siteBlockId }),
   });
-
-  let parsed: ParsedPublicOperationRequest | undefined;
-
-  const response = await executePublicOperationInvocationLifecycle({
-    assertAllowed: () => assertPublicOperationInvocationAllowed(unverifiedEnvelope, input.schema),
-    beforeReplay: () => {
-      assertPublicOperationOrigin(input.request, selected.operation);
-      parsed = parsePublicOperationRequest(envelopeFields, selected, input.schema, input.storage);
-    },
-    envelope: unverifiedEnvelope,
-    execute: (envelope) =>
-      executeWriteOperationInvocation({
-        envelope,
-        schema: input.schema,
-        storage: input.storage,
-        writes: input.writes,
-      }),
-    prepareExecutionEnvelope: async () => {
-      if (!parsed) {
-        throw new Error("Public operation request was not parsed before challenge verification.");
-      }
-
-      const verification = await verifyTurnstileChallenge({
-        env: input.env,
-        idempotencyKey,
-        token: parsed.proof.turnstileToken,
-      });
-
-      return buildPublicOperationInvocationEnvelope({
-        entityName: input.route.entityName,
-        host: requestUrlFacts.host,
-        identity: input.identity,
-        idempotencyKey,
-        operationName: input.route.operationName,
-        path: requestUrlFacts.path,
-        proof: publicOperationProof(parsed.proof.turnstileToken, verification),
-        publicInput: parsed.input,
-        receivedAt,
-        schema: input.schema,
-        ...(parsed.source?.siteBlockId === undefined
-          ? {}
-          : { siteBlockId: parsed.source.siteBlockId }),
-      });
-    },
-    storage: input.storage,
-  });
-
-  if (response.status === "committed") {
-    await input.afterCommit?.(response);
-  }
-
-  return publicOperationResult(response);
 }
 
-function assertPublicOperationInvocationAllowed(
-  envelope: OperationInvocationEnvelope,
-  schema: AppSchema,
+function publicOperationExecutorAdapters(
+  input: PublicOperationExecutionInput,
+): PublicOperationExecutorAdapters {
+  return {
+    afterCommit: {
+      run: ({ response }) => input.afterCommit?.(response),
+    },
+    authority: {
+      execute: ({ envelope }) =>
+        executeWriteOperationInvocation({
+          envelope,
+          schema: input.schema,
+          storage: input.storage,
+          writes: input.writes,
+        }),
+    },
+    challenge: {
+      verify: (stage) =>
+        verifyTurnstileChallenge({
+          env: input.env,
+          idempotencyKey: stage.idempotencyKey,
+          token: stage.parsed.proof.turnstileToken,
+        }),
+    },
+    envelope: {
+      buildVerified: (stage) => buildVerifiedPublicOperationEnvelope(input, stage),
+    },
+    lifecycle: {
+      execute: (stage) =>
+        executePublicOperationInvocationLifecycle({
+          ...stage,
+          storage: input.storage,
+        }),
+    },
+    response: {
+      shape: ({ response }) => shapePublicOperationResponse(response),
+    },
+    validation: {
+      validate: ({ rawInput, selected }) =>
+        validatePublicOperationInputValues({
+          context: "Public operation input",
+          entityName: selected.entityName,
+          operation: selected.operation,
+          operationName: selected.operationName,
+          rawInput,
+          schema: input.schema,
+          storage: input.storage,
+        }),
+    },
+  };
+}
+
+function buildVerifiedPublicOperationEnvelope(
+  input: PublicOperationExecutionInput,
+  stage: PublicOperationVerifiedEnvelopeInput,
 ) {
-  const operation = selectAnonymousPublicOperation(schema, {
-    entityName: envelope.operation.entityName,
-    operationName: envelope.operation.operationName,
-  });
-
-  if (operation.kind !== "available") {
-    throw new PublicOperationError("Public operation is not available.", 404);
-  }
-}
-
-function parsePublicOperationRequest(
-  envelopeFields: PublicOperationRequestEnvelopeFields,
-  selected: SelectedPublicOperation,
-  schema: AppSchema,
-  storage: DurableObjectStorage,
-): ParsedPublicOperationRequest {
-  if (!selected.operation.input) {
-    throw new PublicOperationError("Public operation is not available.", 404);
-  }
-
-  const validatedInput = validatePublicOperationInputValues({
-    context: "Public operation input",
-    entityName: selected.entityName,
-    operation: selected.operation,
-    operationName: selected.operationName,
-    rawInput: envelopeFields.input,
-    schema,
-    storage,
-  });
-
-  return {
-    input: validatedInput,
-    proof: parsePublicOperationProof(envelopeFields.proof),
-    ...(envelopeFields.source === undefined ? {} : { source: envelopeFields.source }),
-    ...(envelopeFields.idempotencyKey === undefined
+  return buildPublicOperationInvocationEnvelope({
+    entityName: input.route.entityName,
+    host: stage.requestUrlFacts.host,
+    identity: input.identity,
+    idempotencyKey: stage.idempotencyKey,
+    operationName: input.route.operationName,
+    path: stage.requestUrlFacts.path,
+    proof: publicOperationProof(stage.parsed.proof.turnstileToken, stage.verification),
+    publicInput: stage.parsed.input,
+    receivedAt: stage.receivedAt,
+    schema: input.schema,
+    ...(stage.parsed.source?.siteBlockId === undefined
       ? {}
-      : { idempotencyKey: envelopeFields.idempotencyKey }),
-  };
-}
-
-function parsePublicOperationRequestEnvelopeFields(
-  value: unknown,
-): PublicOperationRequestEnvelopeFields {
-  if (!isRecord(value)) {
-    throw new BadRequestError("Public operation request must be an object.");
-  }
-
-  assertExactKeys(
-    "Public operation request",
-    value,
-    ["input"],
-    ["proof", "source", "idempotencyKey"],
-  );
-
-  return {
-    input: value.input,
-    proof: value.proof,
-    ...(value.source === undefined ? {} : { source: parsePublicOperationSource(value.source) }),
-    ...(value.idempotencyKey === undefined
-      ? {}
-      : { idempotencyKey: parseIdempotencyKey(value.idempotencyKey, "Public operation") }),
-  };
-}
-
-function parsePublicOperationProof(value: unknown): ParsedPublicOperationRequest["proof"] {
-  if (!isRecord(value)) {
-    throw new BadRequestError("Public operation proof must be an object.");
-  }
-
-  assertExactKeys("Public operation proof", value, ["turnstileToken"]);
-
-  if (typeof value.turnstileToken !== "string" || value.turnstileToken.trim() === "") {
-    throw new BadRequestError("Public operation Turnstile token is required.");
-  }
-
-  if (value.turnstileToken.length > 2048) {
-    throw new BadRequestError("Public operation Turnstile token is too long.");
-  }
-
-  return {
-    turnstileToken: value.turnstileToken,
-  };
-}
-
-function selectPublicOperation(
-  schema: AppSchema,
-  route: Pick<PublicOperationRoute, "entityName" | "operationName">,
-): SelectedPublicOperation {
-  const entity = schema.entities[route.entityName];
-  const operation = entity?.operations?.[route.operationName];
-
-  if (!entity || !operation) {
-    throw new PublicOperationError("Public operation is not available.", 404);
-  }
-
-  if (!isAnonymousPublicOperationExecutable(operation)) {
-    throw new PublicOperationError("Public operation is not available.", 404);
-  }
-
-  return {
-    entityName: route.entityName,
-    operation,
-    operationName: route.operationName,
-  };
-}
-
-function assertPublicOperationOrigin(request: Request, operation: EntityOperationSchema) {
-  if (operation.policy?.access?.origin.kind !== "same-origin") {
-    return;
-  }
-
-  const origin = request.headers.get("Origin");
-  if (!origin) {
-    return;
-  }
-
-  let parsedOrigin: URL;
-
-  try {
-    parsedOrigin = new URL(origin);
-  } catch {
-    throw new PublicOperationError("Public operation origin is not allowed.", 403);
-  }
-
-  if (parsedOrigin.origin !== publicRequestUrlFacts(request).origin) {
-    throw new PublicOperationError("Public operation origin is not allowed.", 403);
-  }
-}
-
-function parsePublicOperationSource(value: unknown): PublicOperationRequestSource {
-  if (!isRecord(value)) {
-    throw new BadRequestError("Public operation source must be an object.");
-  }
-
-  assertExactKeys("Public operation source", value, [], ["siteBlockId"]);
-
-  if (value.siteBlockId === undefined) {
-    return {};
-  }
-
-  if (typeof value.siteBlockId !== "string" || value.siteBlockId.trim() === "") {
-    throw new BadRequestError("Public operation source siteBlockId must be a non-empty string.");
-  }
-
-  return { siteBlockId: value.siteBlockId };
-}
-
-function parseIdempotencyKey(value: unknown, context: string): string {
-  if (typeof value !== "string" || value.trim() === "") {
-    throw new BadRequestError(`${context} idempotencyKey must be a non-empty string.`);
-  }
-
-  if (value.length > 512) {
-    throw new BadRequestError(`${context} idempotencyKey must be at most 512 characters.`);
-  }
-
-  return value;
+      : { siteBlockId: stage.parsed.source.siteBlockId }),
+  });
 }
 
 async function verifyTurnstileChallenge(input: {
@@ -479,7 +285,9 @@ function turnstileFetch(env: PublicOperationEnv, request: Request): Promise<Resp
     : fetch(request);
 }
 
-function publicOperationResult(response: OperationInvocationResponse): PublicOperationResult {
+function shapePublicOperationResponse(
+  response: OperationInvocationResponse,
+): PublicOperationExecutorResult {
   if (response.output.type === "create" && response.invocation.operation.kind === "create") {
     return {
       body: {
@@ -537,125 +345,4 @@ function publicOperationProof(
     token: turnstileToken,
     ...(verification === undefined ? {} : { verification }),
   };
-}
-
-function publicRequestUrlFacts(request: Request): {
-  host: string;
-  origin: string;
-  path: string;
-} {
-  const url = new URL(request.url);
-  const originalOrigin = request.headers.get(originalRequestOriginHeader);
-  const originalHost = request.headers.get(originalRequestHostHeader);
-  const origin = originalOrigin ?? `${url.protocol}//${originalHost ?? url.host}`;
-  const originUrl = parseUrl(origin);
-  const originHeader = parseRequestOriginHeader(request);
-
-  if (isLocalRequestHostname(originUrl?.hostname ?? url.hostname) && originHeader) {
-    return {
-      host: originHeader.host,
-      origin: originHeader.origin,
-      path: url.pathname,
-    };
-  }
-
-  return {
-    host: originalHost ?? url.host,
-    origin,
-    path: url.pathname,
-  };
-}
-
-function parseRequestOriginHeader(request: Request): URL | undefined {
-  const origin = request.headers.get("Origin");
-
-  if (!origin) {
-    return undefined;
-  }
-
-  try {
-    return new URL(origin);
-  } catch {
-    return undefined;
-  }
-}
-
-function parseUrl(value: string): URL | undefined {
-  try {
-    return new URL(value);
-  } catch {
-    return undefined;
-  }
-}
-
-function isLocalRequestHostname(hostname: string) {
-  return hostname === "127.0.0.1" || hostname === "localhost" || hostname === "::1";
-}
-
-async function derivePublicOperationIdempotencyKey(input: {
-  entityName: string;
-  operationName: string;
-  input: unknown;
-  source: PublicOperationRequestSource | undefined;
-}) {
-  const digest = await sha256Hex(
-    stableJson({
-      input: input.input,
-      operationKey: formatEntityOperationKey({
-        entityKey: input.entityName,
-        operationKey: input.operationName,
-      }),
-      source: input.source,
-    }),
-  );
-
-  return `derived:${digest}`;
-}
-
-async function sha256Hex(value: string): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
-
-  return Array.from(new Uint8Array(digest))
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("");
-}
-
-function stableJson(value: unknown): string {
-  if (Array.isArray(value)) {
-    return `[${value.map(stableJson).join(",")}]`;
-  }
-
-  if (isRecord(value)) {
-    return `{${Object.keys(value)
-      .sort()
-      .map((key) => `${JSON.stringify(key)}:${stableJson(value[key])}`)
-      .join(",")}}`;
-  }
-
-  return JSON.stringify(value);
-}
-
-function assertExactKeys(
-  context: string,
-  value: Record<string, unknown>,
-  required: string[],
-  optional: string[] = [],
-) {
-  const allowed = new Set([...required, ...optional]);
-
-  for (const key of Object.keys(value)) {
-    if (!allowed.has(key)) {
-      throw new BadRequestError(`${context} has unsupported key "${key}".`);
-    }
-  }
-
-  for (const key of required) {
-    if (!Object.hasOwn(value, key)) {
-      throw new BadRequestError(`${context} must include "${key}".`);
-    }
-  }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

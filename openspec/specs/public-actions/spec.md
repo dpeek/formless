@@ -281,9 +281,28 @@ invocation envelope before validating input or committing effects.
   operation execution
 - THEN accepted, rejected, failed, replayed, and committed invocation statuses
   are recorded through the shared operation invocation lifecycle
-- AND public route code remains responsible for target route resolution,
-  request origin evaluation, challenge proof verification, verified-envelope
-  construction, public response filtering, and after-commit side effects
+- AND target route resolution, request URL fact selection, challenge proof
+  verification, verified-envelope construction, invocation lifecycle rows,
+  durable writes, public response filtering, and after-commit side effects
+  remain explicit runtime adapters
+
+#### Scenario: Stage public operation execution
+
+- GIVEN a target-scoped public operation route resolves a declared operation
+- WHEN the public operation executor evaluates the request
+- THEN the executor stages operation selection, public request envelope parsing,
+  idempotency derivation, auditable unverified envelope construction, origin
+  evaluation, input and proof validation, replay detection, challenge
+  verification, verified envelope construction, Authority execution, public
+  response filtering, and after-commit side effects in that order
+- AND each stage receives only the public request facts, schema facts, storage
+  facts, challenge adapter, lifecycle adapter, Authority execution adapter,
+  public response adapter, or after-commit adapter it needs
+- AND target route resolution, storage identity selection, Turnstile secret
+  handling, invocation lifecycle rows, durable app writes, notification
+  scheduling, and public response shaping remain explicit runtime adapters
+- AND failed origin, input, proof, challenge, or execution stages preserve the
+  existing public-safe error, audit, replay, and no-partial-write behavior
 
 ### Requirement: Public Input Validation
 

@@ -227,6 +227,7 @@ describe("public operation runtime", () => {
       status: "committed",
     });
     expect(body.output.affectedChangeIds).toHaveLength(4);
+    expect(Object.keys(body.output).sort()).toEqual(["affectedChangeIds", "cursor", "type"]);
     expect(body.output).not.toHaveProperty("response");
     expect(JSON.stringify(body)).not.toContain("actionId");
     expect(JSON.stringify(body)).not.toContain(turnstileSecret);
@@ -398,6 +399,28 @@ describe("public operation runtime", () => {
     expect(turnstileRequests).toEqual([]);
   });
 
+  it("rejects unavailable public operations before challenge verification", async () => {
+    const beforeState = await readPublicOperationHarnessState();
+    const rejected = await postPublicOperationHarness(
+      "/api/site/public/operations/contact-message/missing",
+      publicContactMessageBody({
+        idempotencyKey: "public-operation-unavailable",
+        token: "unavailable-secret-token",
+      }),
+    );
+    const rejectedAfter = await readPublicOperationHarnessState();
+
+    expect(rejected.status).toBe(404);
+    expect((await rejected.json()) as { error: string }).toEqual({
+      error: "Public operation is not available.",
+    });
+    expect(rejectedAfter.records).toEqual(beforeState.records);
+    expect(rejectedAfter.changes).toEqual(beforeState.changes);
+    expect(rejectedAfter.commandExecutionCount).toBe(0);
+    expect(rejectedAfter.invocations).toEqual(beforeState.invocations);
+    expect(turnstileRequests).toEqual([]);
+  });
+
   it("executes subscribe through operation-native command materialization", async () => {
     const accepted = await postPublicOperationHarness(
       "/api/site/public/operations/subscription/subscribe",
@@ -416,6 +439,12 @@ describe("public operation runtime", () => {
       affectedChangeIds: body.output.affectedChangeIds,
       operationKey: "subscription.subscribe",
       operationKind: "command",
+      source: {
+        host: "example.com",
+        path: "/api/site/public/operations/subscription/subscribe",
+        protocol: "public",
+        siteBlockId: "rec_site_subscribe_form",
+      },
       status: "committed",
       statusHistory: [
         expect.objectContaining({ status: "accepted" }),
@@ -435,7 +464,9 @@ describe("public operation runtime", () => {
     expect(records.subscriptions).toHaveLength(1);
     expect(records.subscriptions[0]?.values).toMatchObject({
       sourceKind: "publicOperation",
+      sourceHost: "example.com",
       sourceOperationKey: "subscription.subscribe",
+      sourcePath: "/api/site/public/operations/subscription/subscribe",
       sourceSiteBlockId: "rec_site_subscribe_form",
     });
   });
@@ -502,6 +533,13 @@ describe("public operation runtime", () => {
       throw new Error("Expected create output.");
     }
     expect(body.output.affectedChangeIds).toHaveLength(1);
+    expect(Object.keys(body.output).sort()).toEqual([
+      "affectedChangeIds",
+      "changes",
+      "cursor",
+      "record",
+      "type",
+    ]);
     expect(body.output.record).toEqual(messages[0]);
     expect(body.output.record.values).toEqual({
       name: "Ada Lovelace",
@@ -560,6 +598,8 @@ describe("public operation runtime", () => {
       expect(JSON.stringify(firstBody)).not.toContain("owner@example.com");
       expect(JSON.stringify(firstBody)).not.toContain("contact@mail.example.com");
       expect(JSON.stringify(firstBody)).not.toContain("providerMessageId");
+      expect(JSON.stringify(replayBody)).not.toContain("providerMessageId");
+      expect(JSON.stringify(replayBody)).not.toContain("token-replay");
       expectTurnstileRequests(turnstileRequests, [
         {
           secret: turnstileSecret,
@@ -671,6 +711,8 @@ describe("public operation runtime", () => {
       expect(JSON.stringify(firstBody)).not.toContain("providerMessageId");
       expect(JSON.stringify(firstBody)).not.toContain("operation-input-notification");
       expect(JSON.stringify(firstBody)).not.toContain("token-ok");
+      expect(JSON.stringify(replayBody)).not.toContain("operation-input-notification");
+      expect(JSON.stringify(replayBody)).not.toContain("token-replay");
       expectTurnstileRequests(turnstileRequests, [
         {
           secret: turnstileSecret,
@@ -1033,9 +1075,14 @@ describe("public operation runtime", () => {
     const afterInvalid = await getJson<BootstrapResponse>("/api/tasks/bootstrap");
 
     expect(rejected.status).toBe(400);
-    expect((await rejected.json()) as { error: string }).toEqual({
+    const rejectedBody = (await rejected.json()) as { error: string };
+
+    expect(rejectedBody).toEqual({
       error: 'Public operation input includes undeclared field "admin".',
     });
+    expect(Object.keys(rejectedBody)).toEqual(["error"]);
+    expect(JSON.stringify(rejectedBody)).not.toContain("Rejected task");
+    expect(JSON.stringify(rejectedBody)).not.toContain("token-ok");
     expect(afterRejected.records).toEqual(beforeRejected.records);
     expect(afterRejected.cursor).toBe(beforeRejected.cursor);
     expect(invalid.status).toBe(400);
@@ -1298,6 +1345,12 @@ describe("public operation runtime", () => {
     expect(afterState.invocations[0]?.output).toBeUndefined();
     expect(JSON.stringify(afterState.invocations[0])).not.toContain("token-ok");
     expect(JSON.stringify(afterState.invocations[0])).not.toContain(turnstileSecret);
+    expectTurnstileRequests(turnstileRequests, [
+      {
+        secret: turnstileSecret,
+        response: "token-ok",
+      },
+    ]);
 
     const missingConfigRequests: unknown[] = [];
     const missingConfigHarness = await createPublicOperationWorkerHarness({
@@ -1338,6 +1391,15 @@ describe("public operation runtime", () => {
       "/api/site/public/operations/contact-message/submit",
       publicContactMessageBody({ idempotencyKey: "contact-create-replay" }),
     );
+    expectTurnstileRequests(turnstileRequests, [
+      {
+        secret: turnstileSecret,
+        response: "token-ok",
+      },
+    ]);
+
+    turnstileRequests = [];
+
     const replay = await postPublicOperationHarness(
       "/api/site/public/operations/contact-message/submit",
       publicContactMessageBody({ idempotencyKey: "contact-create-replay", token: "token-replay" }),
@@ -1384,12 +1446,7 @@ describe("public operation runtime", () => {
     expect(JSON.stringify(rows[0])).not.toContain("turnstileToken");
     expect(JSON.stringify(firstBody)).not.toContain("token-ok");
     expect(JSON.stringify(replayBody)).not.toContain("token-replay");
-    expectTurnstileRequests(turnstileRequests, [
-      {
-        secret: turnstileSecret,
-        response: "token-ok",
-      },
-    ]);
+    expect(turnstileRequests).toEqual([]);
   });
 
   it("rejects undeclared public subscribe input before challenge verification and audits source facts", async () => {
@@ -1459,6 +1516,40 @@ describe("public operation runtime", () => {
     expect(accepted.status).toBe(200);
     expect(contactSubscriptionRecords(acceptedAfter.records).subscriptions).toHaveLength(1);
     expect(turnstileRequests).toHaveLength(1);
+  });
+
+  it("rejects malformed public proof before challenge verification", async () => {
+    const beforeState = await readPublicOperationHarnessState();
+    const rejected = await postPublicOperationHarness(
+      "/api/site/public/operations/contact-message/submit",
+      {
+        ...publicContactMessageBody({ idempotencyKey: "contact-create-proof-rejected" }),
+        proof: { turnstileToken: " " },
+      },
+    );
+    const rejectedAfter = await readPublicOperationHarnessState();
+
+    expect(rejected.status).toBe(400);
+    expect((await rejected.json()) as { error: string }).toEqual({
+      error: "Public operation Turnstile token is required.",
+    });
+    expect(rejectedAfter.records).toEqual(beforeState.records);
+    expect(rejectedAfter.changes).toEqual(beforeState.changes);
+    expect(rejectedAfter.commandExecutionCount).toBe(0);
+    expect(rejectedAfter.invocations).toHaveLength(1);
+    expect(rejectedAfter.invocations[0]).toMatchObject({
+      affectedChangeIds: [],
+      errorMessage: "Public operation Turnstile token is required.",
+      operationKey: "contact-message.submit",
+      operationKind: "create",
+      status: "failed",
+      statusHistory: [
+        expect.objectContaining({ status: "accepted" }),
+        expect.objectContaining({ status: "failed" }),
+      ],
+    });
+    expect(rejectedAfter.invocations[0]?.output).toBeUndefined();
+    expect(turnstileRequests).toEqual([]);
   });
 
   it("audits public subscribe same-origin rejections without challenge verification", async () => {
@@ -1576,6 +1667,23 @@ describe("public operation runtime", () => {
     } finally {
       await uuidRequiredHarness.dispose();
     }
+  });
+
+  it("passes UUID public operation idempotency keys through to Siteverify", async () => {
+    const publicIdempotencyKey = randomUUID();
+    const response = await postPublicOperation(
+      "/api/site/public/operations/contact-message/submit",
+      publicContactMessageBody({ idempotencyKey: publicIdempotencyKey }),
+    );
+
+    expect(response.status).toBe(200);
+    expectTurnstileRequests(turnstileRequests, [
+      {
+        secret: turnstileSecret,
+        response: "token-ok",
+      },
+    ]);
+    expect(turnstileRequests[0]?.idempotency_key).toBe(publicIdempotencyKey);
   });
 
   it("maps non-OK Siteverify JSON failures to challenge failure", async () => {
