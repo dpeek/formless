@@ -187,7 +187,6 @@ export {
   type FormlessInstanceWorkspaceDiscoveryResult,
 } from "./instance-workspace-foundation.ts";
 export {
-  formlessInstanceWorkspaceDevEnv,
   type DevFormlessInstanceWorkspaceDependencies,
   type DevFormlessInstanceWorkspaceInput,
   type FormlessInstanceWorkspaceStatusDependencies,
@@ -199,6 +198,11 @@ export {
   type InitFormlessInstanceWorkspaceInput,
   type InitFormlessInstanceWorkspaceResult,
 } from "./instance-workspace-lifecycle.ts";
+export {
+  formlessInstanceWorkspaceDevEnv,
+  type FormlessInstanceWorkspaceDevEnvOptions,
+  type FormlessInstanceWorkspaceGatewayLifecycleSidecarEnv,
+} from "./instance-workspace-gateway-lifecycle.ts";
 export {
   checkLocalFormlessWorkspace,
   type CheckFormlessInstanceWorkspaceDependencies,

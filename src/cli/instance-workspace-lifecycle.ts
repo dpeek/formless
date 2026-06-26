@@ -13,18 +13,7 @@ import {
 } from "@dpeek/formless-archive";
 import type { AppInstall } from "@dpeek/formless-installed-apps";
 import type { AppInstallsResponse } from "../shared/protocol.ts";
-import {
-  FORMLESS_TURNSTILE_ALWAYS_PASS_SECRET_KEY,
-  FORMLESS_TURNSTILE_ALWAYS_PASS_SITE_KEY,
-  FORMLESS_TURNSTILE_SECRET_KEY_ENV_NAME,
-  FORMLESS_TURNSTILE_SITE_KEY_ENV_NAME,
-} from "../shared/turnstile-config.ts";
-import { FORMLESS_WORKSPACE_APP_PACKAGES_ENV_NAME } from "../shared/workspace-runtime-packages.ts";
-import {
-  FORMLESS_SITE_PROJECT_ROOT_ENV_NAME,
-  FORMLESS_WORKSPACE_RUNTIME_EXTENSIONS_ENV_NAME,
-  runtimeWorkspaceExtensionsEnvValue,
-} from "../shared/workspace-runtime-extensions.ts";
+import { runtimeWorkspaceExtensionsEnvValue } from "../shared/workspace-runtime-extensions.ts";
 import {
   DEFAULT_INSTANCE_WORKSPACE_ARCHIVE_ROOT as DEFAULT_FORMLESS_INSTANCE_WORKSPACE_ARCHIVE_ROOT,
   DEFAULT_INSTANCE_WORKSPACE_APP_STATE_ROOT as DEFAULT_FORMLESS_INSTANCE_WORKSPACE_APP_STATE_ROOT,
@@ -38,8 +27,6 @@ import {
   type InstanceWorkspaceTarget as FormlessInstanceWorkspaceTarget,
 } from "@dpeek/formless-workspace";
 import {
-  INSTANCE_WORKSPACE_ADMIN_TOKEN_ENV_NAME as FORMLESS_INSTANCE_WORKSPACE_ADMIN_TOKEN_ENV_NAME,
-  INSTANCE_WORKSPACE_OWNER_SESSION_SECRET_ENV_NAME as FORMLESS_INSTANCE_WORKSPACE_OWNER_SESSION_SECRET_ENV_NAME,
   ensureInstanceWorkspaceLocalDevSecretState as ensureFormlessInstanceWorkspaceLocalDevSecretState,
   ensureInstanceWorkspaceSecretStateIgnored as ensureFormlessInstanceWorkspaceSecretStateIgnored,
   readInstanceWorkspaceControlPlaneStorageSnapshot,
@@ -59,25 +46,11 @@ import {
   formlessCliWorkspaceStatusSecretStateLabel,
 } from "./instance-target-context.ts";
 import { restorePortableArchive, type RestorePortableArchiveResult } from "./archive-workflows.ts";
-import {
-  LOCAL_SESSION_BOOTSTRAP_API_PATH,
-  LOCAL_SESSION_BOOTSTRAP_TOKEN_ENV,
-  WORKSPACE_GATEWAY_PROXY_TOKEN_ENV,
-  WORKSPACE_GATEWAY_SIDECAR_URL_ENV,
-} from "@dpeek/formless-gateway";
-import {
-  startWorkspaceGatewaySidecar as startPackageWorkspaceGatewaySidecar,
-  type WorkspaceGatewaySidecar,
-} from "@dpeek/formless-gateway/sidecar";
-import {
-  createWorkspaceGatewayOperationHandlers,
-  type StartWorkspaceGatewaySidecarDependencies,
-} from "./workspace-gateway-runtime.ts";
+import type { StartWorkspaceGatewaySidecarDependencies } from "./workspace-gateway-runtime.ts";
 import {
   createActiveWorkspaceAppPackages,
   createWorkspaceTempRoot,
   formlessInstanceWorkspaceLocalStateRoot,
-  formlessInstanceWorkspaceWranglerPersistPath,
   readWorkspaceManifest,
   runtimeWorkspaceAppPackagesEnvValue,
   workspaceManifestPath,
@@ -98,6 +71,22 @@ import {
   readWorkspaceArchive,
   workspaceControlPlaneSnapshotFromRecords,
 } from "./instance-workspace-control-plane.ts";
+import {
+  startFormlessInstanceWorkspaceGatewayLifecycle,
+  type FormlessInstanceWorkspaceGatewayLifecycleSidecarStarter,
+} from "./instance-workspace-gateway-lifecycle.ts";
+
+export {
+  formlessInstanceWorkspaceDevEnv,
+  formlessInstanceWorkspaceGatewaySessionEntry,
+  startFormlessInstanceWorkspaceGatewayLifecycle,
+} from "./instance-workspace-gateway-lifecycle.ts";
+export type {
+  FormlessInstanceWorkspaceDevSessionEntry,
+  FormlessInstanceWorkspaceGatewayLifecycle,
+  FormlessInstanceWorkspaceGatewayLifecycleDependencies,
+  FormlessInstanceWorkspaceGatewayLifecycleSidecarStarter,
+} from "./instance-workspace-gateway-lifecycle.ts";
 
 export type InitFormlessInstanceWorkspaceInput = {
   defaultAppPolicy?: FormlessInstanceWorkspaceDefaultAppPolicy;
@@ -203,13 +192,7 @@ export type DevFormlessInstanceWorkspaceDependencies = {
   packageRoot: string;
   selectWorkspaceName?: EnsureFormlessInstanceWorkspaceDevBootstrapDependencies["selectWorkspaceName"];
   spawn: typeof nodeSpawn;
-  startWorkspaceGatewaySidecar?: (
-    input: {
-      env?: NodeJS.ProcessEnv;
-      workspaceRoot: string;
-    },
-    dependencies: StartWorkspaceGatewaySidecarDependencies,
-  ) => Promise<WorkspaceGatewaySidecar>;
+  startWorkspaceGatewaySidecar?: FormlessInstanceWorkspaceGatewayLifecycleSidecarStarter;
 } & Partial<
   Pick<
     StartWorkspaceGatewaySidecarDependencies,
@@ -222,10 +205,6 @@ export type DevFormlessInstanceWorkspaceDependencies = {
     | "setupCapability"
   >
 >;
-
-export type FormlessInstanceWorkspaceDevSessionEntry = {
-  localSessionBootstrapUrl: string;
-};
 
 export type ResetFormlessInstanceWorkspaceLocalStateInput = {
   workspacePath?: string;
@@ -395,13 +374,8 @@ export async function runFormlessInstanceWorkspaceDev(
 
   const candidateOrigins = new Set<string>();
 
-  const localSessionBootstrapToken = requiredGeneratedToken(createLocalDevSecret(dependencies));
-
-  const sidecar = await startWorkspaceGatewaySidecar(
-    {
-      env: dependencies.env,
-      workspaceRoot,
-    },
+  const gatewayLifecycle = await startFormlessInstanceWorkspaceGatewayLifecycle(
+    { workspaceRoot },
     dependencies,
   );
   let child: ChildProcessWithoutNullStreams | undefined;
@@ -409,18 +383,14 @@ export async function runFormlessInstanceWorkspaceDev(
   try {
     child = dependencies.spawn(dependencies.devCommand.command, dependencies.devCommand.args, {
       cwd: dependencies.packageRoot,
-      env: formlessInstanceWorkspaceDevEnv(
-        dependencies.env ?? {},
-        workspaceRoot,
+      env: gatewayLifecycle.childRuntimeEnv({
+        env: dependencies.env,
+        localDevSecrets,
         manifest,
-        sidecar,
-        {
-          localDevSecrets,
-          localSessionBootstrapToken,
-          workspaceAppPackages: runtimeWorkspaceAppPackagesEnvValue(activePackages),
-          workspaceRuntimeExtensions: runtimeWorkspaceExtensionsEnvValue(manifest),
-        },
-      ),
+        workspaceRoot,
+        workspaceAppPackages: runtimeWorkspaceAppPackagesEnvValue(activePackages),
+        workspaceRuntimeExtensions: runtimeWorkspaceExtensionsEnvValue(manifest),
+      }),
       stdio: "pipe",
     });
 
@@ -450,8 +420,9 @@ export async function runFormlessInstanceWorkspaceDev(
       workspaceRoot,
     });
 
-    const browserOrigin = browserFacingLocalDevOrigin(source, dependencies.env);
-    const sessionEntry = localSessionEntry(browserOrigin, localSessionBootstrapToken, {
+    const sessionEntry = gatewayLifecycle.sessionEntry({
+      childOrigin: source,
+      env: dependencies.env,
       reset: input.reset === true,
     });
 
@@ -470,7 +441,7 @@ export async function runFormlessInstanceWorkspaceDev(
     child?.kill();
     throw error;
   } finally {
-    await sidecar.close();
+    await gatewayLifecycle.close();
   }
 }
 
@@ -556,196 +527,8 @@ export async function resetFormlessInstanceWorkspaceLocalState(
   };
 }
 
-export function formlessInstanceWorkspaceDevEnv(
-  env: NodeJS.ProcessEnv,
-  workspaceRoot: string,
-  manifest: FormlessInstanceWorkspaceManifest,
-  sidecar?: Pick<WorkspaceGatewaySidecar, "endpoint" | "proxyToken"> | null,
-  options: {
-    localDevSecrets?: FormlessInstanceWorkspaceLocalDevSecretState;
-    localSessionBootstrapToken?: string;
-    workspaceAppPackages?: string;
-    workspaceRuntimeExtensions?: string;
-  } = {},
-): NodeJS.ProcessEnv {
-  const bootstrapToken = randomWorkspaceGatewayToken();
-  const csrfToken = randomWorkspaceGatewayToken();
-  const localDevSecrets = options.localDevSecrets ?? {
-    adminToken:
-      env.FORMLESS_ADMIN_TOKEN && env.FORMLESS_ADMIN_TOKEN.trim() !== ""
-        ? env.FORMLESS_ADMIN_TOKEN
-        : randomWorkspaceGatewayToken(),
-    ownerSessionSecret:
-      env.FORMLESS_OWNER_SESSION_SECRET && env.FORMLESS_OWNER_SESSION_SECRET.trim() !== ""
-        ? env.FORMLESS_OWNER_SESSION_SECRET
-        : randomWorkspaceGatewayToken(),
-  };
-  const turnstileSecretKey = env[FORMLESS_TURNSTILE_SECRET_KEY_ENV_NAME];
-  const turnstileSiteKey = env[FORMLESS_TURNSTILE_SITE_KEY_ENV_NAME];
-  const nextEnv: NodeJS.ProcessEnv = {
-    ...env,
-    [FORMLESS_INSTANCE_WORKSPACE_ADMIN_TOKEN_ENV_NAME]: localDevSecrets.adminToken,
-    FORMLESS_LAUNCH_FIXTURE: "empty",
-    [FORMLESS_INSTANCE_WORKSPACE_OWNER_SESSION_SECRET_ENV_NAME]: localDevSecrets.ownerSessionSecret,
-    [FORMLESS_TURNSTILE_SECRET_KEY_ENV_NAME]:
-      turnstileSecretKey && turnstileSecretKey.trim() !== ""
-        ? turnstileSecretKey
-        : FORMLESS_TURNSTILE_ALWAYS_PASS_SECRET_KEY,
-    [FORMLESS_TURNSTILE_SITE_KEY_ENV_NAME]:
-      turnstileSiteKey && turnstileSiteKey.trim() !== ""
-        ? turnstileSiteKey
-        : FORMLESS_TURNSTILE_ALWAYS_PASS_SITE_KEY,
-    [LOCAL_SESSION_BOOTSTRAP_TOKEN_ENV]:
-      options.localSessionBootstrapToken ?? randomWorkspaceGatewayToken(),
-    [FORMLESS_SITE_PROJECT_ROOT_ENV_NAME]: workspaceRoot,
-    FORMLESS_RUNTIME_PROFILE: "instance",
-    FORMLESS_WORKSPACE_GATEWAY_BOOTSTRAP_TOKEN: bootstrapToken,
-    FORMLESS_WORKSPACE_GATEWAY_CSRF_TOKEN: csrfToken,
-    FORMLESS_WRANGLER_PERSIST: formlessInstanceWorkspaceWranglerPersistPath(
-      workspaceRoot,
-      manifest,
-    ),
-    VITE_FORMLESS_WORKSPACE_GATEWAY_API: "/api/formless/workspace",
-    VITE_FORMLESS_WORKSPACE_GATEWAY_BOOTSTRAP_TOKEN: bootstrapToken,
-    VITE_FORMLESS_RUNTIME_PROFILE: "instance",
-  };
-
-  if (sidecar) {
-    nextEnv[WORKSPACE_GATEWAY_SIDECAR_URL_ENV] = sidecar.endpoint;
-    nextEnv[WORKSPACE_GATEWAY_PROXY_TOKEN_ENV] = sidecar.proxyToken;
-  } else {
-    delete nextEnv[WORKSPACE_GATEWAY_SIDECAR_URL_ENV];
-    delete nextEnv[WORKSPACE_GATEWAY_PROXY_TOKEN_ENV];
-  }
-
-  if (options.workspaceAppPackages) {
-    nextEnv[FORMLESS_WORKSPACE_APP_PACKAGES_ENV_NAME] = options.workspaceAppPackages;
-  } else {
-    delete nextEnv[FORMLESS_WORKSPACE_APP_PACKAGES_ENV_NAME];
-  }
-
-  if (options.workspaceRuntimeExtensions) {
-    nextEnv[FORMLESS_WORKSPACE_RUNTIME_EXTENSIONS_ENV_NAME] = options.workspaceRuntimeExtensions;
-  } else {
-    delete nextEnv[FORMLESS_WORKSPACE_RUNTIME_EXTENSIONS_ENV_NAME];
-  }
-
-  delete nextEnv.FORMLESS_LOCAL_WORKSPACE_GATEWAY;
-  delete nextEnv.FORMLESS_WORKSPACE_GATEWAY_ROOT;
-  delete nextEnv.VITE_FORMLESS_ADMIN_TOKEN;
-  delete nextEnv.VITE_FORMLESS_LOCAL_PUBLISH_BROKER_TOKEN;
-  delete nextEnv.VITE_FORMLESS_LOCAL_PUBLISH_BROKER_URL;
-  delete nextEnv.VITE_FORMLESS_LOCAL_SESSION_BOOTSTRAP_TOKEN;
-  delete nextEnv.VITE_FORMLESS_OWNER_SESSION_SECRET;
-  delete nextEnv.VITE_FORMLESS_WORKSPACE_GATEWAY_ROOT;
-  delete nextEnv.VITE_FORMLESS_WORKSPACE_GATEWAY_PROXY_TOKEN;
-  delete nextEnv.VITE_FORMLESS_WORKSPACE_GATEWAY_SIDECAR_URL;
-
-  return nextEnv;
-}
-
 function randomWorkspaceGatewayToken(): string {
   return randomBytes(32).toString("base64url");
-}
-
-function localSessionBootstrapUrl(
-  source: string,
-  token: string,
-  input: { reset: boolean },
-): string {
-  const url = new URL(LOCAL_SESSION_BOOTSTRAP_API_PATH, `${source}/`);
-
-  url.searchParams.set("token", token);
-  if (input.reset) {
-    url.searchParams.set("reset", "1");
-  }
-
-  return url.toString();
-}
-
-function localSessionEntry(
-  browserOrigin: string,
-  token: string,
-  input: { reset: boolean },
-): FormlessInstanceWorkspaceDevSessionEntry {
-  return {
-    localSessionBootstrapUrl: localSessionBootstrapUrl(browserOrigin, token, input),
-  };
-}
-
-function browserFacingLocalDevOrigin(source: string, env: NodeJS.ProcessEnv | undefined): string {
-  const proxyOrigin = env?.PORTLESS_URL?.trim();
-
-  if (!proxyOrigin) {
-    return source;
-  }
-
-  try {
-    const url = new URL(proxyOrigin);
-
-    if (url.protocol !== "http:" && url.protocol !== "https:") {
-      throw new Error("must use http or https");
-    }
-
-    return url.origin;
-  } catch {
-    throw new Error(`PORTLESS_URL is invalid: ${proxyOrigin}`);
-  }
-}
-
-function createLocalDevSecret(dependencies: DevFormlessInstanceWorkspaceDependencies): string {
-  return dependencies.randomToken?.() ?? randomWorkspaceGatewayToken();
-}
-
-async function startWorkspaceGatewaySidecar(
-  input: {
-    env?: NodeJS.ProcessEnv;
-    workspaceRoot: string;
-  },
-  dependencies: DevFormlessInstanceWorkspaceDependencies,
-): Promise<WorkspaceGatewaySidecar> {
-  const sidecarDependencies = {
-    ...workspaceGatewaySidecarDependencies(dependencies),
-    createProxyToken: () => createLocalDevSecret(dependencies),
-  };
-
-  if (dependencies.startWorkspaceGatewaySidecar) {
-    return dependencies.startWorkspaceGatewaySidecar(input, sidecarDependencies);
-  }
-
-  return startPackageWorkspaceGatewaySidecar(input, {
-    createProxyToken: sidecarDependencies.createProxyToken,
-    operations: createWorkspaceGatewayOperationHandlers(sidecarDependencies),
-  });
-}
-
-function workspaceGatewaySidecarDependencies(
-  dependencies: DevFormlessInstanceWorkspaceDependencies,
-): StartWorkspaceGatewaySidecarDependencies {
-  return {
-    ...(dependencies.accountDiscovery === undefined
-      ? {}
-      : { accountDiscovery: dependencies.accountDiscovery }),
-    cwd: dependencies.cwd,
-    ...(dependencies.deploymentAdapter === undefined
-      ? {}
-      : { deploymentAdapter: dependencies.deploymentAdapter }),
-    env: dependencies.env,
-    fetch: dependencies.fetch,
-    ...(dependencies.healthCheck === undefined ? {} : { healthCheck: dependencies.healthCheck }),
-    ...(dependencies.localSecretEnv === undefined
-      ? {}
-      : { localSecretEnv: dependencies.localSecretEnv }),
-    now: dependencies.now,
-    packageRoot: dependencies.packageRoot,
-    ...(dependencies.packageVersion === undefined
-      ? {}
-      : { packageVersion: dependencies.packageVersion }),
-    ...(dependencies.randomToken === undefined ? {} : { randomToken: dependencies.randomToken }),
-    ...(dependencies.setupCapability === undefined
-      ? {}
-      : { setupCapability: dependencies.setupCapability }),
-  };
 }
 
 type WorkspaceLocalBootstrapResult =

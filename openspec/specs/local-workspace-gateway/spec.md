@@ -29,6 +29,10 @@ runtime profiles through a filesystem-capable local gateway sidecar process.
   route eligibility, and sidecar target facts
 - **AND** the sidecar process receives only execution authorization, workspace
   root, and operation handler facts needed for filesystem-capable work
+- **AND** the CLI-owned local gateway lifecycle creates the sidecar, mints
+  process-scoped gateway and local session tokens, builds the child runtime
+  environment, produces the browser session entrypoint, and closes the sidecar
+  when the child runtime exits
 - **AND** the same API family is unavailable in deployed instance, app,
   site-authoring, and published Site profiles
 
@@ -356,6 +360,10 @@ bootstrap boundary.
 - **AND** browser-visible environment does not contain sidecar proxy tokens,
   sidecar endpoint URLs, workspace root facts, admin tokens, owner session
   secrets, or raw local session bootstrap tokens
+- **AND** lifecycle tests can verify what reaches the child runtime process,
+  what is printed or opened for the browser, and what is removed from
+  browser-visible configuration without depending on workspace bootstrap,
+  app-package resolution, Authority storage, or operation execution internals
 
 #### Scenario: CLI or automation starts operation
 

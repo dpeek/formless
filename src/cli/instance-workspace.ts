@@ -13,8 +13,12 @@ export {
   runFormlessInstanceWorkspaceDev,
   ensureFormlessInstanceWorkspaceDevBootstrap,
   resetFormlessInstanceWorkspaceLocalState,
-  formlessInstanceWorkspaceDevEnv,
 } from "./instance-workspace-lifecycle.ts";
+export { formlessInstanceWorkspaceDevEnv } from "./instance-workspace-gateway-lifecycle.ts";
+export type {
+  FormlessInstanceWorkspaceDevEnvOptions,
+  FormlessInstanceWorkspaceGatewayLifecycleSidecarEnv,
+} from "./instance-workspace-gateway-lifecycle.ts";
 export type {
   DevFormlessInstanceWorkspaceDependencies,
   DevFormlessInstanceWorkspaceInput,

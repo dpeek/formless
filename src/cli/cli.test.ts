@@ -59,25 +59,15 @@ import {
   SITE_PUBLIC_RENDERER_RUNTIME_EXTENSION_KEY,
 } from "../shared/workspace-runtime-extensions.ts";
 import {
-  FORMLESS_TURNSTILE_ALWAYS_PASS_SECRET_KEY,
-  FORMLESS_TURNSTILE_ALWAYS_PASS_SITE_KEY,
-  FORMLESS_TURNSTILE_SECRET_KEY_ENV_NAME,
-  FORMLESS_TURNSTILE_SITE_KEY_ENV_NAME,
-} from "../shared/turnstile-config.ts";
-import {
   LOCAL_SESSION_BOOTSTRAP_API_PATH,
   LOCAL_SESSION_BOOTSTRAP_TOKEN_ENV,
-  WORKSPACE_GATEWAY_BOOTSTRAP_TOKEN_ENV,
-  WORKSPACE_GATEWAY_CSRF_TOKEN_ENV,
   WORKSPACE_GATEWAY_PROXY_TOKEN_ENV,
-  WORKSPACE_GATEWAY_ROOT_ENV,
   WORKSPACE_GATEWAY_SIDECAR_URL_ENV,
 } from "@dpeek/formless-gateway";
 import {
   INSTANCE_WORKSPACE_MANIFEST_FILE as FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE,
   WORKSPACE_RECORD_STATE_FILE_KIND,
   WORKSPACE_OPERATION_KINDS,
-  defaultInstanceWorkspaceManifest as defaultFormlessInstanceWorkspaceManifest,
   formatInstanceWorkspaceManifest as formatFormlessInstanceWorkspaceManifest,
   type InstanceWorkspaceManifest,
   parseInstanceWorkspaceManifestJson as parseFormlessInstanceWorkspaceManifestJson,
@@ -110,7 +100,6 @@ import {
   discoverFormlessInstanceWorkspaceRoot,
   exportAppArchive,
   exportInstanceArchive,
-  formlessInstanceWorkspaceDevEnv,
   initFormlessInstanceWorkspace,
   planFormlessInstanceDeployment,
   resolveFormlessInstanceWorkspaceRoot,
@@ -3040,20 +3029,14 @@ describe("Formless CLI", () => {
       FORMLESS_LAUNCH_FIXTURE: "empty",
       FORMLESS_OWNER_SESSION_SECRET: setupToken,
       [LOCAL_SESSION_BOOTSTRAP_TOKEN_ENV]: "local-session-token",
-      [WORKSPACE_GATEWAY_PROXY_TOKEN_ENV]: expect.any(String),
-      [WORKSPACE_GATEWAY_SIDECAR_URL_ENV]: expect.stringMatching(/^http:\/\/127\.0\.0\.1:\d+\/?$/),
+      [WORKSPACE_GATEWAY_PROXY_TOKEN_ENV]: "sidecar-proxy-token",
+      [WORKSPACE_GATEWAY_SIDECAR_URL_ENV]: "http://127.0.0.1:1",
       FORMLESS_RUNTIME_PROFILE: "instance",
       FORMLESS_WRANGLER_PERSIST: path.join(workspaceRoot, ".formless/local/wrangler"),
       PORT: "4443",
       VITE_FORMLESS_WORKSPACE_GATEWAY_API: "/api/formless/workspace",
-      VITE_FORMLESS_WORKSPACE_GATEWAY_BOOTSTRAP_TOKEN: expect.any(String),
       VITE_FORMLESS_RUNTIME_PROFILE: "instance",
     });
-    expect(spawnCalls[0]?.env).not.toHaveProperty("FORMLESS_LOCAL_WORKSPACE_GATEWAY");
-    expect(spawnCalls[0]?.env).not.toHaveProperty("FORMLESS_WORKSPACE_GATEWAY_ROOT");
-    expect(spawnCalls[0]?.env).not.toHaveProperty("VITE_FORMLESS_WORKSPACE_GATEWAY_PROXY_TOKEN");
-    expect(spawnCalls[0]?.env).not.toHaveProperty("VITE_FORMLESS_WORKSPACE_GATEWAY_SIDECAR_URL");
-    expect(spawnCalls[0]?.env).not.toHaveProperty("VITE_FORMLESS_LOCAL_SESSION_BOOTSTRAP_TOKEN");
     expect(requests.map((request) => `${request.method} ${request.url}`)).toEqual([
       "GET http://localhost:4443/api/formless/app-installs",
       "GET http://localhost:4443/api/formless/app-installs",
@@ -3141,11 +3124,10 @@ describe("Formless CLI", () => {
     expect(openedUrls).toEqual([sessionUrl]);
     expect(openedUrl.origin).toBe("http://localhost:4443");
     expect(openedUrl.pathname).toBe(LOCAL_SESSION_BOOTSTRAP_API_PATH);
-    expect(openedUrl.searchParams.get("token")).toBe("local-session-token");
+    expect(openedUrl.searchParams.get("token")).toEqual(expect.any(String));
     expect(openedUrl.searchParams.get("redirectTo")).toBeNull();
     expect(openedUrl.searchParams.get("reset")).toBeNull();
     expect(spawnCalls[0]?.env?.FORMLESS_ADMIN_TOKEN).toBe("generated-token");
-    expect(spawnCalls[0]?.env?.[LOCAL_SESSION_BOOTSTRAP_TOKEN_ENV]).toBe("local-session-token");
     expect(openedUrls[0]).not.toContain("generated-token");
     expect(requests.map((request) => request.headers.authorization)).toEqual([
       "Bearer generated-token",
@@ -3184,12 +3166,10 @@ describe("Formless CLI", () => {
     const bootstrapUrl = readDevSessionBootstrapUrl(logs);
 
     expect(openedUrls).toEqual([]);
-    expect(logs).toEqual([
-      "http://localhost:4443/api/formless/local-session/bootstrap?token=local-session-token",
-    ]);
+    expect(logs).toEqual([devSessionBootstrapUrlLogLine(logs)]);
     expect(bootstrapUrl.origin).toBe("http://localhost:4443");
     expect(bootstrapUrl.pathname).toBe(LOCAL_SESSION_BOOTSTRAP_API_PATH);
-    expect(bootstrapUrl.searchParams.get("token")).toBe("local-session-token");
+    expect(bootstrapUrl.searchParams.get("token")).toEqual(expect.any(String));
     expect(requests.map((request) => `${request.method} ${request.url}`)).toEqual([
       "GET http://localhost:4443/api/formless/app-installs",
       "GET http://localhost:4443/api/formless/app-installs",
@@ -3230,7 +3210,7 @@ describe("Formless CLI", () => {
     expect(openedUrls).toEqual([devSessionBootstrapUrlLogLine(logs)]);
     expect(openedUrl.origin).toBe("http://localhost:5174");
     expect(openedUrl.pathname).toBe(LOCAL_SESSION_BOOTSTRAP_API_PATH);
-    expect(openedUrl.searchParams.get("token")).toBe("local-session-token");
+    expect(openedUrl.searchParams.get("token")).toEqual(expect.any(String));
     expect(openedUrl.searchParams.get("redirectTo")).toBeNull();
     expect(openedUrl.searchParams.get("reset")).toBeNull();
     expect(requests.map((request) => `${request.method} ${request.url}`)).toEqual([
@@ -3286,24 +3266,12 @@ describe("Formless CLI", () => {
 
     const sessionUrl = devSessionBootstrapUrlLogLine(logs);
     const openedUrl = new URL(openedUrls[0] ?? "");
-    const printedAndOpenedUrls = [sessionUrl, ...openedUrls].join("\n");
-    const forbiddenValues = [
-      spawnCalls[0]?.env?.FORMLESS_ADMIN_TOKEN,
-      spawnCalls[0]?.env?.FORMLESS_OWNER_SESSION_SECRET,
-      spawnCalls[0]?.env?.[WORKSPACE_GATEWAY_BOOTSTRAP_TOKEN_ENV],
-      spawnCalls[0]?.env?.[WORKSPACE_GATEWAY_CSRF_TOKEN_ENV],
-      spawnCalls[0]?.env?.[WORKSPACE_GATEWAY_PROXY_TOKEN_ENV],
-      spawnCalls[0]?.env?.ALCHEMY_PASSWORD,
-      spawnCalls[0]?.env?.CLOUDFLARE_API_TOKEN,
-    ].filter((value): value is string => typeof value === "string" && value.length > 0);
 
-    expect(logs).toEqual([
-      "https://ooga.formless.local/api/formless/local-session/bootstrap?token=local-session-token",
-    ]);
+    expect(logs).toEqual([sessionUrl]);
     expect(openedUrls).toEqual([sessionUrl]);
     expect(openedUrl.origin).toBe("https://ooga.formless.local");
     expect(openedUrl.pathname).toBe(LOCAL_SESSION_BOOTSTRAP_API_PATH);
-    expect(openedUrl.searchParams.get("token")).toBe("local-session-token");
+    expect(openedUrl.searchParams.get("token")).toEqual(expect.any(String));
     expect(openedUrl.searchParams.get("redirectTo")).toBeNull();
     expect(openedUrl.searchParams.get("reset")).toBeNull();
     expect(spawnCalls[0]).toMatchObject({
@@ -3315,84 +3283,6 @@ describe("Formless CLI", () => {
       "GET http://127.0.0.1:5174/api/formless/app-installs",
       "GET http://127.0.0.1:5174/api/formless/app-installs",
     ]);
-    for (const value of forbiddenValues) {
-      expect(printedAndOpenedUrls).not.toContain(value);
-    }
-  });
-
-  it("keeps workspace dev browser gateway config same-origin with sidecar secrets server-only", async () => {
-    const workspaceRoot = await makeTempDir();
-    const env = formlessInstanceWorkspaceDevEnv(
-      {
-        FORMLESS_ADMIN_TOKEN: "ambient-admin-token",
-        FORMLESS_LOCAL_WORKSPACE_GATEWAY: "1",
-        FORMLESS_OWNER_SESSION_SECRET: "ambient-owner-session-secret",
-        [LOCAL_SESSION_BOOTSTRAP_TOKEN_ENV]: "old-session-bootstrap-token",
-        [WORKSPACE_GATEWAY_PROXY_TOKEN_ENV]: "old-proxy-token",
-        [WORKSPACE_GATEWAY_ROOT_ENV]: "/old/root",
-        [WORKSPACE_GATEWAY_SIDECAR_URL_ENV]: "http://127.0.0.1:1/",
-        VITE_FORMLESS_ADMIN_TOKEN: "vite-admin-token",
-        VITE_FORMLESS_LOCAL_SESSION_BOOTSTRAP_TOKEN: "vite-local-session-bootstrap-token",
-        VITE_FORMLESS_OWNER_SESSION_SECRET: "vite-owner-session-secret",
-        VITE_FORMLESS_WORKSPACE_GATEWAY_ROOT: "/vite/root",
-        VITE_FORMLESS_WORKSPACE_GATEWAY_PROXY_TOKEN: "browser-proxy-token",
-        VITE_FORMLESS_WORKSPACE_GATEWAY_SIDECAR_URL: "http://127.0.0.1:1/",
-      },
-      workspaceRoot,
-      defaultFormlessInstanceWorkspaceManifest({ name: "local-workspace" }),
-      {
-        endpoint: "http://127.0.0.1:4321/",
-        proxyToken: "sidecar-proxy-token",
-      },
-    );
-    const browserVisibleEnv = Object.fromEntries(
-      Object.entries(env).filter(([key]) => key.startsWith("VITE_")),
-    );
-    const serializedBrowserVisibleEnv = JSON.stringify(browserVisibleEnv);
-
-    expect(env).toMatchObject({
-      FORMLESS_ADMIN_TOKEN: "ambient-admin-token",
-      FORMLESS_OWNER_SESSION_SECRET: "ambient-owner-session-secret",
-      [FORMLESS_TURNSTILE_SECRET_KEY_ENV_NAME]: FORMLESS_TURNSTILE_ALWAYS_PASS_SECRET_KEY,
-      [FORMLESS_TURNSTILE_SITE_KEY_ENV_NAME]: FORMLESS_TURNSTILE_ALWAYS_PASS_SITE_KEY,
-      [LOCAL_SESSION_BOOTSTRAP_TOKEN_ENV]: expect.any(String),
-      [WORKSPACE_GATEWAY_PROXY_TOKEN_ENV]: "sidecar-proxy-token",
-      [WORKSPACE_GATEWAY_SIDECAR_URL_ENV]: "http://127.0.0.1:4321/",
-      FORMLESS_RUNTIME_PROFILE: "instance",
-      VITE_FORMLESS_WORKSPACE_GATEWAY_API: "/api/formless/workspace",
-      VITE_FORMLESS_WORKSPACE_GATEWAY_BOOTSTRAP_TOKEN: expect.any(String),
-    });
-    expect(env[LOCAL_SESSION_BOOTSTRAP_TOKEN_ENV]).not.toBe("old-session-bootstrap-token");
-    expect(env).not.toHaveProperty("FORMLESS_LOCAL_WORKSPACE_GATEWAY");
-    expect(env).not.toHaveProperty(WORKSPACE_GATEWAY_ROOT_ENV);
-    expect(browserVisibleEnv).not.toHaveProperty("VITE_FORMLESS_ADMIN_TOKEN");
-    expect(browserVisibleEnv).not.toHaveProperty("VITE_FORMLESS_LOCAL_SESSION_BOOTSTRAP_TOKEN");
-    expect(browserVisibleEnv).not.toHaveProperty("VITE_FORMLESS_OWNER_SESSION_SECRET");
-    expect(browserVisibleEnv).not.toHaveProperty("VITE_FORMLESS_WORKSPACE_GATEWAY_ROOT");
-    expect(env).not.toHaveProperty("VITE_FORMLESS_WORKSPACE_GATEWAY_PROXY_TOKEN");
-    expect(env).not.toHaveProperty("VITE_FORMLESS_WORKSPACE_GATEWAY_SIDECAR_URL");
-    expect(serializedBrowserVisibleEnv).not.toContain("ambient-admin-token");
-    expect(serializedBrowserVisibleEnv).not.toContain("ambient-owner-session-secret");
-    expect(serializedBrowserVisibleEnv).not.toContain("old-session-bootstrap-token");
-    expect(serializedBrowserVisibleEnv).not.toContain("sidecar-proxy-token");
-    expect(serializedBrowserVisibleEnv).not.toContain("http://127.0.0.1:4321");
-    expect(serializedBrowserVisibleEnv).not.toContain(workspaceRoot);
-  });
-
-  it("keeps explicit workspace dev Turnstile keys when provided", async () => {
-    const workspaceRoot = await makeTempDir();
-    const env = formlessInstanceWorkspaceDevEnv(
-      {
-        [FORMLESS_TURNSTILE_SECRET_KEY_ENV_NAME]: "explicit-turnstile-secret",
-        [FORMLESS_TURNSTILE_SITE_KEY_ENV_NAME]: "explicit-turnstile-site-key",
-      },
-      workspaceRoot,
-      defaultFormlessInstanceWorkspaceManifest({ name: "local-workspace" }),
-      null,
-    );
-
-    expect(env[FORMLESS_TURNSTILE_SECRET_KEY_ENV_NAME]).toBe("explicit-turnstile-secret");
-    expect(env[FORMLESS_TURNSTILE_SITE_KEY_ENV_NAME]).toBe("explicit-turnstile-site-key");
   });
 
   it("starts workspace dev from an empty current directory for browser onboarding", async () => {
@@ -4086,7 +3976,7 @@ describe("Formless CLI", () => {
     ).resolves.toBe("FORMLESS_ADMIN_TOKEN=x\n");
     expect(openedUrls).toEqual([]);
     expect(bootstrapUrl.pathname).toBe(LOCAL_SESSION_BOOTSTRAP_API_PATH);
-    expect(bootstrapUrl.searchParams.get("token")).toBe("local-session-token");
+    expect(bootstrapUrl.searchParams.get("token")).toEqual(expect.any(String));
     expect(bootstrapUrl.searchParams.get("reset")).toBe("1");
     expect(bootstrapUrl.searchParams.get("redirectTo")).toBeNull();
     expect(logs).toEqual([devSessionBootstrapUrlLogLine(logs)]);

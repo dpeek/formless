@@ -377,6 +377,12 @@ optional first app install, credential setup, and push operations.
   ignored `.formless/local` state, persists local dev secrets, and mints
   process-scoped local session, gateway proxy, gateway CSRF, and sidecar tokens
   before the product instance runtime starts
+- **AND** local gateway lifecycle code owns sidecar creation, process token
+  minting, child runtime gateway environment assembly, browser session
+  entrypoint creation, and sidecar shutdown
+- **AND** workspace manifest bootstrap, package resolution, local Authority
+  bootstrap, operation execution, and auto-save scheduling remain outside the
+  local gateway lifecycle code
 - **AND** the CLI does not create empty storage snapshot or media directories
 - **AND** no app install, route, deployment config, Cloudflare resource,
   Alchemy resource, provider credential, or remote instance is created
@@ -423,6 +429,8 @@ optional first app install, credential setup, and push operations.
   session bootstrap token and never prints the admin bearer token, owner session
   signing secret, gateway proxy token, gateway CSRF token, provider credential,
   raw filesystem path outside the workspace, or deploy secret
+- **AND** lifecycle code keeps the child runtime's server-only gateway facts
+  separate from browser-visible Vite facts before the URL is printed or opened
 - **AND** the bootstrap URL is useful for a browser or agent to obtain an owner
   session and then navigate the named local instance origin
 
