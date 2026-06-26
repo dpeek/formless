@@ -314,8 +314,9 @@ invocation envelope before validating input or committing effects.
   facts, challenge adapter, lifecycle adapter, Authority execution adapter,
   public response adapter, or after-commit adapter it needs
 - AND target route resolution, storage identity selection, Turnstile secret
-  handling, invocation lifecycle rows, durable app writes, notification
-  scheduling, and public response shaping remain explicit runtime adapters
+  handling, Turnstile Siteverify provider details, invocation lifecycle rows,
+  durable app writes, notification scheduling, and public response shaping
+  remain explicit runtime adapters
 - AND failed origin, input, proof, challenge, or execution stages preserve the
   existing public-safe error, audit, replay, and no-partial-write behavior
 
@@ -371,6 +372,21 @@ The system SHALL support Turnstile as an anonymous public operation challenge.
 - THEN the executor validates the submitted Turnstile token server-side before
   committing operation effects
 - AND failed, missing, expired, or replayed verification rejects the request without committing records
+
+#### Scenario: Turnstile challenge adapter locality
+
+- GIVEN the public operation executor delegates challenge verification through
+  its runtime challenge adapter
+- WHEN the concrete public operation runtime verifies a Turnstile proof
+- THEN Worker-local Turnstile challenge code owns secret lookup, Siteverify
+  request construction, provider fetch selection, provider response parsing,
+  Siteverify idempotency key normalization, public-safe challenge errors, and
+  verified proof facts
+- AND the target public operation route module only wires that Turnstile
+  challenge code into the executor adapter
+- AND schema policy, public request envelope shape, Site tree challenge
+  projection, browser widget rendering, and deployment provisioning remain
+  explicit Turnstile surfaces rather than a generic challenge abstraction
 
 #### Scenario: Keep Turnstile secrets server-side
 
