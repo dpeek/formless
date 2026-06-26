@@ -26,7 +26,7 @@ runtime profiles through a filesystem-capable local gateway sidecar process.
 - **AND** local runtime gateway routes proxy authorized requests to the sidecar
   over HTTP
 - **AND** the local runtime proxy receives only browser/proxy authorization,
-  route eligibility, and sidecar target facts
+  shared runtime topology route eligibility, and sidecar target facts
 - **AND** the sidecar process receives only execution authorization, workspace
   root, and operation handler facts needed for filesystem-capable work
 - **AND** the CLI-owned local gateway lifecycle creates the sidecar, mints
@@ -207,7 +207,8 @@ through the Gateway package slice.
   CSRF proof for browser mutations, build display-safe sidecar proxy headers,
   and wrap sidecar responses for browser-visible callers
 - **AND** the Worker proxy adapter and local Node runtime proxy adapter may
-  differ only in runtime seam facts such as route eligibility, owner session
+  differ only in runtime seam facts such as shared runtime topology route
+  eligibility, adapter-local sidecar target availability, owner session
   validation, owner setup status, advertised capabilities, proxy fetcher, and
   sidecar endpoint selection
 - **AND** the local Node runtime proxy adapter and sidecar execution adapter use
@@ -658,9 +659,10 @@ runtime code and bundles.
   `FORMLESS_WORKSPACE_GATEWAY_SIDECAR_URL` and
   `FORMLESS_WORKSPACE_GATEWAY_PROXY_TOKEN` are present
 - **THEN** the Worker authorizes the browser or automation request, classifies
-  the operation intent, validates that the configured gateway route can satisfy
-  requirements that need sidecar execution, and proxies the request to the
-  configured sidecar over HTTP
+  the operation intent, validates shared runtime topology route eligibility and
+  configured sidecar target availability, validates that the configured gateway
+  route can satisfy requirements that need sidecar execution, and proxies the
+  request to the configured sidecar over HTTP
 - **AND** the Worker does not read or write workspace source files, ignored
   gateway state, local secret state, or provider credentials
 

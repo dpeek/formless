@@ -15,6 +15,10 @@ import {
 import { WORKSPACE_OPERATION_CAPABILITIES } from "@dpeek/formless-workspace";
 import { describe, expect, it } from "vite-plus/test";
 
+import {
+  runtimeProfileKinds,
+  runtimeRoutePolicyForProfileKind,
+} from "../shared/runtime-topology.ts";
 import { createOwnerSessionCookie } from "../worker/owner-session.ts";
 import {
   createWorkspaceGatewayProxyDependencies,
@@ -85,17 +89,24 @@ describe("workspace gateway proxy composition", () => {
     const request = statusRequest();
 
     expect(
-      workspaceGatewayRouteAvailable(request, gatewayEnv({ FORMLESS_RUNTIME_PROFILE: "dev" })),
-    ).toBe(true);
-    expect(
-      workspaceGatewayRouteAvailable(request, gatewayEnv({ FORMLESS_RUNTIME_PROFILE: "instance" })),
-    ).toBe(true);
-
-    for (const profile of ["app", "siteAuthoring", "publishedSite"]) {
-      expect(
-        workspaceGatewayRouteAvailable(request, gatewayEnv({ FORMLESS_RUNTIME_PROFILE: profile })),
-      ).toBe(false);
-    }
+      Object.fromEntries(
+        runtimeProfileKinds.map((profileKind) => [
+          profileKind,
+          workspaceGatewayRouteAvailable(
+            request,
+            gatewayEnv({ FORMLESS_RUNTIME_PROFILE: profileKind }),
+          ),
+        ]),
+      ),
+    ).toEqual(
+      Object.fromEntries(
+        runtimeProfileKinds.map((profileKind) => [
+          profileKind,
+          runtimeRoutePolicyForProfileKind(profileKind).workspaceGatewayApiRoutes,
+        ]),
+      ),
+    );
+    expect(workspaceGatewayRouteAvailable(request, gatewayEnv())).toBe(true);
   });
 
   it("creates default middleware with focused proxy composition", async () => {

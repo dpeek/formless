@@ -85,6 +85,7 @@ describe("runtime topology", () => {
       ownerSessionBrowserRoutes: true,
       schemaKeyApiRoutes: false,
       schemaKeyBrowserRoutes: false,
+      workspaceGatewayApiRoutes: true,
     });
     expect(runtimeRoutePolicyForProfileKind("dev")).toEqual({
       instanceBrowserRoutes: true,
@@ -94,6 +95,7 @@ describe("runtime topology", () => {
       ownerSessionBrowserRoutes: true,
       schemaKeyApiRoutes: true,
       schemaKeyBrowserRoutes: true,
+      workspaceGatewayApiRoutes: true,
     });
     expect(runtimeRoutePolicyForProfileKind("app")).toMatchObject({
       instanceBrowserRoutes: false,
@@ -103,16 +105,19 @@ describe("runtime topology", () => {
       ownerSessionBrowserRoutes: false,
       schemaKeyApiRoutes: true,
       schemaKeyBrowserRoutes: false,
+      workspaceGatewayApiRoutes: false,
     });
     expect(runtimeRoutePolicyForProfileKind("siteAuthoring")).toMatchObject({
       ownerSessionBrowserRoutes: false,
       schemaKeyApiRoutes: true,
       schemaKeyBrowserRoutes: false,
+      workspaceGatewayApiRoutes: false,
     });
     expect(runtimeRoutePolicyForProfileKind("publishedSite")).toMatchObject({
       ownerSessionBrowserRoutes: true,
       schemaKeyApiRoutes: true,
       schemaKeyBrowserRoutes: false,
+      workspaceGatewayApiRoutes: false,
     });
   });
 

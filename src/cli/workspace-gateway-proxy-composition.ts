@@ -5,7 +5,10 @@ import {
 } from "@dpeek/formless-gateway/sidecar";
 import type { WorkspaceOperationRequiredCapability } from "@dpeek/formless-workspace";
 
-import { resolveRuntimeProfileKind } from "../shared/runtime-topology.ts";
+import {
+  resolveRuntimeProfileKind,
+  runtimeRoutePolicyForProfileKind,
+} from "../shared/runtime-topology.ts";
 import { validateOwnerSessionCookie } from "../worker/owner-session.ts";
 import { workspaceGatewayRuntimeCapabilities } from "./workspace-gateway-operation-adapter.ts";
 
@@ -61,7 +64,7 @@ export function workspaceGatewayRouteAvailable(
     profile: env.FORMLESS_RUNTIME_PROFILE,
   });
 
-  return profileKind === "instance" || profileKind === "dev";
+  return runtimeRoutePolicyForProfileKind(profileKind).workspaceGatewayApiRoutes;
 }
 
 async function readLocalRuntimeOwnerSetupStatus(

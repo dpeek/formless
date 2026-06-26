@@ -22,6 +22,7 @@ export type RuntimeTopologyRoutePolicy = {
   ownerSessionBrowserRoutes: boolean;
   schemaKeyApiRoutes: boolean;
   schemaKeyBrowserRoutes: boolean;
+  workspaceGatewayApiRoutes: boolean;
 };
 
 export type RuntimeProfileKindResolverInput = {
@@ -180,6 +181,7 @@ export function runtimeRoutePolicyForProfileKind(
   profileKind: RuntimeProfileKind,
 ): RuntimeTopologyRoutePolicy {
   const instanceBrowserRoutes = profileKind === "instance" || profileKind === "dev";
+  const workspaceGatewayApiRoutes = profileKind === "instance" || profileKind === "dev";
 
   return {
     instanceBrowserRoutes,
@@ -189,6 +191,7 @@ export function runtimeRoutePolicyForProfileKind(
     ownerSessionBrowserRoutes: instanceBrowserRoutes || profileKind === "publishedSite",
     schemaKeyApiRoutes: profileKind !== "instance",
     schemaKeyBrowserRoutes: profileKind === "dev",
+    workspaceGatewayApiRoutes,
   };
 }
 

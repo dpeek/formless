@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  runtimeProfileKinds,
+  runtimeRoutePolicyForProfileKind,
+} from "../shared/runtime-topology.ts";
+import {
   areSchemaKeyApiRoutesEnabledForRequest,
   isClientShellRoute,
   isDynamicSiteIconPath,
@@ -303,28 +307,32 @@ describe("Worker document routing", () => {
     ).toBe("anonymous");
   });
 
-  it("answers schema-key route policy by runtime profile", () => {
-    expect(workerRuntimeRoutePolicy({ profile: "instance" })).toEqual({
-      instanceBrowserRoutes: true,
-      installedAppApiRoutes: true,
-      schemaKeyApiRoutes: false,
-      schemaKeyBrowserRoutes: false,
-      workspaceGatewayApiRoutes: true,
+  it("projects shared route policy by runtime profile", () => {
+    for (const profileKind of runtimeProfileKinds) {
+      const sharedPolicy = runtimeRoutePolicyForProfileKind(profileKind);
+
+      expect(workerRuntimeRoutePolicy({ profile: profileKind })).toEqual({
+        instanceBrowserRoutes: sharedPolicy.instanceBrowserRoutes,
+        installedAppApiRoutes: sharedPolicy.installedAppApiRoutes,
+        schemaKeyApiRoutes: sharedPolicy.schemaKeyApiRoutes,
+        schemaKeyBrowserRoutes: sharedPolicy.schemaKeyBrowserRoutes,
+        workspaceGatewayApiRoutes: sharedPolicy.workspaceGatewayApiRoutes,
+      });
+    }
+    expect(
+      Object.fromEntries(
+        runtimeProfileKinds.map((profileKind) => [
+          profileKind,
+          workerRuntimeRoutePolicy({ profile: profileKind }).workspaceGatewayApiRoutes,
+        ]),
+      ),
+    ).toEqual({
+      app: false,
+      dev: true,
+      instance: true,
+      publishedSite: false,
+      siteAuthoring: false,
     });
-    expect(workerRuntimeRoutePolicy({ profile: "dev" })).toEqual({
-      instanceBrowserRoutes: true,
-      installedAppApiRoutes: true,
-      schemaKeyApiRoutes: true,
-      schemaKeyBrowserRoutes: true,
-      workspaceGatewayApiRoutes: true,
-    });
-    expect(workerRuntimeRoutePolicy({ profile: "app" }).workspaceGatewayApiRoutes).toBe(false);
-    expect(workerRuntimeRoutePolicy({ profile: "siteAuthoring" }).workspaceGatewayApiRoutes).toBe(
-      false,
-    );
-    expect(workerRuntimeRoutePolicy({ profile: "publishedSite" }).workspaceGatewayApiRoutes).toBe(
-      false,
-    );
     expect(
       areSchemaKeyApiRoutesEnabledForRequest(
         new Request("http://instance.example.com/api/site/bootstrap"),

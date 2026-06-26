@@ -353,7 +353,7 @@ function workerRuntimeRoutePolicyFromKind(
     installedAppApiRoutes: policy.installedAppApiRoutes,
     schemaKeyApiRoutes: policy.schemaKeyApiRoutes,
     schemaKeyBrowserRoutes: policy.schemaKeyBrowserRoutes,
-    workspaceGatewayApiRoutes: profileKind === "instance" || profileKind === "dev",
+    workspaceGatewayApiRoutes: policy.workspaceGatewayApiRoutes,
   };
 }
 

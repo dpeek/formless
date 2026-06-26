@@ -129,12 +129,14 @@ export default {
           : env.FORMLESS_RUNTIME_PROFILE,
     );
     const requestTopology = resolveWorkerRuntimeRequestTopology(request, effectiveRuntimeProfile);
+    const workspaceGatewayRouteAvailable = workerWorkspaceGatewayRouteAvailable(
+      requestTopology,
+      runtimeRoute,
+    );
     const workspaceGatewayResponse = await handleWorkspaceGatewayProxyRequest(request, env, {
       capabilities: WORKSPACE_OPERATION_CAPABILITIES,
       readOwnerSetupStatus: (setupRequest) => readOwnerSetupStatus(setupRequest, env),
-      routeAvailable:
-        requestTopology.routePolicy.workspaceGatewayApiRoutes &&
-        !(runtimeRoute?.kind === "mount" && runtimeRoute.matchHost !== undefined),
+      routeAvailable: workspaceGatewayRouteAvailable,
       validateOwnerSession: (sessionRequest) => validateOwnerSessionCookie(sessionRequest, env),
     });
 
@@ -376,6 +378,16 @@ function isInstalledAppManagementApiRead(request: Request, path: `/${string}`): 
   }
 
   return request.method === "GET" && path === "/sync/ws";
+}
+
+function workerWorkspaceGatewayRouteAvailable(
+  requestTopology: WorkerRuntimeRequestTopology,
+  runtimeRoute: Awaited<ReturnType<typeof resolveInstanceRuntimeRouteForRequest>>,
+): boolean {
+  return (
+    requestTopology.routePolicy.workspaceGatewayApiRoutes &&
+    !(runtimeRoute?.kind === "mount" && runtimeRoute.matchHost !== undefined)
+  );
 }
 
 async function redirectAnonymousOwnerBrowserRoute(

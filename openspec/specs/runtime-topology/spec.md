@@ -6,7 +6,8 @@ Runtime topology defines the observable profile, route policy, route access,
 mapped host, and request routing contracts for a Formless instance. It keeps
 product instance, dev workbench, app, Site authoring, and published Site
 behavior coherent across browser shells, APIs, static assets, SSR documents,
-indexing, icons, and public Site routes.
+indexing, icons, public Site routes, and local workspace gateway route
+eligibility.
 
 ## Requirements
 
@@ -30,19 +31,25 @@ The system SHALL resolve each runtime request to one runtime profile kind: `inst
 
 ### Requirement: Profile Route Policy
 
-The system MUST apply profile route policy before selecting browser shell, API, static asset, or SSR handling. Installed app API routes are always enabled; schema-key API routes are unavailable only in the product instance profile.
+The system MUST apply profile route policy before selecting browser shell, API,
+static asset, SSR handling, or local workspace gateway proxy behavior. Installed
+app API routes are always enabled; schema-key API routes are unavailable only in
+the product instance profile.
 
 #### Scenario: Product instance route policy
 
 - GIVEN the runtime profile is `instance`
 - WHEN a request targets schema-key browser or schema-key API routes
 - THEN those schema-key routes are not available
-- AND installed app API routes, installed app browser routes, installed Site public routes, owner session browser routes, and instance browser routes remain available
+- AND installed app API routes, installed app browser routes, installed Site
+  public routes, owner session browser routes, instance browser routes, and the
+  workspace gateway API route family remain route-policy eligible
 
 #### Scenario: Dev route policy
 
 - GIVEN the runtime profile is `dev`
-- WHEN a request targets bundled source app, installed app, installed Site, instance, owner session, or schema-key API routes
+- WHEN a request targets bundled source app, installed app, installed Site,
+  instance, owner session, schema-key API, or workspace gateway API routes
 - THEN those route families remain available
 - AND the dev workbench can compose source app and product instance surfaces together
 
@@ -311,6 +318,21 @@ source for hostless mounts, exact-host mounts, and redirects.
 
 The system SHALL expose workspace gateway API routes only for local workspace
 runtime profiles that have local gateway sidecar proxy configuration.
+
+#### Scenario: Shared gateway route policy fact
+
+- **WHEN** Worker runtime routing or local Node runtime proxy composition derives
+  workspace gateway route availability for a request
+- **THEN** shared runtime topology route policy marks the workspace gateway API
+  route family eligible only for the `instance` and `dev` runtime profiles
+- **AND** the `app`, `siteAuthoring`, and `publishedSite` runtime profiles mark
+  the workspace gateway API route family unavailable
+- **AND** Worker and local Node runtime adapters may combine that shared route
+  policy fact with adapter-local sidecar target, gateway enabled, proxy token,
+  and mapped-host facts before injecting route availability into Gateway proxy
+  rules
+- **AND** the Gateway package consumes injected route availability and sidecar
+  target facts without owning runtime topology selection
 
 #### Scenario: Local dev gateway route
 
