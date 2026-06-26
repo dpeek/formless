@@ -2,9 +2,10 @@
 
 ## Purpose
 
-Package slices define reusable capability package boundaries under
-`lib/<package>/` for behavior that crosses runtime surfaces without owning a
-bundled app schema or app records.
+Package slices and in-repo app packages define package boundaries under
+`lib/<package>/`. Capability slices own reusable contracts and adapters without
+owning app records. App packages own source schema, seed records, manifests, and
+any package-specific adapters for a bundled app.
 
 ## Requirements
 
@@ -49,7 +50,7 @@ adapters.
 
 #### Scenario: App package scaffold
 
-- GIVEN an app package such as Site is extracted into an in-repo package
+- GIVEN an app package such as Site or CRM is extracted into an in-repo package
 - WHEN the package is scaffolded
 - THEN the package contains package-local `AGENTS.md`, `package.json`,
   `tsconfig.json`, `formless.app.json`, `schema.json`, `seed-records.json`,
@@ -58,6 +59,8 @@ adapters.
   React, Worker, and Node subpaths when those adapters exist
 - AND source schema and seed records remain app package source data rather than
   generated runtime state
+- AND app packages without package-specific executable adapters do not need to
+  expose unused adapter subpaths
 
 #### Scenario: App package adapter ownership
 
@@ -78,13 +81,15 @@ adapters.
 
 #### Scenario: App package source replaces root app files
 
-- GIVEN an app package such as Site owns `formless.app.json`, `schema.json`, and
-  `seed-records.json`
+- GIVEN an app package such as Site or CRM owns `formless.app.json`,
+  `schema.json`, and `seed-records.json`
 - WHEN runtime code composes bundled package metadata, source schemas, or seed
   records
 - THEN it imports the package root or documented source JSON subpaths
 - AND root runtime does not keep duplicate source schema or seed-record files
   for that app package
+- AND root `schema/apps/<packageAppKey>` source files are removed for extracted
+  app packages
 
 ### Requirement: Minimal Package Documentation
 

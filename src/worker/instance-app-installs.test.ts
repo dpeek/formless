@@ -140,7 +140,17 @@ describe("instance app install API routes", () => {
         label: "CRM",
         packageAppKey: "crm",
         packageRevision: 1,
+        seedRecordsLocation: {
+          kind: "bundled",
+          key: "crm",
+          path: "seed-records.json",
+        },
         sourceSchemaHash: bundledSourceSchemaHashFixtures.crm,
+        sourceSchemaLocation: {
+          kind: "bundled",
+          key: "crm",
+          path: "schema.json",
+        },
       }),
     ]);
     expect(before.body.installs).toEqual([]);

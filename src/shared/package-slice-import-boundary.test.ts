@@ -66,6 +66,28 @@ describe("package slice import boundaries", () => {
     expect(await pathExists(resolve(repoRoot, "schema/apps/site"))).toBe(false);
     expect(failures).toEqual([]);
   });
+
+  it("keeps CRM source consumers on package public exports", async () => {
+    const failures: string[] = [];
+
+    for (const filePath of await boundarySourceFiles()) {
+      const source = await readFile(filePath, "utf8");
+      const path = relative(repoRoot, filePath);
+
+      for (const specifier of importSpecifiers(source)) {
+        if (forbiddenCrmPackageImport(specifier)) {
+          failures.push(`${path}: deep-imports CRM app package ${specifier}`);
+        }
+
+        if (forbiddenRootCrmSourceImport(specifier)) {
+          failures.push(`${path}: imports removed root CRM source path ${specifier}`);
+        }
+      }
+    }
+
+    expect(await pathExists(resolve(repoRoot, "schema/apps/crm"))).toBe(false);
+    expect(failures).toEqual([]);
+  });
 });
 
 const allowedArchivePackageImports = new Set([
@@ -81,6 +103,13 @@ const allowedSitePackageImports = new Set([
   "@dpeek/formless-site-app/schema.json",
   "@dpeek/formless-site-app/seed-records.json",
   "@dpeek/formless-site-app/worker",
+]);
+
+const allowedCrmPackageImports = new Set([
+  "@dpeek/formless-crm-app",
+  "@dpeek/formless-crm-app/formless.app.json",
+  "@dpeek/formless-crm-app/schema.json",
+  "@dpeek/formless-crm-app/seed-records.json",
 ]);
 
 async function boundarySourceFiles(): Promise<string[]> {
@@ -178,6 +207,17 @@ function forbiddenSitePackageImport(specifier: string): boolean {
 
 function forbiddenRootSiteSourceImport(specifier: string): boolean {
   return specifier.includes("schema/apps/site/");
+}
+
+function forbiddenCrmPackageImport(specifier: string): boolean {
+  return (
+    (specifier === "@dpeek/formless-crm-app" || specifier.startsWith("@dpeek/formless-crm-app/")) &&
+    !allowedCrmPackageImports.has(specifier)
+  );
+}
+
+function forbiddenRootCrmSourceImport(specifier: string): boolean {
+  return specifier.includes("schema/apps/crm/");
 }
 
 async function pathExists(path: string): Promise<boolean> {

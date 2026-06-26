@@ -1,3 +1,4 @@
+import rawCrmAppPackageManifest from "@dpeek/formless-crm-app/formless.app.json";
 import rawSiteAppPackageManifest from "@dpeek/formless-site-app/formless.app.json";
 import {
   appPackageManifestKind,
@@ -45,12 +46,9 @@ export const bundledAppPackageManifests = [
     defaultInstallId: "tasks",
     sourceSchemaHash: bundledSourceSchemaHashFixtures.tasks,
   }),
-  bundledAppPackageManifest({
+  bundledAppPackageManifestFromSource(rawCrmAppPackageManifest, {
+    context: "bundled CRM app package manifest",
     packageAppKey: "crm",
-    label: schemaAppDefinitions.crm.label,
-    description: "CRM app backed by the bundled CRM schema and demo records.",
-    defaultInstallId: "crm",
-    sourceSchemaHash: bundledSourceSchemaHashFixtures.crm,
   }),
 ] as const satisfies readonly AppPackageManifest[];
 
@@ -70,7 +68,7 @@ export function findResolvedAppPackage(
 }
 
 function bundledAppPackageManifest(input: {
-  packageAppKey: SchemaKey;
+  packageAppKey: "tasks";
   label: string;
   description: string;
   defaultInstallId: string;

@@ -1,0 +1,27 @@
+{
+  "kind": "formless.appPackage",
+  "version": 1,
+  "packageAppKey": "crm",
+  "label": "CRM",
+  "description": "CRM app backed by the bundled CRM schema and demo records.",
+  "defaultInstallId": "crm",
+  "supportsMultipleInstalls": true,
+  "packageRevision": 1,
+  "sourceSchema": {
+    "kind": "bundled",
+    "key": "crm",
+    "path": "schema.json"
+  },
+  "seedRecords": {
+    "kind": "bundled",
+    "key": "crm",
+    "path": "seed-records.json"
+  },
+  "sourceSchemaHash": "sha256:bc7a460e8d037f44dacc2af42c9bf49902232478bf9ab10ab6ec7c78b507e6f5",
+  "capabilities": [
+    {
+      "kind": "generatedAdmin",
+      "routeBase": "/apps"
+    }
+  ]
+}

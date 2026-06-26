@@ -1,12 +1,17 @@
 import { describe, expect, it } from "vite-plus/test";
+import rawCrmAppPackageManifest from "@dpeek/formless-crm-app/formless.app.json";
+import { parseAppPackageManifest } from "./app-packages.ts";
 import {
   createLaunchFixtureInitializationPlan,
   listLaunchFixtureNames,
   resolveLaunchFixture,
 } from "./launch-fixtures.ts";
-import { bundledSourceSchemaHashFixtures } from "./upgrade-migrations.ts";
 
 const now = "2026-05-23T00:00:00.000Z";
+const crmPackageManifest = parseAppPackageManifest(
+  rawCrmAppPackageManifest,
+  "CRM package manifest",
+);
 
 describe("launch fixture registry", () => {
   it("lists and resolves named product instance fixtures", () => {
@@ -95,7 +100,7 @@ describe("launch fixture registry", () => {
             label: "CRM",
             packageAppKey: "crm",
             packageRevision: 1,
-            sourceSchemaHash: bundledSourceSchemaHashFixtures.crm,
+            sourceSchemaHash: crmPackageManifest.sourceSchemaHash,
             status: "installed",
             updatedAt: now,
           },

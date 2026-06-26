@@ -43,8 +43,9 @@ app install can be created.
   optional public route capability
 - **AND** the default runtime resolver includes the bundled Site, Tasks, and
   CRM packages with package app keys `site`, `tasks`, and `crm`
-- **AND** package metadata comes from app package manifest facts, not from app
-  install records or instance control-plane route records
+- **AND** Site and CRM package metadata comes from app package manifest facts,
+  not from app install records, instance control-plane route records, or root
+  schema path conventions
 
 #### Scenario: Active resolver is authoritative
 
@@ -116,6 +117,8 @@ contracts through the Installed Apps package slice.
   metadata
 - WHEN the resolver is composed
 - THEN root runtime code supplies bundled package manifests as resolver input
+- AND bundled Site and CRM manifests can be imported from their app packages
+  through documented public exports
 - AND the Installed Apps package does not import bundled app schema JSON, seed
   records, root-only bundled package lists, or package-specific runtime
   adapters
@@ -258,7 +261,8 @@ package's source schema and source seed records.
 
 - **GIVEN** a CRM app install is created with install id `crm`
 - **WHEN** `/api/app-installs/crm/crm/bootstrap` is read
-- **THEN** the bootstrap response contains the bundled CRM source schema and source seed records
+- **THEN** the bootstrap response contains the bundled CRM app package source
+  schema and source seed records
 - **AND** the install metadata keeps label and route identity scoped to `crm`
 
 #### Scenario: Private package initialization

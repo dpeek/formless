@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vite-plus/test";
+import rawCrmAppPackageManifest from "@dpeek/formless-crm-app/formless.app.json";
+import rawCrmSeedRecords from "@dpeek/formless-crm-app/seed-records.json";
+import rawCrmSourceSchema from "@dpeek/formless-crm-app/schema.json";
 import rawSiteAppPackageManifest from "@dpeek/formless-site-app/formless.app.json";
 import rawSiteSourceSchema from "@dpeek/formless-site-app/schema.json";
-import rawCrmSourceSchema from "../../schema/apps/crm/schema.json";
 import rawTasksSourceSchema from "../../schema/apps/tasks/schema.json";
 import {
   appPackageManifestKind,
@@ -47,6 +49,38 @@ describe("app package manifests", () => {
         {
           kind: "publicSite",
           routeBase: "/sites",
+        },
+      ],
+    });
+  });
+
+  it("parses the bundled CRM package manifest from package source", () => {
+    expect(Array.isArray(rawCrmSeedRecords)).toBe(true);
+    expect(rawCrmSeedRecords).toHaveLength(21);
+    expect(parseAppPackageManifest(rawCrmAppPackageManifest)).toEqual({
+      kind: appPackageManifestKind,
+      version: appPackageManifestVersion,
+      packageAppKey: "crm",
+      label: "CRM",
+      description: "CRM app backed by the bundled CRM schema and demo records.",
+      defaultInstallId: "crm",
+      supportsMultipleInstalls: true,
+      packageRevision: 1,
+      sourceSchema: {
+        kind: "bundled",
+        key: "crm",
+        path: "schema.json",
+      },
+      seedRecords: {
+        kind: "bundled",
+        key: "crm",
+        path: "seed-records.json",
+      },
+      sourceSchemaHash: bundledSourceSchemaHashFixtures.crm,
+      capabilities: [
+        {
+          kind: "generatedAdmin",
+          routeBase: "/apps",
         },
       ],
     });
@@ -195,6 +229,16 @@ describe("app package manifests", () => {
     expect(findResolvedAppPackage("site")?.seedRecordsLocation).toEqual({
       kind: "bundled",
       key: "site",
+      path: "seed-records.json",
+    });
+    expect(findResolvedAppPackage("crm")?.sourceSchemaLocation).toEqual({
+      kind: "bundled",
+      key: "crm",
+      path: "schema.json",
+    });
+    expect(findResolvedAppPackage("crm")?.seedRecordsLocation).toEqual({
+      kind: "bundled",
+      key: "crm",
       path: "seed-records.json",
     });
   });

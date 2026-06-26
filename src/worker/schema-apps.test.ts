@@ -1,4 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
+import rawCrmAppPackageManifest from "@dpeek/formless-crm-app/formless.app.json";
+import rawCrmSeedRecords from "@dpeek/formless-crm-app/seed-records.json";
+import rawCrmSourceSchema from "@dpeek/formless-crm-app/schema.json";
 import rawSiteAppPackageManifest from "@dpeek/formless-site-app/formless.app.json";
 import rawSiteSeedRecords from "@dpeek/formless-site-app/seed-records.json";
 import rawSiteSourceSchema from "@dpeek/formless-site-app/schema.json";
@@ -35,6 +38,34 @@ describe("worker schema app definitions", () => {
     expect(site.sourceSchema.entities.site?.label).toBe("Site");
     expect(site.seedRecords.length).toBeGreaterThan(0);
     expect(site.seedRecords.every((record) => record.entity in site.sourceSchema.entities)).toBe(
+      true,
+    );
+  });
+
+  it("loads bundled CRM source from package-local manifest files", async () => {
+    const manifest = parseAppPackageManifest(rawCrmAppPackageManifest, "CRM package manifest");
+    const crm = getWorkerSchemaAppDefinition("crm");
+
+    await expect(computeSourceSchemaHash(rawCrmSourceSchema)).resolves.toBe(
+      manifest.sourceSchemaHash,
+    );
+    expect(manifest).toMatchObject({
+      packageAppKey: "crm",
+      seedRecords: {
+        kind: "bundled",
+        key: "crm",
+        path: "seed-records.json",
+      },
+      sourceSchema: {
+        kind: "bundled",
+        key: "crm",
+        path: "schema.json",
+      },
+    });
+    expect(Array.isArray(rawCrmSeedRecords)).toBe(true);
+    expect(crm.sourceSchema.entities.contact?.label).toBe("Contact");
+    expect(crm.seedRecords).toHaveLength(rawCrmSeedRecords.length);
+    expect(crm.seedRecords.every((record) => record.entity in crm.sourceSchema.entities)).toBe(
       true,
     );
   });

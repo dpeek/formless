@@ -1,4 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
+import rawCrmAppPackageManifest from "@dpeek/formless-crm-app/formless.app.json";
+import rawCrmSeedRecords from "@dpeek/formless-crm-app/seed-records.json";
+import rawCrmSourceSchema from "@dpeek/formless-crm-app/schema.json";
 import {
   APP_ARCHIVE_KIND,
   ARCHIVE_VERSION,
@@ -34,8 +37,11 @@ const siteSourceSchemaHash =
   "sha256:1111111111111111111111111111111111111111111111111111111111111111";
 const tasksSourceSchemaHash =
   "sha256:2222222222222222222222222222222222222222222222222222222222222222";
-const crmSourceSchemaHash =
-  "sha256:3333333333333333333333333333333333333333333333333333333333333333";
+const crmPackageManifest = parseAppPackageManifest(
+  rawCrmAppPackageManifest,
+  "CRM package manifest",
+);
+const crmSourceSchemaHash = crmPackageManifest.sourceSchemaHash;
 const siteSourceSchema = parseAppSchema({
   version: 1,
   entities: {
@@ -168,50 +174,7 @@ const taskSourceSchema = parseAppSchema({
     },
   },
 });
-const crmSourceSchema = parseAppSchema({
-  version: 1,
-  entities: {
-    company: {
-      label: "Company",
-      fields: {
-        name: { type: "text", required: true, label: "Name" },
-      },
-      operations: writeOperations("Company", ["name"], { delete: true }),
-    },
-  },
-  queries: {
-    companyAll: { label: "Companies", entity: "company", expression: { kind: "all" } },
-  },
-  itemViews: {
-    companyItem: {
-      entity: "company",
-      fields: {
-        name: { editor: "text", commit: "field-commit" },
-      },
-    },
-  },
-  tableViews: {},
-  views: {
-    companyList: {
-      type: "collection",
-      label: "Companies",
-      entity: "company",
-      queries: [{ query: "companyAll" }],
-      defaultQuery: "companyAll",
-      result: { type: "list", itemView: "companyItem" },
-    },
-  },
-  screens: {
-    home: {
-      type: "workspace",
-      label: "Home",
-      layout: {
-        type: "stack",
-        sections: [{ id: "companies", type: "collection", view: "companyList" }],
-      },
-    },
-  },
-});
+const crmSourceSchema = parseAppSchema(rawCrmSourceSchema);
 const taskSeedRecords: StoredRecord[] = [
   taskRecord("rec_task_overdue", "Review overdue proposal", false),
   taskRecord("rec_task_today", "Plan today's delivery", false),
@@ -219,7 +182,7 @@ const taskSeedRecords: StoredRecord[] = [
   taskRecord("rec_task_completed", "Send signed kickoff notes", true),
   taskRecord("rec_task_backlog", "Capture research notes", false),
 ];
-const crmSeedRecords: StoredRecord[] = [companyRecord("rec_company_primary", "Example Co")];
+const crmSeedRecords = materializedPackageSeedRecords(rawCrmSeedRecords);
 const archiveTestPackageResolver = createAppPackageResolver([
   packageManifest({
     defaultInstallId: "site",
@@ -234,12 +197,7 @@ const archiveTestPackageResolver = createAppPackageResolver([
     packageAppKey: "tasks",
     sourceSchemaHash: tasksSourceSchemaHash,
   }),
-  packageManifest({
-    defaultInstallId: "crm",
-    label: "CRM",
-    packageAppKey: "crm",
-    sourceSchemaHash: crmSourceSchemaHash,
-  }),
+  crmPackageManifest,
 ]);
 const archiveTestInstallablePackages = listInstallableAppPackages(archiveTestPackageResolver);
 
@@ -804,12 +762,23 @@ function taskRecord(id: string, title: string, done: boolean): StoredRecord {
   };
 }
 
-function companyRecord(id: string, name: string): StoredRecord {
-  return {
-    id,
-    entity: "company",
-    values: { name },
-    createdAt: now,
-    updatedAt: now,
-  };
+function materializedPackageSeedRecords(records: unknown): StoredRecord[] {
+  if (!Array.isArray(records)) {
+    throw new Error("Package seed records fixture must be an array.");
+  }
+
+  return records.map((record) => {
+    if (typeof record !== "object" || record === null || Array.isArray(record)) {
+      throw new Error("Package seed record fixture must be an object.");
+    }
+
+    const storedRecord = record as Omit<StoredRecord, "updatedAt"> & {
+      updatedAt?: string;
+    };
+
+    return {
+      ...storedRecord,
+      updatedAt: storedRecord.updatedAt ?? storedRecord.createdAt,
+    };
+  });
 }

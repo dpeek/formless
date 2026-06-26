@@ -1,8 +1,13 @@
 import { describe, expect, it } from "vite-plus/test";
-import rawCrmSeedRecords from "../../schema/apps/crm/seed-records.json";
-import rawCrmSchema from "../../schema/apps/crm/schema.json";
+import rawCrmSeedRecords from "@dpeek/formless-crm-app/seed-records.json";
+import rawCrmSchema from "@dpeek/formless-crm-app/schema.json";
 import type { StoredRecord } from "@dpeek/formless-storage";
-import { isValidStoredFieldValue, parseAppSchema, type AppSchema } from "@dpeek/formless-schema";
+import {
+  isValidStoredFieldValue,
+  parseAppSchema,
+  selectAnonymousPublicOperationByKey,
+  type AppSchema,
+} from "@dpeek/formless-schema";
 import { selectCollectionModels, selectPrimaryScreenModels } from "./views.ts";
 
 const crmSchema = parseAppSchema(rawCrmSchema);
@@ -268,6 +273,13 @@ describe("crm source schema", () => {
         sections: ["broadcastHome", "broadcastRecipientHome", "deliveryEventHome"],
       },
     ]);
+  });
+
+  it("does not expose CRM subscribe as an anonymous public operation", () => {
+    expect(selectAnonymousPublicOperationByKey(crmSchema, "subscription.subscribe")).toMatchObject({
+      kind: "unavailable",
+      reason: "missing-operation",
+    });
   });
 
   it("keeps demo seed records stored-record shaped and schema-valid", () => {

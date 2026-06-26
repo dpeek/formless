@@ -4,6 +4,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 
 import { afterEach, describe, expect, it } from "vite-plus/test";
+import rawCrmAppPackageManifest from "@dpeek/formless-crm-app/formless.app.json";
 import {
   INSTANCE_CONTROL_PLANE_INSTANCE_SETTINGS_ID,
   INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
@@ -84,11 +85,7 @@ const workspaceTestBundledManifests = [
     packageAppKey: "tasks",
     sourceSchemaHash: "sha256:2222222222222222222222222222222222222222222222222222222222222222",
   }),
-  workspaceTestPackageManifest({
-    label: "CRM",
-    packageAppKey: "crm",
-    sourceSchemaHash: "sha256:3333333333333333333333333333333333333333333333333333333333333333",
-  }),
+  parseAppPackageManifest(rawCrmAppPackageManifest, "CRM package manifest"),
 ];
 const workspaceFixtureTaskSourceSchema = {
   version: 1,

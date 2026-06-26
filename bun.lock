@@ -9,6 +9,7 @@
         "@cloudflare/vite-plugin": "^1.33.2",
         "@dnd-kit/react": "^0.4.0",
         "@dpeek/formless-archive": "^0.1.0",
+        "@dpeek/formless-crm-app": "^0.1.0",
         "@dpeek/formless-deploy": "^0.1.0",
         "@dpeek/formless-gateway": "^0.1.0",
         "@dpeek/formless-installed-apps": "^0.1.0",
@@ -56,6 +57,10 @@
         "@dpeek/formless-schema": "^0.1.0",
         "@dpeek/formless-storage": "^0.1.0",
       },
+    },
+    "lib/crm-app": {
+      "name": "@dpeek/formless-crm-app",
+      "version": "0.1.0",
     },
     "lib/deploy": {
       "name": "@dpeek/formless-deploy",
@@ -256,6 +261,8 @@
     "@dnd-kit/state": ["@dnd-kit/state@0.4.0", "", { "dependencies": { "@preact/signals-core": "^1.10.0", "tslib": "^2.6.2" } }, "sha512-vVdwOY9VsYdMNa7Z0xQhTXlzHqCcCugGuoM1kzvZhnZ0tYVPRdmIhWfeO6Y2ZoN92JwYAyJRRNl4ICkEe2mneg=="],
 
     "@dpeek/formless-archive": ["@dpeek/formless-archive@workspace:lib/archive"],
+
+    "@dpeek/formless-crm-app": ["@dpeek/formless-crm-app@workspace:lib/crm-app"],
 
     "@dpeek/formless-deploy": ["@dpeek/formless-deploy@workspace:lib/deploy"],
 
