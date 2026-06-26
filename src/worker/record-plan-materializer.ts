@@ -14,7 +14,7 @@ import type {
 } from "../shared/operation-invocation.ts";
 import { validateRecordWriteRequest } from "./authority-validation.ts";
 import { BadRequestError } from "./errors.ts";
-import { validateOperationRecordPlanInputValues } from "./operation-input-validation.ts";
+import { validateOperationInvocationRecordPlanInputValues } from "./operation-input-validation.ts";
 import type {
   CreateRecordWriteRequest,
   DeleteRecordWriteRequest,
@@ -74,7 +74,7 @@ export function recordPlanCommandInput(input: {
     );
   }
 
-  return validateOperationRecordPlanInputValues({
+  return validateOperationInvocationRecordPlanInputValues({
     envelope: input.envelope,
     rawInput: input.envelope.input.input ?? {},
     schema: input.schema,

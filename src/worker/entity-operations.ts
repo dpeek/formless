@@ -37,8 +37,8 @@ import {
 } from "./operation-handlers.ts";
 import { validateRecordWriteRequest } from "./authority-validation.ts";
 import {
-  validateOperationCommandHandlerInputValues,
-  validateOperationRecordWriteValues,
+  validateOperationInvocationCommandHandlerInputValues,
+  validateOperationInvocationRecordWriteValues,
 } from "./operation-input-validation.ts";
 import {
   createStoredRecordOutcome,
@@ -685,7 +685,7 @@ function privateCommandOperationInput(
     );
   }
 
-  const commandInput = validateOperationCommandHandlerInputValues({
+  const commandInput = validateOperationInvocationCommandHandlerInputValues({
     envelope,
     rawInput: envelope.input.input ?? {},
     schema,
@@ -835,7 +835,7 @@ function operationCreateRecordWriteRequest(
       writeId,
       entity: envelope.operation.entityName,
       kind: "create",
-      values: validateOperationRecordWriteValues({
+      values: validateOperationInvocationRecordWriteValues({
         envelope,
         rawInput: envelope.input.values,
         schema,
@@ -862,7 +862,7 @@ function operationPatchRecordWriteRequest(
       entity: envelope.operation.entityName,
       kind: "patch",
       recordId: envelope.input.recordId,
-      values: validateOperationRecordWriteValues({
+      values: validateOperationInvocationRecordWriteValues({
         envelope,
         rawInput: envelope.input.values,
         schema,

@@ -11,35 +11,39 @@ import type { OperationInvocationEnvelope } from "../shared/operation-invocation
 import { validateRecordValues } from "./authority-validation.ts";
 import { BadRequestError } from "./errors.ts";
 
-export type OperationInputValidationRequest = {
+type OperationInputValidationBaseRequest = {
   context?: string;
+  rawInput: unknown;
+  schema: AppSchema;
+  storage: DurableObjectStorage;
+};
+
+export type PublicOperationInputValidationRequest = OperationInputValidationBaseRequest & {
   entityName: string;
   operation: EntityOperationSchema;
   operationName: string;
-  rawInput: unknown;
-  schema: AppSchema;
-  storage: DurableObjectStorage;
 };
 
-export type OperationEnvelopeInputValidationRequest = {
-  context?: string;
+export type OperationEnvelopeInputValidationRequest = OperationInputValidationBaseRequest & {
   envelope: OperationInvocationEnvelope;
-  rawInput: unknown;
-  schema: AppSchema;
-  storage: DurableObjectStorage;
 };
 
-type NormalizedOperationInputValidationRequest = OperationInputValidationRequest & {
+type OperationInputValidationRequest =
+  | PublicOperationInputValidationRequest
+  | OperationEnvelopeInputValidationRequest;
+
+type NormalizedOperationInputValidationRequest = OperationInputValidationBaseRequest & {
   canonicalKey: string;
   context: string;
+  entityName: string;
+  operation: EntityOperationSchema;
+  operationName: string;
 };
 
-export function validateOperationRecordWriteValues(
-  input: OperationInputValidationRequest | OperationEnvelopeInputValidationRequest,
+export function validateOperationInvocationRecordWriteValues(
+  input: OperationEnvelopeInputValidationRequest,
 ): Record<string, unknown> {
-  const request = normalizeOperationInputValidationRequest(input);
-  const projection = projectWorkerOperationInputValues(request);
-  assertStorageBackedOperationInputValues(request, projection.recordWriteValues);
+  const { projection, request } = validateWorkerOperationInputValues(input);
 
   if (request.operation.kind !== "update") {
     return projection.recordWriteValues;
@@ -48,44 +52,38 @@ export function validateOperationRecordWriteValues(
   return projection.recordWritePatchValues;
 }
 
-export function validateOperationRecordPlanInputValues(
-  input: OperationInputValidationRequest | OperationEnvelopeInputValidationRequest,
+export function validateOperationInvocationRecordPlanInputValues(
+  input: OperationEnvelopeInputValidationRequest,
 ): RecordValues {
-  const request = normalizeOperationInputValidationRequest(input);
-  const projection = projectWorkerOperationInputValues(request);
-  assertStorageBackedOperationInputValues(request, projection.recordWriteValues);
+  const { projection } = validateWorkerOperationInputValues(input);
 
   return projection.operationInputValues;
 }
 
-export function validateOperationCommandHandlerInputValues(
-  input: OperationInputValidationRequest | OperationEnvelopeInputValidationRequest,
+export function validateOperationInvocationCommandHandlerInputValues(
+  input: OperationEnvelopeInputValidationRequest,
 ): unknown {
-  if (!operationInputValidationOperation(input).input) {
-    return operationInputValidationRawInput(input);
+  const request = normalizeOperationInputValidationRequest(input);
+
+  if (!request.operation.input) {
+    return request.rawInput;
   }
 
-  const request = normalizeOperationInputValidationRequest(input);
-  const projection = projectWorkerOperationInputValues(request);
-  assertStorageBackedOperationInputValues(request, projection.recordWriteValues);
+  const { projection } = validateNormalizedWorkerOperationInputValues(request);
 
   return projection.operationInputValues;
 }
 
-function operationInputValidationOperation(
-  input: OperationInputValidationRequest | OperationEnvelopeInputValidationRequest,
-): EntityOperationSchema {
-  return "envelope" in input ? input.envelope.schemaOperation : input.operation;
-}
+export function validatePublicOperationInputValues(
+  input: PublicOperationInputValidationRequest,
+): RecordValues {
+  const { projection } = validateWorkerOperationInputValues(input);
 
-function operationInputValidationRawInput(
-  input: OperationInputValidationRequest | OperationEnvelopeInputValidationRequest,
-): unknown {
-  return input.rawInput;
+  return projection.operationInputValues;
 }
 
 function normalizeOperationInputValidationRequest(
-  input: OperationInputValidationRequest | OperationEnvelopeInputValidationRequest,
+  input: OperationInputValidationRequest,
 ): NormalizedOperationInputValidationRequest {
   if ("envelope" in input) {
     return {
@@ -115,6 +113,29 @@ function operationCanonicalKey(route: { entityName: string; operationName: strin
     entityKey: route.entityName,
     operationKey: route.operationName,
   });
+}
+
+function validateWorkerOperationInputValues(input: OperationInputValidationRequest): {
+  projection: OperationInputValueProjection;
+  request: NormalizedOperationInputValidationRequest;
+} {
+  const request = normalizeOperationInputValidationRequest(input);
+
+  return {
+    ...validateNormalizedWorkerOperationInputValues(request),
+    request,
+  };
+}
+
+function validateNormalizedWorkerOperationInputValues(
+  request: NormalizedOperationInputValidationRequest,
+): {
+  projection: OperationInputValueProjection;
+} {
+  const projection = projectWorkerOperationInputValues(request);
+  assertStorageBackedOperationInputValues(request, projection.recordWriteValues);
+
+  return { projection };
 }
 
 function projectWorkerOperationInputValues(

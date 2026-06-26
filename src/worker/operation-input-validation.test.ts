@@ -1,13 +1,22 @@
-import type { AppSchema, EntityOperationSchema, EntitySchema } from "@dpeek/formless-schema";
+import {
+  formatEntityOperationKey,
+  type AppSchema,
+  type EntityOperationSchema,
+  type EntitySchema,
+} from "@dpeek/formless-schema";
 import type { StoredRecord } from "@dpeek/formless-storage";
 import { describe, expect, it } from "vite-plus/test";
+import { schemaKeyStorageIdentity } from "../shared/app-storage-identity.ts";
+import type { OperationInvocationEnvelope } from "../shared/operation-invocation.ts";
 import { sourceLikeTaskSchema } from "../test/schema-builders.ts";
 import { BadRequestError } from "./errors.ts";
 import {
-  validateOperationCommandHandlerInputValues,
-  validateOperationRecordPlanInputValues,
-  validateOperationRecordWriteValues,
-  type OperationInputValidationRequest,
+  validateOperationInvocationCommandHandlerInputValues,
+  validateOperationInvocationRecordPlanInputValues,
+  validateOperationInvocationRecordWriteValues,
+  validatePublicOperationInputValues,
+  type OperationEnvelopeInputValidationRequest,
+  type PublicOperationInputValidationRequest,
 } from "./operation-input-validation.ts";
 
 const storage = {} as DurableObjectStorage;
@@ -15,7 +24,7 @@ const storage = {} as DurableObjectStorage;
 describe("operation input validation", () => {
   it("rejects unknown and system fields outside the declared operation input contract", () => {
     expect(() =>
-      validateOperationRecordWriteValues(
+      validateOperationInvocationRecordWriteValues(
         operationInputRequest({
           operation: createTaskOperation({
             fields: {
@@ -31,7 +40,7 @@ describe("operation input validation", () => {
     ).toThrow('Operation input includes undeclared field "admin".');
 
     expect(() =>
-      validateOperationRecordWriteValues(
+      validateOperationInvocationRecordWriteValues(
         operationInputRequest({
           operation: createTaskOperation({
             fields: {
@@ -49,7 +58,7 @@ describe("operation input validation", () => {
 
   it("requires declared operation input fields before materialization", () => {
     expect(() =>
-      validateOperationRecordPlanInputValues(
+      validateOperationInvocationRecordPlanInputValues(
         operationInputRequest({
           operation: recordPlanTaskOperation({
             fields: {
@@ -62,7 +71,7 @@ describe("operation input validation", () => {
     ).toThrow('Operation input field "title" is required.');
 
     expect(() =>
-      validateOperationRecordWriteValues(
+      validateOperationInvocationRecordWriteValues(
         operationInputRequest({
           operation: createTaskOperation({
             fields: {
@@ -95,7 +104,7 @@ describe("operation input validation", () => {
     });
 
     expect(
-      validateOperationRecordPlanInputValues(
+      validateOperationInvocationRecordPlanInputValues(
         operationInputRequest({
           operation,
           rawInput: {
@@ -170,7 +179,7 @@ describe("operation input validation", () => {
 
     for (const testCase of invalidCases) {
       expect(() =>
-        validateOperationRecordPlanInputValues(
+        validateOperationInvocationRecordPlanInputValues(
           operationInputRequest({
             operation,
             rawInput: testCase.rawInput,
@@ -190,7 +199,7 @@ describe("operation input validation", () => {
     });
 
     expect(
-      validateOperationRecordWriteValues(
+      validateOperationInvocationRecordWriteValues(
         operationInputRequest({
           operation,
           rawInput: {
@@ -207,7 +216,7 @@ describe("operation input validation", () => {
     });
 
     expect(() =>
-      validateOperationRecordWriteValues(
+      validateOperationInvocationRecordWriteValues(
         operationInputRequest({
           operation,
           rawInput: {
@@ -220,7 +229,7 @@ describe("operation input validation", () => {
     ).toThrow('Field "done" must be a boolean.');
 
     expect(() =>
-      validateOperationRecordWriteValues(
+      validateOperationInvocationRecordWriteValues(
         operationInputRequest({
           operation,
           rawInput: {
@@ -243,7 +252,7 @@ describe("operation input validation", () => {
     const schema = schemaWithTaskProjectReference();
 
     expect(
-      validateOperationRecordWriteValues(
+      validateOperationInvocationRecordWriteValues(
         operationInputRequest({
           operation,
           rawInput: {
@@ -260,7 +269,7 @@ describe("operation input validation", () => {
     });
 
     expect(() =>
-      validateOperationRecordWriteValues(
+      validateOperationInvocationRecordWriteValues(
         operationInputRequest({
           operation,
           rawInput: {
@@ -274,7 +283,7 @@ describe("operation input validation", () => {
     ).toThrow('Field "project" references unknown project record "missing-project".');
 
     expect(() =>
-      validateOperationRecordWriteValues(
+      validateOperationInvocationRecordWriteValues(
         operationInputRequest({
           operation,
           rawInput: {
@@ -288,7 +297,7 @@ describe("operation input validation", () => {
     ).toThrow('Field "project" must reference a project record.');
 
     expect(() =>
-      validateOperationRecordWriteValues(
+      validateOperationInvocationRecordWriteValues(
         operationInputRequest({
           operation,
           rawInput: {
@@ -306,7 +315,7 @@ describe("operation input validation", () => {
     let thrown: unknown;
 
     try {
-      validateOperationRecordWriteValues(
+      validateOperationInvocationRecordWriteValues(
         operationInputRequest({
           operation: createTaskOperation({
             fields: {
@@ -332,7 +341,7 @@ describe("operation input validation", () => {
     const operation = noInputCommandTaskOperation();
 
     expect(() =>
-      validateOperationRecordWriteValues(
+      validateOperationInvocationRecordWriteValues(
         operationInputRequest({
           operation,
           operationName: "noInputWrite",
@@ -342,7 +351,7 @@ describe("operation input validation", () => {
     ).toThrow('Operation "task.noInputWrite" does not declare input fields.');
 
     expect(() =>
-      validateOperationRecordPlanInputValues(
+      validateOperationInvocationRecordPlanInputValues(
         operationInputRequest({
           operation,
           operationName: "noInputPlan",
@@ -365,7 +374,7 @@ describe("operation input validation", () => {
     };
 
     expect(
-      validateOperationRecordPlanInputValues(
+      validateOperationInvocationRecordPlanInputValues(
         operationInputRequest({
           operation,
           rawInput,
@@ -373,9 +382,47 @@ describe("operation input validation", () => {
       ),
     ).toEqual(rawInput);
     expect(
-      validateOperationCommandHandlerInputValues(
+      validateOperationInvocationCommandHandlerInputValues(
         operationInputRequest({
           operation,
+          rawInput,
+        }),
+      ),
+    ).toEqual(rawInput);
+  });
+
+  it("validates public operation input values through the public route entrypoint", () => {
+    const input = {
+      fields: {
+        taskTitle: { field: "title", required: true },
+        taskDone: { field: "done", required: true },
+      },
+    } satisfies NonNullable<EntityOperationSchema["input"]>;
+    const rawInput = {
+      taskTitle: "Public operation task",
+      taskDone: false,
+    };
+
+    expect(
+      validatePublicOperationInputValues(
+        publicOperationInputRequest({
+          operation: createTaskOperation(input),
+          rawInput,
+        }),
+      ),
+    ).toEqual(rawInput);
+    expect(
+      validatePublicOperationInputValues(
+        publicOperationInputRequest({
+          operation: recordPlanTaskOperation(input),
+          rawInput,
+        }),
+      ),
+    ).toEqual(rawInput);
+    expect(
+      validatePublicOperationInputValues(
+        publicOperationInputRequest({
+          operation: operationHandlerTaskOperation(input),
           rawInput,
         }),
       ),
@@ -397,7 +444,7 @@ describe("operation input validation", () => {
     });
 
     expect(
-      validateOperationRecordWriteValues(
+      validateOperationInvocationRecordWriteValues(
         operationInputRequest({
           operation: createOperation,
           rawInput: {
@@ -411,7 +458,7 @@ describe("operation input validation", () => {
       done: false,
     });
     expect(
-      validateOperationRecordWriteValues(
+      validateOperationInvocationRecordWriteValues(
         operationInputRequest({
           operation: updateOperation,
           operationName: "update",
@@ -434,7 +481,29 @@ function operationInputRequest(input: {
   rawInput: unknown;
   schema?: AppSchema;
   storage?: DurableObjectStorage;
-}): OperationInputValidationRequest {
+}): OperationEnvelopeInputValidationRequest {
+  const entityName = "task";
+  const operationName = input.operationName ?? "submit";
+
+  return {
+    envelope: operationInputEnvelope({
+      entityName,
+      operation: input.operation,
+      operationName,
+    }),
+    rawInput: input.rawInput,
+    schema: input.schema ?? sourceLikeTaskSchema(),
+    storage: input.storage ?? storage,
+  };
+}
+
+function publicOperationInputRequest(input: {
+  operation: EntityOperationSchema;
+  operationName?: string;
+  rawInput: unknown;
+  schema?: AppSchema;
+  storage?: DurableObjectStorage;
+}): PublicOperationInputValidationRequest {
   return {
     entityName: "task",
     operationName: input.operationName ?? "submit",
@@ -443,6 +512,68 @@ function operationInputRequest(input: {
     schema: input.schema ?? sourceLikeTaskSchema(),
     storage: input.storage ?? storage,
   };
+}
+
+function operationInputEnvelope(input: {
+  entityName: string;
+  operation: EntityOperationSchema;
+  operationName: string;
+}): OperationInvocationEnvelope {
+  const canonicalKey = operationCanonicalKey(input);
+
+  return {
+    invocationId: `operation:${canonicalKey}:test`,
+    appStorageIdentity: schemaKeyStorageIdentity("tasks"),
+    actor: { kind: "owner" },
+    source: { protocol: "protocol" },
+    input: operationInvocationInput(input.operation),
+    idempotency: { required: false },
+    operation: {
+      entityName: input.entityName,
+      operationName: input.operationName,
+      canonicalKey,
+      kind: input.operation.kind,
+      scope: input.operation.scope,
+      ...(input.operation.effect === undefined ? {} : { effect: input.operation.effect }),
+      output: input.operation.output,
+      ...(input.operation.policy === undefined ? {} : { policy: input.operation.policy }),
+    },
+    receivedAt: "2026-06-25T00:00:00.000Z",
+    schemaOperation: input.operation,
+  };
+}
+
+function operationInvocationInput(
+  operation: EntityOperationSchema,
+): OperationInvocationEnvelope["input"] {
+  if (operation.kind === "list") {
+    return { type: "list" };
+  }
+
+  if (operation.kind === "get") {
+    return { type: "get", recordId: "record-1" };
+  }
+
+  if (operation.kind === "create") {
+    return { type: "create", values: {} };
+  }
+
+  if (operation.kind === "update") {
+    return { type: "update", recordId: "record-1", values: {} };
+  }
+
+  if (operation.kind === "delete") {
+    return { type: "delete", recordId: "record-1" };
+  }
+
+  return { type: "command", input: {} };
+}
+
+function operationCanonicalKey(input: { entityName: string; operationName: string }) {
+  return formatEntityOperationKey({
+    entityKey: input.entityName,
+    operationKey: input.operationName,
+  });
 }
 
 function schemaWithTaskProjectReference(): AppSchema {
@@ -557,6 +688,18 @@ function recordPlanTaskOperation(input: NonNullable<EntityOperationSchema["input
     scope: "collection",
     input,
     effect: { type: "recordPlan", steps: [] },
+    output: { type: "command" },
+    idempotency: { required: true },
+    audit: { input: "summary" },
+  } satisfies EntityOperationSchema;
+}
+
+function operationHandlerTaskOperation(input: NonNullable<EntityOperationSchema["input"]>) {
+  return {
+    kind: "command",
+    scope: "collection",
+    input,
+    effect: { type: "operationHandler", handler: "subscribe", config: {} },
     output: { type: "command" },
     idempotency: { required: true },
     audit: { input: "summary" },

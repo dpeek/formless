@@ -28,10 +28,7 @@ import {
 } from "./entity-operations.ts";
 import { BadRequestError } from "./errors.ts";
 import { executePublicOperationInvocationLifecycle } from "./operation-invocation-lifecycle.ts";
-import {
-  validateOperationCommandHandlerInputValues,
-  validateOperationRecordPlanInputValues,
-} from "./operation-input-validation.ts";
+import { validatePublicOperationInputValues } from "./operation-input-validation.ts";
 import { type WriteOutcome } from "./storage.ts";
 
 export type PublicOperationEnv = TurnstileRuntimeEnv & {
@@ -252,23 +249,7 @@ function parsePublicOperationRequest(
     throw new PublicOperationError("Public operation is not available.", 404);
   }
 
-  return {
-    input: validatePublicOperationInputValues(envelopeFields, selected, schema, storage),
-    proof: parsePublicOperationProof(envelopeFields.proof),
-    ...(envelopeFields.source === undefined ? {} : { source: envelopeFields.source }),
-    ...(envelopeFields.idempotencyKey === undefined
-      ? {}
-      : { idempotencyKey: envelopeFields.idempotencyKey }),
-  };
-}
-
-function validatePublicOperationInputValues(
-  envelopeFields: PublicOperationRequestEnvelopeFields,
-  selected: SelectedPublicOperation,
-  schema: AppSchema,
-  storage: DurableObjectStorage,
-): RecordValues {
-  const input = {
+  const validatedInput = validatePublicOperationInputValues({
     context: "Public operation input",
     entityName: selected.entityName,
     operation: selected.operation,
@@ -276,13 +257,16 @@ function validatePublicOperationInputValues(
     rawInput: envelopeFields.input,
     schema,
     storage,
+  });
+
+  return {
+    input: validatedInput,
+    proof: parsePublicOperationProof(envelopeFields.proof),
+    ...(envelopeFields.source === undefined ? {} : { source: envelopeFields.source }),
+    ...(envelopeFields.idempotencyKey === undefined
+      ? {}
+      : { idempotencyKey: envelopeFields.idempotencyKey }),
   };
-
-  if (selected.operation.effect?.type === "recordPlan") {
-    return validateOperationRecordPlanInputValues(input);
-  }
-
-  return validateOperationCommandHandlerInputValues(input) as RecordValues;
 }
 
 function parsePublicOperationRequestEnvelopeFields(

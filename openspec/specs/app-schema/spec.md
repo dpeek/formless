@@ -549,6 +549,9 @@ public forms, automation, audit, and authorization.
   and record plans
 - AND projection can return entity-field keyed values for create and update
   record-write materialization
+- AND projection remains storage-free and does not own caller-specific
+  validation entrypoints, target app storage identity, public challenge policy,
+  operation execution routing, or operation invocation audit state
 - AND active reference lookup, tombstone state, unique constraints, idempotency,
   audit rows, challenge proof validation, source routing, and writes are not
   schema facts

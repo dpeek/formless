@@ -331,6 +331,12 @@ materialization.
 - THEN validation uses schema-owned operation input projection for unknown
   fields, required fields, system field rejection, operation input-name
   preservation, entity-backed field targets, and inline scalar field behavior
+- AND one Authority-side operation input validation boundary normalizes
+  route-based and operation-invocation-envelope requests before materialization
+- AND that boundary exposes caller-specific validation entrypoints for
+  record-write materialization, record-plan commands, operation handler
+  commands, and public operation input without duplicating schema-owned
+  projection rules
 - AND validation preserves current operation input error modes for rejected
   invocations
 - AND create and update materializers receive entity-field write values after
