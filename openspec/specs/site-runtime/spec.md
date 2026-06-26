@@ -169,6 +169,10 @@ The system SHALL project subscribe form blocks into public Site trees without ex
 - AND the target public operation route is built through the shared public
   operation route contract from the runtime-owned target API route prefix,
   entity key, and operation key
+- AND subscribe-specific operation eligibility, operation binding warnings, and
+  projected route facts are owned by the Site subscribe public operation adapter
+- AND generic public operation input field projection is not used to render the
+  subscribe-specific email input
 - AND the projected block does not include Turnstile secrets or subscriber data
 
 #### Scenario: Warn for missing public operation
@@ -194,6 +198,10 @@ exposing private challenge, email provider, or runtime secrets.
 - AND the target public operation route is built through the shared public
   operation route contract from the runtime-owned target API route prefix,
   entity key, and operation key
+- AND contact-specific operation eligibility, operation binding warnings, and
+  projected route facts are owned by the Site contact public operation adapter
+- AND generic public operation input field projection is not used to render the
+  contact-specific name, email, and message inputs
 - AND the projected block does not include Turnstile secrets, email provider
   credentials, sender verification facts, or private notification recipients
 
@@ -408,7 +416,7 @@ The system SHALL render subscribe form blocks as public forms on preview, instal
   Turnstile response token extraction use shared public operation browser
   client helpers
 - AND subscribe-specific email input mapping and rendered form UI remain owned
-  by the Site app renderer
+  by the Site app renderer adapter
 
 #### Scenario: Render successful subscribe outcome
 
@@ -437,7 +445,7 @@ installed, and mapped public Site routes.
   Turnstile response token extraction use shared public operation browser
   client helpers
 - AND contact-specific input mapping and rendered form UI remain owned by the
-  Site app renderer
+  Site app renderer adapter
 
 #### Scenario: Render successful contact outcome
 

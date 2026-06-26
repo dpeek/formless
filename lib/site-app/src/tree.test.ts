@@ -1097,11 +1097,12 @@ describe("site page tree projection", () => {
         },
       },
     });
+    expect(subscribeForm.publicOperation).not.toHaveProperty("fields");
     expect(JSON.stringify(tree)).not.toContain("server-secret-value");
     expect(JSON.stringify(tree)).not.toContain("reader@example.com");
   });
 
-  it("warns and omits working subscribe form operations when Turnstile site key config is missing", () => {
+  it("warns and omits working fixed form operations when Turnstile site key config is missing", () => {
     const records = [
       ...baseTreeRecords(),
       blockRecord("rec_site_block_subscribe", {
@@ -1111,6 +1112,12 @@ describe("site page tree projection", () => {
         operationName: "subscribe",
         buttonLabel: "Join",
       }),
+      blockRecord("rec_site_block_contact", {
+        type: "contactForm",
+        label: "Contact us",
+        operationName: "submit",
+        buttonLabel: "Send",
+      }),
       placementRecord(
         "rec_site_place_home_subscribe",
         "rec_site_content_home",
@@ -1119,20 +1126,77 @@ describe("site page tree projection", () => {
           order: 4000,
         },
       ),
+      placementRecord(
+        "rec_site_place_home_contact",
+        "rec_site_content_home",
+        "rec_site_block_contact",
+        {
+          order: 5000,
+        },
+      ),
     ];
     const result = buildSitePageTree(siteSourceSchema, records, "home", { generatedAt });
     const tree = requireTree(result);
     const subscribeForm = childForPlacement(tree.page, "rec_site_place_home_subscribe");
+    const contactForm = childForPlacement(tree.page, "rec_site_place_home_contact");
 
     expect(subscribeForm.publicOperation).toBeUndefined();
+    expect(contactForm.publicOperation).toBeUndefined();
     expect(result.meta.warnings).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           code: "missing-public-operation-challenge-config",
           recordId: "rec_site_block_subscribe",
         }),
+        expect.objectContaining({
+          code: "missing-public-operation-challenge-config",
+          recordId: "rec_site_block_contact",
+        }),
       ]),
     );
+  });
+
+  it("projects subscribe form public create operations without generic field facts", () => {
+    const records = [
+      ...baseTreeRecords(),
+      blockRecord("rec_site_block_public_create_subscribe", {
+        type: "subscribeForm",
+        label: "Join the CRM list",
+        operationName: "join",
+        buttonLabel: "Join",
+      }),
+      placementRecord(
+        "rec_site_place_home_public_create_subscribe",
+        "rec_site_content_home",
+        "rec_site_block_public_create_subscribe",
+        {
+          order: 4000,
+        },
+      ),
+    ];
+    const tree = requireTree(
+      buildSitePageTree(publicSubscriptionCreateSchema, records, "home", {
+        generatedAt,
+        target: { apiRoutePrefix: "/api/app-installs/crm/sales" },
+        turnstileSiteKey: "public-site-key",
+      }),
+    );
+    const subscribeForm = childForPlacement(
+      tree.page,
+      "rec_site_place_home_public_create_subscribe",
+    );
+
+    expect(subscribeForm.publicOperation).toEqual({
+      entityName: "subscription",
+      operationName: "join",
+      canonicalKey: "subscription.join",
+      route: "/api/app-installs/crm/sales/public/operations/subscription/join",
+      challenge: {
+        kind: "turnstile",
+        siteKey: "public-site-key",
+      },
+    });
+    expect(subscribeForm.publicOperation).not.toHaveProperty("fields");
   });
 
   it("warns and omits working subscribe form operations when bindings are missing or not public", () => {
@@ -1259,6 +1323,7 @@ describe("site page tree projection", () => {
         },
       },
     });
+    expect(contactForm.publicOperation).not.toHaveProperty("fields");
     expect(JSON.stringify(tree)).not.toContain("owner@example.com");
     expect(JSON.stringify(tree)).not.toContain("server-secret-value");
     expect(JSON.stringify(tree)).not.toContain("Private message.");
@@ -1667,6 +1732,54 @@ const anonymousTurnstilePolicy = {
     },
   },
 };
+
+const publicSubscriptionCreateSchema = {
+  version: 1,
+  entities: {
+    subscription: {
+      label: "Subscription",
+      fields: {
+        email: {
+          type: "text",
+          required: true,
+          label: "Email",
+        },
+      },
+      operations: {
+        join: {
+          label: "Join",
+          kind: "create",
+          scope: "collection",
+          input: {
+            fields: {
+              email: {
+                field: "email",
+                required: true,
+              },
+            },
+          },
+          effect: {
+            type: "createRecord",
+          },
+          output: {
+            type: "create",
+          },
+          idempotency: {
+            required: true,
+          },
+          audit: {
+            input: "summary",
+          },
+          policy: anonymousTurnstilePolicy,
+        },
+      },
+    },
+  },
+  queries: {},
+  itemViews: {},
+  tableViews: {},
+  views: {},
+} satisfies AppSchema;
 
 const publicIntakeSchema = {
   version: 1,

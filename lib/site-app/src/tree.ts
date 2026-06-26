@@ -13,9 +13,7 @@ import type {
   StoredRecord,
 } from "./types.ts";
 import {
-  isOperationHandlerEffectForKind,
   projectPublicSafeOperationInputFields,
-  selectAnonymousPublicOperation,
   selectAnonymousPublicOperationByKey,
   type AppSchema,
   type EntityOperationSchema,
@@ -28,6 +26,7 @@ import {
   type SiteRouteResolution,
 } from "./route-resolver.ts";
 import { resolveSiteLinkHref } from "./link-targets.ts";
+import { projectSubscribeContactPublicOperation } from "./subscribe-contact-public-operations.ts";
 
 export type {
   SiteBlockNode,
@@ -440,55 +439,15 @@ function projectedPublicOperationFields(
     return undefined;
   }
 
-  const operationName = stringValue(record.values.operationName);
-  const formLabel = type === "contactForm" ? "Contact form" : "Subscribe form";
-
-  if (!operationName) {
-    context.warnings.push({
-      code: "missing-public-operation",
-      recordId: record.id,
-      message: `${formLabel} block "${record.id}" does not declare an operation name.`,
-    });
-    return undefined;
-  }
-
-  const operation =
-    type === "contactForm"
-      ? selectPublicContactOperation(context.schema, operationName)
-      : selectPublicSubscribeOperation(context.schema, operationName);
-
-  if (operation.kind !== "available") {
-    context.warnings.push({
-      code: operation.code,
-      recordId: record.id,
-      message: operation.message,
-    });
-    return undefined;
-  }
-
-  if (context.turnstileSiteKey === undefined) {
-    context.warnings.push({
-      code: "missing-public-operation-challenge-config",
-      recordId: record.id,
-      message: `${formLabel} operation "${operationName}" requires Turnstile site key configuration.`,
-    });
-    return undefined;
-  }
-
-  return {
-    entityName: operation.entityName,
-    operationName,
-    canonicalKey: operation.canonicalKey,
-    route: buildPublicOperationTargetRoute({
-      targetApiRoutePrefix: context.publicOperationApiRoutePrefix,
-      entityKey: operation.entityName,
-      operationKey: operationName,
-    }),
-    challenge: {
-      kind: "turnstile",
-      siteKey: context.turnstileSiteKey,
-    },
-  };
+  return projectSubscribeContactPublicOperation({
+    blockType: type,
+    recordId: record.id,
+    operationName: stringValue(record.values.operationName),
+    publicOperationApiRoutePrefix: context.publicOperationApiRoutePrefix,
+    schema: context.schema,
+    turnstileSiteKey: context.turnstileSiteKey,
+    warnings: context.warnings,
+  });
 }
 
 function projectedGenericPublicOperationFields(
@@ -702,116 +661,6 @@ function projectPublicOperationInputFields(input: {
   }
 
   return projection.fields;
-}
-
-function selectPublicContactOperation(
-  schema: AppSchema,
-  operationName: string,
-):
-  | { kind: "available"; entityName: string; canonicalKey: string }
-  | { kind: "unavailable"; code: string; message: string } {
-  const candidates = operationCandidates(schema, operationName);
-
-  if (candidates.length === 0) {
-    return {
-      kind: "unavailable",
-      code: "missing-public-operation",
-      message: `Contact form operation "${operationName}" does not exist.`,
-    };
-  }
-
-  const publicContactOperations = candidates.flatMap(({ entityName }) => {
-    if (entityName !== "contact-message") {
-      return [];
-    }
-
-    const operation = selectAnonymousPublicOperation(schema, { entityName, operationName });
-
-    return operation.kind === "available" ? [operation] : [];
-  });
-
-  if (publicContactOperations.length !== 1) {
-    return {
-      kind: "unavailable",
-      code: "invalid-public-operation",
-      message: `Contact form operation "${operationName}" is not publicly executable.`,
-    };
-  }
-
-  const publicOperation = publicContactOperations[0];
-
-  if (!publicOperation) {
-    throw new Error("Public contact operation selection was empty after validation.");
-  }
-
-  return {
-    kind: "available",
-    entityName: publicOperation.entityName,
-    canonicalKey: publicOperation.canonicalKey,
-  };
-}
-
-function selectPublicSubscribeOperation(
-  schema: AppSchema,
-  operationName: string,
-):
-  | { kind: "available"; entityName: string; canonicalKey: string }
-  | { kind: "unavailable"; code: string; message: string } {
-  const candidates = operationCandidates(schema, operationName);
-
-  if (candidates.length === 0) {
-    return {
-      kind: "unavailable",
-      code: "missing-public-operation",
-      message: `Subscribe form operation "${operationName}" does not exist.`,
-    };
-  }
-
-  const publicSubscribeOperations = candidates.flatMap(({ entityName }) => {
-    const operation = selectAnonymousPublicOperation(schema, { entityName, operationName });
-
-    return operation.kind === "available" &&
-      operation.operation.kind === "command" &&
-      isOperationHandlerEffectForKind(operation.operation.effect, "subscribe")
-      ? [operation]
-      : [];
-  });
-
-  if (publicSubscribeOperations.length !== 1) {
-    return {
-      kind: "unavailable",
-      code: "invalid-public-operation",
-      message: `Subscribe form operation "${operationName}" is not publicly executable.`,
-    };
-  }
-
-  const publicOperation = publicSubscribeOperations[0];
-
-  if (!publicOperation) {
-    throw new Error("Public subscribe operation selection was empty after validation.");
-  }
-
-  return {
-    kind: "available",
-    entityName: publicOperation.entityName,
-    canonicalKey: publicOperation.canonicalKey,
-  };
-}
-
-function operationCandidates(
-  schema: AppSchema,
-  operationName: string,
-): Array<{ entityName: string; operation: EntityOperationSchema }> {
-  return Object.entries(schema.entities)
-    .map(([entityName, entity]) => {
-      const operation = entity.operations?.[operationName];
-
-      return operation ? { entityName, operation } : undefined;
-    })
-    .filter(
-      (candidate): candidate is { entityName: string; operation: EntityOperationSchema } =>
-        candidate !== undefined,
-    );
 }
 
 function projectedMediaFields(

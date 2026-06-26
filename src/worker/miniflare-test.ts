@@ -24,7 +24,9 @@ type DurableObjectBindings = Record<
 type WorkerHarnessOptions = {
   bindings?: Record<string, string>;
   compatibilityDate?: string;
-  queueProducers?: Record<string, { deliveryDelay?: number; queueName: string }> | string[];
+  queueProducers?:
+    | Record<string, string | { deliveryDelay?: number; queueName: string }>
+    | string[];
   r2Buckets?: string[];
   serviceBindings?: Record<string, ServiceBindingHandler>;
 };

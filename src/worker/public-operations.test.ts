@@ -2482,9 +2482,7 @@ async function createPublicOperationWorkerHarness(input: {
         ? {}
         : {
             queueProducers: {
-              FORMLESS_EMAIL_DELIVERY_QUEUE: {
-                queueName: "formless-email-delivery",
-              },
+              FORMLESS_EMAIL_DELIVERY_QUEUE: "formless-email-delivery",
             },
           }),
       r2Buckets: ["FORMLESS_MEDIA"],
