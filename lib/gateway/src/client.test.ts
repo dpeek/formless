@@ -9,6 +9,7 @@ import {
   workspaceGatewayBrowserConfig,
   type WorkspaceGatewayOperation,
 } from "./client.ts";
+import { workspaceGatewayErrorResponse } from "./response-safety.ts";
 
 const config = {
   apiBasePath: "/api/formless/workspace",
@@ -61,6 +62,7 @@ describe("gateway package client helpers", () => {
     });
 
     expect(response?.csrfToken).toBe("csrf-token");
+    expect("error" in (response ?? {})).toBe(false);
     expect(calls.map((call) => call.path)).toEqual([
       "/api/formless/workspace/status",
       "/api/formless/workspace/status",
@@ -205,7 +207,7 @@ describe("gateway package client helpers", () => {
     const jsonError = await captureError(() =>
       fetchWorkspaceGatewayStatus({
         config,
-        fetcher: async () => Response.json({ error: "Owner session required." }, { status: 403 }),
+        fetcher: async () => workspaceGatewayErrorResponse("Owner session required.", 403),
       }),
     );
     const fallbackError = await captureError(() =>

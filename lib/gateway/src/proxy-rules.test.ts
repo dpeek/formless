@@ -43,28 +43,42 @@ import { handleWorkspaceGatewayProxyRulesRequest } from "./proxy-rules.ts";
 
 describe("shared workspace gateway proxy rules", () => {
   it("classifies routes and rejects missing targets, disallowed methods, cross-origin callers, and invalid read ids before forwarding", async () => {
-    const cases: Array<{ expectedStatus?: number; request: Request; target?: boolean }> = [
+    const cases: Array<{
+      expectedAllow?: string;
+      expectedError?: string;
+      expectedStatus?: number;
+      request: Request;
+      target?: boolean;
+    }> = [
       {
         request: new Request("https://example.com/api/not-workspace/status"),
       },
       {
+        expectedError: "Not found.",
         expectedStatus: 404,
         request: gatewayStatusRequest(),
         target: false,
       },
       {
+        expectedError: "Not found.",
         expectedStatus: 404,
         request: new Request("https://example.com/api/formless/workspace/unknown"),
       },
       {
+        expectedAllow: "GET",
+        expectedError: "Method not allowed.",
         expectedStatus: 405,
         request: gatewayStatusRequest({ method: "POST" }),
       },
       {
+        expectedAllow: "POST",
+        expectedError: "Method not allowed.",
         expectedStatus: 405,
         request: new Request(`https://example.com${WORKSPACE_GATEWAY_OPERATIONS_API_PATH}`),
       },
       {
+        expectedAllow: "GET, POST",
+        expectedError: "Method not allowed.",
         expectedStatus: 405,
         request: gatewayAutoSaveStatusRequest({ method: "PUT" }),
       },
@@ -93,8 +107,17 @@ describe("shared workspace gateway proxy rules", () => {
 
       if (testCase.expectedStatus === undefined) {
         expect(response).toBeUndefined();
+      } else if (testCase.expectedError !== undefined) {
+        await expectGatewayError({
+          error: testCase.expectedError,
+          response,
+          status: testCase.expectedStatus,
+        });
       } else {
         expect(response?.status).toBe(testCase.expectedStatus);
+      }
+      if (testCase.expectedAllow !== undefined) {
+        expect(response?.headers.get("Allow")).toBe(testCase.expectedAllow);
       }
       expectNoSidecarCalls(calls);
     }
@@ -149,7 +172,12 @@ describe("shared workspace gateway proxy rules", () => {
       ),
       baseProxyRulesEnv,
       proxyRulesDependencies({
-        fetch: captureSidecarOperationCalls(calls, workspaceGatewayOperation("save")),
+        fetch: captureSidecarOperationCalls(calls, workspaceGatewayOperation("save"), {
+          headers: {
+            "Set-Cookie": "sidecar-secret=value",
+            "X-Secret": "hidden",
+          },
+        }),
         validateOwnerSession,
       }),
     );
@@ -162,6 +190,8 @@ describe("shared workspace gateway proxy rules", () => {
     expect(response?.headers.get("Set-Cookie")).toContain(
       `${WORKSPACE_GATEWAY_CSRF_COOKIE_NAME}=${csrfToken}`,
     );
+    expect(response?.headers.get("Set-Cookie")).not.toContain("sidecar-secret");
+    expect(response?.headers.get("X-Secret")).toBeNull();
     expect(calls).toHaveLength(1);
     expect(calls[0]).toMatchObject({
       body: JSON.stringify({ check: true, kind: "save" }),
@@ -189,7 +219,12 @@ describe("shared workspace gateway proxy rules", () => {
       }),
       baseProxyRulesEnv,
       proxyRulesDependencies({
-        fetch: captureSidecarAutoSaveCalls(calls, workspaceGatewayAutoSaveState("clean")),
+        fetch: captureSidecarAutoSaveCalls(calls, workspaceGatewayAutoSaveState("clean"), {
+          headers: {
+            "Set-Cookie": "sidecar-secret=value",
+            "X-Secret": "hidden",
+          },
+        }),
         readOwnerSetupStatus: async () => ({ setupComplete: false }),
       }),
     );
@@ -225,6 +260,7 @@ describe("shared workspace gateway proxy rules", () => {
       autoSave: { displayState: "clean" },
       response: status,
     });
+    expectGatewayPassthroughResponseHeaders({ contentType: "application/json", response: status });
     await expectGatewayAutoSaveResponse({
       autoSave: { displayState: "queued" },
       csrfToken,
@@ -511,6 +547,64 @@ describe("shared workspace gateway proxy rules", () => {
     }
   });
 
+  it("filters sidecar JSON error headers and returns sidecar unavailable fallback", async () => {
+    const sidecarError = await handleWorkspaceGatewayProxyRulesRequest(
+      gatewayStatusRequest({
+        headers: {
+          Authorization: `Bearer ${adminToken}`,
+        },
+      }),
+      baseProxyRulesEnv,
+      proxyRulesDependencies({
+        fetch: async () =>
+          sidecarJsonResponse(
+            { error: "Sidecar refused." },
+            {
+              headers: {
+                Allow: "GET",
+                "Set-Cookie": "sidecar-secret=value",
+                "X-Secret": "hidden",
+              },
+              status: 503,
+            },
+          ),
+      }),
+    );
+    const unavailable = await handleWorkspaceGatewayProxyRulesRequest(
+      gatewayStatusRequest({
+        headers: {
+          Authorization: `Bearer ${adminToken}`,
+        },
+      }),
+      baseProxyRulesEnv,
+      proxyRulesDependencies({
+        fetch: async () => {
+          throw new Error("sidecar down");
+        },
+      }),
+    );
+
+    await expectGatewayError({
+      error: "Sidecar refused.",
+      response: sidecarError,
+      status: 503,
+    });
+    expectGatewayPassthroughResponseHeaders({
+      allow: "GET",
+      contentType: "application/json",
+      response: sidecarError,
+    });
+    await expectGatewayError({
+      error: "Workspace gateway sidecar is unavailable.",
+      response: unavailable,
+      status: 502,
+    });
+    expectGatewayPassthroughResponseHeaders({
+      contentType: "application/json",
+      response: unavailable,
+    });
+  });
+
   it("passes through display-safe non-JSON sidecar responses without browser CSRF wrapping", async () => {
     const response = await handleWorkspaceGatewayProxyRulesRequest(
       gatewayStatusRequest({
@@ -536,9 +630,34 @@ describe("shared workspace gateway proxy rules", () => {
     expect(response?.status).toBe(503);
     expect(response).toBeDefined();
     await expect(response!.text()).resolves.toBe("sidecar unavailable");
-    expect(response?.headers.get("Allow")).toBe("GET");
-    expect(response?.headers.get("Content-Type")).toContain("text/plain");
-    expect(response?.headers.get("Set-Cookie")).toBeNull();
-    expect(response?.headers.get("X-Secret")).toBeNull();
+    expectGatewayPassthroughResponseHeaders({
+      allow: "GET",
+      contentType: "text/plain",
+      response,
+    });
   });
 });
+
+function expectGatewayPassthroughResponseHeaders(input: {
+  allow?: string;
+  contentType?: string;
+  label?: string;
+  response: Response | undefined;
+}): void {
+  expect(input.response?.headers.get("Allow"), input.label).toBe(input.allow ?? null);
+  if (input.contentType !== undefined) {
+    expect(input.response?.headers.get("Content-Type"), input.label).toContain(input.contentType);
+  }
+  expect(input.response?.headers.get("Set-Cookie"), input.label).toBeNull();
+  expect(input.response?.headers.get("X-Secret"), input.label).toBeNull();
+}
+
+function sidecarJsonResponse(body: unknown, init: ResponseInit = {}): Response {
+  const headers = new Headers(init.headers);
+
+  if (!headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
+
+  return new Response(JSON.stringify(body), { ...init, headers });
+}

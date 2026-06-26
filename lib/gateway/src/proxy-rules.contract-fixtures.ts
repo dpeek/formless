@@ -56,23 +56,35 @@ export function proxyRulesDependencies(
 export function captureSidecarOperationCalls(
   calls: CapturedSidecarCall[],
   operationResponse: WorkspaceGatewayOperation,
+  responseInit: ResponseInit = {},
 ): typeof fetch {
   return async (input, init) => {
     calls.push(await capturedSidecarCall(input, init));
 
-    return Response.json({ operation: operationResponse });
+    return sidecarJsonResponse({ operation: operationResponse }, responseInit);
   };
 }
 
 export function captureSidecarAutoSaveCalls(
   calls: CapturedSidecarCall[],
   autoSave: WorkspaceGatewayAutoSaveState,
+  responseInit: ResponseInit = {},
 ): typeof fetch {
   return async (input, init) => {
     calls.push(await capturedSidecarCall(input, init));
 
-    return Response.json({ autoSave });
+    return sidecarJsonResponse({ autoSave }, responseInit);
   };
+}
+
+function sidecarJsonResponse(body: unknown, init: ResponseInit = {}): Response {
+  const headers = new Headers(init.headers);
+
+  if (!headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
+
+  return new Response(JSON.stringify(body), { ...init, headers });
 }
 
 export function gatewayStatusRequest(init: RequestInit = {}): Request {

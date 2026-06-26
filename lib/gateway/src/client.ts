@@ -282,7 +282,7 @@ async function gatewayRequestWithBootstrapRetry<T>(
     return readJsonResponse<T>(first);
   }
 
-  const firstBody = await readResponseBody(first);
+  const firstBody = await readGatewayTransportErrorBody(first);
 
   if (!bootstrapExpired(firstBody)) {
     throw new WorkspaceGatewayApiError(firstBody.error, {
@@ -325,11 +325,13 @@ function gatewayHeaders(
 }
 
 async function readJsonResponse<T>(response: Response): Promise<T> {
-  const body = await readResponseBody(response);
+  const body = await readResponseJson(response);
 
   if (!response.ok) {
-    throw new WorkspaceGatewayApiError(body.error, {
-      body,
+    const errorBody = gatewayTransportErrorBody(body);
+
+    throw new WorkspaceGatewayApiError(errorBody.error, {
+      body: errorBody,
       status: response.status,
     });
   }
@@ -337,15 +339,21 @@ async function readJsonResponse<T>(response: Response): Promise<T> {
   return body as unknown as T;
 }
 
-async function readResponseBody(response: Response): Promise<WorkspaceGatewayApiErrorBody> {
-  let body: unknown;
+async function readGatewayTransportErrorBody(
+  response: Response,
+): Promise<WorkspaceGatewayApiErrorBody> {
+  return gatewayTransportErrorBody(await readResponseJson(response));
+}
 
+async function readResponseJson(response: Response): Promise<unknown> {
   try {
-    body = await response.json();
+    return await response.json();
   } catch {
-    body = undefined;
+    return undefined;
   }
+}
 
+function gatewayTransportErrorBody(body: unknown): WorkspaceGatewayApiErrorBody {
   if (isRecord(body)) {
     return {
       ...body,

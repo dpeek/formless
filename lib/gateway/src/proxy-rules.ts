@@ -28,6 +28,13 @@ import {
   type WorkspaceGatewayStartInputParseResult,
 } from "./index.ts";
 import type { WorkspaceOperationRequiredCapability } from "@dpeek/formless-workspace";
+import {
+  workspaceGatewayErrorResponse,
+  workspaceGatewayMethodNotAllowedResponse,
+  workspaceGatewayNotFoundResponse,
+  workspaceGatewaySafeSidecarResponse,
+  workspaceGatewaySidecarUnavailableResponse,
+} from "./response-safety.ts";
 
 export type WorkspaceGatewayProxyRulesEnv = {
   adminToken?: string;
@@ -84,12 +91,12 @@ export async function handleWorkspaceGatewayProxyRulesRequest(
   const proxyTarget = dependencies.proxyTarget();
 
   if (!proxyTarget) {
-    return displaySafeJson({ error: "Not found." }, 404);
+    return workspaceGatewayNotFoundResponse();
   }
 
   if (url.pathname === WORKSPACE_GATEWAY_STATUS_API_PATH) {
     if (request.method !== "GET") {
-      return methodNotAllowed(["GET"]);
+      return workspaceGatewayMethodNotAllowedResponse(["GET"]);
     }
 
     const intent = workspaceGatewayStatusIntent();
@@ -98,7 +105,7 @@ export async function handleWorkspaceGatewayProxyRulesRequest(
     });
 
     if ("error" in authorization) {
-      return displaySafeJson({ error: authorization.error }, authorization.status);
+      return workspaceGatewayErrorResponse(authorization.error, authorization.status);
     }
 
     return proxyWorkspaceGatewayRequest(request, env, dependencies, proxyTarget, authorization, {
@@ -114,7 +121,7 @@ export async function handleWorkspaceGatewayProxyRulesRequest(
       });
 
       if ("error" in authorization) {
-        return displaySafeJson({ error: authorization.error }, authorization.status);
+        return workspaceGatewayErrorResponse(authorization.error, authorization.status);
       }
 
       return proxyWorkspaceGatewayRequest(request, env, dependencies, proxyTarget, authorization, {
@@ -126,7 +133,7 @@ export async function handleWorkspaceGatewayProxyRulesRequest(
       const parsed = await parseGatewayAutoSaveEnqueueInput(request.clone());
 
       if (!parsed.ok) {
-        return displaySafeJson({ error: parsed.error }, 400);
+        return workspaceGatewayErrorResponse(parsed.error, 400);
       }
 
       const intent = workspaceGatewayAutoSaveEnqueueIntent();
@@ -135,7 +142,7 @@ export async function handleWorkspaceGatewayProxyRulesRequest(
       });
 
       if ("error" in authorization) {
-        return displaySafeJson({ error: authorization.error }, authorization.status);
+        return workspaceGatewayErrorResponse(authorization.error, authorization.status);
       }
 
       return proxyWorkspaceGatewayRequest(request, env, dependencies, proxyTarget, authorization, {
@@ -143,18 +150,18 @@ export async function handleWorkspaceGatewayProxyRulesRequest(
       });
     }
 
-    return methodNotAllowed(["GET", "POST"]);
+    return workspaceGatewayMethodNotAllowedResponse(["GET", "POST"]);
   }
 
   if (url.pathname === WORKSPACE_GATEWAY_OPERATIONS_API_PATH) {
     if (request.method !== "POST") {
-      return methodNotAllowed(["POST"]);
+      return workspaceGatewayMethodNotAllowedResponse(["POST"]);
     }
 
     const parsed = await parseGatewayStartInput(request.clone());
 
     if (!parsed.ok) {
-      return displaySafeJson({ error: parsed.error }, 400);
+      return workspaceGatewayErrorResponse(parsed.error, 400);
     }
 
     const intent = workspaceGatewayStartOperationIntent(parsed.input);
@@ -163,7 +170,7 @@ export async function handleWorkspaceGatewayProxyRulesRequest(
     });
 
     if ("error" in authorization) {
-      return displaySafeJson({ error: authorization.error }, authorization.status);
+      return workspaceGatewayErrorResponse(authorization.error, authorization.status);
     }
 
     return proxyWorkspaceGatewayRequest(request, env, dependencies, proxyTarget, authorization, {
@@ -175,19 +182,19 @@ export async function handleWorkspaceGatewayProxyRulesRequest(
 
   if (operationMatch) {
     if (request.method !== "GET") {
-      return methodNotAllowed(["GET"]);
+      return workspaceGatewayMethodNotAllowedResponse(["GET"]);
     }
 
     const parsedOperationId = parseWorkspaceGatewayOperationId(operationMatch.operationId);
 
     if (!parsedOperationId.ok) {
-      return displaySafeJson({ error: parsedOperationId.error }, 400);
+      return workspaceGatewayErrorResponse(parsedOperationId.error, 400);
     }
 
     const readIntent = readOperationIntentFromRequest(request);
 
     if (!readIntent.ok) {
-      return displaySafeJson({ error: readIntent.error }, 400);
+      return workspaceGatewayErrorResponse(readIntent.error, 400);
     }
 
     const authorization = await authorizeGatewayReadOperationRequest(
@@ -198,7 +205,7 @@ export async function handleWorkspaceGatewayProxyRulesRequest(
     );
 
     if ("error" in authorization) {
-      return displaySafeJson({ error: authorization.error }, authorization.status);
+      return workspaceGatewayErrorResponse(authorization.error, authorization.status);
     }
 
     return proxyWorkspaceGatewayRequest(
@@ -211,7 +218,7 @@ export async function handleWorkspaceGatewayProxyRulesRequest(
     );
   }
 
-  return displaySafeJson({ error: "Not found." }, 404);
+  return workspaceGatewayNotFoundResponse();
 }
 
 export function isLoopbackSidecarEndpoint(value: string): boolean {
@@ -411,88 +418,10 @@ async function proxyWorkspaceGatewayRequest(
       method: request.method,
     });
   } catch {
-    return displaySafeJson({ error: "Workspace gateway sidecar is unavailable." }, 502);
+    return workspaceGatewaySidecarUnavailableResponse();
   }
 
-  const contentType = response.headers.get("Content-Type") ?? "";
-
-  if (!contentType.includes("application/json")) {
-    return new Response(await response.arrayBuffer(), {
-      headers: displaySafeProxyHeaders(response.headers),
-      status: response.status,
-    });
-  }
-
-  const body = (await response.json()) as unknown;
-
-  if (response.status === 200 && typeof body === "object" && body !== null && "operation" in body) {
-    return gatewayOperationResponse(request, env, authorization, body.operation);
-  }
-
-  if (response.status === 200 && typeof body === "object" && body !== null && "autoSave" in body) {
-    return gatewayAutoSaveResponse(request, env, authorization, body.autoSave);
-  }
-
-  return displaySafeJson(body, response.status, displaySafeProxyHeaders(response.headers));
-}
-
-function gatewayOperationResponse(
-  request: Request,
-  env: WorkspaceGatewayProxyRulesEnv,
-  authorization: WorkspaceGatewayProxyRulesAuthorization,
-  operation: unknown,
-): Response {
-  const browserResponse = gatewayBrowserResponseHeaders(request, env, authorization);
-
-  return displaySafeJson(
-    {
-      ...(browserResponse.csrfToken === undefined ? {} : { csrfToken: browserResponse.csrfToken }),
-      operation,
-    },
-    200,
-    browserResponse.headers,
-  );
-}
-
-function gatewayAutoSaveResponse(
-  request: Request,
-  env: WorkspaceGatewayProxyRulesEnv,
-  authorization: WorkspaceGatewayProxyRulesAuthorization,
-  autoSave: unknown,
-): Response {
-  const browserResponse = gatewayBrowserResponseHeaders(request, env, authorization);
-
-  return displaySafeJson(
-    {
-      ...(browserResponse.csrfToken === undefined ? {} : { csrfToken: browserResponse.csrfToken }),
-      autoSave,
-    },
-    200,
-    browserResponse.headers,
-  );
-}
-
-function gatewayBrowserResponseHeaders(
-  request: Request,
-  env: WorkspaceGatewayProxyRulesEnv,
-  authorization: WorkspaceGatewayProxyRulesAuthorization,
-): { csrfToken?: string; headers: Headers } {
-  const headers = new Headers();
-  const csrfToken = env.csrfToken?.trim();
-  const includeCsrfToken =
-    authorization.via === "owner-session" && authorization.actor === "browser";
-
-  if (includeCsrfToken && csrfToken) {
-    headers.set(
-      "Set-Cookie",
-      `${WORKSPACE_GATEWAY_CSRF_COOKIE_NAME}=${csrfToken}; Path=/; SameSite=Lax${new URL(request.url).protocol === "https:" ? "; Secure" : ""}`,
-    );
-  }
-
-  return {
-    ...(includeCsrfToken && csrfToken ? { csrfToken } : {}),
-    headers,
-  };
+  return workspaceGatewaySafeSidecarResponse({ authorization, env, request, response });
 }
 
 function readOperationIntentFromRequest(
@@ -640,20 +569,6 @@ async function parseGatewayAutoSaveEnqueueInput(request: { json: () => Promise<u
   return parseWorkspaceGatewayAutoSaveEnqueueInput(body);
 }
 
-function displaySafeProxyHeaders(headers: Headers): Headers {
-  const next = new Headers();
-
-  for (const key of ["Allow", "Content-Type"]) {
-    const value = headers.get(key);
-
-    if (value) {
-      next.set(key, value);
-    }
-  }
-
-  return next;
-}
-
 function isSameOriginOrNoOrigin(request: Request): boolean {
   const origin = request.headers.get("Origin");
 
@@ -680,18 +595,4 @@ function requestCookie(request: Request, name: string): string | undefined {
   }
 
   return undefined;
-}
-
-function displaySafeJson(body: unknown, status: number, headers: Headers = new Headers()) {
-  headers.set("Content-Type", "application/json");
-
-  return new Response(JSON.stringify(body), { headers, status });
-}
-
-function methodNotAllowed(methods: string[]) {
-  return displaySafeJson(
-    { error: "Method not allowed." },
-    405,
-    new Headers({ Allow: methods.join(", ") }),
-  );
 }

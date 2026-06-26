@@ -34,6 +34,13 @@ import {
   type WorkspaceGatewayProxyRulesTarget,
 } from "./proxy-rules.ts";
 import {
+  workspaceGatewayAutoSaveResponse,
+  workspaceGatewayErrorResponse,
+  workspaceGatewayMethodNotAllowedResponse,
+  workspaceGatewayNotFoundResponse,
+  workspaceGatewayOperationResponse,
+} from "./response-safety.ts";
+import {
   authorizeWorkspaceGatewaySidecarExecutionReadRequest,
   authorizeWorkspaceGatewaySidecarExecutionRequest,
   readWorkspaceGatewaySidecarOperationIntent,
@@ -185,12 +192,12 @@ export async function handleWorkspaceGatewaySidecarRequest(
   const workspaceRoot = workspaceGatewaySidecarRoot(env);
 
   if (!workspaceRoot) {
-    return displaySafeJson({ error: "Not found." }, 404);
+    return workspaceGatewayNotFoundResponse();
   }
 
   if (url.pathname === WORKSPACE_GATEWAY_STATUS_API_PATH) {
     if (request.method !== "GET") {
-      return methodNotAllowed(["GET"]);
+      return workspaceGatewayMethodNotAllowedResponse(["GET"]);
     }
 
     const authorization = authorizeSidecarGatewayRequest(
@@ -201,12 +208,14 @@ export async function handleWorkspaceGatewaySidecarRequest(
     );
 
     if ("error" in authorization) {
-      return displaySafeJson({ error: authorization.error }, authorization.status);
+      return workspaceGatewayErrorResponse(authorization.error, authorization.status);
     }
 
-    return sidecarOperationResponse(
-      await handlers.status({ authorization, request, workspaceRoot }),
-    );
+    return sidecarOperationResponse({
+      authorization,
+      operation: await handlers.status({ authorization, request, workspaceRoot }),
+      request,
+    });
   }
 
   if (url.pathname === WORKSPACE_GATEWAY_AUTO_SAVE_API_PATH) {
@@ -219,19 +228,21 @@ export async function handleWorkspaceGatewaySidecarRequest(
       );
 
       if ("error" in authorization) {
-        return displaySafeJson({ error: authorization.error }, authorization.status);
+        return workspaceGatewayErrorResponse(authorization.error, authorization.status);
       }
 
-      return sidecarAutoSaveResponse(
-        await handlers.autoSaveStatus({ authorization, request, workspaceRoot }),
-      );
+      return sidecarAutoSaveResponse({
+        authorization,
+        autoSave: await handlers.autoSaveStatus({ authorization, request, workspaceRoot }),
+        request,
+      });
     }
 
     if (request.method === "POST") {
       const parsed = await parseGatewayAutoSaveEnqueueInput(request);
 
       if (!parsed.ok) {
-        return displaySafeJson({ error: parsed.error }, 400);
+        return workspaceGatewayErrorResponse(parsed.error, 400);
       }
 
       const authorization = authorizeSidecarGatewayRequest(
@@ -242,31 +253,33 @@ export async function handleWorkspaceGatewaySidecarRequest(
       );
 
       if ("error" in authorization) {
-        return displaySafeJson({ error: authorization.error }, authorization.status);
+        return workspaceGatewayErrorResponse(authorization.error, authorization.status);
       }
 
-      return sidecarAutoSaveResponse(
-        await handlers.enqueueAutoSave({
+      return sidecarAutoSaveResponse({
+        authorization,
+        autoSave: await handlers.enqueueAutoSave({
           authorization,
           enqueue: parsed.input,
           request,
           workspaceRoot,
         }),
-      );
+        request,
+      });
     }
 
-    return methodNotAllowed(["GET", "POST"]);
+    return workspaceGatewayMethodNotAllowedResponse(["GET", "POST"]);
   }
 
   if (url.pathname === WORKSPACE_GATEWAY_OPERATIONS_API_PATH) {
     if (request.method !== "POST") {
-      return methodNotAllowed(["POST"]);
+      return workspaceGatewayMethodNotAllowedResponse(["POST"]);
     }
 
     const parsed = await parseGatewayStartInput(request);
 
     if (!parsed.ok) {
-      return displaySafeJson({ error: parsed.error }, 400);
+      return workspaceGatewayErrorResponse(parsed.error, 400);
     }
 
     const authorization = authorizeSidecarGatewayRequest(
@@ -277,36 +290,38 @@ export async function handleWorkspaceGatewaySidecarRequest(
     );
 
     if ("error" in authorization) {
-      return displaySafeJson({ error: authorization.error }, authorization.status);
+      return workspaceGatewayErrorResponse(authorization.error, authorization.status);
     }
 
-    return sidecarOperationResponse(
-      await handlers.startOperation({
+    return sidecarOperationResponse({
+      authorization,
+      operation: await handlers.startOperation({
         authorization,
         operationInput: parsed.input,
         request,
         workspaceRoot,
       }),
-    );
+      request,
+    });
   }
 
   const operationMatch = workspaceGatewayOperationPath(url.pathname);
 
   if (operationMatch) {
     if (request.method !== "GET") {
-      return methodNotAllowed(["GET"]);
+      return workspaceGatewayMethodNotAllowedResponse(["GET"]);
     }
 
     const parsedOperationId = parseWorkspaceGatewayOperationId(operationMatch.operationId);
 
     if (!parsedOperationId.ok) {
-      return displaySafeJson({ error: parsedOperationId.error }, 400);
+      return workspaceGatewayErrorResponse(parsedOperationId.error, 400);
     }
 
     const proxiedOperation = readWorkspaceGatewaySidecarOperationIntent(request);
 
     if (!proxiedOperation.ok) {
-      return displaySafeJson({ error: proxiedOperation.error }, 400);
+      return workspaceGatewayErrorResponse(proxiedOperation.error, 400);
     }
 
     const authorization = authorizeSidecarGatewayReadOperationRequest(
@@ -316,7 +331,7 @@ export async function handleWorkspaceGatewaySidecarRequest(
     );
 
     if ("error" in authorization) {
-      return displaySafeJson({ error: authorization.error }, authorization.status);
+      return workspaceGatewayErrorResponse(authorization.error, authorization.status);
     }
 
     const operation = await handlers.readOperation({
@@ -327,7 +342,7 @@ export async function handleWorkspaceGatewaySidecarRequest(
     });
 
     if (!operation) {
-      return displaySafeJson({ error: "Workspace operation was not found." }, 404);
+      return workspaceGatewayErrorResponse("Workspace operation was not found.", 404);
     }
 
     const stateIntent = validateWorkspaceGatewaySidecarOperationStateIntent({
@@ -337,13 +352,13 @@ export async function handleWorkspaceGatewaySidecarRequest(
     });
 
     if (!stateIntent.ok) {
-      return displaySafeJson({ error: stateIntent.error }, stateIntent.status);
+      return workspaceGatewayErrorResponse(stateIntent.error, stateIntent.status);
     }
 
-    return sidecarOperationResponse(operation);
+    return sidecarOperationResponse({ authorization, operation, request });
   }
 
-  return displaySafeJson({ error: "Not found." }, 404);
+  return workspaceGatewayNotFoundResponse();
 }
 
 export async function startWorkspaceGatewaySidecar(
@@ -411,7 +426,7 @@ export function createWorkspaceGatewaySidecarNodeHandler(
     const request = await nodeRequestFromIncomingMessage(req);
     const response =
       (await handleWorkspaceGatewaySidecarRequest(request, env, handlers)) ??
-      displaySafeJson({ error: "Not found." }, 404);
+      workspaceGatewayNotFoundResponse();
 
     await sendNodeResponse(res, response);
   };
@@ -493,12 +508,30 @@ function authorizeSidecarGatewayReadOperationRequest(
   );
 }
 
-function sidecarOperationResponse(operation: unknown): Response {
-  return displaySafeJson({ operation }, 200);
+function sidecarOperationResponse(input: {
+  authorization: WorkspaceGatewaySidecarExecutionAuthorization;
+  operation: unknown;
+  request: Request;
+}): Response {
+  return workspaceGatewayOperationResponse({
+    authorization: input.authorization,
+    env: {},
+    operation: input.operation,
+    request: input.request,
+  });
 }
 
-function sidecarAutoSaveResponse(autoSave: unknown): Response {
-  return displaySafeJson({ autoSave }, 200);
+function sidecarAutoSaveResponse(input: {
+  authorization: WorkspaceGatewaySidecarExecutionAuthorization;
+  autoSave: unknown;
+  request: Request;
+}): Response {
+  return workspaceGatewayAutoSaveResponse({
+    authorization: input.authorization,
+    autoSave: input.autoSave,
+    env: {},
+    request: input.request,
+  });
 }
 
 async function parseGatewayStartInput(request: {
@@ -540,20 +573,6 @@ function sidecarExecutionAuthorizationEnvFromEnv(
     adminToken: env.FORMLESS_ADMIN_TOKEN,
     proxyToken: env[WORKSPACE_GATEWAY_PROXY_TOKEN_ENV],
   };
-}
-
-function displaySafeJson(body: unknown, status: number, headers: Headers = new Headers()) {
-  headers.set("Content-Type", "application/json");
-
-  return new Response(JSON.stringify(body), { headers, status });
-}
-
-function methodNotAllowed(methods: string[]) {
-  return displaySafeJson(
-    { error: "Method not allowed." },
-    405,
-    new Headers({ Allow: methods.join(", ") }),
-  );
 }
 
 async function listenWorkspaceGatewaySidecar(server: Server): Promise<string> {

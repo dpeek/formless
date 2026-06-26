@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from "vite-plus/test";
 import {
   WORKSPACE_GATEWAY_ACTOR_HEADER,
   WORKSPACE_GATEWAY_AUTHORIZATION_VIA_HEADER,
+  WORKSPACE_GATEWAY_AUTO_SAVE_API_PATH,
   WORKSPACE_GATEWAY_BOOTSTRAP_HEADER,
   WORKSPACE_GATEWAY_BOOTSTRAP_TOKEN_ENV,
   WORKSPACE_GATEWAY_CSRF_TOKEN_ENV,
@@ -157,6 +158,110 @@ describe("sidecar workspace gateway adapter", () => {
         headers: sidecarProxyHeaders({ operation: "status", via: "bootstrap" }),
       }),
     ).rejects.toThrow();
+  });
+
+  it("wraps sidecar method, not-found, and error responses through response safety", async () => {
+    const methodResponse = await handleWorkspaceGatewaySidecarRequest(
+      new Request(`http://127.0.0.1${WORKSPACE_GATEWAY_STATUS_API_PATH}`, { method: "POST" }),
+      gatewayEnv(),
+      operationHandlers(),
+    );
+    const notFoundResponse = await handleWorkspaceGatewaySidecarRequest(
+      new Request("http://127.0.0.1/api/formless/workspace/missing"),
+      gatewayEnv(),
+      operationHandlers(),
+    );
+    const parseErrorResponse = await handleWorkspaceGatewaySidecarRequest(
+      new Request(`http://127.0.0.1${WORKSPACE_GATEWAY_OPERATIONS_API_PATH}`, {
+        body: "{",
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      }),
+      gatewayEnv(),
+      operationHandlers(),
+    );
+
+    expect(methodResponse?.status).toBe(405);
+    expect(methodResponse?.headers.get("Allow")).toBe("GET");
+    expect(methodResponse?.headers.get("Content-Type")).toBe("application/json");
+    expect(headerKeys(methodResponse)).toEqual(["allow", "content-type"]);
+    await expect(methodResponse?.json()).resolves.toEqual({ error: "Method not allowed." });
+
+    expect(notFoundResponse?.status).toBe(404);
+    expect(notFoundResponse?.headers.get("Content-Type")).toBe("application/json");
+    await expect(notFoundResponse?.json()).resolves.toEqual({ error: "Not found." });
+
+    expect(parseErrorResponse?.status).toBe(400);
+    expect(parseErrorResponse?.headers.get("Content-Type")).toBe("application/json");
+    await expect(parseErrorResponse?.json()).resolves.toEqual({
+      error: "Workspace gateway operation request must be JSON.",
+    });
+  });
+
+  it("wraps operation and auto-save handler results with safe sidecar response headers", async () => {
+    const handlers = operationHandlers({
+      autoSaveStatus: async () => autoSaveState({ displayState: "saving" }),
+      enqueueAutoSave: async () =>
+        autoSaveState({ displayState: "queued", writeSources: ["schema-save"] }),
+      status: async ({ authorization }) => operation("status", { actor: authorization.actor }),
+    });
+    const operationResponse = await handleWorkspaceGatewaySidecarRequest(
+      new Request(`http://127.0.0.1${WORKSPACE_GATEWAY_STATUS_API_PATH}`, {
+        headers: sidecarProxyHeaders({ operation: "status", via: "owner-session" }),
+      }),
+      gatewayEnv(),
+      handlers,
+    );
+    const autoSaveStatusResponse = await handleWorkspaceGatewaySidecarRequest(
+      new Request(`http://127.0.0.1${WORKSPACE_GATEWAY_AUTO_SAVE_API_PATH}`, {
+        headers: sidecarProxyHeaders({ operation: "status", via: "owner-session" }),
+      }),
+      gatewayEnv(),
+      handlers,
+    );
+    const autoSaveEnqueueResponse = await handleWorkspaceGatewaySidecarRequest(
+      new Request(`http://127.0.0.1${WORKSPACE_GATEWAY_AUTO_SAVE_API_PATH}`, {
+        body: JSON.stringify({ source: "schema-save", storageIdentity: "app:site" }),
+        headers: {
+          "Content-Type": "application/json",
+          ...sidecarProxyHeaders({ operation: "save", via: "owner-session" }),
+        },
+        method: "POST",
+      }),
+      gatewayEnv(),
+      handlers,
+    );
+
+    expect(operationResponse?.status).toBe(200);
+    expect(operationResponse?.headers.get("Content-Type")).toBe("application/json");
+    expect(operationResponse?.headers.get("Set-Cookie")).toBeNull();
+    expect(operationResponse?.headers.get(WORKSPACE_GATEWAY_PROXY_AUTHORIZATION_HEADER)).toBeNull();
+    expect(headerKeys(operationResponse)).toEqual(["content-type"]);
+    await expect(operationResponse?.json()).resolves.toMatchObject({
+      operation: {
+        actor: "browser",
+        operation: "status",
+      },
+    });
+
+    expect(autoSaveStatusResponse?.status).toBe(200);
+    expect(autoSaveStatusResponse?.headers.get("Content-Type")).toBe("application/json");
+    expect(autoSaveStatusResponse?.headers.get("Set-Cookie")).toBeNull();
+    await expect(autoSaveStatusResponse?.json()).resolves.toMatchObject({
+      autoSave: {
+        displayState: "saving",
+      },
+    });
+
+    expect(autoSaveEnqueueResponse?.status).toBe(200);
+    expect(autoSaveEnqueueResponse?.headers.get("Content-Type")).toBe("application/json");
+    expect(autoSaveEnqueueResponse?.headers.get("Set-Cookie")).toBeNull();
+    await expect(autoSaveEnqueueResponse?.json()).resolves.toMatchObject({
+      autoSave: {
+        displayState: "queued",
+        writeSources: ["schema-save"],
+      },
+    });
   });
 
   it("rejects sidecar execution authorization failures before operation handlers run", async () => {
@@ -433,4 +538,8 @@ function operation(
     workspace: { label: "Workspace" },
     ...overrides,
   };
+}
+
+function headerKeys(response: Response | undefined): string[] {
+  return [...(response?.headers.keys() ?? [])].sort();
 }

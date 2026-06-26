@@ -217,6 +217,22 @@ through the Gateway package slice.
 - **AND** Worker and sidecar adapter tests do not duplicate the full shared proxy
   behavior matrix with separate harnesses
 
+#### Scenario: Gateway response safety
+
+- **WHEN** Gateway Worker, local runtime proxy, sidecar, browser client, or tests
+  need to produce or inspect browser-visible gateway responses
+- **THEN** one package-owned response safety Module defines transport-level JSON
+  envelopes, allowed passthrough headers, method/error responses, sidecar
+  unavailable responses, owner-session CSRF response wrapping, non-JSON sidecar
+  passthrough safety, and display-safe operation or auto-save response wrapping
+- **AND** Worker proxy, local Node proxy, and sidecar adapters use that Module
+  instead of each owning separate response header filtering or JSON wrapper logic
+- **AND** the Module only wraps and filters transport output; semantic operation
+  state redaction remains owned by Workspace package local state adapters and
+  runtime operation adapters
+- **AND** browser UI redaction remains a presentation fallback and does not
+  replace Gateway transport response safety
+
 #### Scenario: Workspace package owns semantic operation contracts
 
 - **WHEN** Gateway browser, Worker, sidecar, CLI runtime, or tests need

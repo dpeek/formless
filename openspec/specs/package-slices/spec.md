@@ -518,8 +518,9 @@ provider secrets or canonical provider state.
 ### Requirement: Gateway Package Slice
 
 The system SHALL provide a Gateway package slice under `lib/gateway/` for local
-workspace gateway transport contracts, browser adapters, Worker proxy adapters,
-shared local runtime proxy rules, and local sidecar HTTP adapters.
+workspace gateway transport contracts, response safety helpers, browser
+adapters, Worker proxy adapters, shared local runtime proxy rules, and local
+sidecar HTTP adapters.
 
 #### Scenario: Gateway package scaffold
 
@@ -539,8 +540,8 @@ shared local runtime proxy rules, and local sidecar HTTP adapters.
 - WHEN they import the package
 - THEN they import from the package root or documented subpaths
 - AND they do not deep-import gateway package internals
-- AND package-internal shared proxy rules remain private implementation behind
-  documented Worker and sidecar adapter subpaths
+- AND package-internal shared proxy rules and response safety helpers remain
+  private implementation behind documented Worker and sidecar adapter subpaths
 
 ### Requirement: Gateway Package Non-Ownership
 
@@ -551,8 +552,9 @@ owner session storage, runtime topology, provider execution, or app records.
 #### Scenario: Package owns gateway contracts and adapters
 
 - GIVEN workspace gateway route constants, proxy header contracts, operation
-  intent helpers, browser fetch behavior, shared local runtime proxy rules,
-  Worker proxy behavior, or sidecar HTTP routing helpers are needed
+  intent helpers, browser fetch behavior, response safety helpers, shared local
+  runtime proxy rules, Worker proxy behavior, or sidecar HTTP routing helpers
+  are needed
 - WHEN runtime-neutral, browser, Worker, or sidecar code consumes gateway
   capability behavior
 - THEN they come from `lib/gateway`
@@ -560,6 +562,10 @@ owner session storage, runtime topology, provider execution, or app records.
   package-owned proxy rules Module for route classification, operation intent
   validation, browser actor policy, CSRF checks, sanitized sidecar forwarding,
   and display-safe response wrapping
+- AND Worker proxy adapters, local Node runtime proxy adapters, sidecar adapters,
+  and browser client tests share package-owned response safety helpers for JSON
+  envelopes, allowed response headers, owner-session CSRF wrapping, sidecar
+  fallback errors, and display-safe gateway transport wrappers
 - AND direct sidecar automation authorization and sidecar execution ingress
   remain sidecar adapter behavior rather than browser proxy behavior
 - AND semantic workspace operation input shapes, display-safe operation state,

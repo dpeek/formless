@@ -568,6 +568,54 @@ describe("instance shell route view", () => {
     expect(html).not.toContain("Bearer abc123");
   });
 
+  it("keeps instance shell redaction as rendered fallback around display-safe operation state", () => {
+    const html = renderToStaticMarkup(
+      <WorkspaceOperationProgress
+        error="Refresh failed at /Users/dpeek/workspace with owner setup token owner-token and Bearer browser-token."
+        operation={workspaceOperation({
+          logs: [
+            {
+              at: "2026-06-02T00:00:01.000Z",
+              id: "log-1",
+              level: "info",
+              message: "Saved TOKEN=[redacted] from <workspace>/records.",
+            },
+          ],
+          operation: "push",
+          result: {
+            deployment: {
+              providerStatePayload: "[redacted]",
+            },
+            summary: {
+              fields: {
+                providerStatePayload: "[redacted]",
+                workspace: "<workspace>",
+              },
+              title: "Workspace push applied",
+            },
+          },
+          status: "failed",
+          summary: {
+            fields: {
+              providerStatePayload: "[redacted]",
+              workspace: "<workspace>",
+            },
+            title: "Workspace push failed",
+          },
+        })}
+      />,
+    );
+
+    expect(html).toContain("Workspace push failed");
+    expect(html).toContain("Provider State Payload");
+    expect(html).toContain("[redacted]");
+    expect(html).toContain("&lt;workspace&gt;");
+    expect(html).toContain("&lt;path&gt;");
+    expect(html).not.toContain("/Users/dpeek");
+    expect(html).not.toContain("owner-token");
+    expect(html).not.toContain("browser-token");
+  });
+
   it("renders ordered push steps and health check failure diagnostics", () => {
     const html = renderToStaticMarkup(
       <WorkspaceOperationProgress
