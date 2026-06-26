@@ -73,6 +73,15 @@
         "@dpeek/formless-workspace": "^0.1.0",
       },
     },
+    "lib/identity-control-plane": {
+      "name": "@dpeek/formless-identity-control-plane",
+      "version": "0.1.0",
+      "dependencies": {
+        "@dpeek/formless-installed-apps": "^0.1.0",
+        "@dpeek/formless-schema": "^0.1.0",
+        "@dpeek/formless-storage": "^0.1.0",
+      },
+    },
     "lib/installed-apps": {
       "name": "@dpeek/formless-installed-apps",
       "version": "0.1.0",
@@ -267,6 +276,8 @@
     "@dpeek/formless-deploy": ["@dpeek/formless-deploy@workspace:lib/deploy"],
 
     "@dpeek/formless-gateway": ["@dpeek/formless-gateway@workspace:lib/gateway"],
+
+    "@dpeek/formless-identity-control-plane": ["@dpeek/formless-identity-control-plane@workspace:lib/identity-control-plane"],
 
     "@dpeek/formless-installed-apps": ["@dpeek/formless-installed-apps@workspace:lib/installed-apps"],
 

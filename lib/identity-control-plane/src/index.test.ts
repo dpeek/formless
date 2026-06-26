@@ -1,0 +1,782 @@
+import { describe, expect, it } from "vite-plus/test";
+import { computeSourceSchemaHash } from "@dpeek/formless-installed-apps";
+import { parseAppSchema, type AppSchema } from "@dpeek/formless-schema";
+import {
+  STORAGE_SNAPSHOT_KIND,
+  STORAGE_SNAPSHOT_VERSION,
+  type StorageSnapshot,
+  type StoredRecord,
+} from "@dpeek/formless-storage";
+import {
+  IDENTITY_CONTROL_PLANE_BOUNDARY_SCHEMA_KEY,
+  IDENTITY_CONTROL_PLANE_SCHEMA_KEY,
+  IDENTITY_CONTROL_PLANE_SOURCE_SCHEMA_HASH,
+  IDENTITY_CONTROL_PLANE_STORAGE_IDENTITY,
+  formatIdentityControlPlaneBoundaryEntityName,
+  identityControlPlaneEntityNames,
+  identityControlPlaneImmutableFields,
+  identityControlPlaneRecordSourceEntityName,
+  identityControlPlaneSchema,
+  identityControlPlaneSchemaProvenance,
+  identityControlPlaneSourceSchema,
+  isIdentityControlPlaneEntityName,
+  parseIdentityControlPlaneBoundaryEntityName,
+  parseIdentityControlPlaneStorageSnapshot,
+  reviewableIdentityControlPlaneStorageSnapshot,
+  validateIdentityControlPlaneRecords,
+} from "./index.ts";
+
+const privateAuthStateEntities = [
+  "auth-session",
+  "central-session",
+  "challenge",
+  "credential",
+  "credential-material",
+  "cross-domain-grant",
+  "email-verification-challenge",
+  "host-session",
+  "invite-token",
+  "invite-token-hash",
+  "passkey-challenge",
+  "passkey-credential",
+  "provider-response",
+  "recovery-secret",
+  "revocation",
+] as const;
+
+describe("identity control-plane schema contracts", () => {
+  it("publishes deterministic source provenance for the identity schema", async () => {
+    const baseHash = await computeSourceSchemaHash(identityControlPlaneSourceSchema);
+    const mutationCases: Array<[string, (schema: AppSchema) => void]> = [
+      [
+        "schema field metadata",
+        (schema) => {
+          schema.entities.principal.fields.displayName.label = "Name";
+        },
+      ],
+      [
+        "operation metadata",
+        (schema) => {
+          const create = schema.entities.principal.operations?.create;
+
+          if (!create) {
+            throw new Error("Expected principal create operation.");
+          }
+
+          create.label = "Create identity principal";
+        },
+      ],
+      [
+        "runtime metadata",
+        (schema) => {
+          const metadata = schema.runtime?.controlPlane?.entities.principal;
+
+          if (!metadata) {
+            throw new Error("Expected principal runtime metadata.");
+          }
+
+          metadata.immutableFields = ["kind", "status"];
+        },
+      ],
+    ];
+
+    expect(parseAppSchema(identityControlPlaneSourceSchema)).toEqual(identityControlPlaneSchema);
+    expect(IDENTITY_CONTROL_PLANE_SOURCE_SCHEMA_HASH).toBe(baseHash);
+    expect(identityControlPlaneSchemaProvenance).toEqual({
+      kind: "identity-control-plane",
+      sourceSchemaHash: baseHash,
+    });
+
+    for (const [label, mutate] of mutationCases) {
+      const changedSchema = structuredClone(
+        identityControlPlaneSourceSchema,
+      ) as unknown as AppSchema;
+      mutate(changedSchema);
+
+      expect(await computeSourceSchemaHash(changedSchema), label).not.toBe(baseHash);
+    }
+  });
+
+  it("defines the runtime-owned flat identity entities and local references", () => {
+    const schema = identityControlPlaneSchema;
+    const referenceTargets = Object.values(schema.entities).flatMap((entity) =>
+      Object.values(entity.fields).flatMap((field) =>
+        field.type === "reference" ? [field.to] : [],
+      ),
+    );
+
+    expect(Object.keys(schema.entities).sort()).toEqual(
+      [...identityControlPlaneEntityNames].sort(),
+    );
+    expect(referenceTargets.filter((target) => target.includes(":"))).toEqual([]);
+    expect(referenceTargets).toEqual(
+      expect.arrayContaining(["principal", "group", "organization", "role"]),
+    );
+    expect(schema.runtime?.owner).toBe("runtime");
+    expect(schema.runtime?.controlPlane?.entities).toEqual(
+      Object.fromEntries(
+        identityControlPlaneEntityNames.map((entityName) => [
+          entityName,
+          { immutableFields: [...identityControlPlaneImmutableFields[entityName]] },
+        ]),
+      ),
+    );
+
+    expect(schema.entities.principal.fields).toMatchObject({
+      displayName: { type: "text", required: true },
+      kind: {
+        type: "enum",
+        required: true,
+        values: { human: { label: "Human" }, service: { label: "Service" } },
+      },
+      status: {
+        type: "enum",
+        required: true,
+        values: {
+          active: { label: "Active" },
+          disabled: { label: "Disabled" },
+          invited: { label: "Invited" },
+        },
+      },
+    });
+    expect(schema.entities["principal-email"].fields).toMatchObject({
+      principal: { type: "reference", required: true, to: "principal" },
+      displayEmail: { type: "text", required: true },
+      normalizedEmail: { type: "text", required: true },
+      verificationStatus: {
+        type: "enum",
+        required: true,
+        values: { unverified: { label: "Unverified" }, verified: { label: "Verified" } },
+      },
+      primary: { type: "boolean", required: true, default: false },
+      recovery: { type: "boolean", required: true, default: false },
+      verifiedAt: { type: "text", required: false },
+    });
+    expect(schema.entities["principal-email"].constraints).toEqual({
+      uniqueNormalizedEmail: { kind: "unique", fields: ["normalizedEmail"] },
+    });
+    expect(schema.entities.group.fields).toMatchObject({
+      displayName: { type: "text", required: true },
+      status: { type: "enum", required: true },
+    });
+    expect(schema.entities.organization.fields).toMatchObject({
+      displayName: { type: "text", required: true },
+      status: { type: "enum", required: true },
+    });
+    expect(schema.entities.membership.fields).toMatchObject({
+      principal: { type: "reference", required: true, to: "principal" },
+      targetKind: {
+        type: "enum",
+        required: true,
+        values: { group: { label: "Group" }, organization: { label: "Organization" } },
+      },
+      targetGroup: { type: "reference", required: false, to: "group" },
+      targetOrganization: { type: "reference", required: false, to: "organization" },
+      status: { type: "enum", required: true },
+    });
+    expect(schema.entities.role.fields).toMatchObject({
+      key: {
+        type: "enum",
+        required: true,
+        values: {
+          "app.admin": { label: "app.admin" },
+          "app.editor": { label: "app.editor" },
+          "app.user": { label: "app.user" },
+          "app.viewer": { label: "app.viewer" },
+          "instance.admin": { label: "instance.admin" },
+          "instance.owner": { label: "instance.owner" },
+        },
+      },
+      displayLabel: { type: "text", required: true },
+      status: { type: "enum", required: true },
+    });
+    expect(schema.entities.role.constraints).toEqual({
+      uniqueKey: { kind: "unique", fields: ["key"] },
+    });
+    expect(schema.entities["role-assignment"].fields).toMatchObject({
+      role: { type: "reference", required: true, to: "role" },
+      targetKind: {
+        type: "enum",
+        required: true,
+        values: {
+          group: { label: "Group" },
+          organization: { label: "Organization" },
+          principal: { label: "Principal" },
+        },
+      },
+      targetPrincipal: { type: "reference", required: false, to: "principal" },
+      targetGroup: { type: "reference", required: false, to: "group" },
+      targetOrganization: { type: "reference", required: false, to: "organization" },
+      scopeKind: {
+        type: "enum",
+        required: true,
+        values: {
+          "app-install": { label: "App install" },
+          instance: { label: "Instance" },
+          organization: { label: "Organization" },
+        },
+      },
+      appInstallId: { type: "text", required: false },
+      scopeOrganization: { type: "reference", required: false, to: "organization" },
+      status: { type: "enum", required: true },
+    });
+    expect(schema.entities["app-registration"].fields).toMatchObject({
+      appInstallId: { type: "text", required: true },
+      targetKind: {
+        type: "enum",
+        required: true,
+        values: {
+          organization: { label: "Organization" },
+          principal: { label: "Principal" },
+        },
+      },
+      targetPrincipal: { type: "reference", required: false, to: "principal" },
+      targetOrganization: { type: "reference", required: false, to: "organization" },
+      status: { type: "enum", required: true },
+      selectedOrganization: { type: "reference", required: false, to: "organization" },
+    });
+    expect(schema.entities.invitation.fields).toMatchObject({
+      targetEmail: { type: "text", required: true },
+      targetSurface: {
+        type: "enum",
+        required: true,
+        values: {
+          "app-install": { label: "App install" },
+          instance: { label: "Instance" },
+          organization: { label: "Organization" },
+        },
+      },
+      targetAppInstallId: { type: "text", required: false },
+      targetOrganization: { type: "reference", required: false, to: "organization" },
+      invitedPrincipal: { type: "reference", required: false, to: "principal" },
+      inviterPrincipal: { type: "reference", required: false, to: "principal" },
+      status: {
+        type: "enum",
+        required: true,
+        values: {
+          accepted: { label: "Accepted" },
+          expired: { label: "Expired" },
+          pending: { label: "Pending" },
+          revoked: { label: "Revoked" },
+        },
+      },
+      expiresAt: { type: "text", required: true },
+      acceptedAt: { type: "text", required: false },
+    });
+  });
+
+  it("declares local relationship shapes for fixed identity references", () => {
+    const schema = identityControlPlaneSchema;
+
+    expect(schema.relationships?.principalEmailPrincipal).toEqual({
+      kind: "toOne",
+      label: "Principal email principal",
+      from: { entity: "principal-email", field: "principal" },
+      to: { entity: "principal" },
+      inverse: "principalEmails",
+    });
+    expect(schema.relationships?.principalEmails).toEqual({
+      kind: "toMany",
+      label: "Principal emails",
+      from: { entity: "principal" },
+      to: { entity: "principal-email", field: "principal" },
+      inverse: "principalEmailPrincipal",
+    });
+    expect(schema.relationships?.membershipGroup).toMatchObject({
+      kind: "toOne",
+      from: { entity: "membership", field: "targetGroup" },
+      to: { entity: "group" },
+    });
+    expect(schema.relationships?.membershipOrganization).toMatchObject({
+      kind: "toOne",
+      from: { entity: "membership", field: "targetOrganization" },
+      to: { entity: "organization" },
+    });
+    expect(schema.relationships?.roleAssignmentRole).toMatchObject({
+      kind: "toOne",
+      from: { entity: "role-assignment", field: "role" },
+      to: { entity: "role" },
+    });
+    expect(schema.relationships?.appRegistrationSelectedOrganization).toMatchObject({
+      kind: "toOne",
+      from: { entity: "app-registration", field: "selectedOrganization" },
+      to: { entity: "organization" },
+    });
+    expect(schema.relationships?.invitationInvitedPrincipal).toMatchObject({
+      kind: "toOne",
+      from: { entity: "invitation", field: "invitedPrincipal" },
+      to: { entity: "principal" },
+    });
+  });
+
+  it("declares generated write operations without private auth-state entities", () => {
+    const schema = identityControlPlaneSchema;
+
+    for (const entityName of identityControlPlaneEntityNames) {
+      const operations = schema.entities[entityName].operations;
+
+      expect(operations?.create).toMatchObject({
+        kind: "create",
+        scope: "collection",
+        effect: { type: "createRecord" },
+        output: { type: "create" },
+      });
+      expect(operations?.update).toMatchObject({
+        kind: "update",
+        scope: "record",
+        effect: { type: "patchRecord" },
+        output: { type: "update" },
+      });
+      expect(Object.keys(operations?.create.input?.fields ?? {})).toEqual(
+        Object.keys(schema.entities[entityName].fields),
+      );
+    }
+
+    expect(Object.keys(schema.entities.principal.operations?.update.input?.fields ?? {})).toEqual([
+      "displayName",
+      "status",
+    ]);
+    expect(
+      Object.keys(schema.entities["principal-email"].operations?.update.input?.fields ?? {}),
+    ).toEqual(["displayEmail", "verificationStatus", "primary", "recovery", "verifiedAt"]);
+    expect(Object.keys(schema.entities.membership.operations?.update.input?.fields ?? {})).toEqual([
+      "status",
+    ]);
+    expect(
+      Object.keys(schema.entities["role-assignment"].operations?.update.input?.fields ?? {}),
+    ).toEqual(["status"]);
+    expect(
+      Object.keys(schema.entities["app-registration"].operations?.update.input?.fields ?? {}),
+    ).toEqual(["status", "selectedOrganization"]);
+    expect(Object.keys(schema.entities.invitation.operations?.update.input?.fields ?? {})).toEqual([
+      "status",
+      "acceptedAt",
+    ]);
+
+    for (const privateEntity of privateAuthStateEntities) {
+      expect(schema.entities).not.toHaveProperty(privateEntity);
+    }
+  });
+
+  it("formats, parses, and identifies identity boundary entity names", () => {
+    expect(IDENTITY_CONTROL_PLANE_BOUNDARY_SCHEMA_KEY).toBe("auth");
+    expect(IDENTITY_CONTROL_PLANE_SCHEMA_KEY).toBe("identity-control-plane");
+    expect(IDENTITY_CONTROL_PLANE_STORAGE_IDENTITY).toBe("instance:identity");
+    expect(formatIdentityControlPlaneBoundaryEntityName("principal")).toBe("auth:principal");
+    expect(formatIdentityControlPlaneBoundaryEntityName("organization")).toBe("auth:organization");
+    expect(parseIdentityControlPlaneBoundaryEntityName("Archive record entity", "auth:group")).toBe(
+      "group",
+    );
+    expect(identityControlPlaneRecordSourceEntityName("auth:principal-email")).toBe(
+      "principal-email",
+    );
+    expect(identityControlPlaneRecordSourceEntityName("role-assignment")).toBe("role-assignment");
+    expect(isIdentityControlPlaneEntityName("app-registration")).toBe(true);
+    expect(isIdentityControlPlaneEntityName("auth-session")).toBe(false);
+    expect(() =>
+      parseIdentityControlPlaneBoundaryEntityName(
+        "Archive record entity",
+        "identity-control-plane:principal",
+      ),
+    ).toThrow('Archive record entity schema key must be "auth".');
+    expect(() =>
+      parseIdentityControlPlaneBoundaryEntityName("Archive record entity", "auth:auth-session"),
+    ).toThrow("is not an identity control-plane entity");
+  });
+
+  it("validates display-safe identity storage snapshots and records", () => {
+    const snapshot = identityStorageSnapshot();
+
+    expect(parseIdentityControlPlaneStorageSnapshot("Identity archive", snapshot)).toEqual(
+      snapshot,
+    );
+    expect(
+      reviewableIdentityControlPlaneStorageSnapshot({
+        ...snapshot,
+        sourceCursor: 123,
+        records: snapshot.records.map((record) => ({
+          ...record,
+          entity: formatIdentityControlPlaneBoundaryEntityName(
+            record.entity as (typeof identityControlPlaneEntityNames)[number],
+          ),
+        })),
+      }),
+    ).toMatchObject({
+      sourceCursor: snapshot.records.length,
+      records: snapshot.records,
+    });
+    expect(() =>
+      parseIdentityControlPlaneStorageSnapshot("Identity archive", {
+        ...snapshot,
+        storageIdentity: "instance:control-plane",
+      }),
+    ).toThrow('Storage snapshot storageIdentity must be "instance:identity".');
+    expect(() =>
+      validateIdentityControlPlaneRecords("Identity records", [
+        ...identityRecords(),
+        identityRecord("unknown", "unknown:1", {}),
+      ]),
+    ).toThrow('references unknown entity "unknown"');
+    expect(() =>
+      validateIdentityControlPlaneRecords("Identity records", [
+        ...identityRecords(),
+        {
+          ...identityRecords()[0],
+          id: "principal:duplicate-id",
+        },
+      ]),
+    ).not.toThrow();
+    expect(() =>
+      validateIdentityControlPlaneRecords("Identity records", [
+        ...identityRecords(),
+        {
+          ...identityRecords()[0],
+        },
+      ]),
+    ).toThrow('includes duplicate identity record id "principal:ada"');
+  });
+
+  it("validates identity record invariants that are outside field shape", () => {
+    const records = identityRecords();
+
+    expect(validateIdentityControlPlaneRecords("Identity records", records)).toBeUndefined();
+    expect(() =>
+      validateIdentityControlPlaneRecords("Identity records", [
+        ...records,
+        principalEmailRecord("principal-email:duplicate", {
+          principal: "principal:grace",
+          displayEmail: "duplicate@example.com",
+          normalizedEmail: "ada@example.com",
+        }),
+      ]),
+    ).toThrow('violates unique constraint "auth:principal-email.uniqueNormalizedEmail"');
+    expect(() =>
+      validateIdentityControlPlaneRecords("Identity records", [
+        ...records,
+        {
+          ...principalEmailRecord("principal-email:tombstoned-duplicate", {
+            principal: "principal:grace",
+            displayEmail: "duplicate@example.com",
+            normalizedEmail: "ada@example.com",
+          }),
+          deletedAt: testNow,
+        },
+      ]),
+    ).not.toThrow();
+    expect(() =>
+      validateIdentityControlPlaneRecords("Identity records", [
+        ...records,
+        roleRecord("role:owner-duplicate", {
+          displayLabel: "Duplicate owner",
+          key: "instance.owner",
+        }),
+      ]),
+    ).toThrow('violates unique constraint "auth:role.uniqueKey"');
+    expect(() =>
+      validateIdentityControlPlaneRecords("Identity records", [
+        ...records,
+        {
+          ...roleRecord("role:owner-tombstoned-duplicate", {
+            displayLabel: "Duplicate owner",
+            key: "instance.owner",
+          }),
+          deletedAt: testNow,
+        },
+      ]),
+    ).not.toThrow();
+
+    expect(() =>
+      validateIdentityControlPlaneRecords(
+        "Identity records",
+        replaceRecord(
+          records,
+          membershipRecord("membership:ada-group", { targetGroup: undefined }),
+        ),
+      ),
+    ).toThrow('requires field "auth:membership.targetGroup"');
+    expect(() =>
+      validateIdentityControlPlaneRecords(
+        "Identity records",
+        replaceRecord(
+          records,
+          membershipRecord("membership:ada-group", { targetOrganization: "organization:acme" }),
+        ),
+      ),
+    ).toThrow('cannot set field "auth:membership.targetOrganization"');
+    expect(() =>
+      validateIdentityControlPlaneRecords(
+        "Identity records",
+        replaceRecord(
+          records,
+          roleAssignmentRecord("role-assignment:ada-owner", {
+            targetGroup: "group:operators",
+          }),
+        ),
+      ),
+    ).toThrow('cannot set field "auth:role-assignment.targetGroup"');
+    expect(() =>
+      validateIdentityControlPlaneRecords(
+        "Identity records",
+        replaceRecord(
+          records,
+          roleAssignmentRecord("role-assignment:ada-owner", { appInstallId: "site" }),
+        ),
+      ),
+    ).toThrow('cannot set field "auth:role-assignment.appInstallId"');
+    expect(() =>
+      validateIdentityControlPlaneRecords(
+        "Identity records",
+        replaceRecord(
+          records,
+          roleAssignmentRecord("role-assignment:ada-owner", {
+            appInstallId: undefined,
+            scopeKind: "app-install",
+          }),
+        ),
+      ),
+    ).toThrow('requires field "auth:role-assignment.appInstallId"');
+    expect(() =>
+      validateIdentityControlPlaneRecords(
+        "Identity records",
+        replaceRecord(
+          records,
+          roleAssignmentRecord("role-assignment:ada-owner", {
+            scopeKind: "organization",
+            scopeOrganization: undefined,
+          }),
+        ),
+      ),
+    ).toThrow('requires field "auth:role-assignment.scopeOrganization"');
+    expect(() =>
+      validateIdentityControlPlaneRecords(
+        "Identity records",
+        replaceRecord(
+          records,
+          appRegistrationRecord("app-registration:site-ada", {
+            targetKind: "organization",
+            targetPrincipal: "principal:ada",
+          }),
+        ),
+      ),
+    ).toThrow('requires field "auth:app-registration.targetOrganization"');
+    expect(() =>
+      validateIdentityControlPlaneRecords(
+        "Identity records",
+        replaceRecord(
+          records,
+          appRegistrationRecord("app-registration:site-ada", {
+            targetKind: "organization",
+            targetOrganization: "organization:acme",
+            targetPrincipal: "principal:ada",
+          }),
+        ),
+      ),
+    ).toThrow('cannot set field "auth:app-registration.targetPrincipal"');
+    expect(() =>
+      validateIdentityControlPlaneRecords(
+        "Identity records",
+        replaceRecord(
+          records,
+          invitationRecord("invitation:ada", { inviteTokenHash: "sha256:private" }),
+        ),
+      ),
+    ).toThrow("cannot store private auth state");
+    expect(() =>
+      validateIdentityControlPlaneRecords(
+        "Identity records",
+        replaceRecord(
+          records,
+          invitationRecord("invitation:ada", {
+            targetEmail: JSON.stringify({ providerResponse: { id: "message-id" } }),
+          }),
+        ),
+      ),
+    ).toThrow("cannot store private auth state");
+  });
+});
+
+const testNow = "2026-06-26T00:00:00.000Z";
+
+function identityStorageSnapshot(overrides: Partial<StorageSnapshot> = {}): StorageSnapshot {
+  const records = identityRecords();
+
+  return {
+    kind: STORAGE_SNAPSHOT_KIND,
+    version: STORAGE_SNAPSHOT_VERSION,
+    storageIdentity: IDENTITY_CONTROL_PLANE_STORAGE_IDENTITY,
+    schemaKey: IDENTITY_CONTROL_PLANE_SCHEMA_KEY,
+    exportedAt: testNow,
+    schemaUpdatedAt: testNow,
+    sourceCursor: records.length,
+    schema: identityControlPlaneSchema,
+    records,
+    ...overrides,
+  };
+}
+
+function identityRecords(): StoredRecord[] {
+  return [
+    identityRecord("principal", "principal:ada", {
+      displayName: "Ada Lovelace",
+      kind: "human",
+      status: "active",
+    }),
+    identityRecord("principal", "principal:grace", {
+      displayName: "Grace Hopper",
+      kind: "human",
+      status: "active",
+    }),
+    principalEmailRecord("principal-email:ada", {
+      principal: "principal:ada",
+      displayEmail: "Ada@example.com",
+      normalizedEmail: "ada@example.com",
+    }),
+    identityRecord("group", "group:operators", {
+      displayName: "Operators",
+      status: "active",
+    }),
+    identityRecord("organization", "organization:acme", {
+      displayName: "Acme",
+      status: "active",
+    }),
+    membershipRecord("membership:ada-group"),
+    roleRecord("role:owner", {
+      displayLabel: "Owner",
+      key: "instance.owner",
+    }),
+    roleAssignmentRecord("role-assignment:ada-owner"),
+    appRegistrationRecord("app-registration:site-ada"),
+    invitationRecord("invitation:ada"),
+  ];
+}
+
+function principalEmailRecord(
+  id: string,
+  values: {
+    displayEmail: string;
+    normalizedEmail: string;
+    principal: string;
+  },
+): StoredRecord {
+  return identityRecord("principal-email", id, {
+    displayEmail: values.displayEmail,
+    normalizedEmail: values.normalizedEmail,
+    principal: values.principal,
+    primary: false,
+    recovery: false,
+    verificationStatus: "verified",
+    verifiedAt: testNow,
+  });
+}
+
+function membershipRecord(
+  id: string,
+  overrides: Record<string, string | undefined> = {},
+): StoredRecord {
+  return identityRecord(
+    "membership",
+    id,
+    omitUndefined({
+      principal: "principal:ada",
+      targetGroup: "group:operators",
+      targetKind: "group",
+      status: "active",
+      ...overrides,
+    }),
+  );
+}
+
+function roleRecord(
+  id: string,
+  values: {
+    displayLabel: string;
+    key: string;
+  },
+): StoredRecord {
+  return identityRecord("role", id, {
+    displayLabel: values.displayLabel,
+    key: values.key,
+    status: "active",
+  });
+}
+
+function roleAssignmentRecord(
+  id: string,
+  overrides: Record<string, string | undefined> = {},
+): StoredRecord {
+  return identityRecord(
+    "role-assignment",
+    id,
+    omitUndefined({
+      role: "role:owner",
+      targetKind: "principal",
+      targetPrincipal: "principal:ada",
+      scopeKind: "instance",
+      status: "active",
+      ...overrides,
+    }),
+  );
+}
+
+function appRegistrationRecord(
+  id: string,
+  overrides: Record<string, string | undefined> = {},
+): StoredRecord {
+  return identityRecord(
+    "app-registration",
+    id,
+    omitUndefined({
+      appInstallId: "site",
+      targetKind: "principal",
+      targetPrincipal: "principal:ada",
+      selectedOrganization: "organization:acme",
+      status: "active",
+      ...overrides,
+    }),
+  );
+}
+
+function invitationRecord(
+  id: string,
+  overrides: Record<string, string | undefined> = {},
+): StoredRecord {
+  return identityRecord(
+    "invitation",
+    id,
+    omitUndefined({
+      acceptedAt: undefined,
+      expiresAt: "2026-07-26T00:00:00.000Z",
+      invitedPrincipal: "principal:ada",
+      inviterPrincipal: "principal:grace",
+      status: "pending",
+      targetAppInstallId: "site",
+      targetEmail: "ada@example.com",
+      targetSurface: "app-install",
+      ...overrides,
+    }),
+  );
+}
+
+function identityRecord(
+  entity: string,
+  id: string,
+  values: Record<string, boolean | number | string>,
+): StoredRecord {
+  return {
+    id,
+    entity,
+    values,
+    createdAt: testNow,
+    updatedAt: testNow,
+  };
+}
+
+function replaceRecord(records: StoredRecord[], replacement: StoredRecord): StoredRecord[] {
+  return records.map((record) => (record.id === replacement.id ? replacement : record));
+}
+
+function omitUndefined<T extends Record<string, string | undefined>>(values: T) {
+  return Object.fromEntries(
+    Object.entries(values).filter((entry): entry is [string, string] => entry[1] !== undefined),
+  );
+}
