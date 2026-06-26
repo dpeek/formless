@@ -2,12 +2,7 @@ import {
   INSTANCE_CONTROL_PLANE_INSTANCE_SETTINGS_ID,
   instanceControlPlaneProductionIdentityFromRecords,
 } from "@dpeek/formless-instance-control-plane";
-import type {
-  AppSchema,
-  EntityOperationInputFieldSchema,
-  PublicSafeOperationInputField,
-} from "@dpeek/formless-schema";
-import { projectPublicSafeOperationInputFields } from "@dpeek/formless-schema";
+import type { AppSchema } from "@dpeek/formless-schema";
 import type { StoredRecord } from "@dpeek/formless-storage";
 import type { AppStorageIdentity } from "../shared/app-storage-identity.ts";
 import { parseEmailDeliveryAddress, type EmailDeliveryAddress } from "../shared/email-runtime.ts";
@@ -15,6 +10,10 @@ import type { OperationInvocationResponse } from "../shared/operation-invocation
 import type { DeploymentControlPlaneClientEnv } from "./deployment-control-plane-client.ts";
 import { readControlPlaneRecords } from "./deployment-control-plane-client.ts";
 import { schedulePlatformEmailDelivery } from "./email-runtime.ts";
+import {
+  operationInputNotificationDisplayRows,
+  operationInputNotificationSubmittedInput,
+} from "./operation-input-notification-display.ts";
 import { getBootstrapRecords } from "./storage.ts";
 
 const operationInputNotificationMessageKind = "site-operation-input-notification";
@@ -60,9 +59,8 @@ export async function scheduleSiteOperationInputNotificationAfterPublicOperation
       return;
     }
 
-    const submittedInput = publicOperationSubmittedInput(input.response);
-    const fields = operationInputNotificationFields({
-      input: submittedInput,
+    const submittedInput = operationInputNotificationSubmittedInput(input.response);
+    const fields = operationInputNotificationDisplayRows({
       response: input.response,
       schema: input.schema,
     });
@@ -188,91 +186,6 @@ function operationInputNotificationSettings(
   return senderId && recipient ? { senderId, recipient } : undefined;
 }
 
-function publicOperationSubmittedInput(
-  response: OperationInvocationResponse,
-): Record<string, unknown> {
-  const invocationInput = response.invocation.input;
-
-  if (invocationInput.type === "create") {
-    return recordValue(invocationInput.values);
-  }
-
-  if (invocationInput.type !== "command") {
-    return {};
-  }
-
-  if (response.invocation.operation.effect?.type === "recordPlan") {
-    return recordValue(invocationInput.input);
-  }
-
-  return recordValue(recordValue(invocationInput.input).input);
-}
-
-function operationInputNotificationFields(input: {
-  input: Record<string, unknown>;
-  response: OperationInvocationResponse;
-  schema: AppSchema;
-}): Array<{ label: string; value: string }> {
-  const entity = input.schema.entities[input.response.invocation.operation.entityName];
-
-  if (!entity) {
-    return [];
-  }
-
-  const projection = projectPublicSafeOperationInputFields({
-    entity,
-    operation: input.response.invocation.schemaOperation,
-  });
-  const operationFields = input.response.invocation.schemaOperation.input?.fields ?? {};
-
-  return projection.fields.flatMap((field) => {
-    const value = submittedInputFieldValue(input.input, field.name, operationFields[field.name]);
-
-    if (value === undefined) {
-      return [];
-    }
-
-    return [
-      {
-        label: field.label,
-        value: displayOperationInputValue(field, value),
-      },
-    ];
-  });
-}
-
-function submittedInputFieldValue(
-  input: Record<string, unknown>,
-  inputName: string,
-  field: EntityOperationInputFieldSchema | undefined,
-): unknown {
-  if (Object.hasOwn(input, inputName)) {
-    return input[inputName];
-  }
-
-  if (field && "field" in field && Object.hasOwn(input, field.field)) {
-    return input[field.field];
-  }
-
-  return undefined;
-}
-
-function displayOperationInputValue(field: PublicSafeOperationInputField, value: unknown) {
-  if (field.control === "boolean") {
-    return value === true ? "Yes" : value === false ? "No" : String(value);
-  }
-
-  if (field.control === "enum" && typeof value === "string") {
-    return field.options?.find((option) => option.value === value)?.label ?? value;
-  }
-
-  if (typeof value === "number") {
-    return Number.isFinite(value) ? String(value) : "";
-  }
-
-  return String(value);
-}
-
 function operationInputNotificationReplyTo(input: {
   input: Record<string, unknown>;
   replyToField?: string;
@@ -377,12 +290,6 @@ async function operationInputNotificationIdempotencyKey(
     .join("");
 
   return `${operationInputNotificationPurpose}:${hex}`;
-}
-
-function recordValue(value: unknown): Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {};
 }
 
 function stringRecordValue(value: unknown): string | undefined {

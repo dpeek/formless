@@ -105,6 +105,14 @@ through an explicit actor policy and public binding.
 - AND the notification message is rendered from the submitted operation input,
   public-safe field labels, canonical operation key, target storage identity,
   request host and path, and Site block id when supplied
+- AND submitted input extraction and display-row projection are concentrated in
+  a display module that consumes the operation invocation response,
+  schema-owned public-safe input field projection, and target app schema
+- AND the display module supports create, record-plan command, and operation
+  handler command public operation input shapes
+- AND scalar display formatting maps booleans to `Yes` or `No`, enum values to
+  public labels when available, finite numbers to decimal text, and text values
+  to string display values
 - AND the HTML notification body renders operation facts and submitted input as
   key-value tables
 - AND configured reply-to fields may use submitted scalar input values but

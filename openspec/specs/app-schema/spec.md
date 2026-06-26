@@ -753,6 +753,9 @@ anonymous public bindings.
   labels, required flags, scalar types, enum values, and text presentation facts
 - AND inline operation input fields expose only their declared labels, required
   flags, scalar types, enum values, and public text presentation facts
+- AND submitted input display can use the same public-safe projection to select
+  fields, resolve entity-backed input names or stored field names, and format
+  scalar display values without exposing private schema facts
 - AND v1 generic public form rendering supports text, long text, enum, boolean,
   date, and number controls
 - AND reference fields, relationship pickers, query-backed choices, server-side

@@ -114,6 +114,42 @@ describe("Site operation input notification scheduling", () => {
     expect(scheduled[0]).not.toHaveProperty("replyTo");
   });
 
+  it("schedules command handler operation input email from the public command wrapper", async () => {
+    const scheduled: unknown[] = [];
+    const operation = requestSubmitCommandHandlerOperation();
+
+    await scheduleSiteOperationInputNotificationAfterPublicOperation({
+      env: fakeNotificationEnv(notificationControlPlaneRecords(), scheduled),
+      identity: schemaKeyStorageIdentity("site"),
+      records: operationFormSourceRecords({ replyToField: "email" }),
+      requestUrl: "https://www.example.com/api/site/public/operations/request/submit",
+      response: operationInputCommandResponse({
+        input: {
+          email: "Ada@Example.COM",
+          wantsNewsletter: false,
+        },
+        operation,
+      }),
+      schema: operationInputSchema(operation),
+    });
+
+    expect(scheduled).toHaveLength(1);
+
+    const delivery = scheduled[0] as {
+      message: { html: string; text: string };
+      replyTo: { address: string };
+      source: Record<string, unknown>;
+    };
+
+    expect(delivery.message.text).toContain("Email: Ada@Example.COM");
+    expect(delivery.message.text).toContain("Wants newsletter: No");
+    expect(delivery.message.html).toMatch(
+      /<tr><th scope="row"[^>]*>Wants newsletter<\/th><td[^>]*>No<\/td><\/tr>/,
+    );
+    expect(delivery.replyTo).toEqual({ address: "Ada@example.com" });
+    expect(delivery.source).not.toHaveProperty("recordId");
+  });
+
   it("skips scheduling when form or email configuration is incomplete", async () => {
     const scheduled: unknown[] = [];
     const response = operationInputResponse();
@@ -308,7 +344,9 @@ function operationFormTargetValues(target: OperationFormTarget | undefined): Rec
   };
 }
 
-function operationInputSchema(): AppSchema {
+function operationInputSchema(
+  operation: EntityOperationSchema = requestSubmitOperation(),
+): AppSchema {
   return {
     version: 1,
     entities: {
@@ -336,7 +374,7 @@ function operationInputSchema(): AppSchema {
           quantity: { type: "number", required: false, label: "Quantity" },
         },
         operations: {
-          submit: requestSubmitOperation(),
+          submit: operation,
         },
       },
     },
@@ -364,6 +402,24 @@ function requestSubmitOperation(): EntityOperationSchema {
     },
     effect: { type: "createRecord" },
     output: { type: "create" },
+    idempotency: { required: true },
+    audit: { input: "summary" },
+  };
+}
+
+function requestSubmitCommandHandlerOperation(): EntityOperationSchema {
+  return {
+    label: "Submit request",
+    kind: "command",
+    scope: "collection",
+    input: {
+      fields: {
+        email: { field: "email", required: true },
+        wantsNewsletter: { type: "boolean", required: false, label: "Wants newsletter" },
+      },
+    },
+    effect: { type: "operationHandler", handler: "subscribe", config: {} },
+    output: { type: "command" },
     idempotency: { required: true },
     audit: { input: "summary" },
   };
@@ -428,6 +484,59 @@ function operationInputResponse(
         createdAt: "2026-06-24T00:00:00.000Z",
         updatedAt: "2026-06-24T00:00:00.000Z",
       },
+    },
+    status: "committed",
+  };
+}
+
+function operationInputCommandResponse(input: {
+  identity?: AppStorageIdentity;
+  input: RecordValues;
+  operation: EntityOperationSchema;
+}): OperationInvocationResponse {
+  const identity = input.identity ?? schemaKeyStorageIdentity("site");
+
+  return {
+    invocation: {
+      invocationId: "operation:request.submit:operation-input-notify",
+      actor: { kind: "anonymous" },
+      appStorageIdentity: identity,
+      idempotency: {
+        required: true,
+        key: "operation-input-notify",
+        source: "caller",
+        writeIdentity: "operation:request.submit:operation-input-notify",
+      },
+      input: {
+        type: "command",
+        input: {
+          input: input.input,
+          proof: { kind: "turnstile", token: "token-ok" },
+        },
+      },
+      operation: {
+        entityName: "request",
+        operationName: "submit",
+        canonicalKey: "request.submit",
+        kind: input.operation.kind,
+        scope: input.operation.scope,
+        output: input.operation.output,
+        ...(input.operation.effect === undefined ? {} : { effect: input.operation.effect }),
+      },
+      receivedAt: "2026-06-24T00:00:00.000Z",
+      schemaOperation: input.operation,
+      source: {
+        host: "www.example.com",
+        path: "/api/site/public/operations/request/submit",
+        protocol: "public",
+        siteBlockId: "form-block",
+      },
+    },
+    output: {
+      type: "command",
+      affectedChangeIds: ["1"],
+      changes: [],
+      cursor: 1,
     },
     status: "committed",
   };
