@@ -4970,6 +4970,30 @@ describe("personal site sample schema", () => {
       required: false,
       label: "Operation",
     });
+    expect(schema.entities.block?.fields.operationTargetKind).toEqual({
+      type: "enum",
+      required: false,
+      label: "Target route",
+      values: {
+        schemaKey: { label: "Schema key" },
+        appInstall: { label: "Installed app" },
+      },
+    });
+    expect(schema.entities.block?.fields.operationTargetSchemaKey).toEqual({
+      type: "text",
+      required: false,
+      label: "Target schema key",
+    });
+    expect(schema.entities.block?.fields.operationTargetPackageAppKey).toEqual({
+      type: "text",
+      required: false,
+      label: "Target package app key",
+    });
+    expect(schema.entities.block?.fields.operationTargetInstallId).toEqual({
+      type: "text",
+      required: false,
+      label: "Target install id",
+    });
     expect(schema.entities.block?.fields.buttonLabel).toEqual({
       type: "text",
       required: false,
@@ -5138,7 +5162,16 @@ describe("personal site sample schema", () => {
         projectList: { label: "Project list", fields: ["label"] },
         subscribeForm: {
           label: "Subscribe form",
-          fields: ["label", "body", "operationName", "buttonLabel"],
+          fields: [
+            "label",
+            "body",
+            "operationName",
+            "operationTargetKind",
+            "operationTargetSchemaKey",
+            "operationTargetPackageAppKey",
+            "operationTargetInstallId",
+            "buttonLabel",
+          ],
         },
         header: { label: "Header", fields: ["label"] },
         headerPrimary: { label: "Header primary", fields: ["label"] },
@@ -5831,7 +5864,16 @@ describe("personal site sample schema", () => {
       projectList: { label: "Project list", fields: ["label"] },
       subscribeForm: {
         label: "Subscribe form",
-        fields: ["label", "body", "operationName", "buttonLabel"],
+        fields: [
+          "label",
+          "body",
+          "operationName",
+          "operationTargetKind",
+          "operationTargetSchemaKey",
+          "operationTargetPackageAppKey",
+          "operationTargetInstallId",
+          "buttonLabel",
+        ],
       },
       contactForm: {
         label: "Contact form",
@@ -5926,6 +5968,9 @@ describe("personal site sample schema", () => {
           fields: {
             body: { editor: "markdown", commit: "field-commit" },
             operationName: { editor: "text", commit: "field-commit" },
+            operationTargetKind: { editor: "enum", commit: "immediate" },
+            operationTargetPackageAppKey: { editor: "text", commit: "field-commit" },
+            operationTargetInstallId: { editor: "text", commit: "field-commit" },
             buttonLabel: { editor: "text", commit: "field-commit" },
           },
         },
@@ -6062,9 +6107,27 @@ describe("personal site sample schema", () => {
       fields: {
         body: { editor: "markdown" },
         operationName: { editor: "text" },
+        operationTargetKind: { editor: "enum" },
+        operationTargetSchemaKey: {
+          editor: "text",
+          visibleWhen: { field: "operationTargetKind", values: ["schemaKey"] },
+        },
+        operationTargetPackageAppKey: {
+          editor: "text",
+          visibleWhen: { field: "operationTargetKind", values: ["appInstall"] },
+        },
+        operationTargetInstallId: {
+          editor: "text",
+          visibleWhen: { field: "operationTargetKind", values: ["appInstall"] },
+        },
         buttonLabel: { editor: "text" },
       },
     });
+    expect(blockCreate.variants?.subscribeForm?.fields).not.toHaveProperty("operationKey");
+    expect(blockCreate.variants?.subscribeForm?.fields).not.toHaveProperty("successLabel");
+    expect(blockCreate.variants?.subscribeForm?.fields).not.toHaveProperty(
+      "operationNotificationMode",
+    );
     expect(blockCreate.variants?.contactForm).toMatchObject({
       presentation: "fields",
       fields: {
@@ -6174,9 +6237,30 @@ describe("personal site sample schema", () => {
       fields: {
         body: { editor: "markdown", commit: "field-commit" },
         operationName: { editor: "text", commit: "field-commit" },
+        operationTargetKind: { editor: "enum", commit: "immediate" },
+        operationTargetSchemaKey: {
+          editor: "text",
+          commit: "field-commit",
+          visibleWhen: { field: "operationTargetKind", values: ["schemaKey"] },
+        },
+        operationTargetPackageAppKey: {
+          editor: "text",
+          commit: "field-commit",
+          visibleWhen: { field: "operationTargetKind", values: ["appInstall"] },
+        },
+        operationTargetInstallId: {
+          editor: "text",
+          commit: "field-commit",
+          visibleWhen: { field: "operationTargetKind", values: ["appInstall"] },
+        },
         buttonLabel: { editor: "text", commit: "field-commit" },
       },
     });
+    expect(blockEdit.variants?.subscribeForm?.fields).not.toHaveProperty("operationKey");
+    expect(blockEdit.variants?.subscribeForm?.fields).not.toHaveProperty("successLabel");
+    expect(blockEdit.variants?.subscribeForm?.fields).not.toHaveProperty(
+      "operationNotificationMode",
+    );
     expect(blockEdit.variants?.contactForm).toMatchObject({
       presentation: "fields",
       fields: {

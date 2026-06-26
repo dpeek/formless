@@ -82,6 +82,12 @@ type SiteTreeBuildContext = {
   maxDepth: number;
 };
 
+type FixedPublicOperationTarget = {
+  schema: AppSchema;
+  publicOperationApiRoutePrefix: `/${string}`;
+  route?: SitePublicOperationTargetNode;
+};
+
 const DEFAULT_MAX_DEPTH = 16;
 const DEFAULT_SITE_PUBLIC_API_ROUTE_PREFIX = "/api/site";
 const PRIMARY_IMAGE_SLOT = "primaryImage";
@@ -439,15 +445,62 @@ function projectedPublicOperationFields(
     return undefined;
   }
 
+  const target: FixedPublicOperationTarget | undefined =
+    type === "subscribeForm"
+      ? selectSubscribeFormPublicOperationTarget(record, context)
+      : siteLocalPublicOperationTarget(context);
+
+  if (!target) {
+    return undefined;
+  }
+
   return projectSubscribeContactPublicOperation({
     blockType: type,
     recordId: record.id,
     operationName: stringValue(record.values.operationName),
-    publicOperationApiRoutePrefix: context.publicOperationApiRoutePrefix,
-    schema: context.schema,
+    publicOperationApiRoutePrefix: target.publicOperationApiRoutePrefix,
+    schema: target.schema,
+    ...(target.route ? { target: target.route } : {}),
     turnstileSiteKey: context.turnstileSiteKey,
     warnings: context.warnings,
   });
+}
+
+function selectSubscribeFormPublicOperationTarget(
+  record: StoredRecord,
+  context: SiteTreeBuildContext,
+): FixedPublicOperationTarget | undefined {
+  if (!hasPublicOperationTargetIdentity(record)) {
+    return siteLocalPublicOperationTarget(context);
+  }
+
+  const target = selectPublicOperationFormTarget(record, context, "Subscribe form");
+
+  if (!target) {
+    return undefined;
+  }
+
+  if (target.route.kind !== "appInstall" || target.route.packageAppKey !== "crm") {
+    context.warnings.push({
+      code: "invalid-public-operation-target",
+      recordId: record.id,
+      message: `Subscribe form target must resolve to an installed CRM app.`,
+    });
+    return undefined;
+  }
+
+  return {
+    schema: target.schema,
+    publicOperationApiRoutePrefix: target.route.apiRoutePrefix,
+    route: target.route,
+  };
+}
+
+function siteLocalPublicOperationTarget(context: SiteTreeBuildContext): FixedPublicOperationTarget {
+  return {
+    schema: context.schema,
+    publicOperationApiRoutePrefix: context.publicOperationApiRoutePrefix,
+  };
 }
 
 function projectedGenericPublicOperationFields(
@@ -466,7 +519,7 @@ function projectedGenericPublicOperationFields(
     return undefined;
   }
 
-  const target = selectPublicOperationFormTarget(record, context);
+  const target = selectPublicOperationFormTarget(record, context, formLabel);
 
   if (!target) {
     return undefined;
@@ -525,6 +578,7 @@ function projectedGenericPublicOperationFields(
 function selectPublicOperationFormTarget(
   record: StoredRecord,
   context: SiteTreeBuildContext,
+  formLabel: string,
 ): SitePublicOperationTargetResolution | undefined {
   const targetKind = stringValue(record.values.operationTargetKind);
 
@@ -535,12 +589,12 @@ function selectPublicOperationFormTarget(
       context.warnings.push({
         code: "missing-public-operation-target",
         recordId: record.id,
-        message: `Public operation form block "${record.id}" does not declare a target schema key.`,
+        message: `${formLabel} block "${record.id}" does not declare a target schema key.`,
       });
       return undefined;
     }
 
-    return resolvePublicOperationFormTarget(record, context, {
+    return resolvePublicOperationFormTarget(record, context, formLabel, {
       kind: "schemaKey",
       schemaKey,
     });
@@ -554,12 +608,12 @@ function selectPublicOperationFormTarget(
       context.warnings.push({
         code: "missing-public-operation-target",
         recordId: record.id,
-        message: `Public operation form block "${record.id}" does not declare an installed app target.`,
+        message: `${formLabel} block "${record.id}" does not declare an installed app target.`,
       });
       return undefined;
     }
 
-    return resolvePublicOperationFormTarget(record, context, {
+    return resolvePublicOperationFormTarget(record, context, formLabel, {
       kind: "appInstall",
       packageAppKey,
       installId,
@@ -569,7 +623,7 @@ function selectPublicOperationFormTarget(
   context.warnings.push({
     code: "missing-public-operation-target",
     recordId: record.id,
-    message: `Public operation form block "${record.id}" does not declare a supported target route kind.`,
+    message: `${formLabel} block "${record.id}" does not declare a supported target route kind.`,
   });
   return undefined;
 }
@@ -577,6 +631,7 @@ function selectPublicOperationFormTarget(
 function resolvePublicOperationFormTarget(
   record: StoredRecord,
   context: SiteTreeBuildContext,
+  formLabel: string,
   request: SitePublicOperationTargetRequest,
 ): SitePublicOperationTargetResolution | undefined {
   const target = context.publicOperationTargetResolver?.(request);
@@ -587,13 +642,22 @@ function resolvePublicOperationFormTarget(
       recordId: record.id,
       message:
         request.kind === "schemaKey"
-          ? `Public operation form target schema key "${request.schemaKey}" is unavailable.`
-          : `Public operation form target install "${request.packageAppKey}/${request.installId}" is unavailable.`,
+          ? `${formLabel} target schema key "${request.schemaKey}" is unavailable.`
+          : `${formLabel} target install "${request.packageAppKey}/${request.installId}" is unavailable.`,
     });
     return undefined;
   }
 
   return target;
+}
+
+function hasPublicOperationTargetIdentity(record: StoredRecord): boolean {
+  return (
+    stringValue(record.values.operationTargetKind) !== undefined ||
+    stringValue(record.values.operationTargetSchemaKey) !== undefined ||
+    stringValue(record.values.operationTargetPackageAppKey) !== undefined ||
+    stringValue(record.values.operationTargetInstallId) !== undefined
+  );
 }
 
 function selectGenericPublicOperation(

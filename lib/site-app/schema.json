@@ -1292,7 +1292,16 @@
         },
         "subscribeForm": {
           "label": "Subscribe form",
-          "fields": ["label", "body", "operationName", "buttonLabel"]
+          "fields": [
+            "label",
+            "body",
+            "operationName",
+            "operationTargetKind",
+            "operationTargetSchemaKey",
+            "operationTargetPackageAppKey",
+            "operationTargetInstallId",
+            "buttonLabel"
+          ]
         },
         "contactForm": {
           "label": "Contact form",
@@ -1847,6 +1856,34 @@
               "editor": "text",
               "commit": "field-commit"
             },
+            "operationTargetKind": {
+              "editor": "enum",
+              "commit": "immediate"
+            },
+            "operationTargetSchemaKey": {
+              "editor": "text",
+              "commit": "field-commit",
+              "visibleWhen": {
+                "field": "operationTargetKind",
+                "values": ["schemaKey"]
+              }
+            },
+            "operationTargetPackageAppKey": {
+              "editor": "text",
+              "commit": "field-commit",
+              "visibleWhen": {
+                "field": "operationTargetKind",
+                "values": ["appInstall"]
+              }
+            },
+            "operationTargetInstallId": {
+              "editor": "text",
+              "commit": "field-commit",
+              "visibleWhen": {
+                "field": "operationTargetKind",
+                "values": ["appInstall"]
+              }
+            },
             "buttonLabel": {
               "editor": "text",
               "commit": "field-commit"
@@ -2143,6 +2180,34 @@
             "operationName": {
               "editor": "text",
               "commit": "field-commit"
+            },
+            "operationTargetKind": {
+              "editor": "enum",
+              "commit": "immediate"
+            },
+            "operationTargetSchemaKey": {
+              "editor": "text",
+              "commit": "field-commit",
+              "visibleWhen": {
+                "field": "operationTargetKind",
+                "values": ["schemaKey"]
+              }
+            },
+            "operationTargetPackageAppKey": {
+              "editor": "text",
+              "commit": "field-commit",
+              "visibleWhen": {
+                "field": "operationTargetKind",
+                "values": ["appInstall"]
+              }
+            },
+            "operationTargetInstallId": {
+              "editor": "text",
+              "commit": "field-commit",
+              "visibleWhen": {
+                "field": "operationTargetKind",
+                "values": ["appInstall"]
+              }
             },
             "buttonLabel": {
               "editor": "text",
@@ -3098,6 +3163,30 @@
             "operationName": {
               "editor": "text"
             },
+            "operationTargetKind": {
+              "editor": "enum"
+            },
+            "operationTargetSchemaKey": {
+              "editor": "text",
+              "visibleWhen": {
+                "field": "operationTargetKind",
+                "values": ["schemaKey"]
+              }
+            },
+            "operationTargetPackageAppKey": {
+              "editor": "text",
+              "visibleWhen": {
+                "field": "operationTargetKind",
+                "values": ["appInstall"]
+              }
+            },
+            "operationTargetInstallId": {
+              "editor": "text",
+              "visibleWhen": {
+                "field": "operationTargetKind",
+                "values": ["appInstall"]
+              }
+            },
             "buttonLabel": {
               "editor": "text"
             }
@@ -3452,6 +3541,34 @@
             "operationName": {
               "editor": "text",
               "commit": "field-commit"
+            },
+            "operationTargetKind": {
+              "editor": "enum",
+              "commit": "immediate"
+            },
+            "operationTargetSchemaKey": {
+              "editor": "text",
+              "commit": "field-commit",
+              "visibleWhen": {
+                "field": "operationTargetKind",
+                "values": ["schemaKey"]
+              }
+            },
+            "operationTargetPackageAppKey": {
+              "editor": "text",
+              "commit": "field-commit",
+              "visibleWhen": {
+                "field": "operationTargetKind",
+                "values": ["appInstall"]
+              }
+            },
+            "operationTargetInstallId": {
+              "editor": "text",
+              "commit": "field-commit",
+              "visibleWhen": {
+                "field": "operationTargetKind",
+                "values": ["appInstall"]
+              }
             },
             "buttonLabel": {
               "editor": "text",

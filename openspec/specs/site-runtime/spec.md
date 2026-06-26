@@ -157,27 +157,48 @@ projection, routes, media delivery, or public action storage contracts.
 
 ### Requirement: Subscribe Form Public Tree Projection
 
-The system SHALL project subscribe form blocks into public Site trees without exposing private challenge or runtime secrets.
+The system SHALL project subscribe form blocks into public Site trees for the
+current Site app or an explicitly configured CRM app target without exposing
+private challenge or runtime secrets.
 
 #### Scenario: Project subscribe form operation facts
 
 - GIVEN the public Site tree includes a `subscribeForm` block
-- WHEN the block references a publicly executable operation
+- WHEN the block references a publicly executable operation on the current Site
+  app or a configured installed CRM app target
 - THEN the projected block includes the operation key and target public operation route
 - AND the referenced operation is a public-eligible create, record-plan, or
   subscribe operation handler
 - AND the target public operation route is built through the shared public
   operation route contract from the runtime-owned target API route prefix,
   entity key, and operation key
+- AND an installed CRM target route is resolved from the block's stored target
+  route identity rather than inferred from public request path
 - AND subscribe-specific operation eligibility, operation binding warnings, and
   projected route facts are owned by the Site subscribe public operation adapter
 - AND generic public operation input field projection is not used to render the
   subscribe-specific email input
 - AND the projected block does not include Turnstile secrets or subscriber data
 
+#### Scenario: Project installed CRM subscribe target
+
+- GIVEN the public Site tree includes a `subscribeForm` block with
+  `operationTargetKind` `appInstall`, `operationTargetPackageAppKey` `crm`,
+  `operationTargetInstallId` `crm`, and operation name `subscribe`
+- WHEN runtime target resolution finds the installed CRM app and its public
+  `subscription.subscribe` operation
+- THEN the projected block includes canonical operation key
+  `subscription.subscribe`
+- AND the target public operation route is
+  `/api/app-installs/crm/crm/public/operations/subscription/subscribe`
+- AND the projection does not include generic public operation input field
+  metadata, Turnstile secrets, raw app storage records, app install records, or
+  subscriber records
+
 #### Scenario: Warn for missing public operation
 
-- GIVEN a `subscribeForm` block references an operation that is missing or not publicly executable
+- GIVEN a `subscribeForm` block references an operation that is missing, not
+  publicly executable, or targets an unavailable app storage identity
 - WHEN the public tree is projected
 - THEN the public tree includes a warning
 - AND public rendering does not expose a working form for that block
@@ -285,7 +306,10 @@ The system SHALL support a Site `subscribeForm` block that binds public page con
 
 - GIVEN a Site author creates a `subscribeForm` block
 - WHEN the block is stored
-- THEN the block stores normal flat block fields for label, body, operation name, and button label
+- THEN the block stores normal flat block fields for label, body, operation
+  name, optional target app route identity, and button label
+- AND absent target route identity keeps the existing Site-local subscribe
+  operation binding as the default
 - AND the block can be placed under public page and group composition branches
 
 #### Scenario: Subscribe form variant is parsed
@@ -294,8 +318,9 @@ The system SHALL support a Site `subscribeForm` block that binds public page con
 - WHEN the schema is parsed
 - THEN `subscribeForm` is a valid block type and union variant
 - AND its stored operation reference resolves through source-declared operation
-  keys and operation handler capability facts
-- AND generated Site authoring exposes the fields needed to configure the form
+  keys, optional target app route facts, and operation handler capability facts
+- AND generated Site authoring exposes the fields needed to configure the fixed
+  subscribe form and its optional installed CRM target
 
 ### Requirement: Contact Form Block
 

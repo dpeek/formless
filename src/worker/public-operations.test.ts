@@ -597,7 +597,7 @@ describe("public operation runtime", () => {
     ]);
   });
 
-  it("executes installed CRM public subscribe operations in CRM install storage", async () => {
+  it("executes CRM-targeted Site subscribe forms in CRM install storage", async () => {
     const crmApiPrefix = `/api/app-installs/crm/${defaultCrmInstallId}`;
     const crmRoute = `${crmApiPrefix}/public/operations/subscription/subscribe`;
 
@@ -612,6 +612,9 @@ describe("public operation runtime", () => {
         type: "subscribeForm",
         label: "Join the CRM isolation list",
         operationName: "subscribe",
+        operationTargetKind: "appInstall",
+        operationTargetPackageAppKey: "crm",
+        operationTargetInstallId: defaultCrmInstallId,
         buttonLabel: "Join",
       },
     });
@@ -630,11 +633,34 @@ describe("public operation runtime", () => {
     const crmBefore = await getJson<BootstrapResponse>(`${crmApiPrefix}/bootstrap`);
     const siteBefore = await getJson<BootstrapResponse>("/api/site/bootstrap");
     const siteTree = await getJson<SitePageTreeResponse>("/api/site/tree/home");
+    const siteSubscribeForm = siteTree.page.placements.find(
+      (placement) => placement.block.id === siteSubscribeBlock.record.id,
+    );
+    const projectedOperation = siteSubscribeForm?.block.publicOperation;
+
+    expect(projectedOperation).toMatchObject({
+      entityName: "subscription",
+      operationName: "subscribe",
+      canonicalKey: "subscription.subscribe",
+      target: {
+        kind: "appInstall",
+        packageAppKey: "crm",
+        installId: defaultCrmInstallId,
+        apiRoutePrefix: crmApiPrefix,
+      },
+      route: crmRoute,
+    });
+
+    if (!projectedOperation) {
+      throw new Error("Expected CRM-targeted subscribe form operation.");
+    }
+
     const accepted = await postPublicOperation(
-      crmRoute,
+      projectedOperation.route,
       publicSubscribeBody({
-        idempotencyKey: "crm-installed-subscribe",
+        idempotencyKey: "crm-targeted-site-subscribe",
         input: { email: "Crm.Visitor@Example.com" },
+        sourceBlockId: siteSubscribeBlock.record.id,
       }),
     );
     const body = (await accepted.json()) as PublicOperationResponse;
@@ -654,13 +680,9 @@ describe("public operation runtime", () => {
         record.values.emailAddress === emailAddresses[0]?.id &&
         record.values.audience === defaultAudiences[0]?.id,
     );
-    const siteSubscribeForm = siteTree.page.placements.find(
-      (placement) => placement.block.id === siteSubscribeBlock.record.id,
-    );
-
     expect(accepted.status).toBe(200);
     expect(body).toMatchObject({
-      invocationId: "operation:subscription.subscribe:crm-installed-subscribe",
+      invocationId: "operation:subscription.subscribe:crm-targeted-site-subscribe",
       operation: {
         entityName: "subscription",
         operationName: "subscribe",
@@ -721,19 +743,16 @@ describe("public operation runtime", () => {
       sourceOperationKey: "subscription.subscribe",
       sourceHost: "example.com",
       sourcePath: crmRoute,
-      sourceSiteBlockId: "rec_site_subscribe_form",
+      sourceSiteBlockId: siteSubscribeBlock.record.id,
     });
     expect(subscriptions[0]?.values.consentedAt).toEqual(expect.any(String));
     expect(subscriptions[0]?.values).not.toHaveProperty("sourceIp");
     expect(subscriptions[0]?.values).not.toHaveProperty("sourceUserAgent");
     expect(siteAfter.records).toEqual(siteBefore.records);
-    expect(siteSubscribeForm?.block.publicOperation).toMatchObject({
-      entityName: "subscription",
-      operationName: "subscribe",
-      canonicalKey: "subscription.subscribe",
-      route: "/api/site/public/operations/subscription/subscribe",
-    });
-    expect(JSON.stringify(siteTree)).not.toContain(crmRoute);
+    expect(contactSubscriptionRecords(siteAfter.records)).toEqual(
+      contactSubscriptionRecords(siteBefore.records),
+    );
+    expect(projectedOperation).not.toHaveProperty("fields");
     expectTurnstileRequests(turnstileRequests, [
       {
         secret: turnstileSecret,

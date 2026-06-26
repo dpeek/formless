@@ -78,6 +78,16 @@ The system SHALL provide a public subscribe operation that upserts reusable cont
   the CRM app storage identity
 - AND Site-owned subscription records are not written by that CRM operation
 
+#### Scenario: Site subscribe can target CRM storage
+
+- GIVEN a public Site `subscribeForm` block targets an installed CRM app and
+  passes its Site block id as source context
+- WHEN a visitor submits a valid email address through that projected form
+- THEN the subscribe operation writes or reuses contact, email-address,
+  default audience, and subscription records in the CRM app storage identity
+- AND no Site-owned contact subscription records are written for that
+  CRM-targeted submission
+
 ### Requirement: Subscription Consent Source
 
 The system SHALL preserve source context for public subscription consent.

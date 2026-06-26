@@ -2325,11 +2325,22 @@ describe("home view model collections", () => {
     expect(createVariantFields).toMatchObject({
       post: ["date", "body", "href"],
       project: ["date", "body", "href"],
+      subscribeForm: [
+        "body",
+        "operationName",
+        "operationTargetKind",
+        "operationTargetSchemaKey",
+        "operationTargetPackageAppKey",
+        "operationTargetInstallId",
+        "buttonLabel",
+      ],
       link: ["linkTargetMode", "linkTargetBlock", "href", "icon"],
       markdown: ["body"],
       feature: ["body", "alignment"],
       image: ["href"],
     });
+    expect(createVariantFields.subscribeForm).not.toContain("operationKey");
+    expect(createVariantFields.subscribeForm).not.toContain("operationNotificationMode");
   });
 
   it("characterizes site authoring rich text fields as string-backed editor hints", () => {

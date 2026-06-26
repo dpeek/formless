@@ -153,15 +153,23 @@ identity.
 
 ### Requirement: CRM Subscribe Boundaries
 
-CRM SHALL own public subscribe writes for CRM records without taking over Site
-subscribe block routing or email delivery in this slice.
+CRM SHALL own public subscribe writes for CRM records when CRM public routes are
+targeted without retiring Site-owned subscriber behavior or adding email
+delivery in this slice.
 
-#### Scenario: Site subscribe behavior unchanged
+#### Scenario: Site subscribe targets CRM explicitly
 
-- **GIVEN** Site subscribe forms and Site-owned subscriber records exist
-- **WHEN** CRM public subscribe is available
-- **THEN** Site subscribe forms continue to target the existing Site subscribe behavior
-- **AND** no Site subscribe form writes CRM records in this change
+- **GIVEN** Site subscribe forms, Site-owned subscriber records, and an installed
+  CRM app exist
+- **WHEN** a Site `subscribeForm` block explicitly targets the installed CRM app
+  and the visitor submits the projected form
+- **THEN** the submission posts to the CRM public subscribe route and writes CRM
+  contact, email-address, audience, and subscription records in the CRM app
+  storage identity
+- **AND** Site subscribe forms without an explicit CRM target continue to target
+  the existing Site subscribe behavior
+- **AND** a CRM-targeted Site subscribe form does not write Site-owned
+  subscriber records
 
 #### Scenario: No email queue execution
 

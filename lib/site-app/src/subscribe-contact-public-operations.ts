@@ -5,7 +5,11 @@ import {
   type EntityOperationSchema,
 } from "@dpeek/formless-schema";
 import { buildPublicOperationTargetRoute } from "@dpeek/formless-public-operations";
-import type { SitePublicOperationNode, SiteTreeWarning } from "./types.ts";
+import type {
+  SitePublicOperationNode,
+  SitePublicOperationTargetNode,
+  SiteTreeWarning,
+} from "./types.ts";
 
 type SubscribeContactPublicOperationBlockType = "subscribeForm" | "contactForm";
 
@@ -15,6 +19,7 @@ type SubscribeContactPublicOperationProjectionInput = {
   operationName: string | undefined;
   publicOperationApiRoutePrefix: `/${string}`;
   schema: AppSchema;
+  target?: SitePublicOperationTargetNode;
   turnstileSiteKey: string | undefined;
   warnings: SiteTreeWarning[];
 };
@@ -83,6 +88,7 @@ export function projectSubscribeContactPublicOperation(
     entityName: operation.entityName,
     operationName: input.operationName,
     canonicalKey: operation.canonicalKey,
+    ...(input.target ? { target: input.target } : {}),
     route: buildPublicOperationTargetRoute({
       targetApiRoutePrefix: input.publicOperationApiRoutePrefix,
       entityKey: operation.entityName,
