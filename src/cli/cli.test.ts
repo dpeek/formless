@@ -543,7 +543,6 @@ describe("Formless CLI", () => {
     const responses = responseQueue();
     const logs: string[] = [];
     const setupInputs: CreateFormlessInstanceOwnerSetupCapabilityInput[] = [];
-    const setupUrl = `https://personal.dpeek.workers.dev/setup?token=${setupToken}`;
 
     await writeWorkspaceManifest(workspaceRoot);
     await writeWorkspaceControlPlaneStorageSnapshot(workspaceRoot);
@@ -570,16 +569,7 @@ describe("Formless CLI", () => {
         setupToken,
       },
     ]);
-    expect(logs).toEqual([
-      [
-        "Instance owner setup URL created.",
-        `Workspace: ${path.relative(tempDir, workspaceRoot)}.`,
-        "Target: instance.primary (https://personal.dpeek.workers.dev).",
-        "Owner setup: incomplete.",
-        `Setup URL: ${setupUrl}.`,
-        "Browser opened: no.",
-      ].join("\n"),
-    ]);
+    expect(logs).toHaveLength(1);
     expect(logs.join("\n")).not.toContain("explicit-admin-token");
     expect(logs.join("\n")).not.toContain("/setup/capability");
     expect(logs.join("\n")).not.toContain("capabilityCreated");
@@ -623,14 +613,7 @@ describe("Formless CLI", () => {
     expectNoOwnerSetupProtectedBootstrapReads(requests);
     expect(setupInputs).toEqual([]);
     expect(openedUrls).toEqual([]);
-    expect(logs).toEqual([
-      [
-        "Instance owner setup already complete.",
-        `Workspace: ${path.relative(tempDir, workspaceRoot)}.`,
-        "Target: instance.primary (https://personal.dpeek.workers.dev).",
-        "Owner setup: complete (David Peek <david@example.com>).",
-      ].join("\n"),
-    ]);
+    expect(logs).toHaveLength(1);
   });
 
   it("requires an admin token after reading incomplete owner setup status", async () => {
@@ -709,8 +692,7 @@ describe("Formless CLI", () => {
       },
     ]);
     expect(openedUrls).toEqual([setupUrl]);
-    expect(logs.at(-1)).toContain(`Setup URL: ${setupUrl}.`);
-    expect(logs.at(-1)).toContain("Browser opened: yes.");
+    expect(logs).toHaveLength(1);
     expect(logs.join("\n")).not.toContain("local-admin-token");
     expect(logs.join("\n")).not.toContain("generated-token");
     expect(logs.join("\n")).not.toContain("/setup/capability");
@@ -820,17 +802,6 @@ describe("Formless CLI", () => {
       requests.map(() => "Bearer stored-archive-token"),
     );
     expect(logs).toHaveLength(1);
-    expect(logs[0]).toContain("Workspace operation: pull (succeeded).");
-    expect(logs[0]).toContain("Summary: Workspace pulled.");
-    expect(logs[0]).toContain("mode: apply.");
-    expect(logs[0]).toContain("noop: false.");
-    expect(logs[0]).toContain("syncPlan:");
-    expect(logs[0]).toContain('"changedAreas":["apps"]');
-    expect(logs[0]).toContain('"source":"instance.primary"');
-    expect(logs[0]).toContain('"target":"workspace"');
-    expect(logs[0]).toContain('"status":"changes"');
-    expect(logs[0]).toContain("target: instance.primary.");
-    expect(logs[0]).not.toContain("drift");
     expect(logs.join("\n")).not.toContain("stored-archive-token");
     expect(JSON.stringify(pulledControlPlane)).not.toContain("stored-archive-token");
     await expect(
@@ -838,7 +809,7 @@ describe("Formless CLI", () => {
     ).resolves.not.toContain("stored-archive-token");
   });
 
-  it("prints the exact no-op message for repeat pull", async () => {
+  it("emits output for repeat pull without mutation", async () => {
     const tempDir = await makeTempDir();
     const workspaceRoot = path.join(tempDir, "personal-sites");
     const requests: CapturedFetchRequest[] = [];
@@ -870,13 +841,11 @@ describe("Formless CLI", () => {
       cliDeps(tempDir, { fetch: fetcher, logs }),
     );
 
-    expect(logs).toEqual(["Everything up to date."]);
-    expect(logs.join("\n")).not.toContain("drift");
-    expect(logs.join("\n")).not.toContain("deploy");
+    expect(logs).toHaveLength(1);
     expect(requests.some((request) => request.method === "POST")).toBe(false);
   });
 
-  it("reports pull dry-run replacement without rewriting local workspace source", async () => {
+  it("keeps pull dry-run replacement read-only", async () => {
     const tempDir = await makeTempDir();
     const workspaceRoot = path.join(tempDir, "personal-sites");
     const requests: CapturedFetchRequest[] = [];
@@ -921,17 +890,6 @@ describe("Formless CLI", () => {
     );
 
     expect(logs).toHaveLength(1);
-    expect(logs[0]).toContain("Workspace operation: pull (succeeded).");
-    expect(logs[0]).toContain("mode: dry-run.");
-    expect(logs[0]).toContain("noop: false.");
-    expect(logs[0]).toContain("changedStatePaths:");
-    expect(logs[0]).toContain("state/apps/david.json");
-    expect(logs[0]).toContain("state/apps/james.json");
-    expect(logs[0]).toContain("state/apps/orphan.json");
-    expect(logs[0]).toContain("state/media/media/david/media/images/cover.png");
-    expect(logs[0]).toContain("state/media/media/james/media/images/cover.png");
-    expect(logs[0]).toContain("state/media/media/orphan/media/images/old.png");
-    expect(logs[0]).toContain("prunedStatePaths:");
     await expect(
       readFile(path.join(workspaceRoot, "state/apps/james.json"), "utf8"),
     ).resolves.toContain('"storageIdentity": "app:james"');
@@ -1134,17 +1092,6 @@ describe("Formless CLI", () => {
     expect(appState.schema).toBeUndefined();
     expect(deployInputs).toEqual([]);
     expect(logs).toHaveLength(1);
-
-    expect(logs[0]).toContain("Workspace operation: push (succeeded).");
-    expect(logs[0]).toContain("mode: dry-run.");
-    expect(logs[0]).toContain("target: instance.primary.");
-    expect(logs[0]).toContain("dryRunRestoreOk: false.");
-    expect(logs[0]).toContain("sync: changes.");
-    expect(logs[0]).toContain("syncPlan:");
-    expect(logs[0]).toContain('"changedAreas":["apps","media","records"]');
-    expect(logs[0]).toContain('"source":"workspace"');
-    expect(logs[0]).toContain('"target":"instance.primary"');
-    expect(logs[0]).not.toContain("drift");
   });
 
   it("performs first push with provider reconciliation before exact restore", async () => {
@@ -1304,11 +1251,9 @@ describe("Formless CLI", () => {
       readFile(path.join(workspaceRoot, ".formless/instance.env"), "utf8"),
     ).resolves.toBe("FORMLESS_ADMIN_TOKEN=generated-token\n");
     expect(logs).toHaveLength(1);
-    expect(logs[0]).toContain("Workspace operation: push (succeeded).");
-    expect(logs[0]).toContain("mode: apply.");
   });
 
-  it("reports first push dry-run when the target Worker has not been deployed", async () => {
+  it("keeps first push dry-run read-only when the target Worker has not been deployed", async () => {
     const tempDir = await makeTempDir();
     const workspaceRoot = path.join(tempDir, "personal-sites");
     const requests: CapturedFetchRequest[] = [];
@@ -1374,10 +1319,6 @@ describe("Formless CLI", () => {
       "GET https://personal.dpeek.workers.dev/api/formless/app-installs",
     ]);
     expect(logs).toHaveLength(1);
-    expect(logs[0]).toContain("Workspace operation: push (succeeded).");
-    expect(logs[0]).toContain("mode: dry-run.");
-    expect(logs[0]).toContain("dryRunRestoreOk: none.");
-    expect(logs[0]).toContain("sync: changes.");
   });
 
   it("runs Cloudflare OAuth preflight before non-dry-run push with an Alchemy credential ref", async () => {
@@ -1473,8 +1414,7 @@ describe("Formless CLI", () => {
     });
     expect(JSON.stringify(snapshot)).not.toContain("formless-access-token");
     expect(JSON.stringify(snapshot)).not.toContain("formless-refresh-token");
-    expect(logs.at(-1)).toContain("Workspace operation: push (succeeded).");
-    expect(logs.at(-1)).toContain("mode: apply.");
+    expect(logs).toHaveLength(2);
   });
 
   it("onboards a missing local Formless OAuth secret for the selected push target", async () => {
@@ -1661,8 +1601,7 @@ describe("Formless CLI", () => {
     ).toBe(true);
     expect(JSON.stringify(snapshot)).not.toContain("formless-access-token");
     expect(JSON.stringify(snapshot)).not.toContain("formless-refresh-token");
-    expect(logs.at(-1)).toContain("Workspace operation: push (succeeded).");
-    expect(logs.at(-1)).toContain("mode: apply.");
+    expect(logs).toHaveLength(2);
   });
 
   it("prompts for display-safe account selection when OAuth sees multiple accounts", async () => {
@@ -1938,8 +1877,6 @@ describe("Formless CLI", () => {
     });
     expect(openedUrls).toEqual([]);
     expect(logs).toHaveLength(1);
-    expect(logs[0]).toContain("Workspace operation: push (succeeded).");
-    expect(logs[0]).toContain("mode: dry-run.");
   });
 
   it("does not refresh existing Formless OAuth credentials during push dry-run", async () => {
@@ -2005,8 +1942,6 @@ describe("Formless CLI", () => {
       false,
     );
     expect(logs).toHaveLength(1);
-    expect(logs[0]).toContain("Workspace operation: push (succeeded).");
-    expect(logs[0]).toContain("mode: dry-run.");
   });
 
   it("refreshes Formless OAuth credentials before ambient Cloudflare token fallback during push", async () => {
@@ -2152,7 +2087,7 @@ describe("Formless CLI", () => {
     }
   });
 
-  it("prints the exact no-op message for repeat push", async () => {
+  it("emits output for repeat push without mutation", async () => {
     const tempDir = await makeTempDir();
     const workspaceRoot = path.join(tempDir, "personal-sites");
     const requests: CapturedFetchRequest[] = [];
@@ -2185,9 +2120,7 @@ describe("Formless CLI", () => {
       cliDeps(tempDir, { fetch: fetcher, logs }),
     );
 
-    expect(logs).toEqual(["Everything up to date."]);
-    expect(logs.join("\n")).not.toContain("drift");
-    expect(logs.join("\n")).not.toContain("deploy");
+    expect(logs).toHaveLength(1);
     expect(requests.some((request) => request.method === "POST")).toBe(false);
   });
 
@@ -2243,11 +2176,6 @@ describe("Formless CLI", () => {
       ),
     ).toEqual([]);
     expect(logs).toHaveLength(1);
-    expect(logs[0]).toContain("Workspace operation: push (succeeded).");
-    expect(logs[0]).toContain("mode: apply.");
-    expect(logs[0]).toContain("runtimeRebuild: applied.");
-    expect(logs[0]).toContain('"reason":"force"');
-    expect(logs[0]).toContain("sync: up-to-date.");
   });
 
   it("recovers invalid remote control-plane records with forced push replacement", async () => {
@@ -2302,14 +2230,6 @@ describe("Formless CLI", () => {
     );
     expect(JSON.stringify(restoreBody.archive)).not.toContain("legacy-control-plane-record");
     expect(logs).toHaveLength(1);
-    expect(logs[0]).toContain("Workspace operation: push (succeeded).");
-    expect(logs[0]).toContain("mode: apply.");
-    expect(logs[0]).toContain("forcedRecovery: applied.");
-    expect(logs[0]).toContain("backupEvidence: unavailable.");
-    expect(logs[0]).toContain("remoteComparisonEvidence: unavailable.");
-    expect(logs[0]).toContain("restoreDryRunEvidence: unavailable.");
-    expect(logs[0]).toContain('"action":"replace-unreadable-target"');
-    expect(logs[0]).toContain('"remoteReadFailureType":"validation"');
   });
 
   it("keeps normal push strict when remote control-plane records are invalid", async () => {
@@ -2357,7 +2277,7 @@ describe("Formless CLI", () => {
     expect(logs).toEqual([]);
   });
 
-  it("keeps forced push dry-run read-only while reporting invalid remote recovery", async () => {
+  it("keeps forced push dry-run read-only during invalid remote recovery", async () => {
     const tempDir = await makeTempDir();
     const workspaceRoot = path.join(tempDir, "personal-sites");
     const requests: CapturedFetchRequest[] = [];
@@ -2411,14 +2331,6 @@ describe("Formless CLI", () => {
       appStateBefore,
     );
     expect(logs).toHaveLength(1);
-    expect(logs[0]).toContain("Workspace operation: push (succeeded).");
-    expect(logs[0]).toContain("mode: dry-run.");
-    expect(logs[0]).toContain("forcedRecovery: planned.");
-    expect(logs[0]).toContain("runtimeRebuild: available.");
-    expect(logs[0]).toContain("backupEvidence: unavailable.");
-    expect(logs[0]).toContain("remoteComparisonEvidence: unavailable.");
-    expect(logs[0]).toContain("restoreDryRunEvidence: unavailable.");
-    expect(logs[0]).toContain('"action":"replace-unreadable-target"');
   });
 
   it("rebuilds runtime extensions on repeat push apply without restoring archive data", async () => {
@@ -2495,15 +2407,9 @@ describe("Formless CLI", () => {
       ),
     ).toBe(true);
     expect(logs).toHaveLength(1);
-    expect(logs[0]).toContain("Workspace operation: push (succeeded).");
-    expect(logs[0]).toContain("mode: apply.");
-    expect(logs[0]).toContain("runtimeRebuild: applied.");
-    expect(logs[0]).toContain("sync: up-to-date.");
-    expect(logs[0]).not.toContain("public-renderer.browser.tsx");
-    expect(logs[0]).not.toContain("public-renderer.worker.tsx");
   });
 
-  it("reports runtime extension rebuild availability on repeat push dry-run without mutation", async () => {
+  it("keeps repeat push dry-run read-only when runtime extension rebuild is available", async () => {
     const tempDir = await makeTempDir();
     const workspaceRoot = path.join(tempDir, "personal-sites");
     const requests: CapturedFetchRequest[] = [];
@@ -2557,13 +2463,6 @@ describe("Formless CLI", () => {
     expect(deployInputs).toEqual([]);
     expect(requests.some((request) => request.method === "POST")).toBe(false);
     expect(logs).toHaveLength(1);
-    expect(logs[0]).toContain("Workspace operation: push (succeeded).");
-    expect(logs[0]).toContain("mode: dry-run.");
-    expect(logs[0]).toContain("noop: true.");
-    expect(logs[0]).toContain("runtimeRebuild: available.");
-    expect(logs[0]).toContain("sync: up-to-date.");
-    expect(logs[0]).not.toContain("public-renderer.browser.tsx");
-    expect(logs[0]).not.toContain("public-renderer.worker.tsx");
   });
 
   it("treats matching app records and schema provenance as repeat push no-op when remote schema bodies differ", async () => {
@@ -2625,7 +2524,7 @@ describe("Formless CLI", () => {
       cliDeps(tempDir, { fetch: fetcher, logs }),
     );
 
-    expect(logs).toEqual(["Everything up to date."]);
+    expect(logs).toHaveLength(1);
     expect(requests.some((request) => request.method === "POST")).toBe(false);
   });
 
@@ -2694,8 +2593,7 @@ describe("Formless CLI", () => {
       toHost: "dpeek.com",
     });
     expect(JSON.stringify(restoreBody.archive.controlPlane)).not.toContain("redirect-intent");
-    expect(logs[0]).toContain("Workspace operation: push (succeeded).");
-    expect(logs[0]).toContain("mode: dry-run.");
+    expect(logs).toHaveLength(1);
   });
 
   it("backs up, dry-runs, and applies instance workspace push by default", async () => {
@@ -2813,11 +2711,6 @@ describe("Formless CLI", () => {
       ),
     ).resolves.toContain('"kind": "formless.instanceArchive"');
     expect(logs).toHaveLength(1);
-    expect(logs[0]).toContain("Workspace operation: push (succeeded).");
-    expect(logs[0]).toContain("Summary: Workspace push applied.");
-    expect(logs[0]).toContain("mode: apply.");
-    expect(logs[0]).toContain("dryRunRestoreOk: true.");
-    expect(logs[0]).toContain("applyRestoreOk: true.");
   });
 
   it("applies push when target data differs without a public stale acknowledgement flag", async () => {
@@ -2972,7 +2865,7 @@ describe("Formless CLI", () => {
     await expect(
       readFile(path.join(workspaceRoot, ".formless/instance.env"), "utf8"),
     ).resolves.toBe("FORMLESS_ADMIN_TOKEN=generated-token\n");
-    expect(logs.at(-1)).toContain("Instance workspace admin token rotated.");
+    expect(logs).toHaveLength(2);
   });
 
   it("starts instance workspace dev from an empty workspace after selecting a workspace name", async () => {
@@ -4149,27 +4042,7 @@ describe("Formless CLI", () => {
       readFile(path.join(workspaceRoot, ".formless/instance.env"), "utf8"),
     ).resolves.toBe("FORMLESS_ADMIN_TOKEN=x\n");
     expect(await pathExists(deploymentStateRoot)).toBe(false);
-    expect(logs).toEqual([
-      [
-        "Instance workspace destroyed.",
-        `Workspace: ${path.relative(tempDir, workspaceRoot)}.`,
-        "Target: instance.primary (https://personal.dpeek.workers.dev).",
-        "Worker: personal.",
-        "Durable Object namespace: personal-authority.",
-        "Media bucket: personal-media.",
-        "Route provider resources: 2 provider resources from 2 routes (instance:route; dpeek.com, old.dpeek.com).",
-        "Destroyed resources: Worker destroyed, Durable Object namespace destroyed, R2 media bucket destroyed, Turnstile widget destroyed, Worker assets destroyed, Worker secrets destroyed, custom domains 2, DNS records 0, Alchemy state destroyed.",
-        `Ignored deploy state: ${path.relative(tempDir, deploymentStateRoot)}.`,
-        `Deployment facts: ${path.relative(
-          tempDir,
-          path.join(deploymentStateRoot, "formless.instance.json"),
-        )}.`,
-        `Local deploy secrets: ${path.relative(
-          tempDir,
-          path.join(deploymentStateRoot, "deploy.env"),
-        )}.`,
-      ].join("\n"),
-    ]);
+    expect(logs).toHaveLength(1);
   });
 
   it("destroys a local-first workspace through the top-level command", async () => {
@@ -4229,8 +4102,6 @@ describe("Formless CLI", () => {
 
     expect(destroyInputs).toHaveLength(1);
     expect(logs).toHaveLength(1);
-    expect(logs[0]).toContain("Turnstile widget destroyed");
-    expect(logs[0]).toContain("Destroyed resources:");
     expect(logs.join("\n")).not.toContain("state-cf-token");
     expect(logs.join("\n")).not.toContain("alchemy-password");
     expect(logs.join("\n")).not.toContain("FORMLESS_TURNSTILE_SECRET_KEY");

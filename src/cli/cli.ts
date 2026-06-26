@@ -24,6 +24,12 @@ import {
   runFormlessCliWorkspacePushCredentialPreflight,
   type FormlessCliCloudflareOAuthAccountSelectionInput,
 } from "./cli-push-credential-preflight.ts";
+import {
+  formatCliInstanceOwnerSetupOutput,
+  formatCliInstanceWorkspaceDestroyOutput,
+  formatCliInstanceWorkspaceTokenAdoptOutput,
+  formatCliInstanceWorkspaceTokenRotateOutput,
+} from "./cli-direct-workspace-command-formatter.ts";
 import { runFormlessCliWorkspaceOperationCommand } from "./cli-workspace-command-adapter.ts";
 import type {
   InstanceDomainProviderManualCleanupResponse,
@@ -452,7 +458,7 @@ export async function runFormlessCli(
         },
         dependencies,
       );
-      dependencies.log(formatInstanceWorkspaceDestroyResult(result, dependencies.cwd));
+      dependencies.log(formatCliInstanceWorkspaceDestroyOutput(result, dependencies.cwd));
       return;
     }
     case "workspaceTokenAdopt": {
@@ -464,7 +470,7 @@ export async function runFormlessCli(
         },
         dependencies,
       );
-      dependencies.log(formatInstanceWorkspaceTokenAdoptResult(result, dependencies.cwd));
+      dependencies.log(formatCliInstanceWorkspaceTokenAdoptOutput(result, dependencies.cwd));
       return;
     }
     case "workspaceTokenRotate": {
@@ -476,7 +482,7 @@ export async function runFormlessCli(
         },
         dependencies,
       );
-      dependencies.log(formatInstanceWorkspaceTokenRotateResult(result, dependencies.cwd));
+      dependencies.log(formatCliInstanceWorkspaceTokenRotateOutput(result, dependencies.cwd));
       return;
     }
     case "workspaceOwnerSetup": {
@@ -489,7 +495,7 @@ export async function runFormlessCli(
         },
         dependencies,
       );
-      dependencies.log(formatInstanceOwnerSetupResult(result, dependencies.cwd));
+      dependencies.log(formatCliInstanceOwnerSetupOutput(result, dependencies.cwd));
       return;
     }
   }
@@ -1336,107 +1342,6 @@ function runCommandWithSpawn(
   });
 }
 
-function formatInstanceWorkspaceTokenAdoptResult(
-  result: AdoptFormlessInstanceWorkspaceAdminTokenResult,
-  cwd: string,
-): string {
-  return [
-    "Instance workspace admin token adopted.",
-    `Workspace: ${formatCliPath(cwd, result.workspaceRoot)}.`,
-    `Secret state: ${formatCliPath(cwd, result.secretPath)}.`,
-    `Target: ${formatSelectedTarget(result.selectedTarget)}.`,
-  ].join("\n");
-}
-
-function formatInstanceWorkspaceTokenRotateResult(
-  result: RotateFormlessInstanceWorkspaceAdminTokenResult,
-  cwd: string,
-): string {
-  return [
-    "Instance workspace admin token rotated.",
-    `Workspace: ${formatCliPath(cwd, result.workspaceRoot)}.`,
-    `Secret state: ${formatCliPath(cwd, result.secretPath)}.`,
-    `Worker: ${result.workerName}.`,
-    `Target: ${formatSelectedTarget(result.selectedTarget)}.`,
-  ].join("\n");
-}
-
-function formatInstanceOwnerSetupResult(
-  result: SetupFormlessInstanceOwnerResult,
-  cwd: string,
-): string {
-  return [
-    result.setupUrl
-      ? "Instance owner setup URL created."
-      : "Instance owner setup already complete.",
-    `Workspace: ${formatCliPath(cwd, result.workspaceRoot)}.`,
-    `Target: ${formatSelectedTarget(result.selectedTarget)}.`,
-    `Owner setup: ${formatOwnerSetup(result.setupStatus)}.`,
-    result.setupUrl ? `Setup URL: ${result.setupUrl}.` : null,
-    result.setupUrl ? `Browser opened: ${result.opened ? "yes" : "no"}.` : null,
-  ]
-    .filter((line): line is string => line !== null)
-    .join("\n");
-}
-
-function formatInstanceWorkspaceDestroyResult(
-  result: DestroyFormlessInstanceWorkspaceResult,
-  cwd: string,
-): string {
-  const resources = result.destroy.resources;
-
-  return [
-    "Instance workspace destroyed.",
-    `Workspace: ${formatCliPath(cwd, result.workspaceRoot)}.`,
-    `Target: ${formatSelectedTarget(result.selectedTarget)}.`,
-    `Worker: ${result.plan.resources.worker.name}.`,
-    `Durable Object namespace: ${result.plan.resources.authority.namespaceName}.`,
-    `Media bucket: ${result.plan.resources.mediaBucket.name}.`,
-    `Route provider resources: ${formatDestroyRouteProviderResources(
-      result.routeProviderResources,
-    )}.`,
-    `Destroyed resources: Worker ${resources.worker}, Durable Object namespace ${resources.durableObjectNamespace}, R2 media bucket ${resources.mediaBucket}, Turnstile widget ${resources.turnstileWidget}, Worker assets ${resources.workerAssets}, Worker secrets ${resources.workerSecrets}, custom domains ${resources.customDomains}, DNS records ${resources.dnsRecords}, Alchemy state ${resources.alchemyState}.`,
-    `Ignored deploy state: ${formatCliPath(cwd, result.deploymentStateRoot)}.`,
-    `Deployment facts: ${formatCliPath(cwd, result.deploymentStatePath)}.`,
-    `Local deploy secrets: ${formatCliPath(cwd, result.localSecretPath)}.`,
-  ].join("\n");
-}
-
-function formatDestroyRouteProviderResources(
-  resources: DestroyFormlessInstanceWorkspaceResult["routeProviderResources"],
-): string {
-  if (resources.resourceCount === 0) {
-    return "none";
-  }
-
-  return `${resources.resourceCount} provider resource${
-    resources.resourceCount === 1 ? "" : "s"
-  } from ${resources.routeCount} route${resources.routeCount === 1 ? "" : "s"} (${
-    resources.source
-  }; ${resources.enabledHosts.length === 0 ? "no hosts" : resources.enabledHosts.join(", ")})`;
-}
-
-function formatSelectedTarget(target: FormlessInstanceWorkspaceTarget | undefined): string {
-  return target ? `${target.alias} (${target.url})` : "<none>";
-}
-
-function formatOwnerSetup(status: {
-  owner?: { email?: string; name: string };
-  setupComplete: boolean;
-}) {
-  if (!status.setupComplete) {
-    return "incomplete";
-  }
-
-  const owner = status.owner;
-
-  if (!owner) {
-    return "complete";
-  }
-
-  return owner.email ? `complete (${owner.name} <${owner.email}>)` : `complete (${owner.name})`;
-}
-
 function generatedCliOwnerSetupToken(randomToken: () => string): string {
   let lastError: unknown;
 
@@ -1449,24 +1354,6 @@ function generatedCliOwnerSetupToken(randomToken: () => string): string {
   }
 
   throw lastError;
-}
-
-function formatCliPath(cwd: string, filePath: string): string {
-  const relativePath = path.relative(cwd, filePath);
-
-  if (relativePath === "") {
-    return ".";
-  }
-
-  if (
-    relativePath === ".." ||
-    relativePath.startsWith(`..${path.sep}`) ||
-    path.isAbsolute(relativePath)
-  ) {
-    return filePath;
-  }
-
-  return relativePath;
 }
 
 function openUrlWithSpawn(spawn: typeof nodeSpawn, url: string): Promise<void> {

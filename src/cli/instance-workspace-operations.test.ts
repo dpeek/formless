@@ -53,7 +53,6 @@ import {
   writeFormlessCloudflareOAuthCredential,
   type FormlessCloudflareOAuthTokenSet,
 } from "./cloudflare-oauth.ts";
-import { formatCliWorkspaceOperationOutput } from "./cli-workspace-operation-formatter.ts";
 import {
   runFormlessWorkspaceOperation,
   type RunFormlessWorkspaceOperationDependencies,
@@ -780,7 +779,6 @@ describe("Formless workspace operations", () => {
       workspaceOperationStatePath(workspaceRoot, operationId),
       "utf8",
     );
-    const terminalOutput = formatCliWorkspaceOperationOutput(state);
     const manifestText = await readFile(
       path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE),
       "utf8",
@@ -803,7 +801,6 @@ describe("Formless workspace operations", () => {
     const browserVisibleState = JSON.stringify(state);
 
     expect(archiveRestoreBodies).not.toBe("");
-    expect(terminalOutput).toContain(`credentialRef: ${credentialRef}.`);
     expect(deploySecretText).not.toContain("oauth-access-token");
     expect(deploySecretText).not.toContain("oauth-refresh-token");
     expect(deploySecretText).not.toContain("manual-provider-token");
@@ -816,7 +813,6 @@ describe("Formless workspace operations", () => {
         deploymentStateText,
         manifestText,
         persistedText,
-        terminalOutput,
       },
       [
         "oauth-access-token",
@@ -925,14 +921,10 @@ describe("Formless workspace operations", () => {
       workspaceOperationStatePath(workspaceRoot, operationId),
       "utf8",
     );
-    const terminalOutput = formatCliWorkspaceOperationOutput(state);
 
-    expect(terminalOutput).toContain("profile: team.");
-    expect(terminalOutput).toContain("profileRef: alchemy-profile:team.");
     assertTextExcludesSecrets(
       {
         persistedText,
-        terminalOutput,
         browserVisibleState: JSON.stringify(state),
       },
       ["manual-provider-token", "local-admin-token", "alchemy-secret", "rawAdapterOutput"],

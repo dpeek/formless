@@ -325,6 +325,27 @@ local execution binding handles it.
   parsing, terminal preflight prompts, terminal output layout, or direct CLI
   dependency assembly
 
+#### Scenario: Operation output formatting boundary
+
+- **WHEN** Formless CLI reports workspace operation output, direct workspace
+  command results, owner setup results, token command results, destroy results,
+  paths, selected targets, display-safe fields, or no-op output
+- **THEN** CLI formatter modules own the terminal strings, line ordering,
+  display-safe value rendering, path rendering, selected-target rendering,
+  command-specific result text, and exact no-op output
+- **AND** top-level CLI dispatch logs formatted output without constructing
+  command result strings inline
+- **AND** operation-domain modules return display-safe summaries, details,
+  steps, deployment facts, cleanup facts, target facts, and result objects but
+  do not own terminal layout, punctuation, path relativity, or public command
+  output wording
+- **AND** direct command formatters use the same shared CLI formatting helpers
+  as workspace operation formatters for display-safe values, selected targets,
+  relative paths, and optional fields
+- **AND** formatter tests own exact terminal string rendering while CLI command
+  integration tests cover dispatch, dependency wiring, behavior, and secret
+  redaction without duplicating every formatter case
+
 #### Scenario: Provider credential boundary for deployment execution
 
 - **WHEN** Formless CLI plans, applies, refreshes, or destroys a
