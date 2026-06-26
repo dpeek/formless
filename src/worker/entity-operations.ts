@@ -41,22 +41,23 @@ import {
   validateOperationRecordWriteValues,
 } from "./operation-input-validation.ts";
 import {
-  committedWrite,
   createStoredRecordOutcome,
   deleteStoredRecordOutcome,
   getActiveRecordsByEntity,
-  getOperationInvocationById,
   getStoredRecord,
   mapWriteOutcome,
   patchStoredRecordOutcome,
   recordOperationInvocationAccepted,
   recordOperationInvocationFailed,
   recordOperationInvocationOutcome,
-  replayedWrite,
   type RecordConstraintValidator,
   type WriteOutcome,
   writeRecordSetForCommandOperationOutcome,
 } from "./storage.ts";
+import {
+  executeWriteOperationInvocationLifecycle,
+  type OperationInvocationLifecycleWriteNotifier,
+} from "./operation-invocation-lifecycle.ts";
 import type {
   CreateRecordWriteRequest,
   DeleteRecordWriteRequest,
@@ -69,10 +70,6 @@ import {
 } from "./record-plan-materializer.ts";
 
 type OperationStorageIdentity = AppStorageIdentity | InstanceControlPlaneStorageIdentity;
-
-type OperationWriteNotifier = {
-  apply<T>(write: () => WriteOutcome<T>): WriteOutcome<T>;
-};
 
 type EntityOperationRoute = {
   entityName: string;
@@ -369,52 +366,21 @@ export function executeWriteOperationInvocation(input: {
   schema: AppSchema;
   storage: DurableObjectStorage;
   validateConstraints?: RecordConstraintValidator;
-  writes: OperationWriteNotifier;
+  writes: OperationInvocationLifecycleWriteNotifier;
 }): OperationInvocationResponse {
-  const outcome = input.writes.apply(() => {
-    recordOperationInvocationAccepted(input.storage, input.envelope);
-
-    try {
-      const replay = operationInvocationReplayResponse(input.storage, input.envelope);
-
-      if (replay) {
-        recordOperationInvocationOutcome(input.storage, {
-          envelope: input.envelope,
-          output: replay.output,
-          status: replay.status,
-        });
-
-        return replayedWrite(replay);
-      }
-
-      const writeOutcome = executeWriteOperationInvocationOutcome(
+  return executeWriteOperationInvocationLifecycle({
+    envelope: input.envelope,
+    execute: () =>
+      executeWriteOperationInvocationOutcome(
         input.storage,
         input.envelope,
         input.schema,
         input.packageResolver,
         input.validateConstraints,
-      );
-      const status = writeOutcome.kind === "replay" ? "replayed" : "committed";
-      const response = operationInvocationResponseFromWriteOutput(
-        input.envelope,
-        writeOutcome.response,
-        status,
-      );
-
-      recordOperationInvocationOutcome(input.storage, {
-        envelope: input.envelope,
-        output: response.output,
-        status: response.status,
-      });
-
-      return writeOutcome.kind === "replay" ? replayedWrite(response) : committedWrite(response);
-    } catch (error) {
-      recordOperationInvocationFailed(input.storage, input.envelope, error);
-      throw error;
-    }
+      ),
+    storage: input.storage,
+    writes: input.writes,
   });
-
-  return outcome.response;
 }
 
 function executeWriteOperationInvocationOutcome(
@@ -785,51 +751,6 @@ type RecordWriteMaterializerOutput = {
   changes: OperationCommandOutput["changes"];
   cursor: number;
 };
-
-function operationInvocationReplayResponse(
-  storage: DurableObjectStorage,
-  envelope: OperationInvocationEnvelope,
-): OperationInvocationResponse | undefined {
-  const replay = getOperationInvocationById(storage, envelope.invocationId);
-
-  if (
-    replay?.output === undefined ||
-    (replay.status !== "committed" && replay.status !== "replayed")
-  ) {
-    return undefined;
-  }
-
-  assertStoredOperationOutputMatchesEnvelope(envelope, replay.output);
-
-  return {
-    invocation: envelope,
-    output: replay.output,
-    status: "replayed",
-  };
-}
-
-function assertStoredOperationOutputMatchesEnvelope(
-  envelope: OperationInvocationEnvelope,
-  output: OperationInvocationOutput,
-) {
-  if (output.type !== envelope.operation.kind) {
-    throw new Error(
-      `Stored operation "${envelope.operation.canonicalKey}" output type "${output.type}" does not match operation kind "${envelope.operation.kind}".`,
-    );
-  }
-}
-
-function operationInvocationResponseFromWriteOutput(
-  envelope: OperationInvocationEnvelope,
-  output: OperationInvocationOutput,
-  status: OperationInvocationResponse["status"],
-): OperationInvocationResponse {
-  return {
-    invocation: envelope,
-    output,
-    status,
-  };
-}
 
 function filterCommandOperationOutputForActor(
   output: OperationCommandOutput,

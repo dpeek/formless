@@ -267,6 +267,23 @@ materialization.
   rows, command effect rows, or operation invocation rows
 - AND list and get operations do not require idempotency keys
 
+#### Scenario: Own operation invocation lifecycle transitions
+
+- GIVEN an operation invocation envelope has been accepted for evaluation
+- WHEN Authority evaluates the operation through a lifecycle wrapper
+- THEN the wrapper records accepted or resumed status before invoking operation
+  execution
+- AND the wrapper returns a stored replay outcome without invoking operation
+  execution when an existing committed or replayed output matches the envelope
+- AND the wrapper records committed or replayed outcome status after successful
+  execution
+- AND the wrapper records rejected status for authorization denial and failed
+  status for validation, challenge, materialization, or execution errors after
+  the invocation envelope exists
+- AND the execution callback remains responsible for operation-specific
+  authorization, validation, materialization, response filtering, and storage
+  writes
+
 #### Scenario: Return operation output
 
 - GIVEN an operation invocation is accepted

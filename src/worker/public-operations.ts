@@ -27,18 +27,12 @@ import {
   executeWriteOperationInvocation,
 } from "./entity-operations.ts";
 import { BadRequestError } from "./errors.ts";
+import { executePublicOperationInvocationLifecycle } from "./operation-invocation-lifecycle.ts";
 import {
   validateOperationCommandHandlerInputValues,
   validateOperationRecordPlanInputValues,
 } from "./operation-input-validation.ts";
-import {
-  getOperationInvocationById,
-  recordOperationInvocationAccepted,
-  recordOperationInvocationFailed,
-  recordOperationInvocationOutcome,
-  recordOperationInvocationRejected,
-  type WriteOutcome,
-} from "./storage.ts";
+import { type WriteOutcome } from "./storage.ts";
 
 export type PublicOperationEnv = TurnstileRuntimeEnv & {
   FORMLESS_TURNSTILE_SITEVERIFY?: Fetcher;
@@ -181,64 +175,50 @@ export async function executePublicOperationRequest(
       : { siteBlockId: envelopeFields.source.siteBlockId }),
   });
 
-  assertPublicOperationInvocationAllowed(input.storage, unverifiedEnvelope, input.schema);
-  recordOperationInvocationAccepted(input.storage, unverifiedEnvelope);
+  let parsed: ParsedPublicOperationRequest | undefined;
 
-  let parsed: ParsedPublicOperationRequest;
-  try {
-    assertPublicOperationOrigin(input.request, selected.operation);
-    parsed = parsePublicOperationRequest(envelopeFields, selected, input.schema, input.storage);
-  } catch (error) {
-    recordOperationInvocationFailed(input.storage, unverifiedEnvelope, error);
-    throw error;
-  }
+  const response = await executePublicOperationInvocationLifecycle({
+    assertAllowed: () => assertPublicOperationInvocationAllowed(unverifiedEnvelope, input.schema),
+    beforeReplay: () => {
+      assertPublicOperationOrigin(input.request, selected.operation);
+      parsed = parsePublicOperationRequest(envelopeFields, selected, input.schema, input.storage);
+    },
+    envelope: unverifiedEnvelope,
+    execute: (envelope) =>
+      executeWriteOperationInvocation({
+        envelope,
+        schema: input.schema,
+        storage: input.storage,
+        writes: input.writes,
+      }),
+    prepareExecutionEnvelope: async () => {
+      if (!parsed) {
+        throw new Error("Public operation request was not parsed before challenge verification.");
+      }
 
-  const replay = getOperationInvocationById(input.storage, unverifiedEnvelope.invocationId);
-  if (replay?.output && (replay.status === "committed" || replay.status === "replayed")) {
-    recordOperationInvocationOutcome(input.storage, {
-      envelope: unverifiedEnvelope,
-      output: replay.output,
-      status: "replayed",
-    });
+      const verification = await verifyTurnstileChallenge({
+        env: input.env,
+        idempotencyKey,
+        token: parsed.proof.turnstileToken,
+      });
 
-    return publicOperationResult({
-      invocation: unverifiedEnvelope,
-      output: replay.output,
-      status: "replayed",
-    });
-  }
-
-  let verification: PublicOperationChallengeVerification;
-
-  try {
-    verification = await verifyTurnstileChallenge({
-      env: input.env,
-      idempotencyKey,
-      token: parsed.proof.turnstileToken,
-    });
-  } catch (error) {
-    recordOperationInvocationFailed(input.storage, unverifiedEnvelope, error);
-    throw error;
-  }
-
-  const envelope = buildPublicOperationInvocationEnvelope({
-    entityName: input.route.entityName,
-    host: requestUrlFacts.host,
-    identity: input.identity,
-    idempotencyKey,
-    operationName: input.route.operationName,
-    path: requestUrlFacts.path,
-    proof: publicOperationProof(parsed.proof.turnstileToken, verification),
-    publicInput: parsed.input,
-    receivedAt,
-    schema: input.schema,
-    ...(parsed.source?.siteBlockId === undefined ? {} : { siteBlockId: parsed.source.siteBlockId }),
-  });
-  const response = executeWriteOperationInvocation({
-    envelope,
-    schema: input.schema,
+      return buildPublicOperationInvocationEnvelope({
+        entityName: input.route.entityName,
+        host: requestUrlFacts.host,
+        identity: input.identity,
+        idempotencyKey,
+        operationName: input.route.operationName,
+        path: requestUrlFacts.path,
+        proof: publicOperationProof(parsed.proof.turnstileToken, verification),
+        publicInput: parsed.input,
+        receivedAt,
+        schema: input.schema,
+        ...(parsed.source?.siteBlockId === undefined
+          ? {}
+          : { siteBlockId: parsed.source.siteBlockId }),
+      });
+    },
     storage: input.storage,
-    writes: input.writes,
   });
 
   if (response.status === "committed") {
@@ -248,53 +228,7 @@ export async function executePublicOperationRequest(
   return publicOperationResult(response);
 }
 
-function selectPublicOperation(
-  schema: AppSchema,
-  route: Pick<PublicOperationRoute, "entityName" | "operationName">,
-): SelectedPublicOperation {
-  const entity = schema.entities[route.entityName];
-  const operation = entity?.operations?.[route.operationName];
-
-  if (!entity || !operation) {
-    throw new PublicOperationError("Public operation is not available.", 404);
-  }
-
-  if (!isAnonymousPublicOperationExecutable(operation)) {
-    throw new PublicOperationError("Public operation is not available.", 404);
-  }
-
-  return {
-    entityName: route.entityName,
-    operation,
-    operationName: route.operationName,
-  };
-}
-
-function assertPublicOperationOrigin(request: Request, operation: EntityOperationSchema) {
-  if (operation.policy?.access?.origin.kind !== "same-origin") {
-    return;
-  }
-
-  const origin = request.headers.get("Origin");
-  if (!origin) {
-    return;
-  }
-
-  let parsedOrigin: URL;
-
-  try {
-    parsedOrigin = new URL(origin);
-  } catch {
-    throw new PublicOperationError("Public operation origin is not allowed.", 403);
-  }
-
-  if (parsedOrigin.origin !== publicRequestUrlFacts(request).origin) {
-    throw new PublicOperationError("Public operation origin is not allowed.", 403);
-  }
-}
-
 function assertPublicOperationInvocationAllowed(
-  storage: DurableObjectStorage,
   envelope: OperationInvocationEnvelope,
   schema: AppSchema,
 ) {
@@ -304,10 +238,7 @@ function assertPublicOperationInvocationAllowed(
   });
 
   if (operation.kind !== "available") {
-    const error = new PublicOperationError("Public operation is not available.", 404);
-
-    recordOperationInvocationRejected(storage, envelope, error);
-    throw error;
+    throw new PublicOperationError("Public operation is not available.", 404);
   }
 }
 
@@ -396,6 +327,51 @@ function parsePublicOperationProof(value: unknown): ParsedPublicOperationRequest
   return {
     turnstileToken: value.turnstileToken,
   };
+}
+
+function selectPublicOperation(
+  schema: AppSchema,
+  route: Pick<PublicOperationRoute, "entityName" | "operationName">,
+): SelectedPublicOperation {
+  const entity = schema.entities[route.entityName];
+  const operation = entity?.operations?.[route.operationName];
+
+  if (!entity || !operation) {
+    throw new PublicOperationError("Public operation is not available.", 404);
+  }
+
+  if (!isAnonymousPublicOperationExecutable(operation)) {
+    throw new PublicOperationError("Public operation is not available.", 404);
+  }
+
+  return {
+    entityName: route.entityName,
+    operation,
+    operationName: route.operationName,
+  };
+}
+
+function assertPublicOperationOrigin(request: Request, operation: EntityOperationSchema) {
+  if (operation.policy?.access?.origin.kind !== "same-origin") {
+    return;
+  }
+
+  const origin = request.headers.get("Origin");
+  if (!origin) {
+    return;
+  }
+
+  let parsedOrigin: URL;
+
+  try {
+    parsedOrigin = new URL(origin);
+  } catch {
+    throw new PublicOperationError("Public operation origin is not allowed.", 403);
+  }
+
+  if (parsedOrigin.origin !== publicRequestUrlFacts(request).origin) {
+    throw new PublicOperationError("Public operation origin is not allowed.", 403);
+  }
 }
 
 function parsePublicOperationSource(value: unknown): PublicOperationRequestSource {

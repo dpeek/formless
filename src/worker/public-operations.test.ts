@@ -340,6 +340,64 @@ describe("public operation runtime", () => {
     expect(turnstileRequests).toEqual([]);
   });
 
+  it("audits public operation policy rejections before challenge verification", async () => {
+    const beforeState = await readPublicOperationHarnessState();
+    const rejected = await postPublicOperationHarness("/api/site/public/operations/block/create", {
+      input: {
+        type: "content",
+        label: "Private block",
+      },
+      proof: { turnstileToken: "policy-secret-token" },
+      source: { siteBlockId: "rec_site_private_form" },
+      idempotencyKey: "public-policy-rejected",
+    });
+    const rejectedAfter = await readPublicOperationHarnessState();
+
+    expect(rejected.status).toBe(404);
+    expect((await rejected.json()) as { error: string }).toEqual({
+      error: "Public operation is not available.",
+    });
+    expect(rejectedAfter.records).toEqual(beforeState.records);
+    expect(rejectedAfter.changes).toEqual(beforeState.changes);
+    expect(rejectedAfter.commandExecutionCount).toBe(0);
+    expect(rejectedAfter.invocations).toHaveLength(1);
+    expect(rejectedAfter.invocations[0]).toMatchObject({
+      actorKind: "anonymous",
+      affectedChangeIds: [],
+      auditInput: {
+        kind: "summary",
+        summary: {
+          fieldNames: ["label", "type"],
+          type: "create",
+          valuesType: "object",
+        },
+      },
+      authDecision: "denied",
+      errorMessage: "Public operation is not available.",
+      idempotency: {
+        key: "public-policy-rejected",
+        source: "caller",
+        writeIdentity: "operation:block.create:public-policy-rejected",
+      },
+      operationKey: "block.create",
+      operationKind: "create",
+      source: {
+        host: "example.com",
+        path: "/api/site/public/operations/block/create",
+        protocol: "public",
+        siteBlockId: "rec_site_private_form",
+      },
+      status: "rejected",
+      statusHistory: [expect.objectContaining({ status: "rejected" })],
+    });
+    expect(rejectedAfter.invocations[0]?.statusHistory.map((entry) => entry.status)).toEqual([
+      "rejected",
+    ]);
+    expect(rejectedAfter.invocations[0]?.output).toBeUndefined();
+    expect(JSON.stringify(rejectedAfter.invocations[0])).not.toContain("policy-secret-token");
+    expect(turnstileRequests).toEqual([]);
+  });
+
   it("executes subscribe through operation-native command materialization", async () => {
     const accepted = await postPublicOperationHarness(
       "/api/site/public/operations/subscription/subscribe",
@@ -359,7 +417,15 @@ describe("public operation runtime", () => {
       operationKey: "subscription.subscribe",
       operationKind: "command",
       status: "committed",
+      statusHistory: [
+        expect.objectContaining({ status: "accepted" }),
+        expect.objectContaining({ status: "committed" }),
+      ],
     });
+    expect(state.invocations[0]?.statusHistory.map((entry) => entry.status)).toEqual([
+      "accepted",
+      "committed",
+    ]);
     expect(state.invocations[0]?.output).toMatchObject({
       type: "command",
       affectedChangeIds: body.output.affectedChangeIds,
@@ -1220,7 +1286,15 @@ describe("public operation runtime", () => {
         siteBlockId: "rec_site_contact_form",
       },
       status: "failed",
+      statusHistory: [
+        expect.objectContaining({ status: "accepted" }),
+        expect.objectContaining({ status: "failed" }),
+      ],
     });
+    expect(afterState.invocations[0]?.statusHistory.map((entry) => entry.status)).toEqual([
+      "accepted",
+      "failed",
+    ]);
     expect(afterState.invocations[0]?.output).toBeUndefined();
     expect(JSON.stringify(afterState.invocations[0])).not.toContain("token-ok");
     expect(JSON.stringify(afterState.invocations[0])).not.toContain(turnstileSecret);
@@ -1299,6 +1373,11 @@ describe("public operation runtime", () => {
         expect.objectContaining({ status: "replayed" }),
       ],
     });
+    expect(rows[0]?.statusHistory.map((entry) => entry.status)).toEqual([
+      "accepted",
+      "committed",
+      "replayed",
+    ]);
     expect(JSON.stringify(rows[0])).not.toContain(turnstileSecret);
     expect(JSON.stringify(rows[0])).not.toContain("token-ok");
     expect(JSON.stringify(rows[0])).not.toContain("token-replay");

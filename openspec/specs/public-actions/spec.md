@@ -266,6 +266,17 @@ invocation envelope before validating input or committing effects.
 - AND challenge proofs and Turnstile secret material are excluded from audit
   snapshots and summaries
 
+#### Scenario: Public execution uses invocation lifecycle
+
+- GIVEN a target-scoped public operation route resolves a declared operation
+- WHEN the public runtime evaluates origin, input, challenge, replay, and
+  operation execution
+- THEN accepted, rejected, failed, replayed, and committed invocation statuses
+  are recorded through the shared operation invocation lifecycle
+- AND public route code remains responsible for target route resolution,
+  request origin evaluation, challenge proof verification, verified-envelope
+  construction, public response filtering, and after-commit side effects
+
 ### Requirement: Public Input Validation
 
 The system MUST validate public operation input against the operation's public

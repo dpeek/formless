@@ -710,6 +710,7 @@ describe("authority operation execution", () => {
       throw new Error("Expected create operation output.");
     }
 
+    expect(first.body.writes.map((write) => write.kind)).toEqual(["committed"]);
     expect(firstRows).toHaveLength(1);
     expect(firstRows[0]).toMatchObject({
       affectedChangeIds: [String(firstOutput.changes[0]?.seq)],
@@ -737,8 +738,13 @@ describe("authority operation execution", () => {
         expect.objectContaining({ status: "committed" }),
       ],
     });
+    expect(firstRows[0]?.statusHistory.map((entry) => entry.status)).toEqual([
+      "accepted",
+      "committed",
+    ]);
     expect(firstRows[0]?.inputHash).toMatch(/^fnv1a64:[a-f0-9]{16}$/);
     expect(replay.response.status).toBe(200);
+    expect(replay.body.writes.map((write) => write.kind)).toEqual(["replay"]);
     expect(replay.body.result.body.status).toBe("replayed");
     expect(replay.body.result.body.output).toEqual(first.body.result.body.output);
     expect(replayRows).toHaveLength(1);
@@ -751,6 +757,11 @@ describe("authority operation execution", () => {
         expect.objectContaining({ status: "replayed" }),
       ],
     });
+    expect(replayRows[0]?.statusHistory.map((entry) => entry.status)).toEqual([
+      "accepted",
+      "committed",
+      "replayed",
+    ]);
     expect(sync.body.result.body.changes).toEqual(firstOutput.changes);
     expect(snapshot.body.result.body.records).toContainEqual(firstOutput.record);
     expect(sync.body.result.body).not.toHaveProperty("operationInvocations");
@@ -855,6 +866,47 @@ describe("authority operation execution", () => {
         expect.objectContaining({ status: "failed" }),
       ],
     });
+    expect(rows[0]?.statusHistory.map((entry) => entry.status)).toEqual(["accepted", "failed"]);
+  });
+
+  it("stores failed operation invocations when command handler execution fails after acceptance", async () => {
+    const bootstrap = await executeOperation<BootstrapResponse>({
+      method: "GET",
+      path: "/bootstrap",
+    });
+    const schema = schemaWithPrivateSubscribeCommandOperation(bootstrap.body.result.body.schema);
+
+    await executeOperation({
+      method: "POST",
+      path: "/schema",
+      body: { schema },
+    });
+
+    const failed = await executeOperationFailure({
+      method: "POST",
+      path: "/operations/task/privateSubscribe",
+      body: {
+        idempotencyKey: "operation-row-handler-failed",
+      },
+    });
+    const rows = await readOperationInvocations();
+
+    expect(failed.response.status).toBe(400);
+    expect(failed.body).toEqual({
+      error: 'Operation "task.privateSubscribe" is not available for private execution.',
+      writes: [],
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      affectedChangeIds: [],
+      authDecision: "allowed",
+      errorMessage: 'Operation "task.privateSubscribe" is not available for private execution.',
+      operationKey: "task.privateSubscribe",
+      operationKind: "command",
+      status: "failed",
+    });
+    expect(rows[0]?.statusHistory.map((entry) => entry.status)).toEqual(["accepted", "failed"]);
+    expect(rows[0]?.output).toBeUndefined();
   });
 
   it("redacts explicitly snapshotted audit input for command operations", async () => {
@@ -1333,6 +1385,7 @@ describe("authority operation execution", () => {
       path: "/operations/task/submitReplayPlan",
       body,
     });
+    const rows = await readOperationInvocations();
     const sync = await executeOperation<SyncResponse>({
       method: "GET",
       path: "/sync",
@@ -1343,6 +1396,12 @@ describe("authority operation execution", () => {
     expect(replay.body.writes.map((write) => write.kind)).toEqual(["replay"]);
     expect(replay.body.result.body.status).toBe("replayed");
     expect(replay.body.result.body.output).toEqual(first.body.result.body.output);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.statusHistory.map((entry) => entry.status)).toEqual([
+      "accepted",
+      "committed",
+      "replayed",
+    ]);
 
     if (first.body.result.body.output.type !== "command") {
       throw new Error("Expected command operation output.");
@@ -1716,6 +1775,30 @@ function schemaWithRecordPlanOperation(
     operations: {
       ...taskEntity.operations,
       [operationName]: recordPlanOperation(steps),
+    },
+  };
+
+  return schema;
+}
+
+function schemaWithPrivateSubscribeCommandOperation(sourceSchema: AppSchema): AppSchema {
+  const schema = cloneSchema(sourceSchema);
+  const taskEntity = requireEntity(schema, "task");
+
+  schema.entities.task = {
+    ...taskEntity,
+    operations: {
+      ...taskEntity.operations,
+      privateSubscribe: {
+        label: "Private subscribe",
+        kind: "command",
+        scope: "collection",
+        effect: { type: "operationHandler", handler: "subscribe", config: {} },
+        output: { type: "command" },
+        idempotency: { required: true },
+        audit: { input: "summary" },
+        policy: { actors: ["owner"] },
+      },
     },
   };
 
