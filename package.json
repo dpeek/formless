@@ -73,7 +73,8 @@
     "esbuild": "^0.28.0",
     "fake-indexeddb": "^6.2.5",
     "miniflare": "^4.20260424.0",
-    "typescript": "~6.0.2"
+    "typescript": "~6.0.2",
+    "zod": "3.25.76"
   },
   "overrides": {
     "vite": "npm:@voidzero-dev/vite-plus-core@latest",
