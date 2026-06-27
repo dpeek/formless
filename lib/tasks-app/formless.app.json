@@ -1,0 +1,27 @@
+{
+  "kind": "formless.appPackage",
+  "version": 1,
+  "packageAppKey": "tasks",
+  "label": "Tasks",
+  "description": "Task tracking app backed by the bundled Tasks schema and starter records.",
+  "defaultInstallId": "tasks",
+  "supportsMultipleInstalls": true,
+  "packageRevision": 1,
+  "sourceSchema": {
+    "kind": "bundled",
+    "key": "tasks",
+    "path": "schema.json"
+  },
+  "seedRecords": {
+    "kind": "bundled",
+    "key": "tasks",
+    "path": "seed-records.json"
+  },
+  "sourceSchemaHash": "sha256:51428cbdf236029c81d97bafffcdad039be062472226b6adea7a249333081c56",
+  "capabilities": [
+    {
+      "kind": "generatedAdmin",
+      "routeBase": "/apps"
+    }
+  ]
+}

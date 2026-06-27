@@ -1294,7 +1294,7 @@ async function writeStorageHarness() {
     harnessPath,
     `
       import { DurableObject } from "cloudflare:workers";
-      import rawSeedSchema from "${process.cwd()}/schema/apps/tasks/schema.json";
+      import rawSeedSchema from "@dpeek/formless-tasks-app/schema.json";
       import { parseAppSchema } from "@dpeek/formless-schema";
       import {
         instanceControlPlaneSchema,

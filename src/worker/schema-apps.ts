@@ -2,8 +2,8 @@ import rawCrmSeedRecords from "@dpeek/formless-crm-app/seed-records.json";
 import rawCrmSourceSchema from "@dpeek/formless-crm-app/schema.json";
 import rawSiteSeedRecords from "@dpeek/formless-site-app/seed-records.json";
 import rawSiteSourceSchema from "@dpeek/formless-site-app/schema.json";
-import rawTaskSeedRecords from "../../schema/apps/tasks/seed-records.json";
-import rawTaskSourceSchema from "../../schema/apps/tasks/schema.json";
+import rawTaskSeedRecords from "@dpeek/formless-tasks-app/seed-records.json";
+import rawTaskSourceSchema from "@dpeek/formless-tasks-app/schema.json";
 import {
   findSchemaAppDefinition,
   schemaAppDefinitions,

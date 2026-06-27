@@ -1,21 +1,17 @@
 import rawCrmAppPackageManifest from "@dpeek/formless-crm-app/formless.app.json";
 import rawSiteAppPackageManifest from "@dpeek/formless-site-app/formless.app.json";
+import rawTasksAppPackageManifest from "@dpeek/formless-tasks-app/formless.app.json";
 import {
-  appPackageManifestKind,
-  appPackageManifestVersion,
   createAppPackageResolver,
   findResolvedAppPackage as findResolvedAppPackageWithResolver,
   listResolvedAppPackages as listResolvedAppPackagesWithResolver,
   parseAppPackageManifest,
   type AppPackageManifest,
   type AppPackageResolver,
-  type PackageAppRevision,
   type ResolvedAppPackage,
-  type SourceSchemaHash,
 } from "@dpeek/formless-installed-apps";
 
-import { schemaAppDefinitions, type SchemaKey } from "./schema-apps.ts";
-import { bundledSourceSchemaHashFixtures } from "./upgrade-migrations.ts";
+import type { SchemaKey } from "./schema-apps.ts";
 
 export {
   appPackageManifestKind,
@@ -32,19 +28,14 @@ export {
   type ResolvedAppPackage,
 } from "@dpeek/formless-installed-apps";
 
-const currentBundledPackageAppRevision = 1 satisfies PackageAppRevision;
-
 export const bundledAppPackageManifests = [
   bundledAppPackageManifestFromSource(rawSiteAppPackageManifest, {
     context: "bundled Site app package manifest",
     packageAppKey: "site",
   }),
-  bundledAppPackageManifest({
+  bundledAppPackageManifestFromSource(rawTasksAppPackageManifest, {
+    context: "bundled Tasks app package manifest",
     packageAppKey: "tasks",
-    label: schemaAppDefinitions.tasks.label,
-    description: "Task tracking app backed by the bundled Tasks schema and starter records.",
-    defaultInstallId: "tasks",
-    sourceSchemaHash: bundledSourceSchemaHashFixtures.tasks,
   }),
   bundledAppPackageManifestFromSource(rawCrmAppPackageManifest, {
     context: "bundled CRM app package manifest",
@@ -65,54 +56,6 @@ export function findResolvedAppPackage(
   resolver: AppPackageResolver = bundledAppPackageResolver,
 ): ResolvedAppPackage | undefined {
   return findResolvedAppPackageWithResolver(packageAppKey, resolver);
-}
-
-function bundledAppPackageManifest(input: {
-  packageAppKey: "tasks";
-  label: string;
-  description: string;
-  defaultInstallId: string;
-  sourceSchemaHash: SourceSchemaHash;
-  publicSite?: boolean;
-}): AppPackageManifest {
-  const sourcePath = `schema/apps/${input.packageAppKey}/schema.json`;
-  const seedRecordsPath = `schema/apps/${input.packageAppKey}/seed-records.json`;
-
-  return parseAppPackageManifest({
-    kind: appPackageManifestKind,
-    version: appPackageManifestVersion,
-    packageAppKey: input.packageAppKey,
-    label: input.label,
-    description: input.description,
-    defaultInstallId: input.defaultInstallId,
-    supportsMultipleInstalls: true,
-    packageRevision: currentBundledPackageAppRevision,
-    sourceSchema: {
-      kind: "bundled",
-      key: input.packageAppKey,
-      path: sourcePath,
-    },
-    seedRecords: {
-      kind: "bundled",
-      key: input.packageAppKey,
-      path: seedRecordsPath,
-    },
-    sourceSchemaHash: input.sourceSchemaHash,
-    capabilities: [
-      {
-        kind: "generatedAdmin",
-        routeBase: "/apps",
-      },
-      ...(input.publicSite
-        ? [
-            {
-              kind: "publicSite" as const,
-              routeBase: "/sites" as const,
-            },
-          ]
-        : []),
-    ],
-  });
 }
 
 function bundledAppPackageManifestFromSource(

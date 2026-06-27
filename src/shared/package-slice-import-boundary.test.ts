@@ -88,6 +88,28 @@ describe("package slice import boundaries", () => {
     expect(await pathExists(resolve(repoRoot, "schema/apps/crm"))).toBe(false);
     expect(failures).toEqual([]);
   });
+
+  it("keeps Tasks source consumers on package public exports", async () => {
+    const failures: string[] = [];
+
+    for (const filePath of await boundarySourceFiles()) {
+      const source = await readFile(filePath, "utf8");
+      const path = relative(repoRoot, filePath);
+
+      for (const specifier of importSpecifiers(source)) {
+        if (forbiddenTasksPackageImport(specifier)) {
+          failures.push(`${path}: deep-imports Tasks app package ${specifier}`);
+        }
+
+        if (forbiddenRootTasksSourceImport(specifier)) {
+          failures.push(`${path}: imports removed root Tasks source path ${specifier}`);
+        }
+      }
+    }
+
+    expect(await pathExists(resolve(repoRoot, "schema/apps/tasks"))).toBe(false);
+    expect(failures).toEqual([]);
+  });
 });
 
 const allowedArchivePackageImports = new Set([
@@ -110,6 +132,13 @@ const allowedCrmPackageImports = new Set([
   "@dpeek/formless-crm-app/formless.app.json",
   "@dpeek/formless-crm-app/schema.json",
   "@dpeek/formless-crm-app/seed-records.json",
+]);
+
+const allowedTasksPackageImports = new Set([
+  "@dpeek/formless-tasks-app",
+  "@dpeek/formless-tasks-app/formless.app.json",
+  "@dpeek/formless-tasks-app/schema.json",
+  "@dpeek/formless-tasks-app/seed-records.json",
 ]);
 
 async function boundarySourceFiles(): Promise<string[]> {
@@ -218,6 +247,18 @@ function forbiddenCrmPackageImport(specifier: string): boolean {
 
 function forbiddenRootCrmSourceImport(specifier: string): boolean {
   return specifier.includes("schema/apps/crm/");
+}
+
+function forbiddenTasksPackageImport(specifier: string): boolean {
+  return (
+    (specifier === "@dpeek/formless-tasks-app" ||
+      specifier.startsWith("@dpeek/formless-tasks-app/")) &&
+    !allowedTasksPackageImports.has(specifier)
+  );
+}
+
+function forbiddenRootTasksSourceImport(specifier: string): boolean {
+  return specifier.includes("schema/apps/tasks/");
 }
 
 async function pathExists(path: string): Promise<boolean> {

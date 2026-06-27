@@ -2,8 +2,8 @@ import path from "node:path";
 
 import { mkdir, writeFile } from "node:fs/promises";
 
-import rawTaskSeedRecords from "../../schema/apps/tasks/seed-records.json";
-import rawTaskSourceSchema from "../../schema/apps/tasks/schema.json";
+import rawTaskSeedRecords from "@dpeek/formless-tasks-app/seed-records.json";
+import rawTaskSourceSchema from "@dpeek/formless-tasks-app/schema.json";
 import {
   appPackageManifestKind,
   appPackageManifestVersion,

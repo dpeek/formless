@@ -1,0 +1,20 @@
+{
+  "name": "@dpeek/formless-tasks-app",
+  "version": "0.1.0",
+  "files": [
+    "formless.app.json",
+    "schema.json",
+    "seed-records.json",
+    "src"
+  ],
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./formless.app.json": "./formless.app.json",
+    "./schema.json": "./schema.json",
+    "./seed-records.json": "./seed-records.json"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

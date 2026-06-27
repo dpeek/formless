@@ -20,6 +20,7 @@
         "@dpeek/formless-schema": "^0.1.0",
         "@dpeek/formless-site-app": "^0.1.0",
         "@dpeek/formless-storage": "^0.1.0",
+        "@dpeek/formless-tasks-app": "^0.1.0",
         "@dpeek/formless-ui": "^0.1.3",
         "@dpeek/formless-workspace": "^0.1.0",
         "@internationalized/date": "^3.12.1",
@@ -129,6 +130,10 @@
       "dependencies": {
         "@dpeek/formless-schema": "^0.1.0",
       },
+    },
+    "lib/tasks-app": {
+      "name": "@dpeek/formless-tasks-app",
+      "version": "0.1.0",
     },
     "lib/ui": {
       "name": "@dpeek/formless-ui",
@@ -294,6 +299,8 @@
     "@dpeek/formless-site-app": ["@dpeek/formless-site-app@workspace:lib/site-app"],
 
     "@dpeek/formless-storage": ["@dpeek/formless-storage@workspace:lib/storage"],
+
+    "@dpeek/formless-tasks-app": ["@dpeek/formless-tasks-app@workspace:lib/tasks-app"],
 
     "@dpeek/formless-ui": ["@dpeek/formless-ui@workspace:lib/ui"],
 

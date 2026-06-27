@@ -50,7 +50,8 @@ adapters.
 
 #### Scenario: App package scaffold
 
-- GIVEN an app package such as Site or CRM is extracted into an in-repo package
+- GIVEN an app package such as Site, Tasks, or CRM is extracted into an in-repo
+  package
 - WHEN the package is scaffolded
 - THEN the package contains package-local `AGENTS.md`, `package.json`,
   `tsconfig.json`, `formless.app.json`, `schema.json`, `seed-records.json`,
@@ -81,7 +82,7 @@ adapters.
 
 #### Scenario: App package source replaces root app files
 
-- GIVEN an app package such as Site or CRM owns `formless.app.json`,
+- GIVEN an app package such as Site, Tasks, or CRM owns `formless.app.json`,
   `schema.json`, and `seed-records.json`
 - WHEN runtime code composes bundled package metadata, source schemas, or seed
   records

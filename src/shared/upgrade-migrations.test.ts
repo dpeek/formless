@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 import rawCrmSourceSchema from "@dpeek/formless-crm-app/schema.json";
 import rawSiteSourceSchema from "@dpeek/formless-site-app/schema.json";
-import rawTaskSourceSchema from "../../schema/apps/tasks/schema.json";
+import rawTaskSourceSchema from "@dpeek/formless-tasks-app/schema.json";
 import {
   bundledSourceSchemaHashFixtures,
   computeSourceSchemaHash,
@@ -35,12 +35,16 @@ describe("upgrade migration contracts", () => {
     await expect(computeSourceSchemaHash(rawTaskSourceSchema)).resolves.toBe(
       bundledSourceSchemaHashFixtures.tasks,
     );
+    expect(bundledSourceSchemaHashFixtures.tasks).toBe(
+      "sha256:51428cbdf236029c81d97bafffcdad039be062472226b6adea7a249333081c56",
+    );
     await expect(computeSourceSchemaHash(rawSiteSourceSchema)).resolves.toBe(
       bundledSourceSchemaHashFixtures.site,
     );
     await expect(computeSourceSchemaHash(rawCrmSourceSchema)).resolves.toBe(
       bundledSourceSchemaHashFixtures.crm,
     );
+    expect(isSourceSchemaHash(bundledSourceSchemaHashFixtures.tasks)).toBe(true);
     expect(isSourceSchemaHash(bundledSourceSchemaHashFixtures.site)).toBe(true);
     expect(isSourceSchemaHash(bundledSourceSchemaHashFixtures.crm)).toBe(true);
   });

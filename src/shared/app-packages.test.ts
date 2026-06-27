@@ -4,7 +4,9 @@ import rawCrmSeedRecords from "@dpeek/formless-crm-app/seed-records.json";
 import rawCrmSourceSchema from "@dpeek/formless-crm-app/schema.json";
 import rawSiteAppPackageManifest from "@dpeek/formless-site-app/formless.app.json";
 import rawSiteSourceSchema from "@dpeek/formless-site-app/schema.json";
-import rawTasksSourceSchema from "../../schema/apps/tasks/schema.json";
+import rawTasksAppPackageManifest from "@dpeek/formless-tasks-app/formless.app.json";
+import rawTasksSeedRecords from "@dpeek/formless-tasks-app/seed-records.json";
+import rawTasksSourceSchema from "@dpeek/formless-tasks-app/schema.json";
 import {
   appPackageManifestKind,
   appPackageManifestVersion,
@@ -77,6 +79,38 @@ describe("app package manifests", () => {
         path: "seed-records.json",
       },
       sourceSchemaHash: bundledSourceSchemaHashFixtures.crm,
+      capabilities: [
+        {
+          kind: "generatedAdmin",
+          routeBase: "/apps",
+        },
+      ],
+    });
+  });
+
+  it("parses the bundled Tasks package manifest from package source", () => {
+    expect(Array.isArray(rawTasksSeedRecords)).toBe(true);
+    expect(rawTasksSeedRecords).toHaveLength(5);
+    expect(parseAppPackageManifest(rawTasksAppPackageManifest)).toEqual({
+      kind: appPackageManifestKind,
+      version: appPackageManifestVersion,
+      packageAppKey: "tasks",
+      label: "Tasks",
+      description: "Task tracking app backed by the bundled Tasks schema and starter records.",
+      defaultInstallId: "tasks",
+      supportsMultipleInstalls: true,
+      packageRevision: 1,
+      sourceSchema: {
+        kind: "bundled",
+        key: "tasks",
+        path: "schema.json",
+      },
+      seedRecords: {
+        kind: "bundled",
+        key: "tasks",
+        path: "seed-records.json",
+      },
+      sourceSchemaHash: bundledSourceSchemaHashFixtures.tasks,
       capabilities: [
         {
           kind: "generatedAdmin",
@@ -229,6 +263,30 @@ describe("app package manifests", () => {
     expect(findResolvedAppPackage("site")?.seedRecordsLocation).toEqual({
       kind: "bundled",
       key: "site",
+      path: "seed-records.json",
+    });
+    expect(findResolvedAppPackage("tasks")).toEqual(
+      expect.objectContaining({
+        adminRouteBase: "/apps",
+        defaultInstallId: "tasks",
+        label: "Tasks",
+        packageAppKey: "tasks",
+        packageRevision: 1,
+        seedRecordsKey: "tasks",
+        sourceOrigin: "bundled",
+        sourceSchemaKey: "tasks",
+        sourceSchemaHash: bundledSourceSchemaHashFixtures.tasks,
+      }),
+    );
+    expect(findResolvedAppPackage("tasks")?.publicRouteBase).toBeUndefined();
+    expect(findResolvedAppPackage("tasks")?.sourceSchemaLocation).toEqual({
+      kind: "bundled",
+      key: "tasks",
+      path: "schema.json",
+    });
+    expect(findResolvedAppPackage("tasks")?.seedRecordsLocation).toEqual({
+      kind: "bundled",
+      key: "tasks",
       path: "seed-records.json",
     });
     expect(findResolvedAppPackage("crm")?.sourceSchemaLocation).toEqual({
