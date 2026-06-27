@@ -32,7 +32,6 @@ Read this when editing `src/cli/*`.
 
 - `cli.ts` and `cli-command.ts`: public command parsing, help, and dispatch.
 - `package-commands.ts`: package command entrypoints.
-- `instance-workspace.ts`: temporary compatibility facade for workspace behavior.
 - `instance-workspace-*operation*.ts`: workspace operation contracts, runner, handlers, and domain operation bodies.
 - `instance-target-context.ts` and `instance-target-client.ts`: target selection, target facts, and instance protocol access.
 - `instance-workspace-credential-setup.ts`, `cloudflare-oauth.ts`, and provider runner modules: credential and provider adapter assembly.
