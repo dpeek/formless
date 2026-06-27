@@ -4,8 +4,9 @@
 
 Instance auth owns product instance passkey credentials, WebAuthn challenge
 ceremonies, canonical auth origin policy, principal-backed owner session
-issuance, logout, and admin bearer recovery boundaries. Reviewable owner
-identity and owner authority are stored as identity control-plane principal,
+issuance, central auth sessions, host-local sessions, cross-domain handoff
+grants, logout, and admin bearer recovery boundaries. Reviewable owner identity
+and owner authority are stored as identity control-plane principal,
 principal-email, and role-assignment records.
 
 ## Requirements
@@ -211,6 +212,80 @@ that require an owner session.
 - THEN the unsafe return target is ignored
 - AND the browser falls back to the product instance root after successful
   login
+
+### Requirement: Central Auth And Host Sessions
+
+The system SHALL keep passkey login and central auth sessions on the configured
+auth origin while issuing host-local sessions for other instance hosts through
+one-time grants.
+
+#### Scenario: Central auth session origin
+
+- GIVEN a passkey login succeeds on the configured auth origin
+- WHEN the runtime issues browser session state for that login
+- THEN the central auth session is scoped to the auth origin host
+- AND the session is signed, instance-bound, principal-bound, and expires
+- AND mapped app hosts and mapped public Site hosts do not receive the central
+  auth session cookie through shared cookie scope
+- AND mapped app hosts and mapped public Site hosts do not start passkey
+  registration or login ceremonies unless they are also the configured auth
+  origin
+
+#### Scenario: One-time grant issuance
+
+- GIVEN a browser without a valid host-local session requests an owner-only
+  route on a host that is not the configured auth origin
+- AND the target host starts auth handoff with a host-local nonce cookie,
+  target origin, route id, target profile, target app install or storage
+  identity, path-only redirect target, and state
+- WHEN the auth origin verifies or creates a central auth session for an active
+  principal with active `instance.owner` authority
+- THEN the runtime stores a one-time grant bound to the instance, principal,
+  target origin, route id, target profile, target app install or storage
+  identity, redirect target, nonce, state, and expiry
+- AND the raw grant secret is not stored in identity control-plane records,
+  workspace state, archives, sync payloads, or reviewable snapshots
+- AND absolute, protocol-relative, cross-origin, malformed, or unsupported
+  redirect targets are rejected before grant issuance
+
+#### Scenario: Host session callback
+
+- GIVEN a target host receives the reserved auth callback route with a grant and
+  state
+- WHEN the target host validates the host-local nonce cookie and consumes a
+  matching unexpired grant through the instance auth runtime
+- THEN the grant cannot be used again
+- AND the target host issues a host-local session cookie scoped to that request
+  host
+- AND the host session is signed, instance-bound, principal-bound,
+  target-origin-bound, route-bound, target-profile-bound, and app-install or
+  storage-identity-bound
+- AND the host session includes issued time, expiry, and revocation or session
+  version facts
+- AND the browser redirects only to the path-only redirect target recorded in
+  the consumed grant
+
+#### Scenario: Reject invalid host session handoff
+
+- WHEN a callback attempts to consume a missing, expired, already-used,
+  wrong-state, wrong-nonce, wrong-origin, wrong-route, wrong-profile,
+  wrong-install, or wrong-instance grant
+- THEN the callback is rejected
+- AND no host-local session cookie is issued
+- AND the callback does not expose passkey ceremony, owner setup, central
+  account-management behavior, or app-controlled redirects
+
+#### Scenario: Host session authorization remains current
+
+- GIVEN a host-local session exists for a principal
+- WHEN a privileged write or owner/admin management read is authorized from that
+  session
+- THEN the runtime rechecks current principal status, active `instance.owner`
+  authority, and host session revocation or version facts
+- AND disabled principals, removed owner authority, changed role assignments,
+  or revoked session versions invalidate or narrow future authorization
+- AND host sessions are not accepted on a different host, route, app install,
+  storage identity, target profile, or instance
 
 ### Requirement: Principal-Backed Owner Authorization
 

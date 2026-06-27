@@ -6,8 +6,8 @@ Runtime topology defines the observable profile, route policy, route access,
 mapped host, and request routing contracts for a Formless instance. It keeps
 product instance, dev workbench, app, Site authoring, and published Site
 behavior coherent across browser shells, APIs, static assets, SSR documents,
-indexing, icons, public Site routes, and local workspace gateway route
-eligibility.
+indexing, icons, public Site routes, cross-domain auth callback routes, and
+local workspace gateway route eligibility.
 
 ## Requirements
 
@@ -115,11 +115,25 @@ surfaces or owner-only management API data.
 - AND the owner-only browser shell, instance dashboard, generated app surface,
   or app screen is not served
 
+#### Scenario: Anonymous mapped owner browser route
+
+- GIVEN a mapped host runtime browser route has effective access `owner`
+- AND the mapped host is not the configured auth origin
+- AND the request is a `GET` or `HEAD` request that accepts HTML
+- WHEN the request does not include a valid host-local session for the mapped
+  host, route, target profile, and target app install or storage identity
+- THEN the runtime starts cross-domain auth handoff through a top-level
+  redirect to the configured auth origin
+- AND the handoff records a host-local nonce and a safe path-only return target
+  for the original path and query
+- AND the mapped host does not serve the owner-only browser shell, generated
+  app surface, public Site document, or app screen before the handoff completes
+
 #### Scenario: Authenticated owner browser route
 
 - GIVEN a runtime browser route has effective access `owner`
-- WHEN the request includes a valid owner session for an active principal with
-  active `instance.owner` authority
+- WHEN the request includes a valid owner session or host-local session for an
+  active principal with active `instance.owner` authority
 - THEN the route remains eligible for the matching instance dashboard,
   generated app surface, or app screen
 
@@ -236,6 +250,18 @@ profile behavior.
 - **AND** public Site document, indexing, and icon behavior is selected from the
   package runtime adapter registered for the route target's package app key
 
+#### Scenario: Mapped host auth callback
+
+- **GIVEN** an enabled exact-host `route` mounts an app or public Site host
+- **WHEN** the mapped host receives `/_formless/auth/callback`
+- **THEN** runtime topology reserves the request for cross-domain auth grant
+  consumption
+- **AND** app schemas, generated app routes, public Site SSR, clean redirects,
+  static asset fallback, schema-key routes, owner setup, owner login, and
+  passkey ceremony routes do not claim the callback path
+- **AND** callback handling may issue only a host-local session for the matched
+  route target before redirecting to a path-only return target
+
 #### Scenario: Mapped app host
 
 - **GIVEN** an enabled exact-host `route` mounts an app surface for an installed
@@ -251,6 +277,9 @@ profile behavior.
   the matching installed app API route remains available
 - **AND** owner setup, owner login, and passkey ceremony requests do not treat
   the mapped app host as a WebAuthn relying party
+- **AND** owner-only access on the mapped app host uses cross-domain auth
+  handoff and a host-local session instead of local owner login or passkey
+  ceremony routes
 
 ### Requirement: Schema-Owned App Route Resolution
 

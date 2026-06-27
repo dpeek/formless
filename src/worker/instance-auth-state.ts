@@ -8,13 +8,16 @@ import {
   parseInstanceAuthCanonicalOrigin,
   parseInstanceAuthConfigInput,
   parseInstanceAuthRelyingPartyId,
+  parseOwnerLoginRedirectTarget,
   type InstanceAuthConfigInput,
+  type OwnerLoginRedirectTarget,
 } from "../shared/instance-auth.ts";
 import { nowIsoString } from "../shared/clock.ts";
 
 const base64UrlPattern = /^[A-Za-z0-9_-]+$/;
 const credentialDeviceTypes = ["multiDevice", "singleDevice"] as const;
 const passkeyChallengeKinds = ["login", "registration"] as const;
+const instanceAuthHandoffTargetProfiles = ["instance", "app", "public-site"] as const;
 const authenticatorTransports = [
   "ble",
   "cable",
@@ -58,6 +61,46 @@ type PasskeyCredentialRow = {
   last_verification_relying_party_id: string | null;
   created_at: string;
   updated_at: string;
+};
+
+type CentralAuthSessionRow = {
+  session_id_hash: string;
+  instance_id: string;
+  principal_id: string;
+  issued_at: string;
+  expires_at: string;
+  revoked_at: string | null;
+};
+
+type HostSessionRevocationVersionRow = {
+  scope_key: string;
+  instance_id: string;
+  principal_id: string;
+  target_origin: string;
+  route_id: string;
+  target_profile: string;
+  app_install_id: string | null;
+  storage_identity: string | null;
+  session_version: number;
+  updated_at: string;
+};
+
+type HandoffGrantRow = {
+  grant_id: string;
+  grant_secret_hash: string;
+  instance_id: string;
+  principal_id: string;
+  target_origin: string;
+  route_id: string;
+  target_profile: string;
+  app_install_id: string | null;
+  storage_identity: string | null;
+  return_to: string;
+  nonce_hash: string;
+  state: string;
+  created_at: string;
+  expires_at: string;
+  consumed_at: string | null;
 };
 
 export type StoredInstanceAuthConfig = InstanceAuthConfigInput & {
@@ -190,6 +233,130 @@ export type UpdatePasskeyCredentialVerificationResult =
       reason: "counter-regression" | "missing-credential";
     };
 
+export type InstanceAuthHandoffTargetProfile = (typeof instanceAuthHandoffTargetProfiles)[number];
+
+export type InstanceAuthSessionTargetBinding = {
+  appInstallId?: string;
+  routeId: string;
+  storageIdentity?: string;
+  targetOrigin: string;
+  targetProfile: InstanceAuthHandoffTargetProfile;
+};
+
+export type StoredCentralAuthSession = {
+  expiresAt: string;
+  instanceId: string;
+  issuedAt: string;
+  principalId: string;
+  revokedAt?: string;
+  sessionIdHash: string;
+};
+
+export type CreateCentralAuthSessionInput = {
+  expiresAt: string;
+  instanceId: string;
+  issuedAt?: string;
+  principalId: string;
+  sessionIdHash: string;
+};
+
+export type CreateCentralAuthSessionResult =
+  | { ok: true; session: StoredCentralAuthSession }
+  | {
+      ok: false;
+      reason: "duplicate-session";
+      session: StoredCentralAuthSession;
+    };
+
+export type RevokeCentralAuthSessionResult =
+  | { ok: true; session: StoredCentralAuthSession }
+  | { ok: false; reason: "missing-session" };
+
+export type StoredHostSessionRevocationVersion = InstanceAuthSessionTargetBinding & {
+  instanceId: string;
+  principalId: string;
+  sessionVersion: number;
+  updatedAt: string;
+};
+
+export type HostSessionRevocationVersionInput = InstanceAuthSessionTargetBinding & {
+  instanceId: string;
+  principalId: string;
+};
+
+export type BumpHostSessionRevocationVersionInput = HostSessionRevocationVersionInput & {
+  now?: string;
+};
+
+export type StoredHandoffGrant = InstanceAuthSessionTargetBinding & {
+  consumedAt?: string;
+  createdAt: string;
+  expiresAt: string;
+  grantId: string;
+  grantSecretHash: string;
+  instanceId: string;
+  nonceHash: string;
+  principalId: string;
+  returnTo: OwnerLoginRedirectTarget;
+  state: string;
+};
+
+export type CreateHandoffGrantInput = InstanceAuthSessionTargetBinding & {
+  createdAt?: string;
+  expiresAt: string;
+  grantId?: string;
+  grantSecretHash: string;
+  instanceId: string;
+  nonceHash: string;
+  principalId: string;
+  returnTo: string;
+  state: string;
+};
+
+export type CreateHandoffGrantResult =
+  | { ok: true; grant: StoredHandoffGrant }
+  | {
+      ok: false;
+      grant: StoredHandoffGrant;
+      reason: "duplicate-grant-id" | "duplicate-grant-secret-hash";
+    };
+
+export type ConsumeHandoffGrantInput = {
+  grantId: string;
+  grantSecretHash?: string;
+  instanceId?: string;
+  nonceHash?: string;
+  now?: string;
+  principalId?: string;
+  state?: string;
+  target?: InstanceAuthSessionTargetBinding;
+};
+
+export type ConsumeHandoffGrantResult =
+  | { ok: true; grant: StoredHandoffGrant }
+  | {
+      ok: false;
+      grant?: StoredHandoffGrant;
+      reason:
+        | "already-consumed"
+        | "expired-grant"
+        | "missing-grant"
+        | "wrong-grant-secret"
+        | "wrong-instance"
+        | "wrong-nonce"
+        | "wrong-principal"
+        | "wrong-state"
+        | "wrong-target";
+    };
+
+type HandoffGrantMismatchReason =
+  | "wrong-grant-secret"
+  | "wrong-instance"
+  | "wrong-nonce"
+  | "wrong-principal"
+  | "wrong-state"
+  | "wrong-target";
+
 export function ensureInstanceAuthTables(storage: DurableObjectStorage) {
   storage.sql.exec(`
     CREATE TABLE IF NOT EXISTS instance_auth_config (
@@ -240,6 +407,81 @@ export function ensureInstanceAuthTables(storage: DurableObjectStorage) {
 
     CREATE INDEX IF NOT EXISTS idx_instance_auth_passkey_credentials_principal_id
       ON instance_auth_passkey_credentials (principal_id);
+
+    CREATE TABLE IF NOT EXISTS instance_auth_central_sessions (
+      session_id_hash TEXT PRIMARY KEY,
+      instance_id TEXT NOT NULL,
+      principal_id TEXT NOT NULL,
+      issued_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      revoked_at TEXT
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_instance_auth_central_sessions_principal_id
+      ON instance_auth_central_sessions (principal_id);
+
+    CREATE INDEX IF NOT EXISTS idx_instance_auth_central_sessions_expires_at
+      ON instance_auth_central_sessions (expires_at);
+
+    CREATE TABLE IF NOT EXISTS instance_auth_host_session_versions (
+      scope_key TEXT PRIMARY KEY,
+      instance_id TEXT NOT NULL,
+      principal_id TEXT NOT NULL,
+      target_origin TEXT NOT NULL,
+      route_id TEXT NOT NULL,
+      target_profile TEXT NOT NULL CHECK (target_profile IN ('instance', 'app', 'public-site')),
+      app_install_id TEXT,
+      storage_identity TEXT,
+      session_version INTEGER NOT NULL CHECK (session_version >= 0),
+      updated_at TEXT NOT NULL,
+      CHECK (app_install_id IS NOT NULL OR storage_identity IS NOT NULL)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_instance_auth_host_session_versions_principal_id
+      ON instance_auth_host_session_versions (principal_id);
+
+    CREATE INDEX IF NOT EXISTS idx_instance_auth_host_session_versions_target
+      ON instance_auth_host_session_versions (
+        target_origin,
+        route_id,
+        target_profile,
+        app_install_id,
+        storage_identity
+      );
+
+    CREATE TABLE IF NOT EXISTS instance_auth_handoff_grants (
+      grant_id TEXT PRIMARY KEY,
+      grant_secret_hash TEXT NOT NULL UNIQUE,
+      instance_id TEXT NOT NULL,
+      principal_id TEXT NOT NULL,
+      target_origin TEXT NOT NULL,
+      route_id TEXT NOT NULL,
+      target_profile TEXT NOT NULL CHECK (target_profile IN ('instance', 'app', 'public-site')),
+      app_install_id TEXT,
+      storage_identity TEXT,
+      return_to TEXT NOT NULL,
+      nonce_hash TEXT NOT NULL,
+      state TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      consumed_at TEXT,
+      CHECK (app_install_id IS NOT NULL OR storage_identity IS NOT NULL)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_instance_auth_handoff_grants_principal_id
+      ON instance_auth_handoff_grants (principal_id);
+
+    CREATE INDEX IF NOT EXISTS idx_instance_auth_handoff_grants_target
+      ON instance_auth_handoff_grants (
+        target_origin,
+        route_id,
+        target_profile,
+        app_install_id,
+        storage_identity
+      );
+
+    CREATE INDEX IF NOT EXISTS idx_instance_auth_handoff_grants_expires_at
+      ON instance_auth_handoff_grants (expires_at);
   `);
 }
 
@@ -248,6 +490,9 @@ export function resetInstanceAuthTables(storage: DurableObjectStorage) {
 
   storage.transactionSync(() => {
     storage.sql.exec(`
+      DELETE FROM instance_auth_handoff_grants;
+      DELETE FROM instance_auth_host_session_versions;
+      DELETE FROM instance_auth_central_sessions;
       DELETE FROM instance_auth_passkey_credentials;
       DELETE FROM instance_auth_challenges;
       DELETE FROM instance_auth_config;
@@ -644,6 +889,281 @@ export function updatePasskeyCredentialVerification(
   });
 }
 
+export function createCentralAuthSession(
+  storage: DurableObjectStorage,
+  input: CreateCentralAuthSessionInput,
+): CreateCentralAuthSessionResult {
+  ensureInstanceAuthTables(storage);
+
+  return storage.transactionSync(() => {
+    const session = normalizeCreateCentralAuthSessionInput(input);
+    const existing = readCentralAuthSessionByHash(storage, session.sessionIdHash);
+
+    if (existing) {
+      return {
+        ok: false,
+        reason: "duplicate-session",
+        session: existing,
+      };
+    }
+
+    storage.sql.exec(
+      `
+        INSERT INTO instance_auth_central_sessions (
+          session_id_hash,
+          instance_id,
+          principal_id,
+          issued_at,
+          expires_at,
+          revoked_at
+        )
+        VALUES (?, ?, ?, ?, ?, NULL)
+      `,
+      session.sessionIdHash,
+      session.instanceId,
+      session.principalId,
+      session.issuedAt,
+      session.expiresAt,
+    );
+
+    return { ok: true, session };
+  });
+}
+
+export function readCentralAuthSession(
+  storage: DurableObjectStorage,
+  sessionIdHash: unknown,
+): StoredCentralAuthSession | undefined {
+  ensureInstanceAuthTables(storage);
+
+  return readCentralAuthSessionByHash(
+    storage,
+    parseBase64UrlString("Central auth session id hash", sessionIdHash),
+  );
+}
+
+export function revokeCentralAuthSession(
+  storage: DurableObjectStorage,
+  sessionIdHash: unknown,
+  now: unknown = nowIsoString(),
+): RevokeCentralAuthSessionResult {
+  ensureInstanceAuthTables(storage);
+
+  return storage.transactionSync(() => {
+    const sessionHash = parseBase64UrlString("Central auth session id hash", sessionIdHash);
+    const revokedAt = parseTimestamp("Central auth session revokedAt", now);
+    const existing = readCentralAuthSessionByHash(storage, sessionHash);
+
+    if (!existing) {
+      return { ok: false, reason: "missing-session" };
+    }
+
+    storage.sql.exec(
+      "UPDATE instance_auth_central_sessions SET revoked_at = ? WHERE session_id_hash = ?",
+      revokedAt,
+      sessionHash,
+    );
+
+    return {
+      ok: true,
+      session: {
+        ...existing,
+        revokedAt,
+      },
+    };
+  });
+}
+
+export function readHostSessionRevocationVersion(
+  storage: DurableObjectStorage,
+  input: HostSessionRevocationVersionInput,
+): StoredHostSessionRevocationVersion | undefined {
+  ensureInstanceAuthTables(storage);
+
+  const scope = normalizeHostSessionRevocationVersionInput(input);
+
+  return readHostSessionRevocationVersionByScopeKey(storage, hostSessionScopeKey(scope));
+}
+
+export function bumpHostSessionRevocationVersion(
+  storage: DurableObjectStorage,
+  input: BumpHostSessionRevocationVersionInput,
+): StoredHostSessionRevocationVersion {
+  ensureInstanceAuthTables(storage);
+
+  return storage.transactionSync(() => {
+    const scope = normalizeHostSessionRevocationVersionInput(input);
+    const updatedAt = parseTimestamp(
+      "Host session revocation version updatedAt",
+      input.now ?? nowIsoString(),
+    );
+    const scopeKey = hostSessionScopeKey(scope);
+    const existing = readHostSessionRevocationVersionByScopeKey(storage, scopeKey);
+    const sessionVersion = (existing?.sessionVersion ?? 0) + 1;
+
+    storage.sql.exec(
+      `
+        INSERT INTO instance_auth_host_session_versions (
+          scope_key,
+          instance_id,
+          principal_id,
+          target_origin,
+          route_id,
+          target_profile,
+          app_install_id,
+          storage_identity,
+          session_version,
+          updated_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(scope_key) DO UPDATE SET
+          session_version = excluded.session_version,
+          updated_at = excluded.updated_at
+      `,
+      scopeKey,
+      scope.instanceId,
+      scope.principalId,
+      scope.targetOrigin,
+      scope.routeId,
+      scope.targetProfile,
+      scope.appInstallId ?? null,
+      scope.storageIdentity ?? null,
+      sessionVersion,
+      updatedAt,
+    );
+
+    return {
+      ...scope,
+      sessionVersion,
+      updatedAt,
+    };
+  });
+}
+
+export function createHandoffGrant(
+  storage: DurableObjectStorage,
+  input: CreateHandoffGrantInput,
+): CreateHandoffGrantResult {
+  ensureInstanceAuthTables(storage);
+
+  return storage.transactionSync(() => {
+    const grant = normalizeCreateHandoffGrantInput(input);
+    const existingById = readHandoffGrantById(storage, grant.grantId);
+
+    if (existingById) {
+      return {
+        ok: false,
+        grant: existingById,
+        reason: "duplicate-grant-id",
+      };
+    }
+
+    const existingBySecret = readHandoffGrantBySecretHash(storage, grant.grantSecretHash);
+
+    if (existingBySecret) {
+      return {
+        ok: false,
+        grant: existingBySecret,
+        reason: "duplicate-grant-secret-hash",
+      };
+    }
+
+    storage.sql.exec(
+      `
+        INSERT INTO instance_auth_handoff_grants (
+          grant_id,
+          grant_secret_hash,
+          instance_id,
+          principal_id,
+          target_origin,
+          route_id,
+          target_profile,
+          app_install_id,
+          storage_identity,
+          return_to,
+          nonce_hash,
+          state,
+          created_at,
+          expires_at,
+          consumed_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
+      `,
+      grant.grantId,
+      grant.grantSecretHash,
+      grant.instanceId,
+      grant.principalId,
+      grant.targetOrigin,
+      grant.routeId,
+      grant.targetProfile,
+      grant.appInstallId ?? null,
+      grant.storageIdentity ?? null,
+      grant.returnTo,
+      grant.nonceHash,
+      grant.state,
+      grant.createdAt,
+      grant.expiresAt,
+    );
+
+    return { ok: true, grant };
+  });
+}
+
+export function readHandoffGrant(
+  storage: DurableObjectStorage,
+  grantId: unknown,
+): StoredHandoffGrant | undefined {
+  ensureInstanceAuthTables(storage);
+
+  return readHandoffGrantById(storage, parseBase64UrlString("Handoff grant id", grantId));
+}
+
+export function consumeHandoffGrant(
+  storage: DurableObjectStorage,
+  input: ConsumeHandoffGrantInput,
+): ConsumeHandoffGrantResult {
+  ensureInstanceAuthTables(storage);
+
+  return storage.transactionSync(() => {
+    const grantId = parseBase64UrlString("Handoff grant id", input.grantId);
+    const consumedAt = parseTimestamp("Handoff grant consumedAt", input.now ?? nowIsoString());
+    const expected = normalizeConsumeHandoffGrantInput(input);
+    const grant = readHandoffGrantById(storage, grantId);
+
+    if (!grant) {
+      return { ok: false, reason: "missing-grant" };
+    }
+
+    if (grant.consumedAt !== undefined) {
+      return { ok: false, grant, reason: "already-consumed" };
+    }
+
+    if (grant.expiresAt <= consumedAt) {
+      return { ok: false, grant, reason: "expired-grant" };
+    }
+
+    const mismatchReason = handoffGrantMismatchReason(grant, expected);
+
+    if (mismatchReason) {
+      return { ok: false, grant, reason: mismatchReason };
+    }
+
+    storage.sql.exec(
+      "UPDATE instance_auth_handoff_grants SET consumed_at = ? WHERE grant_id = ?",
+      consumedAt,
+      grant.grantId,
+    );
+
+    return {
+      ok: true,
+      grant: {
+        ...grant,
+        consumedAt,
+      },
+    };
+  });
+}
+
 function readInstanceAuthConfigRow(
   storage: DurableObjectStorage,
 ): StoredInstanceAuthConfig | undefined {
@@ -863,6 +1383,352 @@ function passkeyCredentialFromRow(row: PasskeyCredentialRow): StoredPasskeyCrede
   };
 }
 
+function normalizeCreateCentralAuthSessionInput(
+  input: CreateCentralAuthSessionInput,
+): StoredCentralAuthSession {
+  const issuedAt = parseTimestamp(
+    "Central auth session issuedAt",
+    input.issuedAt ?? nowIsoString(),
+  );
+  const expiresAt = parseTimestamp("Central auth session expiresAt", input.expiresAt);
+
+  if (expiresAt <= issuedAt) {
+    throw new Error("Central auth session expiresAt must be after issuedAt.");
+  }
+
+  return {
+    sessionIdHash: parseBase64UrlString("Central auth session id hash", input.sessionIdHash),
+    instanceId: parseNonEmptyString("Central auth session instance id", input.instanceId),
+    principalId: parseNonEmptyString("Central auth session principal id", input.principalId),
+    issuedAt,
+    expiresAt,
+  };
+}
+
+function readCentralAuthSessionByHash(
+  storage: DurableObjectStorage,
+  sessionIdHash: string,
+): StoredCentralAuthSession | undefined {
+  const row = storage.sql
+    .exec<CentralAuthSessionRow>(
+      `
+        SELECT
+          session_id_hash,
+          instance_id,
+          principal_id,
+          issued_at,
+          expires_at,
+          revoked_at
+        FROM instance_auth_central_sessions
+        WHERE session_id_hash = ?
+      `,
+      sessionIdHash,
+    )
+    .next();
+
+  return row.done ? undefined : centralAuthSessionFromRow(row.value);
+}
+
+function centralAuthSessionFromRow(row: CentralAuthSessionRow): StoredCentralAuthSession {
+  return {
+    sessionIdHash: row.session_id_hash,
+    instanceId: row.instance_id,
+    principalId: row.principal_id,
+    issuedAt: row.issued_at,
+    expiresAt: row.expires_at,
+    ...(row.revoked_at === null ? {} : { revokedAt: row.revoked_at }),
+  };
+}
+
+function normalizeHostSessionRevocationVersionInput(
+  input: HostSessionRevocationVersionInput,
+): HostSessionRevocationVersionInput {
+  return {
+    instanceId: parseNonEmptyString("Host session instance id", input.instanceId),
+    principalId: parseNonEmptyString("Host session principal id", input.principalId),
+    ...normalizeInstanceAuthTargetBinding(input),
+  };
+}
+
+function readHostSessionRevocationVersionByScopeKey(
+  storage: DurableObjectStorage,
+  scopeKey: string,
+): StoredHostSessionRevocationVersion | undefined {
+  const row = storage.sql
+    .exec<HostSessionRevocationVersionRow>(
+      `
+        SELECT
+          scope_key,
+          instance_id,
+          principal_id,
+          target_origin,
+          route_id,
+          target_profile,
+          app_install_id,
+          storage_identity,
+          session_version,
+          updated_at
+        FROM instance_auth_host_session_versions
+        WHERE scope_key = ?
+      `,
+      scopeKey,
+    )
+    .next();
+
+  return row.done ? undefined : hostSessionRevocationVersionFromRow(row.value);
+}
+
+function hostSessionRevocationVersionFromRow(
+  row: HostSessionRevocationVersionRow,
+): StoredHostSessionRevocationVersion {
+  return {
+    instanceId: row.instance_id,
+    principalId: row.principal_id,
+    targetOrigin: row.target_origin,
+    routeId: row.route_id,
+    targetProfile: parseInstanceAuthHandoffTargetProfile(row.target_profile),
+    ...(row.app_install_id === null ? {} : { appInstallId: row.app_install_id }),
+    ...(row.storage_identity === null ? {} : { storageIdentity: row.storage_identity }),
+    sessionVersion: parseNonNegativeInteger("Host session revocation version", row.session_version),
+    updatedAt: row.updated_at,
+  };
+}
+
+function hostSessionScopeKey(input: HostSessionRevocationVersionInput): string {
+  return JSON.stringify([
+    input.instanceId,
+    input.principalId,
+    input.targetOrigin,
+    input.routeId,
+    input.targetProfile,
+    input.appInstallId ?? null,
+    input.storageIdentity ?? null,
+  ]);
+}
+
+function normalizeCreateHandoffGrantInput(input: CreateHandoffGrantInput): StoredHandoffGrant {
+  const createdAt = parseTimestamp("Handoff grant createdAt", input.createdAt ?? nowIsoString());
+  const expiresAt = parseTimestamp("Handoff grant expiresAt", input.expiresAt);
+
+  if (expiresAt <= createdAt) {
+    throw new Error("Handoff grant expiresAt must be after createdAt.");
+  }
+
+  return {
+    grantId:
+      input.grantId === undefined
+        ? crypto.randomUUID()
+        : parseBase64UrlString("Handoff grant id", input.grantId),
+    grantSecretHash: parseBase64UrlString("Handoff grant secret hash", input.grantSecretHash),
+    instanceId: parseNonEmptyString("Handoff grant instance id", input.instanceId),
+    principalId: parseNonEmptyString("Handoff grant principal id", input.principalId),
+    ...normalizeInstanceAuthTargetBinding(input),
+    returnTo: parsePathOnlyReturnTarget("Handoff grant return target", input.returnTo),
+    nonceHash: parseBase64UrlString("Handoff grant nonce hash", input.nonceHash),
+    state: parseBase64UrlString("Handoff grant state", input.state),
+    createdAt,
+    expiresAt,
+  };
+}
+
+function normalizeConsumeHandoffGrantInput(input: ConsumeHandoffGrantInput): {
+  grantSecretHash?: string;
+  instanceId?: string;
+  nonceHash?: string;
+  principalId?: string;
+  state?: string;
+  target?: InstanceAuthSessionTargetBinding;
+} {
+  return {
+    ...(input.grantSecretHash === undefined
+      ? {}
+      : {
+          grantSecretHash: parseBase64UrlString("Handoff grant secret hash", input.grantSecretHash),
+        }),
+    ...(input.instanceId === undefined
+      ? {}
+      : { instanceId: parseNonEmptyString("Handoff grant instance id", input.instanceId) }),
+    ...(input.nonceHash === undefined
+      ? {}
+      : { nonceHash: parseBase64UrlString("Handoff grant nonce hash", input.nonceHash) }),
+    ...(input.principalId === undefined
+      ? {}
+      : { principalId: parseNonEmptyString("Handoff grant principal id", input.principalId) }),
+    ...(input.state === undefined
+      ? {}
+      : { state: parseBase64UrlString("Handoff grant state", input.state) }),
+    ...(input.target === undefined
+      ? {}
+      : { target: normalizeInstanceAuthTargetBinding(input.target) }),
+  };
+}
+
+function handoffGrantMismatchReason(
+  grant: StoredHandoffGrant,
+  expected: ReturnType<typeof normalizeConsumeHandoffGrantInput>,
+): HandoffGrantMismatchReason | undefined {
+  if (
+    expected.grantSecretHash !== undefined &&
+    expected.grantSecretHash !== grant.grantSecretHash
+  ) {
+    return "wrong-grant-secret";
+  }
+
+  if (expected.instanceId !== undefined && expected.instanceId !== grant.instanceId) {
+    return "wrong-instance";
+  }
+
+  if (expected.principalId !== undefined && expected.principalId !== grant.principalId) {
+    return "wrong-principal";
+  }
+
+  if (expected.state !== undefined && expected.state !== grant.state) {
+    return "wrong-state";
+  }
+
+  if (expected.nonceHash !== undefined && expected.nonceHash !== grant.nonceHash) {
+    return "wrong-nonce";
+  }
+
+  if (expected.target !== undefined && !instanceAuthTargetBindingsEqual(expected.target, grant)) {
+    return "wrong-target";
+  }
+
+  return undefined;
+}
+
+function readHandoffGrantById(
+  storage: DurableObjectStorage,
+  grantId: string,
+): StoredHandoffGrant | undefined {
+  const row = storage.sql
+    .exec<HandoffGrantRow>(
+      `
+        SELECT
+          grant_id,
+          grant_secret_hash,
+          instance_id,
+          principal_id,
+          target_origin,
+          route_id,
+          target_profile,
+          app_install_id,
+          storage_identity,
+          return_to,
+          nonce_hash,
+          state,
+          created_at,
+          expires_at,
+          consumed_at
+        FROM instance_auth_handoff_grants
+        WHERE grant_id = ?
+      `,
+      grantId,
+    )
+    .next();
+
+  return row.done ? undefined : handoffGrantFromRow(row.value);
+}
+
+function readHandoffGrantBySecretHash(
+  storage: DurableObjectStorage,
+  grantSecretHash: string,
+): StoredHandoffGrant | undefined {
+  const row = storage.sql
+    .exec<HandoffGrantRow>(
+      `
+        SELECT
+          grant_id,
+          grant_secret_hash,
+          instance_id,
+          principal_id,
+          target_origin,
+          route_id,
+          target_profile,
+          app_install_id,
+          storage_identity,
+          return_to,
+          nonce_hash,
+          state,
+          created_at,
+          expires_at,
+          consumed_at
+        FROM instance_auth_handoff_grants
+        WHERE grant_secret_hash = ?
+      `,
+      grantSecretHash,
+    )
+    .next();
+
+  return row.done ? undefined : handoffGrantFromRow(row.value);
+}
+
+function handoffGrantFromRow(row: HandoffGrantRow): StoredHandoffGrant {
+  return {
+    grantId: row.grant_id,
+    grantSecretHash: row.grant_secret_hash,
+    instanceId: row.instance_id,
+    principalId: row.principal_id,
+    targetOrigin: row.target_origin,
+    routeId: row.route_id,
+    targetProfile: parseInstanceAuthHandoffTargetProfile(row.target_profile),
+    ...(row.app_install_id === null ? {} : { appInstallId: row.app_install_id }),
+    ...(row.storage_identity === null ? {} : { storageIdentity: row.storage_identity }),
+    returnTo: parsePathOnlyReturnTarget("Stored handoff grant return target", row.return_to),
+    nonceHash: row.nonce_hash,
+    state: row.state,
+    createdAt: row.created_at,
+    expiresAt: row.expires_at,
+    ...(row.consumed_at === null ? {} : { consumedAt: row.consumed_at }),
+  };
+}
+
+function normalizeInstanceAuthTargetBinding(
+  input: InstanceAuthSessionTargetBinding,
+): InstanceAuthSessionTargetBinding {
+  const appInstallId = parseOptionalNonEmptyString(
+    "Instance auth target app install id",
+    input.appInstallId,
+  );
+  const storageIdentity = parseOptionalNonEmptyString(
+    "Instance auth target storage identity",
+    input.storageIdentity,
+  );
+
+  if (appInstallId === undefined && storageIdentity === undefined) {
+    throw new Error("Instance auth target requires app install id or storage identity.");
+  }
+
+  return {
+    targetOrigin: parseInstanceAuthCanonicalOrigin(input.targetOrigin),
+    routeId: parseNonEmptyString("Instance auth target route id", input.routeId),
+    targetProfile: parseInstanceAuthHandoffTargetProfile(input.targetProfile),
+    ...(appInstallId === undefined ? {} : { appInstallId }),
+    ...(storageIdentity === undefined ? {} : { storageIdentity }),
+  };
+}
+
+function instanceAuthTargetBindingsEqual(
+  left: InstanceAuthSessionTargetBinding,
+  right: InstanceAuthSessionTargetBinding,
+): boolean {
+  return (
+    left.targetOrigin === right.targetOrigin &&
+    left.routeId === right.routeId &&
+    left.targetProfile === right.targetProfile &&
+    (left.appInstallId ?? undefined) === (right.appInstallId ?? undefined) &&
+    (left.storageIdentity ?? undefined) === (right.storageIdentity ?? undefined)
+  );
+}
+
+function parseInstanceAuthHandoffTargetProfile(value: unknown): InstanceAuthHandoffTargetProfile {
+  return parseStringLiteral(
+    "Instance auth handoff target profile",
+    value,
+    instanceAuthHandoffTargetProfiles,
+  );
+}
+
 function parsePasskeyChallengeKind(value: unknown): PasskeyChallengeKind {
   return parseStringLiteral("Passkey challenge kind", value, passkeyChallengeKinds);
 }
@@ -919,6 +1785,24 @@ function parseNonEmptyString(context: string, value: unknown): string {
   }
 
   return value.trim();
+}
+
+function parseOptionalNonEmptyString(context: string, value: unknown): string | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  return parseNonEmptyString(context, value);
+}
+
+function parsePathOnlyReturnTarget(context: string, value: unknown): OwnerLoginRedirectTarget {
+  const target = parseOwnerLoginRedirectTarget(value);
+
+  if (target === undefined) {
+    throw new Error(`${context} must be a safe path-only redirect target.`);
+  }
+
+  return target;
 }
 
 function parseTimestamp(context: string, value: unknown): string {

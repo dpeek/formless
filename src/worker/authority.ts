@@ -45,6 +45,10 @@ import { handleInstanceDomainMappingsDurableObjectRequest } from "./instance-dom
 import { handleInstanceDeploymentRuntimeDurableObjectRequest } from "./deployment-runtime-api.ts";
 import { handleInstanceEmailRuntimeDurableObjectRequest } from "./email-runtime.ts";
 import { ensureRuntimeInstanceAuthConfig } from "./instance-auth-runtime.ts";
+import {
+  handleInstanceAuthHandoffDurableObjectRequest,
+  hostAuthSessionTargetFromRequestHeaders,
+} from "./instance-auth-handoff.ts";
 import { handleLocalSessionBootstrapDurableObjectRequest } from "./local-session-bootstrap.ts";
 import {
   executePublicOperationRequest,
@@ -130,6 +134,16 @@ export class FormlessAuthority extends DurableObject<Env> {
 
     if (ownerPasskeyResponse) {
       return ownerPasskeyResponse;
+    }
+
+    const instanceAuthHandoffResponse = await handleInstanceAuthHandoffDurableObjectRequest(
+      request,
+      this.ctx.storage,
+      this.bindings,
+    );
+
+    if (instanceAuthHandoffResponse) {
+      return instanceAuthHandoffResponse;
     }
 
     const instanceDomainMappingsResponse = await handleInstanceDomainMappingsDurableObjectRequest(
@@ -231,7 +245,9 @@ export class FormlessAuthority extends DurableObject<Env> {
 
     try {
       if (isRetiredWriteRoute(request.method, route.path)) {
-        const authorization = await authorizeInstanceWrite(request, this.bindings);
+        const authorization = await authorizeInstanceWrite(request, this.bindings, {
+          hostSessionTarget: hostAuthSessionTargetForAuthorityRoute(request, route.identity),
+        });
 
         if (!authorization.authorized) {
           return jsonResponse(
@@ -324,7 +340,9 @@ export class FormlessAuthority extends DurableObject<Env> {
       }
 
       if (operation) {
-        const authorization = await authorizeAuthorityOperation(request, operation, this.bindings);
+        const authorization = await authorizeAuthorityOperation(request, operation, this.bindings, {
+          hostSessionTarget: hostAuthSessionTargetForAuthorityRoute(request, route.identity),
+        });
 
         if (!authorization.authorized) {
           return jsonResponse(
@@ -421,6 +439,20 @@ export class FormlessAuthority extends DurableObject<Env> {
       webSocket: client,
     });
   }
+}
+
+function hostAuthSessionTargetForAuthorityRoute(request: Request, identity: AppStorageIdentity) {
+  if (identity.kind !== "appInstall") {
+    return undefined;
+  }
+
+  const target = hostAuthSessionTargetFromRequestHeaders(request.headers);
+
+  if (!target || target.storageIdentity !== identity.authorityName) {
+    return undefined;
+  }
+
+  return target;
 }
 
 class AuthorityWriteModule {

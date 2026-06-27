@@ -219,6 +219,16 @@ describe("Worker document routing", () => {
       surface: "admin",
       targetProfile: "app",
     } as const;
+    const mappedOwnerAppRoute = {
+      access: "owner",
+      id: "route:host:app:tasks.example.com",
+      kind: "mount",
+      matchHost: "tasks.example.com",
+      matchPath: "/",
+      matchPrefix: "/",
+      surface: "admin",
+      targetProfile: "app",
+    } as const;
 
     expect(
       shouldRedirectAnonymousOwnerBrowserRoute(
@@ -292,6 +302,13 @@ describe("Worker document routing", () => {
         { profile: "publishedSite" },
       ),
     ).toBe(false);
+    expect(
+      shouldRedirectAnonymousOwnerBrowserRoute(
+        documentRequest("https://tasks.example.com/schema"),
+        { profile: "app" },
+        mappedOwnerAppRoute,
+      ),
+    ).toBe(true);
     expect(
       ownerBrowserRouteAccessForRequest(
         documentRequest("http://example.com/apps/tasks"),

@@ -6,9 +6,16 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vite-plus
 
 import { createWorkerHarness } from "./miniflare-test.ts";
 import type {
+  ConsumeHandoffGrantResult,
   ConsumePasskeyChallengeResult,
+  CreateCentralAuthSessionResult,
+  CreateHandoffGrantResult,
   CreatePasskeyChallengeResult,
   CreatePasskeyCredentialResult,
+  RevokeCentralAuthSessionResult,
+  StoredCentralAuthSession,
+  StoredHandoffGrant,
+  StoredHostSessionRevocationVersion,
   StoredInstanceAuthConfig,
   StoredPasskeyChallenge,
   StoredPasskeyCredential,
@@ -28,7 +35,22 @@ const registrationChallenge = "cmVnaXN0cmF0aW9uLWNoYWxsZW5nZQ";
 const loginChallenge = "bG9naW4tY2hhbGxlbmdl";
 const deleteChallenge = "ZGVsZXRlLWNoYWxsZW5nZQ";
 const setupTokenHash = "c2V0dXAtdG9rZW4taGFzaA";
+const centralSessionIdHash = "Y2VudHJhbC1zZXNzaW9uLWhhc2g";
+const grantId = "aGFuZG9mZi1ncmFudC0x";
+const duplicateGrantId = "aGFuZG9mZi1ncmFudC0y";
+const expiredGrantId = "ZXhwaXJlZC1oYW5kb2ZmLWdyYW50";
+const grantSecretHash = "Z3JhbnQtc2VjcmV0LWhhc2g";
+const duplicateGrantSecretHash = "Z3JhbnQtc2VjcmV0LWhhc2gtMg";
+const expiredGrantSecretHash = "ZXhwaXJlZC1ncmFudC1zZWNyZXQtaGFzaA";
+const nonceHash = "bm9uY2UtaGFzaA";
+const state = "c3RhdGU";
+const instanceId = "instance.example.com";
 const principalId = "principal-1";
+const targetOrigin = "https://app.example.com";
+const routeId = "route:personal:admin";
+const appInstallId = "personal";
+const storageIdentity = "app:personal";
+const returnTo = "/settings?panel=routes";
 const credentialId = "Y3JlZGVudGlhbC0x";
 const publicKey = [1, 2, 3, 4, 5];
 const publicKeyBase64Url = "AQIDBAU";
@@ -283,6 +305,139 @@ describe("instance auth state", () => {
     });
   });
 
+  it("stores central auth sessions and host revocation versions as private auth state", async () => {
+    const created = await createCentralSession();
+    const duplicate = await createCentralSession({ principalId: "principal-2" });
+    const revoked = await revokeCentralSession(centralSessionIdHash, updatedAt);
+    const storedSession = await readCentralSession(centralSessionIdHash);
+    const missingVersion = await readHostSessionRevocationVersion();
+    const firstVersion = await bumpHostSessionRevocationVersion(createdAt);
+    const secondVersion = await bumpHostSessionRevocationVersion(updatedAt);
+    const storedVersion = await readHostSessionRevocationVersion();
+
+    expect(created).toEqual({
+      ok: true,
+      session: {
+        sessionIdHash: centralSessionIdHash,
+        instanceId,
+        principalId,
+        issuedAt: createdAt,
+        expiresAt,
+      },
+    });
+    expect(duplicate).toEqual({
+      ok: false,
+      reason: "duplicate-session",
+      session: created.ok ? created.session : undefined,
+    });
+    expect(revoked).toEqual({
+      ok: true,
+      session: {
+        ...(created.ok ? created.session : undefined),
+        revokedAt: updatedAt,
+      },
+    });
+    expect(storedSession.session).toEqual(revoked.ok ? revoked.session : undefined);
+    expect(missingVersion.version).toBeNull();
+    expect(firstVersion).toEqual({
+      instanceId,
+      principalId,
+      targetOrigin,
+      routeId,
+      targetProfile: "app",
+      appInstallId,
+      storageIdentity,
+      sessionVersion: 1,
+      updatedAt: createdAt,
+    });
+    expect(secondVersion).toEqual({
+      ...firstVersion,
+      sessionVersion: 2,
+      updatedAt,
+    });
+    expect(storedVersion.version).toEqual(secondVersion);
+  });
+
+  it("stores one-time handoff grants with hashed secrets and consumed status", async () => {
+    const created = await createHandoffGrant();
+    const duplicateBySecret = await createHandoffGrant({
+      grantId: duplicateGrantId,
+      grantSecretHash,
+    });
+    const consumed = await consumeHandoffGrant(grantId, updatedAt);
+    const replay = await consumeHandoffGrant(grantId, updatedAt);
+    const stored = await readHandoffGrant(grantId);
+
+    await createHandoffGrant({
+      grantId: expiredGrantId,
+      grantSecretHash: expiredGrantSecretHash,
+      expiresAt: expiredAt,
+    });
+
+    const expired = await consumeHandoffGrant(expiredGrantId, updatedAt);
+    const rejectedUnsafeReturn = await fetchInstanceAuth("/handoff-grant", {
+      body: JSON.stringify({
+        ...handoffGrantInput(),
+        grantId: "dW5zYWZlLXJldHVybg",
+        grantSecretHash: duplicateGrantSecretHash,
+        returnTo: "https://example.com/settings",
+      }),
+      method: "POST",
+    });
+
+    expect(created).toEqual({
+      ok: true,
+      grant: {
+        grantId,
+        grantSecretHash,
+        instanceId,
+        principalId,
+        targetOrigin,
+        routeId,
+        targetProfile: "app",
+        appInstallId,
+        storageIdentity,
+        returnTo,
+        nonceHash,
+        state,
+        createdAt,
+        expiresAt,
+      },
+    });
+    expect(duplicateBySecret).toEqual({
+      ok: false,
+      grant: created.ok ? created.grant : undefined,
+      reason: "duplicate-grant-secret-hash",
+    });
+    expect(consumed).toEqual({
+      ok: true,
+      grant: {
+        ...(created.ok ? created.grant : undefined),
+        consumedAt: updatedAt,
+      },
+    });
+    expect(replay).toEqual({
+      ok: false,
+      grant: consumed.ok ? consumed.grant : undefined,
+      reason: "already-consumed",
+    });
+    expect(stored.grant).toEqual(consumed.ok ? consumed.grant : undefined);
+    expect(expired).toEqual({
+      ok: false,
+      grant: {
+        ...(created.ok ? created.grant : undefined),
+        grantId: expiredGrantId,
+        grantSecretHash: expiredGrantSecretHash,
+        expiresAt: expiredAt,
+      },
+      reason: "expired-grant",
+    });
+    expect(rejectedUnsafeReturn.status).toBe(400);
+    expect(await rejectedUnsafeReturn.json()).toEqual({
+      error: "Handoff grant return target must be a safe path-only redirect target.",
+    });
+  });
+
   it("reports missing credentials before verification facts are updated", async () => {
     expect(
       await updateCredentialVerification({
@@ -344,6 +499,83 @@ function readCredential(id: string) {
   return getJson<{ credential: StoredPasskeyCredential | null }>(`/credential?id=${id}`);
 }
 
+function createCentralSession(overrides: Partial<{ principalId: string }> = {}) {
+  return postJson<CreateCentralAuthSessionResult>("/central-session", {
+    sessionIdHash: centralSessionIdHash,
+    instanceId,
+    principalId: overrides.principalId ?? principalId,
+    issuedAt: createdAt,
+    expiresAt,
+  });
+}
+
+function readCentralSession(idHash: string) {
+  return getJson<{ session: StoredCentralAuthSession | null }>(`/central-session?idHash=${idHash}`);
+}
+
+function revokeCentralSession(idHash: string, now: string) {
+  return postJson<RevokeCentralAuthSessionResult>("/central-session/revoke", { idHash, now });
+}
+
+function readHostSessionRevocationVersion() {
+  return getJson<{ version: StoredHostSessionRevocationVersion | null }>(
+    `/host-session-version?${new URLSearchParams(hostSessionTarget()).toString()}`,
+  );
+}
+
+function bumpHostSessionRevocationVersion(now: string) {
+  return postJson<StoredHostSessionRevocationVersion>("/host-session-version/bump", {
+    ...hostSessionTarget(),
+    now,
+  });
+}
+
+function createHandoffGrant(overrides: Partial<ReturnType<typeof handoffGrantInput>> = {}) {
+  return postJson<CreateHandoffGrantResult>("/handoff-grant", {
+    ...handoffGrantInput(),
+    ...overrides,
+  });
+}
+
+function readHandoffGrant(id: string) {
+  return getJson<{ grant: StoredHandoffGrant | null }>(`/handoff-grant?id=${id}`);
+}
+
+function consumeHandoffGrant(id: string, now: string) {
+  return postJson<ConsumeHandoffGrantResult>("/handoff-grant/consume", { grantId: id, now });
+}
+
+function handoffGrantInput() {
+  return {
+    grantId,
+    grantSecretHash,
+    instanceId,
+    principalId,
+    targetOrigin,
+    routeId,
+    targetProfile: "app",
+    appInstallId,
+    storageIdentity,
+    returnTo,
+    nonceHash,
+    state,
+    createdAt,
+    expiresAt,
+  };
+}
+
+function hostSessionTarget() {
+  return {
+    instanceId,
+    principalId,
+    targetOrigin,
+    routeId,
+    targetProfile: "app",
+    appInstallId,
+    storageIdentity,
+  };
+}
+
 async function getJson<T>(path: string) {
   const response = await fetchInstanceAuth(path);
 
@@ -380,17 +612,25 @@ async function writeInstanceAuthHarness() {
     `
       import { DurableObject } from "cloudflare:workers";
       import {
+        bumpHostSessionRevocationVersion,
+        consumeHandoffGrant,
         consumePasskeyChallenge,
+        createCentralAuthSession,
+        createHandoffGrant,
         createPasskeyChallenge,
         createPasskeyCredential,
         deletePasskeyChallenge,
         ensureInstanceAuthTables,
         expirePasskeyChallenges,
         passkeyCredentialToWebAuthnCredential,
+        readCentralAuthSession,
+        readHandoffGrant,
+        readHostSessionRevocationVersion,
         readInstanceAuthConfig,
         readPasskeyChallenge,
         readPasskeyCredential,
         readPasskeyCredentialsForPrincipal,
+        revokeCentralAuthSession,
         updatePasskeyCredentialVerification,
         writeInstanceAuthConfig,
       } from "${process.cwd()}/src/worker/instance-auth-state.ts";
@@ -411,6 +651,53 @@ async function writeInstanceAuthHarness() {
 
             if (request.method === "POST" && url.pathname === "/config") {
               return Response.json(writeInstanceAuthConfig(this.ctx.storage, await request.json()));
+            }
+
+            if (request.method === "POST" && url.pathname === "/central-session") {
+              return Response.json(createCentralAuthSession(this.ctx.storage, await request.json()));
+            }
+
+            if (request.method === "GET" && url.pathname === "/central-session") {
+              return Response.json({
+                session: readCentralAuthSession(this.ctx.storage, url.searchParams.get("idHash")) ?? null,
+              });
+            }
+
+            if (request.method === "POST" && url.pathname === "/central-session/revoke") {
+              const body = await request.json();
+
+              return Response.json(
+                revokeCentralAuthSession(this.ctx.storage, body.idHash, body.now),
+              );
+            }
+
+            if (request.method === "GET" && url.pathname === "/host-session-version") {
+              return Response.json({
+                version: readHostSessionRevocationVersion(
+                  this.ctx.storage,
+                  targetBindingFromSearch(url),
+                ) ?? null,
+              });
+            }
+
+            if (request.method === "POST" && url.pathname === "/host-session-version/bump") {
+              return Response.json(
+                bumpHostSessionRevocationVersion(this.ctx.storage, await request.json()),
+              );
+            }
+
+            if (request.method === "POST" && url.pathname === "/handoff-grant") {
+              return Response.json(createHandoffGrant(this.ctx.storage, await request.json()));
+            }
+
+            if (request.method === "GET" && url.pathname === "/handoff-grant") {
+              return Response.json({
+                grant: readHandoffGrant(this.ctx.storage, url.searchParams.get("id")) ?? null,
+              });
+            }
+
+            if (request.method === "POST" && url.pathname === "/handoff-grant/consume") {
+              return Response.json(consumeHandoffGrant(this.ctx.storage, await request.json()));
             }
 
             if (request.method === "POST" && url.pathname === "/challenge") {
@@ -502,6 +789,18 @@ async function writeInstanceAuthHarness() {
             );
           }
         }
+      }
+
+      function targetBindingFromSearch(url) {
+        return {
+          instanceId: url.searchParams.get("instanceId") ?? undefined,
+          principalId: url.searchParams.get("principalId") ?? undefined,
+          targetOrigin: url.searchParams.get("targetOrigin") ?? undefined,
+          routeId: url.searchParams.get("routeId") ?? undefined,
+          targetProfile: url.searchParams.get("targetProfile") ?? undefined,
+          appInstallId: url.searchParams.get("appInstallId") ?? undefined,
+          storageIdentity: url.searchParams.get("storageIdentity") ?? undefined,
+        };
       }
 
       export default {

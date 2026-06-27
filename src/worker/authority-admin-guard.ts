@@ -1,4 +1,6 @@
 import type { AuthorityOperation } from "./authority-operations.ts";
+import { validateHostAuthSessionAuthority, type HostAuthSession } from "./instance-auth-handoff.ts";
+import type { InstanceAuthSessionTargetBinding } from "./instance-auth-state.ts";
 import {
   validateOwnerSessionAuthority,
   type OwnerSession,
@@ -20,7 +22,11 @@ export type AuthorityAdminGuardResult =
     };
 
 export type InstanceWriteAuthorizationResult =
-  | { authorized: true; session?: OwnerSession; via: "admin-bearer" | "owner-session" | "open" }
+  | {
+      authorized: true;
+      session?: HostAuthSession | OwnerSession;
+      via: "admin-bearer" | "host-session" | "owner-session" | "open";
+    }
   | {
       authorized: false;
       error: string;
@@ -34,7 +40,10 @@ export function authorizeAuthorityOperation(
   request: Request,
   operation: AuthorityOperation,
   env: AuthorityAdminGuardEnv,
-  options: { resolveOwnerSession?: OwnerSessionAuthorityResolver } = {},
+  options: {
+    hostSessionTarget?: InstanceAuthSessionTargetBinding | undefined;
+    resolveOwnerSession?: OwnerSessionAuthorityResolver;
+  } = {},
 ): Promise<AuthorityAdminGuardResult> {
   if (operation.metadata.mode === "read") {
     return Promise.resolve({ authorized: true });
@@ -70,7 +79,10 @@ export function authorizeAdminWrite(
 export async function authorizeInstanceWrite(
   request: Request,
   env: AuthorityAdminGuardEnv,
-  options: { resolveOwnerSession?: OwnerSessionAuthorityResolver } = {},
+  options: {
+    hostSessionTarget?: InstanceAuthSessionTargetBinding | undefined;
+    resolveOwnerSession?: OwnerSessionAuthorityResolver;
+  } = {},
 ): Promise<InstanceWriteAuthorizationResult> {
   return authorizeOwnerSessionOrAdmin(request, env, {
     error: "Owner session or admin authorization is required for this write endpoint.",
@@ -81,7 +93,10 @@ export async function authorizeInstanceWrite(
 export async function authorizeOwnerManagementRead(
   request: Request,
   env: AuthorityAdminGuardEnv,
-  options: { resolveOwnerSession?: OwnerSessionAuthorityResolver } = {},
+  options: {
+    hostSessionTarget?: InstanceAuthSessionTargetBinding | undefined;
+    resolveOwnerSession?: OwnerSessionAuthorityResolver;
+  } = {},
 ): Promise<OwnerManagementReadAuthorizationResult> {
   return authorizeOwnerSessionOrAdmin(request, env, {
     error: "Owner session or admin authorization is required for this read endpoint.",
@@ -92,7 +107,11 @@ export async function authorizeOwnerManagementRead(
 async function authorizeOwnerSessionOrAdmin(
   request: Request,
   env: AuthorityAdminGuardEnv,
-  options: { error: string; resolveOwnerSession?: OwnerSessionAuthorityResolver },
+  options: {
+    error: string;
+    hostSessionTarget?: InstanceAuthSessionTargetBinding | undefined;
+    resolveOwnerSession?: OwnerSessionAuthorityResolver;
+  },
 ): Promise<InstanceWriteAuthorizationResult> {
   const adminToken = normalizedAdminToken(env.FORMLESS_ADMIN_TOKEN);
   const sessionProtectionConfigured =
@@ -112,6 +131,21 @@ async function authorizeOwnerSessionOrAdmin(
 
   if (ownerSession.ok) {
     return { authorized: true, session: ownerSession.session, via: "owner-session" };
+  }
+
+  const hostSessionEnv =
+    env.FORMLESS_AUTHORITY === undefined
+      ? undefined
+      : { ...env, FORMLESS_AUTHORITY: env.FORMLESS_AUTHORITY };
+  const hostSession =
+    options.hostSessionTarget === undefined || hostSessionEnv === undefined
+      ? undefined
+      : await validateHostAuthSessionAuthority(request, hostSessionEnv, {
+          target: options.hostSessionTarget,
+        });
+
+  if (hostSession?.ok) {
+    return { authorized: true, session: hostSession.session, via: "host-session" };
   }
 
   return {

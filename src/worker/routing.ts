@@ -275,6 +275,11 @@ export function ownerBrowserRouteAccessForRequest(
 ): RuntimeRouteAccess {
   const topology = resolveWorkerRuntimeRequestTopology(request, input);
   const mountRoute = runtimeRoute?.kind === "mount" ? runtimeRoute : undefined;
+
+  if (mountRoute?.matchHost !== undefined) {
+    return mountRoute.access;
+  }
+
   const instanceBrowserProfile =
     topology.profileKind === "instance" || topology.profileKind === "dev";
 

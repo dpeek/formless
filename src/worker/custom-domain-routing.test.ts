@@ -1,12 +1,14 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vite-plus/test";
 import { computeSourceSchemaHash } from "@dpeek/formless-installed-apps";
 import { INSTANCE_CONTROL_PLANE_INSTANCE_SETTINGS_ID } from "@dpeek/formless-instance-control-plane";
+import { IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX } from "@dpeek/formless-identity-control-plane";
 
 import {
   FORMLESS_RUNTIME_APP_INSTALL_ID_META_NAME,
   FORMLESS_RUNTIME_PACKAGE_APP_KEY_META_NAME,
   FORMLESS_RUNTIME_PROFILE_META_NAME,
 } from "../app/runtime-profile.ts";
+import { ownerLoginRedirectLocationForRoute } from "../shared/instance-auth.ts";
 import { LOCAL_SESSION_BOOTSTRAP_API_PATH } from "@dpeek/formless-gateway";
 import { PUBLIC_SITE_INDEXING_CACHE_CONTROL } from "@dpeek/formless-site-app/worker";
 import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
@@ -14,7 +16,14 @@ import { INTERNAL_RESET_INSTANCE_DOMAIN_MAPPINGS_PATH } from "./instance-domain-
 import { createWorkerHarness } from "./miniflare-test.ts";
 import { INTERNAL_RESET_OWNER_SETUP_PATH } from "./owner-setup.ts";
 import { createOwnerSessionCookie } from "./owner-session.ts";
+import {
+  HOST_AUTH_NONCE_COOKIE_NAME,
+  HOST_AUTH_SESSION_COOKIE_NAME,
+  INSTANCE_AUTH_HANDOFF_CALLBACK_PATH,
+  INSTANCE_AUTH_HANDOFF_START_PATH,
+} from "./instance-auth-handoff.ts";
 import { recordOperationRequest, operationWriteRequest } from "../test/authority-write.ts";
+import { ensureTestIdentityOwner } from "../test/identity-owner.ts";
 import type { OperationInvocationResponse } from "../shared/operation-invocation.ts";
 import {
   FORMLESS_WORKSPACE_APP_PACKAGES_ENV_NAME,
@@ -278,8 +287,8 @@ describe("installed Site custom-domain Worker routing", () => {
     });
   });
 
-  it("serves an app profile custom host with installed app document hints", async () => {
-    await setupMappedApp();
+  it("serves an anonymous app profile custom host with installed app document hints", async () => {
+    await setupMappedApp({ access: "anonymous" });
     assetRequests = [];
 
     const home = await fetchHost(mappedAppHost, "/", {
@@ -338,6 +347,311 @@ describe("installed Site custom-domain Worker routing", () => {
     expect(assetRequests).toEqual(["/index.html", "/index.html"]);
   });
 
+  it("starts owner auth handoff for mapped app hosts", async () => {
+    await setupPrimaryProductionIdentity();
+    await setupMappedApp();
+    assetRequests = [];
+
+    const response = await fetchHost(mappedAppHost, "/schema?view=board", {
+      headers: { Accept: "text/html" },
+      redirect: "manual",
+    });
+    const location = requiredHeader(response, "Location");
+    const handoffUrl = new URL(location);
+    const mappedAppRouteId = routeRecordIds.get(`route:host:app:${mappedAppHost}`);
+
+    expect(response.status).toBe(302);
+    expect(handoffUrl.origin).toBe("https://www.example.com");
+    expect(handoffUrl.pathname).toBe(INSTANCE_AUTH_HANDOFF_START_PATH);
+    expect(handoffUrl.searchParams.get("targetOrigin")).toBe(`https://${mappedAppHost}`);
+    expect(handoffUrl.searchParams.get("routeId")).toBe(mappedAppRouteId);
+    expect(handoffUrl.searchParams.get("targetProfile")).toBe("app");
+    expect(handoffUrl.searchParams.get("appInstallId")).toBe(taskInstallId);
+    expect(handoffUrl.searchParams.get("storageIdentity")).toBe(`app:${taskInstallId}`);
+    expect(handoffUrl.searchParams.get("returnTo")).toBe("/schema?view=board");
+    expect(handoffUrl.searchParams.get("nonceHash")).toMatch(/^[A-Za-z0-9_-]+$/);
+    expect(handoffUrl.searchParams.get("state")).toMatch(/^[A-Za-z0-9_-]+$/);
+    expect(response.headers.get("Set-Cookie")).toContain(`${HOST_AUTH_NONCE_COOKIE_NAME}=`);
+    expect(response.headers.get("Set-Cookie")).toContain("HttpOnly");
+    expect(response.headers.get("Set-Cookie")).toContain("SameSite=Lax");
+    expect(response.headers.get("Set-Cookie")).toContain("Secure");
+    expect(assetRequests).toEqual([]);
+  });
+
+  it("issues owner handoff grants on the auth origin after owner authority", async () => {
+    await setupPrimaryProductionIdentity();
+    await setupMappedApp();
+
+    const owner = await ensureTestIdentityOwner(harness, adminToken, {
+      name: "Owner Example",
+    });
+    const session = await createOwnerSessionCookie({
+      env: { FORMLESS_ADMIN_TOKEN: adminToken },
+      maxAgeSeconds: 60,
+      now: "2999-01-01T00:00:00.000Z",
+      owner,
+      request: new Request("https://www.example.com/"),
+    });
+    const start = await fetchHost(mappedAppHost, "/", {
+      headers: { Accept: "text/html" },
+      redirect: "manual",
+    });
+    const startLocation = requiredHeader(start, "Location");
+    const unauthenticated = await harness.mf.dispatchFetch(startLocation, {
+      headers: { Accept: "text/html" },
+      redirect: "manual",
+    });
+    const authenticated = await harness.mf.dispatchFetch(startLocation, {
+      headers: {
+        Accept: "text/html",
+        Cookie: cookiePair(session.cookie),
+      },
+      redirect: "manual",
+    });
+    const callbackUrl = new URL(requiredHeader(authenticated, "Location"));
+    const startUrl = new URL(startLocation);
+
+    expect(unauthenticated.status).toBe(302);
+    expect(unauthenticated.headers.get("Location")).toBe(
+      ownerLoginRedirectLocationForRoute(`${INSTANCE_AUTH_HANDOFF_START_PATH}${startUrl.search}`),
+    );
+
+    expect(authenticated.status).toBe(302);
+    expect(callbackUrl.origin).toBe(`https://${mappedAppHost}`);
+    expect(callbackUrl.pathname).toBe(INSTANCE_AUTH_HANDOFF_CALLBACK_PATH);
+    expect(callbackUrl.searchParams.get("grantId")).toMatch(/^[A-Za-z0-9_-]+$/);
+    expect(callbackUrl.searchParams.get("grantSecret")).toMatch(/^[A-Za-z0-9_-]+$/);
+    expect(callbackUrl.searchParams.get("state")).toBe(startUrl.searchParams.get("state"));
+    expect(requiredHeader(authenticated, "Location")).not.toContain("nonceHash=");
+  });
+
+  it("consumes mapped app auth callbacks into host-local session cookies", async () => {
+    await setupPrimaryProductionIdentity();
+    await setupMappedApp();
+    assetRequests = [];
+
+    const owner = await ensureTestIdentityOwner(harness, adminToken, {
+      name: "Callback Owner",
+    });
+    const session = await createOwnerSessionCookie({
+      env: { FORMLESS_ADMIN_TOKEN: adminToken },
+      maxAgeSeconds: 60,
+      now: "2999-01-01T00:00:00.000Z",
+      owner,
+      request: new Request("https://www.example.com/"),
+    });
+    const start = await fetchHost(mappedAppHost, "/schema?view=board", {
+      headers: { Accept: "text/html" },
+      redirect: "manual",
+    });
+    const nonceCookie = cookiePair(requiredHeader(start, "Set-Cookie"));
+    const grant = await harness.mf.dispatchFetch(requiredHeader(start, "Location"), {
+      headers: {
+        Accept: "text/html",
+        Cookie: cookiePair(session.cookie),
+      },
+      redirect: "manual",
+    });
+    const callbackLocation = requiredHeader(grant, "Location");
+    const wrongHostUrl = new URL(callbackLocation);
+    const wrongStateUrl = new URL(callbackLocation);
+    const mappedAppRouteId = routeRecordIds.get(`route:host:app:${mappedAppHost}`);
+
+    wrongHostUrl.hostname = "www.example.com";
+    wrongStateUrl.searchParams.set("state", "d3Jvbmc");
+
+    const wrongHost = await harness.mf.dispatchFetch(wrongHostUrl.toString(), {
+      headers: { Cookie: nonceCookie },
+      redirect: "manual",
+    });
+    const wrongState = await harness.mf.dispatchFetch(wrongStateUrl.toString(), {
+      headers: { Cookie: nonceCookie },
+      redirect: "manual",
+    });
+    const wrongNonce = await harness.mf.dispatchFetch(callbackLocation, {
+      headers: { Cookie: `${HOST_AUTH_NONCE_COOKIE_NAME}=wrong` },
+      redirect: "manual",
+    });
+    const callback = await harness.mf.dispatchFetch(callbackLocation, {
+      headers: { Cookie: nonceCookie },
+      redirect: "manual",
+    });
+    const replay = await harness.mf.dispatchFetch(callbackLocation, {
+      headers: { Cookie: nonceCookie },
+      redirect: "manual",
+    });
+    const setCookie = requiredHeader(callback, "Set-Cookie");
+    const hostSessionPayload = signedCookiePayload(setCookie, HOST_AUTH_SESSION_COOKIE_NAME);
+
+    expect(wrongHost.status).toBe(400);
+    expect(wrongState.status).toBe(400);
+    expect(wrongNonce.status).toBe(400);
+    expect(wrongHost.headers.get("Set-Cookie") ?? "").not.toContain(
+      `${HOST_AUTH_SESSION_COOKIE_NAME}=`,
+    );
+    expect(wrongState.headers.get("Set-Cookie") ?? "").not.toContain(
+      `${HOST_AUTH_SESSION_COOKIE_NAME}=`,
+    );
+    expect(wrongNonce.headers.get("Set-Cookie") ?? "").not.toContain(
+      `${HOST_AUTH_SESSION_COOKIE_NAME}=`,
+    );
+
+    expect(callback.status).toBe(302);
+    expect(callback.headers.get("Location")).toBe("/schema?view=board");
+    expect(setCookie).toContain(`${HOST_AUTH_SESSION_COOKIE_NAME}=`);
+    expect(setCookie).toContain(`${HOST_AUTH_NONCE_COOKIE_NAME}=;`);
+    expect(setCookie).toContain("HttpOnly");
+    expect(setCookie).toContain("SameSite=Lax");
+    expect(setCookie).toContain("Secure");
+    expect(hostSessionPayload).toEqual(
+      expect.objectContaining({
+        appInstallId: taskInstallId,
+        instanceId: "www.example.com",
+        principalId: owner.id,
+        purpose: "host-session",
+        routeId: mappedAppRouteId,
+        sessionVersion: 0,
+        storageIdentity: `app:${taskInstallId}`,
+        targetOrigin: `https://${mappedAppHost}`,
+        targetProfile: "app",
+        version: 1,
+      }),
+    );
+    expect(Date.parse(hostSessionPayload.issuedAt as string)).toBeGreaterThan(0);
+    expect(Date.parse(hostSessionPayload.expiresAt as string)).toBeGreaterThan(
+      Date.parse(hostSessionPayload.issuedAt as string),
+    );
+    expect(replay.status).toBe(400);
+    expect(replay.headers.get("Set-Cookie") ?? "").not.toContain(
+      `${HOST_AUTH_SESSION_COOKIE_NAME}=`,
+    );
+    expect(assetRequests).toEqual([]);
+  });
+
+  it("accepts host-local sessions for matched mapped app owner routes and APIs", async () => {
+    await setupPrimaryProductionIdentity();
+    await setupMappedApp();
+
+    const { cookie } = await createMappedAppHostSession("Authorized Host Owner");
+    const writeRequest = recordOperationRequest({
+      idempotencyKey: "host-session-write",
+      entity: "task",
+      operationName: "create",
+      input: { title: "Host session write", done: false },
+    });
+
+    assetRequests = [];
+
+    const shell = await fetchHost(mappedAppHost, "/schema?view=board", {
+      headers: {
+        Accept: "text/html",
+        Cookie: cookie,
+      },
+      redirect: "manual",
+    });
+    const bootstrap = await fetchHost(
+      mappedAppHost,
+      `/api/app-installs/tasks/${taskInstallId}/bootstrap`,
+      {
+        headers: { Cookie: cookie },
+      },
+    );
+    const write = await fetchHost(
+      mappedAppHost,
+      `/api/app-installs/tasks/${taskInstallId}${writeRequest.path.slice("/api".length)}`,
+      {
+        body: JSON.stringify(writeRequest.body),
+        headers: {
+          Cookie: cookie,
+          "Content-Type": "application/json",
+        },
+        method: "POST",
+      },
+    );
+    const writeBody = writeRequest.response(await write.json());
+
+    expect(shell.status).toBe(200);
+    expect(bootstrap.status).toBe(200);
+    expect(write.status).toBe(200);
+    expect(writeBody.record.values.title).toBe("Host session write");
+    expect(assetRequests).toEqual(["/index.html"]);
+  });
+
+  it("rejects host-local sessions after owner authority or session version changes", async () => {
+    await setupPrimaryProductionIdentity();
+    await setupMappedApp();
+
+    const { cookie, setCookie } = await createMappedAppHostSession("Stale Host Owner");
+    const staleVersionCookie = await hostSessionCookieWithPayload(setCookie, {
+      sessionVersion: 1,
+    });
+
+    const staleVersionRead = await fetchHost(
+      mappedAppHost,
+      `/api/app-installs/tasks/${taskInstallId}/bootstrap`,
+      {
+        headers: { Cookie: staleVersionCookie },
+      },
+    );
+
+    await postReset(harness, `${IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX}/reset/seed`);
+
+    assetRequests = [];
+
+    const staleOwnerShell = await fetchHost(mappedAppHost, "/schema?view=board", {
+      headers: {
+        Accept: "text/html",
+        Cookie: cookie,
+      },
+      redirect: "manual",
+    });
+    const staleOwnerRead = await fetchHost(
+      mappedAppHost,
+      `/api/app-installs/tasks/${taskInstallId}/bootstrap`,
+      {
+        headers: { Cookie: cookie },
+      },
+    );
+    const handoffUrl = new URL(requiredHeader(staleOwnerShell, "Location"));
+
+    expect(staleVersionRead.status).toBe(401);
+    expect(staleOwnerShell.status).toBe(302);
+    expect(handoffUrl.origin).toBe("https://www.example.com");
+    expect(handoffUrl.pathname).toBe(INSTANCE_AUTH_HANDOFF_START_PATH);
+    expect(staleOwnerRead.status).toBe(401);
+    expect(assetRequests).toEqual([]);
+  });
+
+  it("reserves auth callbacks on mapped public Site hosts", async () => {
+    await setupPrimaryProductionIdentity();
+    await postAdminJson("/api/formless/app-installs", {
+      packageAppKey: "site",
+      installId,
+      label: "Personal",
+    });
+    await createRouteRecord("route:host:publicSite:site.example.com", {
+      enabled: true,
+      matchHost: "site.example.com",
+      matchPath: "/",
+      matchPrefix: "/",
+      kind: "mount",
+      targetProfile: "public-site",
+      appInstall: installId,
+      surface: "public-site",
+    });
+    assetRequests = [];
+
+    const callback = await fetchHost("site.example.com", INSTANCE_AUTH_HANDOFF_CALLBACK_PATH, {
+      headers: { Accept: "text/html" },
+      redirect: "manual",
+    });
+    const body = (await callback.json()) as { error: string };
+
+    expect(callback.status).toBe(400);
+    expect(body.error).toBe("Handoff callback is invalid.");
+    expect(assetRequests).toEqual([]);
+  });
+
   it("resolves exact-host public Site route records before ordinary host behavior", async () => {
     await setupMappedSiteRouteRecord();
     await postInstalledAppRecordOperation("site", installId, {
@@ -389,8 +703,8 @@ describe("installed Site custom-domain Worker routing", () => {
     );
   });
 
-  it("resolves exact-host app route records with installed app document hints", async () => {
-    await setupMappedAppRouteRecord();
+  it("resolves anonymous exact-host app route records with installed app document hints", async () => {
+    await setupMappedAppRouteRecord({ access: "anonymous" });
     assetRequests = [];
 
     const home = await fetchHost(mappedAppHost, "/", {
@@ -614,8 +928,8 @@ async function setupMappedSite() {
   await setupMappedSiteRouteRecord();
 }
 
-async function setupMappedApp() {
-  await setupMappedAppRouteRecord();
+async function setupMappedApp(values: Record<string, unknown> = {}) {
+  await setupMappedAppRouteRecord(values);
 }
 
 async function setupMappedSiteRouteRecord() {
@@ -636,7 +950,7 @@ async function setupMappedSiteRouteRecord() {
   });
 }
 
-async function setupMappedAppRouteRecord() {
+async function setupMappedAppRouteRecord(values: Record<string, unknown> = {}) {
   await postAdminJson("/api/formless/app-installs", {
     packageAppKey: "tasks",
     installId: taskInstallId,
@@ -651,6 +965,7 @@ async function setupMappedAppRouteRecord() {
     targetProfile: "app",
     appInstall: taskInstallId,
     surface: "admin",
+    ...values,
   });
 }
 
@@ -732,6 +1047,142 @@ function fetchHarnessHost(
 
 function cookiePair(cookie: string) {
   return cookie.split(";")[0] ?? cookie;
+}
+
+async function createMappedAppHostSession(ownerName: string) {
+  const owner = await ensureTestIdentityOwner(harness, adminToken, {
+    name: ownerName,
+  });
+  const session = await createOwnerSessionCookie({
+    env: { FORMLESS_ADMIN_TOKEN: adminToken },
+    maxAgeSeconds: 60,
+    now: "2999-01-01T00:00:00.000Z",
+    owner,
+    request: new Request("https://www.example.com/"),
+  });
+  const start = await fetchHost(mappedAppHost, "/schema?view=board", {
+    headers: { Accept: "text/html" },
+    redirect: "manual",
+  });
+  const grant = await harness.mf.dispatchFetch(requiredHeader(start, "Location"), {
+    headers: {
+      Accept: "text/html",
+      Cookie: cookiePair(session.cookie),
+    },
+    redirect: "manual",
+  });
+  const callback = await harness.mf.dispatchFetch(requiredHeader(grant, "Location"), {
+    headers: { Cookie: cookiePair(requiredHeader(start, "Set-Cookie")) },
+    redirect: "manual",
+  });
+  const setCookie = requiredHeader(callback, "Set-Cookie");
+
+  expect(callback.status).toBe(302);
+
+  return {
+    cookie: cookiePair(setCookie),
+    owner,
+    setCookie,
+  };
+}
+
+function signedCookiePayload(setCookieHeader: string, cookieName: string): Record<string, unknown> {
+  const value = setCookieValue(setCookieHeader, cookieName);
+  const [payloadPart, signature] = value.split(".", 2);
+
+  expect(payloadPart).toMatch(/^[A-Za-z0-9_-]+$/);
+  expect(signature).toMatch(/^[A-Za-z0-9_-]+$/);
+
+  return JSON.parse(base64UrlDecodeUtf8(payloadPart)) as Record<string, unknown>;
+}
+
+async function hostSessionCookieWithPayload(
+  setCookieHeader: string,
+  overrides: Record<string, unknown>,
+) {
+  const payload = {
+    ...signedCookiePayload(setCookieHeader, HOST_AUTH_SESSION_COOKIE_NAME),
+    ...overrides,
+  };
+
+  return `${HOST_AUTH_SESSION_COOKIE_NAME}=${await signCookiePayload(payload)}`;
+}
+
+async function signCookiePayload(payload: Record<string, unknown>) {
+  const payloadPart = base64UrlEncodeUtf8(JSON.stringify(payload));
+  const signature = await signString(payloadPart, adminToken);
+
+  return `${payloadPart}.${signature}`;
+}
+
+function setCookieValue(setCookieHeader: string, cookieName: string): string {
+  const marker = `${cookieName}=`;
+  const start = setCookieHeader.indexOf(marker);
+
+  if (start < 0) {
+    throw new Error(`Missing ${cookieName} Set-Cookie value.`);
+  }
+
+  const value = setCookieHeader.slice(start + marker.length).split(";")[0];
+
+  if (!value) {
+    throw new Error(`Empty ${cookieName} Set-Cookie value.`);
+  }
+
+  return value;
+}
+
+function base64UrlDecodeUtf8(value: string) {
+  const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
+  const padding = "=".repeat((4 - (normalized.length % 4)) % 4);
+  const binary = atob(normalized + padding);
+  const bytes = new Uint8Array(binary.length);
+
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+
+  return new TextDecoder().decode(bytes);
+}
+
+function base64UrlEncodeUtf8(value: string) {
+  return base64UrlEncode(new TextEncoder().encode(value));
+}
+
+function base64UrlEncode(bytes: Uint8Array) {
+  let binary = "";
+
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte);
+  }
+
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+
+async function signString(value: string, secret: string) {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(secret),
+    { hash: "SHA-256", name: "HMAC" },
+    false,
+    ["sign"],
+  );
+  const signature = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(value));
+
+  return base64UrlEncode(new Uint8Array(signature));
+}
+
+function requiredHeader(
+  response: { headers: { get(name: string): string | null } },
+  name: string,
+): string {
+  const value = response.headers.get(name);
+
+  if (!value) {
+    throw new Error(`Missing ${name} header.`);
+  }
+
+  return value;
 }
 
 async function postAdminJson(path: string, body: unknown) {

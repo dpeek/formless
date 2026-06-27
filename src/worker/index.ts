@@ -24,6 +24,13 @@ import { handleInstanceDomainMappingsApiRequest } from "./instance-domain-mappin
 import { handleIdentityControlPlaneApiRequest } from "./identity-control-plane.ts";
 import { resolveInstanceRuntimeRouteForRequest } from "./instance-runtime-routes.ts";
 import { mappedAppHostFromRuntimeRoute } from "./mapped-app-host.ts";
+import {
+  handleInstanceAuthHandoffRequest,
+  hostAuthSessionTargetForRuntimeRoute,
+  setHostAuthSessionTargetHeaders,
+  startOwnerRouteAuthHandoff,
+  validateHostAuthSessionAuthority,
+} from "./instance-auth-handoff.ts";
 import { handleOwnerSetupApiRequest } from "./owner-setup.ts";
 import { handleOwnerPasskeyApiRequest } from "./owner-passkeys.ts";
 import { ownerLoginRedirectLocationForRoute } from "../shared/instance-auth.ts";
@@ -192,6 +199,16 @@ export default {
       return deployMetadataResponse;
     }
 
+    const instanceAuthHandoffResponse = await handleInstanceAuthHandoffRequest(
+      request,
+      env,
+      runtimeRoute,
+    );
+
+    if (instanceAuthHandoffResponse) {
+      return instanceAuthHandoffResponse;
+    }
+
     if (isMappedAuthBlockedProfileHost && isOwnerAuthRoute(requestTopology.pathname)) {
       return notFoundResponse(requestTopology.apiPath);
     }
@@ -280,6 +297,12 @@ export default {
     const authorityRoute = parseAuthorityApiRoute(url.pathname, activeAppPackageResolver(env));
 
     if (authorityRoute) {
+      const hostSessionTarget = hostAuthSessionTargetForInstalledAppAuthorityRoute(
+        request,
+        runtimeRoute,
+        authorityRoute.identity.authorityName,
+      );
+
       if (
         authorityRoute.identity.kind === "schemaKey" &&
         (isMappedAuthBlockedProfileHost ||
@@ -292,7 +315,9 @@ export default {
         authorityRoute.identity.kind === "appInstall" &&
         isInstalledAppManagementApiRead(request, authorityRoute.path)
       ) {
-        const authorization = await authorizeOwnerManagementRead(request, env);
+        const authorization = await authorizeOwnerManagementRead(request, env, {
+          hostSessionTarget,
+        });
 
         if (!authorization.authorized) {
           return Response.json(
@@ -308,17 +333,7 @@ export default {
       const authorityId = env.FORMLESS_AUTHORITY.idFromName(authorityRoute.identity.authorityName);
       const authority = env.FORMLESS_AUTHORITY.get(authorityId);
 
-      return authority.fetch(authorityRequestWithOriginalUrlFacts(request));
-    }
-
-    const siteDocumentResponse = await handlePublicSiteDocumentRequest(request, env, {
-      mappedSiteHost,
-      packageResolver,
-      runtimeTopology: requestTopology,
-    });
-
-    if (siteDocumentResponse) {
-      return siteDocumentResponse;
+      return authority.fetch(authorityRequestWithOriginalUrlFacts(request, { hostSessionTarget }));
     }
 
     const ownerBrowserRedirect = await redirectAnonymousOwnerBrowserRoute(
@@ -330,6 +345,16 @@ export default {
 
     if (ownerBrowserRedirect) {
       return ownerBrowserRedirect;
+    }
+
+    const siteDocumentResponse = await handlePublicSiteDocumentRequest(request, env, {
+      mappedSiteHost,
+      packageResolver,
+      runtimeTopology: requestTopology,
+    });
+
+    if (siteDocumentResponse) {
+      return siteDocumentResponse;
     }
 
     if (env.ASSETS && shouldDeferToStaticAssets(request, requestTopology)) {
@@ -387,6 +412,22 @@ function isInstalledAppManagementApiRead(request: Request, path: `/${string}`): 
   return request.method === "GET" && path === "/sync/ws";
 }
 
+function hostAuthSessionTargetForInstalledAppAuthorityRoute(
+  request: Request,
+  runtimeRoute: Awaited<ReturnType<typeof resolveInstanceRuntimeRouteForRequest>>,
+  storageIdentity: string,
+) {
+  const target = hostAuthSessionTargetForRuntimeRoute(request, runtimeRoute, {
+    requireOwnerAccess: true,
+  });
+
+  if (!target || target.storageIdentity !== storageIdentity) {
+    return undefined;
+  }
+
+  return target;
+}
+
 function workerWorkspaceGatewayRouteAvailable(
   requestTopology: WorkerRuntimeRequestTopology,
   runtimeRoute: Awaited<ReturnType<typeof resolveInstanceRuntimeRouteForRequest>>,
@@ -422,6 +463,20 @@ async function redirectAnonymousOwnerBrowserRoute(
     return undefined;
   }
 
+  const hostSession = await validateHostAuthSessionAuthority(request, env, {
+    runtimeRoute,
+  });
+
+  if (hostSession.ok) {
+    return undefined;
+  }
+
+  const handoffRedirect = await startOwnerRouteAuthHandoff(request, env, runtimeRoute);
+
+  if (handoffRedirect) {
+    return handoffRedirect;
+  }
+
   return redirectResponse(
     ownerLoginRedirectLocationForRoute(ownerBrowserRedirectTarget(request)),
     302,
@@ -443,13 +498,19 @@ function notFoundResponse(json: boolean): Response {
 const FORMLESS_ORIGINAL_REQUEST_HOST_HEADER = "x-formless-original-request-host";
 const FORMLESS_ORIGINAL_REQUEST_ORIGIN_HEADER = "x-formless-original-request-origin";
 
-function authorityRequestWithOriginalUrlFacts(request: Request): Request {
+function authorityRequestWithOriginalUrlFacts(
+  request: Request,
+  options: {
+    hostSessionTarget?: ReturnType<typeof hostAuthSessionTargetForInstalledAppAuthorityRoute>;
+  } = {},
+): Request {
   const url = new URL(request.url);
   const headers = new Headers(request.headers);
   const forwardedHost = originalRequestHost(request);
 
   headers.set(FORMLESS_ORIGINAL_REQUEST_HOST_HEADER, forwardedHost ?? url.host);
   headers.set(FORMLESS_ORIGINAL_REQUEST_ORIGIN_HEADER, originalRequestOrigin(request));
+  setHostAuthSessionTargetHeaders(headers, options.hostSessionTarget);
 
   return new Request(request, { headers });
 }
