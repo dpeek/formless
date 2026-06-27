@@ -8,8 +8,8 @@ import {
   type SiteBlockNode,
   type SitePageTree,
   type SitePageTreeProjection,
-  type SitePublicOperationTargetResolver,
 } from "./tree.ts";
+import type { SitePublicOperationTargetResolver } from "./public-operation-block-projection.ts";
 
 const generatedAt = "2026-05-06T00:00:00.000Z";
 const siteSourceSchema = parseAppSchema(rawSiteSourceSchema);
@@ -1024,15 +1024,27 @@ describe("site page tree projection", () => {
     ]);
   });
 
-  it("projects subscribe form operation facts without subscriber data or secrets", () => {
+  it("attaches public operation facts to placed form blocks without exposing private records", () => {
     const records = [
       ...baseTreeRecords(),
       blockRecord("rec_site_block_subscribe", {
         type: "subscribeForm",
         label: "Join the list",
-        body: "Get product notes.",
         operationName: "subscribe",
-        buttonLabel: "Join",
+      }),
+      blockRecord("rec_site_block_contact", {
+        type: "contactForm",
+        label: "Contact us",
+        operationName: "submit",
+      }),
+      blockRecord("rec_site_block_public_intake", {
+        type: "publicOperationForm",
+        label: "Request a test",
+        operationTargetKind: "schemaKey",
+        operationTargetSchemaKey: "tasks",
+        operationKey: "request.submit",
+        operationNotificationMode: "email",
+        operationNotificationReplyToField: "email",
       }),
       placementRecord(
         "rec_site_place_home_subscribe",
@@ -1040,6 +1052,22 @@ describe("site page tree projection", () => {
         "rec_site_block_subscribe",
         {
           order: 4000,
+        },
+      ),
+      placementRecord(
+        "rec_site_place_home_contact",
+        "rec_site_content_home",
+        "rec_site_block_contact",
+        {
+          order: 5000,
+        },
+      ),
+      placementRecord(
+        "rec_site_place_home_public_intake",
+        "rec_site_content_home",
+        "rec_site_block_public_intake",
+        {
+          order: 6000,
         },
       ),
       {
@@ -1052,384 +1080,6 @@ describe("site page tree projection", () => {
         createdAt: "2026-05-06T00:00:01.000Z",
       },
       {
-        id: "rec_site_subscription_reader",
-        entity: "subscription",
-        values: {
-          emailAddress: "rec_site_email_reader",
-          audience: "audience-default",
-          status: "subscribed",
-        },
-        createdAt: "2026-05-06T00:00:02.000Z",
-      },
-      {
-        id: "rec_site_turnstile_secret",
-        entity: "turnstileSecret",
-        values: {
-          secret: "server-secret-value",
-        },
-        createdAt: "2026-05-06T00:00:03.000Z",
-      },
-    ];
-    const tree = requireTree(
-      buildSitePageTree(siteSourceSchema, records, "home", {
-        generatedAt,
-        target: { apiRoutePrefix: "/api/app-installs/site/site" },
-        turnstileSiteKey: "public-site-key",
-      }),
-    );
-    const subscribeForm = childForPlacement(tree.page, "rec_site_place_home_subscribe");
-
-    expect(subscribeForm).toMatchObject({
-      id: "rec_site_block_subscribe",
-      type: "subscribeForm",
-      label: "Join the list",
-      body: "Get product notes.",
-      operationName: "subscribe",
-      buttonLabel: "Join",
-      publicOperation: {
-        entityName: "subscription",
-        operationName: "subscribe",
-        canonicalKey: "subscription.subscribe",
-        route: "/api/app-installs/site/site/public/operations/subscription/subscribe",
-        challenge: {
-          kind: "turnstile",
-          siteKey: "public-site-key",
-        },
-      },
-    });
-    expect(subscribeForm.publicOperation).not.toHaveProperty("fields");
-    expect(JSON.stringify(tree)).not.toContain("server-secret-value");
-    expect(JSON.stringify(tree)).not.toContain("reader@example.com");
-  });
-
-  it("projects subscribe form installed CRM targets without generic field facts or private data", () => {
-    const records = [
-      ...baseTreeRecords(),
-      blockRecord("rec_site_block_crm_subscribe", {
-        type: "subscribeForm",
-        label: "Join the CRM list",
-        operationName: "subscribe",
-        operationTargetKind: "appInstall",
-        operationTargetPackageAppKey: "crm",
-        operationTargetInstallId: "crm",
-        buttonLabel: "Join",
-      }),
-      placementRecord(
-        "rec_site_place_home_crm_subscribe",
-        "rec_site_content_home",
-        "rec_site_block_crm_subscribe",
-        {
-          order: 4000,
-        },
-      ),
-      {
-        id: "rec_private_crm_install",
-        entity: "app-install",
-        values: {
-          packageAppKey: "crm",
-          installId: "crm",
-          label: "Private CRM install",
-          storageIdentity: "crm-storage-private-value",
-        },
-        createdAt: "2026-05-06T00:00:01.000Z",
-      },
-      {
-        id: "rec_private_crm_email",
-        entity: "email-address",
-        values: {
-          address: "crm-reader@example.com",
-          normalizedAddress: "crm-reader@example.com",
-        },
-        createdAt: "2026-05-06T00:00:02.000Z",
-      },
-      {
-        id: "rec_private_crm_subscriber",
-        entity: "subscription",
-        values: {
-          label: "Private subscriber",
-          auditNote: "subscriber-record-private-value",
-        },
-        createdAt: "2026-05-06T00:00:03.000Z",
-      },
-      {
-        id: "rec_private_turnstile_secret",
-        entity: "turnstileSecret",
-        values: {
-          secret: "private-turnstile-secret",
-        },
-        createdAt: "2026-05-06T00:00:04.000Z",
-      },
-    ];
-    const tree = requireTree(
-      buildSitePageTree(siteSourceSchema, records, "home", {
-        generatedAt,
-        publicOperationTargetResolver: publicOperationTargetResolver({
-          crm: crmPublicSubscribeSchema,
-        }),
-        turnstileSiteKey: "public-site-key",
-      }),
-    );
-    const subscribeForm = childForPlacement(tree.page, "rec_site_place_home_crm_subscribe");
-
-    expect(subscribeForm.publicOperation).toEqual({
-      entityName: "subscription",
-      operationName: "subscribe",
-      canonicalKey: "subscription.subscribe",
-      target: {
-        kind: "appInstall",
-        packageAppKey: "crm",
-        installId: "crm",
-        apiRoutePrefix: "/api/app-installs/crm/crm",
-      },
-      route: "/api/app-installs/crm/crm/public/operations/subscription/subscribe",
-      challenge: {
-        kind: "turnstile",
-        siteKey: "public-site-key",
-      },
-    });
-    expect(subscribeForm.publicOperation).not.toHaveProperty("fields");
-    expect(subscribeForm).not.toHaveProperty("operationTargetPackageAppKey");
-    expect(JSON.stringify(tree)).not.toContain("Private CRM install");
-    expect(JSON.stringify(tree)).not.toContain("crm-storage-private-value");
-    expect(JSON.stringify(tree)).not.toContain("crm-reader@example.com");
-    expect(JSON.stringify(tree)).not.toContain("subscriber-record-private-value");
-    expect(JSON.stringify(tree)).not.toContain("private-turnstile-secret");
-  });
-
-  it("warns and omits working fixed form operations when Turnstile site key config is missing", () => {
-    const records = [
-      ...baseTreeRecords(),
-      blockRecord("rec_site_block_subscribe", {
-        type: "subscribeForm",
-        label: "Join the list",
-        body: "Get product notes.",
-        operationName: "subscribe",
-        buttonLabel: "Join",
-      }),
-      blockRecord("rec_site_block_contact", {
-        type: "contactForm",
-        label: "Contact us",
-        operationName: "submit",
-        buttonLabel: "Send",
-      }),
-      placementRecord(
-        "rec_site_place_home_subscribe",
-        "rec_site_content_home",
-        "rec_site_block_subscribe",
-        {
-          order: 4000,
-        },
-      ),
-      placementRecord(
-        "rec_site_place_home_contact",
-        "rec_site_content_home",
-        "rec_site_block_contact",
-        {
-          order: 5000,
-        },
-      ),
-    ];
-    const result = buildSitePageTree(siteSourceSchema, records, "home", { generatedAt });
-    const tree = requireTree(result);
-    const subscribeForm = childForPlacement(tree.page, "rec_site_place_home_subscribe");
-    const contactForm = childForPlacement(tree.page, "rec_site_place_home_contact");
-
-    expect(subscribeForm.publicOperation).toBeUndefined();
-    expect(contactForm.publicOperation).toBeUndefined();
-    expect(result.meta.warnings).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          code: "missing-public-operation-challenge-config",
-          recordId: "rec_site_block_subscribe",
-        }),
-        expect.objectContaining({
-          code: "missing-public-operation-challenge-config",
-          recordId: "rec_site_block_contact",
-        }),
-      ]),
-    );
-  });
-
-  it("warns and omits subscribe form operations for missing or unavailable CRM targets", () => {
-    const records = [
-      ...baseTreeRecords(),
-      blockRecord("rec_site_block_missing_crm_target", {
-        type: "subscribeForm",
-        label: "Missing CRM target",
-        operationName: "subscribe",
-        operationTargetKind: "appInstall",
-        operationTargetPackageAppKey: "crm",
-      }),
-      blockRecord("rec_site_block_unavailable_crm_target", {
-        type: "subscribeForm",
-        label: "Unavailable CRM target",
-        operationName: "subscribe",
-        operationTargetKind: "appInstall",
-        operationTargetPackageAppKey: "crm",
-        operationTargetInstallId: "missing",
-      }),
-      placementRecord(
-        "rec_site_place_home_missing_crm_target",
-        "rec_site_content_home",
-        "rec_site_block_missing_crm_target",
-        {
-          order: 4000,
-        },
-      ),
-      placementRecord(
-        "rec_site_place_home_unavailable_crm_target",
-        "rec_site_content_home",
-        "rec_site_block_unavailable_crm_target",
-        {
-          order: 5000,
-        },
-      ),
-    ];
-    const result = buildSitePageTree(siteSourceSchema, records, "home", {
-      generatedAt,
-      publicOperationTargetResolver: publicOperationTargetResolver({}),
-      turnstileSiteKey: "public-site-key",
-    });
-    const tree = requireTree(result);
-    const missingTarget = childForPlacement(tree.page, "rec_site_place_home_missing_crm_target");
-    const unavailableTarget = childForPlacement(
-      tree.page,
-      "rec_site_place_home_unavailable_crm_target",
-    );
-
-    expect(missingTarget.publicOperation).toBeUndefined();
-    expect(unavailableTarget.publicOperation).toBeUndefined();
-    expect(result.meta.warnings).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          code: "missing-public-operation-target",
-          recordId: "rec_site_block_missing_crm_target",
-        }),
-        expect.objectContaining({
-          code: "invalid-public-operation-target",
-          recordId: "rec_site_block_unavailable_crm_target",
-        }),
-      ]),
-    );
-  });
-
-  it("projects subscribe form public create operations without generic field facts", () => {
-    const records = [
-      ...baseTreeRecords(),
-      blockRecord("rec_site_block_public_create_subscribe", {
-        type: "subscribeForm",
-        label: "Join the CRM list",
-        operationName: "join",
-        buttonLabel: "Join",
-      }),
-      placementRecord(
-        "rec_site_place_home_public_create_subscribe",
-        "rec_site_content_home",
-        "rec_site_block_public_create_subscribe",
-        {
-          order: 4000,
-        },
-      ),
-    ];
-    const tree = requireTree(
-      buildSitePageTree(publicSubscriptionCreateSchema, records, "home", {
-        generatedAt,
-        target: { apiRoutePrefix: "/api/app-installs/crm/sales" },
-        turnstileSiteKey: "public-site-key",
-      }),
-    );
-    const subscribeForm = childForPlacement(
-      tree.page,
-      "rec_site_place_home_public_create_subscribe",
-    );
-
-    expect(subscribeForm.publicOperation).toEqual({
-      entityName: "subscription",
-      operationName: "join",
-      canonicalKey: "subscription.join",
-      route: "/api/app-installs/crm/sales/public/operations/subscription/join",
-      challenge: {
-        kind: "turnstile",
-        siteKey: "public-site-key",
-      },
-    });
-    expect(subscribeForm.publicOperation).not.toHaveProperty("fields");
-  });
-
-  it("warns and omits working subscribe form operations when bindings are missing or not public", () => {
-    const records = [
-      ...baseTreeRecords(),
-      blockRecord("rec_site_block_missing_subscribe", {
-        type: "subscribeForm",
-        label: "Missing subscribe operation",
-        operationName: "missingSubscribeAction",
-      }),
-      blockRecord("rec_site_block_private_subscribe", {
-        type: "subscribeForm",
-        label: "Private subscribe operation",
-        operationName: "addTreeChild",
-      }),
-      placementRecord(
-        "rec_site_place_home_missing_subscribe",
-        "rec_site_content_home",
-        "rec_site_block_missing_subscribe",
-        {
-          order: 4000,
-        },
-      ),
-      placementRecord(
-        "rec_site_place_home_private_subscribe",
-        "rec_site_content_home",
-        "rec_site_block_private_subscribe",
-        {
-          order: 5000,
-        },
-      ),
-    ];
-    const result = buildSitePageTree(siteSourceSchema, records, "home", { generatedAt });
-    const tree = requireTree(result);
-    const missing = childForPlacement(tree.page, "rec_site_place_home_missing_subscribe");
-    const privateAction = childForPlacement(tree.page, "rec_site_place_home_private_subscribe");
-
-    expect(missing.publicOperation).toBeUndefined();
-    expect(privateAction.publicOperation).toBeUndefined();
-    expect(result.meta.warnings).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          code: "missing-public-operation",
-          recordId: "rec_site_block_missing_subscribe",
-        }),
-        expect.objectContaining({
-          code: "invalid-public-operation",
-          recordId: "rec_site_block_private_subscribe",
-        }),
-      ]),
-    );
-  });
-
-  it("projects contact form operation facts without notification configuration or secrets", () => {
-    const records = [
-      ...baseTreeRecords(),
-      blockRecord("rec_site_block_contact", {
-        type: "contactForm",
-        label: "Contact us",
-        body: "Send a **message**.",
-        operationName: "submit",
-        buttonLabel: "Send",
-        successLabel: "Message received.",
-        nameLabel: "Your name",
-        emailLabel: "Your email",
-        messageLabel: "How can we help?",
-      }),
-      placementRecord(
-        "rec_site_place_home_contact",
-        "rec_site_content_home",
-        "rec_site_block_contact",
-        {
-          order: 4000,
-        },
-      ),
-      {
         id: "rec_site_contact_message_private",
         entity: "contact-message",
         values: {
@@ -1437,140 +1087,7 @@ describe("site page tree projection", () => {
           email: "visitor@example.com",
           message: "Private message.",
         },
-        createdAt: "2026-05-06T00:00:01.000Z",
-      },
-      {
-        id: "instance-settings-private",
-        entity: "instance-settings",
-        values: {
-          contactNotificationRecipient: "owner@example.com",
-          providerSecret: "server-secret-value",
-        },
         createdAt: "2026-05-06T00:00:02.000Z",
-      },
-    ];
-    const tree = requireTree(
-      buildSitePageTree(siteSourceSchema, records, "home", {
-        generatedAt,
-        target: { apiRoutePrefix: "/api/app-installs/site/site" },
-        turnstileSiteKey: "public-site-key",
-      }),
-    );
-    const contactForm = childForPlacement(tree.page, "rec_site_place_home_contact");
-
-    expect(contactForm).toMatchObject({
-      id: "rec_site_block_contact",
-      type: "contactForm",
-      label: "Contact us",
-      body: "Send a **message**.",
-      operationName: "submit",
-      buttonLabel: "Send",
-      successLabel: "Message received.",
-      nameLabel: "Your name",
-      emailLabel: "Your email",
-      messageLabel: "How can we help?",
-      publicOperation: {
-        entityName: "contact-message",
-        operationName: "submit",
-        canonicalKey: "contact-message.submit",
-        route: "/api/app-installs/site/site/public/operations/contact-message/submit",
-        challenge: {
-          kind: "turnstile",
-          siteKey: "public-site-key",
-        },
-      },
-    });
-    expect(contactForm.publicOperation).not.toHaveProperty("fields");
-    expect(JSON.stringify(tree)).not.toContain("owner@example.com");
-    expect(JSON.stringify(tree)).not.toContain("server-secret-value");
-    expect(JSON.stringify(tree)).not.toContain("Private message.");
-  });
-
-  it("warns and omits working contact form operations when bindings are missing or not public", () => {
-    const records = [
-      ...baseTreeRecords(),
-      blockRecord("rec_site_block_missing_contact", {
-        type: "contactForm",
-        label: "Missing contact operation",
-        operationName: "missingContactSubmit",
-      }),
-      blockRecord("rec_site_block_private_contact", {
-        type: "contactForm",
-        label: "Private contact operation",
-        operationName: "addTreeChild",
-      }),
-      placementRecord(
-        "rec_site_place_home_missing_contact",
-        "rec_site_content_home",
-        "rec_site_block_missing_contact",
-        {
-          order: 4000,
-        },
-      ),
-      placementRecord(
-        "rec_site_place_home_private_contact",
-        "rec_site_content_home",
-        "rec_site_block_private_contact",
-        {
-          order: 5000,
-        },
-      ),
-    ];
-    const result = buildSitePageTree(siteSourceSchema, records, "home", {
-      generatedAt,
-      turnstileSiteKey: "public-site-key",
-    });
-    const tree = requireTree(result);
-    const missing = childForPlacement(tree.page, "rec_site_place_home_missing_contact");
-    const privateAction = childForPlacement(tree.page, "rec_site_place_home_private_contact");
-
-    expect(missing.publicOperation).toBeUndefined();
-    expect(privateAction.publicOperation).toBeUndefined();
-    expect(result.meta.warnings).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          code: "missing-public-operation",
-          recordId: "rec_site_block_missing_contact",
-        }),
-        expect.objectContaining({
-          code: "invalid-public-operation",
-          recordId: "rec_site_block_private_contact",
-        }),
-      ]),
-    );
-  });
-
-  it("projects public operation form schema-key target, route, challenge, and public field facts", () => {
-    const records = [
-      ...baseTreeRecords(),
-      blockRecord("rec_site_block_public_intake", {
-        type: "publicOperationForm",
-        label: "Request a test",
-        body: "Tell us what you need.",
-        operationTargetKind: "schemaKey",
-        operationTargetSchemaKey: "tasks",
-        operationKey: "request.submit",
-        buttonLabel: "Send request",
-        successLabel: "Request received.",
-        operationNotificationMode: "email",
-        operationNotificationReplyToField: "email",
-      }),
-      placementRecord(
-        "rec_site_place_home_public_intake",
-        "rec_site_content_home",
-        "rec_site_block_public_intake",
-        {
-          order: 4000,
-        },
-      ),
-      {
-        id: "target-private-request",
-        entity: "request",
-        values: {
-          name: "Private target record",
-          details: "Private target details.",
-        },
-        createdAt: "2026-05-06T00:00:01.000Z",
       },
       {
         id: "instance-settings-private",
@@ -1579,162 +1096,48 @@ describe("site page tree projection", () => {
           operationInputNotificationRecipient: "owner@example.com",
           providerSecret: "server-secret-value",
         },
-        createdAt: "2026-05-06T00:00:02.000Z",
+        createdAt: "2026-05-06T00:00:03.000Z",
+      },
+      {
+        id: "target-private-request",
+        entity: "request",
+        values: {
+          name: "Private target record",
+          details: "Private target details.",
+        },
+        createdAt: "2026-05-06T00:00:04.000Z",
       },
     ];
     const tree = requireTree(
       buildSitePageTree(siteSourceSchema, records, "home", {
         generatedAt,
+        target: { apiRoutePrefix: "/api/app-installs/site/site" },
         publicOperationTargetResolver: publicOperationTargetResolver({
           tasks: publicIntakeSchema,
         }),
         turnstileSiteKey: "public-site-key",
       }),
     );
-    const form = childForPlacement(tree.page, "rec_site_place_home_public_intake");
+    const subscribeForm = childForPlacement(tree.page, "rec_site_place_home_subscribe");
+    const contactForm = childForPlacement(tree.page, "rec_site_place_home_contact");
+    const publicOperationForm = childForPlacement(tree.page, "rec_site_place_home_public_intake");
 
-    expect(form).toMatchObject({
-      id: "rec_site_block_public_intake",
-      type: "publicOperationForm",
-      label: "Request a test",
-      body: "Tell us what you need.",
-      operationKey: "request.submit",
-      buttonLabel: "Send request",
-      successLabel: "Request received.",
-      publicOperation: {
-        entityName: "request",
-        operationName: "submit",
-        canonicalKey: "request.submit",
-        target: {
-          kind: "schemaKey",
-          schemaKey: "tasks",
-          apiRoutePrefix: "/api/tasks",
-        },
-        route: "/api/tasks/public/operations/request/submit",
-        challenge: {
-          kind: "turnstile",
-          siteKey: "public-site-key",
-        },
-        fields: expect.arrayContaining([
-          expect.objectContaining({
-            name: "fullName",
-            label: "Your name",
-          }),
-        ]),
-      },
-    });
-    expect(form).not.toHaveProperty("operationTargetSchemaKey");
-    expect(form).not.toHaveProperty("operationNotificationMode");
+    expect(subscribeForm.publicOperation).toEqual(
+      expect.objectContaining({ canonicalKey: "subscription.subscribe" }),
+    );
+    expect(contactForm.publicOperation).toEqual(
+      expect.objectContaining({ canonicalKey: "contact-message.submit" }),
+    );
+    expect(publicOperationForm.publicOperation).toEqual(
+      expect.objectContaining({ canonicalKey: "request.submit" }),
+    );
+    expect(publicOperationForm).not.toHaveProperty("operationTargetSchemaKey");
+    expect(publicOperationForm).not.toHaveProperty("operationNotificationMode");
+    expect(JSON.stringify(tree)).not.toContain("reader@example.com");
+    expect(JSON.stringify(tree)).not.toContain("Private message.");
     expect(JSON.stringify(tree)).not.toContain("owner@example.com");
     expect(JSON.stringify(tree)).not.toContain("server-secret-value");
     expect(JSON.stringify(tree)).not.toContain("Private target details.");
-  });
-
-  it("projects public operation form installed app target routes", () => {
-    const records = [
-      ...baseTreeRecords(),
-      blockRecord("rec_site_block_installed_intake", {
-        type: "publicOperationForm",
-        label: "Installed request",
-        operationTargetKind: "appInstall",
-        operationTargetPackageAppKey: "tasks",
-        operationTargetInstallId: "intake",
-        operationKey: "request.submit",
-      }),
-      placementRecord(
-        "rec_site_place_home_installed_intake",
-        "rec_site_content_home",
-        "rec_site_block_installed_intake",
-        {
-          order: 4000,
-        },
-      ),
-    ];
-    const tree = requireTree(
-      buildSitePageTree(siteSourceSchema, records, "home", {
-        generatedAt,
-        publicOperationTargetResolver: publicOperationTargetResolver({
-          tasks: publicIntakeSchema,
-        }),
-        turnstileSiteKey: "public-site-key",
-      }),
-    );
-    const form = childForPlacement(tree.page, "rec_site_place_home_installed_intake");
-
-    expect(form.publicOperation).toMatchObject({
-      canonicalKey: "request.submit",
-      target: {
-        kind: "appInstall",
-        packageAppKey: "tasks",
-        installId: "intake",
-        apiRoutePrefix: "/api/app-installs/tasks/intake",
-      },
-      route: "/api/app-installs/tasks/intake/public/operations/request/submit",
-    });
-  });
-
-  it("warns and omits public operation form bindings for unavailable targets and unsupported required inputs", () => {
-    const records = [
-      ...baseTreeRecords(),
-      blockRecord("rec_site_block_missing_target_intake", {
-        type: "publicOperationForm",
-        label: "Missing target",
-        operationTargetKind: "schemaKey",
-        operationTargetSchemaKey: "missing",
-        operationKey: "request.submit",
-      }),
-      blockRecord("rec_site_block_required_reference_intake", {
-        type: "publicOperationForm",
-        label: "Required reference",
-        operationTargetKind: "schemaKey",
-        operationTargetSchemaKey: "crm",
-        operationKey: "request.submit",
-      }),
-      placementRecord(
-        "rec_site_place_home_missing_target_intake",
-        "rec_site_content_home",
-        "rec_site_block_missing_target_intake",
-        {
-          order: 4000,
-        },
-      ),
-      placementRecord(
-        "rec_site_place_home_required_reference_intake",
-        "rec_site_content_home",
-        "rec_site_block_required_reference_intake",
-        {
-          order: 5000,
-        },
-      ),
-    ];
-    const result = buildSitePageTree(siteSourceSchema, records, "home", {
-      generatedAt,
-      publicOperationTargetResolver: publicOperationTargetResolver({
-        crm: requiredReferenceIntakeSchema,
-      }),
-      turnstileSiteKey: "public-site-key",
-    });
-    const tree = requireTree(result);
-    const missingTarget = childForPlacement(tree.page, "rec_site_place_home_missing_target_intake");
-    const requiredReference = childForPlacement(
-      tree.page,
-      "rec_site_place_home_required_reference_intake",
-    );
-
-    expect(missingTarget.publicOperation).toBeUndefined();
-    expect(requiredReference.publicOperation).toBeUndefined();
-    expect(result.meta.warnings).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          code: "invalid-public-operation-target",
-          recordId: "rec_site_block_missing_target_intake",
-        }),
-        expect.objectContaining({
-          code: "unsupported-public-operation-input",
-          recordId: "rec_site_block_required_reference_intake",
-        }),
-      ]),
-    );
   });
 
   it("omits tombstoned and undated posts from postList projection", () => {
@@ -1890,105 +1293,6 @@ const anonymousTurnstilePolicy = {
   },
 };
 
-const publicSubscriptionCreateSchema = {
-  version: 1,
-  entities: {
-    subscription: {
-      label: "Subscription",
-      fields: {
-        email: {
-          type: "text",
-          required: true,
-          label: "Email",
-        },
-      },
-      operations: {
-        join: {
-          label: "Join",
-          kind: "create",
-          scope: "collection",
-          input: {
-            fields: {
-              email: {
-                field: "email",
-                required: true,
-              },
-            },
-          },
-          effect: {
-            type: "createRecord",
-          },
-          output: {
-            type: "create",
-          },
-          idempotency: {
-            required: true,
-          },
-          audit: {
-            input: "summary",
-          },
-          policy: anonymousTurnstilePolicy,
-        },
-      },
-    },
-  },
-  queries: {},
-  itemViews: {},
-  tableViews: {},
-  views: {},
-} satisfies AppSchema;
-
-const crmPublicSubscribeSchema = {
-  version: 1,
-  entities: {
-    subscription: {
-      label: "Subscription",
-      fields: {
-        email: {
-          type: "text",
-          required: true,
-          label: "Email",
-        },
-      },
-      operations: {
-        subscribe: {
-          label: "Subscribe",
-          kind: "command",
-          scope: "collection",
-          input: {
-            fields: {
-              email: {
-                type: "text",
-                required: true,
-                label: "Email",
-              },
-            },
-          },
-          effect: {
-            type: "operationHandler",
-            handler: "subscribe",
-            config: {},
-          },
-          output: {
-            type: "command",
-          },
-          idempotency: {
-            required: true,
-          },
-          audit: {
-            input: "summary",
-          },
-          policy: anonymousTurnstilePolicy,
-        },
-      },
-    },
-  },
-  queries: {},
-  itemViews: {},
-  tableViews: {},
-  views: {},
-} satisfies AppSchema;
-
 const publicIntakeSchema = {
   version: 1,
   entities: {
@@ -2079,66 +1383,6 @@ const publicIntakeSchema = {
               },
               owner: {
                 field: "owner",
-              },
-            },
-          },
-          effect: {
-            type: "createRecord",
-          },
-          output: {
-            type: "create",
-          },
-          idempotency: {
-            required: true,
-          },
-          audit: {
-            input: "summary",
-          },
-          policy: anonymousTurnstilePolicy,
-        },
-      },
-    },
-  },
-  queries: {},
-  itemViews: {},
-  tableViews: {},
-  views: {},
-} satisfies AppSchema;
-
-const requiredReferenceIntakeSchema = {
-  version: 1,
-  entities: {
-    owner: {
-      label: "Owner",
-      fields: {
-        label: {
-          type: "text",
-          required: true,
-          label: "Label",
-        },
-      },
-    },
-    request: {
-      label: "Request",
-      fields: {
-        owner: {
-          type: "reference",
-          required: true,
-          label: "Owner",
-          to: "owner",
-          displayField: "label",
-        },
-      },
-      operations: {
-        submit: {
-          label: "Submit request",
-          kind: "create",
-          scope: "collection",
-          input: {
-            fields: {
-              owner: {
-                field: "owner",
-                required: true,
               },
             },
           },

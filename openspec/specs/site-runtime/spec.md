@@ -272,6 +272,27 @@ runtime secrets.
 - THEN the public tree includes a warning
 - AND public rendering does not expose a working form for that block
 
+### Requirement: Public Operation Block Projection Locality
+
+The system SHALL keep public operation block projection separate from generic
+public tree traversal.
+
+#### Scenario: Project public operation blocks through a focused boundary
+
+- GIVEN tree projection encounters a `subscribeForm`, `contactForm`, or
+  `publicOperationForm` block
+- WHEN operation facts are projected for the block
+- THEN stored operation keys, stored target route identity parsing, target
+  resolution warnings, public operation selection, target public operation route
+  construction, Turnstile challenge fact projection, and public-safe operation
+  input field metadata projection are handled by the Site public operation block
+  projection boundary
+- AND generic public tree traversal only attaches returned `publicOperation`
+  facts or records projection warnings on the tree metadata
+- AND media projection, link resolution, dynamic list item projection,
+  frame/root resolution, placement traversal, and browser submission helpers
+  remain outside that boundary
+
 ### Requirement: Site Authoring
 
 The system SHALL expose Site authoring through generated admin screens that edit Site settings and tree-structured block composition without exposing raw implementation-only fields as primary controls.

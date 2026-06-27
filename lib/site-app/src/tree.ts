@@ -4,29 +4,23 @@ import type {
   SiteMediaNode,
   SitePageFrame,
   SiteSettingsNode,
-  SitePublicOperationInputFieldNode,
-  SitePublicOperationNode,
-  SitePublicOperationTargetNode,
   SitePageTreeProjection,
   SitePlacementNode,
   SiteTreeWarning,
   StoredRecord,
 } from "./types.ts";
-import {
-  projectPublicSafeOperationInputFields,
-  selectAnonymousPublicOperationByKey,
-  type AppSchema,
-  type EntityOperationSchema,
-} from "@dpeek/formless-schema";
+import type { AppSchema } from "@dpeek/formless-schema";
 import { coreImageMediaDeliveryFactsForAssetId } from "@dpeek/formless-media";
-import { buildPublicOperationTargetRoute } from "@dpeek/formless-public-operations";
 import {
   resolveSiteRoute,
   routeInfoForResolution,
   type SiteRouteResolution,
 } from "./route-resolver.ts";
 import { resolveSiteLinkHref } from "./link-targets.ts";
-import { projectSubscribeContactPublicOperation } from "./subscribe-contact-public-operations.ts";
+import {
+  projectSitePublicOperationBlock,
+  type SitePublicOperationTargetResolver,
+} from "./public-operation-block-projection.ts";
 
 export type {
   SiteBlockNode,
@@ -46,26 +40,6 @@ export type BuildSitePageTreeOptions = {
   turnstileSiteKey?: string;
 };
 
-export type SitePublicOperationTargetRequest =
-  | {
-      kind: "schemaKey";
-      schemaKey: string;
-    }
-  | {
-      kind: "appInstall";
-      packageAppKey: string;
-      installId: string;
-    };
-
-export type SitePublicOperationTargetResolution = {
-  route: SitePublicOperationTargetNode;
-  schema: AppSchema;
-};
-
-export type SitePublicOperationTargetResolver = (
-  request: SitePublicOperationTargetRequest,
-) => SitePublicOperationTargetResolution | undefined;
-
 type SiteTreeIndexes = {
   blocks: Map<string, StoredRecord>;
   siteSettings: StoredRecord[];
@@ -80,12 +54,6 @@ type SiteTreeBuildContext = {
   turnstileSiteKey?: string;
   warnings: SiteTreeWarning[];
   maxDepth: number;
-};
-
-type FixedPublicOperationTarget = {
-  schema: AppSchema;
-  publicOperationApiRoutePrefix: `/${string}`;
-  route?: SitePublicOperationTargetNode;
 };
 
 const DEFAULT_MAX_DEPTH = 16;
@@ -436,295 +404,20 @@ function projectedPublicOperationFields(
   record: StoredRecord,
   type: string,
   context: SiteTreeBuildContext,
-): SitePublicOperationNode | undefined {
-  if (type === "publicOperationForm") {
-    return projectedGenericPublicOperationFields(record, context);
-  }
-
-  if (type !== "subscribeForm" && type !== "contactForm") {
-    return undefined;
-  }
-
-  const target: FixedPublicOperationTarget | undefined =
-    type === "subscribeForm"
-      ? selectSubscribeFormPublicOperationTarget(record, context)
-      : siteLocalPublicOperationTarget(context);
-
-  if (!target) {
-    return undefined;
-  }
-
-  return projectSubscribeContactPublicOperation({
-    blockType: type,
-    recordId: record.id,
-    operationName: stringValue(record.values.operationName),
-    publicOperationApiRoutePrefix: target.publicOperationApiRoutePrefix,
-    schema: target.schema,
-    ...(target.route ? { target: target.route } : {}),
-    turnstileSiteKey: context.turnstileSiteKey,
-    warnings: context.warnings,
-  });
-}
-
-function selectSubscribeFormPublicOperationTarget(
-  record: StoredRecord,
-  context: SiteTreeBuildContext,
-): FixedPublicOperationTarget | undefined {
-  if (!hasPublicOperationTargetIdentity(record)) {
-    return siteLocalPublicOperationTarget(context);
-  }
-
-  const target = selectPublicOperationFormTarget(record, context, "Subscribe form");
-
-  if (!target) {
-    return undefined;
-  }
-
-  if (target.route.kind !== "appInstall" || target.route.packageAppKey !== "crm") {
-    context.warnings.push({
-      code: "invalid-public-operation-target",
-      recordId: record.id,
-      message: `Subscribe form target must resolve to an installed CRM app.`,
-    });
-    return undefined;
-  }
-
-  return {
-    schema: target.schema,
-    publicOperationApiRoutePrefix: target.route.apiRoutePrefix,
-    route: target.route,
-  };
-}
-
-function siteLocalPublicOperationTarget(context: SiteTreeBuildContext): FixedPublicOperationTarget {
-  return {
+): ReturnType<typeof projectSitePublicOperationBlock> {
+  return projectSitePublicOperationBlock({
+    record,
+    type,
     schema: context.schema,
+    ...(context.publicOperationTargetResolver === undefined
+      ? {}
+      : { publicOperationTargetResolver: context.publicOperationTargetResolver }),
     publicOperationApiRoutePrefix: context.publicOperationApiRoutePrefix,
-  };
-}
-
-function projectedGenericPublicOperationFields(
-  record: StoredRecord,
-  context: SiteTreeBuildContext,
-): SitePublicOperationNode | undefined {
-  const operationKey = stringValue(record.values.operationKey);
-  const formLabel = "Public operation form";
-
-  if (!operationKey) {
-    context.warnings.push({
-      code: "missing-public-operation",
-      recordId: record.id,
-      message: `${formLabel} block "${record.id}" does not declare an operation key.`,
-    });
-    return undefined;
-  }
-
-  const target = selectPublicOperationFormTarget(record, context, formLabel);
-
-  if (!target) {
-    return undefined;
-  }
-
-  const operation = selectGenericPublicOperation(target.schema, operationKey);
-
-  if (operation.kind !== "available") {
-    context.warnings.push({
-      code: operation.code,
-      recordId: record.id,
-      message: operation.message,
-    });
-    return undefined;
-  }
-
-  if (context.turnstileSiteKey === undefined) {
-    context.warnings.push({
-      code: "missing-public-operation-challenge-config",
-      recordId: record.id,
-      message: `${formLabel} operation "${operationKey}" requires Turnstile site key configuration.`,
-    });
-    return undefined;
-  }
-
-  const fields = projectPublicOperationInputFields({
-    entityName: operation.entityName,
-    operation: operation.operation,
-    recordId: record.id,
-    schema: target.schema,
+    ...(context.turnstileSiteKey === undefined
+      ? {}
+      : { turnstileSiteKey: context.turnstileSiteKey }),
     warnings: context.warnings,
   });
-
-  if (!fields) {
-    return undefined;
-  }
-
-  return {
-    entityName: operation.entityName,
-    operationName: operation.operationName,
-    canonicalKey: operation.canonicalKey,
-    target: target.route,
-    route: buildPublicOperationTargetRoute({
-      targetApiRoutePrefix: target.route.apiRoutePrefix,
-      entityKey: operation.entityName,
-      operationKey: operation.operationName,
-    }),
-    challenge: {
-      kind: "turnstile",
-      siteKey: context.turnstileSiteKey,
-    },
-    fields,
-  };
-}
-
-function selectPublicOperationFormTarget(
-  record: StoredRecord,
-  context: SiteTreeBuildContext,
-  formLabel: string,
-): SitePublicOperationTargetResolution | undefined {
-  const targetKind = stringValue(record.values.operationTargetKind);
-
-  if (targetKind === "schemaKey") {
-    const schemaKey = stringValue(record.values.operationTargetSchemaKey);
-
-    if (!schemaKey) {
-      context.warnings.push({
-        code: "missing-public-operation-target",
-        recordId: record.id,
-        message: `${formLabel} block "${record.id}" does not declare a target schema key.`,
-      });
-      return undefined;
-    }
-
-    return resolvePublicOperationFormTarget(record, context, formLabel, {
-      kind: "schemaKey",
-      schemaKey,
-    });
-  }
-
-  if (targetKind === "appInstall") {
-    const packageAppKey = stringValue(record.values.operationTargetPackageAppKey);
-    const installId = stringValue(record.values.operationTargetInstallId);
-
-    if (!packageAppKey || !installId) {
-      context.warnings.push({
-        code: "missing-public-operation-target",
-        recordId: record.id,
-        message: `${formLabel} block "${record.id}" does not declare an installed app target.`,
-      });
-      return undefined;
-    }
-
-    return resolvePublicOperationFormTarget(record, context, formLabel, {
-      kind: "appInstall",
-      packageAppKey,
-      installId,
-    });
-  }
-
-  context.warnings.push({
-    code: "missing-public-operation-target",
-    recordId: record.id,
-    message: `${formLabel} block "${record.id}" does not declare a supported target route kind.`,
-  });
-  return undefined;
-}
-
-function resolvePublicOperationFormTarget(
-  record: StoredRecord,
-  context: SiteTreeBuildContext,
-  formLabel: string,
-  request: SitePublicOperationTargetRequest,
-): SitePublicOperationTargetResolution | undefined {
-  const target = context.publicOperationTargetResolver?.(request);
-
-  if (!target) {
-    context.warnings.push({
-      code: "invalid-public-operation-target",
-      recordId: record.id,
-      message:
-        request.kind === "schemaKey"
-          ? `${formLabel} target schema key "${request.schemaKey}" is unavailable.`
-          : `${formLabel} target install "${request.packageAppKey}/${request.installId}" is unavailable.`,
-    });
-    return undefined;
-  }
-
-  return target;
-}
-
-function hasPublicOperationTargetIdentity(record: StoredRecord): boolean {
-  return (
-    stringValue(record.values.operationTargetKind) !== undefined ||
-    stringValue(record.values.operationTargetSchemaKey) !== undefined ||
-    stringValue(record.values.operationTargetPackageAppKey) !== undefined ||
-    stringValue(record.values.operationTargetInstallId) !== undefined
-  );
-}
-
-function selectGenericPublicOperation(
-  schema: AppSchema,
-  operationKey: string,
-):
-  | {
-      kind: "available";
-      entityName: string;
-      operationName: string;
-      canonicalKey: string;
-      operation: EntityOperationSchema;
-    }
-  | { kind: "unavailable"; code: string; message: string } {
-  const operation = selectAnonymousPublicOperationByKey(schema, operationKey);
-
-  if (operation.kind !== "available") {
-    return {
-      kind: "unavailable",
-      code:
-        operation.reason === "missing-operation"
-          ? "missing-public-operation"
-          : "invalid-public-operation",
-      message: operation.message,
-    };
-  }
-
-  return {
-    kind: "available",
-    entityName: operation.entityName,
-    operationName: operation.operationName,
-    canonicalKey: operation.canonicalKey,
-    operation: operation.operation,
-  };
-}
-
-function projectPublicOperationInputFields(input: {
-  entityName: string;
-  operation: EntityOperationSchema;
-  recordId: string;
-  schema: AppSchema;
-  warnings: SiteTreeWarning[];
-}): SitePublicOperationInputFieldNode[] | undefined {
-  const entity = input.schema.entities[input.entityName];
-
-  if (!entity) {
-    return undefined;
-  }
-
-  const projection = projectPublicSafeOperationInputFields({
-    entity,
-    operation: input.operation,
-  });
-
-  for (const inputName of projection.unsupportedRequiredFields) {
-    input.warnings.push({
-      code: "unsupported-public-operation-input",
-      recordId: input.recordId,
-      message: `Public operation form block "${input.recordId}" cannot render required input field "${inputName}".`,
-    });
-  }
-
-  if (projection.unsupportedRequiredFields.length > 0) {
-    return undefined;
-  }
-
-  return projection.fields;
 }
 
 function projectedMediaFields(

@@ -1,7 +1,8 @@
 import type { AppSchema } from "@dpeek/formless-schema";
 
+import type { SitePublicOperationTargetResolver } from "../public-operation-block-projection.ts";
 import type { SitePublicRendererComponent } from "../public-renderer.ts";
-import { buildSitePageTree, type SitePublicOperationTargetResolver } from "../tree.ts";
+import { buildSitePageTree } from "../tree.ts";
 import type { SitePageTree, StoredRecord } from "../types.ts";
 import type {
   PublicSiteDocumentRenderInput,

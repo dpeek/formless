@@ -26,6 +26,13 @@ export type {
   BuildPublicSiteRouteEntriesOptions,
   PublicSiteRouteEntry,
 } from "./public-indexing.ts";
+export { projectSitePublicOperationBlock } from "./public-operation-block-projection.ts";
+export type {
+  SitePublicOperationBlockProjectionInput,
+  SitePublicOperationTargetResolver,
+  SitePublicOperationTargetRequest,
+  SitePublicOperationTargetResolution,
+} from "./public-operation-block-projection.ts";
 export {
   normalizeSiteRoutePath,
   resolveSiteRoute,
@@ -45,10 +52,5 @@ export {
 } from "./source-media.ts";
 export type { SiteSourceMediaAsset } from "./source-media.ts";
 export { buildSitePageTree } from "./tree.ts";
-export type {
-  BuildSitePageTreeOptions,
-  SitePublicOperationTargetResolver,
-  SitePublicOperationTargetRequest,
-  SitePublicOperationTargetResolution,
-} from "./tree.ts";
+export type { BuildSitePageTreeOptions } from "./tree.ts";
 export type * from "./types.ts";

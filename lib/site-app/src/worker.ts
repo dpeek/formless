@@ -1,6 +1,6 @@
 export { createSitePublicWorkerAdapter, sitePublicWorkerAdapter } from "./worker/adapter.ts";
 export type { SitePublicWorkerAdapter, SitePublicWorkerAdapterOptions } from "./worker/adapter.ts";
-export type { SitePublicOperationTargetResolver } from "./tree.ts";
+export type { SitePublicOperationTargetResolver } from "./public-operation-block-projection.ts";
 export {
   PUBLISHED_SITE_ERROR_CACHE_CONTROL,
   PUBLISHED_SITE_HTML_CACHE_CONTROL,
