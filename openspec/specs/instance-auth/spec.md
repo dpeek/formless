@@ -2,9 +2,11 @@
 
 ## Purpose
 
-Instance auth owns product instance owner identity, passkey credentials,
-WebAuthn challenge ceremonies, canonical auth origin policy, owner session
-issuance, logout, and admin bearer recovery boundaries.
+Instance auth owns product instance passkey credentials, WebAuthn challenge
+ceremonies, canonical auth origin policy, principal-backed owner session
+issuance, logout, and admin bearer recovery boundaries. Reviewable owner
+identity and owner authority are stored as identity control-plane principal,
+principal-email, and role-assignment records.
 
 ## Requirements
 
@@ -35,12 +37,14 @@ ceremonies.
 - GIVEN owner setup or passkey login requires instance auth configuration
 - WHEN canonical origin or relying-party id is missing
 - THEN the ceremony request is rejected with a configuration error
-- AND no owner, credential, challenge, or session state is written
+- AND no principal, role assignment, credential, challenge, or session state is
+  written
 
 #### Scenario: Primary domain activation before production owner credentials
 
 - GIVEN a deployed instance has only a workers.dev bootstrap origin
-- WHEN the owner attempts to create production owner passkey credentials
+- WHEN the owner principal attempts to create production owner passkey
+  credentials
 - THEN the runtime requires configured canonical auth origin and relying-party
   id before accepting the ceremony
 - AND local-dev bootstrap sessions and preview deployment remain available
@@ -56,10 +60,15 @@ first-owner setup.
 - GIVEN a valid owner setup capability exists for the instance
 - WHEN setup completion submits owner identity and a valid passkey registration
   response for the active registration challenge
-- THEN the system stores the owner identity and passkey credential
+- THEN the system stores an active principal for the owner identity
+- AND if the setup request includes an owner email, the system stores a primary
+  principal-email record for that principal
+- AND the system stores an active `instance.owner` role assignment for that
+  principal at instance scope
+- AND the system stores the passkey credential for that principal
 - AND the setup capability is consumed
 - AND no app install metadata or route record is created by owner setup
-- AND an owner session cookie is issued
+- AND an owner session cookie is issued for that principal
 
 #### Scenario: Reject setup without valid passkey
 
@@ -67,20 +76,20 @@ first-owner setup.
 - WHEN setup completion omits the passkey registration response or submits an
   invalid registration response
 - THEN setup completion is rejected
-- AND no owner identity is stored
+- AND no owner principal or owner role assignment is stored
 - AND no setup capability is consumed
 - AND no owner session cookie is issued
 
 ### Requirement: Passkey Credential Storage
 
-The system SHALL store owner passkey credentials as instance metadata without
-storing private authenticator material.
+The system SHALL store passkey credentials as private instance auth metadata
+bound to identity principals without storing private authenticator material.
 
 #### Scenario: Store verified credential
 
 - WHEN a passkey registration response is verified
-- THEN the credential record stores owner id, credential id, public key, sign
-  counter, credential device facts needed for later verification, created
+- THEN the credential record stores principal id, credential id, public key,
+  sign counter, credential device facts needed for later verification, created
   timestamp, and updated timestamp
 - AND the credential record does not store a private key, raw setup token, or
   raw challenge secret
@@ -108,10 +117,13 @@ instance-scoped.
 
 #### Scenario: Login options
 
-- GIVEN owner setup is complete and at least one owner passkey credential is
-  stored
+- GIVEN owner setup is complete with an active principal that has an active
+  `instance.owner` role assignment
+- AND at least one passkey credential is stored for that principal
 - WHEN login options are requested
 - THEN the system stores a one-time login challenge scoped to the instance
+- AND the challenge is bound to the principal id selected for the eligible
+  owner credential set
 - AND the response contains only browser-safe WebAuthn request options for
   eligible owner credentials
 
@@ -121,7 +133,7 @@ instance-scoped.
   expired
 - WHEN the same challenge is submitted again
 - THEN verification is rejected
-- AND no credential, owner, or session state is written
+- AND no credential, principal, role assignment, or session state is written
 
 ### Requirement: Passkey Login
 
@@ -130,16 +142,19 @@ verification.
 
 #### Scenario: Successful passkey login
 
-- GIVEN owner setup is complete and an owner passkey credential exists
+- GIVEN owner setup is complete
+- AND an active principal has an active `instance.owner` role assignment at
+  instance scope
+- AND a passkey credential exists for that principal
 - WHEN the owner submits a valid assertion for the active login challenge,
   canonical origin, relying-party id, and stored credential public key
 - THEN the system updates the stored credential verification facts
-- AND the system issues the existing owner session cookie for that owner
+- AND the system issues the existing owner session cookie for that principal
 
 #### Scenario: Reject invalid passkey login
 
 - WHEN a passkey login assertion has the wrong challenge, origin, relying-party
-  id, credential id, owner, signature, or authenticator counter
+  id, credential id, principal, signature, or authenticator counter
 - THEN login is rejected
 - AND no owner session cookie is issued
 - AND stored credential verification facts are not advanced
@@ -151,17 +166,19 @@ local-dev owner sessions.
 
 #### Scenario: Session status after passkey login
 
-- GIVEN an owner has logged in with a passkey
+- GIVEN an owner principal has logged in with a passkey
 - WHEN the browser requests `/api/formless/session`
 - THEN the response reports the owner as authenticated
-- AND the response includes the owner identity and session expiry
+- AND the response includes the display-safe owner identity from the principal
+  records and session expiry
 
 #### Scenario: Session status after local dev bootstrap
 
 - GIVEN the browser has completed local dev owner session bootstrap
 - WHEN the browser requests `/api/formless/session`
 - THEN the response reports the local owner as authenticated
-- AND the response includes the owner identity and session expiry
+- AND the response includes the display-safe owner identity from the principal
+  records and session expiry
 
 #### Scenario: Logout clears owner session
 
@@ -195,6 +212,30 @@ that require an owner session.
 - AND the browser falls back to the product instance root after successful
   login
 
+### Requirement: Principal-Backed Owner Authorization
+
+The system SHALL authorize browser owner access through an active principal
+with active `instance.owner` authority.
+
+#### Scenario: Owner session resolves to active owner principal
+
+- GIVEN a browser request includes a valid owner session cookie
+- WHEN the session principal is active
+- AND the principal has an active `instance.owner` role assignment at instance
+  scope
+- THEN owner-only browser routes and owner-protected management reads and writes
+  accept the request as owner-authorized
+
+#### Scenario: Owner session without active owner authority
+
+- GIVEN a browser request includes a valid owner session cookie
+- WHEN the session principal is missing, disabled, or no longer has an active
+  `instance.owner` role assignment at instance scope
+- THEN owner-only browser routes and owner-protected management reads and writes
+  reject the request as unauthenticated owner access
+- AND privileged writes do not rely only on stale role facts in the signed
+  cookie payload
+
 ### Requirement: Admin Bearer Boundary
 
 The system MUST keep admin bearer authorization separate from passkey browser
@@ -204,14 +245,16 @@ login.
 
 - GIVEN an admin bearer token is configured
 - WHEN a protected write request supplies the valid admin bearer token
-- THEN the request is authorized without requiring a passkey owner session
+- THEN the request is authorized without requiring a principal-backed owner
+  session
 
 #### Scenario: Admin bearer authorizes protected management reads
 
 - GIVEN an admin bearer token is configured
 - WHEN a trusted CLI or automation request reads an owner-protected management
   endpoint with the valid admin bearer token
-- THEN the request is authorized without requiring a passkey owner session
+- THEN the request is authorized without requiring a principal-backed owner
+  session
 - AND the token is not accepted as a browser owner-login credential
 
 #### Scenario: Admin bearer mints owner setup capability
@@ -223,8 +266,9 @@ login.
   instance and reports that setup remains incomplete
 - AND the raw setup token and admin bearer token are not returned in the
   response
-- AND if owner setup is already complete, the request reports the existing owner
-  state and does not replace the existing owner or store a new setup capability
+- AND if owner setup is already complete, the request reports the existing
+  display-safe owner identity and does not replace the existing owner principal
+  or store a new setup capability
 
 #### Scenario: Owner setup bootstrap does not require owner-protected app state
 
@@ -255,8 +299,10 @@ without requiring passkey registration.
   CLI-generated local session bootstrap token
 - **WHEN** the same-origin browser requests the local session bootstrap endpoint
   with that token
-- **THEN** the runtime creates local owner state if no owner exists
-- **AND** the runtime issues the existing owner session cookie for that owner
+- **THEN** the runtime creates a local active owner principal and active
+  `instance.owner` role assignment if no owner principal exists
+- **AND** the runtime issues the existing owner session cookie for that
+  principal
 - **AND** no passkey credential, passkey challenge, setup capability, app
   install, route record, Cloudflare resource, Alchemy resource, or provider
   resource is created
@@ -278,5 +324,5 @@ without requiring passkey registration.
   profile, published Site profile, cross-origin browser, or request without the
   active local bootstrap token calls the local session bootstrap endpoint
 - **THEN** the request is rejected
-- **AND** no owner, credential, challenge, setup capability, app install,
-  session, or provider state is written
+- **AND** no principal, role assignment, credential, challenge, setup
+  capability, app install, session, or provider state is written

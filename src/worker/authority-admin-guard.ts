@@ -1,7 +1,8 @@
 import type { AuthorityOperation } from "./authority-operations.ts";
 import {
-  validateOwnerSessionCookie,
+  validateOwnerSessionAuthority,
   type OwnerSession,
+  type OwnerSessionAuthorityResolver,
   type OwnerSessionEnv,
 } from "./owner-session.ts";
 
@@ -33,12 +34,13 @@ export function authorizeAuthorityOperation(
   request: Request,
   operation: AuthorityOperation,
   env: AuthorityAdminGuardEnv,
+  options: { resolveOwnerSession?: OwnerSessionAuthorityResolver } = {},
 ): Promise<AuthorityAdminGuardResult> {
   if (operation.metadata.mode === "read") {
     return Promise.resolve({ authorized: true });
   }
 
-  return authorizeInstanceWrite(request, env);
+  return authorizeInstanceWrite(request, env, options);
 }
 
 export function authorizeAdminWrite(
@@ -68,25 +70,29 @@ export function authorizeAdminWrite(
 export async function authorizeInstanceWrite(
   request: Request,
   env: AuthorityAdminGuardEnv,
+  options: { resolveOwnerSession?: OwnerSessionAuthorityResolver } = {},
 ): Promise<InstanceWriteAuthorizationResult> {
   return authorizeOwnerSessionOrAdmin(request, env, {
     error: "Owner session or admin authorization is required for this write endpoint.",
+    ...options,
   });
 }
 
 export async function authorizeOwnerManagementRead(
   request: Request,
   env: AuthorityAdminGuardEnv,
+  options: { resolveOwnerSession?: OwnerSessionAuthorityResolver } = {},
 ): Promise<OwnerManagementReadAuthorizationResult> {
   return authorizeOwnerSessionOrAdmin(request, env, {
     error: "Owner session or admin authorization is required for this read endpoint.",
+    ...options,
   });
 }
 
 async function authorizeOwnerSessionOrAdmin(
   request: Request,
   env: AuthorityAdminGuardEnv,
-  options: { error: string },
+  options: { error: string; resolveOwnerSession?: OwnerSessionAuthorityResolver },
 ): Promise<InstanceWriteAuthorizationResult> {
   const adminToken = normalizedAdminToken(env.FORMLESS_ADMIN_TOKEN);
   const sessionProtectionConfigured =
@@ -100,7 +106,9 @@ async function authorizeOwnerSessionOrAdmin(
     return { authorized: true, via: "admin-bearer" };
   }
 
-  const ownerSession = await validateOwnerSessionCookie(request, env);
+  const ownerSession = await validateOwnerSessionAuthority(request, env, {
+    resolveOwnerSession: options.resolveOwnerSession,
+  });
 
   if (ownerSession.ok) {
     return { authorized: true, session: ownerSession.session, via: "owner-session" };

@@ -88,9 +88,10 @@ runtime-owned Authority storage.
 
 - GIVEN an identity control-plane API request selects a read or write operation
 - WHEN the request is authorized
-- THEN existing owner session and admin bearer authorization protect the request
-  until a later instance-auth change replaces owner-only checks with
-  principal-role checks
+- THEN a browser request is authorized only when its owner session resolves to
+  an active principal with an active `instance.owner` role assignment at
+  instance scope
+- AND trusted automation remains authorized by valid admin bearer authorization
 - AND anonymous browser requests cannot bootstrap, read, or mutate identity
   control-plane records
 - AND admin bearer authorization remains separate from browser login and
@@ -206,8 +207,7 @@ flat role assignment records.
 - AND active role assignments are unique by role, target kind, selected target
   record, scope kind, and selected scope id
 - AND the first owner is represented as an `instance.owner` role assignment for
-  a principal at instance scope when owner identity is moved to the principal
-  model by a later instance-auth change
+  a principal at instance scope
 
 ### Requirement: App Registration And Invitation Records
 
@@ -333,13 +333,16 @@ reviewable identity records.
   organizations, app installs, invitations, and verification status without
   exposing raw secrets
 
-#### Scenario: Owner and admin bearer boundaries remain separate
+#### Scenario: Owner auth uses principal and role records
 
-- GIVEN the first identity control-plane package and schema source are present
-- WHEN existing owner setup, owner sessions, passkey credential storage, local
-  dev owner bootstrap, or admin bearer authorization run
-- THEN those existing instance-auth behaviors remain owned by the instance-auth
-  runtime until a later change moves owner identity to principal and role
-  records
+- GIVEN first-owner setup or local-dev owner bootstrap creates owner authority
+- WHEN reviewable identity records are inspected
+- THEN owner authority is represented by an active `principal` record and an
+  active `instance.owner` role assignment for that principal at instance scope
+- AND an optional owner email is represented by a `principal-email` record for
+  that principal
+- AND passkey credentials, passkey challenges, owner session material, setup
+  capability token hashes, and raw browser cookie values remain private
+  instance-auth runtime state outside identity-control-plane records
 - AND admin bearer authorization remains separate from browser login and
   identity-control-plane records

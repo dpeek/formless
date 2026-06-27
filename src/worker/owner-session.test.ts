@@ -5,6 +5,7 @@ import { authorizeInstanceWrite } from "./authority-admin-guard.ts";
 import {
   OWNER_SESSION_COOKIE_NAME,
   createOwnerSessionCookie,
+  validateOwnerSessionAuthority,
   validateOwnerSessionCookie,
 } from "./owner-session.ts";
 
@@ -38,7 +39,7 @@ describe("owner session cookies", () => {
       expiresAt: "2026-05-21T00:01:00.000Z",
       instanceId: "example.com",
       issuedAt,
-      ownerId: "owner-1",
+      principalId: "owner-1",
     });
     expect(created.cookie).toContain(`${OWNER_SESSION_COOKIE_NAME}=`);
     expect(created.cookie).toContain("Path=/");
@@ -135,7 +136,7 @@ describe("owner session cookies", () => {
         expiresAt: "2026-05-21T00:01:00.000Z",
         instanceId: "example.com",
         issuedAt,
-        ownerId: "owner-1",
+        principalId: "owner-1",
         purpose: "setup-token",
         version: 1,
       },
@@ -212,16 +213,57 @@ describe("shared write authorization", () => {
     });
 
     await expectAuthorizationResult(
-      authorizeInstanceWrite(requestWithCookie(created.cookie, "https://example.com/api"), {
-        FORMLESS_ADMIN_TOKEN: adminToken,
-        FORMLESS_OWNER_SESSION_SECRET: sessionSecret,
-      }),
+      authorizeInstanceWrite(
+        requestWithCookie(created.cookie, "https://example.com/api"),
+        {
+          FORMLESS_ADMIN_TOKEN: adminToken,
+          FORMLESS_OWNER_SESSION_SECRET: sessionSecret,
+        },
+        {
+          resolveOwnerSession: async (session) => (session.principalId === owner.id ? owner : null),
+        },
+      ),
       {
         authorized: true,
         session: created.session,
         via: "owner-session",
       },
     );
+  });
+
+  it("rejects stale signed owner session cookies without current owner authority", async () => {
+    const created = await createOwnerSessionCookie({
+      env: { FORMLESS_OWNER_SESSION_SECRET: sessionSecret },
+      maxAgeSeconds: 60,
+      now: futureIssuedAt,
+      owner,
+      request: request("https://example.com/admin"),
+    });
+    const authority = await validateOwnerSessionAuthority(
+      requestWithCookie(created.cookie, "https://example.com/api"),
+      { FORMLESS_OWNER_SESSION_SECRET: sessionSecret },
+      { resolveOwnerSession: async () => null },
+    );
+
+    await expectAuthorizationResult(
+      authorizeInstanceWrite(
+        requestWithCookie(created.cookie, "https://example.com/api"),
+        {
+          FORMLESS_ADMIN_TOKEN: adminToken,
+          FORMLESS_OWNER_SESSION_SECRET: sessionSecret,
+        },
+        { resolveOwnerSession: async () => null },
+      ),
+      {
+        authorized: false,
+        error: "Owner session or admin authorization is required for this write endpoint.",
+        headers: {
+          "WWW-Authenticate": 'Bearer realm="formless-admin"',
+        },
+        status: 401,
+      },
+    );
+    expect(authority).toEqual({ ok: false, reason: "missing-owner-authority" });
   });
 
   it("rejects unauthenticated writes when bearer or owner-session protection is configured", async () => {

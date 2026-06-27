@@ -49,6 +49,7 @@ describe("local session bootstrap API routes", () => {
     const controlPlaneBefore = await getJson<BootstrapResponse>(
       "/api/formless/control-plane/bootstrap",
     );
+    const identity = await getJson<BootstrapResponse>("/api/formless/identity/bootstrap");
     const created = await createSiteInstall({ cookie });
     const installsAfter = await getJson<AppInstallsResponse>("/api/formless/app-installs");
 
@@ -78,6 +79,32 @@ describe("local session bootstrap API routes", () => {
     });
     expect(JSON.stringify(session.body)).not.toContain(adminToken);
     expect(JSON.stringify(session.body)).not.toContain(localSessionBootstrapToken);
+    expect(identity.body.records).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "local-dev-owner",
+          entity: "principal",
+          values: {
+            displayName: "Local Dev Owner",
+            kind: "human",
+            status: "active",
+          },
+        }),
+        expect.objectContaining({
+          entity: "role-assignment",
+          values: {
+            role: "role:instance.owner",
+            targetKind: "principal",
+            targetPrincipal: "local-dev-owner",
+            scopeKind: "instance",
+            status: "active",
+          },
+        }),
+      ]),
+    );
+    expect(identity.body.records.filter((record) => record.entity === "principal-email")).toEqual(
+      [],
+    );
     expect(installsBefore.body.installs).toEqual([]);
     for (const entity of [
       "app-install",

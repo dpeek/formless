@@ -13,6 +13,7 @@ import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
 import { INTERNAL_RESET_INSTANCE_DOMAIN_MAPPINGS_PATH } from "./instance-domain-mappings.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
 import { INTERNAL_RESET_OWNER_SETUP_PATH } from "./owner-setup.ts";
+import { createOwnerSessionCookie } from "./owner-session.ts";
 import { recordOperationRequest, operationWriteRequest } from "../test/authority-write.ts";
 import type { OperationInvocationResponse } from "../shared/operation-invocation.ts";
 import {
@@ -238,6 +239,24 @@ describe("installed Site custom-domain Worker routing", () => {
         headers: { Accept: "text/html" },
         redirect: "manual",
       });
+      const staleOwnerSession = await createOwnerSessionCookie({
+        env: { FORMLESS_ADMIN_TOKEN: adminToken },
+        maxAgeSeconds: 60,
+        now: "2999-01-01T00:00:00.000Z",
+        owner: {
+          id: "stale-owner",
+          name: "Stale Owner",
+          createdAt: "2999-01-01T00:00:00.000Z",
+        },
+        request: new Request("http://admin.example.com/"),
+      });
+      const staleCookieHome = await fetchHost("admin.example.com", "/", {
+        headers: {
+          Accept: "text/html",
+          Cookie: cookiePair(staleOwnerSession.cookie),
+        },
+        redirect: "manual",
+      });
       const mappingLookup = await fetchHost(
         "admin.example.com",
         "/api/formless/domain-mappings/lookup?host=admin.example.com&profile=instance",
@@ -251,6 +270,8 @@ describe("installed Site custom-domain Worker routing", () => {
       expect(publicSitePage.headers.get("Location")).toBe(
         "/login?redirectTo=%2Fblog%2Fstarter-post",
       );
+      expect(staleCookieHome.status).toBe(302);
+      expect(staleCookieHome.headers.get("Location")).toBe("/login?redirectTo=%2F");
       expect(mappingLookup.status).toBe(200);
       expect(schemaKeyApi.status).toBe(404);
       expect(assetRequests).toEqual([]);
@@ -707,6 +728,10 @@ function fetchHarnessHost(
   init?: DispatchFetchInit,
 ) {
   return targetHarness.mf.dispatchFetch(`http://${host}${path}`, init);
+}
+
+function cookiePair(cookie: string) {
+  return cookie.split(";")[0] ?? cookie;
 }
 
 async function postAdminJson(path: string, body: unknown) {

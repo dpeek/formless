@@ -14,6 +14,7 @@ import { FORMLESS_CLIENT_SOURCE_SCHEMA_HASH_HEADER } from "../shared/protocol.ts
 import type { BootstrapResponse, OwnerIdentity, SchemaResponse } from "../shared/protocol.ts";
 import { computeSourceSchemaHash } from "../shared/upgrade-migrations.ts";
 import { recordOperationRequest } from "../test/authority-write.ts";
+import { ensureTestIdentityOwner } from "../test/identity-owner.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
 import { createOwnerSessionCookie } from "./owner-session.ts";
 
@@ -75,7 +76,25 @@ describe("identity control-plane API routes", () => {
     expect(admin.response.headers.get(FORMLESS_CLIENT_SOURCE_SCHEMA_HASH_HEADER)).toBe(
       identityControlPlaneSchemaProvenance.sourceSchemaHash,
     );
-    expect(ownerRead.body.records).toEqual(admin.body.records);
+    expect(ownerRead.body.records).toEqual(expect.arrayContaining(admin.body.records));
+    expect(ownerRead.body.records).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          entity: "principal",
+          values: expect.objectContaining({
+            displayName: owner.name,
+            status: "active",
+          }),
+        }),
+        expect.objectContaining({
+          entity: "role-assignment",
+          values: expect.objectContaining({
+            role: "role:instance.owner",
+            status: "active",
+          }),
+        }),
+      ]),
+    );
     expect(ownerSchema.body.schema).toEqual(identityControlPlaneSchema);
     expect(ownerSchema.body.schemaProvenance).toEqual(identityControlPlaneSchemaProvenance);
     expect(ownerSchema.response.headers.get("Cache-Control")).toBe("no-store");
@@ -137,6 +156,45 @@ describe("identity control-plane API routes", () => {
       ),
     });
   });
+
+  it("rejects owner sessions without current active owner authority", async () => {
+    const missingPrincipal = await ownerReadResponse("missing-principal");
+    const principalOnly = await createIdentityPrincipal("Principal Only");
+    const missingRole = await ownerReadResponse(principalOnly.id);
+    const disabledPrincipal = await createIdentityOwnerAuthority("Disabled Principal");
+    const disabledAssignment = await createIdentityOwnerAuthority("Disabled Role");
+
+    await postRecordOperation({
+      entity: "principal",
+      idempotencyKey: "disable-owner-principal",
+      operationName: "update",
+      recordId: disabledPrincipal.principal.id,
+      input: { status: "disabled" },
+    });
+    await postRecordOperation({
+      entity: "role-assignment",
+      idempotencyKey: "disable-owner-role",
+      operationName: "update",
+      recordId: disabledAssignment.assignment.id,
+      input: { status: "disabled" },
+    });
+
+    const disabledPrincipalRead = await ownerReadResponse(disabledPrincipal.principal.id);
+    const disabledAssignmentRead = await ownerReadResponse(disabledAssignment.principal.id);
+
+    for (const response of [
+      missingPrincipal,
+      missingRole,
+      disabledPrincipalRead,
+      disabledAssignmentRead,
+    ]) {
+      expect(response.status).toBe(401);
+      expect(response.headers.get("WWW-Authenticate")).toBe('Bearer realm="formless-admin"');
+      expect(await response.json()).toEqual({
+        error: "Owner session or admin authorization is required for this read endpoint.",
+      });
+    }
+  });
 });
 
 async function resetIdentityStorage() {
@@ -179,6 +237,59 @@ async function postRecordOperation(input: Parameters<typeof recordOperationReque
   return (result.body as { record: StoredRecord }).record;
 }
 
+async function createIdentityPrincipal(displayName: string) {
+  return await postRecordOperation({
+    entity: "principal",
+    idempotencyKey: `create-${displayName.toLowerCase().replace(/\s+/g, "-")}`,
+    operationName: "create",
+    input: {
+      displayName,
+      kind: "human",
+      status: "active",
+    },
+  });
+}
+
+async function createIdentityOwnerAuthority(displayName: string) {
+  const principal = await createIdentityPrincipal(displayName);
+  const assignment = await postRecordOperation({
+    entity: "role-assignment",
+    idempotencyKey: `assign-${displayName.toLowerCase().replace(/\s+/g, "-")}-owner`,
+    operationName: "create",
+    input: {
+      role: "role:instance.owner",
+      targetKind: "principal",
+      targetPrincipal: principal.id,
+      scopeKind: "instance",
+      status: "active",
+    },
+  });
+
+  return { assignment, principal };
+}
+
+async function ownerReadResponse(principalId: string) {
+  return await harness.fetch(`${identityApi}/bootstrap`, {
+    headers: { Cookie: await ownerCookieForPrincipal(principalId) },
+  });
+}
+
+async function ownerCookieForPrincipal(principalId: string) {
+  const created = await createOwnerSessionCookie({
+    env: { FORMLESS_ADMIN_TOKEN: adminToken },
+    maxAgeSeconds: 60,
+    now: "2999-01-01T00:00:00.000Z",
+    owner: {
+      id: principalId,
+      name: "Session Principal",
+      createdAt: "2999-01-01T00:00:00.000Z",
+    },
+    request: new Request("http://example.com/"),
+  });
+
+  return cookiePair(created.cookie);
+}
+
 async function postRecordOperationResponse(input: Parameters<typeof recordOperationRequest>[0]) {
   const request = recordOperationRequest(input);
   const response = await harness.fetch(`${identityApi}${request.path.slice("/api".length)}`, {
@@ -216,11 +327,12 @@ function adminHeaders(headers: Record<string, string> = {}) {
 }
 
 async function ownerSessionHeaders() {
+  const identityOwner = await ensureTestIdentityOwner(harness, adminToken, owner);
   const created = await createOwnerSessionCookie({
     env: { FORMLESS_ADMIN_TOKEN: adminToken },
     maxAgeSeconds: 60,
     now: "2999-01-01T00:00:00.000Z",
-    owner,
+    owner: identityOwner,
     request: new Request("http://example.com/"),
   });
 

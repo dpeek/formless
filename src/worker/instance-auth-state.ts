@@ -38,7 +38,7 @@ type PasskeyChallengeRow = {
   kind: string;
   challenge: string;
   setup_token_hash: string | null;
-  owner_id: string | null;
+  principal_id: string | null;
   created_at: string;
   expires_at: string;
   consumed_at: string | null;
@@ -46,7 +46,7 @@ type PasskeyChallengeRow = {
 
 type PasskeyCredentialRow = {
   credential_id: string;
-  owner_id: string;
+  principal_id: string;
   public_key_base64url: string;
   counter: number;
   transports_json: string;
@@ -85,7 +85,7 @@ export type StoredPasskeyLoginChallenge = {
   id: string;
   kind: "login";
   challenge: string;
-  ownerId: string;
+  principalId: string;
   createdAt: string;
   expiresAt: string;
   consumedAt?: string;
@@ -108,7 +108,7 @@ export type CreatePasskeyChallengeInput =
       id?: string;
       kind: "login";
       challenge: string;
-      ownerId: string;
+      principalId: string;
       createdAt?: string;
       expiresAt: string;
     };
@@ -137,7 +137,7 @@ export type ConsumePasskeyChallengeResult =
 
 export type StoredPasskeyCredential = {
   credentialId: string;
-  ownerId: string;
+  principalId: string;
   publicKeyBase64Url: string;
   counter: number;
   transports: AuthenticatorTransportFuture[];
@@ -153,7 +153,7 @@ export type StoredPasskeyCredential = {
 
 export type CreatePasskeyCredentialInput = {
   credentialId: string;
-  ownerId: string;
+  principalId: string;
   publicKey: Uint8Array<ArrayBuffer>;
   counter: number;
   transports?: AuthenticatorTransportFuture[];
@@ -206,14 +206,14 @@ export function ensureInstanceAuthTables(storage: DurableObjectStorage) {
       kind TEXT NOT NULL CHECK (kind IN ('login', 'registration')),
       challenge TEXT NOT NULL UNIQUE,
       setup_token_hash TEXT,
-      owner_id TEXT,
+      principal_id TEXT,
       created_at TEXT NOT NULL,
       expires_at TEXT NOT NULL,
       consumed_at TEXT,
       CHECK (
-        (kind = 'registration' AND setup_token_hash IS NOT NULL AND owner_id IS NULL)
+        (kind = 'registration' AND setup_token_hash IS NOT NULL AND principal_id IS NULL)
         OR
-        (kind = 'login' AND setup_token_hash IS NULL AND owner_id IS NOT NULL)
+        (kind = 'login' AND setup_token_hash IS NULL AND principal_id IS NOT NULL)
       )
     );
 
@@ -222,7 +222,7 @@ export function ensureInstanceAuthTables(storage: DurableObjectStorage) {
 
     CREATE TABLE IF NOT EXISTS instance_auth_passkey_credentials (
       credential_id TEXT PRIMARY KEY,
-      owner_id TEXT NOT NULL,
+      principal_id TEXT NOT NULL,
       public_key_base64url TEXT NOT NULL,
       counter INTEGER NOT NULL,
       transports_json TEXT NOT NULL,
@@ -238,8 +238,8 @@ export function ensureInstanceAuthTables(storage: DurableObjectStorage) {
       updated_at TEXT NOT NULL
     );
 
-    CREATE INDEX IF NOT EXISTS idx_instance_auth_passkey_credentials_owner_id
-      ON instance_auth_passkey_credentials (owner_id);
+    CREATE INDEX IF NOT EXISTS idx_instance_auth_passkey_credentials_principal_id
+      ON instance_auth_passkey_credentials (principal_id);
   `);
 }
 
@@ -336,7 +336,7 @@ export function createPasskeyChallenge(
           kind,
           challenge,
           setup_token_hash,
-          owner_id,
+          principal_id,
           created_at,
           expires_at,
           consumed_at
@@ -347,7 +347,7 @@ export function createPasskeyChallenge(
       normalizedChallenge.kind,
       normalizedChallenge.challenge,
       normalizedChallenge.kind === "registration" ? normalizedChallenge.setupTokenHash : null,
-      normalizedChallenge.kind === "login" ? normalizedChallenge.ownerId : null,
+      normalizedChallenge.kind === "login" ? normalizedChallenge.principalId : null,
       normalizedChallenge.createdAt,
       normalizedChallenge.expiresAt,
       normalizedChallenge.consumedAt ?? null,
@@ -474,7 +474,7 @@ export function createPasskeyCredentialInCurrentTransaction(
     `
         INSERT INTO instance_auth_passkey_credentials (
           credential_id,
-          owner_id,
+          principal_id,
           public_key_base64url,
           counter,
           transports_json,
@@ -490,7 +490,7 @@ export function createPasskeyCredentialInCurrentTransaction(
         VALUES (?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, ?, ?)
       `,
     normalizedCredential.credentialId,
-    normalizedCredential.ownerId,
+    normalizedCredential.principalId,
     normalizedCredential.publicKeyBase64Url,
     normalizedCredential.counter,
     JSON.stringify(normalizedCredential.transports),
@@ -515,20 +515,20 @@ export function readPasskeyCredential(
   );
 }
 
-export function readPasskeyCredentialsForOwner(
+export function readPasskeyCredentialsForPrincipal(
   storage: DurableObjectStorage,
-  ownerId: unknown,
+  principalId: unknown,
 ): StoredPasskeyCredential[] {
   ensureInstanceAuthTables(storage);
 
-  const ownerIdValue = parseNonEmptyString("Passkey credential owner id", ownerId);
+  const principalIdValue = parseNonEmptyString("Passkey credential principal id", principalId);
   const credentials: StoredPasskeyCredential[] = [];
 
   for (const row of storage.sql.exec<PasskeyCredentialRow>(
     `
       SELECT
         credential_id,
-        owner_id,
+        principal_id,
         public_key_base64url,
         counter,
         transports_json,
@@ -541,10 +541,10 @@ export function readPasskeyCredentialsForOwner(
         created_at,
         updated_at
       FROM instance_auth_passkey_credentials
-      WHERE owner_id = ?
+      WHERE principal_id = ?
       ORDER BY created_at ASC, credential_id ASC
     `,
-    ownerIdValue,
+    principalIdValue,
   )) {
     credentials.push(passkeyCredentialFromRow(row));
   }
@@ -720,7 +720,7 @@ function normalizePasskeyChallengeInput(
     id,
     kind,
     challenge,
-    ownerId: parseNonEmptyString("Passkey challenge owner id", input.ownerId),
+    principalId: parseNonEmptyString("Passkey challenge principal id", input.principalId),
     createdAt,
     expiresAt,
   };
@@ -738,7 +738,7 @@ function readPasskeyChallengeByChallenge(
           kind,
           challenge,
           setup_token_hash,
-          owner_id,
+          principal_id,
           created_at,
           expires_at,
           consumed_at
@@ -774,14 +774,14 @@ function passkeyChallengeFromRow(row: PasskeyChallengeRow): StoredPasskeyChallen
   }
 
   if (row.kind === "login") {
-    if (row.owner_id === null) {
-      throw new Error("Stored passkey login challenge is missing owner id.");
+    if (row.principal_id === null) {
+      throw new Error("Stored passkey login challenge is missing principal id.");
     }
 
     return {
       ...base,
       kind: "login",
-      ownerId: row.owner_id,
+      principalId: row.principal_id,
     };
   }
 
@@ -799,7 +799,7 @@ function normalizeCreatePasskeyCredentialInput(
 
   return {
     credentialId: parseBase64UrlString("Passkey credential id", input.credentialId),
-    ownerId: parseNonEmptyString("Passkey credential owner id", input.ownerId),
+    principalId: parseNonEmptyString("Passkey credential principal id", input.principalId),
     publicKeyBase64Url: publicKeyBase64Url(input.publicKey),
     counter: parseNonNegativeInteger("Passkey credential counter", input.counter),
     transports: parseAuthenticatorTransports(input.transports),
@@ -819,7 +819,7 @@ function readPasskeyCredentialById(
       `
         SELECT
           credential_id,
-          owner_id,
+          principal_id,
           public_key_base64url,
           counter,
           transports_json,
@@ -844,7 +844,7 @@ function readPasskeyCredentialById(
 function passkeyCredentialFromRow(row: PasskeyCredentialRow): StoredPasskeyCredential {
   return {
     credentialId: row.credential_id,
-    ownerId: row.owner_id,
+    principalId: row.principal_id,
     publicKeyBase64Url: row.public_key_base64url,
     counter: row.counter,
     transports: parseAuthenticatorTransports(JSON.parse(row.transports_json)),

@@ -28,7 +28,7 @@ const registrationChallenge = "cmVnaXN0cmF0aW9uLWNoYWxsZW5nZQ";
 const loginChallenge = "bG9naW4tY2hhbGxlbmdl";
 const deleteChallenge = "ZGVsZXRlLWNoYWxsZW5nZQ";
 const setupTokenHash = "c2V0dXAtdG9rZW4taGFzaA";
-const ownerId = "owner-1";
+const principalId = "principal-1";
 const credentialId = "Y3JlZGVudGlhbC0x";
 const publicKey = [1, 2, 3, 4, 5];
 const publicKeyBase64Url = "AQIDBAU";
@@ -163,7 +163,7 @@ describe("instance auth state", () => {
     await createChallenge({
       kind: "login",
       challenge: loginChallenge,
-      ownerId,
+      principalId,
       createdAt,
       expiresAt: expiredAt,
     });
@@ -181,7 +181,7 @@ describe("instance auth state", () => {
         id: expect.any(String),
         kind: "login",
         challenge: loginChallenge,
-        ownerId,
+        principalId,
         createdAt,
         expiresAt: expiredAt,
       },
@@ -193,7 +193,7 @@ describe("instance auth state", () => {
     await createChallenge({
       kind: "login",
       challenge: deleteChallenge,
-      ownerId,
+      principalId,
       createdAt,
       expiresAt,
     });
@@ -206,7 +206,7 @@ describe("instance auth state", () => {
 
   it("prevents duplicate passkey credentials and updates verification facts", async () => {
     const created = await createCredential();
-    const duplicate = await createCredential({ ownerId: "owner-2" });
+    const duplicate = await createCredential({ principalId: "principal-2" });
     const updated = await updateCredentialVerification({
       credentialId,
       counter: 9,
@@ -228,8 +228,8 @@ describe("instance auth state", () => {
       verifiedAt: "2026-05-21T00:10:00.000Z",
     });
     const stored = await readCredential(credentialId);
-    const ownerCredentials = await getJson<{ credentials: StoredPasskeyCredential[] }>(
-      `/credentials?ownerId=${ownerId}`,
+    const principalCredentials = await getJson<{ credentials: StoredPasskeyCredential[] }>(
+      `/credentials?principalId=${principalId}`,
     );
     const webauthnCredential = await getJson<{
       credential: { counter: number; id: string; publicKey: number[]; transports?: string[] };
@@ -239,7 +239,7 @@ describe("instance auth state", () => {
       ok: true,
       credential: {
         credentialId,
-        ownerId,
+        principalId,
         publicKeyBase64Url,
         counter: 3,
         transports: ["internal", "hybrid"],
@@ -274,7 +274,7 @@ describe("instance auth state", () => {
       reason: "counter-regression",
     });
     expect(stored.credential).toEqual(updated.ok ? updated.credential : undefined);
-    expect(ownerCredentials.credentials).toEqual([updated.ok ? updated.credential : undefined]);
+    expect(principalCredentials.credentials).toEqual([updated.ok ? updated.credential : undefined]);
     expect(webauthnCredential.credential).toEqual({
       id: credentialId,
       publicKey,
@@ -323,10 +323,10 @@ function readChallenge(challenge: string) {
   return getJson<{ challenge: StoredPasskeyChallenge | null }>(`/challenge?challenge=${challenge}`);
 }
 
-function createCredential(overrides: Partial<{ ownerId: string }> = {}) {
+function createCredential(overrides: Partial<{ principalId: string }> = {}) {
   return postJson<CreatePasskeyCredentialResult>("/credential", {
     credentialId,
-    ownerId: overrides.ownerId ?? ownerId,
+    principalId: overrides.principalId ?? principalId,
     publicKey,
     counter: 3,
     transports: ["internal", "hybrid"],
@@ -390,7 +390,7 @@ async function writeInstanceAuthHarness() {
         readInstanceAuthConfig,
         readPasskeyChallenge,
         readPasskeyCredential,
-        readPasskeyCredentialsForOwner,
+        readPasskeyCredentialsForPrincipal,
         updatePasskeyCredentialVerification,
         writeInstanceAuthConfig,
       } from "${process.cwd()}/src/worker/instance-auth-state.ts";
@@ -460,9 +460,9 @@ async function writeInstanceAuthHarness() {
 
             if (request.method === "GET" && url.pathname === "/credentials") {
               return Response.json({
-                credentials: readPasskeyCredentialsForOwner(
+                credentials: readPasskeyCredentialsForPrincipal(
                   this.ctx.storage,
-                  url.searchParams.get("ownerId"),
+                  url.searchParams.get("principalId"),
                 ),
               });
             }

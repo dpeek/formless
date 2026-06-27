@@ -22,6 +22,7 @@ import {
   taskSourceSchema,
 } from "../test/schema-apps.ts";
 import { operationWriteRequest } from "../test/authority-write.ts";
+import { ensureTestIdentityOwner, resetTestIdentityStorage } from "../test/identity-owner.ts";
 import {
   bundledSourceSchemaHashFixtures,
   computeSourceSchemaHash,
@@ -803,6 +804,7 @@ async function postHarnessAdminJson<T>(targetHarness: Harness, path: string, bod
 }
 
 async function resetWorkerState() {
+  await resetTestIdentityStorage(harness, adminToken);
   await Promise.all([
     postReset("/api/formless/control-plane/reset/seed"),
     postReset("/api/app-installs/site/site/reset/seed"),
@@ -845,11 +847,12 @@ function adminHeaders(headers: Record<string, string> = {}) {
 }
 
 async function ownerSessionHeaders() {
+  const identityOwner = await ensureTestIdentityOwner(harness, adminToken, owner);
   const created = await createOwnerSessionCookie({
     env: { FORMLESS_ADMIN_TOKEN: adminToken },
     maxAgeSeconds: 60,
     now: "2999-01-01T00:00:00.000Z",
-    owner,
+    owner: identityOwner,
     request: new Request("http://example.com/apps"),
   });
 

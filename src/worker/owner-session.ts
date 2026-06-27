@@ -1,5 +1,6 @@
 import { nowIsoString } from "../shared/clock.ts";
 import type { OwnerIdentity } from "../shared/protocol.ts";
+import { readInternalIdentityOwnerForPrincipal } from "./identity-owner-internal.ts";
 
 export const OWNER_SESSION_COOKIE_NAME = "formless_owner_session";
 
@@ -8,6 +9,7 @@ const ownerSessionVersion = 1;
 const defaultSessionMaxAgeSeconds = 60 * 60 * 24 * 30;
 
 export type OwnerSessionEnv = {
+  FORMLESS_AUTHORITY?: DurableObjectNamespace;
   FORMLESS_ADMIN_TOKEN?: string;
   FORMLESS_OWNER_SESSION_SECRET?: string;
 };
@@ -16,7 +18,7 @@ export type OwnerSession = {
   expiresAt: string;
   instanceId: string;
   issuedAt: string;
-  ownerId: string;
+  principalId: string;
 };
 
 export type CreateOwnerSessionCookieInput = {
@@ -32,6 +34,16 @@ export type CreateOwnerSessionCookieResult = {
   session: OwnerSession;
 };
 
+export type OwnerSessionValidationFailureReason =
+  | "expired"
+  | "malformed-cookie"
+  | "malformed-payload"
+  | "missing-cookie"
+  | "missing-secret"
+  | "tampered-cookie"
+  | "wrong-instance"
+  | "wrong-purpose";
+
 export type OwnerSessionValidationResult =
   | {
       ok: true;
@@ -39,15 +51,21 @@ export type OwnerSessionValidationResult =
     }
   | {
       ok: false;
-      reason:
-        | "expired"
-        | "malformed-cookie"
-        | "malformed-payload"
-        | "missing-cookie"
-        | "missing-secret"
-        | "tampered-cookie"
-        | "wrong-instance"
-        | "wrong-purpose";
+      reason: OwnerSessionValidationFailureReason;
+    };
+
+export type OwnerSessionAuthorityResolver = (
+  session: OwnerSession,
+) => Promise<OwnerIdentity | null>;
+
+export type OwnerSessionAuthorityValidationResult =
+  | {
+      ok: true;
+      session: OwnerSession;
+    }
+  | {
+      ok: false;
+      reason: OwnerSessionValidationFailureReason | "missing-owner-authority";
     };
 
 type OwnerSessionPayload = OwnerSession & {
@@ -78,7 +96,7 @@ export async function createOwnerSessionCookie(
     expiresAt,
     instanceId: requestInstanceId(input.request),
     issuedAt,
-    ownerId: parseNonEmptyString("Owner session owner id", input.owner.id),
+    principalId: parseNonEmptyString("Owner session principal id", input.owner.id),
   };
   const payload: OwnerSessionPayload = {
     ...session,
@@ -150,9 +168,34 @@ export async function validateOwnerSessionCookie(
       expiresAt: payload.expiresAt,
       instanceId: payload.instanceId,
       issuedAt: payload.issuedAt,
-      ownerId: payload.ownerId,
+      principalId: payload.principalId,
     },
   };
+}
+
+export async function validateOwnerSessionAuthority(
+  request: Request,
+  env: OwnerSessionEnv,
+  options: {
+    now?: string;
+    resolveOwnerSession?: OwnerSessionAuthorityResolver;
+  } = {},
+): Promise<OwnerSessionAuthorityValidationResult> {
+  const validated = await validateOwnerSessionCookie(request, env, options);
+
+  if (!validated.ok) {
+    return validated;
+  }
+
+  const owner = options.resolveOwnerSession
+    ? await options.resolveOwnerSession(validated.session)
+    : await readInternalIdentityOwnerForPrincipal(env, validated.session.principalId);
+
+  if (!owner || owner.id !== validated.session.principalId) {
+    return { ok: false, reason: "missing-owner-authority" };
+  }
+
+  return validated;
 }
 
 export function clearOwnerSessionCookie(request: Request): string {
@@ -210,8 +253,8 @@ function parseOwnerSessionPayload(payloadPart: string): OwnerSessionPayload | un
     if (
       payload.version !== ownerSessionVersion ||
       typeof payload.purpose !== "string" ||
-      typeof payload.ownerId !== "string" ||
-      payload.ownerId.trim() === "" ||
+      typeof payload.principalId !== "string" ||
+      payload.principalId.trim() === "" ||
       typeof payload.instanceId !== "string" ||
       payload.instanceId.trim() === "" ||
       typeof payload.issuedAt !== "string" ||
@@ -228,7 +271,7 @@ function parseOwnerSessionPayload(payloadPart: string): OwnerSessionPayload | un
       expiresAt: payload.expiresAt,
       instanceId: payload.instanceId,
       issuedAt: payload.issuedAt,
-      ownerId: payload.ownerId,
+      principalId: payload.principalId,
       purpose: payload.purpose,
       version: ownerSessionVersion,
     };

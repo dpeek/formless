@@ -25,6 +25,7 @@ import type {
 } from "../shared/operation-invocation.ts";
 import { computeSourceSchemaHash, type SourceSchemaHash } from "../shared/upgrade-migrations.ts";
 import { siteSeedRecords, siteSourceSchema } from "../test/schema-apps.ts";
+import { ensureTestIdentityOwner, resetTestIdentityStorage } from "../test/identity-owner.ts";
 import {
   appPackageManifestKind,
   appPackageManifestVersion,
@@ -712,6 +713,7 @@ async function resetWorkerState() {
 }
 
 async function resetKnownState() {
+  await resetTestIdentityStorage(harness, adminToken);
   await Promise.all([
     postReset(`${controlPlaneApi}/reset/seed`),
     postReset("/api/app-installs/site/personal/reset/seed"),
@@ -752,11 +754,12 @@ function adminHeaders(headers: Record<string, string> = {}) {
 }
 
 async function ownerSessionHeaders() {
+  const identityOwner = await ensureTestIdentityOwner(harness, adminToken, owner);
   const created = await createOwnerSessionCookie({
     env: { FORMLESS_ADMIN_TOKEN: adminToken },
     maxAgeSeconds: 60,
     now: "2999-01-01T00:00:00.000Z",
-    owner,
+    owner: identityOwner,
     request: new Request("http://example.com/"),
   });
 

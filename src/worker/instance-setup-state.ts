@@ -1,8 +1,4 @@
-import {
-  parseOwnerSetupToken,
-  type OwnerIdentity,
-  type OwnerIdentityInput,
-} from "../shared/protocol.ts";
+import { parseOwnerSetupToken, type OwnerIdentity } from "../shared/protocol.ts";
 import { nowIsoString } from "../shared/clock.ts";
 
 type OwnerSetupCapabilityRow = {
@@ -10,13 +6,6 @@ type OwnerSetupCapabilityRow = {
   instance_id: string;
   created_at: string;
   expires_at: string | null;
-};
-
-type InstanceOwnerRow = {
-  id: string;
-  name: string;
-  email: string | null;
-  created_at: string;
 };
 
 export type StoredOwnerSetupCapability = {
@@ -46,9 +35,15 @@ export type WriteOwnerSetupCapabilityResult =
 export type CompleteFirstOwnerSetupInput = {
   tokenHash: string;
   instanceId: string;
-  owner: OwnerIdentityInput;
+  owner: OwnerIdentity;
   now?: string;
-  ownerId?: string;
+};
+
+export type ValidateFirstOwnerSetupCapabilityInput = {
+  tokenHash: string;
+  instanceId: string;
+  now?: string;
+  owner?: OwnerIdentity | null;
 };
 
 export type CompleteFirstOwnerSetupResult =
@@ -68,17 +63,6 @@ export type CompleteFirstOwnerSetupResult =
         | "wrong-instance";
     };
 
-export type EnsureLocalDevOwnerInput = {
-  now?: string;
-  owner?: OwnerIdentityInput;
-  ownerId?: string;
-};
-
-export type EnsureLocalDevOwnerResult = {
-  created: boolean;
-  owner: OwnerIdentity;
-};
-
 export function ensureInstanceSetupTables(storage: DurableObjectStorage) {
   storage.sql.exec(`
     CREATE TABLE IF NOT EXISTS owner_setup_capability (
@@ -87,13 +71,6 @@ export function ensureInstanceSetupTables(storage: DurableObjectStorage) {
       instance_id TEXT NOT NULL,
       created_at TEXT NOT NULL,
       expires_at TEXT
-    );
-
-    CREATE TABLE IF NOT EXISTS instance_owners (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      email TEXT,
-      created_at TEXT NOT NULL
     );
   `);
 }
@@ -104,7 +81,6 @@ export function resetInstanceSetupTables(storage: DurableObjectStorage) {
   storage.transactionSync(() => {
     storage.sql.exec(`
       DELETE FROM owner_setup_capability;
-      DELETE FROM instance_owners;
     `);
   });
 }
@@ -116,14 +92,15 @@ export async function hashOwnerSetupToken(value: unknown): Promise<string> {
   return base64UrlEncode(new Uint8Array(digest));
 }
 
-export function readInstanceSetupState(storage: DurableObjectStorage): InstanceSetupState {
+export function readInstanceSetupState(
+  storage: DurableObjectStorage,
+  owner: OwnerIdentity | null = null,
+): InstanceSetupState {
   ensureInstanceSetupTables(storage);
 
-  const owner = readInstanceOwner(storage);
-
   return {
-    setupComplete: owner !== undefined,
-    owner: owner ?? null,
+    setupComplete: owner !== null,
+    owner,
     capability: readOwnerSetupCapability(storage) ?? null,
   };
 }
@@ -131,11 +108,12 @@ export function readInstanceSetupState(storage: DurableObjectStorage): InstanceS
 export function writeOwnerSetupCapability(
   storage: DurableObjectStorage,
   capability: StoredOwnerSetupCapability,
+  input: { owner?: OwnerIdentity | null } = {},
 ): WriteOwnerSetupCapabilityResult {
   ensureInstanceSetupTables(storage);
 
   return storage.transactionSync(() => {
-    const owner = readInstanceOwner(storage);
+    const owner = input.owner ?? null;
 
     if (owner) {
       return {
@@ -170,13 +148,23 @@ export function writeOwnerSetupCapability(
   });
 }
 
-export function completeFirstOwnerSetup(
+export function validateFirstOwnerSetupCapability(
   storage: DurableObjectStorage,
-  input: CompleteFirstOwnerSetupInput,
-): CompleteFirstOwnerSetupResult {
+  input: ValidateFirstOwnerSetupCapabilityInput,
+): ValidateFirstOwnerSetupCapabilityResult {
   ensureInstanceSetupTables(storage);
 
-  return storage.transactionSync(() => completeFirstOwnerSetupInCurrentTransaction(storage, input));
+  const owner = input.owner ?? null;
+
+  if (owner) {
+    return {
+      ok: false,
+      owner,
+      reason: "already-complete",
+    };
+  }
+
+  return validateStoredOwnerSetupCapability(storage, input);
 }
 
 export function completeFirstOwnerSetupInCurrentTransaction(
@@ -185,16 +173,38 @@ export function completeFirstOwnerSetupInCurrentTransaction(
 ): CompleteFirstOwnerSetupResult {
   ensureInstanceSetupTables(storage);
 
-  const existingOwner = readInstanceOwner(storage);
+  const validation = validateStoredOwnerSetupCapability(storage, input);
 
-  if (existingOwner) {
-    return {
-      ok: false,
-      owner: existingOwner,
-      reason: "already-complete",
-    };
+  if (!validation.ok) {
+    return validation;
   }
 
+  storage.sql.exec("DELETE FROM owner_setup_capability WHERE id = 1");
+
+  return {
+    ok: true,
+    owner: input.owner,
+    setupComplete: true,
+  };
+}
+
+export type ValidateFirstOwnerSetupCapabilityResult =
+  | { ok: true }
+  | {
+      ok: false;
+      owner?: OwnerIdentity;
+      reason:
+        | "already-complete"
+        | "expired-token"
+        | "invalid-token"
+        | "missing-capability"
+        | "wrong-instance";
+    };
+
+function validateStoredOwnerSetupCapability(
+  storage: DurableObjectStorage,
+  input: Pick<CompleteFirstOwnerSetupInput, "instanceId" | "now" | "tokenHash">,
+): ValidateFirstOwnerSetupCapabilityResult {
   const capability = readOwnerSetupCapability(storage);
 
   if (!capability) {
@@ -216,67 +226,7 @@ export function completeFirstOwnerSetupInCurrentTransaction(
     return { ok: false, reason: "invalid-token" };
   }
 
-  const owner = normalizeOwner(input.owner, {
-    createdAt: now,
-    ownerId: input.ownerId,
-  });
-
-  storage.sql.exec(
-    `
-        INSERT INTO instance_owners (id, name, email, created_at)
-        VALUES (?, ?, ?, ?)
-      `,
-    owner.id,
-    owner.name,
-    owner.email ?? null,
-    owner.createdAt,
-  );
-  storage.sql.exec("DELETE FROM owner_setup_capability WHERE id = 1");
-
-  return {
-    ok: true,
-    owner,
-    setupComplete: true,
-  };
-}
-
-export function ensureLocalDevOwnerInCurrentTransaction(
-  storage: DurableObjectStorage,
-  input: EnsureLocalDevOwnerInput = {},
-): EnsureLocalDevOwnerResult {
-  ensureInstanceSetupTables(storage);
-
-  const existingOwner = readInstanceOwner(storage);
-
-  if (existingOwner) {
-    return {
-      created: false,
-      owner: existingOwner,
-    };
-  }
-
-  const now = input.now ?? nowIsoString();
-  const owner = normalizeOwner(input.owner ?? { name: "Local Dev Owner" }, {
-    createdAt: now,
-    ownerId: input.ownerId ?? "local-dev-owner",
-  });
-
-  storage.sql.exec(
-    `
-        INSERT INTO instance_owners (id, name, email, created_at)
-        VALUES (?, ?, ?, ?)
-      `,
-    owner.id,
-    owner.name,
-    owner.email ?? null,
-    owner.createdAt,
-  );
-  storage.sql.exec("DELETE FROM owner_setup_capability WHERE id = 1");
-
-  return {
-    created: true,
-    owner,
-  };
+  return { ok: true };
 }
 
 function readOwnerSetupCapability(
@@ -289,16 +239,6 @@ function readOwnerSetupCapability(
     .next();
 
   return row.done ? undefined : ownerSetupCapabilityFromRow(row.value);
-}
-
-function readInstanceOwner(storage: DurableObjectStorage): OwnerIdentity | undefined {
-  const row = storage.sql
-    .exec<InstanceOwnerRow>(
-      "SELECT id, name, email, created_at FROM instance_owners ORDER BY created_at ASC LIMIT 1",
-    )
-    .next();
-
-  return row.done ? undefined : ownerFromRow(row.value);
 }
 
 function normalizeOwnerSetupCapability(
@@ -320,43 +260,12 @@ function normalizeOwnerSetupCapability(
   };
 }
 
-function normalizeOwner(
-  input: OwnerIdentityInput,
-  options: { createdAt: string; ownerId?: string },
-): OwnerIdentity {
-  const id =
-    options.ownerId === undefined
-      ? crypto.randomUUID()
-      : parseNonEmptyString("Owner setup owner id", options.ownerId);
-  const name = parseNonEmptyString("Owner setup owner name", input.name);
-  const email =
-    input.email === undefined
-      ? undefined
-      : parseNonEmptyString("Owner setup owner email", input.email);
-
-  return {
-    id,
-    name,
-    ...(email === undefined ? {} : { email }),
-    createdAt: parseNonEmptyString("Owner setup completedAt", options.createdAt),
-  };
-}
-
 function ownerSetupCapabilityFromRow(row: OwnerSetupCapabilityRow): StoredOwnerSetupCapability {
   return {
     tokenHash: row.token_hash,
     instanceId: row.instance_id,
     createdAt: row.created_at,
     ...(row.expires_at === null ? {} : { expiresAt: row.expires_at }),
-  };
-}
-
-function ownerFromRow(row: InstanceOwnerRow): OwnerIdentity {
-  return {
-    id: row.id,
-    name: row.name,
-    ...(row.email === null ? {} : { email: row.email }),
-    createdAt: row.created_at,
   };
 }
 

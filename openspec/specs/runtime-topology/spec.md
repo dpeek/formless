@@ -42,8 +42,9 @@ the product instance profile.
 - WHEN a request targets schema-key browser or schema-key API routes
 - THEN those schema-key routes are not available
 - AND installed app API routes, installed app browser routes, installed Site
-  public routes, owner session browser routes, instance browser routes, and the
-  workspace gateway API route family remain route-policy eligible
+  public routes, principal-backed owner session browser routes, instance
+  browser routes, and the workspace gateway API route family remain
+  route-policy eligible
 
 #### Scenario: Dev route policy
 
@@ -107,7 +108,8 @@ surfaces or owner-only management API data.
 
 - GIVEN a runtime browser route has effective access `owner`
 - AND the request is a `GET` or `HEAD` request that accepts HTML
-- WHEN the request does not include a valid owner session
+- WHEN the request does not include a valid owner session for an active
+  principal with active `instance.owner` authority
 - THEN the runtime redirects to the owner login route with a safe same-origin
   return target for the original path and query
 - AND the owner-only browser shell, instance dashboard, generated app surface,
@@ -116,7 +118,8 @@ surfaces or owner-only management API data.
 #### Scenario: Authenticated owner browser route
 
 - GIVEN a runtime browser route has effective access `owner`
-- WHEN the request includes a valid owner session
+- WHEN the request includes a valid owner session for an active principal with
+  active `instance.owner` authority
 - THEN the route remains eligible for the matching instance dashboard,
   generated app surface, or app screen
 
@@ -124,7 +127,7 @@ surfaces or owner-only management API data.
 
 - GIVEN a runtime browser route has effective access `anonymous`
 - WHEN the request is otherwise eligible for the active runtime profile
-- THEN the route can be served without an owner session
+- THEN the route can be served without a principal-backed owner session
 - AND owner setup, owner login, installed Site public routes, published Site
   documents, public Site resources, static assets, and public actions remain
   available according to their existing route policies
@@ -133,7 +136,8 @@ surfaces or owner-only management API data.
 
 - GIVEN a management API route exposes owner-only instance dashboard or
   generated app administration data
-- WHEN the request does not include a valid owner session or valid admin bearer
+- WHEN the request does not include a valid owner session for an active
+  principal with active `instance.owner` authority or valid admin bearer
   authorization
 - THEN the runtime returns an unauthorized JSON response
 - AND public Site document reads, public Site indexing resources, public

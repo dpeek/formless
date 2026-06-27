@@ -22,6 +22,7 @@ import {
   completeFirstOwnerSetupInCurrentTransaction,
   hashOwnerSetupToken,
   readInstanceSetupState,
+  validateFirstOwnerSetupCapability,
   type CompleteFirstOwnerSetupResult,
 } from "./instance-setup-state.ts";
 import {
@@ -31,10 +32,11 @@ import {
   passkeyCredentialToWebAuthnCredential,
   readInstanceAuthConfig,
   readPasskeyCredential,
-  readPasskeyCredentialsForOwner,
+  readPasskeyCredentialsForPrincipal,
   updatePasskeyCredentialVerification,
   type StoredInstanceAuthConfig,
 } from "./instance-auth-state.ts";
+import { ensureIdentityOwner, readIdentityOwner } from "./identity-control-plane.ts";
 import { createOwnerSessionCookie, ownerSessionSigningSecret } from "./owner-session.ts";
 
 export const OWNER_PASSKEY_API_PATH = "/api/formless/passkeys";
@@ -76,7 +78,7 @@ export async function handleOwnerPasskeyApiRequest(
 export async function handleOwnerPasskeyDurableObjectRequest(
   request: Request,
   storage: DurableObjectStorage,
-  env: AuthorityAdminGuardEnv,
+  env: OwnerPasskeyApiEnv,
 ): Promise<Response | undefined> {
   const pathname = new URL(request.url).pathname;
 
@@ -86,7 +88,7 @@ export async function handleOwnerPasskeyDurableObjectRequest(
 
   try {
     if (pathname === registerOptionsPath) {
-      return await handleRegistrationOptionsRequest(request, storage);
+      return await handleRegistrationOptionsRequest(request, storage, env);
     }
 
     if (pathname === registerVerifyPath) {
@@ -94,7 +96,7 @@ export async function handleOwnerPasskeyDurableObjectRequest(
     }
 
     if (pathname === loginOptionsPath) {
-      return await handleLoginOptionsRequest(request, storage);
+      return await handleLoginOptionsRequest(request, storage, env);
     }
 
     if (pathname === loginVerifyPath) {
@@ -114,6 +116,7 @@ function isOwnerPasskeyApiPath(pathname: string) {
 async function handleRegistrationOptionsRequest(
   request: Request,
   storage: DurableObjectStorage,
+  env: OwnerPasskeyApiEnv,
 ): Promise<Response> {
   if (request.method !== "POST") {
     return methodNotAllowedResponse("POST");
@@ -122,7 +125,7 @@ async function handleRegistrationOptionsRequest(
   const body = parseOwnerPasskeyRegistrationOptionsRequest(await readJson(request));
   const config = requireInstanceAuthConfig(storage);
   const setupTokenHash = await hashOwnerSetupToken(body.setupToken);
-  const setup = validateSetupCapability(storage, request, {
+  const setup = await validateSetupCapability(storage, request, env, {
     now: nowIsoString(),
     setupTokenHash,
   });
@@ -163,7 +166,7 @@ async function handleRegistrationOptionsRequest(
 async function handleRegistrationVerifyRequest(
   request: Request,
   storage: DurableObjectStorage,
-  env: AuthorityAdminGuardEnv,
+  env: OwnerPasskeyApiEnv,
 ): Promise<Response> {
   if (request.method !== "POST") {
     return methodNotAllowedResponse("POST");
@@ -175,7 +178,7 @@ async function handleRegistrationVerifyRequest(
 export async function completeOwnerPasskeyRegistration(
   request: Request,
   storage: DurableObjectStorage,
-  env: AuthorityAdminGuardEnv,
+  env: OwnerPasskeyApiEnv,
   value: unknown,
 ): Promise<Response> {
   const body = parseOwnerPasskeyRegistrationVerifyRequest(value);
@@ -187,7 +190,7 @@ export async function completeOwnerPasskeyRegistration(
   }
 
   const setupTokenHash = await hashOwnerSetupToken(body.setupToken);
-  const setup = validateSetupCapability(storage, request, {
+  const setup = await validateSetupCapability(storage, request, env, {
     now: nowIsoString(),
     setupTokenHash,
   });
@@ -242,6 +245,10 @@ export async function completeOwnerPasskeyRegistration(
   }
 
   const completedAt = nowIsoString();
+  const owner = await ensureIdentityOwner(env, {
+    now: completedAt,
+    owner: body.owner,
+  });
   let completed: CompleteFirstOwnerSetupResult;
 
   try {
@@ -250,7 +257,7 @@ export async function completeOwnerPasskeyRegistration(
         tokenHash: setupTokenHash,
         instanceId: requestInstanceId(request),
         now: completedAt,
-        owner: body.owner,
+        owner,
       });
 
       if (!ownerSetup.ok) {
@@ -259,7 +266,7 @@ export async function completeOwnerPasskeyRegistration(
 
       const credential = createPasskeyCredentialInCurrentTransaction(storage, {
         credentialId,
-        ownerId: ownerSetup.owner.id,
+        principalId: ownerSetup.owner.id,
         publicKey: new Uint8Array(verified.registrationInfo.credential.publicKey),
         counter: verified.registrationInfo.credential.counter,
         transports: verified.registrationInfo.credential.transports,
@@ -315,6 +322,7 @@ class DuplicatePasskeyCredentialError extends Error {
 async function handleLoginOptionsRequest(
   request: Request,
   storage: DurableObjectStorage,
+  env: OwnerPasskeyApiEnv,
 ): Promise<Response> {
   if (request.method !== "POST") {
     return methodNotAllowedResponse("POST");
@@ -323,13 +331,14 @@ async function handleLoginOptionsRequest(
   parseOwnerPasskeyLoginOptionsRequest(await readJson(request));
 
   const config = requireInstanceAuthConfig(storage);
-  const state = readInstanceSetupState(storage);
+  const owner = await readIdentityOwner(env);
+  const state = readInstanceSetupState(storage, owner);
 
   if (!state.owner) {
     return jsonResponse({ error: "Owner setup must be complete before passkey login." }, 409);
   }
 
-  const credentials = readPasskeyCredentialsForOwner(storage, state.owner.id);
+  const credentials = readPasskeyCredentialsForPrincipal(storage, state.owner.id);
 
   if (credentials.length === 0) {
     return jsonResponse({ error: "No owner passkeys are registered." }, 409);
@@ -346,7 +355,7 @@ async function handleLoginOptionsRequest(
   const created = createPasskeyChallenge(storage, {
     kind: "login",
     challenge: options.challenge,
-    ownerId: state.owner.id,
+    principalId: state.owner.id,
     createdAt: nowIsoString(),
     expiresAt: challengeExpiresAt(),
   });
@@ -363,7 +372,7 @@ async function handleLoginOptionsRequest(
 async function handleLoginVerifyRequest(
   request: Request,
   storage: DurableObjectStorage,
-  env: AuthorityAdminGuardEnv,
+  env: OwnerPasskeyApiEnv,
 ): Promise<Response> {
   if (request.method !== "POST") {
     return methodNotAllowedResponse("POST");
@@ -371,7 +380,8 @@ async function handleLoginVerifyRequest(
 
   const body = parseOwnerPasskeyLoginVerifyRequest(await readJson(request));
   const config = requireInstanceAuthConfig(storage);
-  const state = readInstanceSetupState(storage);
+  const owner = await readIdentityOwner(env);
+  const state = readInstanceSetupState(storage, owner);
 
   if (!state.owner) {
     return jsonResponse(
@@ -394,7 +404,7 @@ async function handleLoginVerifyRequest(
     return passkeyChallengeFailureResponse(challenge.reason);
   }
 
-  if (challenge.challenge.kind !== "login" || challenge.challenge.ownerId !== state.owner.id) {
+  if (challenge.challenge.kind !== "login" || challenge.challenge.principalId !== state.owner.id) {
     return jsonResponse(
       { authenticated: false, error: "Passkey login challenge is invalid." },
       401,
@@ -403,7 +413,7 @@ async function handleLoginVerifyRequest(
 
   const credential = readPasskeyCredential(storage, body.response.id);
 
-  if (!credential || credential.ownerId !== state.owner.id) {
+  if (!credential || credential.principalId !== state.owner.id) {
     return jsonResponse({ authenticated: false, error: "Passkey credential is invalid." }, 401);
   }
 
@@ -468,31 +478,22 @@ function requireInstanceAuthConfig(storage: DurableObjectStorage): StoredInstanc
   return config;
 }
 
-function validateSetupCapability(
+async function validateSetupCapability(
   storage: DurableObjectStorage,
   request: Request,
+  env: OwnerPasskeyApiEnv,
   input: { now: string; setupTokenHash: string },
-): SetupCapabilityValidationResult {
-  const state = readInstanceSetupState(storage);
+): Promise<SetupCapabilityValidationResult> {
+  const owner = await readIdentityOwner(env);
+  const setup = validateFirstOwnerSetupCapability(storage, {
+    tokenHash: input.setupTokenHash,
+    instanceId: requestInstanceId(request),
+    now: input.now,
+    owner,
+  });
 
-  if (state.owner) {
-    return { ok: false, owner: state.owner, reason: "already-complete" };
-  }
-
-  if (!state.capability) {
-    return { ok: false, reason: "missing-capability" };
-  }
-
-  if (state.capability.instanceId !== requestInstanceId(request)) {
-    return { ok: false, reason: "wrong-instance" };
-  }
-
-  if (state.capability.expiresAt !== undefined && state.capability.expiresAt <= input.now) {
-    return { ok: false, reason: "expired-token" };
-  }
-
-  if (state.capability.tokenHash !== input.setupTokenHash) {
-    return { ok: false, reason: "invalid-token" };
+  if (!setup.ok) {
+    return setup;
   }
 
   return { ok: true, setupTokenHash: input.setupTokenHash };

@@ -12,7 +12,7 @@ import {
 } from "../shared/instance-auth.ts";
 import { resolveRuntimeProfileKind, runtimeTopologyRoutes } from "../shared/runtime-topology.ts";
 import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
-import { ensureLocalDevOwnerInCurrentTransaction } from "./instance-setup-state.ts";
+import { readIdentityOwner, ensureIdentityOwner } from "./identity-control-plane.ts";
 import {
   createOwnerSessionCookie,
   ownerSessionSigningSecret,
@@ -77,7 +77,7 @@ export async function handleLocalSessionBootstrapDurableObjectRequest(
   }
 
   const tokenHash = await hashLocalSessionBootstrapToken(validation.token);
-  const exchanged = exchangeLocalSessionBootstrapToken(storage, {
+  const exchanged = await exchangeLocalSessionBootstrapToken(storage, env, {
     now: nowIsoString(),
     tokenHash,
   });
@@ -199,13 +199,14 @@ function localSessionBrowserRedirectTarget(
   return `${localSessionUrl.pathname}${localSessionUrl.search}` as OwnerLoginRedirectTarget;
 }
 
-function exchangeLocalSessionBootstrapToken(
+async function exchangeLocalSessionBootstrapToken(
   storage: DurableObjectStorage,
+  env: LocalSessionBootstrapEnv,
   input: { now: string; tokenHash: string },
-): BootstrapExchangeResult {
+): Promise<BootstrapExchangeResult> {
   ensureLocalSessionBootstrapTables(storage);
 
-  return storage.transactionSync(() => {
+  const claimed = storage.transactionSync(() => {
     if (readLocalSessionBootstrapToken(storage, input.tokenHash)) {
       return { ok: false, reason: "replayed-token" };
     }
@@ -222,13 +223,28 @@ function exchangeLocalSessionBootstrapToken(
       input.now,
     );
 
-    const owner = ensureLocalDevOwnerInCurrentTransaction(storage, { now: input.now }).owner;
-
     return {
       ok: true,
-      owner,
     };
   });
+
+  if (!claimed.ok) {
+    return { ok: false, reason: "replayed-token" };
+  }
+
+  const existingOwner = await readIdentityOwner(env);
+  const owner =
+    existingOwner ??
+    (await ensureIdentityOwner(env, {
+      now: input.now,
+      owner: { name: "Local Dev Owner" },
+      ownerId: "local-dev-owner",
+    }));
+
+  return {
+    ok: true,
+    owner,
+  };
 }
 
 function ensureLocalSessionBootstrapTables(storage: DurableObjectStorage) {

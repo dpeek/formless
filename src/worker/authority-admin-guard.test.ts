@@ -5,6 +5,7 @@ import type { BootstrapResponse, OwnerIdentity } from "../shared/protocol.ts";
 import type { SitePageTreeResponse } from "@dpeek/formless-site-app";
 import type { SchemaKey } from "../shared/schema-apps.ts";
 import { recordOperationRequest, operationWriteRequest } from "../test/authority-write.ts";
+import { ensureTestIdentityOwner, resetTestIdentityStorage } from "../test/identity-owner.ts";
 import { siteSourceSchema, taskSeedRecords } from "../test/schema-apps.ts";
 import { testSiteSeedRecords } from "../test/site-records.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
@@ -39,6 +40,7 @@ beforeAll(async () => {
 });
 
 beforeEach(async () => {
+  await resetTestIdentityStorage(harness, adminToken);
   await resetSchemaApp("tasks");
   await resetSchemaApp("site");
 });
@@ -121,6 +123,37 @@ describe("authority admin guard", () => {
 
     expect(created.record.values.title).toBe("Owner session write");
     expect(bootstrap.records).toEqual([...taskSeedRecords, created.record]);
+  });
+
+  it("rejects signed owner session cookies for writes when current owner authority is missing", async () => {
+    const created = await createOwnerSessionCookie({
+      env: { FORMLESS_OWNER_SESSION_SECRET: sessionSecret },
+      maxAgeSeconds: 60,
+      now: "2999-01-01T00:00:00.000Z",
+      owner,
+      request: new Request("http://example.com/admin"),
+    });
+    const request = recordOperationRequest({
+      idempotencyKey: "write-owner-session-stale",
+      entity: "task",
+      operationName: "create",
+      input: { title: "Rejected stale owner session write", done: false },
+    });
+    const response = await harness.fetch(`/api/tasks${request.path.slice("/api".length)}`, {
+      body: JSON.stringify(request.body),
+      headers: {
+        Cookie: cookiePair(created.cookie),
+        "Content-Type": "application/json",
+      },
+      method: "POST",
+    });
+    const bootstrap = await getJson<BootstrapResponse>("/api/tasks/bootstrap");
+
+    expect(response.status).toBe(401);
+    expect(await response.json()).toEqual({
+      error: "Owner session or admin authorization is required for this write endpoint.",
+    });
+    expect(bootstrap.records).toEqual(taskSeedRecords);
   });
 
   it("keeps public Site tree reads open while guarding Site writes", async () => {
@@ -223,11 +256,12 @@ function adminHeaders() {
 }
 
 async function ownerSessionHeaders() {
+  const identityOwner = await ensureTestIdentityOwner(harness, adminToken, owner);
   const created = await createOwnerSessionCookie({
     env: { FORMLESS_OWNER_SESSION_SECRET: sessionSecret },
     maxAgeSeconds: 60,
     now: "2999-01-01T00:00:00.000Z",
-    owner,
+    owner: identityOwner,
     request: new Request("http://example.com/admin"),
   });
 

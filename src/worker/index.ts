@@ -49,7 +49,7 @@ import {
   isLocalSessionBootstrapApiPath,
 } from "./local-session-bootstrap.ts";
 import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
-import { validateOwnerSessionCookie } from "./owner-session.ts";
+import { validateOwnerSessionAuthority, validateOwnerSessionCookie } from "./owner-session.ts";
 import type { TurnstileRuntimeEnv } from "../shared/turnstile-config.ts";
 import { activeAppPackageResolver } from "./runtime-app-packages.ts";
 import { WORKSPACE_OPERATION_CAPABILITIES } from "@dpeek/formless-workspace";
@@ -416,7 +416,7 @@ async function redirectAnonymousOwnerBrowserRoute(
     return undefined;
   }
 
-  const ownerSession = await validateOwnerSessionCookie(request, env);
+  const ownerSession = await validateOwnerSessionAuthority(request, env);
 
   if (ownerSession.ok) {
     return undefined;

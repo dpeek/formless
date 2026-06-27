@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vite-plus/test";
 
 import type { OwnerIdentity } from "../shared/protocol.ts";
+import { ensureTestIdentityOwner, resetTestIdentityStorage } from "../test/identity-owner.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
 import {
   CORE_IMAGE_KEY_PREFIX,
@@ -62,6 +63,7 @@ beforeAll(async () => {
 beforeEach(async () => {
   await clearMediaBucket(harness);
   await clearMediaBucket(guardedHarness);
+  await resetTestIdentityStorage(guardedHarness, adminToken);
 });
 
 afterAll(async () => {
@@ -465,11 +467,12 @@ async function expectResponseStatus(response: HarnessResponse, status: number) {
 }
 
 async function ownerSessionHeaders() {
+  const identityOwner = await ensureTestIdentityOwner(guardedHarness, adminToken, owner);
   const created = await createOwnerSessionCookie({
     env: { FORMLESS_OWNER_SESSION_SECRET: sessionSecret },
     maxAgeSeconds: 60,
     now: "2999-01-01T00:00:00.000Z",
-    owner,
+    owner: identityOwner,
     request: new Request("http://example.com/admin"),
   });
 

@@ -3,11 +3,12 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vite-plus/test";
-import type { OwnerSetupCompleteRequest } from "../shared/protocol.ts";
+import type { OwnerIdentity } from "../shared/protocol.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
 import type {
   CompleteFirstOwnerSetupResult,
   InstanceSetupState,
+  ValidateFirstOwnerSetupCapabilityResult,
   WriteOwnerSetupCapabilityResult,
 } from "./instance-setup-state.ts";
 
@@ -19,6 +20,12 @@ const otherSetupToken = "xyzXYZ0123456789_-xyzXYZ0123456789_-";
 const createdAt = "2026-05-21T00:00:00.000Z";
 const completedAt = "2026-05-21T00:01:00.000Z";
 const expiresAt = "2026-05-21T01:00:00.000Z";
+const ownerIdentity: OwnerIdentity = {
+  id: "owner-1",
+  name: "Ada Owner",
+  email: "ada@example.com",
+  createdAt: completedAt,
+};
 
 let harness: Harness;
 let instanceSetupHarnessDir: string | undefined;
@@ -74,40 +81,34 @@ describe("instance setup state", () => {
     });
   });
 
-  it("creates the first owner atomically when token, instance, and expiry match", async () => {
+  it("consumes setup capability for an externally created owner identity", async () => {
     await writeCapability();
 
     const completed = await completeSetup();
-    const state = await getJson<InstanceSetupState>("/state");
+    const state = await getJson<InstanceSetupState>("/state-with-owner");
 
     expect(completed).toEqual({
       ok: true,
-      owner: {
-        id: "owner-1",
-        name: "Ada Owner",
-        email: "ada@example.com",
-        createdAt: completedAt,
-      },
+      owner: ownerIdentity,
       setupComplete: true,
     });
     expect(state).toEqual({
       setupComplete: true,
-      owner: completed.ok ? completed.owner : null,
+      owner: ownerIdentity,
       capability: null,
     });
   });
 
-  it("rejects invalid setup tokens without mutating owner state", async () => {
+  it("rejects invalid setup tokens without consuming setup capability", async () => {
     await writeCapability();
 
     const rejected = await completeSetup({
-      request: ownerSetupRequest({ setupToken: otherSetupToken }),
+      setupToken: otherSetupToken,
     });
     const state = await getJson<InstanceSetupState>("/state");
 
     expect(rejected).toEqual({ ok: false, reason: "invalid-token" });
     expect(state.setupComplete).toBe(false);
-    expect(state.owner).toBeNull();
     expect(state.capability).toMatchObject({ instanceId });
   });
 
@@ -119,10 +120,10 @@ describe("instance setup state", () => {
 
     expect(rejected).toEqual({ ok: false, reason: "wrong-instance" });
     expect(state.setupComplete).toBe(false);
-    expect(state.owner).toBeNull();
+    expect(state.capability).toMatchObject({ instanceId });
   });
 
-  it("rejects expired setup capabilities without creating an owner", async () => {
+  it("rejects expired setup capabilities without consuming setup capability", async () => {
     await writeCapability({ expiresAt: "2026-05-21T00:00:30.000Z" });
 
     const rejected = await completeSetup();
@@ -130,34 +131,35 @@ describe("instance setup state", () => {
 
     expect(rejected).toEqual({ ok: false, reason: "expired-token" });
     expect(state.setupComplete).toBe(false);
-    expect(state.owner).toBeNull();
+    expect(state.capability).toMatchObject({ instanceId });
   });
 
-  it("blocks replay and capability rotation after the first owner exists", async () => {
+  it("blocks validation and capability rotation when an external owner exists", async () => {
     await writeCapability();
-    const completed = await completeSetup();
 
-    const replay = await completeSetup({
-      ownerId: "owner-2",
-      request: ownerSetupRequest({ owner: { name: "Second Owner" } }),
+    const replay = await validateSetup({
+      owner: ownerIdentity,
     });
-    const rotated = await writeCapability({ setupToken: otherSetupToken });
-    const state = await getJson<InstanceSetupState>("/state");
+    const rotated = await writeCapability({
+      owner: ownerIdentity,
+      setupToken: otherSetupToken,
+    });
+    const state = await getJson<InstanceSetupState>("/state-with-owner");
 
     expect(replay).toEqual({
       ok: false,
-      owner: completed.ok ? completed.owner : undefined,
+      owner: ownerIdentity,
       reason: "already-complete",
     });
     expect(rotated).toEqual({
       ok: false,
-      owner: completed.ok ? completed.owner : undefined,
+      owner: ownerIdentity,
       reason: "already-complete",
     });
     expect(state).toEqual({
       setupComplete: true,
-      owner: completed.ok ? completed.owner : null,
-      capability: null,
+      owner: ownerIdentity,
+      capability: expect.objectContaining({ instanceId }),
     });
   });
 
@@ -171,6 +173,7 @@ async function writeCapability(
     createdAt: string;
     expiresAt: string;
     instanceId: string;
+    owner: OwnerIdentity;
     setupToken: string;
   }> = {},
 ) {
@@ -178,6 +181,7 @@ async function writeCapability(
     createdAt: overrides.createdAt ?? createdAt,
     expiresAt: overrides.expiresAt ?? expiresAt,
     instanceId: overrides.instanceId ?? instanceId,
+    owner: overrides.owner,
     setupToken: overrides.setupToken ?? setupToken,
   });
 }
@@ -186,29 +190,32 @@ function completeSetup(
   overrides: Partial<{
     instanceId: string;
     now: string;
-    ownerId: string;
-    request: OwnerSetupCompleteRequest;
+    owner: OwnerIdentity;
+    setupToken: string;
   }> = {},
 ) {
   return postJson<CompleteFirstOwnerSetupResult>("/complete", {
     instanceId: overrides.instanceId ?? instanceId,
     now: overrides.now ?? completedAt,
-    ownerId: overrides.ownerId ?? "owner-1",
-    request: overrides.request ?? ownerSetupRequest(),
+    owner: overrides.owner ?? ownerIdentity,
+    setupToken: overrides.setupToken ?? setupToken,
   });
 }
 
-function ownerSetupRequest(
-  overrides: Partial<OwnerSetupCompleteRequest> = {},
-): OwnerSetupCompleteRequest {
-  return {
-    setupToken,
-    owner: {
-      name: "Ada Owner",
-      email: "ada@example.com",
-    },
-    ...overrides,
-  };
+function validateSetup(
+  overrides: Partial<{
+    instanceId: string;
+    now: string;
+    owner: OwnerIdentity | null;
+    setupToken: string;
+  }> = {},
+) {
+  return postJson<ValidateFirstOwnerSetupCapabilityResult>("/validate", {
+    instanceId: overrides.instanceId ?? instanceId,
+    now: overrides.now ?? completedAt,
+    owner: overrides.owner,
+    setupToken: overrides.setupToken ?? setupToken,
+  });
 }
 
 async function expectSetupResult(
@@ -253,14 +260,21 @@ async function writeInstanceSetupHarness() {
     harnessPath,
     `
       import { DurableObject } from "cloudflare:workers";
-      import { parseOwnerSetupCompleteRequest } from "${process.cwd()}/src/shared/protocol.ts";
       import {
-        completeFirstOwnerSetup,
+        completeFirstOwnerSetupInCurrentTransaction,
         ensureInstanceSetupTables,
         hashOwnerSetupToken,
         readInstanceSetupState,
+        validateFirstOwnerSetupCapability,
         writeOwnerSetupCapability,
       } from "${process.cwd()}/src/worker/instance-setup-state.ts";
+
+      const ownerIdentity = {
+        id: "owner-1",
+        name: "Ada Owner",
+        email: "ada@example.com",
+        createdAt: "2026-05-21T00:01:00.000Z",
+      };
 
       export class InstanceSetupHarness extends DurableObject {
         constructor(ctx, env) {
@@ -276,6 +290,10 @@ async function writeInstanceSetupHarness() {
               return Response.json(readInstanceSetupState(this.ctx.storage));
             }
 
+            if (request.method === "GET" && url.pathname === "/state-with-owner") {
+              return Response.json(readInstanceSetupState(this.ctx.storage, ownerIdentity));
+            }
+
             if (request.method === "GET" && url.pathname === "/hash") {
               return Response.json({ hash: await hashOwnerSetupToken(url.searchParams.get("token")) });
             }
@@ -284,26 +302,41 @@ async function writeInstanceSetupHarness() {
               const body = await request.json();
 
               return Response.json(
-                writeOwnerSetupCapability(this.ctx.storage, {
+                writeOwnerSetupCapability(
+                  this.ctx.storage,
+                  {
+                    tokenHash: await hashOwnerSetupToken(body.setupToken),
+                    instanceId: body.instanceId,
+                    createdAt: body.createdAt,
+                    expiresAt: body.expiresAt,
+                  },
+                  { owner: body.owner },
+                ),
+              );
+            }
+
+            if (request.method === "POST" && url.pathname === "/validate") {
+              const body = await request.json();
+
+              return Response.json(
+                validateFirstOwnerSetupCapability(this.ctx.storage, {
                   tokenHash: await hashOwnerSetupToken(body.setupToken),
                   instanceId: body.instanceId,
-                  createdAt: body.createdAt,
-                  expiresAt: body.expiresAt,
+                  now: body.now,
+                  owner: body.owner,
                 }),
               );
             }
 
             if (request.method === "POST" && url.pathname === "/complete") {
               const body = await request.json();
-              const setupRequest = parseOwnerSetupCompleteRequest(body.request);
 
               return Response.json(
-                completeFirstOwnerSetup(this.ctx.storage, {
-                  tokenHash: await hashOwnerSetupToken(setupRequest.setupToken),
+                completeFirstOwnerSetupInCurrentTransaction(this.ctx.storage, {
+                  tokenHash: await hashOwnerSetupToken(body.setupToken),
                   instanceId: body.instanceId,
-                  owner: setupRequest.owner,
+                  owner: body.owner,
                   now: body.now,
-                  ownerId: body.ownerId,
                 }),
               );
             }

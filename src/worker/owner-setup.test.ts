@@ -126,6 +126,7 @@ describe("owner setup API routes", () => {
     const status = await getJson<OwnerSetupStatusResponse>("/api/formless/setup");
     const appInstalls = await getJson<AppInstallsResponse>("/api/formless/app-installs");
     const controlPlane = await getJson<BootstrapResponse>("/api/formless/control-plane/bootstrap");
+    const identity = await getJson<BootstrapResponse>("/api/formless/identity/bootstrap");
     const setupCookie = cookiePair(completed.response.headers.get("Set-Cookie"));
     const created = await postJson<CreateAppInstallResponse>(
       "/api/formless/app-installs",
@@ -154,6 +155,7 @@ describe("owner setup API routes", () => {
     expect(completed.response.headers.get("Set-Cookie")).toContain("HttpOnly");
     expect(completed.response.headers.get("Set-Cookie")).toContain("SameSite=Lax");
     expect(status.body).toEqual(completed.body);
+    expectIdentityOwnerRecords(identity.body, completed.body.owner);
     expect(appInstalls.body.installs).toEqual([]);
     expect(controlPlane.body.records.filter((record) => record.entity === "app-install")).toEqual(
       [],
@@ -440,6 +442,7 @@ async function createSetupCapability(
 async function resetWorkerState() {
   await Promise.all([
     postReset("/api/formless/control-plane/reset/seed"),
+    postReset("/api/formless/identity/reset/seed"),
     postInternalInstanceReset(INTERNAL_RESET_OWNER_SETUP_PATH),
   ]);
 }
@@ -521,4 +524,53 @@ function cookiePair(cookie: string | null) {
   }
 
   return cookie.split(";")[0] ?? cookie;
+}
+
+function expectIdentityOwnerRecords(
+  identity: BootstrapResponse,
+  owner: NonNullable<OwnerSetupStatusResponse["owner"]>,
+) {
+  const principal = identity.records.find(
+    (record) => record.entity === "principal" && record.id === owner.id,
+  );
+  const email = identity.records.find(
+    (record) => record.entity === "principal-email" && record.values.principal === owner.id,
+  );
+  const assignment = identity.records.find(
+    (record) =>
+      record.entity === "role-assignment" &&
+      record.values.role === "role:instance.owner" &&
+      record.values.targetPrincipal === owner.id,
+  );
+
+  expect(principal).toMatchObject({
+    id: owner.id,
+    entity: "principal",
+    values: {
+      displayName: owner.name,
+      kind: "human",
+      status: "active",
+    },
+  });
+  expect(email).toMatchObject({
+    entity: "principal-email",
+    values: {
+      principal: owner.id,
+      displayEmail: owner.email,
+      normalizedEmail: owner.email,
+      verificationStatus: "unverified",
+      primary: true,
+      recovery: true,
+    },
+  });
+  expect(assignment).toMatchObject({
+    entity: "role-assignment",
+    values: {
+      role: "role:instance.owner",
+      targetKind: "principal",
+      targetPrincipal: owner.id,
+      scopeKind: "instance",
+      status: "active",
+    },
+  });
 }

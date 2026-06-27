@@ -7,10 +7,11 @@ import {
 import { nowIsoString } from "../shared/clock.ts";
 import { authorizeAdminWrite, type AuthorityAdminGuardEnv } from "./authority-admin-guard.ts";
 import {
-  completeFirstOwnerSetup,
+  completeFirstOwnerSetupInCurrentTransaction,
   hashOwnerSetupToken,
   readInstanceSetupState,
   resetInstanceSetupTables,
+  validateFirstOwnerSetupCapability,
   writeOwnerSetupCapability,
   type CompleteFirstOwnerSetupResult,
   type WriteOwnerSetupCapabilityResult,
@@ -23,6 +24,11 @@ import {
 } from "./owner-session.ts";
 import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
 import { readInstanceAuthConfig, resetInstanceAuthTables } from "./instance-auth-state.ts";
+import {
+  ensureIdentityOwner,
+  readIdentityOwner,
+  resetIdentityOwner,
+} from "./identity-control-plane.ts";
 import { completeOwnerPasskeyRegistration } from "./owner-passkeys.ts";
 
 export const OWNER_SETUP_API_PATH = "/api/formless/setup";
@@ -70,6 +76,7 @@ export async function handleOwnerSetupDurableObjectRequest(
 
     resetInstanceSetupTables(storage);
     resetInstanceAuthTables(storage);
+    await resetIdentityOwner(env);
 
     return jsonResponse({ reset: true });
   }
@@ -88,7 +95,7 @@ export async function handleOwnerSetupDurableObjectRequest(
     }
 
     if (pathname === OWNER_SETUP_API_PATH) {
-      return handleOwnerSetupStatusRequest(request, storage);
+      return await handleOwnerSetupStatusRequest(request, storage, env);
     }
 
     if (pathname === ownerSetupCapabilityPath) {
@@ -120,7 +127,7 @@ function isOwnerSetupApiPath(pathname: string) {
 async function handleOwnerSessionRequest(
   request: Request,
   storage: DurableObjectStorage,
-  env: AuthorityAdminGuardEnv,
+  env: OwnerSetupApiEnv,
 ): Promise<Response> {
   switch (request.method) {
     case "GET":
@@ -135,9 +142,10 @@ async function handleOwnerSessionRequest(
 async function handleOwnerSessionStatusRequest(
   request: Request,
   storage: DurableObjectStorage,
-  env: AuthorityAdminGuardEnv,
+  env: OwnerSetupApiEnv,
 ): Promise<Response> {
-  const state = readInstanceSetupState(storage);
+  const owner = await readIdentityOwner(env);
+  const state = readInstanceSetupState(storage, owner);
 
   if (!state.owner) {
     return jsonResponse({ authenticated: false, setupComplete: false });
@@ -145,7 +153,7 @@ async function handleOwnerSessionStatusRequest(
 
   const session = await validateOwnerSessionCookie(request, env);
 
-  if (session.ok && session.session.ownerId === state.owner.id) {
+  if (session.ok && session.session.principalId === state.owner.id) {
     return jsonResponse({
       authenticated: true,
       owner: state.owner,
@@ -164,9 +172,10 @@ async function handleOwnerSessionStatusRequest(
 async function handleOwnerLoginRequest(
   _request: Request,
   storage: DurableObjectStorage,
-  _env: AuthorityAdminGuardEnv,
+  env: OwnerSetupApiEnv,
 ): Promise<Response> {
-  const state = readInstanceSetupState(storage);
+  const owner = await readIdentityOwner(env);
+  const state = readInstanceSetupState(storage, owner);
 
   if (!state.owner) {
     return jsonResponse(
@@ -195,18 +204,22 @@ function handleOwnerLogoutRequest(request: Request): Response {
   });
 }
 
-function handleOwnerSetupStatusRequest(request: Request, storage: DurableObjectStorage): Response {
+async function handleOwnerSetupStatusRequest(
+  request: Request,
+  storage: DurableObjectStorage,
+  env: OwnerSetupApiEnv,
+): Promise<Response> {
   if (request.method !== "GET") {
     return methodNotAllowedResponse("GET");
   }
 
-  return jsonResponse(ownerSetupStatusResponse(storage));
+  return jsonResponse(await ownerSetupStatusResponse(storage, env));
 }
 
 async function handleOwnerSetupCapabilityRequest(
   request: Request,
   storage: DurableObjectStorage,
-  env: AuthorityAdminGuardEnv,
+  env: OwnerSetupApiEnv,
 ): Promise<Response> {
   if (request.method !== "POST") {
     return methodNotAllowedResponse("POST");
@@ -223,12 +236,17 @@ async function handleOwnerSetupCapabilityRequest(
   }
 
   const body = parseOwnerSetupCapabilityRequest(await readJson(request));
-  const result = writeOwnerSetupCapability(storage, {
-    tokenHash: await hashOwnerSetupToken(body.setupToken),
-    instanceId: requestInstanceId(request),
-    createdAt: nowIsoString(),
-    ...(body.expiresAt === undefined ? {} : { expiresAt: body.expiresAt }),
-  });
+  const owner = await readIdentityOwner(env);
+  const result = writeOwnerSetupCapability(
+    storage,
+    {
+      tokenHash: await hashOwnerSetupToken(body.setupToken),
+      instanceId: requestInstanceId(request),
+      createdAt: nowIsoString(),
+      ...(body.expiresAt === undefined ? {} : { expiresAt: body.expiresAt }),
+    },
+    { owner },
+  );
 
   return ownerSetupCapabilityResponse(result);
 }
@@ -254,18 +272,39 @@ async function handleOwnerSetupCompleteRequest(
 
   const body = parseOwnerSetupCompleteRequest(bodyValue);
   const completedAt = nowIsoString();
-  const result = completeFirstOwnerSetup(storage, {
-    tokenHash: await hashOwnerSetupToken(body.setupToken),
+  const tokenHash = await hashOwnerSetupToken(body.setupToken);
+  const existingOwner = await readIdentityOwner(env);
+  const setup = validateFirstOwnerSetupCapability(storage, {
+    tokenHash,
     instanceId: requestInstanceId(request),
     now: completedAt,
+    owner: existingOwner,
+  });
+
+  if (!setup.ok) {
+    return await ownerSetupCompleteResponse(request, env, setup);
+  }
+
+  const owner = await ensureIdentityOwner(env, {
+    now: completedAt,
     owner: body.owner,
+  });
+  const result = completeFirstOwnerSetupInCurrentTransaction(storage, {
+    tokenHash,
+    instanceId: requestInstanceId(request),
+    now: completedAt,
+    owner,
   });
 
   return await ownerSetupCompleteResponse(request, env, result);
 }
 
-function ownerSetupStatusResponse(storage: DurableObjectStorage): OwnerSetupStatusResponse {
-  const state = readInstanceSetupState(storage);
+async function ownerSetupStatusResponse(
+  storage: DurableObjectStorage,
+  env: OwnerSetupApiEnv,
+): Promise<OwnerSetupStatusResponse> {
+  const owner = await readIdentityOwner(env);
+  const state = readInstanceSetupState(storage, owner);
 
   if (!state.owner) {
     return { setupComplete: false };
