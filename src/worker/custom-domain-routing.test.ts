@@ -2,6 +2,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vite-plus
 import { computeSourceSchemaHash } from "@dpeek/formless-installed-apps";
 import { INSTANCE_CONTROL_PLANE_INSTANCE_SETTINGS_ID } from "@dpeek/formless-instance-control-plane";
 import { IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX } from "@dpeek/formless-identity-control-plane";
+import type { AppSchema } from "@dpeek/formless-schema";
 
 import {
   FORMLESS_RUNTIME_APP_INSTALL_ID_META_NAME,
@@ -577,6 +578,188 @@ describe("installed Site custom-domain Worker routing", () => {
     expect(write.status).toBe(200);
     expect(writeBody.record.values.title).toBe("Host session write");
     expect(assetRequests).toEqual(["/index.html"]);
+  });
+
+  it("issues authenticated handoff grants for active principals while preserving owner rechecks", async () => {
+    await setupPrimaryProductionIdentity();
+    await setupMappedApp({ access: "authenticated" });
+
+    const principal = await createActivePrincipalSessionCookie("Authenticated Principal");
+    const start = await fetchHost(mappedAppHost, "/schema?view=board", {
+      headers: { Accept: "text/html" },
+      redirect: "manual",
+    });
+    const grant = await harness.mf.dispatchFetch(requiredHeader(start, "Location"), {
+      headers: {
+        Accept: "text/html",
+        Cookie: principal.cookie,
+      },
+      redirect: "manual",
+    });
+    const callbackUrl = new URL(requiredHeader(grant, "Location"));
+
+    expect(start.status).toBe(302);
+    expect(grant.status).toBe(302);
+    expect(callbackUrl.origin).toBe(`https://${mappedAppHost}`);
+    expect(callbackUrl.pathname).toBe(INSTANCE_AUTH_HANDOFF_CALLBACK_PATH);
+
+    await resetWorkerState(harness);
+    await setupPrimaryProductionIdentity();
+    await setupMappedApp();
+
+    const ownerOnlyPrincipal = await createActivePrincipalSessionCookie(
+      "Owner Route Non Owner Principal",
+    );
+    const ownerOnlyStart = await fetchHost(mappedAppHost, "/schema?view=board", {
+      headers: { Accept: "text/html" },
+      redirect: "manual",
+    });
+    const ownerOnlyStartUrl = new URL(requiredHeader(ownerOnlyStart, "Location"));
+    const ownerOnlyGrant = await harness.mf.dispatchFetch(ownerOnlyStartUrl.toString(), {
+      headers: {
+        Accept: "text/html",
+        Cookie: ownerOnlyPrincipal.cookie,
+      },
+      redirect: "manual",
+    });
+
+    expect(ownerOnlyGrant.status).toBe(302);
+    expect(ownerOnlyGrant.headers.get("Location")).toBe(
+      ownerLoginRedirectLocationForRoute(
+        `${INSTANCE_AUTH_HANDOFF_START_PATH}${ownerOnlyStartUrl.search}`,
+      ),
+    );
+  });
+
+  it("executes authenticated operations from matched host-local sessions", async () => {
+    await setupPrimaryProductionIdentity();
+    await setupMappedApp({ access: "authenticated" });
+
+    const { cookie, principalId } =
+      await createAuthenticatedMappedAppHostSession("Authenticated Operator");
+    const unauthenticatedBootstrap = await fetchHost(
+      mappedAppHost,
+      `/api/app-installs/tasks/${taskInstallId}/bootstrap`,
+    );
+    const bootstrap = await fetchHost(
+      mappedAppHost,
+      `/api/app-installs/tasks/${taskInstallId}/bootstrap`,
+      {
+        headers: { Cookie: cookie },
+      },
+    );
+    const bootstrapBody = (await bootstrap.json()) as { schema: AppSchema };
+    const taskEntity = bootstrapBody.schema.entities.task;
+    const createOperation = taskEntity?.operations?.create;
+
+    if (!taskEntity || !createOperation) {
+      throw new Error("Expected task create operation.");
+    }
+
+    const schema: AppSchema = {
+      ...bootstrapBody.schema,
+      entities: {
+        ...bootstrapBody.schema.entities,
+        task: {
+          ...taskEntity,
+          operations: {
+            ...taskEntity.operations,
+            create: {
+              ...createOperation,
+              policy: { actors: ["authenticated"] },
+            },
+          },
+        },
+      },
+    };
+    const schemaWrite = await harness.fetch(`/api/app-installs/tasks/${taskInstallId}/schema`, {
+      body: JSON.stringify({ schema }),
+      headers: adminHeaders({ "Content-Type": "application/json" }),
+      method: "POST",
+    });
+    const writeRequest = recordOperationRequest({
+      idempotencyKey: "authenticated-host-session-create",
+      entity: "task",
+      operationName: "create",
+      input: { title: "Authenticated host operation", done: false },
+    });
+    const write = await fetchHost(
+      mappedAppHost,
+      `/api/app-installs/tasks/${taskInstallId}${writeRequest.path.slice("/api".length)}`,
+      {
+        body: JSON.stringify(writeRequest.body),
+        headers: {
+          Cookie: cookie,
+          "Content-Type": "application/json",
+        },
+        method: "POST",
+      },
+    );
+    const writeBody = (await write.json()) as OperationInvocationResponse;
+
+    expect(unauthenticatedBootstrap.status).toBe(401);
+    expect(bootstrap.status).toBe(200);
+    expect(schemaWrite.status).toBe(200);
+    expect(write.status).toBe(200);
+    expect(writeBody.invocation.actor).toMatchObject({
+      kind: "authenticated",
+      principalId,
+      sessionTarget: {
+        appInstallId: taskInstallId,
+        storageIdentity: `app:${taskInstallId}`,
+        targetOrigin: `https://${mappedAppHost}`,
+        targetProfile: "app",
+      },
+    });
+    expect(operationRecord(writeBody).values.title).toBe("Authenticated host operation");
+  });
+
+  it("rejects stale, disabled, and target-mismatched authenticated host sessions", async () => {
+    await setupPrimaryProductionIdentity();
+    await setupMappedApp({ access: "authenticated" });
+
+    const { cookie, principalId, setCookie } = await createAuthenticatedMappedAppHostSession(
+      "Stale Authenticated Principal",
+    );
+    const staleVersionCookie = await hostSessionCookieWithPayload(setCookie, {
+      sessionVersion: 1,
+    });
+    const mismatchedCookie = await hostSessionCookieWithPayload(setCookie, {
+      storageIdentity: "app:wrong-install",
+    });
+
+    const staleVersionRead = await fetchHost(
+      mappedAppHost,
+      `/api/app-installs/tasks/${taskInstallId}/bootstrap`,
+      {
+        headers: { Cookie: staleVersionCookie },
+      },
+    );
+    const mismatchedRead = await fetchHost(
+      mappedAppHost,
+      `/api/app-installs/tasks/${taskInstallId}/bootstrap`,
+      {
+        headers: { Cookie: mismatchedCookie },
+      },
+    );
+
+    await postAdminJson(`${IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX}/operations/principal/update`, {
+      idempotencyKey: "disable-authenticated-principal",
+      recordId: principalId,
+      input: { status: "disabled" },
+    });
+
+    const disabledRead = await fetchHost(
+      mappedAppHost,
+      `/api/app-installs/tasks/${taskInstallId}/bootstrap`,
+      {
+        headers: { Cookie: cookie },
+      },
+    );
+
+    expect(staleVersionRead.status).toBe(401);
+    expect(mismatchedRead.status).toBe(401);
+    expect(disabledRead.status).toBe(401);
   });
 
   it("accepts host-local sessions for matched mapped instance control-plane APIs", async () => {
@@ -1173,6 +1356,25 @@ async function createMappedAppHostSession(ownerName: string) {
     owner,
     request: new Request("https://www.example.com/"),
   });
+  const hostSession = await createMappedAppHostSessionFromCentralCookie(cookiePair(session.cookie));
+
+  return {
+    ...hostSession,
+    owner,
+  };
+}
+
+async function createAuthenticatedMappedAppHostSession(displayName: string) {
+  const principal = await createActivePrincipalSessionCookie(displayName);
+  const hostSession = await createMappedAppHostSessionFromCentralCookie(principal.cookie);
+
+  return {
+    ...hostSession,
+    principalId: principal.principalId,
+  };
+}
+
+async function createMappedAppHostSessionFromCentralCookie(centralCookie: string) {
   const start = await fetchHost(mappedAppHost, "/schema?view=board", {
     headers: { Accept: "text/html" },
     redirect: "manual",
@@ -1180,7 +1382,7 @@ async function createMappedAppHostSession(ownerName: string) {
   const grant = await harness.mf.dispatchFetch(requiredHeader(start, "Location"), {
     headers: {
       Accept: "text/html",
-      Cookie: cookiePair(session.cookie),
+      Cookie: centralCookie,
     },
     redirect: "manual",
   });
@@ -1194,8 +1396,38 @@ async function createMappedAppHostSession(ownerName: string) {
 
   return {
     cookie: cookiePair(setCookie),
-    owner,
     setCookie,
+  };
+}
+
+async function createActivePrincipalSessionCookie(displayName: string) {
+  const response = await postAdminJson(
+    `${IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX}/operations/principal/create`,
+    {
+      idempotencyKey: `active-principal-${displayName.replace(/\W+/g, "-").toLowerCase()}`,
+      input: {
+        displayName,
+        kind: "human",
+        status: "active",
+      },
+    },
+  );
+  const principal = operationRecord((await response.json()) as OperationInvocationResponse);
+  const session = await createOwnerSessionCookie({
+    env: { FORMLESS_ADMIN_TOKEN: adminToken },
+    maxAgeSeconds: 60,
+    now: "2999-01-01T00:00:00.000Z",
+    owner: {
+      id: principal.id,
+      name: displayName,
+      createdAt: principal.createdAt,
+    },
+    request: new Request("https://www.example.com/"),
+  });
+
+  return {
+    cookie: cookiePair(session.cookie),
+    principalId: principal.id,
   };
 }
 

@@ -450,6 +450,7 @@ describe("instance control-plane schema contracts", () => {
         required: false,
         values: {
           anonymous: { label: "Anonymous" },
+          authenticated: { label: "Authenticated" },
           owner: { label: "Owner" },
         },
       },
@@ -780,6 +781,14 @@ describe("instance control-plane schema contracts", () => {
         access: "owner",
       }),
     ).toBe("owner");
+    expect(
+      instanceControlPlaneEffectiveRouteAccess({
+        kind: "mount",
+        targetProfile: "public-site",
+        surface: "public-site",
+        access: "authenticated",
+      }),
+    ).toBe("authenticated");
   });
 
   it("derives private package route records from resolved capabilities", () => {
@@ -943,7 +952,7 @@ describe("instance control-plane schema contracts", () => {
           targetProfile: "public-site",
           appInstall: "personal",
           surface: "public-site",
-          access: "anonymous",
+          access: "authenticated",
         },
       }),
       storedRouteRecord({
@@ -1030,7 +1039,7 @@ describe("instance control-plane schema contracts", () => {
         routeKind: "admin",
       },
       {
-        access: "anonymous",
+        access: "authenticated",
         href: "/public/personal",
         installId: "personal",
         label: "Personal Site",

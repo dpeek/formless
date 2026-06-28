@@ -15,6 +15,7 @@ import type {
   SitePublicOperationTargetResolver,
 } from "@dpeek/formless-site-app";
 import type {
+  OperationInvocationActor,
   OperationInvocationEnvelope,
   OperationInvocationResponse,
 } from "../shared/operation-invocation.ts";
@@ -27,7 +28,11 @@ import {
 import type { PackageAppKey } from "@dpeek/formless-installed-apps";
 import { findResolvedAppPackage, type AppPackageResolver } from "../shared/app-packages.ts";
 import { FORMLESS_RUNTIME_PROTOCOL_VERSION } from "../shared/deploy-metadata.ts";
-import type { AppSchema, SchemaOperationActorKind } from "@dpeek/formless-schema";
+import type {
+  AppSchema,
+  EntityOperationSchema,
+  SchemaOperationActorKind,
+} from "@dpeek/formless-schema";
 import {
   isSourceSchemaHash,
   type PackageAppRevision,
@@ -176,7 +181,14 @@ type EntityOperationRoute = {
   recordId?: string;
 };
 
+export type OperationInvocationActorCandidates = {
+  authenticated?: OperationInvocationActor;
+  owner?: OperationInvocationActor;
+};
+
 type AuthorityOperationExecutionInput = {
+  actor?: OperationInvocationActor;
+  actorCandidates?: OperationInvocationActorCandidates;
   actorKind?: SchemaOperationActorKind;
   app: WorkerSchemaAppDefinition;
   body?: unknown;
@@ -432,7 +444,12 @@ export function executeAuthorityOperation(
 
     case "entityOperation": {
       const { schema } = initializeStorageFromSource(input.storage, input.source);
+      const operationSchema =
+        schema.entities[operation.entityName]?.operations?.[operation.operationName];
       const envelope = buildProtocolOperationInvocationEnvelope({
+        actor:
+          input.actor ??
+          operationInvocationActorFromCandidates(input.actorCandidates, operationSchema),
         actorKind: input.actorKind,
         body: input.body,
         identity: input.identity,
@@ -527,6 +544,31 @@ export function executeAuthorityOperation(
       );
     }
   }
+}
+
+function operationInvocationActorFromCandidates(
+  candidates: OperationInvocationActorCandidates | undefined,
+  operation: EntityOperationSchema | undefined,
+): OperationInvocationActor | undefined {
+  if (!candidates || !operation) {
+    return undefined;
+  }
+
+  const actors = operation.policy?.actors;
+
+  if (actors?.includes("authenticated") && candidates.authenticated) {
+    return candidates.authenticated;
+  }
+
+  if ((actors === undefined || actors.includes("owner")) && candidates.owner) {
+    return candidates.owner;
+  }
+
+  if (actors === undefined && candidates.authenticated) {
+    return candidates.authenticated;
+  }
+
+  return candidates.owner ?? candidates.authenticated;
 }
 
 function writeOperationResult<T extends AuthorityOperationResponseBody>(

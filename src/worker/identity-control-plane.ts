@@ -18,6 +18,7 @@ import {
   type AuthorityAdminGuardEnv,
 } from "./authority-admin-guard.ts";
 import {
+  INTERNAL_IDENTITY_ACTIVE_PRINCIPAL_PATH,
   INTERNAL_IDENTITY_OWNER_PATH,
   INTERNAL_IDENTITY_OWNER_PRINCIPAL_PATH,
   INTERNAL_IDENTITY_OWNER_RESET_PATH,
@@ -267,6 +268,19 @@ async function handleIdentityOwnerInternalRequest(
     return jsonResponse({ owner: readActiveIdentityOwnerForPrincipal(storage, principalId) });
   }
 
+  if (url.pathname === INTERNAL_IDENTITY_ACTIVE_PRINCIPAL_PATH) {
+    if (request.method !== "GET") {
+      return jsonResponse({ error: "Method not allowed." }, 405, { Allow: "GET" });
+    }
+
+    const principalId = parseNonEmptyString(
+      "Identity active principal id",
+      url.searchParams.get("principalId"),
+    );
+
+    return jsonResponse({ principal: readActiveIdentityPrincipal(storage, principalId) });
+  }
+
   if (url.pathname !== INTERNAL_IDENTITY_OWNER_PATH) {
     return undefined;
   }
@@ -473,6 +487,23 @@ function readActiveIdentityOwnerForPrincipal(
   }
 
   return identityOwnerFromPrincipal(records, principal);
+}
+
+function readActiveIdentityPrincipal(
+  storage: DurableObjectStorage,
+  principalId: string,
+): { id: string } | null {
+  ensureIdentityControlPlaneStorage(storage);
+
+  const principal = getBootstrapRecords(storage).find(
+    (record) =>
+      record.id === principalId &&
+      record.entity === "principal" &&
+      !record.deletedAt &&
+      record.values.status === "active",
+  );
+
+  return principal ? { id: principal.id } : null;
 }
 
 function identityOwnerFromPrincipal(

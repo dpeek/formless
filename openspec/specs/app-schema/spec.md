@@ -375,10 +375,13 @@ The system SHALL let app schemas define workspace screens that compose collectio
 
 - GIVEN a workspace screen declares access policy
 - WHEN the schema is parsed
-- THEN `access` is either `anonymous` or `owner`
+- THEN `access` is `anonymous`, `authenticated`, or `owner`
 - AND `anonymous` means the screen does not require an owner session beyond the
   access required by its mounted route
-- AND `owner` means the screen requires an owner session
+- AND `authenticated` means the screen requires an active principal-backed
+  browser session beyond the access required by its mounted route
+- AND `owner` means the screen requires an active `instance.owner` principal
+  session
 - AND omitted screen access inherits the mounted route access
 
 #### Scenario: Reject invalid screen access
@@ -529,6 +532,20 @@ public forms, automation, audit, and authorization.
 - AND `selection` and `workflow` remain reserved until their contracts are
   introduced
 
+#### Scenario: Parse operation actor policy
+
+- GIVEN an entity operation declares actor policy
+- WHEN the schema is parsed
+- THEN operation actors may include `anonymous`, `authenticated`, `owner`,
+  `admin`, `cliDeployer`, or `runner`
+- AND `authenticated` means any active principal with a valid instance or
+  host-local session for the target storage identity can invoke the operation
+- AND `owner` means an active principal with active `instance.owner` authority
+  can invoke the operation
+- AND response field filters may be keyed by each declared actor kind
+- AND anonymous public access still requires the explicit anonymous operation
+  access policy and public input contract
+
 #### Scenario: Reuse entity fields in operation input
 
 - GIVEN an operation input field references an entity field
@@ -602,6 +619,8 @@ public forms, automation, audit, and authorization.
   declared reference target and whose id resolves to a flat record id
 - AND references to earlier steps resolve through flat record ids, not nested
   record values
+- AND actor context expressions support actor mode and the authenticated
+  principal id when present
 - AND plans that include query fan-out, loops, arbitrary code, provider calls,
   cross-app writes, conditional dedupe, computed sibling ordering, state-machine
   transition semantics, or undeclared entity/field targets are rejected
@@ -685,8 +704,8 @@ fields without adding nested stored workflow state.
 - WHEN the schema is parsed
 - THEN the handler configuration references a state machine on the same entity
 - AND the handler configuration references one transition from that machine
-- AND the operation uses normal actor exposure metadata for owner, admin, CLI
-  deployer, and runner callers
+- AND the operation uses normal actor exposure metadata for authenticated,
+  owner, admin, CLI deployer, and runner callers
 - AND anonymous public access is rejected unless a later transition operation
   policy explicitly supports it
 
@@ -852,13 +871,13 @@ after record creation.
 
 ### Requirement: Actor-Scoped Command Operations
 
-The system SHALL support actor-scoped command operations for owner, admin, CLI
-deployer, and runner callers.
+The system SHALL support actor-scoped command operations for authenticated,
+owner, admin, CLI deployer, and runner callers.
 
 #### Scenario: Authorized actor invokes command operation
 
 - GIVEN a caller invokes a command operation exposed to its actor kind
-- WHEN auth, input, idempotency, and schema validation pass
+- WHEN auth, actor facts, input, idempotency, and schema validation pass
 - THEN the runtime accepts the operation
 - AND the operation response includes only fields allowed for that actor
 

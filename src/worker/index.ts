@@ -31,8 +31,8 @@ import {
   handleInstanceAuthHandoffRequest,
   hostAuthSessionTargetForRuntimeRoute,
   setHostAuthSessionTargetHeaders,
-  startOwnerRouteAuthHandoff,
-  validateHostAuthSessionAuthority,
+  startProtectedRouteAuthHandoff,
+  validateRouteAccessSession,
 } from "./instance-auth-handoff.ts";
 import { handleOwnerSetupApiRequest } from "./owner-setup.ts";
 import { handleOwnerPasskeyApiRequest } from "./owner-passkeys.ts";
@@ -43,7 +43,7 @@ import {
   publishedSiteRedirectForRequest,
   resolveWorkerRuntimeRequestTopology,
   shouldDeferToStaticAssets,
-  shouldRedirectAnonymousOwnerBrowserRoute,
+  shouldRedirectAnonymousProtectedBrowserRoute,
   workerRuntimeProfileInput,
   type WorkerRuntimeRequestTopology,
 } from "./routing.ts";
@@ -59,7 +59,7 @@ import {
   isLocalSessionBootstrapApiPath,
 } from "./local-session-bootstrap.ts";
 import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
-import { validateOwnerSessionAuthority, validateOwnerSessionCookie } from "./owner-session.ts";
+import { validateOwnerSessionCookie } from "./owner-session.ts";
 import type { TurnstileRuntimeEnv } from "../shared/turnstile-config.ts";
 import { activeAppPackageResolver } from "./runtime-app-packages.ts";
 import { WORKSPACE_OPERATION_CAPABILITIES } from "@dpeek/formless-workspace";
@@ -332,8 +332,24 @@ export default {
         return Response.json({ error: "Not found." }, { status: 404 });
       }
 
+      const routeAccessAuthorization = await authorizeInstalledAppRouteAccess(
+        request,
+        env,
+        runtimeRoute,
+        authorityRoute.identity.authorityName,
+        hostSessionTarget,
+      );
+
+      if (routeAccessAuthorization) {
+        return routeAccessAuthorization;
+      }
+
       if (
         authorityRoute.identity.kind === "appInstall" &&
+        runtimeRouteAccessForInstalledAppAuthorityRoute(
+          runtimeRoute,
+          authorityRoute.identity.authorityName,
+        ) === "owner" &&
         isInstalledAppManagementApiRead(request, authorityRoute.path)
       ) {
         const authorization = await authorizeOwnerManagementRead(request, env, {
@@ -361,7 +377,7 @@ export default {
       );
     }
 
-    const ownerBrowserRedirect = await redirectAnonymousOwnerBrowserRoute(
+    const ownerBrowserRedirect = await redirectAnonymousProtectedBrowserRoute(
       request,
       env,
       requestTopology,
@@ -443,7 +459,7 @@ function hostAuthSessionTargetForInstalledAppAuthorityRoute(
   storageIdentity: string,
 ) {
   const target = hostAuthSessionTargetForRuntimeRoute(request, runtimeRoute, {
-    requireOwnerAccess: true,
+    minimumAccess: "authenticated",
   });
 
   if (!target || target.storageIdentity !== storageIdentity) {
@@ -458,7 +474,7 @@ function hostAuthSessionTargetForInstanceControlPlaneRoute(
   runtimeRoute: Awaited<ReturnType<typeof resolveInstanceRuntimeRouteForRequest>>,
 ) {
   const target = hostAuthSessionTargetForRuntimeRoute(request, runtimeRoute, {
-    requireOwnerAccess: true,
+    minimumAccess: "owner",
   });
 
   if (
@@ -473,6 +489,48 @@ function hostAuthSessionTargetForInstanceControlPlaneRoute(
   return target;
 }
 
+async function authorizeInstalledAppRouteAccess(
+  request: Request,
+  env: Env,
+  runtimeRoute: Awaited<ReturnType<typeof resolveInstanceRuntimeRouteForRequest>>,
+  storageIdentity: string,
+  hostSessionTarget: ReturnType<typeof hostAuthSessionTargetForRuntimeRoute>,
+): Promise<Response | undefined> {
+  const access = runtimeRouteAccessForInstalledAppAuthorityRoute(runtimeRoute, storageIdentity);
+
+  if (access === undefined || access === "anonymous") {
+    return undefined;
+  }
+
+  const authorization = await validateRouteAccessSession(request, env, {
+    requiredAccess: access,
+    target: hostSessionTarget,
+  });
+
+  if (authorization.ok) {
+    return undefined;
+  }
+
+  return Response.json(
+    { error: "Authenticated session is required for this route." },
+    {
+      headers: {
+        "WWW-Authenticate": 'Bearer realm="formless-authenticated"',
+      },
+      status: 401,
+    },
+  );
+}
+
+function runtimeRouteAccessForInstalledAppAuthorityRoute(
+  runtimeRoute: Awaited<ReturnType<typeof resolveInstanceRuntimeRouteForRequest>>,
+  storageIdentity: string,
+) {
+  return runtimeRoute?.kind === "mount" && runtimeRoute.target?.authorityName === storageIdentity
+    ? runtimeRoute.access
+    : undefined;
+}
+
 function workerWorkspaceGatewayRouteAvailable(
   requestTopology: WorkerRuntimeRequestTopology,
   runtimeRoute: Awaited<ReturnType<typeof resolveInstanceRuntimeRouteForRequest>>,
@@ -483,13 +541,15 @@ function workerWorkspaceGatewayRouteAvailable(
   );
 }
 
-async function redirectAnonymousOwnerBrowserRoute(
+async function redirectAnonymousProtectedBrowserRoute(
   request: Request,
   env: Env,
   requestTopology: WorkerRuntimeRequestTopology,
   exactHostRuntimeRoute: Awaited<ReturnType<typeof resolveInstanceRuntimeRouteForRequest>>,
 ): Promise<Response | undefined> {
-  if (!shouldRedirectAnonymousOwnerBrowserRoute(request, requestTopology, exactHostRuntimeRoute)) {
+  if (
+    !shouldRedirectAnonymousProtectedBrowserRoute(request, requestTopology, exactHostRuntimeRoute)
+  ) {
     return undefined;
   }
 
@@ -498,25 +558,24 @@ async function redirectAnonymousOwnerBrowserRoute(
       ? exactHostRuntimeRoute
       : await resolveInstanceRuntimeRouteForRequest(request, env);
 
-  if (!shouldRedirectAnonymousOwnerBrowserRoute(request, requestTopology, runtimeRoute)) {
+  if (!shouldRedirectAnonymousProtectedBrowserRoute(request, requestTopology, runtimeRoute)) {
     return undefined;
   }
 
-  const ownerSession = await validateOwnerSessionAuthority(request, env);
-
-  if (ownerSession.ok) {
+  if (runtimeRoute?.kind !== "mount" || runtimeRoute.access === "anonymous") {
     return undefined;
   }
 
-  const hostSession = await validateHostAuthSessionAuthority(request, env, {
+  const session = await validateRouteAccessSession(request, env, {
+    requiredAccess: runtimeRoute.access,
     runtimeRoute,
   });
 
-  if (hostSession.ok) {
+  if (session.ok) {
     return undefined;
   }
 
-  const handoffRedirect = await startOwnerRouteAuthHandoff(request, env, runtimeRoute);
+  const handoffRedirect = await startProtectedRouteAuthHandoff(request, env, runtimeRoute);
 
   if (handoffRedirect) {
     return handoffRedirect;

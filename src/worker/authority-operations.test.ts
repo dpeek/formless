@@ -10,7 +10,10 @@ import {
   type BootstrapResponse,
   type SyncResponse,
 } from "../shared/protocol.ts";
-import type { OperationInvocationResponse } from "../shared/operation-invocation.ts";
+import type {
+  OperationInvocationEnvelope,
+  OperationInvocationResponse,
+} from "../shared/operation-invocation.ts";
 import type { SchemaKey } from "../shared/schema-apps.ts";
 import type {
   AppSchema,
@@ -31,6 +34,7 @@ import { PUBLIC_SITE_TREE_CACHE_CONTROL } from "@dpeek/formless-site-app/worker"
 type Harness = Awaited<ReturnType<typeof createWorkerHarness>>;
 
 type ExecuteOperationInput = {
+  actor?: OperationInvocationEnvelope["actor"];
   actorKind?: "admin" | "cliDeployer" | "owner" | "runner";
   appKey?: SchemaKey;
   body?: unknown;
@@ -1094,6 +1098,77 @@ describe("authority operation execution", () => {
     ]);
   });
 
+  it("authorizes authenticated operation actors and filters authenticated command output", async () => {
+    const bootstrap = await executeOperation<BootstrapResponse>({
+      method: "GET",
+      path: "/bootstrap",
+    });
+    const created = await executeOperation<OperationInvocationResponse>({
+      method: "POST",
+      path: "/operations/task/create",
+      body: {
+        idempotencyKey: "authenticated-command-completed-task",
+        input: {
+          title: "Authenticated command completed",
+          done: true,
+        },
+      },
+    });
+    const createdOutput = created.body.result.body.output;
+
+    if (createdOutput.type !== "create") {
+      throw new Error("Expected create operation output.");
+    }
+
+    const schema = schemaWithAuthenticatedScopedClearCompletedCommand(
+      bootstrap.body.result.body.schema,
+    );
+
+    await executeOperation({
+      method: "POST",
+      path: "/schema",
+      body: { schema },
+    });
+
+    const missingFacts = await executeOperationFailure({
+      actor: { kind: "authenticated" },
+      method: "POST",
+      path: "/operations/task/clearCompletedTasks",
+      body: { idempotencyKey: "authenticated-command-missing-facts" },
+    });
+    const committed = await executeOperation<OperationInvocationResponse>({
+      actor: authenticatedOperationActor(),
+      method: "POST",
+      path: "/operations/task/clearCompletedTasks",
+      body: { idempotencyKey: "authenticated-command-clear-completed" },
+    });
+    const output = committed.body.result.body.output;
+
+    if (output.type !== "command") {
+      throw new Error("Expected command operation output.");
+    }
+
+    const change = output.changes.find(
+      (candidate) => candidate.recordId === createdOutput.record.id,
+    );
+
+    expect(missingFacts.response.status).toBe(400);
+    expect(missingFacts.body).toEqual({
+      error: 'Operation "task.clearCompletedTasks" requires authenticated actor facts.',
+      writes: [],
+    });
+    expect(committed.response.status).toBe(200);
+    expect(committed.body.result.body.invocation.actor).toEqual(authenticatedOperationActor());
+    expect(change).toMatchObject({
+      payload: {
+        values: {
+          title: "Authenticated command completed",
+        },
+      },
+    });
+    expect(change?.payload.values).not.toHaveProperty("done");
+  });
+
   it("commits transition-state command operations through operation invocation", async () => {
     const bootstrap = await executeOperation<BootstrapResponse>({
       method: "GET",
@@ -1739,6 +1814,49 @@ function schemaWithScopedClearCompletedCommand(sourceSchema: AppSchema): AppSche
   return schema;
 }
 
+function schemaWithAuthenticatedScopedClearCompletedCommand(sourceSchema: AppSchema): AppSchema {
+  const schema = cloneSchema(sourceSchema);
+  const taskEntity = requireEntity(schema, "task");
+  const operation = taskEntity.operations?.clearCompletedTasks;
+
+  if (!operation || operation.effect?.type !== "operationHandler") {
+    throw new Error("Expected clearCompletedTasks operation.");
+  }
+
+  schema.entities.task = {
+    ...taskEntity,
+    operations: {
+      ...taskEntity.operations,
+      clearCompletedTasks: {
+        ...operation,
+        policy: {
+          actors: ["authenticated"],
+          responseFields: {
+            authenticated: ["title"],
+          },
+        },
+      },
+    },
+  };
+
+  return schema;
+}
+
+function authenticatedOperationActor(): OperationInvocationEnvelope["actor"] {
+  return {
+    kind: "authenticated",
+    principalId: "principal-ada",
+    sessionTarget: {
+      appInstallId: "tasks",
+      instanceId: "instance-1",
+      routeId: "route-tasks",
+      storageIdentity: "app:tasks",
+      targetOrigin: "https://tasks.example.com",
+      targetProfile: "app",
+    },
+  };
+}
+
 function schemaWithTransitionCommandOperation(sourceSchema: AppSchema): AppSchema {
   const schema = cloneSchema(sourceSchema);
   const taskEntity = requireEntity(schema, "task");
@@ -2204,6 +2322,7 @@ async function writeAuthorityOperationHarness() {
 
           try {
             const result = executeAuthorityOperation({
+              actor: input.actor,
               actorKind: input.actorKind,
               app,
               body: input.body,

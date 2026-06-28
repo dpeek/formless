@@ -370,6 +370,37 @@ describe("schema entity operations", () => {
     });
   });
 
+  it("parses authenticated operation actor policy and response field filters", () => {
+    const schema = parseAppSchema(
+      schemaWithTaskOperations({
+        clearCompletedTasks: {
+          label: "Clear completed",
+          kind: "command",
+          scope: "collection",
+          target: { query: "taskCompleted" },
+          effect: {
+            type: "operationHandler",
+            handler: "clear-completed",
+            config: { query: "taskCompleted" },
+          },
+          policy: {
+            actors: ["authenticated"],
+            responseFields: {
+              authenticated: ["title"],
+            },
+          },
+        },
+      }),
+    );
+
+    expect(schema.entities.task?.operations?.clearCompletedTasks.policy).toEqual({
+      actors: ["authenticated"],
+      responseFields: {
+        authenticated: ["title"],
+      },
+    });
+  });
+
   it("keeps browser-hidden collection operation bindings parseable for client selection", () => {
     const schema = parseAppSchema(
       baseTaskSchema({
@@ -461,6 +492,7 @@ describe("schema entity operations", () => {
             },
             label: { kind: "input", field: "note" },
             actorMode: { kind: "actor", field: "mode" },
+            actorPrincipalId: { kind: "actor", field: "principalId" },
             sourcePath: { kind: "source", field: "path" },
             occurredAt: { kind: "generatedTimestamp" },
           },
@@ -633,7 +665,7 @@ describe("schema entity operations", () => {
             }),
           }),
         },
-        message: "field must be mode",
+        message: "field must be mode or principalId",
       },
       {
         operations: {
@@ -877,6 +909,7 @@ function createLogStep() {
       },
       label: { kind: "input", field: "note" },
       actorMode: { kind: "actor", field: "mode" },
+      actorPrincipalId: { kind: "actor", field: "principalId" },
       sourcePath: { kind: "source", field: "path" },
       occurredAt: { kind: "generatedTimestamp" },
     },
@@ -908,6 +941,7 @@ function taskLogEntity() {
       },
       label: { type: "text", required: true, label: "Label" },
       actorMode: { type: "text", required: true, label: "Actor mode" },
+      actorPrincipalId: { type: "text", required: false, label: "Actor principal" },
       sourcePath: { type: "text", required: false, label: "Source path" },
       occurredAt: { type: "date", required: true, label: "Occurred at" },
     },

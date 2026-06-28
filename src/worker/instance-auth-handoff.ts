@@ -1,5 +1,6 @@
 import {
   INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
+  instanceControlPlaneAppInstallsFromRecords,
   instanceControlPlaneProductionIdentityFromRecords,
 } from "@dpeek/formless-instance-control-plane";
 
@@ -10,7 +11,6 @@ import {
   parseInstanceAuthCanonicalOrigin,
   parseOwnerLoginRedirectTarget,
 } from "../shared/instance-auth.ts";
-import type { InstanceRuntimeRouteResolution } from "./instance-runtime-routes.ts";
 import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
 import {
   consumeHandoffGrant,
@@ -22,12 +22,27 @@ import {
   type StoredHandoffGrant,
 } from "./instance-auth-state.ts";
 import { readControlPlaneRecords } from "./deployment-control-plane-client.ts";
-import { readInternalIdentityOwnerForPrincipal } from "./identity-owner-internal.ts";
+import {
+  readInternalActiveIdentityPrincipal,
+  readInternalIdentityOwnerForPrincipal,
+} from "./identity-owner-internal.ts";
 import {
   ownerSessionSigningSecret,
   validateOwnerSessionAuthority,
+  validateOwnerSessionPrincipal,
+  type OwnerSession,
   type OwnerSessionEnv,
 } from "./owner-session.ts";
+import {
+  resolveInstanceRuntimeRouteFromRecords,
+  type InstanceRuntimeMountRouteResolution,
+  type InstanceRuntimeRouteResolution,
+} from "./instance-runtime-routes.ts";
+import {
+  activeAppPackageResolver,
+  type ActiveRuntimeAppPackageEnv,
+} from "./runtime-app-packages.ts";
+import type { OperationInvocationActor } from "../shared/operation-invocation.ts";
 
 export const INSTANCE_AUTH_HANDOFF_START_PATH = "/_formless/auth/handoff";
 export const INSTANCE_AUTH_HANDOFF_CALLBACK_PATH = "/_formless/auth/callback";
@@ -54,7 +69,7 @@ export type InstanceAuthHandoffEnv = OwnerSessionEnv & {
   [FORMLESS_INSTANCE_AUTH_ORIGIN_ENV_NAME]?: string;
   FORMLESS_AUTHORITY: DurableObjectNamespace;
   FORMLESS_RUNTIME_PROFILE?: string;
-};
+} & ActiveRuntimeAppPackageEnv;
 
 export type HostAuthSession = InstanceAuthSessionTargetBinding & {
   expiresAt: string;
@@ -70,6 +85,7 @@ export type HostAuthSessionValidationFailureReason =
   | "malformed-payload"
   | "missing-cookie"
   | "missing-owner-authority"
+  | "missing-principal"
   | "missing-secret"
   | "missing-target"
   | "revoked-session"
@@ -93,13 +109,32 @@ type HostAuthSessionPayload = HostAuthSession & {
   version: typeof hostSessionVersion;
 };
 
-export async function startOwnerRouteAuthHandoff(
+type ProtectedRouteAccess = "authenticated" | "owner";
+
+export type RouteAccessSessionValidationResult =
+  | {
+      ok: true;
+      ownerAuthorized: boolean;
+      principalId: string;
+      session: HostAuthSession | OwnerSession;
+      target?: InstanceAuthSessionTargetBinding;
+      via: "host-session" | "owner-session";
+    }
+  | {
+      ok: false;
+      reason:
+        | HostAuthSessionValidationFailureReason
+        | "missing-owner-authority"
+        | "missing-principal";
+    };
+
+export async function startProtectedRouteAuthHandoff(
   request: Request,
   env: InstanceAuthHandoffEnv,
   runtimeRoute: InstanceRuntimeRouteResolution | undefined,
 ): Promise<Response | undefined> {
   const target = hostAuthSessionTargetForRuntimeRoute(request, runtimeRoute, {
-    requireOwnerAccess: true,
+    minimumAccess: "authenticated",
   });
 
   if (!target) {
@@ -144,6 +179,14 @@ export async function startOwnerRouteAuthHandoff(
   return redirectResponse(location.toString(), 302, {
     "Set-Cookie": serializeHostAuthNonceCookie(target.targetOrigin, nonce),
   });
+}
+
+export async function startOwnerRouteAuthHandoff(
+  request: Request,
+  env: InstanceAuthHandoffEnv,
+  runtimeRoute: InstanceRuntimeRouteResolution | undefined,
+): Promise<Response | undefined> {
+  return startProtectedRouteAuthHandoff(request, env, runtimeRoute);
 }
 
 export async function handleInstanceAuthHandoffRequest(
@@ -212,10 +255,13 @@ export async function handleInstanceAuthHandoffDurableObjectRequest(
   }
 
   try {
-    const target = handoffStartTargetFromSearch(url);
-    const ownerSession = await validateOwnerSessionAuthority(request, env);
+    const target = await verifiedHandoffStartTargetFromSearch(request, env, url);
+    const session =
+      target.requiredAccess === "owner"
+        ? await validateOwnerSessionAuthority(request, env)
+        : await validateOwnerSessionPrincipal(request, env);
 
-    if (!ownerSession.ok) {
+    if (!session.ok) {
       return redirectResponse(
         ownerLoginRedirectLocationForRoute(`${url.pathname}${url.search}`),
         302,
@@ -223,8 +269,8 @@ export async function handleInstanceAuthHandoffDurableObjectRequest(
     }
 
     return await issueHandoffGrantRedirect(storage, target, {
-      instanceId: ownerSession.session.instanceId,
-      principalId: ownerSession.session.principalId,
+      instanceId: session.session.instanceId,
+      principalId: session.session.principalId,
     });
   } catch (error) {
     return jsonResponse({ error: errorMessage(error) }, 400);
@@ -254,12 +300,13 @@ export async function configuredInstanceAuthOrigin(
 export function hostAuthSessionTargetForRuntimeRoute(
   request: Request,
   runtimeRoute: InstanceRuntimeRouteResolution | undefined,
-  options: { requireOwnerAccess?: boolean } = {},
+  options: { minimumAccess?: ProtectedRouteAccess } = {},
 ): InstanceAuthSessionTargetBinding | undefined {
   if (
     runtimeRoute?.kind !== "mount" ||
     runtimeRoute.matchHost === undefined ||
-    (options.requireOwnerAccess === true && runtimeRoute.access !== "owner")
+    (options.minimumAccess !== undefined &&
+      !runtimeRouteAccessSatisfies(runtimeRoute.access, options.minimumAccess))
   ) {
     return undefined;
   }
@@ -326,16 +373,18 @@ export async function validateHostAuthSessionAuthority(
   env: InstanceAuthHandoffEnv,
   options: {
     now?: string;
+    requiredAccess?: ProtectedRouteAccess;
     runtimeRoute?: InstanceRuntimeRouteResolution | undefined;
     target?: InstanceAuthSessionTargetBinding | undefined;
   } = {},
 ): Promise<HostAuthSessionAuthorityValidationResult> {
+  const requiredAccess = options.requiredAccess ?? "owner";
   const target =
     options.target ??
     (options.runtimeRoute === undefined
       ? undefined
       : hostAuthSessionTargetForRuntimeRoute(request, options.runtimeRoute, {
-          requireOwnerAccess: true,
+          minimumAccess: requiredAccess,
         }));
 
   if (!target) {
@@ -354,7 +403,7 @@ export async function validateHostAuthSessionAuthority(
   const id = env.FORMLESS_AUTHORITY.idFromName(FORMLESS_INSTANCE_AUTHORITY_NAME);
   const response = await env.FORMLESS_AUTHORITY.get(id).fetch(
     new Request(new URL(instanceAuthHostSessionValidatePath, request.url), {
-      body: JSON.stringify({ session: validated.session }),
+      body: JSON.stringify({ requiredAccess, session: validated.session }),
       headers: { "Content-Type": "application/json" },
       method: "POST",
     }),
@@ -372,6 +421,96 @@ export async function validateHostAuthSessionAuthority(
   }
 
   return validated;
+}
+
+export async function validateRouteAccessSession(
+  request: Request,
+  env: InstanceAuthHandoffEnv,
+  options: {
+    now?: string;
+    requiredAccess: ProtectedRouteAccess;
+    runtimeRoute?: InstanceRuntimeRouteResolution | undefined;
+    target?: InstanceAuthSessionTargetBinding | undefined;
+  },
+): Promise<RouteAccessSessionValidationResult> {
+  const target =
+    options.target ??
+    (options.runtimeRoute === undefined
+      ? undefined
+      : hostAuthSessionTargetForRuntimeRoute(request, options.runtimeRoute, {
+          minimumAccess: options.requiredAccess,
+        }));
+  const ownerSession =
+    options.requiredAccess === "owner"
+      ? await validateOwnerSessionAuthority(request, env, { now: options.now })
+      : await validateOwnerSessionPrincipal(request, env, { now: options.now });
+
+  if (ownerSession.ok) {
+    return {
+      ok: true,
+      ownerAuthorized: options.requiredAccess === "owner",
+      principalId: ownerSession.session.principalId,
+      session: ownerSession.session,
+      ...(target === undefined ? {} : { target }),
+      via: "owner-session",
+    };
+  }
+
+  const hostSession =
+    target === undefined
+      ? undefined
+      : await validateHostAuthSessionAuthority(request, env, {
+          now: options.now,
+          requiredAccess: options.requiredAccess,
+          target,
+        });
+
+  if (hostSession?.ok) {
+    return {
+      ok: true,
+      ownerAuthorized: options.requiredAccess === "owner",
+      principalId: hostSession.session.principalId,
+      session: hostSession.session,
+      target,
+      via: "host-session",
+    };
+  }
+
+  return {
+    ok: false,
+    reason:
+      hostSession?.reason ??
+      (ownerSession.reason === "missing-owner-authority"
+        ? "missing-owner-authority"
+        : "missing-principal"),
+  };
+}
+
+export function authenticatedOperationActorForSession(session: {
+  principalId: string;
+  session: Pick<HostAuthSession | OwnerSession, "instanceId">;
+  target?: InstanceAuthSessionTargetBinding;
+}): OperationInvocationActor | undefined {
+  if (session.target === undefined) {
+    return undefined;
+  }
+
+  return {
+    kind: "authenticated",
+    principalId: session.principalId,
+    sessionTarget: {
+      instanceId: session.session.instanceId,
+      routeId: session.target.routeId,
+      targetOrigin: session.target.targetOrigin,
+      targetProfile: session.target.targetProfile,
+      ...(session.target.appInstallId === undefined
+        ? {}
+        : { appInstallId: session.target.appInstallId }),
+      ...(session.target.storageIdentity === undefined
+        ? {}
+        : { storageIdentity: session.target.storageIdentity }),
+    },
+  };
 }
 
 async function handleHandoffCallbackDurableObjectRequest(
@@ -431,17 +570,27 @@ async function handleHostAuthSessionValidationDurableObjectRequest(
   }
 
   try {
-    const body = (await request.json()) as { session?: unknown };
+    const body = (await request.json()) as { requiredAccess?: unknown; session?: unknown };
+    const requiredAccess = parseProtectedRouteAccess(body.requiredAccess) ?? "owner";
     const session = parseHostAuthSession(body.session);
 
     if (!session) {
       return jsonResponse({ authorized: false, reason: "malformed-payload" }, 400);
     }
 
-    const owner = await readInternalIdentityOwnerForPrincipal(env, session.principalId);
+    const principal =
+      requiredAccess === "owner"
+        ? await readInternalIdentityOwnerForPrincipal(env, session.principalId)
+        : await readInternalActiveIdentityPrincipal(env, session.principalId);
 
-    if (!owner || owner.id !== session.principalId) {
-      return jsonResponse({ authorized: false, reason: "missing-owner-authority" }, 401);
+    if (!principal || principal.id !== session.principalId) {
+      return jsonResponse(
+        {
+          authorized: false,
+          reason: requiredAccess === "owner" ? "missing-owner-authority" : "missing-principal",
+        },
+        401,
+      );
     }
 
     const currentVersion = readHostSessionRevocationVersion(storage, session);
@@ -561,6 +710,62 @@ function handoffStartTargetFromSearch(
     targetOrigin: parseInstanceAuthCanonicalOrigin(requiredSearchParam(url, "targetOrigin")),
     targetProfile: handoffTargetProfileSearchParam(url),
   };
+}
+
+async function verifiedHandoffStartTargetFromSearch(
+  request: Request,
+  env: InstanceAuthHandoffEnv,
+  url: URL,
+): Promise<
+  Omit<CreateHandoffGrantInput, "expiresAt" | "grantSecretHash" | "instanceId" | "principalId"> & {
+    requiredAccess: ProtectedRouteAccess;
+  }
+> {
+  const target = handoffStartTargetFromSearch(url);
+  const route = await runtimeRouteForHandoffTarget(request, env, target);
+
+  if (!route || route.access === "anonymous") {
+    throw new Error("Handoff target route is not protected.");
+  }
+
+  const targetUrl = new URL(target.returnTo, target.targetOrigin);
+  const routeTarget = hostAuthSessionTargetForRuntimeRoute(
+    new Request(targetUrl.toString()),
+    route,
+    { minimumAccess: "authenticated" },
+  );
+
+  if (!routeTarget || !hostAuthSessionTargetBindingsEqual(routeTarget, target)) {
+    throw new Error("Handoff target route does not match.");
+  }
+
+  return {
+    ...target,
+    requiredAccess: route.access,
+  };
+}
+
+async function runtimeRouteForHandoffTarget(
+  request: Request,
+  env: InstanceAuthHandoffEnv,
+  target: InstanceAuthSessionTargetBinding & { returnTo: string },
+): Promise<InstanceRuntimeMountRouteResolution | undefined> {
+  const records = (await readControlPlaneRecords({ env, requestUrl: request.url })) ?? [];
+  const packageResolver = activeAppPackageResolver(env);
+  const targetUrl = new URL(target.returnTo, target.targetOrigin);
+  const route = resolveInstanceRuntimeRouteFromRecords({
+    appInstalls: instanceControlPlaneAppInstallsFromRecords(records, packageResolver),
+    records,
+    request: {
+      host: targetUrl.hostname,
+      pathname: targetUrl.pathname,
+      search: targetUrl.search,
+    },
+    options: { includeHostless: false },
+    packageResolver,
+  });
+
+  return route?.kind === "mount" && route.id === target.routeId ? route : undefined;
 }
 
 async function issueHandoffGrantRedirect(
@@ -825,6 +1030,28 @@ function hostAuthSessionTargetBindingsEqual(
     left.appInstallId === right.appInstallId &&
     left.storageIdentity === right.storageIdentity
   );
+}
+
+function runtimeRouteAccessSatisfies(
+  actual: ProtectedRouteAccess | "anonymous",
+  required: ProtectedRouteAccess,
+): boolean {
+  return runtimeRouteAccessRank(actual) >= runtimeRouteAccessRank(required);
+}
+
+function runtimeRouteAccessRank(access: ProtectedRouteAccess | "anonymous"): number {
+  switch (access) {
+    case "anonymous":
+      return 0;
+    case "authenticated":
+      return 1;
+    case "owner":
+      return 2;
+  }
+}
+
+function parseProtectedRouteAccess(value: unknown): ProtectedRouteAccess | undefined {
+  return value === "authenticated" || value === "owner" ? value : undefined;
 }
 
 function requestOriginForAuth(request: Request): string {

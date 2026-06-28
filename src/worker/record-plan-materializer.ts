@@ -319,7 +319,7 @@ function evaluateRecordPlanValueExpression(
   }
 
   if (expression.kind === "actor") {
-    return { kind: "set", value: state.envelope.actor.kind };
+    return evaluateRecordPlanActorExpression(expression.field, state.envelope);
   }
 
   if (expression.kind === "source") {
@@ -335,6 +335,18 @@ function evaluateRecordPlanValueExpression(
   return Object.hasOwn(stepRecord.values, expression.field)
     ? { kind: "set", value: stepRecord.values[expression.field] }
     : { kind: "omit" };
+}
+
+function evaluateRecordPlanActorExpression(
+  field: "mode" | "principalId",
+  envelope: OperationInvocationEnvelope,
+): { kind: "omit" } | { kind: "set"; value: FieldValue } {
+  if (field === "mode") {
+    return { kind: "set", value: envelope.actor.kind };
+  }
+
+  const principalId = envelope.actor.principalId;
+  return principalId === undefined ? { kind: "omit" } : { kind: "set", value: principalId };
 }
 
 function evaluateRecordPlanSourceExpression(

@@ -10,7 +10,7 @@ export const runtimeProfileKinds = [
 
 export type RuntimeProfileKind = (typeof runtimeProfileKinds)[number];
 
-export const runtimeRouteAccessKinds = ["anonymous", "owner"] as const;
+export const runtimeRouteAccessKinds = ["anonymous", "authenticated", "owner"] as const;
 
 export type RuntimeRouteAccess = (typeof runtimeRouteAccessKinds)[number];
 
@@ -117,6 +117,7 @@ export function parseRuntimeProfileKind(value: string | undefined): RuntimeProfi
 export function parseRuntimeRouteAccess(value: string | undefined): RuntimeRouteAccess | undefined {
   switch (value) {
     case "anonymous":
+    case "authenticated":
     case "owner":
       return value;
     default:
@@ -132,7 +133,7 @@ export function stricterRuntimeRouteAccess(
   left: RuntimeRouteAccess,
   right: RuntimeRouteAccess,
 ): RuntimeRouteAccess {
-  return left === "owner" || right === "owner" ? "owner" : "anonymous";
+  return runtimeRouteAccessRank(left) >= runtimeRouteAccessRank(right) ? left : right;
 }
 
 export function effectiveRuntimeRouteAccess(input: {
@@ -143,6 +144,17 @@ export function effectiveRuntimeRouteAccess(input: {
     input.routeAccess ?? "anonymous",
     input.screenAccess ?? "anonymous",
   );
+}
+
+function runtimeRouteAccessRank(access: RuntimeRouteAccess): number {
+  switch (access) {
+    case "anonymous":
+      return 0;
+    case "authenticated":
+      return 1;
+    case "owner":
+      return 2;
+  }
 }
 
 export function runtimeProfileKindFromHost(

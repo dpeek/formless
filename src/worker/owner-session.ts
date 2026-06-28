@@ -1,6 +1,9 @@
 import { nowIsoString } from "../shared/clock.ts";
 import type { OwnerIdentity } from "../shared/protocol.ts";
-import { readInternalIdentityOwnerForPrincipal } from "./identity-owner-internal.ts";
+import {
+  readInternalActiveIdentityPrincipal,
+  readInternalIdentityOwnerForPrincipal,
+} from "./identity-owner-internal.ts";
 
 export const OWNER_SESSION_COOKIE_NAME = "formless_owner_session";
 
@@ -66,6 +69,16 @@ export type OwnerSessionAuthorityValidationResult =
   | {
       ok: false;
       reason: OwnerSessionValidationFailureReason | "missing-owner-authority";
+    };
+
+export type OwnerSessionPrincipalValidationResult =
+  | {
+      ok: true;
+      session: OwnerSession;
+    }
+  | {
+      ok: false;
+      reason: OwnerSessionValidationFailureReason | "missing-principal";
     };
 
 type OwnerSessionPayload = OwnerSession & {
@@ -193,6 +206,26 @@ export async function validateOwnerSessionAuthority(
 
   if (!owner || owner.id !== validated.session.principalId) {
     return { ok: false, reason: "missing-owner-authority" };
+  }
+
+  return validated;
+}
+
+export async function validateOwnerSessionPrincipal(
+  request: Request,
+  env: OwnerSessionEnv,
+  options: { now?: string } = {},
+): Promise<OwnerSessionPrincipalValidationResult> {
+  const validated = await validateOwnerSessionCookie(request, env, options);
+
+  if (!validated.ok) {
+    return validated;
+  }
+
+  const principal = await readInternalActiveIdentityPrincipal(env, validated.session.principalId);
+
+  if (!principal || principal.id !== validated.session.principalId) {
+    return { ok: false, reason: "missing-principal" };
   }
 
   return validated;

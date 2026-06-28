@@ -39,7 +39,7 @@ export const INSTANCE_CONTROL_PLANE_BOUNDARY_SCHEMA_KEY = "instance";
 export const INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY = "instance:control-plane";
 export const INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX = "/api/formless/control-plane";
 export const INSTANCE_CONTROL_PLANE_SOURCE_SCHEMA_HASH =
-  "sha256:0a41d87d9928e5d3d04af086f1e1983679edae8d0d420c68338a96e5a3e23864" satisfies SourceSchemaHash;
+  "sha256:4d4ee67faffb2f9395ed76da2828302729fafb60e0e371b0cf48102412b19a2c" satisfies SourceSchemaHash;
 export const INSTANCE_CONTROL_PLANE_INSTANCE_SETTINGS_ID = "instance";
 export const instanceControlPlaneSchemaProvenance = {
   kind: "instance-control-plane",
@@ -331,6 +331,7 @@ export const instanceControlPlaneSourceSchema = {
         }),
         access: optionalEnumField("Access", {
           anonymous: "Anonymous",
+          authenticated: "Authenticated",
           owner: "Owner",
         }),
         deploymentConfig: optionalReferenceField("Deployment config", "deployment-config", "label"),

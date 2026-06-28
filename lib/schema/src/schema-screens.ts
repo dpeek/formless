@@ -91,8 +91,10 @@ function parseScreenAccess(screenName: string, value: unknown): ScreenAccessSche
     return undefined;
   }
 
-  if (value !== "anonymous" && value !== "owner") {
-    throw new Error(`Screen "${screenName}" access must be "anonymous" or "owner".`);
+  if (value !== "anonymous" && value !== "authenticated" && value !== "owner") {
+    throw new Error(
+      `Screen "${screenName}" access must be "anonymous", "authenticated", or "owner".`,
+    );
   }
 
   return value;

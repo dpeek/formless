@@ -703,7 +703,7 @@ export type ScreenNavigationSchema = {
   primary: boolean;
 };
 
-export type ScreenAccessSchema = "anonymous" | "owner";
+export type ScreenAccessSchema = "anonymous" | "authenticated" | "owner";
 
 export type CollectionScreenSectionSchema = {
   id: string;
@@ -818,7 +818,7 @@ export type EntityOperationKind = "list" | "get" | "create" | "update" | "delete
 
 export type EntityOperationScope = "collection" | "record";
 
-export type EntityOperationActorKind = SchemaOperationActorKind | "anonymous";
+export type EntityOperationActorKind = SchemaOperationActorKind | "authenticated" | "anonymous";
 
 export type EntityOperationFieldInputSchema = {
   field: string;
@@ -992,7 +992,7 @@ export type OperationHandlerEntityOperationEffectSchema = {
 
 export type RecordPlanStepKind = "create" | "patch" | "delete" | "tombstone";
 
-export type RecordPlanActorContextField = "mode";
+export type RecordPlanActorContextField = "mode" | "principalId";
 
 export type RecordPlanSourceContextField = "protocol" | "route" | "host" | "path";
 

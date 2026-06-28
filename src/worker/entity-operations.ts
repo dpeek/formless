@@ -118,6 +118,38 @@ export function assertOperationInvocationAuthorized(envelope: OperationInvocatio
   if (actorKind === "anonymous" && policy?.access === undefined) {
     throw new BadRequestError(authorizationErrorMessage(envelope));
   }
+
+  if (actorKind === "authenticated") {
+    assertAuthenticatedOperationActor(envelope);
+  }
+}
+
+function assertAuthenticatedOperationActor(envelope: OperationInvocationEnvelope) {
+  const actor = envelope.actor;
+  const target = actor.sessionTarget;
+
+  if (
+    typeof actor.principalId !== "string" ||
+    actor.principalId.trim() === "" ||
+    target === undefined ||
+    typeof target.instanceId !== "string" ||
+    target.instanceId.trim() === "" ||
+    typeof target.routeId !== "string" ||
+    target.routeId.trim() === "" ||
+    typeof target.targetOrigin !== "string" ||
+    target.targetOrigin.trim() === "" ||
+    typeof target.targetProfile !== "string" ||
+    target.targetProfile.trim() === "" ||
+    (target.appInstallId === undefined && target.storageIdentity === undefined) ||
+    (target.appInstallId !== undefined &&
+      (typeof target.appInstallId !== "string" || target.appInstallId.trim() === "")) ||
+    (target.storageIdentity !== undefined &&
+      (typeof target.storageIdentity !== "string" || target.storageIdentity.trim() === ""))
+  ) {
+    throw new BadRequestError(
+      `Operation "${envelope.operation.canonicalKey}" requires authenticated actor facts.`,
+    );
+  }
 }
 
 export function executeReadOperationInvocation(input: {

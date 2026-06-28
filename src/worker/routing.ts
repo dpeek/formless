@@ -252,6 +252,27 @@ export function shouldRedirectAnonymousOwnerBrowserRoute(
   input: WorkerRuntimeRouteInput = {},
   runtimeRoute?: InstanceRuntimeRouteResolution,
 ): boolean {
+  return (
+    protectedBrowserRouteCandidate(request, input) &&
+    ownerBrowserRouteAccessForRequest(request, input, runtimeRoute) === "owner"
+  );
+}
+
+export function shouldRedirectAnonymousProtectedBrowserRoute(
+  request: Request,
+  input: WorkerRuntimeRouteInput = {},
+  runtimeRoute?: InstanceRuntimeRouteResolution,
+): boolean {
+  return (
+    protectedBrowserRouteCandidate(request, input) &&
+    ownerBrowserRouteAccessForRequest(request, input, runtimeRoute) !== "anonymous"
+  );
+}
+
+function protectedBrowserRouteCandidate(
+  request: Request,
+  input: WorkerRuntimeRouteInput = {},
+): boolean {
   const topology = resolveWorkerRuntimeRequestTopology(request, input);
 
   if (
@@ -265,7 +286,7 @@ export function shouldRedirectAnonymousOwnerBrowserRoute(
     return false;
   }
 
-  return ownerBrowserRouteAccessForRequest(request, topology, runtimeRoute) === "owner";
+  return true;
 }
 
 export function ownerBrowserRouteAccessForRequest(

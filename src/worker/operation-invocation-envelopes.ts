@@ -19,6 +19,7 @@ import type {
   PublicOperationProof,
 } from "../shared/protocol.ts";
 import type {
+  OperationInvocationActor,
   OperationInvocationEnvelope,
   OperationInvocationIdempotency,
   OperationInvocationInput,
@@ -39,6 +40,7 @@ type EntityOperationRoute = {
 };
 
 type OperationInvocationBuildBase = {
+  actor?: OperationInvocationActor;
   actorKind?: SchemaOperationActorKind;
   identity: OperationStorageIdentity;
   receivedAt?: string;
@@ -86,25 +88,25 @@ export function buildProtocolOperationInvocationEnvelope(
   },
 ): OperationInvocationEnvelope {
   const { operation } = requireOperation(input.schema, input.route);
-  const actorKind = input.actorKind ?? "owner";
+  const actor = protocolOperationActor(input);
   const body = parseOptionalRecord("Operation request", input.body);
   assertOperationMethod(input.method, operation.kind);
 
   const invocationInput = operationInvocationInput(operation, body, input.route.recordId);
   assertOperationInputIsDeclared(operation, body);
   const source = operationRequestSource(body.source, {
-    protocol: sourceProtocolForActor(actorKind),
+    protocol: sourceProtocolForActor(actor.kind),
     route: input.path,
   });
   const canonicalKey = operationCanonicalKey(input.route);
-  const idempotency = operationIdempotency(operation, canonicalKey, actorKind, body);
+  const idempotency = operationIdempotency(operation, canonicalKey, actor.kind, body);
   const invocationId =
     idempotency.writeIdentity ??
     parseOptionalNonEmptyString("Operation request invocationId", body.invocationId) ??
     createOperationInvocationId();
 
   return operationInvocationEnvelope({
-    actorKind,
+    actor,
     identity: input.identity,
     idempotency,
     input: invocationInput,
@@ -135,7 +137,7 @@ export function buildVerifiedPublicOperationInvocationEnvelope(
 }
 
 function operationInvocationEnvelope(input: {
-  actorKind: EntityOperationActorKind;
+  actor: OperationInvocationActor;
   identity: OperationStorageIdentity;
   idempotency: OperationInvocationIdempotency;
   input: OperationInvocationInput;
@@ -152,7 +154,7 @@ function operationInvocationEnvelope(input: {
   return {
     invocationId: input.invocationId,
     appStorageIdentity: input.identity,
-    actor: { kind: input.actorKind },
+    actor: input.actor,
     source: input.source,
     input: input.input,
     idempotency: input.idempotency,
@@ -219,7 +221,7 @@ function publicOperationInvocationEnvelope(
   );
 
   return operationInvocationEnvelope({
-    actorKind: "anonymous",
+    actor: { kind: "anonymous" },
     identity: input.identity,
     idempotency: {
       required: operation.idempotency.required,
@@ -240,6 +242,18 @@ function publicOperationInvocationEnvelope(
       ...(input.source.siteBlockId === undefined ? {} : { siteBlockId: input.source.siteBlockId }),
     },
   });
+}
+
+function protocolOperationActor(input: OperationInvocationBuildBase): OperationInvocationActor {
+  if (
+    input.actor !== undefined &&
+    input.actorKind !== undefined &&
+    input.actor.kind !== input.actorKind
+  ) {
+    throw new BadRequestError("Operation actor facts must match actor kind.");
+  }
+
+  return input.actor ?? { kind: input.actorKind ?? "owner" };
 }
 
 function publicOperationInvocationInput(

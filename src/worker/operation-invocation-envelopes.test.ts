@@ -68,6 +68,55 @@ describe("operation invocation envelope construction", () => {
     });
   });
 
+  it("builds authenticated protocol envelopes with principal and target session facts", () => {
+    const envelope = buildProtocolOperationInvocationEnvelope({
+      actor: {
+        kind: "authenticated",
+        principalId: "principal-ada",
+        sessionTarget: authenticatedSessionTarget(),
+      },
+      body: {
+        idempotencyKey: "create-task-authenticated",
+        input: {
+          title: "Authenticated envelope task",
+          done: false,
+        },
+        source: {
+          protocol: "generated-ui",
+          host: "tasks.example.com",
+          path: "/tasks",
+        },
+      },
+      identity: schemaKeyStorageIdentity("tasks"),
+      method: "POST",
+      path: "/operations/task/create",
+      receivedAt: "2026-06-27T00:10:00.000Z",
+      route: {
+        entityName: "task",
+        operationName: "create",
+      },
+      schema: sourceLikeTaskSchema(),
+    });
+
+    expect(envelope).toMatchObject({
+      actor: {
+        kind: "authenticated",
+        principalId: "principal-ada",
+        sessionTarget: authenticatedSessionTarget(),
+      },
+      idempotency: {
+        key: "create-task-authenticated",
+        writeIdentity: "operation:task.create:create-task-authenticated",
+      },
+      source: {
+        protocol: "generated-ui",
+        route: "/operations/task/create",
+        host: "tasks.example.com",
+        path: "/tasks",
+      },
+    });
+  });
+
   it("uses trusted runtime write identity and protocol source defaults", () => {
     const schema = sourceLikeTaskSchema();
     const createOperation = schema.entities.task?.operations?.create;
@@ -419,6 +468,17 @@ function anonymousTurnstilePolicy() {
         kind: "same-origin" as const,
       },
     },
+  };
+}
+
+function authenticatedSessionTarget() {
+  return {
+    appInstallId: "tasks",
+    instanceId: "instance-1",
+    routeId: "route-tasks",
+    storageIdentity: "app:tasks",
+    targetOrigin: "https://tasks.example.com",
+    targetProfile: "app" as const,
   };
 }
 

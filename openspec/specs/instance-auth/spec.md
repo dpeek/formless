@@ -233,13 +233,14 @@ one-time grants.
 
 #### Scenario: One-time grant issuance
 
-- GIVEN a browser without a valid host-local session requests an owner-only
-  route on a host that is not the configured auth origin
+- GIVEN a browser without a valid host-local session requests an
+  authenticated or owner-only route on a host that is not the configured auth
+  origin
 - AND the target host starts auth handoff with a host-local nonce cookie,
   target origin, route id, target profile, target app install or storage
   identity, path-only redirect target, and state
 - WHEN the auth origin verifies or creates a central auth session for an active
-  principal with active `instance.owner` authority
+  principal that satisfies the target route access requirement
 - THEN the runtime stores a one-time grant bound to the instance, principal,
   target origin, route id, target profile, target app install or storage
   identity, redirect target, nonce, state, and expiry
@@ -278,14 +279,43 @@ one-time grants.
 #### Scenario: Host session authorization remains current
 
 - GIVEN a host-local session exists for a principal
-- WHEN a privileged write or owner/admin management read is authorized from that
-  session
-- THEN the runtime rechecks current principal status, active `instance.owner`
-  authority, and host session revocation or version facts
-- AND disabled principals, removed owner authority, changed role assignments,
-  or revoked session versions invalidate or narrow future authorization
+- WHEN an authenticated browser route, operation, privileged write, or
+  owner/admin management read is authorized from that session
+- THEN the runtime rechecks current principal status and host session
+  revocation or version facts
+- AND owner-only routes, privileged writes, and owner/admin management reads
+  also recheck active `instance.owner` authority
+- AND disabled principals, removed owner authority, changed role assignments, or
+  revoked session versions invalidate or narrow future authorization
 - AND host sessions are not accepted on a different host, route, app install,
   storage identity, target profile, or instance
+
+### Requirement: Principal-Backed Authenticated Authorization
+
+The system SHALL authorize authenticated browser access through an active
+principal with a valid instance or host-local browser session.
+
+#### Scenario: Session resolves to active authenticated principal
+
+- GIVEN a browser request includes a valid owner session or host-local session
+- WHEN the session principal is active
+- AND the session target matches the request host, route, target profile, and
+  target app install or storage identity
+- THEN authenticated browser routes and operations accept the request as
+  authenticated
+- AND the resulting operation invocation envelope includes actor kind
+  `authenticated`, the principal id, and the route or storage target facts used
+  for authorization
+
+#### Scenario: Session without active authenticated principal
+
+- GIVEN a browser request includes a valid owner session or host-local session
+- WHEN the session principal is missing, disabled, revoked, or scoped to a
+  different host, route, profile, app install, storage identity, or instance
+- THEN authenticated browser routes and operations reject the request as
+  unauthenticated
+- AND the runtime does not build an authenticated operation invocation envelope
+  from stale signed session facts
 
 ### Requirement: Principal-Backed Owner Authorization
 

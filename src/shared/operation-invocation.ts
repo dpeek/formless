@@ -17,6 +17,17 @@ import type { ChangeRow } from "./protocol.ts";
 
 export type OperationInvocationActor = {
   kind: EntityOperationActorKind;
+  principalId?: string;
+  sessionTarget?: OperationInvocationActorSessionTarget;
+};
+
+export type OperationInvocationActorSessionTarget = {
+  appInstallId?: string;
+  instanceId: string;
+  routeId: string;
+  storageIdentity?: string;
+  targetOrigin: string;
+  targetProfile: "instance" | "app" | "public-site";
 };
 
 export type OperationInvocationSourceProtocol =

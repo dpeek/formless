@@ -73,7 +73,8 @@ The system SHALL mount browser surfaces according to the active runtime profile.
 - WHEN a browser navigates to `/deployments`
 - THEN the client shell is eligible to render the instance deployment surface
 - AND the route is treated as an owner-only instance browser surface unless a
-  narrower route access policy explicitly allows anonymous access
+  less restrictive route access policy explicitly allows anonymous or
+  authenticated access
 - AND installed app routing, public Site routing, owner setup, and owner login
   routes remain separate route families
 
@@ -101,8 +102,31 @@ The system SHALL mount browser surfaces according to the active runtime profile.
 ### Requirement: Route Access Policy
 
 The system SHALL evaluate route access after runtime profile route eligibility
-and enabled route-record resolution, and before serving owner-only browser
-surfaces or owner-only management API data.
+and enabled route-record resolution, and before serving protected browser
+surfaces or protected management API data.
+
+#### Scenario: Anonymous authenticated browser route
+
+- GIVEN a runtime browser route has effective access `authenticated`
+- AND the request is a `GET` or `HEAD` request that accepts HTML
+- WHEN the request does not include a valid session for an active principal on
+  the matched host, route, target profile, and target app install or storage
+  identity
+- THEN the runtime redirects to the configured auth origin through the same
+  safe return-target rules used for protected browser routes
+- AND the authenticated browser shell, generated app surface, public Site
+  document, or app screen is not served before authentication completes
+
+#### Scenario: Authenticated browser route
+
+- GIVEN a runtime browser route has effective access `authenticated`
+- WHEN the request includes a valid owner session or host-local session for an
+  active principal on the matched host, route, target profile, and target app
+  install or storage identity
+- THEN the route remains eligible for the matching browser shell, generated app
+  surface, public Site document, or app screen
+- AND `authenticated` access does not by itself grant owner-only instance
+  management authority
 
 #### Scenario: Anonymous owner browser route
 
@@ -115,9 +139,10 @@ surfaces or owner-only management API data.
 - AND the owner-only browser shell, instance dashboard, generated app surface,
   or app screen is not served
 
-#### Scenario: Anonymous mapped owner browser route
+#### Scenario: Anonymous mapped protected browser route
 
-- GIVEN a mapped host runtime browser route has effective access `owner`
+- GIVEN a mapped host runtime browser route has effective access
+  `authenticated` or `owner`
 - AND the mapped host is not the configured auth origin
 - AND the request is a `GET` or `HEAD` request that accepts HTML
 - WHEN the request does not include a valid host-local session for the mapped
@@ -126,8 +151,8 @@ surfaces or owner-only management API data.
   redirect to the configured auth origin
 - AND the handoff records a host-local nonce and a safe path-only return target
   for the original path and query
-- AND the mapped host does not serve the owner-only browser shell, generated
-  app surface, public Site document, or app screen before the handoff completes
+- AND the mapped host does not serve the protected browser shell, generated app
+  surface, public Site document, or app screen before the handoff completes
 
 #### Scenario: Authenticated owner browser route
 
@@ -141,10 +166,20 @@ surfaces or owner-only management API data.
 
 - GIVEN a runtime browser route has effective access `anonymous`
 - WHEN the request is otherwise eligible for the active runtime profile
-- THEN the route can be served without a principal-backed owner session
+- THEN the route can be served without a principal-backed browser session
 - AND owner setup, owner login, installed Site public routes, published Site
   documents, public Site resources, static assets, and public actions remain
   available according to their existing route policies
+
+#### Scenario: Authenticated app API route
+
+- GIVEN a browser API route is protected by effective access `authenticated`
+- WHEN the request does not include a valid owner session or host-local session
+  for an active principal on the matched host, route, target profile, and target
+  app install or storage identity
+- THEN the runtime returns an unauthorized JSON response
+- AND route access does not replace operation actor policy for generated app
+  reads, writes, or command execution
 
 #### Scenario: Owner management API route
 

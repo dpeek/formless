@@ -26,9 +26,18 @@ import {
 } from "./storage.ts";
 import { BadRequestError, ReloadRequiredError } from "./errors.ts";
 import type { Env } from "./index.ts";
-import { authorizeAuthorityOperation, authorizeInstanceWrite } from "./authority-admin-guard.ts";
+import {
+  authorizeAuthorityOperation,
+  authorizeInstanceWrite,
+  type AuthorityAdminGuardResult,
+} from "./authority-admin-guard.ts";
 import type { WorkerSchemaAppDefinition } from "./schema-apps.ts";
-import { executeAuthorityOperation, selectAuthorityOperation } from "./authority-operations.ts";
+import {
+  executeAuthorityOperation,
+  selectAuthorityOperation,
+  type AuthorityOperation,
+  type OperationInvocationActorCandidates,
+} from "./authority-operations.ts";
 import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
 import { handleInstanceAppInstallsDurableObjectRequest } from "./instance-app-installs.ts";
 import { handleInstanceControlPlaneDurableObjectRequest } from "./instance-control-plane.ts";
@@ -46,9 +55,12 @@ import { handleInstanceDeploymentRuntimeDurableObjectRequest } from "./deploymen
 import { handleInstanceEmailRuntimeDurableObjectRequest } from "./email-runtime.ts";
 import { ensureRuntimeInstanceAuthConfig } from "./instance-auth-runtime.ts";
 import {
+  authenticatedOperationActorForSession,
   handleInstanceAuthHandoffDurableObjectRequest,
   hostAuthSessionTargetFromRequestHeaders,
+  validateHostAuthSessionAuthority,
 } from "./instance-auth-handoff.ts";
+import { validateOwnerSessionAuthority, validateOwnerSessionPrincipal } from "./owner-session.ts";
 import { handleLocalSessionBootstrapDurableObjectRequest } from "./local-session-bootstrap.ts";
 import {
   executePublicOperationRequest,
@@ -340,9 +352,20 @@ export class FormlessAuthority extends DurableObject<Env> {
       }
 
       if (operation) {
-        const authorization = await authorizeAuthorityOperation(request, operation, this.bindings, {
-          hostSessionTarget: hostAuthSessionTargetForAuthorityRoute(request, route.identity),
-        });
+        const hostSessionTarget = hostAuthSessionTargetForAuthorityRoute(request, route.identity);
+        const actorCandidates =
+          operation.kind === "entityOperation"
+            ? await operationActorCandidatesForRequest(request, this.bindings, hostSessionTarget)
+            : undefined;
+        const authorization =
+          operation.kind === "entityOperation"
+            ? await authorizeEntityOperationRequest(request, operation, this.bindings, {
+                actorCandidates,
+                hostSessionTarget,
+              })
+            : await authorizeAuthorityOperation(request, operation, this.bindings, {
+                hostSessionTarget,
+              });
 
         if (!authorization.authorized) {
           return jsonResponse(
@@ -359,6 +382,7 @@ export class FormlessAuthority extends DurableObject<Env> {
           body,
           identity: route.identity,
           operation,
+          actorCandidates,
           packageResolver: activeAppPackageResolver(this.bindings),
           requestHeaders: request.headers,
           source,
@@ -453,6 +477,110 @@ function hostAuthSessionTargetForAuthorityRoute(request: Request, identity: AppS
   }
 
   return target;
+}
+
+async function authorizeEntityOperationRequest(
+  request: Request,
+  operation: AuthorityOperation,
+  env: Env,
+  options: {
+    actorCandidates?: OperationInvocationActorCandidates;
+    hostSessionTarget?: ReturnType<typeof hostAuthSessionTargetFromRequestHeaders>;
+  },
+): Promise<AuthorityAdminGuardResult> {
+  if (operation.metadata.mode === "read") {
+    return { authorized: true };
+  }
+
+  if (options.actorCandidates?.authenticated || options.actorCandidates?.owner) {
+    return { authorized: true };
+  }
+
+  return authorizeAuthorityOperation(request, operation, env, {
+    hostSessionTarget: options.hostSessionTarget,
+  });
+}
+
+async function operationActorCandidatesForRequest(
+  request: Request,
+  env: Env,
+  target: ReturnType<typeof hostAuthSessionTargetFromRequestHeaders>,
+): Promise<OperationInvocationActorCandidates> {
+  const candidates: OperationInvocationActorCandidates = {};
+  const ownerSession = await validateOwnerSessionAuthority(request, env);
+
+  if (ownerSession.ok) {
+    candidates.owner = { kind: "owner" };
+
+    const actor = authenticatedOperationActorForSession({
+      principalId: ownerSession.session.principalId,
+      session: ownerSession.session,
+      target,
+    });
+
+    if (actor) {
+      candidates.authenticated = actor;
+    }
+
+    return candidates;
+  }
+
+  const principalSession = await validateOwnerSessionPrincipal(request, env);
+
+  if (principalSession.ok) {
+    const actor = authenticatedOperationActorForSession({
+      principalId: principalSession.session.principalId,
+      session: principalSession.session,
+      target,
+    });
+
+    if (actor) {
+      candidates.authenticated = actor;
+    }
+  }
+
+  if (target === undefined) {
+    return candidates;
+  }
+
+  const hostOwnerSession = await validateHostAuthSessionAuthority(request, env, {
+    requiredAccess: "owner",
+    target,
+  });
+
+  if (hostOwnerSession.ok) {
+    candidates.owner = { kind: "owner" };
+    const actor = authenticatedOperationActorForSession({
+      principalId: hostOwnerSession.session.principalId,
+      session: hostOwnerSession.session,
+      target,
+    });
+
+    if (actor) {
+      candidates.authenticated = actor;
+    }
+
+    return candidates;
+  }
+
+  const hostPrincipalSession = await validateHostAuthSessionAuthority(request, env, {
+    requiredAccess: "authenticated",
+    target,
+  });
+
+  if (hostPrincipalSession.ok) {
+    const actor = authenticatedOperationActorForSession({
+      principalId: hostPrincipalSession.session.principalId,
+      session: hostPrincipalSession.session,
+      target,
+    });
+
+    if (actor) {
+      candidates.authenticated = actor;
+    }
+  }
+
+  return candidates;
 }
 
 class AuthorityWriteModule {

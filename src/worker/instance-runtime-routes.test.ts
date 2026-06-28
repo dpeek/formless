@@ -269,6 +269,17 @@ describe("instance runtime route resolution", () => {
         createdAt: "2026-06-02T00:00:00.000Z",
         updatedAt: "2026-06-02T00:00:00.000Z",
       }),
+      routeRecord("route:tasks:members", {
+        access: "authenticated",
+        enabled: true,
+        matchPath: "/apps/tasks/members",
+        kind: "mount",
+        targetProfile: "app",
+        appInstall: "tasks",
+        surface: "admin",
+        createdAt: "2026-06-02T00:00:00.000Z",
+        updatedAt: "2026-06-02T00:00:00.000Z",
+      }),
       routeRecord("route:site:public-site", {
         access: "anonymous",
         enabled: true,
@@ -331,6 +342,20 @@ describe("instance runtime route resolution", () => {
       surface: "public-site",
       target: { installId: "site", kind: "appInstall", packageAppKey: "site" },
       targetProfile: "public-site",
+    });
+    expect(
+      resolveInstanceRuntimeRouteFromRecords({
+        appInstalls,
+        records,
+        request: { host: "formless.local", pathname: "/apps/tasks/members" },
+      }),
+    ).toMatchObject({
+      access: "authenticated",
+      id: "route:tasks:members",
+      kind: "mount",
+      surface: "admin",
+      target: { installId: "tasks", kind: "appInstall", packageAppKey: "tasks" },
+      targetProfile: "app",
     });
     expect(
       resolveInstanceRuntimeRouteFromRecords({

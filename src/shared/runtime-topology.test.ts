@@ -36,17 +36,30 @@ describe("runtime topology", () => {
 
   it("parses route access and resolves stricter effective access", () => {
     expect(parseRuntimeRouteAccess("anonymous")).toBe("anonymous");
+    expect(parseRuntimeRouteAccess("authenticated")).toBe("authenticated");
     expect(parseRuntimeRouteAccess("owner")).toBe("owner");
     expect(parseRuntimeRouteAccess("")).toBeUndefined();
     expect(parseRuntimeRouteAccess("admin")).toBeUndefined();
     expect(isRuntimeRouteAccess("anonymous")).toBe(true);
+    expect(isRuntimeRouteAccess("authenticated")).toBe(true);
     expect(isRuntimeRouteAccess("owner")).toBe(true);
     expect(isRuntimeRouteAccess("admin")).toBe(false);
     expect(stricterRuntimeRouteAccess("anonymous", "anonymous")).toBe("anonymous");
+    expect(stricterRuntimeRouteAccess("anonymous", "authenticated")).toBe("authenticated");
+    expect(stricterRuntimeRouteAccess("authenticated", "anonymous")).toBe("authenticated");
+    expect(stricterRuntimeRouteAccess("authenticated", "owner")).toBe("owner");
+    expect(stricterRuntimeRouteAccess("owner", "authenticated")).toBe("owner");
     expect(stricterRuntimeRouteAccess("anonymous", "owner")).toBe("owner");
     expect(stricterRuntimeRouteAccess("owner", "anonymous")).toBe("owner");
     expect(effectiveRuntimeRouteAccess({ routeAccess: "anonymous" })).toBe("anonymous");
+    expect(effectiveRuntimeRouteAccess({ routeAccess: "authenticated" })).toBe("authenticated");
     expect(effectiveRuntimeRouteAccess({ routeAccess: "owner" })).toBe("owner");
+    expect(
+      effectiveRuntimeRouteAccess({ routeAccess: "authenticated", screenAccess: "anonymous" }),
+    ).toBe("authenticated");
+    expect(
+      effectiveRuntimeRouteAccess({ routeAccess: "authenticated", screenAccess: "owner" }),
+    ).toBe("owner");
     expect(effectiveRuntimeRouteAccess({ routeAccess: "anonymous", screenAccess: "owner" })).toBe(
       "owner",
     );

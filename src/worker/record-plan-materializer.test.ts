@@ -211,6 +211,55 @@ describe("record plan materializer", () => {
     });
   });
 
+  it("materializes authenticated principal id from actor context", async () => {
+    const schema = materializerSchema([
+      {
+        name: "createTask",
+        kind: "create",
+        entity: "task",
+        values: {
+          title: { kind: "input", field: "title" },
+          done: { kind: "literal", value: false },
+          actorMode: { kind: "actor", field: "mode" },
+          actorPrincipalId: { kind: "actor", field: "principalId" },
+        },
+      },
+    ]);
+    const operation = submitPlanOperation(schema);
+    const operationId = "operation:task.submitPlan:materializer-authenticated";
+    const inputValues = {
+      existingTaskId: "task-existing",
+      note: "Authenticated",
+      title: "Authenticated task",
+    };
+    const response = await postMaterialize({
+      effect: requireRecordPlanEffect(operation),
+      envelope: operationEnvelope(operation, {
+        actor: {
+          kind: "authenticated",
+          principalId: "principal-ada",
+          sessionTarget: authenticatedSessionTarget(),
+        },
+        input: inputValues,
+        operationId,
+        receivedAt: "2026-06-25T12:40:56.000Z",
+      }),
+      inputValues,
+      operationId,
+      schema,
+    });
+
+    expect(response.planSummaries[0]).toMatchObject({
+      kind: "create",
+      entity: "task",
+      values: {
+        actorMode: "authenticated",
+        actorPrincipalId: "principal-ada",
+        title: "Authenticated task",
+      },
+    });
+  });
+
   it("rejects missing target records before committing materialized plans", async () => {
     const schema = materializerSchema([
       {
@@ -281,6 +330,7 @@ function materializerSchema(
           generatedCode: { type: "text", required: false, label: "Generated code" },
           submittedAt: { type: "text", required: false, label: "Submitted at" },
           actorMode: { type: "text", required: false, label: "Actor mode" },
+          actorPrincipalId: { type: "text", required: false, label: "Actor principal" },
           sourceProtocol: { type: "text", required: false, label: "Source protocol" },
           sourceHost: { type: "text", required: false, label: "Source host" },
           sourcePath: { type: "text", required: false, label: "Source path" },
@@ -459,6 +509,7 @@ function requireRecordPlanEffect(
 function operationEnvelope(
   operation: EntityOperationSchema,
   input: {
+    actor?: OperationInvocationEnvelope["actor"];
     input: Record<string, unknown>;
     operationId: string;
     receivedAt: string;
@@ -467,7 +518,7 @@ function operationEnvelope(
   return {
     invocationId: input.operationId,
     appStorageIdentity: schemaKeyStorageIdentity("tasks"),
-    actor: { kind: "owner" },
+    actor: input.actor ?? { kind: "owner" },
     source: {
       protocol: "generated-ui",
       route: "/api/tasks/operations/task/submitPlan",
@@ -496,6 +547,17 @@ function operationEnvelope(
     },
     receivedAt: input.receivedAt,
     schemaOperation: operation,
+  };
+}
+
+function authenticatedSessionTarget() {
+  return {
+    appInstallId: "tasks",
+    instanceId: "instance-1",
+    routeId: "route-tasks",
+    storageIdentity: "app:tasks",
+    targetOrigin: "https://tasks.example.com",
+    targetProfile: "app" as const,
   };
 }
 

@@ -350,10 +350,14 @@ records.
 
 - **GIVEN** an owner or admin creates a mount route
 - **WHEN** the route includes access policy
-- **THEN** `access` is either `anonymous` or `owner`
-- **AND** `anonymous` means the route can be read without an owner session
+- **THEN** `access` is `anonymous`, `authenticated`, or `owner`
+- **AND** `anonymous` means the route can be read without a principal-backed
+  browser session
+- **AND** `authenticated` means browser reads require a valid owner session or
+  host-local session for an active principal on the matched route target
 - **AND** `owner` means browser reads require an owner session or host-local
-  session for the matched owner route target
+  session for the matched owner route target whose principal has active
+  `instance.owner` authority
 - **AND** owner-protected management API reads and writes require an owner
   session, a host-local session for the matched owner route target, or admin
   bearer authorization

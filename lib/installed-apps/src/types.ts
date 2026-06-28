@@ -5,7 +5,7 @@ export type PackageAppKey = string;
 export type AppPackageKey = PackageAppKey;
 export type AppInstallId = string;
 export type AppInstallStatus = "installed";
-export type AppInstallRouteAccess = "anonymous" | "owner";
+export type AppInstallRouteAccess = "anonymous" | "authenticated" | "owner";
 export type AppInstallRouteKind = "admin" | "publicSite";
 
 export type AppInstallRoute = {

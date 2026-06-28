@@ -3,10 +3,11 @@ import { describe, expect, it } from "vite-plus/test";
 import { parseAppSchema } from "./index.ts";
 
 describe("schema screens", () => {
-  it("parses optional owner and anonymous screen access", () => {
+  it("parses optional owner, authenticated, and anonymous screen access", () => {
     const schema = parseAppSchema(screenAccessSchema());
 
     expect(schema.screens?.home.access).toBe("owner");
+    expect(schema.screens?.members.access).toBe("authenticated");
     expect(schema.screens?.public.access).toBe("anonymous");
     expect(schema.screens?.inherited.access).toBeUndefined();
   });
@@ -22,7 +23,7 @@ describe("schema screens", () => {
           },
         },
       }),
-    ).toThrow('Screen "home" access must be "anonymous" or "owner".');
+    ).toThrow('Screen "home" access must be "anonymous", "authenticated", or "owner".');
   });
 });
 
@@ -85,6 +86,16 @@ function screenAccessSchema() {
         layout: {
           type: "stack",
           sections: [{ id: "public-tasks", type: "collection", view: "taskList" }],
+        },
+      },
+      members: {
+        type: "workspace",
+        label: "Members",
+        access: "authenticated",
+        navigation: { primary: false },
+        layout: {
+          type: "stack",
+          sections: [{ id: "member-tasks", type: "collection", view: "taskList" }],
         },
       },
       inherited: {

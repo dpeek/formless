@@ -2,6 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 import type { EntitySchema } from "@dpeek/formless-schema";
 import { rateSourceSchema, taskSourceSchema } from "../test/schema-apps.ts";
 import {
+  selectAvailableEntityOperations,
   selectCommandOperationByHandlerCapability,
   selectCommandOperationsByHandlerCapability,
 } from "./operation-presentation-model.ts";
@@ -60,5 +61,47 @@ describe("operation presentation model", () => {
         "collection",
       ),
     ).toEqual([]);
+  });
+
+  it("includes authenticated browser operations and hides non-browser actors", () => {
+    const entity = {
+      ...taskSourceSchema.entities.task,
+      operations: {
+        authenticatedCommand: {
+          label: "Authenticated command",
+          kind: "command",
+          scope: "collection",
+          effect: {
+            type: "operationHandler",
+            handler: "clear-completed",
+            config: { query: "taskCompleted" },
+          },
+          output: { type: "command" },
+          idempotency: { required: true },
+          audit: { input: "summary" },
+          policy: { actors: ["authenticated"] },
+        },
+        runnerCommand: {
+          label: "Runner command",
+          kind: "command",
+          scope: "collection",
+          effect: {
+            type: "operationHandler",
+            handler: "clear-completed",
+            config: { query: "taskCompleted" },
+          },
+          output: { type: "command" },
+          idempotency: { required: true },
+          audit: { input: "summary" },
+          policy: { actors: ["runner"] },
+        },
+      },
+    } as unknown as EntitySchema;
+
+    expect(
+      selectAvailableEntityOperations("task", entity, "collection").map(
+        (operation) => operation.operationName,
+      ),
+    ).toEqual(["authenticatedCommand"]);
   });
 });

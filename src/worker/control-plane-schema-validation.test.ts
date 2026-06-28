@@ -168,6 +168,22 @@ describe("control-plane schema runtime validation", () => {
       targetProfile: "app",
     });
 
+    const authenticatedMount = await authority.postRecordOperationRequest({
+      idempotencyKey: "write-route-authenticated-access",
+      entity: "route",
+      operationName: "create",
+      input: mountRouteValues(siteInstall.record.id, {
+        access: "authenticated",
+        matchPath: "/apps/personal-members",
+      }),
+    });
+
+    expect(authenticatedMount.record.values).toMatchObject({
+      access: "authenticated",
+      kind: "mount",
+      matchPath: "/apps/personal-members",
+    });
+
     const redirect = await authority.postRecordOperationRequest({
       idempotencyKey: "write-route-redirect-to-url",
       entity: "route",

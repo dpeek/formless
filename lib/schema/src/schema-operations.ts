@@ -70,6 +70,7 @@ const entityOperationActorKinds = [
   "cliDeployer",
   "owner",
   "runner",
+  "authenticated",
   "anonymous",
 ] as const satisfies readonly EntityOperationActorKind[];
 
@@ -93,6 +94,7 @@ const recordPlanStepKinds = [
 
 const recordPlanActorContextFields = [
   "mode",
+  "principalId",
 ] as const satisfies readonly RecordPlanActorContextField[];
 
 const recordPlanSourceContextFields = [
@@ -204,6 +206,7 @@ export function isEntityOperationVisibleToBrowser(operation: EntityOperationSche
   return (
     operation.policy === undefined ||
     operation.policy.actors.includes("admin") ||
+    operation.policy.actors.includes("authenticated") ||
     operation.policy.actors.includes("owner") ||
     operation.policy.actors.includes("anonymous")
   );
@@ -1189,7 +1192,7 @@ function parseRecordPlanActorExpression(
   assertExactKeys(context, value, ["kind", "field"]);
 
   if (!recordPlanActorContextFields.includes(value.field as RecordPlanActorContextField)) {
-    throw new Error(`${context} field must be mode.`);
+    throw new Error(`${context} field must be mode or principalId.`);
   }
 
   return { kind: "actor", field: value.field as RecordPlanActorContextField };
@@ -1421,7 +1424,7 @@ function parseOperationActorKinds(context: string, value: unknown): EntityOperat
   const actors = value.map((actor, index) => {
     if (!isEntityOperationActorKind(actor)) {
       throw new Error(
-        `${context}[${index}] must be owner, admin, cliDeployer, runner, or anonymous.`,
+        `${context}[${index}] must be anonymous, authenticated, owner, admin, cliDeployer, or runner.`,
       );
     }
 
