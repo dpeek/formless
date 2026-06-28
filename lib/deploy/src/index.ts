@@ -778,7 +778,7 @@ function emailSenderProjectionRecordFromControlPlaneRecord(
   if (
     address === undefined ||
     emailDomain === undefined ||
-    (purpose !== "contact-notification" && purpose !== "system")
+    (purpose !== "auth" && purpose !== "contact-notification" && purpose !== "system")
   ) {
     return undefined;
   }

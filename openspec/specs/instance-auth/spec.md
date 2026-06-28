@@ -5,9 +5,10 @@
 Instance auth owns product instance passkey credentials, WebAuthn challenge
 ceremonies, canonical auth origin policy, principal-backed owner session
 issuance, central auth sessions, host-local sessions, cross-domain handoff
-grants, logout, and admin bearer recovery boundaries. Reviewable owner identity
-and owner authority are stored as identity control-plane principal,
-principal-email, and role-assignment records.
+grants, collaborator invitation token state, logout, and admin bearer recovery
+boundaries. Reviewable owner identity, owner authority, and pending invitation
+facts are stored as identity control-plane principal, principal-email,
+invitation, membership, app-registration, and role-assignment records.
 
 ## Requirements
 
@@ -135,6 +136,37 @@ instance-scoped.
 - WHEN the same challenge is submitted again
 - THEN verification is rejected
 - AND no credential, principal, role assignment, or session state is written
+
+### Requirement: Collaborator Invitation Token State
+
+The system SHALL store collaborator invitation token secrets as private
+instance auth state bound to reviewable identity invitation records.
+
+#### Scenario: Create invitation token
+
+- GIVEN an owner-authorized collaborator invitation request is accepted
+- WHEN the runtime creates the invite token
+- THEN private auth state stores only a token hash, invitation id, normalized
+  target email, target surface facts, created timestamp, expiry, and consumed or
+  revoked status
+- AND the token expiry matches the pending identity `invitation` record expiry
+- AND the raw invite token is only available to the delivery path that renders
+  the invitation link
+- AND the raw invite token and token hash are not stored in identity
+  control-plane records, email-delivery records, queue messages, workspace
+  state, archives, sync payloads, or reviewable snapshots
+- AND creating an invitation token does not issue a passkey credential, central
+  auth session, host-local session, or cross-domain handoff grant
+
+#### Scenario: Invitation link origin
+
+- GIVEN a collaborator invitation email is rendered
+- WHEN the runtime builds the invitation link
+- THEN the link uses the configured auth origin
+- AND the auth origin is selected by instance auth configuration rather than an
+  arbitrary mapped app or public Site request host
+- AND the link target does not expose owner setup, passkey ceremony internals,
+  central session ids, host session cookies, or app-controlled redirect targets
 
 ### Requirement: Passkey Login
 

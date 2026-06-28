@@ -41,7 +41,10 @@ import {
 import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
 import { handleInstanceAppInstallsDurableObjectRequest } from "./instance-app-installs.ts";
 import { handleInstanceControlPlaneDurableObjectRequest } from "./instance-control-plane.ts";
-import { handleIdentityControlPlaneDurableObjectRequest } from "./identity-control-plane.ts";
+import {
+  handleCollaboratorInvitationDeliveryDurableObjectRequest,
+  handleIdentityControlPlaneDurableObjectRequest,
+} from "./identity-control-plane.ts";
 import {
   LaunchFixtureConfigurationError,
   launchFixtureStorageSourceForAuthorityName,
@@ -187,6 +190,17 @@ export class FormlessAuthority extends DurableObject<Env> {
 
     if (instanceDeploymentRuntimeResponse) {
       return instanceDeploymentRuntimeResponse;
+    }
+
+    const collaboratorInvitationDeliveryResponse =
+      await handleCollaboratorInvitationDeliveryDurableObjectRequest(
+        request,
+        this.ctx.storage,
+        this.bindings,
+      );
+
+    if (collaboratorInvitationDeliveryResponse) {
+      return collaboratorInvitationDeliveryResponse;
     }
 
     const instanceEmailRuntimeResponse = await handleInstanceEmailRuntimeDurableObjectRequest(

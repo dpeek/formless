@@ -306,6 +306,10 @@ function validateIdentityControlPlaneRecord(
   if (entity === "app-registration") {
     validateAppRegistrationRecord(context, record);
   }
+
+  if (entity === "invitation") {
+    validateInvitationRecord(context, record);
+  }
 }
 
 function validateIdentityControlPlaneReference(
@@ -489,6 +493,22 @@ function validateAppRegistrationRecord(context: string, record: StoredRecord) {
     organization: "targetOrganization",
     principal: "targetPrincipal",
   });
+}
+
+function validateInvitationRecord(context: string, record: StoredRecord) {
+  const targetSurface = requiredStringValue(context, record, "targetSurface");
+
+  assertSelectedTargetField(context, record, "targetSurface", targetSurface, {
+    "app-install": "targetAppInstallId",
+    organization: "targetOrganization",
+  });
+
+  if (targetSurface === "instance") {
+    assertUnsetFields(context, record, "targetSurface", [
+      "targetAppInstallId",
+      "targetOrganization",
+    ]);
+  }
 }
 
 function selectedMembershipTargetValue(context: string, record: StoredRecord): string {

@@ -503,6 +503,86 @@ describe("instance control-plane API routes", () => {
     expect(operationRecord(deploymentPatch).values).not.toHaveProperty("observedStatus");
   });
 
+  it("validates generated email sender defaults for auth settings writes", async () => {
+    const emailDomain = await postAdminJson<OperationInvocationResponse>(
+      `${controlPlaneApi}/operations/email-domain/create`,
+      {
+        idempotencyKey: "auth-default-email-domain",
+        input: {
+          enabled: true,
+          providerFamily: "cloudflare",
+          domain: "mail.example.com",
+        },
+      },
+    );
+    const contactSender = await postAdminJson<OperationInvocationResponse>(
+      `${controlPlaneApi}/operations/email-sender/create`,
+      {
+        idempotencyKey: "auth-default-contact-sender",
+        input: {
+          enabled: true,
+          address: "contact@mail.example.com",
+          displayName: "Contact",
+          purpose: "contact-notification",
+          emailDomain: operationRecord(emailDomain).id,
+        },
+      },
+    );
+    const authSender = await postAdminJson<OperationInvocationResponse>(
+      `${controlPlaneApi}/operations/email-sender/create`,
+      {
+        idempotencyKey: "auth-default-auth-sender",
+        input: {
+          enabled: true,
+          address: "auth@mail.example.com",
+          displayName: "Auth",
+          purpose: "auth",
+          emailDomain: operationRecord(emailDomain).id,
+        },
+      },
+    );
+    const rejectedSettings = await postAdminJson<FailureResponse>(
+      `${controlPlaneApi}/operations/instance-settings/create`,
+      {
+        idempotencyKey: "auth-default-settings-rejected",
+        input: {
+          settingsId: "instance",
+          defaultEmailDomain: operationRecord(emailDomain).id,
+          defaultContactSender: operationRecord(contactSender).id,
+          defaultAuthSender: operationRecord(contactSender).id,
+          productionIdentityStatus: "unconfigured",
+        },
+      },
+    );
+    const settings = await postAdminJson<OperationInvocationResponse>(
+      `${controlPlaneApi}/operations/instance-settings/create`,
+      {
+        idempotencyKey: "auth-default-settings-created",
+        input: {
+          settingsId: "instance",
+          defaultEmailDomain: operationRecord(emailDomain).id,
+          defaultContactSender: operationRecord(contactSender).id,
+          defaultAuthSender: operationRecord(authSender).id,
+          contactNotificationRecipient: "owner@example.com",
+          productionIdentityStatus: "unconfigured",
+        },
+      },
+    );
+
+    expect(emailDomain.response.status).toBe(200);
+    expect(contactSender.response.status).toBe(200);
+    expect(authSender.response.status).toBe(200);
+    expect(rejectedSettings.response.status).toBe(400);
+    expect(rejectedSettings.body.error).toBe(
+      'Field "defaultAuthSender" must reference a sender with purpose "auth".',
+    );
+    expect(settings.response.status).toBe(200);
+    expect(operationRecord(settings).values).toMatchObject({
+      defaultContactSender: operationRecord(contactSender).id,
+      defaultAuthSender: operationRecord(authSender).id,
+    });
+  });
+
   it("enforces owner/admin writes and rejects runner-only access to install creation", async () => {
     const unauthenticated = await postJson<FailureResponse>(createAppInstallOperation, {
       idempotencyKey: "create-private",

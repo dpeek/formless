@@ -72,7 +72,8 @@ The system SHALL model email configuration as flat instance-owned records.
 - GIVEN multiple domain or sender records exist
 - WHEN the runtime resolves platform email defaults
 - THEN the singleton instance settings record selects the default email domain
-  and default senders by stable record id
+  and default senders for contact notification and auth messages by stable
+  record id
 - AND the selected defaults are policy, not duplicated provider resource state
 
 ### Requirement: Cloudflare Email Deployment
@@ -194,6 +195,29 @@ app-specific provider calls.
 - THEN the message passes through the same delivery primitive as plain text and
   HTML bodies
 - AND template rendering is separate from provider delivery
+
+#### Scenario: Collaborator invitation delivery
+
+- GIVEN the identity auth runtime schedules a collaborator invitation email
+- WHEN default auth sender configuration and a production canonical origin are
+  available
+- THEN the invitation email is scheduled through the same idempotent outbound
+  delivery primitive
+- AND the delivery uses the configured auth sender, the identity storage
+  identity as source storage, the invitation record id as source record, and an
+  invitation-specific message kind
+- AND public delivery records, queue messages, identity records, app records,
+  snapshots, and archives do not expose the raw invite token, token hash,
+  rendered email body, or provider response
+
+#### Scenario: Missing collaborator invitation email configuration
+
+- GIVEN collaborator invitation creation requires email delivery
+- WHEN default auth sender configuration or production canonical origin is
+  unavailable
+- THEN no provider send is attempted with incomplete sender, recipient, or link
+  origin configuration
+- AND the runtime does not claim that an invitation email was delivered
 
 ### Requirement: Site Contact Notifications
 

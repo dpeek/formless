@@ -12,12 +12,20 @@ import {
   type InstanceAuthConfigInput,
   type OwnerLoginRedirectTarget,
 } from "../shared/instance-auth.ts";
+import { normalizeEmailDeliveryAddress } from "../shared/email-runtime.ts";
 import { nowIsoString } from "../shared/clock.ts";
+import type { IdentityInvitationTargetSurface } from "@dpeek/formless-identity-control-plane";
 
 const base64UrlPattern = /^[A-Za-z0-9_-]+$/;
 const credentialDeviceTypes = ["multiDevice", "singleDevice"] as const;
 const passkeyChallengeKinds = ["login", "registration"] as const;
 const instanceAuthHandoffTargetProfiles = ["instance", "app", "public-site"] as const;
+const collaboratorInvitationTargetSurfaces = [
+  "app-install",
+  "instance",
+  "organization",
+] as const satisfies readonly IdentityInvitationTargetSurface[];
+export const COLLABORATOR_INVITATION_ACCEPT_PATH = "/_formless/auth/invitations/accept";
 const authenticatorTransports = [
   "ble",
   "cable",
@@ -101,6 +109,19 @@ type HandoffGrantRow = {
   created_at: string;
   expires_at: string;
   consumed_at: string | null;
+};
+
+type CollaboratorInvitationTokenRow = {
+  invitation_id: string;
+  token_hash: string;
+  normalized_target_email: string;
+  target_surface: IdentityInvitationTargetSurface;
+  target_app_install_id: string | null;
+  target_organization: string | null;
+  created_at: string;
+  expires_at: string;
+  consumed_at: string | null;
+  revoked_at: string | null;
 };
 
 export type StoredInstanceAuthConfig = InstanceAuthConfigInput & {
@@ -357,6 +378,70 @@ type HandoffGrantMismatchReason =
   | "wrong-state"
   | "wrong-target";
 
+export type CollaboratorInvitationTargetFacts = {
+  targetSurface: IdentityInvitationTargetSurface;
+  targetAppInstallId?: string;
+  targetOrganization?: string;
+};
+
+export type StoredCollaboratorInvitationToken = CollaboratorInvitationTargetFacts & {
+  consumedAt?: string;
+  createdAt: string;
+  expiresAt: string;
+  invitationId: string;
+  normalizedTargetEmail: string;
+  revokedAt?: string;
+  tokenHash: string;
+};
+
+export type CreateCollaboratorInvitationTokenInput = CollaboratorInvitationTargetFacts & {
+  createdAt?: string;
+  expiresAt: string;
+  invitationId: string;
+  targetEmail: string;
+  tokenHash: string;
+};
+
+export type CreateCollaboratorInvitationTokenResult =
+  | { ok: true; token: StoredCollaboratorInvitationToken }
+  | {
+      ok: false;
+      reason: "duplicate-invitation-id" | "duplicate-token-hash";
+      token: StoredCollaboratorInvitationToken;
+    };
+
+export type ConsumeCollaboratorInvitationTokenInput = {
+  invitationId: string;
+  now?: string;
+  target?: CollaboratorInvitationTargetFacts;
+  targetEmail?: string;
+  tokenHash: string;
+};
+
+export type ConsumeCollaboratorInvitationTokenResult =
+  | { ok: true; token: StoredCollaboratorInvitationToken }
+  | {
+      ok: false;
+      reason:
+        | "already-consumed"
+        | "expired-token"
+        | "missing-token"
+        | "revoked-token"
+        | "wrong-target"
+        | "wrong-target-email"
+        | "wrong-token";
+      token?: StoredCollaboratorInvitationToken;
+    };
+
+export type RevokeCollaboratorInvitationTokenResult =
+  | { ok: true; token: StoredCollaboratorInvitationToken }
+  | { ok: false; reason: "missing-token" };
+
+type CollaboratorInvitationTokenMismatchReason =
+  | "wrong-target"
+  | "wrong-target-email"
+  | "wrong-token";
+
 export function ensureInstanceAuthTables(storage: DurableObjectStorage) {
   storage.sql.exec(`
     CREATE TABLE IF NOT EXISTS instance_auth_config (
@@ -482,6 +567,38 @@ export function ensureInstanceAuthTables(storage: DurableObjectStorage) {
 
     CREATE INDEX IF NOT EXISTS idx_instance_auth_handoff_grants_expires_at
       ON instance_auth_handoff_grants (expires_at);
+
+    CREATE TABLE IF NOT EXISTS instance_auth_collaborator_invitation_tokens (
+      invitation_id TEXT PRIMARY KEY,
+      token_hash TEXT NOT NULL UNIQUE,
+      normalized_target_email TEXT NOT NULL,
+      target_surface TEXT NOT NULL CHECK (
+        target_surface IN ('app-install', 'instance', 'organization')
+      ),
+      target_app_install_id TEXT,
+      target_organization TEXT,
+      created_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      consumed_at TEXT,
+      revoked_at TEXT,
+      CHECK (
+        (target_surface = 'instance' AND target_app_install_id IS NULL AND target_organization IS NULL)
+        OR
+        (target_surface = 'app-install' AND target_app_install_id IS NOT NULL AND target_organization IS NULL)
+        OR
+        (target_surface = 'organization' AND target_app_install_id IS NULL AND target_organization IS NOT NULL)
+      )
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_instance_auth_collaborator_invitation_tokens_expires_at
+      ON instance_auth_collaborator_invitation_tokens (expires_at);
+
+    CREATE INDEX IF NOT EXISTS idx_instance_auth_collaborator_invitation_tokens_target
+      ON instance_auth_collaborator_invitation_tokens (
+        target_surface,
+        target_app_install_id,
+        target_organization
+      );
   `);
 }
 
@@ -490,6 +607,7 @@ export function resetInstanceAuthTables(storage: DurableObjectStorage) {
 
   storage.transactionSync(() => {
     storage.sql.exec(`
+      DELETE FROM instance_auth_collaborator_invitation_tokens;
       DELETE FROM instance_auth_handoff_grants;
       DELETE FROM instance_auth_host_session_versions;
       DELETE FROM instance_auth_central_sessions;
@@ -1164,6 +1282,207 @@ export function consumeHandoffGrant(
   });
 }
 
+export function createCollaboratorInvitationToken(
+  storage: DurableObjectStorage,
+  input: CreateCollaboratorInvitationTokenInput,
+): CreateCollaboratorInvitationTokenResult {
+  ensureInstanceAuthTables(storage);
+
+  return storage.transactionSync(() => {
+    const token = normalizeCreateCollaboratorInvitationTokenInput(input);
+    const existingByInvitation = readCollaboratorInvitationTokenByInvitationId(
+      storage,
+      token.invitationId,
+    );
+
+    if (existingByInvitation) {
+      return {
+        ok: false,
+        reason: "duplicate-invitation-id",
+        token: existingByInvitation,
+      };
+    }
+
+    const existingByHash = readCollaboratorInvitationTokenByHash(storage, token.tokenHash);
+
+    if (existingByHash) {
+      return {
+        ok: false,
+        reason: "duplicate-token-hash",
+        token: existingByHash,
+      };
+    }
+
+    storage.sql.exec(
+      `
+        INSERT INTO instance_auth_collaborator_invitation_tokens (
+          invitation_id,
+          token_hash,
+          normalized_target_email,
+          target_surface,
+          target_app_install_id,
+          target_organization,
+          created_at,
+          expires_at,
+          consumed_at,
+          revoked_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL)
+      `,
+      token.invitationId,
+      token.tokenHash,
+      token.normalizedTargetEmail,
+      token.targetSurface,
+      token.targetAppInstallId ?? null,
+      token.targetOrganization ?? null,
+      token.createdAt,
+      token.expiresAt,
+    );
+
+    return { ok: true, token };
+  });
+}
+
+export function readCollaboratorInvitationToken(
+  storage: DurableObjectStorage,
+  invitationId: unknown,
+): StoredCollaboratorInvitationToken | undefined {
+  ensureInstanceAuthTables(storage);
+
+  return readCollaboratorInvitationTokenByInvitationId(
+    storage,
+    parseNonEmptyString("Collaborator invitation id", invitationId),
+  );
+}
+
+export function consumeCollaboratorInvitationToken(
+  storage: DurableObjectStorage,
+  input: ConsumeCollaboratorInvitationTokenInput,
+): ConsumeCollaboratorInvitationTokenResult {
+  ensureInstanceAuthTables(storage);
+
+  return storage.transactionSync(() => {
+    const invitationId = parseNonEmptyString("Collaborator invitation id", input.invitationId);
+    const consumedAt = parseTimestamp(
+      "Collaborator invitation token consumedAt",
+      input.now ?? nowIsoString(),
+    );
+    const expected = normalizeConsumeCollaboratorInvitationTokenInput(input);
+    const token = readCollaboratorInvitationTokenByInvitationId(storage, invitationId);
+
+    if (!token) {
+      return { ok: false, reason: "missing-token" };
+    }
+
+    if (token.revokedAt !== undefined) {
+      return { ok: false, reason: "revoked-token", token };
+    }
+
+    if (token.consumedAt !== undefined) {
+      return { ok: false, reason: "already-consumed", token };
+    }
+
+    if (token.expiresAt <= consumedAt) {
+      return { ok: false, reason: "expired-token", token };
+    }
+
+    const mismatchReason = collaboratorInvitationTokenMismatchReason(token, expected);
+
+    if (mismatchReason) {
+      return { ok: false, reason: mismatchReason, token };
+    }
+
+    storage.sql.exec(
+      `
+        UPDATE instance_auth_collaborator_invitation_tokens
+        SET consumed_at = ?
+        WHERE invitation_id = ?
+      `,
+      consumedAt,
+      token.invitationId,
+    );
+
+    return {
+      ok: true,
+      token: {
+        ...token,
+        consumedAt,
+      },
+    };
+  });
+}
+
+export function revokeCollaboratorInvitationToken(
+  storage: DurableObjectStorage,
+  invitationId: unknown,
+  now: unknown = nowIsoString(),
+): RevokeCollaboratorInvitationTokenResult {
+  ensureInstanceAuthTables(storage);
+
+  return storage.transactionSync(() => {
+    const tokenId = parseNonEmptyString("Collaborator invitation id", invitationId);
+    const revokedAt = parseTimestamp("Collaborator invitation token revokedAt", now);
+    const existing = readCollaboratorInvitationTokenByInvitationId(storage, tokenId);
+
+    if (!existing) {
+      return { ok: false, reason: "missing-token" };
+    }
+
+    storage.sql.exec(
+      `
+        UPDATE instance_auth_collaborator_invitation_tokens
+        SET revoked_at = ?
+        WHERE invitation_id = ?
+      `,
+      revokedAt,
+      existing.invitationId,
+    );
+
+    return {
+      ok: true,
+      token: {
+        ...existing,
+        revokedAt,
+      },
+    };
+  });
+}
+
+export function generateCollaboratorInvitationToken(byteLength = 32): string {
+  const length = parsePositiveInteger("Collaborator invitation token byte length", byteLength);
+  const bytes = new Uint8Array(new ArrayBuffer(length));
+
+  crypto.getRandomValues(bytes);
+
+  return base64UrlEncode(bytes);
+}
+
+export async function hashCollaboratorInvitationToken(value: unknown): Promise<string> {
+  const token = parseBase64UrlString("Collaborator invitation token", value);
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(token));
+
+  return base64UrlEncode(new Uint8Array(digest));
+}
+
+export function buildCollaboratorInvitationLink(input: {
+  authOrigin: string;
+  invitationId: string;
+  token: string;
+}): string {
+  const url = new URL(
+    COLLABORATOR_INVITATION_ACCEPT_PATH,
+    parseInstanceAuthCanonicalOrigin(input.authOrigin),
+  );
+
+  url.searchParams.set(
+    "invitationId",
+    parseNonEmptyString("Collaborator invitation id", input.invitationId),
+  );
+  url.searchParams.set("token", parseBase64UrlString("Collaborator invitation token", input.token));
+
+  return url.toString();
+}
+
 function readInstanceAuthConfigRow(
   storage: DurableObjectStorage,
 ): StoredInstanceAuthConfig | undefined {
@@ -1683,6 +2002,217 @@ function handoffGrantFromRow(row: HandoffGrantRow): StoredHandoffGrant {
   };
 }
 
+function normalizeCreateCollaboratorInvitationTokenInput(
+  input: CreateCollaboratorInvitationTokenInput,
+): StoredCollaboratorInvitationToken {
+  const createdAt = parseTimestamp(
+    "Collaborator invitation token createdAt",
+    input.createdAt ?? nowIsoString(),
+  );
+  const expiresAt = parseTimestamp("Collaborator invitation token expiresAt", input.expiresAt);
+
+  if (expiresAt <= createdAt) {
+    throw new Error("Collaborator invitation token expiresAt must be after createdAt.");
+  }
+
+  return {
+    invitationId: parseNonEmptyString("Collaborator invitation id", input.invitationId),
+    tokenHash: parseBase64UrlString("Collaborator invitation token hash", input.tokenHash),
+    normalizedTargetEmail: normalizeCollaboratorInvitationTargetEmail(input.targetEmail),
+    ...normalizeCollaboratorInvitationTargetFacts(input),
+    createdAt,
+    expiresAt,
+  };
+}
+
+function normalizeConsumeCollaboratorInvitationTokenInput(
+  input: ConsumeCollaboratorInvitationTokenInput,
+): {
+  normalizedTargetEmail?: string;
+  target?: CollaboratorInvitationTargetFacts;
+  tokenHash: string;
+} {
+  return {
+    tokenHash: parseBase64UrlString("Collaborator invitation token hash", input.tokenHash),
+    ...(input.targetEmail === undefined
+      ? {}
+      : {
+          normalizedTargetEmail: normalizeCollaboratorInvitationTargetEmail(input.targetEmail),
+        }),
+    ...(input.target === undefined
+      ? {}
+      : { target: normalizeCollaboratorInvitationTargetFacts(input.target) }),
+  };
+}
+
+function collaboratorInvitationTokenMismatchReason(
+  token: StoredCollaboratorInvitationToken,
+  expected: ReturnType<typeof normalizeConsumeCollaboratorInvitationTokenInput>,
+): CollaboratorInvitationTokenMismatchReason | undefined {
+  if (expected.tokenHash !== token.tokenHash) {
+    return "wrong-token";
+  }
+
+  if (
+    expected.normalizedTargetEmail !== undefined &&
+    expected.normalizedTargetEmail !== token.normalizedTargetEmail
+  ) {
+    return "wrong-target-email";
+  }
+
+  if (
+    expected.target !== undefined &&
+    !collaboratorInvitationTargetFactsEqual(expected.target, token)
+  ) {
+    return "wrong-target";
+  }
+
+  return undefined;
+}
+
+function readCollaboratorInvitationTokenByInvitationId(
+  storage: DurableObjectStorage,
+  invitationId: string,
+): StoredCollaboratorInvitationToken | undefined {
+  const row = storage.sql
+    .exec<CollaboratorInvitationTokenRow>(
+      `
+        SELECT
+          invitation_id,
+          token_hash,
+          normalized_target_email,
+          target_surface,
+          target_app_install_id,
+          target_organization,
+          created_at,
+          expires_at,
+          consumed_at,
+          revoked_at
+        FROM instance_auth_collaborator_invitation_tokens
+        WHERE invitation_id = ?
+      `,
+      invitationId,
+    )
+    .next();
+
+  return row.done ? undefined : collaboratorInvitationTokenFromRow(row.value);
+}
+
+function readCollaboratorInvitationTokenByHash(
+  storage: DurableObjectStorage,
+  tokenHash: string,
+): StoredCollaboratorInvitationToken | undefined {
+  const row = storage.sql
+    .exec<CollaboratorInvitationTokenRow>(
+      `
+        SELECT
+          invitation_id,
+          token_hash,
+          normalized_target_email,
+          target_surface,
+          target_app_install_id,
+          target_organization,
+          created_at,
+          expires_at,
+          consumed_at,
+          revoked_at
+        FROM instance_auth_collaborator_invitation_tokens
+        WHERE token_hash = ?
+      `,
+      tokenHash,
+    )
+    .next();
+
+  return row.done ? undefined : collaboratorInvitationTokenFromRow(row.value);
+}
+
+function collaboratorInvitationTokenFromRow(
+  row: CollaboratorInvitationTokenRow,
+): StoredCollaboratorInvitationToken {
+  return {
+    invitationId: row.invitation_id,
+    tokenHash: row.token_hash,
+    normalizedTargetEmail: row.normalized_target_email,
+    targetSurface: parseCollaboratorInvitationTargetSurface(row.target_surface),
+    ...(row.target_app_install_id === null
+      ? {}
+      : { targetAppInstallId: row.target_app_install_id }),
+    ...(row.target_organization === null ? {} : { targetOrganization: row.target_organization }),
+    createdAt: row.created_at,
+    expiresAt: row.expires_at,
+    ...(row.consumed_at === null ? {} : { consumedAt: row.consumed_at }),
+    ...(row.revoked_at === null ? {} : { revokedAt: row.revoked_at }),
+  };
+}
+
+function normalizeCollaboratorInvitationTargetFacts(
+  input: CollaboratorInvitationTargetFacts,
+): CollaboratorInvitationTargetFacts {
+  const targetSurface = parseCollaboratorInvitationTargetSurface(input.targetSurface);
+  const targetAppInstallId = parseOptionalNonEmptyString(
+    "Collaborator invitation target app install id",
+    input.targetAppInstallId,
+  );
+  const targetOrganization = parseOptionalNonEmptyString(
+    "Collaborator invitation target organization",
+    input.targetOrganization,
+  );
+
+  switch (targetSurface) {
+    case "app-install":
+      if (targetAppInstallId === undefined || targetOrganization !== undefined) {
+        throw new Error(
+          "Collaborator invitation app-install target requires target app install id only.",
+        );
+      }
+
+      return {
+        targetSurface,
+        targetAppInstallId,
+      };
+    case "organization":
+      if (targetOrganization === undefined || targetAppInstallId !== undefined) {
+        throw new Error(
+          "Collaborator invitation organization target requires target organization only.",
+        );
+      }
+
+      return {
+        targetSurface,
+        targetOrganization,
+      };
+    case "instance":
+      if (targetAppInstallId !== undefined || targetOrganization !== undefined) {
+        throw new Error("Collaborator invitation instance target cannot include target ids.");
+      }
+
+      return { targetSurface };
+  }
+}
+
+function collaboratorInvitationTargetFactsEqual(
+  left: CollaboratorInvitationTargetFacts,
+  right: CollaboratorInvitationTargetFacts,
+): boolean {
+  return (
+    left.targetSurface === right.targetSurface &&
+    (left.targetAppInstallId ?? undefined) === (right.targetAppInstallId ?? undefined) &&
+    (left.targetOrganization ?? undefined) === (right.targetOrganization ?? undefined)
+  );
+}
+
+function normalizeCollaboratorInvitationTargetEmail(value: unknown): string {
+  return normalizeEmailDeliveryAddress("Collaborator invitation target email", value).toLowerCase();
+}
+
+function parseCollaboratorInvitationTargetSurface(value: unknown): IdentityInvitationTargetSurface {
+  return parseStringLiteral(
+    "Collaborator invitation target surface",
+    value,
+    collaboratorInvitationTargetSurfaces,
+  );
+}
+
 function normalizeInstanceAuthTargetBinding(
   input: InstanceAuthSessionTargetBinding,
 ): InstanceAuthSessionTargetBinding {
@@ -1812,6 +2342,14 @@ function parseTimestamp(context: string, value: unknown): string {
 function parseNonNegativeInteger(context: string, value: unknown): number {
   if (typeof value !== "number" || !Number.isInteger(value) || value < 0) {
     throw new Error(`${context} must be a non-negative integer.`);
+  }
+
+  return value;
+}
+
+function parsePositiveInteger(context: string, value: unknown): number {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 1) {
+    throw new Error(`${context} must be a positive integer.`);
   }
 
   return value;

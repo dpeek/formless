@@ -7,16 +7,27 @@ import {
   identityControlPlaneSchema,
   parseIdentityControlPlaneStorageSnapshot,
   validateIdentityControlPlaneRecords,
+  type IdentityAppRegistrationValues,
   type IdentityControlPlaneRoleKey,
+  type IdentityInvitationTargetSurface,
+  type IdentityMembershipTargetKind,
+  type IdentityMembershipValues,
+  type IdentityRoleAssignmentScopeKind,
+  type IdentityRoleAssignmentValues,
 } from "@dpeek/formless-identity-control-plane";
+import { instanceControlPlaneProductionIdentityFromRecords } from "@dpeek/formless-instance-control-plane";
 import type { RecordValues, StoredRecord } from "@dpeek/formless-storage";
+import type { OperationCommandOutput } from "../shared/operation-invocation.ts";
 import type { OwnerIdentity, OwnerIdentityInput } from "../shared/protocol.ts";
 import type { SchemaOperationActorKind } from "@dpeek/formless-schema";
 import {
   authorizeAuthorityOperation,
+  authorizeInstanceWrite,
   authorizeOwnerManagementRead,
   type AuthorityAdminGuardEnv,
 } from "./authority-admin-guard.ts";
+import { normalizeEmailDeliveryAddress } from "../shared/email-runtime.ts";
+import type { EmailDeliveryRecord, EmailDeliveryScheduleRequest } from "../shared/email-runtime.ts";
 import {
   INTERNAL_IDENTITY_ACTIVE_PRINCIPAL_PATH,
   INTERNAL_IDENTITY_OWNER_PATH,
@@ -43,9 +54,31 @@ import {
   type StorageSource,
 } from "./storage.ts";
 import type { WorkerSchemaAppDefinition } from "./schema-apps.ts";
+import { readControlPlaneRecords } from "./deployment-control-plane-client.ts";
+import {
+  resolveConfiguredDefaultCloudflareSender,
+  resolveDefaultEmailSenderReference,
+  scheduleEmailDelivery,
+  type EmailDeliveryQueueBinding,
+} from "./email-runtime.ts";
+import { readEmailDeliveryByScheduleRequest } from "./email-runtime-state.ts";
+import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
+import {
+  buildCollaboratorInvitationLink,
+  createCollaboratorInvitationToken,
+  generateCollaboratorInvitationToken,
+  hashCollaboratorInvitationToken,
+} from "./instance-auth-state.ts";
 
 const actorKinds = ["admin", "owner"] as const;
+const invitationTargetSurfaces = ["app-install", "instance", "organization"] as const;
+const membershipTargetKinds = ["group", "organization"] as const;
+const roleAssignmentScopeKinds = ["app-install", "instance", "organization"] as const;
 const builtInRoleCreatedAt = "2026-06-26T00:00:00.000Z";
+const collaboratorInvitationDeliveryMessageKind = "identity.collaboratorInvitation";
+const collaboratorInvitationDeliveryPurpose = "collaborator-invitation-delivery";
+export const INTERNAL_COLLABORATOR_INVITATION_DELIVERY_PATH =
+  "/_internal/identity/collaborator-invitation-delivery";
 const identityControlPlaneApp = {
   key: IDENTITY_CONTROL_PLANE_SCHEMA_KEY,
   label: "Identity control plane",
@@ -73,10 +106,97 @@ function ensureIdentityControlPlaneStorage(storage: DurableObjectStorage) {
 
 type IdentityControlPlaneApiEnv = AuthorityAdminGuardEnv & {
   FORMLESS_AUTHORITY: DurableObjectNamespace;
+  FORMLESS_EMAIL_DELIVERY_QUEUE?: EmailDeliveryQueueBinding;
 };
 
 export type IdentityOwnerEnv = {
   FORMLESS_AUTHORITY: DurableObjectNamespace;
+};
+
+type CollaboratorInvitationDeliveryResult =
+  | {
+      delivery: EmailDeliveryRecord;
+      queued: boolean;
+      replayed: boolean;
+      status: "scheduled";
+    }
+  | {
+      reason:
+        | "email-delivery-scheduling-failed"
+        | "existing-token-without-delivery"
+        | "missing-auth-email-configuration"
+        | "missing-email-delivery-queue";
+      status: "skipped";
+    };
+
+type CreateCollaboratorInvitationResponse = {
+  delivery: CollaboratorInvitationDeliveryResult;
+  invitation: StoredRecord;
+  output: OperationCommandOutput;
+  records: StoredRecord[];
+  status: "committed" | "replayed";
+};
+type CreateCollaboratorInvitationWriteResponse = Omit<
+  CreateCollaboratorInvitationResponse,
+  "delivery"
+>;
+
+type CollaboratorInvitationTargetFacts = {
+  targetAppInstallId?: string;
+  targetOrganization?: string;
+  targetSurface: IdentityInvitationTargetSurface;
+};
+
+type CollaboratorInvitationPrincipalInput = {
+  displayName: string;
+  id?: string;
+};
+
+type CollaboratorInvitationPrincipalEmailInput = {
+  id?: string;
+  primary: boolean;
+  recovery: boolean;
+};
+
+type CollaboratorInvitationMembershipInput = {
+  id?: string;
+  targetGroup?: string;
+  targetKind: IdentityMembershipTargetKind;
+  targetOrganization?: string;
+};
+
+type CollaboratorInvitationRoleAssignmentInput = {
+  appInstallId?: string;
+  id?: string;
+  role: string;
+  scopeKind: IdentityRoleAssignmentScopeKind;
+  scopeOrganization?: string;
+};
+
+type CollaboratorInvitationAppRegistrationInput = {
+  appInstallId: string;
+  id?: string;
+  selectedOrganization?: string;
+};
+
+type CreateCollaboratorInvitationInput = CollaboratorInvitationTargetFacts & {
+  appRegistrations: CollaboratorInvitationAppRegistrationInput[];
+  expiresAt: string;
+  idempotencyKey: string;
+  invitedPrincipal?: CollaboratorInvitationPrincipalInput;
+  invitationId?: string;
+  memberships: CollaboratorInvitationMembershipInput[];
+  now?: string;
+  principalEmail?: CollaboratorInvitationPrincipalEmailInput;
+  roleAssignments: CollaboratorInvitationRoleAssignmentInput[];
+  targetEmail: string;
+};
+
+type CollaboratorInvitationDeliveryInput = CollaboratorInvitationTargetFacts & {
+  createdAt: string;
+  expiresAt: string;
+  invitationId: string;
+  targetEmail: string;
 };
 
 export type EnsureIdentityOwnerInput = {
@@ -119,6 +239,45 @@ export async function handleIdentityControlPlaneDurableObjectRequest(
   }
 
   try {
+    const resolveOwnerSession = (session: OwnerSession) =>
+      Promise.resolve(readActiveIdentityOwnerForPrincipal(storage, session.principalId));
+
+    if (route.path === "/collaborator-invitations") {
+      if (request.method !== "POST") {
+        return jsonResponse({ error: "Method not allowed." }, 405, { Allow: "POST" });
+      }
+
+      const authorization = await authorizeInstanceWrite(request, env, { resolveOwnerSession });
+
+      if (!authorization.authorized) {
+        return jsonResponse(
+          { error: authorization.error },
+          authorization.status,
+          authorization.headers,
+        );
+      }
+
+      ensureIdentityControlPlaneStorage(storage);
+
+      const inviterPrincipalId =
+        authorization.via === "owner-session" &&
+        typeof authorization.session?.principalId === "string"
+          ? authorization.session.principalId
+          : undefined;
+      const created = createCollaboratorInvitation(storage, await readJson(request), {
+        inviterPrincipalId,
+      });
+
+      return jsonResponse({
+        ...created,
+        delivery: await requestCollaboratorInvitationDelivery({
+          env,
+          invitation: created.invitation,
+          requestUrl: request.url,
+        }),
+      });
+    }
+
     const operation = selectAuthorityOperation({
       method: request.method,
       path: route.path,
@@ -130,8 +289,6 @@ export async function handleIdentityControlPlaneDurableObjectRequest(
     }
 
     const actorKind = identityControlPlaneActorKindFromRequest(request, url);
-    const resolveOwnerSession = (session: OwnerSession) =>
-      Promise.resolve(readActiveIdentityOwnerForPrincipal(storage, session.principalId));
     const authorization =
       operation.metadata.mode === "read"
         ? await authorizeOwnerManagementRead(request, env, { resolveOwnerSession })
@@ -182,6 +339,35 @@ export async function handleIdentityControlPlaneDurableObjectRequest(
       return jsonResponse({ error: error.message }, 400);
     }
 
+    return jsonResponse({ error: errorMessage(error) }, 400);
+  }
+}
+
+export async function handleCollaboratorInvitationDeliveryDurableObjectRequest(
+  request: Request,
+  storage: DurableObjectStorage,
+  env: IdentityControlPlaneApiEnv,
+): Promise<Response | undefined> {
+  const url = new URL(request.url);
+
+  if (url.pathname !== INTERNAL_COLLABORATOR_INVITATION_DELIVERY_PATH) {
+    return undefined;
+  }
+
+  if (request.method !== "POST") {
+    return jsonResponse({ error: "Method not allowed." }, 405, { Allow: "POST" });
+  }
+
+  try {
+    return jsonResponse(
+      await scheduleCollaboratorInvitationDelivery({
+        env,
+        input: parseCollaboratorInvitationDeliveryRequest(await readJson(request)),
+        requestUrl: request.url,
+        storage,
+      }),
+    );
+  } catch (error) {
     return jsonResponse({ error: errorMessage(error) }, 400);
   }
 }
@@ -353,6 +539,576 @@ function ensureIdentityOwnerRecords(
   }
 
   return { created: true, owner };
+}
+
+function createCollaboratorInvitation(
+  storage: DurableObjectStorage,
+  value: unknown,
+  options: { inviterPrincipalId?: string },
+): CreateCollaboratorInvitationWriteResponse {
+  const input = parseCreateCollaboratorInvitationRequest(value);
+  const plans = collaboratorInvitationRecordWritePlans(input, options);
+
+  const outcome = writeRecordSetForCommandOperationOutcome(
+    storage,
+    `collaborator-invitation:${input.idempotencyKey}`,
+    plans,
+    validateIdentityControlPlaneRecordConstraint(storage),
+    input.now === undefined ? {} : { now: input.now },
+  );
+  const records = outcome.response.changes.map((change) => change.payload);
+  const invitation = records.find((record) => record.entity === "invitation");
+
+  if (!invitation) {
+    throw new Error("Collaborator invitation write did not create an invitation record.");
+  }
+
+  return {
+    invitation,
+    output: outcome.response,
+    records,
+    status: outcome.kind === "replay" ? "replayed" : "committed",
+  };
+}
+
+async function requestCollaboratorInvitationDelivery(input: {
+  env: IdentityControlPlaneApiEnv;
+  invitation: StoredRecord;
+  requestUrl: string;
+}): Promise<CollaboratorInvitationDeliveryResult> {
+  const id = input.env.FORMLESS_AUTHORITY.idFromName(FORMLESS_INSTANCE_AUTHORITY_NAME);
+  const response = await input.env.FORMLESS_AUTHORITY.get(id).fetch(
+    new Request(new URL(INTERNAL_COLLABORATOR_INVITATION_DELIVERY_PATH, input.requestUrl), {
+      body: JSON.stringify(collaboratorInvitationDeliveryInputFromRecord(input.invitation)),
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      method: "POST",
+    }),
+  );
+  const body = (await response.json()) as CollaboratorInvitationDeliveryResult | { error?: string };
+
+  if (!response.ok || !isCollaboratorInvitationDeliveryResult(body)) {
+    return {
+      reason: "email-delivery-scheduling-failed",
+      status: "skipped",
+    };
+  }
+
+  return body;
+}
+
+async function scheduleCollaboratorInvitationDelivery(input: {
+  env: IdentityControlPlaneApiEnv;
+  input: CollaboratorInvitationDeliveryInput;
+  requestUrl: string;
+  storage: DurableObjectStorage;
+}): Promise<CollaboratorInvitationDeliveryResult> {
+  const controlPlaneRecords =
+    (await readControlPlaneRecords({ env: input.env, requestUrl: input.requestUrl })) ?? [];
+  const productionIdentity = instanceControlPlaneProductionIdentityFromRecords(controlPlaneRecords);
+  const senderReference = resolveDefaultEmailSenderReference(controlPlaneRecords, "auth");
+
+  if (!productionIdentity?.authOrigin || !senderReference) {
+    return {
+      reason: "missing-auth-email-configuration",
+      status: "skipped",
+    };
+  }
+
+  try {
+    if (!resolveConfiguredDefaultCloudflareSender(controlPlaneRecords, "auth")) {
+      return {
+        reason: "missing-auth-email-configuration",
+        status: "skipped",
+      };
+    }
+  } catch {
+    return {
+      reason: "missing-auth-email-configuration",
+      status: "skipped",
+    };
+  }
+
+  const scheduleRequest = collaboratorInvitationDeliveryScheduleRequest({
+    authOrigin: productionIdentity.authOrigin,
+    input: input.input,
+    inviteLink: undefined,
+    senderId: senderReference.id,
+  });
+  const existingDelivery = readEmailDeliveryByScheduleRequest(input.storage, scheduleRequest);
+
+  if (existingDelivery) {
+    let result: Awaited<ReturnType<typeof scheduleEmailDelivery>>;
+
+    try {
+      result = await scheduleEmailDelivery({
+        controlPlaneRecords,
+        emailDeliveryQueue: input.env.FORMLESS_EMAIL_DELIVERY_QUEUE,
+        now: input.input.createdAt,
+        request: scheduleRequest,
+        storage: input.storage,
+        targetAuthorityName: FORMLESS_INSTANCE_AUTHORITY_NAME,
+      });
+    } catch {
+      return {
+        reason: "missing-email-delivery-queue",
+        status: "skipped",
+      };
+    }
+
+    return {
+      delivery: result.delivery,
+      queued: result.queued,
+      replayed: result.replayed,
+      status: "scheduled",
+    };
+  }
+
+  if (!input.env.FORMLESS_EMAIL_DELIVERY_QUEUE) {
+    return {
+      reason: "missing-email-delivery-queue",
+      status: "skipped",
+    };
+  }
+
+  const tokenResult = await createFreshCollaboratorInvitationToken(input.storage, input.input);
+
+  if (!tokenResult.ok) {
+    return {
+      reason:
+        tokenResult.reason === "duplicate-invitation-id"
+          ? "existing-token-without-delivery"
+          : "email-delivery-scheduling-failed",
+      status: "skipped",
+    };
+  }
+
+  const inviteLink = buildCollaboratorInvitationLink({
+    authOrigin: productionIdentity.authOrigin,
+    invitationId: input.input.invitationId,
+    token: tokenResult.rawToken,
+  });
+  const result = await scheduleEmailDelivery({
+    controlPlaneRecords,
+    emailDeliveryQueue: input.env.FORMLESS_EMAIL_DELIVERY_QUEUE,
+    now: input.input.createdAt,
+    request: collaboratorInvitationDeliveryScheduleRequest({
+      authOrigin: productionIdentity.authOrigin,
+      input: input.input,
+      inviteLink,
+      senderId: senderReference.id,
+    }),
+    storage: input.storage,
+    targetAuthorityName: FORMLESS_INSTANCE_AUTHORITY_NAME,
+  });
+
+  return {
+    delivery: result.delivery,
+    queued: result.queued,
+    replayed: result.replayed,
+    status: "scheduled",
+  };
+}
+
+async function createFreshCollaboratorInvitationToken(
+  storage: DurableObjectStorage,
+  input: CollaboratorInvitationDeliveryInput,
+): Promise<
+  | { ok: true; rawToken: string }
+  | { ok: false; reason: "duplicate-invitation-id" | "email-delivery-scheduling-failed" }
+> {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const rawToken = generateCollaboratorInvitationToken();
+    const tokenResult = createCollaboratorInvitationToken(storage, {
+      invitationId: input.invitationId,
+      tokenHash: await hashCollaboratorInvitationToken(rawToken),
+      targetEmail: input.targetEmail,
+      targetSurface: input.targetSurface,
+      ...(input.targetAppInstallId === undefined
+        ? {}
+        : { targetAppInstallId: input.targetAppInstallId }),
+      ...(input.targetOrganization === undefined
+        ? {}
+        : { targetOrganization: input.targetOrganization }),
+      createdAt: input.createdAt,
+      expiresAt: input.expiresAt,
+    });
+
+    if (tokenResult.ok) {
+      return { ok: true, rawToken };
+    }
+
+    if (tokenResult.reason !== "duplicate-token-hash") {
+      return { ok: false, reason: "duplicate-invitation-id" };
+    }
+  }
+
+  return { ok: false, reason: "email-delivery-scheduling-failed" };
+}
+
+function collaboratorInvitationDeliveryScheduleRequest(input: {
+  authOrigin: string;
+  input: CollaboratorInvitationDeliveryInput;
+  inviteLink: string | undefined;
+  senderId: string;
+}): EmailDeliveryScheduleRequest {
+  return {
+    canonicalOrigin: input.authOrigin,
+    idempotencyKey: collaboratorInvitationDeliveryIdempotencyKey(input.input.invitationId),
+    message: renderCollaboratorInvitationDeliveryMessage({
+      expiresAt: input.input.expiresAt,
+      inviteLink: input.inviteLink,
+    }),
+    messageKind: collaboratorInvitationDeliveryMessageKind,
+    recipients: [{ address: input.input.targetEmail }],
+    sender: { id: input.senderId },
+    source: {
+      recordId: input.input.invitationId,
+      storageIdentity: IDENTITY_CONTROL_PLANE_STORAGE_IDENTITY,
+    },
+  };
+}
+
+function renderCollaboratorInvitationDeliveryMessage(input: {
+  expiresAt: string;
+  inviteLink: string | undefined;
+}) {
+  if (input.inviteLink === undefined) {
+    return {
+      subject: "Accept your Formless invitation",
+      text: "This invitation delivery has already been rendered.",
+    };
+  }
+
+  const escapedLink = htmlAttributeEscape(input.inviteLink);
+
+  return {
+    subject: "Accept your Formless invitation",
+    text: [
+      "You have been invited to collaborate in Formless.",
+      "",
+      `Accept the invitation: ${input.inviteLink}`,
+      "",
+      `This invitation expires at ${input.expiresAt}.`,
+    ].join("\n"),
+    html: [
+      "<p>You have been invited to collaborate in Formless.</p>",
+      `<p><a href="${escapedLink}">Accept invitation</a></p>`,
+      `<p>This invitation expires at ${htmlTextEscape(input.expiresAt)}.</p>`,
+    ].join(""),
+  };
+}
+
+function collaboratorInvitationDeliveryIdempotencyKey(invitationId: string): string {
+  return `${invitationId}:${collaboratorInvitationDeliveryPurpose}`;
+}
+
+function collaboratorInvitationDeliveryInputFromRecord(
+  record: StoredRecord,
+): CollaboratorInvitationDeliveryInput {
+  if (record.entity !== "invitation") {
+    throw new BadRequestError("Collaborator invitation delivery requires an invitation record.");
+  }
+
+  const targetFacts = parseCollaboratorInvitationTargetFacts(record.values);
+
+  return {
+    ...targetFacts,
+    invitationId: parseNonEmptyString("Collaborator invitation id", record.id),
+    targetEmail: normalizeEmailDeliveryAddress(
+      "Collaborator invitation target email",
+      record.values.targetEmail,
+    ),
+    createdAt: parseIsoTimestamp("Collaborator invitation createdAt", record.createdAt),
+    expiresAt: parseIsoTimestamp("Collaborator invitation expiresAt", record.values.expiresAt),
+  };
+}
+
+function parseCollaboratorInvitationDeliveryRequest(
+  value: unknown,
+): CollaboratorInvitationDeliveryInput {
+  const object = parseRecord("Collaborator invitation delivery request", value);
+
+  assertAllowedKeys("Collaborator invitation delivery request", object, [
+    "createdAt",
+    "expiresAt",
+    "invitationId",
+    "targetAppInstallId",
+    "targetEmail",
+    "targetOrganization",
+    "targetSurface",
+  ]);
+
+  return {
+    ...parseCollaboratorInvitationTargetFacts(object),
+    invitationId: parseNonEmptyString("Collaborator invitation id", object.invitationId),
+    targetEmail: normalizeEmailDeliveryAddress(
+      "Collaborator invitation target email",
+      object.targetEmail,
+    ),
+    createdAt: parseIsoTimestamp("Collaborator invitation createdAt", object.createdAt),
+    expiresAt: parseIsoTimestamp("Collaborator invitation expiresAt", object.expiresAt),
+  };
+}
+
+function isCollaboratorInvitationDeliveryResult(
+  value: unknown,
+): value is CollaboratorInvitationDeliveryResult {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+
+  const record = value as Record<string, unknown>;
+
+  if (record.status === "skipped") {
+    return typeof record.reason === "string";
+  }
+
+  return (
+    record.status === "scheduled" &&
+    typeof record.queued === "boolean" &&
+    typeof record.replayed === "boolean" &&
+    typeof record.delivery === "object" &&
+    record.delivery !== null
+  );
+}
+
+function htmlAttributeEscape(value: string): string {
+  return htmlTextEscape(value).replaceAll('"', "&quot;");
+}
+
+function htmlTextEscape(value: string): string {
+  return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+}
+
+function collaboratorInvitationRecordWritePlans(
+  input: CreateCollaboratorInvitationInput,
+  options: { inviterPrincipalId?: string },
+): OperationRecordWritePlan[] {
+  const invitedPrincipalId =
+    input.invitedPrincipal === undefined
+      ? undefined
+      : (input.invitedPrincipal.id ?? generatedIdentityRecordId("principal"));
+  const linkedRecordsRequested =
+    input.principalEmail !== undefined ||
+    input.memberships.length > 0 ||
+    input.roleAssignments.length > 0 ||
+    input.appRegistrations.length > 0;
+
+  if (linkedRecordsRequested && invitedPrincipalId === undefined) {
+    throw new BadRequestError(
+      "Collaborator invitation linked identity records require invitedPrincipal.",
+    );
+  }
+
+  const invitationId = input.invitationId ?? generatedIdentityRecordId("invitation");
+  const plans: OperationRecordWritePlan[] = [];
+
+  if (input.invitedPrincipal !== undefined && invitedPrincipalId !== undefined) {
+    plans.push({
+      kind: "create",
+      entity: "principal",
+      id: invitedPrincipalId,
+      values: {
+        displayName: input.invitedPrincipal.displayName,
+        kind: "human",
+        status: "invited",
+      },
+    });
+  }
+
+  if (input.principalEmail !== undefined && invitedPrincipalId !== undefined) {
+    plans.push({
+      kind: "create",
+      entity: "principal-email",
+      id: input.principalEmail.id ?? generatedIdentityRecordId("principal-email"),
+      values: {
+        principal: invitedPrincipalId,
+        displayEmail: input.targetEmail,
+        normalizedEmail: input.targetEmail.toLowerCase(),
+        verificationStatus: "unverified",
+        primary: input.principalEmail.primary,
+        recovery: input.principalEmail.recovery,
+      },
+    });
+  }
+
+  for (const [index, membership] of input.memberships.entries()) {
+    if (invitedPrincipalId === undefined) {
+      throw new BadRequestError(`Collaborator invitation membership ${index} requires principal.`);
+    }
+
+    plans.push({
+      kind: "create",
+      entity: "membership",
+      id: membership.id ?? generatedIdentityRecordId("membership"),
+      values: collaboratorInvitationMembershipValues(membership, invitedPrincipalId),
+    });
+  }
+
+  for (const [index, roleAssignment] of input.roleAssignments.entries()) {
+    if (invitedPrincipalId === undefined) {
+      throw new BadRequestError(
+        `Collaborator invitation role assignment ${index} requires principal.`,
+      );
+    }
+
+    plans.push({
+      kind: "create",
+      entity: "role-assignment",
+      id: roleAssignment.id ?? generatedIdentityRecordId("role-assignment"),
+      values: collaboratorInvitationRoleAssignmentValues(roleAssignment, invitedPrincipalId),
+    });
+  }
+
+  for (const [index, appRegistration] of input.appRegistrations.entries()) {
+    if (invitedPrincipalId === undefined) {
+      throw new BadRequestError(
+        `Collaborator invitation app registration ${index} requires principal.`,
+      );
+    }
+
+    plans.push({
+      kind: "create",
+      entity: "app-registration",
+      id: appRegistration.id ?? generatedIdentityRecordId("app-registration"),
+      values: collaboratorInvitationAppRegistrationValues(appRegistration, invitedPrincipalId),
+    });
+  }
+
+  plans.push({
+    kind: "create",
+    entity: "invitation",
+    id: invitationId,
+    values: {
+      targetEmail: input.targetEmail,
+      ...collaboratorInvitationTargetValues(input),
+      ...(invitedPrincipalId === undefined ? {} : { invitedPrincipal: invitedPrincipalId }),
+      ...(options.inviterPrincipalId === undefined
+        ? {}
+        : { inviterPrincipal: options.inviterPrincipalId }),
+      status: "pending",
+      expiresAt: input.expiresAt,
+    },
+  });
+
+  return plans;
+}
+
+function collaboratorInvitationTargetValues(
+  input: CollaboratorInvitationTargetFacts,
+): Pick<
+  CreateCollaboratorInvitationInput,
+  "targetAppInstallId" | "targetOrganization" | "targetSurface"
+> {
+  if (input.targetSurface === "app-install") {
+    return {
+      targetSurface: input.targetSurface,
+      targetAppInstallId: requiredParsedString(
+        "Collaborator invitation target app install id",
+        input.targetAppInstallId,
+      ),
+    };
+  }
+
+  if (input.targetSurface === "organization") {
+    return {
+      targetSurface: input.targetSurface,
+      targetOrganization: requiredParsedString(
+        "Collaborator invitation target organization",
+        input.targetOrganization,
+      ),
+    };
+  }
+
+  return {
+    targetSurface: input.targetSurface,
+  };
+}
+
+function collaboratorInvitationMembershipValues(
+  input: CollaboratorInvitationMembershipInput,
+  principalId: string,
+): IdentityMembershipValues {
+  if (input.targetKind === "group") {
+    return {
+      principal: principalId,
+      targetKind: input.targetKind,
+      targetGroup: requiredParsedString(
+        "Collaborator invitation membership target group",
+        input.targetGroup,
+      ),
+      status: "invited",
+    };
+  }
+
+  return {
+    principal: principalId,
+    targetKind: input.targetKind,
+    targetOrganization: requiredParsedString(
+      "Collaborator invitation membership target organization",
+      input.targetOrganization,
+    ),
+    status: "invited",
+  };
+}
+
+function collaboratorInvitationRoleAssignmentValues(
+  input: CollaboratorInvitationRoleAssignmentInput,
+  principalId: string,
+): IdentityRoleAssignmentValues {
+  if (input.scopeKind === "app-install") {
+    return {
+      role: input.role,
+      targetKind: "principal",
+      targetPrincipal: principalId,
+      scopeKind: input.scopeKind,
+      appInstallId: requiredParsedString(
+        "Collaborator invitation role assignment app install id",
+        input.appInstallId,
+      ),
+      status: "active",
+    };
+  }
+
+  if (input.scopeKind === "organization") {
+    return {
+      role: input.role,
+      targetKind: "principal",
+      targetPrincipal: principalId,
+      scopeKind: input.scopeKind,
+      scopeOrganization: requiredParsedString(
+        "Collaborator invitation role assignment scope organization",
+        input.scopeOrganization,
+      ),
+      status: "active",
+    };
+  }
+
+  return {
+    role: input.role,
+    targetKind: "principal",
+    targetPrincipal: principalId,
+    scopeKind: input.scopeKind,
+    status: "active",
+  };
+}
+
+function collaboratorInvitationAppRegistrationValues(
+  input: CollaboratorInvitationAppRegistrationInput,
+  principalId: string,
+): IdentityAppRegistrationValues {
+  return {
+    appInstallId: input.appInstallId,
+    targetKind: "principal",
+    targetPrincipal: principalId,
+    status: "pending",
+    ...(input.selectedOrganization === undefined
+      ? {}
+      : { selectedOrganization: input.selectedOrganization }),
+  };
 }
 
 function identityOwnerRecords(input: {
@@ -598,6 +1354,381 @@ function parseEnsureIdentityOwnerRequest(value: unknown): EnsureIdentityOwnerInp
   };
 }
 
+function parseCreateCollaboratorInvitationRequest(
+  value: unknown,
+): CreateCollaboratorInvitationInput {
+  const object = parseRecord("Collaborator invitation request", value);
+
+  assertAllowedKeys("Collaborator invitation request", object, [
+    "appRegistrations",
+    "expiresAt",
+    "idempotencyKey",
+    "invitationId",
+    "invitedPrincipal",
+    "memberships",
+    "now",
+    "principalEmail",
+    "roleAssignments",
+    "targetAppInstallId",
+    "targetEmail",
+    "targetOrganization",
+    "targetSurface",
+  ]);
+
+  const targetEmail = normalizeEmailDeliveryAddress(
+    "Collaborator invitation target email",
+    object.targetEmail,
+  );
+  const targetFacts = parseCollaboratorInvitationTargetFacts(object);
+  const expiresAt = parseIsoTimestamp("Collaborator invitation expiresAt", object.expiresAt);
+  const now = parseOptionalIsoTimestamp("Collaborator invitation now", object.now);
+  const comparisonNow = now ?? new Date().toISOString();
+
+  if (expiresAt <= comparisonNow) {
+    throw new BadRequestError("Collaborator invitation expiresAt must be after now.");
+  }
+
+  return {
+    ...targetFacts,
+    targetEmail,
+    expiresAt,
+    idempotencyKey: parseNonEmptyString(
+      "Collaborator invitation idempotencyKey",
+      object.idempotencyKey,
+    ),
+    ...(object.invitationId === undefined
+      ? {}
+      : {
+          invitationId: parseNonEmptyString("Collaborator invitation id", object.invitationId),
+        }),
+    ...(object.invitedPrincipal === undefined
+      ? {}
+      : { invitedPrincipal: parseCollaboratorInvitationPrincipal(object.invitedPrincipal) }),
+    ...(object.principalEmail === undefined
+      ? {}
+      : { principalEmail: parseCollaboratorInvitationPrincipalEmail(object.principalEmail) }),
+    memberships: parseCollaboratorInvitationMemberships(object.memberships),
+    roleAssignments: parseCollaboratorInvitationRoleAssignments(object.roleAssignments),
+    appRegistrations: parseCollaboratorInvitationAppRegistrations(object.appRegistrations),
+    ...(now === undefined ? {} : { now }),
+  };
+}
+
+function parseCollaboratorInvitationTargetFacts(
+  object: Record<string, unknown>,
+): CollaboratorInvitationTargetFacts {
+  const targetSurface = parseStringLiteral(
+    "Collaborator invitation targetSurface",
+    object.targetSurface,
+    invitationTargetSurfaces,
+  );
+  const targetAppInstallId = parseOptionalNonEmptyString(
+    "Collaborator invitation targetAppInstallId",
+    object.targetAppInstallId,
+  );
+  const targetOrganization = parseOptionalNonEmptyString(
+    "Collaborator invitation targetOrganization",
+    object.targetOrganization,
+  );
+
+  if (targetSurface === "app-install") {
+    if (targetAppInstallId === undefined || targetOrganization !== undefined) {
+      throw new BadRequestError(
+        "Collaborator invitation app-install target requires targetAppInstallId only.",
+      );
+    }
+
+    return {
+      targetSurface,
+      targetAppInstallId,
+    };
+  }
+
+  if (targetSurface === "organization") {
+    if (targetOrganization === undefined || targetAppInstallId !== undefined) {
+      throw new BadRequestError(
+        "Collaborator invitation organization target requires targetOrganization only.",
+      );
+    }
+
+    return {
+      targetSurface,
+      targetOrganization,
+    };
+  }
+
+  if (targetAppInstallId !== undefined || targetOrganization !== undefined) {
+    throw new BadRequestError("Collaborator invitation instance target cannot include target ids.");
+  }
+
+  return { targetSurface };
+}
+
+function parseCollaboratorInvitationPrincipal(
+  value: unknown,
+): CollaboratorInvitationPrincipalInput {
+  const object = parseRecord("Collaborator invitation invitedPrincipal", value);
+
+  assertAllowedKeys("Collaborator invitation invitedPrincipal", object, ["displayName", "id"]);
+
+  return {
+    displayName: parseNonEmptyString(
+      "Collaborator invitation invitedPrincipal displayName",
+      object.displayName,
+    ),
+    ...(object.id === undefined
+      ? {}
+      : {
+          id: parseNonEmptyString("Collaborator invitation invitedPrincipal id", object.id),
+        }),
+  };
+}
+
+function parseCollaboratorInvitationPrincipalEmail(
+  value: unknown,
+): CollaboratorInvitationPrincipalEmailInput {
+  const object = parseRecord("Collaborator invitation principalEmail", value);
+
+  assertAllowedKeys("Collaborator invitation principalEmail", object, [
+    "id",
+    "primary",
+    "recovery",
+  ]);
+
+  return {
+    ...(object.id === undefined
+      ? {}
+      : { id: parseNonEmptyString("Collaborator invitation principalEmail id", object.id) }),
+    primary:
+      parseOptionalBoolean("Collaborator invitation principalEmail primary", object.primary) ??
+      true,
+    recovery:
+      parseOptionalBoolean("Collaborator invitation principalEmail recovery", object.recovery) ??
+      false,
+  };
+}
+
+function parseCollaboratorInvitationMemberships(
+  value: unknown,
+): CollaboratorInvitationMembershipInput[] {
+  return parseOptionalArray("Collaborator invitation memberships", value, (item, index) => {
+    const object = parseRecord(`Collaborator invitation memberships ${index}`, item);
+
+    assertAllowedKeys(`Collaborator invitation memberships ${index}`, object, [
+      "id",
+      "targetGroup",
+      "targetKind",
+      "targetOrganization",
+    ]);
+
+    const targetKind = parseStringLiteral(
+      `Collaborator invitation memberships ${index} targetKind`,
+      object.targetKind,
+      membershipTargetKinds,
+    );
+    const targetGroup = parseOptionalNonEmptyString(
+      `Collaborator invitation memberships ${index} targetGroup`,
+      object.targetGroup,
+    );
+    const targetOrganization = parseOptionalNonEmptyString(
+      `Collaborator invitation memberships ${index} targetOrganization`,
+      object.targetOrganization,
+    );
+
+    if (targetKind === "group") {
+      if (targetGroup === undefined || targetOrganization !== undefined) {
+        throw new BadRequestError(
+          `Collaborator invitation memberships ${index} group target requires targetGroup only.`,
+        );
+      }
+
+      return {
+        ...(object.id === undefined
+          ? {}
+          : {
+              id: parseNonEmptyString(`Collaborator invitation memberships ${index} id`, object.id),
+            }),
+        targetKind,
+        targetGroup,
+      };
+    }
+
+    if (targetOrganization === undefined || targetGroup !== undefined) {
+      throw new BadRequestError(
+        `Collaborator invitation memberships ${index} organization target requires targetOrganization only.`,
+      );
+    }
+
+    return {
+      ...(object.id === undefined
+        ? {}
+        : {
+            id: parseNonEmptyString(`Collaborator invitation memberships ${index} id`, object.id),
+          }),
+      targetKind,
+      targetOrganization,
+    };
+  });
+}
+
+function parseCollaboratorInvitationRoleAssignments(
+  value: unknown,
+): CollaboratorInvitationRoleAssignmentInput[] {
+  return parseOptionalArray("Collaborator invitation roleAssignments", value, (item, index) => {
+    const object = parseRecord(`Collaborator invitation roleAssignments ${index}`, item);
+
+    assertAllowedKeys(`Collaborator invitation roleAssignments ${index}`, object, [
+      "appInstallId",
+      "id",
+      "role",
+      "roleKey",
+      "scopeKind",
+      "scopeOrganization",
+    ]);
+
+    const role = parseCollaboratorInvitationRoleReference(object, index);
+    const scopeKind = parseStringLiteral(
+      `Collaborator invitation roleAssignments ${index} scopeKind`,
+      object.scopeKind,
+      roleAssignmentScopeKinds,
+    );
+    const appInstallId = parseOptionalNonEmptyString(
+      `Collaborator invitation roleAssignments ${index} appInstallId`,
+      object.appInstallId,
+    );
+    const scopeOrganization = parseOptionalNonEmptyString(
+      `Collaborator invitation roleAssignments ${index} scopeOrganization`,
+      object.scopeOrganization,
+    );
+
+    if (scopeKind === "app-install") {
+      if (appInstallId === undefined || scopeOrganization !== undefined) {
+        throw new BadRequestError(
+          `Collaborator invitation roleAssignments ${index} app-install scope requires appInstallId only.`,
+        );
+      }
+
+      return {
+        ...(object.id === undefined
+          ? {}
+          : {
+              id: parseNonEmptyString(
+                `Collaborator invitation roleAssignments ${index} id`,
+                object.id,
+              ),
+            }),
+        role,
+        scopeKind,
+        appInstallId,
+      };
+    }
+
+    if (scopeKind === "organization") {
+      if (scopeOrganization === undefined || appInstallId !== undefined) {
+        throw new BadRequestError(
+          `Collaborator invitation roleAssignments ${index} organization scope requires scopeOrganization only.`,
+        );
+      }
+
+      return {
+        ...(object.id === undefined
+          ? {}
+          : {
+              id: parseNonEmptyString(
+                `Collaborator invitation roleAssignments ${index} id`,
+                object.id,
+              ),
+            }),
+        role,
+        scopeKind,
+        scopeOrganization,
+      };
+    }
+
+    if (appInstallId !== undefined || scopeOrganization !== undefined) {
+      throw new BadRequestError(
+        `Collaborator invitation roleAssignments ${index} instance scope cannot include scope ids.`,
+      );
+    }
+
+    return {
+      ...(object.id === undefined
+        ? {}
+        : {
+            id: parseNonEmptyString(
+              `Collaborator invitation roleAssignments ${index} id`,
+              object.id,
+            ),
+          }),
+      role,
+      scopeKind,
+    };
+  });
+}
+
+function parseCollaboratorInvitationRoleReference(
+  object: Record<string, unknown>,
+  index: number,
+): string {
+  const role = parseOptionalNonEmptyString(
+    `Collaborator invitation roleAssignments ${index} role`,
+    object.role,
+  );
+  const roleKey = parseOptionalStringLiteral(
+    `Collaborator invitation roleAssignments ${index} roleKey`,
+    object.roleKey,
+    identityControlPlaneRoleKeys,
+  );
+
+  if (
+    (role === undefined && roleKey === undefined) ||
+    (role !== undefined && roleKey !== undefined)
+  ) {
+    throw new BadRequestError(
+      `Collaborator invitation roleAssignments ${index} must include exactly one of role or roleKey.`,
+    );
+  }
+
+  return role ?? `role:${roleKey}`;
+}
+
+function parseCollaboratorInvitationAppRegistrations(
+  value: unknown,
+): CollaboratorInvitationAppRegistrationInput[] {
+  return parseOptionalArray("Collaborator invitation appRegistrations", value, (item, index) => {
+    const object = parseRecord(`Collaborator invitation appRegistrations ${index}`, item);
+
+    assertAllowedKeys(`Collaborator invitation appRegistrations ${index}`, object, [
+      "appInstallId",
+      "id",
+      "selectedOrganization",
+    ]);
+
+    return {
+      appInstallId: parseNonEmptyString(
+        `Collaborator invitation appRegistrations ${index} appInstallId`,
+        object.appInstallId,
+      ),
+      ...(object.id === undefined
+        ? {}
+        : {
+            id: parseNonEmptyString(
+              `Collaborator invitation appRegistrations ${index} id`,
+              object.id,
+            ),
+          }),
+      ...(object.selectedOrganization === undefined
+        ? {}
+        : {
+            selectedOrganization: parseNonEmptyString(
+              `Collaborator invitation appRegistrations ${index} selectedOrganization`,
+              object.selectedOrganization,
+            ),
+          }),
+    };
+  });
+}
+
 function normalizeIdentityOwnerInput(value: unknown): OwnerIdentityInput {
   const object = parseRecord("Identity owner", value);
   const allowedKeys = new Set(["email", "name"]);
@@ -742,12 +1873,107 @@ function parseRecord(context: string, value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
+function assertAllowedKeys(
+  context: string,
+  value: Record<string, unknown>,
+  allowedKeys: readonly string[],
+) {
+  const allowed = new Set(allowedKeys);
+
+  for (const key of Object.keys(value)) {
+    if (!allowed.has(key)) {
+      throw new BadRequestError(`${context} has unsupported key "${key}".`);
+    }
+  }
+}
+
+function parseOptionalArray<T>(
+  context: string,
+  value: unknown,
+  parseItem: (item: unknown, index: number) => T,
+): T[] {
+  if (value === undefined) {
+    return [];
+  }
+
+  if (!Array.isArray(value)) {
+    throw new BadRequestError(`${context} must be an array.`);
+  }
+
+  return value.map((item, index) => parseItem(item, index));
+}
+
 function parseNonEmptyString(context: string, value: unknown): string {
   if (typeof value !== "string" || value.trim() === "") {
     throw new BadRequestError(`${context} must be a non-empty string.`);
   }
 
   return value.trim();
+}
+
+function parseOptionalNonEmptyString(context: string, value: unknown): string | undefined {
+  return value === undefined ? undefined : parseNonEmptyString(context, value);
+}
+
+function requiredParsedString(context: string, value: string | undefined): string {
+  if (value === undefined) {
+    throw new BadRequestError(`${context} must be a non-empty string.`);
+  }
+
+  return value;
+}
+
+function parseIsoTimestamp(context: string, value: unknown): string {
+  const timestamp = parseNonEmptyString(context, value);
+  const date = new Date(timestamp);
+
+  if (Number.isNaN(date.valueOf()) || date.toISOString() !== timestamp) {
+    throw new BadRequestError(`${context} must be an ISO timestamp.`);
+  }
+
+  return timestamp;
+}
+
+function parseOptionalIsoTimestamp(context: string, value: unknown): string | undefined {
+  return value === undefined ? undefined : parseIsoTimestamp(context, value);
+}
+
+function parseOptionalBoolean(context: string, value: unknown): boolean | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (typeof value !== "boolean") {
+    throw new BadRequestError(`${context} must be a boolean.`);
+  }
+
+  return value;
+}
+
+function parseStringLiteral<const Values extends readonly string[]>(
+  context: string,
+  value: unknown,
+  values: Values,
+): Values[number] {
+  const parsed = parseNonEmptyString(context, value);
+
+  if (!values.includes(parsed as Values[number])) {
+    throw new BadRequestError(`${context} must be one of: ${values.join(", ")}.`);
+  }
+
+  return parsed as Values[number];
+}
+
+function parseOptionalStringLiteral<const Values extends readonly string[]>(
+  context: string,
+  value: unknown,
+  values: Values,
+): Values[number] | undefined {
+  return value === undefined ? undefined : parseStringLiteral(context, value, values);
+}
+
+function generatedIdentityRecordId(entity: string): string {
+  return `${entity}:${crypto.randomUUID()}`;
 }
 
 function jsonResponse(body: unknown, status = 200, headers: HeadersInit = {}): Response {

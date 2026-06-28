@@ -147,8 +147,8 @@ singleton instance settings record.
 - **THEN** at most one active settings record exists for the instance
 - **AND** it stores camelCase fields for canonical origin, primary route
   reference, auth route reference or auth origin facts, default email domain
-  reference, default contact sender reference, contact notification recipient,
-  and production identity status
+  reference, default contact sender reference, default auth sender reference,
+  contact notification recipient, and production identity status
 - **AND** those fields are active policy selections, not provider resource
   truth, raw DNS state, provider credentials, or runtime secrets
 
@@ -194,6 +194,8 @@ records separate from HTTP route behavior.
 - **WHEN** the `email-sender` entity is inspected
 - **THEN** each record stores camelCase fields for enabled state, address,
   display name, purpose, and email domain reference
+- **AND** supported sender purposes include contact notification, system, and
+  auth messages
 - **AND** the sender address host must belong to the referenced email domain
 
 #### Scenario: Route remains HTTP intent

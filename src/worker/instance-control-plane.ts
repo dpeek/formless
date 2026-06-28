@@ -889,30 +889,20 @@ function validateInstanceSettingsBoundary(
 
   const defaultEmailDomain = stringRecordValue(values.defaultEmailDomain);
   const defaultContactSender = stringRecordValue(values.defaultContactSender);
+  const defaultAuthSender = stringRecordValue(values.defaultAuthSender);
 
-  if (defaultContactSender !== undefined) {
-    const sender = findControlPlaneRecord(
-      storage,
-      "email-sender",
-      defaultContactSender,
-      additionalRecords,
-    );
-
-    if (!sender) {
-      throw new BadRequestError(
-        `Field "defaultContactSender" references unknown email-sender record "${defaultContactSender}".`,
-      );
-    }
-
-    if (
-      defaultEmailDomain !== undefined &&
-      stringRecordValue(sender.values.emailDomain) !== defaultEmailDomain
-    ) {
-      throw new BadRequestError(
-        'Field "defaultContactSender" must reference a sender for the selected default email domain.',
-      );
-    }
-  }
+  validateDefaultEmailSenderBoundary(storage, additionalRecords, {
+    defaultEmailDomain,
+    fieldName: "defaultContactSender",
+    purpose: "contact-notification",
+    senderId: defaultContactSender,
+  });
+  validateDefaultEmailSenderBoundary(storage, additionalRecords, {
+    defaultEmailDomain,
+    fieldName: "defaultAuthSender",
+    purpose: "auth",
+    senderId: defaultAuthSender,
+  });
 
   if (
     values.productionIdentityStatus === "configured" &&
@@ -923,6 +913,44 @@ function validateInstanceSettingsBoundary(
   ) {
     throw new BadRequestError(
       'Field "productionIdentityStatus" cannot be "configured" without a canonical origin or production route.',
+    );
+  }
+}
+
+function validateDefaultEmailSenderBoundary(
+  storage: DurableObjectStorage,
+  additionalRecords: readonly StoredRecord[] | undefined,
+  input: {
+    defaultEmailDomain?: string;
+    fieldName: "defaultAuthSender" | "defaultContactSender";
+    purpose: "auth" | "contact-notification";
+    senderId?: string;
+  },
+) {
+  if (input.senderId === undefined) {
+    return;
+  }
+
+  const sender = findControlPlaneRecord(storage, "email-sender", input.senderId, additionalRecords);
+
+  if (!sender) {
+    throw new BadRequestError(
+      `Field "${input.fieldName}" references unknown email-sender record "${input.senderId}".`,
+    );
+  }
+
+  if (stringRecordValue(sender.values.purpose) !== input.purpose) {
+    throw new BadRequestError(
+      `Field "${input.fieldName}" must reference a sender with purpose "${input.purpose}".`,
+    );
+  }
+
+  if (
+    input.defaultEmailDomain !== undefined &&
+    stringRecordValue(sender.values.emailDomain) !== input.defaultEmailDomain
+  ) {
+    throw new BadRequestError(
+      `Field "${input.fieldName}" must reference a sender for the selected default email domain.`,
     );
   }
 }

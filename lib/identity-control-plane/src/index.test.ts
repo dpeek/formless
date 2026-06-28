@@ -580,6 +580,40 @@ describe("identity control-plane schema contracts", () => {
         "Identity records",
         replaceRecord(
           records,
+          invitationRecord("invitation:ada", {
+            targetAppInstallId: undefined,
+          }),
+        ),
+      ),
+    ).toThrow('requires field "auth:invitation.targetAppInstallId"');
+    expect(() =>
+      validateIdentityControlPlaneRecords(
+        "Identity records",
+        replaceRecord(
+          records,
+          invitationRecord("invitation:ada", {
+            targetOrganization: "organization:acme",
+          }),
+        ),
+      ),
+    ).toThrow('cannot set field "auth:invitation.targetOrganization"');
+    expect(() =>
+      validateIdentityControlPlaneRecords(
+        "Identity records",
+        replaceRecord(
+          records,
+          invitationRecord("invitation:ada", {
+            targetAppInstallId: "site",
+            targetSurface: "instance",
+          }),
+        ),
+      ),
+    ).toThrow('cannot set field "auth:invitation.targetAppInstallId"');
+    expect(() =>
+      validateIdentityControlPlaneRecords(
+        "Identity records",
+        replaceRecord(
+          records,
           invitationRecord("invitation:ada", { inviteTokenHash: "sha256:private" }),
         ),
       ),

@@ -228,7 +228,7 @@ export type ControlPlaneEmailDomainProjectionRecord = {
   providerFamily: DeployProviderFamily;
 };
 
-export type ControlPlaneEmailSenderPurpose = "contact-notification" | "system";
+export type ControlPlaneEmailSenderPurpose = "auth" | "contact-notification" | "system";
 
 export type ControlPlaneEmailSenderProjectionRecord = {
   address: string;

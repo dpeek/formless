@@ -1,4 +1,5 @@
 import type { StoredRecord } from "@dpeek/formless-storage";
+import { INSTANCE_CONTROL_PLANE_INSTANCE_SETTINGS_ID } from "@dpeek/formless-instance-control-plane";
 import {
   EMAIL_DELIVERY_SCHEDULE_API_PATH,
   emailDeliverySendRuntimeJob,
@@ -67,6 +68,13 @@ export type CloudflareSendEmailBinding = {
 export type EmailDeliveryQueueBinding = {
   send(message: EmailDeliverySendRuntimeJob): Promise<unknown>;
 };
+
+export type PlatformEmailDefaultSenderPurpose = "auth" | "contact-notification";
+
+const defaultSenderFieldByPurpose = {
+  auth: "defaultAuthSender",
+  "contact-notification": "defaultContactSender",
+} as const satisfies Record<PlatformEmailDefaultSenderPurpose, string>;
 
 export type ScheduleEmailDeliveryInput = {
   controlPlaneRecords: readonly StoredRecord[];
@@ -220,6 +228,38 @@ export async function schedulePlatformEmailDelivery(input: {
     delivery: body.delivery,
     replayed: body.replayed,
   };
+}
+
+export function resolveDefaultEmailSenderReference(
+  records: readonly StoredRecord[],
+  purpose: PlatformEmailDefaultSenderPurpose,
+): { id: string } | undefined {
+  const settings = activeInstanceSettingsRecord(records);
+  const fieldName = defaultSenderFieldByPurpose[purpose];
+  const senderId = stringRecordValue(settings?.values[fieldName]);
+
+  return senderId === undefined ? undefined : { id: senderId };
+}
+
+export function resolveConfiguredDefaultCloudflareSender(
+  records: readonly StoredRecord[],
+  purpose: PlatformEmailDefaultSenderPurpose,
+): EmailDeliverySender | undefined {
+  const sender = resolveDefaultEmailSenderReference(records, purpose);
+
+  if (sender === undefined) {
+    return undefined;
+  }
+
+  const senderRecord = activeControlPlaneRecord(records, "email-sender", sender.id);
+
+  if (stringRecordValue(senderRecord?.values.purpose) !== purpose) {
+    throw new DisplaySafeEmailRuntimeError(
+      `Default ${purpose} email sender must reference a sender with purpose "${purpose}".`,
+    );
+  }
+
+  return resolveConfiguredCloudflareSender(records, sender.id);
 }
 
 export async function scheduleEmailDelivery(
@@ -520,6 +560,15 @@ function activeControlPlaneRecord(
 ): StoredRecord | undefined {
   return records.find(
     (record) => record.entity === entity && record.id === id && !record.deletedAt,
+  );
+}
+
+function activeInstanceSettingsRecord(records: readonly StoredRecord[]): StoredRecord | undefined {
+  return records.find(
+    (record) =>
+      record.entity === "instance-settings" &&
+      !record.deletedAt &&
+      stringRecordValue(record.values.settingsId) === INSTANCE_CONTROL_PLANE_INSTANCE_SETTINGS_ID,
   );
 }
 

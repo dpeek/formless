@@ -222,6 +222,7 @@ describe("instance control-plane schema contracts", () => {
       authRelyingPartyId: { type: "text", required: false },
       defaultEmailDomain: { type: "reference", required: false, to: "email-domain" },
       defaultContactSender: { type: "reference", required: false, to: "email-sender" },
+      defaultAuthSender: { type: "reference", required: false, to: "email-sender" },
       contactNotificationRecipient: { type: "text", required: false },
       productionIdentityStatus: {
         type: "enum",
@@ -251,6 +252,7 @@ describe("instance control-plane schema contracts", () => {
         required: true,
         values: {
           "contact-notification": { label: "Contact notification" },
+          auth: { label: "Auth messages" },
           system: { label: "System" },
         },
       },
@@ -309,6 +311,28 @@ describe("instance control-plane schema contracts", () => {
         { packageResolver: controlPlanePackageResolver },
       ),
     ).toThrow('field "instance:email-sender.address" host must belong');
+
+    expect(() =>
+      parseInstanceControlPlaneStorageSnapshot(
+        "Instance archive controlPlane",
+        controlPlaneSnapshot({
+          records: records.map((record) =>
+            record.entity === "instance-settings"
+              ? {
+                  ...record,
+                  values: {
+                    ...record.values,
+                    defaultAuthSender: "email-sender:contact@mail.example.com",
+                  },
+                }
+              : record,
+          ),
+        }),
+        { packageResolver: controlPlanePackageResolver },
+      ),
+    ).toThrow(
+      'field "instance:instance-settings.defaultAuthSender" must reference a sender with purpose "auth"',
+    );
   });
 
   it("declares operation contracts for generated instance management records", () => {
@@ -402,6 +426,37 @@ describe("instance control-plane schema contracts", () => {
       "workerName",
       "credentialRef",
       ...instanceControlPlaneDeploymentConfigObservedFields,
+    ]);
+    expect(
+      Object.keys(schema.entities["instance-settings"]?.operations?.create.input?.fields ?? {}),
+    ).toEqual([
+      "settingsId",
+      "canonicalOrigin",
+      "primaryRoute",
+      "authRoute",
+      "authOrigin",
+      "authRelyingPartyId",
+      "authRelyingPartyName",
+      "defaultEmailDomain",
+      "defaultContactSender",
+      "defaultAuthSender",
+      "contactNotificationRecipient",
+      "productionIdentityStatus",
+    ]);
+    expect(
+      Object.keys(schema.entities["instance-settings"]?.operations?.update.input?.fields ?? {}),
+    ).toEqual([
+      "canonicalOrigin",
+      "primaryRoute",
+      "authRoute",
+      "authOrigin",
+      "authRelyingPartyId",
+      "authRelyingPartyName",
+      "defaultEmailDomain",
+      "defaultContactSender",
+      "defaultAuthSender",
+      "contactNotificationRecipient",
+      "productionIdentityStatus",
     ]);
   });
 
@@ -686,6 +741,56 @@ describe("instance control-plane schema contracts", () => {
     expect(schema.tableViews.deployDesiredResourceTable).toBeUndefined();
     expect(schema.tableViews.deployEvidenceSummaryTable).toBeUndefined();
     expect(schema.tableViews.deployDriftReportTable).toBeUndefined();
+  });
+
+  it("renders email defaults in generated settings management surfaces", () => {
+    const schema = instanceControlPlaneSchema;
+    const settingsTable = schema.tableViews.instanceSettingsTable;
+    const settingsCreateFields =
+      schema.views.instanceSettingsCreate?.type === "create"
+        ? Object.keys(schema.views.instanceSettingsCreate.fields)
+        : [];
+    const settingsEditFields =
+      schema.views.instanceSettingsEdit?.type === "edit"
+        ? Object.keys(schema.views.instanceSettingsEdit.fields)
+        : [];
+    const expectedEditableDefaults = [
+      "canonicalOrigin",
+      "primaryRoute",
+      "authRoute",
+      "authOrigin",
+      "authRelyingPartyId",
+      "authRelyingPartyName",
+      "defaultEmailDomain",
+      "defaultContactSender",
+      "defaultAuthSender",
+      "contactNotificationRecipient",
+      "productionIdentityStatus",
+    ];
+
+    expect(settingsTable?.columns).toMatchObject([
+      { field: "settingsId", display: "readOnly" },
+      { field: "canonicalOrigin", display: "readOnly" },
+      { field: "primaryRoute", display: "readOnly" },
+      { field: "authRoute", display: "readOnly" },
+      { field: "authOrigin", display: "readOnly" },
+      { field: "authRelyingPartyId", display: "readOnly" },
+      { field: "authRelyingPartyName", display: "readOnly" },
+      { field: "defaultEmailDomain", display: "readOnly" },
+      { field: "defaultContactSender", display: "readOnly" },
+      { field: "defaultAuthSender", display: "readOnly" },
+      { field: "contactNotificationRecipient", display: "readOnly" },
+      { field: "productionIdentityStatus", display: "readOnly" },
+      { type: "operationControl", operations: ["instance-settings.update"] },
+    ]);
+    expect(settingsCreateFields).toEqual(["settingsId", ...expectedEditableDefaults]);
+    expect(settingsEditFields).toEqual(expectedEditableDefaults);
+    expect(schema.relationships?.settingsDefaultAuthSender).toEqual({
+      kind: "toOne",
+      label: "Settings default auth sender",
+      from: { entity: "instance-settings", field: "defaultAuthSender" },
+      to: { entity: "email-sender" },
+    });
   });
 
   it("derives default app route records without nesting installed app data", () => {
@@ -1403,6 +1508,7 @@ function controlPlaneRecords(
               authRelyingPartyName: "Example Instance",
               defaultEmailDomain: "email-domain:mail.example.com",
               defaultContactSender: "email-sender:contact@mail.example.com",
+              defaultAuthSender: "email-sender:auth@mail.example.com",
               contactNotificationRecipient: "owner@example.com",
               productionIdentityStatus: "configured",
             },
@@ -1431,6 +1537,19 @@ function controlPlaneRecords(
               address: "contact@mail.example.com",
               displayName: "Contact",
               purpose: "contact-notification",
+              emailDomain: "email-domain:mail.example.com",
+            },
+            createdAt: now,
+            updatedAt: now,
+          },
+          {
+            id: "email-sender:auth@mail.example.com",
+            entity: "email-sender",
+            values: {
+              enabled: true,
+              address: "auth@mail.example.com",
+              displayName: "Auth",
+              purpose: "auth",
               emailDomain: "email-domain:mail.example.com",
             },
             createdAt: now,

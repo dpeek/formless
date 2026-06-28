@@ -6,13 +6,17 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vite-plus
 
 import { createWorkerHarness } from "./miniflare-test.ts";
 import type {
+  ConsumeCollaboratorInvitationTokenResult,
   ConsumeHandoffGrantResult,
   ConsumePasskeyChallengeResult,
   CreateCentralAuthSessionResult,
+  CreateCollaboratorInvitationTokenResult,
   CreateHandoffGrantResult,
   CreatePasskeyChallengeResult,
   CreatePasskeyCredentialResult,
+  RevokeCollaboratorInvitationTokenResult,
   RevokeCentralAuthSessionResult,
+  StoredCollaboratorInvitationToken,
   StoredCentralAuthSession,
   StoredHandoffGrant,
   StoredHostSessionRevocationVersion,
@@ -51,6 +55,11 @@ const routeId = "route:personal:admin";
 const appInstallId = "personal";
 const storageIdentity = "app:personal";
 const returnTo = "/settings?panel=routes";
+const invitationId = "invitation:ada";
+const revokedInvitationId = "invitation:grace";
+const duplicateInvitationId = "invitation:duplicate";
+const invitationRawToken = "aW52aXRlLXJhdy10b2tlbi0x";
+const revokedInvitationRawToken = "aW52aXRlLXJhdy10b2tlbi0y";
 const credentialId = "Y3JlZGVudGlhbC0x";
 const publicKey = [1, 2, 3, 4, 5];
 const publicKeyBase64Url = "AQIDBAU";
@@ -438,6 +447,167 @@ describe("instance auth state", () => {
     });
   });
 
+  it("stores collaborator invitation token hashes with target binding and builds auth-origin links", async () => {
+    const tokenHash = await hashInvitationToken(invitationRawToken);
+    const revokedTokenHash = await hashInvitationToken(revokedInvitationRawToken);
+    const created = await createInvitationToken({
+      invitationId,
+      tokenHash,
+      targetEmail: "Ada@Example.COM",
+      targetSurface: "app-install",
+      targetAppInstallId: appInstallId,
+    });
+    const duplicateByInvitation = await createInvitationToken({
+      invitationId,
+      tokenHash: revokedTokenHash,
+      targetEmail: "grace@example.com",
+      targetSurface: "instance",
+    });
+    const duplicateByHash = await createInvitationToken({
+      invitationId: duplicateInvitationId,
+      tokenHash,
+      targetEmail: "grace@example.com",
+      targetSurface: "instance",
+    });
+    const link = await buildInvitationLink({
+      authOrigin: `${canonicalOrigin}/`,
+      invitationId,
+      token: invitationRawToken,
+    });
+    const wrongToken = await consumeInvitationToken({
+      invitationId,
+      tokenHash: revokedTokenHash,
+      now: updatedAt,
+    });
+    const wrongTarget = await consumeInvitationToken({
+      invitationId,
+      tokenHash,
+      target: {
+        targetSurface: "organization",
+        targetOrganization: "organization:ops",
+      },
+      now: updatedAt,
+    });
+    const wrongEmail = await consumeInvitationToken({
+      invitationId,
+      tokenHash,
+      targetEmail: "grace@example.com",
+      now: updatedAt,
+    });
+    const consumed = await consumeInvitationToken({
+      invitationId,
+      tokenHash,
+      target: {
+        targetSurface: "app-install",
+        targetAppInstallId: appInstallId,
+      },
+      targetEmail: "ada@example.com",
+      now: updatedAt,
+    });
+    const replay = await consumeInvitationToken({
+      invitationId,
+      tokenHash,
+      now: updatedAt,
+    });
+    const stored = await readInvitationToken(invitationId);
+    const session = await createCentralSession();
+    const grant = await createHandoffGrant();
+
+    await createInvitationToken({
+      invitationId: revokedInvitationId,
+      tokenHash: revokedTokenHash,
+      targetEmail: "grace@example.com",
+      targetSurface: "instance",
+    });
+
+    const revoked = await revokeInvitationToken(revokedInvitationId, updatedAt);
+    const consumedRevoked = await consumeInvitationToken({
+      invitationId: revokedInvitationId,
+      tokenHash: revokedTokenHash,
+      now: updatedAt,
+    });
+
+    expect(created).toEqual({
+      ok: true,
+      token: {
+        invitationId,
+        tokenHash,
+        normalizedTargetEmail: "ada@example.com",
+        targetSurface: "app-install",
+        targetAppInstallId: appInstallId,
+        createdAt,
+        expiresAt,
+      },
+    });
+    expect(duplicateByInvitation).toEqual({
+      ok: false,
+      reason: "duplicate-invitation-id",
+      token: created.ok ? created.token : undefined,
+    });
+    expect(duplicateByHash).toEqual({
+      ok: false,
+      reason: "duplicate-token-hash",
+      token: created.ok ? created.token : undefined,
+    });
+    expect(link).toBe(
+      `${canonicalOrigin}/_formless/auth/invitations/accept?invitationId=invitation%3Aada&token=${invitationRawToken}`,
+    );
+    expect(new URL(link).searchParams.has("redirectTo")).toBe(false);
+    expect(new URL(link).pathname).not.toContain("setup");
+    expect(new URL(link).pathname).not.toContain("passkey");
+    expect(wrongToken).toEqual({
+      ok: false,
+      reason: "wrong-token",
+      token: created.ok ? created.token : undefined,
+    });
+    expect(wrongTarget).toEqual({
+      ok: false,
+      reason: "wrong-target",
+      token: created.ok ? created.token : undefined,
+    });
+    expect(wrongEmail).toEqual({
+      ok: false,
+      reason: "wrong-target-email",
+      token: created.ok ? created.token : undefined,
+    });
+    expect(consumed).toEqual({
+      ok: true,
+      token: {
+        ...(created.ok ? created.token : undefined),
+        consumedAt: updatedAt,
+      },
+    });
+    expect(replay).toEqual({
+      ok: false,
+      reason: "already-consumed",
+      token: consumed.ok ? consumed.token : undefined,
+    });
+    expect(stored.token).toEqual(consumed.ok ? consumed.token : undefined);
+    expect(revoked).toEqual({
+      ok: true,
+      token: {
+        invitationId: revokedInvitationId,
+        tokenHash: revokedTokenHash,
+        normalizedTargetEmail: "grace@example.com",
+        targetSurface: "instance",
+        createdAt,
+        expiresAt,
+        revokedAt: updatedAt,
+      },
+    });
+    expect(consumedRevoked).toEqual({
+      ok: false,
+      reason: "revoked-token",
+      token: revoked.ok ? revoked.token : undefined,
+    });
+
+    const privateAuthSessionState = JSON.stringify([session, grant]);
+
+    expect(JSON.stringify([created, consumed, revoked])).not.toContain(invitationRawToken);
+    expect(privateAuthSessionState).not.toContain(invitationRawToken);
+    expect(privateAuthSessionState).not.toContain(tokenHash);
+  });
+
   it("reports missing credentials before verification facts are updated", async () => {
     expect(
       await updateCredentialVerification({
@@ -545,6 +715,43 @@ function consumeHandoffGrant(id: string, now: string) {
   return postJson<ConsumeHandoffGrantResult>("/handoff-grant/consume", { grantId: id, now });
 }
 
+function createInvitationToken(input: Record<string, unknown>) {
+  return postJson<CreateCollaboratorInvitationTokenResult>("/invitation-token", {
+    createdAt,
+    expiresAt,
+    ...input,
+  });
+}
+
+function readInvitationToken(id: string) {
+  return getJson<{ token: StoredCollaboratorInvitationToken | null }>(
+    `/invitation-token?invitationId=${encodeURIComponent(id)}`,
+  );
+}
+
+function consumeInvitationToken(input: unknown) {
+  return postJson<ConsumeCollaboratorInvitationTokenResult>("/invitation-token/consume", input);
+}
+
+function revokeInvitationToken(id: string, now: string) {
+  return postJson<RevokeCollaboratorInvitationTokenResult>("/invitation-token/revoke", {
+    invitationId: id,
+    now,
+  });
+}
+
+function buildInvitationLink(input: unknown) {
+  return postJson<string>("/invitation-link", input);
+}
+
+async function hashInvitationToken(token: string) {
+  const body = await getJson<{ hash: string }>(
+    `/invitation-token/hash?token=${encodeURIComponent(token)}`,
+  );
+
+  return body.hash;
+}
+
 function handoffGrantInput() {
   return {
     grantId,
@@ -612,24 +819,30 @@ async function writeInstanceAuthHarness() {
     `
       import { DurableObject } from "cloudflare:workers";
       import {
+        buildCollaboratorInvitationLink,
         bumpHostSessionRevocationVersion,
+        consumeCollaboratorInvitationToken,
         consumeHandoffGrant,
         consumePasskeyChallenge,
         createCentralAuthSession,
+        createCollaboratorInvitationToken,
         createHandoffGrant,
         createPasskeyChallenge,
         createPasskeyCredential,
         deletePasskeyChallenge,
         ensureInstanceAuthTables,
         expirePasskeyChallenges,
+        hashCollaboratorInvitationToken,
         passkeyCredentialToWebAuthnCredential,
         readCentralAuthSession,
+        readCollaboratorInvitationToken,
         readHandoffGrant,
         readHostSessionRevocationVersion,
         readInstanceAuthConfig,
         readPasskeyChallenge,
         readPasskeyCredential,
         readPasskeyCredentialsForPrincipal,
+        revokeCollaboratorInvitationToken,
         revokeCentralAuthSession,
         updatePasskeyCredentialVerification,
         writeInstanceAuthConfig,
@@ -698,6 +911,46 @@ async function writeInstanceAuthHarness() {
 
             if (request.method === "POST" && url.pathname === "/handoff-grant/consume") {
               return Response.json(consumeHandoffGrant(this.ctx.storage, await request.json()));
+            }
+
+            if (request.method === "POST" && url.pathname === "/invitation-token") {
+              return Response.json(
+                createCollaboratorInvitationToken(this.ctx.storage, await request.json()),
+              );
+            }
+
+            if (request.method === "GET" && url.pathname === "/invitation-token") {
+              return Response.json({
+                token:
+                  readCollaboratorInvitationToken(
+                    this.ctx.storage,
+                    url.searchParams.get("invitationId"),
+                  ) ?? null,
+              });
+            }
+
+            if (request.method === "POST" && url.pathname === "/invitation-token/consume") {
+              return Response.json(
+                consumeCollaboratorInvitationToken(this.ctx.storage, await request.json()),
+              );
+            }
+
+            if (request.method === "POST" && url.pathname === "/invitation-token/revoke") {
+              const body = await request.json();
+
+              return Response.json(
+                revokeCollaboratorInvitationToken(this.ctx.storage, body.invitationId, body.now),
+              );
+            }
+
+            if (request.method === "GET" && url.pathname === "/invitation-token/hash") {
+              return Response.json({
+                hash: await hashCollaboratorInvitationToken(url.searchParams.get("token")),
+              });
+            }
+
+            if (request.method === "POST" && url.pathname === "/invitation-link") {
+              return Response.json(buildCollaboratorInvitationLink(await request.json()));
             }
 
             if (request.method === "POST" && url.pathname === "/challenge") {

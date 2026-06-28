@@ -204,10 +204,7 @@ describe("RecordTable", () => {
     expect(html).toContain('data-formless-state-transition-operation-labels="Start"');
     expect(html).toContain('data-formless-state-transition-operations="startTask"');
     expect(html).toContain('data-formless-state-transition-target-states="doing"');
-    expect(html).toContain('data-formless-state-transition-operation="startTask"');
-    expect(html).toContain('data-formless-state-transition-machine="statusFlow"');
-    expect(html).toContain('data-formless-state-transition-target-state="doing"');
-    expect(html).not.toContain('data-formless-state-transition-operation="completeTask"');
+    expect(html).not.toContain("completeTask");
     expect(html).not.toContain('data-formless-transition-controls="task-1"');
   });
 

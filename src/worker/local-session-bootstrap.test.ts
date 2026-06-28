@@ -36,6 +36,7 @@ afterEach(async () => {
 describe("local session bootstrap API routes", () => {
   it("mints a local owner session that authorizes app install writes without exposing admin tokens", async () => {
     const rejectedBefore = await createSiteInstall({ cookie: null });
+    const rejectedBeforeBody = await rejectedBefore.json();
     const bootstrap = await bootstrapLocalSession({
       init: { headers: { Origin: "http://example.com" } },
       redirectTo: "/apps/site",
@@ -54,7 +55,7 @@ describe("local session bootstrap API routes", () => {
     const installsAfter = await getJson<AppInstallsResponse>("/api/formless/app-installs");
 
     expect(rejectedBefore.status).toBe(401);
-    expect(await rejectedBefore.json()).toEqual({
+    expect(rejectedBeforeBody).toEqual({
       error: "Owner session or admin authorization is required for this write endpoint.",
     });
     expect(bootstrap.status).toBe(302);

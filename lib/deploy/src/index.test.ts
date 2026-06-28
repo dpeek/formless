@@ -314,6 +314,14 @@ describe("Deploy control-plane projection helpers", () => {
     ]);
     expect(projectionInput.emailSenders).toEqual([
       {
+        address: "auth@mail.example.com",
+        displayName: "Auth",
+        emailDomain: "email-domain:mail.example.com",
+        enabled: true,
+        id: "email-sender:auth@mail.example.com",
+        purpose: "auth",
+      },
+      {
         address: "contact@mail.example.com",
         displayName: "Contact",
         emailDomain: "email-domain:mail.example.com",
@@ -362,6 +370,7 @@ describe("Deploy control-plane projection helpers", () => {
         ],
         inputs: {
           allowedSenderAddresses: [
+            "auth@mail.example.com",
             "contact@mail.example.com",
             "pending@mail.example.com",
             "system@mail.example.com",
@@ -944,6 +953,14 @@ const emailDomains = [
 
 const emailSenders = [
   {
+    address: "auth@mail.example.com",
+    displayName: "Auth",
+    emailDomain: "email-domain:mail.example.com",
+    enabled: true,
+    id: "email-sender:auth@mail.example.com",
+    purpose: "auth",
+  },
+  {
     address: "System@Mail.Example.com",
     emailDomain: "email-domain:mail.example.com",
     enabled: true,
@@ -1057,6 +1074,18 @@ const emailSourceRecords = [
       domain: "Mail.Example.com.",
       enabled: true,
       providerFamily: "cloudflare",
+    },
+  },
+  {
+    id: "email-sender:auth@mail.example.com",
+    entity: "email-sender",
+    createdAt: "2026-06-14T00:00:00.000Z",
+    values: {
+      address: "Auth@Mail.Example.com",
+      displayName: "Auth",
+      emailDomain: "email-domain:mail.example.com",
+      enabled: true,
+      purpose: "auth",
     },
   },
   {

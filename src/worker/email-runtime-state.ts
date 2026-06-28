@@ -396,6 +396,15 @@ export function readEmailDeliveryById(
   return row === undefined ? undefined : emailDeliveryFromRow(row);
 }
 
+export function readEmailDeliveryByScheduleRequest(
+  storage: DurableObjectStorage,
+  request: Pick<EmailDeliveryScheduleRequest, "idempotencyKey" | "messageKind" | "source">,
+): EmailDeliveryRecord | undefined {
+  ensureEmailDeliveryTables(storage);
+
+  return readEmailDeliveryByScope(storage, emailDeliveryIdempotencyScope(request));
+}
+
 export function listEmailDeliveries(storage: DurableObjectStorage): EmailDeliveryRecord[] {
   ensureEmailDeliveryTables(storage);
 

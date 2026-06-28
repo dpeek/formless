@@ -241,6 +241,47 @@ facts without storing raw auth secrets.
 - AND raw invite tokens, token hashes, verification challenge secrets, delivery
   provider responses, and email recovery secrets remain private runtime state
 
+### Requirement: Collaborator Invitation Creation
+
+The system SHALL create pending collaborator invitations through
+owner-authorized identity control-plane behavior without exposing auth secrets
+as reviewable identity records.
+
+#### Scenario: Create pending collaborator invitation
+
+- GIVEN a browser owner session resolves to an active principal with active
+  `instance.owner` authority
+- OR trusted automation supplies valid admin bearer authorization
+- WHEN the request creates a collaborator invitation through
+  `POST /api/formless/identity/collaborator-invitations` for a valid target
+  email, target surface, expiry, and optional target app install or
+  organization
+- THEN identity storage commits one pending `invitation` record with
+  display-safe target facts
+- AND the inviter principal reference is recorded when the request is
+  authorized by a browser owner session
+- AND optional invited principal, principal-email, membership,
+  role-assignment, or app-registration records are normal flat identity records
+  linked by id
+- AND invited principal and membership records use invited status until invite
+  acceptance activates them
+- AND app-registration records created before acceptance use pending status
+- AND any role assignment created for an invited principal does not authorize
+  browser access until the invited principal becomes active
+- AND raw invite tokens, token hashes, rendered email bodies, email delivery
+  provider responses, and session material are not stored on identity records
+
+#### Scenario: Invitation delivery request
+
+- GIVEN a pending collaborator invitation has been committed by identity storage
+- WHEN the runtime schedules its delivery
+- THEN delivery uses the email runtime with the invitation record id as source
+  record and the identity control-plane storage identity as source storage
+- AND delivery uses an idempotency key derived from the invitation id and
+  delivery purpose
+- AND email scheduling does not grant authentication, activate the invited
+  principal, verify the target email, or issue a browser session
+
 ### Requirement: Target-Aware Identity Uniqueness
 
 The system SHALL enforce identity uniqueness according to the record's selected

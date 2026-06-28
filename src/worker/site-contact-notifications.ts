@@ -7,7 +7,10 @@ import type { AppStorageIdentity } from "../shared/app-storage-identity.ts";
 import type { OperationInvocationResponse } from "../shared/operation-invocation.ts";
 import type { DeploymentControlPlaneClientEnv } from "./deployment-control-plane-client.ts";
 import { readControlPlaneRecords } from "./deployment-control-plane-client.ts";
-import { schedulePlatformEmailDelivery } from "./email-runtime.ts";
+import {
+  resolveDefaultEmailSenderReference,
+  schedulePlatformEmailDelivery,
+} from "./email-runtime.ts";
 
 const contactNotificationMessageKind = "site-contact-notification";
 
@@ -100,9 +103,9 @@ function contactNotificationSettings(
     (record) =>
       record.entity === "instance-settings" &&
       !record.deletedAt &&
-      record.values.settingsId === INSTANCE_CONTROL_PLANE_INSTANCE_SETTINGS_ID,
+      stringRecordValue(record.values.settingsId) === INSTANCE_CONTROL_PLANE_INSTANCE_SETTINGS_ID,
   );
-  const senderId = stringRecordValue(settings?.values.defaultContactSender);
+  const senderId = resolveDefaultEmailSenderReference(records, "contact-notification")?.id;
   const recipient = stringRecordValue(settings?.values.contactNotificationRecipient);
 
   return senderId && recipient ? { senderId, recipient } : undefined;

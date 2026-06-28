@@ -39,7 +39,7 @@ export const INSTANCE_CONTROL_PLANE_BOUNDARY_SCHEMA_KEY = "instance";
 export const INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY = "instance:control-plane";
 export const INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX = "/api/formless/control-plane";
 export const INSTANCE_CONTROL_PLANE_SOURCE_SCHEMA_HASH =
-  "sha256:4d4ee67faffb2f9395ed76da2828302729fafb60e0e371b0cf48102412b19a2c" satisfies SourceSchemaHash;
+  "sha256:921d6267c2c20e2cdd693c7dd4fd0bd31eac097b6b4db889f74ad9b4d970170f" satisfies SourceSchemaHash;
 export const INSTANCE_CONTROL_PLANE_INSTANCE_SETTINGS_ID = "instance";
 export const instanceControlPlaneSchemaProvenance = {
   kind: "instance-control-plane",
@@ -176,7 +176,7 @@ export type InstanceControlPlaneDeploymentConfigValues = {
 
 export type InstanceControlPlaneProductionIdentityStatus = "configured" | "unconfigured";
 export type InstanceControlPlaneEmailDnsStatus = "failed" | "pending" | "unconfigured" | "verified";
-export type InstanceControlPlaneEmailSenderPurpose = "contact-notification" | "system";
+export type InstanceControlPlaneEmailSenderPurpose = "auth" | "contact-notification" | "system";
 
 export type InstanceControlPlaneInstanceSettingsValues = {
   settingsId: typeof INSTANCE_CONTROL_PLANE_INSTANCE_SETTINGS_ID;
@@ -188,6 +188,7 @@ export type InstanceControlPlaneInstanceSettingsValues = {
   authRelyingPartyName?: string;
   defaultEmailDomain?: string;
   defaultContactSender?: string;
+  defaultAuthSender?: string;
   contactNotificationRecipient?: string;
   productionIdentityStatus: InstanceControlPlaneProductionIdentityStatus;
 };
@@ -447,6 +448,7 @@ export const instanceControlPlaneSourceSchema = {
           "email-sender",
           "address",
         ),
+        defaultAuthSender: optionalReferenceField("Default auth sender", "email-sender", "address"),
         contactNotificationRecipient: optionalTextField("Contact notification recipient"),
         productionIdentityStatus: enumField(
           "Production identity status",
@@ -469,6 +471,7 @@ export const instanceControlPlaneSourceSchema = {
           "authRelyingPartyName",
           "defaultEmailDomain",
           "defaultContactSender",
+          "defaultAuthSender",
           "contactNotificationRecipient",
           "productionIdentityStatus",
         ],
@@ -482,6 +485,7 @@ export const instanceControlPlaneSourceSchema = {
             "authRelyingPartyName",
             "defaultEmailDomain",
             "defaultContactSender",
+            "defaultAuthSender",
             "contactNotificationRecipient",
             "productionIdentityStatus",
           ],
@@ -535,6 +539,7 @@ export const instanceControlPlaneSourceSchema = {
         displayName: optionalTextField("Display name"),
         purpose: enumField("Purpose", {
           "contact-notification": "Contact notification",
+          auth: "Auth messages",
           system: "System",
         }),
         emailDomain: referenceField("Email domain", "email-domain", "domain"),
@@ -574,6 +579,12 @@ export const instanceControlPlaneSourceSchema = {
       "Settings default contact sender",
       "instance-settings",
       "defaultContactSender",
+      "email-sender",
+    ),
+    settingsDefaultAuthSender: toOne(
+      "Settings default auth sender",
+      "instance-settings",
+      "defaultAuthSender",
       "email-sender",
     ),
     emailDomainPrimaryRoute: toOne(
@@ -750,6 +761,7 @@ export const instanceControlPlaneSourceSchema = {
         "authRelyingPartyName",
         "defaultEmailDomain",
         "defaultContactSender",
+        "defaultAuthSender",
         "contactNotificationRecipient",
         "productionIdentityStatus",
       ],
@@ -911,6 +923,7 @@ export const instanceControlPlaneSourceSchema = {
       "authRelyingPartyName",
       "defaultEmailDomain",
       "defaultContactSender",
+      "defaultAuthSender",
       "contactNotificationRecipient",
       "productionIdentityStatus",
     ]),
@@ -923,6 +936,7 @@ export const instanceControlPlaneSourceSchema = {
       "authRelyingPartyName",
       "defaultEmailDomain",
       "defaultContactSender",
+      "defaultAuthSender",
       "contactNotificationRecipient",
       "productionIdentityStatus",
     ]),
@@ -2101,6 +2115,7 @@ function validateInstanceSettingsRecord(
   const authRoute = optionalStringValue(context, record, "authRoute");
   const defaultEmailDomain = optionalStringValue(context, record, "defaultEmailDomain");
   const defaultContactSender = optionalStringValue(context, record, "defaultContactSender");
+  const defaultAuthSender = optionalStringValue(context, record, "defaultAuthSender");
 
   if (settingsId !== INSTANCE_CONTROL_PLANE_INSTANCE_SETTINGS_ID) {
     throw new Error(
@@ -2168,22 +2183,56 @@ function validateInstanceSettingsRecord(
     );
   }
 
-  if (defaultContactSender !== undefined) {
-    const sender = assertActiveRecordEntity(
-      context,
-      record,
-      "defaultContactSender",
-      defaultContactSender,
-      "email-sender",
-      recordsById,
-    );
-    const senderDomain = optionalStringValue(context, sender, "emailDomain");
+  validateDefaultEmailSenderReference(context, record, recordsById, {
+    defaultEmailDomain,
+    fieldName: "defaultContactSender",
+    purpose: "contact-notification",
+    senderId: defaultContactSender,
+  });
+  validateDefaultEmailSenderReference(context, record, recordsById, {
+    defaultEmailDomain,
+    fieldName: "defaultAuthSender",
+    purpose: "auth",
+    senderId: defaultAuthSender,
+  });
+}
 
-    if (defaultEmailDomain !== undefined && senderDomain !== defaultEmailDomain) {
-      throw new Error(
-        `${context} record "${record.id}" field "${controlPlaneFieldLabel(record, "defaultContactSender")}" must reference a sender for the selected default email domain.`,
-      );
-    }
+function validateDefaultEmailSenderReference(
+  context: string,
+  record: StoredRecord,
+  recordsById: ReadonlyMap<string, StoredRecord>,
+  input: {
+    defaultEmailDomain?: string;
+    fieldName: "defaultAuthSender" | "defaultContactSender";
+    purpose: InstanceControlPlaneEmailSenderPurpose;
+    senderId?: string;
+  },
+) {
+  if (input.senderId === undefined) {
+    return;
+  }
+
+  const sender = assertActiveRecordEntity(
+    context,
+    record,
+    input.fieldName,
+    input.senderId,
+    "email-sender",
+    recordsById,
+  );
+  const senderDomain = optionalStringValue(context, sender, "emailDomain");
+  const senderPurpose = optionalStringValue(context, sender, "purpose");
+
+  if (senderPurpose !== input.purpose) {
+    throw new Error(
+      `${context} record "${record.id}" field "${controlPlaneFieldLabel(record, input.fieldName)}" must reference a sender with purpose "${input.purpose}".`,
+    );
+  }
+
+  if (input.defaultEmailDomain !== undefined && senderDomain !== input.defaultEmailDomain) {
+    throw new Error(
+      `${context} record "${record.id}" field "${controlPlaneFieldLabel(record, input.fieldName)}" must reference a sender for the selected default email domain.`,
+    );
   }
 }
 
@@ -3572,6 +3621,7 @@ function editorForField(field: string): FieldEditor {
     field === "authRoute" ||
     field === "defaultEmailDomain" ||
     field === "defaultContactSender" ||
+    field === "defaultAuthSender" ||
     field === "emailDomain" ||
     field === "route" ||
     field === "domainMapping" ||

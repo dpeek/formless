@@ -8,7 +8,12 @@ import type {
   EmailDeliveryRenderedMessage,
   EmailDeliverySendRuntimeJob,
 } from "../shared/email-runtime.ts";
-import type { CloudflareSendEmailMessage } from "./email-runtime.ts";
+import type { StoredRecord } from "@dpeek/formless-storage";
+import {
+  resolveConfiguredDefaultCloudflareSender,
+  resolveDefaultEmailSenderReference,
+  type CloudflareSendEmailMessage,
+} from "./email-runtime.ts";
 
 type Harness = Awaited<ReturnType<typeof createWorkerHarness>>;
 type HarnessFetchInit = Parameters<Harness["fetch"]>[1];
@@ -24,6 +29,108 @@ afterEach(async () => {
     await rm(harnessDir, { recursive: true, force: true });
     harnessDir = undefined;
   }
+});
+
+function emailDefaultControlPlaneRecords(
+  options: { defaultAuthSender?: string } = {},
+): StoredRecord[] {
+  const createdAt = "2026-06-24T00:00:00.000Z";
+  const defaultAuthSender =
+    "defaultAuthSender" in options
+      ? options.defaultAuthSender
+      : "email-sender:auth@mail.example.com";
+
+  return [
+    {
+      id: "settings:instance",
+      entity: "instance-settings",
+      values: {
+        settingsId: "instance",
+        defaultEmailDomain: "email-domain:mail.example.com",
+        defaultContactSender: "email-sender:contact@mail.example.com",
+        ...(defaultAuthSender === undefined ? {} : { defaultAuthSender }),
+      },
+      createdAt,
+      updatedAt: createdAt,
+    },
+    {
+      id: "email-domain:mail.example.com",
+      entity: "email-domain",
+      values: {
+        enabled: true,
+        providerFamily: "cloudflare",
+        domain: "mail.example.com",
+      },
+      createdAt,
+      updatedAt: createdAt,
+    },
+    {
+      id: "email-sender:contact@mail.example.com",
+      entity: "email-sender",
+      values: {
+        enabled: true,
+        address: "contact@mail.example.com",
+        displayName: "Example Contact",
+        purpose: "contact-notification",
+        emailDomain: "email-domain:mail.example.com",
+      },
+      createdAt,
+      updatedAt: createdAt,
+    },
+    {
+      id: "email-sender:auth@mail.example.com",
+      entity: "email-sender",
+      values: {
+        enabled: true,
+        address: "auth@mail.example.com",
+        displayName: "Example Auth",
+        purpose: "auth",
+        emailDomain: "email-domain:mail.example.com",
+      },
+      createdAt,
+      updatedAt: createdAt,
+    },
+  ];
+}
+
+describe("email runtime default sender resolution", () => {
+  it("resolves contact and auth sender defaults independently", () => {
+    const records = emailDefaultControlPlaneRecords();
+
+    expect(resolveDefaultEmailSenderReference(records, "contact-notification")).toEqual({
+      id: "email-sender:contact@mail.example.com",
+    });
+    expect(resolveDefaultEmailSenderReference(records, "auth")).toEqual({
+      id: "email-sender:auth@mail.example.com",
+    });
+    expect(resolveConfiguredDefaultCloudflareSender(records, "auth")).toMatchObject({
+      address: "auth@mail.example.com",
+      displayName: "Example Auth",
+      id: "email-sender:auth@mail.example.com",
+    });
+  });
+
+  it("does not reuse the contact sender when the auth sender default is unset", () => {
+    const records = emailDefaultControlPlaneRecords({
+      defaultAuthSender: undefined,
+    });
+
+    expect(resolveDefaultEmailSenderReference(records, "contact-notification")).toEqual({
+      id: "email-sender:contact@mail.example.com",
+    });
+    expect(resolveDefaultEmailSenderReference(records, "auth")).toBeUndefined();
+    expect(resolveConfiguredDefaultCloudflareSender(records, "auth")).toBeUndefined();
+  });
+
+  it("rejects configured defaults that reference the wrong sender purpose", () => {
+    const records = emailDefaultControlPlaneRecords({
+      defaultAuthSender: "email-sender:contact@mail.example.com",
+    });
+
+    expect(() => resolveConfiguredDefaultCloudflareSender(records, "auth")).toThrow(
+      'Default auth email sender must reference a sender with purpose "auth".',
+    );
+  });
 });
 
 describe("email runtime delivery scheduling", () => {
@@ -91,6 +198,51 @@ describe("email runtime delivery scheduling", () => {
       text: "Plain text body",
       html: "<p>HTML body</p>",
     });
+  });
+
+  it("keeps collaborator invitation token material out of delivery records and queue jobs", async () => {
+    harness = await createEmailRuntimeHarness();
+
+    const rawToken = "aW52aXRlLXJhdy10b2tlbi0x";
+    const tokenHash = "dG9rZW4taGFzaC0x";
+    const inviteLink =
+      "https://auth.example.com/_formless/auth/invitations/accept?invitationId=invitation%3Aada&token=aW52aXRlLXJhdy10b2tlbi0x";
+    const scheduled = await postSchedule({
+      canonicalOrigin: "https://auth.example.com",
+      idempotencyKey: "invitation:ada:delivery",
+      message: {
+        subject: "Accept your invite",
+        text: `Use ${inviteLink}`,
+        html: `<a href="${inviteLink}">Accept invite</a>`,
+      },
+      messageKind: "identity.collaboratorInvitation",
+      recipientAddress: "ada@example.com",
+      senderId: "email-sender:auth@mail.example.com",
+      source: {
+        storageIdentity: "instance:identity",
+        recordId: "invitation:ada",
+      },
+    });
+    const queueJobs = await getJson<{ jobs: EmailDeliverySendRuntimeJob[] }>("/queue-jobs");
+    const publicDeliveryState = JSON.stringify([scheduled.delivery, queueJobs.jobs]);
+
+    expect(scheduled.delivery).toMatchObject({
+      canonicalOrigin: "https://auth.example.com",
+      idempotencyKey: "invitation:ada:delivery",
+      messageKind: "identity.collaboratorInvitation",
+      sourceRecordId: "invitation:ada",
+      sourceStorageIdentity: "instance:identity",
+      sender: {
+        address: "auth@mail.example.com",
+        displayName: "Example Auth",
+        id: "email-sender:auth@mail.example.com",
+      },
+    });
+    expect(queueJobs.jobs).toHaveLength(1);
+    expect(publicDeliveryState).not.toContain(rawToken);
+    expect(publicDeliveryState).not.toContain(tokenHash);
+    expect(publicDeliveryState).not.toContain(inviteLink);
+    expect(publicDeliveryState).not.toContain("Accept your invite");
   });
 
   it("fails scheduling when queue handoff fails and retries unqueued deliveries", async () => {
@@ -506,6 +658,13 @@ async function writeEmailRuntimeHarness() {
           purpose: "contact-notification",
           emailDomain: "email-domain:mail.example.com",
         }),
+        record("email-sender:auth@mail.example.com", "email-sender", {
+          enabled: true,
+          address: "auth@mail.example.com",
+          displayName: "Example Auth",
+          purpose: "auth",
+          emailDomain: "email-domain:mail.example.com",
+        }),
       ];
     `,
   );
@@ -514,10 +673,18 @@ async function writeEmailRuntimeHarness() {
 }
 
 type ScheduleBodyOverrides = {
+  canonicalOrigin?: string;
   failQueue?: boolean;
   idempotencyKey?: string;
+  message?: EmailDeliveryRenderedMessage;
+  messageKind?: string;
   recipientAddress?: string;
   senderId?: string;
+  source?: {
+    operationId?: string;
+    recordId?: string;
+    storageIdentity: string;
+  };
 };
 
 async function postSchedule(overrides: ScheduleBodyOverrides = {}) {
@@ -586,8 +753,8 @@ async function dispatchEmailDeliveryQueue(
 
 function scheduleBody(overrides: ScheduleBodyOverrides = {}) {
   return {
-    messageKind: "site.contactNotification",
-    source: {
+    messageKind: overrides.messageKind ?? "site.contactNotification",
+    source: overrides.source ?? {
       storageIdentity: "app:site",
       operationId: "operation_123",
     },
@@ -595,8 +762,8 @@ function scheduleBody(overrides: ScheduleBodyOverrides = {}) {
     sender: { id: overrides.senderId ?? "email-sender:contact@mail.example.com" },
     recipients: [{ address: overrides.recipientAddress ?? "owner@example.com" }],
     replyTo: { address: "visitor@example.net" },
-    canonicalOrigin: "https://www.example.com",
-    message: {
+    canonicalOrigin: overrides.canonicalOrigin ?? "https://www.example.com",
+    message: overrides.message ?? {
       subject: "New contact message",
       text: "Plain text body",
       html: "<p>HTML body</p>",
