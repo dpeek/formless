@@ -144,7 +144,7 @@ export async function startProtectedRouteAuthHandoff(
   const authOrigin = await configuredInstanceAuthOrigin(request, env);
 
   if (!authOrigin) {
-    return jsonResponse({ error: "Instance auth configuration is missing." }, 400);
+    return undefined;
   }
 
   if (authOrigin === requestOriginForAuth(request)) {

@@ -344,12 +344,14 @@ export default {
         return routeAccessAuthorization;
       }
 
+      const routeAccess = runtimeRouteAccessForInstalledAppAuthorityRoute(
+        runtimeRoute,
+        authorityRoute.identity.authorityName,
+      );
+
       if (
         authorityRoute.identity.kind === "appInstall" &&
-        runtimeRouteAccessForInstalledAppAuthorityRoute(
-          runtimeRoute,
-          authorityRoute.identity.authorityName,
-        ) === "owner" &&
+        (routeAccess === undefined || routeAccess === "owner") &&
         isInstalledAppManagementApiRead(request, authorityRoute.path)
       ) {
         const authorization = await authorizeOwnerManagementRead(request, env, {
@@ -562,13 +564,15 @@ async function redirectAnonymousProtectedBrowserRoute(
     return undefined;
   }
 
-  if (runtimeRoute?.kind !== "mount" || runtimeRoute.access === "anonymous") {
+  const requiredAccess = runtimeRoute?.kind === "mount" ? runtimeRoute.access : "owner";
+
+  if (requiredAccess === "anonymous") {
     return undefined;
   }
 
   const session = await validateRouteAccessSession(request, env, {
-    requiredAccess: runtimeRoute.access,
-    runtimeRoute,
+    requiredAccess,
+    ...(runtimeRoute?.kind === "mount" ? { runtimeRoute } : {}),
   });
 
   if (session.ok) {
