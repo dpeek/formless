@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it } from "vite-plus/test";
 import {
   App,
   type AppRouteComponents,
+  runtimeInstalledAppRouteRegistryRefreshKey,
   runtimeInstalledAppRouteRegistryFromResponse,
   selectRuntimeShellInstalledAppLinks,
 } from "./app.tsx";
@@ -1241,6 +1242,23 @@ describe("App smoke routes", () => {
       sourceSchemaKey: "private-site",
     });
     expect(registry.activePackageResolver?.findPackage("site")).toBeUndefined();
+  });
+
+  it("keeps installed app registry refresh keys stable across app screen paths", () => {
+    const runtimeProfile = createDevRuntimeProfile();
+
+    expect(runtimeInstalledAppRouteRegistryRefreshKey(runtimeProfile, "/apps/crm")).toBe(
+      "/apps/crm",
+    );
+    expect(runtimeInstalledAppRouteRegistryRefreshKey(runtimeProfile, "/apps/crm/audiences")).toBe(
+      "/apps/crm",
+    );
+    expect(runtimeInstalledAppRouteRegistryRefreshKey(runtimeProfile, "/sites/site/blog")).toBe(
+      "/sites/site",
+    );
+    expect(runtimeInstalledAppRouteRegistryRefreshKey(runtimeProfile, "/crm/audiences")).toBe(
+      "/crm/audiences",
+    );
   });
 
   it("renders installed Tasks generated UI from the install-scoped target", () => {

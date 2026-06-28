@@ -143,11 +143,15 @@ export function App({
     () => runtimeProfileProp ?? resolveRuntimeProfile(),
     [runtimeProfileProp],
   );
+  const installedAppRouteRegistryRefreshKey = runtimeInstalledAppRouteRegistryRefreshKey(
+    runtimeProfile,
+    location,
+  );
   const installedAppRouteRegistry = useRuntimeInstalledAppRouteRegistry(
     runtimeProfile,
     installedAppRouteInstallsProp,
     installedAppRoutePackagesProp,
-    location,
+    installedAppRouteRegistryRefreshKey,
   );
   const activeRuntimeProfile = useMemo(
     () =>
@@ -418,6 +422,41 @@ function routeMayNeedLocalWorkspaceGateway(
   path: string,
 ): boolean {
   return path === routes.localSessionRoute || path === routes.instanceShellRoute;
+}
+
+export function runtimeInstalledAppRouteRegistryRefreshKey(
+  runtimeProfile: RuntimeProfile,
+  location: string,
+): string {
+  const path = normalizeRuntimeBrowserPath(location);
+  const routes = runtimeBrowserRoutePatterns(runtimeProfile);
+
+  return (
+    installedRouteRootPath(path, routes.installedAppHomeRoutePattern) ??
+    installedRouteRootPath(path, routes.installedSitePublicHomeRoutePattern) ??
+    path
+  );
+}
+
+function installedRouteRootPath(
+  path: string,
+  routePattern: `/${string}` | undefined,
+): string | undefined {
+  const routeBase = routePattern?.split("/:installId")[0];
+
+  if (!routeBase) {
+    return undefined;
+  }
+
+  const routePrefix = `${routeBase}/`;
+
+  if (!path.startsWith(routePrefix)) {
+    return undefined;
+  }
+
+  const installId = path.slice(routePrefix.length).split("/")[0];
+
+  return installId ? `${routePrefix}${installId}` : undefined;
 }
 
 function WorkbenchFrame({

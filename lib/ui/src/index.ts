@@ -38,6 +38,7 @@ export * from "./object-list.js";
 export * from "./popover.js";
 export * from "./primitive.js";
 export * from "./range-calendar.js";
+export * from "./router-provider.js";
 export * from "./select.js";
 export * from "./separator.js";
 export * from "./sheet.js";

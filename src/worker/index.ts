@@ -1,6 +1,9 @@
 import { FormlessAuthority } from "./authority.ts";
 import { handleWorkspaceGatewayProxyRequest } from "@dpeek/formless-gateway/worker";
-import { parseAuthorityApiRoute } from "../shared/app-storage-identity.ts";
+import {
+  parseAuthorityApiRoute,
+  parseInstanceControlPlaneApiRoute,
+} from "../shared/app-storage-identity.ts";
 import { handleInstanceArchiveApiRequest } from "./archive-api.ts";
 import { authorizeInstanceWrite, authorizeOwnerManagementRead } from "./authority-admin-guard.ts";
 import { selectAuthorityOperation } from "./authority-operations.ts";
@@ -101,6 +104,17 @@ export type Env = TurnstileRuntimeEnv & {
 
 export default {
   async fetch(request, env) {
+    const requestUrl = new URL(request.url);
+    const packageResolver = activeAppPackageResolver(env);
+    const authorityRoute = parseAuthorityApiRoute(requestUrl.pathname, packageResolver);
+    const authorityForwardRequest: Request | undefined = authorityRoute
+      ? (request.clone() as Request)
+      : undefined;
+    const instanceControlPlaneRoute = parseInstanceControlPlaneApiRoute(requestUrl.pathname);
+    const instanceControlPlaneForwardRequest: Request | undefined = instanceControlPlaneRoute
+      ? (request.clone() as Request)
+      : undefined;
+
     const earlyInstanceAppInstallsResponse = await handleInstanceAppInstallsApiRequest(
       request,
       env,
@@ -122,7 +136,6 @@ export default {
       return new Response(null, { status: 404 });
     }
 
-    const packageResolver = activeAppPackageResolver(env);
     const mappedAppHost = mappedAppHostFromRuntimeRoute(runtimeRoute);
     const mappedSiteHost = mappedPublicSiteHostFromRuntimeRoute(runtimeRoute);
     const mappedRouteTargetProfile =
@@ -249,16 +262,17 @@ export default {
       return instanceUpgradeStatusResponse;
     }
 
-    const instanceControlPlaneHostSessionTarget = hostAuthSessionTargetForInstanceControlPlaneRoute(
-      request,
-      runtimeRoute,
-    );
-    const instanceControlPlaneResponse = await handleInstanceControlPlaneApiRequest(
-      authorityRequestWithOriginalUrlFacts(request, {
-        hostSessionTarget: instanceControlPlaneHostSessionTarget,
-      }),
-      env,
-    );
+    const instanceControlPlaneResponse = instanceControlPlaneRoute
+      ? await handleInstanceControlPlaneApiRequest(
+          authorityRequestWithOriginalUrlFacts(instanceControlPlaneForwardRequest ?? request, {
+            hostSessionTarget: hostAuthSessionTargetForInstanceControlPlaneRoute(
+              request,
+              runtimeRoute,
+            ),
+          }),
+          env,
+        )
+      : undefined;
 
     if (instanceControlPlaneResponse) {
       return instanceControlPlaneResponse;
@@ -303,9 +317,6 @@ export default {
       return instanceDomainMappingsResponse;
     }
 
-    const url = new URL(request.url);
-    const authorityRoute = parseAuthorityApiRoute(url.pathname, activeAppPackageResolver(env));
-
     if (authorityRoute) {
       const hostSessionTarget = hostAuthSessionTargetForInstalledAppAuthorityRoute(
         request,
@@ -343,7 +354,11 @@ export default {
       const authorityId = env.FORMLESS_AUTHORITY.idFromName(authorityRoute.identity.authorityName);
       const authority = env.FORMLESS_AUTHORITY.get(authorityId);
 
-      return authority.fetch(authorityRequestWithOriginalUrlFacts(request, { hostSessionTarget }));
+      return authority.fetch(
+        authorityRequestWithOriginalUrlFacts(authorityForwardRequest ?? request, {
+          hostSessionTarget,
+        }),
+      );
     }
 
     const ownerBrowserRedirect = await redirectAnonymousOwnerBrowserRoute(

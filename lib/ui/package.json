@@ -38,6 +38,7 @@
     "./popover": "./src/popover.tsx",
     "./primitive": "./src/primitive.ts",
     "./range-calendar": "./src/range-calendar.tsx",
+    "./router-provider": "./src/router-provider.tsx",
     "./select": "./src/select.tsx",
     "./separator": "./src/separator.tsx",
     "./sheet": "./src/sheet.tsx",
