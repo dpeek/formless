@@ -61,7 +61,10 @@ import { DeleteRecordButton, type RecordLabelFieldConfig } from "./record-delete
 import { RecordFieldEditor } from "./record-field-editor.tsx";
 import { RecordReadinessWarnings } from "./readiness-warnings.tsx";
 import { useSchemaAppTarget, useSchemaAppWriteOptions } from "./schema-app-context.tsx";
-import { RecordTransitionOperationControls } from "./state-machine-ui.tsx";
+import {
+  RecordStateTransitionMenu,
+  RecordTransitionOperationControls,
+} from "./state-machine-ui.tsx";
 import { TableOperationControlsCell } from "./table-operation-controls.tsx";
 import {
   selectGeneratedTablePresentation,
@@ -680,6 +683,15 @@ function RecordTableCell({
     );
   }
 
+  if (isStateTransitionTableColumn(column)) {
+    return (
+      <div className={`flex min-h-6 items-center gap-1 ${justifyClass}`}>
+        <StateTransitionTableCell column={column} entityName={entityName} recordId={recordId} />
+        <ReferencedRecordEditButton column={column} sourceRecordId={recordId} />
+      </div>
+    );
+  }
+
   if (column.display === "readOnly" || !recordFieldIsWritable(column)) {
     return (
       <div className={`flex min-h-6 items-center gap-1 ${justifyClass}`}>
@@ -704,6 +716,47 @@ function RecordTableCell({
       ) : null}
       <ReferencedRecordEditButton column={column} sourceRecordId={recordId} />
     </div>
+  );
+}
+
+type StateTransitionTableColumn = FieldTableColumnConfig & {
+  field: Extract<FieldTableColumnConfig["field"], { type: "enum" }>;
+  stateMachine: NonNullable<FieldTableColumnConfig["stateMachine"]>;
+  stateTransitionOperations: TransitionStateOperationConfig[];
+};
+
+function isStateTransitionTableColumn(
+  column: TableColumnConfig,
+): column is StateTransitionTableColumn {
+  return (
+    column.type === "field" &&
+    column.field.type === "enum" &&
+    column.stateMachine !== undefined &&
+    column.stateTransitionOperations !== undefined
+  );
+}
+
+function StateTransitionTableCell({
+  column,
+  entityName,
+  recordId,
+}: {
+  column: StateTransitionTableColumn;
+  entityName: string;
+  recordId: string;
+}) {
+  const record = useRecord(recordId);
+
+  return (
+    <RecordStateTransitionMenu
+      entityName={entityName}
+      field={column.field}
+      label={column.label ?? column.fieldName}
+      operations={column.stateTransitionOperations}
+      recordId={recordId}
+      stateMachine={column.stateMachine}
+      values={record?.values}
+    />
   );
 }
 

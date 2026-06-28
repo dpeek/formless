@@ -199,6 +199,11 @@ describe("home view model collections", () => {
     expect(tableStatus?.type === "field" ? tableStatus.stateMachine?.machineName : undefined).toBe(
       "statusFlow",
     );
+    expect(
+      tableStatus?.type === "field"
+        ? tableStatus.stateTransitionOperations?.map((operation) => operation.operationName)
+        : [],
+    ).toEqual(["startTask", "completeTask"]);
     expect(listModel.result.type === "list" ? listModel.result.transitionOperations : []).toEqual([
       expect.objectContaining({
         operationName: "startTask",
@@ -220,7 +225,7 @@ describe("home view model collections", () => {
     ).toHaveLength(2);
     expect(
       tableModel.result.type === "table" ? tableModel.result.transitionOperations : [],
-    ).toHaveLength(2);
+    ).toHaveLength(0);
     expect(
       createOperation?.type === "create"
         ? createOperation.fields.find((field) => field.fieldName === "status")?.stateMachine
@@ -230,6 +235,32 @@ describe("home view model collections", () => {
     expect(
       editControl?.type === "editRecord" ? editControl.editView.transitionOperations : [],
     ).toHaveLength(2);
+  });
+
+  it("keeps table transition operations unpaired when matching state field columns are hidden or absent", () => {
+    const schema = lifecycleTaskSchema();
+    const hiddenTableModel = requiredCollectionModel(schema, "taskHiddenStatusTableHome");
+    const absentTableModel = requiredCollectionModel(schema, "taskAbsentStatusTableHome");
+    const hiddenStatus =
+      hiddenTableModel.result.type === "table"
+        ? hiddenTableModel.result.columns.find(
+            (column) => column.type === "field" && column.fieldName === "status",
+          )
+        : undefined;
+
+    expect(hiddenStatus?.type === "field" ? hiddenStatus.stateTransitionOperations : []).toBe(
+      undefined,
+    );
+    expect(
+      hiddenTableModel.result.type === "table"
+        ? hiddenTableModel.result.transitionOperations.map((operation) => operation.operationName)
+        : [],
+    ).toEqual(["startTask", "completeTask"]);
+    expect(
+      absentTableModel.result.type === "table"
+        ? absentTableModel.result.transitionOperations.map((operation) => operation.operationName)
+        : [],
+    ).toEqual(["startTask", "completeTask"]);
   });
 
   it("exposes render-ready union variant facts for item, create, and edit views", () => {
@@ -3592,6 +3623,17 @@ function lifecycleTaskSchema() {
           },
         ],
       },
+      taskHiddenStatusTable: {
+        entity: "task",
+        columns: [
+          { type: "field", field: "title" },
+          { type: "field", field: "status", display: "hidden" },
+        ],
+      },
+      taskAbsentStatusTable: {
+        entity: "task",
+        columns: [{ type: "field", field: "title" }],
+      },
     },
     views: {
       taskHome: {
@@ -3618,6 +3660,22 @@ function lifecycleTaskSchema() {
         queries: [{ query: "taskAll" }],
         defaultQuery: "taskAll",
         result: { type: "table", tableView: "taskTable" },
+      },
+      taskHiddenStatusTableHome: {
+        type: "collection",
+        label: "Task hidden status table",
+        entity: "task",
+        queries: [{ query: "taskAll" }],
+        defaultQuery: "taskAll",
+        result: { type: "table", tableView: "taskHiddenStatusTable" },
+      },
+      taskAbsentStatusTableHome: {
+        type: "collection",
+        label: "Task absent status table",
+        entity: "task",
+        queries: [{ query: "taskAll" }],
+        defaultQuery: "taskAll",
+        result: { type: "table", tableView: "taskAbsentStatusTable" },
       },
       taskCreate: {
         type: "create",

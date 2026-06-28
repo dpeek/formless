@@ -104,6 +104,7 @@ export type TableColumnBaseConfig = {
 export type FieldTableColumnConfig = RecordFieldConfig &
   TableColumnBaseConfig & {
     type: "field";
+    stateTransitionOperations?: TransitionStateOperationConfig[];
     referenceItem?: {
       itemViewName: string;
       entityName: string;

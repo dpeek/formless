@@ -69,7 +69,12 @@ export function selectTableResultModel(
   resultOrdering?: ResultOrderingConfig,
 ): TableResultModel {
   const ordering = resultOrdering ?? selectResultOrderingConfig(tableView.ordering, entity);
-  const columns = selectTableColumns(schema, tableView, entity, ordering);
+  const selectedColumns = selectTableColumns(schema, tableView, entity, ordering);
+  const selectedTransitionOperations = selectTransitionStateOperations(entityName, entity);
+  const { columns, transitionOperations } = pairVisibleStateMachineColumnTransitionOperations(
+    selectedColumns,
+    selectedTransitionOperations,
+  );
   const updateOperation = selectEntityOperationByKind(entityName, entity, "update", "record");
   const deleteOperation = selectEntityOperationByKind(entityName, entity, "delete", "record");
 
@@ -77,8 +82,64 @@ export function selectTableResultModel(
     columns,
     ...(updateOperation === undefined ? {} : { updateOperation }),
     ...(deleteOperation === undefined ? {} : { deleteOperation }),
-    transitionOperations: selectTransitionStateOperations(entityName, entity),
+    transitionOperations,
     ...(ordering === undefined ? {} : { ordering }),
+  };
+}
+
+function pairVisibleStateMachineColumnTransitionOperations(
+  columns: TableColumnConfig[],
+  transitionOperations: TransitionStateOperationConfig[],
+): Pick<TableResultModel, "columns" | "transitionOperations"> {
+  if (transitionOperations.length === 0) {
+    return { columns, transitionOperations };
+  }
+
+  const pairedOperationNames = new Set<string>();
+  const pairedMachineFields = new Set<string>();
+  const pairedColumns = columns.map((column): TableColumnConfig => {
+    if (
+      column.type !== "field" ||
+      column.display === "hidden" ||
+      column.field.type !== "enum" ||
+      column.stateMachine === undefined
+    ) {
+      return column;
+    }
+
+    const pairKey = `${column.stateMachine.machineName}:${column.fieldName}`;
+
+    if (pairedMachineFields.has(pairKey)) {
+      return column;
+    }
+
+    const operations = transitionOperations.filter(
+      (operation) =>
+        operation.machineName === column.stateMachine?.machineName &&
+        operation.fieldName === column.fieldName,
+    );
+
+    if (operations.length === 0) {
+      return column;
+    }
+
+    pairedMachineFields.add(pairKey);
+
+    for (const operation of operations) {
+      pairedOperationNames.add(operation.operationName);
+    }
+
+    return {
+      ...column,
+      stateTransitionOperations: operations,
+    };
+  });
+
+  return {
+    columns: pairedColumns,
+    transitionOperations: transitionOperations.filter(
+      (operation) => !pairedOperationNames.has(operation.operationName),
+    ),
   };
 }
 

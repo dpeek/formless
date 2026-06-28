@@ -484,6 +484,23 @@ status fields.
 - AND submitting a transition invokes the matching operation through the normal
   Authority operation boundary
 
+#### Scenario: Render table state transition menu
+
+- GIVEN a generated table includes a visible enum field owned by a state machine
+- AND the table entity has record-scoped transition-state operations targeting
+  that machine
+- WHEN generated UI renders the state-machine field cell for a row
+- THEN the current state is rendered as one cell control using the enum label and
+  presentation metadata
+- AND opening the control shows only transition operations valid for the row's
+  current state
+- AND selecting a transition invokes the matching operation through the normal
+  Authority operation boundary
+- AND generated UI does not add a separate lifecycle transition utility column
+  for transition operations paired with a visible state-machine field column
+- AND generated UI may keep separate lifecycle transition controls when the
+  matching state-machine field is hidden or absent from the table
+
 #### Scenario: Protect machine-owned field editors
 
 - GIVEN a generated create, edit, table, or detail surface includes a field owned

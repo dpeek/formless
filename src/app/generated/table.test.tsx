@@ -187,6 +187,50 @@ describe("RecordTable", () => {
     expect(html).toContain("Move up");
     expect(html).toContain("Move to bottom");
   });
+
+  it("renders visible state-machine table fields as valid transition menus", () => {
+    const schema = tableLifecycleSchema();
+    const html = renderTableViewHtml({
+      records: [taskLifecycleRecord("task-1", "todo")],
+      schema,
+      viewName: "taskTableHome",
+    });
+
+    expect(html).toContain('data-formless-state-transition-menu="task-1"');
+    expect(html).toContain('aria-label="Status: Todo. Change state."');
+    expect(html).toContain('data-formless-state-machine="statusFlow"');
+    expect(html).toContain('data-formless-state-machine-field="status"');
+    expect(html).toContain('data-formless-state-value="todo"');
+    expect(html).toContain('data-formless-state-transition-operation-labels="Start"');
+    expect(html).toContain('data-formless-state-transition-operations="startTask"');
+    expect(html).toContain('data-formless-state-transition-target-states="doing"');
+    expect(html).toContain('data-formless-state-transition-operation="startTask"');
+    expect(html).toContain('data-formless-state-transition-machine="statusFlow"');
+    expect(html).toContain('data-formless-state-transition-target-state="doing"');
+    expect(html).not.toContain('data-formless-state-transition-operation="completeTask"');
+    expect(html).not.toContain('data-formless-transition-controls="task-1"');
+  });
+
+  it("keeps separate lifecycle transition controls when the state field is hidden or absent", () => {
+    const schema = tableLifecycleSchema();
+    const hiddenHtml = renderTableViewHtml({
+      records: [taskLifecycleRecord("task-1", "todo")],
+      schema,
+      viewName: "taskHiddenStatusTableHome",
+    });
+    const absentHtml = renderTableViewHtml({
+      records: [taskLifecycleRecord("task-1", "todo")],
+      schema,
+      viewName: "taskAbsentStatusTableHome",
+    });
+
+    expect(hiddenHtml).not.toContain('data-formless-state-transition-menu="task-1"');
+    expect(hiddenHtml).toContain('data-formless-transition-controls="task-1"');
+    expect(hiddenHtml).toContain('data-formless-transition-operation="startTask"');
+    expect(hiddenHtml).toContain('data-formless-transition-operation="completeTask"');
+    expect(absentHtml).not.toContain('data-formless-state-transition-menu="task-1"');
+    expect(absentHtml).toContain('data-formless-transition-controls="task-1"');
+  });
 });
 
 function rateRecord(id: string, cost: number): StoredRecord {
@@ -300,4 +344,141 @@ function presentationTaskRecord(id: string, priority: string): StoredRecord {
     createdAt: "2026-05-26T00:00:00.000Z",
     updatedAt: "2026-05-26T00:00:00.000Z",
   };
+}
+
+function taskLifecycleRecord(id: string, status: string): StoredRecord {
+  return {
+    id,
+    entity: "task",
+    values: { title: "Ship status menu", status },
+    createdAt: "2026-05-26T00:00:00.000Z",
+    updatedAt: "2026-05-26T00:00:00.000Z",
+  };
+}
+
+function tableLifecycleSchema(): AppSchema {
+  return parseAppSchema({
+    version: 1,
+    entities: {
+      task: {
+        label: "Task",
+        fields: {
+          title: { type: "text", required: true },
+          status: {
+            type: "enum",
+            required: true,
+            default: "todo",
+            values: {
+              todo: { label: "Todo", presentation: { color: "warning", icon: "priority-marker" } },
+              doing: {
+                label: "Doing",
+                presentation: { color: "success", icon: "priority-marker" },
+              },
+              done: { label: "Done", presentation: { color: "success", icon: "confirm" } },
+            },
+          },
+        },
+        stateMachines: {
+          statusFlow: {
+            field: "status",
+            initial: "todo",
+            terminal: ["done"],
+            transitions: {
+              start: { label: "Start", from: ["todo"], to: "doing" },
+              complete: { label: "Complete", from: ["doing"], to: "done" },
+            },
+          },
+        },
+        operations: {
+          startTask: {
+            label: "Start",
+            kind: "command",
+            scope: "record",
+            effect: {
+              type: "operationHandler",
+              handler: "transition-state",
+              config: { machine: "statusFlow", transition: "start" },
+            },
+            output: { type: "command" },
+            idempotency: { required: true },
+            audit: { input: "summary" },
+          },
+          completeTask: {
+            label: "Complete",
+            kind: "command",
+            scope: "record",
+            effect: {
+              type: "operationHandler",
+              handler: "transition-state",
+              config: { machine: "statusFlow", transition: "complete" },
+            },
+            output: { type: "command" },
+            idempotency: { required: true },
+            audit: { input: "summary" },
+          },
+        },
+      },
+    },
+    queries: {
+      taskAll: { label: "All", entity: "task", expression: { kind: "all" } },
+    },
+    itemViews: {},
+    tableViews: {
+      taskTable: {
+        entity: "task",
+        columns: [
+          { type: "field", field: "title" },
+          { type: "field", field: "status" },
+        ],
+      },
+      taskHiddenStatusTable: {
+        entity: "task",
+        columns: [
+          { type: "field", field: "title" },
+          { type: "field", field: "status", display: "hidden" },
+        ],
+      },
+      taskAbsentStatusTable: {
+        entity: "task",
+        columns: [{ type: "field", field: "title" }],
+      },
+    },
+    views: {
+      taskTableHome: {
+        type: "collection",
+        label: "Tasks",
+        entity: "task",
+        queries: [{ query: "taskAll" }],
+        defaultQuery: "taskAll",
+        result: { type: "table", tableView: "taskTable" },
+      },
+      taskHiddenStatusTableHome: {
+        type: "collection",
+        label: "Tasks",
+        entity: "task",
+        queries: [{ query: "taskAll" }],
+        defaultQuery: "taskAll",
+        result: { type: "table", tableView: "taskHiddenStatusTable" },
+      },
+      taskAbsentStatusTableHome: {
+        type: "collection",
+        label: "Tasks",
+        entity: "task",
+        queries: [{ query: "taskAll" }],
+        defaultQuery: "taskAll",
+        result: { type: "table", tableView: "taskAbsentStatusTable" },
+      },
+    },
+    screens: {
+      taskHome: {
+        type: "workspace",
+        label: "Tasks",
+        navigation: { primary: true },
+        layout: {
+          type: "stack",
+          sections: [{ id: "tasks", type: "collection", view: "taskTableHome" }],
+        },
+      },
+    },
+  });
 }
