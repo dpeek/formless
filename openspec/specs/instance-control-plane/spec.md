@@ -352,11 +352,30 @@ records.
 - **WHEN** the route includes access policy
 - **THEN** `access` is either `anonymous` or `owner`
 - **AND** `anonymous` means the route can be read without an owner session
-- **AND** `owner` means browser reads require an owner session and management
-  API reads require an owner session or admin bearer authorization
+- **AND** `owner` means browser reads require an owner session or host-local
+  session for the matched owner route target
+- **AND** owner-protected management API reads and writes require an owner
+  session, a host-local session for the matched owner route target, or admin
+  bearer authorization
 - **AND** omitted access defaults to `owner` for instance, app admin, and app
   schema mounts
 - **AND** omitted access defaults to `anonymous` for public Site mounts
+
+#### Scenario: Mapped instance route host session authorizes control plane
+
+- **GIVEN** an enabled exact-host `route` mounts the instance profile with
+  access `owner`
+- **AND** the browser has a valid host-local session for that route target and
+  storage identity `instance:control-plane`
+- **WHEN** the browser reads or writes owner-protected instance control-plane
+  operations through the mapped host
+- **THEN** the control-plane API accepts the host-local session as owner
+  authorization
+- **AND** the control-plane API still rechecks the session principal has active
+  `instance.owner` authority before privileged reads or writes
+- **AND** host-local sessions minted for installed app storage, public Site
+  storage, another route, another profile, another host, or another instance do
+  not authorize instance control-plane operations
 
 #### Scenario: Redirect route
 

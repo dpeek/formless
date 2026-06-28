@@ -151,12 +151,28 @@ surfaces or owner-only management API data.
 - GIVEN a management API route exposes owner-only instance dashboard or
   generated app administration data
 - WHEN the request does not include a valid owner session for an active
-  principal with active `instance.owner` authority or valid admin bearer
-  authorization
+  principal with active `instance.owner` authority, valid host-local session
+  for the matched owner-only route target, or valid admin bearer authorization
 - THEN the runtime returns an unauthorized JSON response
 - AND public Site document reads, public Site indexing resources, public
   actions, and public route discovery needed for anonymous Site rendering are
   not made owner-only by that management API guard
+
+#### Scenario: Mapped instance host management API route
+
+- GIVEN an enabled exact-host `route` mounts the instance profile with
+  effective access `owner`
+- AND a browser has completed cross-domain auth handoff for that mapped
+  instance host route
+- WHEN the browser requests owner-protected instance control-plane management
+  API reads or writes through that mapped host
+- THEN the runtime authorizes the request with the host-local session only when
+  the session is valid for the same host, route, target profile, and
+  `instance:control-plane` storage identity
+- AND the runtime still rejects host-local sessions minted for a different
+  mapped host, app install, route, profile, storage identity, or instance
+- AND the request does not require the central auth origin owner session cookie
+  to be scoped to the mapped instance host
 
 ### Requirement: Published Site Documents
 

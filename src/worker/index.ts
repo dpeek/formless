@@ -60,6 +60,7 @@ import { validateOwnerSessionAuthority, validateOwnerSessionCookie } from "./own
 import type { TurnstileRuntimeEnv } from "../shared/turnstile-config.ts";
 import { activeAppPackageResolver } from "./runtime-app-packages.ts";
 import { WORKSPACE_OPERATION_CAPABILITIES } from "@dpeek/formless-workspace";
+import { INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY } from "@dpeek/formless-instance-control-plane";
 
 export { FormlessAuthority } from "./authority.ts";
 
@@ -248,7 +249,16 @@ export default {
       return instanceUpgradeStatusResponse;
     }
 
-    const instanceControlPlaneResponse = await handleInstanceControlPlaneApiRequest(request, env);
+    const instanceControlPlaneHostSessionTarget = hostAuthSessionTargetForInstanceControlPlaneRoute(
+      request,
+      runtimeRoute,
+    );
+    const instanceControlPlaneResponse = await handleInstanceControlPlaneApiRequest(
+      authorityRequestWithOriginalUrlFacts(request, {
+        hostSessionTarget: instanceControlPlaneHostSessionTarget,
+      }),
+      env,
+    );
 
     if (instanceControlPlaneResponse) {
       return instanceControlPlaneResponse;
@@ -428,6 +438,26 @@ function hostAuthSessionTargetForInstalledAppAuthorityRoute(
   return target;
 }
 
+function hostAuthSessionTargetForInstanceControlPlaneRoute(
+  request: Request,
+  runtimeRoute: Awaited<ReturnType<typeof resolveInstanceRuntimeRouteForRequest>>,
+) {
+  const target = hostAuthSessionTargetForRuntimeRoute(request, runtimeRoute, {
+    requireOwnerAccess: true,
+  });
+
+  if (
+    !target ||
+    target.appInstallId !== undefined ||
+    target.targetProfile !== "instance" ||
+    target.storageIdentity !== INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY
+  ) {
+    return undefined;
+  }
+
+  return target;
+}
+
 function workerWorkspaceGatewayRouteAvailable(
   requestTopology: WorkerRuntimeRequestTopology,
   runtimeRoute: Awaited<ReturnType<typeof resolveInstanceRuntimeRouteForRequest>>,
@@ -501,7 +531,7 @@ const FORMLESS_ORIGINAL_REQUEST_ORIGIN_HEADER = "x-formless-original-request-ori
 function authorityRequestWithOriginalUrlFacts(
   request: Request,
   options: {
-    hostSessionTarget?: ReturnType<typeof hostAuthSessionTargetForInstalledAppAuthorityRoute>;
+    hostSessionTarget?: Parameters<typeof setHostAuthSessionTargetHeaders>[1];
   } = {},
 ): Request {
   const url = new URL(request.url);

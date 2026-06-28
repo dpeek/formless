@@ -37,8 +37,10 @@ type DispatchFetchInit = Parameters<Harness["mf"]["dispatchFetch"]>[1];
 
 const adminToken = "test-admin-token";
 const controlPlaneApi = "/api/formless/control-plane";
+const createAppInstallOperation = `${controlPlaneApi}/operations/app-install/createAppInstall`;
 const mappedHost = "www.example.com";
 const mappedAppHost = "tasks.example.com";
+const mappedInstanceHost = "admin.example.com";
 const installId = "personal";
 const privateSitePackageAppKey = "private-site";
 const privateSiteInstallId = "private-site";
@@ -577,6 +579,103 @@ describe("installed Site custom-domain Worker routing", () => {
     expect(assetRequests).toEqual(["/index.html"]);
   });
 
+  it("accepts host-local sessions for matched mapped instance control-plane APIs", async () => {
+    await setupPrimaryProductionIdentity();
+    await setupMappedInstance();
+
+    const { cookie, setCookie } = await createMappedInstanceHostSession("Mapped Instance Owner");
+    const mismatchedCookie = await hostSessionCookieWithPayload(setCookie, {
+      appInstallId: taskInstallId,
+      storageIdentity: `app:${taskInstallId}`,
+      targetProfile: "app",
+    });
+
+    const bootstrap = await fetchHost(mappedInstanceHost, `${controlPlaneApi}/bootstrap`, {
+      headers: { Cookie: cookie },
+    });
+    const routeWrite = await fetchHost(
+      mappedInstanceHost,
+      `${controlPlaneApi}/operations/route/create`,
+      {
+        body: JSON.stringify({
+          idempotencyKey: "mapped-instance-host-session-route-create",
+          input: {
+            enabled: true,
+            matchPath: "/host-session-route",
+            kind: "mount",
+            targetProfile: "instance",
+            surface: "admin",
+            access: "owner",
+          },
+        }),
+        headers: {
+          Cookie: cookie,
+          "Content-Type": "application/json",
+        },
+        method: "POST",
+      },
+    );
+    const createInstall = await fetchHost(mappedInstanceHost, createAppInstallOperation, {
+      body: JSON.stringify({
+        idempotencyKey: "mapped-instance-host-session-create-install",
+        input: {
+          packageAppKey: "site",
+          installId: "host-session-site",
+          label: "Host Session Site",
+        },
+      }),
+      headers: {
+        Cookie: cookie,
+        "Content-Type": "application/json",
+      },
+      method: "POST",
+    });
+    const mismatchedBootstrap = await fetchHost(
+      mappedInstanceHost,
+      `${controlPlaneApi}/bootstrap`,
+      {
+        headers: { Cookie: mismatchedCookie },
+      },
+    );
+    const mismatchedWrite = await fetchHost(
+      mappedInstanceHost,
+      `${controlPlaneApi}/operations/route/create`,
+      {
+        body: JSON.stringify({
+          idempotencyKey: "mapped-instance-mismatched-host-session-route-create",
+          input: {
+            enabled: true,
+            matchPath: "/mismatched-host-session-route",
+            kind: "mount",
+            targetProfile: "instance",
+            surface: "admin",
+            access: "owner",
+          },
+        }),
+        headers: {
+          Cookie: mismatchedCookie,
+          "Content-Type": "application/json",
+        },
+        method: "POST",
+      },
+    );
+    const bootstrapBody = (await bootstrap.json()) as { records?: unknown[] };
+    const routeWriteBody = (await routeWrite.json()) as OperationInvocationResponse;
+    const createInstallBody = (await createInstall.json()) as OperationInvocationResponse;
+
+    expect(bootstrap.status).toBe(200);
+    expect(Array.isArray(bootstrapBody.records)).toBe(true);
+    expect([200, 201]).toContain(routeWrite.status);
+    expect(operationRecord(routeWriteBody).values).toMatchObject({
+      matchPath: "/host-session-route",
+      targetProfile: "instance",
+    });
+    expect(createInstall.status).toBe(200);
+    expect(createInstallBody.status).toBe("committed");
+    expect(mismatchedBootstrap.status).toBe(401);
+    expect(mismatchedWrite.status).toBe(401);
+  });
+
   it("rejects host-local sessions after owner authority or session version changes", async () => {
     await setupPrimaryProductionIdentity();
     await setupMappedApp();
@@ -932,6 +1031,20 @@ async function setupMappedApp(values: Record<string, unknown> = {}) {
   await setupMappedAppRouteRecord(values);
 }
 
+async function setupMappedInstance(values: Record<string, unknown> = {}) {
+  await createRouteRecord(`route:host:instance:${mappedInstanceHost}`, {
+    enabled: true,
+    matchHost: mappedInstanceHost,
+    matchPath: "/",
+    matchPrefix: "/",
+    kind: "mount",
+    targetProfile: "instance",
+    surface: "admin",
+    access: "owner",
+    ...values,
+  });
+}
+
 async function setupMappedSiteRouteRecord() {
   await postAdminJson("/api/formless/app-installs", {
     packageAppKey: "site",
@@ -1061,6 +1174,43 @@ async function createMappedAppHostSession(ownerName: string) {
     request: new Request("https://www.example.com/"),
   });
   const start = await fetchHost(mappedAppHost, "/schema?view=board", {
+    headers: { Accept: "text/html" },
+    redirect: "manual",
+  });
+  const grant = await harness.mf.dispatchFetch(requiredHeader(start, "Location"), {
+    headers: {
+      Accept: "text/html",
+      Cookie: cookiePair(session.cookie),
+    },
+    redirect: "manual",
+  });
+  const callback = await harness.mf.dispatchFetch(requiredHeader(grant, "Location"), {
+    headers: { Cookie: cookiePair(requiredHeader(start, "Set-Cookie")) },
+    redirect: "manual",
+  });
+  const setCookie = requiredHeader(callback, "Set-Cookie");
+
+  expect(callback.status).toBe(302);
+
+  return {
+    cookie: cookiePair(setCookie),
+    owner,
+    setCookie,
+  };
+}
+
+async function createMappedInstanceHostSession(ownerName: string) {
+  const owner = await ensureTestIdentityOwner(harness, adminToken, {
+    name: ownerName,
+  });
+  const session = await createOwnerSessionCookie({
+    env: { FORMLESS_ADMIN_TOKEN: adminToken },
+    maxAgeSeconds: 60,
+    now: "2999-01-01T00:00:00.000Z",
+    owner,
+    request: new Request("https://www.example.com/"),
+  });
+  const start = await fetchHost(mappedInstanceHost, "/", {
     headers: { Accept: "text/html" },
     redirect: "manual",
   });

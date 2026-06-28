@@ -93,6 +93,7 @@ import {
   launchFixtureControlPlaneRecordsForEnv,
   type LaunchFixtureStartupEnv,
 } from "./launch-fixtures.ts";
+import { hostAuthSessionTargetFromRequestHeaders } from "./instance-auth-handoff.ts";
 
 const actorKinds = ["admin", "cliDeployer", "owner", "runner"] as const;
 const createAppInstallControlPlaneOperation = "createAppInstall";
@@ -235,10 +236,11 @@ export async function handleInstanceControlPlaneDurableObjectRequest(
     }
 
     const actorKind = controlPlaneActorKindFromRequest(request, url);
+    const hostSessionTarget = hostAuthSessionTargetForInstanceControlPlaneRequest(request);
     const authorization =
       operation.metadata.mode === "read"
-        ? await authorizeOwnerManagementRead(request, env)
-        : await authorizeAuthorityOperation(request, operation, env);
+        ? await authorizeOwnerManagementRead(request, env, { hostSessionTarget })
+        : await authorizeAuthorityOperation(request, operation, env, { hostSessionTarget });
 
     if (!authorization.authorized) {
       return jsonResponse(
@@ -481,7 +483,9 @@ async function handleCreateAppInstallOperation(
   const actorKind = controlPlaneActorKindFromRequest(request, new URL(request.url));
   assertBrowserControlPlaneOperationActor(actorKind, createAppInstallControlPlaneOperationKey);
 
-  const authorization = await authorizeInstanceWrite(request, env);
+  const authorization = await authorizeInstanceWrite(request, env, {
+    hostSessionTarget: hostAuthSessionTargetForInstanceControlPlaneRequest(request),
+  });
 
   if (!authorization.authorized) {
     return jsonResponse(
@@ -594,6 +598,21 @@ async function handleCreateAppInstallOperation(
     recordOperationInvocationFailed(storage, envelope, error);
     throw error;
   }
+}
+
+function hostAuthSessionTargetForInstanceControlPlaneRequest(request: Request) {
+  const target = hostAuthSessionTargetFromRequestHeaders(request.headers);
+
+  if (
+    !target ||
+    target.appInstallId !== undefined ||
+    target.targetProfile !== "instance" ||
+    target.storageIdentity !== INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY
+  ) {
+    return undefined;
+  }
+
+  return target;
 }
 
 function createAppInstallOperationEnvelope(input: {
