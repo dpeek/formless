@@ -81,7 +81,7 @@ export function SitePageShell({
                 {hasFooter ? (
                   <div
                     aria-hidden="true"
-                    className={`pointer-events-none absolute inset-x-0 -bottom-2.5 z-20 h-2.5 w-full transition-opacity duration-200 ${
+                    className={`pointer-events-none absolute inset-x-0 -bottom-2.5 z-20 h-2.5 w-full bg-[color:var(--site-bg)] transition-opacity duration-200 ${
                       footerCompletelyRevealed ? "opacity-0" : "opacity-100"
                     }`}
                     data-site-body-crease

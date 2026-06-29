@@ -26,7 +26,8 @@ describe("public Site renderer characterization", () => {
     expect(html).toContain("--site-link:rgb(137 94 31)");
     expect(html).toContain("flex min-h-dvh flex-col");
     expect(html).toContain("data-site-body");
-    expect(html).toContain("data-site-body-crease");
+    const bodyCrease = elementHtml(html, "data-site-body-crease");
+
     expect(html).toContain("data-site-theme-toggle");
     expect(html).toContain('data-site-theme-icon="light"');
     expect(html).toContain('aria-label="Switch to dark mode"');
@@ -36,9 +37,10 @@ describe("public Site renderer characterization", () => {
     expect(html).toContain("data-site-header-crease");
     expect(html).toContain("top-full h-2.5");
     expect(html).toContain("data-site-footer");
-    expect(html).toContain("absolute inset-x-0 -bottom-2.5");
-    expect(html).toContain('data-site-footer-revealed="false"');
-    expect(html).toContain("opacity-100");
+    expect(bodyCrease).toContain("absolute inset-x-0 -bottom-2.5");
+    expect(bodyCrease).toContain("bg-[color:var(--site-bg)]");
+    expect(bodyCrease).toContain('data-site-footer-revealed="false"');
+    expect(bodyCrease).toContain("background-image:radial-gradient");
     expect(html).toContain("bg-[color:var(--site-bg)]");
     expect(html).toContain("sticky bottom-0");
     expect(html).toContain('aria-label="Header primary"');
@@ -759,6 +761,18 @@ function mainHtml(html: string): string {
   }
 
   return html.slice(start, end + "</main>".length);
+}
+
+function elementHtml(html: string, dataAttribute: string): string {
+  const attributeIndex = html.indexOf(dataAttribute);
+  const elementStart = html.lastIndexOf("<", attributeIndex);
+  const elementEnd = html.indexOf(">", attributeIndex);
+
+  if (attributeIndex === -1 || elementStart === -1 || elementEnd === -1) {
+    throw new Error(`Missing element for "${dataAttribute}".`);
+  }
+
+  return html.slice(elementStart, elementEnd + 1);
 }
 
 function countOccurrences(text: string, search: string): number {

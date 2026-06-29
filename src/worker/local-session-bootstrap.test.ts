@@ -56,7 +56,8 @@ describe("local session bootstrap API routes", () => {
 
     expect(rejectedBefore.status).toBe(401);
     expect(rejectedBeforeBody).toEqual({
-      error: "Owner session or admin authorization is required for this write endpoint.",
+      error:
+        "Owner session, instance-admin session, or admin authorization is required for this write endpoint.",
     });
     expect(bootstrap.status).toBe(302);
     expect(bootstrap.headers.get("Location")).toBe(

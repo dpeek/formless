@@ -157,7 +157,6 @@ describe("instance control-plane API routes", () => {
           appInstall: "admin-site",
           surface: "public-site",
           access: "anonymous",
-          deploymentConfig: operationRecord(deploymentConfig).id,
         },
       },
       adminSession,

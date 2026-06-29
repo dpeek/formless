@@ -348,6 +348,13 @@ describe("identity control-plane schema contracts", () => {
     expect(
       Object.keys(schema.entities["role-assignment"].operations?.update.input?.fields ?? {}),
     ).toEqual(["status"]);
+    expect(schema.entities["role-assignment"].operations?.delete).toMatchObject({
+      kind: "delete",
+      scope: "record",
+      effect: { type: "deleteRecord" },
+      output: { type: "delete" },
+    });
+    expect(schema.entities.principal.operations?.delete).toBeUndefined();
     expect(
       Object.keys(schema.entities["app-registration"].operations?.update.input?.fields ?? {}),
     ).toEqual(["status", "selectedOrganization"]);

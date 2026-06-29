@@ -438,6 +438,7 @@ export const identityControlPlaneSourceSchema = {
           "status",
         ],
         {
+          delete: true,
           updateFields: ["status"],
         },
       ),
@@ -903,7 +904,7 @@ function screen(
 function writeOperations(
   label: string,
   fields: readonly string[],
-  options: { updateFields?: readonly string[] } = {},
+  options: { delete?: boolean; updateFields?: readonly string[] } = {},
 ) {
   const input = {
     fields: Object.fromEntries(fields.map((field) => [field, { field }])),
@@ -933,6 +934,19 @@ function writeOperations(
       idempotency: { required: true },
       audit: { input: "summary" },
     },
+    ...(options.delete
+      ? {
+          delete: {
+            label: `Delete ${label}`,
+            kind: "delete",
+            scope: "record",
+            effect: { type: "deleteRecord" },
+            output: { type: "delete" },
+            idempotency: { required: true },
+            audit: { input: "summary" },
+          },
+        }
+      : {}),
   } satisfies NonNullable<AppSchema["entities"][string]["operations"]>;
 }
 
