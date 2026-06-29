@@ -284,6 +284,36 @@ describe("shared workspace gateway proxy rules", () => {
     );
   });
 
+  it("authorizes browser mutations against the forwarded browser-facing origin", async () => {
+    const calls: CapturedSidecarCall[] = [];
+    const response = await handleWorkspaceGatewayProxyRulesRequest(
+      new Request(`http://127.0.0.1:8787${WORKSPACE_GATEWAY_AUTO_SAVE_API_PATH}`, {
+        body: JSON.stringify({ source: "schema-save", storageIdentity: "instance:control-plane" }),
+        headers: {
+          ...browserMutationHeaders(),
+          Origin: "https://formless.local",
+          "x-forwarded-host": "formless.local",
+          "x-forwarded-proto": "https",
+        },
+        method: "POST",
+      }),
+      baseProxyRulesEnv,
+      proxyRulesDependencies({
+        fetch: captureSidecarAutoSaveCalls(calls, workspaceGatewayAutoSaveState("queued")),
+        validateOwnerSession,
+      }),
+    );
+
+    await expectGatewayAutoSaveResponse({
+      autoSave: { displayState: "queued" },
+      csrfToken,
+      response,
+    });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.headers.get(WORKSPACE_GATEWAY_AUTHORIZATION_VIA_HEADER)).toBe("owner-session");
+    expect(calls[0]?.headers.get(WORKSPACE_GATEWAY_OPERATION_KIND_HEADER)).toBe("save");
+  });
+
   it("prefers owner-session authorization over an expired bootstrap header", async () => {
     const calls: CapturedSidecarCall[] = [];
     const response = await handleWorkspaceGatewayProxyRulesRequest(

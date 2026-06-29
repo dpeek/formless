@@ -1,6 +1,6 @@
 # Multi-Domain Auth Architecture
 
-Last updated: 2026-06-26
+Last updated: 2026-06-29
 
 Purpose: architecture direction for collaborator auth, app user auth, and
 multi-domain session handoff in Formless.
@@ -164,6 +164,36 @@ query/projection layers use actor context to filter or authorize records.
 These role keys are intentionally small and runtime-owned. App packages can
 model richer domain roles in app records later, but the base runtime should only
 ship roles it can enforce directly.
+
+### Instance Management Boundary
+
+`instance.owner` is the recovery and authority root. It should be required for:
+
+- granting, revoking, or disabling `instance.owner` assignments;
+- owner recovery, owner setup replacement, and high-risk credential recovery;
+- changing auth origin, relying-party, or owner-session signing policy;
+- creating or rotating admin-bearer recovery material;
+- destructive identity actions that would remove the last active owner.
+
+`instance.admin` is operational administration. It should be enough for:
+
+- managing app installs, app routes, domains, deploy intent, email sender intent,
+  and generated app administration surfaces;
+- reading owner/admin management APIs that do not expose recovery material;
+- inviting and revoking non-owner collaborators, including other
+  `instance.admin` principals when owner policy allows admin delegation;
+- assigning app-scoped roles such as `app.admin`, `app.editor`, `app.viewer`,
+  and `app.user`.
+
+`instance.admin` must not grant `instance.owner`, remove the last owner, mint
+owner recovery capabilities, or convert admin-bearer authorization into browser
+login. `instance.owner` should satisfy any `instance.admin` check unless a path
+explicitly needs owner-only recovery authority.
+
+The runtime should make the permission check explicit. Owner-management guards
+should resolve the authenticated principal and recheck current role assignments;
+the cookie name alone must not imply owner or admin authority. Admin bearer
+authorization stays a separate trusted CLI/automation path.
 
 ## App Schema Interface
 
@@ -375,12 +405,25 @@ Invites are operations on the identity control plane.
 
 Invite creation:
 
-- requires `instance.owner` or another explicit auth-management permission;
+- requires `instance.owner`, `instance.admin`, or another explicit
+  auth-management permission scoped to the roles being granted;
 - stores display-safe `invitation` facts;
 - stores token hash and expiry in private auth state;
 - optionally preassigns roles, groups, organization membership, or app-install
   registration;
 - schedules email through the email runtime using configured sender defaults.
+
+Invite authority rules:
+
+- `instance.owner` may invite principals with any runtime role, including
+  `instance.owner`, subject to last-owner safety checks.
+- `instance.admin` may invite `instance.admin` and app-scoped roles only when
+  admin delegation is enabled for the instance; it must never grant
+  `instance.owner`.
+- `app.admin` may invite app-scoped collaborators only for its app install when
+  the app install allows delegated app access management.
+- Invite creation must reject role assignments outside the inviter's current
+  grant authority before writing the invitation record or private token hash.
 
 Invite acceptance:
 
@@ -400,6 +443,35 @@ Invite policy:
   the same email;
 - email control proves delivery address ownership, not authorization beyond the
   invite scope.
+
+## Access Management UI
+
+Do not expose the identity control plane as a raw generated record editor for
+normal administrators. Build a dedicated instance access surface backed by the
+identity APIs.
+
+Recommended first UI:
+
+- route: an owner/admin instance shell route such as `/access` or
+  `/settings/access`;
+- people list: active and invited principals, primary email, status, current
+  instance/app roles, and selected organization/app registrations;
+- invitations list: pending, accepted, expired, and revoked invitations with
+  target email, target surface, granted roles, expiry, delivery status, inviter,
+  and resend/revoke actions;
+- invite flow: email, display name, role, app install or organization scope when
+  needed, expiry, and optional delivery preview;
+- role picker: offers only roles the current actor may grant, with owner-only
+  roles hidden or disabled for non-owner actors;
+- destructive actions: revoke invitation, disable principal, remove role
+  assignment, and transfer/remove owner remain owner-confirmed when they affect
+  owner or recovery authority.
+
+Invite acceptance needs its own auth-origin browser surface. A request to
+`/_formless/auth/invitations/accept` should render status, start passkey
+registration for eligible pending invitations, verify the passkey response,
+issue the central session, and follow any returned handoff target. This surface
+must not depend on an installed app route or generated app UI.
 
 ## External App Registration
 
@@ -538,25 +610,37 @@ actions.
    Add `authenticated` route access and authenticated operation actor facts in
    the invocation envelope.
 
-5. Add collaborator invitations.
-   Use email runtime for invite delivery. Accept invites on auth origin and
-   apply role/group/org assignments atomically.
+5. Add role-aware management authorization.
+   Add explicit checks for `instance.owner`, `instance.admin`, and app-scoped
+   roles. Keep owner-only recovery paths separate from operational admin paths.
+   Ensure mutating management requests recheck current principal status and role
+   assignments.
 
-6. Add identity references in app schemas.
+6. Add collaborator invitations.
+   Use email runtime for invite delivery. Accept invites on auth origin and
+   apply role/group/org assignments atomically. Enforce inviter grant authority
+   before writing invitations or private token hashes.
+
+7. Add access management UI.
+   Build a dedicated instance shell surface for people, roles, invitations,
+   invite creation, resend, revoke, and principal disablement. Build the
+   auth-origin invite acceptance surface separately from generated app UI.
+
+8. Add identity references in app schemas.
    Support `auth:principal`, `auth:organization`, and `auth:group` references
    from app records.
 
-7. Add external app registration policies.
+9. Add external app registration policies.
    Support closed and email-verified registration first. Add custom operation
    provisioning through explicit app registration operations.
 
-8. Add recovery flows.
-   Start with verified email challenge plus replacement passkey for low-risk
-   users. Add high-privilege recovery approval before owner/admin email-only
-   recovery.
+10. Add recovery flows.
+    Start with verified email challenge plus replacement passkey for low-risk
+    users. Add high-privilege recovery approval before owner/admin email-only
+    recovery.
 
-9. Add future auth method adapters.
-   Keep sessions and principal records stable while methods vary.
+11. Add future auth method adapters.
+    Keep sessions and principal records stable while methods vary.
 
 ## Decisions
 
@@ -564,6 +648,8 @@ actions.
   `instance-control-plane`.
 - First-pass runtime roles are `instance.owner`, `instance.admin`, `app.admin`,
   `app.editor`, `app.viewer`, and `app.user`.
+- `instance.owner` is the recovery authority root. `instance.admin` is
+  operational administration and cannot grant owner authority.
 - Organization context is explicit when a principal belongs to multiple
   organizations.
 - Email verification is required for recovery setup but cannot restore

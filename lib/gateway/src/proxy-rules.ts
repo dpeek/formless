@@ -572,11 +572,69 @@ async function parseGatewayAutoSaveEnqueueInput(request: { json: () => Promise<u
 function isSameOriginOrNoOrigin(request: Request): boolean {
   const origin = request.headers.get("Origin");
 
-  return origin === null || origin === new URL(request.url).origin;
+  return origin === null || origin === browserFacingRequestOrigin(request);
 }
 
 function isSameOriginWithOrigin(request: Request): boolean {
-  return request.headers.get("Origin") === new URL(request.url).origin;
+  return request.headers.get("Origin") === browserFacingRequestOrigin(request);
+}
+
+function browserFacingRequestOrigin(request: Request): string {
+  const url = new URL(request.url);
+  const forwardedHost = firstForwardedHeaderValue(request.headers.get("x-forwarded-host"));
+
+  if (forwardedHost) {
+    const forwardedProto =
+      firstForwardedHeaderValue(request.headers.get("x-forwarded-proto")) ??
+      forwardedHeaderValue(request.headers.get("forwarded"), "proto") ??
+      url.protocol.replace(/:$/, "");
+
+    return `${forwardedProto}://${forwardedHost}`;
+  }
+
+  const standardForwardedHost = forwardedHeaderValue(request.headers.get("forwarded"), "host");
+
+  if (standardForwardedHost) {
+    const forwardedProto =
+      forwardedHeaderValue(request.headers.get("forwarded"), "proto") ??
+      url.protocol.replace(/:$/, "");
+
+    return `${forwardedProto}://${standardForwardedHost}`;
+  }
+
+  return url.origin;
+}
+
+function firstForwardedHeaderValue(value: string | null): string | undefined {
+  const first = value?.split(",")[0]?.trim();
+
+  return first ? unquoteForwardedValue(first) : undefined;
+}
+
+function forwardedHeaderValue(value: string | null, key: "host" | "proto"): string | undefined {
+  const first = firstForwardedHeaderValue(value);
+
+  if (!first) {
+    return undefined;
+  }
+
+  for (const part of first.split(";")) {
+    const [partKey, partValue] = part.split("=", 2);
+
+    if (partKey?.trim().toLowerCase() !== key) {
+      continue;
+    }
+
+    const parsed = partValue?.trim();
+
+    return parsed ? unquoteForwardedValue(parsed) : undefined;
+  }
+
+  return undefined;
+}
+
+function unquoteForwardedValue(value: string): string {
+  return value.replace(/^"|"$/g, "");
 }
 
 function requestCookie(request: Request, name: string): string | undefined {
