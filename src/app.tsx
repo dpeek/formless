@@ -50,6 +50,7 @@ import type {
   PackageAppKey,
 } from "@dpeek/formless-installed-apps";
 import {
+  COLLABORATOR_INVITATION_ACCEPT_PATH,
   ownerLoginRedirectLocationForRoute,
   type OwnerLoginRedirectTarget,
 } from "./shared/instance-auth.ts";
@@ -76,6 +77,7 @@ export type RuntimeInstalledAppRouteRegistry = {
 };
 
 export type AppRouteComponents = {
+  CollaboratorInvitationAcceptanceRoute: ElementType;
   GeneratedAppFrame: ElementType<GeneratedAppFrameProps>;
   HomeRoute: ElementType<HomeRouteProps>;
   InstanceShellRoute: ElementType<InstanceShellRouteProps>;
@@ -92,6 +94,11 @@ const defaultPublicSiteReactAdapters = createPublicSiteReactAdapterRegistry(
 );
 
 const defaultRouteComponents: AppRouteComponents = {
+  CollaboratorInvitationAcceptanceRoute: lazy(() =>
+    import("./app/routes/collaborator-invitation-acceptance.tsx").then((module) => ({
+      default: module.CollaboratorInvitationAcceptanceRoute,
+    })),
+  ),
   GeneratedAppFrame: lazy(() =>
     import("./app/generated-app-frame.tsx").then((module) => ({
       default: module.GeneratedAppFrame,
@@ -640,8 +647,14 @@ function AppRoutes({
   routeComponents: AppRouteComponents;
   runtimeProfile: RuntimeProfile;
 }) {
-  const { HomeRoute, InstanceShellRoute, LocalSessionRoute, OwnerLoginRoute, OwnerSetupRoute } =
-    routeComponents;
+  const {
+    CollaboratorInvitationAcceptanceRoute,
+    HomeRoute,
+    InstanceShellRoute,
+    LocalSessionRoute,
+    OwnerLoginRoute,
+    OwnerSetupRoute,
+  } = routeComponents;
   const publicSiteReactAdapters =
     routeComponents.publicSiteReactAdapters ??
     createPublicSiteReactAdapterRegistry(routeComponents.SitePageRoute);
@@ -656,6 +669,9 @@ function AppRoutes({
           <Redirect replace to={runtimeProfile.defaultRedirect} />
         </Route>
       ) : null}
+      <Route path={COLLABORATOR_INVITATION_ACCEPT_PATH}>
+        <CollaboratorInvitationAcceptanceRoute />
+      </Route>
       {browserRoutes.ownerSetupRoute ? (
         <Route path={browserRoutes.ownerSetupRoute}>
           <OwnerSetupRoute />

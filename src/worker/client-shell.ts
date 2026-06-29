@@ -46,6 +46,27 @@ export async function handleClientAssetRequest(
   return env.ASSETS.fetch(request);
 }
 
+export async function handleClientShellDocumentRequest(
+  request: Request,
+  env: ClientAssetEnv,
+): Promise<Response | undefined> {
+  if (!env.ASSETS) {
+    return responseWithoutBodyForHead(request, fallbackClientShellDocumentResponse());
+  }
+
+  const shellResponse = await env.ASSETS.fetch(
+    clientShellAssetRequest(getEquivalentRequestForHead(request)),
+  );
+
+  if (!isHtmlResponse(shellResponse)) {
+    return responseWithoutBodyForHead(request, shellResponse);
+  }
+
+  const response = htmlResponse(shellResponse, await shellResponse.text());
+
+  return responseWithoutBodyForHead(request, response);
+}
+
 function shouldServeMappedAppHostShell(
   request: Request,
   runtimeTopology?: WorkerRuntimeRequestTopology,
@@ -70,17 +91,48 @@ function injectMappedAppHostDocumentHints(
   html: string,
   mappedAppHost: MappedAppHost,
 ): Response {
+  return htmlResponse(response, injectHeadHtml(html, mappedAppHostHints(mappedAppHost)));
+}
+
+function htmlResponse(response: Response, html: string): Response {
   const headers = new Headers(response.headers);
 
   headers.set("Cache-Control", "no-store");
   headers.set("Content-Type", "text/html; charset=utf-8");
   headers.delete("Content-Length");
 
-  return new Response(injectHeadHtml(html, mappedAppHostHints(mappedAppHost)), {
+  return new Response(html, {
     headers,
     status: response.status,
     statusText: response.statusText,
   });
+}
+
+function fallbackClientShellDocumentResponse(): Response {
+  return new Response(
+    `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" sizes="any" href="/favicon.ico" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>formless</title>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+`,
+    {
+      headers: {
+        "Cache-Control": "no-store",
+        "Content-Type": "text/html; charset=utf-8",
+      },
+    },
+  );
 }
 
 function mappedAppHostHints(mappedAppHost: MappedAppHost): string {

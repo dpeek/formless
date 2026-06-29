@@ -11,6 +11,7 @@ import type {
   RegistrationResponseJSON,
 } from "@simplewebauthn/server";
 import {
+  COLLABORATOR_INVITATION_ACCEPT_PATH,
   parseCollaboratorInvitationAcceptanceStatusResponse,
   parseCollaboratorInvitationPasskeyRegistrationOptionsResponse,
   parseCollaboratorInvitationPasskeyRegistrationVerifyResponse,
@@ -28,6 +29,7 @@ import {
 } from "./instance-auth-handoff.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
 import { OWNER_SESSION_COOKIE_NAME } from "./owner-session.ts";
+import { handleCollaboratorInvitationAcceptanceBrowserRequest } from "./collaborator-invitation-acceptance.ts";
 
 type Harness = Awaited<ReturnType<typeof createWorkerHarness>>;
 
@@ -94,6 +96,58 @@ afterAll(async () => {
 });
 
 describe("collaborator invitation acceptance status", () => {
+  it("serves the browser route shell separately from the status API", async () => {
+    const assetRequests: string[] = [];
+    const env = {
+      ASSETS: {
+        fetch(request: Request) {
+          assetRequests.push(new URL(request.url).pathname);
+
+          return new Response("<!doctype html><html><body>acceptance shell</body></html>", {
+            headers: { "Content-Type": "text/html; charset=utf-8" },
+          });
+        },
+      },
+    } as unknown as Parameters<typeof handleCollaboratorInvitationAcceptanceBrowserRequest>[1];
+    const documentResponse = await handleCollaboratorInvitationAcceptanceBrowserRequest(
+      new Request(
+        `${authOrigin}${COLLABORATOR_INVITATION_ACCEPT_PATH}?invitationId=invitation%3Aada&token=${rawToken}`,
+        { headers: { Accept: "text/html" } },
+      ),
+      env,
+    );
+    const headResponse = await handleCollaboratorInvitationAcceptanceBrowserRequest(
+      new Request(
+        `${authOrigin}${COLLABORATOR_INVITATION_ACCEPT_PATH}?invitationId=invitation%3Aada&token=${rawToken}`,
+        { headers: { Accept: "text/html" }, method: "HEAD" },
+      ),
+      env,
+    );
+    const apiResponse = await handleCollaboratorInvitationAcceptanceBrowserRequest(
+      new Request(
+        `${authOrigin}${COLLABORATOR_INVITATION_ACCEPT_PATH}?invitationId=invitation%3Aada&token=${rawToken}`,
+        { headers: { Accept: "application/json" } },
+      ),
+      env,
+    );
+    const passkeyApiResponse = await handleCollaboratorInvitationAcceptanceBrowserRequest(
+      new Request(`${authOrigin}${COLLABORATOR_INVITATION_ACCEPT_PATH}/passkeys/register/options`, {
+        headers: { Accept: "text/html" },
+        method: "POST",
+      }),
+      env,
+    );
+
+    expect(documentResponse?.status).toBe(200);
+    expect(documentResponse?.headers.get("Content-Type")).toBe("text/html; charset=utf-8");
+    expect(await documentResponse?.text()).toContain("acceptance shell");
+    expect(headResponse?.status).toBe(200);
+    expect(await headResponse?.text()).toBe("");
+    expect(apiResponse).toBeUndefined();
+    expect(passkeyApiResponse).toBeUndefined();
+    expect(assetRequests).toEqual(["/index.html", "/index.html"]);
+  });
+
   it("returns display-safe eligible invitation facts without consuming tokens or issuing auth state", async () => {
     const invitation = await createInvitation({
       invitationId: "invitation:eligible",

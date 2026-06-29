@@ -31,6 +31,7 @@ import {
   type RuntimeRouteAccess,
   type RuntimeProfileKind,
 } from "../shared/runtime-topology.ts";
+import { COLLABORATOR_INVITATION_ACCEPT_PATH } from "../shared/instance-auth.ts";
 
 export type { RuntimeProfileKind };
 
@@ -317,6 +318,7 @@ export function shouldRenderRuntimeRouteOutsideGeneratedAppFrame(
   const routes = runtimeBrowserRoutePatterns(profile);
 
   return (
+    path === COLLABORATOR_INVITATION_ACCEPT_PATH ||
     path === routes.ownerLoginRoute ||
     path === routes.ownerSetupRoute ||
     path === routes.localSessionRoute ||

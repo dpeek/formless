@@ -35,7 +35,10 @@ import {
   startProtectedRouteAuthHandoff,
   validateRouteAccessSession,
 } from "./instance-auth-handoff.ts";
-import { handleCollaboratorInvitationAcceptanceApiRequest } from "./collaborator-invitation-acceptance.ts";
+import {
+  handleCollaboratorInvitationAcceptanceApiRequest,
+  handleCollaboratorInvitationAcceptanceBrowserRequest,
+} from "./collaborator-invitation-acceptance.ts";
 import { handleOwnerSetupApiRequest } from "./owner-setup.ts";
 import { handleOwnerPasskeyApiRequest } from "./owner-passkeys.ts";
 import { ownerLoginRedirectLocationForRoute } from "../shared/instance-auth.ts";
@@ -128,6 +131,13 @@ export default {
 
     if (earlyInstanceAppInstallsResponse) {
       return earlyInstanceAppInstallsResponse;
+    }
+
+    const earlyCollaboratorInvitationAcceptanceBrowserResponse =
+      await handleCollaboratorInvitationAcceptanceBrowserRequest(request, env);
+
+    if (earlyCollaboratorInvitationAcceptanceBrowserResponse) {
+      return earlyCollaboratorInvitationAcceptanceBrowserResponse;
     }
 
     const earlyCollaboratorInvitationAcceptanceResponse =

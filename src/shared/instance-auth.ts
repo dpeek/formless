@@ -31,6 +31,7 @@ export const FORMLESS_INSTANCE_AUTH_RELYING_PARTY_ID_ENV_NAME =
   "FORMLESS_INSTANCE_AUTH_RELYING_PARTY_ID";
 export const FORMLESS_INSTANCE_AUTH_RELYING_PARTY_NAME_ENV_NAME =
   "FORMLESS_INSTANCE_AUTH_RELYING_PARTY_NAME";
+export const COLLABORATOR_INVITATION_ACCEPT_PATH = "/_formless/auth/invitations/accept";
 
 export type OwnerSessionSummary = {
   expiresAt: string;

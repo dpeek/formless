@@ -246,6 +246,65 @@ principals, committing identity acceptance, and issuing central auth sessions.
   principal, issue a central auth session, issue a host-local session, or mint a
   handoff grant from stale or partial state
 
+### Requirement: Collaborator Invitation Acceptance Browser Surface
+
+The system SHALL render collaborator invitation acceptance as an auth-origin
+browser surface that drives the invitation acceptance APIs without depending on
+an installed app route or generated app UI.
+
+#### Scenario: Render eligible invitation
+
+- GIVEN a browser navigates to `/_formless/auth/invitations/accept` on the
+  configured auth origin with an invitation id and raw invite token
+- WHEN the invitation acceptance eligibility check succeeds
+- THEN the browser surface renders display-safe invitation facts needed to
+  continue acceptance, including target email, target surface, expiry, and
+  invited principal display name when available
+- AND it does not render or persist raw invite tokens, token hashes, passkey
+  challenge secrets, credential material, central session ids, host session
+  cookies, or handoff grant secrets
+- AND the surface is served by instance auth runtime behavior rather than by an
+  installed app, public Site document, source app screen, or generated
+  identity-control-plane record editor
+
+#### Scenario: Render ineligible invitation safely
+
+- GIVEN a browser opens an invitation acceptance URL whose token, target,
+  invitation, auth configuration, or origin is invalid or unavailable
+- WHEN the eligibility check fails
+- THEN the browser surface renders a display-safe failure state
+- AND it does not reveal whether an unrelated principal exists for the same
+  email address
+- AND it does not start passkey registration, activate identity records, create
+  credentials, issue sessions, mint handoff grants, or redirect to an
+  app-controlled target
+
+#### Scenario: Complete passkey-backed invitation acceptance
+
+- GIVEN the browser surface has an eligible invitation
+- WHEN the invited user starts passkey registration and submits the resulting
+  registration response from the configured auth origin
+- THEN the surface requests invitation-bound registration options and verifies
+  the registration through the invitation acceptance APIs
+- AND successful completion stores the credential, consumes the invite token,
+  commits identity acceptance, and receives only display-safe accepted
+  principal, session-expiry, and optional handoff target facts
+- AND mapped app hosts and mapped public Site hosts do not render or start the
+  passkey ceremony unless they are also the configured auth origin
+
+#### Scenario: Continue after accepted invitation
+
+- GIVEN invitation acceptance completes successfully
+- WHEN the accepted invitation has a mapped app, mapped public Site, or mapped
+  instance target
+- THEN the browser surface continues through the target-bound cross-domain
+  handoff flow
+- AND the redirect target remains path-only for the target origin
+- AND the auth origin does not issue a host-local session cookie directly for
+  the target host
+- AND when no handoff target is available, the surface remains on the auth
+  origin and renders a display-safe accepted state
+
 ### Requirement: Passkey Login
 
 The system SHALL issue owner sessions after successful passkey assertion

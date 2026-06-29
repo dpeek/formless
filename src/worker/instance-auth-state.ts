@@ -5,6 +5,7 @@ import type {
 } from "@simplewebauthn/server";
 
 import {
+  COLLABORATOR_INVITATION_ACCEPT_PATH as SHARED_COLLABORATOR_INVITATION_ACCEPT_PATH,
   parseInstanceAuthCanonicalOrigin,
   parseInstanceAuthConfigInput,
   parseInstanceAuthRelyingPartyId,
@@ -25,7 +26,7 @@ const collaboratorInvitationTargetSurfaces = [
   "instance",
   "organization",
 ] as const satisfies readonly IdentityInvitationTargetSurface[];
-export const COLLABORATOR_INVITATION_ACCEPT_PATH = "/_formless/auth/invitations/accept";
+export const COLLABORATOR_INVITATION_ACCEPT_PATH = SHARED_COLLABORATOR_INVITATION_ACCEPT_PATH;
 const authenticatorTransports = [
   "ble",
   "cable",

@@ -12,7 +12,10 @@ import {
   FORMLESS_RUNTIME_PACKAGE_APP_KEY_META_NAME,
   FORMLESS_RUNTIME_PROFILE_META_NAME,
 } from "../app/runtime-profile.ts";
-import { ownerLoginRedirectLocationForRoute } from "../shared/instance-auth.ts";
+import {
+  COLLABORATOR_INVITATION_ACCEPT_PATH,
+  ownerLoginRedirectLocationForRoute,
+} from "../shared/instance-auth.ts";
 import { LOCAL_SESSION_BOOTSTRAP_API_PATH } from "@dpeek/formless-gateway";
 import { PUBLIC_SITE_INDEXING_CACHE_CONTROL } from "@dpeek/formless-site-app/worker";
 import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
@@ -303,6 +306,13 @@ describe("installed Site custom-domain Worker routing", () => {
     const schema = await fetchHost(mappedAppHost, "/schema", {
       headers: { Accept: "text/html" },
     });
+    const invitationAcceptance = await fetchHost(
+      mappedAppHost,
+      `${COLLABORATOR_INVITATION_ACCEPT_PATH}?invitationId=invitation%3Amapped-host&token=aW52aXRl`,
+      {
+        headers: { Accept: "text/html" },
+      },
+    );
     const login = await fetchHost(mappedAppHost, "/login", {
       headers: { Accept: "text/html" },
     });
@@ -328,6 +338,7 @@ describe("installed Site custom-domain Worker routing", () => {
     );
     const homeHtml = await home.text();
     const schemaHtml = await schema.text();
+    const invitationAcceptanceHtml = await invitationAcceptance.text();
 
     expect(home.status).toBe(200);
     expect(homeHtml).toContain(
@@ -344,13 +355,20 @@ describe("installed Site custom-domain Worker routing", () => {
     expect(schemaHtml).toContain(
       `<meta name="${FORMLESS_RUNTIME_PROFILE_META_NAME}" content="app" />`,
     );
+    expect(invitationAcceptance.status).toBe(200);
+    expect(invitationAcceptanceHtml).not.toContain(
+      `<meta name="${FORMLESS_RUNTIME_PROFILE_META_NAME}" content="app" />`,
+    );
+    expect(invitationAcceptanceHtml).not.toContain(
+      `<meta name="${FORMLESS_RUNTIME_APP_INSTALL_ID_META_NAME}" content="${taskInstallId}" />`,
+    );
     expect(login.status).toBe(404);
     expect(passkeyOptions.status).toBe(404);
     expect(localSessionBootstrap.status).toBe(404);
     expect(setupCapability.status).toBe(404);
     expect(schemaKeyApi.status).toBe(404);
     expect(installApi.status).toBe(200);
-    expect(assetRequests).toEqual(["/index.html", "/index.html"]);
+    expect(assetRequests).toEqual(["/index.html", "/index.html", "/index.html"]);
   });
 
   it("starts owner auth handoff for mapped app hosts", async () => {

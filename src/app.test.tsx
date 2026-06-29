@@ -54,6 +54,7 @@ import { InstanceShellRoute } from "./app/routes/instance-shell.tsx";
 import { LocalSessionRoute } from "./app/routes/local-session.tsx";
 import { OwnerLoginRoute } from "./app/routes/owner-login.tsx";
 import { OwnerSetupRoute } from "./app/routes/owner-setup.tsx";
+import { CollaboratorInvitationAcceptanceRoute } from "./app/routes/collaborator-invitation-acceptance.tsx";
 import { buildSitePageTree, type SitePageTree } from "@dpeek/formless-site-app";
 import {
   createDevRuntimeProfile,
@@ -81,6 +82,7 @@ import {
   type TableColumnConfig,
 } from "./client/views.ts";
 import { bundledSourceSchemaHashFixtures } from "./shared/upgrade-migrations.ts";
+import { COLLABORATOR_INVITATION_ACCEPT_PATH } from "./shared/instance-auth.ts";
 import type { StoredRecord } from "@dpeek/formless-storage";
 import type { BootstrapResponse } from "./shared/protocol.ts";
 import type { SchemaKey } from "./shared/schema-apps.ts";
@@ -236,6 +238,7 @@ function SitePageRouteProbe({
 
 function appRouteComponents(overrides: Partial<AppRouteComponents> = {}): AppRouteComponents {
   return {
+    CollaboratorInvitationAcceptanceRoute,
     GeneratedAppFrame,
     HomeRoute,
     InstanceShellRoute,
@@ -852,6 +855,18 @@ describe("App smoke routes", () => {
 
     expect(html).toContain("Checking owner session");
     expect(html).toContain("Loading sign-in state.");
+    expect(html).not.toContain('data-frame="workbench"');
+    expect(html).not.toContain('data-frame="generated-app"');
+    expect(html).not.toContain('aria-label="Runtime apps"');
+  });
+
+  it("renders the collaborator invitation acceptance route outside runtime app chrome", () => {
+    const html = renderRoute(
+      `${COLLABORATOR_INVITATION_ACCEPT_PATH}?invitationId=invitation%3Aada&token=aW52aXRlLXJhdy10b2tlbi0x`,
+    );
+
+    expect(html).toContain("Checking invitation");
+    expect(html).toContain("Loading invitation status.");
     expect(html).not.toContain('data-frame="workbench"');
     expect(html).not.toContain('data-frame="generated-app"');
     expect(html).not.toContain('aria-label="Runtime apps"');

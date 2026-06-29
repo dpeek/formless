@@ -15,6 +15,7 @@ import {
 } from "../shared/instance-auth.ts";
 import { normalizeEmailDeliveryAddress } from "../shared/email-runtime.ts";
 import { nowIsoString } from "../shared/clock.ts";
+import { acceptsRuntimeHtml } from "../shared/runtime-topology.ts";
 import type { OwnerIdentity } from "../shared/protocol.ts";
 import type { StoredRecord } from "@dpeek/formless-storage";
 import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
@@ -41,8 +42,10 @@ import {
 } from "./identity-control-plane.ts";
 import { createOwnerSessionCookie } from "./owner-session.ts";
 import { readControlPlaneRecords } from "./deployment-control-plane-client.ts";
+import { handleClientShellDocumentRequest } from "./client-shell.ts";
 
 type CollaboratorInvitationAcceptanceEnv = {
+  ASSETS?: Fetcher;
   FORMLESS_ADMIN_TOKEN?: string;
   FORMLESS_AUTHORITY: DurableObjectNamespace;
   FORMLESS_OWNER_SESSION_SECRET?: string;
@@ -61,6 +64,19 @@ type CollaboratorInvitationTokenCommitFailureReason =
   | "wrong-target"
   | "wrong-target-email"
   | "wrong-token";
+
+export async function handleCollaboratorInvitationAcceptanceBrowserRequest(
+  request: Request,
+  env: CollaboratorInvitationAcceptanceEnv,
+): Promise<Response | undefined> {
+  const url = new URL(request.url);
+
+  if (url.pathname !== COLLABORATOR_INVITATION_ACCEPT_PATH || !isBrowserDocumentRequest(request)) {
+    return undefined;
+  }
+
+  return await handleClientShellDocumentRequest(request, env);
+}
 
 export async function handleCollaboratorInvitationAcceptanceApiRequest(
   request: Request,
@@ -121,6 +137,13 @@ function isCollaboratorInvitationAcceptancePath(pathname: string): boolean {
   return (
     pathname === COLLABORATOR_INVITATION_ACCEPT_PATH ||
     pathname.startsWith(`${COLLABORATOR_INVITATION_ACCEPT_PATH}/`)
+  );
+}
+
+function isBrowserDocumentRequest(request: Request): boolean {
+  return (
+    (request.method === "GET" || request.method === "HEAD") &&
+    acceptsRuntimeHtml(request.headers.get("Accept"))
   );
 }
 
