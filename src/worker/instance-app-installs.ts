@@ -21,8 +21,7 @@ import {
   type SourceSchemaHash,
 } from "../shared/upgrade-migrations.ts";
 import {
-  authorizeInstanceWrite,
-  authorizeOwnerManagementRead,
+  authorizeOperationalManagement,
   type AuthorityAdminGuardEnv,
 } from "./authority-admin-guard.ts";
 import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
@@ -101,7 +100,10 @@ export async function handleInstanceAppInstallsDurableObjectRequest(
         return methodNotAllowedResponse("POST");
       }
 
-      const authorization = await authorizeInstanceWrite(request, env);
+      const authorization = await authorizeOperationalManagement(request, env, {
+        error:
+          "Owner session, instance-admin session, or admin authorization is required for this write endpoint.",
+      });
 
       if (!authorization.authorized) {
         return jsonResponse(
@@ -147,7 +149,10 @@ export async function handleInstanceAppInstallsDurableObjectRequest(
     }
 
     if (request.method === "GET") {
-      const authorization = await authorizeOwnerManagementRead(request, env);
+      const authorization = await authorizeOperationalManagement(request, env, {
+        error:
+          "Owner session, instance-admin session, or admin authorization is required for this read endpoint.",
+      });
 
       if (!authorization.authorized) {
         return jsonResponse(
@@ -161,7 +166,10 @@ export async function handleInstanceAppInstallsDurableObjectRequest(
     }
 
     if (request.method === "POST") {
-      const authorization = await authorizeInstanceWrite(request, env);
+      const authorization = await authorizeOperationalManagement(request, env, {
+        error:
+          "Owner session, instance-admin session, or admin authorization is required for this write endpoint.",
+      });
 
       if (!authorization.authorized) {
         return jsonResponse(

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import type { OwnerIdentity } from "../shared/protocol.ts";
-import { authorizeInstanceWrite } from "./authority-admin-guard.ts";
+import { authorizeInstanceWrite, authorizeOperationalManagement } from "./authority-admin-guard.ts";
 import {
   OWNER_SESSION_COOKIE_NAME,
   createOwnerSessionCookie,
@@ -286,6 +286,76 @@ describe("shared write authorization", () => {
   });
 });
 
+describe("operational management authorization", () => {
+  it("accepts current owner or instance-admin authority from a signed principal session", async () => {
+    for (const authority of [
+      { instanceAdmin: false, instanceOwner: true },
+      { instanceAdmin: true, instanceOwner: false },
+      { instanceAdmin: true, instanceOwner: true },
+    ]) {
+      const created = await createOwnerSessionCookie({
+        env: { FORMLESS_OWNER_SESSION_SECRET: sessionSecret },
+        maxAgeSeconds: 60,
+        now: futureIssuedAt,
+        owner,
+        request: request("https://example.com/admin"),
+      });
+
+      await expectAuthorizationResult(
+        authorizeOperationalManagement(
+          requestWithCookie(created.cookie, "https://example.com/api"),
+          { FORMLESS_OWNER_SESSION_SECRET: sessionSecret },
+          {
+            resolveManagementAuthority: async (session) => ({
+              id: session.principalId,
+              ...authority,
+            }),
+          },
+        ),
+        {
+          authorized: true,
+          session: created.session,
+          via: "owner-session",
+        },
+      );
+    }
+  });
+
+  it("rejects active principals without management authority and stale principal state", async () => {
+    await expectRejectedOperationalManagement({
+      id: owner.id,
+      instanceAdmin: false,
+      instanceOwner: false,
+    });
+    await expectRejectedOperationalManagement(null);
+    await expectRejectedOperationalManagement({
+      id: owner.id,
+      instanceAdmin: false,
+      instanceOwner: false,
+    });
+  });
+
+  it("accepts admin bearer and stays open when no protection is configured", async () => {
+    await expectAuthorizationResult(
+      authorizeOperationalManagement(request("https://example.com/api"), {}),
+      {
+        authorized: true,
+        via: "open",
+      },
+    );
+    await expectAuthorizationResult(
+      authorizeOperationalManagement(
+        request("https://example.com/api", { Authorization: `Bearer ${adminToken}` }),
+        { FORMLESS_ADMIN_TOKEN: adminToken },
+      ),
+      {
+        authorized: true,
+        via: "admin-bearer",
+      },
+    );
+  });
+});
+
 function request(url: string, headers: Record<string, string> = {}) {
   return new Request(url, { headers });
 }
@@ -310,6 +380,35 @@ async function expectAuthorizationResult(
   expected: Awaited<ReturnType<typeof authorizeInstanceWrite>>,
 ) {
   expect(await actual).toEqual(expected);
+}
+
+async function expectRejectedOperationalManagement(
+  authority: { id: string; instanceAdmin: boolean; instanceOwner: boolean } | null,
+) {
+  const created = await createOwnerSessionCookie({
+    env: { FORMLESS_OWNER_SESSION_SECRET: sessionSecret },
+    maxAgeSeconds: 60,
+    now: futureIssuedAt,
+    owner,
+    request: request("https://example.com/admin"),
+  });
+
+  await expectAuthorizationResult(
+    authorizeOperationalManagement(
+      requestWithCookie(created.cookie, "https://example.com/api"),
+      { FORMLESS_OWNER_SESSION_SECRET: sessionSecret },
+      { resolveManagementAuthority: async () => authority },
+    ),
+    {
+      authorized: false,
+      error:
+        "Owner session, instance-admin session, or admin authorization is required for this endpoint.",
+      headers: {
+        "WWW-Authenticate": 'Bearer realm="formless-admin"',
+      },
+      status: 401,
+    },
+  );
 }
 
 async function signedCookie(payload: unknown, secret: string) {

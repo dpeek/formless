@@ -1,7 +1,16 @@
 import type { AuthorityOperation } from "./authority-operations.ts";
-import { validateHostAuthSessionAuthority, type HostAuthSession } from "./instance-auth-handoff.ts";
+import {
+  validateHostAuthSessionAuthority,
+  validateHostAuthSessionManagementAuthority,
+  type HostAuthSession,
+} from "./instance-auth-handoff.ts";
 import type { InstanceAuthSessionTargetBinding } from "./instance-auth-state.ts";
 import {
+  readInternalIdentityAuthorityForPrincipal,
+  type ActiveIdentityAuthority,
+} from "./identity-owner-internal.ts";
+import {
+  validateOwnerSessionCookie,
   validateOwnerSessionAuthority,
   type OwnerSession,
   type OwnerSessionAuthorityResolver,
@@ -35,6 +44,10 @@ export type InstanceWriteAuthorizationResult =
     };
 
 export type OwnerManagementReadAuthorizationResult = InstanceWriteAuthorizationResult;
+export type OperationalManagementAuthorizationResult = InstanceWriteAuthorizationResult;
+export type OperationalManagementAuthorityResolver = (
+  session: OwnerSession,
+) => Promise<ActiveIdentityAuthority | null>;
 
 export function authorizeAuthorityOperation(
   request: Request,
@@ -104,6 +117,23 @@ export async function authorizeOwnerManagementRead(
   });
 }
 
+export async function authorizeOperationalManagement(
+  request: Request,
+  env: AuthorityAdminGuardEnv,
+  options: {
+    error?: string;
+    hostSessionTarget?: InstanceAuthSessionTargetBinding | undefined;
+    resolveManagementAuthority?: OperationalManagementAuthorityResolver;
+  } = {},
+): Promise<OperationalManagementAuthorizationResult> {
+  return authorizeManagementSessionOrAdmin(request, env, {
+    ...options,
+    error:
+      options.error ??
+      "Owner session, instance-admin session, or admin authorization is required for this endpoint.",
+  });
+}
+
 async function authorizeOwnerSessionOrAdmin(
   request: Request,
   env: AuthorityAdminGuardEnv,
@@ -156,6 +186,74 @@ async function authorizeOwnerSessionOrAdmin(
     },
     status: 401,
   };
+}
+
+async function authorizeManagementSessionOrAdmin(
+  request: Request,
+  env: AuthorityAdminGuardEnv,
+  options: {
+    error: string;
+    hostSessionTarget?: InstanceAuthSessionTargetBinding | undefined;
+    resolveManagementAuthority?: OperationalManagementAuthorityResolver;
+  },
+): Promise<OperationalManagementAuthorizationResult> {
+  const adminToken = normalizedAdminToken(env.FORMLESS_ADMIN_TOKEN);
+  const sessionProtectionConfigured =
+    normalizedAdminToken(env.FORMLESS_OWNER_SESSION_SECRET) !== undefined;
+
+  if (!adminToken && !sessionProtectionConfigured) {
+    return { authorized: true, via: "open" };
+  }
+
+  if (adminToken && requestAdminToken(request) === adminToken) {
+    return { authorized: true, via: "admin-bearer" };
+  }
+
+  const ownerSession = await validateOwnerSessionCookie(request, env);
+
+  if (ownerSession.ok) {
+    const authority = options.resolveManagementAuthority
+      ? await options.resolveManagementAuthority(ownerSession.session)
+      : await readInternalIdentityAuthorityForPrincipal(env, ownerSession.session.principalId);
+
+    if (hasOperationalManagementAuthority(authority, ownerSession.session.principalId)) {
+      return { authorized: true, session: ownerSession.session, via: "owner-session" };
+    }
+  }
+
+  const hostSessionEnv =
+    env.FORMLESS_AUTHORITY === undefined
+      ? undefined
+      : { ...env, FORMLESS_AUTHORITY: env.FORMLESS_AUTHORITY };
+  const hostSession =
+    options.hostSessionTarget === undefined || hostSessionEnv === undefined
+      ? undefined
+      : await validateHostAuthSessionManagementAuthority(request, hostSessionEnv, {
+          target: options.hostSessionTarget,
+        });
+
+  if (hostSession?.ok) {
+    return { authorized: true, session: hostSession.session, via: "host-session" };
+  }
+
+  return {
+    authorized: false,
+    error: options.error,
+    headers: {
+      "WWW-Authenticate": 'Bearer realm="formless-admin"',
+    },
+    status: 401,
+  };
+}
+
+function hasOperationalManagementAuthority(
+  authority: ActiveIdentityAuthority | null,
+  principalId: string,
+): boolean {
+  return (
+    authority?.id === principalId &&
+    (authority.instanceAdmin === true || authority.instanceOwner === true)
+  );
 }
 
 function normalizedAdminToken(value: string | undefined) {

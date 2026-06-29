@@ -43,8 +43,7 @@ import {
 } from "../shared/upgrade-migrations.ts";
 import {
   authorizeAuthorityOperation,
-  authorizeInstanceWrite,
-  authorizeOwnerManagementRead,
+  authorizeOperationalManagement,
   type AuthorityAdminGuardEnv,
 } from "./authority-admin-guard.ts";
 import {
@@ -96,6 +95,13 @@ import {
 import { hostAuthSessionTargetFromRequestHeaders } from "./instance-auth-handoff.ts";
 
 const actorKinds = ["admin", "cliDeployer", "owner", "runner"] as const;
+const operationalControlPlaneEntityNames = new Set([
+  "app-install",
+  "deployment-config",
+  "email-domain",
+  "email-sender",
+  "route",
+]);
 const createAppInstallControlPlaneOperation = "createAppInstall";
 const createAppInstallControlPlaneOperationKey = "app-install.createAppInstall";
 export const CREATE_APP_INSTALL_CONTROL_PLANE_OPERATION_PATH =
@@ -237,10 +243,12 @@ export async function handleInstanceControlPlaneDurableObjectRequest(
 
     const actorKind = controlPlaneActorKindFromRequest(request, url);
     const hostSessionTarget = hostAuthSessionTargetForInstanceControlPlaneRequest(request);
-    const authorization =
-      operation.metadata.mode === "read"
-        ? await authorizeOwnerManagementRead(request, env, { hostSessionTarget })
-        : await authorizeAuthorityOperation(request, operation, env, { hostSessionTarget });
+    const authorization = isOperationalControlPlaneOperation(operation)
+      ? await authorizeOperationalManagement(request, env, {
+          error: operationalControlPlaneAuthorizationError(operation),
+          hostSessionTarget,
+        })
+      : await authorizeAuthorityOperation(request, operation, env, { hostSessionTarget });
 
     if (!authorization.authorized) {
       return jsonResponse(
@@ -483,7 +491,9 @@ async function handleCreateAppInstallOperation(
   const actorKind = controlPlaneActorKindFromRequest(request, new URL(request.url));
   assertBrowserControlPlaneOperationActor(actorKind, createAppInstallControlPlaneOperationKey);
 
-  const authorization = await authorizeInstanceWrite(request, env, {
+  const authorization = await authorizeOperationalManagement(request, env, {
+    error:
+      "Owner session, instance-admin session, or admin authorization is required for this write endpoint.",
     hostSessionTarget: hostAuthSessionTargetForInstanceControlPlaneRequest(request),
   });
 
@@ -613,6 +623,23 @@ function hostAuthSessionTargetForInstanceControlPlaneRequest(request: Request) {
   }
 
   return target;
+}
+
+function isOperationalControlPlaneOperation(operation: AuthorityOperation): boolean {
+  if (operation.metadata.mode === "read") {
+    return true;
+  }
+
+  return (
+    operation.kind === "entityOperation" &&
+    operationalControlPlaneEntityNames.has(operation.entityName)
+  );
+}
+
+function operationalControlPlaneAuthorizationError(operation: AuthorityOperation) {
+  return operation.metadata.mode === "read"
+    ? "Owner session, instance-admin session, or admin authorization is required for this read endpoint."
+    : "Owner session, instance-admin session, or admin authorization is required for this write endpoint.";
 }
 
 function createAppInstallOperationEnvelope(input: {

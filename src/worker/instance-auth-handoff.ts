@@ -23,6 +23,7 @@ import {
 } from "./instance-auth-state.ts";
 import { readControlPlaneRecords } from "./deployment-control-plane-client.ts";
 import {
+  readInternalIdentityAuthorityForPrincipal,
   readInternalActiveIdentityPrincipal,
   readInternalIdentityOwnerForPrincipal,
 } from "./identity-owner-internal.ts";
@@ -84,6 +85,7 @@ export type HostAuthSessionValidationFailureReason =
   | "malformed-cookie"
   | "malformed-payload"
   | "missing-cookie"
+  | "missing-management-authority"
   | "missing-owner-authority"
   | "missing-principal"
   | "missing-secret"
@@ -110,6 +112,7 @@ type HostAuthSessionPayload = HostAuthSession & {
 };
 
 type ProtectedRouteAccess = "authenticated" | "owner";
+type HostSessionAuthorityRequirement = ProtectedRouteAccess | "management";
 
 export type RouteAccessSessionValidationResult =
   | {
@@ -387,6 +390,46 @@ export async function validateHostAuthSessionAuthority(
           minimumAccess: requiredAccess,
         }));
 
+  return validateHostAuthSessionRequirement(request, env, {
+    now: options.now,
+    requiredAccess,
+    target,
+  });
+}
+
+export async function validateHostAuthSessionManagementAuthority(
+  request: Request,
+  env: InstanceAuthHandoffEnv,
+  options: {
+    now?: string;
+    runtimeRoute?: InstanceRuntimeRouteResolution | undefined;
+    target?: InstanceAuthSessionTargetBinding | undefined;
+  } = {},
+): Promise<HostAuthSessionAuthorityValidationResult> {
+  const target =
+    options.target ??
+    (options.runtimeRoute === undefined
+      ? undefined
+      : hostAuthSessionTargetForRuntimeRoute(request, options.runtimeRoute));
+
+  return validateHostAuthSessionRequirement(request, env, {
+    now: options.now,
+    requiredAccess: "management",
+    target,
+  });
+}
+
+async function validateHostAuthSessionRequirement(
+  request: Request,
+  env: InstanceAuthHandoffEnv,
+  options: {
+    now?: string;
+    requiredAccess: HostSessionAuthorityRequirement;
+    target?: InstanceAuthSessionTargetBinding | undefined;
+  },
+): Promise<HostAuthSessionAuthorityValidationResult> {
+  const { requiredAccess, target } = options;
+
   if (!target) {
     return { ok: false, reason: "missing-target" };
   }
@@ -416,7 +459,7 @@ export async function validateHostAuthSessionAuthority(
   if (!response.ok || body.authorized !== true) {
     return {
       ok: false,
-      reason: body.reason ?? "missing-owner-authority",
+      reason: body.reason ?? missingAuthorityReason(requiredAccess),
     };
   }
 
@@ -571,23 +614,18 @@ async function handleHostAuthSessionValidationDurableObjectRequest(
 
   try {
     const body = (await request.json()) as { requiredAccess?: unknown; session?: unknown };
-    const requiredAccess = parseProtectedRouteAccess(body.requiredAccess) ?? "owner";
+    const requiredAccess = parseHostSessionAuthorityRequirement(body.requiredAccess) ?? "owner";
     const session = parseHostAuthSession(body.session);
 
     if (!session) {
       return jsonResponse({ authorized: false, reason: "malformed-payload" }, 400);
     }
 
-    const principal =
-      requiredAccess === "owner"
-        ? await readInternalIdentityOwnerForPrincipal(env, session.principalId)
-        : await readInternalActiveIdentityPrincipal(env, session.principalId);
-
-    if (!principal || principal.id !== session.principalId) {
+    if (!(await hostSessionPrincipalSatisfiesAuthority(env, session, requiredAccess))) {
       return jsonResponse(
         {
           authorized: false,
-          reason: requiredAccess === "owner" ? "missing-owner-authority" : "missing-principal",
+          reason: missingAuthorityReason(requiredAccess),
         },
         401,
       );
@@ -603,6 +641,27 @@ async function handleHostAuthSessionValidationDurableObjectRequest(
   } catch {
     return jsonResponse({ authorized: false, reason: "malformed-payload" }, 400);
   }
+}
+
+async function hostSessionPrincipalSatisfiesAuthority(
+  env: InstanceAuthHandoffEnv,
+  session: HostAuthSession,
+  requiredAccess: HostSessionAuthorityRequirement,
+): Promise<boolean> {
+  if (requiredAccess === "management") {
+    const authority = await readInternalIdentityAuthorityForPrincipal(env, session.principalId);
+
+    return (
+      authority?.id === session.principalId && (authority.instanceAdmin || authority.instanceOwner)
+    );
+  }
+
+  const principal =
+    requiredAccess === "owner"
+      ? await readInternalIdentityOwnerForPrincipal(env, session.principalId)
+      : await readInternalActiveIdentityPrincipal(env, session.principalId);
+
+  return principal?.id === session.principalId;
 }
 
 async function validateHostAuthSessionCookie(
@@ -1052,6 +1111,25 @@ function runtimeRouteAccessRank(access: ProtectedRouteAccess | "anonymous"): num
 
 function parseProtectedRouteAccess(value: unknown): ProtectedRouteAccess | undefined {
   return value === "authenticated" || value === "owner" ? value : undefined;
+}
+
+function parseHostSessionAuthorityRequirement(
+  value: unknown,
+): HostSessionAuthorityRequirement | undefined {
+  return value === "management" ? value : parseProtectedRouteAccess(value);
+}
+
+function missingAuthorityReason(
+  requiredAccess: HostSessionAuthorityRequirement,
+): HostAuthSessionValidationFailureReason {
+  switch (requiredAccess) {
+    case "authenticated":
+      return "missing-principal";
+    case "management":
+      return "missing-management-authority";
+    case "owner":
+      return "missing-owner-authority";
+  }
 }
 
 function requestOriginForAuth(request: Request): string {

@@ -676,7 +676,7 @@ describe("instance app install API routes", () => {
     expect(after.body.installs.map((install) => install.installId)).toEqual(["personal"]);
   });
 
-  it("requires instance write authorization for install creation when configured", async () => {
+  it("requires operational management authorization for install creation when configured", async () => {
     const rejected = await harness.fetch("/api/formless/app-installs", {
       body: JSON.stringify({
         packageAppKey: "site",
@@ -695,12 +695,13 @@ describe("instance app install API routes", () => {
     expect(rejected.status).toBe(401);
     expect(rejected.headers.get("WWW-Authenticate")).toBe('Bearer realm="formless-admin"');
     expect(await rejected.json()).toEqual({
-      error: "Owner session or admin authorization is required for this write endpoint.",
+      error:
+        "Owner session, instance-admin session, or admin authorization is required for this write endpoint.",
     });
     expect(accepted.response.status).toBe(201);
   });
 
-  it("requires owner or admin authorization for app management reads when configured", async () => {
+  it("requires operational management authorization for app management reads when configured", async () => {
     const anonymous = await harness.fetch("/api/formless/app-installs");
     const admin = await getJson<AppInstallsResponse>("/api/formless/app-installs");
     const ownerRead = await getOwnerJson<AppInstallsResponse>("/api/formless/app-installs");
@@ -708,7 +709,8 @@ describe("instance app install API routes", () => {
     expect(anonymous.status).toBe(401);
     expect(anonymous.headers.get("WWW-Authenticate")).toBe('Bearer realm="formless-admin"');
     expect(await anonymous.json()).toEqual({
-      error: "Owner session or admin authorization is required for this read endpoint.",
+      error:
+        "Owner session, instance-admin session, or admin authorization is required for this read endpoint.",
     });
     expect(admin.body.installs).toEqual([]);
     expect(ownerRead.body.installs).toEqual([]);

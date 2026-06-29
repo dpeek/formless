@@ -18,6 +18,10 @@ import type { BootstrapResponse, OwnerIdentity, SchemaResponse } from "../shared
 import { computeSourceSchemaHash } from "../shared/upgrade-migrations.ts";
 import { recordOperationRequest } from "../test/authority-write.ts";
 import { ensureTestIdentityOwner } from "../test/identity-owner.ts";
+import {
+  INTERNAL_IDENTITY_PRINCIPAL_AUTHORITY_PATH,
+  type ActiveIdentityAuthority,
+} from "./identity-owner-internal.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
 import { createOwnerSessionCookie } from "./owner-session.ts";
 
@@ -509,6 +513,55 @@ describe("identity control-plane API routes", () => {
       });
     }
   });
+
+  it("resolves current owner and instance-admin authority from identity records", async () => {
+    const ownerAuthority = await createIdentityOwnerAuthority("Lookup Owner");
+    const adminPrincipal = await createIdentityPrincipal("Lookup Admin");
+    await assignIdentityInstanceRole(adminPrincipal.id, "instance.admin");
+    const ordinaryPrincipal = await createIdentityPrincipal("Lookup Ordinary");
+    const disabledAuthority = await createIdentityOwnerAuthority("Lookup Disabled");
+    const removedAdminPrincipal = await createIdentityPrincipal("Lookup Removed Admin");
+    const removedAdminAssignment = await assignIdentityInstanceRole(
+      removedAdminPrincipal.id,
+      "instance.admin",
+    );
+
+    await postRecordOperation({
+      entity: "principal",
+      idempotencyKey: "disable-lookup-principal",
+      operationName: "update",
+      recordId: disabledAuthority.principal.id,
+      input: { status: "disabled" },
+    });
+    await postRecordOperation({
+      entity: "role-assignment",
+      idempotencyKey: "delete-lookup-admin-role",
+      operationName: "delete",
+      recordId: removedAdminAssignment.id,
+    });
+
+    expect(await readPrincipalAuthority(ownerAuthority.principal.id)).toEqual({
+      id: ownerAuthority.principal.id,
+      instanceAdmin: false,
+      instanceOwner: true,
+    });
+    expect(await readPrincipalAuthority(adminPrincipal.id)).toEqual({
+      id: adminPrincipal.id,
+      instanceAdmin: true,
+      instanceOwner: false,
+    });
+    expect(await readPrincipalAuthority(ordinaryPrincipal.id)).toEqual({
+      id: ordinaryPrincipal.id,
+      instanceAdmin: false,
+      instanceOwner: false,
+    });
+    expect(await readPrincipalAuthority(disabledAuthority.principal.id)).toBeNull();
+    expect(await readPrincipalAuthority(removedAdminPrincipal.id)).toEqual({
+      id: removedAdminPrincipal.id,
+      instanceAdmin: false,
+      instanceOwner: false,
+    });
+  });
 });
 
 async function resetKnownState() {
@@ -655,6 +708,47 @@ async function createIdentityOwnerAuthority(displayName: string) {
   });
 
   return { assignment, principal };
+}
+
+async function assignIdentityInstanceRole(
+  principalId: string,
+  roleKey: "instance.admin" | "instance.owner",
+) {
+  return await postRecordOperation({
+    entity: "role-assignment",
+    idempotencyKey: `assign-${principalId.replace(/\W+/g, "-")}-${roleKey.replace(/\./g, "-")}`,
+    operationName: "create",
+    input: {
+      role: `role:${roleKey}`,
+      targetKind: "principal",
+      targetPrincipal: principalId,
+      scopeKind: "instance",
+      status: "active",
+    },
+  });
+}
+
+async function readPrincipalAuthority(
+  principalId: string,
+): Promise<ActiveIdentityAuthority | null> {
+  const url = new URL(INTERNAL_IDENTITY_PRINCIPAL_AUTHORITY_PATH, "http://internal");
+
+  url.searchParams.set("principalId", principalId);
+
+  const response = await harness.durableObjectFetch(
+    "FORMLESS_AUTHORITY",
+    IDENTITY_CONTROL_PLANE_STORAGE_IDENTITY,
+    `${url.pathname}${url.search}`,
+    { method: "GET" },
+  );
+  const body = (await response.json()) as {
+    authority?: ActiveIdentityAuthority | null;
+    error?: string;
+  };
+
+  expect(response.status).toBe(200);
+
+  return body.authority ?? null;
 }
 
 async function ownerReadResponse(principalId: string) {

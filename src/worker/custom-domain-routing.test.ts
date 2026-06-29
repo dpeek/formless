@@ -1,6 +1,9 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vite-plus/test";
 import { computeSourceSchemaHash } from "@dpeek/formless-installed-apps";
-import { INSTANCE_CONTROL_PLANE_INSTANCE_SETTINGS_ID } from "@dpeek/formless-instance-control-plane";
+import {
+  INSTANCE_CONTROL_PLANE_INSTANCE_SETTINGS_ID,
+  INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
+} from "@dpeek/formless-instance-control-plane";
 import { IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX } from "@dpeek/formless-identity-control-plane";
 import type { AppSchema } from "@dpeek/formless-schema";
 
@@ -859,6 +862,124 @@ describe("installed Site custom-domain Worker routing", () => {
     expect(mismatchedWrite.status).toBe(401);
   });
 
+  it("accepts mapped instance host-local sessions with current operational management authority", async () => {
+    await setupPrimaryProductionIdentity();
+    await setupMappedInstance();
+
+    const instanceAdmin = await createInstanceAdminPrincipalSessionCookie("Mapped Instance Admin");
+    const removedAdmin = await createInstanceAdminPrincipalSessionCookie("Removed Instance Admin");
+    const disabledAdmin =
+      await createInstanceAdminPrincipalSessionCookie("Disabled Instance Admin");
+    const ordinary = await createActivePrincipalSessionCookie("Mapped Instance Ordinary");
+    const adminCookie = await mappedInstanceHostSessionCookieForPrincipal(
+      instanceAdmin.principalId,
+    );
+    const removedAdminCookie = await mappedInstanceHostSessionCookieForPrincipal(
+      removedAdmin.principalId,
+    );
+    const disabledAdminCookie = await mappedInstanceHostSessionCookieForPrincipal(
+      disabledAdmin.principalId,
+    );
+    const ordinaryCookie = await mappedInstanceHostSessionCookieForPrincipal(ordinary.principalId);
+    const owner = await createMappedInstanceHostSession("Mapped Instance Owner Still Works");
+
+    await postAdminJson(
+      `${IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX}/operations/role-assignment/delete`,
+      {
+        idempotencyKey: "mapped-instance-remove-admin-role",
+        recordId: removedAdmin.assignmentId,
+      },
+    );
+    await postAdminJson(`${IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX}/operations/principal/update`, {
+      idempotencyKey: "mapped-instance-disable-admin-principal",
+      recordId: disabledAdmin.principalId,
+      input: { status: "disabled" },
+    });
+
+    const adminRead = await fetchHost(mappedInstanceHost, `${controlPlaneApi}/bootstrap`, {
+      headers: { Cookie: adminCookie },
+    });
+    const adminWrite = await fetchHost(
+      mappedInstanceHost,
+      `${controlPlaneApi}/operations/email-domain/create`,
+      {
+        body: JSON.stringify({
+          idempotencyKey: "mapped-instance-admin-email-domain",
+          input: {
+            enabled: true,
+            providerFamily: "cloudflare",
+            domain: "mapped-mail.example.com",
+          },
+        }),
+        headers: {
+          Cookie: adminCookie,
+          "Content-Type": "application/json",
+        },
+        method: "POST",
+      },
+    );
+    const ownerWrite = await fetchHost(
+      mappedInstanceHost,
+      `${controlPlaneApi}/operations/route/create`,
+      {
+        body: JSON.stringify({
+          idempotencyKey: "mapped-instance-owner-route",
+          input: {
+            enabled: true,
+            matchPath: "/owner-host-session-route",
+            kind: "mount",
+            targetProfile: "instance",
+            surface: "admin",
+            access: "owner",
+          },
+        }),
+        headers: {
+          Cookie: owner.cookie,
+          "Content-Type": "application/json",
+        },
+        method: "POST",
+      },
+    );
+    const ordinaryRead = await fetchHost(mappedInstanceHost, `${controlPlaneApi}/bootstrap`, {
+      headers: { Cookie: ordinaryCookie },
+    });
+    const removedRead = await fetchHost(mappedInstanceHost, `${controlPlaneApi}/bootstrap`, {
+      headers: { Cookie: removedAdminCookie },
+    });
+    const disabledWrite = await fetchHost(
+      mappedInstanceHost,
+      `${controlPlaneApi}/operations/email-domain/create`,
+      {
+        body: JSON.stringify({
+          idempotencyKey: "mapped-instance-disabled-admin-email-domain",
+          input: {
+            enabled: true,
+            providerFamily: "cloudflare",
+            domain: "disabled-mapped-mail.example.com",
+          },
+        }),
+        headers: {
+          Cookie: disabledAdminCookie,
+          "Content-Type": "application/json",
+        },
+        method: "POST",
+      },
+    );
+    const adminReadBody = (await adminRead.json()) as { records?: unknown[] };
+    const adminWriteBody = (await adminWrite.json()) as OperationInvocationResponse;
+    const ownerWriteBody = (await ownerWrite.json()) as OperationInvocationResponse;
+
+    expect(adminRead.status).toBe(200);
+    expect(Array.isArray(adminReadBody.records)).toBe(true);
+    expect(adminWrite.status).toBe(200);
+    expect(operationRecord(adminWriteBody).values.domain).toBe("mapped-mail.example.com");
+    expect(ownerWrite.status).toBe(200);
+    expect(operationRecord(ownerWriteBody).values.matchPath).toBe("/owner-host-session-route");
+    expect(ordinaryRead.status).toBe(401);
+    expect(removedRead.status).toBe(401);
+    expect(disabledWrite.status).toBe(401);
+  });
+
   it("rejects host-local sessions after owner authority or session version changes", async () => {
     await setupPrimaryProductionIdentity();
     await setupMappedApp();
@@ -1429,6 +1550,63 @@ async function createActivePrincipalSessionCookie(displayName: string) {
     cookie: cookiePair(session.cookie),
     principalId: principal.id,
   };
+}
+
+async function createInstanceAdminPrincipalSessionCookie(displayName: string) {
+  const principal = await createActivePrincipalSessionCookie(displayName);
+  const assignment = await assignIdentityInstanceRole(principal.principalId, "instance.admin");
+
+  return {
+    ...principal,
+    assignmentId: assignment.id,
+  };
+}
+
+async function assignIdentityInstanceRole(
+  principalId: string,
+  roleKey: "instance.admin" | "instance.owner",
+) {
+  const response = await postAdminJson(
+    `${IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX}/operations/role-assignment/create`,
+    {
+      idempotencyKey: [
+        "custom-domain-assign",
+        principalId.replace(/\W+/g, "-"),
+        roleKey.replace(/\./g, "-"),
+      ].join("-"),
+      input: {
+        role: `role:${roleKey}`,
+        targetKind: "principal",
+        targetPrincipal: principalId,
+        scopeKind: "instance",
+        status: "active",
+      },
+    },
+  );
+
+  return operationRecord((await response.json()) as OperationInvocationResponse);
+}
+
+async function mappedInstanceHostSessionCookieForPrincipal(principalId: string) {
+  const routeId = routeRecordIds.get(`route:host:instance:${mappedInstanceHost}`);
+
+  if (!routeId) {
+    throw new Error("Mapped instance route must be created before host session cookies.");
+  }
+
+  return `${HOST_AUTH_SESSION_COOKIE_NAME}=${await signCookiePayload({
+    expiresAt: "2999-01-01T12:00:00.000Z",
+    instanceId: "www.example.com",
+    issuedAt: "2999-01-01T00:00:00.000Z",
+    principalId,
+    purpose: "host-session",
+    routeId,
+    sessionVersion: 0,
+    storageIdentity: INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
+    targetOrigin: `https://${mappedInstanceHost}`,
+    targetProfile: "instance",
+    version: 1,
+  })}`;
 }
 
 async function createMappedInstanceHostSession(ownerName: string) {

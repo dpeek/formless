@@ -33,7 +33,9 @@ import {
   INTERNAL_IDENTITY_ACTIVE_PRINCIPAL_PATH,
   INTERNAL_IDENTITY_OWNER_PATH,
   INTERNAL_IDENTITY_OWNER_PRINCIPAL_PATH,
+  INTERNAL_IDENTITY_PRINCIPAL_AUTHORITY_PATH,
   INTERNAL_IDENTITY_OWNER_RESET_PATH,
+  type ActiveIdentityAuthority,
 } from "./identity-owner-internal.ts";
 import {
   executeAuthorityOperation,
@@ -568,6 +570,21 @@ async function handleIdentityOwnerInternalRequest(
     );
 
     return jsonResponse({ principal: readActiveIdentityPrincipal(storage, principalId) });
+  }
+
+  if (url.pathname === INTERNAL_IDENTITY_PRINCIPAL_AUTHORITY_PATH) {
+    if (request.method !== "GET") {
+      return jsonResponse({ error: "Method not allowed." }, 405, { Allow: "GET" });
+    }
+
+    const principalId = parseNonEmptyString(
+      "Identity principal authority id",
+      url.searchParams.get("principalId"),
+    );
+
+    return jsonResponse({
+      authority: readActiveIdentityAuthorityForPrincipal(storage, principalId),
+    });
   }
 
   if (url.pathname === INTERNAL_COLLABORATOR_INVITATION_ACCEPTANCE_STATUS_PATH) {
@@ -1787,6 +1804,35 @@ function readActiveIdentityOwnerForPrincipal(
   return identityOwnerFromPrincipal(records, principal);
 }
 
+function readActiveIdentityAuthorityForPrincipal(
+  storage: DurableObjectStorage,
+  principalId: string,
+): ActiveIdentityAuthority | null {
+  ensureIdentityControlPlaneStorage(storage);
+
+  const records = getBootstrapRecords(storage);
+  const principal = records.find(
+    (record) =>
+      record.id === principalId &&
+      record.entity === "principal" &&
+      !record.deletedAt &&
+      record.values.status === "active",
+  );
+
+  if (!principal) {
+    return null;
+  }
+
+  const ownerRole = activeRoleRecord(records, "instance.owner");
+  const adminRole = activeRoleRecord(records, "instance.admin");
+
+  return {
+    id: principal.id,
+    instanceAdmin: hasActiveInstanceRoleAssignment(records, principal.id, adminRole.id),
+    instanceOwner: hasActiveInstanceRoleAssignment(records, principal.id, ownerRole.id),
+  };
+}
+
 function readActiveIdentityPrincipal(
   storage: DurableObjectStorage,
   principalId: string,
@@ -1802,6 +1848,23 @@ function readActiveIdentityPrincipal(
   );
 
   return principal ? { id: principal.id } : null;
+}
+
+function hasActiveInstanceRoleAssignment(
+  records: readonly StoredRecord[],
+  principalId: string,
+  roleId: string,
+): boolean {
+  return records.some(
+    (record) =>
+      record.entity === "role-assignment" &&
+      !record.deletedAt &&
+      record.values.status === "active" &&
+      record.values.role === roleId &&
+      record.values.targetKind === "principal" &&
+      record.values.scopeKind === "instance" &&
+      record.values.targetPrincipal === principalId,
+  );
 }
 
 function identityOwnerFromPrincipal(

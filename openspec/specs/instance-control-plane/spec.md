@@ -360,9 +360,12 @@ records.
 - **AND** `owner` means browser reads require an owner session or host-local
   session for the matched owner route target whose principal has active
   `instance.owner` authority
-- **AND** owner-protected management API reads and writes require an owner
-  session, a host-local session for the matched owner route target, or admin
-  bearer authorization
+- **AND** operational management API reads and writes require a session whose
+  principal has active `instance.owner` or `instance.admin` authority, a
+  matching host-local session with that current authority, or admin bearer
+  authorization
+- **AND** owner-only recovery, owner role management, auth origin policy, and
+  admin bearer recovery remain outside operational management authorization
 - **AND** omitted access defaults to `owner` for instance, app admin, and app
   schema mounts
 - **AND** omitted access defaults to `anonymous` for public Site mounts
@@ -373,15 +376,57 @@ records.
   access `owner`
 - **AND** the browser has a valid host-local session for that route target and
   storage identity `instance:control-plane`
-- **WHEN** the browser reads or writes owner-protected instance control-plane
-  operations through the mapped host
-- **THEN** the control-plane API accepts the host-local session as owner
-  authorization
-- **AND** the control-plane API still rechecks the session principal has active
-  `instance.owner` authority before privileged reads or writes
+- **WHEN** the browser reads or writes protected operational instance
+  control-plane operations through the mapped host
+- **THEN** the control-plane API accepts the host-local session as operational
+  management authorization only when the current principal has active
+  `instance.owner` or `instance.admin` authority for the requested path
+- **AND** owner-only control-plane paths still recheck active `instance.owner`
+  authority before privileged reads or writes
 - **AND** host-local sessions minted for installed app storage, public Site
   storage, another route, another profile, another host, or another instance do
   not authorize instance control-plane operations
+
+#### Scenario: Instance admin writes operational control-plane intent
+
+- **GIVEN** a browser session or matching mapped-instance host-local session
+  resolves to an active principal with active `instance.admin` authority at
+  instance scope
+- **WHEN** the browser writes operational instance intent such as app install,
+  route, deployment config, email domain, or email sender records
+- **THEN** the control-plane API authorizes the write without requiring admin
+  bearer authorization or `instance.owner` authority
+- **AND** the write still commits through normal control-plane operation
+  handling, record validation, immutable field checks, operation invocation
+  recording, and storage provenance rules
+- **AND** app-owned data records, provider secrets, raw deployment history,
+  auth session material, and identity records are not written by the
+  control-plane operation
+
+#### Scenario: Instance admin cannot write owner-only control-plane policy
+
+- **GIVEN** a browser session or matching mapped-instance host-local session is
+  authorized only by active `instance.admin` authority
+- **WHEN** the browser attempts an owner-only control-plane write
+- **THEN** the write is rejected unless the principal also has active
+  `instance.owner` authority or the request uses valid admin bearer
+  authorization where that path explicitly allows it
+- **AND** owner-only control-plane policy includes auth origin selection,
+  relying-party policy, owner-session signing policy, owner recovery material,
+  admin bearer recovery material, and changes that would remove the last active
+  owner
+
+#### Scenario: Non-admin principal cannot write operational control-plane intent
+
+- **GIVEN** a browser session or matching mapped-instance host-local session
+  resolves to an active principal without active `instance.admin` or
+  `instance.owner` authority at instance scope
+- **WHEN** the browser reads or writes protected operational control-plane
+  intent
+- **THEN** the control-plane API rejects the request as unauthorized management
+  access
+- **AND** stale signed session role facts do not authorize the request after
+  the current principal is disabled or its role assignments change
 
 #### Scenario: Redirect route
 

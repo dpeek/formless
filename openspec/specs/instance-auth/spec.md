@@ -380,11 +380,14 @@ one-time grants.
 
 - GIVEN a host-local session exists for a principal
 - WHEN an authenticated browser route, operation, privileged write, or
-  owner/admin management read is authorized from that session
+  protected management read or write is authorized from that session
 - THEN the runtime rechecks current principal status and host session
   revocation or version facts
-- AND owner-only routes, privileged writes, and owner/admin management reads
-  also recheck active `instance.owner` authority
+- AND owner-only routes and owner-only management reads or writes also recheck
+  active `instance.owner` authority
+- AND instance-admin management reads or writes recheck active
+  `instance.admin` authority or active `instance.owner` authority according to
+  the path's required management role
 - AND disabled principals, removed owner authority, changed role assignments, or
   revoked session versions invalidate or narrow future authorization
 - AND host sessions are not accepted on a different host, route, app install,
@@ -440,6 +443,51 @@ with active `instance.owner` authority.
   reject the request as unauthenticated owner access
 - AND privileged writes do not rely only on stale role facts in the signed
   cookie payload
+
+### Requirement: Principal-Backed Instance Admin Authorization
+
+The system SHALL authorize operational instance management through active
+principals with active `instance.admin` authority while preserving owner-only
+recovery authority.
+
+#### Scenario: Instance admin session resolves to management authority
+
+- GIVEN a browser request includes a valid owner session or matching
+  host-local session
+- WHEN the session principal is active
+- AND the principal has an active `instance.admin` role assignment at instance
+  scope
+- THEN operational instance management reads and writes accept the request as
+  instance-admin-authorized
+- AND an active `instance.owner` role assignment at instance scope also
+  satisfies instance-admin authorization
+- AND authorization is based on current identity-control-plane principal and
+  role-assignment records rather than stale role facts in signed cookies
+
+#### Scenario: Instance admin session without active admin authority
+
+- GIVEN a browser request includes a valid owner session or matching
+  host-local session
+- WHEN the session principal is missing, disabled, or no longer has active
+  `instance.admin` or `instance.owner` authority at instance scope
+- THEN operational instance management reads and writes reject the request as
+  unauthorized management access
+- AND removed admin authority, disabled principals, or changed role assignments
+  invalidate or narrow future management authorization
+
+#### Scenario: Instance admin does not receive owner recovery authority
+
+- GIVEN a browser request is authorized only by active `instance.admin`
+  authority
+- WHEN the request attempts owner-only recovery or auth-sensitive management
+- THEN the request is rejected unless the principal also has active
+  `instance.owner` authority or the request uses valid admin bearer
+  authorization where that path explicitly allows it
+- AND owner-only recovery includes granting, revoking, or disabling
+  `instance.owner`, removing the last active owner, owner setup replacement,
+  owner credential recovery, changing auth origin or relying-party policy,
+  rotating owner-session signing policy, and creating or rotating admin-bearer
+  recovery material
 
 ### Requirement: Admin Bearer Boundary
 

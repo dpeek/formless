@@ -9,12 +9,14 @@ import {
   type InstanceControlPlaneAppInstallValues,
   type InstanceControlPlaneRouteValues,
 } from "@dpeek/formless-instance-control-plane";
+import { IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX } from "@dpeek/formless-identity-control-plane";
 import { STORAGE_SNAPSHOT_KIND, STORAGE_SNAPSHOT_VERSION } from "@dpeek/formless-storage";
-import type { StorageSnapshot } from "@dpeek/formless-storage";
+import type { StorageSnapshot, StoredRecord } from "@dpeek/formless-storage";
 import { FORMLESS_CLIENT_SOURCE_SCHEMA_HASH_HEADER } from "../shared/protocol.ts";
 import type {
   AppInstallsResponse,
   BootstrapResponse,
+  CreateAppInstallResponse,
   OwnerIdentity,
   SchemaResponse,
   SyncResponse,
@@ -86,7 +88,7 @@ function createHarness() {
 }
 
 describe("instance control-plane API routes", () => {
-  it("requires owner or admin authorization for dashboard control-plane reads", async () => {
+  it("requires owner, instance-admin, or admin authorization for dashboard control-plane reads", async () => {
     const anonymous = await harness.fetch(`${controlPlaneApi}/bootstrap`);
     const admin = await getJson<BootstrapResponse>(`${controlPlaneApi}/bootstrap`);
     const ownerRead = await getOwnerJson<BootstrapResponse>(`${controlPlaneApi}/bootstrap`);
@@ -94,10 +96,196 @@ describe("instance control-plane API routes", () => {
     expect(anonymous.status).toBe(401);
     expect(anonymous.headers.get("WWW-Authenticate")).toBe('Bearer realm="formless-admin"');
     expect(await anonymous.json()).toEqual({
-      error: "Owner session or admin authorization is required for this read endpoint.",
+      error:
+        "Owner session, instance-admin session, or admin authorization is required for this read endpoint.",
     });
     expect(admin.body.records).toEqual([]);
     expect(ownerRead.body.records).toEqual([]);
+  });
+
+  it("authorizes same-origin instance admins for operational control-plane intent only", async () => {
+    const adminPrincipal = await createIdentityPrincipal("Same Origin Instance Admin");
+    await assignIdentityInstanceRole(adminPrincipal.id, "instance.admin");
+    const ordinaryPrincipal = await createIdentityPrincipal("Same Origin Ordinary Principal");
+    const removedAdminPrincipal = await createIdentityPrincipal("Same Origin Removed Admin");
+    const removedAdminAssignment = await assignIdentityInstanceRole(
+      removedAdminPrincipal.id,
+      "instance.admin",
+    );
+    const disabledAdminPrincipal = await createIdentityPrincipal("Same Origin Disabled Admin");
+    await assignIdentityInstanceRole(disabledAdminPrincipal.id, "instance.admin");
+
+    const adminSession = await principalSessionHeaders(adminPrincipal.id);
+    const ordinarySession = await principalSessionHeaders(ordinaryPrincipal.id);
+    const removedAdminSession = await principalSessionHeaders(removedAdminPrincipal.id);
+    const disabledAdminSession = await principalSessionHeaders(disabledAdminPrincipal.id);
+
+    const appInstall = await postJson<CreateAppInstallResponse>(
+      "/api/formless/app-installs",
+      {
+        packageAppKey: "site",
+        installId: "admin-site",
+        label: "Admin Site",
+      },
+      adminSession,
+    );
+    const deploymentConfig = await postJson<OperationInvocationResponse>(
+      `${controlPlaneApi}/operations/deployment-config/create`,
+      {
+        idempotencyKey: "same-origin-admin-deployment-config",
+        input: {
+          targetId: "instance.primary",
+          targetKind: "instance",
+          label: "Primary",
+          enabled: true,
+          targetUrl: "https://same-origin-admin.example.workers.dev",
+          providerFamily: "cloudflare",
+        },
+      },
+      adminSession,
+    );
+    const route = await postJson<OperationInvocationResponse>(
+      `${controlPlaneApi}/operations/route/create`,
+      {
+        idempotencyKey: "same-origin-admin-route",
+        input: {
+          enabled: true,
+          matchPath: "/admin-site",
+          matchPrefix: "/admin-site/",
+          kind: "mount",
+          targetProfile: "public-site",
+          appInstall: "admin-site",
+          surface: "public-site",
+          access: "anonymous",
+          deploymentConfig: operationRecord(deploymentConfig).id,
+        },
+      },
+      adminSession,
+    );
+    const emailDomain = await postJson<OperationInvocationResponse>(
+      `${controlPlaneApi}/operations/email-domain/create`,
+      {
+        idempotencyKey: "same-origin-admin-email-domain",
+        input: {
+          enabled: true,
+          providerFamily: "cloudflare",
+          domain: "mail.example.com",
+        },
+      },
+      adminSession,
+    );
+    const emailSender = await postJson<OperationInvocationResponse>(
+      `${controlPlaneApi}/operations/email-sender/create`,
+      {
+        idempotencyKey: "same-origin-admin-email-sender",
+        input: {
+          enabled: true,
+          address: "contact@mail.example.com",
+          displayName: "Contact",
+          purpose: "contact-notification",
+          emailDomain: operationRecord(emailDomain).id,
+        },
+      },
+      adminSession,
+    );
+    const ownerSettings = await postJson<OperationInvocationResponse>(
+      `${controlPlaneApi}/operations/instance-settings/create`,
+      {
+        idempotencyKey: "same-origin-owner-settings",
+        input: {
+          settingsId: "instance",
+          productionIdentityStatus: "unconfigured",
+        },
+      },
+      await ownerSessionHeaders(),
+    );
+    const adminSettings = await postJson<FailureResponse>(
+      `${controlPlaneApi}/operations/instance-settings/update`,
+      {
+        idempotencyKey: "same-origin-admin-settings-rejected",
+        recordId: operationRecord(ownerSettings).id,
+        input: {
+          authOrigin: "https://auth.example.com",
+        },
+      },
+      adminSession,
+    );
+    const ordinaryRead = await harness.fetch(`${controlPlaneApi}/bootstrap`, {
+      headers: ordinarySession,
+    });
+    const ordinaryWrite = await postJson<FailureResponse>(
+      `${controlPlaneApi}/operations/email-domain/create`,
+      {
+        idempotencyKey: "same-origin-ordinary-email-domain",
+        input: {
+          enabled: true,
+          providerFamily: "cloudflare",
+          domain: "ordinary-mail.example.com",
+        },
+      },
+      ordinarySession,
+    );
+
+    await postIdentityRecordOperation({
+      entity: "role-assignment",
+      idempotencyKey: "same-origin-remove-admin-role",
+      operationName: "delete",
+      recordId: removedAdminAssignment.id,
+    });
+    await postIdentityRecordOperation({
+      entity: "principal",
+      idempotencyKey: "same-origin-disable-admin-principal",
+      operationName: "update",
+      recordId: disabledAdminPrincipal.id,
+      input: { status: "disabled" },
+    });
+
+    const removedAdminRead = await harness.fetch("/api/formless/app-installs", {
+      headers: removedAdminSession,
+    });
+    const disabledAdminWrite = await postJson<FailureResponse>(
+      `${controlPlaneApi}/operations/email-domain/create`,
+      {
+        idempotencyKey: "same-origin-disabled-admin-email-domain",
+        input: {
+          enabled: true,
+          providerFamily: "cloudflare",
+          domain: "disabled-mail.example.com",
+        },
+      },
+      disabledAdminSession,
+    );
+
+    expect(appInstall.response.status).toBe(201);
+    expect(appInstall.body.install.installId).toBe("admin-site");
+    expect(deploymentConfig.response.status).toBe(200);
+    expect(route.response.status).toBe(200);
+    expect(emailDomain.response.status).toBe(200);
+    expect(emailSender.response.status).toBe(200);
+    expect(operationRecord(emailSender).values.address).toBe("contact@mail.example.com");
+    expect(ownerSettings.response.status).toBe(200);
+    expect(adminSettings.response.status).toBe(401);
+    expect(adminSettings.body.error).toBe(
+      "Owner session or admin authorization is required for this write endpoint.",
+    );
+    expect(ordinaryRead.status).toBe(401);
+    expect(await ordinaryRead.json()).toEqual({
+      error:
+        "Owner session, instance-admin session, or admin authorization is required for this read endpoint.",
+    });
+    expect(ordinaryWrite.response.status).toBe(401);
+    expect(ordinaryWrite.body.error).toBe(
+      "Owner session, instance-admin session, or admin authorization is required for this write endpoint.",
+    );
+    expect(removedAdminRead.status).toBe(401);
+    expect(await removedAdminRead.json()).toEqual({
+      error:
+        "Owner session, instance-admin session, or admin authorization is required for this read endpoint.",
+    });
+    expect(disabledAdminWrite.response.status).toBe(401);
+    expect(disabledAdminWrite.body.error).toBe(
+      "Owner session, instance-admin session, or admin authorization is required for this write endpoint.",
+    );
   });
 
   it("bootstraps the runtime-owned control-plane storage identity for safe query actors", async () => {
@@ -583,7 +771,7 @@ describe("instance control-plane API routes", () => {
     });
   });
 
-  it("enforces owner/admin writes and rejects runner-only access to install creation", async () => {
+  it("enforces operational management writes and rejects runner-only access to install creation", async () => {
     const unauthenticated = await postJson<FailureResponse>(createAppInstallOperation, {
       idempotencyKey: "create-private",
       input: {
@@ -621,7 +809,7 @@ describe("instance control-plane API routes", () => {
 
     expect(unauthenticated.response.status).toBe(401);
     expect(unauthenticated.body.error).toBe(
-      "Owner session or admin authorization is required for this write endpoint.",
+      "Owner session, instance-admin session, or admin authorization is required for this write endpoint.",
     );
     expect(runner.response.status).toBe(400);
     expect(runner.body.error).toBe(
@@ -846,6 +1034,81 @@ async function ownerSessionHeaders() {
   return {
     Cookie: cookiePair(created.cookie),
   };
+}
+
+async function principalSessionHeaders(principalId: string) {
+  return {
+    Cookie: await ownerCookieForPrincipal(principalId),
+  };
+}
+
+async function ownerCookieForPrincipal(principalId: string) {
+  const created = await createOwnerSessionCookie({
+    env: { FORMLESS_ADMIN_TOKEN: adminToken },
+    maxAgeSeconds: 60,
+    now: "2999-01-01T00:00:00.000Z",
+    owner: {
+      id: principalId,
+      name: "Session Principal",
+      createdAt: "2999-01-01T00:00:00.000Z",
+    },
+    request: new Request("http://example.com/"),
+  });
+
+  return cookiePair(created.cookie);
+}
+
+async function createIdentityPrincipal(displayName: string): Promise<StoredRecord> {
+  return await postIdentityRecordOperation({
+    entity: "principal",
+    idempotencyKey: `control-plane-create-${displayName.toLowerCase().replace(/\W+/g, "-")}`,
+    operationName: "create",
+    input: {
+      displayName,
+      kind: "human",
+      status: "active",
+    },
+  });
+}
+
+async function assignIdentityInstanceRole(
+  principalId: string,
+  roleKey: "instance.admin" | "instance.owner",
+): Promise<StoredRecord> {
+  return await postIdentityRecordOperation({
+    entity: "role-assignment",
+    idempotencyKey: [
+      "control-plane-assign",
+      principalId.replace(/\W+/g, "-"),
+      roleKey.replace(/\./g, "-"),
+    ].join("-"),
+    operationName: "create",
+    input: {
+      role: `role:${roleKey}`,
+      targetKind: "principal",
+      targetPrincipal: principalId,
+      scopeKind: "instance",
+      status: "active",
+    },
+  });
+}
+
+async function postIdentityRecordOperation(
+  input: Parameters<typeof recordOperationRequest>[0],
+): Promise<StoredRecord> {
+  const request = recordOperationRequest(input);
+  const response = await harness.fetch(
+    `${IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX}${request.path.slice("/api".length)}`,
+    {
+      body: JSON.stringify(request.body),
+      headers: adminHeaders({ "Content-Type": "application/json" }),
+      method: "POST",
+    },
+  );
+
+  expect(response.status).toBe(200);
+
+  return request.response(await response.json()).record;
 }
 
 function cookiePair(cookie: string) {
