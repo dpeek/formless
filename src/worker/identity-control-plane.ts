@@ -9,6 +9,7 @@ import {
   validateIdentityControlPlaneRecords,
   type IdentityAppRegistrationValues,
   type IdentityControlPlaneRoleKey,
+  type IdentityInvitationStatus,
   type IdentityInvitationTargetSurface,
   type IdentityMembershipTargetKind,
   type IdentityMembershipValues,
@@ -52,6 +53,7 @@ import {
   type RecordConstraintValidator,
   type OperationRecordWritePlan,
   type StorageSource,
+  type WriteOutcome,
 } from "./storage.ts";
 import type { WorkerSchemaAppDefinition } from "./schema-apps.ts";
 import { readControlPlaneRecords } from "./deployment-control-plane-client.ts";
@@ -72,6 +74,12 @@ import {
 
 const actorKinds = ["admin", "owner"] as const;
 const invitationTargetSurfaces = ["app-install", "instance", "organization"] as const;
+const invitationStatuses = [
+  "accepted",
+  "expired",
+  "pending",
+  "revoked",
+] as const satisfies readonly IdentityInvitationStatus[];
 const membershipTargetKinds = ["group", "organization"] as const;
 const roleAssignmentScopeKinds = ["app-install", "instance", "organization"] as const;
 const builtInRoleCreatedAt = "2026-06-26T00:00:00.000Z";
@@ -79,6 +87,10 @@ const collaboratorInvitationDeliveryMessageKind = "identity.collaboratorInvitati
 const collaboratorInvitationDeliveryPurpose = "collaborator-invitation-delivery";
 export const INTERNAL_COLLABORATOR_INVITATION_DELIVERY_PATH =
   "/_internal/identity/collaborator-invitation-delivery";
+export const INTERNAL_COLLABORATOR_INVITATION_ACCEPTANCE_STATUS_PATH =
+  "/_internal/identity/collaborator-invitation-acceptance-status";
+export const INTERNAL_COLLABORATOR_INVITATION_ACCEPTANCE_COMMIT_PATH =
+  "/_internal/identity/collaborator-invitation-acceptance-commit";
 const identityControlPlaneApp = {
   key: IDENTITY_CONTROL_PLANE_SCHEMA_KEY,
   label: "Identity control plane",
@@ -198,6 +210,48 @@ type CollaboratorInvitationDeliveryInput = CollaboratorInvitationTargetFacts & {
   invitationId: string;
   targetEmail: string;
 };
+
+export type IdentityCollaboratorInvitationAcceptanceStatus = CollaboratorInvitationTargetFacts & {
+  expiresAt: string;
+  invitedPrincipalId?: string;
+  invitationId: string;
+  invitedPrincipalDisplayName?: string;
+  status: IdentityInvitationStatus;
+  targetEmail: string;
+};
+
+export type IdentityCollaboratorInvitationAcceptanceCommitInput =
+  CollaboratorInvitationTargetFacts & {
+    invitationId: string;
+    now: string;
+    principalId: string;
+    targetEmail: string;
+  };
+
+export type IdentityCollaboratorInvitationAcceptanceCommitFailureReason =
+  | "accepted-invitation"
+  | "expired-invitation"
+  | "identity-validation-failed"
+  | "missing-invitation"
+  | "revoked-invitation"
+  | "wrong-email"
+  | "wrong-principal"
+  | "wrong-target";
+
+export type IdentityCollaboratorInvitationAcceptanceCommitResult =
+  | {
+      invitation: IdentityCollaboratorInvitationAcceptanceStatus;
+      ok: true;
+      output: OperationCommandOutput;
+      principalId: string;
+      records: StoredRecord[];
+      status: "committed" | "replayed";
+    }
+  | {
+      error: string;
+      ok: false;
+      reason: IdentityCollaboratorInvitationAcceptanceCommitFailureReason;
+    };
 
 export type EnsureIdentityOwnerInput = {
   now: string;
@@ -414,6 +468,55 @@ export async function resetIdentityOwner(env: IdentityOwnerEnv): Promise<void> {
   }
 }
 
+export async function readIdentityCollaboratorInvitationAcceptanceStatus(
+  env: IdentityOwnerEnv,
+  invitationId: string,
+): Promise<IdentityCollaboratorInvitationAcceptanceStatus | null> {
+  const url = new URL(INTERNAL_COLLABORATOR_INVITATION_ACCEPTANCE_STATUS_PATH, "http://internal");
+
+  url.searchParams.set("invitationId", invitationId);
+
+  const response = await fetchIdentityOwnerInternal(env, `${url.pathname}${url.search}`, {
+    method: "GET",
+  });
+  const body = (await response.json()) as {
+    error?: string;
+    invitation?: IdentityCollaboratorInvitationAcceptanceStatus | null;
+  };
+
+  if (!response.ok) {
+    throw new Error(body.error ?? "Identity collaborator invitation lookup failed.");
+  }
+
+  return body.invitation ?? null;
+}
+
+export async function acceptIdentityCollaboratorInvitation(
+  env: IdentityOwnerEnv,
+  input: IdentityCollaboratorInvitationAcceptanceCommitInput,
+): Promise<IdentityCollaboratorInvitationAcceptanceCommitResult> {
+  const response = await fetchIdentityOwnerInternal(
+    env,
+    INTERNAL_COLLABORATOR_INVITATION_ACCEPTANCE_COMMIT_PATH,
+    {
+      body: JSON.stringify(input),
+      headers: { "Content-Type": "application/json" },
+      method: "POST",
+    },
+  );
+  const body = (await response.json()) as
+    | IdentityCollaboratorInvitationAcceptanceCommitResult
+    | { error?: string };
+
+  if (!response.ok || !isIdentityCollaboratorInvitationAcceptanceCommitResult(body)) {
+    throw new Error(
+      responseBodyError(body) ?? "Identity collaborator invitation acceptance failed.",
+    );
+  }
+
+  return body;
+}
+
 async function fetchIdentityOwnerInternal(
   env: IdentityOwnerEnv,
   path: string,
@@ -465,6 +568,31 @@ async function handleIdentityOwnerInternalRequest(
     );
 
     return jsonResponse({ principal: readActiveIdentityPrincipal(storage, principalId) });
+  }
+
+  if (url.pathname === INTERNAL_COLLABORATOR_INVITATION_ACCEPTANCE_STATUS_PATH) {
+    if (request.method !== "GET") {
+      return jsonResponse({ error: "Method not allowed." }, 405, { Allow: "GET" });
+    }
+
+    const invitationId = parseNonEmptyString(
+      "Identity collaborator invitation id",
+      url.searchParams.get("invitationId"),
+    );
+
+    return jsonResponse({
+      invitation: readCollaboratorInvitationAcceptanceStatus(storage, invitationId),
+    });
+  }
+
+  if (url.pathname === INTERNAL_COLLABORATOR_INVITATION_ACCEPTANCE_COMMIT_PATH) {
+    if (request.method !== "POST") {
+      return jsonResponse({ error: "Method not allowed." }, 405, { Allow: "POST" });
+    }
+
+    const result = acceptCollaboratorInvitationIntoIdentity(storage, await readJson(request));
+
+    return jsonResponse(result);
   }
 
   if (url.pathname !== INTERNAL_IDENTITY_OWNER_PATH) {
@@ -569,6 +697,420 @@ function createCollaboratorInvitation(
     records,
     status: outcome.kind === "replay" ? "replayed" : "committed",
   };
+}
+
+function readCollaboratorInvitationAcceptanceStatus(
+  storage: DurableObjectStorage,
+  invitationId: string,
+): IdentityCollaboratorInvitationAcceptanceStatus | null {
+  ensureIdentityControlPlaneStorage(storage);
+
+  const records = getBootstrapRecords(storage);
+  const invitation = records.find(
+    (record) => record.id === invitationId && record.entity === "invitation" && !record.deletedAt,
+  );
+
+  if (!invitation) {
+    return null;
+  }
+
+  const targetFacts = parseCollaboratorInvitationTargetFacts(invitation.values);
+  const invitedPrincipalId =
+    typeof invitation.values.invitedPrincipal === "string"
+      ? invitation.values.invitedPrincipal
+      : undefined;
+  const invitedPrincipal =
+    invitedPrincipalId === undefined
+      ? undefined
+      : records.find(
+          (record) =>
+            record.id === invitedPrincipalId && record.entity === "principal" && !record.deletedAt,
+        );
+
+  return {
+    ...targetFacts,
+    invitationId: invitation.id,
+    targetEmail: normalizeEmailDeliveryAddress(
+      "Identity collaborator invitation target email",
+      invitation.values.targetEmail,
+    ),
+    expiresAt: parseIsoTimestamp(
+      "Identity collaborator invitation expiresAt",
+      invitation.values.expiresAt,
+    ),
+    ...(invitedPrincipalId === undefined ? {} : { invitedPrincipalId }),
+    status: parseStringLiteral(
+      "Identity collaborator invitation status",
+      invitation.values.status,
+      invitationStatuses,
+    ),
+    ...(invitedPrincipal === undefined
+      ? {}
+      : {
+          invitedPrincipalDisplayName: parseNonEmptyString(
+            "Identity collaborator invitation invited principal displayName",
+            invitedPrincipal.values.displayName,
+          ),
+        }),
+  };
+}
+
+function acceptCollaboratorInvitationIntoIdentity(
+  storage: DurableObjectStorage,
+  value: unknown,
+): IdentityCollaboratorInvitationAcceptanceCommitResult {
+  const input = parseIdentityCollaboratorInvitationAcceptanceCommitRequest(value);
+
+  ensureIdentityControlPlaneStorage(storage);
+
+  let plans: OperationRecordWritePlan[];
+
+  try {
+    const planned = collaboratorInvitationAcceptanceRecordWritePlans(
+      getBootstrapRecords(storage),
+      input,
+    );
+
+    if (!planned.ok) {
+      return planned;
+    }
+
+    plans = planned.plans;
+  } catch {
+    return identityCollaboratorInvitationAcceptanceFailure("identity-validation-failed");
+  }
+
+  let outcome: WriteOutcome<OperationCommandOutput>;
+
+  try {
+    outcome = writeRecordSetForCommandOperationOutcome(
+      storage,
+      `collaborator-invitation-acceptance:${input.invitationId}`,
+      plans,
+      validateIdentityControlPlaneRecordConstraint(storage),
+      { now: input.now },
+    );
+  } catch {
+    return identityCollaboratorInvitationAcceptanceFailure("identity-validation-failed");
+  }
+
+  const invitation = readCollaboratorInvitationAcceptanceStatus(storage, input.invitationId);
+
+  if (!invitation || invitation.status !== "accepted") {
+    return identityCollaboratorInvitationAcceptanceFailure("identity-validation-failed");
+  }
+
+  return {
+    invitation,
+    ok: true,
+    output: outcome.response,
+    principalId: input.principalId,
+    records: outcome.response.changes.map((change) => change.payload),
+    status: outcome.kind === "replay" ? "replayed" : "committed",
+  };
+}
+
+function collaboratorInvitationAcceptanceRecordWritePlans(
+  records: readonly StoredRecord[],
+  input: IdentityCollaboratorInvitationAcceptanceCommitInput,
+):
+  | { ok: true; plans: OperationRecordWritePlan[] }
+  | Extract<IdentityCollaboratorInvitationAcceptanceCommitResult, { ok: false }> {
+  const invitation = records.find(
+    (record) =>
+      record.id === input.invitationId && record.entity === "invitation" && !record.deletedAt,
+  );
+
+  if (!invitation) {
+    return identityCollaboratorInvitationAcceptanceFailure("missing-invitation");
+  }
+
+  const status = parseStringLiteral(
+    "Identity collaborator invitation status",
+    invitation.values.status,
+    invitationStatuses,
+  );
+
+  if (status === "accepted") {
+    return identityCollaboratorInvitationAcceptanceFailure("accepted-invitation");
+  }
+
+  if (status === "revoked") {
+    return identityCollaboratorInvitationAcceptanceFailure("revoked-invitation");
+  }
+
+  if (
+    status === "expired" ||
+    parseIsoTimestamp("Identity collaborator invitation expiresAt", invitation.values.expiresAt) <=
+      input.now
+  ) {
+    return identityCollaboratorInvitationAcceptanceFailure("expired-invitation");
+  }
+
+  if (
+    normalizeEmailDeliveryAddress(
+      "Identity collaborator invitation target email",
+      invitation.values.targetEmail,
+    ).toLowerCase() !== input.targetEmail.toLowerCase()
+  ) {
+    return identityCollaboratorInvitationAcceptanceFailure("wrong-email");
+  }
+
+  const invitationTargetFacts = parseCollaboratorInvitationTargetFacts(invitation.values);
+
+  if (!collaboratorInvitationTargetFactsEqual(invitationTargetFacts, input)) {
+    return identityCollaboratorInvitationAcceptanceFailure("wrong-target");
+  }
+
+  const invitedPrincipalId = parseOptionalNonEmptyString(
+    "Identity collaborator invitation invited principal",
+    invitation.values.invitedPrincipal,
+  );
+
+  if (invitedPrincipalId !== undefined && invitedPrincipalId !== input.principalId) {
+    return identityCollaboratorInvitationAcceptanceFailure("wrong-principal");
+  }
+
+  const principal = records.find(
+    (record) => record.id === input.principalId && record.entity === "principal",
+  );
+
+  if (principal?.deletedAt) {
+    return identityCollaboratorInvitationAcceptanceFailure("identity-validation-failed");
+  }
+
+  const plans: OperationRecordWritePlan[] = [];
+
+  if (!principal) {
+    plans.push({
+      kind: "create",
+      entity: "principal",
+      id: input.principalId,
+      values: {
+        displayName: input.targetEmail,
+        kind: "human",
+        status: "active",
+      },
+    });
+  } else if (principal.values.status !== "active") {
+    plans.push({
+      kind: "patch",
+      record: principal,
+      values: {
+        ...principal.values,
+        status: "active",
+      },
+    });
+  }
+
+  plans.push(...collaboratorInvitationPrincipalEmailWritePlans(records, input));
+
+  for (const membership of records) {
+    if (
+      membership.entity === "membership" &&
+      !membership.deletedAt &&
+      membership.values.principal === input.principalId &&
+      membership.values.status === "invited"
+    ) {
+      plans.push({
+        kind: "patch",
+        record: membership,
+        values: {
+          ...membership.values,
+          status: "active",
+        },
+      });
+    }
+  }
+
+  for (const appRegistration of records) {
+    if (
+      appRegistration.entity === "app-registration" &&
+      !appRegistration.deletedAt &&
+      appRegistration.values.targetKind === "principal" &&
+      appRegistration.values.targetPrincipal === input.principalId &&
+      appRegistration.values.status === "pending"
+    ) {
+      plans.push({
+        kind: "patch",
+        record: appRegistration,
+        values: {
+          ...appRegistration.values,
+          status: "active",
+        },
+      });
+    }
+  }
+
+  plans.push({
+    kind: "patch",
+    record: invitation,
+    values: {
+      ...invitation.values,
+      invitedPrincipal: input.principalId,
+      status: "accepted",
+      acceptedAt: input.now,
+    },
+  });
+
+  return { ok: true, plans };
+}
+
+function collaboratorInvitationPrincipalEmailWritePlans(
+  records: readonly StoredRecord[],
+  input: IdentityCollaboratorInvitationAcceptanceCommitInput,
+): OperationRecordWritePlan[] {
+  const normalizedEmail = normalizeEmailDeliveryAddress(
+    "Identity collaborator invitation target email",
+    input.targetEmail,
+  ).toLowerCase();
+  const existingEmail = records.find(
+    (record) =>
+      record.entity === "principal-email" &&
+      !record.deletedAt &&
+      record.values.normalizedEmail === normalizedEmail,
+  );
+
+  if (existingEmail) {
+    if (existingEmail.values.principal !== input.principalId) {
+      throw new Error(
+        "Identity collaborator invitation target email belongs to another principal.",
+      );
+    }
+
+    return [
+      {
+        kind: "patch",
+        record: existingEmail,
+        values: {
+          ...existingEmail.values,
+          displayEmail: input.targetEmail,
+          normalizedEmail,
+          verificationStatus: "verified",
+          verifiedAt: input.now,
+        },
+      },
+    ];
+  }
+
+  return [
+    {
+      kind: "create",
+      entity: "principal-email",
+      id: generatedIdentityRecordId("principal-email"),
+      values: {
+        principal: input.principalId,
+        displayEmail: input.targetEmail,
+        normalizedEmail,
+        verificationStatus: "verified",
+        primary: true,
+        recovery: false,
+        verifiedAt: input.now,
+      },
+    },
+  ];
+}
+
+function parseIdentityCollaboratorInvitationAcceptanceCommitRequest(
+  value: unknown,
+): IdentityCollaboratorInvitationAcceptanceCommitInput {
+  const object = parseRecord("Identity collaborator invitation acceptance request", value);
+
+  assertAllowedKeys("Identity collaborator invitation acceptance request", object, [
+    "invitationId",
+    "now",
+    "principalId",
+    "targetAppInstallId",
+    "targetEmail",
+    "targetOrganization",
+    "targetSurface",
+  ]);
+
+  return {
+    ...parseCollaboratorInvitationTargetFacts(object),
+    invitationId: parseNonEmptyString(
+      "Identity collaborator invitation acceptance invitation id",
+      object.invitationId,
+    ),
+    now: parseIsoTimestamp("Identity collaborator invitation acceptance now", object.now),
+    principalId: parseNonEmptyString(
+      "Identity collaborator invitation acceptance principal id",
+      object.principalId,
+    ),
+    targetEmail: normalizeEmailDeliveryAddress(
+      "Identity collaborator invitation acceptance target email",
+      object.targetEmail,
+    ),
+  };
+}
+
+function identityCollaboratorInvitationAcceptanceFailure(
+  reason: IdentityCollaboratorInvitationAcceptanceCommitFailureReason,
+): Extract<IdentityCollaboratorInvitationAcceptanceCommitResult, { ok: false }> {
+  return {
+    error:
+      reason === "accepted-invitation"
+        ? "Invitation has already been accepted."
+        : reason === "expired-invitation"
+          ? "Invitation link has expired."
+          : reason === "missing-invitation" ||
+              reason === "wrong-email" ||
+              reason === "wrong-principal" ||
+              reason === "wrong-target"
+            ? "Invitation link is invalid."
+            : reason === "revoked-invitation"
+              ? "Invitation link is no longer available."
+              : "Invitation acceptance could not be committed.",
+    ok: false,
+    reason,
+  };
+}
+
+function isIdentityCollaboratorInvitationAcceptanceCommitResult(
+  value: unknown,
+): value is IdentityCollaboratorInvitationAcceptanceCommitResult {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+
+  const record = value as Record<string, unknown>;
+
+  if (record.ok === true) {
+    return (
+      typeof record.principalId === "string" &&
+      typeof record.status === "string" &&
+      typeof record.invitation === "object" &&
+      record.invitation !== null &&
+      Array.isArray(record.records) &&
+      typeof record.output === "object" &&
+      record.output !== null
+    );
+  }
+
+  return (
+    record.ok === false && typeof record.reason === "string" && typeof record.error === "string"
+  );
+}
+
+function responseBodyError(value: unknown): string | undefined {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return undefined;
+  }
+
+  const error = (value as Record<string, unknown>).error;
+
+  return typeof error === "string" ? error : undefined;
+}
+
+function collaboratorInvitationTargetFactsEqual(
+  left: CollaboratorInvitationTargetFacts,
+  right: CollaboratorInvitationTargetFacts,
+): boolean {
+  return (
+    left.targetSurface === right.targetSurface &&
+    (left.targetAppInstallId ?? undefined) === (right.targetAppInstallId ?? undefined) &&
+    (left.targetOrganization ?? undefined) === (right.targetOrganization ?? undefined)
+  );
 }
 
 async function requestCollaboratorInvitationDelivery(input: {

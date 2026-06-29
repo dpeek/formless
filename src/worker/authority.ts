@@ -52,6 +52,7 @@ import {
 } from "./launch-fixtures.ts";
 import { handleOwnerSetupDurableObjectRequest } from "./owner-setup.ts";
 import { handleOwnerPasskeyDurableObjectRequest } from "./owner-passkeys.ts";
+import { handleCollaboratorInvitationAcceptanceDurableObjectRequest } from "./collaborator-invitation-acceptance.ts";
 import { handleInstanceDomainProviderDurableObjectRequest } from "./domain-provider-api.ts";
 import { handleInstanceDomainMappingsDurableObjectRequest } from "./instance-domain-mappings.ts";
 import { handleInstanceDeploymentRuntimeDurableObjectRequest } from "./deployment-runtime-api.ts";
@@ -149,6 +150,17 @@ export class FormlessAuthority extends DurableObject<Env> {
 
     if (ownerPasskeyResponse) {
       return ownerPasskeyResponse;
+    }
+
+    const collaboratorInvitationAcceptanceResponse =
+      await handleCollaboratorInvitationAcceptanceDurableObjectRequest(
+        request,
+        this.ctx.storage,
+        this.bindings,
+      );
+
+    if (collaboratorInvitationAcceptanceResponse) {
+      return collaboratorInvitationAcceptanceResponse;
     }
 
     const instanceAuthHandoffResponse = await handleInstanceAuthHandoffDurableObjectRequest(

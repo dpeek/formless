@@ -215,6 +215,7 @@ export async function completeOwnerPasskeyRegistration(
 
   if (
     challenge.challenge.kind !== "registration" ||
+    !("setupTokenHash" in challenge.challenge) ||
     challenge.challenge.setupTokenHash !== setupTokenHash
   ) {
     return jsonResponse({ error: "Passkey registration challenge is invalid." }, 401);

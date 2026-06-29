@@ -48,8 +48,12 @@ type PasskeyChallengeRow = {
   id: string;
   kind: string;
   challenge: string;
+  invitation_id: string | null;
+  invitation_token_hash: string | null;
   setup_token_hash: string | null;
   principal_id: string | null;
+  registration_origin: string | null;
+  registration_relying_party_id: string | null;
   created_at: string;
   expires_at: string;
   consumed_at: string | null;
@@ -135,7 +139,7 @@ export type WriteInstanceAuthConfigInput = InstanceAuthConfigInput & {
 
 export type PasskeyChallengeKind = (typeof passkeyChallengeKinds)[number];
 
-export type StoredPasskeyRegistrationChallenge = {
+export type StoredOwnerPasskeyRegistrationChallenge = {
   id: string;
   kind: "registration";
   challenge: string;
@@ -144,6 +148,24 @@ export type StoredPasskeyRegistrationChallenge = {
   expiresAt: string;
   consumedAt?: string;
 };
+
+export type StoredCollaboratorInvitationPasskeyRegistrationChallenge = {
+  canonicalOrigin: string;
+  challenge: string;
+  consumedAt?: string;
+  createdAt: string;
+  expiresAt: string;
+  id: string;
+  invitationId: string;
+  invitationTokenHash: string;
+  kind: "registration";
+  principalId: string;
+  relyingPartyId: string;
+};
+
+export type StoredPasskeyRegistrationChallenge =
+  | StoredOwnerPasskeyRegistrationChallenge
+  | StoredCollaboratorInvitationPasskeyRegistrationChallenge;
 
 export type StoredPasskeyLoginChallenge = {
   id: string;
@@ -167,6 +189,18 @@ export type CreatePasskeyChallengeInput =
       setupTokenHash: string;
       createdAt?: string;
       expiresAt: string;
+    }
+  | {
+      canonicalOrigin: string;
+      challenge: string;
+      createdAt?: string;
+      expiresAt: string;
+      id?: string;
+      invitationId: string;
+      invitationTokenHash: string;
+      kind: "registration";
+      principalId: string;
+      relyingPartyId: string;
     }
   | {
       id?: string;
@@ -457,15 +491,45 @@ export function ensureInstanceAuthTables(storage: DurableObjectStorage) {
       id TEXT PRIMARY KEY,
       kind TEXT NOT NULL CHECK (kind IN ('login', 'registration')),
       challenge TEXT NOT NULL UNIQUE,
+      invitation_id TEXT,
+      invitation_token_hash TEXT,
       setup_token_hash TEXT,
       principal_id TEXT,
+      registration_origin TEXT,
+      registration_relying_party_id TEXT,
       created_at TEXT NOT NULL,
       expires_at TEXT NOT NULL,
       consumed_at TEXT,
       CHECK (
-        (kind = 'registration' AND setup_token_hash IS NOT NULL AND principal_id IS NULL)
+        (
+          kind = 'registration'
+          AND setup_token_hash IS NOT NULL
+          AND principal_id IS NULL
+          AND invitation_id IS NULL
+          AND invitation_token_hash IS NULL
+          AND registration_origin IS NULL
+          AND registration_relying_party_id IS NULL
+        )
         OR
-        (kind = 'login' AND setup_token_hash IS NULL AND principal_id IS NOT NULL)
+        (
+          kind = 'registration'
+          AND setup_token_hash IS NULL
+          AND principal_id IS NOT NULL
+          AND invitation_id IS NOT NULL
+          AND invitation_token_hash IS NOT NULL
+          AND registration_origin IS NOT NULL
+          AND registration_relying_party_id IS NOT NULL
+        )
+        OR
+        (
+          kind = 'login'
+          AND setup_token_hash IS NULL
+          AND principal_id IS NOT NULL
+          AND invitation_id IS NULL
+          AND invitation_token_hash IS NULL
+          AND registration_origin IS NULL
+          AND registration_relying_party_id IS NULL
+        )
       )
     );
 
@@ -698,19 +762,27 @@ export function createPasskeyChallenge(
           id,
           kind,
           challenge,
+          invitation_id,
+          invitation_token_hash,
           setup_token_hash,
           principal_id,
+          registration_origin,
+          registration_relying_party_id,
           created_at,
           expires_at,
           consumed_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
       normalizedChallenge.id,
       normalizedChallenge.kind,
       normalizedChallenge.challenge,
-      normalizedChallenge.kind === "registration" ? normalizedChallenge.setupTokenHash : null,
-      normalizedChallenge.kind === "login" ? normalizedChallenge.principalId : null,
+      "invitationId" in normalizedChallenge ? normalizedChallenge.invitationId : null,
+      "invitationTokenHash" in normalizedChallenge ? normalizedChallenge.invitationTokenHash : null,
+      "setupTokenHash" in normalizedChallenge ? normalizedChallenge.setupTokenHash : null,
+      "principalId" in normalizedChallenge ? normalizedChallenge.principalId : null,
+      "canonicalOrigin" in normalizedChallenge ? normalizedChallenge.canonicalOrigin : null,
+      "relyingPartyId" in normalizedChallenge ? normalizedChallenge.relyingPartyId : null,
       normalizedChallenge.createdAt,
       normalizedChallenge.expiresAt,
       normalizedChallenge.consumedAt ?? null,
@@ -1361,55 +1433,62 @@ export function consumeCollaboratorInvitationToken(
 ): ConsumeCollaboratorInvitationTokenResult {
   ensureInstanceAuthTables(storage);
 
-  return storage.transactionSync(() => {
-    const invitationId = parseNonEmptyString("Collaborator invitation id", input.invitationId);
-    const consumedAt = parseTimestamp(
-      "Collaborator invitation token consumedAt",
-      input.now ?? nowIsoString(),
-    );
-    const expected = normalizeConsumeCollaboratorInvitationTokenInput(input);
-    const token = readCollaboratorInvitationTokenByInvitationId(storage, invitationId);
+  return storage.transactionSync(() =>
+    consumeCollaboratorInvitationTokenInCurrentTransaction(storage, input),
+  );
+}
 
-    if (!token) {
-      return { ok: false, reason: "missing-token" };
-    }
+export function consumeCollaboratorInvitationTokenInCurrentTransaction(
+  storage: DurableObjectStorage,
+  input: ConsumeCollaboratorInvitationTokenInput,
+): ConsumeCollaboratorInvitationTokenResult {
+  const invitationId = parseNonEmptyString("Collaborator invitation id", input.invitationId);
+  const consumedAt = parseTimestamp(
+    "Collaborator invitation token consumedAt",
+    input.now ?? nowIsoString(),
+  );
+  const expected = normalizeConsumeCollaboratorInvitationTokenInput(input);
+  const token = readCollaboratorInvitationTokenByInvitationId(storage, invitationId);
 
-    if (token.revokedAt !== undefined) {
-      return { ok: false, reason: "revoked-token", token };
-    }
+  if (!token) {
+    return { ok: false, reason: "missing-token" };
+  }
 
-    if (token.consumedAt !== undefined) {
-      return { ok: false, reason: "already-consumed", token };
-    }
+  if (token.revokedAt !== undefined) {
+    return { ok: false, reason: "revoked-token", token };
+  }
 
-    if (token.expiresAt <= consumedAt) {
-      return { ok: false, reason: "expired-token", token };
-    }
+  if (token.consumedAt !== undefined) {
+    return { ok: false, reason: "already-consumed", token };
+  }
 
-    const mismatchReason = collaboratorInvitationTokenMismatchReason(token, expected);
+  if (token.expiresAt <= consumedAt) {
+    return { ok: false, reason: "expired-token", token };
+  }
 
-    if (mismatchReason) {
-      return { ok: false, reason: mismatchReason, token };
-    }
+  const mismatchReason = collaboratorInvitationTokenMismatchReason(token, expected);
 
-    storage.sql.exec(
-      `
-        UPDATE instance_auth_collaborator_invitation_tokens
-        SET consumed_at = ?
-        WHERE invitation_id = ?
-      `,
+  if (mismatchReason) {
+    return { ok: false, reason: mismatchReason, token };
+  }
+
+  storage.sql.exec(
+    `
+      UPDATE instance_auth_collaborator_invitation_tokens
+      SET consumed_at = ?
+      WHERE invitation_id = ?
+    `,
+    consumedAt,
+    token.invitationId,
+  );
+
+  return {
+    ok: true,
+    token: {
+      ...token,
       consumedAt,
-      token.invitationId,
-    );
-
-    return {
-      ok: true,
-      token: {
-        ...token,
-        consumedAt,
-      },
-    };
-  });
+    },
+  };
 }
 
 export function revokeCollaboratorInvitationToken(
@@ -1538,14 +1617,39 @@ function normalizePasskeyChallengeInput(
       throw new Error("Passkey registration challenge kind must be registration.");
     }
 
+    if ("setupTokenHash" in input) {
+      return {
+        id,
+        kind,
+        challenge,
+        setupTokenHash: parseBase64UrlString(
+          "Passkey challenge setup token hash",
+          input.setupTokenHash,
+        ),
+        createdAt,
+        expiresAt,
+      };
+    }
+
+    const canonicalOrigin = parseInstanceAuthCanonicalOrigin(input.canonicalOrigin);
+
     return {
       id,
       kind,
       challenge,
-      setupTokenHash: parseBase64UrlString(
-        "Passkey challenge setup token hash",
-        input.setupTokenHash,
+      canonicalOrigin,
+      invitationId: parseNonEmptyString(
+        "Passkey challenge collaborator invitation id",
+        input.invitationId,
       ),
+      invitationTokenHash: parseBase64UrlString(
+        "Passkey challenge collaborator invitation token hash",
+        input.invitationTokenHash,
+      ),
+      principalId: parseNonEmptyString("Passkey challenge principal id", input.principalId),
+      relyingPartyId: parseInstanceAuthRelyingPartyId(input.relyingPartyId, {
+        canonicalOrigin,
+      }),
       createdAt,
       expiresAt,
     };
@@ -1576,8 +1680,12 @@ function readPasskeyChallengeByChallenge(
           id,
           kind,
           challenge,
+          invitation_id,
+          invitation_token_hash,
           setup_token_hash,
           principal_id,
+          registration_origin,
+          registration_relying_party_id,
           created_at,
           expires_at,
           consumed_at
@@ -1601,14 +1709,32 @@ function passkeyChallengeFromRow(row: PasskeyChallengeRow): StoredPasskeyChallen
   };
 
   if (row.kind === "registration") {
-    if (row.setup_token_hash === null) {
-      throw new Error("Stored passkey registration challenge is missing setup token hash.");
+    if (row.setup_token_hash !== null) {
+      return {
+        ...base,
+        kind: "registration",
+        setupTokenHash: row.setup_token_hash,
+      };
+    }
+
+    if (
+      row.invitation_id === null ||
+      row.invitation_token_hash === null ||
+      row.principal_id === null ||
+      row.registration_origin === null ||
+      row.registration_relying_party_id === null
+    ) {
+      throw new Error("Stored collaborator invitation passkey challenge is missing scope.");
     }
 
     return {
       ...base,
       kind: "registration",
-      setupTokenHash: row.setup_token_hash,
+      canonicalOrigin: row.registration_origin,
+      invitationId: row.invitation_id,
+      invitationTokenHash: row.invitation_token_hash,
+      principalId: row.principal_id,
+      relyingPartyId: row.registration_relying_party_id,
     };
   }
 

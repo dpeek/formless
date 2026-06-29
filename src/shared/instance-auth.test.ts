@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  parseCollaboratorInvitationAcceptanceRequest,
+  parseCollaboratorInvitationAcceptanceStatusResponse,
+  parseCollaboratorInvitationPasskeyRegistrationOptionsRequest,
+  parseCollaboratorInvitationPasskeyRegistrationOptionsResponse,
+  parseCollaboratorInvitationPasskeyRegistrationVerifyRequest,
+  parseCollaboratorInvitationPasskeyRegistrationVerifyResponse,
   parseInstanceAuthCanonicalOrigin,
   parseInstanceAuthConfigInput,
   parseInstanceAuthErrorResponse,
@@ -21,6 +27,7 @@ import {
 } from "./instance-auth.ts";
 
 const setupToken = "abcDEF0123456789_-abcDEF0123456789_-";
+const invitationToken = "aW52aXRlLXJhdy10b2tlbi0x";
 const owner = {
   id: "owner-1",
   name: "Ada Owner",
@@ -67,6 +74,192 @@ describe("instance auth origin policy", () => {
     expect(() => parseInstanceAuthRelyingPartyId("https://example.com")).toThrow(
       "Instance auth relying-party id must be a host name, not a URL.",
     );
+  });
+});
+
+describe("collaborator invitation acceptance protocol", () => {
+  it("parses invitation acceptance requests, passkey requests, and display-safe responses", () => {
+    expect(
+      parseCollaboratorInvitationAcceptanceRequest({
+        invitationId: " invitation:ada ",
+        token: invitationToken,
+      }),
+    ).toEqual({
+      invitationId: "invitation:ada",
+      token: invitationToken,
+    });
+    expect(
+      parseCollaboratorInvitationAcceptanceStatusResponse({
+        eligible: true,
+        invitation: {
+          invitationId: "invitation:ada",
+          targetEmail: "Ada.Collab@example.com",
+          targetSurface: "app-install",
+          targetAppInstallId: "site",
+          expiresAt: "2999-02-01T00:00:00.000Z",
+          invitedPrincipalDisplayName: "Ada Collaborator",
+          passkeyRegistrationRequired: true,
+        },
+      }),
+    ).toEqual({
+      eligible: true,
+      invitation: {
+        invitationId: "invitation:ada",
+        targetEmail: "Ada.Collab@example.com",
+        targetSurface: "app-install",
+        targetAppInstallId: "site",
+        expiresAt: "2999-02-01T00:00:00.000Z",
+        invitedPrincipalDisplayName: "Ada Collaborator",
+        passkeyRegistrationRequired: true,
+      },
+    });
+    expect(
+      parseCollaboratorInvitationAcceptanceStatusResponse({
+        eligible: false,
+        error: "Invitation link is invalid.",
+        reason: "wrong-target",
+      }),
+    ).toEqual({
+      eligible: false,
+      error: "Invitation link is invalid.",
+      reason: "wrong-target",
+    });
+    expect(
+      parseCollaboratorInvitationPasskeyRegistrationOptionsRequest({
+        invitationId: "invitation:ada",
+        token: invitationToken,
+      }),
+    ).toEqual({
+      invitationId: "invitation:ada",
+      token: invitationToken,
+    });
+    expect(
+      parseCollaboratorInvitationPasskeyRegistrationOptionsResponse({
+        options: registrationOptions(),
+      }),
+    ).toEqual({
+      options: registrationOptions(),
+    });
+    expect(
+      parseCollaboratorInvitationPasskeyRegistrationVerifyRequest({
+        invitationId: "invitation:ada",
+        token: invitationToken,
+        response: registrationResponse(),
+      }),
+    ).toEqual({
+      invitationId: "invitation:ada",
+      token: invitationToken,
+      response: registrationResponse(),
+    });
+    expect(
+      parseCollaboratorInvitationPasskeyRegistrationVerifyResponse({
+        acceptedPrincipal: {
+          principalId: "principal:ada",
+          displayName: "Ada Collaborator",
+        },
+        handoff: {
+          targetOrigin: "https://app.example.com",
+          returnTo: "/",
+        },
+        invitation: {
+          invitationId: "invitation:ada",
+          targetEmail: "Ada.Collab@example.com",
+          targetSurface: "app-install",
+          targetAppInstallId: "site",
+          expiresAt: "2999-02-01T00:00:00.000Z",
+          passkeyRegistrationRequired: true,
+        },
+        session: { expiresAt: "2026-06-28T00:00:00.000Z" },
+        verified: true,
+      }),
+    ).toEqual({
+      acceptedPrincipal: {
+        principalId: "principal:ada",
+        displayName: "Ada Collaborator",
+      },
+      handoff: {
+        targetOrigin: "https://app.example.com",
+        returnTo: "/",
+      },
+      invitation: {
+        invitationId: "invitation:ada",
+        targetEmail: "Ada.Collab@example.com",
+        targetSurface: "app-install",
+        targetAppInstallId: "site",
+        expiresAt: "2999-02-01T00:00:00.000Z",
+        passkeyRegistrationRequired: true,
+      },
+      session: { expiresAt: "2026-06-28T00:00:00.000Z" },
+      verified: true,
+    });
+  });
+
+  it("rejects malformed invitation acceptance payloads and private fields", () => {
+    expect(() =>
+      parseCollaboratorInvitationAcceptanceRequest({
+        invitationId: "invitation:ada",
+        token: "not+base64",
+      }),
+    ).toThrow("Collaborator invitation acceptance token must be base64url.");
+    expect(() =>
+      parseCollaboratorInvitationAcceptanceStatusResponse({
+        eligible: true,
+        invitation: {
+          invitationId: "invitation:ada",
+          targetEmail: "Ada.Collab@example.com",
+          targetSurface: "instance",
+          targetAppInstallId: "site",
+          expiresAt: "2999-02-01T00:00:00.000Z",
+          passkeyRegistrationRequired: true,
+        },
+      }),
+    ).toThrow("Collaborator invitation acceptance instance target cannot include target ids.");
+    expect(() =>
+      parseCollaboratorInvitationAcceptanceStatusResponse({
+        eligible: false,
+        error: "Invitation link is invalid.",
+        reason: "wrong-token",
+        tokenHash: "private",
+      }),
+    ).toThrow(
+      'Collaborator invitation acceptance status response has unsupported key "tokenHash".',
+    );
+    expect(() =>
+      parseCollaboratorInvitationPasskeyRegistrationOptionsResponse({
+        options: registrationOptions(),
+        tokenHash: "private",
+      }),
+    ).toThrow(
+      'Collaborator invitation passkey registration options response has unsupported key "tokenHash".',
+    );
+    expect(() =>
+      parseCollaboratorInvitationPasskeyRegistrationVerifyResponse({
+        acceptedPrincipal: {
+          principalId: "principal:ada",
+          displayName: "Ada Collaborator",
+        },
+        invitation: {
+          invitationId: "invitation:ada",
+          targetEmail: "Ada.Collab@example.com",
+          targetSurface: "app-install",
+          targetAppInstallId: "site",
+          expiresAt: "2999-02-01T00:00:00.000Z",
+          passkeyRegistrationRequired: true,
+        },
+        session: { expiresAt: "2026-06-28T00:00:00.000Z" },
+        sessionId: "private",
+        verified: true,
+      }),
+    ).toThrow(
+      'Collaborator invitation passkey registration verify response has unsupported key "sessionId".',
+    );
+    expect(() =>
+      parseCollaboratorInvitationPasskeyRegistrationVerifyRequest({
+        invitationId: "invitation:ada",
+        token: invitationToken,
+        response: { ...registrationResponse(), type: "password" },
+      }),
+    ).toThrow('Collaborator invitation passkey registration response type must be "public-key".');
   });
 });
 

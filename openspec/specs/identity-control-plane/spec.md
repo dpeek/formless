@@ -282,6 +282,59 @@ as reviewable identity records.
 - AND email scheduling does not grant authentication, activate the invited
   principal, verify the target email, or issue a browser session
 
+### Requirement: Collaborator Invitation Acceptance
+
+The system SHALL accept pending collaborator invitations through auth-origin
+identity behavior without exposing private auth secrets as reviewable identity
+records.
+
+#### Scenario: Invitation acceptance summary
+
+- GIVEN a browser opens a collaborator invitation acceptance link on the
+  configured auth origin
+- WHEN the runtime verifies the invitation id and raw invite token against
+  private auth state and a pending identity `invitation` record
+- THEN the response contains only display-safe invitation facts such as target
+  email, target surface, expiry, invited principal display name, and whether
+  passkey registration is required
+- AND the raw invite token, token hash, existing principal lookup results,
+  passkey challenge secret, credential material, central session id, and host
+  session state are not returned or stored on identity records
+- AND checking acceptance eligibility does not consume the invite token, mark
+  the invitation accepted, activate identity records, or issue a browser
+  session
+
+#### Scenario: Accept invitation into identity records
+
+- GIVEN private auth state has verified an unexpired, unrevoked, unconsumed
+  collaborator invitation token
+- AND the auth runtime has verified passkey registration for the invited
+  principal when a new principal needs a credential
+- WHEN invitation acceptance is committed for the matching pending identity
+  `invitation`
+- THEN the invitation status becomes `accepted` and stores `acceptedAt`
+- AND the invited principal is created or changed to active status
+- AND the target principal email is recorded as verified for the accepted
+  principal
+- AND invited memberships for the accepted principal become active
+- AND pending app registrations for the accepted principal become active
+- AND role assignments linked to the accepted principal authorize only after
+  the principal is active and current authorization checks pass
+- AND all reviewable identity changes for acceptance are committed together or
+  rejected together without a partial identity commit
+
+#### Scenario: Reject invalid invitation acceptance
+
+- WHEN acceptance uses a missing, expired, revoked, already accepted,
+  already consumed, wrong-token, wrong-email, or wrong-target invitation
+- THEN identity records are not activated
+- AND the invitation token is not consumed unless the matching invitation
+  acceptance commit succeeds
+- AND the response does not reveal whether an unrelated principal exists for
+  the same email address
+- AND no passkey credential, central auth session, host-local session, or
+  cross-domain grant is issued
+
 ### Requirement: Target-Aware Identity Uniqueness
 
 The system SHALL enforce identity uniqueness according to the record's selected

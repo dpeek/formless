@@ -36,6 +36,7 @@ const updatedAt = "2026-05-21T00:05:00.000Z";
 const expiresAt = "2026-05-21T01:00:00.000Z";
 const expiredAt = "2026-05-21T00:00:30.000Z";
 const registrationChallenge = "cmVnaXN0cmF0aW9uLWNoYWxsZW5nZQ";
+const invitationRegistrationChallenge = "aW52aXRhdGlvbi1yZWdpc3RyYXRpb24tY2hhbGxlbmdl";
 const loginChallenge = "bG9naW4tY2hhbGxlbmdl";
 const deleteChallenge = "ZGVsZXRlLWNoYWxsZW5nZQ";
 const setupTokenHash = "c2V0dXAtdG9rZW4taGFzaA";
@@ -147,6 +148,7 @@ describe("instance auth state", () => {
   });
 
   it("creates, consumes, rejects replay, expires, and deletes passkey challenges", async () => {
+    const invitationTokenHash = await hashInvitationToken(invitationRawToken);
     const registration = await createChallenge({
       kind: "registration",
       challenge: registrationChallenge,
@@ -166,6 +168,23 @@ describe("instance auth state", () => {
         expiresAt,
       },
     });
+    const invitationRegistration = await createChallenge({
+      kind: "registration",
+      challenge: invitationRegistrationChallenge,
+      invitationId,
+      invitationTokenHash,
+      principalId,
+      canonicalOrigin,
+      relyingPartyId,
+      createdAt,
+      expiresAt,
+    });
+    const storedInvitationRegistration = await readChallenge(invitationRegistrationChallenge);
+    const consumedInvitationRegistration = await consumeChallenge({
+      kind: "registration",
+      challenge: invitationRegistrationChallenge,
+      now: updatedAt,
+    });
 
     const consumed = await consumeChallenge({
       kind: "registration",
@@ -182,6 +201,31 @@ describe("instance auth state", () => {
       ok: true,
       challenge: {
         ...(registration.ok ? registration.challenge : undefined),
+        consumedAt: updatedAt,
+      },
+    });
+    expect(invitationRegistration).toEqual({
+      ok: true,
+      challenge: {
+        id: expect.any(String),
+        kind: "registration",
+        challenge: invitationRegistrationChallenge,
+        invitationId,
+        invitationTokenHash,
+        principalId,
+        canonicalOrigin,
+        relyingPartyId,
+        createdAt,
+        expiresAt,
+      },
+    });
+    expect(storedInvitationRegistration).toEqual({
+      challenge: invitationRegistration.ok ? invitationRegistration.challenge : undefined,
+    });
+    expect(consumedInvitationRegistration).toEqual({
+      ok: true,
+      challenge: {
+        ...(invitationRegistration.ok ? invitationRegistration.challenge : undefined),
         consumedAt: updatedAt,
       },
     });

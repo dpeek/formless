@@ -16,6 +16,7 @@ import type {
   RegistrationResponseJSON,
   UserVerificationRequirement,
 } from "@simplewebauthn/server";
+import type { IdentityInvitationTargetSurface } from "@dpeek/formless-identity-control-plane";
 
 import { parseOwnerSetupToken, type OwnerIdentity, type OwnerIdentityInput } from "./protocol.ts";
 
@@ -92,6 +93,76 @@ export type InstanceAuthErrorResponse = {
   error: string;
 };
 
+export type CollaboratorInvitationAcceptanceFailureReason =
+  | "accepted-invitation"
+  | "configuration-unavailable"
+  | "consumed-invitation"
+  | "expired-invitation"
+  | "missing-invitation"
+  | "revoked-invitation"
+  | "wrong-email"
+  | "wrong-origin"
+  | "wrong-target"
+  | "wrong-token";
+
+export type CollaboratorInvitationAcceptanceRequest = {
+  invitationId: string;
+  token: string;
+};
+
+export type CollaboratorInvitationAcceptanceInvitationSummary = {
+  expiresAt: string;
+  invitationId: string;
+  invitedPrincipalDisplayName?: string;
+  passkeyRegistrationRequired: boolean;
+  targetAppInstallId?: string;
+  targetEmail: string;
+  targetOrganization?: string;
+  targetSurface: IdentityInvitationTargetSurface;
+};
+
+export type CollaboratorInvitationAcceptedPrincipalSummary = {
+  displayName: string;
+  principalId: string;
+};
+
+export type CollaboratorInvitationAcceptanceHandoffSummary = {
+  returnTo: `/${string}`;
+  targetOrigin: string;
+};
+
+export type CollaboratorInvitationAcceptanceStatusResponse =
+  | {
+      eligible: true;
+      invitation: CollaboratorInvitationAcceptanceInvitationSummary;
+    }
+  | {
+      eligible: false;
+      error: string;
+      reason: CollaboratorInvitationAcceptanceFailureReason;
+    };
+
+export type CollaboratorInvitationPasskeyRegistrationOptionsRequest =
+  CollaboratorInvitationAcceptanceRequest;
+
+export type CollaboratorInvitationPasskeyRegistrationOptionsResponse = {
+  options: PublicKeyCredentialCreationOptionsJSON;
+};
+
+export type CollaboratorInvitationPasskeyRegistrationVerifyRequest = {
+  invitationId: string;
+  response: RegistrationResponseJSON;
+  token: string;
+};
+
+export type CollaboratorInvitationPasskeyRegistrationVerifyResponse = {
+  acceptedPrincipal: CollaboratorInvitationAcceptedPrincipalSummary;
+  handoff?: CollaboratorInvitationAcceptanceHandoffSummary;
+  invitation: CollaboratorInvitationAcceptanceInvitationSummary;
+  session: OwnerSessionSummary;
+  verified: true;
+};
+
 export type OwnerLoginRedirectTarget = `/${string}`;
 
 export const ownerLoginDefaultRedirectTarget = "/" satisfies OwnerLoginRedirectTarget;
@@ -164,6 +235,23 @@ const authenticatorTransports = [
   "smart-card",
   "usb",
 ] as const;
+const collaboratorInvitationAcceptanceTargetSurfaces = [
+  "app-install",
+  "instance",
+  "organization",
+] as const satisfies readonly IdentityInvitationTargetSurface[];
+const collaboratorInvitationAcceptanceFailureReasons = [
+  "accepted-invitation",
+  "configuration-unavailable",
+  "consumed-invitation",
+  "expired-invitation",
+  "missing-invitation",
+  "revoked-invitation",
+  "wrong-email",
+  "wrong-origin",
+  "wrong-target",
+  "wrong-token",
+] as const satisfies readonly CollaboratorInvitationAcceptanceFailureReason[];
 const publicKeyCredentialHints = ["client-device", "hybrid", "security-key"] as const;
 const userVerificationRequirements = ["discouraged", "preferred", "required"] as const;
 const residentKeyRequirements = ["discouraged", "preferred", "required"] as const;
@@ -445,6 +533,285 @@ export function parseInstanceAuthErrorResponse(value: unknown): InstanceAuthErro
   return {
     error: parseTrimmedNonEmptyString("Instance auth error response error", object.error),
   };
+}
+
+export function parseCollaboratorInvitationAcceptanceRequest(
+  value: unknown,
+): CollaboratorInvitationAcceptanceRequest {
+  const object = parseObject("Collaborator invitation acceptance request", value);
+
+  assertKeys("Collaborator invitation acceptance request", object, ["invitationId", "token"]);
+
+  return {
+    invitationId: parseTrimmedNonEmptyString(
+      "Collaborator invitation acceptance invitationId",
+      object.invitationId,
+    ),
+    token: parseBase64UrlString("Collaborator invitation acceptance token", object.token),
+  };
+}
+
+export function parseCollaboratorInvitationAcceptanceStatusResponse(
+  value: unknown,
+): CollaboratorInvitationAcceptanceStatusResponse {
+  const object = parseObject("Collaborator invitation acceptance status response", value);
+
+  if (object.eligible === true) {
+    assertKeys("Collaborator invitation acceptance status response", object, [
+      "eligible",
+      "invitation",
+    ]);
+
+    return {
+      eligible: true,
+      invitation: parseCollaboratorInvitationAcceptanceInvitationSummary(object.invitation),
+    };
+  }
+
+  if (object.eligible !== false) {
+    throw new Error("Collaborator invitation acceptance status response eligible must be boolean.");
+  }
+
+  assertKeys("Collaborator invitation acceptance status response", object, [
+    "eligible",
+    "error",
+    "reason",
+  ]);
+
+  return {
+    eligible: false,
+    error: parseTrimmedNonEmptyString(
+      "Collaborator invitation acceptance status response error",
+      object.error,
+    ),
+    reason: parseStringLiteral(
+      "Collaborator invitation acceptance status response reason",
+      object.reason,
+      collaboratorInvitationAcceptanceFailureReasons,
+    ),
+  };
+}
+
+export function parseCollaboratorInvitationPasskeyRegistrationOptionsRequest(
+  value: unknown,
+): CollaboratorInvitationPasskeyRegistrationOptionsRequest {
+  return parseCollaboratorInvitationAcceptanceRequest(value);
+}
+
+export function parseCollaboratorInvitationPasskeyRegistrationOptionsResponse(
+  value: unknown,
+): CollaboratorInvitationPasskeyRegistrationOptionsResponse {
+  const object = parseObject(
+    "Collaborator invitation passkey registration options response",
+    value,
+  );
+
+  assertKeys("Collaborator invitation passkey registration options response", object, ["options"]);
+
+  return {
+    options: parseCreationOptions(
+      "Collaborator invitation passkey registration options",
+      object.options,
+    ),
+  };
+}
+
+export function parseCollaboratorInvitationPasskeyRegistrationVerifyRequest(
+  value: unknown,
+): CollaboratorInvitationPasskeyRegistrationVerifyRequest {
+  const object = parseObject("Collaborator invitation passkey registration verify request", value);
+
+  assertKeys("Collaborator invitation passkey registration verify request", object, [
+    "invitationId",
+    "response",
+    "token",
+  ]);
+
+  return {
+    invitationId: parseTrimmedNonEmptyString(
+      "Collaborator invitation passkey registration invitationId",
+      object.invitationId,
+    ),
+    response: parseRegistrationResponse(
+      "Collaborator invitation passkey registration response",
+      object.response,
+    ),
+    token: parseBase64UrlString("Collaborator invitation passkey registration token", object.token),
+  };
+}
+
+export function parseCollaboratorInvitationPasskeyRegistrationVerifyResponse(
+  value: unknown,
+): CollaboratorInvitationPasskeyRegistrationVerifyResponse {
+  const object = parseObject("Collaborator invitation passkey registration verify response", value);
+
+  assertKeys(
+    "Collaborator invitation passkey registration verify response",
+    object,
+    ["acceptedPrincipal", "invitation", "session", "verified"],
+    ["handoff"],
+  );
+
+  if (object.verified !== true) {
+    throw new Error(
+      "Collaborator invitation passkey registration verify response verified must be true.",
+    );
+  }
+
+  return {
+    acceptedPrincipal: parseCollaboratorInvitationAcceptedPrincipalSummary(
+      object.acceptedPrincipal,
+    ),
+    ...(object.handoff === undefined
+      ? {}
+      : { handoff: parseCollaboratorInvitationAcceptanceHandoffSummary(object.handoff) }),
+    invitation: parseCollaboratorInvitationAcceptanceInvitationSummary(object.invitation),
+    session: parseOwnerSessionSummary(
+      "Collaborator invitation passkey registration verify session",
+      object.session,
+    ),
+    verified: true,
+  };
+}
+
+function parseCollaboratorInvitationAcceptedPrincipalSummary(
+  value: unknown,
+): CollaboratorInvitationAcceptedPrincipalSummary {
+  const object = parseObject("Collaborator invitation accepted principal", value);
+
+  assertKeys("Collaborator invitation accepted principal", object, ["displayName", "principalId"]);
+
+  return {
+    displayName: parseTrimmedNonEmptyString(
+      "Collaborator invitation accepted principal displayName",
+      object.displayName,
+    ),
+    principalId: parseTrimmedNonEmptyString(
+      "Collaborator invitation accepted principal principalId",
+      object.principalId,
+    ),
+  };
+}
+
+function parseCollaboratorInvitationAcceptanceHandoffSummary(
+  value: unknown,
+): CollaboratorInvitationAcceptanceHandoffSummary {
+  const object = parseObject("Collaborator invitation acceptance handoff", value);
+
+  assertKeys("Collaborator invitation acceptance handoff", object, ["returnTo", "targetOrigin"]);
+
+  const returnTo = parseOwnerLoginRedirectTarget(object.returnTo);
+
+  if (!returnTo) {
+    throw new Error("Collaborator invitation acceptance handoff returnTo must be path-only.");
+  }
+
+  return {
+    returnTo,
+    targetOrigin: parseInstanceAuthCanonicalOrigin(object.targetOrigin),
+  };
+}
+
+function parseCollaboratorInvitationAcceptanceInvitationSummary(
+  value: unknown,
+): CollaboratorInvitationAcceptanceInvitationSummary {
+  const object = parseObject("Collaborator invitation acceptance invitation summary", value);
+
+  assertKeys(
+    "Collaborator invitation acceptance invitation summary",
+    object,
+    ["expiresAt", "invitationId", "passkeyRegistrationRequired", "targetEmail", "targetSurface"],
+    ["invitedPrincipalDisplayName", "targetAppInstallId", "targetOrganization"],
+  );
+
+  return {
+    expiresAt: parseTrimmedNonEmptyString(
+      "Collaborator invitation acceptance expiresAt",
+      object.expiresAt,
+    ),
+    invitationId: parseTrimmedNonEmptyString(
+      "Collaborator invitation acceptance invitationId",
+      object.invitationId,
+    ),
+    ...(object.invitedPrincipalDisplayName === undefined
+      ? {}
+      : {
+          invitedPrincipalDisplayName: parseTrimmedNonEmptyString(
+            "Collaborator invitation acceptance invitedPrincipalDisplayName",
+            object.invitedPrincipalDisplayName,
+          ),
+        }),
+    passkeyRegistrationRequired: parseBoolean(
+      "Collaborator invitation acceptance passkeyRegistrationRequired",
+      object.passkeyRegistrationRequired,
+    ),
+    targetEmail: parseTrimmedNonEmptyString(
+      "Collaborator invitation acceptance targetEmail",
+      object.targetEmail,
+    ),
+    ...parseCollaboratorInvitationAcceptanceTargetFacts(object),
+  };
+}
+
+function parseCollaboratorInvitationAcceptanceTargetFacts(
+  object: Record<string, unknown>,
+): Pick<
+  CollaboratorInvitationAcceptanceInvitationSummary,
+  "targetAppInstallId" | "targetOrganization" | "targetSurface"
+> {
+  const targetSurface = parseStringLiteral(
+    "Collaborator invitation acceptance targetSurface",
+    object.targetSurface,
+    collaboratorInvitationAcceptanceTargetSurfaces,
+  );
+  const targetAppInstallId =
+    object.targetAppInstallId === undefined
+      ? undefined
+      : parseTrimmedNonEmptyString(
+          "Collaborator invitation acceptance targetAppInstallId",
+          object.targetAppInstallId,
+        );
+  const targetOrganization =
+    object.targetOrganization === undefined
+      ? undefined
+      : parseTrimmedNonEmptyString(
+          "Collaborator invitation acceptance targetOrganization",
+          object.targetOrganization,
+        );
+
+  if (targetSurface === "app-install") {
+    if (targetAppInstallId === undefined || targetOrganization !== undefined) {
+      throw new Error(
+        "Collaborator invitation acceptance app-install target requires targetAppInstallId only.",
+      );
+    }
+
+    return {
+      targetSurface,
+      targetAppInstallId,
+    };
+  }
+
+  if (targetSurface === "organization") {
+    if (targetOrganization === undefined || targetAppInstallId !== undefined) {
+      throw new Error(
+        "Collaborator invitation acceptance organization target requires targetOrganization only.",
+      );
+    }
+
+    return {
+      targetSurface,
+      targetOrganization,
+    };
+  }
+
+  if (targetAppInstallId !== undefined || targetOrganization !== undefined) {
+    throw new Error(
+      "Collaborator invitation acceptance instance target cannot include target ids.",
+    );
+  }
+
+  return { targetSurface };
 }
 
 function parseCreationOptions(

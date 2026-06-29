@@ -168,6 +168,74 @@ instance auth state bound to reviewable identity invitation records.
 - AND the link target does not expose owner setup, passkey ceremony internals,
   central session ids, host session cookies, or app-controlled redirect targets
 
+### Requirement: Collaborator Invitation Acceptance
+
+The system SHALL accept collaborator invitations on the configured auth origin
+by verifying private invite token state, registering passkeys for new
+principals, committing identity acceptance, and issuing central auth sessions.
+
+#### Scenario: Invitation acceptance eligibility
+
+- GIVEN a browser opens `/_formless/auth/invitations/accept` on the configured
+  auth origin with an invitation id and raw invite token
+- WHEN the runtime checks acceptance eligibility
+- THEN it hashes the raw token and verifies it against private invitation token
+  state
+- AND it requires a matching pending identity invitation with the same target
+  email, target surface, target app install, or target organization facts
+- AND it rejects missing, expired, revoked, consumed, accepted, wrong-token,
+  wrong-email, and wrong-target invitations without revealing whether an
+  unrelated principal exists for the same email
+- AND eligibility checks do not consume the token, create a passkey challenge,
+  activate identity records, create credentials, issue sessions, or mint
+  handoff grants
+
+#### Scenario: Invitation-bound passkey registration options
+
+- GIVEN an invitation is eligible for acceptance on the configured auth origin
+- WHEN passkey registration options are requested for the invitation
+- THEN the runtime creates a one-time registration challenge scoped to the
+  instance, invitation id, token hash, invited principal, canonical auth
+  origin, and relying-party id
+- AND the response contains only browser-safe WebAuthn creation options for
+  the accepted principal
+- AND mapped app hosts and mapped public Site hosts do not start the
+  invitation passkey ceremony unless they are also the configured auth origin
+- AND requesting options does not consume the invite token, activate identity
+  records, store credentials, issue sessions, or mint handoff grants
+
+#### Scenario: Complete invitation acceptance
+
+- GIVEN an invitation-bound passkey registration challenge is active
+- AND the browser submits a valid registration response for the challenge,
+  canonical auth origin, relying-party id, and accepted principal
+- WHEN the runtime completes invitation acceptance
+- THEN it stores the passkey credential as private auth state for the accepted
+  principal
+- AND it consumes the matching invitation token
+- AND it commits the identity-control-plane invitation acceptance changes for
+  the same principal and target facts
+- AND it issues a central auth session scoped to the configured auth origin
+- AND it redirects through the normal cross-domain grant flow when the
+  accepted invitation targets a mapped app, mapped public Site, or mapped
+  instance host
+- AND raw invite tokens, token hashes, passkey challenge secrets, credential
+  material, central session ids, host session cookies, and handoff grant
+  secrets are not stored in identity records, email-delivery records, queue
+  messages, workspace state, archives, sync payloads, or reviewable snapshots
+
+#### Scenario: Reject invalid invitation acceptance completion
+
+- WHEN invitation acceptance completion uses a missing, expired, already
+  consumed, revoked, wrong-token, wrong-target, wrong-challenge, malformed, or
+  duplicate passkey credential
+- THEN acceptance is rejected
+- AND the invite token is not consumed before the matching identity acceptance
+  commit is durable
+- AND failed or retried completion attempts do not authorize an invited
+  principal, issue a central auth session, issue a host-local session, or mint a
+  handoff grant from stale or partial state
+
 ### Requirement: Passkey Login
 
 The system SHALL issue owner sessions after successful passkey assertion
