@@ -26,7 +26,7 @@
     "agents": "bun run scripts/agents.ts",
     "browser": "agent-browser",
     "check": "vp check --fix",
-    "test": "vp test --reporter=agent",
+    "test": "vp test --dir src --configLoader runner && vp test --dir scripts --configLoader runner",
     "dev": "bun scripts/formless.ts dev --workspace tmp/devstate-workspace --reset",
     "dev:instance": "FORMLESS_RUNTIME_PROFILE=instance VITE_FORMLESS_RUNTIME_PROFILE=instance FORMLESS_LAUNCH_FIXTURE=empty vp dev",
     "dev:instance:empty": "FORMLESS_RUNTIME_PROFILE=instance VITE_FORMLESS_RUNTIME_PROFILE=instance FORMLESS_LAUNCH_FIXTURE=empty vp dev",
@@ -61,8 +61,7 @@
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
     "tailwindcss": "^4.2.4",
-    "vite": "npm:@voidzero-dev/vite-plus-core@latest",
-    "vite-plus": "latest",
+    "vite-plus": "^0.2.1",
     "wouter": "^3.9.0",
     "wrangler": "^4.85.0"
   },
@@ -77,10 +76,6 @@
     "miniflare": "^4.20260424.0",
     "typescript": "~6.0.2",
     "zod": "3.25.76"
-  },
-  "overrides": {
-    "vite": "npm:@voidzero-dev/vite-plus-core@latest",
-    "vitest": "npm:@voidzero-dev/vite-plus-test@latest"
   },
   "packageManager": "bun@1.3.13"
 }

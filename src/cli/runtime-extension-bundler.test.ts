@@ -74,6 +74,7 @@ describe("workspace Site public renderer bundler resolution", () => {
     const result = await build({
       bundle: true,
       format: "esm",
+      logLevel: "silent",
       plugins: [sitePublicRendererWorkerVirtualModulesPlugin({ env: {} })],
       stdin: {
         contents: `import { sitePublicRenderer } from ${JSON.stringify(SITE_PUBLIC_RENDERER_WORKER_VIRTUAL_MODULE_ID)};
@@ -85,6 +86,7 @@ export const fallbackRenderer = sitePublicRenderer;
     });
     const output = result.outputFiles[0]?.text ?? "";
 
+    expect(result.warnings).toHaveLength(0);
     expect(output).toContain("sitePublicRenderer = void 0");
     expect(output).toContain("fallbackRenderer");
   });
@@ -108,6 +110,7 @@ export const fallbackRenderer = sitePublicRenderer;
     const result = await build({
       bundle: true,
       format: "esm",
+      logLevel: "silent",
       plugins: [sitePublicRendererWorkerVirtualModulesPlugin({ env })],
       stdin: {
         contents: `import { sitePublicRenderer } from ${JSON.stringify(SITE_PUBLIC_RENDERER_WORKER_VIRTUAL_MODULE_ID)};
@@ -119,6 +122,7 @@ export const rendered = sitePublicRenderer();
     });
     const output = result.outputFiles[0]?.text ?? "";
 
+    expect(result.warnings).toHaveLength(0);
     expect(output).toContain("worker renderer");
     expect(output).toContain("rendered");
   });

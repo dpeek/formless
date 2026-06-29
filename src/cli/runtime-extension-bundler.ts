@@ -104,7 +104,8 @@ export function sitePublicRendererVirtualModuleCode(
 
   return `import * as rendererModule from ${JSON.stringify(entrypointModuleId)};
 
-const resolvedSitePublicRenderer = rendererModule.SitePublicRenderer ?? rendererModule.default;
+const resolvedSitePublicRenderer =
+  Reflect.get(rendererModule, "SitePublicRenderer") ?? Reflect.get(rendererModule, "default");
 
 if (resolvedSitePublicRenderer === undefined) {
   throw new Error("Configured ${SITE_PUBLIC_RENDERER_RUNTIME_EXTENSION_KEY} ${target} entrypoint must export a default renderer or named SitePublicRenderer.");

@@ -60,6 +60,7 @@
     "access": "public"
   },
   "scripts": {
+    "test": "vp test --configLoader runner",
     "check": "oxlint --type-aware --type-check && oxfmt && bun test ./src"
   },
   "dependencies": {

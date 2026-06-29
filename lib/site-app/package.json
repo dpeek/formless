@@ -20,6 +20,9 @@
   "publishConfig": {
     "access": "public"
   },
+  "scripts": {
+    "test": "vp test --configLoader runner"
+  },
   "dependencies": {
     "@cf-wasm/resvg": "0.3.4",
     "@dpeek/formless-media": "^0.1.0",

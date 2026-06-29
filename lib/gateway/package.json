@@ -14,6 +14,9 @@
   "publishConfig": {
     "access": "public"
   },
+  "scripts": {
+    "test": "vp test --configLoader runner"
+  },
   "dependencies": {
     "@dpeek/formless-workspace": "^0.1.0"
   }

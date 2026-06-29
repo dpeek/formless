@@ -105,7 +105,14 @@ export default defineConfig({
   lint: { ignorePatterns: ignoredScratchGlobs, options: { typeAware: true, typeCheck: true } },
   test: {
     exclude: [...defaultTestExclude, ...ignoredScratchGlobs],
+    cache: false,
+    reporters: ["minimal"],
   },
+  run: {
+    cache: {
+      scripts: true
+    }
+  }
 });
 
 function packageInstallNodeModulesRoot(root: string): string | null {

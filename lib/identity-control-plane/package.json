@@ -11,6 +11,9 @@
   "publishConfig": {
     "access": "public"
   },
+  "scripts": {
+    "test": "vp test --configLoader runner"
+  },
   "dependencies": {
     "@dpeek/formless-installed-apps": "^0.1.0",
     "@dpeek/formless-schema": "^0.1.0",
