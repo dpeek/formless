@@ -18,8 +18,10 @@ import {
   IDENTITY_CONTROL_PLANE_SCHEMA_KEY,
   IDENTITY_CONTROL_PLANE_STORAGE_IDENTITY,
   identityControlPlaneEntityNames,
+  identityControlPlaneRoleKeys,
   type IdentityControlPlaneEntityName,
   type IdentityControlPlaneRecordValuesByEntity,
+  type IdentityControlPlaneRoleKey,
 } from "./types.ts";
 
 export * from "./types.ts";
@@ -51,6 +53,23 @@ export type AnyIdentityControlPlaneRecord = {
 export type IdentityControlPlaneRecordValidationOptions = {
   context?: string;
   sourceLabel?: string;
+};
+
+export type IdentityCollaboratorInvitationGrantAuthority = {
+  instanceAdmin: boolean;
+  instanceOwner: boolean;
+  principalId: string;
+};
+
+export type IdentityCollaboratorInvitationGrantRecord = Pick<
+  StoredRecord,
+  "entity" | "id" | "values"
+>;
+
+export type IdentityCollaboratorInvitationGrantValidationInput = {
+  grantRecords: readonly IdentityCollaboratorInvitationGrantRecord[];
+  inviterPrincipalId: string;
+  records: readonly StoredRecord[];
 };
 
 export function isIdentityControlPlaneEntityName(
@@ -216,6 +235,73 @@ export function reviewableIdentityControlPlaneRecordValues(
       ([fieldName]) => fieldName !== "createdAt" && fieldName !== "updatedAt",
     ),
   ) as RecordValues;
+}
+
+export function resolveIdentityCollaboratorInvitationGrantAuthority(
+  records: readonly StoredRecord[],
+  principalId: string,
+): IdentityCollaboratorInvitationGrantAuthority | null {
+  const parsedPrincipalId = parseNonEmptyString(
+    "Identity collaborator invitation inviter principal id",
+    principalId,
+  );
+  const principal = records.find(
+    (record) =>
+      identityControlPlaneRecordSourceEntityName(record.entity) === "principal" &&
+      record.id === parsedPrincipalId &&
+      !record.deletedAt &&
+      record.values.status === "active",
+  );
+
+  if (!principal) {
+    return null;
+  }
+
+  const rolesByKey = activeIdentityRoleIdsByKey(records);
+
+  return {
+    principalId: principal.id,
+    instanceAdmin: hasActiveIdentityPrincipalRoleAssignment(
+      records,
+      principal.id,
+      rolesByKey.get("instance.admin"),
+    ),
+    instanceOwner: hasActiveIdentityPrincipalRoleAssignment(
+      records,
+      principal.id,
+      rolesByKey.get("instance.owner"),
+    ),
+  };
+}
+
+export function validateIdentityCollaboratorInvitationGrants(
+  context: string,
+  input: IdentityCollaboratorInvitationGrantValidationInput,
+): IdentityCollaboratorInvitationGrantAuthority {
+  const authority = resolveIdentityCollaboratorInvitationGrantAuthority(
+    input.records,
+    input.inviterPrincipalId,
+  );
+
+  if (!authority) {
+    throw new Error(`${context} requires an active inviter principal.`);
+  }
+
+  if (!authority.instanceOwner && !authority.instanceAdmin) {
+    throw new Error(`${context} requires current instance owner or instance admin authority.`);
+  }
+
+  if (authority.instanceOwner) {
+    validateOwnerIdentityCollaboratorInvitationGrants(context, input.records, input.grantRecords);
+    return authority;
+  }
+
+  validateInstanceAdminIdentityCollaboratorInvitationGrants(
+    context,
+    input.records,
+    input.grantRecords,
+  );
+  return authority;
 }
 
 function parseIdentityControlPlaneRecord(context: string, value: unknown): StoredRecord {
@@ -456,6 +542,233 @@ function activeStatusRecordsForEntity(
   return activeRecordsForEntity(records, entityName).filter(
     (record) => record.values.status === "active",
   );
+}
+
+function validateOwnerIdentityCollaboratorInvitationGrants(
+  context: string,
+  currentRecords: readonly StoredRecord[],
+  grantRecords: readonly IdentityCollaboratorInvitationGrantRecord[],
+) {
+  for (const grantRecord of grantRecords) {
+    const entity = parseIdentityCollaboratorInvitationGrantEntity(context, grantRecord);
+
+    if (entity === "role-assignment") {
+      identityCollaboratorInvitationGrantRoleKey(context, currentRecords, grantRecord);
+    }
+  }
+}
+
+function validateInstanceAdminIdentityCollaboratorInvitationGrants(
+  context: string,
+  currentRecords: readonly StoredRecord[],
+  grantRecords: readonly IdentityCollaboratorInvitationGrantRecord[],
+) {
+  for (const grantRecord of grantRecords) {
+    const entity = parseIdentityCollaboratorInvitationGrantEntity(context, grantRecord);
+
+    if (entity === "membership") {
+      throw new Error(
+        `${context} record "${grantRecord.id}" cannot grant collaborator memberships with instance admin authority.`,
+      );
+    }
+
+    if (entity === "app-registration") {
+      validateInstanceAdminCollaboratorInvitationAppRegistration(context, grantRecord);
+      continue;
+    }
+
+    if (entity === "principal-email") {
+      validateInstanceAdminCollaboratorInvitationPrincipalEmail(context, grantRecord);
+      continue;
+    }
+
+    if (entity === "role-assignment") {
+      validateInstanceAdminCollaboratorInvitationRoleAssignment(
+        context,
+        currentRecords,
+        grantRecord,
+      );
+    }
+  }
+}
+
+function parseIdentityCollaboratorInvitationGrantEntity(
+  context: string,
+  record: IdentityCollaboratorInvitationGrantRecord,
+): "app-registration" | "membership" | "principal" | "principal-email" | "role-assignment" {
+  const entity = identityControlPlaneRecordSourceEntityName(record.entity);
+
+  if (
+    entity === "app-registration" ||
+    entity === "membership" ||
+    entity === "principal" ||
+    entity === "principal-email" ||
+    entity === "role-assignment"
+  ) {
+    return entity;
+  }
+
+  throw new Error(
+    `${context} record "${record.id}" entity "${identityEntityLabel(record.entity)}" is not a supported collaborator invitation grant.`,
+  );
+}
+
+function validateInstanceAdminCollaboratorInvitationAppRegistration(
+  context: string,
+  record: IdentityCollaboratorInvitationGrantRecord,
+) {
+  if (record.values.targetKind !== "principal") {
+    throw new Error(
+      `${context} record "${record.id}" cannot grant organization app registrations with instance admin authority.`,
+    );
+  }
+
+  requiredStringValue(context, storedGrantRecord(record, "app-registration"), "appInstallId");
+}
+
+function validateInstanceAdminCollaboratorInvitationPrincipalEmail(
+  context: string,
+  record: IdentityCollaboratorInvitationGrantRecord,
+) {
+  if (record.values.recovery === true) {
+    throw new Error(
+      `${context} record "${record.id}" cannot grant recovery email authority with instance admin authority.`,
+    );
+  }
+}
+
+function validateInstanceAdminCollaboratorInvitationRoleAssignment(
+  context: string,
+  currentRecords: readonly StoredRecord[],
+  record: IdentityCollaboratorInvitationGrantRecord,
+) {
+  const grantRecord = storedGrantRecord(record, "role-assignment");
+  const roleKey = identityCollaboratorInvitationGrantRoleKey(context, currentRecords, record);
+  const targetKind = requiredStringValue(context, grantRecord, "targetKind");
+  const scopeKind = requiredStringValue(context, grantRecord, "scopeKind");
+
+  if (targetKind !== "principal") {
+    throw new Error(
+      `${context} record "${record.id}" cannot grant non-principal role assignments with instance admin authority.`,
+    );
+  }
+
+  if (scopeKind === "organization") {
+    throw new Error(
+      `${context} record "${record.id}" cannot grant organization-scoped roles with instance admin authority.`,
+    );
+  }
+
+  if (roleKey === "instance.owner") {
+    throw new Error(
+      `${context} record "${record.id}" cannot grant instance.owner with instance admin authority.`,
+    );
+  }
+
+  if (scopeKind === "instance") {
+    if (roleKey !== "instance.admin") {
+      throw new Error(
+        `${context} record "${record.id}" can only grant instance.admin at instance scope with instance admin authority.`,
+      );
+    }
+
+    return;
+  }
+
+  if (scopeKind === "app-install") {
+    if (
+      roleKey === "app.admin" ||
+      roleKey === "app.editor" ||
+      roleKey === "app.viewer" ||
+      roleKey === "app.user"
+    ) {
+      requiredStringValue(context, grantRecord, "appInstallId");
+      return;
+    }
+
+    throw new Error(
+      `${context} record "${record.id}" can only grant app roles at app-install scope with instance admin authority.`,
+    );
+  }
+
+  throw new Error(
+    `${context} record "${record.id}" cannot grant scope "${scopeKind}" with instance admin authority.`,
+  );
+}
+
+function identityCollaboratorInvitationGrantRoleKey(
+  context: string,
+  currentRecords: readonly StoredRecord[],
+  record: IdentityCollaboratorInvitationGrantRecord,
+): IdentityControlPlaneRoleKey {
+  const roleId = requiredStringValue(context, storedGrantRecord(record, "role-assignment"), "role");
+  const role = currentRecords.find(
+    (candidate) =>
+      identityControlPlaneRecordSourceEntityName(candidate.entity) === "role" &&
+      candidate.id === roleId &&
+      !candidate.deletedAt &&
+      candidate.values.status === "active",
+  );
+  const roleKey = role?.values.key;
+
+  if (typeof roleKey === "string" && isIdentityControlPlaneRoleKey(roleKey)) {
+    return roleKey;
+  }
+
+  throw new Error(
+    `${context} record "${record.id}" references an unsupported collaborator invitation role.`,
+  );
+}
+
+function activeIdentityRoleIdsByKey(
+  records: readonly StoredRecord[],
+): Map<IdentityControlPlaneRoleKey, string> {
+  const roles = new Map<IdentityControlPlaneRoleKey, string>();
+
+  for (const record of activeStatusRecordsForEntity(records, "role")) {
+    const roleKey = record.values.key;
+
+    if (typeof roleKey === "string" && isIdentityControlPlaneRoleKey(roleKey)) {
+      roles.set(roleKey, record.id);
+    }
+  }
+
+  return roles;
+}
+
+function hasActiveIdentityPrincipalRoleAssignment(
+  records: readonly StoredRecord[],
+  principalId: string,
+  roleId: string | undefined,
+): boolean {
+  if (roleId === undefined) {
+    return false;
+  }
+
+  return activeStatusRecordsForEntity(records, "role-assignment").some(
+    (record) =>
+      record.values.role === roleId &&
+      record.values.targetKind === "principal" &&
+      record.values.targetPrincipal === principalId &&
+      record.values.scopeKind === "instance",
+  );
+}
+
+function isIdentityControlPlaneRoleKey(value: string): value is IdentityControlPlaneRoleKey {
+  return identityControlPlaneRoleKeys.includes(value as IdentityControlPlaneRoleKey);
+}
+
+function storedGrantRecord(
+  record: IdentityCollaboratorInvitationGrantRecord,
+  entity: IdentityControlPlaneEntityName,
+): StoredRecord {
+  return {
+    id: record.id,
+    entity,
+    values: record.values,
+    createdAt: "",
+    updatedAt: "",
+  };
 }
 
 function validateMembershipRecord(context: string, record: StoredRecord) {

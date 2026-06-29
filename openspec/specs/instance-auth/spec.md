@@ -144,7 +144,7 @@ instance auth state bound to reviewable identity invitation records.
 
 #### Scenario: Create invitation token
 
-- GIVEN an owner-authorized collaborator invitation request is accepted
+- GIVEN a grant-authorized collaborator invitation request is accepted
 - WHEN the runtime creates the invite token
 - THEN private auth state stores only a token hash, invitation id, normalized
   target email, target surface facts, created timestamp, expiry, and consumed or
@@ -157,6 +157,16 @@ instance auth state bound to reviewable identity invitation records.
   state, archives, sync payloads, or reviewable snapshots
 - AND creating an invitation token does not issue a passkey credential, central
   auth session, host-local session, or cross-domain handoff grant
+
+#### Scenario: Reject unauthorized invitation token creation
+
+- GIVEN a collaborator invitation request asks for identity records outside the
+  current browser principal's invitation grant authority
+- WHEN the runtime evaluates the request
+- THEN it rejects the request before creating private invite token state
+- AND no invitation token hash, raw invite token, rendered invitation link,
+  email delivery request, passkey challenge, central session, host-local
+  session, or cross-domain handoff grant is created
 
 #### Scenario: Invitation link origin
 

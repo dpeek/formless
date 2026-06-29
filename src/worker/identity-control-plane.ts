@@ -6,7 +6,9 @@ import {
   identityControlPlaneSchemaProvenance,
   identityControlPlaneSchema,
   parseIdentityControlPlaneStorageSnapshot,
+  validateIdentityCollaboratorInvitationGrants,
   validateIdentityControlPlaneRecords,
+  type IdentityCollaboratorInvitationGrantRecord,
   type IdentityAppRegistrationValues,
   type IdentityControlPlaneRoleKey,
   type IdentityInvitationStatus,
@@ -23,8 +25,8 @@ import type { OwnerIdentity, OwnerIdentityInput } from "../shared/protocol.ts";
 import type { SchemaOperationActorKind } from "@dpeek/formless-schema";
 import {
   authorizeAuthorityOperation,
-  authorizeInstanceWrite,
   authorizeOwnerManagementRead,
+  authorizeOperationalManagement,
   type AuthorityAdminGuardEnv,
 } from "./authority-admin-guard.ts";
 import { normalizeEmailDeliveryAddress } from "../shared/email-runtime.ts";
@@ -73,6 +75,7 @@ import {
   generateCollaboratorInvitationToken,
   hashCollaboratorInvitationToken,
 } from "./instance-auth-state.ts";
+import { hostAuthSessionTargetFromRequestHeaders } from "./instance-auth-handoff.ts";
 
 const actorKinds = ["admin", "owner"] as const;
 const invitationTargetSurfaces = ["app-install", "instance", "organization"] as const;
@@ -297,13 +300,18 @@ export async function handleIdentityControlPlaneDurableObjectRequest(
   try {
     const resolveOwnerSession = (session: OwnerSession) =>
       Promise.resolve(readActiveIdentityOwnerForPrincipal(storage, session.principalId));
+    const resolveManagementAuthority = (session: OwnerSession) =>
+      Promise.resolve(readActiveIdentityAuthorityForPrincipal(storage, session.principalId));
 
     if (route.path === "/collaborator-invitations") {
       if (request.method !== "POST") {
         return jsonResponse({ error: "Method not allowed." }, 405, { Allow: "POST" });
       }
 
-      const authorization = await authorizeInstanceWrite(request, env, { resolveOwnerSession });
+      const authorization = await authorizeOperationalManagement(request, env, {
+        hostSessionTarget: hostAuthSessionTargetFromRequestHeaders(request.headers),
+        resolveManagementAuthority,
+      });
 
       if (!authorization.authorized) {
         return jsonResponse(
@@ -316,11 +324,12 @@ export async function handleIdentityControlPlaneDurableObjectRequest(
       ensureIdentityControlPlaneStorage(storage);
 
       const inviterPrincipalId =
-        authorization.via === "owner-session" &&
+        (authorization.via === "owner-session" || authorization.via === "host-session") &&
         typeof authorization.session?.principalId === "string"
           ? authorization.session.principalId
           : undefined;
       const created = createCollaboratorInvitation(storage, await readJson(request), {
+        grantAuthorityPrincipalId: inviterPrincipalId,
         inviterPrincipalId,
       });
 
@@ -689,10 +698,14 @@ function ensureIdentityOwnerRecords(
 function createCollaboratorInvitation(
   storage: DurableObjectStorage,
   value: unknown,
-  options: { inviterPrincipalId?: string },
+  options: { grantAuthorityPrincipalId?: string; inviterPrincipalId?: string },
 ): CreateCollaboratorInvitationWriteResponse {
   const input = parseCreateCollaboratorInvitationRequest(value);
   const plans = collaboratorInvitationRecordWritePlans(input, options);
+
+  if (options.grantAuthorityPrincipalId !== undefined) {
+    validateCollaboratorInvitationGrantAuthority(storage, options.grantAuthorityPrincipalId, plans);
+  }
 
   const outcome = writeRecordSetForCommandOperationOutcome(
     storage,
@@ -714,6 +727,40 @@ function createCollaboratorInvitation(
     records,
     status: outcome.kind === "replay" ? "replayed" : "committed",
   };
+}
+
+function validateCollaboratorInvitationGrantAuthority(
+  storage: DurableObjectStorage,
+  inviterPrincipalId: string,
+  plans: readonly OperationRecordWritePlan[],
+) {
+  const grantRecords: IdentityCollaboratorInvitationGrantRecord[] = [];
+
+  for (const plan of plans) {
+    if (plan.kind !== "create" || plan.entity === "invitation") {
+      continue;
+    }
+
+    if (plan.id === undefined) {
+      throw new Error("Collaborator invitation grant record is missing an id.");
+    }
+
+    if (typeof plan.values === "function") {
+      throw new Error("Collaborator invitation grant record values must be materialized.");
+    }
+
+    grantRecords.push({
+      entity: plan.entity,
+      id: plan.id,
+      values: plan.values,
+    });
+  }
+
+  validateIdentityCollaboratorInvitationGrants("Collaborator invitation grants", {
+    grantRecords,
+    inviterPrincipalId,
+    records: getBootstrapRecords(storage),
+  });
 }
 
 function readCollaboratorInvitationAcceptanceStatus(

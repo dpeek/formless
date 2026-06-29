@@ -440,6 +440,157 @@ describe("identity control-plane API routes", () => {
     expect(created.body.invitation.values).not.toHaveProperty("inviterPrincipal");
   });
 
+  it("creates instance-admin browser collaborator invitations and keeps raw identity writes owner-only", async () => {
+    const adminPrincipal = await createIdentityPrincipal("Invite Instance Admin");
+    await assignIdentityInstanceRole(adminPrincipal.id, "instance.admin");
+
+    const adminSessionHeaders = { Cookie: await ownerCookieForPrincipal(adminPrincipal.id) };
+    const rawWrite = await postRecordOperationResponse(
+      {
+        entity: "principal",
+        idempotencyKey: "instance-admin-raw-principal-create",
+        operationName: "create",
+        input: {
+          displayName: "Raw Write Should Fail",
+          kind: "human",
+          status: "active",
+        },
+      },
+      adminSessionHeaders,
+    );
+    const created = await postCollaboratorInvitationResponse(
+      {
+        idempotencyKey: "invite-instance-admin-scoped",
+        invitationId: "invitation:instance-admin-scoped",
+        targetEmail: "instance-admin-scoped@example.com",
+        targetSurface: "app-install",
+        targetAppInstallId: "site",
+        expiresAt: "2999-02-01T00:00:00.000Z",
+        now: "2999-01-01T00:00:00.000Z",
+        invitedPrincipal: {
+          id: "principal:instance-admin-scoped",
+          displayName: "Scoped Collaborator",
+        },
+        principalEmail: {
+          id: "principal-email:instance-admin-scoped",
+          primary: true,
+          recovery: false,
+        },
+        roleAssignments: [
+          {
+            id: "role-assignment:instance-admin-scoped-viewer",
+            roleKey: "app.viewer",
+            scopeKind: "app-install",
+            appInstallId: "site",
+          },
+        ],
+        appRegistrations: [
+          {
+            id: "app-registration:site-instance-admin-scoped",
+            appInstallId: "site",
+          },
+        ],
+      },
+      adminSessionHeaders,
+    );
+
+    expect(rawWrite.response.status).toBe(401);
+    expect(rawWrite.body).toEqual({
+      error: "Owner session or admin authorization is required for this write endpoint.",
+    });
+    expect(created.response.status).toBe(200);
+    expect(created.body.status).toBe("committed");
+    expect(created.body.invitation).toMatchObject({
+      id: "invitation:instance-admin-scoped",
+      entity: "invitation",
+      values: {
+        targetEmail: "instance-admin-scoped@example.com",
+        targetSurface: "app-install",
+        targetAppInstallId: "site",
+        invitedPrincipal: "principal:instance-admin-scoped",
+        inviterPrincipal: adminPrincipal.id,
+        status: "pending",
+      },
+    });
+    const viewerAssignment = recordById(
+      created.body.records,
+      "role-assignment:instance-admin-scoped-viewer",
+    );
+
+    expect(viewerAssignment).toMatchObject({
+      entity: "role-assignment",
+      values: {
+        role: "role:app.viewer",
+        targetKind: "principal",
+        targetPrincipal: "principal:instance-admin-scoped",
+        scopeKind: "app-install",
+        appInstallId: "site",
+        status: "active",
+      },
+    });
+  });
+
+  it("rejects unauthorized invitation grants before identity, token, link, or delivery state", async () => {
+    const { authSender } = await configureAuthInvitationEmailDelivery();
+    const adminPrincipal = await createIdentityPrincipal("Invite Boundary Admin");
+    await assignIdentityInstanceRole(adminPrincipal.id, "instance.admin");
+
+    const input = {
+      idempotencyKey: "invite-blocked-owner-grant",
+      invitationId: "invitation:blocked-owner-grant",
+      targetEmail: "blocked-owner-grant@example.com",
+      targetSurface: "instance",
+      expiresAt: "2999-02-01T00:00:00.000Z",
+      now: "2999-01-01T00:00:00.000Z",
+      invitedPrincipal: {
+        id: "principal:blocked-owner-grant",
+        displayName: "Blocked Owner Grant",
+      },
+      roleAssignments: [
+        {
+          id: "role-assignment:blocked-owner-grant",
+          roleKey: "instance.owner",
+          scopeKind: "instance",
+        },
+      ],
+    };
+    const rejected = await postCollaboratorInvitationResponse(input, {
+      Cookie: await ownerCookieForPrincipal(adminPrincipal.id),
+    });
+    const afterRejected = await getJson<BootstrapResponse>(`${identityApi}/bootstrap`);
+    const created = await postCollaboratorInvitationResponse(input, adminHeaders());
+
+    expect(rejected.response.status).toBe(400);
+    expect(rejected.body).toEqual({
+      error: expect.stringContaining("cannot grant instance.owner"),
+    });
+    expect(JSON.stringify(rejected.body)).not.toContain("token");
+    expect(JSON.stringify(rejected.body)).not.toContain("/_formless/auth/invitations/accept");
+    expect(afterRejected.body.records.some((record) => record.id === input.invitationId)).toBe(
+      false,
+    );
+    expect(
+      afterRejected.body.records.some((record) => record.id === input.invitedPrincipal.id),
+    ).toBe(false);
+    expect(
+      afterRejected.body.records.some((record) => record.id === input.roleAssignments[0]?.id),
+    ).toBe(false);
+    expect(created.response.status).toBe(200);
+    expect(created.body.status).toBe("committed");
+    expect(created.body.delivery).toMatchObject({
+      status: "scheduled",
+      queued: true,
+      replayed: false,
+      delivery: {
+        idempotencyKey: "invitation:blocked-owner-grant:collaborator-invitation-delivery",
+        sender: { id: authSender.id },
+        sourceRecordId: "invitation:blocked-owner-grant",
+        sourceStorageIdentity: IDENTITY_CONTROL_PLANE_STORAGE_IDENTITY,
+      },
+    });
+    expect(JSON.stringify(created.body)).not.toContain("token");
+  });
+
   it("rejects invalid collaborator invitation targets without partial identity commits", async () => {
     const anonymous = await postCollaboratorInvitationResponse(
       {
@@ -466,7 +617,8 @@ describe("identity control-plane API routes", () => {
 
     expect(anonymous.response.status).toBe(401);
     expect(anonymous.body).toEqual({
-      error: "Owner session or admin authorization is required for this write endpoint.",
+      error:
+        "Owner session, instance-admin session, or admin authorization is required for this endpoint.",
     });
     expect(rejected.response.status).toBe(400);
     expect(rejected.body).toEqual({
@@ -773,11 +925,17 @@ async function ownerCookieForPrincipal(principalId: string) {
   return cookiePair(created.cookie);
 }
 
-async function postRecordOperationResponse(input: Parameters<typeof recordOperationRequest>[0]) {
+async function postRecordOperationResponse(
+  input: Parameters<typeof recordOperationRequest>[0],
+  headers: Record<string, string> = adminHeaders(),
+) {
   const request = recordOperationRequest(input);
   const response = await harness.fetch(`${identityApi}${request.path.slice("/api".length)}`, {
     body: JSON.stringify(request.body),
-    headers: adminHeaders({ "Content-Type": "application/json" }),
+    headers: {
+      ...headers,
+      "Content-Type": "application/json",
+    },
     method: "POST",
   });
   const body = await response.json();

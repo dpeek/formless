@@ -14,6 +14,7 @@ import {
   IDENTITY_CONTROL_PLANE_STORAGE_IDENTITY,
   formatIdentityControlPlaneBoundaryEntityName,
   identityControlPlaneEntityNames,
+  identityControlPlaneRoleKeys,
   identityControlPlaneImmutableFields,
   identityControlPlaneRecordSourceEntityName,
   identityControlPlaneSchema,
@@ -22,7 +23,9 @@ import {
   isIdentityControlPlaneEntityName,
   parseIdentityControlPlaneBoundaryEntityName,
   parseIdentityControlPlaneStorageSnapshot,
+  resolveIdentityCollaboratorInvitationGrantAuthority,
   reviewableIdentityControlPlaneStorageSnapshot,
+  validateIdentityCollaboratorInvitationGrants,
   validateIdentityControlPlaneRecords,
 } from "./index.ts";
 
@@ -720,9 +723,266 @@ describe("identity control-plane schema contracts", () => {
       ]),
     ).not.toThrow();
   });
+
+  it("resolves and accepts owner collaborator invitation grant authority", () => {
+    const records = identityCollaboratorInvitationGrantPolicyRecords();
+    const grantRecords = [
+      invitedPrincipalGrantRecord(),
+      invitedPrincipalEmailGrantRecord(),
+      membershipRecord("membership:invitee-acme", {
+        principal: "principal:invitee",
+        status: "invited",
+        targetGroup: undefined,
+        targetKind: "organization",
+        targetOrganization: "organization:acme",
+      }),
+      roleAssignmentRecord("role-assignment:invitee-owner", {
+        role: "role:instance.owner",
+        targetPrincipal: "principal:invitee",
+      }),
+      roleAssignmentRecord("role-assignment:invitee-org-editor", {
+        appInstallId: undefined,
+        role: "role:app.editor",
+        scopeKind: "organization",
+        scopeOrganization: "organization:acme",
+        targetPrincipal: "principal:invitee",
+      }),
+      appRegistrationRecord("app-registration:site-invitee", {
+        selectedOrganization: undefined,
+        targetPrincipal: "principal:invitee",
+      }),
+    ];
+
+    expect(resolveIdentityCollaboratorInvitationGrantAuthority(records, "principal:owner")).toEqual(
+      {
+        instanceAdmin: false,
+        instanceOwner: true,
+        principalId: "principal:owner",
+      },
+    );
+    expect(
+      validateIdentityCollaboratorInvitationGrants("Collaborator invitation grants", {
+        grantRecords,
+        inviterPrincipalId: "principal:owner",
+        records,
+      }),
+    ).toEqual({
+      instanceAdmin: false,
+      instanceOwner: true,
+      principalId: "principal:owner",
+    });
+  });
+
+  it("accepts instance-admin collaborator invitation grant authority for non-owner grants", () => {
+    const records = identityCollaboratorInvitationGrantPolicyRecords();
+    const grantRecords = [
+      invitedPrincipalGrantRecord(),
+      invitedPrincipalEmailGrantRecord(),
+      appRegistrationRecord("app-registration:site-invitee", {
+        selectedOrganization: undefined,
+        targetPrincipal: "principal:invitee",
+      }),
+      roleAssignmentRecord("role-assignment:invitee-admin", {
+        role: "role:instance.admin",
+        targetPrincipal: "principal:invitee",
+      }),
+      roleAssignmentRecord("role-assignment:invitee-app-editor", {
+        role: "role:app.editor",
+        scopeKind: "app-install",
+        appInstallId: "site",
+        targetPrincipal: "principal:invitee",
+      }),
+    ];
+
+    expect(
+      validateIdentityCollaboratorInvitationGrants("Collaborator invitation grants", {
+        grantRecords,
+        inviterPrincipalId: "principal:admin",
+        records,
+      }),
+    ).toEqual({
+      instanceAdmin: true,
+      instanceOwner: false,
+      principalId: "principal:admin",
+    });
+  });
+
+  it("rejects collaborator invitation grants from non-admin principals", () => {
+    expect(() =>
+      validateIdentityCollaboratorInvitationGrants("Collaborator invitation grants", {
+        grantRecords: [invitedPrincipalGrantRecord()],
+        inviterPrincipalId: "principal:ordinary",
+        records: identityCollaboratorInvitationGrantPolicyRecords(),
+      }),
+    ).toThrow("requires current instance owner or instance admin authority");
+  });
+
+  it("rejects collaborator invitation grants from stale or disabled inviter principals", () => {
+    const records = identityCollaboratorInvitationGrantPolicyRecords();
+
+    expect(() =>
+      validateIdentityCollaboratorInvitationGrants("Collaborator invitation grants", {
+        grantRecords: [invitedPrincipalGrantRecord()],
+        inviterPrincipalId: "principal:missing",
+        records,
+      }),
+    ).toThrow("requires an active inviter principal");
+    expect(() =>
+      validateIdentityCollaboratorInvitationGrants("Collaborator invitation grants", {
+        grantRecords: [invitedPrincipalGrantRecord()],
+        inviterPrincipalId: "principal:disabled",
+        records,
+      }),
+    ).toThrow("requires an active inviter principal");
+  });
+
+  it("rejects collaborator invitation grants after current role authority is removed", () => {
+    const records = identityCollaboratorInvitationGrantPolicyRecords({
+      removedAdminAuthority: true,
+    });
+
+    expect(resolveIdentityCollaboratorInvitationGrantAuthority(records, "principal:admin")).toEqual(
+      {
+        instanceAdmin: false,
+        instanceOwner: false,
+        principalId: "principal:admin",
+      },
+    );
+    expect(() =>
+      validateIdentityCollaboratorInvitationGrants("Collaborator invitation grants", {
+        grantRecords: [invitedPrincipalGrantRecord()],
+        inviterPrincipalId: "principal:admin",
+        records,
+      }),
+    ).toThrow("requires current instance owner or instance admin authority");
+  });
+
+  it("rejects instance-admin collaborator invitation role and membership grants outside policy", () => {
+    const records = identityCollaboratorInvitationGrantPolicyRecords();
+
+    expect(() =>
+      validateIdentityCollaboratorInvitationGrants("Collaborator invitation grants", {
+        grantRecords: [
+          roleAssignmentRecord("role-assignment:invitee-owner", {
+            role: "role:instance.owner",
+            targetPrincipal: "principal:invitee",
+          }),
+        ],
+        inviterPrincipalId: "principal:admin",
+        records,
+      }),
+    ).toThrow("cannot grant instance.owner with instance admin authority");
+    expect(() =>
+      validateIdentityCollaboratorInvitationGrants("Collaborator invitation grants", {
+        grantRecords: [
+          roleAssignmentRecord("role-assignment:invitee-org-editor", {
+            appInstallId: undefined,
+            role: "role:app.editor",
+            scopeKind: "organization",
+            scopeOrganization: "organization:acme",
+            targetPrincipal: "principal:invitee",
+          }),
+        ],
+        inviterPrincipalId: "principal:admin",
+        records,
+      }),
+    ).toThrow("cannot grant organization-scoped roles with instance admin authority");
+    expect(() =>
+      validateIdentityCollaboratorInvitationGrants("Collaborator invitation grants", {
+        grantRecords: [
+          membershipRecord("membership:invitee-acme", {
+            principal: "principal:invitee",
+            status: "invited",
+            targetGroup: undefined,
+            targetKind: "organization",
+            targetOrganization: "organization:acme",
+          }),
+        ],
+        inviterPrincipalId: "principal:admin",
+        records,
+      }),
+    ).toThrow("cannot grant collaborator memberships with instance admin authority");
+  });
 });
 
 const testNow = "2026-06-26T00:00:00.000Z";
+
+function identityCollaboratorInvitationGrantPolicyRecords(
+  options: { removedAdminAuthority?: boolean } = {},
+): StoredRecord[] {
+  return [
+    identityRecord("principal", "principal:owner", {
+      displayName: "Owner",
+      kind: "human",
+      status: "active",
+    }),
+    identityRecord("principal", "principal:admin", {
+      displayName: "Admin",
+      kind: "human",
+      status: "active",
+    }),
+    identityRecord("principal", "principal:ordinary", {
+      displayName: "Ordinary",
+      kind: "human",
+      status: "active",
+    }),
+    identityRecord("principal", "principal:disabled", {
+      displayName: "Disabled",
+      kind: "human",
+      status: "disabled",
+    }),
+    identityRecord("organization", "organization:acme", {
+      displayName: "Acme",
+      status: "active",
+    }),
+    identityRecord("group", "group:operators", {
+      displayName: "Operators",
+      status: "active",
+    }),
+    ...builtInRoleRecords(),
+    roleAssignmentRecord("role-assignment:owner-owner", {
+      role: "role:instance.owner",
+      targetPrincipal: "principal:owner",
+    }),
+    {
+      ...roleAssignmentRecord("role-assignment:admin-admin", {
+        role: "role:instance.admin",
+        targetPrincipal: "principal:admin",
+      }),
+      ...(options.removedAdminAuthority === true ? { deletedAt: testNow } : {}),
+    },
+    roleAssignmentRecord("role-assignment:disabled-owner", {
+      role: "role:instance.owner",
+      targetPrincipal: "principal:disabled",
+    }),
+  ];
+}
+
+function invitedPrincipalGrantRecord(): StoredRecord {
+  return identityRecord("principal", "principal:invitee", {
+    displayName: "Invitee",
+    kind: "human",
+    status: "invited",
+  });
+}
+
+function invitedPrincipalEmailGrantRecord(): StoredRecord {
+  return principalEmailRecord("principal-email:invitee", {
+    principal: "principal:invitee",
+    displayEmail: "invitee@example.com",
+    normalizedEmail: "invitee@example.com",
+  });
+}
+
+function builtInRoleRecords(): StoredRecord[] {
+  return identityControlPlaneRoleKeys.map((roleKey) =>
+    identityRecord("role", `role:${roleKey}`, {
+      displayLabel: roleKey,
+      key: roleKey,
+      status: "active",
+    }),
+  );
+}
 
 function identityStorageSnapshot(overrides: Partial<StorageSnapshot> = {}): StorageSnapshot {
   const records = identityRecords();

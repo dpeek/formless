@@ -96,6 +96,11 @@ runtime-owned Authority storage.
   control-plane records
 - AND admin bearer authorization remains separate from browser login and
   identity-control-plane records
+- AND purpose-built collaborator invitation APIs may use their own grant
+  authority rules before writing invitation records or private auth token state
+- AND those grant rules do not make generic identity-control-plane record
+  editors, snapshot restore, raw role assignment writes, or owner recovery
+  writes available to non-owner browser principals
 
 #### Scenario: Runtime identity write validation
 
@@ -244,13 +249,13 @@ facts without storing raw auth secrets.
 ### Requirement: Collaborator Invitation Creation
 
 The system SHALL create pending collaborator invitations through
-owner-authorized identity control-plane behavior without exposing auth secrets
+grant-authorized identity control-plane behavior without exposing auth secrets
 as reviewable identity records.
 
 #### Scenario: Create pending collaborator invitation
 
-- GIVEN a browser owner session resolves to an active principal with active
-  `instance.owner` authority
+- GIVEN a browser session resolves to an active principal whose current role
+  assignments authorize every requested invitation grant
 - OR trusted automation supplies valid admin bearer authorization
 - WHEN the request creates a collaborator invitation through
   `POST /api/formless/identity/collaborator-invitations` for a valid target
@@ -259,7 +264,7 @@ as reviewable identity records.
 - THEN identity storage commits one pending `invitation` record with
   display-safe target facts
 - AND the inviter principal reference is recorded when the request is
-  authorized by a browser owner session
+  authorized by a browser principal session
 - AND optional invited principal, principal-email, membership,
   role-assignment, or app-registration records are normal flat identity records
   linked by id
@@ -270,6 +275,49 @@ as reviewable identity records.
   browser access until the invited principal becomes active
 - AND raw invite tokens, token hashes, rendered email bodies, email delivery
   provider responses, and session material are not stored on identity records
+
+#### Scenario: Owner grants collaborator invitation roles
+
+- GIVEN a browser session resolves to an active principal with active
+  `instance.owner` authority at instance scope
+- WHEN the principal creates a collaborator invitation
+- THEN the request may include invited principal, principal-email, membership,
+  app-registration, and role-assignment records for any supported runtime role,
+  including `instance.owner`
+- AND owner-only last-owner, recovery, credential, and admin-bearer safety
+  rules remain enforced by the owner-only paths that manage those capabilities
+- AND the invitation still does not authorize browser access until invite
+  acceptance activates the invited principal and current authorization checks
+  pass
+
+#### Scenario: Instance admin grants non-owner collaborator invitation roles
+
+- GIVEN a browser session resolves to an active principal with active
+  `instance.admin` authority at instance scope
+- AND the principal does not have active `instance.owner` authority
+- WHEN the principal creates a collaborator invitation
+- THEN the request may include invited principal and principal-email records
+- AND it may include app-registration records for app-install targets
+- AND it may include role assignments for `instance.admin` at instance scope
+  and app-scoped `app.admin`, `app.editor`, `app.viewer`, or `app.user` roles
+  at app-install scope
+- AND it may not include `instance.owner`, organization-scoped role
+  assignments, group memberships, organization memberships, or owner recovery
+  capabilities
+- AND the inviter principal reference is recorded from the current browser
+  principal
+
+#### Scenario: Reject collaborator invitation outside grant authority
+
+- GIVEN a browser session resolves to an active principal without current grant
+  authority for at least one requested invitation record
+- WHEN the principal creates a collaborator invitation
+- THEN the request is rejected before identity records are written
+- AND no private invite token hash, rendered invitation link, email delivery
+  request, session, credential, grant, or reviewable invitation record is
+  created
+- AND stale signed session facts do not authorize the request after the
+  inviter principal is disabled or its role assignments change
 
 #### Scenario: Invitation delivery request
 

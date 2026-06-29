@@ -2,6 +2,7 @@ import { FormlessAuthority } from "./authority.ts";
 import { handleWorkspaceGatewayProxyRequest } from "@dpeek/formless-gateway/worker";
 import {
   parseAuthorityApiRoute,
+  parseIdentityControlPlaneApiRoute,
   parseInstanceControlPlaneApiRoute,
 } from "../shared/app-storage-identity.ts";
 import { handleInstanceArchiveApiRequest } from "./archive-api.ts";
@@ -113,6 +114,10 @@ export default {
       : undefined;
     const instanceControlPlaneRoute = parseInstanceControlPlaneApiRoute(requestUrl.pathname);
     const instanceControlPlaneForwardRequest: Request | undefined = instanceControlPlaneRoute
+      ? (request.clone() as Request)
+      : undefined;
+    const identityControlPlaneRoute = parseIdentityControlPlaneApiRoute(requestUrl.pathname);
+    const identityControlPlaneForwardRequest: Request | undefined = identityControlPlaneRoute
       ? (request.clone() as Request)
       : undefined;
 
@@ -286,7 +291,17 @@ export default {
       return instanceControlPlaneResponse;
     }
 
-    const identityControlPlaneResponse = await handleIdentityControlPlaneApiRequest(request, env);
+    const identityControlPlaneResponse = identityControlPlaneRoute
+      ? await handleIdentityControlPlaneApiRequest(
+          authorityRequestWithOriginalUrlFacts(identityControlPlaneForwardRequest ?? request, {
+            hostSessionTarget: hostAuthSessionTargetForInstanceControlPlaneRoute(
+              request,
+              runtimeRoute,
+            ),
+          }),
+          env,
+        )
+      : undefined;
 
     if (identityControlPlaneResponse) {
       return identityControlPlaneResponse;
