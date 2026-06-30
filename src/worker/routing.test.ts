@@ -15,6 +15,7 @@ import {
   shouldBlockMappedSiteHostBrowserRoute,
   shouldHandlePublishedSiteDocument,
   shouldHandlePublishedSiteIndexingResource,
+  shouldRedirectAnonymousProtectedBrowserRoute,
   shouldRedirectAnonymousOwnerBrowserRoute,
   shouldServeMappedAppHostClientShell,
   workerRuntimeRoutePolicy,
@@ -163,6 +164,9 @@ describe("Worker document routing", () => {
       ),
     ).toBe(true);
     expect(
+      shouldDeferToStaticAssets(documentRequest("http://example.com/access"), instanceProfile),
+    ).toBe(true);
+    expect(
       shouldDeferToStaticAssets(documentRequest("http://example.com/deployments"), instanceProfile),
     ).toBe(false);
     expect(
@@ -250,6 +254,18 @@ describe("Worker document routing", () => {
     ).toBe(false);
     expect(
       shouldRedirectAnonymousOwnerBrowserRoute(
+        documentRequest("http://example.com/access"),
+        instanceProfile,
+      ),
+    ).toBe(false);
+    expect(
+      shouldRedirectAnonymousProtectedBrowserRoute(
+        documentRequest("http://example.com/access"),
+        instanceProfile,
+      ),
+    ).toBe(true);
+    expect(
+      shouldRedirectAnonymousOwnerBrowserRoute(
         new Request("http://example.com/apps/personal/schema", {
           headers: { Accept: "text/html" },
           method: "HEAD",
@@ -316,6 +332,12 @@ describe("Worker document routing", () => {
         anonymousAppRoute,
       ),
     ).toBe("anonymous");
+    expect(
+      ownerBrowserRouteAccessForRequest(
+        documentRequest("http://example.com/access"),
+        instanceProfile,
+      ),
+    ).toBe("authenticated");
     expect(
       ownerBrowserRouteAccessForRequest(
         documentRequest("http://example.com/deployments"),

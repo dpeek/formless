@@ -135,6 +135,7 @@ describe("runtime topology", () => {
   });
 
   it("owns installed route bases and public Site route constants", () => {
+    expect(runtimeTopologyRoutes.accessRoute).toBe("/access");
     expect(runtimeTopologyRoutes.appRouteBase).toBe("/apps");
     expect(runtimeTopologyRoutes.siteRouteBase).toBe("/sites");
     expect(runtimeTopologyRoutes.publicSiteHomeSlug).toBe("home");
@@ -193,6 +194,7 @@ describe("runtime topology", () => {
     expect(isRuntimePublishedProfileClientShellRoute("/site")).toBe(false);
 
     expect(isRuntimeInstanceProfileClientShellRoute("/")).toBe(true);
+    expect(isRuntimeInstanceProfileClientShellRoute("/access")).toBe(true);
     expect(isRuntimeInstanceProfileClientShellRoute("/local-session")).toBe(true);
     expect(isRuntimeInstanceProfileClientShellRoute("/deployments")).toBe(false);
     expect(isRuntimeInstanceProfileClientShellRoute("/apps/personal")).toBe(true);

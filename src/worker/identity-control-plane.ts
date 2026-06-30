@@ -1,5 +1,7 @@
 import { parseIdentityControlPlaneApiRoute } from "../shared/app-storage-identity.ts";
 import {
+  IDENTITY_ACCESS_MANAGEMENT_SUMMARY_API_PATH,
+  IDENTITY_COLLABORATOR_INVITATIONS_API_PATH,
   IDENTITY_CONTROL_PLANE_SCHEMA_KEY,
   IDENTITY_CONTROL_PLANE_STORAGE_IDENTITY,
   identityControlPlaneRoleKeys,
@@ -8,15 +10,33 @@ import {
   parseIdentityControlPlaneStorageSnapshot,
   validateIdentityCollaboratorInvitationGrants,
   validateIdentityControlPlaneRecords,
+  type IdentityAccessInvitationGrantAuthoritySummary,
+  type IdentityAccessInvitationGrantOptions,
+  type IdentityAccessInvitationMembershipGrantOption,
+  type IdentityAccessInvitationRoleGrantOption,
+  type IdentityAccessManagementSummary,
+  type IdentityAppRegistrationStatus,
   type IdentityCollaboratorInvitationGrantRecord,
+  type IdentityContainerStatus,
   type IdentityAppRegistrationValues,
   type IdentityControlPlaneRoleKey,
+  type IdentityGroupValues,
+  type IdentityInvitationValues,
   type IdentityInvitationStatus,
   type IdentityInvitationTargetSurface,
   type IdentityMembershipTargetKind,
   type IdentityMembershipValues,
+  type IdentityPrincipalEmailValues,
+  type IdentityPrincipalKind,
+  type IdentityPrincipalStatus,
+  type IdentityPrincipalValues,
+  type IdentityPrincipalEmailVerificationStatus,
+  type IdentityRoleAssignmentStatus,
   type IdentityRoleAssignmentScopeKind,
   type IdentityRoleAssignmentValues,
+  type IdentityRoleAssignmentTargetKind,
+  type IdentityRoleValues,
+  type IdentityOrganizationValues,
 } from "@dpeek/formless-identity-control-plane";
 import { instanceControlPlaneProductionIdentityFromRecords } from "@dpeek/formless-instance-control-plane";
 import type { RecordValues, StoredRecord } from "@dpeek/formless-storage";
@@ -87,6 +107,12 @@ const invitationStatuses = [
 ] as const satisfies readonly IdentityInvitationStatus[];
 const membershipTargetKinds = ["group", "organization"] as const;
 const roleAssignmentScopeKinds = ["app-install", "instance", "organization"] as const;
+const appScopedInvitationRoleKeys = [
+  "app.admin",
+  "app.editor",
+  "app.viewer",
+  "app.user",
+] as const satisfies readonly IdentityControlPlaneRoleKey[];
 const builtInRoleCreatedAt = "2026-06-26T00:00:00.000Z";
 const collaboratorInvitationDeliveryMessageKind = "identity.collaboratorInvitation";
 const collaboratorInvitationDeliveryPurpose = "collaborator-invitation-delivery";
@@ -303,7 +329,33 @@ export async function handleIdentityControlPlaneDurableObjectRequest(
     const resolveManagementAuthority = (session: OwnerSession) =>
       Promise.resolve(readActiveIdentityAuthorityForPrincipal(storage, session.principalId));
 
-    if (route.path === "/collaborator-invitations") {
+    if (route.path === IDENTITY_ACCESS_MANAGEMENT_SUMMARY_API_PATH) {
+      if (request.method !== "GET") {
+        return jsonResponse({ error: "Method not allowed." }, 405, { Allow: "GET" });
+      }
+
+      const authorization = await authorizeOperationalManagement(request, env, {
+        hostSessionTarget: hostAuthSessionTargetFromRequestHeaders(request.headers),
+        resolveManagementAuthority,
+      });
+
+      if (!authorization.authorized) {
+        return jsonResponse(
+          { error: authorization.error },
+          authorization.status,
+          authorization.headers,
+        );
+      }
+
+      return jsonResponse(
+        readIdentityAccessManagementSummary(
+          storage,
+          identityAccessGrantAuthorityFromAuthorization(storage, authorization),
+        ),
+      );
+    }
+
+    if (route.path === IDENTITY_COLLABORATOR_INVITATIONS_API_PATH) {
       if (request.method !== "POST") {
         return jsonResponse({ error: "Method not allowed." }, 405, { Allow: "POST" });
       }
@@ -693,6 +745,325 @@ function ensureIdentityOwnerRecords(
   }
 
   return { created: true, owner };
+}
+
+function identityAccessGrantAuthorityFromAuthorization(
+  storage: DurableObjectStorage,
+  authorization: {
+    session?: { principalId?: string };
+    via: "admin-bearer" | "host-session" | "owner-session" | "open";
+  },
+): IdentityAccessInvitationGrantAuthoritySummary {
+  const principalId = authorization.session?.principalId;
+
+  if (principalId !== undefined) {
+    const authority = readActiveIdentityAuthorityForPrincipal(storage, principalId);
+
+    return {
+      instanceAdmin: authority?.instanceAdmin === true,
+      instanceOwner: authority?.instanceOwner === true,
+    };
+  }
+
+  return {
+    instanceAdmin: true,
+    instanceOwner: true,
+  };
+}
+
+function readIdentityAccessManagementSummary(
+  storage: DurableObjectStorage,
+  grantAuthority: IdentityAccessInvitationGrantAuthoritySummary,
+): IdentityAccessManagementSummary {
+  ensureIdentityControlPlaneStorage(storage);
+
+  const records = getBootstrapRecords(storage);
+  const primaryEmails = primaryIdentityAccessEmailsByPrincipal(records);
+  const roleRecords = new Map(
+    identityAccessRecordsForEntity(records, "role").map((record) => [record.id, record]),
+  );
+
+  return {
+    appRegistrations: identityAccessRecordsForEntity(records, "app-registration").map((record) => {
+      const values = record.values as IdentityAppRegistrationValues;
+
+      return {
+        appInstallId: values.appInstallId,
+        appRegistrationId: record.id,
+        createdAt: record.createdAt,
+        ...(values.selectedOrganization === undefined
+          ? {}
+          : { selectedOrganizationId: values.selectedOrganization }),
+        status: values.status as IdentityAppRegistrationStatus,
+        targetKind: values.targetKind,
+        ...(values.targetOrganization === undefined
+          ? {}
+          : { targetOrganizationId: values.targetOrganization }),
+        ...(values.targetPrincipal === undefined
+          ? {}
+          : { targetPrincipalId: values.targetPrincipal }),
+        updatedAt: record.updatedAt,
+      };
+    }),
+    groups: identityAccessRecordsForEntity(records, "group").map((record) => {
+      const values = record.values as IdentityGroupValues;
+
+      return {
+        createdAt: record.createdAt,
+        displayName: values.displayName,
+        groupId: record.id,
+        status: values.status as IdentityContainerStatus,
+        updatedAt: record.updatedAt,
+      };
+    }),
+    invitationGrantOptions: identityAccessInvitationGrantOptions(records, grantAuthority),
+    invitations: identityAccessRecordsForEntity(records, "invitation").map((record) => {
+      const values = record.values as IdentityInvitationValues;
+
+      return {
+        ...(values.acceptedAt === undefined ? {} : { acceptedAt: values.acceptedAt }),
+        createdAt: record.createdAt,
+        expiresAt: values.expiresAt,
+        ...(values.invitedPrincipal === undefined
+          ? {}
+          : { invitedPrincipalId: values.invitedPrincipal }),
+        invitationId: record.id,
+        ...(values.inviterPrincipal === undefined
+          ? {}
+          : { inviterPrincipalId: values.inviterPrincipal }),
+        status: values.status,
+        ...(values.targetAppInstallId === undefined
+          ? {}
+          : { targetAppInstallId: values.targetAppInstallId }),
+        targetEmail: values.targetEmail,
+        ...(values.targetOrganization === undefined
+          ? {}
+          : { targetOrganizationId: values.targetOrganization }),
+        targetSurface: values.targetSurface,
+        updatedAt: record.updatedAt,
+      };
+    }),
+    memberships: identityAccessRecordsForEntity(records, "membership").map((record) => {
+      const values = record.values as IdentityMembershipValues;
+
+      return {
+        createdAt: record.createdAt,
+        membershipId: record.id,
+        principalId: values.principal,
+        status: values.status,
+        ...(values.targetGroup === undefined ? {} : { targetGroupId: values.targetGroup }),
+        targetKind: values.targetKind,
+        ...(values.targetOrganization === undefined
+          ? {}
+          : { targetOrganizationId: values.targetOrganization }),
+        updatedAt: record.updatedAt,
+      };
+    }),
+    organizations: identityAccessRecordsForEntity(records, "organization").map((record) => {
+      const values = record.values as IdentityOrganizationValues;
+
+      return {
+        createdAt: record.createdAt,
+        displayName: values.displayName,
+        organizationId: record.id,
+        status: values.status as IdentityContainerStatus,
+        updatedAt: record.updatedAt,
+      };
+    }),
+    people: identityAccessRecordsForEntity(records, "principal").map((record) => {
+      const values = record.values as IdentityPrincipalValues;
+      const primaryEmail = primaryEmails.get(record.id);
+
+      return {
+        createdAt: record.createdAt,
+        displayName: values.displayName,
+        kind: values.kind as IdentityPrincipalKind,
+        ...(primaryEmail === undefined
+          ? {}
+          : { primaryEmail: identityAccessPrimaryEmailSummary(primaryEmail) }),
+        principalId: record.id,
+        status: values.status as IdentityPrincipalStatus,
+        updatedAt: record.updatedAt,
+      };
+    }),
+    roles: identityAccessRecordsForEntity(records, "role-assignment").map((record) => {
+      const values = record.values as IdentityRoleAssignmentValues;
+      const role = roleRecords.get(values.role);
+
+      if (!role) {
+        throw new Error(`Identity access summary role "${values.role}" is missing.`);
+      }
+
+      const roleValues = role.values as IdentityRoleValues;
+
+      return {
+        ...(values.appInstallId === undefined ? {} : { appInstallId: values.appInstallId }),
+        createdAt: record.createdAt,
+        displayLabel: roleValues.displayLabel,
+        roleAssignmentId: record.id,
+        roleId: role.id,
+        roleKey: roleValues.key,
+        scopeKind: values.scopeKind as IdentityRoleAssignmentScopeKind,
+        ...(values.scopeOrganization === undefined
+          ? {}
+          : { scopeOrganizationId: values.scopeOrganization }),
+        status: values.status as IdentityRoleAssignmentStatus,
+        ...(values.targetGroup === undefined ? {} : { targetGroupId: values.targetGroup }),
+        targetKind: values.targetKind as IdentityRoleAssignmentTargetKind,
+        ...(values.targetOrganization === undefined
+          ? {}
+          : { targetOrganizationId: values.targetOrganization }),
+        ...(values.targetPrincipal === undefined
+          ? {}
+          : { targetPrincipalId: values.targetPrincipal }),
+        updatedAt: record.updatedAt,
+      };
+    }),
+  };
+}
+
+function identityAccessInvitationGrantOptions(
+  records: readonly StoredRecord[],
+  authority: IdentityAccessInvitationGrantAuthoritySummary,
+): IdentityAccessInvitationGrantOptions {
+  return {
+    authority,
+    memberships: identityAccessInvitationMembershipGrantOptions(records, authority),
+    roles: identityAccessInvitationRoleGrantOptions(records, authority),
+  };
+}
+
+function identityAccessInvitationRoleGrantOptions(
+  records: readonly StoredRecord[],
+  authority: IdentityAccessInvitationGrantAuthoritySummary,
+): IdentityAccessInvitationRoleGrantOption[] {
+  const activeRoleKeys = new Set(
+    identityAccessRecordsForEntity(records, "role")
+      .filter((record) => (record.values as IdentityRoleValues).status === "active")
+      .map((record) => (record.values as IdentityRoleValues).key),
+  );
+  const options: IdentityAccessInvitationRoleGrantOption[] = [];
+
+  if (authority.instanceOwner && activeRoleKeys.has("instance.owner")) {
+    options.push(identityAccessInvitationRoleGrantOption("instance.owner", "instance"));
+  }
+
+  if (
+    (authority.instanceOwner || authority.instanceAdmin) &&
+    activeRoleKeys.has("instance.admin")
+  ) {
+    options.push(identityAccessInvitationRoleGrantOption("instance.admin", "instance"));
+  }
+
+  for (const roleKey of appScopedInvitationRoleKeys) {
+    if (!activeRoleKeys.has(roleKey)) {
+      continue;
+    }
+
+    if (authority.instanceOwner || authority.instanceAdmin) {
+      options.push(identityAccessInvitationRoleGrantOption(roleKey, "app-install"));
+    }
+
+    if (authority.instanceOwner) {
+      options.push(identityAccessInvitationRoleGrantOption(roleKey, "organization"));
+    }
+  }
+
+  return options;
+}
+
+function identityAccessInvitationRoleGrantOption(
+  roleKey: IdentityControlPlaneRoleKey,
+  scopeKind: IdentityRoleAssignmentScopeKind,
+): IdentityAccessInvitationRoleGrantOption {
+  return {
+    displayLabel: `${identityAccessRoleKeyLabel(roleKey)} (${identityAccessScopeLabel(scopeKind)})`,
+    roleKey,
+    scopeKind,
+  };
+}
+
+function identityAccessInvitationMembershipGrantOptions(
+  records: readonly StoredRecord[],
+  authority: IdentityAccessInvitationGrantAuthoritySummary,
+): IdentityAccessInvitationMembershipGrantOption[] {
+  if (!authority.instanceOwner) {
+    return [];
+  }
+
+  return [
+    ...identityAccessRecordsForEntity(records, "organization")
+      .filter((record) => (record.values as IdentityOrganizationValues).status === "active")
+      .map((record): IdentityAccessInvitationMembershipGrantOption => {
+        const values = record.values as IdentityOrganizationValues;
+
+        return {
+          displayLabel: values.displayName,
+          targetKind: "organization",
+          targetOrganizationId: record.id,
+        };
+      }),
+    ...identityAccessRecordsForEntity(records, "group")
+      .filter((record) => (record.values as IdentityGroupValues).status === "active")
+      .map((record): IdentityAccessInvitationMembershipGrantOption => {
+        const values = record.values as IdentityGroupValues;
+
+        return {
+          displayLabel: values.displayName,
+          targetGroupId: record.id,
+          targetKind: "group",
+        };
+      }),
+  ].sort((left, right) => left.displayLabel.localeCompare(right.displayLabel));
+}
+
+function identityAccessRecordsForEntity(
+  records: readonly StoredRecord[],
+  entity: string,
+): StoredRecord[] {
+  return records
+    .filter((record) => record.entity === entity && !record.deletedAt)
+    .sort(compareStoredRecords);
+}
+
+function primaryIdentityAccessEmailsByPrincipal(
+  records: readonly StoredRecord[],
+): Map<string, StoredRecord> {
+  const emails = new Map<string, StoredRecord>();
+
+  for (const record of identityAccessRecordsForEntity(records, "principal-email")) {
+    const values = record.values as IdentityPrincipalEmailValues;
+
+    if (values.primary === true && !emails.has(values.principal)) {
+      emails.set(values.principal, record);
+    }
+  }
+
+  return emails;
+}
+
+function identityAccessPrimaryEmailSummary(record: StoredRecord) {
+  const values = record.values as IdentityPrincipalEmailValues;
+
+  return {
+    displayEmail: values.displayEmail,
+    normalizedEmail: values.normalizedEmail,
+    principalEmailId: record.id,
+    verificationStatus: values.verificationStatus as IdentityPrincipalEmailVerificationStatus,
+    ...(values.verifiedAt === undefined ? {} : { verifiedAt: values.verifiedAt }),
+  };
+}
+
+function identityAccessRoleKeyLabel(roleKey: IdentityControlPlaneRoleKey): string {
+  return roleKey.split(".").map(identityAccessFieldLabel).join(" ");
+}
+
+function identityAccessScopeLabel(scopeKind: IdentityRoleAssignmentScopeKind): string {
+  return identityAccessFieldLabel(scopeKind);
+}
+
+function identityAccessFieldLabel(value: string): string {
+  return value.replaceAll(/[-_]/g, " ").replace(/^\w/, (match) => match.toUpperCase());
 }
 
 function createCollaboratorInvitation(

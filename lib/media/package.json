@@ -15,6 +15,6 @@
     "access": "public"
   },
   "scripts": {
-    "test": "vp test --configLoader runner"
+    "test": "vp test --config ../../vite.config.ts"
   }
 }

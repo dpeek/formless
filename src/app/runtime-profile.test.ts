@@ -153,6 +153,7 @@ describe("runtime profile resolver", () => {
       schemaKeyBrowserRoutes: false,
     });
     expect(runtimeBrowserRoutePatterns(profile)).toEqual({
+      instanceAccessRoute: "/access",
       instanceShellRoute: "/",
       installedAppHomeRoutePattern: "/apps/:installId",
       installedAppScreenRoutePattern: "/apps/:installId/*",
@@ -194,6 +195,7 @@ describe("runtime profile resolver", () => {
       schemaKeyBrowserRoutes: true,
     });
     expect(runtimeBrowserRoutePatterns(profile)).toEqual({
+      instanceAccessRoute: "/access",
       instanceShellRoute: "/",
       installedAppHomeRoutePattern: "/apps/:installId",
       installedAppScreenRoutePattern: "/apps/:installId/*",

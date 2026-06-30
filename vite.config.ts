@@ -113,6 +113,11 @@ export default defineConfig({
     exclude: [...defaultTestExclude, ...ignoredScratchGlobs],
     cache: false,
     reporters: ["minimal"],
+    server: {
+      deps: {
+        inline: ["vite-plus"],
+      },
+    },
   },
   run: {
     cache: {

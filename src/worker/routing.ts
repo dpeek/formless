@@ -312,6 +312,10 @@ export function ownerBrowserRouteAccessForRequest(
     return mountRoute.access;
   }
 
+  if (topology.pathname === runtimeTopologyRoutes.accessRoute) {
+    return "authenticated";
+  }
+
   if (
     topology.pathname === runtimeTopologyRoutes.instanceRootRoute ||
     topology.pathname === runtimeTopologyRoutes.appRouteBase ||

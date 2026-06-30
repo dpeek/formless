@@ -1,6 +1,7 @@
 import { Link } from "wouter";
 import { PublishIcon } from "@dpeek/formless-ui/icons";
 import type { AppInstall, AppInstallLaunchLink } from "@dpeek/formless-installed-apps";
+import { runtimeTopologyRoutes } from "../shared/runtime-topology.ts";
 
 export type InstanceRailLink = {
   href: `/${string}`;
@@ -21,6 +22,8 @@ export function InstanceRail({
 }) {
   const links = selectInstanceRailLinks({ currentPath, installs });
   const settingsIsCurrent = normalizeInstanceRailPath(currentPath) === "/";
+  const accessIsCurrent =
+    normalizeInstanceRailPath(currentPath) === runtimeTopologyRoutes.accessRoute;
 
   return (
     <nav
@@ -33,6 +36,12 @@ export function InstanceRail({
         href="/"
         isCurrent={settingsIsCurrent}
         mark="I"
+      />
+      <InstanceRailTile
+        ariaLabel="Open Access"
+        href={runtimeTopologyRoutes.accessRoute}
+        isCurrent={accessIsCurrent}
+        mark="A"
       />
       {links.length > 0 ? <span aria-hidden="true" className="my-1 h-px w-8 bg-border" /> : null}
       {links.map((link) => (

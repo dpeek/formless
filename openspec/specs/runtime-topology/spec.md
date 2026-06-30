@@ -61,11 +61,27 @@ The system SHALL mount browser surfaces according to the active runtime profile.
 #### Scenario: Product instance browser routes
 
 - GIVEN the runtime profile is `instance`
-- WHEN a browser navigates to `/`, `/deployments`, `/setup`, `/login`,
+- WHEN a browser navigates to `/`, `/deployments`, `/access`, `/setup`, `/login`,
   `/apps/<installId>`, `/sites/<installId>`, or `/sites/<installId>/*`
 - THEN the request is eligible for the client shell
 - AND source app routes such as `/tasks`, `/crm/audiences`, `/site/schema`, and
   `/pages/home` are not eligible instance browser routes
+
+#### Scenario: Product instance access management route
+
+- GIVEN the runtime profile is `instance`
+- WHEN a browser navigates to `/access`
+- THEN the client shell is eligible to render the dedicated access management
+  surface
+- AND the route is treated as an authenticated instance browser surface unless
+  a stricter route access policy explicitly requires owner access
+- AND route access only proves an active principal-backed browser session;
+  identity summary reads, collaborator invitation creation, role grants, and
+  destructive identity actions remain authorized by identity-control-plane
+  management rules
+- AND installed app routing, public Site routing, owner setup, owner login, and
+  raw generated identity-control-plane record editing remain separate route
+  families
 
 #### Scenario: Product instance deployment route
 

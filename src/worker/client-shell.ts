@@ -43,6 +43,10 @@ export async function handleClientAssetRequest(
     return responseWithoutBodyForHead(request, response);
   }
 
+  if (shouldServeRuntimeClientShellDocument(options.runtimeTopology)) {
+    return handleClientShellDocumentRequest(request, env);
+  }
+
   return env.ASSETS.fetch(request);
 }
 
@@ -72,6 +76,22 @@ function shouldServeMappedAppHostShell(
   runtimeTopology?: WorkerRuntimeRequestTopology,
 ): boolean {
   return shouldServeMappedAppHostClientShell(request, runtimeTopology);
+}
+
+function shouldServeRuntimeClientShellDocument(
+  runtimeTopology?: WorkerRuntimeRequestTopology,
+): boolean {
+  const instanceBrowserProfile =
+    runtimeTopology?.profileKind === "instance" || runtimeTopology?.profileKind === "dev";
+
+  return Boolean(
+    instanceBrowserProfile &&
+    runtimeTopology?.readMethod &&
+    runtimeTopology.acceptsHtml &&
+    !runtimeTopology.apiPath &&
+    !runtimeTopology.staticAssetPath &&
+    runtimeTopology.pathname === runtimeTopologyRoutes.accessRoute,
+  );
 }
 
 function clientShellAssetRequest(request: Request): Request {

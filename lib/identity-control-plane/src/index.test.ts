@@ -8,7 +8,10 @@ import {
   type StoredRecord,
 } from "@dpeek/formless-storage";
 import {
+  IDENTITY_ACCESS_MANAGEMENT_SUMMARY_API_PATH,
+  IDENTITY_COLLABORATOR_INVITATIONS_API_PATH,
   IDENTITY_CONTROL_PLANE_BOUNDARY_SCHEMA_KEY,
+  IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX,
   IDENTITY_CONTROL_PLANE_SCHEMA_KEY,
   IDENTITY_CONTROL_PLANE_SOURCE_SCHEMA_HASH,
   IDENTITY_CONTROL_PLANE_STORAGE_IDENTITY,
@@ -373,6 +376,9 @@ describe("identity control-plane schema contracts", () => {
 
   it("formats, parses, and identifies identity boundary entity names", () => {
     expect(IDENTITY_CONTROL_PLANE_BOUNDARY_SCHEMA_KEY).toBe("auth");
+    expect(IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX).toBe("/api/formless/identity");
+    expect(IDENTITY_ACCESS_MANAGEMENT_SUMMARY_API_PATH).toBe("/access-summary");
+    expect(IDENTITY_COLLABORATOR_INVITATIONS_API_PATH).toBe("/collaborator-invitations");
     expect(IDENTITY_CONTROL_PLANE_SCHEMA_KEY).toBe("identity-control-plane");
     expect(IDENTITY_CONTROL_PLANE_STORAGE_IDENTITY).toBe("instance:identity");
     expect(formatIdentityControlPlaneBoundaryEntityName("principal")).toBe("auth:principal");

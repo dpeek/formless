@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vite-plus/test";
 import {
+  IDENTITY_ACCESS_MANAGEMENT_SUMMARY_API_PATH,
   IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX,
   IDENTITY_CONTROL_PLANE_SOURCE_SCHEMA_HASH,
   IDENTITY_CONTROL_PLANE_STORAGE_IDENTITY,
@@ -7,6 +8,7 @@ import {
   identityControlPlaneSchema,
   identityControlPlaneSchemaProvenance,
   identityControlPlaneSourceSchema,
+  type IdentityAccessManagementSummary,
 } from "@dpeek/formless-identity-control-plane";
 import { INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX } from "@dpeek/formless-instance-control-plane";
 import { STORAGE_SNAPSHOT_KIND, STORAGE_SNAPSHOT_VERSION } from "@dpeek/formless-storage";
@@ -30,10 +32,11 @@ type Harness = Awaited<ReturnType<typeof createWorkerHarness>>;
 const adminToken = "test-admin-token";
 const identityApi = IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX;
 const controlPlaneApi = INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX;
+const ownerEmail = "ada@example.com";
 const owner: OwnerIdentity = {
   id: "owner-1",
   name: "Ada Owner",
-  email: "ada@example.com",
+  email: ownerEmail,
   createdAt: "2026-06-09T00:00:00.000Z",
 };
 
@@ -530,6 +533,354 @@ describe("identity control-plane API routes", () => {
     });
   });
 
+  it("returns display-safe access summaries for owners and instance admins", async () => {
+    const ownerSession = await createOwnerSessionHeaders();
+    const adminPrincipal = await createIdentityPrincipal("Access Summary Admin");
+    await createIdentityPrincipalEmail(adminPrincipal.id, "Access.Admin@Example.COM");
+    const adminRole = await assignIdentityInstanceRole(adminPrincipal.id, "instance.admin");
+    const organization = await postRecordOperation({
+      entity: "organization",
+      idempotencyKey: "create-access-summary-organization",
+      operationName: "create",
+      input: {
+        displayName: "Access Org",
+        status: "active",
+      },
+    });
+    const group = await postRecordOperation({
+      entity: "group",
+      idempotencyKey: "create-access-summary-group",
+      operationName: "create",
+      input: {
+        displayName: "Access Group",
+        status: "active",
+      },
+    });
+    const membership = await postRecordOperation({
+      entity: "membership",
+      idempotencyKey: "create-access-summary-membership",
+      operationName: "create",
+      input: {
+        principal: adminPrincipal.id,
+        targetKind: "group",
+        targetGroup: group.id,
+        status: "active",
+      },
+    });
+    const appRegistration = await postRecordOperation({
+      entity: "app-registration",
+      idempotencyKey: "create-access-summary-registration",
+      operationName: "create",
+      input: {
+        appInstallId: "site",
+        targetKind: "principal",
+        targetPrincipal: adminPrincipal.id,
+        selectedOrganization: organization.id,
+        status: "active",
+      },
+    });
+    const appRole = await postRecordOperation({
+      entity: "role-assignment",
+      idempotencyKey: "create-access-summary-app-role",
+      operationName: "create",
+      input: {
+        role: "role:app.viewer",
+        targetKind: "principal",
+        targetPrincipal: adminPrincipal.id,
+        scopeKind: "app-install",
+        appInstallId: "site",
+        status: "active",
+      },
+    });
+    const invitation = await postCollaboratorInvitationResponse(
+      {
+        idempotencyKey: "invite-access-summary",
+        invitationId: "invitation:access-summary",
+        targetEmail: "access-summary@example.com",
+        targetSurface: "organization",
+        targetOrganization: organization.id,
+        expiresAt: "2999-02-01T00:00:00.000Z",
+        now: "2999-01-01T00:00:00.000Z",
+        invitedPrincipal: {
+          id: "principal:access-summary-invited",
+          displayName: "Access Summary Invited",
+        },
+        principalEmail: {
+          id: "principal-email:access-summary-invited",
+          primary: true,
+          recovery: false,
+        },
+      },
+      ownerSession.headers,
+    );
+
+    const ownerSummary = await getAccessSummary(ownerSession.headers);
+    const adminSummary = await getAccessSummary({
+      Cookie: await ownerCookieForPrincipal(adminPrincipal.id),
+    });
+
+    expect({
+      ...ownerSummary.body,
+      invitationGrantOptions: adminSummary.body.invitationGrantOptions,
+    }).toEqual(adminSummary.body);
+    expect(ownerSummary.body.invitationGrantOptions).toEqual(
+      expect.objectContaining({
+        authority: {
+          instanceAdmin: false,
+          instanceOwner: true,
+        },
+        memberships: expect.arrayContaining([
+          expect.objectContaining({
+            displayLabel: "Access Group",
+            targetGroupId: group.id,
+            targetKind: "group",
+          }),
+          expect.objectContaining({
+            displayLabel: "Access Org",
+            targetKind: "organization",
+            targetOrganizationId: organization.id,
+          }),
+        ]),
+        roles: expect.arrayContaining([
+          expect.objectContaining({
+            roleKey: "instance.owner",
+            scopeKind: "instance",
+          }),
+          expect.objectContaining({
+            roleKey: "app.editor",
+            scopeKind: "organization",
+          }),
+        ]),
+      }),
+    );
+    expect(adminSummary.body.invitationGrantOptions).toEqual(
+      expect.objectContaining({
+        authority: {
+          instanceAdmin: true,
+          instanceOwner: false,
+        },
+        memberships: [],
+        roles: expect.arrayContaining([
+          expect.objectContaining({
+            roleKey: "instance.admin",
+            scopeKind: "instance",
+          }),
+          expect.objectContaining({
+            roleKey: "app.editor",
+            scopeKind: "app-install",
+          }),
+        ]),
+      }),
+    );
+    expect(adminSummary.body.invitationGrantOptions.roles).not.toContainEqual(
+      expect.objectContaining({
+        roleKey: "instance.owner",
+      }),
+    );
+    expect(adminSummary.body.invitationGrantOptions.roles).not.toContainEqual(
+      expect.objectContaining({
+        scopeKind: "organization",
+      }),
+    );
+    expect(ownerSummary.body.people).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          displayName: owner.name,
+          primaryEmail: expect.objectContaining({
+            displayEmail: ownerEmail,
+            normalizedEmail: ownerEmail,
+            verificationStatus: "unverified",
+          }),
+          principalId: ownerSession.owner.id,
+          status: "active",
+        }),
+        expect.objectContaining({
+          displayName: "Access Summary Admin",
+          primaryEmail: expect.objectContaining({
+            displayEmail: "Access.Admin@example.com",
+            normalizedEmail: "access.admin@example.com",
+            verificationStatus: "unverified",
+          }),
+          principalId: adminPrincipal.id,
+          status: "active",
+        }),
+      ]),
+    );
+    expect(ownerSummary.body.roles).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          roleAssignmentId: adminRole.id,
+          roleKey: "instance.admin",
+          scopeKind: "instance",
+          targetKind: "principal",
+          targetPrincipalId: adminPrincipal.id,
+        }),
+        expect.objectContaining({
+          appInstallId: "site",
+          roleAssignmentId: appRole.id,
+          roleKey: "app.viewer",
+          scopeKind: "app-install",
+          targetPrincipalId: adminPrincipal.id,
+        }),
+      ]),
+    );
+    expect(ownerSummary.body.groups).toContainEqual(
+      expect.objectContaining({
+        displayName: "Access Group",
+        groupId: group.id,
+        status: "active",
+      }),
+    );
+    expect(ownerSummary.body.organizations).toContainEqual(
+      expect.objectContaining({
+        displayName: "Access Org",
+        organizationId: organization.id,
+        status: "active",
+      }),
+    );
+    expect(ownerSummary.body.memberships).toContainEqual(
+      expect.objectContaining({
+        membershipId: membership.id,
+        principalId: adminPrincipal.id,
+        targetGroupId: group.id,
+        targetKind: "group",
+      }),
+    );
+    expect(ownerSummary.body.appRegistrations).toContainEqual(
+      expect.objectContaining({
+        appInstallId: "site",
+        appRegistrationId: appRegistration.id,
+        selectedOrganizationId: organization.id,
+        targetKind: "principal",
+        targetPrincipalId: adminPrincipal.id,
+      }),
+    );
+    expect(ownerSummary.body.invitations).toContainEqual(
+      expect.objectContaining({
+        invitedPrincipalId: "principal:access-summary-invited",
+        invitationId: invitation.body.invitation.id,
+        inviterPrincipalId: ownerSession.owner.id,
+        status: "pending",
+        targetEmail: "access-summary@example.com",
+        targetOrganizationId: organization.id,
+        targetSurface: "organization",
+      }),
+    );
+
+    const serialized = JSON.stringify(ownerSummary.body);
+
+    expect(serialized).not.toContain("records");
+    expect(serialized).not.toContain("values");
+    for (const forbidden of [
+      "adminBearer",
+      "challenge",
+      "credential",
+      "provider",
+      "recovery",
+      "secret",
+      "session",
+      "token",
+      "tokenHash",
+    ]) {
+      expect(serialized).not.toContain(forbidden);
+    }
+  });
+
+  it("rejects access summaries without current operational authority", async () => {
+    const principalOnly = await createIdentityPrincipal("Access Summary Principal Only");
+    const staleAdmin = await createIdentityPrincipal("Access Summary Stale Admin");
+    const staleRole = await assignIdentityInstanceRole(staleAdmin.id, "instance.admin");
+    const anonymous = await getAccessSummaryResponse();
+    const missingAuthority = await getAccessSummaryResponse({
+      Cookie: await ownerCookieForPrincipal(principalOnly.id),
+    });
+    const beforeStale = await getAccessSummary({
+      Cookie: await ownerCookieForPrincipal(staleAdmin.id),
+    });
+
+    await postRecordOperation({
+      entity: "role-assignment",
+      idempotencyKey: "disable-access-summary-stale-admin",
+      operationName: "update",
+      recordId: staleRole.id,
+      input: { status: "disabled" },
+    });
+
+    const staleAuthority = await getAccessSummaryResponse({
+      Cookie: await ownerCookieForPrincipal(staleAdmin.id),
+    });
+
+    expect(beforeStale.body.roles).toContainEqual(
+      expect.objectContaining({
+        roleAssignmentId: staleRole.id,
+        roleKey: "instance.admin",
+        status: "active",
+      }),
+    );
+
+    for (const result of [anonymous, missingAuthority, staleAuthority]) {
+      expect(result.response.status).toBe(401);
+      expect(result.response.headers.get("WWW-Authenticate")).toBe('Bearer realm="formless-admin"');
+      expect(result.body).toEqual({
+        error:
+          "Owner session, instance-admin session, or admin authorization is required for this endpoint.",
+      });
+    }
+  });
+
+  it("keeps generic identity management paths owner-only for instance admins", async () => {
+    const adminPrincipal = await createIdentityPrincipal("Access Summary Generic Admin");
+    await assignIdentityInstanceRole(adminPrincipal.id, "instance.admin");
+
+    const adminSessionHeaders = { Cookie: await ownerCookieForPrincipal(adminPrincipal.id) };
+    const summary = await getAccessSummary(adminSessionHeaders);
+    const bootstrap = await harness.fetch(`${identityApi}/bootstrap`, {
+      headers: adminSessionHeaders,
+    });
+    const snapshot = await harness.fetch(`${identityApi}/snapshot`, {
+      headers: adminSessionHeaders,
+    });
+    const restore = await harness.fetch(`${identityApi}/snapshot/restore`, {
+      body: "{}",
+      headers: {
+        ...adminSessionHeaders,
+        "Content-Type": "application/json",
+      },
+      method: "POST",
+    });
+    const rawRoleAssignmentWrite = await postRecordOperationResponse(
+      {
+        entity: "role-assignment",
+        idempotencyKey: "instance-admin-raw-role-assignment-create",
+        operationName: "create",
+        input: {
+          role: "role:instance.admin",
+          targetKind: "principal",
+          targetPrincipal: adminPrincipal.id,
+          scopeKind: "instance",
+          status: "active",
+        },
+      },
+      adminSessionHeaders,
+    );
+
+    expect(summary.response.status).toBe(200);
+    for (const response of [bootstrap, snapshot]) {
+      expect(response.status).toBe(401);
+      expect(await response.json()).toEqual({
+        error: "Owner session or admin authorization is required for this read endpoint.",
+      });
+    }
+    expect(restore.status).toBe(401);
+    expect(await restore.json()).toEqual({
+      error: "Owner session or admin authorization is required for this write endpoint.",
+    });
+    expect(rawRoleAssignmentWrite.response.status).toBe(401);
+    expect(rawRoleAssignmentWrite.body).toEqual({
+      error: "Owner session or admin authorization is required for this write endpoint.",
+    });
+  });
+
   it("rejects unauthorized invitation grants before identity, token, link, or delivery state", async () => {
     const { authSender } = await configureAuthInvitationEmailDelivery();
     const adminPrincipal = await createIdentityPrincipal("Invite Boundary Admin");
@@ -762,6 +1113,30 @@ async function getOwnerJson<T>(path: string) {
   };
 }
 
+async function getAccessSummary(headers: Record<string, string>) {
+  const result = await getAccessSummaryResponse(headers);
+
+  expect(result.response.status).toBe(200);
+
+  return {
+    body: result.body as IdentityAccessManagementSummary,
+    response: result.response,
+  };
+}
+
+async function getAccessSummaryResponse(headers: Record<string, string> = {}) {
+  const response = await harness.fetch(
+    `${identityApi}${IDENTITY_ACCESS_MANAGEMENT_SUMMARY_API_PATH}`,
+    { headers },
+  );
+  const body = (await response.json()) as IdentityAccessManagementSummary | { error: string };
+
+  return {
+    body,
+    response,
+  };
+}
+
 async function configureAuthInvitationEmailDelivery() {
   const emailDomain = await postControlPlaneOperation("email-domain", "auth-invite-domain", {
     enabled: true,
@@ -840,6 +1215,27 @@ async function createIdentityPrincipal(displayName: string) {
       displayName,
       kind: "human",
       status: "active",
+    },
+  });
+}
+
+async function createIdentityPrincipalEmail(principalId: string, displayEmail: string) {
+  const displayEmailWithNormalizedDomain = displayEmail.replace(
+    /@(.+)$/,
+    (_, domain: string) => `@${domain.toLowerCase()}`,
+  );
+
+  return await postRecordOperation({
+    entity: "principal-email",
+    idempotencyKey: `create-${principalId.replace(/\W+/g, "-")}-primary-email`,
+    operationName: "create",
+    input: {
+      principal: principalId,
+      displayEmail: displayEmailWithNormalizedDomain,
+      normalizedEmail: displayEmail.toLowerCase(),
+      verificationStatus: "unverified",
+      primary: true,
+      recovery: false,
     },
   });
 }

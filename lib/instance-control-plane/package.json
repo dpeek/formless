@@ -12,7 +12,7 @@
     "access": "public"
   },
   "scripts": {
-    "test": "vp test --configLoader runner"
+    "test": "vp test --config ../../vite.config.ts"
   },
   "dependencies": {
     "@dpeek/formless-deploy": "^0.1.0",

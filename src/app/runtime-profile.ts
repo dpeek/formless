@@ -116,6 +116,7 @@ export type RuntimeRoutePolicy = {
 };
 
 export type RuntimeBrowserRoutePatterns = {
+  instanceAccessRoute?: typeof runtimeTopologyRoutes.accessRoute;
   instanceShellRoute?: typeof runtimeTopologyRoutes.instanceRootRoute;
   installedAppHomeRoutePattern?: `/${string}`;
   installedAppScreenRoutePattern?: `/${string}`;
@@ -260,6 +261,7 @@ export function runtimeBrowserRoutePatterns(profile: RuntimeProfile): RuntimeBro
       : {}),
     ...(hasInstanceBrowserShell
       ? {
+          instanceAccessRoute: runtimeTopologyRoutes.accessRoute,
           instanceShellRoute: runtimeTopologyRoutes.instanceRootRoute,
           localSessionRoute: runtimeTopologyRoutes.localSessionRoute,
         }

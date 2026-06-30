@@ -721,6 +721,8 @@ describe("App smoke routes", () => {
     expect(html).toContain("Instance Settings");
     expect(html).toContain('aria-label="Instance navigation"');
     expect(html).toContain('aria-label="Open Instance Settings"');
+    expect(html).toContain('aria-label="Open Access"');
+    expect(html).toContain('href="/access"');
     expect(html).not.toContain("Overview");
     expect(html).not.toContain('href="/deployments"');
     expect(html).toContain("Loading installed apps...");
@@ -909,6 +911,7 @@ describe("App smoke routes", () => {
     const instanceProfile = createInstanceRuntimeProfile();
     const appInstalls = [appInstallFixture({ installId: "personal", label: "Personal Site" })];
     const shellHtml = renderRoute("/", instanceProfile);
+    const accessHtml = renderRoute("/access", instanceProfile);
     const deploymentsHtml = renderRoute("/deployments", instanceProfile, undefined, {
       localWorkspaceGatewayAvailable: true,
     });
@@ -925,6 +928,10 @@ describe("App smoke routes", () => {
 
     expect(shellHtml).toContain("Instance");
     expect(shellHtml).toContain("Loading installed apps...");
+    expect(accessHtml).toContain("Access");
+    expect(accessHtml).toContain("Loading installed apps...");
+    expect(accessHtml).toContain('aria-label="Open Access"');
+    expect(accessHtml).not.toContain("Not found");
     expect(deploymentsHtml).toContain("Not found");
     expect(deploymentsHtml).not.toContain("Instance");
     expect(deploymentsHtml).not.toContain('data-frame="workbench"');
@@ -941,6 +948,7 @@ describe("App smoke routes", () => {
     expect(adminHtml).toContain('data-install-id="personal"');
     expect(adminHtml).toContain('aria-label="Instance navigation"');
     expect(adminHtml).toContain('aria-label="Open Instance Settings"');
+    expect(adminHtml).toContain('aria-label="Open Access"');
     expect(adminHtml).toContain('aria-label="Open Personal Site admin"');
     expect(adminHtml).toContain('aria-label="Open Personal Site public Site"');
     expect(adminHtml).toContain('href="/"');

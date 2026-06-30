@@ -697,6 +697,16 @@ function AppRoutes({
           </OwnerRouteGuard>
         </Route>
       ) : null}
+      {browserRoutes.instanceAccessRoute ? (
+        <Route path={browserRoutes.instanceAccessRoute}>
+          <OwnerRouteGuard access="authenticated">
+            <InstanceShellRoute
+              homeRouteComponent={HomeRoute}
+              localWorkspaceGatewayAvailable={localWorkspaceGatewayAvailable}
+            />
+          </OwnerRouteGuard>
+        </Route>
+      ) : null}
       {publishedSite ? (
         <Route path={publishedSite.rootRoute}>
           <PublicSiteRoute

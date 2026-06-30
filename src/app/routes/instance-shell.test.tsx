@@ -24,9 +24,11 @@ import {
   instanceShellUninitializedWorkspaceInstallState,
   operationPollsAutomatically,
   selectWorkspaceGatewayOperationControls,
+  type AccessManagementRouteState,
   type InstanceShellRouteState,
   type WorkspaceGatewayRouteState,
 } from "./instance-shell.tsx";
+import type { IdentityAccessManagementSummary } from "@dpeek/formless-identity-control-plane";
 import type {
   WorkspaceGatewayAutoSaveState,
   WorkspaceGatewayOperation,
@@ -74,6 +76,8 @@ describe("instance shell route view", () => {
     expect(html).toContain("Instance Settings");
     expect(html).toContain('aria-label="Instance navigation"');
     expect(html).toContain('aria-label="Open Instance Settings"');
+    expect(html).toContain('aria-label="Open Access"');
+    expect(html).toContain('href="/access"');
     expect(html).toContain('aria-label="Open Personal Site admin"');
     expect(html).toContain('aria-label="Open Personal Site public Site"');
     expect(html).toContain('data-formless-control-plane-screen="apps"');
@@ -103,10 +107,131 @@ describe("instance shell route view", () => {
     expect(html).not.toContain("Custom domains");
     expect(html).not.toContain("No custom domains.");
     expect(html).not.toContain("Add redirect");
+    expect(html).not.toContain('data-formless-access-management="true"');
     expect(html).not.toContain("Installed apps");
     expect(html).not.toContain("Bundled apps");
     expect(html).not.toContain("Public website app backed by the bundled Site schema");
     expect(html).not.toContain("Task tracking app backed by the bundled Tasks schema");
+  });
+
+  it("renders access route loading, unauthorized, failed, and empty states outside generated editors", () => {
+    const states: Array<[AccessManagementRouteState, string]> = [
+      [{ status: "loading" }, "Loading access management..."],
+      [
+        { status: "unauthorized", message: "Administrator authority is required." },
+        "Administrator authority is required.",
+      ],
+      [{ status: "failed", message: "Access summary failed." }, "Access summary failed."],
+      [{ status: "ready", summary: emptyAccessSummary() }, "No people or invitations."],
+    ];
+
+    for (const [accessState, expectedText] of states) {
+      const html = renderWithRouter(
+        <InstanceShellRouteView
+          accessState={accessState}
+          currentPath="/access"
+          state={readyState({
+            installs: [siteInstall({ installId: "personal", label: "Personal Site" })],
+          })}
+        />,
+        "/access",
+      );
+
+      expect(html).toContain('data-formless-access-management="true"');
+      expect(html).toContain("Access");
+      expect(html).toContain(expectedText);
+      expect(html).toContain('aria-label="Open Access"');
+      expect(html).toContain('data-current="true"');
+      expect(html).not.toContain('data-formless-control-plane-screen="apps"');
+      expect(html).not.toContain('data-formless-control-plane-screen="routes"');
+      expect(html).not.toContain("identity-control-plane");
+    }
+  });
+
+  it("renders access people and invitation summaries without destructive controls", () => {
+    const html = renderWithRouter(
+      <InstanceShellRouteView
+        accessState={{ status: "ready", summary: accessSummary() }}
+        currentPath="/access"
+        state={readyState({
+          installs: [siteInstall({ installId: "personal", label: "Personal Site" })],
+        })}
+      />,
+      "/access",
+    );
+
+    expect(html).toContain('data-formless-access-people-summary="true"');
+    expect(html).toContain('data-formless-access-person="principal:ada"');
+    expect(html).toContain("Ada Admin");
+    expect(html).toContain("ada@example.com");
+    expect(html).toContain("Instance Admin");
+    expect(html).toContain('data-formless-access-invitation-summary="true"');
+    expect(html).toContain('data-formless-access-invitation="invitation:grace"');
+    expect(html).toContain("grace@example.com");
+    expect(html).toContain("App install personal");
+    expect(html).toContain("2026-07-15");
+    expect(html).not.toContain("Disable principal");
+    expect(html).not.toContain("Revoke invitation");
+    expect(html).not.toContain("Remove role");
+    expect(html).not.toContain("Transfer owner");
+    expect(html).not.toContain('data-formless-control-plane-screen="apps"');
+    expect(html).not.toContain('data-formless-control-plane-screen="routes"');
+  });
+
+  it("renders owner access invitation form grant choices", () => {
+    const html = renderWithRouter(
+      <InstanceShellRouteView
+        accessState={{ status: "ready", summary: accessSummary() }}
+        currentPath="/access"
+        state={readyState({
+          installs: [siteInstall({ installId: "personal", label: "Personal Site" })],
+        })}
+      />,
+      "/access",
+    );
+
+    expect(html).toContain('data-formless-access-invitation-form="true"');
+    expect(html).toContain("Invite collaborator");
+    expect(html).toContain('name="targetEmail"');
+    expect(html).toContain('name="displayName"');
+    expect(html).toContain('name="expiresAt"');
+    expect(html).toContain('name="targetSurface"');
+    expect(html).toContain('name="targetAppInstallId"');
+    expect(html).toContain('name="targetOrganization"');
+    expect(html).toContain("Personal Site");
+    expect(html).toContain("Access Org");
+    expect(html).toContain('data-formless-access-invitation-role-option="instance:instance.owner"');
+    expect(html).toContain('data-formless-access-invitation-role-option="instance:instance.admin"');
+    expect(html).toContain('data-formless-access-invitation-role-option="app-install:app.editor"');
+    expect(html).toContain('data-formless-access-invitation-role-option="organization:app.editor"');
+    expect(html).toContain(
+      'data-formless-access-invitation-membership-option="group:group:access"',
+    );
+    expect(html).toContain(
+      'data-formless-access-invitation-membership-option="organization:organization:access"',
+    );
+    expect(html).toContain("Send invite");
+  });
+
+  it("hides owner-only access invitation grants for instance admins", () => {
+    const html = renderWithRouter(
+      <InstanceShellRouteView
+        accessState={{ status: "ready", summary: accessSummary({ authority: "admin" }) }}
+        currentPath="/access"
+        state={readyState({
+          installs: [siteInstall({ installId: "personal", label: "Personal Site" })],
+        })}
+      />,
+      "/access",
+    );
+
+    expect(html).toContain("Admin grants");
+    expect(html).toContain('data-formless-access-invitation-role-option="instance:instance.admin"');
+    expect(html).toContain('data-formless-access-invitation-role-option="app-install:app.editor"');
+    expect(html).not.toContain("Owner grants");
+    expect(html).not.toContain("instance.owner");
+    expect(html).not.toContain('data-formless-access-invitation-role-scope="organization"');
+    expect(html).not.toContain('data-formless-access-invitation-membership-option="');
   });
 
   it("renders overview route management without deployment target grouping", () => {
@@ -821,6 +946,153 @@ function readyState(
     packages: listInstallableAppPackages(bundledAppPackageResolver),
     status: "ready",
     ...overrides,
+  };
+}
+
+function emptyAccessSummary(): IdentityAccessManagementSummary {
+  return {
+    appRegistrations: [],
+    groups: [],
+    invitationGrantOptions: invitationGrantOptions(),
+    invitations: [],
+    memberships: [],
+    organizations: [],
+    people: [],
+    roles: [],
+  };
+}
+
+function accessSummary({
+  authority = "owner",
+}: {
+  authority?: "admin" | "owner";
+} = {}): IdentityAccessManagementSummary {
+  const now = "2026-06-30T00:00:00.000Z";
+
+  return {
+    ...emptyAccessSummary(),
+    groups: [
+      {
+        createdAt: now,
+        displayName: "Access Group",
+        groupId: "group:access",
+        status: "active",
+        updatedAt: now,
+      },
+    ],
+    invitationGrantOptions: invitationGrantOptions({ authority }),
+    invitations: [
+      {
+        createdAt: now,
+        expiresAt: "2026-07-15T00:00:00.000Z",
+        invitationId: "invitation:grace",
+        inviterPrincipalId: "principal:ada",
+        status: "pending",
+        targetAppInstallId: "personal",
+        targetEmail: "grace@example.com",
+        targetSurface: "app-install",
+        updatedAt: now,
+      },
+    ],
+    organizations: [
+      {
+        createdAt: now,
+        displayName: "Access Org",
+        organizationId: "organization:access",
+        status: "active",
+        updatedAt: now,
+      },
+    ],
+    people: [
+      {
+        createdAt: now,
+        displayName: "Ada Admin",
+        kind: "human",
+        primaryEmail: {
+          displayEmail: "ada@example.com",
+          normalizedEmail: "ada@example.com",
+          principalEmailId: "principal-email:ada",
+          verificationStatus: "verified",
+          verifiedAt: now,
+        },
+        principalId: "principal:ada",
+        status: "active",
+        updatedAt: now,
+      },
+    ],
+    roles: [
+      {
+        createdAt: now,
+        displayLabel: "Instance Admin",
+        roleAssignmentId: "role-assignment:ada-admin",
+        roleId: "role:instance.admin",
+        roleKey: "instance.admin",
+        scopeKind: "instance",
+        status: "active",
+        targetKind: "principal",
+        targetPrincipalId: "principal:ada",
+        updatedAt: now,
+      },
+    ],
+  };
+}
+
+function invitationGrantOptions({
+  authority = "owner",
+}: {
+  authority?: "admin" | "owner";
+} = {}): IdentityAccessManagementSummary["invitationGrantOptions"] {
+  const owner = authority === "owner";
+
+  return {
+    authority: {
+      instanceAdmin: !owner,
+      instanceOwner: owner,
+    },
+    memberships: owner
+      ? [
+          {
+            displayLabel: "Access Group",
+            targetGroupId: "group:access",
+            targetKind: "group",
+          },
+          {
+            displayLabel: "Access Org",
+            targetKind: "organization",
+            targetOrganizationId: "organization:access",
+          },
+        ]
+      : [],
+    roles: [
+      ...(owner
+        ? [
+            {
+              displayLabel: "Instance owner (Instance)",
+              roleKey: "instance.owner" as const,
+              scopeKind: "instance" as const,
+            },
+          ]
+        : []),
+      {
+        displayLabel: "Instance admin (Instance)",
+        roleKey: "instance.admin" as const,
+        scopeKind: "instance" as const,
+      },
+      {
+        displayLabel: "App editor (App install)",
+        roleKey: "app.editor" as const,
+        scopeKind: "app-install" as const,
+      },
+      ...(owner
+        ? [
+            {
+              displayLabel: "App editor (Organization)",
+              roleKey: "app.editor" as const,
+              scopeKind: "organization" as const,
+            },
+          ]
+        : []),
+    ],
   };
 }
 

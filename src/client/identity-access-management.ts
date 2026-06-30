@@ -1,0 +1,162 @@
+import {
+  IDENTITY_COLLABORATOR_INVITATIONS_API_PATH,
+  IDENTITY_ACCESS_MANAGEMENT_SUMMARY_API_PATH,
+  IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX,
+  type IdentityControlPlaneRoleKey,
+  type IdentityAccessManagementSummary,
+  type IdentityInvitationTargetSurface,
+  type IdentityMembershipTargetKind,
+  type IdentityRoleAssignmentScopeKind,
+} from "@dpeek/formless-identity-control-plane";
+
+export const IDENTITY_ACCESS_MANAGEMENT_SUMMARY_API_ROUTE =
+  `${IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX}${IDENTITY_ACCESS_MANAGEMENT_SUMMARY_API_PATH}` as const;
+export const IDENTITY_COLLABORATOR_INVITATIONS_API_ROUTE =
+  `${IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX}${IDENTITY_COLLABORATOR_INVITATIONS_API_PATH}` as const;
+
+export type CreateIdentityAccessManagementInvitationInput = {
+  appRegistrations?: Array<{
+    appInstallId: string;
+    selectedOrganization?: string;
+  }>;
+  expiresAt: string;
+  idempotencyKey: string;
+  invitedPrincipal?: {
+    displayName: string;
+  };
+  memberships?: Array<
+    | {
+        targetGroup: string;
+        targetKind: Extract<IdentityMembershipTargetKind, "group">;
+      }
+    | {
+        targetKind: Extract<IdentityMembershipTargetKind, "organization">;
+        targetOrganization: string;
+      }
+  >;
+  principalEmail?: {
+    primary: boolean;
+    recovery: boolean;
+  };
+  roleAssignments?: Array<
+    | {
+        appInstallId: string;
+        roleKey: IdentityControlPlaneRoleKey;
+        scopeKind: Extract<IdentityRoleAssignmentScopeKind, "app-install">;
+      }
+    | {
+        roleKey: IdentityControlPlaneRoleKey;
+        scopeKind: Extract<IdentityRoleAssignmentScopeKind, "instance">;
+      }
+    | {
+        roleKey: IdentityControlPlaneRoleKey;
+        scopeKind: Extract<IdentityRoleAssignmentScopeKind, "organization">;
+        scopeOrganization: string;
+      }
+  >;
+  targetAppInstallId?: string;
+  targetEmail: string;
+  targetOrganization?: string;
+  targetSurface: IdentityInvitationTargetSurface;
+};
+
+export type IdentityAccessManagementInvitationResponse = {
+  delivery?: unknown;
+  invitation?: unknown;
+  output?: unknown;
+  records?: unknown[];
+  status?: "committed" | "replayed";
+};
+
+export type IdentityAccessManagementApiErrorBody = {
+  error: string;
+};
+
+export class IdentityAccessManagementApiError extends Error {
+  readonly body: IdentityAccessManagementApiErrorBody;
+  readonly status: number;
+
+  constructor(
+    message: string,
+    options: { body: IdentityAccessManagementApiErrorBody; status: number },
+  ) {
+    super(message);
+    this.name = "IdentityAccessManagementApiError";
+    this.body = options.body;
+    this.status = options.status;
+  }
+}
+
+export async function fetchIdentityAccessManagementSummary({
+  fetcher = fetch,
+  signal,
+}: {
+  fetcher?: typeof fetch;
+  signal?: AbortSignal;
+} = {}): Promise<IdentityAccessManagementSummary> {
+  const response = await fetcher(IDENTITY_ACCESS_MANAGEMENT_SUMMARY_API_ROUTE, {
+    credentials: "same-origin",
+    headers: { Accept: "application/json" },
+    signal,
+  });
+
+  return readJsonResponse<IdentityAccessManagementSummary>(response);
+}
+
+export async function createIdentityAccessManagementInvitation(
+  input: CreateIdentityAccessManagementInvitationInput,
+  {
+    fetcher = fetch,
+    signal,
+  }: {
+    fetcher?: typeof fetch;
+    signal?: AbortSignal;
+  } = {},
+): Promise<IdentityAccessManagementInvitationResponse> {
+  const response = await fetcher(IDENTITY_COLLABORATOR_INVITATIONS_API_ROUTE, {
+    body: JSON.stringify({
+      appRegistrations: [],
+      memberships: [],
+      roleAssignments: [],
+      ...input,
+    }),
+    credentials: "same-origin",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    method: "POST",
+    signal,
+  });
+
+  return readJsonResponse<IdentityAccessManagementInvitationResponse>(response);
+}
+
+async function readJsonResponse<T>(response: Response): Promise<T> {
+  const body = (await response.json()) as unknown;
+
+  if (!response.ok) {
+    const errorBody = identityAccessManagementErrorBody(body);
+
+    throw new IdentityAccessManagementApiError(errorBody.error, {
+      body: errorBody,
+      status: response.status,
+    });
+  }
+
+  return body as T;
+}
+
+function identityAccessManagementErrorBody(value: unknown): IdentityAccessManagementApiErrorBody {
+  if (!isRecord(value)) {
+    return { error: "Access management request failed." };
+  }
+
+  const error = typeof value.error === "string" ? value.error : "Access management request failed.";
+
+  return { error };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}

@@ -330,6 +330,69 @@ as reviewable identity records.
 - AND email scheduling does not grant authentication, activate the invited
   principal, verify the target email, or issue a browser session
 
+### Requirement: Access Management Surface
+
+The system SHALL expose dedicated instance access management behavior for
+owner and operational-admin principals without exposing the raw generated
+identity-control-plane record editor to normal administrators.
+
+#### Scenario: Read access management summary
+
+- GIVEN a browser session resolves to an active principal with active
+  `instance.owner` or `instance.admin` authority at instance scope
+- WHEN the principal opens the dedicated instance access management surface and
+  reads `GET /api/formless/identity/access-summary`
+- THEN the surface reads identity data through purpose-built access management
+  behavior
+- AND the response includes only display-safe people, primary email, role,
+  app-registration, organization, group, and invitation summary facts needed by
+  the surface
+- AND the response includes display-safe collaborator invitation grant choices
+  derived from the current actor's active owner or instance-admin authority
+- AND raw invite tokens, token hashes, credential material, passkey challenge
+  secrets, session ids, handoff grant secrets, provider responses, recovery
+  material, and admin bearer material are not returned
+- AND normal administrators do not receive generic identity-control-plane
+  record editor, snapshot restore, raw role-assignment write, or owner recovery
+  access through the surface
+
+#### Scenario: Create collaborator invitation from access management
+
+- GIVEN the dedicated access management surface submits an invitation request
+  for a target email, display name, expiry, target surface, and requested
+  roles, app registrations, groups, or organization memberships
+- WHEN the request is accepted
+- THEN it uses the collaborator invitation creation contract and private invite
+  token boundary
+- AND the role and membership choices are limited to grants authorized for the
+  current browser principal
+- AND a principal with only active `instance.admin` authority cannot grant
+  `instance.owner`, owner recovery capabilities, admin bearer capabilities, or
+  destructive identity authority
+- AND raw invite tokens and token hashes remain unavailable to the browser
+  surface except for the delivery path that renders the invitation link
+
+#### Scenario: Reject unauthorized access management request
+
+- GIVEN a browser session is missing, stale, disabled, scoped to the wrong
+  instance, or lacks active `instance.owner` or `instance.admin` authority
+- WHEN it reads the access management summary or creates an invitation through
+  the dedicated access management behavior
+- THEN the request is rejected before identity records, private invite token
+  state, rendered invitation links, or email delivery requests are created
+- AND stale signed session facts do not authorize access after the principal is
+  disabled or role assignments change
+
+#### Scenario: First-pass destructive identity actions unavailable
+
+- GIVEN the dedicated access management surface is available
+- WHEN a principal attempts to disable a principal, revoke an invitation, remove
+  a role assignment, transfer owner authority, or remove owner authority
+- THEN the first-pass surface does not expose those actions
+- AND future destructive identity actions require purpose-built owner/admin
+  confirmation and current role checks before generic identity records or
+  private auth state are changed
+
 ### Requirement: Collaborator Invitation Acceptance
 
 The system SHALL accept pending collaborator invitations through auth-origin
