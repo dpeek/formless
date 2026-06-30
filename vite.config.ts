@@ -4,8 +4,7 @@ import { fileURLToPath } from "node:url";
 import { cloudflare, type PluginConfig, type WorkerConfig } from "@cloudflare/vite-plugin";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
-import type { Plugin } from "vite";
-import { defineConfig } from "vite-plus";
+import { defineConfig, type Plugin, type PluginOption } from "vite-plus";
 import { defaultExclude as defaultTestExclude } from "vite-plus/test/config";
 import {
   FORMLESS_INSTANCE_AUTH_ORIGIN_ENV_NAME,
@@ -73,6 +72,9 @@ const cloudflarePluginConfig: PluginConfig | undefined =
       }
     : undefined;
 
+// vite-plus bundles its own Vite core, while third-party plugins type against public "vite".
+const publicVitePlugins = (plugins: unknown[]): PluginOption[] => plugins as PluginOption[];
+
 export default defineConfig({
   environments: {
     client: {
@@ -92,9 +94,9 @@ export default defineConfig({
   },
   plugins: [
     formlessWorkspaceRuntimeExtensionsPlugin({ env: process.env }),
-    react(),
-    tailwindcss(),
-    ...(process.env.VITEST ? [] : [cloudflare(cloudflarePluginConfig)]),
+    ...publicVitePlugins(react()),
+    ...publicVitePlugins(tailwindcss()),
+    ...(process.env.VITEST ? [] : publicVitePlugins(cloudflare(cloudflarePluginConfig))),
   ],
   server: {
     fs: {
@@ -110,9 +112,9 @@ export default defineConfig({
   },
   run: {
     cache: {
-      scripts: true
-    }
-  }
+      scripts: true,
+    },
+  },
 });
 
 function packageInstallNodeModulesRoot(root: string): string | null {

@@ -7,7 +7,10 @@
   },
   "checks": {
     "vite": {
-      "cmd": "bun run check"
+      "cmd": "vp check --fix"
+    },
+    "test": {
+      "cmd": "vp run --recursive test"
     }
   },
   "services": {
@@ -19,23 +22,6 @@
         },
         "ready": {
           "log": "https?://(?:[a-z0-9-]+\\.)*formless\\.local/api/formless/local-session/bootstrap[^\n]+"
-        }
-      }
-    },
-    "test": {
-      "cmd": "vp test --watch --reporter=agent --no-color",
-      "events": {
-        "run": {
-          "log": "RERUN"
-        },
-        "fail": {
-          "log": "FAIL"
-        },
-        "pass": {
-          "log": "PASS"
-        },
-        "ready": {
-          "log": "(?:(?:Test Files|Tests)\\s+\\d+\\s+passed|PASS\\s+Waiting for file changes)"
         }
       }
     }
