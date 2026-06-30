@@ -85,6 +85,9 @@ export default defineConfig({
             app: path.resolve(packageRoot, "index.html"),
             "public-site": path.resolve(packageRoot, "src/public-site-main.tsx"),
           },
+          output: {
+            manualChunks: clientManualChunks,
+          },
         },
       },
     },
@@ -94,6 +97,7 @@ export default defineConfig({
   },
   plugins: [
     formlessWorkspaceRuntimeExtensionsPlugin({ env: process.env }),
+    floatingUiReactImportInteropPlugin(),
     ...publicVitePlugins(react()),
     ...publicVitePlugins(tailwindcss()),
     ...(process.env.VITEST ? [] : publicVitePlugins(cloudflare(cloudflarePluginConfig))),
@@ -165,6 +169,83 @@ function runtimeWorkerVars(env: NodeJS.ProcessEnv): Record<string, string> {
 
 function optionalWorkerVar(name: string, value: string | undefined): Record<string, string> {
   return value && value.length > 0 ? { [name]: value } : {};
+}
+
+export function clientManualChunks(id: string): string | undefined {
+  // Rolldown can orphan Floating UI's React namespace imports when its React adapter is
+  // folded into generated field editor chunks. Keep that adapter family together.
+  return id.includes("@floating-ui/") ? "floating-ui" : undefined;
+}
+
+export function floatingUiReactImportInteropPlugin(): Plugin {
+  return {
+    name: "formless-floating-ui-react-import-interop",
+    apply: "build",
+    generateBundle(_options, bundle) {
+      for (const output of Object.values(bundle)) {
+        if (
+          output.type !== "chunk" ||
+          !Object.keys(output.modules).some((id) => floatingUiReactPatchKind(id) === "react")
+        ) {
+          continue;
+        }
+
+        output.code = floatingUiReactImportInteropCode(output.code);
+      }
+    },
+  };
+}
+
+type FloatingUiReactPatchKind = "react" | "react-dom";
+
+export function floatingUiReactPatchKind(id: string): FloatingUiReactPatchKind | undefined {
+  if (
+    id.includes("/@floating-ui/react/dist/floating-ui.react.mjs") ||
+    id.includes("/@floating-ui/react/dist/floating-ui.react.esm.js")
+  ) {
+    return "react";
+  }
+
+  if (
+    id.includes("/@floating-ui/react-dom/dist/floating-ui.react-dom.mjs") ||
+    id.includes("/@floating-ui/react-dom/dist/floating-ui.react-dom.esm.js")
+  ) {
+    return "react-dom";
+  }
+
+  return undefined;
+}
+
+export function floatingUiReactImportInteropCode(code: string): string {
+  const unminifiedBoundary = "require_react();\nrequire_react_dom();";
+
+  if (
+    code.includes(unminifiedBoundary) &&
+    code.includes("var SafeReact = { ...React };") &&
+    !code.includes("var React = require_react();")
+  ) {
+    return code.replace(
+      unminifiedBoundary,
+      `${unminifiedBoundary}
+var React = require_react();
+var ReactDOM = require_react_dom();
+var useLayoutEffect = React.useLayoutEffect;
+var useEffect = React.useEffect;`,
+    );
+  }
+
+  const minifiedBoundary =
+    /([A-Za-z_$][\w$]*)\(\),([A-Za-z_$][\w$]*)\(\);(?=var [A-Za-z_$][\w$]*=\([^=]*?=>\{let [A-Za-z_$][\w$]*=)/;
+
+  if (code.includes("{...React}") && minifiedBoundary.test(code)) {
+    return code.replace(
+      minifiedBoundary,
+      (_, requireReact: string, requireReactDom: string) =>
+        `${requireReact}(),${requireReactDom}();var React=${requireReact}(),ReactDOM=${requireReactDom}(),useLayoutEffect=React.useLayoutEffect,useEffect=React.useEffect;`,
+    );
+  }
+
+  return code;
 }
 
 export function formlessWorkspaceRuntimeExtensionsPlugin(
