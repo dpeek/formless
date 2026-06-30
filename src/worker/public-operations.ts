@@ -21,6 +21,7 @@ import {
   type PublicOperationTurnstileChallengeEnv,
   verifyPublicOperationTurnstileChallenge,
 } from "./public-operation-turnstile-challenge.ts";
+import type { IdentityReferenceTargetResolver } from "./identity-reference-targets.ts";
 import { type WriteOutcome } from "./storage.ts";
 
 export type PublicOperationEnv = PublicOperationTurnstileChallengeEnv;
@@ -46,6 +47,7 @@ type PublicOperationExecutionInput = {
   body: unknown;
   env: PublicOperationEnv;
   identity: AppStorageIdentity;
+  identityReferenceResolver?: IdentityReferenceTargetResolver;
   request: Request;
   route: PublicOperationRoute;
   schema: AppSchema;
@@ -117,6 +119,7 @@ function publicOperationExecutorAdapters(
       execute: ({ envelope }) =>
         executeWriteOperationInvocation({
           envelope,
+          identityReferenceResolver: input.identityReferenceResolver,
           schema: input.schema,
           storage: input.storage,
           writes: input.writes,

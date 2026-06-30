@@ -1,5 +1,6 @@
-import { assertSchemaLocalEntityKey } from "./entity-names.ts";
+import { assertSchemaLocalEntityKey, parseQualifiedEntityName } from "./entity-names.ts";
 import { isSystemFieldName } from "./fields.ts";
+import { isSupportedIdentityReferenceTarget } from "./schema-fields.ts";
 import {
   isEntityOperationCommandEffectType,
   isOperationHandlerEffectForKind,
@@ -994,6 +995,18 @@ function parseRecordPlanEntityReference(
   const entityName = parseRequiredNonEmptyString(context, value);
 
   if (entityName.includes(":")) {
+    const qualifiedName = parseQualifiedEntityName(`${context} "${entityName}"`, entityName);
+
+    if (entities[qualifiedName.entityKey] !== undefined) {
+      throw new Error(
+        `${context} "${entityName}" references local entity "${qualifiedName.entityKey}" with a qualified name. Use local entity key "${qualifiedName.entityKey}".`,
+      );
+    }
+
+    if (isSupportedIdentityReferenceTarget(entityName)) {
+      return entityName;
+    }
+
     throw new Error(`${context} must target an entity from the same schema.`);
   }
 

@@ -7,7 +7,7 @@ import { Input } from "@dpeek/formless-ui/input";
 import { NativeSelect, NativeSelectContent } from "@dpeek/formless-ui/native-select";
 import { TextField } from "@dpeek/formless-ui/text-field";
 import { Textarea } from "@dpeek/formless-ui/textarea";
-import { useReferenceOptions } from "../../client/store.ts";
+import { useReferenceOptions, type ReferenceOption } from "../../client/store.ts";
 import { fieldLabel, type CreateFieldConfig } from "../../client/views.ts";
 import type { FieldVisibilityValue } from "@dpeek/formless-schema";
 import type { FieldSchema } from "@dpeek/formless-schema";
@@ -21,6 +21,10 @@ import { dateValueToStoredDateValue, storedDateValueToDateValue } from "./date-v
 import { selectGeneratedFieldControl, type GeneratedFieldControl } from "./field-controls.ts";
 import { completionCheckboxClassName } from "./field-presentation.tsx";
 import { encodeNumberEditorInputValue, numberInputValueToFieldValue } from "./format.ts";
+import {
+  EMPTY_GENERATED_REFERENCE_OPTIONS,
+  shouldUseAppReplicaReferenceOptions,
+} from "./reference-field-options.ts";
 import { StateMachineStateBadge } from "./state-machine-ui.tsx";
 
 export function GeneratedCreateFieldControl({
@@ -504,6 +508,24 @@ function encodeNumberCreateDefaultValue(value: string | undefined) {
 }
 
 function ReferenceCreateField({
+  field,
+  ...props
+}: {
+  defaultValue: string | undefined;
+  field: Extract<FieldSchema, { type: "reference" }>;
+  fieldName: string;
+  label: string;
+  onValueChange?: (value: FieldVisibilityValue) => void;
+  required: boolean;
+}) {
+  if (!shouldUseAppReplicaReferenceOptions(field)) {
+    return <ReferenceCreateFieldSelect {...props} options={EMPTY_GENERATED_REFERENCE_OPTIONS} />;
+  }
+
+  return <LocalReferenceCreateField {...props} field={field} />;
+}
+
+function LocalReferenceCreateField({
   defaultValue,
   field,
   fieldName,
@@ -520,6 +542,33 @@ function ReferenceCreateField({
 }) {
   const options = useReferenceOptions(field.to, field.displayField);
 
+  return (
+    <ReferenceCreateFieldSelect
+      defaultValue={defaultValue}
+      fieldName={fieldName}
+      label={label}
+      onValueChange={onValueChange}
+      options={options}
+      required={required}
+    />
+  );
+}
+
+function ReferenceCreateFieldSelect({
+  defaultValue,
+  fieldName,
+  label,
+  onValueChange,
+  options,
+  required,
+}: {
+  defaultValue: string | undefined;
+  fieldName: string;
+  label: string;
+  onValueChange?: (value: FieldVisibilityValue) => void;
+  options: readonly ReferenceOption[];
+  required: boolean;
+}) {
   return (
     <NativeSelect>
       <Label>{label}</Label>

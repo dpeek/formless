@@ -33,6 +33,7 @@ import type {
   EntityOperationSchema,
   SchemaOperationActorKind,
 } from "@dpeek/formless-schema";
+import type { IdentityReferenceTargetResolver } from "./identity-reference-targets.ts";
 import {
   isSourceSchemaHash,
   type PackageAppRevision,
@@ -196,6 +197,7 @@ type AuthorityOperationExecutionInput = {
     | AppStorageIdentity
     | IdentityControlPlaneStorageIdentity
     | InstanceControlPlaneStorageIdentity;
+  identityReferenceResolver?: IdentityReferenceTargetResolver;
   operation: AuthorityOperation;
   packageResolver?: AppPackageResolver;
   requestHeaders?: Headers;
@@ -328,9 +330,9 @@ export function selectAuthorityOperation(
   return undefined;
 }
 
-export function executeAuthorityOperation(
+export async function executeAuthorityOperation(
   input: AuthorityOperationExecutionInput,
-): AuthorityOperationResult {
+): Promise<AuthorityOperationResult> {
   const operation = input.operation;
 
   switch (operation.kind) {
@@ -430,10 +432,14 @@ export function executeAuthorityOperation(
     }
 
     case "restoreSnapshot": {
-      const snapshot = validateStorageSnapshotRestore(input.body, {
-        schemaKey: input.app.key,
-        storageIdentity: input.identity.authorityName,
-      });
+      const snapshot = await validateStorageSnapshotRestore(
+        input.body,
+        {
+          schemaKey: input.app.key,
+          storageIdentity: input.identity.authorityName,
+        },
+        { identityReferenceResolver: input.identityReferenceResolver },
+      );
 
       return writeOperationResult(
         input.writes.apply(() =>
@@ -478,8 +484,9 @@ export function executeAuthorityOperation(
       assertBrowserReplicaWriteCompatibleForOperation(input, envelope);
 
       return {
-        body: executeWriteOperationInvocation({
+        body: await executeWriteOperationInvocation({
           envelope,
+          identityReferenceResolver: input.identityReferenceResolver,
           packageResolver: input.packageResolver,
           schema,
           storage: input.storage,

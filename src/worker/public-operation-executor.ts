@@ -71,7 +71,9 @@ export type PublicOperationLifecycleAdapter = {
     assertAllowed: () => void;
     beforeReplay: () => Promise<void> | void;
     envelope: OperationInvocationEnvelope;
-    execute: (envelope: OperationInvocationEnvelope) => OperationInvocationResponse;
+    execute: (
+      envelope: OperationInvocationEnvelope,
+    ) => Promise<OperationInvocationResponse> | OperationInvocationResponse;
     prepareExecutionEnvelope: () =>
       | Promise<OperationInvocationEnvelope>
       | OperationInvocationEnvelope;
@@ -79,7 +81,9 @@ export type PublicOperationLifecycleAdapter = {
 };
 
 export type PublicOperationAuthorityExecutionAdapter = {
-  execute(input: { envelope: OperationInvocationEnvelope }): OperationInvocationResponse;
+  execute(input: {
+    envelope: OperationInvocationEnvelope;
+  }): Promise<OperationInvocationResponse> | OperationInvocationResponse;
 };
 
 export type PublicOperationResponseAdapter = {

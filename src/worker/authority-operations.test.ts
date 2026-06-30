@@ -1469,6 +1469,38 @@ describe("authority operation execution", () => {
     });
   });
 
+  it("rejects identity reference writes when target lookup is unavailable", async () => {
+    const bootstrap = await executeOperation<BootstrapResponse>({
+      method: "GET",
+      path: "/bootstrap",
+    });
+    const schema = schemaWithOperationOnlyTaskIdentityReference(bootstrap.body.result.body.schema);
+
+    await executeOperation({
+      method: "POST",
+      path: "/schema",
+      body: { schema },
+    });
+
+    const failed = await executeOperationFailure({
+      method: "POST",
+      path: "/operations/task/create",
+      body: {
+        idempotencyKey: "identity-reference-unavailable",
+        input: {
+          title: "Needs principal",
+          ownerPrincipal: "principal:missing",
+        },
+      },
+    });
+
+    expect(failed.response.status).toBe(400);
+    expect(failed.body).toEqual({
+      error: 'Identity reference validation is unavailable for field "ownerPrincipal".',
+      writes: [],
+    });
+  });
+
   it("replays record-plan command operations without duplicate writes", async () => {
     const bootstrap = await executeOperation<BootstrapResponse>({
       method: "GET",
@@ -2155,6 +2187,32 @@ function schemaWithOperationOnlyTaskProjectReference(sourceSchema: AppSchema): A
   return schema;
 }
 
+function schemaWithOperationOnlyTaskIdentityReference(sourceSchema: AppSchema): AppSchema {
+  const schema = schemaWithOperationOnlyTaskCrud(sourceSchema);
+  const taskEntity = requireEntity(schema, "task");
+  const taskFields = {
+    ...taskEntity.fields,
+    ownerPrincipal: {
+      type: "reference",
+      required: false,
+      label: "Owner principal",
+      to: "auth:principal",
+    },
+  } satisfies EntitySchema["fields"];
+
+  schema.entities.task = {
+    ...taskEntity,
+    fields: taskFields,
+    operations: {
+      ...taskEntity.operations,
+      ...recordCrudOperations("Task", taskFields),
+      activeList: listOperation("taskActive"),
+    },
+  };
+
+  return schema;
+}
+
 function requireEntity(schema: AppSchema, entityName: string): EntitySchema {
   const entity = schema.entities[entityName];
 
@@ -2321,7 +2379,7 @@ async function writeAuthorityOperationHarness() {
           };
 
           try {
-            const result = executeAuthorityOperation({
+            const result = await executeAuthorityOperation({
               actor: input.actor,
               actorKind: input.actorKind,
               app,

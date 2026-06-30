@@ -1,18 +1,26 @@
-import { Children, isValidElement, type ReactNode } from "react";
+import { Children, isValidElement, type ComponentProps, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vite-plus/test";
+import { beforeEach, describe, expect, it } from "vite-plus/test";
 import {
   MediaFieldControl,
   type ImageMediaAssetOption,
   type MediaFieldControlProps,
 } from "@dpeek/formless-media/react";
+import { NativeSelectContent } from "@dpeek/formless-ui/native-select";
 import type { CreateFieldConfig, RecordFieldConfig } from "../../client/views.ts";
 import type { FieldValue, RecordValues } from "@dpeek/formless-storage";
 import { resolveIconCatalogSvg } from "../../shared/icon-catalog.ts";
-import type { FieldSchema } from "@dpeek/formless-schema";
+import type { AppSchema, FieldSchema } from "@dpeek/formless-schema";
+import { applyBootstrapResponse, resetClientStore } from "../../client/store.ts";
+import type { BootstrapResponse } from "../../shared/protocol.ts";
 import { GeneratedCreateFieldControl } from "./create-field-control.tsx";
 import { GeneratedIconPickerEditor } from "./field-control-primitives.tsx";
+import { RecordFieldDisplay } from "./record-field-display.tsx";
 import { GeneratedRecordFieldControl } from "./record-field-control.tsx";
+
+beforeEach(() => {
+  resetClientStore();
+});
 
 describe("generated record field presentation rendering", () => {
   it("renders enum icon presentation as a select with resolved icon, color, and accessible value label", () => {
@@ -246,6 +254,59 @@ describe("generated record field presentation rendering", () => {
 
     expect(immediateCommitted).toEqual(["/entered.webp"]);
   });
+
+  it("renders identity reference displays and editors with a stored-id fallback", () => {
+    applyBootstrapResponse(identityReferenceBootstrap());
+
+    const displayHtml = renderToStaticMarkup(
+      <RecordFieldDisplay column={ownerPrincipalFieldConfig} recordId="account-1" />,
+    );
+    const editorHtml = renderRecordControl(ownerPrincipalFieldConfig, {
+      draft: "principal-1",
+      recordValue: "principal-1",
+      showLabel: true,
+    });
+
+    expect(displayHtml).toContain(">principal-1</span>");
+    expect(displayHtml).not.toContain("credential-hash");
+    expect(editorHtml).toContain(">Owner</label>");
+    expect(editorHtml).toContain('value="principal-1"');
+    expect(editorHtml).toContain(">principal-1</option>");
+    expect(editorHtml).not.toContain("credential-hash");
+  });
+
+  it("commits identity reference editor changes as flat ids", () => {
+    const committed: FieldValue[] = [];
+    const drafts: string[] = [];
+    const props = recordReferenceSelectProps({
+      fieldConfig: ownerPrincipalFieldConfig,
+      onDraftChange: (value) => {
+        drafts.push(value);
+      },
+      onValueCommit: (value) => {
+        committed.push(value);
+      },
+    });
+
+    props.onChange?.({
+      currentTarget: { value: "principal-2" },
+    } as Parameters<NonNullable<typeof props.onChange>>[0]);
+
+    expect(drafts).toEqual(["principal-2"]);
+    expect(committed).toEqual(["principal-2"]);
+  });
+
+  it("renders identity reference create editors without active app replica identity options", () => {
+    applyBootstrapResponse(identityReferenceBootstrap());
+
+    const html = renderToStaticMarkup(
+      <GeneratedCreateFieldControl fieldConfig={ownerPrincipalCreateFieldConfig} />,
+    );
+
+    expect(html).toContain('name="ownerPrincipal"');
+    expect(html).toContain(">Owner</label>");
+    expect(html).not.toContain("credential-hash");
+  });
 });
 
 function renderRecordControl(
@@ -344,6 +405,53 @@ function recordMediaFieldControlProps({
   return props;
 }
 
+function recordReferenceSelectProps({
+  fieldConfig,
+  onDraftChange = () => undefined,
+  onValueCommit = () => undefined,
+}: {
+  fieldConfig: RecordFieldConfig;
+  onDraftChange?: (value: string) => void;
+  onValueCommit?: (value: FieldValue) => void;
+}): ComponentProps<typeof NativeSelectContent> {
+  const props = findNativeSelectContentProps(
+    <GeneratedRecordFieldControl
+      canPatch={true}
+      draft="principal-1"
+      error={null}
+      fieldConfig={fieldConfig}
+      iconDialogDraft=""
+      iconDialogOpen={false}
+      isPending={false}
+      mediaAssetOptions={[]}
+      mediaEditorMode="url"
+      numberFormat="plain"
+      onDraftChange={onDraftChange}
+      onDraftRevert={() => undefined}
+      onErrorChange={() => undefined}
+      onIconCancel={() => undefined}
+      onIconDraftChange={() => undefined}
+      onIconOpenChange={() => undefined}
+      onIconSave={() => Promise.resolve()}
+      onImageFileSelect={() => undefined}
+      onMediaAssetSelect={() => undefined}
+      onPatchValues={() => undefined}
+      onUnitDraftChange={() => undefined}
+      onUnitDraftRevert={() => undefined}
+      onValueCommit={onValueCommit}
+      recordValue="principal-1"
+      unitDraft=""
+      uploadEnabled={true}
+    />,
+  );
+
+  if (!props) {
+    throw new Error("Expected generated reference select props.");
+  }
+
+  return props;
+}
+
 function findMediaFieldControlProps(node: ReactNode): MediaFieldControlProps | undefined {
   for (const child of Children.toArray(node)) {
     if (!isValidElement(child)) {
@@ -364,6 +472,38 @@ function findMediaFieldControlProps(node: ReactNode): MediaFieldControlProps | u
     if (typeof child.type === "function") {
       const rendered = (child.type as (props: unknown) => ReactNode)(child.props);
       const renderedProps = findMediaFieldControlProps(rendered);
+
+      if (renderedProps) {
+        return renderedProps;
+      }
+    }
+  }
+
+  return undefined;
+}
+
+function findNativeSelectContentProps(
+  node: ReactNode,
+): ComponentProps<typeof NativeSelectContent> | undefined {
+  for (const child of Children.toArray(node)) {
+    if (!isValidElement(child)) {
+      continue;
+    }
+
+    if (child.type === NativeSelectContent) {
+      return child.props as ComponentProps<typeof NativeSelectContent>;
+    }
+
+    const childProps = child.props as { children?: ReactNode };
+    const nestedProps = findNativeSelectContentProps(childProps.children);
+
+    if (nestedProps) {
+      return nestedProps;
+    }
+
+    if (typeof child.type === "function") {
+      const rendered = (child.type as (props: unknown) => ReactNode)(child.props);
+      const renderedProps = findNativeSelectContentProps(rendered);
 
       if (renderedProps) {
         return renderedProps;
@@ -410,6 +550,14 @@ const dueDateField = {
 
 const imageTextField = { type: "text", required: false, format: "href" } satisfies FieldSchema;
 
+const ownerPrincipalField = {
+  type: "reference",
+  required: true,
+  label: "Owner",
+  to: "auth:principal",
+  displayField: "credentialHash",
+} satisfies FieldSchema;
+
 const priorityFieldConfig = {
   fieldName: "priority",
   field: priorityField,
@@ -444,3 +592,59 @@ const mediaFieldConfig = {
   commit: "field-commit",
   label: "Hero image",
 } satisfies RecordFieldConfig;
+
+const ownerPrincipalFieldConfig = {
+  fieldName: "ownerPrincipal",
+  field: ownerPrincipalField,
+  editor: "reference",
+  commit: "immediate",
+  label: "Owner",
+} satisfies RecordFieldConfig;
+
+const ownerPrincipalCreateFieldConfig = {
+  fieldName: "ownerPrincipal",
+  field: ownerPrincipalField,
+  editor: "reference",
+} satisfies CreateFieldConfig;
+
+const identityReferenceSchema = {
+  version: 1,
+  entities: {
+    account: {
+      label: "Account",
+      fields: {
+        ownerPrincipal: ownerPrincipalField,
+      },
+    },
+  },
+  queries: {},
+  itemViews: {},
+  tableViews: {},
+  views: {},
+  screens: {},
+} satisfies AppSchema;
+
+function identityReferenceBootstrap(): BootstrapResponse {
+  return {
+    schema: identityReferenceSchema,
+    schemaUpdatedAt: "2026-06-30T12:40:00.000Z",
+    records: [
+      storedRecord("account-1", "account", { ownerPrincipal: "principal-1" }),
+      storedRecord("principal-1", "auth:principal", {
+        credentialHash: "credential-hash",
+        displayName: "Raw Principal",
+      }),
+    ],
+    cursor: 1,
+  };
+}
+
+function storedRecord(id: string, entity: string, values: RecordValues) {
+  return {
+    id,
+    entity,
+    values,
+    createdAt: "2026-06-30T12:40:00.000Z",
+    updatedAt: "2026-06-30T12:40:00.000Z",
+  };
+}

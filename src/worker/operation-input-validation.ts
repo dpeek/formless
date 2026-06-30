@@ -1,5 +1,6 @@
 import {
   formatEntityOperationKey,
+  isSupportedIdentityReferenceTarget,
   projectOperationInputValues,
   type AppSchema,
   type EntityOperationSchema,
@@ -198,6 +199,10 @@ function assertStorageBackedOperationInputValues(
 
     const entityField = entity.fields[field.field];
     if (!entityField) {
+      continue;
+    }
+
+    if (entityField.type === "reference" && isSupportedIdentityReferenceTarget(entityField.to)) {
       continue;
     }
 

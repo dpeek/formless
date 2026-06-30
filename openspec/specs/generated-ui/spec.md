@@ -293,6 +293,22 @@ The system SHALL render generated field displays and editors from field behavior
 - AND it treats the field as read-only regardless of table display metadata,
   field editor metadata, or operation availability
 
+#### Scenario: Identity reference field fallback
+
+- GIVEN a generated field display or editor renders a reference field targeting
+  `auth:principal`, `auth:organization`, or `auth:group`
+- WHEN display-safe identity target records are not loaded in the active app
+  browser replica
+- THEN generated UI keeps the stored flat record id visible as the fallback
+  reference label
+- AND it does not query unrelated app storage, expose the raw generated
+  identity-control-plane record editor, or require credentials, challenge
+  secrets, token hashes, sessions, grants, recovery material, or provider
+  responses
+- AND when display-safe identity reference options are available through a
+  runtime-owned client path, generated UI may use those options without
+  changing the stored app record value shape
+
 ### Requirement: Media Field Package Adapter
 
 The system SHALL keep generated field layout and commit behavior in generated UI

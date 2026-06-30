@@ -12,8 +12,12 @@ import type {
   OperationCommandOutput,
   OperationInvocationEnvelope,
 } from "../shared/operation-invocation.ts";
-import { validateRecordWriteRequest } from "./authority-validation.ts";
+import {
+  validateRecordWriteRequest,
+  validateRecordWriteRequestAsync,
+} from "./authority-validation.ts";
 import { BadRequestError } from "./errors.ts";
+import type { IdentityReferenceTargetResolver } from "./identity-reference-targets.ts";
 import { validateOperationInvocationRecordPlanInputValues } from "./operation-input-validation.ts";
 import type {
   CreateRecordWriteRequest,
@@ -39,6 +43,7 @@ export type RecordPlanMaterialization = {
 export type RecordPlanMaterializerInput = {
   effect: RecordPlanEntityOperationEffectSchema;
   envelope: OperationInvocationEnvelope;
+  identityReferenceResolver?: IdentityReferenceTargetResolver;
   inputValues: RecordPlanInputValues;
   operationId: string;
   packageResolver?: AppPackageResolver;
@@ -100,6 +105,33 @@ export function materializeRecordPlan(
 
   for (const step of input.effect.steps) {
     const materialized = recordPlanWritePlanForStep(step, state);
+    plans.push(materialized.plan);
+    steps.push(materialized.step);
+  }
+
+  return { plans, steps };
+}
+
+export async function materializeRecordPlanAsync(
+  input: RecordPlanMaterializerInput,
+): Promise<RecordPlanMaterialization> {
+  const state: RecordPlanPlanningState = {
+    operationId: input.operationId,
+    envelope: input.envelope,
+    inputValues: input.inputValues,
+    packageResolver: input.packageResolver,
+    plannedRecordsById: initialRecordPlanRecords(input.plannedRecords),
+    schema: input.schema,
+    stepOutputs: new Map(),
+    storage: input.storage,
+  };
+  const steps: RecordPlanStepMaterialization[] = [];
+  const plans: OperationRecordWritePlan[] = [];
+
+  for (const step of input.effect.steps) {
+    const materialized = await recordPlanWritePlanForStepAsync(step, state, {
+      identityReferenceResolver: input.identityReferenceResolver,
+    });
     plans.push(materialized.plan);
     steps.push(materialized.step);
   }
@@ -253,6 +285,128 @@ function recordPlanWritePlanForStep(
   };
 }
 
+async function recordPlanWritePlanForStepAsync(
+  step: RecordPlanStepSchema,
+  state: RecordPlanPlanningState,
+  options: { identityReferenceResolver?: IdentityReferenceTargetResolver },
+): Promise<RecordPlanStepPlan> {
+  if (step.kind === "create") {
+    const recordId =
+      step.recordId === undefined
+        ? createRecordId()
+        : evaluateRecordPlanRecordIdExpression(step.recordId, state);
+
+    assertRecordPlanCreateIdAvailable(step, recordId, state);
+
+    const recordWrite = await validateRecordPlanStepWriteAsync(
+      step,
+      state,
+      {
+        writeId: recordPlanStepWriteId(state.operationId, step.name),
+        entity: step.entity,
+        kind: "create",
+        values: evaluateRecordPlanValues(step.values, state),
+      },
+      options,
+    );
+
+    if (recordWrite.kind !== "create") {
+      throw new Error(`Record plan create step "${step.name}" did not produce create values.`);
+    }
+
+    const values = recordWrite.values;
+    const record = {
+      id: recordId,
+      entity: step.entity,
+      values,
+      createdAt: state.envelope.receivedAt,
+      updatedAt: state.envelope.receivedAt,
+    } satisfies StoredRecord;
+
+    recordPlanRecordWritten(step, record, state);
+
+    return {
+      plan: {
+        kind: "create",
+        entity: step.entity,
+        id: recordId,
+        values,
+      },
+      step: recordPlanStepMaterialization(step, recordId),
+    };
+  }
+
+  if (step.kind === "patch") {
+    const recordId = evaluateRecordPlanRecordIdExpression(step.recordId, state);
+    const existingRecord = requireRecordPlanTargetRecord(step, recordId, state);
+    const recordWrite = await validateRecordPlanStepWriteAsync(
+      step,
+      state,
+      {
+        writeId: recordPlanStepWriteId(state.operationId, step.name),
+        entity: step.entity,
+        kind: "patch",
+        recordId,
+        values: evaluateRecordPlanValues(step.values, state),
+      },
+      options,
+    );
+
+    if (!("recordValues" in recordWrite)) {
+      throw new Error(`Record plan patch step "${step.name}" did not produce record values.`);
+    }
+
+    const record = {
+      ...existingRecord,
+      values: recordWrite.recordValues,
+      updatedAt: state.envelope.receivedAt,
+    } satisfies StoredRecord;
+
+    recordPlanRecordWritten(step, record, state);
+
+    return {
+      plan: {
+        kind: "patch",
+        record: (writtenRecords) =>
+          requireRecordPlanMaterializedTargetRecord(recordId, writtenRecords, state.storage),
+        values: recordWrite.recordValues,
+      },
+      step: recordPlanStepMaterialization(step, recordId),
+    };
+  }
+
+  const recordId = evaluateRecordPlanRecordIdExpression(step.recordId, state);
+  const existingRecord = requireRecordPlanTargetRecord(step, recordId, state);
+  await validateRecordPlanStepWriteAsync(
+    step,
+    state,
+    {
+      writeId: recordPlanStepWriteId(state.operationId, step.name),
+      entity: step.entity,
+      kind: "delete",
+      recordId,
+    },
+    options,
+  );
+
+  const record = {
+    ...existingRecord,
+    updatedAt: state.envelope.receivedAt,
+    deletedAt: state.envelope.receivedAt,
+  } satisfies StoredRecord;
+
+  recordPlanRecordWritten(step, record, state);
+
+  return {
+    plan: {
+      kind: step.kind,
+      record: (writtenRecords) =>
+        requireRecordPlanMaterializedTargetRecord(recordId, writtenRecords, state.storage),
+    },
+    step: recordPlanStepMaterialization(step, recordId),
+  };
+}
+
 function validateRecordPlanStepWrite(
   step: RecordPlanStepSchema,
   state: RecordPlanPlanningState,
@@ -261,6 +415,28 @@ function validateRecordPlanStepWrite(
   const result = validateRecordWriteRequest(recordWrite, state.schema, state.storage, {
     additionalRecords: [...state.plannedRecordsById.values()],
     enforceGenericRecordWritePolicy: false,
+    packageResolver: state.packageResolver,
+  });
+
+  if ("outcome" in result) {
+    throw new BadRequestError(
+      `Record plan step "${step.name}" conflicts with an existing write identity.`,
+    );
+  }
+
+  return result.recordWrite;
+}
+
+async function validateRecordPlanStepWriteAsync(
+  step: RecordPlanStepSchema,
+  state: RecordPlanPlanningState,
+  recordWrite: CreateRecordWriteRequest | PatchRecordWriteRequest | DeleteRecordWriteRequest,
+  options: { identityReferenceResolver?: IdentityReferenceTargetResolver },
+) {
+  const result = await validateRecordWriteRequestAsync(recordWrite, state.schema, state.storage, {
+    additionalRecords: [...state.plannedRecordsById.values()],
+    enforceGenericRecordWritePolicy: false,
+    identityReferenceResolver: options.identityReferenceResolver,
     packageResolver: state.packageResolver,
   });
 

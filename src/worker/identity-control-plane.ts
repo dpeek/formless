@@ -4,6 +4,7 @@ import {
   IDENTITY_COLLABORATOR_INVITATIONS_API_PATH,
   IDENTITY_CONTROL_PLANE_SCHEMA_KEY,
   IDENTITY_CONTROL_PLANE_STORAGE_IDENTITY,
+  identityControlPlaneRecordSourceEntityName,
   identityControlPlaneRoleKeys,
   identityControlPlaneSchemaProvenance,
   identityControlPlaneSchema,
@@ -38,6 +39,11 @@ import {
   type IdentityRoleValues,
   type IdentityOrganizationValues,
 } from "@dpeek/formless-identity-control-plane";
+import {
+  isIdentityReferenceTargetResolution,
+  type IdentityReferenceTargetLookup,
+  type IdentityReferenceTargetResolution,
+} from "./identity-reference-targets.ts";
 import { instanceControlPlaneProductionIdentityFromRecords } from "@dpeek/formless-instance-control-plane";
 import type { RecordValues, StoredRecord } from "@dpeek/formless-storage";
 import type { OperationCommandOutput } from "../shared/operation-invocation.ts";
@@ -122,6 +128,8 @@ export const INTERNAL_COLLABORATOR_INVITATION_ACCEPTANCE_STATUS_PATH =
   "/_internal/identity/collaborator-invitation-acceptance-status";
 export const INTERNAL_COLLABORATOR_INVITATION_ACCEPTANCE_COMMIT_PATH =
   "/_internal/identity/collaborator-invitation-acceptance-commit";
+export const INTERNAL_IDENTITY_APP_REFERENCE_TARGET_PATH =
+  "/_internal/identity/app-reference-target";
 const identityControlPlaneApp = {
   key: IDENTITY_CONTROL_PLANE_SCHEMA_KEY,
   label: "Identity control plane",
@@ -431,7 +439,7 @@ export async function handleIdentityControlPlaneDurableObjectRequest(
 
     ensureIdentityControlPlaneStorage(storage);
 
-    const result = executeAuthorityOperation({
+    const result = await executeAuthorityOperation({
       actorKind,
       app: identityControlPlaneApp,
       body,
@@ -554,6 +562,31 @@ export async function readIdentityCollaboratorInvitationAcceptanceStatus(
   return body.invitation ?? null;
 }
 
+export async function resolveIdentityAppReferenceTarget(
+  env: IdentityOwnerEnv,
+  lookup: IdentityReferenceTargetLookup,
+): Promise<IdentityReferenceTargetResolution> {
+  const response = await fetchIdentityOwnerInternal(
+    env,
+    INTERNAL_IDENTITY_APP_REFERENCE_TARGET_PATH,
+    {
+      body: JSON.stringify(lookup),
+      headers: { "Content-Type": "application/json" },
+      method: "POST",
+    },
+  );
+
+  if (!response.ok) {
+    return { kind: "unavailable" };
+  }
+
+  const body = (await response.json()) as { resolution?: unknown };
+
+  return isIdentityReferenceTargetResolution(body.resolution)
+    ? body.resolution
+    : { kind: "unavailable" };
+}
+
 export async function acceptIdentityCollaboratorInvitation(
   env: IdentityOwnerEnv,
   input: IdentityCollaboratorInvitationAcceptanceCommitInput,
@@ -595,6 +628,21 @@ async function handleIdentityOwnerInternalRequest(
   storage: DurableObjectStorage,
 ): Promise<Response | undefined> {
   const url = new URL(request.url);
+
+  if (url.pathname === INTERNAL_IDENTITY_APP_REFERENCE_TARGET_PATH) {
+    if (request.method !== "POST") {
+      return jsonResponse({ error: "Method not allowed." }, 405, { Allow: "POST" });
+    }
+
+    ensureIdentityControlPlaneStorage(storage);
+
+    return jsonResponse({
+      resolution: resolveIdentityAppReferenceTargetFromStorage(
+        storage,
+        parseIdentityAppReferenceTargetLookup(await readJson(request)),
+      ),
+    });
+  }
 
   if (url.pathname === INTERNAL_IDENTITY_OWNER_RESET_PATH) {
     if (request.method !== "POST") {
@@ -693,6 +741,62 @@ async function handleIdentityOwnerInternalRequest(
   } catch (error) {
     return jsonResponse({ error: errorMessage(error) }, 400);
   }
+}
+
+function parseIdentityAppReferenceTargetLookup(value: unknown): IdentityReferenceTargetLookup {
+  const object = parseRecord("Identity app reference target lookup", value);
+
+  assertAllowedKeys("Identity app reference target lookup", object, ["id", "target"]);
+
+  return {
+    id: parseNonEmptyString("Identity app reference target id", object.id),
+    target: parseNonEmptyString("Identity app reference target", object.target),
+  };
+}
+
+function resolveIdentityAppReferenceTargetFromStorage(
+  storage: DurableObjectStorage,
+  lookup: IdentityReferenceTargetLookup,
+): IdentityReferenceTargetResolution {
+  const entity = identityAppReferenceTargetEntity(lookup.target);
+
+  if (entity === undefined) {
+    return { kind: "unsupported" };
+  }
+
+  const record = getBootstrapRecords(storage).find((candidate) => candidate.id === lookup.id);
+
+  if (!record) {
+    return { kind: "missing" };
+  }
+
+  if (identityControlPlaneRecordSourceEntityName(record.entity) !== entity) {
+    return { kind: "wrong-entity" };
+  }
+
+  if (record.deletedAt) {
+    return { kind: "tombstoned" };
+  }
+
+  return { kind: "active" };
+}
+
+function identityAppReferenceTargetEntity(
+  value: string,
+): "group" | "organization" | "principal" | undefined {
+  if (value === "auth:principal") {
+    return "principal";
+  }
+
+  if (value === "auth:organization") {
+    return "organization";
+  }
+
+  if (value === "auth:group") {
+    return "group";
+  }
+
+  return undefined;
 }
 
 function ensureIdentityOwnerRecords(

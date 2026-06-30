@@ -538,7 +538,8 @@ describe("schema entity operations", () => {
             }),
           }),
         },
-        message: "must target an entity from the same schema",
+        message:
+          'entity "crm:task" references local entity "task" with a qualified name. Use local entity key "task".',
       },
       {
         operations: {

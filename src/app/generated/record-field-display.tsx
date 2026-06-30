@@ -1,7 +1,11 @@
 import { ColorSwatch } from "@dpeek/formless-ui/color-swatch";
 import { MarkdownRenderer } from "@dpeek/formless-ui/markdown";
 import { SvgIcon } from "@dpeek/formless-ui/svg-icon";
-import { useRecordFieldValue, useReferenceOptions } from "../../client/store.ts";
+import {
+  useRecordFieldValue,
+  useReferenceOptions,
+  type ReferenceOption,
+} from "../../client/store.ts";
 import type {
   FieldTableColumnConfig,
   RecordFieldConfig,
@@ -17,6 +21,11 @@ import {
   GeneratedFieldPresentationIcon,
 } from "./field-presentation.tsx";
 import { formatFieldDisplayValue } from "./format.ts";
+import {
+  EMPTY_GENERATED_REFERENCE_OPTIONS,
+  generatedReferenceDisplayLabel,
+  shouldUseAppReplicaReferenceOptions,
+} from "./reference-field-options.ts";
 import { StateMachineStateBadge } from "./state-machine-ui.tsx";
 
 type DisplayTableColumnConfig =
@@ -243,11 +252,45 @@ function RecordReferenceDisplay({
   recordValue: FieldValue | undefined;
   suffix?: string;
 }) {
+  if (!shouldUseAppReplicaReferenceOptions(field)) {
+    return (
+      <RecordReferenceDisplayValue
+        options={EMPTY_GENERATED_REFERENCE_OPTIONS}
+        recordValue={recordValue}
+        suffix={suffix}
+      />
+    );
+  }
+
+  return <LocalRecordReferenceDisplay field={field} recordValue={recordValue} suffix={suffix} />;
+}
+
+function LocalRecordReferenceDisplay({
+  field,
+  recordValue,
+  suffix,
+}: {
+  field: Extract<FieldSchema, { type: "reference" }>;
+  recordValue: FieldValue | undefined;
+  suffix?: string;
+}) {
   const options = useReferenceOptions(field.to, field.displayField);
-  const label =
-    typeof recordValue === "string"
-      ? (options.find((option) => option.id === recordValue)?.label ?? recordValue)
-      : "";
+
+  return (
+    <RecordReferenceDisplayValue options={options} recordValue={recordValue} suffix={suffix} />
+  );
+}
+
+function RecordReferenceDisplayValue({
+  options,
+  recordValue,
+  suffix,
+}: {
+  options: readonly ReferenceOption[];
+  recordValue: FieldValue | undefined;
+  suffix?: string;
+}) {
+  const label = generatedReferenceDisplayLabel(recordValue, options);
 
   return (
     <>

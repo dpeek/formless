@@ -29,7 +29,17 @@ import {
   FORMLESS_WORKSPACE_APP_PACKAGES_ENV_NAME,
   formatRuntimeWorkspaceAppPackages,
 } from "../shared/workspace-runtime-packages.ts";
-import { parseAppSchema, type AppSchema, type EntitySchema } from "@dpeek/formless-schema";
+import {
+  parseAppSchema,
+  type AppSchema,
+  type EntityOperationSchema,
+  type EntitySchema,
+  type RecordPlanStepSchema,
+} from "@dpeek/formless-schema";
+import {
+  IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX,
+  IDENTITY_CONTROL_PLANE_STORAGE_IDENTITY,
+} from "@dpeek/formless-identity-control-plane";
 import {
   crmSeedRecords,
   crmSourceSchema,
@@ -49,6 +59,8 @@ import {
   type AuthorityTestCommandOperationRequest,
   type AuthorityTestRecordOperationRequest,
 } from "../test/authority-write.ts";
+import { resetTestIdentityStorage } from "../test/identity-owner.ts";
+import { INTERNAL_IDENTITY_APP_REFERENCE_TARGET_PATH } from "./identity-control-plane.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
 import { PUBLIC_SITE_TREE_CACHE_CONTROL } from "@dpeek/formless-site-app/worker";
 
@@ -56,6 +68,7 @@ type Harness = Awaited<ReturnType<typeof createWorkerHarness>>;
 
 let harness: Harness;
 let authority: AuthorityWriteHelpers;
+const adminToken = "test-admin-token";
 
 function taskSchemaProvenance() {
   const packageFacts = packageAppFactsForKey("tasks", bundledAppPackageResolver);
@@ -2345,6 +2358,302 @@ describe("authority", () => {
     );
   });
 
+  it("validates app identity references against identity control-plane targets", async () => {
+    const privateHarness = await createIdentityReferenceHarness();
+
+    try {
+      await resetTestIdentityStorage(privateHarness, adminToken);
+
+      const principal = await createIdentityPrincipal(
+        privateHarness,
+        "app-ref-principal",
+        "App Principal",
+      );
+      const nextPrincipal = await createIdentityPrincipal(
+        privateHarness,
+        "app-ref-next-principal",
+        "App Next Principal",
+      );
+      const organization = await createIdentityOrganization(
+        privateHarness,
+        "app-ref-organization",
+        "App Organization",
+      );
+      const group = await createIdentityGroup(privateHarness, "app-ref-group", "App Group");
+
+      await postPrivateJson<SchemaUpdateResponse>(privateHarness, "/api/schema", {
+        schema: schemaWithIdentityReferenceAccount(),
+      });
+
+      const account = await postPrivateRecordOperation(privateHarness, {
+        idempotencyKey: "write-account-identity-refs",
+        entity: "account",
+        operationName: "create",
+        input: {
+          name: "Identity account",
+          ownerPrincipal: principal.id,
+          organization: organization.id,
+          group: group.id,
+        },
+      });
+      const patched = await postPrivateRecordOperation(privateHarness, {
+        idempotencyKey: "patch-account-identity-ref",
+        entity: "account",
+        operationName: "update",
+        recordId: account.record.id,
+        input: { ownerPrincipal: nextPrincipal.id },
+      });
+      const planned = await postPrivateCommandOperation(privateHarness, {
+        idempotencyKey: "plan-account-identity-refs",
+        entity: "account",
+        operationName: "createFromPlan",
+        input: {
+          name: "Planned identity account",
+          ownerPrincipal: principal.id,
+          organization: organization.id,
+          group: group.id,
+        },
+      });
+
+      expect(account.record.values).toMatchObject({
+        ownerPrincipal: principal.id,
+        organization: organization.id,
+        group: group.id,
+      });
+      expect(patched.record.values.ownerPrincipal).toBe(nextPrincipal.id);
+      expect(planned.changes[0]?.payload).toMatchObject({
+        entity: "account",
+        values: {
+          name: "Planned identity account",
+          ownerPrincipal: principal.id,
+          organization: organization.id,
+          group: group.id,
+        },
+      });
+
+      await expectPrivateRecordOperationError(
+        privateHarness,
+        {
+          idempotencyKey: "write-missing-identity-ref",
+          entity: "account",
+          operationName: "create",
+          input: {
+            name: "Missing identity",
+            ownerPrincipal: "missing-principal",
+            organization: organization.id,
+            group: group.id,
+          },
+        },
+        'Field "ownerPrincipal" references unknown auth:principal record "missing-principal".',
+      );
+      await expectPrivateRecordOperationError(
+        privateHarness,
+        {
+          idempotencyKey: "write-wrong-identity-ref",
+          entity: "account",
+          operationName: "create",
+          input: {
+            name: "Wrong identity entity",
+            ownerPrincipal: group.id,
+            organization: organization.id,
+            group: group.id,
+          },
+        },
+        'Field "ownerPrincipal" must reference a auth:principal record.',
+      );
+
+      const tombstonedGroup = await createIdentityGroup(
+        privateHarness,
+        "app-ref-tombstoned-group",
+        "Removed Group",
+      );
+      await tombstoneIdentityRecord(privateHarness, tombstonedGroup.id);
+
+      await expectPrivateRecordOperationError(
+        privateHarness,
+        {
+          idempotencyKey: "write-tombstoned-identity-ref",
+          entity: "account",
+          operationName: "create",
+          input: {
+            name: "Tombstoned identity",
+            ownerPrincipal: principal.id,
+            organization: organization.id,
+            group: tombstonedGroup.id,
+          },
+        },
+        `Field "group" cannot reference tombstoned record "${tombstonedGroup.id}".`,
+      );
+    } finally {
+      await privateHarness.dispose();
+    }
+  });
+
+  it("validates app identity references during snapshot restore", async () => {
+    const privateHarness = await createIdentityReferenceHarness();
+
+    try {
+      await resetTestIdentityStorage(privateHarness, adminToken);
+
+      const principal = await createIdentityPrincipal(
+        privateHarness,
+        "restore-app-ref-principal",
+        "Restore Principal",
+      );
+      const organization = await createIdentityOrganization(
+        privateHarness,
+        "restore-app-ref-organization",
+        "Restore Organization",
+      );
+      const group = await createIdentityGroup(
+        privateHarness,
+        "restore-app-ref-group",
+        "Restore Group",
+      );
+      const wrongEntityGroup = await createIdentityGroup(
+        privateHarness,
+        "restore-app-ref-wrong-group",
+        "Restore Wrong Group",
+      );
+      const tombstonedGroup = await createIdentityGroup(
+        privateHarness,
+        "restore-app-ref-tombstoned-group",
+        "Restore Tombstoned Group",
+      );
+      await tombstoneIdentityRecord(privateHarness, tombstonedGroup.id);
+
+      const schema = schemaWithIdentityReferenceAccount();
+      const account = identityReferenceAccountSnapshotRecord({
+        ownerPrincipal: principal.id,
+        organization: organization.id,
+        group: group.id,
+      });
+      const restored = await postPrivateJson<BootstrapResponse>(
+        privateHarness,
+        "/api/snapshot/restore",
+        storageSnapshot({ schema, records: [account] }),
+      );
+
+      expect(restored.records).toContainEqual(account);
+
+      await expectPrivateError(
+        privateHarness,
+        "/api/snapshot/restore",
+        storageSnapshot({
+          schema,
+          records: [
+            identityReferenceAccountSnapshotRecord({
+              id: "snapshot-account-missing-identity",
+              ownerPrincipal: "missing-principal",
+              organization: organization.id,
+              group: group.id,
+            }),
+          ],
+        }),
+        'Field "ownerPrincipal" references unknown auth:principal record "missing-principal".',
+      );
+      await expectPrivateError(
+        privateHarness,
+        "/api/snapshot/restore",
+        storageSnapshot({
+          schema,
+          records: [
+            identityReferenceAccountSnapshotRecord({
+              id: "snapshot-account-wrong-identity",
+              ownerPrincipal: wrongEntityGroup.id,
+              organization: organization.id,
+              group: group.id,
+            }),
+          ],
+        }),
+        'Field "ownerPrincipal" must reference a auth:principal record.',
+      );
+      await expectPrivateError(
+        privateHarness,
+        "/api/snapshot/restore",
+        storageSnapshot({
+          schema,
+          records: [
+            identityReferenceAccountSnapshotRecord({
+              id: "snapshot-account-tombstoned-identity",
+              ownerPrincipal: principal.id,
+              organization: organization.id,
+              group: tombstonedGroup.id,
+            }),
+          ],
+        }),
+        `Field "group" cannot reference tombstoned record "${tombstonedGroup.id}".`,
+      );
+    } finally {
+      await privateHarness.dispose();
+    }
+  });
+
+  it("keeps app identity references compatible without local target records", async () => {
+    const privateHarness = await createIdentityReferenceHarness();
+
+    try {
+      await resetTestIdentityStorage(privateHarness, adminToken);
+
+      const principal = await createIdentityPrincipal(
+        privateHarness,
+        "compatible-app-ref-principal",
+        "Compatible Principal",
+      );
+      const organization = await createIdentityOrganization(
+        privateHarness,
+        "compatible-app-ref-organization",
+        "Compatible Organization",
+      );
+      const group = await createIdentityGroup(
+        privateHarness,
+        "compatible-app-ref-group",
+        "Compatible Group",
+      );
+      const schema = schemaWithIdentityReferenceAccount();
+
+      await postPrivateJson<SchemaUpdateResponse>(privateHarness, "/api/schema", { schema });
+      await postPrivateRecordOperation(privateHarness, {
+        idempotencyKey: "write-compatible-identity-account",
+        entity: "account",
+        operationName: "create",
+        input: {
+          name: "Compatible identity account",
+          ownerPrincipal: principal.id,
+          organization: organization.id,
+          group: group.id,
+        },
+      });
+
+      const updated = await postPrivateJson<SchemaUpdateResponse>(privateHarness, "/api/schema", {
+        schema,
+      });
+
+      expect(updated.schema.entities.account?.fields.ownerPrincipal).toMatchObject({
+        type: "reference",
+        to: "auth:principal",
+      });
+    } finally {
+      await privateHarness.dispose();
+    }
+  });
+
+  it("rejects unsupported identity app reference lookup targets", async () => {
+    const response = await harness.durableObjectFetch(
+      "FORMLESS_AUTHORITY",
+      IDENTITY_CONTROL_PLANE_STORAGE_IDENTITY,
+      INTERNAL_IDENTITY_APP_REFERENCE_TARGET_PATH,
+      {
+        body: JSON.stringify({ id: "role:instance.owner", target: "auth:role" }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      },
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ resolution: { kind: "unsupported" } });
+  });
+
   it("checks reference schema compatibility against existing records", async () => {
     await postJson<SchemaUpdateResponse>("/api/schema", {
       schema: schemaWithTaskProjectReference({ required: false }),
@@ -3845,6 +4154,169 @@ function schemaWithRequiredScore() {
   };
 }
 
+function schemaWithIdentityReferenceAccount(): AppSchema {
+  const fields = identityReferenceAccountFields();
+
+  return {
+    version: 1,
+    entities: {
+      ...appSchema.entities,
+      account: {
+        label: "Account",
+        fields,
+        operations: taskOperations("Account", fields, {
+          createFromPlan: identityReferenceAccountPlanOperation(),
+        }),
+      },
+    },
+    queries: {
+      ...appSchema.queries,
+      accountAll: {
+        label: "All accounts",
+        entity: "account",
+        expression: { kind: "all" },
+      },
+    },
+    itemViews: {
+      ...appSchema.itemViews,
+      accountListItem: {
+        entity: "account",
+        fields: {
+          name: { editor: "text", commit: "field-commit" },
+          ownerPrincipal: { editor: "reference", commit: "immediate" },
+          organization: { editor: "reference", commit: "immediate" },
+          group: { editor: "reference", commit: "immediate" },
+        },
+      },
+    },
+    tableViews: appSchema.tableViews,
+    views: {
+      ...appSchema.views,
+      accountHome: {
+        type: "collection",
+        label: "Accounts",
+        entity: "account",
+        queries: [{ query: "accountAll" }],
+        defaultQuery: "accountAll",
+        result: { type: "list", itemView: "accountListItem" },
+      },
+      accountCreate: {
+        type: "create",
+        entity: "account",
+        fields: {
+          name: { editor: "text" },
+          ownerPrincipal: { editor: "reference" },
+          organization: { editor: "reference" },
+          group: { editor: "reference" },
+        },
+      },
+    },
+    screens: appSchema.screens,
+  } as AppSchema;
+}
+
+function identityReferenceAccountFields(): EntitySchema["fields"] {
+  return {
+    name: { type: "text", required: true, label: "Name" },
+    ownerPrincipal: {
+      type: "reference",
+      required: true,
+      label: "Owner principal",
+      to: "auth:principal",
+    },
+    organization: {
+      type: "reference",
+      required: true,
+      label: "Organization",
+      to: "auth:organization",
+    },
+    group: {
+      type: "reference",
+      required: true,
+      label: "Group",
+      to: "auth:group",
+    },
+  };
+}
+
+function identityReferenceAccountSnapshotRecord({
+  group,
+  id = "snapshot-account-identity-refs",
+  name = "Restored identity account",
+  organization,
+  ownerPrincipal,
+}: {
+  group: string;
+  id?: string;
+  name?: string;
+  organization: string;
+  ownerPrincipal: string;
+}): StoredRecord {
+  return {
+    id,
+    entity: "account",
+    values: {
+      name,
+      ownerPrincipal,
+      organization,
+      group,
+    },
+    createdAt: "2026-06-30T00:00:00.000Z",
+    updatedAt: "2026-06-30T00:00:00.000Z",
+  };
+}
+
+function identityReferenceAccountPlanOperation(): EntityOperationSchema {
+  return {
+    label: "Create account from plan",
+    kind: "command",
+    scope: "collection",
+    input: {
+      fields: {
+        name: { field: "name" },
+        ownerPrincipal: { field: "ownerPrincipal" },
+        organization: { field: "organization" },
+        group: { field: "group" },
+      },
+    },
+    effect: {
+      type: "recordPlan",
+      steps: identityReferenceAccountPlanSteps(),
+    },
+    output: { type: "command" },
+    idempotency: { required: true },
+    audit: { input: "summary" },
+  };
+}
+
+function identityReferenceAccountPlanSteps(): RecordPlanStepSchema[] {
+  return [
+    {
+      name: "createAccount",
+      kind: "create",
+      entity: "account",
+      values: {
+        name: { kind: "input", field: "name" },
+        ownerPrincipal: {
+          kind: "reference",
+          entity: "auth:principal",
+          id: { kind: "input", field: "ownerPrincipal" },
+        },
+        organization: {
+          kind: "reference",
+          entity: "auth:organization",
+          id: { kind: "input", field: "organization" },
+        },
+        group: {
+          kind: "reference",
+          entity: "auth:group",
+          id: { kind: "input", field: "group" },
+        },
+      },
+    },
+  ];
+}
+
 function schemaWithRateReferences({
   constraints,
 }: {
@@ -4293,6 +4765,222 @@ function installedAppApiPath(packageAppKey: string, installId: string, path: str
   }
 
   return `/api/app-installs/${packageAppKey}/${installId}${path}`;
+}
+
+async function createIdentityReferenceHarness() {
+  return await createWorkerHarness(
+    "src/worker/index.ts",
+    {
+      FORMLESS_AUTHORITY: { className: "FormlessAuthority", useSQLite: true },
+    },
+    { bindings: { FORMLESS_ADMIN_TOKEN: adminToken } },
+  );
+}
+
+async function createIdentityPrincipal(
+  targetHarness: Harness,
+  idempotencyKey: string,
+  displayName: string,
+) {
+  return await postIdentityRecordOperation({
+    harness: targetHarness,
+    entity: "principal",
+    idempotencyKey,
+    operationName: "create",
+    input: {
+      displayName,
+      kind: "human",
+      status: "active",
+    },
+  });
+}
+
+async function createIdentityOrganization(
+  targetHarness: Harness,
+  idempotencyKey: string,
+  displayName: string,
+) {
+  return await postIdentityRecordOperation({
+    harness: targetHarness,
+    entity: "organization",
+    idempotencyKey,
+    operationName: "create",
+    input: {
+      displayName,
+      status: "active",
+    },
+  });
+}
+
+async function createIdentityGroup(
+  targetHarness: Harness,
+  idempotencyKey: string,
+  displayName: string,
+) {
+  return await postIdentityRecordOperation({
+    harness: targetHarness,
+    entity: "group",
+    idempotencyKey,
+    operationName: "create",
+    input: {
+      displayName,
+      status: "active",
+    },
+  });
+}
+
+async function postIdentityRecordOperation(
+  body: AuthorityTestRecordOperationRequest & { harness: Harness },
+) {
+  const { harness: targetHarness, ...operationBody } = body;
+  const request = recordOperationRequest(operationBody);
+  const response = await targetHarness.fetch(
+    `${IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX}${request.path.slice("/api".length)}`,
+    {
+      body: JSON.stringify(request.body),
+      headers: {
+        Authorization: `Bearer ${adminToken}`,
+        "Content-Type": "application/json",
+      },
+      method: "POST",
+    },
+  );
+
+  expect(response.status).toBe(200);
+
+  return request.response(await response.json()).record;
+}
+
+async function tombstoneIdentityRecord(targetHarness: Harness, recordId: string) {
+  const snapshotResponse = await targetHarness.fetch(
+    `${IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX}/snapshot`,
+    {
+      headers: { Authorization: `Bearer ${adminToken}` },
+    },
+  );
+
+  expect(snapshotResponse.status).toBe(200);
+
+  const snapshot = (await snapshotResponse.json()) as StorageSnapshot;
+  const tombstonedAt = "2026-06-30T00:00:00.000Z";
+  const restoreResponse = await targetHarness.fetch(
+    `${IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX}/snapshot/restore`,
+    {
+      body: JSON.stringify({
+        ...snapshot,
+        records: snapshot.records.map((record) =>
+          record.id === recordId
+            ? { ...record, updatedAt: tombstonedAt, deletedAt: tombstonedAt }
+            : record,
+        ),
+      }),
+      headers: {
+        Authorization: `Bearer ${adminToken}`,
+        "Content-Type": "application/json",
+      },
+      method: "POST",
+    },
+  );
+
+  expect(restoreResponse.status).toBe(200);
+}
+
+async function postPrivateJson<T>(targetHarness: Harness, path: string, body: unknown) {
+  const response = await targetHarness.fetch(privateTasksApiPath(path), {
+    body: JSON.stringify(body),
+    headers: privateWriteHeaders(),
+    method: "POST",
+  });
+  const responseBody = await response.json();
+
+  if (response.status !== 200) {
+    throw new Error(`Private request failed: ${response.status} ${JSON.stringify(responseBody)}`);
+  }
+
+  return responseBody as T;
+}
+
+async function expectPrivateError(
+  targetHarness: Harness,
+  path: string,
+  body: unknown,
+  message: string,
+) {
+  const response = await targetHarness.fetch(privateTasksApiPath(path), {
+    body: JSON.stringify(body),
+    headers: privateWriteHeaders(),
+    method: "POST",
+  });
+
+  expect(response.status).toBe(400);
+  expect((await response.json()) as { error: string }).toEqual({
+    error: expect.stringContaining(message),
+  });
+}
+
+async function postPrivateRecordOperation(
+  targetHarness: Harness,
+  body: AuthorityTestRecordOperationRequest,
+) {
+  const request = recordOperationRequest(body);
+  const response = await targetHarness.fetch(privateTasksApiPath(request.path), {
+    body: JSON.stringify(request.body),
+    headers: privateWriteHeaders(),
+    method: "POST",
+  });
+
+  expect(response.status).toBe(200);
+
+  return request.response(await response.json());
+}
+
+async function expectPrivateRecordOperationError(
+  targetHarness: Harness,
+  body: AuthorityTestRecordOperationRequest,
+  message: string,
+) {
+  const request = recordOperationRequest(body);
+  const response = await targetHarness.fetch(privateTasksApiPath(request.path), {
+    body: JSON.stringify(request.body),
+    headers: privateWriteHeaders(),
+    method: "POST",
+  });
+
+  expect(response.status).toBe(400);
+  expect((await response.json()) as { error: string }).toEqual({
+    error: expect.stringContaining(message),
+  });
+}
+
+async function postPrivateCommandOperation(
+  targetHarness: Harness,
+  body: AuthorityTestCommandOperationRequest,
+) {
+  const request = commandOperationRequest(body);
+  const response = await targetHarness.fetch(privateTasksApiPath(request.path), {
+    body: JSON.stringify(request.body),
+    headers: privateWriteHeaders(),
+    method: "POST",
+  });
+
+  expect(response.status).toBe(200);
+
+  return request.response(await response.json());
+}
+
+function privateTasksApiPath(path: string) {
+  if (!path.startsWith("/api/")) {
+    throw new Error(`Expected API path, received "${path}".`);
+  }
+
+  return `/api/tasks${path.slice("/api".length)}`;
+}
+
+function privateWriteHeaders() {
+  return {
+    Authorization: `Bearer ${adminToken}`,
+    "Content-Type": "application/json",
+  };
 }
 
 async function postCreateOperation(idempotencyKey: string, values: Record<string, unknown>) {

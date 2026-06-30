@@ -1,5 +1,6 @@
 import {
   isSystemFieldName,
+  isSupportedIdentityReferenceTarget,
   isValidStoredFieldValue as isValidStoredFieldValueForType,
   parseAppSchema,
   runtimeControlPlaneEntityMetadata,
@@ -26,6 +27,10 @@ import type {
 } from "./record-write-requests.ts";
 import { assertExistingRecordsSatisfyUniqueConstraints } from "./constraints.ts";
 import { BadRequestError } from "./errors.ts";
+import type {
+  IdentityReferenceTargetResolution,
+  IdentityReferenceTargetResolver,
+} from "./identity-reference-targets.ts";
 import {
   getBootstrapRecords,
   getRecordWriteResponseById,
@@ -47,6 +52,7 @@ type RecordWriteValidationOptions = {
   additionalRecords?: StoredRecord[];
   allowStoredReplay?: boolean;
   enforceGenericRecordWritePolicy?: boolean;
+  identityReferenceResolver?: IdentityReferenceTargetResolver;
   packageResolver?: AppPackageResolver;
 };
 
@@ -212,6 +218,170 @@ export function validateRecordWriteRequest(
   };
 }
 
+export async function validateRecordWriteRequestAsync(
+  value: unknown,
+  schema: AppSchema,
+  storage: DurableObjectStorage,
+  options: RecordWriteValidationOptions = {},
+): Promise<ValidatedRecordWrite> {
+  if (!isRecord(value)) {
+    throw new BadRequestError("Record write request must be an object.");
+  }
+
+  if (typeof value.writeId !== "string" || value.writeId.trim() === "") {
+    throw new BadRequestError("Record write request must include a non-empty writeId.");
+  }
+
+  if (value.kind !== "create" && value.kind !== "patch" && value.kind !== "delete") {
+    throw new BadRequestError('Only "create", "patch", and "delete" record writes are supported.');
+  }
+
+  if (typeof value.entity !== "string") {
+    throw new BadRequestError("Record write request must include an entity.");
+  }
+
+  const entity = schema.entities[value.entity];
+  if (!entity) {
+    throw new BadRequestError(`Unknown entity "${value.entity}".`);
+  }
+
+  if (options.allowStoredReplay !== false) {
+    const replay = getRecordWriteResponseById(storage, value.writeId);
+    if (replay) {
+      return { outcome: replayedWrite(replay) };
+    }
+  }
+
+  if (options.enforceGenericRecordWritePolicy !== false) {
+    assertRuntimeHistoryAllowsGenericRecordWrite(schema, value.entity, value.kind);
+
+    if (value.kind === "create" && !entityHasOperationKind(entity, "create")) {
+      throw new BadRequestError(`Create record writes are disabled for entity "${value.entity}".`);
+    }
+
+    if (value.kind === "patch" && !entityHasOperationKind(entity, "update")) {
+      throw new BadRequestError(`Patch record writes are disabled for entity "${value.entity}".`);
+    }
+
+    if (value.kind === "delete" && !entityHasOperationKind(entity, "delete")) {
+      throw new BadRequestError(`Delete record writes are disabled for entity "${value.entity}".`);
+    }
+  }
+
+  if (value.kind === "delete") {
+    if ("values" in value) {
+      throw new BadRequestError("Delete record write must not include values.");
+    }
+
+    if (typeof value.recordId !== "string" || value.recordId.trim() === "") {
+      throw new BadRequestError("Delete record write must include a recordId.");
+    }
+
+    const existingRecord = getStoredRecordForValidation(
+      storage,
+      value.recordId,
+      options.additionalRecords,
+    );
+    if (!existingRecord) {
+      throw new BadRequestError(`Unknown record "${value.recordId}".`);
+    }
+
+    if (existingRecord.entity !== value.entity) {
+      throw new BadRequestError("Delete entity must match the stored record entity.");
+    }
+
+    if (existingRecord.deletedAt) {
+      throw new BadRequestError(`Cannot delete tombstoned record "${value.recordId}".`);
+    }
+
+    assertNoActiveInboundReferences(existingRecord, schema, storage, options.additionalRecords);
+
+    return {
+      recordWrite: {
+        writeId: value.writeId,
+        entity: value.entity,
+        kind: "delete",
+        recordId: value.recordId,
+      } satisfies DeleteRecordWriteRequest,
+    };
+  }
+
+  if (!isRecord(value.values)) {
+    throw new BadRequestError("Record write request values must be an object.");
+  }
+
+  if (value.kind === "patch") {
+    if (typeof value.recordId !== "string" || value.recordId.trim() === "") {
+      throw new BadRequestError("Patch record write must include a recordId.");
+    }
+
+    const existingRecord = getStoredRecordForValidation(
+      storage,
+      value.recordId,
+      options.additionalRecords,
+    );
+    if (!existingRecord) {
+      throw new BadRequestError(`Unknown record "${value.recordId}".`);
+    }
+
+    if (existingRecord.entity !== value.entity) {
+      throw new BadRequestError("Patch entity must match the stored record entity.");
+    }
+
+    if (existingRecord.deletedAt) {
+      throw new BadRequestError(`Cannot patch tombstoned record "${value.recordId}".`);
+    }
+
+    const patchValues = validatePatchValues(value.values, entity);
+    assertImmutableFieldsNotPatched(schema, value.entity, patchValues);
+    assertStateMachineFieldsNotPatched(value.entity, entity, existingRecord, patchValues);
+    const recordValues = await validateRecordValuesAsync(
+      { ...existingRecord.values, ...patchValues },
+      entity,
+      storage,
+      {
+        additionalRecords: options.additionalRecords,
+        entityName: value.entity,
+        existingRecordId: value.recordId,
+        identityReferenceResolver: options.identityReferenceResolver,
+        packageResolver: options.packageResolver,
+        schema,
+      },
+    );
+
+    return {
+      recordWrite: {
+        writeId: value.writeId,
+        entity: value.entity,
+        kind: "patch",
+        recordId: value.recordId,
+        values: patchValues,
+        recordValues,
+      },
+    };
+  }
+
+  return {
+    recordWrite: {
+      writeId: value.writeId,
+      entity: value.entity,
+      kind: "create",
+      values: await validateRecordValuesAsync(
+        normalizeStateMachineCreateValues(value.entity, entity, value.values),
+        entity,
+        storage,
+        {
+          additionalRecords: options.additionalRecords,
+          entityName: value.entity,
+          identityReferenceResolver: options.identityReferenceResolver,
+          packageResolver: options.packageResolver,
+          schema,
+        },
+      ),
+    } satisfies CreateRecordWriteRequest,
+  };
+}
+
 export function validateSchemaUpdateRequest(
   value: unknown,
   currentSchema: AppSchema,
@@ -245,10 +415,11 @@ export function validateSourceSchemaReset(
   assertExistingRecordsSatisfyUniqueConstraints(sourceSchema, records);
 }
 
-export function validateStorageSnapshotRestore(
+export async function validateStorageSnapshotRestore(
   value: unknown,
   expected: { schemaKey: string; storageIdentity: string },
-): StorageSnapshot {
+  options: { identityReferenceResolver?: IdentityReferenceTargetResolver } = {},
+): Promise<StorageSnapshot> {
   let snapshot: StorageSnapshot;
 
   try {
@@ -259,7 +430,7 @@ export function validateStorageSnapshotRestore(
     );
   }
 
-  validateSnapshotRecords(snapshot);
+  await validateSnapshotRecords(snapshot, options);
   assertIsoTimestamp("Storage snapshot exportedAt", snapshot.exportedAt);
   assertIsoTimestamp("Storage snapshot schemaUpdatedAt", snapshot.schemaUpdatedAt);
   assertExistingRecordsSatisfyUniqueConstraints(snapshot.schema, snapshot.records);
@@ -267,7 +438,10 @@ export function validateStorageSnapshotRestore(
   return snapshot;
 }
 
-function validateSnapshotRecords(snapshot: StorageSnapshot) {
+async function validateSnapshotRecords(
+  snapshot: StorageSnapshot,
+  options: { identityReferenceResolver?: IdentityReferenceTargetResolver },
+) {
   const recordsById = new Map<string, StoredRecord>();
 
   for (const record of snapshot.records) {
@@ -290,15 +464,16 @@ function validateSnapshotRecords(snapshot: StorageSnapshot) {
   }
 
   for (const record of snapshot.records) {
-    validateSnapshotRecord(record, snapshot.schema, recordsById);
+    await validateSnapshotRecord(record, snapshot.schema, recordsById, options);
     assertControlPlaneRecordValuesAreDisplaySafe(record.values, snapshot.schema, record.entity);
   }
 }
 
-function validateSnapshotRecord(
+async function validateSnapshotRecord(
   record: StoredRecord,
   schema: AppSchema,
   recordsById: Map<string, StoredRecord>,
+  options: { identityReferenceResolver?: IdentityReferenceTargetResolver },
 ) {
   const entity = schema.entities[record.entity];
 
@@ -322,6 +497,27 @@ function validateSnapshotRecord(
     if (!isValidStoredFieldValue(fieldValue, field, recordsById)) {
       throw new BadRequestError(
         `Storage snapshot record "${record.id}" has invalid field "${record.entity}.${fieldName}".`,
+      );
+    }
+
+    if (
+      field.type === "reference" &&
+      fieldValue !== undefined &&
+      isSupportedIdentityReferenceTarget(field.to)
+    ) {
+      if (typeof fieldValue !== "string") {
+        throw new Error("Identity reference field validation returned a non-string value.");
+      }
+
+      if (!options.identityReferenceResolver) {
+        throw new BadRequestError(
+          `Identity reference validation is unavailable for field "${fieldName}".`,
+        );
+      }
+
+      assertIdentityReferenceTargetResolution(
+        { fieldName, target: field.to, value: fieldValue },
+        await options.identityReferenceResolver({ id: fieldValue, target: field.to }),
       );
     }
   }
@@ -430,14 +626,58 @@ export function validateRecordValues(
   values: Record<string, unknown>,
   entity: EntitySchema,
   storage: DurableObjectStorage,
-  runtimeOptions?: {
-    additionalRecords?: StoredRecord[];
-    entityName: string;
-    existingRecordId?: string;
-    packageResolver?: AppPackageResolver;
-    schema: AppSchema;
-  },
+  runtimeOptions?: RuntimeRecordValueValidationOptions,
 ): RecordValues {
+  const { references, validated } = validateRecordValuesBase(values, entity);
+
+  for (const reference of references) {
+    validateLocalReferenceFieldValue(reference, storage, runtimeOptions?.additionalRecords);
+  }
+
+  validateRuntimeRecordValues(validated, storage, runtimeOptions);
+
+  return validated;
+}
+
+async function validateRecordValuesAsync(
+  values: Record<string, unknown>,
+  entity: EntitySchema,
+  storage: DurableObjectStorage,
+  runtimeOptions: RuntimeRecordValueValidationOptions,
+): Promise<RecordValues> {
+  const { references, validated } = validateRecordValuesBase(values, entity);
+
+  for (const reference of references) {
+    await validateReferenceFieldValueAsync(reference, storage, runtimeOptions);
+  }
+
+  validateRuntimeRecordValues(validated, storage, runtimeOptions);
+
+  return validated;
+}
+
+type RuntimeRecordValueValidationOptions = {
+  additionalRecords?: StoredRecord[];
+  entityName: string;
+  existingRecordId?: string;
+  identityReferenceResolver?: IdentityReferenceTargetResolver;
+  packageResolver?: AppPackageResolver;
+  schema: AppSchema;
+};
+
+type ReferenceFieldValidation = {
+  fieldName: string;
+  target: string;
+  value: string;
+};
+
+function validateRecordValuesBase(
+  values: Record<string, unknown>,
+  entity: EntitySchema,
+): {
+  references: ReferenceFieldValidation[];
+  validated: RecordValues;
+} {
   assertNoSystemRecordValues("Record values", values, entity);
 
   for (const fieldName of Object.keys(values)) {
@@ -447,6 +687,7 @@ export function validateRecordValues(
   }
 
   const validated: RecordValues = {};
+  const references: ReferenceFieldValidation[] = [];
 
   for (const [fieldName, field] of Object.entries(entity.fields)) {
     const fieldValue = values[fieldName];
@@ -467,31 +708,107 @@ export function validateRecordValues(
         throw new Error("Reference field validation returned a non-string value.");
       }
 
-      const targetRecord = getStoredRecordForValidation(
-        storage,
-        result.value,
-        runtimeOptions?.additionalRecords,
-      );
-      if (!targetRecord) {
-        throw new BadRequestError(
-          `Field "${fieldName}" references unknown ${field.to} record "${result.value}".`,
-        );
-      }
-
-      if (targetRecord.entity !== field.to) {
-        throw new BadRequestError(`Field "${fieldName}" must reference a ${field.to} record.`);
-      }
-
-      if (targetRecord.deletedAt) {
-        throw new BadRequestError(
-          `Field "${fieldName}" cannot reference tombstoned record "${result.value}".`,
-        );
-      }
+      references.push({ fieldName, target: field.to, value: result.value });
     }
 
     validated[fieldName] = result.value;
   }
 
+  return { references, validated };
+}
+
+function validateLocalReferenceFieldValue(
+  reference: ReferenceFieldValidation,
+  storage: DurableObjectStorage,
+  additionalRecords: StoredRecord[] | undefined,
+) {
+  const targetRecord = getStoredRecordForValidation(storage, reference.value, additionalRecords);
+  if (!targetRecord) {
+    throw new BadRequestError(
+      `Field "${reference.fieldName}" references unknown ${reference.target} record "${reference.value}".`,
+    );
+  }
+
+  if (targetRecord.entity !== reference.target) {
+    throw new BadRequestError(
+      `Field "${reference.fieldName}" must reference a ${reference.target} record.`,
+    );
+  }
+
+  if (targetRecord.deletedAt) {
+    throw new BadRequestError(
+      `Field "${reference.fieldName}" cannot reference tombstoned record "${reference.value}".`,
+    );
+  }
+}
+
+async function validateReferenceFieldValueAsync(
+  reference: ReferenceFieldValidation,
+  storage: DurableObjectStorage,
+  runtimeOptions: RuntimeRecordValueValidationOptions,
+) {
+  if (isSupportedIdentityReferenceTarget(reference.target)) {
+    if (!runtimeOptions.identityReferenceResolver) {
+      throw new BadRequestError(
+        `Identity reference validation is unavailable for field "${reference.fieldName}".`,
+      );
+    }
+
+    assertIdentityReferenceTargetResolution(
+      reference,
+      await runtimeOptions.identityReferenceResolver({
+        id: reference.value,
+        target: reference.target,
+      }),
+    );
+    return;
+  }
+
+  validateLocalReferenceFieldValue(reference, storage, runtimeOptions.additionalRecords);
+}
+
+function assertIdentityReferenceTargetResolution(
+  reference: ReferenceFieldValidation,
+  resolution: IdentityReferenceTargetResolution,
+) {
+  if (resolution.kind === "active") {
+    return;
+  }
+
+  if (resolution.kind === "missing") {
+    throw new BadRequestError(
+      `Field "${reference.fieldName}" references unknown ${reference.target} record "${reference.value}".`,
+    );
+  }
+
+  if (resolution.kind === "wrong-entity") {
+    throw new BadRequestError(
+      `Field "${reference.fieldName}" must reference a ${reference.target} record.`,
+    );
+  }
+
+  if (resolution.kind === "tombstoned") {
+    throw new BadRequestError(
+      `Field "${reference.fieldName}" cannot reference tombstoned record "${reference.value}".`,
+    );
+  }
+
+  if (resolution.kind === "unsupported") {
+    throw new BadRequestError(
+      `Field "${reference.fieldName}" references unsupported identity target "${reference.target}".`,
+    );
+  }
+
+  throw new BadRequestError(
+    `Identity reference validation is unavailable for field "${reference.fieldName}".`,
+  );
+}
+
+function validateRuntimeRecordValues(
+  validated: RecordValues,
+  storage: DurableObjectStorage,
+  runtimeOptions: RuntimeRecordValueValidationOptions | undefined,
+) {
   if (runtimeOptions) {
     assertControlPlaneRecordValuesAreDisplaySafe(
       validated,
@@ -508,8 +825,6 @@ export function validateRecordValues(
       runtimeOptions.packageResolver,
     );
   }
-
-  return validated;
 }
 
 function assertNoSystemRecordValues(
@@ -1367,6 +1682,10 @@ function isValidStoredFieldValue(
   if (field.type === "reference" && value !== undefined) {
     if (typeof value !== "string") {
       return false;
+    }
+
+    if (isSupportedIdentityReferenceTarget(field.to)) {
+      return true;
     }
 
     const targetRecord = recordsById.get(value);

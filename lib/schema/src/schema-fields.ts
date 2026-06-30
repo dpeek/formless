@@ -32,6 +32,20 @@ const textFieldFormats = [
   "icon",
 ] satisfies TextFieldFormat[];
 
+export const supportedIdentityReferenceTargets = [
+  "auth:principal",
+  "auth:organization",
+  "auth:group",
+] as const;
+
+export type SupportedIdentityReferenceTarget = (typeof supportedIdentityReferenceTargets)[number];
+
+export function isSupportedIdentityReferenceTarget(
+  value: string,
+): value is SupportedIdentityReferenceTarget {
+  return (supportedIdentityReferenceTargets as readonly string[]).includes(value);
+}
+
 export type ParsedEntityCatalog = {
   entities: Record<string, EntitySchema>;
   operationInputsByEntity: Record<string, unknown>;
@@ -80,11 +94,15 @@ function validateReferenceFields(entities: Record<string, EntitySchema>) {
         continue;
       }
 
-      const targetEntity = requireLocalEntityReference(
+      const targetEntity = resolveReferenceTarget(
         `Field "${entityName}.${fieldName}" reference target`,
         field.to,
         entities,
       );
+
+      if (targetEntity === undefined) {
+        continue;
+      }
 
       if (field.displayField === undefined) {
         continue;
@@ -106,11 +124,11 @@ function validateReferenceFields(entities: Record<string, EntitySchema>) {
   }
 }
 
-function requireLocalEntityReference(
+function resolveReferenceTarget(
   context: string,
   entityName: string,
   entities: Record<string, EntitySchema>,
-): EntitySchema {
+): EntitySchema | undefined {
   if (entityName.includes(":")) {
     const qualifiedName = parseQualifiedEntityName(`${context} "${entityName}"`, entityName);
 
@@ -118,6 +136,10 @@ function requireLocalEntityReference(
       throw new Error(
         `${context} "${entityName}" references local entity "${qualifiedName.entityKey}" with a qualified name. Use local entity key "${qualifiedName.entityKey}".`,
       );
+    }
+
+    if (isSupportedIdentityReferenceTarget(entityName)) {
+      return undefined;
     }
   } else {
     assertSchemaLocalEntityKey(`${context} "${entityName}"`, entityName);

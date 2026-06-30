@@ -44,6 +44,7 @@ import { handleInstanceControlPlaneDurableObjectRequest } from "./instance-contr
 import {
   handleCollaboratorInvitationDeliveryDurableObjectRequest,
   handleIdentityControlPlaneDurableObjectRequest,
+  resolveIdentityAppReferenceTarget,
 } from "./identity-control-plane.ts";
 import {
   LaunchFixtureConfigurationError,
@@ -367,6 +368,8 @@ export class FormlessAuthority extends DurableObject<Env> {
           body,
           env: this.bindings,
           identity: route.identity,
+          identityReferenceResolver: (lookup) =>
+            resolveIdentityAppReferenceTarget(this.bindings, lookup),
           request,
           route: publicOperationRoute,
           schema,
@@ -403,10 +406,12 @@ export class FormlessAuthority extends DurableObject<Env> {
 
         const body = operation.metadata.mode === "write" ? await readJson(request) : undefined;
         ensureStorageTables(this.ctx.storage);
-        const result = executeAuthorityOperation({
+        const result = await executeAuthorityOperation({
           app: route.app,
           body,
           identity: route.identity,
+          identityReferenceResolver: (lookup) =>
+            resolveIdentityAppReferenceTarget(this.bindings, lookup),
           operation,
           actorCandidates,
           packageResolver: activeAppPackageResolver(this.bindings),

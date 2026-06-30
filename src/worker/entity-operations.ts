@@ -20,7 +20,8 @@ import {
   executeOperationHandlerCreateTriggers,
   executeOperationHandlerOutcome,
 } from "./operation-handlers.ts";
-import { validateRecordWriteRequest } from "./authority-validation.ts";
+import { validateRecordWriteRequestAsync } from "./authority-validation.ts";
+import type { IdentityReferenceTargetResolver } from "./identity-reference-targets.ts";
 import {
   validateOperationInvocationCommandHandlerInputValues,
   validateOperationInvocationRecordWriteValues,
@@ -49,7 +50,7 @@ import type {
   PatchRecordWriteRequest,
 } from "./record-write-requests.ts";
 import {
-  materializeRecordPlan,
+  materializeRecordPlanAsync,
   recordPlanCommandInput,
   recordPlanOperationOutput,
 } from "./record-plan-materializer.ts";
@@ -247,21 +248,23 @@ function executeGetOperationInvocation(input: {
   };
 }
 
-export function executeWriteOperationInvocation(input: {
+export async function executeWriteOperationInvocation(input: {
   envelope: OperationInvocationEnvelope;
+  identityReferenceResolver?: IdentityReferenceTargetResolver;
   packageResolver?: AppPackageResolver;
   schema: AppSchema;
   storage: DurableObjectStorage;
   validateConstraints?: RecordConstraintValidator;
   writes: OperationInvocationLifecycleWriteNotifier;
-}): OperationInvocationResponse {
+}): Promise<OperationInvocationResponse> {
   return executeWriteOperationInvocationLifecycle({
     envelope: input.envelope,
-    execute: () =>
-      executeWriteOperationInvocationOutcome(
+    prepareExecute: () =>
+      prepareWriteOperationInvocationOutcome(
         input.storage,
         input.envelope,
         input.schema,
+        input.identityReferenceResolver,
         input.packageResolver,
         input.validateConstraints,
       ),
@@ -270,13 +273,14 @@ export function executeWriteOperationInvocation(input: {
   });
 }
 
-function executeWriteOperationInvocationOutcome(
+async function prepareWriteOperationInvocationOutcome(
   storage: DurableObjectStorage,
   envelope: OperationInvocationEnvelope,
   schema: AppSchema,
+  identityReferenceResolver?: IdentityReferenceTargetResolver,
   packageResolver?: AppPackageResolver,
   validateConstraints?: RecordConstraintValidator,
-): WriteOutcome<OperationInvocationOutput> {
+): Promise<() => WriteOutcome<OperationInvocationOutput>> {
   if (!isEntityOperationWriteKind(envelope.operation.kind)) {
     throw new BadRequestError(
       `Operation "${envelope.operation.canonicalKey}" is not a write operation.`,
@@ -284,61 +288,66 @@ function executeWriteOperationInvocationOutcome(
   }
 
   if (envelope.operation.kind === "command") {
-    return executeCommandOperationInvocationOutcome(
+    return prepareCommandOperationInvocationOutcome(
       storage,
       envelope,
       schema,
+      identityReferenceResolver,
       packageResolver,
       validateConstraints,
     );
   }
 
   if (envelope.operation.kind === "create") {
-    return executeCreateOperationInvocationOutcome(
+    return prepareCreateOperationInvocationOutcome(
       storage,
       envelope,
       schema,
+      identityReferenceResolver,
       packageResolver,
       validateConstraints,
     );
   }
 
   if (envelope.operation.kind === "update") {
-    return executeUpdateOperationInvocationOutcome(
+    return prepareUpdateOperationInvocationOutcome(
       storage,
       envelope,
       schema,
+      identityReferenceResolver,
       packageResolver,
       validateConstraints,
     );
   }
 
-  return executeDeleteOperationInvocationOutcome(storage, envelope, schema, packageResolver);
+  return prepareDeleteOperationInvocationOutcome(storage, envelope, schema, packageResolver);
 }
 
-function executeCreateOperationInvocationOutcome(
+async function prepareCreateOperationInvocationOutcome(
   storage: DurableObjectStorage,
   envelope: OperationInvocationEnvelope,
   schema: AppSchema,
+  identityReferenceResolver?: IdentityReferenceTargetResolver,
   packageResolver?: AppPackageResolver,
   validateConstraints?: RecordConstraintValidator,
-): WriteOutcome<OperationInvocationOutput> {
+): Promise<() => WriteOutcome<OperationInvocationOutput>> {
   const validateRecordConstraints = operationRecordConstraintValidator(
     storage,
     schema,
     validateConstraints,
   );
-  const validatedRecordWrite = validateOperationRecordWriteRequest(
+  const validatedRecordWrite = await validateOperationRecordWriteRequest(
     operationCreateRecordWriteRequest(envelope, schema, storage),
     schema,
     storage,
-    { packageResolver },
+    { identityReferenceResolver, packageResolver },
   );
 
   if ("outcome" in validatedRecordWrite) {
-    return mapWriteOutcome(validatedRecordWrite.outcome, (response) =>
-      recordWriteOperationOutput(envelope, response),
-    );
+    return () =>
+      mapWriteOutcome(validatedRecordWrite.outcome, (response) =>
+        recordWriteOperationOutput(envelope, response),
+      );
   }
 
   const recordWrite = validatedRecordWrite.recordWrite;
@@ -347,48 +356,51 @@ function executeCreateOperationInvocationOutcome(
     throw new Error(`Operation "${envelope.operation.canonicalKey}" did not produce a create.`);
   }
 
-  return mapWriteOutcome(
-    createStoredRecordOutcome(
-      storage,
-      recordWrite,
-      (context) => {
-        executeOperationHandlerCreateTriggers(
-          context.storage,
-          context.request,
-          schema,
-          context.createRecords,
-        );
-      },
-      validateRecordConstraints,
-      { allowStoredReplay: false, now: envelope.receivedAt },
-    ),
-    (response) => recordWriteOperationOutput(envelope, response),
-  );
+  return () =>
+    mapWriteOutcome(
+      createStoredRecordOutcome(
+        storage,
+        recordWrite,
+        (context) => {
+          executeOperationHandlerCreateTriggers(
+            context.storage,
+            context.request,
+            schema,
+            context.createRecords,
+          );
+        },
+        validateRecordConstraints,
+        { allowStoredReplay: false, now: envelope.receivedAt },
+      ),
+      (response) => recordWriteOperationOutput(envelope, response),
+    );
 }
 
-function executeUpdateOperationInvocationOutcome(
+async function prepareUpdateOperationInvocationOutcome(
   storage: DurableObjectStorage,
   envelope: OperationInvocationEnvelope,
   schema: AppSchema,
+  identityReferenceResolver?: IdentityReferenceTargetResolver,
   packageResolver?: AppPackageResolver,
   validateConstraints?: RecordConstraintValidator,
-): WriteOutcome<OperationInvocationOutput> {
+): Promise<() => WriteOutcome<OperationInvocationOutput>> {
   const validateRecordConstraints = operationRecordConstraintValidator(
     storage,
     schema,
     validateConstraints,
   );
-  const validatedRecordWrite = validateOperationRecordWriteRequest(
+  const validatedRecordWrite = await validateOperationRecordWriteRequest(
     operationPatchRecordWriteRequest(envelope, schema, storage),
     schema,
     storage,
-    { packageResolver },
+    { identityReferenceResolver, packageResolver },
   );
 
   if ("outcome" in validatedRecordWrite) {
-    return mapWriteOutcome(validatedRecordWrite.outcome, (response) =>
-      recordWriteOperationOutput(envelope, response),
-    );
+    return () =>
+      mapWriteOutcome(validatedRecordWrite.outcome, (response) =>
+        recordWriteOperationOutput(envelope, response),
+      );
   }
 
   const recordWrite = validatedRecordWrite.recordWrite;
@@ -397,28 +409,29 @@ function executeUpdateOperationInvocationOutcome(
     throw new Error(`Operation "${envelope.operation.canonicalKey}" did not produce an update.`);
   }
 
-  return mapWriteOutcome(
-    patchStoredRecordOutcome(
-      storage,
-      recordWrite,
-      recordWrite.recordValues,
-      validateRecordConstraints,
-      {
-        allowStoredReplay: false,
-        now: envelope.receivedAt,
-      },
-    ),
-    (response) => recordWriteOperationOutput(envelope, response),
-  );
+  return () =>
+    mapWriteOutcome(
+      patchStoredRecordOutcome(
+        storage,
+        recordWrite,
+        recordWrite.recordValues,
+        validateRecordConstraints,
+        {
+          allowStoredReplay: false,
+          now: envelope.receivedAt,
+        },
+      ),
+      (response) => recordWriteOperationOutput(envelope, response),
+    );
 }
 
-function executeDeleteOperationInvocationOutcome(
+async function prepareDeleteOperationInvocationOutcome(
   storage: DurableObjectStorage,
   envelope: OperationInvocationEnvelope,
   schema: AppSchema,
   packageResolver?: AppPackageResolver,
-): WriteOutcome<OperationInvocationOutput> {
-  const validatedRecordWrite = validateOperationRecordWriteRequest(
+): Promise<() => WriteOutcome<OperationInvocationOutput>> {
+  const validatedRecordWrite = await validateOperationRecordWriteRequest(
     operationDeleteRecordWriteRequest(envelope),
     schema,
     storage,
@@ -426,9 +439,10 @@ function executeDeleteOperationInvocationOutcome(
   );
 
   if ("outcome" in validatedRecordWrite) {
-    return mapWriteOutcome(validatedRecordWrite.outcome, (response) =>
-      recordWriteOperationOutput(envelope, response),
-    );
+    return () =>
+      mapWriteOutcome(validatedRecordWrite.outcome, (response) =>
+        recordWriteOperationOutput(envelope, response),
+      );
   }
 
   const recordWrite = validatedRecordWrite.recordWrite;
@@ -437,13 +451,14 @@ function executeDeleteOperationInvocationOutcome(
     throw new Error(`Operation "${envelope.operation.canonicalKey}" did not produce a delete.`);
   }
 
-  return mapWriteOutcome(
-    deleteStoredRecordOutcome(storage, recordWrite, {
-      allowStoredReplay: false,
-      now: envelope.receivedAt,
-    }),
-    (response) => recordWriteOperationOutput(envelope, response),
-  );
+  return () =>
+    mapWriteOutcome(
+      deleteStoredRecordOutcome(storage, recordWrite, {
+        allowStoredReplay: false,
+        now: envelope.receivedAt,
+      }),
+      (response) => recordWriteOperationOutput(envelope, response),
+    );
 }
 
 function validateOperationRecordWriteRequest(
@@ -451,29 +466,33 @@ function validateOperationRecordWriteRequest(
   schema: AppSchema,
   storage: DurableObjectStorage,
   options: {
+    identityReferenceResolver?: IdentityReferenceTargetResolver;
     packageResolver?: AppPackageResolver;
   } = {},
 ) {
-  return validateRecordWriteRequest(recordWrite, schema, storage, {
+  return validateRecordWriteRequestAsync(recordWrite, schema, storage, {
     allowStoredReplay: false,
     enforceGenericRecordWritePolicy: false,
+    identityReferenceResolver: options.identityReferenceResolver,
     packageResolver: options.packageResolver,
   });
 }
 
-function executeCommandOperationInvocationOutcome(
+async function prepareCommandOperationInvocationOutcome(
   storage: DurableObjectStorage,
   envelope: OperationInvocationEnvelope,
   schema: AppSchema,
+  identityReferenceResolver?: IdentityReferenceTargetResolver,
   packageResolver?: AppPackageResolver,
   validateConstraints?: RecordConstraintValidator,
-): WriteOutcome<OperationInvocationOutput> {
+): Promise<() => WriteOutcome<OperationInvocationOutput>> {
   if (envelope.operation.effect?.type === "recordPlan") {
-    return executeRecordPlanOperationInvocationOutcome(
+    return prepareRecordPlanOperationInvocationOutcome(
       storage,
       envelope,
       schema,
       envelope.operation.effect,
+      identityReferenceResolver,
       packageResolver,
       validateConstraints,
     );
@@ -492,17 +511,18 @@ function executeCommandOperationInvocationOutcome(
       ? publicCommandOperationPayload(envelope).input
       : privateCommandOperationInput(envelope, schema, storage);
 
-  return mapWriteOutcome(
-    executeOperationHandlerOutcome({
-      storage,
-      envelope,
-      schema,
-      effect: commandEffect,
-      ...(commandInput === undefined ? {} : { input: commandInput }),
-      ...(validateConstraints === undefined ? {} : { validateConstraints }),
-    }),
-    (response) => filterCommandOperationOutputForActor(response, envelope),
-  );
+  return () =>
+    mapWriteOutcome(
+      executeOperationHandlerOutcome({
+        storage,
+        envelope,
+        schema,
+        effect: commandEffect,
+        ...(commandInput === undefined ? {} : { input: commandInput }),
+        ...(validateConstraints === undefined ? {} : { validateConstraints }),
+      }),
+      (response) => filterCommandOperationOutputForActor(response, envelope),
+    );
 }
 
 function operationHandlerEffect(
@@ -513,41 +533,44 @@ function operationHandlerEffect(
   return effect?.type === "operationHandler" ? effect : undefined;
 }
 
-function executeRecordPlanOperationInvocationOutcome(
+async function prepareRecordPlanOperationInvocationOutcome(
   storage: DurableObjectStorage,
   envelope: OperationInvocationEnvelope,
   schema: AppSchema,
   effect: RecordPlanEntityOperationEffectSchema,
+  identityReferenceResolver?: IdentityReferenceTargetResolver,
   packageResolver?: AppPackageResolver,
   validateConstraints?: RecordConstraintValidator,
-): WriteOutcome<OperationInvocationOutput> {
+): Promise<() => WriteOutcome<OperationInvocationOutput>> {
   const operationId = requiredWriteIdentity(envelope);
   const inputValues = recordPlanCommandInput({ envelope, schema, storage });
-  const materialization = materializeRecordPlan({
+  const materialization = await materializeRecordPlanAsync({
     storage,
     envelope,
     schema,
     effect,
+    identityReferenceResolver,
     inputValues,
     operationId,
     packageResolver,
     plannedRecords: [],
   });
 
-  return mapWriteOutcome(
-    writeRecordSetForCommandOperationOutcome(
-      storage,
-      operationId,
-      materialization.plans,
-      operationRecordConstraintValidator(storage, schema, validateConstraints),
-      { allowStoredReplay: false, now: envelope.receivedAt },
-    ),
-    (response) =>
-      filterCommandOperationOutputForActor(
-        recordPlanOperationOutput(response, materialization),
-        envelope,
+  return () =>
+    mapWriteOutcome(
+      writeRecordSetForCommandOperationOutcome(
+        storage,
+        operationId,
+        materialization.plans,
+        operationRecordConstraintValidator(storage, schema, validateConstraints),
+        { allowStoredReplay: false, now: envelope.receivedAt },
       ),
-  );
+      (response) =>
+        filterCommandOperationOutputForActor(
+          recordPlanOperationOutput(response, materialization),
+          envelope,
+        ),
+    );
 }
 
 function operationRecordConstraintValidator(

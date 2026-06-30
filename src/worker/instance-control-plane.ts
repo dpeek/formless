@@ -266,7 +266,7 @@ export async function handleInstanceControlPlaneDurableObjectRequest(
     ensureControlPlaneStorage(storage, env);
     const packageResolver = activeAppPackageResolver(env);
     const source = instanceControlPlaneSourceForEnv(env);
-    const result = executeAuthorityOperation({
+    const result = await executeAuthorityOperation({
       actorKind,
       app: instanceControlPlaneApp,
       body,

@@ -231,8 +231,8 @@ facts without storing raw auth secrets.
 - AND active app registrations are unique by app install id, target kind, and
   selected target record
 - AND app-specific profile or account records remain app-owned records and
-  reference identity records by id when cross-schema identity references are
-  enabled by a later app-schema change
+  reference identity records by id through supported app-schema reference
+  targets such as `auth:principal` and `auth:organization`
 
 #### Scenario: Invitation record shape
 
@@ -495,7 +495,7 @@ target and scope rather than raw optional fields.
 - AND tombstoned duplicate app registrations do not block the active
   registration
 
-### Requirement: Identity Boundary For Future App References
+### Requirement: Identity Boundary For App References
 
 The system SHALL expose identity records through stable qualified entity names
 without making app schemas own auth records.
@@ -509,6 +509,21 @@ without making app schemas own auth records.
   and `auth:group`
 - AND the right-hand side remains the local identity entity key
 - AND normal record values remain flat record ids
+
+#### Scenario: Resolve app identity reference targets
+
+- GIVEN an app Authority validates a record value for `auth:principal`,
+  `auth:organization`, or `auth:group`
+- WHEN it asks the identity control plane to resolve the target record id
+- THEN the lookup reads only the runtime-owned identity storage identity
+  `instance:identity`
+- AND the lookup confirms the record exists, uses the requested identity entity,
+  and is not tombstoned
+- AND missing, tombstoned, wrong-entity, or unsupported qualified identity
+  targets fail without exposing credentials, challenge secrets, token hashes,
+  sessions, grants, recovery material, or provider responses
+- AND resolving the reference does not copy identity records into the app
+  storage identity
 
 #### Scenario: App-owned profile extension
 

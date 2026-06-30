@@ -18,23 +18,26 @@ export type OperationInvocationLifecycleWriteNotifier = {
   apply<T>(write: () => WriteOutcome<T>): WriteOutcome<T>;
 };
 
-export function executeWriteOperationInvocationLifecycle(input: {
+export async function executeWriteOperationInvocationLifecycle(input: {
   envelope: OperationInvocationEnvelope;
-  execute: () => WriteOutcome<OperationInvocationOutput>;
+  prepareExecute: () =>
+    | Promise<() => WriteOutcome<OperationInvocationOutput>>
+    | (() => WriteOutcome<OperationInvocationOutput>);
   storage: DurableObjectStorage;
   writes: OperationInvocationLifecycleWriteNotifier;
-}): OperationInvocationResponse {
-  const outcome = input.writes.apply(() => {
-    recordOperationInvocationAccepted(input.storage, input.envelope);
+}): Promise<OperationInvocationResponse> {
+  recordOperationInvocationAccepted(input.storage, input.envelope);
 
-    try {
-      const replay = recordStoredOperationInvocationReplay(input.storage, input.envelope);
+  try {
+    const replay = recordStoredOperationInvocationReplay(input.storage, input.envelope);
 
-      if (replay) {
-        return replayedWrite(replay);
-      }
+    if (replay) {
+      return input.writes.apply(() => replayedWrite(replay)).response;
+    }
 
-      const writeOutcome = input.execute();
+    const execute = await input.prepareExecute();
+    const outcome = input.writes.apply(() => {
+      const writeOutcome = execute();
       const status = writeOutcome.kind === "replay" ? "replayed" : "committed";
       const response = operationInvocationResponseFromWriteOutput(
         input.envelope,
@@ -49,20 +52,22 @@ export function executeWriteOperationInvocationLifecycle(input: {
       });
 
       return writeOutcome.kind === "replay" ? replayedWrite(response) : committedWrite(response);
-    } catch (error) {
-      recordOperationInvocationFailed(input.storage, input.envelope, error);
-      throw error;
-    }
-  });
+    });
 
-  return outcome.response;
+    return outcome.response;
+  } catch (error) {
+    recordOperationInvocationFailed(input.storage, input.envelope, error);
+    throw error;
+  }
 }
 
 export async function executePublicOperationInvocationLifecycle(input: {
   assertAllowed: () => void;
   beforeReplay: () => Promise<void> | void;
   envelope: OperationInvocationEnvelope;
-  execute: (envelope: OperationInvocationEnvelope) => OperationInvocationResponse;
+  execute: (
+    envelope: OperationInvocationEnvelope,
+  ) => Promise<OperationInvocationResponse> | OperationInvocationResponse;
   prepareExecutionEnvelope: () =>
     | Promise<OperationInvocationEnvelope>
     | OperationInvocationEnvelope;
@@ -93,7 +98,7 @@ export async function executePublicOperationInvocationLifecycle(input: {
     throw error;
   }
 
-  return input.execute(executionEnvelope);
+  return await input.execute(executionEnvelope);
 }
 
 function recordStoredOperationInvocationReplay(

@@ -324,6 +324,36 @@ the declaring schema.
   entity name
 - AND normal record values remain flat reference values
 
+#### Scenario: Declare identity reference targets
+
+- GIVEN an app schema declares a reference field targeting `auth:principal`,
+  `auth:organization`, or `auth:group`
+- WHEN the schema is parsed
+- THEN the field is accepted as a supported cross-schema identity reference
+- AND the declaring app schema does not define or own the target identity
+  entity
+- AND schema-internal references to entities in the same schema still use local
+  entity keys without a schema namespace prefix
+- AND relationships, reference-field table columns, and local read-model
+  traversal do not treat cross-schema identity references as local relationship
+  endpoints
+
+#### Scenario: Validate identity reference values
+
+- GIVEN an app record write stores a value for a field targeting
+  `auth:principal`, `auth:organization`, or `auth:group`
+- WHEN the Authority validates the write, operation record plan, or restored
+  snapshot
+- THEN the field value remains a flat record id
+- AND the runtime resolves the referenced record from identity control-plane
+  storage identity `instance:identity`
+- AND validation rejects missing, tombstoned, wrong-entity, unsupported
+  qualified-target, or unavailable identity storage targets before committing
+  the app record
+- AND principal status, role assignments, credentials, sessions, and
+  authorization policy remain identity auth and operation-policy concerns
+  rather than nested app record state
+
 ### Requirement: Flat Record Model
 
 The system SHALL store entity records as flat values and SHALL keep relationships as schema metadata over reference fields.

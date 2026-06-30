@@ -19,7 +19,7 @@ import type { DateValue } from "@internationalized/date";
 import type { FocusEvent, KeyboardEvent } from "react";
 import { useRef } from "react";
 import { MediaFieldControl, type ImageMediaAssetOption } from "@dpeek/formless-media/react";
-import { useReferenceOptions } from "../../client/store.ts";
+import { useReferenceOptions, type ReferenceOption } from "../../client/store.ts";
 import { fieldLabel, type RecordFieldConfig } from "../../client/views.ts";
 import type { FieldValue, RecordValues } from "@dpeek/formless-storage";
 import type {
@@ -60,6 +60,11 @@ import {
   type GeneratedRecordFieldControlPresentation,
   type GeneratedRecordFieldRendererKind,
 } from "./record-field-renderer-model.ts";
+import {
+  EMPTY_GENERATED_REFERENCE_OPTIONS,
+  generatedMissingReferenceOptionValue,
+  shouldUseAppReplicaReferenceOptions,
+} from "./reference-field-options.ts";
 
 export type {
   GeneratedRecordFieldControlDensity,
@@ -1581,6 +1586,34 @@ function enumValueUnitOptions(field: NonNullable<RecordFieldConfig["valueUnit"]>
 }
 
 function RecordReferenceFieldControl({
+  field,
+  ...props
+}: {
+  canPatch: boolean;
+  density?: GeneratedRecordFieldControlDensity;
+  draft: string;
+  error: string | null;
+  field: Extract<FieldSchema, { type: "reference" }>;
+  isPending: boolean;
+  label: string;
+  labelClass: string;
+  onCommit: (value: FieldValue) => void;
+  onDraftChange: (value: string) => void;
+}) {
+  if (!shouldUseAppReplicaReferenceOptions(field)) {
+    return (
+      <RecordReferenceFieldSelect
+        {...props}
+        field={field}
+        options={EMPTY_GENERATED_REFERENCE_OPTIONS}
+      />
+    );
+  }
+
+  return <LocalRecordReferenceFieldControl {...props} field={field} />;
+}
+
+function LocalRecordReferenceFieldControl({
   canPatch,
   density = "default",
   draft,
@@ -1604,8 +1637,50 @@ function RecordReferenceFieldControl({
   onDraftChange: (value: string) => void;
 }) {
   const options = useReferenceOptions(field.to, field.displayField);
-  const unknownValue =
-    draft !== "" && !options.some((option) => option.id === draft) ? draft : null;
+
+  return (
+    <RecordReferenceFieldSelect
+      canPatch={canPatch}
+      density={density}
+      draft={draft}
+      error={error}
+      field={field}
+      isPending={isPending}
+      label={label}
+      labelClass={labelClass}
+      onCommit={onCommit}
+      onDraftChange={onDraftChange}
+      options={options}
+    />
+  );
+}
+
+function RecordReferenceFieldSelect({
+  canPatch,
+  density = "default",
+  draft,
+  error,
+  field,
+  isPending,
+  label,
+  labelClass,
+  onCommit,
+  onDraftChange,
+  options,
+}: {
+  canPatch: boolean;
+  density?: GeneratedRecordFieldControlDensity;
+  draft: string;
+  error: string | null;
+  field: Extract<FieldSchema, { type: "reference" }>;
+  isPending: boolean;
+  label: string;
+  labelClass: string;
+  onCommit: (value: FieldValue) => void;
+  onDraftChange: (value: string) => void;
+  options: readonly ReferenceOption[];
+}) {
+  const unknownValue = generatedMissingReferenceOptionValue(draft, options);
 
   return (
     <div

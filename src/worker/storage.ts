@@ -1,5 +1,8 @@
 import { createRecordId } from "../shared/ids.ts";
-import { validateAuthorityFieldValue } from "@dpeek/formless-schema";
+import {
+  isSupportedIdentityReferenceTarget,
+  validateAuthorityFieldValue,
+} from "@dpeek/formless-schema";
 import { STORAGE_SNAPSHOT_KIND, STORAGE_SNAPSHOT_VERSION } from "@dpeek/formless-storage";
 import type { RecordValues, StorageSnapshot, StoredRecord } from "@dpeek/formless-storage";
 import type { BootstrapResponse, ChangeRow } from "../shared/protocol.ts";
@@ -1585,6 +1588,10 @@ function validateActiveSchemaRefreshRecord(
 
     if (typeof result.value !== "string") {
       throw new Error("reference field validation returned a non-string value");
+    }
+
+    if (isSupportedIdentityReferenceTarget(field.to)) {
+      continue;
     }
 
     const targetRecord = recordsById.get(result.value);
