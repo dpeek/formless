@@ -3,10 +3,13 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vite-plus/test";
 
-import viteConfig, {
+import {
   clientManualChunks,
   floatingUiReactImportInteropCode,
-} from "../../vite.config.ts";
+  runtimeCloudflarePluginConfig,
+  runtimeViteConfig,
+  runtimeWorkerConfigPath,
+} from "../runtime/vite-config.ts";
 
 const repoRoot = resolve(fileURLToPath(new URL("../../", import.meta.url)));
 
@@ -29,9 +32,13 @@ type ViteConfigWithEnvironments = {
   };
 };
 
-describe("Vite config", () => {
+type WorkerConfigCustomizer = (config: {
+  vars?: Record<string, string>;
+}) => { vars?: Record<string, string> } | void;
+
+describe("Runtime Vite config", () => {
   it("scopes client-only HTML entries to the client environment", () => {
-    const config = viteConfig as ViteConfigWithEnvironments;
+    const config = runtimeViteConfig() as ViteConfigWithEnvironments;
     const clientBuild = config.environments?.client?.build;
 
     expect(config.build).toBeUndefined();
@@ -41,6 +48,36 @@ describe("Vite config", () => {
       "public-site": resolve(repoRoot, "src/public-site-main.tsx"),
     });
     expect(clientBuild?.rollupOptions?.output?.manualChunks).toBe(clientManualChunks);
+  });
+
+  it("uses the Worker-owned Wrangler config and preserves runtime Cloudflare overrides", () => {
+    const persistPath = resolve(repoRoot, "tmp/wrangler-state");
+    const pluginConfig = runtimeCloudflarePluginConfig({
+      env: {
+        FORMLESS_ADMIN_TOKEN: "secret",
+        FORMLESS_RUNTIME_PROFILE: "instance",
+        FORMLESS_WRANGLER_PERSIST: persistPath,
+      },
+      packageRoot: repoRoot,
+    });
+
+    expect(runtimeWorkerConfigPath(repoRoot)).toBe(resolve(repoRoot, "src/worker/wrangler.jsonc"));
+    expect(pluginConfig.configPath).toBe(resolve(repoRoot, "src/worker/wrangler.jsonc"));
+    expect(pluginConfig.persistState).toEqual({ path: persistPath });
+    expect(typeof pluginConfig.config).toBe("function");
+
+    const configCustomizer = pluginConfig.config;
+    if (typeof configCustomizer !== "function") {
+      throw new Error("Expected runtime Cloudflare config customizer.");
+    }
+
+    expect((configCustomizer as WorkerConfigCustomizer)({ vars: { EXISTING: "1" } })).toEqual({
+      vars: {
+        EXISTING: "1",
+        FORMLESS_ADMIN_TOKEN: "secret",
+        FORMLESS_RUNTIME_PROFILE: "instance",
+      },
+    });
   });
 
   it("keeps Floating UI React adapter modules in one shared chunk", () => {

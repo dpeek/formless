@@ -15,8 +15,7 @@
     "scripts",
     "src",
     "tsconfig.json",
-    "vite.config.ts",
-    "wrangler.jsonc"
+    "vite.config.ts"
   ],
   "type": "module",
   "publishConfig": {

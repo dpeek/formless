@@ -41,8 +41,10 @@ describe("public Site SSR characterization", () => {
   });
 
   it("characterizes Cloudflare routing as Worker-first for API, published documents, and root icons", () => {
-    const wrangler = readRepoFile("../../wrangler.jsonc");
+    const wrangler = readRepoFile("../worker/wrangler.jsonc");
 
+    expect(wrangler).toContain('"$schema": "../../node_modules/wrangler/config-schema.json"');
+    expect(wrangler).toContain('"main": "./index.ts"');
     expect(wrangler).toContain('"not_found_handling": "single-page-application"');
     expect(wrangler).toContain('"binding": "ASSETS"');
     expect(wrangler).toContain('"run_worker_first": [');
@@ -68,6 +70,8 @@ describe("public Site SSR characterization", () => {
       scripts?: Record<string, string>;
     };
 
+    expect(packageJson.files).toContain("src");
+    expect(packageJson.files).not.toContain("wrangler.jsonc");
     expect(packageJson.files).not.toContain("icons");
     expect(packageJson.files).not.toContain("public");
     expect(
@@ -75,6 +79,8 @@ describe("public Site SSR characterization", () => {
     ).toEqual([]);
     expect(repoFileExists("../../icons")).toBe(false);
     expect(repoFileExists("../../public")).toBe(false);
+    expect(repoFileExists("../../wrangler.jsonc")).toBe(false);
+    expect(repoFileExists("../worker/wrangler.jsonc")).toBe(true);
     expect(repoFileExists("../../public/favicon.svg")).toBe(false);
     expect(repoFileExists("../../public/favicon.ico")).toBe(false);
     expect(repoFileExists("../../public/apple-touch-icon.png")).toBe(false);

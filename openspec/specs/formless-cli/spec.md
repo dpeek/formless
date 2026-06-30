@@ -552,6 +552,31 @@ optional first app install, credential setup, and push operations.
 - **AND** app installation remains a separate optional local Authority write
   before or after the first push
 
+### Requirement: Runtime Build Config Boundary
+
+The CLI SHALL keep monorepo quality tooling configuration separate from the
+bundled Worker and browser runtime build setup used by local dev and push.
+
+#### Scenario: Runtime build setup owns Worker and browser facts
+
+- **WHEN** `formless dev`, `formless push`, or package build starts the bundled
+  runtime build
+- **THEN** Worker entrypoint, Cloudflare Worker configuration, browser shell
+  entrypoint, public Site client entrypoint, runtime extension virtual modules,
+  runtime environment injection, and browser asset output facts are resolved
+  through package-owned runtime build setup
+- **AND** monorepo quality tooling configuration does not own Worker or browser
+  runtime build facts
+- **AND** Cloudflare Worker configuration lives under Worker-owned runtime
+  source and is passed to runtime build setup explicitly instead of relying on
+  root repository file discovery
+- **AND** the browser shell asset remains emitted and served as `/index.html`
+- **AND** the public Site client manifest remains emitted and served as
+  `/assets/formless-client-manifest.json`
+- **AND** workspace-relative runtime extension paths are resolved during build
+  setup rather than stored as app data, deployment intent, package app source,
+  or Worker runtime bindings
+
 ### Requirement: Workspace Save From Local Authority
 
 The local workspace operation layer SHALL save local workspace runtime state
