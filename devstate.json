@@ -11,6 +11,9 @@
     },
     "test": {
       "cmd": "vp run --recursive test"
+    },
+    "spec": {
+      "cmd": "openspec validate --all"
     }
   },
   "services": {
