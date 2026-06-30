@@ -196,6 +196,27 @@ function writeDevstateStatus(worktreeDir: string): void {
   );
 }
 
+function successfulDevstateCommand(
+  cwd: string,
+  command: string,
+  args: string[],
+): ReturnType<CommandRunner> | null {
+  if (command !== "devstate") {
+    return null;
+  }
+
+  if (args.join(" ") === "start" || args.join(" ") === "stop") {
+    return { code: 0, stderr: "", stdout: "" };
+  }
+
+  if (args.join(" ") === "check") {
+    writeDevstateStatus(cwd);
+    return { code: 0, stderr: "", stdout: "# Dev Tool State\n\n## Summary\n\n- checks: ok\n" };
+  }
+
+  return null;
+}
+
 describe("Formless change metadata", () => {
   it("parses valid proposal, design, tasks, evidence, blockers, and trailers", () => {
     const result = parseFormlessChangeCommitMessage(validChangeCommitMessage(), {
@@ -894,7 +915,12 @@ describe("local agent worker discovery", () => {
     let reviewBranchExists = false;
     let stdout = "";
     let stderr = "";
-    const runCommand: CommandRunner = (_cwd, command, args) => {
+    const runCommand: CommandRunner = (cwd, command, args) => {
+      const devstateResult = successfulDevstateCommand(cwd, command, args);
+      if (devstateResult) {
+        return devstateResult;
+      }
+
       if (
         command === "git" &&
         args.join(" ") === "rev-parse --path-format=absolute --git-common-dir"
@@ -1266,6 +1292,11 @@ describe("local agent worker review branches", () => {
     let stderr = "";
     const runCommand: CommandRunner = (cwd, command, args) => {
       commandCalls.push({ args, command, cwd });
+      const devstateResult = successfulDevstateCommand(cwd, command, args);
+      if (devstateResult) {
+        return devstateResult;
+      }
+
       if (
         command === "git" &&
         args.join(" ") === "rev-parse --path-format=absolute --git-common-dir"
@@ -1372,7 +1403,140 @@ describe("local agent worker review branches", () => {
         command: "git",
         cwd: worktreeDir,
       });
+      expect(commandCalls).toContainEqual({
+        args: ["start"],
+        command: "devstate",
+        cwd: worktreeDir,
+      });
+      expect(commandCalls).toContainEqual({
+        args: ["stop"],
+        command: "devstate",
+        cwd: worktreeDir,
+      });
+      expect(
+        commandCalls.findIndex(
+          (call) => call.command === "devstate" && call.args.join(" ") === "start",
+        ),
+      ).toBeLessThan(
+        commandCalls.findIndex(
+          (call) =>
+            call.command === "git" && call.args.join(" ") === "branch -f changes/add-thing impl123",
+        ),
+      );
+      expect(
+        commandCalls.findIndex(
+          (call) => call.command === "devstate" && call.args.join(" ") === "stop",
+        ),
+      ).toBeGreaterThan(
+        commandCalls.findIndex(
+          (call) =>
+            call.command === "git" && call.args.join(" ") === "branch -f changes/add-thing impl123",
+        ),
+      );
       expect(commandCalls.some((call) => call.command === "openspec")).toBe(false);
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  it("stops devstate when an implementation session errors", async () => {
+    const root = tempDir();
+    const gitCommonDir = path.join(root, ".git");
+    const worktreeDir = path.join(root, "tmp", "worktree", "igor");
+    const commandCalls: Array<{ args: string[]; command: string; cwd: string }> = [];
+    let reviewBranchExists = false;
+    let workerBranchExists = false;
+    let sessionCalls = 0;
+    let stdout = "";
+    let stderr = "";
+    const runCommand: CommandRunner = (cwd, command, args) => {
+      commandCalls.push({ args, command, cwd });
+      const devstateResult = successfulDevstateCommand(cwd, command, args);
+      if (devstateResult) {
+        return devstateResult;
+      }
+
+      if (
+        command === "git" &&
+        args.join(" ") === "rev-parse --path-format=absolute --git-common-dir"
+      ) {
+        return { code: 0, stderr: "", stdout: `${gitCommonDir}\n` };
+      }
+
+      const metadataResult = changeBranchMetadataCommand(command, args, ["add-thing"]);
+      if (metadataResult) {
+        return metadataResult;
+      }
+
+      if (
+        command === "git" &&
+        args.join(" ") === "show-ref --verify --quiet refs/heads/changes/add-thing"
+      ) {
+        return { code: reviewBranchExists ? 0 : 1, stderr: "", stdout: "" };
+      }
+
+      if (command === "git" && args.join(" ") === "branch changes/add-thing main") {
+        reviewBranchExists = true;
+        return { code: 0, stderr: "", stdout: "" };
+      }
+
+      if (
+        command === "git" &&
+        args.join(" ") === "show-ref --verify --quiet refs/heads/agents/igor"
+      ) {
+        return { code: workerBranchExists ? 0 : 1, stderr: "", stdout: "" };
+      }
+
+      if (
+        command === "git" &&
+        args[0] === "worktree" &&
+        args[1] === "add" &&
+        args[2] === "-b" &&
+        args[3] === "agents/igor"
+      ) {
+        workerBranchExists = true;
+        return { code: 0, stderr: "", stdout: "" };
+      }
+
+      if (command === "git" && args.join(" ") === "reset --keep changes/add-thing") {
+        return { code: 0, stderr: "", stdout: "" };
+      }
+
+      throw new Error(`unexpected command: ${command} ${args.join(" ")}`);
+    };
+
+    try {
+      const code = await runAgentsCli(["watch", "igor", "--once"], {
+        cwd: root,
+        now: () => new Date("2026-05-28T00:00:00.000Z"),
+        runCommand,
+        runSession: async () => {
+          sessionCalls += 1;
+          throw new Error("session exploded");
+        },
+        stderr: {
+          write: (chunk: string | Uint8Array) => ((stderr += String(chunk)), true),
+        } as Pick<NodeJS.WriteStream, "write">,
+        stdout: {
+          write: (chunk: string | Uint8Array) => ((stdout += String(chunk)), true),
+        } as Pick<NodeJS.WriteStream, "write">,
+      });
+
+      expect(code).toBe(1);
+      expect(sessionCalls).toBe(1);
+      expect(stdout).toContain("[agents] devstate start add-thing");
+      expect(stdout).toContain("[agents] devstate stop add-thing");
+      expect(stderr).toContain("session exploded");
+      expect(commandCalls).toContainEqual({
+        args: ["start"],
+        command: "devstate",
+        cwd: worktreeDir,
+      });
+      expect(commandCalls).toContainEqual({
+        args: ["stop"],
+        command: "devstate",
+        cwd: worktreeDir,
+      });
     } finally {
       rmSync(root, { force: true, recursive: true });
     }
@@ -1392,6 +1556,11 @@ describe("local agent worker review branches", () => {
     let stderr = "";
     const runCommand: CommandRunner = (cwd, command, args) => {
       commandCalls.push({ args, command, cwd });
+      const devstateResult = successfulDevstateCommand(cwd, command, args);
+      if (devstateResult) {
+        return devstateResult;
+      }
+
       if (
         command === "git" &&
         args.join(" ") === "rev-parse --path-format=absolute --git-common-dir"
@@ -1472,11 +1641,6 @@ describe("local agent worker review branches", () => {
         };
       }
 
-      if (command === "devstate" && args.join(" ") === "check") {
-        writeDevstateStatus(worktreeDir);
-        return { code: 0, stderr: "", stdout: "# Dev Tool State\n\n## Summary\n\n- checks: ok\n" };
-      }
-
       if (command === "git" && args[0] === "commit" && args[1] === "--amend") {
         const messagePath = args[3];
         const message = messagePath ? readFileSync(messagePath, "utf8") : "";
@@ -1534,6 +1698,16 @@ describe("local agent worker review branches", () => {
         cwd: worktreeDir,
       });
       expect(commandCalls).toContainEqual({
+        args: ["start"],
+        command: "devstate",
+        cwd: worktreeDir,
+      });
+      expect(commandCalls).toContainEqual({
+        args: ["stop"],
+        command: "devstate",
+        cwd: worktreeDir,
+      });
+      expect(commandCalls).toContainEqual({
         args: ["validate", "--specs", "--strict", "--no-interactive"],
         command: "openspec",
         cwd: worktreeDir,
@@ -1561,6 +1735,11 @@ describe("local agent worker review branches", () => {
     let stdout = "";
     let stderr = "";
     const runCommand: CommandRunner = (cwd, command, args) => {
+      const devstateResult = successfulDevstateCommand(cwd, command, args);
+      if (devstateResult) {
+        return devstateResult;
+      }
+
       if (
         command === "git" &&
         args.join(" ") === "rev-parse --path-format=absolute --git-common-dir"
@@ -1687,6 +1866,11 @@ describe("local agent worker review branches", () => {
     let stderr = "";
     const runCommand: CommandRunner = (cwd, command, args) => {
       commandCalls.push({ args, command, cwd });
+      const devstateResult = successfulDevstateCommand(cwd, command, args);
+      if (devstateResult) {
+        return devstateResult;
+      }
+
       if (
         command === "git" &&
         args.join(" ") === "rev-parse --path-format=absolute --git-common-dir"
@@ -1760,7 +1944,7 @@ describe("local agent worker review branches", () => {
         expect(message).toContain("- [x] 1.1 Add parser.");
         expect(message).toContain("`devstate check` at 2026-05-28T00:00:00.000Z: checks ok.");
         expect(message).toContain(
-          "Finalization at 2026-05-28T00:00:00.000Z: finalized add-thing; reused implementation check evidence.",
+          "Finalization at 2026-05-28T00:00:00.000Z: finalized add-thing; ran devstate check because completion requires fresh check.",
         );
         expect(message).toContain("Formless-Change-State: ready-for-review");
         expect(message).toContain("Formless-Last-Evidence-At: 2026-05-28T00:00:00.000Z");
@@ -1809,6 +1993,11 @@ describe("local agent worker review branches", () => {
       expect(commandCalls).toContainEqual({
         args: ["validate", "--specs", "--strict", "--no-interactive"],
         command: "openspec",
+        cwd: worktreeDir,
+      });
+      expect(commandCalls).toContainEqual({
+        args: ["check"],
+        command: "devstate",
         cwd: worktreeDir,
       });
       expect(
@@ -1949,6 +2138,11 @@ describe("local agent worker review branches", () => {
     let stdout = "";
     let stderr = "";
     const runCommand: CommandRunner = (cwd, command, args) => {
+      const devstateResult = successfulDevstateCommand(cwd, command, args);
+      if (devstateResult) {
+        return devstateResult;
+      }
+
       if (
         command === "git" &&
         args.join(" ") === "rev-parse --path-format=absolute --git-common-dir"
@@ -2036,7 +2230,7 @@ describe("local agent worker review branches", () => {
         expect(message).toContain("- [x] 1.1 Add parser.");
         expect(message).toContain("`devstate check` at 2026-05-28T00:00:00.000Z: checks ok.");
         expect(message).toContain(
-          "Finalization at 2026-05-28T00:01:00.000Z: finalized add-thing; reused implementation check evidence.",
+          "Finalization at 2026-05-28T00:01:00.000Z: finalized add-thing; ran devstate check because completion requires fresh check.",
         );
         expect(message).toContain("Formless-Change-State: ready-for-review");
         expect(message).toContain("Formless-Last-Evidence-At: 2026-05-28T00:01:00.000Z");
@@ -2073,7 +2267,9 @@ describe("local agent worker review branches", () => {
       expect(stderr).toBe("");
       expect(sessionCalls).toBe(0);
       expect(stdout).toContain("[agents] ready maintenance add-thing");
-      expect(stdout).toContain("[agents] reused implementation check for add-thing");
+      expect(stdout).toContain(
+        "[agents] finalization check add-thing: completion requires fresh check",
+      );
       expect(readChangeLease(paths.root, "add-thing")).toMatchObject({
         changeId: "add-thing",
         owner: "igor",
@@ -2351,11 +2547,12 @@ describe("local OpenSpec implementation prompt", () => {
     expect(prompt).toContain(
       "Do not perform automatic finalization, archive, spec promotion, or ready-for-review work in this implementation session.",
     );
-    expect(prompt).toContain("Current green `devstate start` output can satisfy setup evidence");
     expect(prompt).toContain("Current clean `devstate check` output is required");
     expect(prompt).toContain(
       "read `./.devstate/status.md` after failures, stale output, conflict resolution, or exact evidence-copy needs",
     );
+    expect(prompt).not.toContain("devstate start");
+    expect(prompt).not.toContain("devstate stop");
     expect(prompt).not.toContain("openspec-apply-change");
     expect(prompt).not.toContain("openspec instructions apply");
     expect(prompt).not.toContain("openspec status");
@@ -2390,7 +2587,7 @@ describe("local OpenSpec finalization prompt", () => {
     expect(prompt).toContain("openspec validate --specs --strict --no-interactive");
     expect(prompt).toContain("Do not run `openspec archive`");
     expect(prompt).toContain("Formless-Change-State: ready-for-review");
-    expect(prompt).toContain("Reuse latest implementation `devstate check` evidence");
+    expect(prompt).toContain("Run `devstate check`.");
     expect(prompt).toContain("Current green `devstate check` output can satisfy check evidence");
     expect(prompt).toContain(
       "Skill-owned instruction source: `.agents/skills/change-finalize/templates/local-finalize.md`.",
@@ -2408,5 +2605,7 @@ describe("local OpenSpec finalization prompt", () => {
     expect(prompt).not.toContain("doc/agents/local-openspec-implement.md");
     expect(prompt).not.toContain("doc/agents/local-openspec-finalize.md");
     expect(prompt).not.toContain("doc/agents/local-agent-workers.md");
+    expect(prompt).not.toContain("devstate start");
+    expect(prompt).not.toContain("devstate stop");
   });
 });

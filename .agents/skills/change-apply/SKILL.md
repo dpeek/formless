@@ -9,15 +9,14 @@ Implement exactly one ready task section from the change commit metadata, then s
 
 ## Quick Start
 
-1. Run `devstate start`.
-2. Read `AGENTS.md`.
-3. Query parsed metadata: `bun agents change <change-id> --json`.
-4. Read authoritative metadata: `git log --no-notes -1 --format=%B HEAD`.
-5. Select the next task section with unchecked tasks before broad context reads.
-6. Inspect the branch delta: `git diff --stat --find-renames main..HEAD` and `git diff --name-status --find-renames main..HEAD`.
-7. Implement only the selected section.
-8. Run `devstate check`.
-9. Amend the branch tip with code changes, completed task checkboxes, evidence, blockers if any, and updated trailers: `git add -A` then `git commit --amend`.
+1. Read `AGENTS.md`.
+2. Query parsed metadata: `bun agents change <change-id> --json`.
+3. Read authoritative metadata: `git log --no-notes -1 --format=%B HEAD`.
+4. Select the next task section with unchecked tasks before broad context reads.
+5. Inspect the branch delta: `git diff --stat --find-renames main..HEAD` and `git diff --name-status --find-renames main..HEAD`.
+6. Implement only the selected section.
+7. Run `devstate check`.
+8. Amend the branch tip with code changes, completed task checkboxes, evidence, blockers if any, and updated trailers: `git add -A` then `git commit --amend`.
 
 ## Worker Guardrails
 

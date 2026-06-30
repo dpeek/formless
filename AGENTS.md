@@ -120,18 +120,17 @@ Data stays flat. Compose in query, view, projection, action layer.
 
 ## Work
 
-1. Run `devstate start`.
-2. Use current devstate output; read `./.devstate/status.md` after failures, stale output, conflict resolution, or exact evidence-copy needs.
-3. Select the ready task section from parsed change commit metadata before broad context reads when doing implementation work.
-4. Read assigned change metadata, canonical specs, docs, and code needed for the selected section or finalization prompt.
-5. Read nearest package `AGENTS.md` only when editing inside that package.
-6. Read relevant `openspec/specs/*/spec.md`.
-7. Ship exactly one ready task section from change commit metadata unless user explicitly asks for docs/planning only.
-8. Update the branch tip with task status, decisions, blockers, evidence, and machine-readable trailers.
-9. Run `devstate check`.
-10. Use current devstate output; read `./.devstate/status.md` after failures, stale output, conflict resolution, or exact evidence-copy needs.
-11. If app behavior changed, smoke with `bun browser ...`.
-12. End with changed files, checks, and change metadata status.
+1. Use current devstate output; read `./.devstate/status.md` after failures, stale output, conflict resolution, or exact evidence-copy needs.
+2. Select the ready task section from parsed change commit metadata before broad context reads when doing implementation work.
+3. Read assigned change metadata, canonical specs, docs, and code needed for the selected section or finalization prompt.
+4. Read nearest package `AGENTS.md` only when editing inside that package.
+5. Read relevant `openspec/specs/*/spec.md`.
+6. Ship exactly one ready task section from change commit metadata unless user explicitly asks for docs/planning only.
+7. Update the branch tip with task status, decisions, blockers, evidence, and machine-readable trailers.
+8. Run `devstate check`.
+9. Use current devstate output; read `./.devstate/status.md` after failures, stale output, conflict resolution, or exact evidence-copy needs.
+10. If app behavior changed, smoke with `bun browser ...`.
+11. End with changed files, checks, and change metadata status.
 
 ## Workstream
 
@@ -155,7 +154,7 @@ For `bun agents watch <worker-name>`:
 - Finalization is supervisor and rendered-prompt owned after required tasks are shipped or intentionally closed.
 - Rebase on local `main`, validate structured commit metadata, run `openspec validate --specs --strict --no-interactive`, publish to the review branch, and mark metadata ready for review.
 - Do not run `openspec archive` or commit archived change files for Git-backed Formless changes.
-- Reuse latest implementation `devstate check` evidence unless rebase, conflict resolution, code changes, generated output edits, or unclear coverage invalidate it.
+- Run `devstate check` before marking a branch ready for review.
 - Resolve clear structural rebase conflicts; block only on semantic conflicts that require product, storage, security, public API, or user-intent decisions.
 - Leave a clean review-ready `changes/<change-id>` branch with code changes, completed evidence, canonical specs, and structured commit metadata.
 - Keep review-ready branches rebased on local `main`; workers rerun finalization when `main` advances.

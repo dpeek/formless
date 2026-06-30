@@ -342,6 +342,10 @@ function runOrThrow(
   return result.stdout;
 }
 
+function commandResultSummary(result: CommandResult): string {
+  return result.stderr.trim() || result.stdout.trim() || `exit ${result.code}`;
+}
+
 function nowIso(now: () => Date): string {
   return now().toISOString();
 }
@@ -2065,7 +2069,7 @@ function runFinalizationCommand(input: {
   return finalizationBlockedEvidence({
     at: input.at,
     command: commandText(input.command, input.args),
-    message: `${input.failurePrefix}: ${result.stderr.trim() || result.stdout.trim()}`,
+    message: `${input.failurePrefix}: ${commandResultSummary(result)}`,
   });
 }
 
@@ -2244,30 +2248,24 @@ function runAutomaticFinalization(input: {
     checkReason = `finalization changed code: ${finalizationCodeFiles.join(", ")}`;
   }
 
-  if (checkReason) {
-    writeLine(input.stdout, `[agents] finalization check ${changeId}: ${checkReason}`);
-    const checkResult = runFinalizationCommand({
-      at,
-      args: ["check"],
-      command: "devstate",
-      cwd,
-      failurePrefix: `devstate check failed during finalization for ${changeId}`,
-      runCommand: input.runCommand,
-    });
-    if ("signal" in checkResult) {
-      return checkResult;
-    }
-    const statusSummary = readDevstateStatusSummary(cwd);
-    writeLine(
-      input.stdout,
-      `[agents] finalization check ok ${changeId}: ${statusSummary ?? checkResult.stdout.trim()}`,
-    );
-  } else {
-    writeLine(
-      input.stdout,
-      `[agents] reused implementation check for ${changeId}: ${implementationCheck}`,
-    );
+  const checkMessage = checkReason ?? "completion requires fresh check";
+  writeLine(input.stdout, `[agents] finalization check ${changeId}: ${checkMessage}`);
+  const checkResult = runFinalizationCommand({
+    at,
+    args: ["check"],
+    command: "devstate",
+    cwd,
+    failurePrefix: `devstate check failed during finalization for ${changeId}`,
+    runCommand: input.runCommand,
+  });
+  if ("signal" in checkResult) {
+    return checkResult;
   }
+  const statusSummary = readDevstateStatusSummary(cwd);
+  writeLine(
+    input.stdout,
+    `[agents] finalization check ok ${changeId}: ${statusSummary ?? checkResult.stdout.trim()}`,
+  );
 
   const changedFiles = changedFilesInWorktree(cwd, input.runCommand);
   if (changedFiles === null) {
@@ -2297,10 +2295,7 @@ function runAutomaticFinalization(input: {
     });
   }
 
-  const evidenceMessage =
-    checkReason === null
-      ? `finalized ${changeId}; reused implementation check evidence`
-      : `finalized ${changeId}; ran devstate check because ${checkReason}`;
+  const evidenceMessage = `finalized ${changeId}; ran devstate check because ${checkMessage}`;
   finalizationCommands.push("git commit --amend -F <metadata-message>");
   const metadataFailure = amendFinalizationMetadata({
     at,
@@ -2720,6 +2715,52 @@ function showDryRunClaim(input: {
   );
 }
 
+function runSupervisorDevstateCommand(input: {
+  action: "start" | "stop";
+  changeId: string;
+  runCommand: CommandRunner;
+  stdout: Pick<NodeJS.WriteStream, "write">;
+  worktreeDir: string;
+}): CommandResult {
+  writeLine(input.stdout, `[agents] devstate ${input.action} ${input.changeId}`);
+  try {
+    return input.runCommand(input.worktreeDir, "devstate", [input.action]);
+  } catch (error) {
+    return {
+      code: 1,
+      stderr: error instanceof Error ? error.message : String(error),
+      stdout: "",
+    };
+  }
+}
+
+function markClaimedChangeBlocked(input: {
+  branchPlan: BranchPlan;
+  changeId: string;
+  evidence: AgentEvidence;
+  now: () => Date;
+  options: WatchOptions;
+  paths: AgentStatePaths;
+}): void {
+  writeWorkerStatus(
+    input.paths.root,
+    makeWorkerStatus({
+      branch: input.branchPlan.branch,
+      currentChange: input.changeId,
+      latestEvidence: input.evidence,
+      now: input.now,
+      owner: input.options.workerName,
+      state: "blocked",
+    }),
+  );
+  updateChangeLease(
+    input.paths.root,
+    input.changeId,
+    { latestEvidence: input.evidence, state: "blocked" },
+    input.now,
+  );
+}
+
 async function runClaimedChange(input: {
   branchPlan: BranchPlan;
   change: CommittedOpenSpecChange;
@@ -2731,19 +2772,138 @@ async function runClaimedChange(input: {
   runSession: CodexSessionRunner;
   stdout: Pick<NodeJS.WriteStream, "write">;
 }): Promise<number> {
-  let changeMetadata = input.change.metadata ?? null;
-  if (!changeMetadata && input.modeOverride !== "finalize") {
-    const metadataResult = readClaimedChangeMetadata(
-      input.branchPlan.worktreeDir,
-      input.change.branch,
-      input.runCommand,
+  const startResult = runSupervisorDevstateCommand({
+    action: "start",
+    changeId: input.change.changeId,
+    runCommand: input.runCommand,
+    stdout: input.stdout,
+    worktreeDir: input.branchPlan.worktreeDir,
+  });
+  if (startResult.code !== 0) {
+    const evidence: AgentEvidence = {
+      at: nowIso(input.now),
+      command: "devstate start",
+      message: `devstate start failed for ${input.change.changeId}: ${commandResultSummary(
+        startResult,
+      )}`,
+    };
+    markClaimedChangeBlocked({
+      branchPlan: input.branchPlan,
+      changeId: input.change.changeId,
+      evidence,
+      now: input.now,
+      options: input.options,
+      paths: input.paths,
+    });
+    return 1;
+  }
+
+  try {
+    let changeMetadata = input.change.metadata ?? null;
+    if (!changeMetadata && input.modeOverride !== "finalize") {
+      const metadataResult = readClaimedChangeMetadata(
+        input.branchPlan.worktreeDir,
+        input.change.branch,
+        input.runCommand,
+      );
+      if (!metadataResult.ok) {
+        const blockedEvidence: AgentEvidence = {
+          at: nowIso(input.now),
+          message: `invalid change metadata for ${input.change.changeId}: ${metadataResult.errors.join(
+            "; ",
+          )}`,
+        };
+        writeWorkerStatus(
+          input.paths.root,
+          makeWorkerStatus({
+            branch: input.branchPlan.branch,
+            currentChange: input.change.changeId,
+            latestEvidence: blockedEvidence,
+            now: input.now,
+            owner: input.options.workerName,
+            state: "blocked",
+          }),
+        );
+        updateChangeLease(
+          input.paths.root,
+          input.change.changeId,
+          { latestEvidence: blockedEvidence, state: "blocked" },
+          input.now,
+        );
+        return 1;
+      }
+      changeMetadata = metadataResult.metadata;
+    }
+
+    const mode =
+      input.modeOverride ??
+      (changeMetadata && remainingFormlessChangeTasks(changeMetadata) === 0
+        ? "finalize"
+        : "implement");
+    const state: WorkerState = mode === "finalize" ? "finalizing" : "working";
+    const evidence: AgentEvidence = {
+      at: nowIso(input.now),
+      message: `${state} ${input.change.changeId}`,
+    };
+
+    writeWorkerStatus(
+      input.paths.root,
+      makeWorkerStatus({
+        branch: input.branchPlan.branch,
+        currentChange: input.change.changeId,
+        latestEvidence: evidence,
+        now: input.now,
+        owner: input.options.workerName,
+        state,
+      }),
     );
-    if (!metadataResult.ok) {
-      const blockedEvidence: AgentEvidence = {
+    updateChangeLease(
+      input.paths.root,
+      input.change.changeId,
+      { latestEvidence: evidence, state },
+      input.now,
+    );
+
+    let outcomeEvidence: AgentEvidence | null = null;
+    const signal =
+      mode === "finalize"
+        ? (() => {
+            const outcome = runAutomaticFinalization({
+              branchPlan: input.branchPlan,
+              change: input.change,
+              now: input.now,
+              options: input.options,
+              runCommand: input.runCommand,
+              stdout: input.stdout,
+            });
+            outcomeEvidence = outcome.evidence;
+            return outcome.signal;
+          })()
+        : await input.runSession({
+            applyInstructions: null,
+            baseRef: input.options.baseRef,
+            branchDiff: readCurrentBranchDiffSummary(
+              input.branchPlan.worktreeDir,
+              input.options.baseRef,
+              input.runCommand,
+            ),
+            changeMetadata,
+            changeId: input.change.changeId,
+            dangerous: input.options.dangerous,
+            mode,
+            now: input.now,
+            paths: input.paths,
+            runCommand: input.runCommand,
+            selectedTaskSection: selectedFormlessTaskSection(changeMetadata),
+            workerName: input.options.workerName,
+            worktreeDir: input.branchPlan.worktreeDir,
+            stdout: input.stdout,
+          });
+
+    if (signal === "blocked" || signal === "none") {
+      const blockedEvidence: AgentEvidence = outcomeEvidence ?? {
         at: nowIso(input.now),
-        message: `invalid change metadata for ${input.change.changeId}: ${metadataResult.errors.join(
-          "; ",
-        )}`,
+        message: `worker stopped with ${signal}`,
       };
       writeWorkerStatus(
         input.paths.root,
@@ -2764,187 +2924,110 @@ async function runClaimedChange(input: {
       );
       return 1;
     }
-    changeMetadata = metadataResult.metadata;
-  }
 
-  const mode =
-    input.modeOverride ??
-    (changeMetadata && remainingFormlessChangeTasks(changeMetadata) === 0
-      ? "finalize"
-      : "implement");
-  const state: WorkerState = mode === "finalize" ? "finalizing" : "working";
-  const evidence: AgentEvidence = {
-    at: nowIso(input.now),
-    message: `${state} ${input.change.changeId}`,
-  };
-
-  writeWorkerStatus(
-    input.paths.root,
-    makeWorkerStatus({
-      branch: input.branchPlan.branch,
-      currentChange: input.change.changeId,
-      latestEvidence: evidence,
-      now: input.now,
-      owner: input.options.workerName,
-      state,
-    }),
-  );
-  updateChangeLease(
-    input.paths.root,
-    input.change.changeId,
-    { latestEvidence: evidence, state },
-    input.now,
-  );
-
-  let outcomeEvidence: AgentEvidence | null = null;
-  const signal =
-    mode === "finalize"
-      ? (() => {
-          const outcome = runAutomaticFinalization({
-            branchPlan: input.branchPlan,
-            change: input.change,
-            now: input.now,
-            options: input.options,
-            runCommand: input.runCommand,
-            stdout: input.stdout,
-          });
-          outcomeEvidence = outcome.evidence;
-          return outcome.signal;
-        })()
-      : await input.runSession({
-          applyInstructions: null,
-          baseRef: input.options.baseRef,
-          branchDiff: readCurrentBranchDiffSummary(
-            input.branchPlan.worktreeDir,
-            input.options.baseRef,
-            input.runCommand,
-          ),
-          changeMetadata,
-          changeId: input.change.changeId,
-          dangerous: input.options.dangerous,
-          mode,
+    let publishedCommit: string;
+    try {
+      publishedCommit = publishWorkerBranchToChangeBranch(input.branchPlan, input.runCommand);
+    } catch (error) {
+      const blockedEvidence: AgentEvidence = {
+        at: nowIso(input.now),
+        message: `failed to publish ${input.branchPlan.workerBranch} to ${
+          input.branchPlan.branch
+        }: ${error instanceof Error ? error.message : String(error)}`,
+      };
+      writeWorkerStatus(
+        input.paths.root,
+        makeWorkerStatus({
+          branch: input.branchPlan.branch,
+          currentChange: input.change.changeId,
+          latestEvidence: blockedEvidence,
           now: input.now,
-          paths: input.paths,
-          runCommand: input.runCommand,
-          selectedTaskSection: selectedFormlessTaskSection(changeMetadata),
-          workerName: input.options.workerName,
-          worktreeDir: input.branchPlan.worktreeDir,
-          stdout: input.stdout,
-        });
-
-  if (signal === "blocked" || signal === "none") {
-    const blockedEvidence: AgentEvidence = outcomeEvidence ?? {
-      at: nowIso(input.now),
-      message: `worker stopped with ${signal}`,
-    };
-    writeWorkerStatus(
-      input.paths.root,
-      makeWorkerStatus({
-        branch: input.branchPlan.branch,
-        currentChange: input.change.changeId,
-        latestEvidence: blockedEvidence,
-        now: input.now,
-        owner: input.options.workerName,
-        state: "blocked",
-      }),
-    );
-    updateChangeLease(
-      input.paths.root,
-      input.change.changeId,
-      { latestEvidence: blockedEvidence, state: "blocked" },
-      input.now,
-    );
-    return 1;
-  }
-
-  let publishedCommit: string;
-  try {
-    publishedCommit = publishWorkerBranchToChangeBranch(input.branchPlan, input.runCommand);
-  } catch (error) {
-    const blockedEvidence: AgentEvidence = {
-      at: nowIso(input.now),
-      message: `failed to publish ${input.branchPlan.workerBranch} to ${
-        input.branchPlan.branch
-      }: ${error instanceof Error ? error.message : String(error)}`,
-    };
-    writeWorkerStatus(
-      input.paths.root,
-      makeWorkerStatus({
-        branch: input.branchPlan.branch,
-        currentChange: input.change.changeId,
-        latestEvidence: blockedEvidence,
-        now: input.now,
-        owner: input.options.workerName,
-        state: "blocked",
-      }),
-    );
-    updateChangeLease(
-      input.paths.root,
-      input.change.changeId,
-      { latestEvidence: blockedEvidence, state: "blocked" },
-      input.now,
-    );
-    return 1;
-  }
-
-  if (mode === "implement") {
-    const implementationEvidence: AgentEvidence = {
-      at: nowIso(input.now),
-      message:
-        signal === "plan-done"
-          ? `implemented ${input.change.changeId}; branch ${input.branchPlan.branch} updated at ${publishedCommit}; ready for finalization pass`
-          : `implemented ${input.change.changeId}; branch ${input.branchPlan.branch} updated at ${publishedCommit}`,
-    };
-    writeWorkerStatus(
-      input.paths.root,
-      makeWorkerStatus({
-        branch: input.branchPlan.branch,
-        currentChange: input.change.changeId,
-        latestEvidence: implementationEvidence,
-        now: input.now,
-        owner: input.options.workerName,
-        state: "working",
-      }),
-    );
-    updateChangeLease(
-      input.paths.root,
-      input.change.changeId,
-      { latestEvidence: implementationEvidence, state: "working" },
-      input.now,
-    );
-    writeLine(input.stdout, `[agents] published ${input.change.changeId} at ${publishedCommit}`);
-  }
-
-  if (mode === "finalize" && signal === "plan-done") {
-    const readyEvidence: AgentEvidence = {
-      at: nowIso(input.now),
-      message: `${
-        outcomeEvidence?.message ?? `finalized ${input.change.changeId}`
-      }; branch ${input.branchPlan.branch} ready for review at ${publishedCommit}; worker branch ${input.branchPlan.workerBranch} remains checked out`,
-    };
-    if (outcomeEvidence?.command) {
-      readyEvidence.command = outcomeEvidence.command;
+          owner: input.options.workerName,
+          state: "blocked",
+        }),
+      );
+      updateChangeLease(
+        input.paths.root,
+        input.change.changeId,
+        { latestEvidence: blockedEvidence, state: "blocked" },
+        input.now,
+      );
+      return 1;
     }
-    writeWorkerStatus(
-      input.paths.root,
-      makeWorkerStatus({
-        branch: input.branchPlan.branch,
-        currentChange: input.change.changeId,
-        latestEvidence: readyEvidence,
-        now: input.now,
-        owner: input.options.workerName,
-        state: "ready-for-review",
-      }),
-    );
-    updateChangeLease(
-      input.paths.root,
-      input.change.changeId,
-      { latestEvidence: readyEvidence, state: "ready-for-review" },
-      input.now,
-    );
-  }
 
-  return 0;
+    if (mode === "implement") {
+      const implementationEvidence: AgentEvidence = {
+        at: nowIso(input.now),
+        message:
+          signal === "plan-done"
+            ? `implemented ${input.change.changeId}; branch ${input.branchPlan.branch} updated at ${publishedCommit}; ready for finalization pass`
+            : `implemented ${input.change.changeId}; branch ${input.branchPlan.branch} updated at ${publishedCommit}`,
+      };
+      writeWorkerStatus(
+        input.paths.root,
+        makeWorkerStatus({
+          branch: input.branchPlan.branch,
+          currentChange: input.change.changeId,
+          latestEvidence: implementationEvidence,
+          now: input.now,
+          owner: input.options.workerName,
+          state: "working",
+        }),
+      );
+      updateChangeLease(
+        input.paths.root,
+        input.change.changeId,
+        { latestEvidence: implementationEvidence, state: "working" },
+        input.now,
+      );
+      writeLine(input.stdout, `[agents] published ${input.change.changeId} at ${publishedCommit}`);
+    }
+
+    if (mode === "finalize" && signal === "plan-done") {
+      const readyEvidence: AgentEvidence = {
+        at: nowIso(input.now),
+        message: `${
+          outcomeEvidence?.message ?? `finalized ${input.change.changeId}`
+        }; branch ${input.branchPlan.branch} ready for review at ${publishedCommit}; worker branch ${input.branchPlan.workerBranch} remains checked out`,
+      };
+      if (outcomeEvidence?.command) {
+        readyEvidence.command = outcomeEvidence.command;
+      }
+      writeWorkerStatus(
+        input.paths.root,
+        makeWorkerStatus({
+          branch: input.branchPlan.branch,
+          currentChange: input.change.changeId,
+          latestEvidence: readyEvidence,
+          now: input.now,
+          owner: input.options.workerName,
+          state: "ready-for-review",
+        }),
+      );
+      updateChangeLease(
+        input.paths.root,
+        input.change.changeId,
+        { latestEvidence: readyEvidence, state: "ready-for-review" },
+        input.now,
+      );
+    }
+
+    return 0;
+  } finally {
+    const stopResult = runSupervisorDevstateCommand({
+      action: "stop",
+      changeId: input.change.changeId,
+      runCommand: input.runCommand,
+      stdout: input.stdout,
+      worktreeDir: input.branchPlan.worktreeDir,
+    });
+    if (stopResult.code !== 0) {
+      writeLine(
+        input.stdout,
+        `[agents] devstate stop failed ${input.change.changeId}: ${commandResultSummary(stopResult)}`,
+      );
+    }
+  }
 }
 
 async function runReadyForReviewMaintenance(input: {

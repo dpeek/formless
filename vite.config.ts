@@ -49,7 +49,7 @@ const siteProjectRoot = process.env[FORMLESS_SITE_PROJECT_ROOT_ENV_NAME];
 const wranglerPersistPath = process.env.FORMLESS_WRANGLER_PERSIST;
 const workspaceAppPackages = process.env[FORMLESS_WORKSPACE_APP_PACKAGES_ENV_NAME]?.trim();
 const workerRuntimeVars = runtimeWorkerVars(process.env);
-const ignoredScratchGlobs = ["tmp/**", "**/tmp/**"];
+const ignoredScratchGlobs = [".agents/**"];
 const serverFsAllow = [
   packageRoot,
   ...(installedNodeModulesRoot ? [installedNodeModulesRoot] : []),

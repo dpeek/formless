@@ -199,6 +199,13 @@ The system SHALL use `./tmp/worktree/<worker-name>` as the default local worktre
 - **AND** checks out `agents/igor`
 - **AND** resets `agents/igor` to `changes/add-thing` before starting the worker session
 
+#### Scenario: Supervisor owns devstate lifecycle
+
+- **WHEN** a claimed change worktree has been prepared for a worker session
+- **THEN** the supervisor runs `devstate start` in that worktree before launching the worker session
+- **AND** the worker prompt does not ask the worker to run `devstate start` or `devstate stop`
+- **AND** the supervisor runs `devstate stop` in that worktree after the worker session completes, blocks, or errors
+
 #### Scenario: Worker reuses its worktree
 
 - **WHEN** `igor` later works on `other-thing`
@@ -283,16 +290,10 @@ The system SHALL finalize a completed Git-backed change branch through metadata 
 - **THEN** it runs strict validation for canonical specs
 - **AND** it blocks with command evidence when canonical spec validation fails
 
-#### Scenario: Finalization reuses valid implementation check
+#### Scenario: Finalization always runs completion check
 
-- **WHEN** finalization does not change code, resolve conflicts, or otherwise invalidate the latest recorded implementation `devstate check`
-- **THEN** the worker does not run `devstate check` again
-- **AND** the worker records which implementation check evidence was reused
-
-#### Scenario: Finalization reruns invalidated check
-
-- **WHEN** finalization rebases code changes, resolves conflicts, edits code or generated outputs, or cannot prove the latest implementation check still covers the final branch state
-- **THEN** the worker runs `devstate check`, reads `.devstate/status.md`, fixes issues, and records finalization check evidence before marking the branch ready
+- **WHEN** finalization validates `changes/add-thing`
+- **THEN** the worker runs `devstate check`, reads `.devstate/status.md` after failures or when exact status text is needed, fixes issues, and records finalization check evidence before marking the branch ready
 
 #### Scenario: Worker resolves clear structural rebase conflicts
 
@@ -387,9 +388,9 @@ The system SHALL render concise worker prompt packets from the repo-owned Git-ba
 - **THEN** the rendered prompt includes the already-known task state, change state, and relevant file paths needed by the worker
 - **AND** the worker is not required to rerun those commands only to rediscover the same state
 
-#### Scenario: Devstate output avoids immediate status reread
+#### Scenario: Check output avoids immediate status reread
 
-- **WHEN** `devstate start` or `devstate check` prints current green status for the session
+- **WHEN** `devstate check` prints current green status for the session
 - **THEN** the worker can use that output as check evidence
 - **AND** the worker reads `.devstate/status.md` after failures, stale output, conflict resolution, or when exact status text must be copied into change metadata
 

@@ -28,7 +28,6 @@ Skill-owned instruction source: `.agents/skills/change-apply/templates/local-imp
 
 {{git_backed_helper_commands}}
 
-- Start repo services and checks: `devstate start`.
 - Validate the completion gate: `devstate check`.
 
 ## Assignment
@@ -43,21 +42,20 @@ Skill-owned instruction source: `.agents/skills/change-apply/templates/local-imp
 
 ## Workflow
 
-1. Run `devstate start`. Current green `devstate start` output can satisfy setup evidence; read `./.devstate/status.md` after failures, stale output, conflict resolution, or exact evidence-copy needs.
-2. Read `AGENTS.md`.
-3. Use the selected task section above before broad context reads. The selected section includes that heading and its task checkboxes.
-4. After selecting the section, read only the commit metadata, canonical specs, docs, and code needed for that section.
-5. If the worktree is already mid-rebase, resolve clear structural conflicts, continue the rebase, and stop with `<blocked/>` only for semantic conflicts.
-6. Implement only the selected task section. Do not cross into another task section.
-7. If the selected task section is too large, internally inconsistent, or crosses an unclear architecture, security, storage, public API, or design boundary, stop with `<blocked/>` and record blocker evidence plus split guidance in commit metadata.
-8. Preserve user changes. Keep data model flat; compose in view/query/projection/action layer.
-9. Mark only completed task checkboxes from the selected section complete in commit metadata.
-10. Record changed files, `devstate check` evidence, browser smoke evidence when app behavior changed, blockers, and split guidance in structured commit metadata.
-11. Run `devstate check`. Current clean `devstate check` output is required for done evidence; read `./.devstate/status.md` after failures, stale output, conflict resolution, or exact evidence-copy needs. If the completion gate is red, diagnose and fix reasonably actionable failures before deciding whether you are blocked. Do not run `vp test`, `vp check`, `bun test`, or `bun check` manually.
-12. If app behavior changed, smoke with `bun browser ...` and record evidence.
-13. Amend the branch tip so the commit message contains updated task state, evidence, blockers if any, and trailers. Do not merge into `main`.
-14. Do not perform automatic finalization, archive, spec promotion, or ready-for-review work in this implementation session.
-15. Final response must include changed files, checks, change metadata status, and exactly one signal: `<task-done/>`, `<plan-done/>`, or `<blocked/>`.
+1. Read `AGENTS.md`.
+2. Use the selected task section above before broad context reads. The selected section includes that heading and its task checkboxes.
+3. After selecting the section, read only the commit metadata, canonical specs, docs, and code needed for that section.
+4. If the worktree is already mid-rebase, resolve clear structural conflicts, continue the rebase, and stop with `<blocked/>` only for semantic conflicts.
+5. Implement only the selected task section. Do not cross into another task section.
+6. If the selected task section is too large, internally inconsistent, or crosses an unclear architecture, security, storage, public API, or design boundary, stop with `<blocked/>` and record blocker evidence plus split guidance in commit metadata.
+7. Preserve user changes. Keep data model flat; compose in view/query/projection/action layer.
+8. Mark only completed task checkboxes from the selected section complete in commit metadata.
+9. Record changed files, `devstate check` evidence, browser smoke evidence when app behavior changed, blockers, and split guidance in structured commit metadata.
+10. Run `devstate check`. Current clean `devstate check` output is required for done evidence; read `./.devstate/status.md` after failures, stale output, conflict resolution, or exact evidence-copy needs. If the completion gate is red, diagnose and fix reasonably actionable failures before deciding whether you are blocked. Do not run `vp test`, `vp check`, `bun test`, or `bun check` manually.
+11. If app behavior changed, smoke with `bun browser ...` and record evidence.
+12. Amend the branch tip so the commit message contains updated task state, evidence, blockers if any, and trailers. Do not merge into `main`.
+13. Do not perform automatic finalization, archive, spec promotion, or ready-for-review work in this implementation session.
+14. Final response must include changed files, checks, change metadata status, and exactly one signal: `<task-done/>`, `<plan-done/>`, or `<blocked/>`.
 
 ## Completion Gate
 

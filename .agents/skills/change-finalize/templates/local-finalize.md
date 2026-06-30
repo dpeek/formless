@@ -37,23 +37,21 @@ Skill-owned instruction source: `.agents/skills/change-finalize/templates/local-
 - Rebase on local main: `git rebase main`.
 - Validate structured metadata: `git log --no-notes -1 --format=%B HEAD`.
 - Validate canonical specs: `openspec validate --specs --strict --no-interactive`.
-- Run checks only when finalization invalidates current implementation evidence: `devstate check`.
+- Validate the completion gate: `devstate check`.
 
 ## Workflow
 
-1. Run `devstate start`. Current green `devstate start` output can satisfy setup evidence; read `./.devstate/status.md` after failures, stale output, conflict resolution, or exact evidence-copy needs.
-2. Read `AGENTS.md`.
-3. Verify all required metadata tasks are shipped or intentionally closed. Stop with `<blocked/>` if the change is not ready.
-4. Rebase current branch on local `main`. Use `git rebase main`; resolve clear structural conflicts and stop with `<blocked/>` only for semantic conflicts.
-5. Validate the rebased tip commit metadata. Stop with `<blocked/>` if required sections, trailers, branch id, or task state are invalid.
-6. Run `openspec validate --specs --strict --no-interactive`; block with command evidence on failure.
-7. Do not run `openspec archive` and do not commit archived change files.
-8. Reuse latest implementation `devstate check` evidence when finalization did not change code, resolve conflicts, edit generated output, or otherwise invalidate the checked tree.
-9. Run `devstate check` only when finalization invalidates prior evidence or evidence validity is unclear. Current green `devstate check` output can satisfy check evidence; read `./.devstate/status.md` after failures, stale output, conflict resolution, or exact evidence-copy needs. Do not run `vp test`, `vp check`, `bun test`, or `bun check` manually.
-10. Update the tip commit metadata with finalization evidence, `Formless-Change-State: ready-for-review`, and latest evidence time.
-11. Leave `changes/{{change_id}}` as the review branch and do not check it out in the worker worktree.
-12. Do not merge into `main`.
-13. Final response must include changed files, checks, OpenSpec change status, and exactly one signal: `<plan-done/>` or `<blocked/>`.
+1. Read `AGENTS.md`.
+2. Verify all required metadata tasks are shipped or intentionally closed. Stop with `<blocked/>` if the change is not ready.
+3. Rebase current branch on local `main`. Use `git rebase main`; resolve clear structural conflicts and stop with `<blocked/>` only for semantic conflicts.
+4. Validate the rebased tip commit metadata. Stop with `<blocked/>` if required sections, trailers, branch id, or task state are invalid.
+5. Run `openspec validate --specs --strict --no-interactive`; block with command evidence on failure.
+6. Do not run `openspec archive` and do not commit archived change files.
+7. Run `devstate check`. Current green `devstate check` output can satisfy check evidence; read `./.devstate/status.md` after failures, stale output, conflict resolution, or exact evidence-copy needs. If the completion gate is red, diagnose and fix reasonably actionable failures before deciding whether you are blocked. Do not run `vp test`, `vp check`, `bun test`, or `bun check` manually.
+8. Update the tip commit metadata with finalization evidence, `Formless-Change-State: ready-for-review`, and latest evidence time.
+9. Leave `changes/{{change_id}}` as the review branch and do not check it out in the worker worktree.
+10. Do not merge into `main`.
+11. Final response must include changed files, checks, OpenSpec change status, and exactly one signal: `<plan-done/>` or `<blocked/>`.
 
 ## Signals
 
