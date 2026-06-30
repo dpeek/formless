@@ -1,0 +1,30 @@
+{
+  "name": "@dpeek/formless-astryx",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite"
+  },
+  "dependencies": {
+    "@astryxdesign/core": "latest",
+    "@astryxdesign/theme-neutral": "latest",
+    "@heroicons/react": "latest",
+    "@stylexjs/stylex": "latest",
+    "@thesvg/react": "^3.0.19",
+    "react": "latest",
+    "react-dom": "latest"
+  },
+  "devDependencies": {
+    "@astryxdesign/build": "latest",
+    "@stylexjs/unplugin": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "@vitejs/plugin-react": "latest",
+    "typescript": "~6.0.2",
+    "vite": "latest"
+  },
+  "browserslist": [
+    "last 1 Chrome version"
+  ]
+}
