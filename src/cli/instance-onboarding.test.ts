@@ -109,7 +109,6 @@ describe("Formless instance onboarding planner", () => {
         FORMLESS_DOMAIN_PROVIDER_CLOUDFLARE_ACCOUNT_ID: "account-123",
         FORMLESS_DOMAIN_PROVIDER_INSTANCE_ID: "brothers-remote-instance",
         FORMLESS_DOMAIN_PROVIDER_WORKER_NAME: "brothers-remote-instance",
-        FORMLESS_INSTANCE_AUTH_ORIGIN: "https://brothers-remote-instance.dpeek.workers.dev",
         FORMLESS_RUNTIME_PROFILE: "instance",
         VITE_FORMLESS_RUNTIME_PROFILE: "instance",
       },
@@ -1131,7 +1130,6 @@ describe("Alchemy Formless instance deployment", () => {
             FORMLESS_DOMAIN_PROVIDER_CLOUDFLARE_ACCOUNT_ID: "account-123",
             FORMLESS_DOMAIN_PROVIDER_INSTANCE_ID: "brother-instance",
             FORMLESS_DOMAIN_PROVIDER_WORKER_NAME: "brother-instance",
-            FORMLESS_INSTANCE_AUTH_ORIGIN: "https://brother-instance.dpeek.workers.dev",
             FORMLESS_EMAIL_DELIVERY_QUEUE: queues[1]?.output,
             FORMLESS_MEDIA: mediaBucket,
             FORMLESS_RUNTIME_PROFILE: "instance",
@@ -1145,7 +1143,6 @@ describe("Alchemy Formless instance deployment", () => {
               FORMLESS_DOMAIN_PROVIDER_CLOUDFLARE_ACCOUNT_ID: "account-123",
               FORMLESS_DOMAIN_PROVIDER_INSTANCE_ID: "brother-instance",
               FORMLESS_DOMAIN_PROVIDER_WORKER_NAME: "brother-instance",
-              FORMLESS_INSTANCE_AUTH_ORIGIN: "https://brother-instance.dpeek.workers.dev",
               FORMLESS_RUNTIME_PROFILE: "instance",
               [FORMLESS_SITE_PROJECT_ROOT_ENV_NAME]: "/workspace",
               [FORMLESS_WORKSPACE_APP_PACKAGES_ENV_NAME]: "runtime-package-payload",
@@ -1905,11 +1902,11 @@ describe("Alchemy Formless instance deployment", () => {
         FORMLESS_DOMAIN_PROVIDER_CLOUDFLARE_ACCOUNT_ID: "account-123",
         FORMLESS_DOMAIN_PROVIDER_INSTANCE_ID: "brother-instance",
         FORMLESS_DOMAIN_PROVIDER_WORKER_NAME: "brother-instance",
-        FORMLESS_INSTANCE_AUTH_ORIGIN: "https://brother-instance.dpeek.workers.dev",
         FORMLESS_RUNTIME_PROFILE: "instance",
         VITE_FORMLESS_RUNTIME_PROFILE: "instance",
       },
     });
+    expect(plan.runtimeVars).not.toHaveProperty("FORMLESS_INSTANCE_AUTH_ORIGIN");
     expect(buckets[0]?.props).toMatchObject({ adopt: true });
     expect(customDomains[0]?.props).toMatchObject({ adopt: true });
     expect(turnstiles[0]?.props).toMatchObject({ adopt: true });

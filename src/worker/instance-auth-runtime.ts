@@ -9,6 +9,7 @@ import { instanceControlPlaneProductionIdentityFromRecords } from "@dpeek/formle
 import { resolveRuntimeProfileKind } from "../shared/runtime-topology.ts";
 import { readControlPlaneRecords } from "./deployment-control-plane-client.ts";
 import { readInstanceAuthConfig, writeInstanceAuthConfig } from "./instance-auth-state.ts";
+import { readIdentityOwner } from "./identity-control-plane.ts";
 
 export type InstanceAuthRuntimeEnv = {
   [FORMLESS_INSTANCE_AUTH_ORIGIN_ENV_NAME]?: string;
@@ -25,17 +26,49 @@ export function ensureRuntimeInstanceAuthConfig(
   request: Request,
   env: InstanceAuthRuntimeEnv,
 ): Promise<void> {
-  if (readInstanceAuthConfig(storage)) {
-    return Promise.resolve();
-  }
+  const existing = readInstanceAuthConfig(storage);
 
-  return runtimeInstanceAuthConfigForRequest(request, env).then((config) => {
+  return runtimeInstanceAuthConfigForRequest(request, env).then(async (config) => {
     if (!config) {
+      return;
+    }
+
+    if (!existing) {
+      writeInstanceAuthConfig(storage, config);
+      return;
+    }
+
+    if (instanceAuthConfigMatches(existing, config)) {
+      return;
+    }
+
+    if (!env.FORMLESS_AUTHORITY) {
+      return;
+    }
+
+    const owner = await readIdentityOwner({ FORMLESS_AUTHORITY: env.FORMLESS_AUTHORITY });
+
+    if (owner) {
       return;
     }
 
     writeInstanceAuthConfig(storage, config);
   });
+}
+
+function instanceAuthConfigMatches(
+  existing: {
+    canonicalOrigin: string;
+    relyingPartyId: string;
+    relyingPartyName: string;
+  },
+  next: InstanceAuthConfigInput,
+): boolean {
+  return (
+    existing.canonicalOrigin === next.canonicalOrigin &&
+    existing.relyingPartyId === next.relyingPartyId &&
+    existing.relyingPartyName === next.relyingPartyName
+  );
 }
 
 async function runtimeInstanceAuthConfigForRequest(

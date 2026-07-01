@@ -154,7 +154,6 @@ export type FormlessInstanceDeploymentPlan = {
     FORMLESS_DOMAIN_PROVIDER_CLOUDFLARE_ACCOUNT_ID: string;
     FORMLESS_DOMAIN_PROVIDER_INSTANCE_ID: string;
     FORMLESS_DOMAIN_PROVIDER_WORKER_NAME: string;
-    FORMLESS_INSTANCE_AUTH_ORIGIN: string;
     FORMLESS_RUNTIME_PROFILE: "instance";
     VITE_FORMLESS_RUNTIME_PROFILE: "instance";
   };
@@ -610,7 +609,6 @@ export function planFormlessInstanceDeployment(
       FORMLESS_DOMAIN_PROVIDER_CLOUDFLARE_ACCOUNT_ID: account.id,
       FORMLESS_DOMAIN_PROVIDER_INSTANCE_ID: instanceName,
       FORMLESS_DOMAIN_PROVIDER_WORKER_NAME: workerName,
-      FORMLESS_INSTANCE_AUTH_ORIGIN: `https://${host}`,
       FORMLESS_RUNTIME_PROFILE: "instance",
       VITE_FORMLESS_RUNTIME_PROFILE: "instance",
     },
@@ -945,7 +943,6 @@ async function declareFormlessInstanceAlchemyResourceTree(
         input.plan.runtimeVars.FORMLESS_DOMAIN_PROVIDER_INSTANCE_ID,
       FORMLESS_DOMAIN_PROVIDER_WORKER_NAME:
         input.plan.runtimeVars.FORMLESS_DOMAIN_PROVIDER_WORKER_NAME,
-      FORMLESS_INSTANCE_AUTH_ORIGIN: input.plan.runtimeVars.FORMLESS_INSTANCE_AUTH_ORIGIN,
       FORMLESS_RUNTIME_PROFILE: input.plan.runtimeVars.FORMLESS_RUNTIME_PROFILE,
       [FORMLESS_TURNSTILE_SECRET_KEY_ENV_NAME]: turnstileWidget.verificationSecret,
       [FORMLESS_TURNSTILE_SITE_KEY_ENV_NAME]: turnstileWidget.siteKey,

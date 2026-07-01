@@ -88,6 +88,69 @@ describe("installed Site custom-domain Worker routing", () => {
     await expectAuthConfigRp(harness, "personal.dpeek.workers.dev", "example.com");
   }, 10_000);
 
+  it("refreshes stale auth config before owner setup completes", async () => {
+    await createRouteRecord("route:primary-production", {
+      enabled: true,
+      matchHost: "verifi.verifi-labs.workers.dev",
+      matchPath: "/",
+      matchPrefix: "/",
+      kind: "mount",
+      targetProfile: "instance",
+      surface: "admin",
+      access: "owner",
+    });
+
+    const primaryRoute = routeRecordIds.get("route:primary-production");
+
+    expect(primaryRoute).toBeDefined();
+
+    await postAdminJson(`${controlPlaneApi}/operations/instance-settings/create`, {
+      idempotencyKey: "instance-settings-stale-auth-origin",
+      input: {
+        settingsId: INSTANCE_CONTROL_PLANE_INSTANCE_SETTINGS_ID,
+        primaryRoute,
+        authOrigin: "https://verifi.verifi-labs.workers.dev",
+        authRelyingPartyId: "verifi.verifi-labs.workers.dev",
+        productionIdentityStatus: "configured",
+      },
+    });
+
+    await expectAuthConfigRp(
+      harness,
+      "verifi.verifi-labs.workers.dev",
+      "verifi.verifi-labs.workers.dev",
+    );
+
+    routeRecordIds.clear();
+    await postReset(harness, `${controlPlaneApi}/reset/seed`);
+    await createRouteRecord("route:primary-production", {
+      enabled: true,
+      matchHost: "admin.verifi-labs.com",
+      matchPath: "/",
+      matchPrefix: "/",
+      kind: "mount",
+      targetProfile: "instance",
+      surface: "admin",
+      access: "owner",
+    });
+    const updatedPrimaryRoute = routeRecordIds.get("route:primary-production");
+
+    expect(updatedPrimaryRoute).toBeDefined();
+
+    await postAdminJson(`${controlPlaneApi}/operations/instance-settings/create`, {
+      idempotencyKey: "instance-settings-refreshed-auth-origin",
+      input: {
+        settingsId: INSTANCE_CONTROL_PLANE_INSTANCE_SETTINGS_ID,
+        primaryRoute: updatedPrimaryRoute,
+        authOrigin: "https://auth.verifi-labs.com",
+        authRelyingPartyId: "auth.verifi-labs.com",
+        productionIdentityStatus: "configured",
+      },
+    });
+
+    await expectAuthConfigRp(harness, "auth.verifi-labs.com", "auth.verifi-labs.com");
+  }, 10_000);
+
   it("renders mapped host documents from installed Site storage", async () => {
     await setupMappedSite();
     await postInstalledAppRecordOperation("site", installId, {
