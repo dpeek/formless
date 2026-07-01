@@ -464,6 +464,37 @@ The system SHALL use field behavior to define validation, defaults, conversion, 
 - THEN date fields preserve `YYYY-MM-DD` values
 - AND number fields store numbers
 
+#### Scenario: Validate contact-shaped text formats
+
+- GIVEN a text field or inline text operation input declares `format` `email`
+  or `phone`
+- WHEN schema field behavior validates accepted input for Authority storage,
+  operation input projection, or public form coercion
+- THEN validation uses one shared runtime-neutral text format validator
+- AND accepted email and phone values are trimmed before storage
+- AND email format requires exactly one `@`, rejects whitespace and control
+  characters, requires non-empty local and domain parts, requires plausible
+  dot-separated domain labels, caps length, and does not perform DNS, MX, or
+  full RFC address validation
+- AND invalid email input returns the user-facing message
+  `Enter an email address like name@example.com.`
+- AND optional blank phone input remains omitted
+- AND phone format allows digits plus common separators `+`, `-`, `.`, `(`,
+  `)`, and spaces, requires 7 to 15 digits, allows `+` only at the start,
+  stores the trimmed original text, and does not perform country-specific
+  formatting or E.164 normalization
+- AND invalid phone input returns the user-facing message
+  `Enter a phone number using digits and common separators.`
+
+#### Scenario: Declare open text suggestions
+
+- GIVEN a text field or inline text operation input declares `suggestions`
+- WHEN the schema is parsed
+- THEN `suggestions` is a non-empty array of non-empty strings
+- AND suggestions are presentation metadata for text inputs, not enum values
+- AND field validation accepts any text value allowed by the text field format
+  instead of restricting stored values to the suggestions
+
 #### Scenario: Validate presentation modes
 
 - GIVEN presentation mode `iconOnly`, `completion`, or `valueOrInteraction`
@@ -608,6 +639,8 @@ public forms, automation, audit, and authorization.
   contract
 - AND projection derives required flags, inline scalar validation, entity-backed
   field targets, and storage-free scalar field behavior from the parsed schema
+- AND inline scalar operation input validation uses the same field behavior
+  validators as entity-backed operation input validation
 - AND projection can return operation-input keyed values for command handlers
   and record plans
 - AND projection can return entity-field keyed values for create and update
@@ -820,14 +853,17 @@ anonymous public bindings.
   submitted input display
 - THEN the projection is derived from `operation.input.fields`
 - AND entity-backed operation input fields reuse public-safe entity field
-  labels, required flags, scalar types, enum values, and text presentation facts
+  labels, required flags, scalar types, enum values, text formats, and text
+  suggestions
 - AND inline operation input fields expose only their declared labels, required
-  flags, scalar types, enum values, and public text presentation facts
+  flags, scalar types, enum values, public text formats, and public text
+  suggestions
 - AND submitted input display can use the same public-safe projection to select
   fields, resolve entity-backed input names or stored field names, and format
   scalar display values without exposing private schema facts
 - AND v1 generic public form rendering supports text, long text, enum, boolean,
-  date, and number controls
+  date, number, email-formatted text, phone-formatted text, and open suggested
+  text controls
 - AND reference fields, relationship pickers, query-backed choices, server-side
   conditional validation, wizard flow state, payment facts, and authenticated
   customer facts are not projected as generic public form fields

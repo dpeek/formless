@@ -8,7 +8,9 @@ import type {
   EntityOperationInputFieldSchema,
   EntityOperationSchema,
   EntitySchema,
+  ContactTextFieldFormat,
   FieldSchema,
+  TextFieldFormat,
 } from "./types.ts";
 
 export type AnonymousPublicOperationExecutionKind =
@@ -58,6 +60,8 @@ export type PublicSafeOperationInputField = {
   label: string;
   required: boolean;
   control: PublicSafeOperationInputControl;
+  format?: ContactTextFieldFormat;
+  suggestions?: string[];
   options?: PublicSafeOperationInputFieldOption[];
 };
 
@@ -247,11 +251,16 @@ function projectScalarPublicSafeOperationInputField(
   const fieldLabel = label ?? field.label ?? inputName;
 
   if (field.type === "text") {
+    const format = publicSafeTextFormat(field.format);
+    const suggestions = field.suggestions;
+
     return {
       name: inputName,
       label: fieldLabel,
       required,
       control: field.format === "longText" || field.format === "markdown" ? "longText" : "text",
+      ...(format === undefined ? {} : { format }),
+      ...(suggestions === undefined ? {} : { suggestions }),
     };
   }
 
@@ -282,4 +291,10 @@ function projectScalarPublicSafeOperationInputField(
 
 function isOperationInputFieldRequired(field: EntityOperationInputFieldSchema): boolean {
   return "field" in field ? field.required === true : field.required;
+}
+
+function publicSafeTextFormat(
+  format: TextFieldFormat | undefined,
+): ContactTextFieldFormat | undefined {
+  return format === "email" || format === "phone" ? format : undefined;
 }

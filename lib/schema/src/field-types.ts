@@ -1,4 +1,9 @@
 import { isDateString } from "./date.ts";
+import {
+  isValidStoredTextValue,
+  textFormatValidatesStoredValue,
+  validateTextValueForStorage,
+} from "./text-values.ts";
 import type { FieldValue, RecordValues } from "./types.ts";
 import type { QueryOperator } from "./types.ts";
 import type { FieldCommitPolicy, FieldEditor, FieldSchema, TableColumnFormat } from "./types.ts";
@@ -67,7 +72,7 @@ export const fieldTypeBehaviors = {
     inputValueToFieldValue: stringInputValueToFieldValue,
     validateAuthorityValue: validateStringAuthorityValue,
     isValidStoredValue: (value, field) =>
-      typeof value === "string" && (!field.required || value.trim() !== ""),
+      typeof value === "string" && isValidStoredTextValue(value, field),
   },
   boolean: {
     type: "boolean",
@@ -250,7 +255,11 @@ export function fieldInputAttributes(field: FieldSchema) {
 }
 
 export function shouldValidateExistingFieldValue(field: FieldSchema) {
-  return field.required || getFieldTypeBehavior(field).validatesExistingStoredValues;
+  return (
+    field.required ||
+    getFieldTypeBehavior(field).validatesExistingStoredValues ||
+    (field.type === "text" && textFormatValidatesStoredValue(field.format))
+  );
 }
 
 export function validateAuthorityFieldValue(
@@ -277,8 +286,20 @@ function validateStringAuthorityValue(
   fieldName: string,
   field: Extract<FieldSchema, { type: "text" }>,
   value: unknown,
-) {
-  return validateTextLikeAuthorityValue(fieldName, field, value, undefined);
+): AuthorityFieldValueResult {
+  if (typeof value !== "string") {
+    if (field.required) {
+      throw new Error(`Field "${fieldName}" is required.`);
+    }
+
+    return { kind: "omit" };
+  }
+
+  if (field.required && value.trim() === "") {
+    throw new Error(`Field "${fieldName}" cannot be empty.`);
+  }
+
+  return validateTextValueForStorage(field, value);
 }
 
 function stringCreateInputValueToFieldValue(

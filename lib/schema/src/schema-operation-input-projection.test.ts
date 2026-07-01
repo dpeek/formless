@@ -6,6 +6,8 @@ import {
   projectOperationRecordPlanInputValues,
   projectOperationRecordWritePatchValues,
   projectOperationRecordWriteValues,
+  TEXT_EMAIL_FORMAT_INVALID_MESSAGE,
+  TEXT_PHONE_FORMAT_INVALID_MESSAGE,
   type EntityOperationSchema,
   type EntitySchema,
 } from "./index.ts";
@@ -164,6 +166,78 @@ describe("schema operation input projection", () => {
         }),
       ).toThrow(testCase.error);
     }
+  });
+
+  it("validates inline text formats and keeps suggested text unrestricted", () => {
+    const operation = recordPlanTaskOperation({
+      fields: {
+        email: { type: "text", required: true, format: "email", label: "Email" },
+        phone: { type: "text", required: false, format: "phone", label: "Phone" },
+        inquiryType: {
+          type: "text",
+          required: false,
+          suggestions: ["Support", "Sales"],
+          label: "Inquiry type",
+        },
+      },
+    });
+
+    expect(
+      projectOperationRecordPlanInputValues({
+        canonicalOperationKey: "task.plan",
+        entity: taskEntity,
+        operation,
+        rawInput: {
+          email: "  name@example.com  ",
+          phone: " +1 (555) 123-4567 ",
+          inquiryType: "Custom",
+        },
+      }),
+    ).toEqual({
+      email: "name@example.com",
+      phone: "+1 (555) 123-4567",
+      inquiryType: "Custom",
+    });
+
+    expect(
+      projectOperationRecordPlanInputValues({
+        canonicalOperationKey: "task.plan",
+        entity: taskEntity,
+        operation,
+        rawInput: {
+          email: "name@example.com",
+          phone: "",
+          inquiryType: "Another custom value",
+        },
+      }),
+    ).toEqual({
+      email: "name@example.com",
+      inquiryType: "Another custom value",
+    });
+
+    expect(() =>
+      projectOperationRecordPlanInputValues({
+        canonicalOperationKey: "task.plan",
+        entity: taskEntity,
+        operation,
+        rawInput: {
+          email: "not an email",
+          phone: "+1 (555) 123-4567",
+        },
+      }),
+    ).toThrow(TEXT_EMAIL_FORMAT_INVALID_MESSAGE);
+
+    expect(() =>
+      projectOperationRecordPlanInputValues({
+        canonicalOperationKey: "task.plan",
+        entity: taskEntity,
+        operation,
+        rawInput: {
+          email: "name@example.com",
+          phone: "555-abc",
+        },
+      }),
+    ).toThrow(TEXT_PHONE_FORMAT_INVALID_MESSAGE);
   });
 
   it("preserves no-input-contract behavior for record projections and command handlers", () => {

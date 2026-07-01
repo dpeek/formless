@@ -1,5 +1,6 @@
 import { validateAuthorityFieldValue } from "./field-types.ts";
 import { isSystemFieldName } from "./fields.ts";
+import { validateTextValueForStorage } from "./text-values.ts";
 import type {
   EntityOperationInputFieldSchema,
   EntityOperationSchema,
@@ -201,7 +202,12 @@ function projectInlineOperationInputField(
       return { kind: "omit", inputName };
     }
 
-    return { kind: "set", inputName, value };
+    const result = validateTextValueForStorage(field, value);
+    if (result.kind === "omit") {
+      return { kind: "omit", inputName };
+    }
+
+    return { kind: "set", inputName, value: result.value };
   }
 
   if (field.type === "boolean") {

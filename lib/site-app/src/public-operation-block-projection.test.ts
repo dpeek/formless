@@ -150,6 +150,29 @@ describe("site public operation block projection", () => {
           control: "text",
         },
         {
+          name: "replyEmail",
+          label: "Reply email",
+          required: true,
+          control: "text",
+          format: "email",
+          suggestions: ["hello@example.com"],
+        },
+        {
+          name: "phone",
+          label: "Phone",
+          required: false,
+          control: "text",
+          format: "phone",
+          suggestions: ["+1 555 123 4567"],
+        },
+        {
+          name: "inquiryType",
+          label: "Inquiry type",
+          required: false,
+          control: "text",
+          suggestions: ["Support", "Sales"],
+        },
+        {
           name: "details",
           label: "Request details",
           required: true,
@@ -673,6 +696,26 @@ const publicIntakeSchema = {
           label: "Request details",
           format: "longText",
         },
+        email: {
+          type: "text",
+          required: true,
+          label: "Email",
+          format: "email",
+          suggestions: ["hello@example.com"],
+        },
+        phone: {
+          type: "text",
+          required: false,
+          label: "Phone",
+          format: "phone",
+          suggestions: ["+1 555 123 4567"],
+        },
+        inquiryType: {
+          type: "text",
+          required: false,
+          label: "Inquiry type",
+          suggestions: ["Support", "Sales"],
+        },
         tier: {
           type: "enum",
           required: true,
@@ -716,6 +759,17 @@ const publicIntakeSchema = {
                 field: "name",
                 required: true,
                 label: "Your name",
+              },
+              replyEmail: {
+                field: "email",
+                required: true,
+                label: "Reply email",
+              },
+              phone: {
+                field: "phone",
+              },
+              inquiryType: {
+                field: "inquiryType",
               },
               details: {
                 field: "details",

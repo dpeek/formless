@@ -2,7 +2,111 @@ import { describe, expect, it } from "vite-plus/test";
 
 import { parseAppSchema, stringifySchema } from "./index.ts";
 
-describe("schema identity reference fields", () => {
+describe("schema fields", () => {
+  it("accepts contact text formats and open text suggestions on entity fields", () => {
+    const source = identityReferenceSourceSchema();
+    const schema = parseAppSchema({
+      ...source,
+      entities: {
+        ...source.entities,
+        account: {
+          ...source.entities.account,
+          fields: {
+            ...source.entities.account.fields,
+            email: {
+              type: "text",
+              required: false,
+              format: "email",
+              suggestions: ["hello@example.com"],
+            },
+            phone: {
+              type: "text",
+              required: false,
+              format: "phone",
+            },
+            inquiryType: {
+              type: "text",
+              required: false,
+              suggestions: ["Support", "Sales"],
+            },
+          },
+        },
+      },
+    });
+
+    expect(schema.entities.account?.fields.email).toEqual({
+      type: "text",
+      required: false,
+      format: "email",
+      suggestions: ["hello@example.com"],
+    });
+    expect(schema.entities.account?.fields.phone).toEqual({
+      type: "text",
+      required: false,
+      format: "phone",
+    });
+    expect(schema.entities.account?.fields.inquiryType).toEqual({
+      type: "text",
+      required: false,
+      suggestions: ["Support", "Sales"],
+    });
+    expect(parseAppSchema(JSON.parse(stringifySchema(schema)))).toEqual(schema);
+  });
+
+  it("rejects invalid text format and suggestion declarations", () => {
+    const source = identityReferenceSourceSchema();
+
+    expect(() =>
+      parseAppSchema({
+        ...source,
+        entities: {
+          ...source.entities,
+          account: {
+            ...source.entities.account,
+            fields: {
+              ...source.entities.account.fields,
+              email: { type: "text", required: false, format: "unsupported" },
+            },
+          },
+        },
+      }),
+    ).toThrow(
+      'Field "account.email" text format must be "plain", "longText", "markdown", "href", "slug", "color", "icon", "email", or "phone".',
+    );
+
+    expect(() =>
+      parseAppSchema({
+        ...source,
+        entities: {
+          ...source.entities,
+          account: {
+            ...source.entities.account,
+            fields: {
+              ...source.entities.account.fields,
+              inquiryType: { type: "text", required: false, suggestions: [] },
+            },
+          },
+        },
+      }),
+    ).toThrow('Field "account.inquiryType" text suggestions must be a non-empty array.');
+
+    expect(() =>
+      parseAppSchema({
+        ...source,
+        entities: {
+          ...source.entities,
+          account: {
+            ...source.entities.account,
+            fields: {
+              ...source.entities.account.fields,
+              inquiryType: { type: "text", required: false, suggestions: ["Support", ""] },
+            },
+          },
+        },
+      }),
+    ).toThrow('Field "account.inquiryType" text suggestions[1] must be a non-empty string.');
+  });
+
   it("accepts supported identity reference targets and local unqualified references", () => {
     const schema = parseAppSchema(identityReferenceSourceSchema());
 

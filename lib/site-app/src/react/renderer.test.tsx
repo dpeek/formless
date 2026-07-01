@@ -320,6 +320,29 @@ describe("public Site renderer characterization", () => {
                   control: "text",
                 },
                 {
+                  name: "replyEmail",
+                  label: "Reply email",
+                  required: true,
+                  control: "text",
+                  format: "email",
+                  suggestions: ["hello@example.com"],
+                },
+                {
+                  name: "phone",
+                  label: "Phone",
+                  required: false,
+                  control: "text",
+                  format: "phone",
+                  suggestions: ["+1 555 123 4567"],
+                },
+                {
+                  name: "inquiryType",
+                  label: "Inquiry type",
+                  required: false,
+                  control: "text",
+                  suggestions: ["Support", "Sales"],
+                },
+                {
                   name: "details",
                   label: "Details",
                   required: false,
@@ -370,6 +393,19 @@ describe("public Site renderer characterization", () => {
     expect(html).toContain('data-site-public-operation-field="summary"');
     expect(html).toContain('name="summary"');
     expect(html).toContain('type="text"');
+    expect(html).toContain('data-site-public-operation-field="replyEmail"');
+    expect(html).toContain('name="replyEmail"');
+    expect(html).toContain('type="email"');
+    expect(html).toContain('value="hello@example.com"');
+    expect(html).toContain('data-site-public-operation-field="phone"');
+    expect(html).toContain('name="phone"');
+    expect(html).toContain('type="tel"');
+    expect(html).toContain('value="+1 555 123 4567"');
+    expect(html).toContain('data-site-public-operation-field="inquiryType"');
+    expect(html).toContain('name="inquiryType"');
+    expect(html).toContain('value="Support"');
+    expect(html).toContain('value="Sales"');
+    expect(countOccurrences(html, "<datalist")).toBe(3);
     expect(html).toContain('data-site-public-operation-field="details"');
     expect(html).toContain("<textarea");
     expect(html).toContain('name="details"');

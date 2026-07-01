@@ -9,6 +9,7 @@ import {
 } from "./schema-parse-helpers.ts";
 import type {
   BooleanFieldSchema,
+  ContactTextFieldFormat,
   DateFieldSchema,
   EntityConstraintSchema,
   EntitySchema,
@@ -30,7 +31,11 @@ const textFieldFormats = [
   "slug",
   "color",
   "icon",
+  "email",
+  "phone",
 ] satisfies TextFieldFormat[];
+
+const operationTextFieldFormats = ["email", "phone"] satisfies ContactTextFieldFormat[];
 
 export const supportedIdentityReferenceTargets = [
   "auth:principal",
@@ -309,7 +314,7 @@ function parseField(entityName: string, fieldName: string, value: unknown): Fiel
       `Field "${entityName}.${fieldName}"`,
       value,
       ["type", "required"],
-      ["label", "format"],
+      ["label", "format", "suggestions"],
     );
 
     const field: TextFieldSchema = {
@@ -321,9 +326,20 @@ function parseField(entityName: string, fieldName: string, value: unknown): Fiel
       field.label = label;
     }
 
-    const format = parseOptionalTextFieldFormat(entityName, fieldName, value.format);
+    const format = parseOptionalTextFieldFormat(
+      `Field "${entityName}.${fieldName}" text format`,
+      value.format,
+    );
     if (format !== undefined) {
       field.format = format;
+    }
+
+    const suggestions = parseOptionalTextSuggestions(
+      `Field "${entityName}.${fieldName}" text suggestions`,
+      value.suggestions,
+    );
+    if (suggestions !== undefined) {
+      field.suggestions = suggestions;
     }
 
     return field;
@@ -621,9 +637,8 @@ function parseFieldLabel(
   return value;
 }
 
-function parseOptionalTextFieldFormat(
-  entityName: string,
-  fieldName: string,
+export function parseOptionalTextFieldFormat(
+  context: string,
   value: unknown,
 ): TextFieldFormat | undefined {
   if (value === undefined) {
@@ -632,9 +647,48 @@ function parseOptionalTextFieldFormat(
 
   if (typeof value !== "string" || !textFieldFormats.includes(value as TextFieldFormat)) {
     throw new Error(
-      `Field "${entityName}.${fieldName}" text format must be "plain", "longText", "markdown", "href", "slug", "color", or "icon".`,
+      `${context} must be "plain", "longText", "markdown", "href", "slug", "color", "icon", "email", or "phone".`,
     );
   }
 
   return value as TextFieldFormat;
+}
+
+export function parseOptionalOperationTextFieldFormat(
+  context: string,
+  value: unknown,
+): ContactTextFieldFormat | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (
+    typeof value !== "string" ||
+    !operationTextFieldFormats.includes(value as ContactTextFieldFormat)
+  ) {
+    throw new Error(`${context} must be "email" or "phone".`);
+  }
+
+  return value as ContactTextFieldFormat;
+}
+
+export function parseOptionalTextSuggestions(
+  context: string,
+  value: unknown,
+): string[] | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new Error(`${context} must be a non-empty array.`);
+  }
+
+  return value.map((suggestion, index) => {
+    if (typeof suggestion !== "string" || suggestion.trim() === "") {
+      throw new Error(`${context}[${index}] must be a non-empty string.`);
+    }
+
+    return suggestion;
+  });
 }

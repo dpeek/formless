@@ -251,7 +251,7 @@ runtime secrets.
 - AND the target may be a schema-key app route or an installed app route
 - AND projected field metadata uses the schema-owned public-safe operation input
   projection and includes only field names, labels, required flags, supported
-  scalar control types, and enum option labels
+  scalar control types, text formats, text suggestions, and enum option labels
 - AND the target public operation route is built through the shared public
   operation route contract from the runtime-owned target API route prefix,
   entity key, and operation key
@@ -515,6 +515,9 @@ forms on preview, installed, and mapped public Site routes.
   field, a submit control, and a Turnstile widget using the public site key
 - AND text, long text, enum, boolean, date, and number projected fields render
   with matching browser controls
+- AND email-formatted text renders as an email input, phone-formatted text
+  renders as a telephone input, and text suggestions render as native open
+  datalist suggestions without preventing free text entry
 - AND form submission posts to the target public operation route with the
   declared operation input values, source block id, idempotency key, and
   Turnstile token
@@ -524,6 +527,10 @@ forms on preview, installed, and mapped public Site routes.
   client helpers
 - AND browser coercion preserves booleans as booleans, numbers as finite
   numbers, dates as `YYYY-MM-DD` strings, and enum values as declared strings
+- AND browser coercion trims and validates email-formatted and phone-formatted
+  text with the same schema-owned validator used by Authority storage
+- AND browser coercion accepts any text value for suggested text fields instead
+  of restricting values to the datalist suggestions
 - AND schema-driven form input coercion and rendered controls remain owned by
   the Site app renderer
 

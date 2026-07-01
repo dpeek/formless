@@ -69,11 +69,15 @@ export type SitePublicOperationInputFieldOptionNode = {
   label: string;
 };
 
+export type SitePublicOperationTextFormatNode = "email" | "phone";
+
 export type SitePublicOperationInputFieldNode = {
   name: string;
   label: string;
   required: boolean;
   control: "text" | "longText" | "boolean" | "date" | "number" | "enum";
+  format?: SitePublicOperationTextFormatNode;
+  suggestions?: string[];
   options?: SitePublicOperationInputFieldOptionNode[];
 };
 

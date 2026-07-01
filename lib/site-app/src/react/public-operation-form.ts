@@ -1,4 +1,5 @@
 import type { SitePublicOperationInputFieldNode } from "../types.ts";
+import { validateTextValueForStorage } from "@dpeek/formless-schema";
 import {
   TURNSTILE_RESPONSE_FIELD_NAME,
   buildPublicOperationRequestBody,
@@ -127,10 +128,7 @@ function publicOperationFormFieldValueFromFormData(
   switch (field.control) {
     case "text":
     case "longText":
-      return {
-        present: true,
-        value: rawValue,
-      };
+      return publicOperationTextFieldValue(rawValue, field);
     case "date":
       return isValidDateInputValue(rawValue)
         ? {
@@ -157,6 +155,26 @@ function publicOperationFormFieldValueFromFormData(
         : { error: `${field.label} must match a declared option.` };
     default:
       return { error: `${field.label} is not supported by this form.` };
+  }
+}
+
+function publicOperationTextFieldValue(
+  rawValue: string,
+  field: SitePublicOperationInputFieldNode,
+): CoercedFormFieldValue | { error: string } {
+  try {
+    const result = validateTextValueForStorage({ format: field.format }, rawValue);
+
+    return result.kind === "set"
+      ? {
+          present: true,
+          value: result.value,
+        }
+      : { present: false };
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : `${field.label} is invalid.`,
+    };
   }
 }
 

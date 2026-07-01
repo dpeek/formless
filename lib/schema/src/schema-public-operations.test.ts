@@ -120,6 +120,15 @@ describe("schema public operation facts", () => {
               field: "fallback",
               required: false,
             },
+            replyEmail: {
+              field: "email",
+              required: true,
+              label: "Reply email",
+            },
+            inquiryType: {
+              field: "inquiryType",
+              required: false,
+            },
             tier: {
               field: "tier",
               required: true,
@@ -140,6 +149,13 @@ describe("schema public operation facts", () => {
               type: "text",
               required: false,
               label: "Inline note",
+            },
+            inlinePhone: {
+              type: "text",
+              required: false,
+              format: "phone",
+              suggestions: ["+1 555 123 4567"],
+              label: "Inline phone",
             },
             inlineTier: {
               type: "enum",
@@ -183,6 +199,21 @@ describe("schema public operation facts", () => {
           control: "text",
         },
         {
+          name: "replyEmail",
+          label: "Reply email",
+          required: true,
+          control: "text",
+          format: "email",
+          suggestions: ["hello@example.com"],
+        },
+        {
+          name: "inquiryType",
+          label: "Inquiry type",
+          required: false,
+          control: "text",
+          suggestions: ["Support", "Sales"],
+        },
+        {
           name: "tier",
           label: "Tier",
           required: true,
@@ -215,6 +246,14 @@ describe("schema public operation facts", () => {
           label: "Inline note",
           required: false,
           control: "text",
+        },
+        {
+          name: "inlinePhone",
+          label: "Inline phone",
+          required: false,
+          control: "text",
+          format: "phone",
+          suggestions: ["+1 555 123 4567"],
         },
         {
           name: "inlineTier",
@@ -316,6 +355,19 @@ function publicOperationSchema(operations: Record<string, EntityOperationSchema>
           fallback: {
             type: "text",
             required: false,
+          },
+          email: {
+            type: "text",
+            required: true,
+            label: "Email",
+            format: "email",
+            suggestions: ["hello@example.com"],
+          },
+          inquiryType: {
+            type: "text",
+            required: false,
+            label: "Inquiry type",
+            suggestions: ["Support", "Sales"],
           },
           tier: {
             type: "enum",

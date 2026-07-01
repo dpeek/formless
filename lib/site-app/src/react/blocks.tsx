@@ -878,17 +878,43 @@ function renderPublicOperationInputControl({
       );
     case "text":
     default:
-      return (
-        <input
-          className={siteFormInputClassName}
-          disabled={disabled}
-          id={inputId}
-          name={field.name}
-          required={field.required}
-          type="text"
-        />
-      );
+      return renderPublicOperationTextInput({ disabled, field, inputId });
   }
+}
+
+function renderPublicOperationTextInput({
+  disabled,
+  field,
+  inputId,
+}: {
+  disabled: boolean;
+  field: SitePublicOperationInputFieldNode;
+  inputId: string;
+}) {
+  const suggestionsId =
+    field.suggestions && field.suggestions.length > 0 ? `${inputId}-suggestions` : undefined;
+  const type = field.format === "email" ? "email" : field.format === "phone" ? "tel" : "text";
+
+  return (
+    <>
+      <input
+        className={siteFormInputClassName}
+        disabled={disabled}
+        id={inputId}
+        list={suggestionsId}
+        name={field.name}
+        required={field.required}
+        type={type}
+      />
+      {suggestionsId ? (
+        <datalist id={suggestionsId}>
+          {field.suggestions?.map((suggestion) => (
+            <option key={suggestion} value={suggestion} />
+          ))}
+        </datalist>
+      ) : null}
+    </>
+  );
 }
 
 function ContentListBlock({ block }: { block: SiteBlockNode }) {

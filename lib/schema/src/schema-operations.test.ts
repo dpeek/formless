@@ -269,6 +269,106 @@ describe("schema entity operations", () => {
     ).toBe(true);
   });
 
+  it("parses inline operation text formats and suggestions", () => {
+    const schema = parseAppSchema(
+      schemaWithTaskOperations({
+        submitContact: {
+          kind: "command",
+          scope: "collection",
+          input: {
+            fields: {
+              email: {
+                type: "text",
+                required: true,
+                label: "Email",
+                format: "email",
+                suggestions: ["hello@example.com"],
+              },
+              phone: {
+                type: "text",
+                required: false,
+                label: "Phone",
+                format: "phone",
+              },
+              topic: {
+                type: "text",
+                required: false,
+                suggestions: ["Support", "Sales"],
+              },
+            },
+          },
+          effect: {
+            type: "operationHandler",
+            handler: "clear-completed",
+            config: { query: "taskCompleted" },
+          },
+        },
+      }),
+    );
+
+    expect(schema.entities.task?.operations?.submitContact.input).toEqual({
+      fields: {
+        email: {
+          type: "text",
+          required: true,
+          label: "Email",
+          format: "email",
+          suggestions: ["hello@example.com"],
+        },
+        phone: {
+          type: "text",
+          required: false,
+          label: "Phone",
+          format: "phone",
+        },
+        topic: {
+          type: "text",
+          required: false,
+          suggestions: ["Support", "Sales"],
+        },
+      },
+    });
+    expect(parseAppSchema(JSON.parse(stringifySchema(schema)))).toEqual(schema);
+  });
+
+  it("rejects invalid inline operation text format and suggestion declarations", () => {
+    expect(() =>
+      parseAppSchema(
+        schemaWithTaskOperations({
+          submitContact: {
+            kind: "command",
+            scope: "collection",
+            input: {
+              fields: {
+                email: { type: "text", required: true, format: "href" },
+              },
+            },
+          },
+        }),
+      ),
+    ).toThrow(
+      'Entity operation "task.submitContact" input fields.email format must be "email" or "phone".',
+    );
+
+    expect(() =>
+      parseAppSchema(
+        schemaWithTaskOperations({
+          submitContact: {
+            kind: "command",
+            scope: "collection",
+            input: {
+              fields: {
+                topic: { type: "text", required: false, suggestions: ["Support", ""] },
+              },
+            },
+          },
+        }),
+      ),
+    ).toThrow(
+      'Entity operation "task.submitContact" input fields.topic suggestions[1] must be a non-empty string.',
+    );
+  });
+
   it("rejects unsupported command effect types", () => {
     expect(() =>
       parseAppSchema(

@@ -124,7 +124,10 @@ export type TextFieldSchema = {
   required: boolean;
   label?: string;
   format?: TextFieldFormat;
+  suggestions?: string[];
 };
+
+export type ContactTextFieldFormat = "email" | "phone";
 
 export type TextFieldFormat =
   | "plain"
@@ -133,7 +136,8 @@ export type TextFieldFormat =
   | "href"
   | "slug"
   | "color"
-  | "icon";
+  | "icon"
+  | ContactTextFieldFormat;
 
 export type BooleanFieldSchema = {
   type: "boolean";
@@ -214,6 +218,8 @@ export type PublicOperationTextInputFieldSchema = {
   type: "text";
   required: boolean;
   label?: string;
+  format?: ContactTextFieldFormat;
+  suggestions?: string[];
 };
 
 export type PublicOperationBooleanInputFieldSchema = {

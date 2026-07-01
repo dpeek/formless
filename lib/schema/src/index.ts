@@ -31,5 +31,6 @@ export * from "./schema-view-field-parser.ts";
 export * from "./schema-view-fields.ts";
 export * from "./schema-views.ts";
 export * from "./schema.ts";
+export * from "./text-values.ts";
 export { SCHEMA_PUBLIC_CONTRACT_VERSION } from "./types.ts";
 export type * from "./types.ts";

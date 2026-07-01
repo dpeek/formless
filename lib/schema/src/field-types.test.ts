@@ -13,6 +13,8 @@ import {
   isValidStoredFieldValue,
   numberInputValueToFieldValue,
   shouldValidateExistingFieldValue,
+  TEXT_EMAIL_FORMAT_INVALID_MESSAGE,
+  TEXT_PHONE_FORMAT_INVALID_MESSAGE,
   validateAuthorityFieldValue,
 } from "./index.ts";
 import type { FieldSchema } from "./index.ts";
@@ -69,6 +71,54 @@ describe("field type behavior", () => {
         defaultCommit: "field-commit",
       },
       icon: {
+        filterOps: ["eq"],
+        editors: [
+          "text",
+          "textarea",
+          "markdown",
+          "href",
+          "slug",
+          "color",
+          "icon",
+          "image",
+          "media",
+        ],
+        defaultEditor: "text",
+        defaultCommit: "field-commit",
+      },
+      email: {
+        filterOps: ["eq"],
+        editors: [
+          "text",
+          "textarea",
+          "markdown",
+          "href",
+          "slug",
+          "color",
+          "icon",
+          "image",
+          "media",
+        ],
+        defaultEditor: "text",
+        defaultCommit: "field-commit",
+      },
+      phone: {
+        filterOps: ["eq"],
+        editors: [
+          "text",
+          "textarea",
+          "markdown",
+          "href",
+          "slug",
+          "color",
+          "icon",
+          "image",
+          "media",
+        ],
+        defaultEditor: "text",
+        defaultCommit: "field-commit",
+      },
+      inquiryType: {
         filterOps: ["eq"],
         editors: [
           "text",
@@ -253,6 +303,25 @@ describe("field type behavior", () => {
       kind: "set",
       value: "<svg></svg>",
     });
+    expect(
+      validateAuthorityFieldValue("email", fields.email, "  name@example.com  ", true),
+    ).toEqual({
+      kind: "set",
+      value: "name@example.com",
+    });
+    expect(validateAuthorityFieldValue("phone", fields.phone, "", true)).toEqual({
+      kind: "omit",
+    });
+    expect(validateAuthorityFieldValue("phone", fields.phone, " +1 (555) 123-4567 ", true)).toEqual(
+      {
+        kind: "set",
+        value: "+1 (555) 123-4567",
+      },
+    );
+    expect(validateAuthorityFieldValue("inquiryType", fields.inquiryType, "Custom", true)).toEqual({
+      kind: "set",
+      value: "Custom",
+    });
 
     expect(() => validateAuthorityFieldValue("estimate", fields.estimate, Infinity, true)).toThrow(
       'Field "estimate" must be a finite number.',
@@ -269,18 +338,34 @@ describe("field type behavior", () => {
     expect(() => validateAuthorityFieldValue("resource", fields.resource, 1, true)).toThrow(
       'Field "resource" must be a reference ID.',
     );
+    expect(() => validateAuthorityFieldValue("email", fields.email, "not an email", true)).toThrow(
+      TEXT_EMAIL_FORMAT_INVALID_MESSAGE,
+    );
+    expect(() => validateAuthorityFieldValue("phone", fields.phone, "555-abc", true)).toThrow(
+      TEXT_PHONE_FORMAT_INVALID_MESSAGE,
+    );
   });
 
   it("validates stored values for schema compatibility checks", () => {
     expect(shouldValidateExistingFieldValue(fields.dueDate)).toBe(false);
     expect(shouldValidateExistingFieldValue(fields.estimate)).toBe(true);
     expect(shouldValidateExistingFieldValue(fields.resource)).toBe(true);
+    expect(shouldValidateExistingFieldValue(fields.email)).toBe(true);
+    expect(shouldValidateExistingFieldValue(fields.phone)).toBe(true);
+    expect(shouldValidateExistingFieldValue(fields.inquiryType)).toBe(false);
     expect(isValidStoredFieldValue(undefined, fields.done)).toBe(true);
     expect(isValidStoredFieldValue(undefined, fields.title)).toBe(false);
+    expect(isValidStoredFieldValue(undefined, fields.email)).toBe(true);
     expect(isValidStoredFieldValue(0, fields.estimate)).toBe(true);
     expect(isValidStoredFieldValue(1.5, fields.estimate)).toBe(false);
     expect(isValidStoredFieldValue("high", fields.priority)).toBe(true);
     expect(isValidStoredFieldValue("", fields.resource)).toBe(false);
+    expect(isValidStoredFieldValue("name@example.com", fields.email)).toBe(true);
+    expect(isValidStoredFieldValue(" name@example.com ", fields.email)).toBe(false);
+    expect(isValidStoredFieldValue("name@example", fields.email)).toBe(false);
+    expect(isValidStoredFieldValue("+1 (555) 123-4567", fields.phone)).toBe(true);
+    expect(isValidStoredFieldValue("", fields.phone)).toBe(false);
+    expect(isValidStoredFieldValue("anything custom", fields.inquiryType)).toBe(true);
   });
 });
 
@@ -288,6 +373,9 @@ const fields = {
   title: { type: "text", required: true },
   body: { type: "text", required: false, format: "markdown" },
   icon: { type: "text", required: false, format: "icon" },
+  email: { type: "text", required: false, format: "email" },
+  phone: { type: "text", required: false, format: "phone" },
+  inquiryType: { type: "text", required: false, suggestions: ["Support", "Sales"] },
   done: { type: "boolean", required: true, default: false },
   dueDate: { type: "date", required: false },
   estimate: { type: "number", required: false, default: 0, min: 0, integer: true },

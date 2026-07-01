@@ -1,4 +1,8 @@
 import { describe, expect, it } from "vite-plus/test";
+import {
+  TEXT_EMAIL_FORMAT_INVALID_MESSAGE,
+  TEXT_PHONE_FORMAT_INVALID_MESSAGE,
+} from "@dpeek/formless-schema";
 
 import type { SitePublicOperationInputFieldNode } from "../types.ts";
 import {
@@ -13,6 +17,27 @@ const fields: SitePublicOperationInputFieldNode[] = [
     label: "Summary",
     required: true,
     control: "text",
+  },
+  {
+    name: "replyEmail",
+    label: "Reply email",
+    required: false,
+    control: "text",
+    format: "email",
+  },
+  {
+    name: "phone",
+    label: "Phone",
+    required: false,
+    control: "text",
+    format: "phone",
+  },
+  {
+    name: "inquiryType",
+    label: "Inquiry type",
+    required: false,
+    control: "text",
+    suggestions: ["Support", "Sales"],
   },
   {
     name: "details",
@@ -90,6 +115,9 @@ describe("generic public operation form submit helpers", () => {
   it("coerces browser form values to declared public operation input values", () => {
     const formData = new FormData();
     formData.set("summary", "Send lab results");
+    formData.set("replyEmail", "  name@example.com  ");
+    formData.set("phone", " +1 (555) 123-4567 ");
+    formData.set("inquiryType", "Custom");
     formData.set("details", "Include chain of custody.");
     formData.set("category", "priority");
     formData.set("confirmed", "true");
@@ -101,6 +129,9 @@ describe("generic public operation form submit helpers", () => {
       ok: true,
       input: {
         summary: "Send lab results",
+        replyEmail: "name@example.com",
+        phone: "+1 (555) 123-4567",
+        inquiryType: "Custom",
         details: "Include chain of custody.",
         category: "priority",
         confirmed: true,
@@ -171,6 +202,26 @@ describe("generic public operation form submit helpers", () => {
     ).toEqual({
       ok: false,
       error: "Category must match a declared option.",
+    });
+
+    expect(
+      publicOperationFormInputValuesFromFormData(
+        [{ ...requiredField("replyEmail", "Reply email", "text"), format: "email" }],
+        formDataWith("replyEmail", "not an email"),
+      ),
+    ).toEqual({
+      ok: false,
+      error: TEXT_EMAIL_FORMAT_INVALID_MESSAGE,
+    });
+
+    expect(
+      publicOperationFormInputValuesFromFormData(
+        [{ ...requiredField("phone", "Phone", "text"), format: "phone" }],
+        formDataWith("phone", "555-abc"),
+      ),
+    ).toEqual({
+      ok: false,
+      error: TEXT_PHONE_FORMAT_INVALID_MESSAGE,
     });
   });
 

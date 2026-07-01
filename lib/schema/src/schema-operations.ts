@@ -1,6 +1,10 @@
 import { assertSchemaLocalEntityKey, parseQualifiedEntityName } from "./entity-names.ts";
 import { isSystemFieldName } from "./fields.ts";
-import { isSupportedIdentityReferenceTarget } from "./schema-fields.ts";
+import {
+  isSupportedIdentityReferenceTarget,
+  parseOptionalOperationTextFieldFormat,
+  parseOptionalTextSuggestions,
+} from "./schema-fields.ts";
 import {
   isEntityOperationCommandEffectType,
   isOperationHandlerEffectForKind,
@@ -522,8 +526,16 @@ function parseInlineInputField(
   const label = parseOptionalNonEmptyString(`${context} label`, value.label);
 
   if (value.type === "text") {
-    assertExactKeys(context, value, ["type", "required"], ["label"]);
-    return { type: "text", required: value.required, ...(label === undefined ? {} : { label }) };
+    assertExactKeys(context, value, ["type", "required"], ["label", "format", "suggestions"]);
+    const format = parseOptionalOperationTextFieldFormat(`${context} format`, value.format);
+    const suggestions = parseOptionalTextSuggestions(`${context} suggestions`, value.suggestions);
+    return {
+      type: "text",
+      required: value.required,
+      ...(label === undefined ? {} : { label }),
+      ...(format === undefined ? {} : { format }),
+      ...(suggestions === undefined ? {} : { suggestions }),
+    };
   }
 
   if (value.type === "boolean") {
