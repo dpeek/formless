@@ -42,14 +42,19 @@ ceremonies.
 - AND no principal, role assignment, credential, challenge, or session state is
   written
 
-#### Scenario: Owner setup status reports configured auth origin
+#### Scenario: Owner setup status reports configured origins
 
 - GIVEN first-owner setup is incomplete
 - WHEN a trusted CLI reads owner setup status from a deployed instance
-- THEN the status response includes the effective auth origin when instance
+- THEN the status response includes `authOrigin` with the effective auth origin when instance
   auth configuration selects one
+- AND the status response includes `adminOrigin` with the preferred admin origin when instance
+  control-plane settings or route records select one
 - AND if no effective auth origin is configured, the status response does not
   invent one from the workers.dev deployment host
+- AND if no preferred custom admin route exists, the status response may report
+  the deployment target URL as the admin fallback without treating it as the
+  auth origin
 
 #### Scenario: Primary domain activation before production owner credentials
 
@@ -333,6 +338,11 @@ an installed app route or generated app UI.
   instance target
 - THEN the browser surface continues through the target-bound cross-domain
   handoff flow
+- AND mapped instance targets use the preferred admin origin resolved from the
+  selected admin route, eligible primary route, or one unambiguous enabled
+  custom admin route
+- AND mapped instance continuations enter that preferred admin origin's owner
+  login route with a path-only return target
 - AND the redirect target remains path-only for the target origin
 - AND the auth origin does not issue a host-local session cookie directly for
   the target host
@@ -365,8 +375,8 @@ verification.
 
 ### Requirement: Owner Session Status And Logout
 
-The system SHALL expose owner session status and logout for passkey-backed and
-local-dev owner sessions.
+The system SHALL expose owner session status and logout for passkey-backed,
+local-dev, and mapped host-local owner sessions.
 
 #### Scenario: Session status after passkey login
 
@@ -391,6 +401,20 @@ local-dev owner sessions.
 - THEN the response clears the owner session cookie
 - AND later session status requests without a valid cookie report
   unauthenticated state
+
+#### Scenario: Mapped admin host session status and logout
+
+- GIVEN a mapped instance admin host has completed cross-domain auth handoff
+  for an owner principal
+- WHEN the browser requests `/api/formless/session` from that mapped host with
+  the host-local session cookie
+- THEN the response reports the owner as authenticated without requiring a
+  central auth-origin owner cookie on that host
+- WHEN the browser posts to `/api/formless/session/logout` from that mapped
+  host
+- THEN the response clears the host-local session cookie
+- AND the response does not issue a central owner session cookie on the mapped
+  host
 
 ### Requirement: Owner Login Redirects
 
@@ -428,11 +452,45 @@ one-time grants.
 - WHEN the runtime issues browser session state for that login
 - THEN the central auth session is scoped to the auth origin host
 - AND the session is signed, instance-bound, principal-bound, and expires
-- AND mapped app hosts and mapped public Site hosts do not receive the central
-  auth session cookie through shared cookie scope
-- AND mapped app hosts and mapped public Site hosts do not start passkey
-  registration or login ceremonies unless they are also the configured auth
-  origin
+- AND mapped instance admin hosts, mapped app hosts, and mapped public Site
+  hosts do not receive the central auth session cookie through shared cookie
+  scope
+- AND mapped instance admin hosts, mapped app hosts, and mapped public Site
+  hosts do not start passkey registration or login ceremonies unless they are
+  also the configured auth origin
+
+#### Scenario: Non-auth admin host owner login starts handoff
+
+- GIVEN an enabled exact-host route mounts the instance admin surface
+- AND the mapped admin host is not the configured auth origin
+- AND a browser navigates to the owner login route on that admin host with an
+  optional safe path-only `redirectTo` target
+- WHEN the browser does not include a valid host-local session for that admin
+  route and `instance:control-plane` target
+- THEN the admin host redirects to the configured auth origin through the
+  cross-domain handoff start flow
+- AND the handoff target origin is the admin host origin
+- AND the handoff target route is the matched instance admin route
+- AND the handoff target storage identity is `instance:control-plane`
+- AND the return target is the safe path-only `redirectTo` value or the admin
+  route root when no safe target is supplied
+- AND the admin host does not render owner login UI, start a passkey ceremony,
+  issue a central auth session cookie, or silently mint credentials for its own
+  host
+
+#### Scenario: Non-auth admin host owner setup redirects to auth origin
+
+- GIVEN a configured auth origin exists
+- AND an enabled exact-host route mounts the instance admin surface on another
+  host
+- WHEN a browser navigates to the owner setup route on the admin host
+- THEN the admin host redirects to the same path and query on the configured
+  auth origin
+- AND setup status, setup capability creation, owner passkey registration, and
+  setup completion remain accepted only on the configured auth origin when
+  production auth is configured
+- AND the admin host does not render owner setup UI or start passkey
+  registration unless it is also the configured auth origin
 
 #### Scenario: One-time grant issuance
 

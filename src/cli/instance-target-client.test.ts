@@ -171,7 +171,11 @@ describe("Formless instance target client", () => {
           }
 
           if (pathname === "/api/formless/setup") {
-            return Response.json({ setupComplete: true });
+            return Response.json({
+              adminOrigin: "https://admin.example.com",
+              authOrigin: "https://auth.example.com",
+              setupComplete: true,
+            });
           }
 
           if (pathname === "/api/formless/app-installs") {
@@ -230,6 +234,11 @@ describe("Formless instance target client", () => {
       "GET https://instance.example/api/formless/app-installs",
       "GET https://instance.example/api/formless/deployments/status",
     ]);
+    expect(result.ownerSetup).toEqual({
+      adminOrigin: "https://admin.example.com",
+      authOrigin: "https://auth.example.com",
+      setupComplete: true,
+    });
     expect(result.upgradeStatus.verificationFailures).toEqual([]);
     expect(result.upgradeStatus.archiveInput).toEqual({
       archivePath: "/workspace/archive/archive.json",

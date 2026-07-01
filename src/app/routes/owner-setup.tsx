@@ -25,14 +25,14 @@ import {
 } from "./passkey-browser.ts";
 
 export type OwnerSetupRouteState =
-  | { status: "already-complete"; owner?: OwnerIdentity }
-  | { status: "complete"; owner: OwnerIdentity }
-  | { status: "failed"; message: string; setupToken?: string }
+  | { status: "already-complete"; adminOrigin?: string; owner?: OwnerIdentity }
+  | { status: "complete"; adminOrigin?: string; owner: OwnerIdentity }
+  | { status: "failed"; adminOrigin?: string; message: string; setupToken?: string }
   | { status: "invalid-link"; message: string }
   | { status: "loading" }
   | { status: "passkey-unavailable"; message: string }
-  | { status: "ready"; setupToken: string }
-  | { status: "submitting"; setupToken: string };
+  | { status: "ready"; adminOrigin?: string; setupToken: string }
+  | { status: "submitting"; adminOrigin?: string; setupToken: string };
 
 type StartOwnerSetupRouteSessionOptions = {
   fetcher?: typeof fetch;
@@ -68,10 +68,11 @@ export function OwnerSetupRoute() {
   );
 
   const submitError = state.status === "failed" ? state.message : undefined;
-  const activeSetupToken =
+  const activeSetupState =
     state.status === "ready" || state.status === "failed" || state.status === "submitting"
-      ? state.setupToken
+      ? state
       : undefined;
+  const activeSetupToken = activeSetupState?.setupToken;
 
   async function submitOwner(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -82,7 +83,11 @@ export function OwnerSetupRoute() {
 
     const owner = ownerIdentityInput({ email: ownerEmail, name: ownerName });
 
-    setState({ status: "submitting", setupToken: activeSetupToken });
+    setState({
+      status: "submitting",
+      ...(activeSetupState?.adminOrigin ? { adminOrigin: activeSetupState.adminOrigin } : {}),
+      setupToken: activeSetupToken,
+    });
 
     try {
       const completed = await completeOwnerSetup({
@@ -90,9 +95,21 @@ export function OwnerSetupRoute() {
         setupToken: activeSetupToken,
       });
 
-      setState({ status: "complete", owner: completed.owner });
+      setState({
+        status: "complete",
+        ...(activeSetupState?.adminOrigin ? { adminOrigin: activeSetupState.adminOrigin } : {}),
+        owner: completed.owner,
+      });
     } catch (error) {
       const failure = ownerSetupFailureState(error, activeSetupToken);
+
+      if (
+        activeSetupState?.adminOrigin &&
+        (failure.status === "already-complete" || failure.status === "failed")
+      ) {
+        setState({ ...failure, adminOrigin: activeSetupState.adminOrigin });
+        return;
+      }
 
       setState(failure);
     }
@@ -169,7 +186,11 @@ export function startOwnerSetupRouteSession({
       }
 
       if (status.setupComplete) {
-        onState({ status: "already-complete", owner: status.owner });
+        onState({
+          status: "already-complete",
+          ...(status.adminOrigin ? { adminOrigin: status.adminOrigin } : {}),
+          owner: status.owner,
+        });
         return;
       }
 
@@ -185,7 +206,10 @@ export function startOwnerSetupRouteSession({
         return;
       }
 
-      onState(tokenState);
+      onState({
+        ...tokenState,
+        ...(status.adminOrigin ? { adminOrigin: status.adminOrigin } : {}),
+      });
     } catch (error) {
       if (!stopped && !controller.signal.aborted) {
         onState({
@@ -350,6 +374,7 @@ function OwnerSetupStateBody({
     case "already-complete":
       return (
         <OwnerSetupMessage
+          action={<OwnerSetupContinueLink adminOrigin={state.adminOrigin} />}
           heading="Owner setup is complete"
           message={
             state.owner
@@ -361,7 +386,7 @@ function OwnerSetupStateBody({
     case "complete":
       return (
         <OwnerSetupMessage
-          action={<OwnerSetupContinueLink />}
+          action={<OwnerSetupContinueLink adminOrigin={state.adminOrigin} />}
           heading="Owner setup complete"
           message={`Signed in as ${state.owner.name}.`}
         />
@@ -479,15 +504,39 @@ function OwnerSetupHeader({ heading, message }: { heading: string; message: stri
   );
 }
 
-function OwnerSetupContinueLink() {
+function OwnerSetupContinueLink({ adminOrigin }: { adminOrigin?: string }) {
   return (
     <a
       className="inline-flex h-7 items-center justify-center rounded-md bg-primary px-2 text-xs font-medium text-primary-fg transition-colors hover:bg-primary/80"
-      href="/"
+      href={ownerSetupAdminHref(adminOrigin)}
     >
       Continue
     </a>
   );
+}
+
+function ownerSetupAdminHref(adminOrigin: string | undefined): string {
+  if (!adminOrigin) {
+    return "/";
+  }
+
+  try {
+    const url = new URL(adminOrigin);
+
+    if (
+      url.username ||
+      url.password ||
+      url.search !== "" ||
+      url.hash !== "" ||
+      (url.protocol !== "http:" && url.protocol !== "https:")
+    ) {
+      return "/";
+    }
+
+    return `${url.origin}/`;
+  } catch {
+    return "/";
+  }
 }
 
 function parseOwnerSetupRouteToken(locationSearch: string): OwnerSetupRouteState {
@@ -555,6 +604,7 @@ function parseOwnerSetupStatusResponse(value: unknown): OwnerSetupStatusResponse
   }
 
   return {
+    ...(typeof value.adminOrigin === "string" ? { adminOrigin: value.adminOrigin } : {}),
     ...(typeof value.authOrigin === "string" ? { authOrigin: value.authOrigin } : {}),
     setupComplete: value.setupComplete,
     ...(value.owner === undefined ? {} : { owner: parseOwnerIdentity(value.owner) }),

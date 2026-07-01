@@ -10,12 +10,14 @@ import {
   type CollaboratorInvitationPasskeyRegistrationOptionsResponse,
   type CollaboratorInvitationPasskeyRegistrationVerifyResponse,
   type CollaboratorInvitationAcceptanceStatusResponse,
+  ownerLoginRedirectLocationForRoute,
   parseInstanceAuthCanonicalOrigin,
   parseOwnerLoginRedirectTarget,
 } from "../shared/instance-auth.ts";
 import { normalizeEmailDeliveryAddress } from "../shared/email-runtime.ts";
 import { nowIsoString } from "../shared/clock.ts";
 import { acceptsRuntimeHtml } from "../shared/runtime-topology.ts";
+import { instanceControlPlanePreferredAdminOriginFromRecords } from "@dpeek/formless-instance-control-plane";
 import type { OwnerIdentity } from "../shared/protocol.ts";
 import type { StoredRecord } from "@dpeek/formless-storage";
 import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
@@ -445,25 +447,62 @@ async function collaboratorInvitationAcceptanceHandoff(
   input: { invitation: IdentityCollaboratorInvitationAcceptanceStatus },
 ): Promise<CollaboratorInvitationAcceptanceHandoffSummary | undefined> {
   const records = (await readControlPlaneRecords({ env, requestUrl: request.url })) ?? [];
-  const route = mappedInvitationTargetRoute(records, input.invitation);
+  const target = invitationAcceptanceHandoffTarget(records, input.invitation);
 
-  if (!route) {
+  if (!target) {
     return undefined;
   }
 
-  const targetOrigin = parseInstanceAuthCanonicalOrigin(`https://${route.matchHost}`);
-
-  if (targetOrigin === new URL(request.url).origin) {
+  if (target.targetOrigin === new URL(request.url).origin) {
     return undefined;
   }
 
-  const returnTo = parseOwnerLoginRedirectTarget(route.matchPath);
+  const returnTo = parseOwnerLoginRedirectTarget(target.returnTo);
 
   return returnTo === undefined
     ? undefined
     : {
         returnTo,
-        targetOrigin,
+        targetOrigin: target.targetOrigin,
+      };
+}
+
+function invitationAcceptanceHandoffTarget(
+  records: readonly StoredRecord[],
+  invitation: IdentityCollaboratorInvitationAcceptanceStatus,
+): { returnTo: `/${string}`; targetOrigin: string } | undefined {
+  if (invitation.targetSurface === "instance") {
+    return preferredAdminInvitationTarget(records);
+  }
+
+  const route = mappedInvitationTargetRoute(records, invitation);
+
+  return route === undefined
+    ? undefined
+    : {
+        returnTo: route.matchPath,
+        targetOrigin: parseInstanceAuthCanonicalOrigin(`https://${route.matchHost}`),
+      };
+}
+
+function preferredAdminInvitationTarget(
+  records: readonly StoredRecord[],
+): { returnTo: `/${string}`; targetOrigin: string } | undefined {
+  const resolution = instanceControlPlanePreferredAdminOriginFromRecords({ records });
+
+  if (resolution.status !== "resolved" || resolution.source === "deploymentTargetUrl") {
+    return undefined;
+  }
+
+  const route = records
+    .map(routeRecordTarget)
+    .find((candidate) => candidate?.recordId === resolution.routeId);
+
+  return route === undefined
+    ? undefined
+    : {
+        returnTo: ownerLoginRedirectLocationForRoute(route.matchPath),
+        targetOrigin: parseInstanceAuthCanonicalOrigin(resolution.adminOrigin),
       };
 }
 

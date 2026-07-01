@@ -796,8 +796,20 @@ function validateControlPlaneRecordConstraint(
   storage: DurableObjectStorage,
   packageResolver?: AppPackageResolver,
 ): RecordConstraintValidator {
-  return (entityName, values) => {
-    validateControlPlanePackageBoundary(storage, entityName, values, { packageResolver });
+  return (entityName, values, recordOptions) => {
+    validateControlPlanePackageBoundary(
+      storage,
+      entityName,
+      values,
+      {
+        additionalRecords:
+          recordOptions?.additionalRecords === undefined
+            ? undefined
+            : [...recordOptions.additionalRecords],
+        packageResolver,
+      },
+      recordOptions?.ignoreRecordId,
+    );
   };
 }
 
@@ -911,6 +923,25 @@ function validateInstanceSettingsBoundary(
       stringRecordValue(route.values.matchHost) === undefined
     ) {
       throw new BadRequestError(`Field "${fieldName}" must reference an enabled exact-host route.`);
+    }
+  }
+
+  const adminRoute = stringRecordValue(values.adminRoute);
+
+  if (adminRoute !== undefined) {
+    const route = findControlPlaneRecord(storage, "route", adminRoute, additionalRecords);
+
+    if (
+      !route ||
+      route.values.enabled !== true ||
+      stringRecordValue(route.values.matchHost) === undefined ||
+      route.values.kind !== "mount" ||
+      route.values.targetProfile !== "instance" ||
+      route.values.surface !== "admin"
+    ) {
+      throw new BadRequestError(
+        'Field "adminRoute" must reference an enabled exact-host instance admin route.',
+      );
     }
   }
 

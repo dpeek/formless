@@ -111,6 +111,35 @@ describe("direct workspace command CLI formatter", () => {
     expect(created).not.toContain("/setup/capability");
   });
 
+  it("renders reported admin origin as the browser continuation URL", () => {
+    const setupUrl = "https://auth.example.com/setup?token=setup-token";
+    const created = formatCliInstanceOwnerSetupOutput(
+      {
+        opened: false,
+        selectedTarget,
+        setupStatus: {
+          adminOrigin: "https://admin.example.com",
+          setupComplete: false,
+        },
+        setupUrl,
+        workspaceRoot,
+      },
+      cwd,
+    );
+
+    expect(created).toBe(
+      [
+        "Instance owner setup URL created.",
+        "Workspace: personal-sites.",
+        "Target: instance.primary (https://personal.dpeek.workers.dev).",
+        "Owner setup: incomplete.",
+        "Admin URL: https://admin.example.com/.",
+        `Setup URL: ${setupUrl}.`,
+        "Browser opened: no.",
+      ].join("\n"),
+    );
+  });
+
   it("omits setup URL and browser-opened output when owner setup is already complete", () => {
     const output = formatCliInstanceOwnerSetupOutput(
       {

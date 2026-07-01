@@ -4,7 +4,9 @@ import {
   type OwnerSetupCompleteResponse,
   type OwnerSetupStatusResponse,
 } from "../shared/protocol.ts";
+import { isWorkersDevHost } from "../shared/runtime-topology.ts";
 import { nowIsoString } from "../shared/clock.ts";
+import { instanceControlPlanePreferredAdminOriginFromRecords } from "@dpeek/formless-instance-control-plane";
 import { authorizeAdminWrite, type AuthorityAdminGuardEnv } from "./authority-admin-guard.ts";
 import {
   completeFirstOwnerSetupInCurrentTransaction,
@@ -24,21 +26,27 @@ import {
 } from "./owner-session.ts";
 import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
 import { readInstanceAuthConfig, resetInstanceAuthTables } from "./instance-auth-state.ts";
-import { configuredInstanceAuthOrigin } from "./instance-auth-handoff.ts";
+import {
+  clearHostAuthSessionCookie,
+  configuredInstanceAuthOrigin,
+  hostAuthSessionTargetFromRequestHeaders,
+  validateHostAuthSessionAuthorityInStorage,
+} from "./instance-auth-handoff.ts";
 import {
   ensureIdentityOwner,
   readIdentityOwner,
   resetIdentityOwner,
 } from "./identity-control-plane.ts";
 import { completeOwnerPasskeyRegistration } from "./owner-passkeys.ts";
+import { readControlPlaneRecords } from "./deployment-control-plane-client.ts";
 
 export const OWNER_SETUP_API_PATH = "/api/formless/setup";
 export const OWNER_SESSION_API_PATH = "/api/formless/session";
 export const INTERNAL_RESET_OWNER_SETUP_PATH = "/_internal/reset-owner-setup";
+export const OWNER_SESSION_LOGOUT_API_PATH = `${OWNER_SESSION_API_PATH}/logout`;
 
 const ownerSetupCapabilityPath = `${OWNER_SETUP_API_PATH}/capability`;
 const ownerSetupCompletePath = `${OWNER_SETUP_API_PATH}/complete`;
-const ownerSessionLogoutPath = `${OWNER_SESSION_API_PATH}/logout`;
 
 type OwnerSetupApiEnv = AuthorityAdminGuardEnv & {
   FORMLESS_AUTHORITY: DurableObjectNamespace;
@@ -87,7 +95,7 @@ export async function handleOwnerSetupDurableObjectRequest(
   }
 
   try {
-    if (pathname === ownerSessionLogoutPath) {
+    if (pathname === OWNER_SESSION_LOGOUT_API_PATH) {
       return handleOwnerLogoutRequest(request);
     }
 
@@ -117,7 +125,7 @@ function isOwnerApiPath(pathname: string) {
   return (
     isOwnerSetupApiPath(pathname) ||
     pathname === OWNER_SESSION_API_PATH ||
-    pathname === ownerSessionLogoutPath
+    pathname === OWNER_SESSION_LOGOUT_API_PATH
   );
 }
 
@@ -163,6 +171,12 @@ async function handleOwnerSessionStatusRequest(
     });
   }
 
+  const hostSession = await hostOwnerSessionStatusResponse(request, storage, env, state.owner);
+
+  if (hostSession) {
+    return hostSession;
+  }
+
   return jsonResponse({
     authenticated: false,
     owner: state.owner,
@@ -200,8 +214,55 @@ function handleOwnerLogoutRequest(request: Request): Response {
     return methodNotAllowedResponse("POST");
   }
 
+  const hostSessionTarget = hostAuthSessionTargetFromRequestHeaders(request.headers);
+
+  if (hostSessionTarget) {
+    return jsonResponse({ authenticated: false }, 200, {
+      "Set-Cookie": clearHostAuthSessionCookie(hostSessionTarget.targetOrigin),
+    });
+  }
+
   return jsonResponse({ authenticated: false }, 200, {
     "Set-Cookie": clearOwnerSessionCookie(request),
+  });
+}
+
+async function hostOwnerSessionStatusResponse(
+  request: Request,
+  storage: DurableObjectStorage,
+  env: OwnerSetupApiEnv,
+  owner: Awaited<ReturnType<typeof readIdentityOwner>>,
+): Promise<Response | undefined> {
+  const hostSessionTarget = hostAuthSessionTargetFromRequestHeaders(request.headers);
+
+  if (!hostSessionTarget) {
+    return undefined;
+  }
+
+  if (!owner) {
+    return jsonResponse({ authenticated: false, setupComplete: false }, 401);
+  }
+
+  const hostSession = await validateHostAuthSessionAuthorityInStorage(request, storage, env, {
+    target: hostSessionTarget,
+  });
+
+  if (!hostSession.ok || hostSession.session.principalId !== owner.id) {
+    return jsonResponse(
+      {
+        authenticated: false,
+        owner,
+        setupComplete: true,
+      },
+      401,
+    );
+  }
+
+  return jsonResponse({
+    authenticated: true,
+    owner,
+    session: { expiresAt: hostSession.session.expiresAt },
+    setupComplete: true,
   });
 }
 
@@ -308,19 +369,40 @@ async function ownerSetupStatusResponse(
   const owner = await readIdentityOwner(env);
   const state = readInstanceSetupState(storage, owner);
   const authOrigin = await configuredInstanceAuthOrigin(request, env);
+  const adminOrigin = await ownerSetupAdminOrigin(request, env);
 
   if (!state.owner) {
     return {
+      ...(adminOrigin === undefined ? {} : { adminOrigin }),
       ...(authOrigin === undefined ? {} : { authOrigin }),
       setupComplete: false,
     };
   }
 
   return {
+    ...(adminOrigin === undefined ? {} : { adminOrigin }),
     ...(authOrigin === undefined ? {} : { authOrigin }),
     setupComplete: true,
     owner: state.owner,
   };
+}
+
+async function ownerSetupAdminOrigin(
+  request: Request,
+  env: OwnerSetupApiEnv,
+): Promise<string | undefined> {
+  const requestUrl = new URL(request.url);
+  const deploymentTargetUrl = isWorkersDevHost(requestUrl.hostname) ? requestUrl.origin : undefined;
+  const resolution = instanceControlPlanePreferredAdminOriginFromRecords({
+    ...(deploymentTargetUrl === undefined ? {} : { deploymentTargetUrl }),
+    records:
+      (await readControlPlaneRecords({
+        env,
+        requestUrl: request.url,
+      })) ?? [],
+  });
+
+  return resolution.status === "resolved" ? resolution.adminOrigin : undefined;
 }
 
 function ownerSetupCapabilityResponse(result: WriteOwnerSetupCapabilityResult): Response {

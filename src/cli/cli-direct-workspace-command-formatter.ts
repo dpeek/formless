@@ -16,6 +16,7 @@ export type CliInstanceWorkspaceTokenRotateResult = CliInstanceWorkspaceTokenAdo
 };
 
 export type CliOwnerSetupStatus = {
+  adminOrigin?: string;
   owner?: {
     email?: string;
     name: string;
@@ -111,6 +112,9 @@ export function formatCliInstanceOwnerSetupOutput(
     `Workspace: ${formatCliRelativePath(cwd, result.workspaceRoot)}.`,
     `Target: ${formatCliSelectedTarget(result.selectedTarget)}.`,
     `Owner setup: ${formatCliOwnerSetupStatus(result.setupStatus)}.`,
+    result.setupStatus.adminOrigin
+      ? `Admin URL: ${formatCliOwnerSetupAdminUrl(result.setupStatus.adminOrigin)}.`
+      : null,
     result.setupUrl ? `Setup URL: ${result.setupUrl}.` : null,
     result.setupUrl ? `Browser opened: ${formatCliBrowserOpened(result.opened)}.` : null,
   ]);
@@ -171,4 +175,18 @@ export function formatCliOwnerSetupStatus(status: CliOwnerSetupStatus): string {
 
 export function formatCliBrowserOpened(opened: boolean): "no" | "yes" {
   return opened ? "yes" : "no";
+}
+
+function formatCliOwnerSetupAdminUrl(adminOrigin: string): string {
+  try {
+    const url = new URL(adminOrigin);
+
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+      return adminOrigin;
+    }
+
+    return `${url.origin}/`;
+  } catch {
+    return adminOrigin;
+  }
 }

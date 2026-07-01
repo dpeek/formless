@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vite-plus/test";
 
 import { IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX } from "@dpeek/formless-identity-control-plane";
+import { INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY } from "@dpeek/formless-instance-control-plane";
 import type { StoredRecord } from "@dpeek/formless-storage";
 import type {
   PublicKeyCredentialCreationOptionsJSON,
@@ -986,6 +987,166 @@ describe("collaborator invitation acceptance status", () => {
     );
   });
 
+  it("continues instance targets through the preferred admin origin and normal handoff", async () => {
+    const unique = randomUUID().replace(/-/g, "");
+    const decoyHost = `invite-instance-decoy-${unique}.example.com`;
+    const adminHost = `invite-instance-admin-${unique}.example.com`;
+    const targetEmail = `mapped-instance-${unique}@example.com`;
+    const invitation = await createInvitation({
+      invitationId: `invitation:mapped-instance-${unique}`,
+      targetEmail,
+      targetSurface: "instance",
+      invitedPrincipal: {
+        id: `principal:mapped-instance-${unique}`,
+        displayName: "Mapped Instance Collaborator",
+      },
+    });
+    const token = rawTokenFor(invitation.id);
+
+    await writeDefaultAuthConfig();
+    const decoyRoute = await createDefaultRoute(`aaa-instance-decoy-${unique}`, {
+      access: "authenticated",
+      enabled: true,
+      kind: "mount",
+      matchHost: decoyHost,
+      matchPath: "/",
+      matchPrefix: "/",
+      surface: "admin",
+      targetProfile: "instance",
+    });
+    const adminRoute = await createDefaultRoute(`zzz-instance-admin-${unique}`, {
+      access: "authenticated",
+      enabled: true,
+      kind: "mount",
+      matchHost: adminHost,
+      matchPath: "/",
+      matchPrefix: "/",
+      surface: "admin",
+      targetProfile: "instance",
+    });
+
+    await configureDefaultProductionIdentity({ adminRoute: adminRoute.id });
+    await createDefaultPrivateToken({
+      invitationId: invitation.id,
+      rawToken: token,
+      targetEmail,
+      targetSurface: "instance",
+    });
+
+    const countsBefore = await defaultAuthCounts();
+    const options = await fetchDefaultPasskeyRegistrationOptions(invitation.id, token);
+    const authenticator = new VirtualPasskey(
+      Buffer.from(`mapped-instance-credential:${unique}`).toString("base64url"),
+    );
+
+    if (!("options" in options.body)) {
+      throw new Error(`Expected passkey options, received ${JSON.stringify(options.body)}.`);
+    }
+
+    const verified = await verifyDefaultPasskeyRegistration(
+      invitation.id,
+      token,
+      authenticator.registrationResponse(options.body.options, {
+        origin: authOrigin,
+        rpId: "example.com",
+      }),
+    );
+    const sessionCookie = requiredHeader(verified.response, "Set-Cookie");
+
+    const handoffCandidate = isObjectWithKey(verified.body, "handoff")
+      ? verified.body.handoff
+      : undefined;
+
+    if (
+      !isObjectWithKey(handoffCandidate, "returnTo") ||
+      !isObjectWithKey(handoffCandidate, "targetOrigin") ||
+      typeof handoffCandidate.returnTo !== "string" ||
+      typeof handoffCandidate.targetOrigin !== "string"
+    ) {
+      throw new Error(`Expected handoff continuation, received ${JSON.stringify(verified.body)}.`);
+    }
+    const handoff = {
+      returnTo: handoffCandidate.returnTo,
+      targetOrigin: handoffCandidate.targetOrigin,
+    };
+
+    expect(verified.response.status).toBe(200);
+    expect(sessionCookie).toContain(`${OWNER_SESSION_COOKIE_NAME}=`);
+    expect(sessionCookie).not.toContain(`${HOST_AUTH_SESSION_COOKIE_NAME}=`);
+    expect(decoyRoute.values.matchHost).toBe(decoyHost);
+    expect(verified.body).toMatchObject({
+      acceptedPrincipal: {
+        displayName: "Mapped Instance Collaborator",
+        principalId: `principal:mapped-instance-${unique}`,
+      },
+      handoff: {
+        returnTo: "/login?redirectTo=%2F",
+        targetOrigin: `https://${adminHost}`,
+      },
+      session: { expiresAt: expect.any(String) },
+      verified: true,
+    });
+    expect(JSON.stringify(verified.body)).not.toContain(decoyHost);
+    expect(await defaultAuthCounts()).toEqual({
+      centralSessions: countsBefore.centralSessions + 1,
+      challenges: countsBefore.challenges + 1,
+      credentials: countsBefore.credentials + 1,
+      handoffGrants: countsBefore.handoffGrants,
+    });
+
+    const continuationUrl = new URL(handoff.returnTo, handoff.targetOrigin);
+    const target = {
+      routeId: adminRoute.id,
+      storageIdentity: INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
+      targetOrigin: `https://${adminHost}`,
+      targetProfile: "instance" as const,
+    };
+    const nonce = Buffer.from(`instance-nonce:${unique}`).toString("base64url");
+    const state = Buffer.from(`instance-state:${unique}`).toString("base64url");
+    const handoffStartUrl = new URL(INSTANCE_AUTH_HANDOFF_START_PATH, authOrigin);
+
+    handoffStartUrl.searchParams.set("targetOrigin", target.targetOrigin);
+    handoffStartUrl.searchParams.set("routeId", target.routeId);
+    handoffStartUrl.searchParams.set("targetProfile", target.targetProfile);
+    handoffStartUrl.searchParams.set("storageIdentity", target.storageIdentity);
+    handoffStartUrl.searchParams.set("returnTo", "/");
+    handoffStartUrl.searchParams.set("nonceHash", sha256Base64Url(nonce));
+    handoffStartUrl.searchParams.set("state", state);
+
+    expect(continuationUrl.origin).toBe(`https://${adminHost}`);
+    expect(continuationUrl.pathname).toBe("/login");
+    expect(continuationUrl.searchParams.get("redirectTo")).toBe("/");
+    expect(handoffStartUrl.searchParams.get("targetOrigin")).toBe(`https://${adminHost}`);
+    expect(handoffStartUrl.searchParams.get("routeId")).toBe(adminRoute.id);
+    expect(handoffStartUrl.searchParams.get("targetProfile")).toBe("instance");
+    expect(handoffStartUrl.searchParams.get("storageIdentity")).toBe(
+      INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
+    );
+    expect(handoffStartUrl.searchParams.get("returnTo")).toBe("/");
+
+    const grant = await harness.mf.dispatchFetch(handoffStartUrl.toString(), {
+      headers: {
+        Accept: "text/html",
+        Cookie: cookiePair(sessionCookie),
+      },
+      redirect: "manual",
+    });
+    const callbackUrl = new URL(requiredHeader(grant, "Location"));
+    const callback = await harness.mf.dispatchFetch(callbackUrl.toString(), {
+      headers: handoffCallbackHeaders(`${HOST_AUTH_NONCE_COOKIE_NAME}=${nonce}`, target),
+      redirect: "manual",
+    });
+    const callbackCookie = requiredHeader(callback, "Set-Cookie");
+
+    expect(grant.status).toBe(302);
+    expect(callbackUrl.origin).toBe(`https://${adminHost}`);
+    expect(callbackUrl.pathname).toBe(INSTANCE_AUTH_HANDOFF_CALLBACK_PATH);
+    expect(callback.status).toBe(302);
+    expect(callback.headers.get("Location")).toBe("/");
+    expect(callbackCookie).toContain(`${HOST_AUTH_SESSION_COOKIE_NAME}=`);
+    expect(callbackCookie).not.toContain(`${OWNER_SESSION_COOKIE_NAME}=`);
+  });
+
   it("does not start invitation passkey ceremonies on mapped app or public Site hosts", async () => {
     const invitation = await prepareActiveInvitation("invitation:mapped-hosts", {
       targetEmail: "mapped-hosts@example.com",
@@ -1427,13 +1588,23 @@ async function verifyDefaultPasskeyRegistration(
   return { body, response };
 }
 
-async function configureDefaultProductionIdentity() {
-  await postDefaultControlPlaneOperation("instance-settings", "default-auth-origin", {
-    settingsId: "instance",
+async function configureDefaultProductionIdentity(input: { adminRoute?: string } = {}) {
+  const values = {
+    ...(input.adminRoute === undefined ? {} : { adminRoute: input.adminRoute }),
     canonicalOrigin: "https://www.example.com",
     authOrigin,
     productionIdentityStatus: "configured",
-  });
+  };
+
+  await upsertDefaultControlPlaneRecord(
+    "instance-settings",
+    `default-auth-origin-${randomUUID()}`,
+    {
+      settingsId: "instance",
+      ...values,
+    },
+    values,
+  );
 }
 
 async function createDefaultAppInstall(installId: string) {
@@ -1479,6 +1650,53 @@ async function postDefaultControlPlaneOperation(
   }
 
   return body;
+}
+
+async function upsertDefaultControlPlaneRecord(
+  entity: string,
+  idempotencyKey: string,
+  createInput: Record<string, unknown>,
+  updateInput: Record<string, unknown> = createInput,
+) {
+  const records = await readDefaultControlPlaneRecords();
+  const existing = records.find((record) => record.entity === entity && !record.deletedAt);
+
+  if (!existing) {
+    return operationRecord(
+      await postDefaultControlPlaneOperation(entity, idempotencyKey, createInput),
+    );
+  }
+
+  const request = recordOperationRequest({
+    entity,
+    idempotencyKey,
+    input: updateInput,
+    operationName: "update",
+    recordId: existing.id,
+  });
+  const response = await harness.fetch(`${controlPlaneApi}${request.path.slice("/api".length)}`, {
+    body: JSON.stringify(request.body),
+    headers: adminHeaders({ "Content-Type": "application/json" }),
+    method: "POST",
+  });
+  const body = await response.json();
+
+  if (response.status !== 200) {
+    throw new Error(`Expected ${entity} upsert to succeed, received ${JSON.stringify(body)}.`);
+  }
+
+  return request.response(body).record;
+}
+
+async function readDefaultControlPlaneRecords(): Promise<StoredRecord[]> {
+  const response = await harness.fetch(`${controlPlaneApi}/bootstrap`, {
+    headers: adminHeaders(),
+  });
+  const body = (await response.json()) as BootstrapResponse;
+
+  expect(response.status).toBe(200);
+
+  return body.records;
 }
 
 function operationRecord(response: OperationInvocationResponse): StoredRecord {

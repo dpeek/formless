@@ -624,6 +624,102 @@ describe("Formless CLI", () => {
     expect(logs.join("\n")).not.toContain("explicit-admin-token");
   });
 
+  it("keeps owner setup transport on the selected target while output links the reported admin origin", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+    const openedUrls: string[] = [];
+    const requests: CapturedFetchRequest[] = [];
+    const responses = responseQueue();
+    const logs: string[] = [];
+    const setupInputs: CreateFormlessInstanceOwnerSetupCapabilityInput[] = [];
+    const adminOrigin = "https://admin.example.com";
+    const authOrigin = "https://auth.example.com";
+    const setupUrl = `${authOrigin}/setup?token=${setupToken}`;
+
+    await writeWorkspaceManifest(workspaceRoot);
+    await writeWorkspaceControlPlaneStorageSnapshot(workspaceRoot);
+
+    responses.queueJson({ adminOrigin, authOrigin, setupComplete: false });
+
+    await runFormlessCli(
+      [
+        "owner",
+        "setup",
+        "--workspace",
+        workspaceRoot,
+        "--admin-token",
+        "explicit-admin-token",
+        "--open",
+      ],
+      cliDeps(tempDir, {
+        fetch: responses.fetcher(requests),
+        logs,
+        openedUrls,
+        setupInputs,
+      }),
+    );
+
+    expect(requests.map((request) => `${request.method} ${request.url}`)).toEqual([
+      "GET https://personal.dpeek.workers.dev/api/formless/setup",
+    ]);
+    expectNoOwnerSetupProtectedBootstrapReads(requests);
+    expect(setupInputs).toEqual([
+      {
+        adminToken: "explicit-admin-token",
+        deploymentUrl: authOrigin,
+        setupToken,
+      },
+    ]);
+    expect(openedUrls).toEqual([setupUrl]);
+    expect(logs.join("\n")).toContain(
+      "Target: instance.primary (https://personal.dpeek.workers.dev).",
+    );
+    expect(logs.join("\n")).toContain(`Admin URL: ${adminOrigin}/.`);
+    expect(logs.join("\n")).toContain(`Setup URL: ${setupUrl}.`);
+    expect(logs.join("\n")).not.toContain("explicit-admin-token");
+  });
+
+  it("does not invent a workers.dev admin continuation when setup status omits admin origin", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+    const requests: CapturedFetchRequest[] = [];
+    const responses = responseQueue();
+    const logs: string[] = [];
+    const setupInputs: CreateFormlessInstanceOwnerSetupCapabilityInput[] = [];
+    const authOrigin = "https://auth.example.com";
+    const setupUrl = `${authOrigin}/setup?token=${setupToken}`;
+
+    await writeWorkspaceManifest(workspaceRoot);
+    await writeWorkspaceControlPlaneStorageSnapshot(workspaceRoot);
+
+    responses.queueJson({ authOrigin, setupComplete: false });
+
+    await runFormlessCli(
+      ["owner", "setup", "--workspace", workspaceRoot, "--admin-token", "explicit-admin-token"],
+      cliDeps(tempDir, {
+        fetch: responses.fetcher(requests),
+        logs,
+        setupInputs,
+      }),
+    );
+
+    expect(requests.map((request) => `${request.method} ${request.url}`)).toEqual([
+      "GET https://personal.dpeek.workers.dev/api/formless/setup",
+    ]);
+    expectNoOwnerSetupProtectedBootstrapReads(requests);
+    expect(setupInputs).toEqual([
+      {
+        adminToken: "explicit-admin-token",
+        deploymentUrl: authOrigin,
+        setupToken,
+      },
+    ]);
+    expect(logs.join("\n")).toContain(`Setup URL: ${setupUrl}.`);
+    expect(logs.join("\n")).not.toContain("Admin URL:");
+    expect(logs.join("\n")).not.toContain("Admin URL: https://personal.dpeek.workers.dev/.");
+    expect(logs.join("\n")).not.toContain("explicit-admin-token");
+  });
+
   it("does not retry owner setup capability creation on workers.dev when auth origin fails", async () => {
     const tempDir = await makeTempDir();
     const workspaceRoot = path.join(tempDir, "personal-sites");

@@ -397,6 +397,22 @@ export async function validateHostAuthSessionAuthority(
   });
 }
 
+export async function validateHostAuthSessionAuthorityInStorage(
+  request: Request,
+  storage: DurableObjectStorage,
+  env: InstanceAuthHandoffEnv,
+  options: {
+    now?: string;
+    target?: InstanceAuthSessionTargetBinding | undefined;
+  } = {},
+): Promise<HostAuthSessionAuthorityValidationResult> {
+  return validateHostAuthSessionRequirementInStorage(request, storage, env, {
+    now: options.now,
+    requiredAccess: "owner",
+    target: options.target,
+  });
+}
+
 export async function validateHostAuthSessionManagementAuthority(
   request: Request,
   env: InstanceAuthHandoffEnv,
@@ -743,6 +759,44 @@ async function validateHostAuthSessionCookie(
   };
 }
 
+async function validateHostAuthSessionRequirementInStorage(
+  request: Request,
+  storage: DurableObjectStorage,
+  env: InstanceAuthHandoffEnv,
+  options: {
+    now?: string;
+    requiredAccess: HostSessionAuthorityRequirement;
+    target?: InstanceAuthSessionTargetBinding | undefined;
+  },
+): Promise<HostAuthSessionAuthorityValidationResult> {
+  const { requiredAccess, target } = options;
+
+  if (!target) {
+    return { ok: false, reason: "missing-target" };
+  }
+
+  const validated = await validateHostAuthSessionCookie(request, env, {
+    now: options.now,
+    target,
+  });
+
+  if (!validated.ok) {
+    return validated;
+  }
+
+  if (!(await hostSessionPrincipalSatisfiesAuthority(env, validated.session, requiredAccess))) {
+    return { ok: false, reason: missingAuthorityReason(requiredAccess) };
+  }
+
+  const currentVersion = readHostSessionRevocationVersion(storage, validated.session);
+
+  if ((currentVersion?.sessionVersion ?? 0) !== validated.session.sessionVersion) {
+    return { ok: false, reason: "revoked-session" };
+  }
+
+  return validated;
+}
+
 function handoffStartTargetFromSearch(
   url: URL,
 ): Omit<CreateHandoffGrantInput, "expiresAt" | "grantSecretHash" | "instanceId" | "principalId"> {
@@ -945,6 +999,23 @@ function clearHostAuthNonceCookie(targetOrigin: string): string {
   return parts.join("; ");
 }
 
+export function clearHostAuthSessionCookie(targetOrigin: string): string {
+  const parts = [
+    `${HOST_AUTH_SESSION_COOKIE_NAME}=`,
+    "Path=/",
+    "Max-Age=0",
+    "Expires=Thu, 01 Jan 1970 00:00:00 GMT",
+    "HttpOnly",
+    "SameSite=Lax",
+  ];
+
+  if (new URL(targetOrigin).protocol === "https:") {
+    parts.push("Secure");
+  }
+
+  return parts.join("; ");
+}
+
 function serializeHostAuthSessionCookie(
   targetOrigin: string,
   value: string,
@@ -1132,7 +1203,7 @@ function missingAuthorityReason(
   }
 }
 
-function requestOriginForAuth(request: Request): string {
+export function requestOriginForAuth(request: Request): string {
   const requestUrl = new URL(request.url);
   const forwardedHost =
     firstHeaderValue(request.headers.get("x-forwarded-host")) ??

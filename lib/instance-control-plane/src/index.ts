@@ -39,7 +39,7 @@ export const INSTANCE_CONTROL_PLANE_BOUNDARY_SCHEMA_KEY = "instance";
 export const INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY = "instance:control-plane";
 export const INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX = "/api/formless/control-plane";
 export const INSTANCE_CONTROL_PLANE_SOURCE_SCHEMA_HASH =
-  "sha256:921d6267c2c20e2cdd693c7dd4fd0bd31eac097b6b4db889f74ad9b4d970170f" satisfies SourceSchemaHash;
+  "sha256:1ee1276b57278f7eab8db33a4c4d03716ea87e86c72eabcfccf6ac14c5bfef15" satisfies SourceSchemaHash;
 export const INSTANCE_CONTROL_PLANE_INSTANCE_SETTINGS_ID = "instance";
 export const instanceControlPlaneSchemaProvenance = {
   kind: "instance-control-plane",
@@ -182,6 +182,7 @@ export type InstanceControlPlaneInstanceSettingsValues = {
   settingsId: typeof INSTANCE_CONTROL_PLANE_INSTANCE_SETTINGS_ID;
   canonicalOrigin?: string;
   primaryRoute?: string;
+  adminRoute?: string;
   authRoute?: string;
   authOrigin?: string;
   authRelyingPartyId?: string;
@@ -218,6 +219,38 @@ export type InstanceControlPlaneProductionIdentity = {
   relyingPartyId: string;
   relyingPartyName?: string;
 };
+
+export type InstanceControlPlanePreferredAdminOriginSource =
+  | "adminRoute"
+  | "primaryRoute"
+  | "singleCustomAdminRoute"
+  | "deploymentTargetUrl";
+
+export type InstanceControlPlanePreferredAdminRouteCandidate = {
+  adminOrigin: string;
+  matchHost: string;
+  routeId: string;
+};
+
+export type InstanceControlPlanePreferredAdminOriginResolution =
+  | {
+      adminOrigin: string;
+      routeId: string;
+      source: Exclude<InstanceControlPlanePreferredAdminOriginSource, "deploymentTargetUrl">;
+      status: "resolved";
+    }
+  | {
+      adminOrigin: string;
+      source: "deploymentTargetUrl";
+      status: "resolved";
+    }
+  | {
+      candidateRoutes: InstanceControlPlanePreferredAdminRouteCandidate[];
+      status: "ambiguous";
+    }
+  | {
+      status: "unconfigured";
+    };
 
 export type InstanceControlPlaneRedirectStatusCode = "301" | "302" | "303" | "307" | "308";
 
@@ -434,6 +467,7 @@ export const instanceControlPlaneSourceSchema = {
         settingsId: textField("Settings id"),
         canonicalOrigin: optionalTextField("Canonical origin", "href"),
         primaryRoute: optionalReferenceField("Primary route", "route", "matchHost"),
+        adminRoute: optionalReferenceField("Admin route", "route", "matchHost"),
         authRoute: optionalReferenceField("Auth route", "route", "matchHost"),
         authOrigin: optionalTextField("Auth origin", "href"),
         authRelyingPartyId: optionalTextField("Auth relying-party id"),
@@ -465,6 +499,7 @@ export const instanceControlPlaneSourceSchema = {
           "settingsId",
           "canonicalOrigin",
           "primaryRoute",
+          "adminRoute",
           "authRoute",
           "authOrigin",
           "authRelyingPartyId",
@@ -479,6 +514,7 @@ export const instanceControlPlaneSourceSchema = {
           updateFields: [
             "canonicalOrigin",
             "primaryRoute",
+            "adminRoute",
             "authRoute",
             "authOrigin",
             "authRelyingPartyId",
@@ -568,6 +604,7 @@ export const instanceControlPlaneSourceSchema = {
       "primaryRoute",
       "route",
     ),
+    settingsAdminRoute: toOne("Settings admin route", "instance-settings", "adminRoute", "route"),
     settingsAuthRoute: toOne("Settings auth route", "instance-settings", "authRoute", "route"),
     settingsDefaultEmailDomain: toOne(
       "Settings default email domain",
@@ -675,6 +712,7 @@ export const instanceControlPlaneSourceSchema = {
     instanceSettingsItem: itemView("instance-settings", [
       "settingsId",
       "primaryRoute",
+      "adminRoute",
       "canonicalOrigin",
       "productionIdentityStatus",
     ]),
@@ -755,6 +793,7 @@ export const instanceControlPlaneSourceSchema = {
         { field: "settingsId", display: "readOnly" },
         "canonicalOrigin",
         "primaryRoute",
+        "adminRoute",
         "authRoute",
         "authOrigin",
         "authRelyingPartyId",
@@ -917,6 +956,7 @@ export const instanceControlPlaneSourceSchema = {
       "settingsId",
       "canonicalOrigin",
       "primaryRoute",
+      "adminRoute",
       "authRoute",
       "authOrigin",
       "authRelyingPartyId",
@@ -930,6 +970,7 @@ export const instanceControlPlaneSourceSchema = {
     instanceSettingsEdit: editView("instance-settings", [
       "canonicalOrigin",
       "primaryRoute",
+      "adminRoute",
       "authRoute",
       "authOrigin",
       "authRelyingPartyId",
@@ -1640,6 +1681,77 @@ export function instanceControlPlaneProductionIdentityFromRecords(
   };
 }
 
+export function instanceControlPlanePreferredAdminOriginFromRecords(input: {
+  deploymentTargetUrl?: string;
+  records: readonly InstanceControlPlaneProjectionRecord[];
+}): InstanceControlPlanePreferredAdminOriginResolution {
+  const activeRecords = input.records.filter((record) => record.deletedAt === undefined);
+  const settings = activeRecords.find((record) => record.entity === "instance-settings");
+  const adminRouteId = stringControlPlaneValue(settings?.values.adminRoute);
+  const primaryRouteId = stringControlPlaneValue(settings?.values.primaryRoute);
+  const adminRoutes = activeRecords
+    .flatMap((record) => {
+      const candidate = preferredAdminRouteCandidate(record);
+
+      return candidate === undefined ? [] : [candidate];
+    })
+    .sort(comparePreferredAdminRouteCandidates);
+  const adminRoutesById = new Map(adminRoutes.map((route) => [route.routeId, route]));
+  const explicitAdminRoute =
+    adminRouteId === undefined ? undefined : adminRoutesById.get(adminRouteId);
+
+  if (explicitAdminRoute !== undefined) {
+    return {
+      adminOrigin: explicitAdminRoute.adminOrigin,
+      routeId: explicitAdminRoute.routeId,
+      source: "adminRoute",
+      status: "resolved",
+    };
+  }
+
+  const primaryAdminRoute =
+    primaryRouteId === undefined ? undefined : adminRoutesById.get(primaryRouteId);
+
+  if (primaryAdminRoute !== undefined) {
+    return {
+      adminOrigin: primaryAdminRoute.adminOrigin,
+      routeId: primaryAdminRoute.routeId,
+      source: "primaryRoute",
+      status: "resolved",
+    };
+  }
+
+  if (adminRoutes.length === 1) {
+    const [adminRoute] = adminRoutes;
+
+    return {
+      adminOrigin: adminRoute.adminOrigin,
+      routeId: adminRoute.routeId,
+      source: "singleCustomAdminRoute",
+      status: "resolved",
+    };
+  }
+
+  if (adminRoutes.length > 1) {
+    return { candidateRoutes: adminRoutes, status: "ambiguous" };
+  }
+
+  const deploymentTargetOrigin =
+    input.deploymentTargetUrl === undefined
+      ? undefined
+      : normalizeInstanceControlPlaneTargetUrl(input.deploymentTargetUrl);
+
+  if (deploymentTargetOrigin === undefined) {
+    return { status: "unconfigured" };
+  }
+
+  return {
+    adminOrigin: deploymentTargetOrigin,
+    source: "deploymentTargetUrl",
+    status: "resolved",
+  };
+}
+
 export const instanceControlPlaneRecordSourceExcludedEntityNames = [
   "deploy-desired-resource",
   "deploy-target",
@@ -2112,6 +2224,7 @@ function validateInstanceSettingsRecord(
     "contactNotificationRecipient",
   );
   const primaryRoute = optionalStringValue(context, record, "primaryRoute");
+  const adminRoute = optionalStringValue(context, record, "adminRoute");
   const authRoute = optionalStringValue(context, record, "authRoute");
   const defaultEmailDomain = optionalStringValue(context, record, "defaultEmailDomain");
   const defaultContactSender = optionalStringValue(context, record, "defaultContactSender");
@@ -2154,6 +2267,10 @@ function validateInstanceSettingsRecord(
 
   if (primaryRoute !== undefined) {
     assertProductionRouteReference(context, record, "primaryRoute", primaryRoute, recordsById);
+  }
+
+  if (adminRoute !== undefined) {
+    assertAdminRouteReference(context, record, "adminRoute", adminRoute, recordsById);
   }
 
   if (authRoute !== undefined) {
@@ -2712,6 +2829,30 @@ function assertProductionRouteReference(
   return route;
 }
 
+function assertAdminRouteReference(
+  context: string,
+  record: StoredRecord,
+  fieldName: string,
+  routeId: string,
+  recordsById: ReadonlyMap<string, StoredRecord>,
+): StoredRecord {
+  const route = assertActiveRecordEntity(context, record, fieldName, routeId, "route", recordsById);
+
+  if (
+    route.values.enabled !== true ||
+    optionalStringValue(context, route, "matchHost") === undefined ||
+    route.values.kind !== "mount" ||
+    route.values.targetProfile !== "instance" ||
+    route.values.surface !== "admin"
+  ) {
+    throw new Error(
+      `${context} record "${record.id}" field "${controlPlaneFieldLabel(record, fieldName)}" must reference an enabled exact-host instance admin route.`,
+    );
+  }
+
+  return route;
+}
+
 function assertActiveRecordEntity(
   context: string,
   record: StoredRecord,
@@ -3203,6 +3344,42 @@ function productionOriginForRouteRecord(
   return matchHost === undefined ? undefined : `https://${matchHost}`;
 }
 
+function preferredAdminRouteCandidate(
+  record: InstanceControlPlaneProjectionRecord,
+): InstanceControlPlanePreferredAdminRouteCandidate | undefined {
+  if (
+    record.entity !== "route" ||
+    record.deletedAt !== undefined ||
+    record.values.enabled !== true ||
+    record.values.kind !== "mount" ||
+    record.values.targetProfile !== "instance" ||
+    record.values.surface !== "admin"
+  ) {
+    return undefined;
+  }
+
+  const matchHost = stringControlPlaneValue(record.values.matchHost);
+
+  if (matchHost === undefined) {
+    return undefined;
+  }
+
+  return {
+    adminOrigin: `https://${matchHost}`,
+    matchHost,
+    routeId: record.id,
+  };
+}
+
+function comparePreferredAdminRouteCandidates(
+  left: InstanceControlPlanePreferredAdminRouteCandidate,
+  right: InstanceControlPlanePreferredAdminRouteCandidate,
+) {
+  const hostOrder = left.matchHost.localeCompare(right.matchHost);
+
+  return hostOrder === 0 ? left.routeId.localeCompare(right.routeId) : hostOrder;
+}
+
 function parseControlPlaneEmailAddress(
   context: string,
   record: StoredRecord,
@@ -3618,6 +3795,7 @@ function editorForField(field: string): FieldEditor {
     field === "appRoute" ||
     field === "deploymentConfig" ||
     field === "primaryRoute" ||
+    field === "adminRoute" ||
     field === "authRoute" ||
     field === "defaultEmailDomain" ||
     field === "defaultContactSender" ||

@@ -146,9 +146,10 @@ singleton instance settings record.
 - **WHEN** the `instance-settings` entity is inspected
 - **THEN** at most one active settings record exists for the instance
 - **AND** it stores camelCase fields for canonical origin, primary route
-  reference, auth route reference or auth origin facts, default email domain
-  reference, default contact sender reference, default auth sender reference,
-  contact notification recipient, and production identity status
+  reference, auth route reference or auth origin facts, preferred admin route
+  reference, default email domain reference, default contact sender reference,
+  default auth sender reference, contact notification recipient, and production
+  identity status
 - **AND** those fields are active policy selections, not provider resource
   truth, raw DNS state, provider credentials, or runtime secrets
 
@@ -168,6 +169,31 @@ singleton instance settings record.
 - **AND** DNS authentication, Email Sending onboarding state, provider status,
   and cleanup lifecycle remain on the referenced records or provider observation
   boundary
+
+#### Scenario: Preferred admin route selection
+
+- **GIVEN** enabled exact-host instance admin route records exist
+- **WHEN** the settings singleton selects `adminRoute`
+- **THEN** `adminRoute` references an enabled exact-host `route` whose
+  `targetProfile` is `instance` and whose surface is the admin surface
+- **AND** the preferred admin origin is derived from that route's `matchHost`
+- **AND** changing the preferred admin route does not change the configured auth
+  origin, WebAuthn relying-party id, central auth session origin, deployment
+  target URL, or provider resource truth
+
+#### Scenario: Preferred admin origin fallback
+
+- **GIVEN** no settings `adminRoute` is selected
+- **WHEN** a browser-visible owner or admin link needs a preferred admin origin
+- **THEN** the system may use `primaryRoute` only when it references an enabled
+  exact-host instance admin route
+- **AND** when exactly one enabled exact-host instance admin route exists, the
+  system may use that route as the preferred admin origin
+- **AND** when multiple enabled exact-host instance admin routes exist without a
+  selected preferred route, the preferred admin origin is ambiguous instead of
+  falling back to the deployment target URL
+- **AND** the workers.dev deployment target URL is a browser admin fallback only
+  when no enabled custom admin route exists
 
 ### Requirement: Email Domain And Sender Records
 

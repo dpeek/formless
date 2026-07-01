@@ -1251,6 +1251,7 @@ function parseOwnerSetupStatus(value: unknown, context: string): OwnerSetupStatu
   }
 
   return {
+    ...(typeof value.adminOrigin === "string" ? { adminOrigin: value.adminOrigin } : {}),
     ...(typeof value.authOrigin === "string" ? { authOrigin: value.authOrigin } : {}),
     setupComplete: value.setupComplete,
     ...(isRecord(value.owner) ? { owner: value.owner as OwnerSetupStatusResponse["owner"] } : {}),

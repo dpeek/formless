@@ -96,11 +96,16 @@ The system SHALL mount browser surfaces according to the active runtime profile.
 
 #### Scenario: Product instance owner auth routes
 
-- GIVEN a browser is on the canonical instance origin
+- GIVEN a browser is on the configured auth origin
 - WHEN it navigates to `/setup` or `/login`
 - THEN the client shell is eligible to render the owner setup or owner login
   route
 - AND passkey ceremony API calls use the canonical instance auth origin
+- AND auth route eligibility is origin-scoped reserved runtime behavior rather
+  than an exclusive runtime profile
+- AND when the configured auth origin is also the preferred admin origin, the
+  same host can serve owner auth routes and ordinary instance admin routes
+  according to path and route access policy
 
 #### Scenario: App profile mounts one app
 
@@ -150,8 +155,9 @@ surfaces or protected management API data.
 - AND the request is a `GET` or `HEAD` request that accepts HTML
 - WHEN the request does not include a valid owner session for an active
   principal with active `instance.owner` authority
-- THEN the runtime redirects to the owner login route with a safe same-origin
-  return target for the original path and query
+- THEN the runtime redirects to the owner login route on the configured auth
+  origin, or starts cross-domain auth handoff when the matched host is not the
+  configured auth origin
 - AND the owner-only browser shell, instance dashboard, generated app surface,
   or app screen is not served
 
@@ -319,7 +325,8 @@ profile behavior.
 
 #### Scenario: Mapped host auth callback
 
-- **GIVEN** an enabled exact-host `route` mounts an app or public Site host
+- **GIVEN** an enabled exact-host `route` mounts an instance admin, app, or
+  public Site host
 - **WHEN** the mapped host receives `/_formless/auth/callback`
 - **THEN** runtime topology reserves the request for cross-domain auth grant
   consumption
@@ -347,6 +354,28 @@ profile behavior.
 - **AND** owner-only access on the mapped app host uses cross-domain auth
   handoff and a host-local session instead of local owner login or passkey
   ceremony routes
+
+#### Scenario: Mapped instance admin host
+
+- **GIVEN** an enabled exact-host `route` mounts the instance admin surface
+- **WHEN** the mapped host receives browser requests for `/`, `/access`,
+  `/deployments`, `/apps/<installId>`, or another instance admin path
+- **THEN** the client shell is served only after the matched route access policy
+  is satisfied
+- **AND** protected access on the mapped admin host uses cross-domain auth
+  handoff and a host-local session when the mapped host is not the configured
+  auth origin
+- **AND** protected instance control-plane management API requests may use a
+  host-local session bound to that admin route, target profile `instance`, and
+  storage identity `instance:control-plane`
+- **AND** schema-key browser routes, source app routes, and unrelated installed
+  app storage identities are not exposed through the mapped admin host
+- **AND** owner setup, owner login, owner session, and passkey ceremony routes
+  are served on the mapped admin host only when that host is also the configured
+  auth origin
+- **AND** when the mapped admin host is not the configured auth origin, owner
+  login and setup browser requests redirect to the configured auth origin and
+  passkey ceremony API requests do not run locally
 
 ### Requirement: Schema-Owned App Route Resolution
 

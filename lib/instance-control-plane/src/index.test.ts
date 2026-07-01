@@ -6,6 +6,7 @@ import {
   INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
   formatInstanceControlPlaneBoundaryEntityName,
   instanceControlPlaneAppLaunchLinksFromRecords,
+  instanceControlPlanePreferredAdminOriginFromRecords,
   instanceControlPlaneProductionIdentityFromRecords,
   instanceControlPlaneAppInstallRecord,
   instanceControlPlaneAppInstallsFromRecords,
@@ -217,6 +218,7 @@ describe("instance control-plane schema contracts", () => {
       settingsId: { type: "text", required: true },
       canonicalOrigin: { type: "text", required: false, format: "href" },
       primaryRoute: { type: "reference", required: false, to: "route" },
+      adminRoute: { type: "reference", required: false, to: "route" },
       authRoute: { type: "reference", required: false, to: "route" },
       authOrigin: { type: "text", required: false, format: "href" },
       authRelyingPartyId: { type: "text", required: false },
@@ -335,6 +337,157 @@ describe("instance control-plane schema contracts", () => {
     );
   });
 
+  it("validates preferred admin route references in control-plane record sources", () => {
+    const now = "2026-05-28T00:00:00.000Z";
+    const settings = storedInstanceSettingsRecord({
+      adminRoute: "route:host:instance:admin.example.com",
+      productionIdentityStatus: "unconfigured",
+    });
+    const adminRoute = storedAdminRouteRecord({
+      id: "route:host:instance:admin.example.com",
+      matchHost: "admin.example.com",
+    });
+    const parseRecords = (records: StoredRecord[]) =>
+      parseInstanceControlPlaneStorageSnapshot(
+        "Instance archive controlPlane",
+        controlPlaneSnapshot({
+          records,
+          sourceCursor: records.length,
+          exportedAt: now,
+          schemaUpdatedAt: now,
+        }),
+      );
+
+    expect(parseRecords([settings, adminRoute]).records).toEqual([settings, adminRoute]);
+    expect(() =>
+      parseRecords([
+        settings,
+        storedAdminRouteRecord({
+          id: "route:host:instance:admin.example.com",
+          enabled: false,
+          matchHost: "admin.example.com",
+        }),
+      ]),
+    ).toThrow(
+      'field "instance:instance-settings.adminRoute" must reference an enabled exact-host instance admin route',
+    );
+    expect(() =>
+      parseRecords([
+        settings,
+        storedAdminRouteRecord({
+          id: "route:host:instance:admin.example.com",
+        }),
+      ]),
+    ).toThrow(
+      'field "instance:instance-settings.adminRoute" must reference an enabled exact-host instance admin route',
+    );
+    expect(() =>
+      parseRecords([
+        settings,
+        storedAdminRouteRecord({
+          id: "route:host:instance:admin.example.com",
+          matchHost: "admin.example.com",
+          surface: undefined,
+        }),
+      ]),
+    ).toThrow(
+      'field "instance:instance-settings.adminRoute" must reference an enabled exact-host instance admin route',
+    );
+  });
+
+  it("resolves preferred admin origins from selected and fallback routes", () => {
+    const adminOne = storedAdminRouteRecord({
+      id: "route:host:instance:admin.example.com",
+      matchHost: "admin.example.com",
+    });
+    const adminTwo = storedAdminRouteRecord({
+      id: "route:host:instance:control.example.com",
+      matchHost: "control.example.com",
+    });
+    const publicRoute = storedRouteRecord({
+      id: "route:host:public-site:www.example.com",
+      values: {
+        enabled: true,
+        matchHost: "www.example.com",
+        matchPath: "/",
+        matchPrefix: "/",
+        kind: "mount",
+        targetProfile: "public-site",
+        appInstall: "site",
+        surface: "public-site",
+      },
+    });
+
+    expect(
+      instanceControlPlanePreferredAdminOriginFromRecords({
+        records: [
+          storedInstanceSettingsRecord({ adminRoute: adminTwo.id }),
+          adminOne,
+          adminTwo,
+          publicRoute,
+        ],
+        deploymentTargetUrl: "https://personal.dpeek.workers.dev",
+      }),
+    ).toEqual({
+      adminOrigin: "https://control.example.com",
+      routeId: adminTwo.id,
+      source: "adminRoute",
+      status: "resolved",
+    });
+    expect(
+      instanceControlPlanePreferredAdminOriginFromRecords({
+        records: [storedInstanceSettingsRecord({ primaryRoute: adminOne.id }), adminOne, adminTwo],
+        deploymentTargetUrl: "https://personal.dpeek.workers.dev",
+      }),
+    ).toEqual({
+      adminOrigin: "https://admin.example.com",
+      routeId: adminOne.id,
+      source: "primaryRoute",
+      status: "resolved",
+    });
+    expect(
+      instanceControlPlanePreferredAdminOriginFromRecords({
+        records: [adminOne, publicRoute],
+        deploymentTargetUrl: "https://personal.dpeek.workers.dev",
+      }),
+    ).toEqual({
+      adminOrigin: "https://admin.example.com",
+      routeId: adminOne.id,
+      source: "singleCustomAdminRoute",
+      status: "resolved",
+    });
+    expect(
+      instanceControlPlanePreferredAdminOriginFromRecords({
+        records: [adminTwo, adminOne, publicRoute],
+        deploymentTargetUrl: "https://personal.dpeek.workers.dev",
+      }),
+    ).toEqual({
+      candidateRoutes: [
+        {
+          adminOrigin: "https://admin.example.com",
+          matchHost: "admin.example.com",
+          routeId: adminOne.id,
+        },
+        {
+          adminOrigin: "https://control.example.com",
+          matchHost: "control.example.com",
+          routeId: adminTwo.id,
+        },
+      ],
+      status: "ambiguous",
+    });
+    expect(
+      instanceControlPlanePreferredAdminOriginFromRecords({
+        records: [publicRoute],
+        deploymentTargetUrl: "https://personal.dpeek.workers.dev",
+      }),
+    ).toEqual({
+      adminOrigin: "https://personal.dpeek.workers.dev",
+      source: "deploymentTargetUrl",
+      status: "resolved",
+    });
+  });
+
   it("declares operation contracts for generated instance management records", () => {
     const schema = instanceControlPlaneSchema;
 
@@ -433,6 +586,7 @@ describe("instance control-plane schema contracts", () => {
       "settingsId",
       "canonicalOrigin",
       "primaryRoute",
+      "adminRoute",
       "authRoute",
       "authOrigin",
       "authRelyingPartyId",
@@ -448,6 +602,7 @@ describe("instance control-plane schema contracts", () => {
     ).toEqual([
       "canonicalOrigin",
       "primaryRoute",
+      "adminRoute",
       "authRoute",
       "authOrigin",
       "authRelyingPartyId",
@@ -757,6 +912,7 @@ describe("instance control-plane schema contracts", () => {
     const expectedEditableDefaults = [
       "canonicalOrigin",
       "primaryRoute",
+      "adminRoute",
       "authRoute",
       "authOrigin",
       "authRelyingPartyId",
@@ -772,6 +928,7 @@ describe("instance control-plane schema contracts", () => {
       { field: "settingsId", display: "readOnly" },
       { field: "canonicalOrigin", display: "readOnly" },
       { field: "primaryRoute", display: "readOnly" },
+      { field: "adminRoute", display: "readOnly" },
       { field: "authRoute", display: "readOnly" },
       { field: "authOrigin", display: "readOnly" },
       { field: "authRelyingPartyId", display: "readOnly" },
@@ -785,6 +942,12 @@ describe("instance control-plane schema contracts", () => {
     ]);
     expect(settingsCreateFields).toEqual(["settingsId", ...expectedEditableDefaults]);
     expect(settingsEditFields).toEqual(expectedEditableDefaults);
+    expect(schema.relationships?.settingsAdminRoute).toEqual({
+      kind: "toOne",
+      label: "Settings admin route",
+      from: { entity: "instance-settings", field: "adminRoute" },
+      to: { entity: "route" },
+    });
     expect(schema.relationships?.settingsDefaultAuthSender).toEqual({
       kind: "toOne",
       label: "Settings default auth sender",
@@ -1424,6 +1587,45 @@ function storedRouteRecord(input: {
     id: input.id,
     entity: "route",
     values: input.values,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+function storedAdminRouteRecord(input: {
+  enabled?: boolean;
+  id: string;
+  matchHost?: string;
+  surface?: "admin" | undefined;
+}): StoredRecord {
+  const surface = Object.prototype.hasOwnProperty.call(input, "surface") ? input.surface : "admin";
+
+  return storedRouteRecord({
+    id: input.id,
+    values: {
+      enabled: input.enabled ?? true,
+      ...(input.matchHost === undefined ? {} : { matchHost: input.matchHost }),
+      matchPath: "/",
+      matchPrefix: "/",
+      kind: "mount",
+      targetProfile: "instance",
+      ...(surface === undefined ? {} : { surface }),
+      access: "owner",
+    },
+  });
+}
+
+function storedInstanceSettingsRecord(values: Record<string, string>): StoredRecord {
+  const now = "2026-05-28T00:00:00.000Z";
+
+  return {
+    id: "settings:instance",
+    entity: "instance-settings",
+    values: {
+      settingsId: INSTANCE_CONTROL_PLANE_INSTANCE_SETTINGS_ID,
+      productionIdentityStatus: "unconfigured",
+      ...values,
+    },
     createdAt: now,
     updatedAt: now,
   };

@@ -67,6 +67,24 @@ describe("owner setup route view", () => {
     expect(html).toContain("Name");
     expect(html).toContain("Email");
   });
+
+  it("renders setup completion continuation to the reported admin origin", () => {
+    const html = renderOwnerSetupState({
+      adminOrigin: "https://admin.example.com",
+      status: "complete",
+      owner,
+    });
+    const alreadyCompleteHtml = renderOwnerSetupState({
+      adminOrigin: "https://admin.example.com",
+      status: "already-complete",
+      owner,
+    });
+
+    expect(html).toContain("Continue");
+    expect(html).toContain('href="https://admin.example.com/"');
+    expect(alreadyCompleteHtml).toContain("Continue");
+    expect(alreadyCompleteHtml).toContain('href="https://admin.example.com/"');
+  });
 });
 
 describe("owner setup route data flow", () => {
@@ -87,6 +105,35 @@ describe("owner setup route data flow", () => {
     }
 
     expect(states).toEqual([{ status: "loading" }, { status: "ready", setupToken }]);
+  });
+
+  it("carries reported admin origin into the ready setup state", async () => {
+    const states: OwnerSetupRouteState[] = [];
+
+    const stop = startOwnerSetupRouteSession({
+      fetcher: jsonFetcher({
+        adminOrigin: "https://admin.example.com",
+        setupComplete: false,
+      }),
+      locationSearch: `?token=${setupToken}`,
+      onState: (state) => states.push(state),
+      passkeysSupported: () => true,
+    });
+
+    try {
+      await waitFor(() => states.some((state) => state.status === "ready"));
+    } finally {
+      stop();
+    }
+
+    expect(states).toEqual([
+      { status: "loading" },
+      {
+        adminOrigin: "https://admin.example.com",
+        status: "ready",
+        setupToken,
+      },
+    ]);
   });
 
   it("keeps setup usable when passkeys are unavailable", async () => {
@@ -293,8 +340,17 @@ describe("owner setup route data flow", () => {
 
   it("parses setup status responses", async () => {
     await expect(
-      fetchOwnerSetupStatus({ fetcher: jsonFetcher({ setupComplete: true, owner }) }),
+      fetchOwnerSetupStatus({
+        fetcher: jsonFetcher({
+          adminOrigin: "https://admin.example.com",
+          authOrigin: "https://auth.example.com",
+          setupComplete: true,
+          owner,
+        }),
+      }),
     ).resolves.toEqual({
+      adminOrigin: "https://admin.example.com",
+      authOrigin: "https://auth.example.com",
       setupComplete: true,
       owner,
     });

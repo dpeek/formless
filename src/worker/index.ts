@@ -29,9 +29,13 @@ import { handleIdentityControlPlaneApiRequest } from "./identity-control-plane.t
 import { resolveInstanceRuntimeRouteForRequest } from "./instance-runtime-routes.ts";
 import { mappedAppHostFromRuntimeRoute } from "./mapped-app-host.ts";
 import {
+  HOST_AUTH_SESSION_COOKIE_NAME,
+  configuredInstanceAuthOrigin,
   handleInstanceAuthHandoffRequest,
   hostAuthSessionTargetForRuntimeRoute,
+  requestOriginForAuth,
   setHostAuthSessionTargetHeaders,
+  startOwnerRouteAuthHandoff,
   startProtectedRouteAuthHandoff,
   validateRouteAccessSession,
 } from "./instance-auth-handoff.ts";
@@ -39,9 +43,11 @@ import {
   handleCollaboratorInvitationAcceptanceApiRequest,
   handleCollaboratorInvitationAcceptanceBrowserRequest,
 } from "./collaborator-invitation-acceptance.ts";
-import { handleOwnerSetupApiRequest } from "./owner-setup.ts";
 import { handleOwnerPasskeyApiRequest } from "./owner-passkeys.ts";
-import { ownerLoginRedirectLocationForRoute } from "../shared/instance-auth.ts";
+import {
+  ownerLoginRedirectLocationForRoute,
+  ownerLoginRedirectTargetFromSearch,
+} from "../shared/instance-auth.ts";
 import {
   areSchemaKeyApiRoutesEnabledForRequest,
   mappedSiteHostRedirectForRequest,
@@ -63,6 +69,11 @@ import {
   handleLocalSessionBootstrapApiRequest,
   isLocalSessionBootstrapApiPath,
 } from "./local-session-bootstrap.ts";
+import {
+  handleOwnerSetupApiRequest,
+  OWNER_SESSION_API_PATH,
+  OWNER_SESSION_LOGOUT_API_PATH,
+} from "./owner-setup.ts";
 import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
 import { validateOwnerSessionCookie } from "./owner-session.ts";
 import type { TurnstileRuntimeEnv } from "../shared/turnstile-config.ts";
@@ -248,6 +259,17 @@ export default {
 
     if (isMappedAuthBlockedProfileHost && isOwnerAuthRoute(requestTopology.pathname)) {
       return notFoundResponse(requestTopology.apiPath);
+    }
+
+    const nonAuthOwnerRouteResponse = await handleNonAuthOriginOwnerAuthRoute(
+      request,
+      env,
+      requestTopology,
+      runtimeRoute,
+    );
+
+    if (nonAuthOwnerRouteResponse) {
+      return nonAuthOwnerRouteResponse;
     }
 
     const localSessionBootstrapResponse = isLocalSessionBootstrapApiPath(requestTopology.pathname)
@@ -474,6 +496,105 @@ function isOwnerAuthRoute(pathname: string): boolean {
   );
 }
 
+async function handleNonAuthOriginOwnerAuthRoute(
+  request: Request,
+  env: Env,
+  requestTopology: WorkerRuntimeRequestTopology,
+  runtimeRoute: Awaited<ReturnType<typeof resolveInstanceRuntimeRouteForRequest>>,
+): Promise<Response | undefined> {
+  if (!isOwnerAuthRoute(requestTopology.pathname)) {
+    return undefined;
+  }
+
+  const authOrigin = await configuredInstanceAuthOrigin(request, env);
+
+  if (!authOrigin || authOrigin === requestOriginForAuth(request)) {
+    return undefined;
+  }
+
+  if (isMappedInstanceHostSessionApiRequest(requestTopology, request)) {
+    const hostSessionTarget = hostAuthSessionTargetForInstanceControlPlaneRoute(
+      request,
+      runtimeRoute,
+    );
+
+    if (hostSessionTarget) {
+      return await handleOwnerSetupApiRequest(
+        authorityRequestWithOriginalUrlFacts(request, { hostSessionTarget }),
+        env,
+      );
+    }
+  }
+
+  if (isOwnerLoginBrowserRequest(requestTopology)) {
+    const handoffRedirect = await startOwnerRouteAuthHandoff(
+      ownerLoginHandoffRequest(request),
+      env,
+      runtimeRoute,
+    );
+
+    return (
+      handoffRedirect ?? redirectResponse(authOriginLocationForRequest(authOrigin, request), 302)
+    );
+  }
+
+  if (isOwnerSetupBrowserRequest(requestTopology)) {
+    return redirectResponse(authOriginLocationForRequest(authOrigin, request), 302);
+  }
+
+  return notFoundResponse(requestTopology.apiPath);
+}
+
+function isMappedInstanceHostSessionApiRequest(
+  requestTopology: WorkerRuntimeRequestTopology,
+  request: Request,
+): boolean {
+  return (
+    (requestTopology.pathname === OWNER_SESSION_API_PATH ||
+      requestTopology.pathname === OWNER_SESSION_LOGOUT_API_PATH) &&
+    requestHasCookie(request, HOST_AUTH_SESSION_COOKIE_NAME)
+  );
+}
+
+function isOwnerLoginBrowserRequest(requestTopology: WorkerRuntimeRequestTopology): boolean {
+  return (
+    requestTopology.pathname === "/login" &&
+    requestTopology.readMethod &&
+    requestTopology.acceptsHtml &&
+    !requestTopology.apiPath
+  );
+}
+
+function isOwnerSetupBrowserRequest(requestTopology: WorkerRuntimeRequestTopology): boolean {
+  return (
+    requestTopology.pathname === "/setup" &&
+    requestTopology.readMethod &&
+    requestTopology.acceptsHtml &&
+    !requestTopology.apiPath
+  );
+}
+
+function ownerLoginHandoffRequest(request: Request): Request {
+  const sourceUrl = new URL(request.url);
+  const returnTo = ownerLoginRedirectTargetFromSearch(sourceUrl.search);
+  const handoffUrl = new URL(returnTo, request.url);
+
+  return new Request(handoffUrl, {
+    headers: request.headers,
+    method: request.method,
+  });
+}
+
+function authOriginLocationForRequest(authOrigin: string, request: Request): string {
+  const sourceUrl = new URL(request.url);
+  const location = new URL(authOrigin);
+
+  location.pathname = sourceUrl.pathname;
+  location.search = sourceUrl.search;
+
+  return location.toString();
+}
+
 function isInstalledAppManagementApiRead(request: Request, path: `/${string}`): boolean {
   const operation = selectAuthorityOperation({
     method: request.method,
@@ -634,6 +755,16 @@ function notFoundResponse(json: boolean): Response {
   return json
     ? Response.json({ error: "Not found." }, { status: 404 })
     : new Response(null, { status: 404 });
+}
+
+function requestHasCookie(request: Request, name: string): boolean {
+  const header = request.headers.get("Cookie");
+
+  if (!header) {
+    return false;
+  }
+
+  return header.split(";").some((part) => part.split("=", 1)[0]?.trim() === name);
 }
 
 const FORMLESS_ORIGINAL_REQUEST_HOST_HEADER = "x-formless-original-request-host";

@@ -22,7 +22,7 @@ import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
 import { INTERNAL_RESET_INSTANCE_DOMAIN_MAPPINGS_PATH } from "./instance-domain-mappings.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
 import { INTERNAL_RESET_OWNER_SETUP_PATH } from "./owner-setup.ts";
-import { createOwnerSessionCookie } from "./owner-session.ts";
+import { OWNER_SESSION_COOKIE_NAME, createOwnerSessionCookie } from "./owner-session.ts";
 import {
   HOST_AUTH_NONCE_COOKIE_NAME,
   HOST_AUTH_SESSION_COOKIE_NAME,
@@ -85,7 +85,8 @@ describe("installed Site custom-domain Worker routing", () => {
 
     await expectAuthConfigMissing(harness, "personal.dpeek.workers.dev");
     await setupPrimaryProductionIdentity();
-    await expectAuthConfigRp(harness, "personal.dpeek.workers.dev", "example.com");
+    await expectOwnerPasskeyRouteNotFound(harness, "personal.dpeek.workers.dev");
+    await expectAuthConfigRp(harness, "www.example.com", "example.com");
   }, 10_000);
 
   it("refreshes stale auth config before owner setup completes", async () => {
@@ -846,17 +847,271 @@ describe("installed Site custom-domain Worker routing", () => {
     expect(disabledRead.status).toBe(401);
   });
 
+  it("keeps non-auth mapped instance admin hosts outside owner auth routes", async () => {
+    await setupPrimaryProductionIdentity();
+    await setupMappedInstance();
+    assetRequests = [];
+
+    const mappedInstanceRouteId = routeRecordIds.get(`route:host:instance:${mappedInstanceHost}`);
+    const login = await fetchHost(mappedInstanceHost, "/login?redirectTo=%2Fdeployments", {
+      headers: { Accept: "text/html" },
+      redirect: "manual",
+    });
+    const setup = await fetchHost(mappedInstanceHost, `/setup?token=${setupToken}`, {
+      headers: { Accept: "text/html" },
+      redirect: "manual",
+    });
+    const setupStatus = await fetchHost(mappedInstanceHost, "/api/formless/setup");
+    const sessionStatus = await fetchHost(mappedInstanceHost, "/api/formless/session");
+    const setupCapability = await fetchHost(mappedInstanceHost, "/api/formless/setup/capability", {
+      body: JSON.stringify({ setupToken }),
+      headers: adminHeaders({ "Content-Type": "application/json" }),
+      method: "POST",
+    });
+    const registerOptions = await fetchHost(
+      mappedInstanceHost,
+      "/api/formless/passkeys/register/options",
+      {
+        body: JSON.stringify({ setupToken }),
+        headers: { "Content-Type": "application/json", Origin: `https://${mappedInstanceHost}` },
+        method: "POST",
+      },
+    );
+    const loginOptions = await fetchHost(
+      mappedInstanceHost,
+      "/api/formless/passkeys/login/options",
+      {
+        body: "{}",
+        headers: { "Content-Type": "application/json", Origin: `https://${mappedInstanceHost}` },
+        method: "POST",
+      },
+    );
+    const handoffUrl = new URL(requiredHeader(login, "Location"));
+    const loginSetCookie = requiredHeader(login, "Set-Cookie");
+
+    expect(login.status).toBe(302);
+    expect(handoffUrl.origin).toBe("https://www.example.com");
+    expect(handoffUrl.pathname).toBe(INSTANCE_AUTH_HANDOFF_START_PATH);
+    expect(handoffUrl.searchParams.get("targetOrigin")).toBe(`https://${mappedInstanceHost}`);
+    expect(handoffUrl.searchParams.get("routeId")).toBe(mappedInstanceRouteId);
+    expect(handoffUrl.searchParams.get("targetProfile")).toBe("instance");
+    expect(handoffUrl.searchParams.get("storageIdentity")).toBe(
+      INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
+    );
+    expect(handoffUrl.searchParams.get("appInstallId")).toBeNull();
+    expect(handoffUrl.searchParams.get("returnTo")).toBe("/deployments");
+    expect(handoffUrl.searchParams.get("nonceHash")).toMatch(/^[A-Za-z0-9_-]+$/);
+    expect(handoffUrl.searchParams.get("state")).toMatch(/^[A-Za-z0-9_-]+$/);
+    expect(loginSetCookie).toContain(`${HOST_AUTH_NONCE_COOKIE_NAME}=`);
+    expect(loginSetCookie).not.toContain(`${OWNER_SESSION_COOKIE_NAME}=`);
+    expect(loginSetCookie).not.toContain(`${HOST_AUTH_SESSION_COOKIE_NAME}=`);
+
+    expect(setup.status).toBe(302);
+    expect(setup.headers.get("Location")).toBe(`https://www.example.com/setup?token=${setupToken}`);
+    expect(setup.headers.get("Set-Cookie")).toBeNull();
+
+    expect(setupStatus.status).toBe(404);
+    expect(sessionStatus.status).toBe(404);
+    expect(setupCapability.status).toBe(404);
+    expect(registerOptions.status).toBe(404);
+    expect(loginOptions.status).toBe(404);
+    expect(assetRequests).toEqual([]);
+  });
+
+  it("returns auth-origin admin handoff callbacks to host-local instance sessions", async () => {
+    await setupPrimaryProductionIdentity();
+    await setupMappedInstance();
+
+    const owner = await ensureTestIdentityOwner(harness, adminToken, {
+      name: "Mapped Admin Callback Owner",
+    });
+    const session = await createOwnerSessionCookie({
+      env: { FORMLESS_ADMIN_TOKEN: adminToken },
+      maxAgeSeconds: 60,
+      now: "2999-01-01T00:00:00.000Z",
+      owner,
+      request: new Request("https://www.example.com/"),
+    });
+    const start = await fetchHost(mappedInstanceHost, "/login?redirectTo=%2Fdeployments", {
+      headers: { Accept: "text/html" },
+      redirect: "manual",
+    });
+    const nonceCookie = cookiePair(requiredHeader(start, "Set-Cookie"));
+    const startUrl = new URL(requiredHeader(start, "Location"));
+    const mappedInstanceRouteId = routeRecordIds.get(`route:host:instance:${mappedInstanceHost}`);
+    const grant = await harness.mf.dispatchFetch(startUrl.toString(), {
+      headers: {
+        Accept: "text/html",
+        Cookie: cookiePair(session.cookie),
+      },
+      redirect: "manual",
+    });
+    const callbackUrl = new URL(requiredHeader(grant, "Location"));
+    const callback = await harness.mf.dispatchFetch(callbackUrl.toString(), {
+      headers: { Cookie: nonceCookie },
+      redirect: "manual",
+    });
+    const setCookie = requiredHeader(callback, "Set-Cookie");
+    const hostSessionPayload = signedCookiePayload(setCookie, HOST_AUTH_SESSION_COOKIE_NAME);
+    const hostSessionCookie = cookiePair(setCookie);
+    const sessionStatus = await fetchHost(mappedInstanceHost, "/api/formless/session", {
+      headers: { Cookie: hostSessionCookie },
+    });
+    const sessionStatusBody = (await sessionStatus.json()) as {
+      authenticated?: boolean;
+      owner?: { id?: string };
+      session?: { expiresAt?: string };
+      setupComplete?: boolean;
+    };
+    const logout = await fetchHost(mappedInstanceHost, "/api/formless/session/logout", {
+      headers: { Cookie: hostSessionCookie },
+      method: "POST",
+    });
+    const logoutBody = (await logout.json()) as { authenticated?: boolean };
+    const logoutSetCookie = requiredHeader(logout, "Set-Cookie");
+
+    expect(start.status).toBe(302);
+    expect(startUrl.origin).toBe("https://www.example.com");
+    expect(startUrl.pathname).toBe(INSTANCE_AUTH_HANDOFF_START_PATH);
+    expect(startUrl.searchParams.get("targetOrigin")).toBe(`https://${mappedInstanceHost}`);
+    expect(startUrl.searchParams.get("routeId")).toBe(mappedInstanceRouteId);
+    expect(startUrl.searchParams.get("targetProfile")).toBe("instance");
+    expect(startUrl.searchParams.get("storageIdentity")).toBe(
+      INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
+    );
+    expect(startUrl.searchParams.get("appInstallId")).toBeNull();
+    expect(startUrl.searchParams.get("returnTo")).toBe("/deployments");
+
+    expect(grant.status).toBe(302);
+    expect(callbackUrl.origin).toBe(`https://${mappedInstanceHost}`);
+    expect(callbackUrl.pathname).toBe(INSTANCE_AUTH_HANDOFF_CALLBACK_PATH);
+    expect(callbackUrl.searchParams.get("grantId")).toMatch(/^[A-Za-z0-9_-]+$/);
+    expect(callbackUrl.searchParams.get("grantSecret")).toMatch(/^[A-Za-z0-9_-]+$/);
+    expect(callbackUrl.searchParams.get("state")).toBe(startUrl.searchParams.get("state"));
+    expect(requiredHeader(grant, "Location")).not.toContain("nonceHash=");
+
+    expect(callback.status).toBe(302);
+    expect(callback.headers.get("Location")).toBe("/deployments");
+    expect(setCookie).toContain(`${HOST_AUTH_SESSION_COOKIE_NAME}=`);
+    expect(setCookie).toContain(`${HOST_AUTH_NONCE_COOKIE_NAME}=;`);
+    expect(setCookie).not.toContain(`${OWNER_SESSION_COOKIE_NAME}=`);
+    expect(hostSessionPayload).toEqual(
+      expect.objectContaining({
+        instanceId: "www.example.com",
+        principalId: owner.id,
+        purpose: "host-session",
+        routeId: mappedInstanceRouteId,
+        sessionVersion: 0,
+        storageIdentity: INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
+        targetOrigin: `https://${mappedInstanceHost}`,
+        targetProfile: "instance",
+        version: 1,
+      }),
+    );
+    expect(hostSessionPayload).not.toHaveProperty("appInstallId");
+
+    expect(sessionStatus.status).toBe(200);
+    expect(sessionStatusBody).toMatchObject({
+      authenticated: true,
+      owner: { id: owner.id },
+      setupComplete: true,
+    });
+    expect(Date.parse(sessionStatusBody.session?.expiresAt ?? "")).toBeGreaterThan(0);
+
+    expect(logout.status).toBe(200);
+    expect(logoutBody.authenticated).toBe(false);
+    expect(logoutSetCookie).toContain(`${HOST_AUTH_SESSION_COOKIE_NAME}=;`);
+    expect(logoutSetCookie).not.toContain(`${OWNER_SESSION_COOKIE_NAME}=`);
+  });
+
+  it("serves owner auth routes on mapped instance admin hosts that are also the auth origin", async () => {
+    await setupMappedInstance();
+
+    const mappedInstanceRouteId = routeRecordIds.get(`route:host:instance:${mappedInstanceHost}`);
+
+    expect(mappedInstanceRouteId).toBeDefined();
+
+    await postAdminJson(`${controlPlaneApi}/operations/instance-settings/create`, {
+      idempotencyKey: "instance-settings-mapped-instance-auth-origin",
+      input: {
+        settingsId: INSTANCE_CONTROL_PLANE_INSTANCE_SETTINGS_ID,
+        primaryRoute: mappedInstanceRouteId,
+        authOrigin: `https://${mappedInstanceHost}`,
+        productionIdentityStatus: "configured",
+      },
+    });
+    assetRequests = [];
+
+    const login = await fetchHost(mappedInstanceHost, "/login", {
+      headers: { Accept: "text/html" },
+      redirect: "manual",
+    });
+    const setup = await fetchHost(mappedInstanceHost, `/setup?token=${setupToken}`, {
+      headers: { Accept: "text/html" },
+      redirect: "manual",
+    });
+    const setupCapability = await fetchHost(mappedInstanceHost, "/api/formless/setup/capability", {
+      body: JSON.stringify({ setupToken }),
+      headers: adminHeaders({ "Content-Type": "application/json" }),
+      method: "POST",
+    });
+    const registerOptions = await fetchHost(
+      mappedInstanceHost,
+      "/api/formless/passkeys/register/options",
+      {
+        body: JSON.stringify({ setupToken }),
+        headers: { "Content-Type": "application/json", Origin: `https://${mappedInstanceHost}` },
+        method: "POST",
+      },
+    );
+    const registerOptionsBody = (await registerOptions.json()) as {
+      options: { rp: { id: string; name: string } };
+    };
+    const sessionStatus = await fetchHost(mappedInstanceHost, "/api/formless/session");
+
+    expect(login.status).toBe(200);
+    expect(setup.status).toBe(200);
+    expect(setupCapability.status).toBe(200);
+    expect(registerOptions.status).toBe(200);
+    expect(registerOptionsBody.options.rp).toEqual({
+      id: mappedInstanceHost,
+      name: "Formless",
+    });
+    expect(sessionStatus.status).toBe(200);
+    expect(assetRequests).toEqual(["/login", "/setup"]);
+  });
+
   it("accepts host-local sessions for matched mapped instance control-plane APIs", async () => {
     await setupPrimaryProductionIdentity();
     await setupMappedInstance();
 
     const { cookie, setCookie } = await createMappedInstanceHostSession("Mapped Instance Owner");
+    const staleVersionCookie = await hostSessionCookieWithPayload(setCookie, {
+      sessionVersion: 1,
+    });
+    const wrongHostCookie = await hostSessionCookieWithPayload(setCookie, {
+      targetOrigin: "https://other.example.com",
+    });
+    const wrongRouteCookie = await hostSessionCookieWithPayload(setCookie, {
+      routeId: "route:wrong-mapped-instance-admin",
+    });
+    const wrongStorageCookie = await hostSessionCookieWithPayload(setCookie, {
+      storageIdentity: "instance:wrong-control-plane",
+    });
     const mismatchedCookie = await hostSessionCookieWithPayload(setCookie, {
       appInstallId: taskInstallId,
       storageIdentity: `app:${taskInstallId}`,
       targetProfile: "app",
     });
 
+    assetRequests = [];
+
+    const shell = await fetchHost(mappedInstanceHost, "/", {
+      headers: {
+        Accept: "text/html",
+        Cookie: cookie,
+      },
+    });
     const bootstrap = await fetchHost(mappedInstanceHost, `${controlPlaneApi}/bootstrap`, {
       headers: { Cookie: cookie },
     });
@@ -897,6 +1152,30 @@ describe("installed Site custom-domain Worker routing", () => {
       },
       method: "POST",
     });
+    const staleVersionBootstrap = await fetchHost(
+      mappedInstanceHost,
+      `${controlPlaneApi}/bootstrap`,
+      {
+        headers: { Cookie: staleVersionCookie },
+      },
+    );
+    const wrongHostBootstrap = await fetchHost(mappedInstanceHost, `${controlPlaneApi}/bootstrap`, {
+      headers: { Cookie: wrongHostCookie },
+    });
+    const wrongRouteBootstrap = await fetchHost(
+      mappedInstanceHost,
+      `${controlPlaneApi}/bootstrap`,
+      {
+        headers: { Cookie: wrongRouteCookie },
+      },
+    );
+    const wrongStorageBootstrap = await fetchHost(
+      mappedInstanceHost,
+      `${controlPlaneApi}/bootstrap`,
+      {
+        headers: { Cookie: wrongStorageCookie },
+      },
+    );
     const mismatchedBootstrap = await fetchHost(
       mappedInstanceHost,
       `${controlPlaneApi}/bootstrap`,
@@ -930,6 +1209,7 @@ describe("installed Site custom-domain Worker routing", () => {
     const routeWriteBody = (await routeWrite.json()) as OperationInvocationResponse;
     const createInstallBody = (await createInstall.json()) as OperationInvocationResponse;
 
+    expect(shell.status).toBe(200);
     expect(bootstrap.status).toBe(200);
     expect(Array.isArray(bootstrapBody.records)).toBe(true);
     expect([200, 201]).toContain(routeWrite.status);
@@ -939,8 +1219,13 @@ describe("installed Site custom-domain Worker routing", () => {
     });
     expect(createInstall.status).toBe(200);
     expect(createInstallBody.status).toBe("committed");
+    expect(staleVersionBootstrap.status).toBe(401);
+    expect(wrongHostBootstrap.status).toBe(401);
+    expect(wrongRouteBootstrap.status).toBe(401);
+    expect(wrongStorageBootstrap.status).toBe(401);
     expect(mismatchedBootstrap.status).toBe(401);
     expect(mismatchedWrite.status).toBe(401);
+    expect(assetRequests).toEqual(["/"]);
   });
 
   it("accepts mapped instance host-local sessions with current operational management authority", async () => {
@@ -1379,6 +1664,22 @@ async function expectAuthConfigMissing(targetHarness: Harness, host: string) {
 
   expect(options.status).toBe(400);
   expect(body.error).toBe("Instance auth configuration is missing.");
+}
+
+async function expectOwnerPasskeyRouteNotFound(targetHarness: Harness, host: string) {
+  const origin = `https://${host}`;
+  const options = await targetHarness.mf.dispatchFetch(
+    `${origin}/api/formless/passkeys/register/options`,
+    {
+      body: JSON.stringify({ setupToken }),
+      headers: { "Content-Type": "application/json", Origin: origin },
+      method: "POST",
+    },
+  );
+  const body = (await options.json()) as { error: string };
+
+  expect(options.status).toBe(404);
+  expect(body.error).toBe("Not found.");
 }
 
 async function setupPrimaryProductionIdentity() {

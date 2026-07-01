@@ -104,7 +104,7 @@ describe("owner setup API routes", () => {
     expect(after.body).toEqual({ setupComplete: false });
   });
 
-  it("reports configured auth origin in setup status without inventing a workers.dev origin", async () => {
+  it("reports configured auth and preferred admin origins in setup status before owner setup", async () => {
     const before = await getJson<OwnerSetupStatusResponse>("/api/formless/setup");
 
     expect(before.body).toEqual({ setupComplete: false });
@@ -128,12 +128,63 @@ describe("owner setup API routes", () => {
       productionIdentityStatus: "configured",
     });
 
-    const after = await getJson<OwnerSetupStatusResponse>("/api/formless/setup");
+    const nonAuthOrigin = await harness.fetch("/api/formless/setup", {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      redirect: "manual",
+    });
+    const after = await getJsonFromUrl<OwnerSetupStatusResponse>(
+      "https://auth.example.com/api/formless/setup",
+    );
 
+    expect(nonAuthOrigin.status).toBe(404);
     expect(after.body).toEqual({
+      adminOrigin: "https://www.example.com",
       authOrigin: "https://auth.example.com",
       setupComplete: false,
     });
+  });
+
+  it("uses workers.dev as setup status admin fallback only without custom admin routes", async () => {
+    const fallback = await getJsonFromUrl<OwnerSetupStatusResponse>(
+      "https://personal.dpeek.workers.dev/api/formless/setup",
+    );
+
+    expect(fallback.body).toEqual({
+      adminOrigin: "https://personal.dpeek.workers.dev",
+      setupComplete: false,
+    });
+
+    const adminOne = await createAdminRoute("admin.example.com");
+    const singleCustom = await getJsonFromUrl<OwnerSetupStatusResponse>(
+      "https://personal.dpeek.workers.dev/api/formless/setup",
+    );
+
+    expect(singleCustom.body).toEqual({
+      adminOrigin: "https://admin.example.com",
+      setupComplete: false,
+    });
+
+    const adminTwo = await createAdminRoute("control.example.com");
+    const ambiguous = await getJsonFromUrl<OwnerSetupStatusResponse>(
+      "https://personal.dpeek.workers.dev/api/formless/setup",
+    );
+
+    expect(ambiguous.body).toEqual({ setupComplete: false });
+
+    await createControlPlaneRecord("instance-settings", {
+      settingsId: INSTANCE_CONTROL_PLANE_INSTANCE_SETTINGS_ID,
+      adminRoute: adminTwo.id,
+    });
+
+    const explicit = await getJsonFromUrl<OwnerSetupStatusResponse>(
+      "https://personal.dpeek.workers.dev/api/formless/setup",
+    );
+
+    expect(explicit.body).toEqual({
+      adminOrigin: "https://control.example.com",
+      setupComplete: false,
+    });
+    expect(adminOne.id).not.toBe(adminTwo.id);
   });
 
   it("requires the admin bearer token before creating setup capabilities", async () => {
@@ -523,6 +574,19 @@ async function getJson<T>(path: string) {
   };
 }
 
+async function getJsonFromUrl<T>(url: string) {
+  const response = await harness.mf.dispatchFetch(url, {
+    headers: { Authorization: `Bearer ${adminToken}` },
+  });
+
+  expect(response.status).toBe(200);
+
+  return {
+    body: (await response.json()) as T,
+    response,
+  };
+}
+
 async function postJson<T>(path: string, body: unknown, init: HarnessFetchInit = {}) {
   const headers = {
     ...(init.headers as Record<string, string> | undefined),
@@ -569,6 +633,19 @@ async function createControlPlaneRecord(entity: string, values: Record<string, u
   expect(created.response.status).toBe(200);
 
   return operationRecord(created.body);
+}
+
+async function createAdminRoute(matchHost: string) {
+  return createControlPlaneRecord("route", {
+    enabled: true,
+    matchHost,
+    matchPath: "/",
+    matchPrefix: "/",
+    kind: "mount",
+    targetProfile: "instance",
+    surface: "admin",
+    access: "owner",
+  });
 }
 
 function operationRecord(response: OperationInvocationResponse) {

@@ -126,6 +126,8 @@ workspace operations that are promoted to public CLI bindings.
   setup capability
 - **AND** the CLI resolves the setup origin from the configured auth origin
   reported for that target when one exists
+- **AND** the CLI keeps the reported preferred admin origin separate from the
+  setup origin
 - **AND** if no configured auth origin is reported, the CLI uses the selected
   deployment host as the setup origin
 - **AND** if owner setup is incomplete, the CLI uses the selected admin token
@@ -140,6 +142,9 @@ workspace operations that are promoted to public CLI bindings.
 - **AND** if owner setup is already complete, the CLI reports the existing owner
   state without minting a setup token, creating a capability, or opening a
   browser
+- **AND** when a preferred admin origin is reported, owner setup output uses it
+  for browser-visible admin continuation links instead of the workers.dev
+  deployment target URL
 - **AND** the admin token is not displayed and the setup token is displayed only
   as part of the intended setup URL
 
@@ -923,6 +928,10 @@ workspace-controlled deployment intent.
   authorization consistently
 - **AND** logs and reviewable workspace source do not include admin bearer
   tokens, owner setup tokens, provider credentials, or other runtime secrets
+- **AND** browser-visible admin entrypoints are selected from the reported
+  preferred admin origin when one exists, while protected CLI management reads
+  and writes continue to use the selected target URL and admin bearer
+  authorization
 
 #### Scenario: Owner setup command uses focused bootstrap reads
 
@@ -931,6 +940,9 @@ workspace-controlled deployment intent.
   resolved admin bearer authorization needed to create the setup capability
 - **AND** configured setup-origin facts needed for capability creation are part
   of the owner setup status response
+- **AND** preferred admin-origin facts needed for post-setup browser links are
+  part of the owner setup status response when configured or unambiguously
+  derivable
 - **AND** it does not require installed app registry, route, deployment status,
   archive, or browser owner session reads before the first owner passkey exists
 

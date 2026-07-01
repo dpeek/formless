@@ -770,6 +770,130 @@ describe("instance control-plane API routes", () => {
     });
   });
 
+  it("validates preferred admin route references on settings writes", async () => {
+    const adminRoute = await postAdminJson<OperationInvocationResponse>(
+      `${controlPlaneApi}/operations/route/create`,
+      {
+        idempotencyKey: "settings-admin-route",
+        input: {
+          enabled: true,
+          matchHost: "admin.example.com",
+          matchPath: "/",
+          matchPrefix: "/",
+          kind: "mount",
+          targetProfile: "instance",
+          surface: "admin",
+          access: "owner",
+        },
+      },
+    );
+    const disabledAdminRoute = await postAdminJson<OperationInvocationResponse>(
+      `${controlPlaneApi}/operations/route/create`,
+      {
+        idempotencyKey: "settings-disabled-admin-route",
+        input: {
+          enabled: false,
+          matchHost: "disabled-admin.example.com",
+          matchPath: "/",
+          matchPrefix: "/",
+          kind: "mount",
+          targetProfile: "instance",
+          surface: "admin",
+          access: "owner",
+        },
+      },
+    );
+    const hostlessAdminRoute = await postAdminJson<OperationInvocationResponse>(
+      `${controlPlaneApi}/operations/route/create`,
+      {
+        idempotencyKey: "settings-hostless-admin-route",
+        input: {
+          enabled: true,
+          matchPath: "/hostless-admin",
+          kind: "mount",
+          targetProfile: "instance",
+          surface: "admin",
+          access: "owner",
+        },
+      },
+    );
+    const unmarkedInstanceRoute = await postAdminJson<OperationInvocationResponse>(
+      `${controlPlaneApi}/operations/route/create`,
+      {
+        idempotencyKey: "settings-unmarked-instance-route",
+        input: {
+          enabled: true,
+          matchHost: "unmarked-admin.example.com",
+          matchPath: "/",
+          matchPrefix: "/",
+          kind: "mount",
+          targetProfile: "instance",
+          access: "owner",
+        },
+      },
+    );
+    const settings = await postAdminJson<OperationInvocationResponse>(
+      `${controlPlaneApi}/operations/instance-settings/create`,
+      {
+        idempotencyKey: "settings-admin-route-created",
+        input: {
+          settingsId: "instance",
+          adminRoute: operationRecord(adminRoute).id,
+          productionIdentityStatus: "unconfigured",
+        },
+      },
+    );
+    const settingsRecordId = operationRecord(settings).id;
+    const rejectedDisabledRoute = await postAdminJson<FailureResponse>(
+      `${controlPlaneApi}/operations/instance-settings/update?recordId=${encodeURIComponent(settingsRecordId)}`,
+      {
+        idempotencyKey: "settings-admin-route-disabled-rejected",
+        input: {
+          adminRoute: operationRecord(disabledAdminRoute).id,
+        },
+      },
+    );
+    const rejectedHostlessRoute = await postAdminJson<FailureResponse>(
+      `${controlPlaneApi}/operations/instance-settings/update?recordId=${encodeURIComponent(settingsRecordId)}`,
+      {
+        idempotencyKey: "settings-admin-route-hostless-rejected",
+        input: {
+          adminRoute: operationRecord(hostlessAdminRoute).id,
+        },
+      },
+    );
+    const rejectedUnmarkedRoute = await postAdminJson<FailureResponse>(
+      `${controlPlaneApi}/operations/instance-settings/update?recordId=${encodeURIComponent(settingsRecordId)}`,
+      {
+        idempotencyKey: "settings-admin-route-unmarked-rejected",
+        input: {
+          adminRoute: operationRecord(unmarkedInstanceRoute).id,
+        },
+      },
+    );
+
+    expect(adminRoute.response.status).toBe(200);
+    expect(disabledAdminRoute.response.status).toBe(200);
+    expect(hostlessAdminRoute.response.status).toBe(200);
+    expect(unmarkedInstanceRoute.response.status).toBe(200);
+    expect(settings.response.status).toBe(200);
+    expect(operationRecord(settings).values).toMatchObject({
+      adminRoute: operationRecord(adminRoute).id,
+    });
+    expect(rejectedDisabledRoute.response.status).toBe(400);
+    expect(rejectedDisabledRoute.body.error).toBe(
+      'Field "adminRoute" must reference an enabled exact-host instance admin route.',
+    );
+    expect(rejectedHostlessRoute.response.status).toBe(400);
+    expect(rejectedHostlessRoute.body.error).toBe(
+      'Field "adminRoute" must reference an enabled exact-host instance admin route.',
+    );
+    expect(rejectedUnmarkedRoute.response.status).toBe(400);
+    expect(rejectedUnmarkedRoute.body.error).toBe(
+      'Field "adminRoute" must reference an enabled exact-host instance admin route.',
+    );
+  });
+
   it("enforces operational management writes and rejects runner-only access to install creation", async () => {
     const unauthenticated = await postJson<FailureResponse>(createAppInstallOperation, {
       idempotencyKey: "create-private",
