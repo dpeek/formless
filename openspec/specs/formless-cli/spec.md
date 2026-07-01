@@ -778,6 +778,26 @@ intent lives in schema-owned storage snapshots.
 - **AND** push trusts the local workspace as the selected source and does not
   refuse because the remote target differs from it
 
+#### Scenario: Schema-changing push apply
+
+- **GIVEN** a local workspace source validates as a complete instance archive
+- **AND** the selected remote target is readable but was deployed with different
+  package source schemas, package facts, or active app schemas
+- **WHEN** `formless push` applies that workspace source
+- **THEN** the command keeps the local workspace source as the selected desired
+  state and does not reject solely because the target's current runtime cannot
+  validate the replacement archive's source schema facts
+- **AND** it reconciles the runtime and provider graph needed for the local
+  workspace source before treating target restore dry-run results as final
+- **AND** it validates the composed archive restore against the selected target
+  runtime before mutating remote control-plane records, app records, app schemas,
+  or media
+- **AND** restore validation failures that remain after runtime reconciliation
+  fail before remote data mutation
+- **AND** invalid local workspace source, invalid local archives, auth failures,
+  network failures, provider failures, and unsupported packages still fail
+  before remote data mutation
+
 ### Requirement: Push Provider Reconciliation
 
 The system SHALL keep push and destroy credential-scoped while making projected

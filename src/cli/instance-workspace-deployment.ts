@@ -544,12 +544,11 @@ export async function pushFormlessInstanceWorkspace(
               dependencies,
             )
         : undefined;
-    const dryRunBeforeProvider =
-      hasDataChanges && planned.existingSelectedTarget !== undefined && !forcedRecoveryActive;
     const dryRun =
       hasDataChanges &&
       planned.existingSelectedTarget !== undefined &&
-      (!input.apply || dryRunBeforeProvider)
+      !input.apply &&
+      !forcedRecoveryActive
         ? await restoreWorkspacePushSourceArchive(
             {
               adminToken: providerApply?.adminToken ?? adminToken,
@@ -562,16 +561,12 @@ export async function pushFormlessInstanceWorkspace(
           )
         : undefined;
 
-    if (input.apply && dryRun && !dryRun.remote.ok) {
-      throw new Error("Formless instance push apply stopped because dry-run restore failed.");
-    }
-
     const provider =
       input.apply && providerApply === undefined
         ? await applyWorkspacePushProviderReconciliation(planned, applyDependencies!)
         : providerApply;
-    const firstApplyDryRun =
-      hasDataChanges && input.apply && dryRun === undefined && !forcedRecoveryActive
+    const applyDryRun =
+      hasDataChanges && input.apply && !forcedRecoveryActive
         ? await restoreWorkspacePushSourceArchive(
             {
               adminToken: provider?.adminToken ?? adminToken,
@@ -583,7 +578,7 @@ export async function pushFormlessInstanceWorkspace(
             dependencies,
           )
         : undefined;
-    const restoreDryRun = dryRun ?? firstApplyDryRun;
+    const restoreDryRun = dryRun ?? applyDryRun;
 
     if (input.apply && restoreDryRun && !restoreDryRun.remote.ok) {
       throw new Error("Formless instance push apply stopped because dry-run restore failed.");

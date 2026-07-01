@@ -464,6 +464,12 @@ manifest.
   install-set replacement flags
 - **AND** remote app installs, control-plane records, app data, and media are
   reconciled to match the composed workspace state
+- **AND** archive restore planning for push apply uses the source schemas and
+  package facts selected by the workspace source being pushed rather than stale
+  target runtime source facts that are being replaced
+- **AND** a schema-changing push apply validates the replacement archive against
+  the selected target runtime after required runtime reconciliation and before
+  mutating remote app, control-plane, or media state
 - **AND** `formless push --dry-run` validates and reports the restore plan
   without mutating the target
 

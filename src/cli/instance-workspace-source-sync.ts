@@ -204,7 +204,13 @@ export type SaveLocalFormlessWorkspaceDependencies = {
 export type FormlessInstanceWorkspacePackageMismatch = {
   installId: string;
   localPackageAppKey: string;
+  localPackageRevision: number;
+  localSourceSchemaHash: string;
+  localSourceSchemaKey: string;
   remotePackageAppKey: string;
+  remotePackageRevision: number;
+  remoteSourceSchemaHash: string;
+  remoteSourceSchemaKey: string;
 };
 
 export type FormlessInstanceWorkspaceSyncPlanChangedArea =
@@ -1767,14 +1773,14 @@ function createWorkspaceSyncPlan(input: {
       continue;
     }
 
-    const localPackageAppKey = localState.appArchive.app.packageAppKey;
-
-    if (localPackageAppKey !== remoteApp.app.packageAppKey) {
-      packageMismatches.push({
-        installId: remoteApp.app.installId,
-        localPackageAppKey,
-        remotePackageAppKey: remoteApp.app.packageAppKey,
-      });
+    if (workspaceAppPackageFactsDiffer(localState.appArchive.app, remoteApp.app)) {
+      packageMismatches.push(
+        workspaceAppPackageMismatch(
+          remoteApp.app.installId,
+          localState.appArchive.app,
+          remoteApp.app,
+        ),
+      );
       changedStatePaths.add(statePath);
       continue;
     }
@@ -2058,7 +2064,10 @@ type WorkspaceSyncComparableApp = {
   mediaJson: string | null;
   missingState: boolean;
   packageAppKey: string;
+  packageRevision: number | null;
   recordsJson: string | null;
+  sourceSchemaHash: string | null;
+  sourceSchemaKey: string | null;
 };
 
 type WorkspaceSyncComparableAppSource = {
@@ -2078,7 +2087,10 @@ function comparableWorkspaceSyncApp(
       mediaJson: null,
       missingState: true,
       packageAppKey,
+      packageRevision: null,
       recordsJson: null,
+      sourceSchemaHash: null,
+      sourceSchemaKey: null,
     };
   }
 
@@ -2087,7 +2099,40 @@ function comparableWorkspaceSyncApp(
     mediaJson: comparableAppMediaJson(archive, archive.appArchive),
     missingState: false,
     packageAppKey: archive.appArchive.app.packageAppKey,
+    packageRevision: archive.appArchive.app.packageRevision,
     recordsJson: comparableAppRecordStateJson(archive.appArchive),
+    sourceSchemaHash: archive.appArchive.app.sourceSchemaHash,
+    sourceSchemaKey: archive.appArchive.app.sourceSchemaKey,
+  };
+}
+
+function workspaceAppPackageFactsDiffer(
+  left: AppArchive["app"],
+  right: AppArchive["app"],
+): boolean {
+  return (
+    left.packageAppKey !== right.packageAppKey ||
+    left.packageRevision !== right.packageRevision ||
+    left.sourceSchemaHash !== right.sourceSchemaHash ||
+    left.sourceSchemaKey !== right.sourceSchemaKey
+  );
+}
+
+function workspaceAppPackageMismatch(
+  installId: string,
+  local: AppArchive["app"],
+  remote: AppArchive["app"],
+): FormlessInstanceWorkspacePackageMismatch {
+  return {
+    installId,
+    localPackageAppKey: local.packageAppKey,
+    localPackageRevision: local.packageRevision,
+    localSourceSchemaHash: local.sourceSchemaHash,
+    localSourceSchemaKey: local.sourceSchemaKey,
+    remotePackageAppKey: remote.packageAppKey,
+    remotePackageRevision: remote.packageRevision,
+    remoteSourceSchemaHash: remote.sourceSchemaHash,
+    remoteSourceSchemaKey: remote.sourceSchemaKey,
   };
 }
 

@@ -423,6 +423,9 @@ describe("workspace source sync operation domain", () => {
     });
     expect(restoreBody.archive.apps.map((app) => app.app.installId)).toEqual(["david"]);
     expect(restoreBody.exactInstanceReplacement).toBe(true);
+    expect(
+      requests.map((request) => `${request.method} ${new URL(request.url).pathname}`),
+    ).not.toContain("POST /api/formless/control-plane/operations/deployment-config/update");
     expect(JSON.stringify(result)).not.toContain("local-token");
   });
 
@@ -672,6 +675,124 @@ describe("deployment runtime domain", () => {
     expect(JSON.stringify(result)).not.toContain("local-token");
   });
 
+  it("reconciles readable package fact drift before final push restore validation", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+    const requests: CapturedRequest[] = [];
+    const deployInputs: DeployFormlessInstanceInput[] = [];
+    const restoreEvents: string[] = [];
+    const localPackageFacts = packageAppFactsForKey("site", bundledAppPackageResolver);
+
+    if (!localPackageFacts) {
+      throw new Error("Missing bundled package facts for site.");
+    }
+
+    const staleRemoteInstall = {
+      ...installedSite("david", "David Peek"),
+      packageRevision: localPackageFacts.packageRevision + 1,
+      sourceSchemaHash: `sha256:${"a".repeat(64)}` as `sha256:${string}`,
+    };
+
+    await writeWorkspaceManifest(workspaceRoot);
+    await writeDeployStorageSnapshot(workspaceRoot);
+    await writeWorkspaceAppStorageSnapshot(workspaceRoot);
+    await mkdir(path.join(workspaceRoot, ".formless"), { recursive: true });
+    await writeFile(
+      path.join(workspaceRoot, ".formless/instance.env"),
+      "FORMLESS_ADMIN_TOKEN=local-token\n",
+    );
+
+    const result = await runPushWorkspaceSourceOperation(
+      {
+        dryRun: false,
+        force: false,
+        kind: "push",
+        workspacePath: workspaceRoot,
+      },
+      deploymentApplyOperationDeps(tempDir, {
+        deployInputs,
+        env: { CLOUDFLARE_API_TOKEN: "manual-provider-token" },
+        fetch: deployFetch(requests, {
+          installs: [staleRemoteInstall],
+          restoreResponse: ({ dryRun }) => {
+            if (deployInputs.length === 0) {
+              restoreEvents.push(dryRun ? "predeploy:dry-run" : "predeploy:apply");
+
+              return {
+                ok: false,
+                errors: [{ message: "stale runtime rejected source schema facts" }],
+              };
+            }
+
+            restoreEvents.push(dryRun ? "postdeploy:dry-run" : "postdeploy:apply");
+
+            return dryRun
+              ? restorePlan({ replacedInstalls: ["david"] })
+              : { ok: true, report: { applied: true, summary: restoreSummary() } };
+          },
+        }),
+      }),
+    );
+    const restoreRequests = requests.filter(
+      (request) =>
+        request.method === "POST" &&
+        new URL(request.url).pathname === "/api/formless/archive/restore",
+    );
+    const restoreBodies = restoreRequests.map((request) =>
+      capturedRequestJson<{
+        archive: {
+          apps: Array<{
+            app: {
+              packageRevision: number;
+              sourceSchemaHash: string;
+            };
+          }>;
+          restorePolicy: unknown;
+        };
+        exactInstanceReplacement: boolean;
+      }>(request),
+    );
+
+    expect(deployInputs).toHaveLength(1);
+    expect(restoreEvents).toEqual(["postdeploy:dry-run", "postdeploy:apply"]);
+    expect(result).toMatchObject({
+      details: {
+        applyRestore: {
+          ok: true,
+          replacedInstalls: ["david"],
+        },
+        dryRunRestore: {
+          ok: true,
+          replacedInstalls: ["david"],
+        },
+        syncPlan: {
+          changedAreas: expect.arrayContaining(["packages"]),
+          status: "changes",
+        },
+      },
+      summary: {
+        fields: {
+          applyRestoreOk: true,
+          dryRunRestoreOk: true,
+          mode: "apply",
+          noop: false,
+          sync: "changes",
+        },
+        title: "Workspace push applied",
+      },
+    });
+    expect(restoreRequests).toHaveLength(2);
+    expect(restoreBodies.map((body) => body.archive.restorePolicy)).toEqual([
+      { dryRun: true, installCollisions: "replace" },
+      { dryRun: false, installCollisions: "replace" },
+    ]);
+    expect(restoreBodies.every((body) => body.exactInstanceReplacement)).toBe(true);
+    expect(restoreBodies[1]?.archive.apps[0]?.app).toMatchObject({
+      packageRevision: localPackageFacts.packageRevision,
+      sourceSchemaHash: localPackageFacts.sourceSchemaHash,
+    });
+  });
+
   it("rebuilds runtime extensions on repeat push apply without restoring archive data", async () => {
     const tempDir = await makeTempDir();
     const workspaceRoot = path.join(tempDir, "personal-sites");
@@ -791,6 +912,52 @@ describe("deployment runtime domain", () => {
       "remote-invalid-control-plane-record",
     );
     expect(JSON.stringify(restoreBody.archive)).not.toContain("legacy-control-plane-record");
+  });
+
+  it("rejects invalid local push source before provider or restore mutation", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+    const requests: CapturedRequest[] = [];
+    const deployInputs: DeployFormlessInstanceInput[] = [];
+
+    await writeWorkspaceManifest(workspaceRoot);
+    await writeDeployStorageSnapshot(workspaceRoot);
+    await mkdir(path.join(workspaceRoot, ".formless"), { recursive: true });
+    await writeFile(
+      path.join(workspaceRoot, ".formless/instance.env"),
+      "FORMLESS_ADMIN_TOKEN=local-token\n",
+    );
+
+    await expect(
+      pushFormlessInstanceWorkspace(
+        {
+          apply: true,
+          force: false,
+          workspacePath: workspaceRoot,
+        },
+        deploymentApplyOperationDeps(tempDir, {
+          deployInputs,
+          env: { CLOUDFLARE_API_TOKEN: "manual-provider-token" },
+          fetch: deployFetch(requests),
+        }),
+      ),
+    ).rejects.toThrow("Formless instance push requires local app state state/apps/david.json.");
+    expect(deployInputs).toHaveLength(0);
+    expect(
+      requests.filter(
+        (request) =>
+          request.method === "POST" &&
+          new URL(request.url).pathname === "/api/formless/archive/restore",
+      ),
+    ).toEqual([]);
+    expect(
+      requests.filter(
+        (request) =>
+          request.method === "POST" &&
+          new URL(request.url).pathname ===
+            "/api/formless/control-plane/operations/deployment-config/update",
+      ),
+    ).toEqual([]);
   });
 
   it("omits removed host routes from the provider graph while replacing target source", async () => {
@@ -1526,7 +1693,15 @@ function sourceSyncFetch(
 
 function deployFetch(
   requests: CapturedRequest[],
-  options: { controlPlaneRecords?: StoredRecord[] } = {},
+  options: {
+    appData?: Record<
+      string,
+      { mediaBytes?: Uint8Array; records?: StoredRecord[]; schema?: typeof siteSourceSchema }
+    >;
+    controlPlaneRecords?: StoredRecord[];
+    installs?: ReturnType<typeof installedSite>[];
+    restoreResponse?: (input: { dryRun: boolean; request: CapturedRequest }) => unknown;
+  } = {},
 ): typeof fetch {
   return async (url, init) => {
     const requestUrl =
@@ -1557,7 +1732,7 @@ function deployFetch(
 
     if (parsedUrl.pathname === "/api/formless/app-installs") {
       return Response.json({
-        installs: [installedSite("david", "David Peek")],
+        installs: options.installs ?? [installedSite("david", "David Peek")],
         packages: listInstallableAppPackages(bundledAppPackageResolver),
       });
     }
@@ -1576,8 +1751,18 @@ function deployFetch(
       );
     }
 
-    if (parsedUrl.pathname === "/api/app-installs/site/david/snapshot") {
-      return Response.json(snapshot([]));
+    const snapshotMatch = parsedUrl.pathname.match(
+      /^\/api\/app-installs\/site\/([^/]+)\/snapshot$/,
+    );
+
+    if (snapshotMatch) {
+      const installId = snapshotMatch[1] ?? "";
+      const data = options.appData?.[installId] ?? { records: [] };
+
+      return Response.json({
+        ...snapshot(data.records ?? [], `app:${installId}`),
+        ...(data.schema === undefined ? {} : { schema: data.schema }),
+      });
     }
 
     if (parsedUrl.pathname === "/api/formless/domain-mappings") {
@@ -1590,11 +1775,13 @@ function deployFetch(
     if (parsedUrl.pathname === "/api/formless/archive/restore") {
       const body = parseCapturedBody<{ archive?: { restorePolicy?: { dryRun?: boolean } } }>(init);
       const dryRun = body.archive?.restorePolicy?.dryRun !== false;
+      const response = options.restoreResponse?.({ dryRun, request: requests.at(-1)! });
 
       return Response.json(
-        dryRun
-          ? { ok: true, plan: { summary: restoreSummary() } }
-          : { ok: true, report: { applied: true, summary: restoreSummary() } },
+        response ??
+          (dryRun
+            ? { ok: true, plan: { summary: restoreSummary() } }
+            : { ok: true, report: { applied: true, summary: restoreSummary() } }),
       );
     }
 
