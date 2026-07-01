@@ -574,6 +574,97 @@ describe("Formless CLI", () => {
     expect(logs.join("\n")).not.toContain("capabilityCreated");
   });
 
+  it("creates owner setup capability and URL on the reported auth origin", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+    const openedUrls: string[] = [];
+    const requests: CapturedFetchRequest[] = [];
+    const responses = responseQueue();
+    const logs: string[] = [];
+    const setupInputs: CreateFormlessInstanceOwnerSetupCapabilityInput[] = [];
+    const authOrigin = "https://auth.example.com";
+    const setupUrl = `${authOrigin}/setup?token=${setupToken}`;
+
+    await writeWorkspaceManifest(workspaceRoot);
+    await writeWorkspaceControlPlaneStorageSnapshot(workspaceRoot);
+
+    responses.queueJson({ authOrigin, setupComplete: false });
+
+    await runFormlessCli(
+      [
+        "owner",
+        "setup",
+        "--workspace",
+        workspaceRoot,
+        "--admin-token",
+        "explicit-admin-token",
+        "--open",
+      ],
+      cliDeps(tempDir, {
+        fetch: responses.fetcher(requests),
+        logs,
+        openedUrls,
+        setupInputs,
+      }),
+    );
+
+    expect(requests.map((request) => `${request.method} ${request.url}`)).toEqual([
+      "GET https://personal.dpeek.workers.dev/api/formless/setup",
+    ]);
+    expectNoOwnerSetupProtectedBootstrapReads(requests);
+    expect(setupInputs).toEqual([
+      {
+        adminToken: "explicit-admin-token",
+        deploymentUrl: authOrigin,
+        setupToken,
+      },
+    ]);
+    expect(openedUrls).toEqual([setupUrl]);
+    expect(logs.join("\n")).toContain(`Setup URL: ${setupUrl}.`);
+    expect(logs.join("\n")).not.toContain("explicit-admin-token");
+  });
+
+  it("does not retry owner setup capability creation on workers.dev when auth origin fails", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+    const requests: CapturedFetchRequest[] = [];
+    const responses = responseQueue();
+    const setupInputs: CreateFormlessInstanceOwnerSetupCapabilityInput[] = [];
+    const authOrigin = "https://auth.example.com";
+
+    await writeWorkspaceManifest(workspaceRoot);
+    await writeWorkspaceControlPlaneStorageSnapshot(workspaceRoot);
+
+    responses.queueJson({ authOrigin, setupComplete: false });
+
+    await expect(
+      runFormlessCli(
+        ["owner", "setup", "--workspace", workspaceRoot, "--admin-token", "explicit-admin-token"],
+        cliDeps(tempDir, {
+          fetch: responses.fetcher(requests),
+          setupCapability: {
+            create: async (input) => {
+              setupInputs.push(input);
+
+              throw new Error("configured auth origin is missing the setup endpoint");
+            },
+          },
+        }),
+      ),
+    ).rejects.toThrow("configured auth origin is missing the setup endpoint");
+
+    expect(requests.map((request) => `${request.method} ${request.url}`)).toEqual([
+      "GET https://personal.dpeek.workers.dev/api/formless/setup",
+    ]);
+    expect(setupInputs).toEqual([
+      {
+        adminToken: "explicit-admin-token",
+        deploymentUrl: authOrigin,
+        setupToken,
+      },
+    ]);
+  });
+
   it("reports complete owner setup without creating a capability or opening a browser", async () => {
     const tempDir = await makeTempDir();
     const workspaceRoot = path.join(tempDir, "personal-sites");
@@ -5257,6 +5348,7 @@ function cliDeps(
     packageRoot?: string;
     selectCloudflareAccount?: FormlessCliDependencies["selectCloudflareAccount"];
     selectWorkspaceName?: FormlessCliDependencies["selectWorkspaceName"];
+    setupCapability?: FormlessCliDependencies["setupCapability"];
     setupInputs?: CreateFormlessInstanceOwnerSetupCapabilityInput[];
     spawn?: typeof spawn;
     startWorkspaceGatewaySidecar?: FormlessCliDependencies["startWorkspaceGatewaySidecar"];
@@ -5375,7 +5467,7 @@ function cliDeps(
         };
       },
     },
-    setupCapability: {
+    setupCapability: options.setupCapability ?? {
       create: async (input) => {
         options.setupInputs?.push(input);
 

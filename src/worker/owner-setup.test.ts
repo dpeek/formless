@@ -1,4 +1,8 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vite-plus/test";
+import {
+  INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX,
+  INSTANCE_CONTROL_PLANE_INSTANCE_SETTINGS_ID,
+} from "@dpeek/formless-instance-control-plane";
 
 import type {
   AppInstallsResponse,
@@ -7,6 +11,7 @@ import type {
   OwnerSetupCompleteResponse,
   OwnerSetupStatusResponse,
 } from "../shared/protocol.ts";
+import type { OperationInvocationResponse } from "../shared/operation-invocation.ts";
 import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
 import { OWNER_SESSION_COOKIE_NAME } from "./owner-session.ts";
@@ -53,12 +58,14 @@ const futureExpiresAt = "2999-01-01T00:00:00.000Z";
 const pastExpiresAt = "2000-01-01T00:00:00.000Z";
 
 let harness: Harness;
+let controlPlaneOperationCounter = 0;
 
 beforeAll(async () => {
   harness = await createHarness();
 });
 
 beforeEach(async () => {
+  controlPlaneOperationCounter = 0;
   await resetWorkerState();
 });
 
@@ -95,6 +102,38 @@ describe("owner setup API routes", () => {
     });
     expect(JSON.stringify(created.body)).not.toContain(setupToken);
     expect(after.body).toEqual({ setupComplete: false });
+  });
+
+  it("reports configured auth origin in setup status without inventing a workers.dev origin", async () => {
+    const before = await getJson<OwnerSetupStatusResponse>("/api/formless/setup");
+
+    expect(before.body).toEqual({ setupComplete: false });
+
+    const route = await createControlPlaneRecord("route", {
+      enabled: true,
+      matchHost: "www.example.com",
+      matchPath: "/",
+      matchPrefix: "/",
+      kind: "mount",
+      targetProfile: "instance",
+      surface: "admin",
+      access: "owner",
+    });
+
+    await createControlPlaneRecord("instance-settings", {
+      settingsId: INSTANCE_CONTROL_PLANE_INSTANCE_SETTINGS_ID,
+      primaryRoute: route.id,
+      authOrigin: "https://auth.example.com",
+      authRelyingPartyId: "auth.example.com",
+      productionIdentityStatus: "configured",
+    });
+
+    const after = await getJson<OwnerSetupStatusResponse>("/api/formless/setup");
+
+    expect(after.body).toEqual({
+      authOrigin: "https://auth.example.com",
+      setupComplete: false,
+    });
   });
 
   it("requires the admin bearer token before creating setup capabilities", async () => {
@@ -516,6 +555,30 @@ async function postAdminJson<T>(path: string, body: unknown) {
     body: (await response.json()) as T,
     response,
   };
+}
+
+async function createControlPlaneRecord(entity: string, values: Record<string, unknown>) {
+  const created = await postAdminJson<OperationInvocationResponse>(
+    `${INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX}/operations/${entity}/create`,
+    {
+      idempotencyKey: `owner-setup-${entity}-${++controlPlaneOperationCounter}`,
+      input: values,
+    },
+  );
+
+  expect(created.response.status).toBe(200);
+
+  return operationRecord(created.body);
+}
+
+function operationRecord(response: OperationInvocationResponse) {
+  if (response.output.type !== "create" && response.output.type !== "update") {
+    throw new Error(
+      `Expected control-plane write operation output, received "${response.output.type}".`,
+    );
+  }
+
+  return response.output.record;
 }
 
 function cookiePair(cookie: string | null) {

@@ -124,9 +124,17 @@ workspace operations that are promoted to public CLI bindings.
 - **WHEN** a user runs `formless owner setup ... [--open]`
 - **THEN** the CLI reads the selected target owner setup status before minting a
   setup capability
+- **AND** the CLI resolves the setup origin from the configured auth origin
+  reported for that target when one exists
+- **AND** if no configured auth origin is reported, the CLI uses the selected
+  deployment host as the setup origin
 - **AND** if owner setup is incomplete, the CLI uses the selected admin token
-  source to create one owner setup capability and displays the intended
-  `/setup?token=...` URL
+  source to create one owner setup capability by posting to
+  `/api/formless/setup/capability` on the setup origin and displays the
+  intended `/setup?token=...` URL on the same setup origin
+- **AND** if a configured auth origin is reported but capability creation on
+  that origin fails, the CLI fails clearly without retrying capability creation
+  on the deployment host
 - **AND** if `--open` is present, the CLI opens only that intended setup URL
   after capability creation succeeds
 - **AND** if owner setup is already complete, the CLI reports the existing owner
@@ -921,6 +929,8 @@ workspace-controlled deployment intent.
 - **WHEN** owner setup is incomplete and the CLI prepares an owner setup URL
 - **THEN** the command reads only the selected target, owner setup status, and
   resolved admin bearer authorization needed to create the setup capability
+- **AND** configured setup-origin facts needed for capability creation are part
+  of the owner setup status response
 - **AND** it does not require installed app registry, route, deployment status,
   archive, or browser owner session reads before the first owner passkey exists
 

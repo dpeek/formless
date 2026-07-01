@@ -893,15 +893,16 @@ export async function setupFormlessInstanceOwner(
   }
 
   const setupToken = generatedCliOwnerSetupToken(dependencies.randomToken);
+  const setupOrigin = setupStatus.authOrigin ?? context.targetUrl;
 
   await dependencies.setupCapability.create({
     adminToken: context.adminToken,
-    deploymentUrl: context.targetUrl,
+    deploymentUrl: setupOrigin,
     setupToken,
   });
 
   const setupUrl = formatFormlessOwnerSetupUrl({
-    deploymentUrl: context.targetUrl,
+    deploymentUrl: setupOrigin,
     setupToken,
   });
 

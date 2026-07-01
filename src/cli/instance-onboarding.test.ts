@@ -744,6 +744,56 @@ describe("Formless instance owner setup capability", () => {
     );
   });
 
+  it("creates and formats setup links on a configured auth origin", async () => {
+    const requests: Array<{
+      body: string;
+      headers: Record<string, string>;
+      method: string;
+      url: string;
+    }> = [];
+    const authOrigin = "https://auth.example.com";
+
+    const result = await createFormlessInstanceOwnerSetupCapability(
+      {
+        adminToken: "admin-secret",
+        deploymentUrl: authOrigin,
+        setupToken,
+      },
+      {
+        fetch: async (url, init) => {
+          const body = typeof init?.body === "string" ? init.body : "";
+
+          requests.push({
+            body,
+            headers: normalizeHeaders(init?.headers),
+            method: init?.method ?? "GET",
+            url: typeof url === "string" ? url : url instanceof URL ? url.toString() : url.url,
+          });
+
+          return Response.json({
+            capabilityCreated: true,
+            setupComplete: false,
+          });
+        },
+      },
+    );
+
+    expect(requests.map((request) => `${request.method} ${request.url}`)).toEqual([
+      "POST https://auth.example.com/api/formless/setup/capability",
+    ]);
+    expect(result).toEqual({
+      capabilityCreated: true,
+      endpointUrl: "https://auth.example.com/api/formless/setup/capability",
+      setupComplete: false,
+    });
+    expect(
+      formatFormlessOwnerSetupUrl({
+        deploymentUrl: authOrigin,
+        setupToken,
+      }),
+    ).toBe(`https://auth.example.com${FORMLESS_OWNER_SETUP_ROUTE_PATH}?token=${setupToken}`);
+  });
+
   it("rejects failed or malformed setup capability responses", async () => {
     await expect(
       createFormlessInstanceOwnerSetupCapability(
@@ -770,6 +820,26 @@ describe("Formless instance owner setup capability", () => {
         },
       ),
     ).rejects.toThrow("response did not confirm setup capability creation");
+
+    await expect(
+      createFormlessInstanceOwnerSetupCapability(
+        {
+          adminToken: "admin-secret",
+          deploymentUrl: "https://auth.example.com",
+          setupToken,
+        },
+        {
+          fetch: async () => {
+            throw new Error("connection refused");
+          },
+        },
+      ),
+    ).rejects.toThrow(
+      [
+        "Formless owner setup capability creation failed for",
+        "https://auth.example.com/api/formless/setup/capability: connection refused",
+      ].join(" "),
+    );
   });
 });
 

@@ -24,6 +24,7 @@ import {
 } from "./owner-session.ts";
 import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
 import { readInstanceAuthConfig, resetInstanceAuthTables } from "./instance-auth-state.ts";
+import { configuredInstanceAuthOrigin } from "./instance-auth-handoff.ts";
 import {
   ensureIdentityOwner,
   readIdentityOwner,
@@ -213,7 +214,7 @@ async function handleOwnerSetupStatusRequest(
     return methodNotAllowedResponse("GET");
   }
 
-  return jsonResponse(await ownerSetupStatusResponse(storage, env));
+  return jsonResponse(await ownerSetupStatusResponse(request, storage, env));
 }
 
 async function handleOwnerSetupCapabilityRequest(
@@ -300,17 +301,23 @@ async function handleOwnerSetupCompleteRequest(
 }
 
 async function ownerSetupStatusResponse(
+  request: Request,
   storage: DurableObjectStorage,
   env: OwnerSetupApiEnv,
 ): Promise<OwnerSetupStatusResponse> {
   const owner = await readIdentityOwner(env);
   const state = readInstanceSetupState(storage, owner);
+  const authOrigin = await configuredInstanceAuthOrigin(request, env);
 
   if (!state.owner) {
-    return { setupComplete: false };
+    return {
+      ...(authOrigin === undefined ? {} : { authOrigin }),
+      setupComplete: false,
+    };
   }
 
   return {
+    ...(authOrigin === undefined ? {} : { authOrigin }),
     setupComplete: true,
     owner: state.owner,
   };

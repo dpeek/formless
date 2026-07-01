@@ -42,6 +42,15 @@ ceremonies.
 - AND no principal, role assignment, credential, challenge, or session state is
   written
 
+#### Scenario: Owner setup status reports configured auth origin
+
+- GIVEN first-owner setup is incomplete
+- WHEN a trusted CLI reads owner setup status from a deployed instance
+- THEN the status response includes the effective auth origin when instance
+  auth configuration selects one
+- AND if no effective auth origin is configured, the status response does not
+  invent one from the workers.dev deployment host
+
 #### Scenario: Primary domain activation before production owner credentials
 
 - GIVEN a deployed instance has only a workers.dev bootstrap origin
@@ -611,11 +620,27 @@ login.
   with a setup token and the valid admin bearer token
 - THEN the runtime stores a hashed setup capability scoped to the requested
   instance and reports that setup remains incomplete
+- AND the requested instance identity is derived from the host that receives the
+  setup capability request
+- AND setup completion only accepts the setup token for the same host-derived
+  instance identity
 - AND the raw setup token and admin bearer token are not returned in the
   response
 - AND if owner setup is already complete, the request reports the existing
   display-safe owner identity and does not replace the existing owner principal
   or store a new setup capability
+
+#### Scenario: Trusted CLI uses configured auth origin for setup capability
+
+- GIVEN owner setup is incomplete and an admin bearer token is available to a
+  trusted CLI
+- AND the deployed instance reports an effective auth origin in owner setup
+  status
+- WHEN the CLI prepares an owner setup URL
+- THEN the CLI creates the setup capability on that auth origin
+- AND the browser setup URL uses the same auth origin
+- AND the runtime does not silently fall back to the workers.dev deployment host
+  when the auth-origin capability request is unreachable or misconfigured
 
 #### Scenario: Owner setup bootstrap does not require owner-protected app state
 

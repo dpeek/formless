@@ -182,6 +182,7 @@ export type OwnerIdentity = {
 };
 
 export type OwnerSetupStatusResponse = {
+  authOrigin?: string;
   setupComplete: boolean;
   owner?: OwnerIdentity;
 };

@@ -555,6 +555,7 @@ function parseOwnerSetupStatusResponse(value: unknown): OwnerSetupStatusResponse
   }
 
   return {
+    ...(typeof value.authOrigin === "string" ? { authOrigin: value.authOrigin } : {}),
     setupComplete: value.setupComplete,
     ...(value.owner === undefined ? {} : { owner: parseOwnerIdentity(value.owner) }),
   };

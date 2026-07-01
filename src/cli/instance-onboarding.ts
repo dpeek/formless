@@ -1268,30 +1268,24 @@ export async function createFormlessInstanceOwnerSetupCapability(
   input: CreateFormlessInstanceOwnerSetupCapabilityInput,
   dependencies: CreateFormlessInstanceOwnerSetupCapabilityDependencies,
 ): Promise<CreateFormlessInstanceOwnerSetupCapabilityResult> {
-  const deploymentUrl = parseWorkersDevUrl(
-    "Formless owner setup deployment URL",
-    input.deploymentUrl,
-  );
+  const setupOrigin = parseOwnerSetupOrigin("Formless owner setup origin", input.deploymentUrl);
   const adminToken = parseRequiredString("Formless owner setup admin token", input.adminToken);
   const setupToken = parseOwnerSetupToken(input.setupToken);
   const endpointUrl = new URL(
     FORMLESS_OWNER_SETUP_CAPABILITY_API_PATH,
-    `${deploymentUrl}/`,
+    `${setupOrigin}/`,
   ).toString();
-  const response = await dependencies.fetch(endpointUrl, {
-    body: JSON.stringify({ setupToken }),
-    headers: {
-      accept: "application/json",
-      authorization: `Bearer ${adminToken}`,
-      "content-type": "application/json",
-    },
-    method: "POST",
-  });
+  const response = await fetchOwnerSetupCapability(
+    dependencies,
+    endpointUrl,
+    adminToken,
+    setupToken,
+  );
   const text = await response.text();
 
   if (!response.ok) {
     throw new Error(
-      `Formless owner setup capability creation failed for ${deploymentUrl}: HTTP ${response.status} ${text}`,
+      `Formless owner setup capability creation failed for ${setupOrigin}: HTTP ${response.status} ${text}`,
     );
   }
 
@@ -1307,16 +1301,36 @@ export function formatFormlessOwnerSetupUrl(input: {
   deploymentUrl: string;
   setupToken: string;
 }): string {
-  const deploymentUrl = parseWorkersDevUrl(
-    "Formless owner setup URL deployment URL",
-    input.deploymentUrl,
-  );
+  const setupOrigin = parseOwnerSetupOrigin("Formless owner setup URL origin", input.deploymentUrl);
   const setupToken = parseOwnerSetupToken(input.setupToken);
-  const url = new URL(FORMLESS_OWNER_SETUP_ROUTE_PATH, `${deploymentUrl}/`);
+  const url = new URL(FORMLESS_OWNER_SETUP_ROUTE_PATH, `${setupOrigin}/`);
 
   url.searchParams.set("token", setupToken);
 
   return url.toString();
+}
+
+async function fetchOwnerSetupCapability(
+  dependencies: CreateFormlessInstanceOwnerSetupCapabilityDependencies,
+  endpointUrl: string,
+  adminToken: string,
+  setupToken: string,
+): Promise<Response> {
+  try {
+    return await dependencies.fetch(endpointUrl, {
+      body: JSON.stringify({ setupToken }),
+      headers: {
+        accept: "application/json",
+        authorization: `Bearer ${adminToken}`,
+        "content-type": "application/json",
+      },
+      method: "POST",
+    });
+  } catch (error) {
+    throw new Error(
+      `Formless owner setup capability creation failed for ${endpointUrl}: ${errorMessage(error)}`,
+    );
+  }
 }
 
 function formlessInstanceAlchemyAssets(): AlchemyFormlessInstanceDeploymentWorkerProps["assets"] {
@@ -2410,6 +2424,38 @@ function parseWorkersDevUrl(context: string, value: unknown): string {
   } catch {
     throw new Error(`${context} must be a workers.dev origin URL.`);
   }
+}
+
+function parseOwnerSetupOrigin(context: string, value: unknown): string {
+  const raw = parseRequiredString(context, value);
+
+  try {
+    const url = new URL(raw);
+
+    if (
+      url.username ||
+      url.password ||
+      url.pathname !== "/" ||
+      url.search !== "" ||
+      url.hash !== "" ||
+      (url.protocol !== "https:" && !(url.protocol === "http:" && isLocalhost(url.hostname))) ||
+      url.hostname.trim() === ""
+    ) {
+      throw new Error();
+    }
+
+    return url.origin;
+  } catch {
+    throw new Error(`${context} must be an absolute URL origin.`);
+  }
+}
+
+function isLocalhost(hostname: string): boolean {
+  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]";
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function parseDeploymentTarget(value: unknown): "workers.dev" {
