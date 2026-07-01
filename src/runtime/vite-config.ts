@@ -88,6 +88,7 @@ export function runtimeViteConfig(input: RuntimeViteConfigInput = {}) {
     },
     plugins: [
       formlessWorkspaceRuntimeExtensionsPlugin({ env }),
+      floatingUiReactImportNormalizePlugin(),
       floatingUiReactImportInteropPlugin(),
       ...publicVitePlugins(react()),
       ...publicVitePlugins(tailwindcss()),
@@ -178,9 +179,299 @@ function optionalWorkerVar(name: string, value: string | undefined): Record<stri
 }
 
 export function clientManualChunks(id: string): string | undefined {
-  // Rolldown can orphan Floating UI's React namespace imports when its React adapter is
-  // folded into generated field editor chunks. Keep that adapter family together.
+  // Rolldown can orphan Floating UI's React namespace and DOM helper imports when its
+  // React adapter is folded into generated field editor chunks. Keep that adapter
+  // family together.
   return id.includes("@floating-ui/") ? "floating-ui" : undefined;
+}
+
+export function floatingUiReactImportNormalizePlugin(): Plugin {
+  return {
+    name: "formless-floating-ui-react-import-normalize",
+    apply: "build",
+    transform(code, id) {
+      if (floatingUiReactPatchKind(id) !== "react") {
+        return;
+      }
+
+      const nextCode = floatingUiReactImportNormalizeCode(code);
+      return nextCode === code ? undefined : { code: nextCode, map: null };
+    },
+  };
+}
+
+export function floatingUiReactImportNormalizeCode(code: string): string {
+  const reactDomImport =
+    "import { getOverflowAncestors, useFloating as useFloating$1, offset, detectOverflow } from '@floating-ui/react-dom';";
+
+  if (!code.includes(reactDomImport)) {
+    return code;
+  }
+
+  return code
+    .replace(
+      reactDomImport,
+      `import { computePosition, getOverflowAncestors, offset, detectOverflow } from '@floating-ui/react-dom';
+${floatingUiReactDomUseFloatingShimCode()}`,
+    )
+    .replaceAll("useFloating$1", "floatingUiReactDomUseFloating");
+}
+
+function floatingUiReactDomUseFloatingShimCode(): string {
+  return `const formlessFloatingNoop = () => {};
+const formlessFloatingUseLayoutEffect = typeof document !== "undefined" ? useLayoutEffect : formlessFloatingNoop;
+
+function formlessFloatingDeepEqual(a, b) {
+  if (a === b) {
+    return true;
+  }
+
+  if (typeof a !== typeof b) {
+    return false;
+  }
+
+  if (typeof a === "function" && a.toString() === b.toString()) {
+    return true;
+  }
+
+  let length;
+  let index;
+  let keys;
+
+  if (a && b && typeof a === "object") {
+    if (Array.isArray(a)) {
+      length = a.length;
+      if (length !== b.length) {
+        return false;
+      }
+
+      for (index = length; index-- !== 0;) {
+        if (!formlessFloatingDeepEqual(a[index], b[index])) {
+          return false;
+        }
+      }
+
+      return true;
+    }
+
+    keys = Object.keys(a);
+    length = keys.length;
+    if (length !== Object.keys(b).length) {
+      return false;
+    }
+
+    for (index = length; index-- !== 0;) {
+      if (!{}.hasOwnProperty.call(b, keys[index])) {
+        return false;
+      }
+    }
+
+    for (index = length; index-- !== 0;) {
+      const key = keys[index];
+      if (key === "_owner" && a["$" + "$typeof"]) {
+        continue;
+      }
+
+      if (!formlessFloatingDeepEqual(a[key], b[key])) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  return a !== a && b !== b;
+}
+
+function formlessFloatingGetDpr(element) {
+  if (typeof window === "undefined") {
+    return 1;
+  }
+
+  const win = element.ownerDocument.defaultView || window;
+  return win.devicePixelRatio || 1;
+}
+
+function formlessFloatingRoundByDpr(element, value) {
+  const dpr = formlessFloatingGetDpr(element);
+  return Math.round(value * dpr) / dpr;
+}
+
+function formlessFloatingUseLatestRef(value) {
+  const ref = React.useRef(value);
+  formlessFloatingUseLayoutEffect(() => {
+    ref.current = value;
+  });
+  return ref;
+}
+
+function floatingUiReactDomUseFloating(options) {
+  if (options === void 0) {
+    options = {};
+  }
+
+  const {
+    placement = "bottom",
+    strategy = "absolute",
+    middleware = [],
+    platform,
+    elements: { reference: externalReference, floating: externalFloating } = {},
+    transform = true,
+    whileElementsMounted,
+    open,
+  } = options;
+  const [data, setData] = React.useState({
+    x: 0,
+    y: 0,
+    strategy,
+    placement,
+    middlewareData: {},
+    isPositioned: false,
+  });
+  const [latestMiddleware, setLatestMiddleware] = React.useState(middleware);
+
+  if (!formlessFloatingDeepEqual(latestMiddleware, middleware)) {
+    setLatestMiddleware(middleware);
+  }
+
+  const [_reference, _setReference] = React.useState(null);
+  const [_floating, _setFloating] = React.useState(null);
+  const referenceRef = React.useRef(null);
+  const floatingRef = React.useRef(null);
+  const dataRef = React.useRef(data);
+  const setReference = React.useCallback((node) => {
+    if (node !== referenceRef.current) {
+      referenceRef.current = node;
+      _setReference(node);
+    }
+  }, []);
+  const setFloating = React.useCallback((node) => {
+    if (node !== floatingRef.current) {
+      floatingRef.current = node;
+      _setFloating(node);
+    }
+  }, []);
+  const referenceEl = externalReference || _reference;
+  const floatingEl = externalFloating || _floating;
+  const hasWhileElementsMounted = whileElementsMounted != null;
+  const whileElementsMountedRef = formlessFloatingUseLatestRef(whileElementsMounted);
+  const platformRef = formlessFloatingUseLatestRef(platform);
+  const openRef = formlessFloatingUseLatestRef(open);
+  const isMountedRef = React.useRef(false);
+  const update = React.useCallback(() => {
+    if (!referenceRef.current || !floatingRef.current) {
+      return;
+    }
+
+    const config = {
+      placement,
+      strategy,
+      middleware: latestMiddleware,
+    };
+
+    if (platformRef.current) {
+      config.platform = platformRef.current;
+    }
+
+    computePosition(referenceRef.current, floatingRef.current, config).then((nextData) => {
+      const fullData = {
+        ...nextData,
+        isPositioned: openRef.current !== false,
+      };
+
+      if (isMountedRef.current && !formlessFloatingDeepEqual(dataRef.current, fullData)) {
+        dataRef.current = fullData;
+        ReactDOM.flushSync(() => {
+          setData(fullData);
+        });
+      }
+    });
+  }, [latestMiddleware, placement, strategy, platformRef, openRef]);
+
+  formlessFloatingUseLayoutEffect(() => {
+    if (open === false && dataRef.current.isPositioned) {
+      dataRef.current.isPositioned = false;
+      setData((currentData) => ({
+        ...currentData,
+        isPositioned: false,
+      }));
+    }
+  }, [open]);
+
+  formlessFloatingUseLayoutEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  formlessFloatingUseLayoutEffect(() => {
+    if (referenceEl) {
+      referenceRef.current = referenceEl;
+    }
+
+    if (floatingEl) {
+      floatingRef.current = floatingEl;
+    }
+
+    if (referenceEl && floatingEl) {
+      if (whileElementsMountedRef.current) {
+        return whileElementsMountedRef.current(referenceEl, floatingEl, update);
+      }
+
+      update();
+    }
+  }, [referenceEl, floatingEl, update, whileElementsMountedRef, hasWhileElementsMounted]);
+
+  const refs = React.useMemo(() => ({
+    reference: referenceRef,
+    floating: floatingRef,
+    setReference,
+    setFloating,
+  }), [setReference, setFloating]);
+  const elements = React.useMemo(() => ({
+    reference: referenceEl,
+    floating: floatingEl,
+  }), [referenceEl, floatingEl]);
+  const floatingStyles = React.useMemo(() => {
+    const initialStyles = {
+      position: strategy,
+      left: 0,
+      top: 0,
+    };
+
+    if (!elements.floating) {
+      return initialStyles;
+    }
+
+    const x = formlessFloatingRoundByDpr(elements.floating, data.x);
+    const y = formlessFloatingRoundByDpr(elements.floating, data.y);
+
+    if (transform) {
+      return {
+        ...initialStyles,
+        transform: "translate(" + x + "px, " + y + "px)",
+        ...(formlessFloatingGetDpr(elements.floating) >= 1.5 && {
+          willChange: "transform",
+        }),
+      };
+    }
+
+    return {
+      position: strategy,
+      left: x,
+      top: y,
+    };
+  }, [strategy, transform, elements.floating, data.x, data.y]);
+
+  return React.useMemo(() => ({
+    ...data,
+    update,
+    refs,
+    elements,
+    floatingStyles,
+  }), [data, update, refs, elements, floatingStyles]);
+}`;
 }
 
 export function floatingUiReactImportInteropPlugin(): Plugin {
@@ -223,6 +514,7 @@ export function floatingUiReactPatchKind(id: string): FloatingUiReactPatchKind |
 }
 
 export function floatingUiReactImportInteropCode(code: string): string {
+  const extraBindings = floatingUiReactExtraInteropBindingsCode(code);
   const unminifiedBoundary = "require_react();\nrequire_react_dom();";
 
   if (
@@ -236,7 +528,7 @@ export function floatingUiReactImportInteropCode(code: string): string {
 var React = require_react();
 var ReactDOM = require_react_dom();
 var useLayoutEffect = React.useLayoutEffect;
-var useEffect = React.useEffect;`,
+var useEffect = React.useEffect;${extraBindings}`,
     );
   }
 
@@ -247,11 +539,25 @@ var useEffect = React.useEffect;`,
     return code.replace(
       minifiedBoundary,
       (_, requireReact: string, requireReactDom: string) =>
-        `${requireReact}(),${requireReactDom}();var React=${requireReact}(),ReactDOM=${requireReactDom}(),useLayoutEffect=React.useLayoutEffect,useEffect=React.useEffect;`,
+        `${requireReact}(),${requireReactDom}();var React=${requireReact}(),ReactDOM=${requireReactDom}(),useLayoutEffect=React.useLayoutEffect,useEffect=React.useEffect;${extraBindings}`,
     );
   }
 
   return code;
+}
+
+function floatingUiReactExtraInteropBindingsCode(code: string): string {
+  return floatingUiReactNeedsIsElementBinding(code)
+    ? `\nvar isElement=formlessFloatingIsElement;function formlessFloatingIsElement(value){if(typeof window==="undefined"){return false;}const win=(value==null?void 0:value.ownerDocument)==null?window:value.ownerDocument.defaultView||window;return value instanceof Element||value instanceof win.Element;}`
+    : "";
+}
+
+function floatingUiReactNeedsIsElementBinding(code: string): boolean {
+  return (
+    /\bisElement\s*\(/.test(code) &&
+    !/\b(?:function|var|let|const)\s+isElement\b/.test(code) &&
+    !/\bisElement\s*=/.test(code)
+  );
 }
 
 export function formlessWorkspaceRuntimeExtensionsPlugin(
