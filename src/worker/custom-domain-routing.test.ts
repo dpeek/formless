@@ -1152,6 +1152,16 @@ describe("installed Site custom-domain Worker routing", () => {
       },
       method: "POST",
     });
+    const appInstalls = await fetchHost(mappedInstanceHost, "/api/formless/app-installs", {
+      headers: { Cookie: cookie },
+    });
+    const installedAppBootstrap = await fetchHost(
+      mappedInstanceHost,
+      "/api/app-installs/site/host-session-site/bootstrap",
+      {
+        headers: { Cookie: cookie },
+      },
+    );
     const staleVersionBootstrap = await fetchHost(
       mappedInstanceHost,
       `${controlPlaneApi}/bootstrap`,
@@ -1205,9 +1215,29 @@ describe("installed Site custom-domain Worker routing", () => {
         method: "POST",
       },
     );
+    const mismatchedAppInstalls = await fetchHost(
+      mappedInstanceHost,
+      "/api/formless/app-installs",
+      {
+        headers: { Cookie: mismatchedCookie },
+      },
+    );
+    const mismatchedInstalledAppBootstrap = await fetchHost(
+      mappedInstanceHost,
+      "/api/app-installs/site/host-session-site/bootstrap",
+      {
+        headers: { Cookie: mismatchedCookie },
+      },
+    );
     const bootstrapBody = (await bootstrap.json()) as { records?: unknown[] };
     const routeWriteBody = (await routeWrite.json()) as OperationInvocationResponse;
     const createInstallBody = (await createInstall.json()) as OperationInvocationResponse;
+    const appInstallsBody = (await appInstalls.json()) as {
+      installs?: Array<{ installId?: string }>;
+    };
+    const installedAppBootstrapBody = (await installedAppBootstrap.json()) as {
+      schema?: AppSchema;
+    };
 
     expect(shell.status).toBe(200);
     expect(bootstrap.status).toBe(200);
@@ -1219,12 +1249,20 @@ describe("installed Site custom-domain Worker routing", () => {
     });
     expect(createInstall.status).toBe(200);
     expect(createInstallBody.status).toBe("committed");
+    expect(appInstalls.status).toBe(200);
+    expect(
+      appInstallsBody.installs?.some((install) => install.installId === "host-session-site"),
+    ).toBe(true);
+    expect(installedAppBootstrap.status).toBe(200);
+    expect(installedAppBootstrapBody.schema).toEqual(siteSourceSchema);
     expect(staleVersionBootstrap.status).toBe(401);
     expect(wrongHostBootstrap.status).toBe(401);
     expect(wrongRouteBootstrap.status).toBe(401);
     expect(wrongStorageBootstrap.status).toBe(401);
     expect(mismatchedBootstrap.status).toBe(401);
     expect(mismatchedWrite.status).toBe(401);
+    expect(mismatchedAppInstalls.status).toBe(401);
+    expect(mismatchedInstalledAppBootstrap.status).toBe(401);
     expect(assetRequests).toEqual(["/"]);
   });
 

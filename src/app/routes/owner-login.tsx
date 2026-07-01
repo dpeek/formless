@@ -43,6 +43,8 @@ type OwnerLoginFetchOptions = {
   signal?: AbortSignal;
 };
 
+type OwnerLoginLocationSetter = (path: `/${string}`, options?: { replace?: boolean }) => void;
+
 export function OwnerLoginRoute() {
   const [state, setState] = useState<OwnerLoginRouteState>({ status: "loading" });
   const [location, setLocation] = useLocation();
@@ -77,7 +79,7 @@ export function OwnerLoginRoute() {
       const response = await loginWithPasskey();
 
       setState({ status: "complete", owner: response.owner });
-      setLocation(redirectTarget, { replace: true });
+      navigateAfterOwnerLogin(redirectTarget, { setLocation });
     } catch (error) {
       setState({
         status: "failed",
@@ -117,6 +119,31 @@ export function OwnerLoginRoute() {
       state={state}
     />
   );
+}
+
+export function navigateAfterOwnerLogin(
+  redirectTarget: `/${string}`,
+  options: {
+    replaceDocumentLocation?: (target: `/${string}`) => void;
+    setLocation: OwnerLoginLocationSetter;
+  },
+): void {
+  if (ownerLoginRedirectRequiresDocumentNavigation(redirectTarget)) {
+    const replaceDocumentLocation =
+      options.replaceDocumentLocation ??
+      ((target: `/${string}`) => window.location.replace(target));
+
+    replaceDocumentLocation(redirectTarget);
+    return;
+  }
+
+  options.setLocation(redirectTarget, { replace: true });
+}
+
+export function ownerLoginRedirectRequiresDocumentNavigation(
+  redirectTarget: `/${string}`,
+): boolean {
+  return redirectTarget === "/_formless" || redirectTarget.startsWith("/_formless/");
 }
 
 export function OwnerLoginRouteView({

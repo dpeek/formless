@@ -6,6 +6,8 @@ import {
   fetchOwnerSessionStatus,
   loginWithPasskey,
   logoutOwnerSession,
+  navigateAfterOwnerLogin,
+  ownerLoginRedirectRequiresDocumentNavigation,
   startOwnerLoginRouteSession,
   type OwnerLoginApiError,
   type OwnerLoginRouteState,
@@ -82,6 +84,37 @@ describe("owner login route view", () => {
 });
 
 describe("owner login route data flow", () => {
+  it("uses document navigation for internal auth handoff redirects", () => {
+    const clientLocations: unknown[] = [];
+    const documentLocations: string[] = [];
+    const handoffTarget =
+      "/_formless/auth/handoff?targetOrigin=https%3A%2F%2Fadmin.example.com&state=c0tPAI" as const;
+
+    navigateAfterOwnerLogin(handoffTarget, {
+      replaceDocumentLocation: (target) => documentLocations.push(target),
+      setLocation: (...args) => clientLocations.push(args),
+    });
+
+    expect(ownerLoginRedirectRequiresDocumentNavigation(handoffTarget)).toBe(true);
+    expect(documentLocations).toEqual([handoffTarget]);
+    expect(clientLocations).toEqual([]);
+  });
+
+  it("uses client navigation for normal owner login redirects", () => {
+    const clientLocations: unknown[] = [];
+    const documentLocations: string[] = [];
+    const redirectTarget = "/apps/personal/settings?panel=routes" as const;
+
+    navigateAfterOwnerLogin(redirectTarget, {
+      replaceDocumentLocation: (target) => documentLocations.push(target),
+      setLocation: (...args) => clientLocations.push(args),
+    });
+
+    expect(ownerLoginRedirectRequiresDocumentNavigation(redirectTarget)).toBe(false);
+    expect(clientLocations).toEqual([[redirectTarget, { replace: true }]]);
+    expect(documentLocations).toEqual([]);
+  });
+
   it("loads ready state when owner setup is complete but no session exists", async () => {
     const states: OwnerLoginRouteState[] = [];
     const stop = startOwnerLoginRouteSession({

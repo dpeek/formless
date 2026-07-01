@@ -22,7 +22,10 @@ import {
   type EmailDeliveryQueueBinding,
   type CloudflareSendEmailBinding,
 } from "./email-runtime.ts";
-import { handleInstanceAppInstallsApiRequest } from "./instance-app-installs.ts";
+import {
+  handleInstanceAppInstallsApiRequest,
+  isInstanceAppInstallsApiPath,
+} from "./instance-app-installs.ts";
 import { handleInstanceControlPlaneApiRequest } from "./instance-control-plane.ts";
 import { handleInstanceDomainMappingsApiRequest } from "./instance-domain-mappings.ts";
 import { handleIdentityControlPlaneApiRequest } from "./identity-control-plane.ts";
@@ -134,15 +137,6 @@ export default {
     const identityControlPlaneForwardRequest: Request | undefined = identityControlPlaneRoute
       ? (request.clone() as Request)
       : undefined;
-
-    const earlyInstanceAppInstallsResponse = await handleInstanceAppInstallsApiRequest(
-      request,
-      env,
-    );
-
-    if (earlyInstanceAppInstallsResponse) {
-      return earlyInstanceAppInstallsResponse;
-    }
 
     const earlyCollaboratorInvitationAcceptanceBrowserResponse =
       await handleCollaboratorInvitationAcceptanceBrowserRequest(request, env);
@@ -307,6 +301,22 @@ export default {
       return instanceUpgradeStatusResponse;
     }
 
+    const instanceAppInstallsResponse = isInstanceAppInstallsApiPath(requestUrl.pathname)
+      ? await handleInstanceAppInstallsApiRequest(
+          authorityRequestWithOriginalUrlFacts(request, {
+            hostSessionTarget: hostAuthSessionTargetForInstanceControlPlaneRoute(
+              request,
+              runtimeRoute,
+            ),
+          }),
+          env,
+        )
+      : undefined;
+
+    if (instanceAppInstallsResponse) {
+      return instanceAppInstallsResponse;
+    }
+
     const instanceControlPlaneResponse = instanceControlPlaneRoute
       ? await handleInstanceControlPlaneApiRequest(
           authorityRequestWithOriginalUrlFacts(instanceControlPlaneForwardRequest ?? request, {
@@ -409,8 +419,11 @@ export default {
         (routeAccess === undefined || routeAccess === "owner") &&
         isInstalledAppManagementApiRead(request, authorityRoute.path)
       ) {
+        const managementHostSessionTarget =
+          hostSessionTarget ??
+          hostAuthSessionTargetForInstanceControlPlaneRoute(request, runtimeRoute);
         const authorization = await authorizeOwnerManagementRead(request, env, {
-          hostSessionTarget,
+          hostSessionTarget: managementHostSessionTarget,
         });
 
         if (!authorization.authorized) {

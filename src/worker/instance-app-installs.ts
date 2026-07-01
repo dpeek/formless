@@ -25,6 +25,7 @@ import {
   type AuthorityAdminGuardEnv,
 } from "./authority-admin-guard.ts";
 import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
+import { hostAuthSessionTargetFromRequestHeaders } from "./instance-auth-handoff.ts";
 import {
   CREATE_APP_INSTALL_CONTROL_PLANE_OPERATION_PATH,
   INTERNAL_UPDATE_APP_INSTALL_PACKAGE_FACTS_PATH,
@@ -103,6 +104,7 @@ export async function handleInstanceAppInstallsDurableObjectRequest(
       const authorization = await authorizeOperationalManagement(request, env, {
         error:
           "Owner session, instance-admin session, or admin authorization is required for this write endpoint.",
+        hostSessionTarget: hostAuthSessionTargetForInstanceAppInstallsRequest(request),
       });
 
       if (!authorization.authorized) {
@@ -152,6 +154,7 @@ export async function handleInstanceAppInstallsDurableObjectRequest(
       const authorization = await authorizeOperationalManagement(request, env, {
         error:
           "Owner session, instance-admin session, or admin authorization is required for this read endpoint.",
+        hostSessionTarget: hostAuthSessionTargetForInstanceAppInstallsRequest(request),
       });
 
       if (!authorization.authorized) {
@@ -169,6 +172,7 @@ export async function handleInstanceAppInstallsDurableObjectRequest(
       const authorization = await authorizeOperationalManagement(request, env, {
         error:
           "Owner session, instance-admin session, or admin authorization is required for this write endpoint.",
+        hostSessionTarget: hostAuthSessionTargetForInstanceAppInstallsRequest(request),
       });
 
       if (!authorization.authorized) {
@@ -215,11 +219,26 @@ export async function handleInstanceAppInstallsDurableObjectRequest(
   }
 }
 
-function isInstanceAppInstallsApiPath(pathname: string) {
+export function isInstanceAppInstallsApiPath(pathname: string) {
   return (
     pathname === INSTANCE_APP_INSTALLS_API_PATH ||
     pathname.startsWith(`${INSTANCE_APP_INSTALLS_API_PATH}/`)
   );
+}
+
+function hostAuthSessionTargetForInstanceAppInstallsRequest(request: Request) {
+  const target = hostAuthSessionTargetFromRequestHeaders(request.headers);
+
+  if (
+    !target ||
+    target.appInstallId !== undefined ||
+    target.targetProfile !== "instance" ||
+    target.storageIdentity !== INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY
+  ) {
+    return undefined;
+  }
+
+  return target;
 }
 
 function parsePackageMigrationApplyRoute(pathname: string):
