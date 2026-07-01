@@ -470,7 +470,11 @@ export type ConsumeCollaboratorInvitationTokenResult =
 
 export type RevokeCollaboratorInvitationTokenResult =
   | { ok: true; token: StoredCollaboratorInvitationToken }
-  | { ok: false; reason: "missing-token" };
+  | {
+      ok: false;
+      reason: "already-consumed" | "expired-token" | "missing-token" | "revoked-token";
+      token?: StoredCollaboratorInvitationToken;
+    };
 
 type CollaboratorInvitationTokenMismatchReason =
   | "wrong-target"
@@ -1506,6 +1510,18 @@ export function revokeCollaboratorInvitationToken(
 
     if (!existing) {
       return { ok: false, reason: "missing-token" };
+    }
+
+    if (existing.revokedAt !== undefined) {
+      return { ok: false, reason: "revoked-token", token: existing };
+    }
+
+    if (existing.consumedAt !== undefined) {
+      return { ok: false, reason: "already-consumed", token: existing };
+    }
+
+    if (existing.expiresAt <= revokedAt) {
+      return { ok: false, reason: "expired-token", token: existing };
     }
 
     storage.sql.exec(

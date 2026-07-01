@@ -13,6 +13,7 @@ export const IDENTITY_CONTROL_PLANE_STORAGE_IDENTITY = "instance:identity";
 export const IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX = "/api/formless/identity";
 export const IDENTITY_ACCESS_MANAGEMENT_SUMMARY_API_PATH = "/access-summary";
 export const IDENTITY_COLLABORATOR_INVITATIONS_API_PATH = "/collaborator-invitations";
+export const IDENTITY_COLLABORATOR_INVITATION_REVOKE_API_PATH = "/collaborator-invitations/revoke";
 
 export type IdentityControlPlaneSchemaKey = typeof IDENTITY_CONTROL_PLANE_SCHEMA_KEY;
 export type IdentityControlPlaneBoundarySchemaKey =
@@ -23,6 +24,8 @@ export type IdentityAccessManagementSummaryApiPath =
   typeof IDENTITY_ACCESS_MANAGEMENT_SUMMARY_API_PATH;
 export type IdentityCollaboratorInvitationsApiPath =
   typeof IDENTITY_COLLABORATOR_INVITATIONS_API_PATH;
+export type IdentityCollaboratorInvitationRevokeApiPath =
+  typeof IDENTITY_COLLABORATOR_INVITATION_REVOKE_API_PATH;
 
 export const identityControlPlaneEntityNames = [
   "principal",
@@ -292,4 +295,27 @@ export type IdentityAccessManagementSummary = {
   organizations: IdentityAccessOrganizationSummary[];
   people: IdentityAccessPersonSummary[];
   roles: IdentityAccessRoleSummary[];
+};
+
+export type IdentityCollaboratorInvitationRevokeRequest = {
+  invitationId: string;
+  now?: string;
+};
+
+export type IdentityCollaboratorInvitationRevokeFailureReason =
+  | "accepted-invitation"
+  | "expired-invitation"
+  | "missing-invitation"
+  | "revoked-invitation"
+  | "tombstoned-invitation";
+
+export type IdentityCollaboratorInvitationRevokeErrorResponse = {
+  error: string;
+  reason: IdentityCollaboratorInvitationRevokeFailureReason;
+};
+
+export type IdentityCollaboratorInvitationRevokeResponse = {
+  invitation: IdentityAccessInvitationSummary;
+  revokedAt: string;
+  status: "revoked";
 };

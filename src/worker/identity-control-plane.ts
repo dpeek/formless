@@ -1,6 +1,7 @@
 import { parseIdentityControlPlaneApiRoute } from "../shared/app-storage-identity.ts";
 import {
   IDENTITY_ACCESS_MANAGEMENT_SUMMARY_API_PATH,
+  IDENTITY_COLLABORATOR_INVITATION_REVOKE_API_PATH,
   IDENTITY_COLLABORATOR_INVITATIONS_API_PATH,
   IDENTITY_CONTROL_PLANE_SCHEMA_KEY,
   IDENTITY_CONTROL_PLANE_STORAGE_IDENTITY,
@@ -11,6 +12,7 @@ import {
   parseIdentityControlPlaneStorageSnapshot,
   validateIdentityCollaboratorInvitationGrants,
   validateIdentityControlPlaneRecords,
+  type IdentityAccessInvitationSummary,
   type IdentityAccessInvitationGrantAuthoritySummary,
   type IdentityAccessInvitationGrantOptions,
   type IdentityAccessInvitationMembershipGrantOption,
@@ -18,6 +20,10 @@ import {
   type IdentityAccessManagementSummary,
   type IdentityAppRegistrationStatus,
   type IdentityCollaboratorInvitationGrantRecord,
+  type IdentityCollaboratorInvitationRevokeErrorResponse,
+  type IdentityCollaboratorInvitationRevokeFailureReason,
+  type IdentityCollaboratorInvitationRevokeRequest,
+  type IdentityCollaboratorInvitationRevokeResponse,
   type IdentityContainerStatus,
   type IdentityAppRegistrationValues,
   type IdentityControlPlaneRoleKey,
@@ -100,8 +106,11 @@ import {
   createCollaboratorInvitationToken,
   generateCollaboratorInvitationToken,
   hashCollaboratorInvitationToken,
+  revokeCollaboratorInvitationToken,
+  type RevokeCollaboratorInvitationTokenResult,
 } from "./instance-auth-state.ts";
 import { hostAuthSessionTargetFromRequestHeaders } from "./instance-auth-handoff.ts";
+import { nowIsoString } from "../shared/clock.ts";
 
 const actorKinds = ["admin", "owner"] as const;
 const invitationTargetSurfaces = ["app-install", "instance", "organization"] as const;
@@ -124,6 +133,8 @@ const collaboratorInvitationDeliveryMessageKind = "identity.collaboratorInvitati
 const collaboratorInvitationDeliveryPurpose = "collaborator-invitation-delivery";
 export const INTERNAL_COLLABORATOR_INVITATION_DELIVERY_PATH =
   "/_internal/identity/collaborator-invitation-delivery";
+export const INTERNAL_COLLABORATOR_INVITATION_TOKEN_REVOKE_PATH =
+  "/_internal/identity/collaborator-invitation-token-revoke";
 export const INTERNAL_COLLABORATOR_INVITATION_ACCEPTANCE_STATUS_PATH =
   "/_internal/identity/collaborator-invitation-acceptance-status";
 export const INTERNAL_COLLABORATOR_INVITATION_ACCEPTANCE_COMMIT_PATH =
@@ -191,6 +202,29 @@ type CreateCollaboratorInvitationWriteResponse = Omit<
   CreateCollaboratorInvitationResponse,
   "delivery"
 >;
+
+type RevokeCollaboratorInvitationResult =
+  | {
+      body: IdentityCollaboratorInvitationRevokeResponse;
+      ok: true;
+    }
+  | {
+      body: IdentityCollaboratorInvitationRevokeErrorResponse;
+      ok: false;
+      status: number;
+    };
+
+type CollaboratorInvitationTokenRevocationInput = {
+  invitationId: string;
+  now: string;
+};
+
+type CollaboratorInvitationTokenRevocationResult =
+  | { ok: true }
+  | {
+      ok: false;
+      reason: Extract<RevokeCollaboratorInvitationTokenResult, { ok: false }>["reason"];
+    };
 
 type CollaboratorInvitationTargetFacts = {
   targetAppInstallId?: string;
@@ -403,6 +437,38 @@ export async function handleIdentityControlPlaneDurableObjectRequest(
       });
     }
 
+    if (route.path === IDENTITY_COLLABORATOR_INVITATION_REVOKE_API_PATH) {
+      if (request.method !== "POST") {
+        return jsonResponse({ error: "Method not allowed." }, 405, { Allow: "POST" });
+      }
+
+      const authorization = await authorizeOperationalManagement(request, env, {
+        hostSessionTarget: hostAuthSessionTargetFromRequestHeaders(request.headers),
+        resolveManagementAuthority,
+      });
+
+      if (!authorization.authorized) {
+        return jsonResponse(
+          { error: authorization.error },
+          authorization.status,
+          authorization.headers,
+        );
+      }
+
+      ensureIdentityControlPlaneStorage(storage);
+
+      const revoked = await revokeCollaboratorInvitationFromAccessManagement(
+        storage,
+        await readJson(request),
+        {
+          env,
+          requestUrl: request.url,
+        },
+      );
+
+      return jsonResponse(revoked.body, revoked.ok ? 200 : revoked.status);
+    }
+
     const operation = selectAuthorityOperation({
       method: request.method,
       path: route.path,
@@ -492,6 +558,30 @@ export async function handleCollaboratorInvitationDeliveryDurableObjectRequest(
         storage,
       }),
     );
+  } catch (error) {
+    return jsonResponse({ error: errorMessage(error) }, 400);
+  }
+}
+
+export async function handleCollaboratorInvitationTokenRevocationDurableObjectRequest(
+  request: Request,
+  storage: DurableObjectStorage,
+): Promise<Response | undefined> {
+  const url = new URL(request.url);
+
+  if (url.pathname !== INTERNAL_COLLABORATOR_INVITATION_TOKEN_REVOKE_PATH) {
+    return undefined;
+  }
+
+  if (request.method !== "POST") {
+    return jsonResponse({ error: "Method not allowed." }, 405, { Allow: "POST" });
+  }
+
+  try {
+    const input = parseCollaboratorInvitationTokenRevocationRequest(await readJson(request));
+    const revoked = revokeCollaboratorInvitationToken(storage, input.invitationId, input.now);
+
+    return jsonResponse(collaboratorInvitationTokenRevocationResult(revoked));
   } catch (error) {
     return jsonResponse({ error: errorMessage(error) }, 400);
   }
@@ -921,32 +1011,9 @@ function readIdentityAccessManagementSummary(
       };
     }),
     invitationGrantOptions: identityAccessInvitationGrantOptions(records, grantAuthority),
-    invitations: identityAccessRecordsForEntity(records, "invitation").map((record) => {
-      const values = record.values as IdentityInvitationValues;
-
-      return {
-        ...(values.acceptedAt === undefined ? {} : { acceptedAt: values.acceptedAt }),
-        createdAt: record.createdAt,
-        expiresAt: values.expiresAt,
-        ...(values.invitedPrincipal === undefined
-          ? {}
-          : { invitedPrincipalId: values.invitedPrincipal }),
-        invitationId: record.id,
-        ...(values.inviterPrincipal === undefined
-          ? {}
-          : { inviterPrincipalId: values.inviterPrincipal }),
-        status: values.status,
-        ...(values.targetAppInstallId === undefined
-          ? {}
-          : { targetAppInstallId: values.targetAppInstallId }),
-        targetEmail: values.targetEmail,
-        ...(values.targetOrganization === undefined
-          ? {}
-          : { targetOrganizationId: values.targetOrganization }),
-        targetSurface: values.targetSurface,
-        updatedAt: record.updatedAt,
-      };
-    }),
+    invitations: identityAccessRecordsForEntity(records, "invitation").map(
+      identityAccessInvitationSummary,
+    ),
     memberships: identityAccessRecordsForEntity(records, "membership").map((record) => {
       const values = record.values as IdentityMembershipValues;
 
@@ -1034,6 +1101,33 @@ function identityAccessInvitationGrantOptions(
     authority,
     memberships: identityAccessInvitationMembershipGrantOptions(records, authority),
     roles: identityAccessInvitationRoleGrantOptions(records, authority),
+  };
+}
+
+function identityAccessInvitationSummary(record: StoredRecord): IdentityAccessInvitationSummary {
+  const values = record.values as IdentityInvitationValues;
+
+  return {
+    ...(values.acceptedAt === undefined ? {} : { acceptedAt: values.acceptedAt }),
+    createdAt: record.createdAt,
+    expiresAt: values.expiresAt,
+    ...(values.invitedPrincipal === undefined
+      ? {}
+      : { invitedPrincipalId: values.invitedPrincipal }),
+    invitationId: record.id,
+    ...(values.inviterPrincipal === undefined
+      ? {}
+      : { inviterPrincipalId: values.inviterPrincipal }),
+    status: values.status,
+    ...(values.targetAppInstallId === undefined
+      ? {}
+      : { targetAppInstallId: values.targetAppInstallId }),
+    targetEmail: values.targetEmail,
+    ...(values.targetOrganization === undefined
+      ? {}
+      : { targetOrganizationId: values.targetOrganization }),
+    targetSurface: values.targetSurface,
+    updatedAt: record.updatedAt,
   };
 }
 
@@ -1202,6 +1296,150 @@ function createCollaboratorInvitation(
     records,
     status: outcome.kind === "replay" ? "replayed" : "committed",
   };
+}
+
+async function revokeCollaboratorInvitationFromAccessManagement(
+  storage: DurableObjectStorage,
+  value: unknown,
+  options: { env: IdentityControlPlaneApiEnv; requestUrl: string },
+): Promise<RevokeCollaboratorInvitationResult> {
+  const input = parseCollaboratorInvitationRevokeRequest(value);
+  const revokedAt = input.now ?? nowIsoString();
+  const records = getBootstrapRecords(storage);
+  const candidate = collaboratorInvitationRevocationCandidate(records, {
+    ...input,
+    now: revokedAt,
+  });
+
+  if (!candidate.ok) {
+    return identityCollaboratorInvitationRevokeFailure(candidate.reason);
+  }
+
+  const tokenRevocation = await requestCollaboratorInvitationTokenRevocation({
+    env: options.env,
+    invitationId: candidate.invitation.id,
+    now: revokedAt,
+    requestUrl: options.requestUrl,
+  });
+
+  if (!tokenRevocation.ok && tokenRevocation.reason === "already-consumed") {
+    return identityCollaboratorInvitationRevokeFailure("accepted-invitation");
+  }
+
+  if (!tokenRevocation.ok && tokenRevocation.reason === "expired-token") {
+    return identityCollaboratorInvitationRevokeFailure("expired-invitation");
+  }
+
+  const outcome = writeRecordSetForCommandOperationOutcome(
+    storage,
+    `collaborator-invitation-revocation:${candidate.invitation.id}:${revokedAt}`,
+    [
+      {
+        kind: "patch",
+        record: candidate.invitation,
+        values: {
+          ...candidate.invitation.values,
+          status: "revoked",
+        },
+      },
+    ],
+    validateIdentityControlPlaneRecordConstraint(storage),
+    { allowStoredReplay: false, now: revokedAt },
+  );
+  const invitation = outcome.response.changes
+    .map((change) => change.payload)
+    .find((record) => record.entity === "invitation" && record.id === candidate.invitation.id);
+
+  if (!invitation) {
+    throw new Error("Collaborator invitation revocation did not update the invitation record.");
+  }
+
+  return {
+    body: {
+      invitation: identityAccessInvitationSummary(invitation),
+      revokedAt,
+      status: "revoked",
+    },
+    ok: true,
+  };
+}
+
+function collaboratorInvitationRevocationCandidate(
+  records: readonly StoredRecord[],
+  input: IdentityCollaboratorInvitationRevokeRequest & { now: string },
+):
+  | { invitation: StoredRecord; ok: true }
+  | { ok: false; reason: IdentityCollaboratorInvitationRevokeFailureReason } {
+  const invitation = records.find(
+    (record) => record.id === input.invitationId && record.entity === "invitation",
+  );
+
+  if (!invitation) {
+    return { ok: false, reason: "missing-invitation" };
+  }
+
+  if (invitation.deletedAt) {
+    return { ok: false, reason: "tombstoned-invitation" };
+  }
+
+  const status = parseStringLiteral(
+    "Identity collaborator invitation status",
+    invitation.values.status,
+    invitationStatuses,
+  );
+
+  if (status === "accepted") {
+    return { ok: false, reason: "accepted-invitation" };
+  }
+
+  if (status === "revoked") {
+    return { ok: false, reason: "revoked-invitation" };
+  }
+
+  if (
+    status === "expired" ||
+    parseIsoTimestamp("Identity collaborator invitation expiresAt", invitation.values.expiresAt) <=
+      input.now
+  ) {
+    return { ok: false, reason: "expired-invitation" };
+  }
+
+  return { invitation, ok: true };
+}
+
+function identityCollaboratorInvitationRevokeFailure(
+  reason: IdentityCollaboratorInvitationRevokeFailureReason,
+): Extract<RevokeCollaboratorInvitationResult, { ok: false }> {
+  return {
+    body: {
+      error:
+        reason === "accepted-invitation"
+          ? "Invitation has already been accepted."
+          : reason === "expired-invitation"
+            ? "Invitation has expired."
+            : reason === "revoked-invitation"
+              ? "Invitation has already been revoked."
+              : "Invitation could not be found.",
+      reason,
+    },
+    ok: false,
+    status: identityCollaboratorInvitationRevokeFailureStatus(reason),
+  };
+}
+
+function identityCollaboratorInvitationRevokeFailureStatus(
+  reason: IdentityCollaboratorInvitationRevokeFailureReason,
+): number {
+  switch (reason) {
+    case "accepted-invitation":
+    case "revoked-invitation":
+      return 409;
+    case "expired-invitation":
+      return 410;
+    case "missing-invitation":
+    case "tombstoned-invitation":
+      return 404;
+  }
 }
 
 function validateCollaboratorInvitationGrantAuthority(
@@ -1680,6 +1918,39 @@ async function requestCollaboratorInvitationDelivery(input: {
   return body;
 }
 
+async function requestCollaboratorInvitationTokenRevocation(input: {
+  env: IdentityControlPlaneApiEnv;
+  invitationId: string;
+  now: string;
+  requestUrl: string;
+}): Promise<CollaboratorInvitationTokenRevocationResult> {
+  const id = input.env.FORMLESS_AUTHORITY.idFromName(FORMLESS_INSTANCE_AUTHORITY_NAME);
+  const response = await input.env.FORMLESS_AUTHORITY.get(id).fetch(
+    new Request(new URL(INTERNAL_COLLABORATOR_INVITATION_TOKEN_REVOKE_PATH, input.requestUrl), {
+      body: JSON.stringify({
+        invitationId: input.invitationId,
+        now: input.now,
+      }),
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      method: "POST",
+    }),
+  );
+  const body = (await response.json()) as
+    | CollaboratorInvitationTokenRevocationResult
+    | {
+        error?: string;
+      };
+
+  if (!response.ok || !isCollaboratorInvitationTokenRevocationResult(body)) {
+    return { ok: false, reason: "missing-token" };
+  }
+
+  return body;
+}
+
 async function scheduleCollaboratorInvitationDelivery(input: {
   env: IdentityControlPlaneApiEnv;
   input: CollaboratorInvitationDeliveryInput;
@@ -1934,6 +2205,42 @@ function parseCollaboratorInvitationDeliveryRequest(
   };
 }
 
+function parseCollaboratorInvitationRevokeRequest(
+  value: unknown,
+): IdentityCollaboratorInvitationRevokeRequest {
+  const object = parseRecord("Collaborator invitation revoke request", value);
+  const now = parseOptionalIsoTimestamp("Collaborator invitation revoke now", object.now);
+
+  assertAllowedKeys("Collaborator invitation revoke request", object, ["invitationId", "now"]);
+
+  return {
+    invitationId: parseNonEmptyString(
+      "Collaborator invitation revoke invitationId",
+      object.invitationId,
+    ),
+    ...(now === undefined ? {} : { now }),
+  };
+}
+
+function parseCollaboratorInvitationTokenRevocationRequest(
+  value: unknown,
+): CollaboratorInvitationTokenRevocationInput {
+  const object = parseRecord("Collaborator invitation token revocation request", value);
+
+  assertAllowedKeys("Collaborator invitation token revocation request", object, [
+    "invitationId",
+    "now",
+  ]);
+
+  return {
+    invitationId: parseNonEmptyString(
+      "Collaborator invitation token revocation invitationId",
+      object.invitationId,
+    ),
+    now: parseIsoTimestamp("Collaborator invitation token revocation now", object.now),
+  };
+}
+
 function isCollaboratorInvitationDeliveryResult(
   value: unknown,
 ): value is CollaboratorInvitationDeliveryResult {
@@ -1953,6 +2260,32 @@ function isCollaboratorInvitationDeliveryResult(
     typeof record.replayed === "boolean" &&
     typeof record.delivery === "object" &&
     record.delivery !== null
+  );
+}
+
+function collaboratorInvitationTokenRevocationResult(
+  result: RevokeCollaboratorInvitationTokenResult,
+): CollaboratorInvitationTokenRevocationResult {
+  return result.ok ? { ok: true } : { ok: false, reason: result.reason };
+}
+
+function isCollaboratorInvitationTokenRevocationResult(
+  value: unknown,
+): value is CollaboratorInvitationTokenRevocationResult {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+
+  const record = value as Record<string, unknown>;
+
+  if (record.ok === true) {
+    return true;
+  }
+
+  return (
+    record.ok === false &&
+    typeof record.reason === "string" &&
+    ["already-consumed", "expired-token", "missing-token", "revoked-token"].includes(record.reason)
   );
 }
 

@@ -372,22 +372,54 @@ identity-control-plane record editor to normal administrators.
 - AND raw invite tokens and token hashes remain unavailable to the browser
   surface except for the delivery path that renders the invitation link
 
+#### Scenario: Revoke pending collaborator invitation from access management
+
+- GIVEN the dedicated access management surface submits a revoke request for a
+  pending collaborator invitation
+- AND the browser session resolves to an active principal with active
+  `instance.owner` or `instance.admin` authority at instance scope
+- WHEN the request is accepted
+- THEN identity storage changes the matching `invitation` record status to
+  `revoked`
+- AND the invitation keeps display-safe target email, target surface, inviter
+  principal, invited principal, target app install or organization, expiry, and
+  accepted timestamp facts when present
+- AND private instance auth state revokes the matching invitation token so the
+  invitation link can no longer be accepted
+- AND revocation does not activate invited principals, verify principal emails,
+  enable invited memberships, enable pending app registrations, grant role
+  authority, issue credentials, issue sessions, or mint handoff grants
+- AND raw invite tokens, token hashes, credential material, passkey challenge
+  secrets, session ids, handoff grant secrets, provider responses, recovery
+  material, and admin bearer material are not returned to the browser surface
+
+#### Scenario: Reject invalid collaborator invitation revocation
+
+- WHEN an access management revoke request targets a missing, accepted,
+  expired, already revoked, or tombstoned invitation
+- THEN the request is rejected before writing identity records
+- AND private invitation token state, credentials, sessions, handoff grants,
+  pending grant records, and email delivery records remain unchanged
+- AND the response does not expose raw invite tokens, token hashes, passkey
+  challenge secrets, credential material, session ids, handoff grant secrets,
+  provider responses, recovery material, or admin bearer material
+
 #### Scenario: Reject unauthorized access management request
 
 - GIVEN a browser session is missing, stale, disabled, scoped to the wrong
   instance, or lacks active `instance.owner` or `instance.admin` authority
-- WHEN it reads the access management summary or creates an invitation through
-  the dedicated access management behavior
+- WHEN it reads the access management summary, creates an invitation, or
+  revokes an invitation through the dedicated access management behavior
 - THEN the request is rejected before identity records, private invite token
   state, rendered invitation links, or email delivery requests are created
 - AND stale signed session facts do not authorize access after the principal is
   disabled or role assignments change
 
-#### Scenario: First-pass destructive identity actions unavailable
+#### Scenario: First-pass non-revocation destructive identity actions unavailable
 
 - GIVEN the dedicated access management surface is available
-- WHEN a principal attempts to disable a principal, revoke an invitation, remove
-  a role assignment, transfer owner authority, or remove owner authority
+- WHEN a principal attempts to disable a principal, remove a role assignment,
+  transfer owner authority, or remove owner authority
 - THEN the first-pass surface does not expose those actions
 - AND future destructive identity actions require purpose-built owner/admin
   confirmation and current role checks before generic identity records or

@@ -43,6 +43,7 @@ import { handleInstanceAppInstallsDurableObjectRequest } from "./instance-app-in
 import { handleInstanceControlPlaneDurableObjectRequest } from "./instance-control-plane.ts";
 import {
   handleCollaboratorInvitationDeliveryDurableObjectRequest,
+  handleCollaboratorInvitationTokenRevocationDurableObjectRequest,
   handleIdentityControlPlaneDurableObjectRequest,
   resolveIdentityAppReferenceTarget,
 } from "./identity-control-plane.ts";
@@ -214,6 +215,16 @@ export class FormlessAuthority extends DurableObject<Env> {
 
     if (collaboratorInvitationDeliveryResponse) {
       return collaboratorInvitationDeliveryResponse;
+    }
+
+    const collaboratorInvitationTokenRevocationResponse =
+      await handleCollaboratorInvitationTokenRevocationDurableObjectRequest(
+        request,
+        this.ctx.storage,
+      );
+
+    if (collaboratorInvitationTokenRevocationResponse) {
+      return collaboratorInvitationTokenRevocationResponse;
     }
 
     const instanceEmailRuntimeResponse = await handleInstanceEmailRuntimeDurableObjectRequest(

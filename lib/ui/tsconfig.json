@@ -6,8 +6,7 @@
     "paths": {
       "@dpeek/formless-ui": ["./src/index.ts"],
       "@dpeek/formless-ui/*": ["./src/*"]
-    },
-    "types": ["@types/bun"]
+    }
   },
   "include": ["./src/**/*"]
 }

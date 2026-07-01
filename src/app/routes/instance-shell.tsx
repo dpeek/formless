@@ -24,7 +24,7 @@ import {
   ModalTitle,
 } from "@dpeek/formless-ui/modal";
 import { TextField } from "@dpeek/formless-ui/text-field";
-import { AddIcon } from "@dpeek/formless-ui/icons";
+import { AddIcon, RemoveIcon } from "@dpeek/formless-ui/icons";
 import {
   AppInstallApiError,
   createInstanceAppInstall,
@@ -34,7 +34,9 @@ import {
   createIdentityAccessManagementInvitation,
   fetchIdentityAccessManagementSummary,
   IdentityAccessManagementApiError,
+  revokeIdentityAccessManagementInvitation,
   type CreateIdentityAccessManagementInvitationInput,
+  type RevokeIdentityAccessManagementInvitationInput,
 } from "../../client/identity-access-management.ts";
 import {
   instanceControlPlaneClientTarget,
@@ -144,6 +146,11 @@ export type AccessInvitationCreateSubmission =
   | { status: "idle" }
   | { status: "succeeded"; message: string }
   | { status: "submitting" };
+
+export type AccessInvitationRevokeSubmission =
+  | { status: "failed"; invitationId: string; message: string }
+  | { status: "idle" }
+  | { status: "submitting"; invitationId: string };
 
 type AccessInvitationDraft = {
   displayName: string;
@@ -536,6 +543,15 @@ export function InstanceShellRoute({
     setAccessState({ status: "ready", summary });
   }
 
+  async function submitAccessInvitationRevoke(
+    input: RevokeIdentityAccessManagementInvitationInput,
+  ) {
+    await revokeIdentityAccessManagementInvitation(input);
+    const summary = await fetchIdentityAccessManagementSummary();
+
+    setAccessState({ status: "ready", summary });
+  }
+
   async function startWorkspaceOperation(input: WorkspaceGatewayStartInput) {
     if (workspaceGatewayState.status !== "ready" || !workspaceGatewayConfig) {
       return;
@@ -602,6 +618,7 @@ export function InstanceShellRoute({
       installDrafts={installDrafts}
       onPollWorkspaceOperation={pollWorkspaceOperation}
       onCreateAccessInvitation={submitAccessInvitation}
+      onRevokeAccessInvitation={submitAccessInvitationRevoke}
       onInstallDraftChange={(packageAppKey, draft) =>
         setInstallDrafts((current) => ({
           ...current,
@@ -805,6 +822,7 @@ export function InstanceShellRouteView({
   installs = [],
   installDrafts = {},
   onCreateAccessInvitation,
+  onRevokeAccessInvitation,
   onPollWorkspaceOperation,
   onInstallDraftChange,
   onSubmitInstall,
@@ -819,6 +837,9 @@ export function InstanceShellRouteView({
   installDrafts?: PackageInstallDrafts;
   onCreateAccessInvitation?: (
     input: CreateIdentityAccessManagementInvitationInput,
+  ) => Promise<void>;
+  onRevokeAccessInvitation?: (
+    input: RevokeIdentityAccessManagementInvitationInput,
   ) => Promise<void>;
   onPollWorkspaceOperation?: (
     operationId: string,
@@ -862,6 +883,7 @@ export function InstanceShellRouteView({
       <AccessManagementRouteView
         installs={installs.length > 0 ? installs : state.installs}
         onCreateInvitation={onCreateAccessInvitation}
+        onRevokeInvitation={onRevokeAccessInvitation}
         state={accessState}
       />,
       state.installs,
@@ -1437,10 +1459,12 @@ function workspaceManagementOperation(
 export function AccessManagementRouteView({
   installs,
   onCreateInvitation,
+  onRevokeInvitation,
   state,
 }: {
   installs: readonly AppInstall[];
   onCreateInvitation?: (input: CreateIdentityAccessManagementInvitationInput) => Promise<void>;
+  onRevokeInvitation?: (input: RevokeIdentityAccessManagementInvitationInput) => Promise<void>;
   state: AccessManagementRouteState;
 }) {
   return (
@@ -1468,6 +1492,7 @@ export function AccessManagementRouteView({
         <AccessManagementSummaryView
           installs={installs}
           onCreateInvitation={onCreateInvitation}
+          onRevokeInvitation={onRevokeInvitation}
           summary={state.summary}
         />
       ) : null}
@@ -1478,10 +1503,12 @@ export function AccessManagementRouteView({
 function AccessManagementSummaryView({
   installs,
   onCreateInvitation,
+  onRevokeInvitation,
   summary,
 }: {
   installs: readonly AppInstall[];
   onCreateInvitation?: (input: CreateIdentityAccessManagementInvitationInput) => Promise<void>;
+  onRevokeInvitation?: (input: RevokeIdentityAccessManagementInvitationInput) => Promise<void>;
   summary: IdentityAccessManagementSummary;
 }) {
   const empty = identityAccessSummaryIsEmpty(summary);
@@ -1507,7 +1534,15 @@ function AccessManagementSummaryView({
           onCreateInvitation={onCreateInvitation}
           organizations={summary.organizations}
         />
-        {empty ? null : <AccessInvitationSummary invitations={summary.invitations} />}
+        {empty ? null : (
+          <AccessInvitationSummary
+            canRevokeInvitations={identityAccessCanManageInvitations(
+              summary.invitationGrantOptions,
+            )}
+            invitations={summary.invitations}
+            onRevokeInvitation={onRevokeInvitation}
+          />
+        )}
       </div>
     </div>
   );
@@ -1563,10 +1598,40 @@ function AccessPeopleSummary({
 }
 
 function AccessInvitationSummary({
+  canRevokeInvitations,
   invitations,
+  onRevokeInvitation,
 }: {
+  canRevokeInvitations: boolean;
   invitations: readonly IdentityAccessInvitationSummary[];
+  onRevokeInvitation?: (input: RevokeIdentityAccessManagementInvitationInput) => Promise<void>;
 }) {
+  const [revokeSubmission, setRevokeSubmission] = useState<AccessInvitationRevokeSubmission>({
+    status: "idle",
+  });
+
+  async function revokeInvitation(invitation: IdentityAccessInvitationSummary) {
+    if (!onRevokeInvitation) {
+      return;
+    }
+
+    setRevokeSubmission({ status: "submitting", invitationId: invitation.invitationId });
+
+    try {
+      await onRevokeInvitation({ invitationId: invitation.invitationId });
+      setRevokeSubmission({ status: "idle" });
+    } catch (error) {
+      setRevokeSubmission({
+        status: "failed",
+        invitationId: invitation.invitationId,
+        message:
+          error instanceof IdentityAccessManagementApiError || error instanceof Error
+            ? error.message
+            : "Invitation could not be revoked.",
+      });
+    }
+  }
+
   return (
     <section aria-labelledby="access-invitations-heading" className="space-y-3">
       <div className="flex items-center justify-between gap-3">
@@ -1581,40 +1646,93 @@ function AccessInvitationSummary({
         </p>
       ) : (
         <ol className="grid gap-3" data-formless-access-invitation-summary="true">
-          {invitations.map((invitation) => (
-            <li
-              className="rounded-md border border-border bg-overlay p-4"
-              data-formless-access-invitation={invitation.invitationId}
-              key={invitation.invitationId}
-            >
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <h3 className="break-words text-sm font-medium">
-                    {displaySafeText(invitation.targetEmail)}
-                  </h3>
-                  <p className="text-xs text-muted-fg">
-                    {identityAccessInvitationTargetLabel(invitation)}
-                  </p>
-                </div>
-                <IdentityAccessStatusBadge value={invitation.status} />
-              </div>
-              <dl className="mt-3 grid gap-2 text-xs text-muted-fg sm:grid-cols-2">
-                <div>
-                  <dt className="font-medium text-fg">Expires</dt>
-                  <dd>{formatIdentityAccessDate(invitation.expiresAt)}</dd>
-                </div>
-                {invitation.acceptedAt ? (
-                  <div>
-                    <dt className="font-medium text-fg">Accepted</dt>
-                    <dd>{formatIdentityAccessDate(invitation.acceptedAt)}</dd>
+          {invitations.map((invitation) => {
+            const revoking =
+              revokeSubmission.status === "submitting" &&
+              revokeSubmission.invitationId === invitation.invitationId;
+            const showRevoke =
+              canRevokeInvitations &&
+              onRevokeInvitation !== undefined &&
+              invitation.status === "pending";
+
+            return (
+              <li
+                className="rounded-md border border-border bg-overlay p-4"
+                data-formless-access-invitation={invitation.invitationId}
+                key={invitation.invitationId}
+              >
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <h3 className="break-words text-sm font-medium">
+                      {displaySafeText(invitation.targetEmail)}
+                    </h3>
+                    <p className="text-xs text-muted-fg">
+                      {identityAccessInvitationTargetLabel(invitation)}
+                    </p>
                   </div>
-                ) : null}
-              </dl>
-            </li>
-          ))}
+                  <div className="flex flex-wrap items-center justify-end gap-2">
+                    <IdentityAccessStatusBadge value={invitation.status} />
+                    {showRevoke ? (
+                      <Button
+                        aria-label={`Revoke invitation for ${displaySafeText(invitation.targetEmail)}`}
+                        data-formless-access-invitation-revoke={invitation.invitationId}
+                        intent="danger"
+                        isDisabled={revoking}
+                        onPress={() => void revokeInvitation(invitation)}
+                        size="sm"
+                        type="button"
+                      >
+                        <RemoveIcon aria-hidden="true" />
+                        {revoking ? "Revoking" : "Revoke"}
+                      </Button>
+                    ) : null}
+                  </div>
+                </div>
+                <dl className="mt-3 grid gap-2 text-xs text-muted-fg sm:grid-cols-2">
+                  <div>
+                    <dt className="font-medium text-fg">Expires</dt>
+                    <dd>{formatIdentityAccessDate(invitation.expiresAt)}</dd>
+                  </div>
+                  {invitation.acceptedAt ? (
+                    <div>
+                      <dt className="font-medium text-fg">Accepted</dt>
+                      <dd>{formatIdentityAccessDate(invitation.acceptedAt)}</dd>
+                    </div>
+                  ) : null}
+                </dl>
+                <AccessInvitationRevokeFeedback
+                  invitationId={invitation.invitationId}
+                  submission={revokeSubmission}
+                />
+              </li>
+            );
+          })}
         </ol>
       )}
     </section>
+  );
+}
+
+export function AccessInvitationRevokeFeedback({
+  invitationId,
+  submission,
+}: {
+  invitationId: string;
+  submission: AccessInvitationRevokeSubmission;
+}) {
+  if (submission.status !== "failed" || submission.invitationId !== invitationId) {
+    return null;
+  }
+
+  return (
+    <p
+      className={fieldErrorStyles()}
+      data-formless-access-invitation-revoke-error={invitationId}
+      data-slot="field-error"
+      role="alert"
+    >
+      {displaySafeText(submission.message)}
+    </p>
   );
 }
 
@@ -1911,6 +2029,12 @@ function identityAccessSummaryIsEmpty(summary: IdentityAccessManagementSummary):
     summary.organizations.length === 0 &&
     summary.groups.length === 0
   );
+}
+
+function identityAccessCanManageInvitations(
+  grantOptions: IdentityAccessInvitationGrantOptions,
+): boolean {
+  return grantOptions.authority.instanceAdmin || grantOptions.authority.instanceOwner;
 }
 
 function identityAccessRolesByPrincipalId(

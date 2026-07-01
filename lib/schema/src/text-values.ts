@@ -64,7 +64,7 @@ export function isValidStoredTextValue(
 }
 
 function assertEmailTextValue(value: string) {
-  if (value.length > 254 || /[\s\u0000-\u001f\u007f]/u.test(value)) {
+  if (value.length > 254 || emailTextValueHasWhitespaceOrControl(value)) {
     throw new Error(TEXT_EMAIL_FORMAT_INVALID_MESSAGE);
   }
 
@@ -97,6 +97,18 @@ function assertEmailTextValue(value: string) {
   if (!lastLabel || lastLabel.length < 2) {
     throw new Error(TEXT_EMAIL_FORMAT_INVALID_MESSAGE);
   }
+}
+
+function emailTextValueHasWhitespaceOrControl(value: string): boolean {
+  for (const character of value) {
+    const code = character.charCodeAt(0);
+
+    if (character.trim() === "" || code <= 0x1f || code === 0x7f) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 function assertPhoneTextValue(value: string) {

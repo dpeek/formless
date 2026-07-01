@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vite-plus/test";
 import {
   IDENTITY_ACCESS_MANAGEMENT_SUMMARY_API_PATH,
+  IDENTITY_COLLABORATOR_INVITATION_REVOKE_API_PATH,
   IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX,
   IDENTITY_CONTROL_PLANE_SOURCE_SCHEMA_HASH,
   IDENTITY_CONTROL_PLANE_STORAGE_IDENTITY,
@@ -8,6 +9,8 @@ import {
   identityControlPlaneSchema,
   identityControlPlaneSchemaProvenance,
   identityControlPlaneSourceSchema,
+  type IdentityCollaboratorInvitationRevokeErrorResponse,
+  type IdentityCollaboratorInvitationRevokeResponse,
   type IdentityAccessManagementSummary,
 } from "@dpeek/formless-identity-control-plane";
 import { INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX } from "@dpeek/formless-instance-control-plane";
@@ -17,6 +20,10 @@ import type { EmailDeliveryRecord } from "../shared/email-runtime.ts";
 import type { OperationInvocationResponse } from "../shared/operation-invocation.ts";
 import { FORMLESS_CLIENT_SOURCE_SCHEMA_HASH_HEADER } from "../shared/protocol.ts";
 import type { BootstrapResponse, OwnerIdentity, SchemaResponse } from "../shared/protocol.ts";
+import {
+  COLLABORATOR_INVITATION_ACCEPT_PATH,
+  type CollaboratorInvitationAcceptanceStatusResponse,
+} from "../shared/instance-auth.ts";
 import { computeSourceSchemaHash } from "../shared/upgrade-migrations.ts";
 import { recordOperationRequest } from "../test/authority-write.ts";
 import { ensureTestIdentityOwner } from "../test/identity-owner.ts";
@@ -32,6 +39,7 @@ type Harness = Awaited<ReturnType<typeof createWorkerHarness>>;
 const adminToken = "test-admin-token";
 const identityApi = IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX;
 const controlPlaneApi = INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX;
+const authOrigin = "https://auth.example.com";
 const ownerEmail = "ada@example.com";
 const owner: OwnerIdentity = {
   id: "owner-1",
@@ -58,6 +66,10 @@ type CollaboratorInvitationTestResponse = {
   status: "committed" | "replayed";
 };
 
+type CollaboratorInvitationRevokeTestResponse =
+  | IdentityCollaboratorInvitationRevokeResponse
+  | IdentityCollaboratorInvitationRevokeErrorResponse;
+
 let harness: Harness;
 
 beforeAll(async () => {
@@ -79,7 +91,10 @@ function createHarness() {
       FORMLESS_AUTHORITY: { className: "FormlessAuthority", useSQLite: true },
     },
     {
-      bindings: { FORMLESS_ADMIN_TOKEN: adminToken },
+      bindings: {
+        FORMLESS_ADMIN_TOKEN: adminToken,
+        FORMLESS_INSTANCE_AUTH_ORIGIN: authOrigin,
+      },
       queueProducers: {
         FORMLESS_EMAIL_DELIVERY_QUEUE: "formless-email-delivery",
       },
@@ -441,6 +456,197 @@ describe("identity control-plane API routes", () => {
       },
     });
     expect(created.body.invitation.values).not.toHaveProperty("inviterPrincipal");
+  });
+
+  it("revokes pending collaborator invitations and prevents later acceptance", async () => {
+    await configureAuthInvitationEmailDelivery();
+    const ownerSession = await createOwnerSessionHeaders();
+    const created = await postCollaboratorInvitationResponse(
+      {
+        idempotencyKey: "invite-revoke-success",
+        invitationId: "invitation:revoke-success",
+        targetEmail: "revoke-success@example.com",
+        targetSurface: "instance",
+        expiresAt: "2999-02-01T00:00:00.000Z",
+        now: "2999-01-01T00:00:00.000Z",
+      },
+      ownerSession.headers,
+    );
+    const revoked = await postRevokeCollaboratorInvitationResponse(
+      {
+        invitationId: "invitation:revoke-success",
+        now: "2999-01-02T00:00:00.000Z",
+      },
+      ownerSession.headers,
+    );
+    const summary = await getAccessSummary(ownerSession.headers);
+    const publicAcceptance = await fetchCollaboratorInvitationAcceptanceStatus(
+      "invitation:revoke-success",
+      "fake-token",
+    );
+
+    expect(created.response.status).toBe(200);
+    expect(revoked.response.status).toBe(200);
+    expect(revoked.body).toEqual({
+      invitation: expect.objectContaining({
+        invitationId: "invitation:revoke-success",
+        status: "revoked",
+        targetEmail: "revoke-success@example.com",
+        targetSurface: "instance",
+      }),
+      revokedAt: "2999-01-02T00:00:00.000Z",
+      status: "revoked",
+    });
+    expect(summary.body.invitations).toContainEqual(
+      expect.objectContaining({
+        invitationId: "invitation:revoke-success",
+        status: "revoked",
+      }),
+    );
+    expect(publicAcceptance.response.status).toBe(409);
+    expect(publicAcceptance.body).toEqual({
+      eligible: false,
+      error: "Invitation link is no longer available.",
+      reason: "revoked-invitation",
+    });
+    for (const forbidden of ["challenge", "credential", "secret", "session", "token"]) {
+      expect(JSON.stringify(revoked.body)).not.toContain(forbidden);
+    }
+  });
+
+  it("rejects unauthorized collaborator invitation revocation before identity writes", async () => {
+    const ownerSession = await createOwnerSessionHeaders();
+    const created = await postCollaboratorInvitationResponse(
+      {
+        idempotencyKey: "invite-revoke-unauthorized",
+        invitationId: "invitation:revoke-unauthorized",
+        targetEmail: "revoke-unauthorized@example.com",
+        targetSurface: "instance",
+        expiresAt: "2999-02-01T00:00:00.000Z",
+        now: "2999-01-01T00:00:00.000Z",
+      },
+      ownerSession.headers,
+    );
+    const rejected = await postRevokeCollaboratorInvitationResponse(
+      {
+        invitationId: "invitation:revoke-unauthorized",
+        now: "2999-01-02T00:00:00.000Z",
+      },
+      {},
+    );
+    const summary = await getAccessSummary(ownerSession.headers);
+
+    expect(created.response.status).toBe(200);
+    expect(rejected.response.status).toBe(401);
+    expect(rejected.response.headers.get("WWW-Authenticate")).toBe('Bearer realm="formless-admin"');
+    expect(rejected.body).toEqual({
+      error:
+        "Owner session, instance-admin session, or admin authorization is required for this endpoint.",
+    });
+    expect(summary.body.invitations).toContainEqual(
+      expect.objectContaining({
+        invitationId: "invitation:revoke-unauthorized",
+        status: "pending",
+      }),
+    );
+  });
+
+  it("rejects missing and non-pending collaborator invitation revocation before identity writes", async () => {
+    const ownerSession = await createOwnerSessionHeaders();
+    const accepted = await postCollaboratorInvitationResponse(
+      {
+        idempotencyKey: "invite-revoke-accepted",
+        invitationId: "invitation:revoke-accepted",
+        targetEmail: "revoke-accepted@example.com",
+        targetSurface: "instance",
+        expiresAt: "2999-02-01T00:00:00.000Z",
+        now: "2999-01-01T00:00:00.000Z",
+      },
+      ownerSession.headers,
+    );
+    const expired = await postCollaboratorInvitationResponse(
+      {
+        idempotencyKey: "invite-revoke-expired",
+        invitationId: "invitation:revoke-expired",
+        targetEmail: "revoke-expired@example.com",
+        targetSurface: "instance",
+        expiresAt: "2999-02-01T00:00:00.000Z",
+        now: "2999-01-01T00:00:00.000Z",
+      },
+      ownerSession.headers,
+    );
+    await postRecordOperation({
+      entity: "invitation",
+      idempotencyKey: "mark-revoke-accepted",
+      operationName: "update",
+      recordId: "invitation:revoke-accepted",
+      input: {
+        acceptedAt: "2999-01-02T00:00:00.000Z",
+        status: "accepted",
+      },
+    });
+
+    const missingRevoke = await postRevokeCollaboratorInvitationResponse(
+      {
+        invitationId: "invitation:missing-revoke",
+        now: "2999-01-02T00:00:00.000Z",
+      },
+      ownerSession.headers,
+    );
+    const acceptedRevoke = await postRevokeCollaboratorInvitationResponse(
+      {
+        invitationId: "invitation:revoke-accepted",
+        now: "2999-01-02T00:00:00.000Z",
+      },
+      ownerSession.headers,
+    );
+    const expiredRevoke = await postRevokeCollaboratorInvitationResponse(
+      {
+        invitationId: "invitation:revoke-expired",
+        now: "2999-03-01T00:00:00.000Z",
+      },
+      ownerSession.headers,
+    );
+
+    expect(accepted.response.status).toBe(200);
+    expect(expired.response.status).toBe(200);
+    expect(missingRevoke.response.status).toBe(404);
+    expect(missingRevoke.body).toEqual({
+      error: "Invitation could not be found.",
+      reason: "missing-invitation",
+    });
+    expect(acceptedRevoke.response.status).toBe(409);
+    expect(acceptedRevoke.body).toEqual({
+      error: "Invitation has already been accepted.",
+      reason: "accepted-invitation",
+    });
+    expect(expiredRevoke.response.status).toBe(410);
+    expect(expiredRevoke.body).toEqual({
+      error: "Invitation has expired.",
+      reason: "expired-invitation",
+    });
+
+    const firstRevoke = await postRevokeCollaboratorInvitationResponse(
+      {
+        invitationId: "invitation:revoke-expired",
+        now: "2999-01-02T00:00:00.000Z",
+      },
+      ownerSession.headers,
+    );
+    const secondRevoke = await postRevokeCollaboratorInvitationResponse(
+      {
+        invitationId: "invitation:revoke-expired",
+        now: "2999-01-02T00:00:00.000Z",
+      },
+      ownerSession.headers,
+    );
+
+    expect(firstRevoke.response.status).toBe(200);
+    expect(secondRevoke.response.status).toBe(409);
+    expect(secondRevoke.body).toEqual({
+      error: "Invitation has already been revoked.",
+      reason: "revoked-invitation",
+    });
   });
 
   it("creates instance-admin browser collaborator invitations and keeps raw identity writes owner-only", async () => {
@@ -1155,7 +1361,7 @@ async function configureAuthInvitationEmailDelivery() {
   await postControlPlaneOperation("instance-settings", "auth-invite-settings", {
     settingsId: "instance",
     canonicalOrigin: "https://www.example.com",
-    authOrigin: "https://auth.example.com",
+    authOrigin,
     defaultEmailDomain: operationRecord(emailDomain).id,
     defaultAuthSender: authSender.id,
     productionIdentityStatus: "configured",
@@ -1352,6 +1558,50 @@ async function postCollaboratorInvitationResponse(input: unknown, headers: Recor
     method: "POST",
   });
   const body = (await response.json()) as CollaboratorInvitationTestResponse;
+
+  return {
+    body,
+    response,
+  };
+}
+
+async function postRevokeCollaboratorInvitationResponse(
+  input: unknown,
+  headers: Record<string, string>,
+) {
+  const response = await harness.fetch(
+    `${identityApi}${IDENTITY_COLLABORATOR_INVITATION_REVOKE_API_PATH}`,
+    {
+      body: JSON.stringify(input),
+      headers: {
+        ...headers,
+        "Content-Type": "application/json",
+      },
+      method: "POST",
+    },
+  );
+  const body = (await response.json()) as
+    | CollaboratorInvitationRevokeTestResponse
+    | {
+        error: string;
+      };
+
+  return {
+    body,
+    response,
+  };
+}
+
+async function fetchCollaboratorInvitationAcceptanceStatus(invitationId: string, token: string) {
+  const url = new URL(COLLABORATOR_INVITATION_ACCEPT_PATH, authOrigin);
+
+  url.searchParams.set("invitationId", invitationId);
+  url.searchParams.set("token", token);
+
+  const response = await harness.mf.dispatchFetch(url.toString(), {
+    headers: { Accept: "application/json" },
+  });
+  const body = (await response.json()) as CollaboratorInvitationAcceptanceStatusResponse;
 
   return {
     body,

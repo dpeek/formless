@@ -17,6 +17,7 @@ import {
 import type { StoredRecord } from "@dpeek/formless-storage";
 import { bundledSourceSchemaHashFixtures } from "../../shared/upgrade-migrations.ts";
 import {
+  AccessInvitationRevokeFeedback,
   InstallAppDialogForm,
   InstanceShellRouteView as BaseInstanceShellRouteView,
   WorkspaceOperationProgress,
@@ -28,7 +29,11 @@ import {
   type InstanceShellRouteState,
   type WorkspaceGatewayRouteState,
 } from "./instance-shell.tsx";
-import type { IdentityAccessManagementSummary } from "@dpeek/formless-identity-control-plane";
+import type {
+  IdentityAccessInvitationSummary,
+  IdentityAccessManagementSummary,
+  IdentityInvitationStatus,
+} from "@dpeek/formless-identity-control-plane";
 import type {
   WorkspaceGatewayAutoSaveState,
   WorkspaceGatewayOperation,
@@ -232,6 +237,110 @@ describe("instance shell route view", () => {
     expect(html).not.toContain("instance.owner");
     expect(html).not.toContain('data-formless-access-invitation-role-scope="organization"');
     expect(html).not.toContain('data-formless-access-invitation-membership-option="');
+  });
+
+  it("renders revoke controls for pending invitations with access authority", () => {
+    const summary = accessSummary();
+
+    Object.assign(summary.invitations[0] as object, {
+      rawInviteToken: "invite-raw-secret",
+      sessionId: "session-secret",
+      tokenHash: "token-hash-secret",
+    });
+
+    const html = renderWithRouter(
+      <InstanceShellRouteView
+        accessState={{ status: "ready", summary }}
+        currentPath="/access"
+        onRevokeAccessInvitation={async () => undefined}
+        state={readyState({
+          installs: [siteInstall({ installId: "personal", label: "Personal Site" })],
+        })}
+      />,
+      "/access",
+    );
+
+    expect(html).toContain('data-formless-access-invitation-revoke="invitation:grace"');
+    expect(html).toContain('aria-label="Revoke invitation for grace@example.com"');
+    expect(html).toContain("Revoke");
+    expect(html).not.toContain("rawInviteToken");
+    expect(html).not.toContain("invite-raw-secret");
+    expect(html).not.toContain("session-secret");
+    expect(html).not.toContain("token-hash-secret");
+  });
+
+  it("hides revoke controls for non-pending and missing-authority invitations", () => {
+    const nonPendingStatuses: IdentityInvitationStatus[] = ["accepted", "expired", "revoked"];
+    const nonPendingInvitations = nonPendingStatuses.map((status) =>
+      accessInvitation({
+        invitationId: `invitation:${status}`,
+        status,
+        targetEmail: `${status}@example.com`,
+        ...(status === "accepted" ? { acceptedAt: "2026-07-01T00:00:00.000Z" } : {}),
+      }),
+    );
+    const nonPendingHtml = renderWithRouter(
+      <InstanceShellRouteView
+        accessState={{
+          status: "ready",
+          summary: accessSummary({ invitations: nonPendingInvitations }),
+        }}
+        currentPath="/access"
+        onRevokeAccessInvitation={async () => undefined}
+        state={readyState({
+          installs: [siteInstall({ installId: "personal", label: "Personal Site" })],
+        })}
+      />,
+      "/access",
+    );
+    const missingAuthorityHtml = renderWithRouter(
+      <InstanceShellRouteView
+        accessState={{ status: "ready", summary: accessSummary({ authority: "none" }) }}
+        currentPath="/access"
+        onRevokeAccessInvitation={async () => undefined}
+        state={readyState({
+          installs: [siteInstall({ installId: "personal", label: "Personal Site" })],
+        })}
+      />,
+      "/access",
+    );
+
+    expect(nonPendingHtml).not.toContain('data-formless-access-invitation-revoke="');
+    expect(nonPendingHtml).toContain("Accepted");
+    expect(nonPendingHtml).toContain("Expired");
+    expect(nonPendingHtml).toContain("Revoked");
+    expect(missingAuthorityHtml).toContain('data-formless-access-invitation="invitation:grace"');
+    expect(missingAuthorityHtml).not.toContain('data-formless-access-invitation-revoke="');
+  });
+
+  it("renders revoke failures as invitation-scoped display-safe alerts", () => {
+    const html = renderToStaticMarkup(
+      <AccessInvitationRevokeFeedback
+        invitationId="invitation:grace"
+        submission={{
+          status: "failed",
+          invitationId: "invitation:grace",
+          message: "Collaborator invitation is not pending.",
+        }}
+      />,
+    );
+    const otherInvitationHtml = renderToStaticMarkup(
+      <AccessInvitationRevokeFeedback
+        invitationId="invitation:other"
+        submission={{
+          status: "failed",
+          invitationId: "invitation:grace",
+          message: "Collaborator invitation is not pending.",
+        }}
+      />,
+    );
+
+    expect(html).toContain('role="alert"');
+    expect(html).toContain('data-formless-access-invitation-revoke-error="invitation:grace"');
+    expect(html).toContain("Collaborator invitation is not pending.");
+    expect(html).not.toContain("token");
+    expect(html).not.toContain("secret");
+    expect(otherInvitationHtml).toBe("");
   });
 
   it("renders overview route management without deployment target grouping", () => {
@@ -964,8 +1073,10 @@ function emptyAccessSummary(): IdentityAccessManagementSummary {
 
 function accessSummary({
   authority = "owner",
+  invitations,
 }: {
-  authority?: "admin" | "owner";
+  authority?: "admin" | "none" | "owner";
+  invitations?: IdentityAccessInvitationSummary[];
 } = {}): IdentityAccessManagementSummary {
   const now = "2026-06-30T00:00:00.000Z";
 
@@ -981,19 +1092,7 @@ function accessSummary({
       },
     ],
     invitationGrantOptions: invitationGrantOptions({ authority }),
-    invitations: [
-      {
-        createdAt: now,
-        expiresAt: "2026-07-15T00:00:00.000Z",
-        invitationId: "invitation:grace",
-        inviterPrincipalId: "principal:ada",
-        status: "pending",
-        targetAppInstallId: "personal",
-        targetEmail: "grace@example.com",
-        targetSurface: "app-install",
-        updatedAt: now,
-      },
-    ],
+    invitations: invitations ?? [accessInvitation()],
     organizations: [
       {
         createdAt: now,
@@ -1037,16 +1136,36 @@ function accessSummary({
   };
 }
 
+function accessInvitation(
+  overrides: Partial<IdentityAccessInvitationSummary> = {},
+): IdentityAccessInvitationSummary {
+  const now = "2026-06-30T00:00:00.000Z";
+
+  return {
+    createdAt: now,
+    expiresAt: "2026-07-15T00:00:00.000Z",
+    invitationId: "invitation:grace",
+    inviterPrincipalId: "principal:ada",
+    status: "pending",
+    targetAppInstallId: "personal",
+    targetEmail: "grace@example.com",
+    targetSurface: "app-install",
+    updatedAt: now,
+    ...overrides,
+  };
+}
+
 function invitationGrantOptions({
   authority = "owner",
 }: {
-  authority?: "admin" | "owner";
+  authority?: "admin" | "none" | "owner";
 } = {}): IdentityAccessManagementSummary["invitationGrantOptions"] {
   const owner = authority === "owner";
+  const admin = authority === "admin";
 
   return {
     authority: {
-      instanceAdmin: !owner,
+      instanceAdmin: admin,
       instanceOwner: owner,
     },
     memberships: owner
@@ -1063,36 +1182,39 @@ function invitationGrantOptions({
           },
         ]
       : [],
-    roles: [
-      ...(owner
-        ? [
+    roles:
+      authority === "none"
+        ? []
+        : [
+            ...(owner
+              ? [
+                  {
+                    displayLabel: "Instance owner (Instance)",
+                    roleKey: "instance.owner" as const,
+                    scopeKind: "instance" as const,
+                  },
+                ]
+              : []),
             {
-              displayLabel: "Instance owner (Instance)",
-              roleKey: "instance.owner" as const,
+              displayLabel: "Instance admin (Instance)",
+              roleKey: "instance.admin" as const,
               scopeKind: "instance" as const,
             },
-          ]
-        : []),
-      {
-        displayLabel: "Instance admin (Instance)",
-        roleKey: "instance.admin" as const,
-        scopeKind: "instance" as const,
-      },
-      {
-        displayLabel: "App editor (App install)",
-        roleKey: "app.editor" as const,
-        scopeKind: "app-install" as const,
-      },
-      ...(owner
-        ? [
             {
-              displayLabel: "App editor (Organization)",
+              displayLabel: "App editor (App install)",
               roleKey: "app.editor" as const,
-              scopeKind: "organization" as const,
+              scopeKind: "app-install" as const,
             },
-          ]
-        : []),
-    ],
+            ...(owner
+              ? [
+                  {
+                    displayLabel: "App editor (Organization)",
+                    roleKey: "app.editor" as const,
+                    scopeKind: "organization" as const,
+                  },
+                ]
+              : []),
+          ],
   };
 }
 

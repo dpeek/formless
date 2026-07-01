@@ -10,6 +10,7 @@ import {
 import {
   IDENTITY_ACCESS_MANAGEMENT_SUMMARY_API_PATH,
   IDENTITY_COLLABORATOR_INVITATIONS_API_PATH,
+  IDENTITY_COLLABORATOR_INVITATION_REVOKE_API_PATH,
   IDENTITY_CONTROL_PLANE_BOUNDARY_SCHEMA_KEY,
   IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX,
   IDENTITY_CONTROL_PLANE_SCHEMA_KEY,
@@ -379,6 +380,9 @@ describe("identity control-plane schema contracts", () => {
     expect(IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX).toBe("/api/formless/identity");
     expect(IDENTITY_ACCESS_MANAGEMENT_SUMMARY_API_PATH).toBe("/access-summary");
     expect(IDENTITY_COLLABORATOR_INVITATIONS_API_PATH).toBe("/collaborator-invitations");
+    expect(IDENTITY_COLLABORATOR_INVITATION_REVOKE_API_PATH).toBe(
+      "/collaborator-invitations/revoke",
+    );
     expect(IDENTITY_CONTROL_PLANE_SCHEMA_KEY).toBe("identity-control-plane");
     expect(IDENTITY_CONTROL_PLANE_STORAGE_IDENTITY).toBe("instance:identity");
     expect(formatIdentityControlPlaneBoundaryEntityName("principal")).toBe("auth:principal");

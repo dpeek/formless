@@ -1,9 +1,12 @@
 import {
   IDENTITY_COLLABORATOR_INVITATIONS_API_PATH,
+  IDENTITY_COLLABORATOR_INVITATION_REVOKE_API_PATH,
   IDENTITY_ACCESS_MANAGEMENT_SUMMARY_API_PATH,
   IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX,
   type IdentityControlPlaneRoleKey,
   type IdentityAccessManagementSummary,
+  type IdentityCollaboratorInvitationRevokeRequest,
+  type IdentityCollaboratorInvitationRevokeResponse,
   type IdentityInvitationTargetSurface,
   type IdentityMembershipTargetKind,
   type IdentityRoleAssignmentScopeKind,
@@ -13,6 +16,8 @@ export const IDENTITY_ACCESS_MANAGEMENT_SUMMARY_API_ROUTE =
   `${IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX}${IDENTITY_ACCESS_MANAGEMENT_SUMMARY_API_PATH}` as const;
 export const IDENTITY_COLLABORATOR_INVITATIONS_API_ROUTE =
   `${IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX}${IDENTITY_COLLABORATOR_INVITATIONS_API_PATH}` as const;
+export const IDENTITY_COLLABORATOR_INVITATION_REVOKE_API_ROUTE =
+  `${IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX}${IDENTITY_COLLABORATOR_INVITATION_REVOKE_API_PATH}` as const;
 
 export type CreateIdentityAccessManagementInvitationInput = {
   appRegistrations?: Array<{
@@ -67,6 +72,12 @@ export type IdentityAccessManagementInvitationResponse = {
   records?: unknown[];
   status?: "committed" | "replayed";
 };
+
+export type RevokeIdentityAccessManagementInvitationInput =
+  IdentityCollaboratorInvitationRevokeRequest;
+
+export type IdentityAccessManagementInvitationRevokeResponse =
+  IdentityCollaboratorInvitationRevokeResponse;
 
 export type IdentityAccessManagementApiErrorBody = {
   error: string;
@@ -130,6 +141,30 @@ export async function createIdentityAccessManagementInvitation(
   });
 
   return readJsonResponse<IdentityAccessManagementInvitationResponse>(response);
+}
+
+export async function revokeIdentityAccessManagementInvitation(
+  input: RevokeIdentityAccessManagementInvitationInput,
+  {
+    fetcher = fetch,
+    signal,
+  }: {
+    fetcher?: typeof fetch;
+    signal?: AbortSignal;
+  } = {},
+): Promise<IdentityAccessManagementInvitationRevokeResponse> {
+  const response = await fetcher(IDENTITY_COLLABORATOR_INVITATION_REVOKE_API_ROUTE, {
+    body: JSON.stringify(input),
+    credentials: "same-origin",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    method: "POST",
+    signal,
+  });
+
+  return readJsonResponse<IdentityAccessManagementInvitationRevokeResponse>(response);
 }
 
 async function readJsonResponse<T>(response: Response): Promise<T> {

@@ -168,6 +168,31 @@ instance auth state bound to reviewable identity invitation records.
   email delivery request, passkey challenge, central session, host-local
   session, or cross-domain handoff grant is created
 
+#### Scenario: Revoke invitation token
+
+- GIVEN a pending identity collaborator invitation has matching private
+  invitation token state
+- WHEN grant-authorized access management revokes the collaborator invitation
+- THEN private auth state records the token as revoked
+- AND later invitation acceptance eligibility and completion reject the
+  invitation as revoked
+- AND token revocation does not expose the raw invite token, token hash,
+  credential material, passkey challenge secrets, central session ids,
+  host-local session cookies, handoff grant secrets, provider responses, or
+  recovery material
+- AND token revocation does not issue credentials, central auth sessions,
+  host-local sessions, or cross-domain handoff grants
+
+#### Scenario: Reject invalid invitation token revocation
+
+- WHEN invitation token revocation targets missing, consumed, expired, or
+  already revoked private token state
+- THEN the revocation request is rejected or reported as not applied without
+  issuing credentials, sessions, or handoff grants
+- AND raw invite tokens, token hashes, credential material, passkey challenge
+  secrets, central session ids, host-local session cookies, handoff grant
+  secrets, provider responses, and recovery material remain private auth state
+
 #### Scenario: Invitation link origin
 
 - GIVEN a collaborator invitation email is rendered
