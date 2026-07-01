@@ -150,6 +150,44 @@ describe("Site operation input notification scheduling", () => {
     expect(delivery.source).not.toHaveProperty("recordId");
   });
 
+  it("renders exposed command output fields in operation input email", async () => {
+    const scheduled: unknown[] = [];
+    const operation = {
+      ...recordPlanRequestOperation(),
+      policy: {
+        actors: ["anonymous"],
+        responseFields: { anonymous: ["requestCode"] },
+      },
+    } satisfies EntityOperationSchema;
+
+    await scheduleSiteOperationInputNotificationAfterPublicOperation({
+      env: fakeNotificationEnv(notificationControlPlaneRecords(), scheduled),
+      identity: schemaKeyStorageIdentity("site"),
+      records: operationFormSourceRecords(),
+      requestUrl: "https://www.example.com/api/site/public/operations/request/submit",
+      response: operationInputCommandResponse({
+        input: {
+          email: "Ada@Example.COM",
+        },
+        operation,
+        outputValues: {
+          requestCode: "7K2Q-9D3A",
+        },
+      }),
+      schema: operationInputSchema(operation),
+    });
+
+    expect(scheduled).toHaveLength(1);
+
+    const message = (scheduled[0] as { message: { html: string; text: string } }).message;
+
+    expect(message.text).toContain("Operation output");
+    expect(message.text).toContain("Request code: 7K2Q-9D3A");
+    expect(message.html).toMatch(
+      /<tr><th scope="row"[^>]*>Request code<\/th><td[^>]*>7K2Q-9D3A<\/td><\/tr>/,
+    );
+  });
+
   it("skips scheduling when form or email configuration is incomplete", async () => {
     const scheduled: unknown[] = [];
     const response = operationInputResponse();
@@ -372,6 +410,7 @@ function operationInputSchema(
           },
           acceptedTerms: { type: "boolean", required: false, label: "Accepted terms" },
           quantity: { type: "number", required: false, label: "Quantity" },
+          requestCode: { type: "text", required: false, label: "Request code" },
         },
         operations: {
           submit: operation,
@@ -419,6 +458,23 @@ function requestSubmitCommandHandlerOperation(): EntityOperationSchema {
       },
     },
     effect: { type: "operationHandler", handler: "subscribe", config: {} },
+    output: { type: "command" },
+    idempotency: { required: true },
+    audit: { input: "summary" },
+  };
+}
+
+function recordPlanRequestOperation(): EntityOperationSchema {
+  return {
+    label: "Submit request",
+    kind: "command",
+    scope: "collection",
+    input: {
+      fields: {
+        email: { field: "email", required: true },
+      },
+    },
+    effect: { type: "recordPlan", steps: [] },
     output: { type: "command" },
     idempotency: { required: true },
     audit: { input: "summary" },
@@ -493,6 +549,7 @@ function operationInputCommandResponse(input: {
   identity?: AppStorageIdentity;
   input: RecordValues;
   operation: EntityOperationSchema;
+  outputValues?: RecordValues;
 }): OperationInvocationResponse {
   const identity = input.identity ?? schemaKeyStorageIdentity("site");
 
@@ -509,10 +566,13 @@ function operationInputCommandResponse(input: {
       },
       input: {
         type: "command",
-        input: {
-          input: input.input,
-          proof: { kind: "turnstile", token: "token-ok" },
-        },
+        input:
+          input.operation.effect?.type === "recordPlan"
+            ? input.input
+            : {
+                input: input.input,
+                proof: { kind: "turnstile", token: "token-ok" },
+              },
       },
       operation: {
         entityName: "request",
@@ -535,7 +595,26 @@ function operationInputCommandResponse(input: {
     output: {
       type: "command",
       affectedChangeIds: ["1"],
-      changes: [],
+      changes:
+        input.outputValues === undefined
+          ? []
+          : [
+              {
+                seq: 1,
+                writeId: "operation:request.submit:operation-input-notify",
+                operationKind: "command",
+                entity: "request",
+                recordId: "request-1",
+                payload: {
+                  id: "request-1",
+                  entity: "request",
+                  values: input.outputValues,
+                  createdAt: "2026-06-24T00:00:00.000Z",
+                  updatedAt: "2026-06-24T00:00:00.000Z",
+                },
+                createdAt: "2026-06-24T00:00:00.000Z",
+              },
+            ],
       cursor: 1,
     },
     status: "committed",

@@ -44,6 +44,41 @@ export function operationInputNotificationDisplayRows(input: {
   });
 }
 
+export function operationInputNotificationOutputDisplayRows(input: {
+  response: OperationInvocationResponse;
+  schema: AppSchema;
+}): OperationInputNotificationDisplayRow[] {
+  if (input.response.output.type !== "command") {
+    return [];
+  }
+
+  const rows = input.response.output.changes.flatMap((change) => {
+    const entity = input.schema.entities[change.entity];
+
+    if (!entity) {
+      return [];
+    }
+
+    return Object.entries(change.payload.values).flatMap(([fieldName, value]) => {
+      const field = entity.fields[fieldName];
+
+      if (!field) {
+        return [];
+      }
+
+      return [
+        {
+          entityLabel: entity.label ?? change.entity,
+          label: field.label ?? fieldName,
+          value: displayFieldValue(field, value),
+        },
+      ];
+    });
+  });
+
+  return disambiguateDuplicateOutputLabels(rows);
+}
+
 export function operationInputNotificationSubmittedInput(
   response: OperationInvocationResponse,
 ): Record<string, unknown> {
@@ -94,6 +129,40 @@ function displayOperationInputValue(field: PublicSafeOperationInputField, value:
   }
 
   return String(value);
+}
+
+function displayFieldValue(
+  field: AppSchema["entities"][string]["fields"][string],
+  value: unknown,
+): string {
+  if (field.type === "boolean") {
+    return value === true ? "Yes" : value === false ? "No" : String(value);
+  }
+
+  if (field.type === "enum" && typeof value === "string") {
+    return field.values[value]?.label ?? value;
+  }
+
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? String(value) : "";
+  }
+
+  return String(value);
+}
+
+function disambiguateDuplicateOutputLabels(
+  rows: Array<OperationInputNotificationDisplayRow & { entityLabel: string }>,
+): OperationInputNotificationDisplayRow[] {
+  const labelCounts = new Map<string, number>();
+
+  for (const row of rows) {
+    labelCounts.set(row.label, (labelCounts.get(row.label) ?? 0) + 1);
+  }
+
+  return rows.map((row) => ({
+    label: labelCounts.get(row.label) === 1 ? row.label : `${row.entityLabel} ${row.label}`,
+    value: row.value,
+  }));
 }
 
 function recordValue(value: unknown): Record<string, unknown> {

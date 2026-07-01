@@ -4,6 +4,7 @@ import { BadRequestError } from "./errors.ts";
 import { getActiveRecordsByEntity } from "./storage.ts";
 
 type ConstraintCheckOptions = {
+  additionalRecords?: readonly StoredRecord[];
   ignoreRecordId?: string;
 };
 
@@ -24,7 +25,11 @@ export function assertUniqueConstraints(
       continue;
     }
 
-    const duplicate = getActiveRecordsByEntity(storage, entityName).find((record) => {
+    const duplicate = activeConstraintCandidateRecords(
+      storage,
+      entityName,
+      options.additionalRecords,
+    ).find((record) => {
       return (
         record.id !== options.ignoreRecordId &&
         uniqueConstraintValuesEqual(record.values, values, constraint)
@@ -60,6 +65,21 @@ export function assertExistingRecordsSatisfyUniqueConstraints(
       );
     }
   }
+}
+
+function activeConstraintCandidateRecords(
+  storage: DurableObjectStorage,
+  entityName: string,
+  additionalRecords: readonly StoredRecord[] | undefined,
+) {
+  const additionalIds = new Set(additionalRecords?.map((record) => record.id) ?? []);
+  const activeAdditionalRecords =
+    additionalRecords?.filter((record) => record.entity === entityName && !record.deletedAt) ?? [];
+  const storedRecords = getActiveRecordsByEntity(storage, entityName).filter(
+    (record) => !additionalIds.has(record.id),
+  );
+
+  return [...storedRecords, ...activeAdditionalRecords];
 }
 
 function assertExistingRecordsSatisfyUniqueConstraint(

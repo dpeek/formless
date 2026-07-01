@@ -1011,6 +1011,21 @@ export type RecordPlanGeneratedIdExpressionSchema = {
   prefix?: string;
 };
 
+export type RecordPlanGeneratedCodeAlphabet =
+  | "digits"
+  | "upperAlpha"
+  | "upperAlphaNumeric"
+  | "upperAlphaNumericNoConfusables";
+
+export type RecordPlanGeneratedCodeExpressionSchema = {
+  kind: "generatedCode";
+  alphabet: RecordPlanGeneratedCodeAlphabet;
+  length?: number;
+  groups?: number[];
+  separator?: string;
+  prefix?: string;
+};
+
 export type RecordPlanGeneratedTimestampExpressionSchema = {
   kind: "generatedTimestamp";
 };
@@ -1050,6 +1065,7 @@ export type RecordPlanRecordIdExpressionSchema =
 
 export type RecordPlanScalarValueExpressionSchema =
   | RecordPlanRecordIdExpressionSchema
+  | RecordPlanGeneratedCodeExpressionSchema
   | RecordPlanGeneratedTimestampExpressionSchema
   | RecordPlanActorContextExpressionSchema
   | RecordPlanSourceContextExpressionSchema

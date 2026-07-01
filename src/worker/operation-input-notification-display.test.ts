@@ -7,7 +7,10 @@ import type {
   OperationInvocationOutput,
   OperationInvocationResponse,
 } from "../shared/operation-invocation.ts";
-import { operationInputNotificationDisplayRows } from "./operation-input-notification-display.ts";
+import {
+  operationInputNotificationDisplayRows,
+  operationInputNotificationOutputDisplayRows,
+} from "./operation-input-notification-display.ts";
 
 describe("operation input notification display rows", () => {
   it("projects create input from public-safe fields and stored entity field names", () => {
@@ -96,6 +99,37 @@ describe("operation input notification display rows", () => {
     ).toEqual([
       { label: "Email", value: "ada@example.com" },
       { label: "Wants newsletter", value: "Yes" },
+    ]);
+  });
+
+  it("projects exposed command output change values", () => {
+    const operation = recordPlanRequestOperation();
+
+    expect(
+      operationInputNotificationOutputDisplayRows({
+        response: operationResponse({
+          input: {
+            type: "command",
+            input: {
+              applicantName: "Grace Hopper",
+              tier: "standard",
+            },
+          },
+          operation,
+          output: commandOperationOutput({
+            fullName: "Grace Hopper",
+            tier: "priority",
+            acceptedTerms: true,
+            quantity: 4,
+          }),
+        }),
+        schema: requestSchema(operation),
+      }),
+    ).toEqual([
+      { label: "Full name", value: "Grace Hopper" },
+      { label: "Tier", value: "Priority" },
+      { label: "Accepted terms", value: "Yes" },
+      { label: "Quantity", value: "4" },
     ]);
   });
 
@@ -264,11 +298,32 @@ function createOperationOutput(
   };
 }
 
-function commandOperationOutput(): OperationInvocationOutput {
+function commandOperationOutput(
+  values: Record<string, string | boolean | number> = {},
+): OperationInvocationOutput {
   return {
     type: "command",
     affectedChangeIds: ["change-1"],
-    changes: [],
+    changes:
+      Object.keys(values).length === 0
+        ? []
+        : [
+            {
+              seq: 1,
+              writeId: "operation:request.submit:notification-display",
+              operationKind: "command",
+              entity: "request",
+              recordId: "request-1",
+              payload: {
+                id: "request-1",
+                entity: "request",
+                values,
+                createdAt: "2026-06-24T00:00:00.000Z",
+                updatedAt: "2026-06-24T00:00:00.000Z",
+              },
+              createdAt: "2026-06-24T00:00:00.000Z",
+            },
+          ],
     cursor: 1,
   };
 }

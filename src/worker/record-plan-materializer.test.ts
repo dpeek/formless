@@ -146,6 +146,9 @@ describe("record plan materializer", () => {
     expect(createdTask.values).toMatchObject({
       actorMode: "owner",
       done: false,
+      humanCode: expect.stringMatching(
+        /^ORD-[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{4}-[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{4}$/,
+      ),
       marker: "created",
       sourceHost: "example.com",
       sourcePath: "/intake",
@@ -208,6 +211,56 @@ describe("record plan materializer", () => {
         sourcePath: "/intake",
         title: "Planned task",
       },
+    });
+  });
+
+  it("fails generated code materialization after unique collision retries are exhausted", async () => {
+    const schema = materializerSchema(
+      [
+        {
+          name: "createTask",
+          kind: "create",
+          entity: "task",
+          values: {
+            title: { kind: "input", field: "title" },
+            done: { kind: "literal", value: false },
+            humanCode: { kind: "generatedCode", alphabet: "digits", length: 1 },
+          },
+        },
+      ],
+      {
+        constraints: {
+          uniqueHumanCode: { kind: "unique", fields: ["humanCode"] },
+        },
+      },
+    );
+    const operation = submitPlanOperation(schema);
+    const operationId = "operation:task.submitPlan:materializer-code-collision";
+    const response = await postMaterializeFailure({
+      effect: requireRecordPlanEffect(operation),
+      envelope: operationEnvelope(operation, {
+        input: {
+          existingTaskId: "task-existing",
+          note: "Collision",
+          title: "Collision task",
+        },
+        operationId,
+        receivedAt: "2026-06-25T12:41:56.000Z",
+      }),
+      inputValues: {
+        existingTaskId: "task-existing",
+        note: "Collision",
+        title: "Collision task",
+      },
+      operationId,
+      records: digitCodeRecords(),
+      schema,
+    });
+
+    expect(response.status).toBe(400);
+    expect((await response.json()) as { error: string }).toEqual({
+      error:
+        'Record plan step "createTask" generated code collided after 32 attempts: Unique constraint "task.uniqueHumanCode" would be violated.',
     });
   });
 
@@ -317,6 +370,7 @@ function postMaterializeFailure(body: MaterializeRequest) {
 
 function materializerSchema(
   steps: RecordPlanEntityOperationEffectSchema["steps"] = materializerRecordPlanSteps(),
+  taskOverrides: Record<string, unknown> = {},
 ): AppSchema {
   return parseAppSchema({
     version: 1,
@@ -328,6 +382,7 @@ function materializerSchema(
           done: { type: "boolean", required: true, label: "Done", default: false },
           marker: { type: "text", required: false, label: "Marker" },
           generatedCode: { type: "text", required: false, label: "Generated code" },
+          humanCode: { type: "text", required: false, label: "Human code" },
           submittedAt: { type: "text", required: false, label: "Submitted at" },
           actorMode: { type: "text", required: false, label: "Actor mode" },
           actorPrincipalId: { type: "text", required: false, label: "Actor principal" },
@@ -338,6 +393,7 @@ function materializerSchema(
         operations: {
           submitPlan: recordPlanOperation(steps),
         },
+        ...taskOverrides,
       },
       "task-log": {
         label: "Task log",
@@ -443,6 +499,13 @@ function materializerRecordPlanSteps(): RecordPlanEntityOperationEffectSchema["s
         done: { kind: "literal", value: false },
         marker: { kind: "literal", value: "created" },
         generatedCode: { kind: "generatedId", prefix: "code" },
+        humanCode: {
+          kind: "generatedCode",
+          alphabet: "upperAlphaNumericNoConfusables",
+          groups: [4, 4],
+          separator: "-",
+          prefix: "ORD-",
+        },
         submittedAt: { kind: "generatedTimestamp" },
         actorMode: { kind: "actor", field: "mode" },
         sourceProtocol: { kind: "source", field: "protocol" },
@@ -572,6 +635,20 @@ function existingTaskRecord(): StoredRecord {
     createdAt: "2026-06-25T00:00:00.000Z",
     updatedAt: "2026-06-25T00:00:00.000Z",
   };
+}
+
+function digitCodeRecords(): StoredRecord[] {
+  return Array.from({ length: 10 }, (_, index) => ({
+    id: `task-code-${index}`,
+    entity: "task",
+    values: {
+      title: `Code ${index}`,
+      done: false,
+      humanCode: String(index),
+    },
+    createdAt: "2026-06-25T00:00:00.000Z",
+    updatedAt: "2026-06-25T00:00:00.000Z",
+  }));
 }
 
 async function writeRecordPlanMaterializerHarness() {

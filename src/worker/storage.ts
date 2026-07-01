@@ -289,7 +289,7 @@ export type CreateRecordWriteSideEffectRecordCreator = (
 export type RecordConstraintValidator = (
   entity: string,
   values: RecordValues,
-  options?: { ignoreRecordId?: string },
+  options?: { additionalRecords?: readonly StoredRecord[]; ignoreRecordId?: string },
 ) => void;
 
 export type OperationRecordCreatePlan = {
@@ -2512,6 +2512,7 @@ function materializeCreatedOperationRecordSet(
         createdAt,
       },
       validateConstraints,
+      createdRecords,
     );
 
     createdRecords.push(record);
@@ -2541,6 +2542,7 @@ function materializeOperationRecordWrites(
           createdAt: changedAt,
         },
         validateConstraints,
+        writtenRecords,
       );
 
       writtenRecords.push(record);
@@ -2554,7 +2556,14 @@ function materializeOperationRecordWrites(
         typeof plan.values === "function" ? plan.values([...writtenRecords]) : plan.values;
 
       writtenRecords.push(
-        materializePatchedOperationRecord(storage, record, values, changedAt, validateConstraints),
+        materializePatchedOperationRecord(
+          storage,
+          record,
+          values,
+          changedAt,
+          validateConstraints,
+          writtenRecords,
+        ),
       );
       continue;
     }
@@ -2578,6 +2587,7 @@ function materializePatchedOperationRecord(
   values: RecordValues,
   changedAt: string,
   validateConstraints?: RecordConstraintValidator,
+  additionalRecords: readonly StoredRecord[] = [],
 ): StoredRecord {
   const record: StoredRecord = {
     ...existingRecord,
@@ -2585,7 +2595,10 @@ function materializePatchedOperationRecord(
     updatedAt: changedAt,
   };
 
-  validateConstraints?.(record.entity, record.values, { ignoreRecordId: record.id });
+  validateConstraints?.(record.entity, record.values, {
+    additionalRecords,
+    ignoreRecordId: record.id,
+  });
 
   storage.sql.exec(
     `
@@ -2611,8 +2624,9 @@ function materializeCreatedOperationRecord(
     createdAt: string;
   },
   validateConstraints?: RecordConstraintValidator,
+  additionalRecords: readonly StoredRecord[] = [],
 ): StoredRecord {
-  validateConstraints?.(input.entity, input.values);
+  validateConstraints?.(input.entity, input.values, { additionalRecords });
 
   return insertCreatedRecord(storage, input.entity, input.values, input.createdAt, input.id);
 }

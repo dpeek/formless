@@ -15,6 +15,7 @@ import {
 } from "./email-runtime.ts";
 import {
   operationInputNotificationDisplayRows,
+  operationInputNotificationOutputDisplayRows,
   operationInputNotificationSubmittedInput,
 } from "./operation-input-notification-display.ts";
 import { getBootstrapRecords } from "./storage.ts";
@@ -67,6 +68,10 @@ export async function scheduleSiteOperationInputNotificationAfterPublicOperation
       response: input.response,
       schema: input.schema,
     });
+    const outputFields = operationInputNotificationOutputDisplayRows({
+      response: input.response,
+      schema: input.schema,
+    });
 
     if (fields.length === 0) {
       return;
@@ -82,6 +87,7 @@ export async function scheduleSiteOperationInputNotificationAfterPublicOperation
           fields,
           host: input.response.invocation.source.host,
           operationKey: input.response.invocation.operation.canonicalKey,
+          outputFields,
           path: input.response.invocation.source.path,
           siteBlockId: input.response.invocation.source.siteBlockId,
           storageIdentity: input.identity.authorityName,
@@ -218,6 +224,7 @@ function renderOperationInputNotificationMessage(input: {
   fields: Array<{ label: string; value: string }>;
   host?: string;
   operationKey: string;
+  outputFields: Array<{ label: string; value: string }>;
   path?: string;
   siteBlockId?: string;
   storageIdentity: string;
@@ -244,14 +251,32 @@ function renderOperationInputNotificationMessage(input: {
       "Submitted input",
       "",
       ...textFields,
+      ...operationOutputTextSection(input.outputFields),
     ].join("\n"),
     html: [
       "<p>New public operation form submission</p>",
       htmlFacts,
       "<p>Submitted input</p>",
       htmlFields,
+      ...operationOutputHtmlSection(input.outputFields),
     ].join(""),
   };
+}
+
+function operationOutputTextSection(fields: Array<{ label: string; value: string }>): string[] {
+  if (fields.length === 0) {
+    return [];
+  }
+
+  return ["", "Operation output", "", ...fields.map((field) => `${field.label}: ${field.value}`)];
+}
+
+function operationOutputHtmlSection(fields: Array<{ label: string; value: string }>): string[] {
+  if (fields.length === 0) {
+    return [];
+  }
+
+  return ["<p>Operation output</p>", renderKeyValueTable(fields)];
 }
 
 function renderKeyValueTable(rows: Array<{ label: string; value: string }>): string {

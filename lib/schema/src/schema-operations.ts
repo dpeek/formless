@@ -43,6 +43,7 @@ import type {
   RelationshipSchema,
   RecordPlanActorContextField,
   RecordPlanEntityOperationEffectSchema,
+  RecordPlanGeneratedCodeAlphabet,
   RecordPlanRecordIdExpressionSchema,
   RecordPlanSourceContextField,
   RecordPlanStepKind,
@@ -104,6 +105,15 @@ const recordPlanSourceContextFields = [
   "host",
   "path",
 ] as const satisfies readonly RecordPlanSourceContextField[];
+
+const recordPlanGeneratedCodeAlphabets = [
+  "digits",
+  "upperAlpha",
+  "upperAlphaNumeric",
+  "upperAlphaNumericNoConfusables",
+] as const satisfies readonly RecordPlanGeneratedCodeAlphabet[];
+
+const maxGeneratedCodeLength = 128;
 
 export type ParsedEntityOperationKey = {
   entityKey: string;
@@ -336,7 +346,7 @@ function parseEntityOperation(
   );
   const idempotency = parseOperationIdempotency(`${context} idempotency`, value.idempotency, kind);
   const audit = parseOperationAudit(`${context} audit`, value.audit);
-  const policy = parseOperationPolicy(`${context} policy`, value.policy, entity);
+  const policy = parseOperationPolicy(`${context} policy`, value.policy);
   validateOperationPublicPolicy(context, kind, input, effect, policy);
 
   return {
@@ -1090,6 +1100,10 @@ function parseRecordPlanValueExpression(
     return parseRecordPlanGeneratedIdExpression(context, value);
   }
 
+  if (value.kind === "generatedCode") {
+    return parseRecordPlanGeneratedCodeExpression(context, value);
+  }
+
   if (value.kind === "generatedTimestamp") {
     assertExactKeys(context, value, ["kind"]);
     return { kind: "generatedTimestamp" };
@@ -1196,6 +1210,96 @@ function parseRecordPlanGeneratedIdExpression(
 
   const prefix = parseOptionalNonEmptyString(`${context} prefix`, value.prefix);
   return { kind: "generatedId", ...(prefix === undefined ? {} : { prefix }) };
+}
+
+function parseRecordPlanGeneratedCodeExpression(
+  context: string,
+  value: Record<string, unknown>,
+): RecordPlanValueExpressionSchema {
+  assertExactKeys(
+    context,
+    value,
+    ["kind", "alphabet"],
+    ["length", "groups", "separator", "prefix"],
+  );
+
+  const alphabet = parseRecordPlanGeneratedCodeAlphabet(`${context} alphabet`, value.alphabet);
+  const hasLength = value.length !== undefined;
+  const hasGroups = value.groups !== undefined;
+
+  if (hasLength === hasGroups) {
+    throw new Error(`${context} must include exactly one of length or groups.`);
+  }
+
+  if (hasLength && value.separator !== undefined) {
+    throw new Error(`${context} separator requires groups.`);
+  }
+
+  const prefix = parseOptionalNonEmptyString(`${context} prefix`, value.prefix);
+  const separator = parseOptionalNonEmptyString(`${context} separator`, value.separator);
+
+  if (hasLength) {
+    const length = parseGeneratedCodePositiveInteger(`${context} length`, value.length);
+
+    return {
+      kind: "generatedCode",
+      alphabet,
+      length,
+      ...(prefix === undefined ? {} : { prefix }),
+    };
+  }
+
+  const groups = parseGeneratedCodeGroups(`${context} groups`, value.groups);
+
+  return {
+    kind: "generatedCode",
+    alphabet,
+    groups,
+    ...(separator === undefined ? {} : { separator }),
+    ...(prefix === undefined ? {} : { prefix }),
+  };
+}
+
+function parseRecordPlanGeneratedCodeAlphabet(
+  context: string,
+  value: unknown,
+): RecordPlanGeneratedCodeAlphabet {
+  if (!recordPlanGeneratedCodeAlphabets.includes(value as RecordPlanGeneratedCodeAlphabet)) {
+    throw new Error(
+      `${context} must be digits, upperAlpha, upperAlphaNumeric, or upperAlphaNumericNoConfusables.`,
+    );
+  }
+
+  return value as RecordPlanGeneratedCodeAlphabet;
+}
+
+function parseGeneratedCodeGroups(context: string, value: unknown): number[] {
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new Error(`${context} must be a non-empty array.`);
+  }
+
+  const groups = value.map((group, index) =>
+    parseGeneratedCodePositiveInteger(`${context}[${index}]`, group),
+  );
+  const totalLength = groups.reduce((total, group) => total + group, 0);
+
+  if (totalLength > maxGeneratedCodeLength) {
+    throw new Error(`${context} total length must be at most ${maxGeneratedCodeLength}.`);
+  }
+
+  return groups;
+}
+
+function parseGeneratedCodePositiveInteger(context: string, value: unknown): number {
+  if (typeof value !== "number" || !Number.isInteger(value) || value <= 0) {
+    throw new Error(`${context} must be a positive integer.`);
+  }
+
+  if (value > maxGeneratedCodeLength) {
+    throw new Error(`${context} must be at most ${maxGeneratedCodeLength}.`);
+  }
+
+  return value;
 }
 
 function parseRecordPlanActorExpression(
@@ -1395,7 +1499,6 @@ function parseOperationAudit(context: string, value: unknown): EntityOperationAu
 function parseOperationPolicy(
   context: string,
   value: unknown,
-  entity: EntitySchema,
 ): EntityOperationPolicySchema | undefined {
   if (value === undefined) {
     return undefined;
@@ -1412,7 +1515,6 @@ function parseOperationPolicy(
   const responseFields = parseOperationResponseFields(
     `${context} responseFields`,
     value.responseFields,
-    entity,
     actors,
   );
   const visible = parseOptionalBoolean(`${context} visible`, value.visible);
@@ -1510,7 +1612,6 @@ function parseOperationOriginPolicy(context: string, value: unknown): OperationO
 function parseOperationResponseFields(
   context: string,
   value: unknown,
-  entity: EntitySchema,
   actors: EntityOperationActorKind[],
 ): EntityOperationPolicySchema["responseFields"] {
   if (value === undefined) {
@@ -1532,7 +1633,7 @@ function parseOperationResponseFields(
       throw new Error(`${context}.${actor} must reference an operation actor.`);
     }
 
-    responseFields[actor] = parseResponseFieldList(`${context}.${actor}`, fields, entity);
+    responseFields[actor] = parseResponseFieldList(`${context}.${actor}`, fields);
   }
 
   if (Object.keys(responseFields).length === 0) {
@@ -1542,20 +1643,14 @@ function parseOperationResponseFields(
   return responseFields;
 }
 
-function parseResponseFieldList(context: string, value: unknown, entity: EntitySchema): string[] {
+function parseResponseFieldList(context: string, value: unknown): string[] {
   if (!Array.isArray(value) || value.length === 0) {
     throw new Error(`${context} must be a non-empty array.`);
   }
 
-  const fields = value.map((fieldName, index) => {
-    const field = parseRequiredNonEmptyString(`${context}[${index}]`, fieldName);
-
-    if (!entity.fields[field]) {
-      throw new Error(`${context}[${index}] references unknown field "${field}".`);
-    }
-
-    return field;
-  });
+  const fields = value.map((fieldName, index) =>
+    parseRequiredNonEmptyString(`${context}[${index}]`, fieldName),
+  );
 
   if (new Set(fields).size !== fields.length) {
     throw new Error(`${context} must be unique.`);

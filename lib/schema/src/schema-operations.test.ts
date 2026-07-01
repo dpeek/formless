@@ -477,6 +477,13 @@ describe("schema entity operations", () => {
           values: {
             title: { kind: "input", field: "title" },
             done: { kind: "literal", value: false },
+            marker: {
+              kind: "generatedCode",
+              alphabet: "upperAlphaNumericNoConfusables",
+              groups: [4, 4],
+              separator: "-",
+              prefix: "ORD-",
+            },
             dueDate: { kind: "generatedTimestamp" },
           },
         },
@@ -652,6 +659,93 @@ describe("schema entity operations", () => {
           }),
         },
         message: "value must be a string, boolean, or finite number",
+      },
+      {
+        operations: {
+          submitIntake: recordPlanOperation({
+            effect: recordPlanEffect({
+              steps: [
+                {
+                  ...createTaskStep(),
+                  values: {
+                    title: {
+                      kind: "generatedCode",
+                      alphabet: "lowercase",
+                      length: 8,
+                    },
+                  },
+                },
+              ],
+            }),
+          }),
+        },
+        message:
+          "alphabet must be digits, upperAlpha, upperAlphaNumeric, or upperAlphaNumericNoConfusables",
+      },
+      {
+        operations: {
+          submitIntake: recordPlanOperation({
+            effect: recordPlanEffect({
+              steps: [
+                {
+                  ...createTaskStep(),
+                  values: {
+                    title: {
+                      kind: "generatedCode",
+                      alphabet: "upperAlphaNumeric",
+                      length: 8,
+                      groups: [4, 4],
+                    },
+                  },
+                },
+              ],
+            }),
+          }),
+        },
+        message: "must include exactly one of length or groups",
+      },
+      {
+        operations: {
+          submitIntake: recordPlanOperation({
+            effect: recordPlanEffect({
+              steps: [
+                {
+                  ...createTaskStep(),
+                  values: {
+                    title: {
+                      kind: "generatedCode",
+                      alphabet: "upperAlphaNumeric",
+                      length: 8,
+                      separator: "-",
+                    },
+                  },
+                },
+              ],
+            }),
+          }),
+        },
+        message: "separator requires groups",
+      },
+      {
+        operations: {
+          submitIntake: recordPlanOperation({
+            effect: recordPlanEffect({
+              steps: [
+                {
+                  ...createTaskStep(),
+                  values: {
+                    title: {
+                      kind: "generatedCode",
+                      alphabet: "upperAlphaNumeric",
+                      groups: [4, 0],
+                    },
+                  },
+                },
+              ],
+            }),
+          }),
+        },
+        message: "groups[1] must be a positive integer",
       },
       {
         operations: {
@@ -892,6 +986,13 @@ function createTaskStep() {
     values: {
       title: { kind: "input", field: "title" },
       done: { kind: "literal", value: false },
+      marker: {
+        kind: "generatedCode",
+        alphabet: "upperAlphaNumericNoConfusables",
+        groups: [4, 4],
+        separator: "-",
+        prefix: "ORD-",
+      },
       dueDate: { kind: "generatedTimestamp" },
     },
   };
@@ -1025,6 +1126,7 @@ function taskEntity(overrides: Record<string, unknown> = {}) {
     fields: {
       title: { type: "text", required: true, label: "Title" },
       done: { type: "boolean", required: true, label: "Done", default: false },
+      marker: { type: "text", required: false, label: "Marker" },
       dueDate: { type: "date", required: false, label: "Due date" },
     },
     ...overrides,

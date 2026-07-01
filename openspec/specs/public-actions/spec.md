@@ -104,17 +104,18 @@ through an explicit actor policy and public binding.
   email delivery records outside the target app storage identity
 - AND the notification message is rendered from the submitted operation input,
   public-safe field labels, canonical operation key, target storage identity,
-  request host and path, and Site block id when supplied
+  request host and path, Site block id when supplied, and command output fields
+  already exposed by the operation policy for the anonymous actor
 - AND submitted input extraction and display-row projection are concentrated in
   a display module that consumes the operation invocation response,
   schema-owned public-safe input field projection, and target app schema
 - AND the display module supports create, record-plan command, and operation
   handler command public operation input shapes
 - AND scalar display formatting maps booleans to `Yes` or `No`, enum values to
-  public labels when available, finite numbers to decimal text, and text values
-  to string display values
-- AND the HTML notification body renders operation facts and submitted input as
-  key-value tables
+  public-safe or schema labels when available, finite numbers to decimal text,
+  and text values to string display values
+- AND the HTML notification body renders operation facts, submitted input, and
+  non-empty operation output rows as key-value tables
 - AND configured reply-to fields may use submitted scalar input values but
   missing or invalid reply-to values do not block the committed operation
 - AND the public operation response remains the operation-native create or
@@ -135,8 +136,9 @@ through an explicit actor policy and public binding.
   verification or record materialization
 - AND successful execution commits only the flat records declared by the
   operation record plan for that target app storage identity
-- AND the public response exposes only the command output fields, record ids, or
-  metadata allowed by the operation policy
+- AND the public response and after-commit side effects expose only the command
+  output payload field names, record ids, or metadata allowed by the operation
+  policy
 - AND challenge proof values, provider secrets, and protected internal fields
   are not stored in committed app records or returned in the public response
 

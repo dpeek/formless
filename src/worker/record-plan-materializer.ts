@@ -1,6 +1,8 @@
 import {
   type AppSchema,
   type RecordPlanEntityOperationEffectSchema,
+  type RecordPlanGeneratedCodeAlphabet,
+  type RecordPlanGeneratedCodeExpressionSchema,
   type RecordPlanRecordIdExpressionSchema,
   type RecordPlanStepSchema,
   type RecordPlanValueExpressionSchema,
@@ -16,6 +18,7 @@ import {
   validateRecordWriteRequest,
   validateRecordWriteRequestAsync,
 } from "./authority-validation.ts";
+import { assertUniqueConstraints } from "./constraints.ts";
 import { BadRequestError } from "./errors.ts";
 import type { IdentityReferenceTargetResolver } from "./identity-reference-targets.ts";
 import { validateOperationInvocationRecordPlanInputValues } from "./operation-input-validation.ts";
@@ -67,6 +70,15 @@ type RecordPlanStepPlan = {
   plan: OperationRecordWritePlan;
   step: RecordPlanStepMaterialization;
 };
+
+const generatedCodeMaxAttempts = 32;
+
+const generatedCodeAlphabets = {
+  digits: "0123456789",
+  upperAlpha: "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+  upperAlphaNumeric: "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+  upperAlphaNumericNoConfusables: "23456789ABCDEFGHJKLMNPQRSTUVWXYZ",
+} satisfies Record<RecordPlanGeneratedCodeAlphabet, string>;
 
 export function recordPlanCommandInput(input: {
   envelope: OperationInvocationEnvelope;
@@ -191,12 +203,16 @@ function recordPlanWritePlanForStep(
 
     assertRecordPlanCreateIdAvailable(step, recordId, state);
 
-    const recordWrite = validateRecordPlanStepWrite(step, state, {
-      writeId: recordPlanStepWriteId(state.operationId, step.name),
-      entity: step.entity,
-      kind: "create",
-      values: evaluateRecordPlanValues(step.values, state),
-    });
+    const recordWrite = validateRecordPlanStepWriteWithGeneratedCodeRetries(
+      step,
+      state,
+      (values) => ({
+        writeId: recordPlanStepWriteId(state.operationId, step.name),
+        entity: step.entity,
+        kind: "create",
+        values,
+      }),
+    );
 
     if (recordWrite.kind !== "create") {
       throw new Error(`Record plan create step "${step.name}" did not produce create values.`);
@@ -227,13 +243,17 @@ function recordPlanWritePlanForStep(
   if (step.kind === "patch") {
     const recordId = evaluateRecordPlanRecordIdExpression(step.recordId, state);
     const existingRecord = requireRecordPlanTargetRecord(step, recordId, state);
-    const recordWrite = validateRecordPlanStepWrite(step, state, {
-      writeId: recordPlanStepWriteId(state.operationId, step.name),
-      entity: step.entity,
-      kind: "patch",
-      recordId,
-      values: evaluateRecordPlanValues(step.values, state),
-    });
+    const recordWrite = validateRecordPlanStepWriteWithGeneratedCodeRetries(
+      step,
+      state,
+      (values) => ({
+        writeId: recordPlanStepWriteId(state.operationId, step.name),
+        entity: step.entity,
+        kind: "patch",
+        recordId,
+        values,
+      }),
+    );
 
     if (!("recordValues" in recordWrite)) {
       throw new Error(`Record plan patch step "${step.name}" did not produce record values.`);
@@ -298,15 +318,15 @@ async function recordPlanWritePlanForStepAsync(
 
     assertRecordPlanCreateIdAvailable(step, recordId, state);
 
-    const recordWrite = await validateRecordPlanStepWriteAsync(
+    const recordWrite = await validateRecordPlanStepWriteWithGeneratedCodeRetriesAsync(
       step,
       state,
-      {
+      (values) => ({
         writeId: recordPlanStepWriteId(state.operationId, step.name),
         entity: step.entity,
         kind: "create",
-        values: evaluateRecordPlanValues(step.values, state),
-      },
+        values,
+      }),
       options,
     );
 
@@ -339,16 +359,16 @@ async function recordPlanWritePlanForStepAsync(
   if (step.kind === "patch") {
     const recordId = evaluateRecordPlanRecordIdExpression(step.recordId, state);
     const existingRecord = requireRecordPlanTargetRecord(step, recordId, state);
-    const recordWrite = await validateRecordPlanStepWriteAsync(
+    const recordWrite = await validateRecordPlanStepWriteWithGeneratedCodeRetriesAsync(
       step,
       state,
-      {
+      (values) => ({
         writeId: recordPlanStepWriteId(state.operationId, step.name),
         entity: step.entity,
         kind: "patch",
         recordId,
-        values: evaluateRecordPlanValues(step.values, state),
-      },
+        values,
+      }),
       options,
     );
 
@@ -424,7 +444,39 @@ function validateRecordPlanStepWrite(
     );
   }
 
+  assertRecordPlanStepUniqueConstraints(state, result.recordWrite);
+
   return result.recordWrite;
+}
+
+function validateRecordPlanStepWriteWithGeneratedCodeRetries(
+  step: Extract<RecordPlanStepSchema, { values: Record<string, RecordPlanValueExpressionSchema> }>,
+  state: RecordPlanPlanningState,
+  recordWriteForValues: (
+    values: RecordValues,
+  ) => CreateRecordWriteRequest | PatchRecordWriteRequest,
+) {
+  const generatedCodeFields = recordPlanGeneratedCodeFields(step.values);
+  const maxAttempts = generatedCodeFields.size === 0 ? 1 : generatedCodeMaxAttempts;
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      return validateRecordPlanStepWrite(
+        step,
+        state,
+        recordWriteForValues(evaluateRecordPlanValues(step.values, state)),
+      );
+    } catch (error) {
+      if (!shouldRetryGeneratedCodeCollision(error, step, state, generatedCodeFields)) {
+        throw error;
+      }
+
+      lastError = error;
+    }
+  }
+
+  throw generatedCodeCollisionExhaustedError(step, lastError);
 }
 
 async function validateRecordPlanStepWriteAsync(
@@ -446,7 +498,132 @@ async function validateRecordPlanStepWriteAsync(
     );
   }
 
+  assertRecordPlanStepUniqueConstraints(state, result.recordWrite);
+
   return result.recordWrite;
+}
+
+function assertRecordPlanStepUniqueConstraints(
+  state: RecordPlanPlanningState,
+  recordWrite: CreateRecordWriteRequest | PatchRecordWriteRequest | DeleteRecordWriteRequest,
+) {
+  if (recordWrite.kind === "delete") {
+    return;
+  }
+
+  const additionalRecords = [...state.plannedRecordsById.values()];
+
+  if (recordWrite.kind === "create") {
+    assertUniqueConstraints(state.storage, state.schema, recordWrite.entity, recordWrite.values, {
+      additionalRecords,
+    });
+    return;
+  }
+
+  if (!("recordValues" in recordWrite)) {
+    return;
+  }
+
+  assertUniqueConstraints(
+    state.storage,
+    state.schema,
+    recordWrite.entity,
+    recordWrite.recordValues as RecordValues,
+    {
+      additionalRecords,
+      ignoreRecordId: recordWrite.recordId,
+    },
+  );
+}
+
+async function validateRecordPlanStepWriteWithGeneratedCodeRetriesAsync(
+  step: Extract<RecordPlanStepSchema, { values: Record<string, RecordPlanValueExpressionSchema> }>,
+  state: RecordPlanPlanningState,
+  recordWriteForValues: (
+    values: RecordValues,
+  ) => CreateRecordWriteRequest | PatchRecordWriteRequest,
+  options: { identityReferenceResolver?: IdentityReferenceTargetResolver },
+) {
+  const generatedCodeFields = recordPlanGeneratedCodeFields(step.values);
+  const maxAttempts = generatedCodeFields.size === 0 ? 1 : generatedCodeMaxAttempts;
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      return await validateRecordPlanStepWriteAsync(
+        step,
+        state,
+        recordWriteForValues(evaluateRecordPlanValues(step.values, state)),
+        options,
+      );
+    } catch (error) {
+      if (!shouldRetryGeneratedCodeCollision(error, step, state, generatedCodeFields)) {
+        throw error;
+      }
+
+      lastError = error;
+    }
+  }
+
+  throw generatedCodeCollisionExhaustedError(step, lastError);
+}
+
+function recordPlanGeneratedCodeFields(
+  values: Record<string, RecordPlanValueExpressionSchema>,
+): Set<string> {
+  return new Set(
+    Object.entries(values)
+      .filter(([, expression]) => expression.kind === "generatedCode")
+      .map(([fieldName]) => fieldName),
+  );
+}
+
+function shouldRetryGeneratedCodeCollision(
+  error: unknown,
+  step: Pick<RecordPlanStepSchema, "entity">,
+  state: RecordPlanPlanningState,
+  generatedCodeFields: ReadonlySet<string>,
+): boolean {
+  if (generatedCodeFields.size === 0 || !(error instanceof BadRequestError)) {
+    return false;
+  }
+
+  const constraintName = uniqueConstraintViolationName(error.message, step.entity);
+  const constraint =
+    constraintName === undefined
+      ? undefined
+      : state.schema.entities[step.entity]?.constraints?.[constraintName];
+
+  return (
+    constraint?.kind === "unique" &&
+    constraint.fields.some((fieldName) => generatedCodeFields.has(fieldName))
+  );
+}
+
+function uniqueConstraintViolationName(message: string, entityName: string): string | undefined {
+  const match = /^Unique constraint "([^"]+)" would be violated\.$/.exec(message);
+
+  if (!match) {
+    return undefined;
+  }
+
+  const prefix = `${entityName}.`;
+  return match[1]?.startsWith(prefix) ? match[1].slice(prefix.length) : undefined;
+}
+
+function generatedCodeCollisionExhaustedError(
+  step: Pick<RecordPlanStepSchema, "name">,
+  lastError: unknown,
+) {
+  if (lastError instanceof Error) {
+    return new BadRequestError(
+      `Record plan step "${step.name}" generated code collided after ${generatedCodeMaxAttempts} attempts: ${lastError.message}`,
+    );
+  }
+
+  return new BadRequestError(
+    `Record plan step "${step.name}" generated code collided after ${generatedCodeMaxAttempts} attempts.`,
+  );
 }
 
 function evaluateRecordPlanValues(
@@ -488,6 +665,10 @@ function evaluateRecordPlanValueExpression(
 
   if (expression.kind === "generatedId") {
     return { kind: "set", value: createRecordPlanGeneratedId(expression.prefix) };
+  }
+
+  if (expression.kind === "generatedCode") {
+    return { kind: "set", value: createRecordPlanGeneratedCode(expression) };
   }
 
   if (expression.kind === "generatedTimestamp") {
@@ -588,6 +769,51 @@ function createRecordPlanGeneratedId(prefix: string | undefined) {
   }
 
   return `${prefix}_${crypto.randomUUID()}`;
+}
+
+function createRecordPlanGeneratedCode(expression: RecordPlanGeneratedCodeExpressionSchema) {
+  const alphabet = generatedCodeAlphabets[expression.alphabet];
+  const parts = generatedCodeSegmentLengths(expression).map((length) =>
+    randomGeneratedCodeSegment(length, alphabet),
+  );
+
+  return `${expression.prefix ?? ""}${parts.join(expression.separator ?? "")}`;
+}
+
+function generatedCodeSegmentLengths(expression: RecordPlanGeneratedCodeExpressionSchema) {
+  if (expression.groups !== undefined) {
+    return expression.groups;
+  }
+
+  if (expression.length !== undefined) {
+    return [expression.length];
+  }
+
+  throw new BadRequestError("Generated code expression requires length or groups.");
+}
+
+function randomGeneratedCodeSegment(length: number, alphabet: string) {
+  let result = "";
+  const maxAcceptedByte = 256 - (256 % alphabet.length);
+
+  while (result.length < length) {
+    const bytes = new Uint8Array(length - result.length);
+    crypto.getRandomValues(bytes);
+
+    for (const byte of bytes) {
+      if (byte >= maxAcceptedByte) {
+        continue;
+      }
+
+      result += alphabet[byte % alphabet.length];
+
+      if (result.length === length) {
+        break;
+      }
+    }
+  }
+
+  return result;
 }
 
 function assertRecordPlanCreateIdAvailable(

@@ -573,6 +573,9 @@ public forms, automation, audit, and authorization.
 - AND `owner` means an active principal with active `instance.owner` authority
   can invoke the operation
 - AND response field filters may be keyed by each declared actor kind
+- AND response field filters select command output payload field names,
+  including fields written by record-plan steps whose entity differs from the
+  operation entity
 - AND anonymous public access still requires the explicit anonymous operation
   access policy and public input contract
 
@@ -640,8 +643,13 @@ public forms, automation, audit, and authorization.
 - AND each step creates, patches, deletes, or tombstones one flat record in a
   declared entity from the same schema
 - AND step values may reference operation input fields, literal scalar values,
-  generated ids, generated timestamps, actor/source context, and outputs from
-  earlier steps
+  generated ids, generated human-readable codes, generated timestamps,
+  actor/source context, and outputs from earlier steps
+- AND generated human-readable code expressions declare a named alphabet, either
+  one length or grouped segment lengths, an optional group separator, and an
+  optional literal prefix
+- AND generated human-readable code expressions are valid for step values, not
+  record id expressions
 - AND record id expressions use input, literal scalar, generated id, or earlier
   step id output expressions
 - AND field values target declared fields on the step entity
