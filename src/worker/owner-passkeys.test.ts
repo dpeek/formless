@@ -423,6 +423,7 @@ describe("owner passkey API routes", () => {
     expect(accepted.response.headers.get("Set-Cookie")).toContain(`${OWNER_SESSION_COOKIE_NAME}=`);
     expect(accepted.body).toEqual({
       authenticated: true,
+      continueTo: "/",
       owner: registered.body.owner,
       session: { expiresAt: expect.any(String) },
     });
@@ -492,6 +493,63 @@ describe("owner passkey API routes", () => {
     expect(counterRegression.body).toEqual({
       authenticated: false,
       error: "Passkey login verification failed.",
+    });
+  });
+
+  it("returns validated login continuations after successful assertion verification", async () => {
+    const authenticator = new VirtualPasskey(credentialId);
+    const registered = await registerOwnerPasskey(authenticator);
+    const handoffTarget =
+      "/formless/auth/handoff?targetOrigin=https%3A%2F%2Fadmin.example.com&state=c0tPAI";
+
+    const safeOptions = await loginOptions();
+    const safe = await verifyLogin(
+      authenticator.authenticationResponse(safeOptions.body.options, {
+        counter: 1,
+        origin: canonicalOrigin,
+        rpId: relyingPartyId,
+      }),
+      { redirectTo: "/apps/site?screen=owner" },
+    );
+    const unsafeOptions = await loginOptions();
+    const unsafe = await verifyLogin(
+      authenticator.authenticationResponse(unsafeOptions.body.options, {
+        counter: 2,
+        origin: canonicalOrigin,
+        rpId: relyingPartyId,
+      }),
+      { redirectTo: "https://evil.example/apps/site" },
+    );
+    const handoffOptions = await loginOptions();
+    const handoff = await verifyLogin(
+      authenticator.authenticationResponse(handoffOptions.body.options, {
+        counter: 3,
+        origin: canonicalOrigin,
+        rpId: relyingPartyId,
+      }),
+      { redirectTo: handoffTarget },
+    );
+
+    expect(safe.response.status).toBe(200);
+    expect(safe.body).toEqual({
+      authenticated: true,
+      continueTo: "/apps/site?screen=owner",
+      owner: registered.body.owner,
+      session: { expiresAt: expect.any(String) },
+    });
+    expect(unsafe.response.status).toBe(200);
+    expect(unsafe.body).toEqual({
+      authenticated: true,
+      continueTo: "/",
+      owner: registered.body.owner,
+      session: { expiresAt: expect.any(String) },
+    });
+    expect(handoff.response.status).toBe(200);
+    expect(handoff.body).toEqual({
+      authenticated: true,
+      continueTo: handoffTarget,
+      owner: registered.body.owner,
+      session: { expiresAt: expect.any(String) },
     });
   });
 
@@ -597,10 +655,13 @@ async function registerOwnerPasskey(authenticator: VirtualPasskey) {
   return response;
 }
 
-async function verifyLogin(response: AuthenticationResponseJSON) {
+async function verifyLogin(
+  response: AuthenticationResponseJSON,
+  input: { redirectTo?: unknown } = {},
+) {
   return postJson<OwnerPasskeyLoginVerifyResponse | { authenticated?: false; error: string }>(
     "/api/formless/passkeys/login/verify",
-    { response },
+    { ...input, response },
   );
 }
 

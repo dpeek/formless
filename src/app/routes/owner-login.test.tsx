@@ -218,6 +218,7 @@ describe("owner login route data flow", () => {
 
       return Response.json({
         authenticated: true,
+        continueTo: "/formless/auth/handoff?state=runtime",
         owner,
         session: { expiresAt: "2026-06-21T00:00:00.000Z" },
       });
@@ -227,9 +228,11 @@ describe("owner login route data flow", () => {
       loginWithPasskey({
         createAuthenticationResponse: async () => authenticationResponse,
         fetcher,
+        redirectTo: "/apps/personal/settings?panel=routes",
       }),
     ).resolves.toEqual({
       authenticated: true,
+      continueTo: "/formless/auth/handoff?state=runtime",
       owner,
       session: { expiresAt: "2026-06-21T00:00:00.000Z" },
     });
@@ -243,7 +246,10 @@ describe("owner login route data flow", () => {
       },
       {
         authorization: null,
-        body: { response: authenticationResponse },
+        body: {
+          redirectTo: "/apps/personal/settings?panel=routes",
+          response: authenticationResponse,
+        },
         credentials: "same-origin",
         input: "/api/formless/passkeys/login/verify",
         method: "POST",

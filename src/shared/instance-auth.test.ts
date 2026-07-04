@@ -300,17 +300,34 @@ describe("owner passkey protocol", () => {
     expect(parseOwnerPasskeyLoginOptionsResponse({ options: loginOptions() })).toEqual({
       options: loginOptions(),
     });
-    expect(parseOwnerPasskeyLoginVerifyRequest({ response: authenticationResponse() })).toEqual({
+    expect(
+      parseOwnerPasskeyLoginVerifyRequest({
+        redirectTo: "/apps/site?screen=owner",
+        response: authenticationResponse(),
+      }),
+    ).toEqual({
+      redirectTo: "/apps/site?screen=owner",
+      response: authenticationResponse(),
+    });
+    expect(
+      parseOwnerPasskeyLoginVerifyRequest({
+        redirectTo: "https://evil.example/apps/site",
+        response: authenticationResponse(),
+      }),
+    ).toEqual({
+      redirectTo: "https://evil.example/apps/site",
       response: authenticationResponse(),
     });
     expect(
       parseOwnerPasskeyLoginVerifyResponse({
         authenticated: true,
+        continueTo: "/formless/auth/handoff?targetOrigin=https%3A%2F%2Fadmin.example.com",
         owner,
         session: { expiresAt: "2026-06-28T00:00:00.000Z" },
       }),
     ).toEqual({
       authenticated: true,
+      continueTo: "/formless/auth/handoff?targetOrigin=https%3A%2F%2Fadmin.example.com",
       owner,
       session: { expiresAt: "2026-06-28T00:00:00.000Z" },
     });
@@ -357,12 +374,26 @@ describe("owner passkey protocol", () => {
     ).toThrow('Passkey registration verify request has unsupported key "redirectTo".');
     expect(() =>
       parseOwnerPasskeyLoginVerifyRequest({
+        redirectTo: 42,
+        response: authenticationResponse(),
+      }),
+    ).toThrow("Passkey login verify request redirectTo must be a string.");
+    expect(() =>
+      parseOwnerPasskeyLoginVerifyRequest({
         response: {
           ...authenticationResponse(),
           type: "password",
         },
       }),
     ).toThrow('Passkey login response type must be "public-key".');
+    expect(() =>
+      parseOwnerPasskeyLoginVerifyResponse({
+        authenticated: true,
+        continueTo: "https://evil.example/apps/site",
+        owner,
+        session: { expiresAt: "2026-06-28T00:00:00.000Z" },
+      }),
+    ).toThrow("Passkey login verify response continueTo must be path-only.");
     expect(() => parseOwnerPasskeyLoginOptionsRequest({ setupToken })).toThrow(
       'Passkey login options request has unsupported key "setupToken".',
     );

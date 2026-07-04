@@ -755,7 +755,7 @@ export async function writeWorkspaceOperationState(
   await mkdir(workspaceRoot, { recursive: true });
   await ensureInstanceWorkspaceSecretStateIgnored(workspaceRoot);
   await mkdir(workspaceOperationStateRoot(workspaceRoot), { recursive: true });
-  await writeFile(
+  await writeFileAtomically(
     workspaceOperationStatePath(workspaceRoot, state.id),
     formatWorkspaceOperationState(state),
   );

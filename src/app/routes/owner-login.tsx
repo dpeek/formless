@@ -76,10 +76,10 @@ export function OwnerLoginRoute() {
     setState({ status: "submitting", owner });
 
     try {
-      const response = await loginWithPasskey();
+      const response = await loginWithPasskey({ redirectTo: redirectTarget });
 
       setState({ status: "complete", owner: response.owner });
-      navigateAfterOwnerLogin(redirectTarget, { setLocation });
+      navigateAfterOwnerLogin(response.continueTo, { setLocation });
     } catch (error) {
       setState({
         status: "failed",
@@ -255,14 +255,16 @@ export async function fetchOwnerSessionStatus({
 export async function loginWithPasskey({
   createAuthenticationResponse = createBrowserPasskeyAuthenticationResponse,
   fetcher = fetch,
+  redirectTo,
   signal,
 }: OwnerLoginFetchOptions & {
   createAuthenticationResponse?: CreatePasskeyAuthenticationResponse;
+  redirectTo?: OwnerPasskeyLoginVerifyRequest["redirectTo"];
 } = {}): Promise<OwnerPasskeyLoginVerifyResponse> {
   const options = await fetchOwnerPasskeyLoginOptions({ fetcher, signal });
   const response = await createAuthenticationResponse(options.options);
 
-  return await verifyOwnerPasskeyLogin({ fetcher, response, signal });
+  return await verifyOwnerPasskeyLogin({ fetcher, redirectTo, response, signal });
 }
 
 export async function fetchOwnerPasskeyLoginOptions({
@@ -292,13 +294,18 @@ export async function fetchOwnerPasskeyLoginOptions({
 
 async function verifyOwnerPasskeyLogin({
   fetcher = fetch,
+  redirectTo,
   response: assertionResponse,
   signal,
 }: OwnerLoginFetchOptions & {
+  redirectTo?: OwnerPasskeyLoginVerifyRequest["redirectTo"];
   response: OwnerPasskeyLoginVerifyRequest["response"];
 }): Promise<OwnerPasskeyLoginVerifyResponse> {
   const response = await fetcher("/api/formless/passkeys/login/verify", {
-    body: JSON.stringify({ response: assertionResponse }),
+    body: JSON.stringify({
+      ...(redirectTo === undefined ? {} : { redirectTo }),
+      response: assertionResponse,
+    }),
     credentials: "same-origin",
     headers: {
       Accept: "application/json",

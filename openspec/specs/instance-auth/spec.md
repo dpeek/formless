@@ -419,7 +419,7 @@ local-dev, and mapped host-local owner sessions.
 ### Requirement: Owner Login Redirects
 
 The system SHALL preserve safe owner-login return targets for browser routes
-that require an owner session.
+that require an owner session through a runtime-owned continuation contract.
 
 #### Scenario: Login completes with return target
 
@@ -427,7 +427,12 @@ that require an owner session.
   `/login` with a same-origin `redirectTo` path and query
 - WHEN passkey login succeeds
 - THEN an owner session cookie is issued
-- AND the browser is returned to the requested route
+- AND the passkey verification response includes a display-safe continuation
+  target equal to the validated path-only return target
+- AND the browser is returned to the requested route by following the returned
+  continuation target
+- AND browser client code does not synthesize the final post-login destination
+  from raw URL search parameters after login succeeds
 - AND the return target is not exposed to passkey challenge verification as an
   authorization input
 
@@ -437,8 +442,20 @@ that require an owner session.
   cross-origin, malformed, or unsupported `redirectTo` value
 - WHEN login renders or completes
 - THEN the unsafe return target is ignored
-- AND the browser falls back to the product instance root after successful
-  login
+- AND the passkey verification response uses the product instance root as the
+  continuation target after successful login
+
+#### Scenario: Login continuation may enter auth handoff
+
+- GIVEN an anonymous browser was redirected to `/login` with a safe path-only
+  `redirectTo` value that targets `/formless/auth/handoff`
+- WHEN passkey login succeeds
+- THEN the passkey verification response includes that handoff path and query
+  as the continuation target
+- AND the browser follows the continuation with document navigation so the
+  runtime-owned handoff route can issue a target-bound one-time grant
+- AND no absolute, protocol-relative, cross-origin, malformed, or unsupported
+  handoff target is accepted
 
 ### Requirement: Central Auth And Host Sessions
 

@@ -6,6 +6,8 @@ import {
 } from "@simplewebauthn/server";
 
 import {
+  ownerLoginDefaultRedirectTarget,
+  parseOwnerLoginRedirectTarget,
   parseOwnerPasskeyLoginOptionsRequest,
   parseOwnerPasskeyLoginVerifyRequest,
   parseOwnerPasskeyRegistrationOptionsRequest,
@@ -457,11 +459,14 @@ async function handleLoginVerifyRequest(
     request,
   });
   const headers = new Headers();
+  const continueTo =
+    parseOwnerLoginRedirectTarget(body.redirectTo) ?? ownerLoginDefaultRedirectTarget;
 
   headers.set("Set-Cookie", session.cookie);
 
   const response: OwnerPasskeyLoginVerifyResponse = {
     authenticated: true,
+    continueTo,
     owner: state.owner,
     session: { expiresAt: session.session.expiresAt },
   };

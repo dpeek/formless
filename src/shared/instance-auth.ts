@@ -64,11 +64,13 @@ export type OwnerPasskeyLoginOptionsResponse = {
 };
 
 export type OwnerPasskeyLoginVerifyRequest = {
+  redirectTo?: string;
   response: AuthenticationResponseJSON;
 };
 
 export type OwnerPasskeyLoginVerifyResponse = {
   authenticated: true;
+  continueTo: OwnerLoginRedirectTarget;
   owner: OwnerIdentity;
   session: OwnerSessionSummary;
 };
@@ -442,9 +444,14 @@ export function parseOwnerPasskeyLoginVerifyRequest(
 ): OwnerPasskeyLoginVerifyRequest {
   const object = parseObject("Passkey login verify request", value);
 
-  assertKeys("Passkey login verify request", object, ["response"]);
+  assertKeys("Passkey login verify request", object, ["response"], ["redirectTo"]);
 
   return {
+    ...(object.redirectTo === undefined
+      ? {}
+      : {
+          redirectTo: parseString("Passkey login verify request redirectTo", object.redirectTo),
+        }),
     response: parseAuthenticationResponse("Passkey login response", object.response),
   };
 }
@@ -454,7 +461,12 @@ export function parseOwnerPasskeyLoginVerifyResponse(
 ): OwnerPasskeyLoginVerifyResponse {
   const object = parseObject("Passkey login verify response", value);
 
-  assertKeys("Passkey login verify response", object, ["authenticated", "owner", "session"]);
+  assertKeys("Passkey login verify response", object, [
+    "authenticated",
+    "continueTo",
+    "owner",
+    "session",
+  ]);
 
   if (object.authenticated !== true) {
     throw new Error("Passkey login verify response authenticated must be true.");
@@ -462,6 +474,10 @@ export function parseOwnerPasskeyLoginVerifyResponse(
 
   return {
     authenticated: true,
+    continueTo: parseOwnerLoginContinuationTarget(
+      "Passkey login verify response continueTo",
+      object.continueTo,
+    ),
     owner: parseOwnerIdentity("Passkey login owner", object.owner),
     session: parseOwnerSessionSummary("Passkey login session", object.session),
   };
@@ -711,6 +727,19 @@ function parseCollaboratorInvitationAcceptanceHandoffSummary(
     returnTo,
     targetOrigin: parseInstanceAuthCanonicalOrigin(object.targetOrigin),
   };
+}
+
+function parseOwnerLoginContinuationTarget(
+  context: string,
+  value: unknown,
+): OwnerLoginRedirectTarget {
+  const target = parseOwnerLoginRedirectTarget(value);
+
+  if (!target) {
+    throw new Error(`${context} must be path-only.`);
+  }
+
+  return target;
 }
 
 function parseCollaboratorInvitationAcceptanceInvitationSummary(
@@ -1328,6 +1357,14 @@ function parseTrimmedNonEmptyString(context: string, value: unknown): string {
   }
 
   return value.trim();
+}
+
+function parseString(context: string, value: unknown): string {
+  if (typeof value !== "string") {
+    throw new Error(`${context} must be a string.`);
+  }
+
+  return value;
 }
 
 function parseObject(context: string, value: unknown): Record<string, unknown> {

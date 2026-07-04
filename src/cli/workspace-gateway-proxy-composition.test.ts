@@ -186,7 +186,7 @@ function requireRouteAvailable(
 async function createOwnerCookie(): Promise<string> {
   const created = await createOwnerSessionCookie({
     env: { FORMLESS_OWNER_SESSION_SECRET: ownerSecret },
-    now: "2026-06-02T01:00:00.000Z",
+    now: "2999-01-01T00:00:00.000Z",
     owner: { createdAt: "2026-06-02T01:00:00.000Z", id: "owner-1", name: "Ada Owner" },
     request: new Request("http://local.test/"),
   });
