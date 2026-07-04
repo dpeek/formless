@@ -45,12 +45,12 @@ import {
 } from "./runtime-app-packages.ts";
 import type { OperationInvocationActor } from "../shared/operation-invocation.ts";
 
-export const INSTANCE_AUTH_HANDOFF_START_PATH = "/_formless/auth/handoff";
-export const INSTANCE_AUTH_HANDOFF_CALLBACK_PATH = "/_formless/auth/callback";
+export const INSTANCE_AUTH_HANDOFF_START_PATH = "/formless/auth/handoff";
+export const INSTANCE_AUTH_HANDOFF_CALLBACK_PATH = "/formless/auth/callback";
 export const HOST_AUTH_NONCE_COOKIE_NAME = "formless_host_auth_nonce";
 export const HOST_AUTH_SESSION_COOKIE_NAME = "formless_host_session";
 
-const instanceAuthHostSessionValidatePath = "/_formless/auth/host-session/validate";
+const instanceAuthHostSessionValidatePath = "/formless/auth/host-session/validate";
 const handoffGrantTtlMs = 5 * 60 * 1000;
 const hostNonceMaxAgeSeconds = 5 * 60;
 const hostSessionMaxAgeSeconds = 12 * 60 * 60;

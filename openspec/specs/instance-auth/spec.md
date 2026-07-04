@@ -225,7 +225,7 @@ principals, committing identity acceptance, and issuing central auth sessions.
 
 #### Scenario: Invitation acceptance eligibility
 
-- GIVEN a browser opens `/_formless/auth/invitations/accept` on the configured
+- GIVEN a browser opens `/formless/auth/invitations/accept` on the configured
   auth origin with an invitation id and raw invite token
 - WHEN the runtime checks acceptance eligibility
 - THEN it hashes the raw token and verifies it against private invitation token
@@ -293,7 +293,7 @@ an installed app route or generated app UI.
 
 #### Scenario: Render eligible invitation
 
-- GIVEN a browser navigates to `/_formless/auth/invitations/accept` on the
+- GIVEN a browser navigates to `/formless/auth/invitations/accept` on the
   configured auth origin with an invitation id and raw invite token
 - WHEN the invitation acceptance eligibility check succeeds
 - THEN the browser surface renders display-safe invitation facts needed to

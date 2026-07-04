@@ -40,6 +40,7 @@ export const runtimeTopologyRoutes = {
   appRouteBase: "/apps",
   clientShellAssetPath: "/index.html",
   dynamicSiteIconPaths: ["/favicon.svg", "/favicon.ico", "/apple-touch-icon.png"],
+  formlessRouteBase: "/formless",
   instanceRootRoute: "/",
   loginRoute: "/login",
   localSessionRoute: "/local-session",
@@ -75,6 +76,7 @@ const clientRoutePaths = [
 ] as const;
 const clientRoutePrefixes = [
   runtimeTopologyRoutes.appRouteBase,
+  runtimeTopologyRoutes.formlessRouteBase,
   runtimeTopologyRoutes.publicSitePreviewRouteBase,
   "/schema",
   runtimeTopologyRoutes.siteRouteBase,
@@ -82,6 +84,7 @@ const clientRoutePrefixes = [
 ] as const;
 const publishedProfileClientRoutePrefixes = [
   runtimeTopologyRoutes.appRouteBase,
+  runtimeTopologyRoutes.formlessRouteBase,
   runtimeTopologyRoutes.siteRouteBase,
 ] as const;
 const instanceProfileClientRoutePaths = [

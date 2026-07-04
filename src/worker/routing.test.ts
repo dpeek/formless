@@ -405,9 +405,10 @@ describe("Worker document routing", () => {
     ).toBe(false);
   });
 
-  it("keeps API, preview redirect, generated app, app-profile, asset, and non-HTML routes out of SSR", () => {
+  it("keeps API, Formless view, preview redirect, generated app, app-profile, asset, and non-HTML routes out of SSR", () => {
     const nonSsrRequests = [
       documentRequest("http://example.com/api/site/tree/home"),
+      documentRequest("http://example.com/formless/auth/callback"),
       documentRequest("http://example.com/pages/home"),
       documentRequest("http://example.com/tasks"),
       documentRequest("http://example.com/crm/audiences"),
@@ -436,6 +437,11 @@ describe("Worker document routing", () => {
     expect(shouldHandlePublishedSiteDocument(documentRequest("http://app.example.com/"))).toBe(
       false,
     );
+    expect(
+      shouldDeferToStaticAssets(documentRequest("http://example.com/formless/auth/callback"), {
+        profile: "publishedSite",
+      }),
+    ).toBe(true);
   });
 
   it("routes published Site indexing resources before static asset fallback", () => {

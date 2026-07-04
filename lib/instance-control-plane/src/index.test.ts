@@ -1437,6 +1437,8 @@ describe("instance control-plane schema contracts", () => {
     expect(isInstanceControlPlaneRouteSafePath("/apps//personal")).toBe(false);
     expect(isInstanceControlPlaneRouteSafePath("/api")).toBe(false);
     expect(isInstanceControlPlaneRouteSafePath("/api/jobs")).toBe(false);
+    expect(isInstanceControlPlaneRouteSafePath("/formless")).toBe(false);
+    expect(isInstanceControlPlaneRouteSafePath("/formless/auth")).toBe(false);
   });
 
   it("validates reviewable control-plane storage snapshots", () => {

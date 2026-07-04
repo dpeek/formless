@@ -302,6 +302,7 @@ export const instanceControlPlaneReservedRoutePaths = [
   "/assets",
   "/favicon.ico",
   "/favicon.svg",
+  "/formless",
   "/login",
   "/robots.txt",
   "/schema",

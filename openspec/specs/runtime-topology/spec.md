@@ -257,7 +257,7 @@ The system MUST route public Site documents through published Site behavior only
 #### Scenario: Non-document paths stay out of SSR
 
 - GIVEN the runtime profile is `publishedSite`
-- WHEN a request targets `/api/*`, `/tasks`, `/crm/audiences`, `/site/schema`, `/schema`, `/apps/<installId>`, `/sites/<installId>`, static asset-like paths, dynamic root icon paths, or a non-HTML request
+- WHEN a request targets `/api/*`, `/formless/*`, `/tasks`, `/crm/audiences`, `/site/schema`, `/schema`, `/apps/<installId>`, `/sites/<installId>`, static asset-like paths, dynamic root icon paths, or a non-HTML request
 - THEN the request is not handled as a published Site document
 
 ### Requirement: Static Assets And Dynamic Public Resources
@@ -327,7 +327,7 @@ profile behavior.
 
 - **GIVEN** an enabled exact-host `route` mounts an instance admin, app, or
   public Site host
-- **WHEN** the mapped host receives `/_formless/auth/callback`
+- **WHEN** the mapped host receives `/formless/auth/callback`
 - **THEN** runtime topology reserves the request for cross-domain auth grant
   consumption
 - **AND** app schemas, generated app routes, public Site SSR, clean redirects,

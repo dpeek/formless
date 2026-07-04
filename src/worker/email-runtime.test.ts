@@ -206,7 +206,7 @@ describe("email runtime delivery scheduling", () => {
     const rawToken = "aW52aXRlLXJhdy10b2tlbi0x";
     const tokenHash = "dG9rZW4taGFzaC0x";
     const inviteLink =
-      "https://auth.example.com/_formless/auth/invitations/accept?invitationId=invitation%3Aada&token=aW52aXRlLXJhdy10b2tlbi0x";
+      "https://auth.example.com/formless/auth/invitations/accept?invitationId=invitation%3Aada&token=aW52aXRlLXJhdy10b2tlbi0x";
     const scheduled = await postSchedule({
       canonicalOrigin: "https://auth.example.com",
       idempotencyKey: "invitation:ada:delivery",

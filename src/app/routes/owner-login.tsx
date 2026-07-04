@@ -143,7 +143,7 @@ export function navigateAfterOwnerLogin(
 export function ownerLoginRedirectRequiresDocumentNavigation(
   redirectTarget: `/${string}`,
 ): boolean {
-  return redirectTarget === "/_formless" || redirectTarget.startsWith("/_formless/");
+  return redirectTarget === "/formless" || redirectTarget.startsWith("/formless/");
 }
 
 export function OwnerLoginRouteView({

@@ -594,7 +594,7 @@ describe("instance auth state", () => {
       token: created.ok ? created.token : undefined,
     });
     expect(link).toBe(
-      `${canonicalOrigin}/_formless/auth/invitations/accept?invitationId=invitation%3Aada&token=${invitationRawToken}`,
+      `${canonicalOrigin}/formless/auth/invitations/accept?invitationId=invitation%3Aada&token=${invitationRawToken}`,
     );
     expect(new URL(link).searchParams.has("redirectTo")).toBe(false);
     expect(new URL(link).pathname).not.toContain("setup");

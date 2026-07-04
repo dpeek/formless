@@ -1,9 +1,9 @@
 # Multi-Domain Auth Architecture
 
-Last updated: 2026-06-29
+Last updated: 2026-07-04
 
-Purpose: architecture direction for collaborator auth, app user auth, and
-multi-domain session handoff in Formless.
+Purpose: architecture direction for owner setup, collaborator auth, app user
+auth, unified account onboarding, and multi-domain session handoff in Formless.
 
 This is not shipped behavior. Shipped behavior lives in
 `openspec/specs/*/spec.md`.
@@ -27,14 +27,24 @@ This is not shipped behavior. Shipped behavior lives in
   bindings and target-scoped public operation routes.
 - `openspec/specs/email-runtime/spec.md` defines instance-scoped outbound email
   delivery, idempotent delivery records, and default sender selection.
+- `openspec/specs/identity-control-plane/spec.md` defines current principal,
+  email, group, organization, membership, role, role assignment, app
+  registration, and invitation records.
 - `src/worker/owner-session.ts` currently signs instance-bound owner cookies
   named `formless_owner_session`.
 - `src/worker/instance-auth-runtime.ts` currently derives passkey auth config
   from explicit env, dev origin, or control-plane production identity.
 - `lib/schema/src/types.ts` currently supports operation actors `admin`,
-  `cliDeployer`, `owner`, `runner`, and `anonymous`.
-- `src/shared/operation-invocation.ts` currently stores only actor kind in the
-  operation invocation envelope.
+  `authenticated`, `cliDeployer`, `owner`, `runner`, and `anonymous`.
+- `src/shared/operation-invocation.ts` currently stores actor kind, optional
+  principal id, and optional session target facts in the operation invocation
+  envelope.
+- `src/app/routes/owner-login.tsx`, `src/app/routes/owner-setup.tsx`, and
+  `src/app/routes/collaborator-invitation-acceptance.tsx` currently own some
+  successful-auth continuation behavior in React after JSON API responses.
+- `src/worker/instance-auth-handoff.ts` currently owns mapped-host handoff start,
+  grant issuance, callback consumption, host-local session cookies, and callback
+  redirects.
 
 ## Recommendation
 
@@ -53,6 +63,12 @@ The first owner becomes a principal with an `instance.owner` role assignment.
 Collaborators and later external app users are principals with narrower role or
 membership assignments.
 
+Expose those pieces through one account experience on the auth origin. Owner
+setup, sign in, email verification, passkey creation, invitation acceptance, app
+registration, app profile completion, terms acceptance, and continuation to a
+mapped host should be steps in one runtime-owned account journey, not unrelated
+browser surfaces.
+
 ## Principles
 
 - Instance identity is common. Apps do not get separate user tables for auth.
@@ -66,6 +82,20 @@ membership assignments.
   that serves the app or Site surface.
 - Email verification is a recovery and invitation primitive, not the primary
   credential.
+- Production human accounts should have a verified primary email before they
+  receive durable browser access. Production first-owner setup should verify
+  email before granting `instance.owner`. Local dev bootstrap may keep an
+  explicit shortcut.
+- Account completion is a gate, not a credential. Missing profile fields, terms
+  acceptance, or app registration steps should block the target surface without
+  changing how credentials prove the principal.
+- Auth views are transient. After a browser is authenticated and all target
+  gates are satisfied, the auth surface should redirect to an instance, app, or
+  destination picker rather than remain on a logged-in auth page.
+- Redirect decisions belong to the runtime account orchestrator. Client code may
+  render WebAuthn and form steps, but successful gate completion should return a
+  runtime-owned continuation target or an HTTP redirect, not ad hoc per-view
+  navigation rules.
 - Public anonymous operations remain available without auth. Authenticated
   users are a new actor mode, not a replacement for public operation policy.
 - Provider state remains separate. Domains and email deployment continue to
@@ -124,6 +154,18 @@ Fields:
 - `status`: `active`, `invited`, `disabled`
 - `createdAt` and `updatedAt` through record system fields
 
+Keep required common fields small. `principal` is for identity display and
+authorization joins, not a universal user profile. A human account needs a
+display name and at least one verified primary email through `principal-email`.
+Avatar can become an optional display field or media reference later if the
+runtime needs cross-app account presentation, but it should not be required for
+auth.
+
+Do not put first name, last name, phone, address, job title, billing details,
+preferences, or app-specific consent fields on `principal`. Apps should model
+those as normal app-owned records that reference `auth:principal` or
+`auth:organization`.
+
 Owner is not a separate identity class. Owner is a role assignment:
 
 - role key: `instance.owner`
@@ -132,6 +174,97 @@ Owner is not a separate identity class. Owner is a role assignment:
 
 This keeps first-owner setup, collaborators, and external users on the same
 identity path.
+
+## Account Journey
+
+Use one runtime-owned auth-origin shell for human account flows. The shell should
+compose small gates:
+
+- identify or create the principal;
+- verify primary email;
+- create or verify a credential, passkey first;
+- accept an invitation or owner setup grant when present;
+- create or activate app registration when the target is an app install;
+- collect required app-owned profile fields through declared operations;
+- record required policy or terms acceptance;
+- mint the central session and continue through target-bound handoff.
+
+The journey starts from different grants, but converges on the same account
+state:
+
+- owner setup capability grants the first `instance.owner` role;
+- collaborator invitation grants instance, app, organization, group, or
+  membership state according to inviter authority;
+- app signup policy grants or requests app registration;
+- sign-in resumes an existing principal and evaluates any missing completion
+  gates for the requested target.
+
+Owner setup should be a specialized entry into this journey, not a separate user
+class. In production, first-owner setup should verify the owner's email, register
+a passkey, create the principal, create the verified `principal-email`, assign
+`instance.owner`, issue the central session, and continue to the instance shell.
+Admin bearer and local dev bootstrap remain trusted setup paths but do not become
+browser credentials.
+
+## Auth Views And Redirects
+
+Use `/formless/*` for runtime-owned auth routes.
+
+`/formless/auth` is the canonical auth entrypoint. It is mostly an
+orchestrator, not a durable logged-in page. It should resolve the current
+principal session, requested target, route policy, account gates, and next step.
+Most requests to it should redirect to a specific auth gate view or to the final
+target.
+
+Recommended auth-origin views:
+
+- `/formless/auth`: resolve target and next gate; render only for fallback
+  states.
+- `/formless/auth/sign-in`: passkey sign-in or future credential choice.
+- `/formless/auth/setup`: first-owner setup entry.
+- `/formless/auth/verify-email`: email challenge request and verification.
+- `/formless/auth/invitations/accept`: invitation deep link and acceptance.
+- `/formless/auth/signup`: app registration entry.
+- `/formless/auth/complete-profile`: app-owned profile completion gate.
+- `/formless/auth/terms`: required policy or terms acceptance gate.
+- `/formless/auth/continue`: final same-host redirect or cross-domain handoff
+  start.
+
+Auth views should exit after success. They may render loading, form, success, or
+error states while completing a gate, but an already-authenticated browser with
+no blocking gate should not stay on a generic auth surface. A direct visit to
+the auth origin without a target should behave as follows:
+
+- unauthenticated browser: show sign-in and eligible signup/setup choices;
+- authenticated owner or instance admin: redirect to the preferred instance
+  admin origin;
+- authenticated principal with one available app destination: redirect to that
+  app destination;
+- authenticated principal with multiple destinations: render a destination
+  picker;
+- authenticated principal with no destination: render account status and sign
+  out only.
+
+Continuation targets should be explicit and path-only for the target origin.
+Auth APIs that complete a gate should either return `303 See Other` with a
+validated `Location` or return a small display-safe continuation contract such as
+`{ continueTo }` for browser APIs that must finish inside client-controlled
+WebAuthn code. The target still comes from runtime route resolution,
+invitation/setup/signup state, or app registration policy, not arbitrary
+app-controlled HTML or open redirects.
+
+Redirect cleanup should converge current client-side continuation behavior onto
+that contract:
+
+- owner login success exits through the account continuation contract instead of
+  each React route deciding the final destination;
+- owner setup success exits to the preferred instance admin destination instead
+  of remaining on a durable setup-complete view;
+- invitation acceptance success exits through the same continuation contract,
+  including mapped-host handoff when needed;
+- logout should clear the active auth or host session and redirect to a signed
+  out entry state or path-only return target, rather than keeping a privileged
+  logged-in auth page alive.
 
 ## Roles And Authorization
 
@@ -241,6 +374,20 @@ This is an extension model, not inheritance. The app profile is app data. The
 principal, email verification, credentials, and role assignments remain runtime
 identity data.
 
+App profile records are the extension point for schema-driven account fields.
+For example, an app may require `firstName`, `lastName`, `address`, `company`,
+or app-specific consent fields on a profile record that references
+`auth:principal`. The runtime account journey can render or launch the
+completion operation for those fields, but the app owns the fields and writes
+them through its schema operation model.
+
+Required profile fields are completion gates. If a target app install declares
+that a profile record or operation is required before use, sign in or signup can
+finish authentication and then pause on profile completion before entering the
+app surface. Adding a new required app profile field later should create a new
+completion gate for affected principals; it should not require changing the
+common `principal` shape.
+
 ## Operation Actor Policy
 
 Add authenticated actor support to operation policy after the identity runtime
@@ -326,9 +473,12 @@ Flow:
 1. Browser requests an authenticated app route on `https://app.example.net`.
 2. Runtime sees no valid host session for that host, route, and app install.
 3. Target host creates a short-lived auth-start nonce, stores it in a
-   host-local nonce cookie, and redirects to
-   `https://auth.example.com/login?client=<route-id>&redirectTo=<path>&state=<state>`.
-4. Auth origin verifies or creates the central auth session through passkey.
+   host-local nonce cookie, and redirects to the auth entrypoint with validated
+   target facts, such as
+   `https://auth.example.com/formless/auth?target=<target>&state=<state>`.
+4. Auth origin resolves the target, verifies or creates the central auth session
+   through the required account gates, and exits the auth surface after the
+   browser satisfies those gates.
 5. Auth origin creates a short-lived one-time grant bound to:
    - instance id;
    - principal id;
@@ -340,7 +490,7 @@ Flow:
    - nonce/state;
    - expiry.
 6. Auth origin redirects back to
-   `https://app.example.net/_formless/auth/callback?grant=<grant>&state=<state>`.
+   `https://app.example.net/formless/auth/callback?grant=<grant>&state=<state>`.
 7. Target host verifies and consumes the grant through the same instance
    Authority/auth runtime, and requires returned state to match the host-local
    auth-start nonce cookie.
@@ -467,11 +617,13 @@ Recommended first UI:
   assignment, and transfer/remove owner remain owner-confirmed when they affect
   owner or recovery authority.
 
-Invite acceptance needs its own auth-origin browser surface. A request to
-`/_formless/auth/invitations/accept` should render status, start passkey
-registration for eligible pending invitations, verify the passkey response,
-issue the central session, and follow any returned handoff target. This surface
-must not depend on an installed app route or generated app UI.
+Invite acceptance needs an auth-origin browser surface. The current
+`/formless/auth/invitations/accept` entrypoint can remain a deep link, but the
+experience should use the shared account journey: render invitation status,
+verify email through the invite token, start passkey registration for eligible
+pending invitations, issue the central session, evaluate completion gates, and
+follow any returned handoff target. This surface must not depend on an installed
+app route or generated app UI.
 
 ## External App Registration
 
@@ -498,11 +650,49 @@ creates or reuses identity records and app registration records, then invokes or
 offers an explicit app registration operation. It must not directly materialize
 arbitrary app records outside the operation model.
 
+Signup should be a grant-producing account flow. The target app install supplies
+the registration policy and optional app registration operation. The account
+journey proves the principal, verifies email, evaluates the policy, creates or
+activates `app-registration`, and then runs any required app profile completion
+or terms gates before issuing or using a host session for the app surface.
+
+Closed signup is the first app-user policy. It can reuse collaborator
+invitations or owner-created app registrations. Self-service `email-verified`
+signup should come after the shared account journey and completion gate contract
+exist, so app signup does not invent a parallel account model.
+
+## Account Terms And Completion Gates
+
+Terms acceptance is account completion state, not credential state. Model terms
+or policy acceptance as reviewable records scoped to an instance, app install,
+or organization, with a separate principal acceptance record. The raw text or
+published policy document can be app-owned or control-plane-owned depending on
+the surface, but acceptance should remain a flat record that references the
+principal and policy version.
+
+Recommended gate kinds:
+
+- `email-verification`: principal must have a verified primary email;
+- `credential`: principal must have an accepted credential method;
+- `invitation`: pending invitation must be accepted or rejected;
+- `app-registration`: principal or organization must be registered for the app;
+- `profile-completion`: app-owned required fields or registration operation must
+  be completed;
+- `terms-acceptance`: required policy version must be accepted;
+- `role-review`: requested high-privilege access needs owner/admin approval.
+
+Gates should be target-scoped. A principal can be fully usable in one app install
+while needing profile completion or updated terms in another. The auth shell
+should always show the next blocking gate for the requested target and should
+avoid leaking app-private profile fields across unrelated app installs.
+
 ## Email Verification And Recovery
 
 Email verification is required for:
 
+- production first-owner setup;
 - invite acceptance;
+- self-service app signup;
 - recovery contact setup;
 - future email-link auth methods;
 - account notifications;
@@ -584,6 +774,11 @@ actions.
   redirects.
 - Return targets must remain path-only for the target origin, following the
   current owner login redirect safety rule.
+- Successful auth gate completion must not leave the browser on a privileged
+  logged-in auth page when a valid target exists.
+- Client-side continuation is allowed only for display-safe WebAuthn or form
+  flows that receive a runtime-issued continuation target; clients must not
+  synthesize cross-origin redirect targets from app-controlled input.
 - Passkey challenges remain one-time and scoped to canonical auth origin and
   relying-party id.
 - Disabled principals, revoked memberships, and changed role assignments must
@@ -597,49 +792,65 @@ actions.
    package slice from `instance-control-plane`.
 
 2. Move owner identity to the principal model.
-   First owner setup creates a principal, passkey credential, and
-   `instance.owner` role assignment. Existing owner-only checks become role
-   checks.
+   First owner setup creates a principal, verified primary email, passkey
+   credential, and `instance.owner` role assignment. Existing owner-only checks
+   become role checks. Local dev bootstrap may keep an explicit shortcut.
 
-3. Add central auth session and host session contracts.
+3. Add central auth session, host session, and shared account shell contracts.
    Keep passkey ceremonies on the canonical auth origin. Add one-time
    cross-domain grant issuance and callback consumption. Include session
-   version and revocation checks for privileged host-session use.
+   version and revocation checks for privileged host-session use. Start moving
+   owner setup, sign in, invitation acceptance, and handoff continuations toward
+   one auth-origin account journey.
 
-4. Expand route access and operation actor policy.
+4. Clean up auth redirects and continuations.
+   Make `/formless/auth` the auth-origin orchestrator. Move owner login, owner
+   setup, invitation acceptance, logout, and handoff continuation onto one
+   runtime-owned redirect or `{ continueTo }` contract. Auth views should exit
+   to a target, destination picker, or signed-out state instead of keeping a
+   durable logged-in auth surface.
+
+5. Expand route access and operation actor policy.
    Add `authenticated` route access and authenticated operation actor facts in
    the invocation envelope.
 
-5. Add role-aware management authorization.
+6. Add role-aware management authorization.
    Add explicit checks for `instance.owner`, `instance.admin`, and app-scoped
    roles. Keep owner-only recovery paths separate from operational admin paths.
    Ensure mutating management requests recheck current principal status and role
    assignments.
 
-6. Add collaborator invitations.
+7. Add collaborator invitations.
    Use email runtime for invite delivery. Accept invites on auth origin and
    apply role/group/org assignments atomically. Enforce inviter grant authority
    before writing invitations or private token hashes.
 
-7. Add access management UI.
+8. Add access management UI.
    Build a dedicated instance shell surface for people, roles, invitations,
    invite creation, resend, revoke, and principal disablement. Build the
-   auth-origin invite acceptance surface separately from generated app UI.
+   auth-origin invite acceptance entrypoint on the shared account shell,
+   separately from generated app UI.
 
-8. Add identity references in app schemas.
+9. Add identity references in app schemas.
    Support `auth:principal`, `auth:organization`, and `auth:group` references
    from app records.
 
-9. Add external app registration policies.
-   Support closed and email-verified registration first. Add custom operation
-   provisioning through explicit app registration operations.
+10. Add account completion gate contracts.
+    Define target-scoped gates for verified email, credential setup, invitation
+    acceptance, app registration, profile completion, terms acceptance, and
+    role-review approval. Gate completion should write flat identity,
+    control-plane, or app-owned records through explicit operations.
 
-10. Add recovery flows.
+11. Add external app registration policies.
+    Support closed and email-verified registration first. Add custom operation
+    provisioning through explicit app registration operations.
+
+12. Add recovery flows.
     Start with verified email challenge plus replacement passkey for low-risk
     users. Add high-privilege recovery approval before owner/admin email-only
     recovery.
 
-11. Add future auth method adapters.
+13. Add future auth method adapters.
     Keep sessions and principal records stable while methods vary.
 
 ## Decisions
@@ -652,8 +863,18 @@ actions.
   operational administration and cannot grant owner authority.
 - Organization context is explicit when a principal belongs to multiple
   organizations.
-- Email verification is required for recovery setup but cannot restore
-  owner/admin access by itself.
+- `principal` stays small: display name, kind, and status. Verified primary
+  email lives in `principal-email`; app-specific profile fields live in app
+  records that reference identity records.
+- Production first-owner setup should verify email before granting
+  `instance.owner`. Email verification is necessary for recovery setup but
+  cannot restore owner/admin access by itself.
+- Account completion gates are target-scoped runtime flow state. They should
+  write flat identity, control-plane, or app-owned records rather than adding
+  broad profile fields to `principal`.
+- `/formless/auth` is an orchestrator. Auth views are transient gate views, and
+  successful gate completion exits through a runtime-owned redirect or
+  continuation contract.
 - App registration provisioning goes through explicit app operations, not
   direct auth-runtime app record materialization.
 - Host sessions may cache read authorization briefly, but privileged writes and

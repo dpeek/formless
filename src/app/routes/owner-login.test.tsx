@@ -88,7 +88,7 @@ describe("owner login route data flow", () => {
     const clientLocations: unknown[] = [];
     const documentLocations: string[] = [];
     const handoffTarget =
-      "/_formless/auth/handoff?targetOrigin=https%3A%2F%2Fadmin.example.com&state=c0tPAI" as const;
+      "/formless/auth/handoff?targetOrigin=https%3A%2F%2Fadmin.example.com&state=c0tPAI" as const;
 
     navigateAfterOwnerLogin(handoffTarget, {
       replaceDocumentLocation: (target) => documentLocations.push(target),

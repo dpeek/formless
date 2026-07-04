@@ -137,6 +137,7 @@ describe("runtime topology", () => {
   it("owns installed route bases and public Site route constants", () => {
     expect(runtimeTopologyRoutes.accessRoute).toBe("/access");
     expect(runtimeTopologyRoutes.appRouteBase).toBe("/apps");
+    expect(runtimeTopologyRoutes.formlessRouteBase).toBe("/formless");
     expect(runtimeTopologyRoutes.siteRouteBase).toBe("/sites");
     expect(runtimeTopologyRoutes.publicSiteHomeSlug).toBe("home");
     expect(runtimeTopologyRoutes.publicSitePackageAppKey).toBe("site");
@@ -177,6 +178,7 @@ describe("runtime topology", () => {
     expect(isRuntimeClientShellRoute("/crm/audiences")).toBe(true);
     expect(isRuntimeClientShellRoute("/site/schema")).toBe(true);
     expect(isRuntimeClientShellRoute("/schema")).toBe(true);
+    expect(isRuntimeClientShellRoute("/formless/auth/invitations/accept")).toBe(true);
     expect(isRuntimeClientShellRoute("/apps/personal")).toBe(true);
     expect(isRuntimeClientShellRoute("/sites/personal/blog")).toBe(true);
     expect(isRuntimeClientShellRoute("/local-session")).toBe(true);
@@ -186,6 +188,7 @@ describe("runtime topology", () => {
     expect(isRuntimeClientShellRoute("/blog")).toBe(false);
 
     expect(isRuntimePublishedProfileClientShellRoute("/apps/personal")).toBe(true);
+    expect(isRuntimePublishedProfileClientShellRoute("/formless/auth/callback")).toBe(true);
     expect(isRuntimePublishedProfileClientShellRoute("/sites/personal/blog")).toBe(true);
     expect(isRuntimePublishedProfileClientShellRoute("/login")).toBe(true);
     expect(isRuntimePublishedProfileClientShellRoute("/setup")).toBe(true);

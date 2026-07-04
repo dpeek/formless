@@ -1122,7 +1122,7 @@ describe("identity control-plane API routes", () => {
       error: expect.stringContaining("cannot grant instance.owner"),
     });
     expect(JSON.stringify(rejected.body)).not.toContain("token");
-    expect(JSON.stringify(rejected.body)).not.toContain("/_formless/auth/invitations/accept");
+    expect(JSON.stringify(rejected.body)).not.toContain("/formless/auth/invitations/accept");
     expect(afterRejected.body.records.some((record) => record.id === input.invitationId)).toBe(
       false,
     );
