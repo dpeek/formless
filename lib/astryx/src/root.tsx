@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { CommandPalette } from "@astryxdesign/core/CommandPalette";
 import { createStaticSource, type SearchableItem } from "@astryxdesign/core/Typeahead";
 import { FormlessAuthLayout } from "./components/auth.tsx";
+import { FormlessOperationsLayout } from "./components/operations.tsx";
 import { FormlessSiteLayout } from "./components/site.tsx";
 import { FormlessAppShell } from "./components/shell.tsx";
 import { FormlessThemeProvider } from "./theme.tsx";
@@ -21,6 +22,7 @@ const formlessPrototypeLayouts: FormlessPrototypeLayout[] = [
   createFormlessPrototypeLayout("App Shell", () => <FormlessAppShell />),
   createFormlessPrototypeLayout("Public Site", () => <FormlessSiteLayout />),
   createFormlessPrototypeLayout("Auth", () => <FormlessAuthLayout />),
+  createFormlessPrototypeLayout("Operations", () => <FormlessOperationsLayout />),
 ];
 
 const defaultLayout = formlessPrototypeLayouts[0];

@@ -4,7 +4,7 @@ import { FormlessSideNav } from "./side-nav.tsx";
 
 export function FormlessAppShell() {
   return (
-    <AppShell contentPadding={6} sideNav={<FormlessSideNav />}>
+    <AppShell contentPadding={4} sideNav={<FormlessSideNav />}>
       <FormlessMainContent />
     </AppShell>
   );

@@ -39,5 +39,6 @@ Read this when editing `lib/astryx/*`.
 - If custom styling is needed, use StyleX with Astryx tokens.
 - Do not add app schema, seed records, runtime storage, or generated UI behavior here.
 - Do not run or check devstate while iterating in this package
+- Keep prototypes focused on real product behaviour. Avoid proof badges, labels, descriptions and prototype cruft where possible. Where we need to explore multiple states, keep the UI for doing so minimal (see auth layout for and example)
 - Start and keep the vite dev server running so that I can see changes as you make them
 - Use `bun browser` from the the repo root for browser testing (calls agent-browser)

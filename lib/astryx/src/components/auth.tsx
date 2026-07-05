@@ -13,30 +13,27 @@ import { VStack } from "@astryxdesign/core/VStack";
 import {
   borderVars,
   colorVars,
+  fontWeightVars,
   radiusVars,
   shadowVars,
   spacingVars,
+  typeScaleVars,
 } from "@astryxdesign/core/theme/tokens.stylex";
 import {
   ArrowRightIcon,
-  BuildingOffice2Icon,
-  CheckCircleIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
-  EnvelopeIcon,
-  ExclamationTriangleIcon,
   FingerPrintIcon,
-  ShieldCheckIcon,
-  UserPlusIcon,
 } from "@heroicons/react/24/outline";
-
-// PROTOTYPE: user-facing auth flow states, switchable with the bottom bar.
+import { OTPInput } from "./otp-input.tsx";
 
 type AuthIcon = ComponentProps<typeof Icon>["icon"];
 type AuthScenarioKind =
   | "signIn"
   | "ownerSetup"
+  | "accountDetails"
   | "verifyEmail"
+  | "createPasskey"
   | "invite"
   | "handoff"
   | "destinations"
@@ -46,25 +43,29 @@ type AuthScenario = {
   id: string;
   label: string;
   kind: AuthScenarioKind;
-  icon: AuthIcon;
 };
 
 const authScenarios: AuthScenario[] = [
-  { id: "sign-in", label: "Sign in", kind: "signIn", icon: FingerPrintIcon },
-  { id: "owner-setup", label: "Owner setup", kind: "ownerSetup", icon: ShieldCheckIcon },
-  { id: "verify-email", label: "Verify email", kind: "verifyEmail", icon: EnvelopeIcon },
-  { id: "invite", label: "Invitation", kind: "invite", icon: UserPlusIcon },
-  { id: "handoff", label: "Continue", kind: "handoff", icon: CheckCircleIcon },
-  { id: "destinations", label: "Destinations", kind: "destinations", icon: BuildingOffice2Icon },
-  {
-    id: "expired-invite",
-    label: "Expired invite",
-    kind: "expiredInvite",
-    icon: ExclamationTriangleIcon,
-  },
+  { id: "sign-in", label: "Sign in", kind: "signIn" },
+  { id: "owner-setup", label: "Owner setup", kind: "ownerSetup" },
+  { id: "account-details", label: "Account details", kind: "accountDetails" },
+  { id: "verify-email", label: "Verify email", kind: "verifyEmail" },
+  { id: "create-passkey", label: "Passkey", kind: "createPasskey" },
+  { id: "invite", label: "Invitation", kind: "invite" },
+  { id: "handoff", label: "Continue", kind: "handoff" },
+  { id: "destinations", label: "Destinations", kind: "destinations" },
+  { id: "expired-invite", label: "Expired invite", kind: "expiredInvite" },
 ];
 
 const defaultScenarioId = authScenarios[0]?.id ?? "sign-in";
+const authBrand = {
+  name: "Formless",
+  icon: FingerPrintIcon,
+} satisfies {
+  name: string;
+  icon: AuthIcon;
+};
+const verificationEmail = "dana@example.com";
 
 const styles = stylex.create({
   screen: {
@@ -78,28 +79,74 @@ const styles = stylex.create({
   },
   productFrame: {
     width: "min(100%, 480px)",
+    display: "grid",
+    gap: spacingVars["--spacing-6"],
+    justifyItems: "center",
+  },
+  productCard: {
+    width: "100%",
   },
   cardHeader: {
     display: "grid",
     gap: spacingVars["--spacing-3"],
+    justifyItems: "center",
+    textAlign: "center",
+  },
+  brandLockup: {
+    display: "grid",
+    justifyItems: "center",
+    justifyContent: "center",
+    gap: spacingVars["--spacing-2"],
   },
   iconWrap: {
-    width: 42,
-    height: 42,
+    width: spacingVars["--spacing-9"],
+    height: spacingVars["--spacing-9"],
     borderRadius: radiusVars["--radius-element"],
     display: "grid",
     placeItems: "center",
-    backgroundColor: colorVars["--color-background-muted"],
-    borderWidth: borderVars["--border-width"],
-    borderStyle: "solid",
-    borderColor: colorVars["--color-border"],
+  },
+  brandIcon: {
+    width: spacingVars["--spacing-8"],
+    height: spacingVars["--spacing-8"],
+    color: colorVars["--color-accent"],
+  },
+  brandName: {
+    color: colorVars["--color-text-primary"],
+    fontSize: typeScaleVars["--text-heading-2-size"],
+    lineHeight: typeScaleVars["--text-heading-2-leading"],
+    fontWeight: fontWeightVars["--font-weight-semibold"],
   },
   form: {
     display: "grid",
     gap: spacingVars["--spacing-4"],
   },
   actions: {
+    display: "grid",
+    gap: spacingVars["--spacing-2"],
     paddingTop: spacingVars["--spacing-2"],
+    width: "100%",
+  },
+  actionButton: {
+    width: "100%",
+  },
+  otpInputWrap: {
+    width: "max-content",
+    maxWidth: "100%",
+    justifySelf: "center",
+  },
+  legalLine: {
+    maxWidth: "100%",
+    textAlign: "center",
+  },
+  legalLink: {
+    color: colorVars["--color-text-primary"],
+    textDecorationLine: "none",
+  },
+  legalLinkHover: {
+    textDecorationLine: {
+      default: "none",
+      ":hover": "underline",
+    },
   },
   destinationList: {
     display: "grid",
@@ -189,7 +236,9 @@ export function FormlessAuthLayout() {
     <AppShell contentPadding={0}>
       <main {...stylex.props(styles.screen)}>
         <div {...stylex.props(styles.productFrame)}>
+          <AuthBrand />
           <AuthCard scenario={scenario} />
+          <AuthLegalLine scenario={scenario} />
         </div>
         <AuthScenarioSwitcher
           currentScenario={scenario}
@@ -209,12 +258,49 @@ type AuthCardProps = {
 
 function AuthCard({ scenario }: AuthCardProps) {
   return (
-    <Card padding={6}>
-      <VStack gap={5}>
-        <AuthCardHeader scenario={scenario} />
-        <AuthScenarioBody scenario={scenario} />
-      </VStack>
-    </Card>
+    <div {...stylex.props(styles.productCard)}>
+      <Card padding={6}>
+        <VStack gap={5}>
+          <AuthCardHeader scenario={scenario} />
+          <AuthScenarioBody scenario={scenario} />
+        </VStack>
+      </Card>
+    </div>
+  );
+}
+
+function AuthBrand() {
+  const BrandIcon = authBrand.icon;
+
+  return (
+    <div {...stylex.props(styles.brandLockup)}>
+      <span {...stylex.props(styles.iconWrap)}>
+        <BrandIcon aria-hidden="true" {...stylex.props(styles.brandIcon)} />
+      </span>
+      <Text type="label" as="div" {...stylex.props(styles.brandName)}>
+        {authBrand.name}
+      </Text>
+    </div>
+  );
+}
+
+function AuthLegalLine({ scenario }: AuthCardProps) {
+  if (scenario.kind !== "signIn") {
+    return null;
+  }
+
+  return (
+    <Text type="supporting" as="p" color="secondary" justify="center" {...stylex.props(styles.legalLine)}>
+      By continuing, you agree to the{" "}
+      <a href="/terms" {...stylex.props(styles.legalLink, styles.legalLinkHover)}>
+        Terms of Service
+      </a>{" "}
+      and{" "}
+      <a href="/privacy" {...stylex.props(styles.legalLink, styles.legalLinkHover)}>
+        Privacy Policy
+      </a>
+      .
+    </Text>
   );
 }
 
@@ -223,12 +309,9 @@ function AuthCardHeader({ scenario }: AuthCardProps) {
 
   return (
     <header {...stylex.props(styles.cardHeader)}>
-      <span {...stylex.props(styles.iconWrap)}>
-        <Icon icon={scenario.icon} color={scenario.kind === "expiredInvite" ? "error" : "accent"} />
-      </span>
       <VStack gap={2}>
         <Heading level={2}>{copy.title}</Heading>
-        <Text type="body" as="p" color="secondary">
+        <Text type="body" as="p" color="secondary" justify="center">
           {copy.description}
         </Text>
       </VStack>
@@ -239,9 +322,13 @@ function AuthCardHeader({ scenario }: AuthCardProps) {
 function AuthScenarioBody({ scenario }: AuthCardProps) {
   switch (scenario.kind) {
     case "ownerSetup":
-      return <OwnerSetupForm />;
+      return <OwnerSetupEntry />;
+    case "accountDetails":
+      return <AccountDetailsForm />;
     case "verifyEmail":
       return <VerifyEmailForm />;
+    case "createPasskey":
+      return <CreatePasskeyForm />;
     case "invite":
       return <InvitationForm />;
     case "handoff":
@@ -259,25 +346,29 @@ function AuthScenarioBody({ scenario }: AuthCardProps) {
 function SignInForm() {
   return (
     <div {...stylex.props(styles.form)}>
-      <TextInput
-        label="Email"
-        type="email"
-        value=""
-        placeholder="name@example.com"
-        onChange={() => {}}
-      />
-      <HStack gap={2} wrap="wrap" {...stylex.props(styles.actions)}>
+      <div {...stylex.props(styles.actions)}>
         <Button
           label="Continue with passkey"
           variant="primary"
           icon={<Icon icon={FingerPrintIcon} color="inherit" size="sm" />}
+          xstyle={styles.actionButton}
         />
-      </HStack>
+      </div>
     </div>
   );
 }
 
-function OwnerSetupForm() {
+function OwnerSetupEntry() {
+  return (
+    <div {...stylex.props(styles.form)}>
+      <VStack gap={5} hAlign="center">
+        <Spinner size="xl" />
+      </VStack>
+    </div>
+  );
+}
+
+function AccountDetailsForm() {
   return (
     <div {...stylex.props(styles.form)}>
       <TextInput label="Name" value="Dana Peek" onChange={() => {}} />
@@ -287,31 +378,69 @@ function OwnerSetupForm() {
         value="dana@example.com"
         onChange={() => {}}
       />
-      <HStack gap={2} wrap="wrap" {...stylex.props(styles.actions)}>
-        <Button
-          label="Create owner passkey"
-          variant="primary"
-          icon={<Icon icon={FingerPrintIcon} color="inherit" size="sm" />}
-        />
-        <Button label="Use recovery key" variant="ghost" />
-      </HStack>
+      <div {...stylex.props(styles.actions)}>
+        <Button label="Continue" variant="primary" xstyle={styles.actionButton} />
+      </div>
     </div>
   );
 }
 
 function VerifyEmailForm() {
+  const [verificationCode, setVerificationCode] = useState("");
+  const [isCodeVerified, setIsCodeVerified] = useState(false);
+  const verificationCodeLength = 6;
+
+  const handleVerificationCodeChange = (nextCode: string) => {
+    setVerificationCode(nextCode);
+
+    if (isCodeVerified) {
+      setIsCodeVerified(false);
+    }
+  };
+
+  const verifyCodeAction = async () => {
+    await new Promise<void>((resolve) => window.setTimeout(resolve, 900));
+    setIsCodeVerified(true);
+  };
+
   return (
     <div {...stylex.props(styles.form)}>
-      <div {...stylex.props(styles.notice)}>
-        <Text type="body" as="p">
-          We sent a verification code to <strong>dana@example.com</strong>.
-        </Text>
+      <div {...stylex.props(styles.otpInputWrap)}>
+        <OTPInput
+          value={verificationCode}
+          onChange={handleVerificationCodeChange}
+          completeAction={verifyCodeAction}
+          status={
+            isCodeVerified
+              ? {
+                  type: "success",
+                  message: "Code verified. You can keep going.",
+                }
+              : undefined
+          }
+          length={verificationCodeLength}
+          htmlName="emailVerificationCode"
+          hasAutoFocus
+        />
       </div>
-      <TextInput label="Verification code" value="492814" onChange={() => {}} />
-      <HStack gap={2} wrap="wrap" {...stylex.props(styles.actions)}>
-        <Button label="Verify email" variant="primary" />
-        <Button label="Send a new code" variant="ghost" />
-      </HStack>
+      <div {...stylex.props(styles.actions)}>
+        <Button label="Resend code" variant="secondary" xstyle={styles.actionButton} />
+      </div>
+    </div>
+  );
+}
+
+function CreatePasskeyForm() {
+  return (
+    <div {...stylex.props(styles.form)}>
+      <div {...stylex.props(styles.actions)}>
+        <Button
+          label="Create passkey"
+          variant="primary"
+          icon={<Icon icon={FingerPrintIcon} color="inherit" size="sm" />}
+          xstyle={styles.actionButton}
+        />
+      </div>
     </div>
   );
 }
@@ -321,19 +450,13 @@ function InvitationForm() {
     <div {...stylex.props(styles.form)}>
       <div {...stylex.props(styles.notice)}>
         <Text type="body" as="p">
-          Dana invited you to collaborate on <strong>CRM workspace</strong>.
+          Dana invited you to collaborate on <strong>CRM</strong>.
         </Text>
       </div>
-      <TextInput label="Name" value="Sam Rivera" onChange={() => {}} />
-      <TextInput label="Email" type="email" value="sam@example.com" onChange={() => {}} />
-      <HStack gap={2} wrap="wrap" {...stylex.props(styles.actions)}>
-        <Button
-          label="Accept invite"
-          variant="primary"
-          icon={<Icon icon={FingerPrintIcon} color="inherit" size="sm" />}
-        />
-        <Button label="Decline" variant="ghost" />
-      </HStack>
+      <div {...stylex.props(styles.actions)}>
+        <Button label="Accept invitation" variant="primary" xstyle={styles.actionButton} />
+        <Button label="Decline" variant="secondary" xstyle={styles.actionButton} />
+      </div>
     </div>
   );
 }
@@ -342,14 +465,6 @@ function HandoffState() {
   return (
     <VStack gap={5} hAlign="center">
       <Spinner size="xl" />
-      <VStack gap={2} hAlign="center">
-        <Text type="label" as="div">
-          Taking you to CRM workspace
-        </Text>
-        <Text type="body" as="p" color="secondary" justify="center">
-          This should only take a moment.
-        </Text>
-      </VStack>
     </VStack>
   );
 }
@@ -357,11 +472,11 @@ function HandoffState() {
 function DestinationPicker() {
   const destinations = [
     {
-      label: "Workspace admin",
+      label: "Instance admin",
       detail: "Manage apps, access, domains, and deployment.",
     },
     {
-      label: "CRM workspace",
+      label: "CRM",
       detail: "Open contacts and customer activity.",
     },
     {
@@ -398,15 +513,10 @@ function DestinationPicker() {
 function ExpiredInviteState() {
   return (
     <div {...stylex.props(styles.form)}>
-      <div {...stylex.props(styles.notice, styles.errorNotice)}>
-        <Text type="body" as="p">
-          Ask the workspace owner to send a new invitation to continue.
-        </Text>
+      <div {...stylex.props(styles.actions)}>
+        <Button label="Back to sign in" variant="primary" xstyle={styles.actionButton} />
+        <Button label="Contact owner" variant="secondary" xstyle={styles.actionButton} />
       </div>
-      <HStack gap={2} wrap="wrap" {...stylex.props(styles.actions)}>
-        <Button label="Back to sign in" variant="primary" />
-        <Button label="Contact owner" variant="ghost" />
-      </HStack>
     </div>
   );
 }
@@ -482,39 +592,49 @@ function resolveHeaderCopy(kind: AuthScenarioKind) {
   switch (kind) {
     case "ownerSetup":
       return {
-        title: "Set up your workspace",
-        description: "Create the owner account and passkey for this Formless workspace.",
+        title: "Preparing owner setup",
+        description: "We are verifying the setup link before continuing.",
+      };
+    case "accountDetails":
+      return {
+        title: "Create your account",
+        description: "Add the account details used across this instance.",
       };
     case "verifyEmail":
       return {
         title: "Check your email",
-        description: "Enter the code we sent so we can finish setting up your account.",
+        description: `We've sent a code to ${verificationEmail}`,
+      };
+    case "createPasskey":
+      return {
+        title: "Create a passkey",
+        description: "Email verified. Create a passkey for future sign-ins.",
       };
     case "invite":
       return {
-        title: "Join CRM workspace",
-        description: "Accept the invitation and create a passkey to continue.",
+        title: "Join CRM",
+        description: "Accept the invitation, then continue through account setup.",
       };
     case "handoff":
       return {
         title: "You are signed in",
-        description: "We are opening the workspace on its own domain.",
+        description: "We are opening the app on its own domain.",
       };
     case "destinations":
       return {
         title: "Where do you want to go?",
-        description: "Choose a workspace or app connected to your account.",
+        description: "Choose an instance or app connected to your account.",
       };
     case "expiredInvite":
       return {
         title: "This invitation has expired",
-        description: "For security, invitations can only be used for a limited time.",
+        description: "Ask the instance owner to send a new invitation to continue.",
       };
     case "signIn":
     default:
       return {
-        title: "Sign in to Formless",
-        description: "Use your passkey to continue to your workspace.",
+        title: "Sign in to your account",
+        description: "Use your passkey to continue",
       };
   }
 }
