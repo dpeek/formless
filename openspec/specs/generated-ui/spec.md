@@ -320,6 +320,55 @@ The system SHALL render generated field displays and editors from field behavior
   runtime-owned client path, generated UI may use those options without
   changing the stored app record value shape
 
+#### Scenario: Astryx field primitive boundary
+
+- GIVEN generated UI renders create forms, record editors, table cells, detail
+  fields, Site block authoring fields, or public operation input fields with
+  Astryx view primitives
+- WHEN the foundation model prepares field data for the view layer
+- THEN it projects each renderable field as plain field-shaped data with a
+  stable field id, field or input name, label, required state, surface, density,
+  access mode, editor or display kind, draft value, committed display value,
+  options, presentation metadata, commit policy, pending state, and
+  display-safe field error
+- AND hidden fields are omitted before they reach Astryx, except hidden literal
+  create defaults remain foundation-owned operation input
+- AND `visibleWhen`, union discriminator variants, create defaults,
+  non-writable fields, system fields, state-machine-owned fields, reference
+  option loading, missing reference fallbacks, media upload state, value
+  coercion, validation, operation submission, sync status, and local auto-save
+  remain foundation behavior
+- AND Astryx receives only projected field data and intent callbacks such as
+  draft change, commit, revert, picker open, or upload file
+- AND Astryx does not import schema parser internals, browser replica APIs,
+  app target selectors, write option hooks, `submitOperation`, media clients,
+  sync status hooks, or generated UI storage helpers
+- AND foundation code does not render Astryx components or decide field group,
+  form, table, detail, picker, popover, or compact cell layout
+
+#### Scenario: Astryx field primitive coverage
+
+- GIVEN generated UI projects supported field display and editor kinds to
+  Astryx
+- WHEN Astryx renders the projected fields
+- THEN text, long text, number, date, boolean, enum, reference, markdown
+  display, icon display, source SVG icon display, color, image, and media
+  fields share Astryx field framing, labels, status, density, and keyboard
+  behavior
+- AND markdown editing uses a plain text area while markdown display uses the
+  Astryx Markdown component
+- AND source SVG icon rendering uses an Astryx SourceIcon primitive that wraps
+  the Astryx Icon public props and accepts a display-safe SVG source supplied by
+  generated UI
+- AND SourceIcon preserves Astryx icon sizing, color, accessibility, and layout
+  semantics without importing `@dpeek/formless-ui` icon components
+- AND color fields use an Astryx ColorInput primitive whose public props follow
+  Astryx input conventions while generated UI owns validation, draft value
+  preservation, and commit policy
+- AND when the color picker control can only represent valid opaque hex colors,
+  invalid, alpha, missing, or unknown stored text values remain visible as
+  field draft or display text rather than being coerced by Astryx
+
 ### Requirement: Media Field Package Adapter
 
 The system SHALL keep generated field layout and commit behavior in generated UI

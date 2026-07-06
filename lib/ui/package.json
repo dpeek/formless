@@ -72,9 +72,9 @@
     "lowlight": "^3.3.0",
     "lucide-react": "^1.14.0",
     "marked": "^15.0.12",
-    "react": "^19.2.4",
+    "react": "19.2.6",
     "react-aria-components": "^1.17.0",
-    "react-dom": "^19.2.4",
+    "react-dom": "19.2.6",
     "tailwind-merge": "^3.5.0",
     "tailwind-variants": "^3.2.2",
     "tailwindcss": "^4.2.1",
@@ -83,8 +83,8 @@
   },
   "devDependencies": {
     "@types/bun": "^1.3.11",
-    "@types/react": "^19.2.14",
-    "@types/react-dom": "^19.2.3",
+    "@types/react": "19.2.15",
+    "@types/react-dom": "19.2.3",
     "@typescript/native-preview": "^7.0.0-dev.20260226.1",
     "oxfmt": "^0.42.0",
     "oxlint": "^1.57.0"

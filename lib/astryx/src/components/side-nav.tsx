@@ -103,11 +103,7 @@ function FormlessUserMenu() {
       items={[
         {
           type: "section",
-          items: [
-            { label: "Profile" },
-            { label: "Account settings" },
-            { label: "Sign out" },
-          ],
+          items: [{ label: "Profile" }, { label: "Account settings" }, { label: "Sign out" }],
         },
       ]}
     />

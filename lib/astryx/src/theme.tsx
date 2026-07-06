@@ -46,7 +46,7 @@ export function FormlessThemeProvider({
 }: FormlessThemeProviderProps) {
   const isUserControlled = modePolicy.type === "user";
   const defaultThemeMode =
-    modePolicy.type === "user" ? modePolicy.defaultMode ?? "system" : "system";
+    modePolicy.type === "user" ? (modePolicy.defaultMode ?? "system") : "system";
   const [userThemeMode, setUserThemeMode] = useStoredFormlessThemeMode(
     defaultThemeMode,
     isUserControlled,

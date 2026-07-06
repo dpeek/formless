@@ -193,16 +193,19 @@ export function OTPInput({
   );
   const describedBy = status?.message ? statusMessageId : undefined;
 
-  const completeCode = useCallback((code: string) => {
-    completedCodeRef.current = code;
-    onComplete?.(code);
+  const completeCode = useCallback(
+    (code: string) => {
+      completedCodeRef.current = code;
+      onComplete?.(code);
 
-    if (completeAction) {
-      startTransition(async () => {
-        await completeAction(code);
-      });
-    }
-  }, [completeAction, onComplete, startTransition]);
+      if (completeAction) {
+        startTransition(async () => {
+          await completeAction(code);
+        });
+      }
+    },
+    [completeAction, onComplete, startTransition],
+  );
 
   useEffect(() => {
     if (!hasAutoFocus || isDisabled || isBusy || didAutoFocusRef.current) {
@@ -253,123 +256,107 @@ export function OTPInput({
     commitCode(nextValue, nextFocusIndex);
   };
 
-  const handleChange =
-    (index: number) => (event: ChangeEvent<HTMLInputElement>) => {
-      const digits = normalizePasscode(event.currentTarget.value, passcodeLength);
+  const handleChange = (index: number) => (event: ChangeEvent<HTMLInputElement>) => {
+    const digits = normalizePasscode(event.currentTarget.value, passcodeLength);
 
-      if (digits.length === 0) {
-        commitCode(
-          normalizedValue.slice(0, index) + normalizedValue.slice(index + 1),
-          index,
-        );
-        return;
-      }
+    if (digits.length === 0) {
+      commitCode(normalizedValue.slice(0, index) + normalizedValue.slice(index + 1), index);
+      return;
+    }
 
-      if (digits.length >= passcodeLength) {
-        commitCode(digits, passcodeLength - 1);
-        return;
-      }
+    if (digits.length >= passcodeLength) {
+      commitCode(digits, passcodeLength - 1);
+      return;
+    }
 
-      replaceAtIndex(index, digits);
-    };
+    replaceAtIndex(index, digits);
+  };
 
-  const handleKeyDown =
-    (index: number) => (event: KeyboardEvent<HTMLInputElement>) => {
-      if (event.metaKey || event.ctrlKey || event.altKey) {
-        return;
-      }
+  const handleKeyDown = (index: number) => (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.metaKey || event.ctrlKey || event.altKey) {
+      return;
+    }
 
-      if (/^[0-9]$/.test(event.key)) {
-        event.preventDefault();
-        replaceAtIndex(index, event.key);
-        return;
-      }
-
-      if (event.key === "Backspace") {
-        event.preventDefault();
-        const targetIndex =
-          index < normalizedValue.length
-            ? index
-            : Math.max(0, normalizedValue.length - 1);
-        const nextValue =
-          normalizedValue.slice(0, targetIndex) +
-          normalizedValue.slice(targetIndex + 1);
-
-        commitCode(nextValue, Math.max(0, targetIndex - 1));
-        return;
-      }
-
-      if (event.key === "Delete") {
-        event.preventDefault();
-        commitCode(
-          normalizedValue.slice(0, index) + normalizedValue.slice(index + 1),
-          index,
-        );
-        return;
-      }
-
-      if (event.key === "ArrowLeft") {
-        event.preventDefault();
-        focusCell(inputsRef.current, index - 1);
-        return;
-      }
-
-      if (event.key === "ArrowRight") {
-        event.preventDefault();
-        focusCell(inputsRef.current, index + 1);
-        return;
-      }
-
-      if (event.key === "Home") {
-        event.preventDefault();
-        focusCell(inputsRef.current, 0);
-        return;
-      }
-
-      if (event.key === "End") {
-        event.preventDefault();
-        focusCell(inputsRef.current, passcodeLength - 1);
-        return;
-      }
-
-      if (event.key === "Enter") {
-        event.preventDefault();
-        submitCompletedCode();
-      }
-    };
-
-  const handlePaste =
-    (index: number) => (event: ClipboardEvent<HTMLInputElement>) => {
-      const digits = normalizePasscode(
-        event.clipboardData.getData("text"),
-        passcodeLength,
-      );
-
-      if (digits.length === 0) {
-        return;
-      }
-
+    if (/^[0-9]$/.test(event.key)) {
       event.preventDefault();
+      replaceAtIndex(index, event.key);
+      return;
+    }
 
-      if (digits.length >= passcodeLength) {
-        commitCode(digits, passcodeLength - 1);
-        return;
-      }
+    if (event.key === "Backspace") {
+      event.preventDefault();
+      const targetIndex =
+        index < normalizedValue.length ? index : Math.max(0, normalizedValue.length - 1);
+      const nextValue =
+        normalizedValue.slice(0, targetIndex) + normalizedValue.slice(targetIndex + 1);
 
-      replaceAtIndex(index, digits);
-    };
+      commitCode(nextValue, Math.max(0, targetIndex - 1));
+      return;
+    }
 
-  const handleFocus =
-    (index: number) => (event: FocusEvent<HTMLInputElement>) => {
-      const firstEmptyIndex = Math.min(normalizedValue.length, passcodeLength - 1);
+    if (event.key === "Delete") {
+      event.preventDefault();
+      commitCode(normalizedValue.slice(0, index) + normalizedValue.slice(index + 1), index);
+      return;
+    }
 
-      if (index > firstEmptyIndex) {
-        focusCell(inputsRef.current, firstEmptyIndex);
-        return;
-      }
+    if (event.key === "ArrowLeft") {
+      event.preventDefault();
+      focusCell(inputsRef.current, index - 1);
+      return;
+    }
 
-      event.currentTarget.select();
-    };
+    if (event.key === "ArrowRight") {
+      event.preventDefault();
+      focusCell(inputsRef.current, index + 1);
+      return;
+    }
+
+    if (event.key === "Home") {
+      event.preventDefault();
+      focusCell(inputsRef.current, 0);
+      return;
+    }
+
+    if (event.key === "End") {
+      event.preventDefault();
+      focusCell(inputsRef.current, passcodeLength - 1);
+      return;
+    }
+
+    if (event.key === "Enter") {
+      event.preventDefault();
+      submitCompletedCode();
+    }
+  };
+
+  const handlePaste = (index: number) => (event: ClipboardEvent<HTMLInputElement>) => {
+    const digits = normalizePasscode(event.clipboardData.getData("text"), passcodeLength);
+
+    if (digits.length === 0) {
+      return;
+    }
+
+    event.preventDefault();
+
+    if (digits.length >= passcodeLength) {
+      commitCode(digits, passcodeLength - 1);
+      return;
+    }
+
+    replaceAtIndex(index, digits);
+  };
+
+  const handleFocus = (index: number) => (event: FocusEvent<HTMLInputElement>) => {
+    const firstEmptyIndex = Math.min(normalizedValue.length, passcodeLength - 1);
+
+    if (index > firstEmptyIndex) {
+      focusCell(inputsRef.current, firstEmptyIndex);
+      return;
+    }
+
+    event.currentTarget.select();
+  };
 
   return (
     <Field
@@ -468,10 +455,7 @@ function resolvePasscodeLength(length: number) {
   return Math.floor(length);
 }
 
-function focusCell(
-  inputs: Array<HTMLInputElement | null>,
-  index: number,
-) {
+function focusCell(inputs: Array<HTMLInputElement | null>, index: number) {
   const nextInput = inputs[Math.max(0, Math.min(index, inputs.length - 1))];
 
   window.requestAnimationFrame(() => {

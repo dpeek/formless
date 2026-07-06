@@ -290,7 +290,13 @@ function AuthLegalLine({ scenario }: AuthCardProps) {
   }
 
   return (
-    <Text type="supporting" as="p" color="secondary" justify="center" {...stylex.props(styles.legalLine)}>
+    <Text
+      type="supporting"
+      as="p"
+      color="secondary"
+      justify="center"
+      {...stylex.props(styles.legalLine)}
+    >
       By continuing, you agree to the{" "}
       <a href="/terms" {...stylex.props(styles.legalLink, styles.legalLinkHover)}>
         Terms of Service
@@ -372,12 +378,7 @@ function AccountDetailsForm() {
   return (
     <div {...stylex.props(styles.form)}>
       <TextInput label="Name" value="Dana Peek" onChange={() => {}} />
-      <TextInput
-        label="Email"
-        type="email"
-        value="dana@example.com"
-        onChange={() => {}}
-      />
+      <TextInput label="Email" type="email" value="dana@example.com" onChange={() => {}} />
       <div {...stylex.props(styles.actions)}>
         <Button label="Continue" variant="primary" xstyle={styles.actionButton} />
       </div>

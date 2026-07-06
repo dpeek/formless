@@ -3,7 +3,7 @@
     "target": "es2023",
     "module": "esnext",
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
-    "types": ["node", "vite/client", "@cloudflare/workers-types/latest"],
+    "types": ["node", "vite-plus/client", "@cloudflare/workers-types/latest"],
     "skipLibCheck": true,
     "jsx": "react-jsx",
 
