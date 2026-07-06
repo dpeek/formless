@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@dpeek/formless-ui/button";
 import {
   ModalBody,
@@ -10,13 +10,16 @@ import {
 } from "@dpeek/formless-ui/modal";
 import { Fieldset } from "@dpeek/formless-ui/field";
 import { setSyncStatus } from "../../client/sync-status.ts";
-import { submitOperation } from "../../client/sync.ts";
 import { selectEntityOperationByKind } from "../../client/operation-presentation-model.ts";
 import {
   type CreateDefaultConfig,
   type CreateFieldConfig,
   type CreateUnionPresentationConfig,
+  type GeneratedOperationControlBinding,
+  type GeneratedOperationController,
+  type GeneratedOperationExecutionResult,
   type HomeOperationConfig,
+  projectCollectionOperationControlBinding,
 } from "../../client/views.ts";
 import type { RecordValues } from "@dpeek/formless-storage";
 import type { QueryEvaluationContext } from "@dpeek/formless-schema";
@@ -28,7 +31,11 @@ import {
   selectGeneratedCreateFieldAuthoring,
 } from "./create-field-authoring.ts";
 import { GeneratedCreateFieldControl } from "./create-field-control.tsx";
-import { useSchemaAppTarget, useSchemaAppWriteOptions } from "./schema-app-context.tsx";
+import {
+  executeGeneratedOperationControl,
+  useGeneratedOperationController,
+  useGeneratedOperationControllerVersion,
+} from "./operation-control-runtime.ts";
 
 export type CreateHomeOperationConfig = Extract<HomeOperationConfig, { type: "create" }>;
 
@@ -45,8 +52,6 @@ export function GeneratedCreateForm({
   entityName: string;
   union?: CreateUnionPresentationConfig;
 }) {
-  const appTarget = useSchemaAppTarget();
-  const writeOptions = useSchemaAppWriteOptions();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [authoringState, setAuthoringState] = useState(() =>
     initialGeneratedCreateFieldAuthoringState({ defaults, union }),
@@ -60,6 +65,36 @@ export function GeneratedCreateForm({
     state: authoringState,
     union,
   });
+  const operationConfig = useMemo(
+    () =>
+      createOperation === undefined
+        ? undefined
+        : ({
+            type: "create",
+            label: `Create ${entity.label}`,
+            entityName,
+            entity,
+            operationName: createOperation.operationName,
+            operation: createOperation,
+            fields: createFields,
+            defaults,
+            ...(union === undefined ? {} : { union }),
+            enabled: true,
+          } satisfies CreateHomeOperationConfig),
+    [createFields, createOperation, defaults, entity, entityName, union],
+  );
+  const binding = useMemo(
+    () =>
+      operationConfig === undefined
+        ? undefined
+        : projectCreateSubmitBinding(operationConfig, "create-form"),
+    [operationConfig],
+  );
+  const bindings = useMemo(() => (binding === undefined ? [] : [binding]), [binding]);
+  const controller = useGeneratedOperationController(bindings);
+  useGeneratedOperationControllerVersion(controller);
+  const isOperationSubmitting = binding === undefined ? false : controller.isPending(binding.id);
+  const submitDisabled = isSubmitting || isOperationSubmitting;
 
   useEffect(() => {
     setAuthoringState(initialGeneratedCreateFieldAuthoringState({ defaults, union }));
@@ -82,26 +117,25 @@ export function GeneratedCreateForm({
     });
 
     setIsSubmitting(true);
-    setSyncStatus({ state: "syncing", message: `Saving ${entity.label.toLowerCase()}...` });
 
     try {
-      if (createOperation === undefined) {
+      if (binding === undefined) {
         throw new Error(`Create operation is unavailable for ${entity.label}.`);
       }
 
-      await submitOperation(
-        appTarget,
-        entityName,
-        createOperation.operationName,
-        {
-          input: values,
-        },
-        undefined,
-        writeOptions,
-      );
+      const result = await executeCreateSubmitOperation({
+        binding,
+        controller,
+        progressMessage: `Saving ${entity.label.toLowerCase()}...`,
+        values,
+      });
+
+      if (result.type === "failed") {
+        return;
+      }
+
       form.reset();
       setAuthoringState(initialGeneratedCreateFieldAuthoringState({ defaults, union }));
-      setSyncStatus({ state: "idle", message: "Saved and synced." });
     } catch (error) {
       setSyncStatus({
         state: "error",
@@ -120,7 +154,7 @@ export function GeneratedCreateForm({
         <p className="text-sm text-slate-600">Create is disabled for {entity.label}.</p>
       ) : null}
 
-      <Fieldset className="space-y-4" disabled={!authoring.canSubmit || isSubmitting}>
+      <Fieldset className="space-y-4" disabled={!authoring.canSubmit || submitDisabled}>
         {authoring.visibleFields.map((fieldConfig) => (
           <GeneratedCreateFieldControl
             fieldConfig={fieldConfig}
@@ -139,8 +173,8 @@ export function GeneratedCreateForm({
         ))}
       </Fieldset>
 
-      <Button isDisabled={!authoring.canSubmit || isSubmitting} type="submit">
-        {isSubmitting ? "Saving..." : canCreate ? `Create ${entity.label}` : "Create disabled"}
+      <Button isDisabled={!authoring.canSubmit || submitDisabled} type="submit">
+        {submitDisabled ? "Saving..." : canCreate ? `Create ${entity.label}` : "Create disabled"}
       </Button>
     </form>
   );
@@ -191,8 +225,6 @@ export function GeneratedCreateDialogForm({
   renderDialogCancel?: boolean;
   submitValues?: (values: RecordValues) => Promise<{ recordId: string }>;
 }) {
-  const appTarget = useSchemaAppTarget();
-  const writeOptions = useSchemaAppWriteOptions();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [authoringState, setAuthoringState] = useState(() =>
     initialGeneratedCreateFieldAuthoringState({
@@ -208,6 +240,18 @@ export function GeneratedCreateDialogForm({
     state: authoringState,
     union: operation.union,
   });
+  const binding = useMemo(
+    () =>
+      submitValues === undefined
+        ? projectCreateSubmitBinding(operation, "create-dialog")
+        : undefined,
+    [operation, submitValues],
+  );
+  const bindings = useMemo(() => (binding === undefined ? [] : [binding]), [binding]);
+  const controller = useGeneratedOperationController(bindings);
+  useGeneratedOperationControllerVersion(controller);
+  const isOperationSubmitting = binding === undefined ? false : controller.isPending(binding.id);
+  const submitDisabled = isSubmitting || isOperationSubmitting;
 
   useEffect(() => {
     setAuthoringState(
@@ -230,29 +274,38 @@ export function GeneratedCreateDialogForm({
     const values = resolveCreateValues(formData, operation, queryContext);
 
     setIsSubmitting(true);
-    setSyncStatus({
-      state: "syncing",
-      message: `Saving ${operation.entity.label.toLowerCase()}...`,
-    });
 
     try {
-      const response =
-        submitValues === undefined
-          ? {
-              recordId: selectCreatedOperationRecordId(
-                await submitOperation(
-                  appTarget,
-                  operation.entityName,
-                  operation.operationName,
-                  {
-                    input: values,
-                  },
-                  undefined,
-                  writeOptions,
-                ),
-              ),
-            }
-          : await submitValues(values);
+      let response: { recordId: string };
+
+      if (submitValues === undefined) {
+        if (binding === undefined) {
+          throw new Error(`Create operation is unavailable for ${operation.entity.label}.`);
+        }
+
+        const result = await executeCreateSubmitOperation({
+          binding,
+          controller,
+          progressMessage: `Saving ${operation.entity.label.toLowerCase()}...`,
+          values,
+        });
+
+        if (result.type === "failed") {
+          return;
+        }
+
+        response = {
+          recordId: selectCreatedOperationRecordId(result),
+        };
+      } else {
+        setSyncStatus({
+          state: "syncing",
+          message: `Saving ${operation.entity.label.toLowerCase()}...`,
+        });
+        response = await submitValues(values);
+        setSyncStatus({ state: "idle", message: "Saved and synced." });
+      }
+
       form.reset();
       setAuthoringState(
         initialGeneratedCreateFieldAuthoringState({
@@ -261,7 +314,6 @@ export function GeneratedCreateDialogForm({
         }),
       );
       onSuccess?.(response.recordId);
-      setSyncStatus({ state: "idle", message: "Saved and synced." });
     } catch (error) {
       setSyncStatus({
         state: "error",
@@ -278,7 +330,7 @@ export function GeneratedCreateDialogForm({
         <p className="text-sm text-slate-600">Create is disabled for {operation.entity.label}.</p>
       ) : null}
 
-      <Fieldset className="space-y-4" disabled={!authoring.canSubmit || isSubmitting}>
+      <Fieldset className="space-y-4" disabled={!authoring.canSubmit || submitDisabled}>
         {authoring.visibleFields.map((fieldConfig) => (
           <GeneratedCreateFieldControl
             fieldConfig={fieldConfig}
@@ -307,8 +359,8 @@ export function GeneratedCreateDialogForm({
             Cancel
           </Button>
         )}
-        <Button isDisabled={!authoring.canSubmit || isSubmitting} type="submit">
-          {isSubmitting ? "Saving..." : operation.enabled ? operation.label : "Create disabled"}
+        <Button isDisabled={!authoring.canSubmit || submitDisabled} type="submit">
+          {submitDisabled ? "Saving..." : operation.enabled ? operation.label : "Create disabled"}
         </Button>
       </ModalFooter>
     </form>
@@ -329,10 +381,50 @@ export function resolveCreateValues(
   });
 }
 
-function selectCreatedOperationRecordId(response: Awaited<ReturnType<typeof submitOperation>>) {
-  if (response.output.type !== "create") {
+export function projectCreateSubmitBinding(
+  operation: CreateHomeOperationConfig,
+  idPrefix: string,
+): GeneratedOperationControlBinding {
+  return projectCollectionOperationControlBinding(operation, { idPrefix });
+}
+
+export async function executeCreateSubmitOperation({
+  binding,
+  controller,
+  progressMessage,
+  values,
+}: {
+  binding: GeneratedOperationControlBinding;
+  controller: GeneratedOperationController;
+  progressMessage: string;
+  values: RecordValues;
+}): Promise<GeneratedOperationExecutionResult> {
+  return executeGeneratedOperationControl({
+    binding,
+    callerInput: {
+      bindingId: binding.id,
+      input: values,
+      source: "submitButton",
+    },
+    controller,
+    feedback: {
+      committedMessage: "Saved and synced.",
+      progressMessage,
+      replayedMessage: "Saved and synced.",
+    },
+  });
+}
+
+function selectCreatedOperationRecordId(result: GeneratedOperationExecutionResult) {
+  if (result.type === "failed") {
+    throw new Error(result.displayError);
+  }
+
+  const recordId = result.createdRecordIds?.[0];
+
+  if (recordId === undefined) {
     throw new Error("Create operation did not return a created record.");
   }
 
-  return response.output.record.id;
+  return recordId;
 }

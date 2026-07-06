@@ -20,11 +20,7 @@ import { TextInput } from "@astryxdesign/core/TextInput";
 import { Heading, Text } from "@astryxdesign/core/Text";
 import { ToastViewport, useToast } from "@astryxdesign/core/Toast";
 import { VStack } from "@astryxdesign/core/VStack";
-import {
-  borderVars,
-  colorVars,
-  spacingVars,
-} from "@astryxdesign/core/theme/tokens.stylex";
+import { borderVars, colorVars, spacingVars } from "@astryxdesign/core/theme/tokens.stylex";
 import {
   ArchiveBoxArrowDownIcon,
   ArchiveBoxXMarkIcon,
@@ -42,26 +38,29 @@ import {
 type OperationScope = "workspace" | "collection" | "record" | "form";
 type OperationKind = "create" | "update" | "delete" | "transition" | "sync" | "bulk";
 type OperationVariant = ButtonVariant;
-type OperationOutcome =
+type OperationInvocationSource = "button" | "menuItem" | "submitButton" | "confirmationDialog";
+type OperationExecutionStatus = "idle" | "pending" | "committed" | "replayed" | "failed";
+type OperationMockOutcome =
   | {
-      type: "success";
+      type: "committed";
       delayMs?: number;
+      affectedCount?: number;
+      createdRecordIds?: readonly string[];
     }
   | {
       type: "replay";
       delayMs?: number;
-      replayCopy?: string;
-      replayDetail?: string;
     }
   | {
       type: "failure";
       delayMs?: number;
-      errorCopy: string;
+      displayError: string;
     };
 
-type OperationDefinition = {
+type OperationBinding = {
   id: string;
-  canonicalKey: string;
+  executionKey: string;
+  canonicalOperationKey: string;
   label: string;
   scope: OperationScope;
   kind: OperationKind;
@@ -69,10 +68,8 @@ type OperationDefinition = {
   disabledReason?: string;
   destructive?: boolean;
   confirmation?: OperationConfirmation;
-  successCopy?: string;
-  affectedCount?: number;
+  feedback?: OperationFeedbackCopy;
   progress?: OperationProgress;
-  outcome: OperationOutcome;
 };
 
 type OperationConfirmation = {
@@ -81,9 +78,17 @@ type OperationConfirmation = {
   actionLabel: string;
 };
 
+type OperationFeedbackCopy = {
+  progressTitle?: string;
+  progressDetail?: string;
+  successTitle?: string;
+  successDetail?: string;
+  replayTitle?: string;
+  replayDetail?: string;
+  failureTitle?: string;
+};
+
 type OperationProgress = {
-  delayedTitle?: string;
-  delayedDetail?: string;
   steps?: readonly OperationProgressStep[];
 };
 
@@ -93,11 +98,59 @@ type OperationProgressStep = {
   status: "pending" | "running" | "succeeded";
 };
 
+type OperationExecutionInput = {
+  source: OperationInvocationSource;
+  values?: Record<string, string>;
+};
+
+type OperationExecutionResult =
+  | {
+      type: "committed";
+      title: string;
+      detail: string;
+      affectedCount?: number;
+      createdRecordIds?: readonly string[];
+    }
+  | {
+      type: "replayed";
+      title: string;
+      detail: string;
+    }
+  | {
+      type: "failed";
+      title: string;
+      displayError: string;
+    };
+
+type OperationExecutionState = {
+  executionKey: string;
+  status: OperationExecutionStatus;
+  result?: OperationExecutionResult;
+  startedAt?: number;
+  completedAt?: number;
+};
+
+type OperationExecutionController = {
+  execute: (
+    binding: OperationBinding,
+    input: OperationExecutionInput,
+  ) => Promise<OperationExecutionResult>;
+  getState: (binding: OperationBinding) => OperationExecutionState;
+  isPending: (binding: OperationBinding) => boolean;
+  getResult: (binding: OperationBinding) => OperationExecutionResult | undefined;
+};
+
+type OperationMockExecutionPlan = {
+  outcome: OperationMockOutcome;
+};
+
 type OperationFeedbackPhase = "progress" | "success" | "error";
 
 type OperationFeedbackEvent = {
   id: string;
-  operationId: string;
+  bindingId: string;
+  executionKey: string;
+  canonicalOperationKey: string;
   label: string;
   phase: OperationFeedbackPhase;
   title: string;
@@ -106,11 +159,8 @@ type OperationFeedbackEvent = {
 };
 
 type OperationExecutionContextValue = {
-  pendingIds: ReadonlySet<string>;
-  failures: ReadonlyMap<string, OperationFeedbackEvent>;
-  runOperation: (operation: OperationDefinition) => Promise<void>;
-  getOperationFailure: (operationId: string) => OperationFeedbackEvent | undefined;
-  isOperationPending: (operationId: string) => boolean;
+  controller: OperationExecutionController;
+  states: ReadonlyMap<string, OperationExecutionState>;
 };
 
 type MockTask = {
@@ -142,80 +192,150 @@ const mockContact: MockContact = {
   company: "Northwind",
 };
 
+const operationExecutionPlans: Record<string, OperationMockExecutionPlan> = {
+  "collection:tasks.create": {
+    outcome: {
+      type: "committed",
+      delayMs: 520,
+      affectedCount: 1,
+      createdRecordIds: ["task-new"],
+    },
+  },
+  "collection:tasks.clearCompleted": {
+    outcome: {
+      type: "committed",
+      delayMs: 4200,
+      affectedCount: 2,
+    },
+  },
+  "workspace:push": {
+    outcome: { type: "replay", delayMs: 760 },
+  },
+  "workspace:fail": {
+    outcome: {
+      type: "failure",
+      delayMs: 700,
+      displayError: "The operation was rejected.",
+    },
+  },
+  [`record:${mockTask.id}:transferOwner`]: {
+    outcome: {
+      type: "committed",
+      delayMs: 600,
+      affectedCount: 1,
+    },
+  },
+  [`record:${mockTask.id}:delete`]: {
+    outcome: {
+      type: "committed",
+      delayMs: 850,
+      affectedCount: 1,
+    },
+  },
+  [`record:${mockTask.id}:edit`]: {
+    outcome: {
+      type: "committed",
+      delayMs: 520,
+      affectedCount: 1,
+    },
+  },
+  [`record:${mockTask.id}:complete`]: {
+    outcome: {
+      type: "committed",
+      delayMs: 660,
+      affectedCount: 1,
+    },
+  },
+  [`record:${mockTask.id}:archive`]: {
+    outcome: {
+      type: "committed",
+      delayMs: 680,
+      affectedCount: 1,
+    },
+  },
+  "form:crm.contacts.create": {
+    outcome: {
+      type: "committed",
+      delayMs: 720,
+      affectedCount: 1,
+      createdRecordIds: ["contact-new"],
+    },
+  },
+};
+
 const operationExamples = {
   createTask: {
-    id: "case:tasks.create",
-    canonicalKey: "tasks.create",
+    id: "button:tasks.create",
+    executionKey: "collection:tasks.create",
+    canonicalOperationKey: "tasks.create",
     label: "New task",
     scope: "collection",
     kind: "create",
     variant: "primary",
-    successCopy: "Task created",
-    affectedCount: 1,
-    outcome: { type: "success", delayMs: 520 },
+    feedback: {
+      successTitle: "Task created",
+    },
   },
   clearCompleted: {
-    id: "case:tasks.clearCompleted",
-    canonicalKey: "tasks.clearCompleted",
+    id: "button:tasks.clearCompleted",
+    executionKey: "collection:tasks.clearCompleted",
+    canonicalOperationKey: "tasks.clearCompleted",
     label: "Clear completed",
     scope: "collection",
     kind: "bulk",
     variant: "secondary",
-    successCopy: "Completed tasks cleared",
-    affectedCount: 2,
+    feedback: {
+      progressTitle: "Clearing completed tasks",
+      progressDetail: "You can keep working while this finishes.",
+      successTitle: "Completed tasks cleared",
+    },
     progress: {
-      delayedTitle: "Clearing completed tasks",
-      delayedDetail: "You can keep working while this finishes.",
       steps: [
         { id: "find", label: "Find completed tasks", status: "succeeded" },
         { id: "clear", label: "Clear matching records", status: "running" },
         { id: "refresh", label: "Refresh task list", status: "pending" },
       ],
     },
-    outcome: { type: "success", delayMs: 4200 },
   },
   pushWorkspace: {
-    id: "case:workspace.push",
-    canonicalKey: "workspace.push",
+    id: "button:workspace.push",
+    executionKey: "workspace:push",
+    canonicalOperationKey: "workspace.push",
     label: "Push workspace",
     scope: "workspace",
     kind: "sync",
     variant: "secondary",
-    successCopy: "Workspace push committed",
-    affectedCount: 8,
-    outcome: {
-      type: "replay",
-      delayMs: 760,
-      replayCopy: "Workspace push already applied",
+    feedback: {
+      replayTitle: "Workspace push already applied",
       replayDetail: "No duplicate changes made.",
     },
   },
   failingOperation: {
-    id: "case:workspace.fail",
-    canonicalKey: "workspace.fail",
+    id: "button:workspace.fail",
+    executionKey: "workspace:fail",
+    canonicalOperationKey: "workspace.fail",
     label: "Failing operation",
     scope: "workspace",
     kind: "sync",
     variant: "secondary",
-    outcome: {
-      type: "failure",
-      delayMs: 700,
-      errorCopy: "The operation was rejected.",
+    feedback: {
+      failureTitle: "Failing operation failed",
     },
   },
   disabledTransfer: {
-    id: `case:${mockTask.id}.transferOwner`,
-    canonicalKey: "tasks.transferOwner",
+    id: `button:${mockTask.id}.transferOwner`,
+    executionKey: `record:${mockTask.id}:transferOwner`,
+    canonicalOperationKey: "tasks.transferOwner",
     label: "Transfer owner",
     scope: "record",
     kind: "update",
     variant: "secondary",
     disabledReason: "Requires owner role.",
-    outcome: { type: "success", delayMs: 600 },
   },
   deleteTask: {
-    id: `case:${mockTask.id}.delete`,
-    canonicalKey: "tasks.delete",
+    id: `button:${mockTask.id}.delete`,
+    executionKey: `record:${mockTask.id}:delete`,
+    canonicalOperationKey: "tasks.delete",
     label: "Delete task",
     scope: "record",
     kind: "delete",
@@ -226,11 +346,11 @@ const operationExamples = {
       description: `${mockTask.title} will be removed from this workspace.`,
       actionLabel: "Delete",
     },
-    successCopy: "Task deleted",
-    affectedCount: 1,
-    outcome: { type: "success", delayMs: 850 },
+    feedback: {
+      successTitle: "Task deleted",
+    },
   },
-} satisfies Record<string, OperationDefinition>;
+} satisfies Record<string, OperationBinding>;
 
 const styles = stylex.create({
   screen: {
@@ -301,6 +421,10 @@ const styles = stylex.create({
   feedbackError: {
     backgroundColor: colorVars["--color-error-muted"],
     borderColor: colorVars["--color-error"],
+  },
+  feedbackSuccess: {
+    backgroundColor: colorVars["--color-background-muted"],
+    borderColor: colorVars["--color-success"],
   },
   feedbackProgress: {
     backgroundColor: colorVars["--color-accent-muted"],
@@ -432,8 +556,8 @@ function OperationCaseCard({
   control,
 }: {
   title: string;
-  operation?: OperationDefinition;
-  operations?: OperationDefinition[];
+  operation?: OperationBinding;
+  operations?: OperationBinding[];
   control: ReactNode;
 }) {
   const metadataOperations = operations ?? (operation ? [operation] : []);
@@ -447,6 +571,7 @@ function OperationCaseCard({
         </VStack>
         <div {...stylex.props(styles.controlArea)}>{control}</div>
         <OperationProgressPanel operations={metadataOperations} />
+        <OperationResultPanel operations={metadataOperations} />
         <OperationFailureAlert operations={metadataOperations} />
         <OperationReasonLine operations={metadataOperations} />
       </VStack>
@@ -457,19 +582,20 @@ function OperationCaseCard({
 function OperationSubmitCase() {
   const [name, setName] = useState(mockContact.name);
   const [company, setCompany] = useState(mockContact.company);
-  const { runOperation } = useOperationExecution();
-  const createContactOperation = useMemo<OperationDefinition>(
+  const { controller } = useOperationExecution();
+  const createContactOperation = useMemo<OperationBinding>(
     () => ({
-      id: "case:crm.contacts.create",
-      canonicalKey: "crm.contacts.create",
+      id: "submit:crm.contacts.create",
+      executionKey: "form:crm.contacts.create",
+      canonicalOperationKey: "crm.contacts.create",
       label: "Create contact",
       scope: "form",
       kind: "create",
       variant: "primary",
       disabledReason: name.trim().length === 0 ? "Enter a contact name." : undefined,
-      successCopy: `${name.trim() || "Contact"} created`,
-      affectedCount: 1,
-      outcome: { type: "success", delayMs: 720 },
+      feedback: {
+        successTitle: `${name.trim() || "Contact"} created`,
+      },
     }),
     [name],
   );
@@ -480,9 +606,15 @@ function OperationSubmitCase() {
       if (createContactOperation.disabledReason) {
         return;
       }
-      void runOperation(createContactOperation);
+      void controller.execute(createContactOperation, {
+        source: "submitButton",
+        values: {
+          company,
+          name,
+        },
+      });
     },
-    [createContactOperation, runOperation],
+    [company, controller, createContactOperation, name],
   );
 
   return (
@@ -501,6 +633,7 @@ function OperationSubmitCase() {
             <OperationSubmitButton operation={createContactOperation} icon={UserPlusIcon} />
           </div>
           <OperationProgressPanel operations={[createContactOperation]} />
+          <OperationResultPanel operations={[createContactOperation]} />
           <OperationFailureAlert operations={[createContactOperation]} />
           <OperationReasonLine operations={[createContactOperation]} />
         </VStack>
@@ -509,7 +642,7 @@ function OperationSubmitCase() {
   );
 }
 
-function OperationMetadata({ operations }: { operations: OperationDefinition[] }) {
+function OperationMetadata({ operations }: { operations: OperationBinding[] }) {
   const firstOperation = operations[0];
 
   if (!firstOperation) {
@@ -531,7 +664,7 @@ function OperationMetadata({ operations }: { operations: OperationDefinition[] }
   );
 }
 
-function OperationReasonLine({ operations }: { operations: OperationDefinition[] }) {
+function OperationReasonLine({ operations }: { operations: OperationBinding[] }) {
   if (operations.length > 1 && operations.some((operation) => !operation.disabledReason)) {
     return null;
   }
@@ -550,10 +683,10 @@ function OperationReasonLine({ operations }: { operations: OperationDefinition[]
   );
 }
 
-function OperationProgressPanel({ operations }: { operations: OperationDefinition[] }) {
-  const { isOperationPending } = useOperationExecution();
+function OperationProgressPanel({ operations }: { operations: OperationBinding[] }) {
+  const { controller } = useOperationExecution();
   const pendingOperation = operations.find(
-    (operation) => isOperationPending(operation.id) && operation.progress?.steps?.length,
+    (operation) => controller.isPending(operation) && operation.progress?.steps?.length,
   );
 
   if (!pendingOperation?.progress?.steps?.length) {
@@ -561,10 +694,7 @@ function OperationProgressPanel({ operations }: { operations: OperationDefinitio
   }
 
   return (
-    <div
-      role="status"
-      {...stylex.props(styles.feedbackPanel, styles.feedbackProgress)}
-    >
+    <div role="status" {...stylex.props(styles.feedbackPanel, styles.feedbackProgress)}>
       <div {...stylex.props(styles.feedbackHeader)}>
         <Spinner size="sm" shade="inherit" />
         <VStack gap={0.5}>
@@ -601,27 +731,30 @@ function OperationProgressStepMarker({ status }: { status: OperationProgressStep
   );
 }
 
-function OperationFailureAlert({ operations }: { operations: OperationDefinition[] }) {
-  const { getOperationFailure } = useOperationExecution();
-  const failure = operations
-    .map((operation) => getOperationFailure(operation.id))
-    .find((event): event is OperationFeedbackEvent => event !== undefined);
+function OperationResultPanel({ operations }: { operations: OperationBinding[] }) {
+  const { controller } = useOperationExecution();
+  const result = operations
+    .map((operation) => controller.getResult(operation))
+    .find(
+      (value): value is Extract<OperationExecutionResult, { type: "committed" | "replayed" }> =>
+        value?.type === "committed" || value?.type === "replayed",
+    );
 
-  if (!failure) {
+  if (!result) {
     return null;
   }
 
   return (
-    <div
-      role="alert"
-      {...stylex.props(styles.feedbackPanel, styles.feedbackError)}
-    >
+    <div role="status" {...stylex.props(styles.feedbackPanel, styles.feedbackSuccess)}>
       <div {...stylex.props(styles.feedbackHeader)}>
-        <Icon icon={ExclamationTriangleIcon} color="error" size="sm" />
+        <StatusDot
+          variant={result.type === "committed" ? "success" : "neutral"}
+          label={result.type === "committed" ? "Committed" : "Already applied"}
+        />
         <VStack gap={0.5}>
-          <Text type="label">{failure.title}</Text>
+          <Text type="label">{result.title}</Text>
           <Text type="supporting" color="secondary">
-            {failure.detail}
+            {result.detail}
           </Text>
         </VStack>
       </div>
@@ -629,16 +762,38 @@ function OperationFailureAlert({ operations }: { operations: OperationDefinition
   );
 }
 
-function OperationButton({
-  operation,
-  icon,
-}: {
-  operation: OperationDefinition;
-  icon?: IconType;
-}) {
-  const { isOperationPending, runOperation } = useOperationExecution();
+function OperationFailureAlert({ operations }: { operations: OperationBinding[] }) {
+  const { controller } = useOperationExecution();
+  const failure = operations
+    .map((operation) => controller.getResult(operation))
+    .find(
+      (result): result is Extract<OperationExecutionResult, { type: "failed" }> =>
+        result?.type === "failed",
+    );
+
+  if (!failure) {
+    return null;
+  }
+
+  return (
+    <div role="alert" {...stylex.props(styles.feedbackPanel, styles.feedbackError)}>
+      <div {...stylex.props(styles.feedbackHeader)}>
+        <Icon icon={ExclamationTriangleIcon} color="error" size="sm" />
+        <VStack gap={0.5}>
+          <Text type="label">{failure.title}</Text>
+          <Text type="supporting" color="secondary">
+            {failure.displayError}
+          </Text>
+        </VStack>
+      </div>
+    </div>
+  );
+}
+
+function OperationButton({ operation, icon }: { operation: OperationBinding; icon?: IconType }) {
+  const { controller } = useOperationExecution();
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
-  const isPending = isOperationPending(operation.id);
+  const isPending = controller.isPending(operation);
   const IconComponent = icon;
 
   const handleClick = useCallback(() => {
@@ -651,8 +806,8 @@ function OperationButton({
       return;
     }
 
-    void runOperation(operation);
-  }, [isPending, operation, runOperation]);
+    void controller.execute(operation, { source: "button" });
+  }, [controller, isPending, operation]);
 
   return (
     <>
@@ -678,11 +833,11 @@ function OperationSubmitButton({
   operation,
   icon,
 }: {
-  operation: OperationDefinition;
+  operation: OperationBinding;
   icon?: IconType;
 }) {
-  const { isOperationPending } = useOperationExecution();
-  const isPending = isOperationPending(operation.id);
+  const { controller } = useOperationExecution();
+  const isPending = controller.isPending(operation);
   const IconComponent = icon;
 
   return (
@@ -698,8 +853,8 @@ function OperationSubmitButton({
   );
 }
 
-function OperationMenu({ operations }: { operations: OperationDefinition[] }) {
-  const [confirmationOperation, setConfirmationOperation] = useState<OperationDefinition | null>(null);
+function OperationMenu({ operations }: { operations: OperationBinding[] }) {
+  const [confirmationOperation, setConfirmationOperation] = useState<OperationBinding | null>(null);
 
   return (
     <div {...stylex.props(styles.menuWrap)}>
@@ -743,12 +898,12 @@ function OperationMenuItem({
   hasDividerBefore,
   onConfirm,
 }: {
-  operation: OperationDefinition;
+  operation: OperationBinding;
   hasDividerBefore?: boolean;
-  onConfirm: (operation: OperationDefinition) => void;
+  onConfirm: (operation: OperationBinding) => void;
 }) {
-  const { isOperationPending, runOperation } = useOperationExecution();
-  const isPending = isOperationPending(operation.id);
+  const { controller } = useOperationExecution();
+  const isPending = controller.isPending(operation);
 
   const handleClick = useCallback(() => {
     if (operation.disabledReason || isPending) {
@@ -760,8 +915,8 @@ function OperationMenuItem({
       return;
     }
 
-    void runOperation(operation);
-  }, [isPending, onConfirm, operation, runOperation]);
+    void controller.execute(operation, { source: "menuItem" });
+  }, [controller, isPending, onConfirm, operation]);
 
   return (
     <>
@@ -789,12 +944,12 @@ function OperationConfirmDialog({
   isOpen,
   onOpenChange,
 }: {
-  operation: OperationDefinition;
+  operation: OperationBinding;
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
 }) {
-  const { isOperationPending, runOperation } = useOperationExecution();
-  const isPending = isOperationPending(operation.id);
+  const { controller } = useOperationExecution();
+  const isPending = controller.isPending(operation);
   const confirmation = operation.confirmation;
 
   if (!confirmation) {
@@ -811,7 +966,9 @@ function OperationConfirmDialog({
       actionVariant={operation.destructive ? "destructive" : operation.variant}
       isActionLoading={isPending}
       onAction={() => {
-        void runOperation(operation).then(() => onOpenChange(false));
+        void controller.execute(operation, { source: "confirmationDialog" }).then(() => {
+          onOpenChange(false);
+        });
       }}
     />
   );
@@ -821,44 +978,20 @@ function OperationExecutionProvider({ children }: { children: ReactNode }) {
   const showToast = useToast();
   const eventCounterRef = useRef(0);
   const operationRunCounterRef = useRef(0);
-  const pendingIdsRef = useRef<Set<string>>(new Set());
-  const failuresRef = useRef<Map<string, OperationFeedbackEvent>>(new Map());
+  const statesRef = useRef<Map<string, OperationExecutionState>>(new Map());
   const runningTokensRef = useRef<Map<string, number>>(new Map());
-  const [pendingIds, setPendingIds] = useState<Set<string>>(() => new Set());
-  const [failures, setFailures] = useState<Map<string, OperationFeedbackEvent>>(() => new Map());
+  const [states, setStates] = useState<Map<string, OperationExecutionState>>(() => new Map());
 
-  const setOperationPending = useCallback((operationId: string, isPending: boolean) => {
-    const nextPendingIds = new Set(pendingIdsRef.current);
-
-    if (isPending) {
-      nextPendingIds.add(operationId);
-    } else {
-      nextPendingIds.delete(operationId);
-    }
-
-    pendingIdsRef.current = nextPendingIds;
-    setPendingIds(nextPendingIds);
+  const setExecutionState = useCallback((executionKey: string, state: OperationExecutionState) => {
+    const nextStates = new Map(statesRef.current);
+    nextStates.set(executionKey, state);
+    statesRef.current = nextStates;
+    setStates(nextStates);
   }, []);
-
-  const setOperationFailure = useCallback(
-    (operationId: string, failure: OperationFeedbackEvent | null) => {
-      const nextFailures = new Map(failuresRef.current);
-
-      if (failure) {
-        nextFailures.set(operationId, failure);
-      } else {
-        nextFailures.delete(operationId);
-      }
-
-      failuresRef.current = nextFailures;
-      setFailures(nextFailures);
-    },
-    [],
-  );
 
   const createFeedbackEvent = useCallback(
     (
-      operation: OperationDefinition,
+      operation: OperationBinding,
       phase: OperationFeedbackPhase,
       title: string,
       detail: string,
@@ -867,7 +1000,9 @@ function OperationExecutionProvider({ children }: { children: ReactNode }) {
 
       return {
         id: `operation-event-${eventCounterRef.current}`,
-        operationId: operation.id,
+        bindingId: operation.id,
+        executionKey: operation.executionKey,
+        canonicalOperationKey: operation.canonicalOperationKey,
         label: operation.label,
         phase,
         title,
@@ -881,7 +1016,7 @@ function OperationExecutionProvider({ children }: { children: ReactNode }) {
   const showOperationToast = useCallback(
     (event: OperationFeedbackEvent) => {
       showToast({
-        uniqueID: `operation:${event.operationId}`,
+        uniqueID: `operation:${event.executionKey}`,
         collisionBehavior: "overwrite",
         body: <OperationToastBody event={event} />,
         type: event.phase === "error" ? "error" : "info",
@@ -892,24 +1027,44 @@ function OperationExecutionProvider({ children }: { children: ReactNode }) {
     [showToast],
   );
 
-  const runOperation = useCallback(
-    async (operation: OperationDefinition) => {
+  const execute = useCallback(
+    async (
+      operation: OperationBinding,
+      input: OperationExecutionInput,
+    ): Promise<OperationExecutionResult> => {
       if (operation.disabledReason) {
-        return;
+        const result: OperationExecutionResult = {
+          type: "failed",
+          title: operation.feedback?.failureTitle ?? `${operation.label} unavailable`,
+          displayError: operation.disabledReason,
+        };
+        return result;
       }
 
-      if (pendingIdsRef.current.has(operation.id)) {
-        return;
+      const currentState = statesRef.current.get(operation.executionKey);
+      if (currentState?.status === "pending") {
+        return {
+          type: "replayed",
+          title: `${operation.label} already running`,
+          detail: "Another control is already running this operation.",
+        };
       }
 
       operationRunCounterRef.current += 1;
       const runToken = operationRunCounterRef.current;
-      runningTokensRef.current.set(operation.id, runToken);
-      setOperationFailure(operation.id, null);
-      setOperationPending(operation.id, true);
+      const startedAt = Date.now();
+      const executionKey = operation.executionKey;
+      const plan = operationExecutionPlans[executionKey] ?? defaultOperationExecutionPlan;
+
+      runningTokensRef.current.set(executionKey, runToken);
+      setExecutionState(executionKey, {
+        executionKey,
+        status: "pending",
+        startedAt,
+      });
 
       window.setTimeout(() => {
-        if (runningTokensRef.current.get(operation.id) !== runToken) {
+        if (runningTokensRef.current.get(executionKey) !== runToken) {
           return;
         }
 
@@ -917,81 +1072,141 @@ function OperationExecutionProvider({ children }: { children: ReactNode }) {
           createFeedbackEvent(
             operation,
             "progress",
-            operation.progress?.delayedTitle ?? `${operation.label} is taking longer than usual`,
-            operation.progress?.delayedDetail ?? "You can keep working while this finishes.",
+            operation.feedback?.progressTitle ?? `${operation.label} is taking longer than usual`,
+            operation.feedback?.progressDetail ?? "You can keep working while this finishes.",
           ),
         );
       }, progressToastDelayMs);
 
-      try {
-        await wait(operation.outcome.delayMs ?? 600);
+      await wait(plan.outcome.delayMs ?? 600);
 
-        if (operation.outcome.type === "failure") {
-          throw new Error(operation.outcome.errorCopy);
-        }
+      const result = createOperationExecutionResult(operation, input, plan);
+      setExecutionState(executionKey, {
+        executionKey,
+        status: result.type,
+        result,
+        startedAt,
+        completedAt: Date.now(),
+      });
 
-        if (operation.outcome.type === "replay") {
-          showOperationToast(
-            createFeedbackEvent(
-              operation,
-              "success",
-              operation.outcome.replayCopy ?? `${operation.label} already applied`,
-              operation.outcome.replayDetail ?? "No duplicate changes made.",
-            ),
-          );
-          return;
-        }
+      showOperationToast(
+        createFeedbackEvent(
+          operation,
+          result.type === "failed" ? "error" : "success",
+          result.title,
+          result.type === "failed" ? result.displayError : result.detail,
+        ),
+      );
 
-        showOperationToast(
-          createFeedbackEvent(
-            operation,
-            "success",
-            operation.successCopy ?? `${operation.label} committed`,
-            describeOperationResult(operation),
-          ),
-        );
-      } catch (error) {
-        setOperationFailure(
-          operation.id,
-          createFeedbackEvent(
-            operation,
-            "error",
-            `${operation.label} failed`,
-            error instanceof Error ? error.message : "Operation failed.",
-          ),
-        );
-      } finally {
-        if (runningTokensRef.current.get(operation.id) === runToken) {
-          runningTokensRef.current.delete(operation.id);
-        }
-        setOperationPending(operation.id, false);
+      if (runningTokensRef.current.get(executionKey) === runToken) {
+        runningTokensRef.current.delete(executionKey);
       }
+
+      return result;
     },
-    [createFeedbackEvent, setOperationFailure, setOperationPending, showOperationToast],
+    [createFeedbackEvent, setExecutionState, showOperationToast],
   );
 
-  const isOperationPending = useCallback(
-    (operationId: string) => pendingIds.has(operationId),
-    [pendingIds],
+  const getState = useCallback(
+    (operation: OperationBinding) =>
+      states.get(operation.executionKey) ?? createIdleOperationState(operation.executionKey),
+    [states],
   );
 
-  const getOperationFailure = useCallback(
-    (operationId: string) => failures.get(operationId),
-    [failures],
+  const controller = useMemo<OperationExecutionController>(
+    () => ({
+      execute,
+      getState,
+      getResult: (operation) => getState(operation).result,
+      isPending: (operation) => getState(operation).status === "pending",
+    }),
+    [execute, getState],
   );
 
   const contextValue = useMemo<OperationExecutionContextValue>(
     () => ({
-      failures,
-      getOperationFailure,
-      pendingIds,
-      runOperation,
-      isOperationPending,
+      controller,
+      states,
     }),
-    [failures, getOperationFailure, isOperationPending, pendingIds, runOperation],
+    [controller, states],
   );
 
   return <OperationExecutionContext value={contextValue}>{children}</OperationExecutionContext>;
+}
+
+function createOperationExecutionResult(
+  operation: OperationBinding,
+  input: OperationExecutionInput,
+  plan: OperationMockExecutionPlan,
+): OperationExecutionResult {
+  if (plan.outcome.type === "failure") {
+    return {
+      type: "failed",
+      title: operation.feedback?.failureTitle ?? `${operation.label} failed`,
+      displayError: plan.outcome.displayError,
+    };
+  }
+
+  if (plan.outcome.type === "replay") {
+    return {
+      type: "replayed",
+      title: operation.feedback?.replayTitle ?? `${operation.label} already applied`,
+      detail: operation.feedback?.replayDetail ?? "No duplicate changes made.",
+    };
+  }
+
+  return {
+    type: "committed",
+    title: operation.feedback?.successTitle ?? `${operation.label} committed`,
+    detail:
+      operation.feedback?.successDetail ??
+      describeCommittedOperationResult(operation, input, plan.outcome),
+    affectedCount: plan.outcome.affectedCount,
+    createdRecordIds: plan.outcome.createdRecordIds,
+  };
+}
+
+function createIdleOperationState(executionKey: string): OperationExecutionState {
+  return {
+    executionKey,
+    status: "idle",
+  };
+}
+
+const defaultOperationExecutionPlan = {
+  outcome: {
+    type: "committed",
+    delayMs: 600,
+    affectedCount: 1,
+  },
+} satisfies OperationMockExecutionPlan;
+
+function describeCommittedOperationResult(
+  operation: OperationBinding,
+  input: OperationExecutionInput,
+  outcome: Extract<OperationMockOutcome, { type: "committed" }>,
+) {
+  const submittedName = input.values?.name?.trim();
+
+  if (submittedName) {
+    return `${submittedName} is ready.`;
+  }
+
+  if (outcome.affectedCount == null) {
+    return "Done.";
+  }
+
+  const noun = outcome.affectedCount === 1 ? "record" : "records";
+  const verbByKind: Record<OperationKind, string> = {
+    bulk: "updated",
+    create: "created",
+    delete: "deleted",
+    sync: "applied",
+    transition: "updated",
+    update: "updated",
+  };
+
+  return `${outcome.affectedCount} ${noun} ${verbByKind[operation.kind]}.`;
 }
 
 function OperationToastBody({ event }: { event: OperationFeedbackEvent }) {
@@ -1033,45 +1248,49 @@ function useOperationExecution() {
   return context;
 }
 
-function createTaskMenuOperations(task: MockTask): OperationDefinition[] {
+function createTaskMenuOperations(task: MockTask): OperationBinding[] {
   return [
     {
       id: `menu:${task.id}.edit`,
-      canonicalKey: "tasks.update",
+      executionKey: `record:${task.id}:edit`,
+      canonicalOperationKey: "tasks.update",
       label: "Edit",
       scope: "record",
       kind: "update",
       variant: "secondary",
-      successCopy: `${task.title} updated`,
-      affectedCount: 1,
-      outcome: { type: "success", delayMs: 520 },
+      feedback: {
+        successTitle: `${task.title} updated`,
+      },
     },
     {
       id: `menu:${task.id}.complete`,
-      canonicalKey: "tasks.complete",
+      executionKey: `record:${task.id}:complete`,
+      canonicalOperationKey: "tasks.complete",
       label: "Complete",
       scope: "record",
       kind: "transition",
       variant: "secondary",
       disabledReason: task.status === "Done" ? "Task is already complete." : undefined,
-      successCopy: `${task.title} completed`,
-      affectedCount: 1,
-      outcome: { type: "success", delayMs: 660 },
+      feedback: {
+        successTitle: `${task.title} completed`,
+      },
     },
     {
       id: `menu:${task.id}.archive`,
-      canonicalKey: "tasks.archive",
+      executionKey: `record:${task.id}:archive`,
+      canonicalOperationKey: "tasks.archive",
       label: "Archive",
       scope: "record",
       kind: "transition",
       variant: "secondary",
-      successCopy: `${task.title} archived`,
-      affectedCount: 1,
-      outcome: { type: "success", delayMs: 680 },
+      feedback: {
+        successTitle: `${task.title} archived`,
+      },
     },
     {
       id: `menu:${task.id}.delete`,
-      canonicalKey: "tasks.delete",
+      executionKey: `record:${task.id}:delete`,
+      canonicalOperationKey: "tasks.delete",
       label: "Delete",
       scope: "record",
       kind: "delete",
@@ -1082,14 +1301,14 @@ function createTaskMenuOperations(task: MockTask): OperationDefinition[] {
         description: `${task.title} will be removed from this workspace.`,
         actionLabel: "Delete",
       },
-      successCopy: `${task.title} deleted`,
-      affectedCount: 1,
-      outcome: { type: "success", delayMs: 850 },
+      feedback: {
+        successTitle: `${task.title} deleted`,
+      },
     },
   ];
 }
 
-function resolveOperationIcon(operation: OperationDefinition) {
+function resolveOperationIcon(operation: OperationBinding) {
   if (operation.disabledReason) {
     return <Icon icon={NoSymbolIcon} color="warning" size="sm" />;
   }
@@ -1107,24 +1326,6 @@ function resolveOperationIcon(operation: OperationDefinition) {
   }
 
   return <Icon icon={ArchiveBoxArrowDownIcon} color="secondary" size="sm" />;
-}
-
-function describeOperationResult(operation: OperationDefinition) {
-  if (operation.affectedCount == null) {
-    return "Done.";
-  }
-
-  const noun = operation.affectedCount === 1 ? "record" : "records";
-  const verbByKind: Record<OperationKind, string> = {
-    bulk: "updated",
-    create: "created",
-    delete: "deleted",
-    sync: "applied",
-    transition: "updated",
-    update: "updated",
-  };
-
-  return `${operation.affectedCount} ${noun} ${verbByKind[operation.kind]}.`;
 }
 
 function formatOperationScope(scope: OperationScope) {

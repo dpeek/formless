@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@dpeek/formless-ui/badge";
 import { Button } from "@dpeek/formless-ui/button";
 import {
@@ -31,6 +31,7 @@ import type {
   RelatedCollectionConfig,
   RecordUnionPresentationConfig,
 } from "../../client/views.ts";
+import { projectOrderingMoveOperationControlBinding } from "../../client/views.ts";
 import type { CollectionResultModel } from "../../client/collection-result-model.ts";
 import type { ListResultModel, RecordResultModel } from "../../client/list-result-model.ts";
 import type { QueryEvaluationContext } from "@dpeek/formless-schema";
@@ -44,18 +45,22 @@ import {
   selectOrderingDragFacts,
   selectOrderingMoveMenuItems,
   selectResultOrderingContext,
-  submitOrderingPatch,
+  type OrderingMoveDirection,
   type OrderingMoveMenuItem,
 } from "./ordering-ui.ts";
 import { RecordReadinessWarnings } from "./readiness-warnings.tsx";
 import { DeleteRecordButton } from "./record-delete.tsx";
 import { RecordFieldEditor } from "./record-field-editor.tsx";
-import { useSchemaAppTarget, useSchemaAppWriteOptions } from "./schema-app-context.tsx";
 import { RecordTransitionOperationControls } from "./state-machine-ui.tsx";
 import { RecordTable } from "./table.tsx";
 import { RecordTree } from "./tree.tsx";
 import { selectRecordFieldsForActiveUnion } from "./union-presentation.ts";
 import { AddIcon } from "@dpeek/formless-ui/icons";
+import {
+  executeGeneratedOrderingMoveOperation,
+  useGeneratedOperationController,
+  useGeneratedOperationControllerVersion,
+} from "./operation-control-runtime.ts";
 
 export function HomeCollection({
   collection,
@@ -960,8 +965,6 @@ export function RecordList({
   queryContext?: QueryEvaluationContext;
   result: ListResultModel;
 }) {
-  const appTarget = useSchemaAppTarget();
-  const writeOptions = useSchemaAppWriteOptions();
   const { ordering, recordFields, recordUnion } = result;
   const [pendingOrderingRecordId, setPendingOrderingRecordId] = useState<string | null>(null);
   const recordIds = useEntityRecordIdsMatchingQuery(entityName, query, queryContext);
@@ -978,14 +981,47 @@ export function RecordList({
   const listItems = orderedRecordIds.map((recordId) => ({ recordId }));
   const hasDragOrdering = orderingContext !== undefined && orderingDragFacts !== undefined;
   const hasMoveMenuOrdering = orderingContext?.ordering.presentations.includes("moveMenu") === true;
+  const orderingBindings = useMemo(
+    () =>
+      orderingContext?.updateOperation === undefined
+        ? []
+        : orderingMoveBindingDirections.map(({ direction, label }) =>
+            projectOrderingMoveOperationControlBinding({
+              direction,
+              label,
+              ordering: orderingContext.ordering,
+              updateOperation: orderingContext.updateOperation,
+            }),
+          ),
+    [orderingContext],
+  );
+  const definedOrderingBindings = useMemo(
+    () => orderingBindings.filter((binding) => binding !== undefined),
+    [orderingBindings],
+  );
+  const orderingController = useGeneratedOperationController(definedOrderingBindings);
+  useGeneratedOperationControllerVersion(orderingController);
+  const orderingBindingsByDirection = useMemo(
+    () =>
+      new Map(
+        orderingMoveBindingDirections.flatMap(({ direction }, index) => {
+          const binding = orderingBindings[index];
+
+          return binding === undefined ? [] : [[direction, binding]];
+        }),
+      ),
+    [orderingBindings],
+  );
 
   async function submitOrderingPlan({
+    binding,
     failureMessage,
     plan,
     recordId,
     successMessage,
     syncingMessage,
   }: {
+    binding: ReturnType<typeof projectOrderingMoveOperationControlBinding>;
     failureMessage: string;
     plan: OrderingMoveMenuItem["plan"];
     recordId: string;
@@ -999,16 +1035,23 @@ export function RecordList({
       return;
     }
 
+    if (binding === undefined) {
+      setSyncStatus({ state: "error", message: failureMessage });
+      return;
+    }
+
     setPendingOrderingRecordId(recordId);
-    setSyncStatus({ state: "syncing", message: syncingMessage });
 
     try {
-      await submitOrderingPatch(appTarget, orderingContext, plan, writeOptions);
-      setSyncStatus({ state: "idle", message: successMessage });
-    } catch (error) {
-      setSyncStatus({
-        state: "error",
-        message: error instanceof Error ? error.message : failureMessage,
+      await executeGeneratedOrderingMoveOperation({
+        binding,
+        controller: orderingController,
+        failedMessage: failureMessage,
+        orderingContext,
+        plan,
+        source: "button",
+        successMessage,
+        syncingMessage,
       });
     } finally {
       setPendingOrderingRecordId(null);
@@ -1050,6 +1093,7 @@ export function RecordList({
     });
 
     await submitOrderingPlan({
+      binding: orderingBindingsByDirection.get("drag"),
       failureMessage: "Drag reorder failed.",
       plan,
       recordId,
@@ -1064,6 +1108,7 @@ export function RecordList({
     }
 
     await submitOrderingPlan({
+      binding: orderingBindingsByDirection.get(item.direction),
       failureMessage: "Move failed.",
       plan: item.plan,
       recordId,
@@ -1150,6 +1195,17 @@ export function RecordList({
     </section>
   );
 }
+
+const orderingMoveBindingDirections: Array<{
+  direction: OrderingMoveDirection | "drag";
+  label: string;
+}> = [
+  { direction: "drag", label: "Move list item" },
+  { direction: "top", label: "Move to top" },
+  { direction: "up", label: "Move up" },
+  { direction: "down", label: "Move down" },
+  { direction: "bottom", label: "Move to bottom" },
+];
 
 function firstRecordIdFromKeys(keys: ObjectListReorderIntent["keys"]) {
   const key = keys.values().next().value;

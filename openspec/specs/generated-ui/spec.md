@@ -419,6 +419,69 @@ entity operations and view operation bindings.
 - AND operation response shape drives success, failure, replay, local
   auto-save, and compact status presentation
 
+#### Scenario: Project operation control bindings
+
+- GIVEN generated UI selects operation controls for collection toolbars, record
+  menus, form submits, table rows, tree nodes, state transitions, ordering
+  controls, public forms, or workspace controls
+- WHEN the foundation model prepares data for the view layer
+- THEN it projects each renderable control as plain operation-shaped data with a
+  stable binding id, shared execution key, canonical operation key, scope, kind,
+  label, visual intent, availability state, optional disabled reason, optional
+  destructive confirmation, and compact feedback labels
+- AND hidden controls are omitted before they reach the view layer
+- AND disabled, destructive, confirmation, ordering, menu placement, edit-dialog,
+  public-safe field, and reference-target facts remain presentation facts derived
+  from source operations, operation bindings, runtime operation definitions, or
+  public operation projections
+- AND the projected data does not expose app targets, schema parser internals,
+  browser replica internals, write options, local auto-save hooks, operation
+  handler internals, or auth policy internals
+
+#### Scenario: Execute through operation controller
+
+- GIVEN multiple generated controls are bound to the same operation execution key
+- WHEN the user invokes one of those controls
+- THEN generated UI submits a binding id and caller input to a foundation-owned
+  operation controller
+- AND the controller builds the operation invocation request, calls the
+  Authority operation endpoint or runtime operation adapter, applies materialized
+  changes to the browser replica, reports committed writes to local workspace
+  auto-save where available, and returns a normalized committed, replayed, or
+  failed result
+- AND pending, success, replay, and failure state is shared across all controls
+  that use the same execution key
+- AND created record ids, affected counts, replay status, and display-safe error
+  messages come from the normalized operation result rather than from view
+  component-specific response parsing
+
+#### Scenario: Astryx operation primitive boundary
+
+- GIVEN generated UI renders operation controls with Astryx view primitives
+- WHEN buttons, menu items, submit buttons, confirmation dialogs, progress
+  indicators, compact status, or toast feedback render
+- THEN Astryx consumes only projected operation control data, current execution
+  state, and callback functions supplied by generated UI
+- AND Astryx does not import or call `submitOperation`, app target selectors,
+  schema parsing helpers, browser replica APIs, write option hooks, local
+  auto-save hooks, operation handler helpers, or auth policy helpers
+- AND foundation code does not render Astryx components or decide page, table,
+  row, tree, dialog, menu, or toast layout
+
+#### Scenario: Specialized controls use adapters
+
+- GIVEN create dialogs, edit dialogs, delete confirmations, table row menus,
+  state transition menus, ordering moves, tree child add or remove controls,
+  public operation forms, or workspace controls need specialized input
+- WHEN the user submits the specialized control
+- THEN a foundation adapter builds the operation input from form values, record
+  ids, transition facts, ordering move plans, tree parent and variant facts,
+  public proof fields, or workspace operation fields
+- AND the adapter invokes the same operation controller contract used by simple
+  operation buttons and menu items
+- AND adapters do not redefine operation input, output, effect, actor policy,
+  idempotency policy, audit policy, or storage target semantics
+
 #### Scenario: Public operation form authoring controls
 
 - GIVEN generated Site authoring renders a `publicOperationForm` block editor

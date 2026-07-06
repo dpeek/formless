@@ -47,6 +47,27 @@ import type {
 } from "./state-machine-model.ts";
 
 export { selectRelatedCollectionModels } from "./collection-shell-model.ts";
+export {
+  buildGeneratedOperationInvocationRequest,
+  buildGeneratedOperationRuntimeAdapterRequest,
+  createGeneratedOperationController,
+  normalizeGeneratedOperationInvocationResponse,
+  normalizeGeneratedOperationRuntimeAdapterResponse,
+} from "./operation-control-controller.ts";
+export {
+  createIdleGeneratedOperationExecutionState,
+  generatedOperationExecutionKey,
+  projectCollectionOperationControlBinding,
+  projectCollectionOperationControlBindings,
+  projectOrderingMoveOperationControlBinding,
+  projectPublicOperationFormControlBinding,
+  projectRecordDeleteOperationControlBinding,
+  projectStateTransitionOperationControlBinding,
+  projectTableOperationControlBinding,
+  projectTableOperationControlBindings,
+  projectTreeCompositionOperationControlBindings,
+  projectWorkspaceOperationControlBinding,
+} from "./operation-control-model.ts";
 export type {
   CommandOperationTargetCountConfig,
   CommandOperationUiConfig,
@@ -60,6 +81,36 @@ export type {
   HomeSummarySlotConfig,
   RelatedCollectionConfig,
 } from "./collection-shell-model.ts";
+export type {
+  GeneratedOperationAuthoritySubmitter,
+  GeneratedOperationController,
+  GeneratedOperationControllerListener,
+  GeneratedOperationControllerOptions,
+  GeneratedOperationRuntimeAdapter,
+  GeneratedOperationRuntimeAdapterKind,
+  GeneratedOperationRuntimeAdapterRequest,
+  GeneratedOperationRuntimeAdapterResponse,
+} from "./operation-control-controller.ts";
+export type {
+  GeneratedOperationCallerInput,
+  GeneratedOperationControlAvailability,
+  GeneratedOperationControlBinding,
+  GeneratedOperationControlConfirmation,
+  GeneratedOperationControlFeedback,
+  GeneratedOperationControlKind,
+  GeneratedOperationControlScope,
+  GeneratedOperationControlVisualIntent,
+  GeneratedOperationExecutionResult,
+  GeneratedOperationExecutionState,
+  GeneratedOperationExecutionStatus,
+  GeneratedOperationInputAdapter,
+  GeneratedOperationInvocationSource,
+  GeneratedOperationProjectionOptions,
+  GeneratedOrderingMoveOperationFacts,
+  GeneratedPublicOperationControlFacts,
+  GeneratedPublicOperationInputField,
+  GeneratedWorkspaceOperationControlFacts,
+} from "./operation-control-model.ts";
 export type { StateMachineFieldConfig, TransitionStateOperationConfig };
 export { fieldLabel } from "./view-labels.ts";
 

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Button } from "@dpeek/formless-ui/button";
 import {
   ModalClose,
@@ -9,12 +9,21 @@ import {
   ModalTitle,
 } from "@dpeek/formless-ui/modal";
 import { useRecord } from "../../client/store.ts";
-import { setSyncStatus } from "../../client/sync-status.ts";
-import { submitOperation } from "../../client/sync.ts";
 import type { EntityOperationPresentationConfig } from "../../client/operation-presentation-model.ts";
+import {
+  projectRecordDeleteOperationControlBinding,
+  type GeneratedOperationControlBinding,
+  type GeneratedOperationController,
+  type GeneratedOperationExecutionResult,
+} from "../../client/views.ts";
+import type { SyncStatus } from "../../client/sync-status.ts";
 import type { StoredRecord } from "@dpeek/formless-storage";
 import type { FieldSchema } from "@dpeek/formless-schema";
-import { useSchemaAppTarget, useSchemaAppWriteOptions } from "./schema-app-context.tsx";
+import {
+  executeGeneratedOperationControl,
+  useGeneratedOperationController,
+  useGeneratedOperationControllerVersion,
+} from "./operation-control-runtime.ts";
 
 export type RecordLabelFieldConfig = {
   fieldName: string;
@@ -27,7 +36,6 @@ export function DeleteRecordButton({
   className,
   deleteOperation,
   entityLabel,
-  entityName,
   labelFields = [],
   onDeleted,
   recordId,
@@ -46,40 +54,39 @@ export function DeleteRecordButton({
   size?: "xs" | "sq-xs";
   triggerData?: Record<string, string>;
 }) {
-  const appTarget = useSchemaAppTarget();
-  const writeOptions = useSchemaAppWriteOptions();
   const record = useRecord(recordId);
   const [open, setOpen] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
   const recordLabel = selectRecordLabel(record, labelFields, entityLabel, recordId);
+  const binding = useMemo(
+    () =>
+      projectDeleteRecordButtonBinding({
+        deleteOperation,
+        entityLabel,
+        recordId,
+        recordLabel,
+      }),
+    [deleteOperation, entityLabel, recordId, recordLabel],
+  );
+  const bindings = useMemo(() => (binding === undefined ? [] : [binding]), [binding]);
+  const controller = useGeneratedOperationController(bindings);
+  useGeneratedOperationControllerVersion(controller);
+  const isDeleting = binding === undefined ? false : controller.isPending(binding.id);
 
   async function deleteRecord() {
-    if (isDeleting) {
+    if (binding === undefined || isDeleting) {
       return;
     }
 
-    setIsDeleting(true);
-    setSyncStatus({ state: "syncing", message: `Deleting ${recordLabel}...` });
+    const result = await executeRecordDeleteOperation({
+      binding,
+      controller,
+      recordId,
+      recordLabel,
+    });
 
-    try {
-      await submitOperation(
-        appTarget,
-        entityName,
-        deleteOperation.operationName,
-        { recordId },
-        undefined,
-        writeOptions,
-      );
+    if (result.type !== "failed") {
       setOpen(false);
       onDeleted?.();
-      setSyncStatus({ state: "idle", message: `Deleted ${recordLabel}.` });
-    } catch (error) {
-      setSyncStatus({
-        state: "error",
-        message: error instanceof Error ? error.message : "Delete failed.",
-      });
-    } finally {
-      setIsDeleting(false);
     }
   }
 
@@ -108,9 +115,10 @@ export function DeleteRecordButton({
         role="alertdialog"
       >
         <ModalHeader>
-          <ModalTitle>Delete {recordLabel}?</ModalTitle>
+          <ModalTitle>{binding?.confirmation?.title ?? `Delete ${recordLabel}?`}</ModalTitle>
           <ModalDescription>
-            The record will be hidden from active views. Active references can block deletion.
+            {binding?.confirmation?.description ??
+              "The record will be hidden from active views. Active references can block deletion."}
           </ModalDescription>
         </ModalHeader>
         <ModalFooter>
@@ -121,12 +129,66 @@ export function DeleteRecordButton({
             type="button"
             intent="danger"
           >
-            {isDeleting ? "Deleting..." : "Delete"}
+            {isDeleting ? "Deleting..." : (binding?.confirmation?.actionLabel ?? "Delete")}
           </Button>
         </ModalFooter>
       </ModalContent>
     </>
   );
+}
+
+export function projectDeleteRecordButtonBinding({
+  deleteOperation,
+  entityLabel,
+  recordId,
+  recordLabel,
+}: {
+  deleteOperation: EntityOperationPresentationConfig;
+  entityLabel: string;
+  recordId: string;
+  recordLabel: string;
+}): GeneratedOperationControlBinding | undefined {
+  return projectRecordDeleteOperationControlBinding({
+    entityLabel,
+    label: "Delete",
+    operation: deleteOperation,
+    recordLabel,
+    options: {
+      executionTargetKey: recordId,
+    },
+  });
+}
+
+export async function executeRecordDeleteOperation({
+  binding,
+  controller,
+  recordId,
+  recordLabel,
+  setStatus,
+}: {
+  binding: GeneratedOperationControlBinding;
+  controller: GeneratedOperationController;
+  recordId: string;
+  recordLabel: string;
+  setStatus?: (status: SyncStatus) => void;
+}): Promise<GeneratedOperationExecutionResult> {
+  return executeGeneratedOperationControl({
+    binding,
+    callerInput: {
+      bindingId: binding.id,
+      recordId,
+      source: "confirmationDialog",
+    },
+    controller,
+    feedback: {
+      committedMessage: `Deleted ${recordLabel}.`,
+      failedMessage: (result) =>
+        result.type === "failed" ? result.displayError : "Delete failed.",
+      progressMessage: `Deleting ${recordLabel}...`,
+      replayedMessage: `Deleted ${recordLabel}.`,
+    },
+    setStatus,
+  });
 }
 
 export function selectRecordLabel(

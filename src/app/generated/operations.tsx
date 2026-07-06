@@ -1,14 +1,23 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Badge } from "@dpeek/formless-ui/badge";
 import { Button } from "@dpeek/formless-ui/button";
 import { useEntityRecordCountMatchingQuery } from "../../client/store.ts";
-import { setSyncStatus } from "../../client/sync-status.ts";
-import { submitOperation } from "../../client/sync.ts";
-import type { CommandOperationTargetCountConfig } from "../../client/views.ts";
-import type { HomeOperationConfig } from "../../client/views.ts";
+import {
+  projectCollectionOperationControlBindings,
+  type CommandOperationTargetCountConfig,
+  type GeneratedOperationControlBinding,
+  type GeneratedOperationController,
+  type GeneratedOperationExecutionResult,
+  type HomeOperationConfig,
+} from "../../client/views.ts";
+import type { SyncStatus } from "../../client/sync-status.ts";
 import { createDefaultsAreResolved, type QueryEvaluationContext } from "@dpeek/formless-schema";
 import { GeneratedCreateDialog } from "./create.tsx";
-import { useSchemaAppTarget, useSchemaAppWriteOptions } from "./schema-app-context.tsx";
+import {
+  executeGeneratedOperationControl,
+  useGeneratedOperationController,
+  useGeneratedOperationControllerVersion,
+} from "./operation-control-runtime.ts";
 
 type CommandHomeOperationConfig = Extract<HomeOperationConfig, { type: "command" }>;
 type CreateHomeOperationConfig = Extract<HomeOperationConfig, { type: "create" }>;
@@ -22,43 +31,34 @@ export function HomeOperationRow({
   operations: HomeOperationConfig[];
   queryContext: QueryEvaluationContext;
 }) {
-  const appTarget = useSchemaAppTarget();
-  const writeOptions = useSchemaAppWriteOptions();
-  const [pendingOperationName, setPendingOperationName] = useState<string | null>(null);
   const [createDialogOperation, setCreateDialogOperation] =
     useState<CreateHomeOperationConfig | null>(null);
+  const bindings = useMemo(
+    () => projectCollectionOperationControlBindings(operations),
+    [operations],
+  );
+  const bindingsByCanonicalKey = useMemo(
+    () => new Map(bindings.map((binding) => [binding.canonicalOperationKey, binding])),
+    [bindings],
+  );
+  const controller = useGeneratedOperationController(bindings);
+  useGeneratedOperationControllerVersion(controller);
+  const commandPending = bindings.some(
+    (binding) => binding.kind === "command" && controller.isPending(binding.id),
+  );
 
   async function runCommandOperation(operation: CommandHomeOperationConfig) {
-    if (pendingOperationName) {
+    const binding = bindingsByCanonicalKey.get(operation.operation.canonicalKey);
+
+    if (binding === undefined || commandPending) {
       return;
     }
 
-    setPendingOperationName(operation.operationName);
-    setSyncStatus({ state: "syncing", message: `${operation.label}...` });
-
-    try {
-      const response = await submitOperation(
-        appTarget,
-        operation.entityName,
-        operation.operationName,
-        {},
-        undefined,
-        writeOptions,
-      );
-      const affected = "changes" in response.output ? response.output.changes.length : 0;
-      const message = operation.ui.showAffectedCountOnSuccess
-        ? `${operation.label} synced. ${affected} affected.`
-        : `${operation.label} synced.`;
-
-      setSyncStatus({ state: "idle", message });
-    } catch (error) {
-      setSyncStatus({
-        state: "error",
-        message: error instanceof Error ? error.message : "Operation failed.",
-      });
-    } finally {
-      setPendingOperationName(null);
-    }
+    await executeHomeCommandOperation({
+      binding,
+      controller,
+      operation,
+    });
   }
 
   return (
@@ -84,13 +84,16 @@ export function HomeOperationRow({
           );
         }
 
+        const binding = bindingsByCanonicalKey.get(operation.operation.canonicalKey);
+
         return (
           <HomeCommandOperationButton
-            disabled={pendingOperationName !== null}
+            binding={binding}
+            disabled={commandPending}
             key={`${operation.type}:${operation.operationName}`}
             onRun={runCommandOperation}
             operation={operation}
-            pending={pendingOperationName === operation.operationName}
+            pending={binding === undefined ? false : controller.isPending(binding.id)}
             queryContext={queryContext}
           />
         );
@@ -112,22 +115,26 @@ export function HomeOperationRow({
 }
 
 function HomeCommandOperationButton({
+  binding,
   disabled,
   onRun,
   operation,
   pending,
   queryContext,
 }: {
+  binding?: GeneratedOperationControlBinding;
   disabled: boolean;
   onRun: (operation: CommandHomeOperationConfig) => Promise<void>;
   operation: CommandHomeOperationConfig;
   pending: boolean;
   queryContext: QueryEvaluationContext;
 }) {
+  const controlDisabled = disabled || binding?.availability.state === "disabled";
+
   if (!operation.ui.targetCount) {
     return (
       <Button
-        isDisabled={disabled}
+        isDisabled={controlDisabled}
         onPress={() => void onRun(operation)}
         type="button"
         intent="outline"
@@ -139,7 +146,7 @@ function HomeCommandOperationButton({
 
   return (
     <CountedHomeCommandOperationButton
-      disabled={disabled}
+      disabled={controlDisabled}
       onRun={onRun}
       operation={operation}
       pending={pending}
@@ -183,4 +190,41 @@ function CountedHomeCommandOperationButton({
       </Badge>
     </Button>
   );
+}
+
+export async function executeHomeCommandOperation({
+  binding,
+  controller,
+  operation,
+  setStatus,
+}: {
+  binding: GeneratedOperationControlBinding;
+  controller: GeneratedOperationController;
+  operation: CommandHomeOperationConfig;
+  setStatus?: (status: SyncStatus) => void;
+}): Promise<GeneratedOperationExecutionResult> {
+  return executeGeneratedOperationControl({
+    binding,
+    callerInput: {
+      bindingId: binding.id,
+      source: "button",
+    },
+    controller,
+    feedback: {
+      committedMessage: (result) => homeCommandOperationCommittedMessage(operation, result),
+      replayedMessage: binding.feedback?.replayLabel ?? `${operation.label} replayed.`,
+    },
+    setStatus,
+  });
+}
+
+export function homeCommandOperationCommittedMessage(
+  operation: CommandHomeOperationConfig,
+  result: GeneratedOperationExecutionResult,
+): string {
+  const affectedCount = result.type === "failed" ? 0 : (result.affectedCount ?? 0);
+
+  return operation.ui.showAffectedCountOnSuccess
+    ? `${operation.label} synced. ${affectedCount} affected.`
+    : `${operation.label} synced.`;
 }

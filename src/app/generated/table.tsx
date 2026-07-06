@@ -1,4 +1,4 @@
-import { Fragment, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { DragDropProvider, type DragEndEvent } from "@dnd-kit/react";
 import { isSortableOperation, useSortable } from "@dnd-kit/react/sortable";
 import { Button } from "@dpeek/formless-ui/button";
@@ -38,7 +38,10 @@ import type {
   TableFooterSlotConfig,
   TransitionStateOperationConfig,
 } from "../../client/views.ts";
-import { recordFieldIsWritable } from "../../client/views.ts";
+import {
+  projectOrderingMoveOperationControlBinding,
+  recordFieldIsWritable,
+} from "../../client/views.ts";
 import type { TableCollectionResultModel } from "../../client/collection-result-model.ts";
 import {
   evaluateNumericExpression,
@@ -52,7 +55,6 @@ import {
   parseOrderingDragData,
   selectOrderingDragFacts,
   selectResultOrderingContext,
-  submitOrderingPatch,
   type ResultOrderingContext,
   type ResultOrderingDragData,
 } from "./ordering-ui.ts";
@@ -60,7 +62,6 @@ import { RecordFieldDisplay } from "./record-field-display.tsx";
 import { DeleteRecordButton, type RecordLabelFieldConfig } from "./record-delete.tsx";
 import { RecordFieldEditor } from "./record-field-editor.tsx";
 import { RecordReadinessWarnings } from "./readiness-warnings.tsx";
-import { useSchemaAppTarget, useSchemaAppWriteOptions } from "./schema-app-context.tsx";
 import {
   RecordStateTransitionMenu,
   RecordTransitionOperationControls,
@@ -77,6 +78,11 @@ import {
   type GeneratedTableRowPresentation,
 } from "./table-presentation.ts";
 import { selectRecordFieldsForActiveUnion } from "./union-presentation.ts";
+import {
+  executeGeneratedOrderingMoveOperation,
+  useGeneratedOperationController,
+  useGeneratedOperationControllerVersion,
+} from "./operation-control-runtime.ts";
 
 export function RecordTable({
   entity,
@@ -93,8 +99,6 @@ export function RecordTable({
   queryContext?: QueryEvaluationContext;
   result: TableCollectionResultModel;
 }) {
-  const appTarget = useSchemaAppTarget();
-  const writeOptions = useSchemaAppWriteOptions();
   const canPatch = result.updateOperation !== undefined;
   const canDelete = result.deleteOperation !== undefined;
   const [pendingDragRecordId, setPendingDragRecordId] = useState<string | null>(null);
@@ -110,6 +114,24 @@ export function RecordTable({
   });
   const orderedRecordIds = orderingContext?.orderedRecordIds ?? recordIds;
   const orderingDragFacts = selectOrderingDragFacts(orderingContext);
+  const orderingDragBinding = useMemo(
+    () =>
+      orderingContext?.updateOperation === undefined
+        ? undefined
+        : projectOrderingMoveOperationControlBinding({
+            direction: "drag",
+            label: "Move row",
+            ordering: orderingContext.ordering,
+            updateOperation: orderingContext.updateOperation,
+          }),
+    [orderingContext],
+  );
+  const orderingBindings = useMemo(
+    () => (orderingDragBinding === undefined ? [] : [orderingDragBinding]),
+    [orderingDragBinding],
+  );
+  const orderingController = useGeneratedOperationController(orderingBindings);
+  useGeneratedOperationControllerVersion(orderingController);
   const presentation = selectGeneratedTablePresentation({
     canDelete,
     canPatch,
@@ -159,17 +181,23 @@ export function RecordTable({
       return;
     }
 
+    if (orderingDragBinding === undefined) {
+      return;
+    }
+
     const suspendedDrop = event.suspend();
     setPendingDragRecordId(dragData.recordId);
-    setSyncStatus({ state: "syncing", message: "Moving row..." });
 
     try {
-      await submitOrderingPatch(appTarget, orderingContext, plan, writeOptions);
-      setSyncStatus({ state: "idle", message: "Row moved and synced." });
-    } catch (error) {
-      setSyncStatus({
-        state: "error",
-        message: error instanceof Error ? error.message : "Drag reorder failed.",
+      await executeGeneratedOrderingMoveOperation({
+        binding: orderingDragBinding,
+        controller: orderingController,
+        failedMessage: "Drag reorder failed.",
+        orderingContext,
+        plan,
+        source: "button",
+        successMessage: "Row moved and synced.",
+        syncingMessage: "Moving row...",
       });
     } finally {
       setPendingDragRecordId(null);

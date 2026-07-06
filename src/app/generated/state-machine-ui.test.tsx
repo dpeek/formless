@@ -10,17 +10,22 @@ import {
 } from "../../client/store.ts";
 import {
   selectStateMachineField,
+  selectTransitionStateOperationAvailability,
   selectTransitionStateOperations,
 } from "../../client/state-machine-model.ts";
+import {
+  createGeneratedOperationController,
+  projectStateTransitionOperationControlBinding,
+} from "../../client/views.ts";
 import type { OperationInvocationResponse } from "../../shared/operation-invocation.ts";
 import type { StoredRecord } from "@dpeek/formless-storage";
 import type { ChangeRow } from "../../shared/protocol.ts";
 import { GeneratedCreateFieldControl } from "./create-field-control.tsx";
 import { RecordFieldEditor } from "./record-field-editor.tsx";
 import {
+  executeTransitionStateOperation,
   RecordTransitionOperationControls,
   StateMachineStateBadge,
-  submitTransitionStateOperation,
 } from "./state-machine-ui.tsx";
 
 beforeEach(async () => {
@@ -152,11 +157,6 @@ describe("generated state-machine UI", () => {
   it("submits transition operations through the generated operation endpoint with recordId input", async () => {
     const schema = lifecycleSchema();
     const changed = taskRecord("task-1", "doing");
-    let submittedOperation: {
-      idempotencyKey: string;
-      recordId?: string;
-      source?: { protocol?: string };
-    };
 
     await saveBootstrapResponse("tasks", {
       schema,
@@ -166,35 +166,59 @@ describe("generated state-machine UI", () => {
     });
     await refreshClientStoreFromDb("tasks");
 
-    await submitTransitionStateOperation(
-      "tasks",
-      "task",
-      "startTask",
-      "task-1",
-      async (input, init) => {
-        submittedOperation = parseOperationRequestBody(init?.body);
+    const operations = selectTransitionStateOperations("task", schema.entities.task);
+    const operation = operations.find((candidate) => candidate.operationName === "startTask");
+
+    if (operation === undefined) {
+      throw new Error("Missing startTask operation.");
+    }
+
+    const binding = projectStateTransitionOperationControlBinding({
+      operation,
+      availability: selectTransitionStateOperationAvailability({
+        operation,
+        currentValue: "todo",
+        field: operation.field,
+      }),
+      options: {
+        executionTargetKey: "task-1",
+      },
+    });
+    const controller = createGeneratedOperationController({
+      bindings: [binding],
+      fetcher: async (input, init) => {
+        const submittedOperation = parseOperationRequestBody(init?.body);
 
         expect(input).toBe("/api/tasks/operations/task/startTask");
         expect(init?.method).toBe("POST");
         expect(submittedOperation).toMatchObject({
-          idempotencyKey: expect.any(String),
           recordId: "task-1",
-          source: { protocol: "generated-ui" },
+          source: { protocol: "generated-ui", surface: "button" },
         });
-        const changes = [commandChange(2, changed, submittedOperation.idempotencyKey)];
+        const writeId = submittedOperation.idempotencyKey ?? "write-2";
+        const changes = [commandChange(2, changed, writeId)];
 
         return Response.json({
           invocation: {} as OperationInvocationResponse["invocation"],
           output: {
             type: "command",
-            affectedChangeIds: [submittedOperation.idempotencyKey],
+            affectedChangeIds: [writeId],
             changes,
             cursor: 2,
           },
           status: "committed",
         } satisfies OperationInvocationResponse);
       },
-    );
+      target: "tasks",
+    });
+
+    await executeTransitionStateOperation({
+      binding,
+      controller,
+      operation,
+      recordId: "task-1",
+      source: "button",
+    });
 
     expect(getClientStoreSnapshot().recordsById["task-1"]?.values.status).toBe("doing");
   });
@@ -365,8 +389,8 @@ function parseOperationRequestBody(body: BodyInit | null | undefined) {
   );
 
   return parsed as {
-    idempotencyKey: string;
+    idempotencyKey?: string;
     recordId?: string;
-    source?: { protocol?: string };
+    source?: { protocol?: string; surface?: string };
   };
 }

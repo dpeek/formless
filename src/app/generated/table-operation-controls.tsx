@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Button, buttonStyles } from "@dpeek/formless-ui/button";
 import {
   ModalBody,
@@ -18,26 +18,35 @@ import {
   MenuTrigger,
 } from "@dpeek/formless-ui/menu";
 import { useRecord, useRecordField } from "../../client/store.ts";
-import { setSyncStatus } from "../../client/sync-status.ts";
 import type {
   EditRecordTableOperationControlConfig,
   EditViewConfig,
+  GeneratedOperationCallerInput,
+  GeneratedOperationControlBinding,
   OperationControlTableColumnConfig,
   TableOperationControlConfig,
 } from "../../client/views.ts";
+import {
+  projectOrderingMoveOperationControlBinding,
+  projectTableOperationControlBinding,
+} from "../../client/views.ts";
 import type { StoredRecord } from "@dpeek/formless-storage";
 import { RecordFieldEditor } from "./record-field-editor.tsx";
-import { useSchemaAppTarget, useSchemaAppWriteOptions } from "./schema-app-context.tsx";
 import { RecordTransitionOperationControls } from "./state-machine-ui.tsx";
 import { selectRecordFieldsForActiveUnion } from "./union-presentation.ts";
 import {
   orderingMoveAriaLabel,
   selectOrderingMoveMenuItems,
-  submitOrderingPatch,
-  type OrderingMoveDirection,
   type OrderingMoveMenuItem,
   type ResultOrderingContext,
 } from "./ordering-ui.ts";
+import {
+  executeGeneratedOperationControl,
+  executeGeneratedOrderingMoveOperation,
+  selectGeneratedOperationControlTriggerDecision,
+  useGeneratedOperationController,
+  useGeneratedOperationControllerVersion,
+} from "./operation-control-runtime.ts";
 
 type ReferenceEditRecordTableOperationControlConfig = EditRecordTableOperationControlConfig & {
   target: Extract<EditRecordTableOperationControlConfig["target"], { kind: "reference" }>;
@@ -52,16 +61,63 @@ export function TableOperationControlsCell({
   orderingContext?: ResultOrderingContext;
   sourceRecordId: string;
 }) {
-  const appTarget = useSchemaAppTarget();
-  const writeOptions = useSchemaAppWriteOptions();
   const [openBindingName, setOpenBindingName] = useState<string | null>(null);
-  const [pendingOrderingDirection, setPendingOrderingDirection] =
-    useState<OrderingMoveDirection | null>(null);
-  const orderingItems = selectOrderingMoveMenuItems({
-    includeOrdering: column.includeOrdering && column.ordering !== undefined,
-    orderingContext,
-    sourceRecordId,
-  });
+  const [confirmingBindingId, setConfirmingBindingId] = useState<string | null>(null);
+  const orderingItems = useMemo(
+    () =>
+      selectOrderingMoveMenuItems({
+        includeOrdering: column.includeOrdering && column.ordering !== undefined,
+        orderingContext,
+        sourceRecordId,
+      }),
+    [column.includeOrdering, column.ordering, orderingContext, sourceRecordId],
+  );
+  const controlBindings = useMemo(
+    () =>
+      column.controls.map((control) => ({
+        binding: projectTableOperationControlBinding(control, {
+          executionTargetKey: sourceRecordId,
+          idPrefix: `table:${sourceRecordId}`,
+        }),
+        control,
+      })),
+    [column.controls, sourceRecordId],
+  );
+  const orderingBindings = useMemo(
+    () =>
+      orderingItems.map((item) => ({
+        binding:
+          orderingContext === undefined
+            ? undefined
+            : projectOrderingMoveOperationControlBinding(
+                {
+                  direction: item.direction,
+                  label: item.label,
+                  ordering: orderingContext.ordering,
+                  updateOperation: orderingContext.updateOperation,
+                  disabledReason: item.disabledReason,
+                },
+                {
+                  executionTargetKey: sourceRecordId,
+                  idPrefix: `table-ordering:${sourceRecordId}`,
+                },
+              ),
+        item,
+      })),
+    [orderingContext, orderingItems, sourceRecordId],
+  );
+  const bindings = useMemo(
+    () =>
+      [...controlBindings, ...orderingBindings]
+        .map(({ binding }) => binding)
+        .filter((binding): binding is GeneratedOperationControlBinding => binding !== undefined),
+    [controlBindings, orderingBindings],
+  );
+  const controller = useGeneratedOperationController(bindings);
+  useGeneratedOperationControllerVersion(controller);
+  const anyOrderingPending = orderingBindings.some(
+    ({ binding }) => binding !== undefined && controller.isPending(binding.id),
+  );
 
   if (column.controls.length === 0 && orderingItems.length === 0) {
     return null;
@@ -71,6 +127,9 @@ export function TableOperationControlsCell({
     (control): control is EditRecordTableOperationControlConfig =>
       control.bindingName === openBindingName && control.type === "editRecord",
   );
+  const confirmingControlBinding = controlBindings.find(
+    ({ binding }) => binding?.id === confirmingBindingId,
+  );
 
   function openControlDialog(control: TableOperationControlConfig) {
     if (control.type === "editRecord" && !control.disabled) {
@@ -78,25 +137,86 @@ export function TableOperationControlsCell({
     }
   }
 
-  async function invokeOrderingMove(item: OrderingMoveMenuItem) {
+  async function executeTableControl(
+    binding: GeneratedOperationControlBinding,
+    source: GeneratedOperationCallerInput["source"],
+  ) {
+    return executeGeneratedOperationControl({
+      binding,
+      callerInput: {
+        bindingId: binding.id,
+        recordId: sourceRecordId,
+        source,
+      },
+      controller,
+    });
+  }
+
+  async function invokeTableControl(
+    control: TableOperationControlConfig,
+    binding: GeneratedOperationControlBinding | undefined,
+    source: GeneratedOperationCallerInput["source"],
+  ) {
+    if (control.type === "editRecord") {
+      openControlDialog(control);
+      return;
+    }
+
+    const decision = selectGeneratedOperationControlTriggerDecision({
+      binding,
+      disabled: control.disabled,
+      pending: binding === undefined ? false : controller.isPending(binding.id),
+    });
+
+    if (decision.type === "ignore" || binding === undefined) {
+      return;
+    }
+
+    if (decision.type === "confirm") {
+      setConfirmingBindingId(binding.id);
+      return;
+    }
+
+    await executeTableControl(binding, source);
+  }
+
+  async function confirmTableControl(
+    control: TableOperationControlConfig,
+    binding: GeneratedOperationControlBinding,
+  ) {
+    if (control.disabled || controller.isPending(binding.id)) {
+      return;
+    }
+
+    const result = await executeTableControl(binding, "confirmationDialog");
+
+    if (result.type !== "failed") {
+      setConfirmingBindingId(null);
+    }
+  }
+
+  async function invokeOrderingMove(
+    item: OrderingMoveMenuItem,
+    binding: GeneratedOperationControlBinding | undefined,
+  ) {
     if (item.disabled || item.plan.kind !== "patch" || !orderingContext) {
       return;
     }
 
-    setPendingOrderingDirection(item.direction);
-    setSyncStatus({ state: "syncing", message: `${item.label}...` });
-
-    try {
-      await submitOrderingPatch(appTarget, orderingContext, item.plan, writeOptions);
-      setSyncStatus({ state: "idle", message: "Row moved and synced." });
-    } catch (error) {
-      setSyncStatus({
-        state: "error",
-        message: error instanceof Error ? error.message : "Move failed.",
-      });
-    } finally {
-      setPendingOrderingDirection(null);
+    if (binding === undefined || anyOrderingPending) {
+      return;
     }
+
+    await executeGeneratedOrderingMoveOperation({
+      binding,
+      controller,
+      failedMessage: "Move failed.",
+      orderingContext,
+      plan: item.plan,
+      source: "menuItem",
+      successMessage: "Row moved and synced.",
+      syncingMessage: `${item.label}...`,
+    });
   }
 
   if (
@@ -112,7 +232,16 @@ export function TableOperationControlsCell({
 
     return (
       <>
-        <TableOperationControlButton control={control} onOpen={() => openControlDialog(control)} />
+        <TableOperationControlButton
+          binding={controlBindings[0]?.binding}
+          control={control}
+          onRun={invokeTableControl}
+          pending={
+            controlBindings[0]?.binding === undefined
+              ? false
+              : controller.isPending(controlBindings[0].binding.id)
+          }
+        />
         {openControl ? (
           <EditRecordTableOperationDialog
             control={openControl}
@@ -123,6 +252,24 @@ export function TableOperationControlsCell({
             }}
             open={true}
             sourceRecordId={sourceRecordId}
+          />
+        ) : null}
+        {confirmingControlBinding ? (
+          <TableOperationConfirmationDialog
+            binding={confirmingControlBinding.binding}
+            control={confirmingControlBinding.control}
+            onConfirm={confirmTableControl}
+            onOpenChange={(open) => {
+              if (!open) {
+                setConfirmingBindingId(null);
+              }
+            }}
+            open={true}
+            pending={
+              confirmingControlBinding.binding === undefined
+                ? false
+                : controller.isPending(confirmingControlBinding.binding.id)
+            }
           />
         ) : null}
       </>
@@ -157,28 +304,40 @@ export function TableOperationControlsCell({
         <MenuContent
           popover={{ placement: column.align === "end" ? "bottom end" : "bottom start" }}
         >
-          {column.controls.map((control) => (
+          {controlBindings.map(({ binding, control }) => (
             <MenuItem
               aria-label={operationControlAriaLabel(control)}
-              isDisabled={control.disabled}
+              isDisabled={
+                control.disabled || (binding !== undefined && controller.isPending(binding.id))
+              }
               intent={control.variant === "destructive" ? "danger" : undefined}
               key={control.bindingName}
-              onAction={() => openControlDialog(control)}
+              onAction={() => {
+                void invokeTableControl(control, binding, "menuItem");
+              }}
             >
-              <MenuLabel>{control.label}</MenuLabel>
+              <MenuLabel>
+                {binding !== undefined && controller.isPending(binding.id)
+                  ? `${control.label}...`
+                  : control.label}
+              </MenuLabel>
             </MenuItem>
           ))}
           {column.controls.length > 0 && orderingItems.length > 0 ? <MenuSeparator /> : null}
-          {orderingItems.map((item) => (
+          {orderingBindings.map(({ binding, item }) => (
             <MenuItem
               aria-label={orderingMoveAriaLabel(item)}
-              isDisabled={item.disabled || pendingOrderingDirection !== null}
+              isDisabled={item.disabled || anyOrderingPending}
               key={item.direction}
               onAction={() => {
-                void invokeOrderingMove(item);
+                void invokeOrderingMove(item, binding);
               }}
             >
-              <MenuLabel>{item.label}</MenuLabel>
+              <MenuLabel>
+                {binding !== undefined && controller.isPending(binding.id)
+                  ? `${item.label}...`
+                  : item.label}
+              </MenuLabel>
             </MenuItem>
           ))}
         </MenuContent>
@@ -195,28 +354,110 @@ export function TableOperationControlsCell({
           sourceRecordId={sourceRecordId}
         />
       ) : null}
+      {confirmingControlBinding ? (
+        <TableOperationConfirmationDialog
+          binding={confirmingControlBinding.binding}
+          control={confirmingControlBinding.control}
+          onConfirm={confirmTableControl}
+          onOpenChange={(open) => {
+            if (!open) {
+              setConfirmingBindingId(null);
+            }
+          }}
+          open={true}
+          pending={
+            confirmingControlBinding.binding === undefined
+              ? false
+              : controller.isPending(confirmingControlBinding.binding.id)
+          }
+        />
+      ) : null}
     </>
   );
 }
 
 function TableOperationControlButton({
+  binding,
   control,
-  onOpen,
+  onRun,
+  pending,
 }: {
+  binding: GeneratedOperationControlBinding | undefined;
   control: TableOperationControlConfig;
-  onOpen: () => void;
+  onRun: (
+    control: TableOperationControlConfig,
+    binding: GeneratedOperationControlBinding | undefined,
+    source: GeneratedOperationCallerInput["source"],
+  ) => Promise<void>;
+  pending: boolean;
 }) {
   return (
     <Button
       aria-label={operationControlAriaLabel(control)}
-      isDisabled={control.disabled}
-      onPress={control.type === "editRecord" ? onOpen : undefined}
+      isDisabled={control.disabled || pending}
+      onPress={() => {
+        void onRun(control, binding, "button");
+      }}
       size="xs"
       type="button"
       intent={control.variant === "destructive" ? "danger" : "outline"}
     >
-      {control.label}
+      {pending ? `${control.label}...` : control.label}
     </Button>
+  );
+}
+
+function TableOperationConfirmationDialog({
+  binding,
+  control,
+  onConfirm,
+  onOpenChange,
+  open,
+  pending,
+}: {
+  binding: GeneratedOperationControlBinding | undefined;
+  control: TableOperationControlConfig;
+  onConfirm: (
+    control: TableOperationControlConfig,
+    binding: GeneratedOperationControlBinding,
+  ) => Promise<void>;
+  onOpenChange: (open: boolean) => void;
+  open: boolean;
+  pending: boolean;
+}) {
+  if (binding?.confirmation === undefined) {
+    return null;
+  }
+
+  return (
+    <ModalContent
+      closeButton={false}
+      isOpen={open}
+      onOpenChange={(nextOpen) => {
+        if (!pending) {
+          onOpenChange(nextOpen);
+        }
+      }}
+      role="alertdialog"
+    >
+      <ModalHeader>
+        <ModalTitle>{binding.confirmation.title}</ModalTitle>
+        <ModalDescription>{binding.confirmation.description}</ModalDescription>
+      </ModalHeader>
+      <ModalFooter>
+        <ModalClose intent="outline" isDisabled={pending} type="button">
+          Cancel
+        </ModalClose>
+        <Button
+          isDisabled={pending}
+          onPress={() => void onConfirm(control, binding)}
+          type="button"
+          intent={binding.visualIntent === "destructive" ? "danger" : "primary"}
+        >
+          {pending ? `${binding.label}...` : binding.confirmation.actionLabel}
+        </Button>
+      </ModalFooter>
+    </ModalContent>
   );
 }
 

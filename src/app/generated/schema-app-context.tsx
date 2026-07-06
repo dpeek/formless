@@ -1,4 +1,4 @@
-import { createContext, useContext, type ReactNode } from "react";
+import { createContext, useContext, useMemo, type ReactNode } from "react";
 import {
   clientTargetForSchemaKey,
   type ClientAppSchemaKey,
@@ -49,5 +49,8 @@ export function useSchemaAppTarget() {
 export function useSchemaAppWriteOptions() {
   const { activePackageResolver } = useContext(SchemaAppContext);
 
-  return activePackageResolver ? { activePackageResolver } : {};
+  return useMemo(
+    () => (activePackageResolver ? { activePackageResolver } : {}),
+    [activePackageResolver],
+  );
 }

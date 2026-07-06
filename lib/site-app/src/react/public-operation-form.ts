@@ -19,6 +19,16 @@ export type PublicOperationFormInputValue = PublicOperationInputValue;
 export type PublicOperationFormInputValues = PublicOperationInputValues;
 export type PublicOperationFormRequest = PublicOperationRequestEnvelope;
 export type PublicOperationFormResponse = PublicOperationResponse;
+export type PublicOperationFormExecutionResult =
+  | {
+      type: "committed" | "replayed";
+      affectedCount?: number;
+      output: PublicOperationResponse["output"];
+    }
+  | {
+      type: "failed";
+      displayError: string;
+    };
 
 export type PublicOperationFormRequestInput = {
   idempotencyKey: string;
@@ -68,6 +78,29 @@ export async function submitPublicOperationForm(
     route: input.route,
     submitErrorMessage: "Public operation request failed.",
   });
+}
+
+export async function executePublicOperationForm(
+  input: SubmitPublicOperationFormInput,
+): Promise<PublicOperationFormExecutionResult> {
+  try {
+    return normalizePublicOperationFormResponse(await submitPublicOperationForm(input));
+  } catch (error) {
+    return {
+      type: "failed",
+      displayError: error instanceof Error ? error.message : "Public operation request failed.",
+    };
+  }
+}
+
+export function normalizePublicOperationFormResponse(
+  response: PublicOperationFormResponse,
+): PublicOperationFormExecutionResult {
+  return {
+    type: response.status,
+    affectedCount: response.output.affectedChangeIds.length,
+    output: response.output,
+  };
 }
 
 export function createPublicOperationFormIdempotencyKey(blockId: string): string {

@@ -1,0 +1,319 @@
+import { describe, expect, it } from "vite-plus/test";
+import type { AppSchema, CollectionViewSchema } from "@dpeek/formless-schema";
+import { sourceLikeSiteSchema, sourceLikeTaskSchema } from "../test/schema-builders.ts";
+import { selectHomeCollectionShell } from "./collection-shell-model.ts";
+import {
+  createIdleGeneratedOperationExecutionState,
+  projectCollectionOperationControlBindings,
+  projectOrderingMoveOperationControlBinding,
+  projectPublicOperationFormControlBinding,
+  projectRecordDeleteOperationControlBinding,
+  projectStateTransitionOperationControlBinding,
+  projectTableOperationControlBindings,
+  projectTreeCompositionOperationControlBindings,
+  projectWorkspaceOperationControlBinding,
+} from "./operation-control-model.ts";
+import { selectEntityOperationByKind } from "./operation-presentation-model.ts";
+import {
+  selectTransitionStateOperationAvailability,
+  selectTransitionStateOperations,
+} from "./state-machine-model.ts";
+import { selectTableResultModel } from "./table-model.ts";
+import { selectTreeResultModel } from "./tree-result-model.ts";
+
+describe("generated operation control model", () => {
+  it("projects collection create and command controls with caller and execution contracts", () => {
+    const schema = sourceLikeTaskSchema();
+    const view = requiredCollectionView(schema, "taskHome");
+    const shell = selectHomeCollectionShell(
+      schema,
+      Object.entries(schema.views),
+      view,
+      schema.entities.task,
+    );
+    const bindings = projectCollectionOperationControlBindings(shell.operations);
+
+    expect(createIdleGeneratedOperationExecutionState("task.create")).toEqual({
+      executionKey: "task.create",
+      status: "idle",
+    });
+    expect(
+      bindings.map((binding) => ({
+        id: binding.id,
+        executionKey: binding.executionKey,
+        canonicalOperationKey: binding.canonicalOperationKey,
+        kind: binding.kind,
+        operationKind: binding.operationKind,
+        scope: binding.scope,
+        inputKind: binding.input.kind,
+      })),
+    ).toEqual([
+      {
+        id: "collection:task.create",
+        executionKey: "task.create",
+        canonicalOperationKey: "task.create",
+        kind: "create",
+        operationKind: "create",
+        scope: "collection",
+        inputKind: "createForm",
+      },
+      {
+        id: "collection:task.clearCompletedTasks",
+        executionKey: "task.clearCompletedTasks",
+        canonicalOperationKey: "task.clearCompletedTasks",
+        kind: "command",
+        operationKind: "command",
+        scope: "collection",
+        inputKind: "collectionCommand",
+      },
+    ]);
+  });
+
+  it("omits hidden table controls and projects disabled destructive confirmations", () => {
+    const schema = sourceLikeSiteSchema();
+    const tableView = schema.tableViews.blockPlacementTable;
+
+    tableView.operations = [
+      {
+        operation: "block.update",
+        label: "Edit block",
+        availability: { state: "hidden" },
+        target: { kind: "reference", field: "block" },
+        editView: "blockEdit",
+      },
+      {
+        operation: "block.delete",
+        label: "Delete block",
+        variant: "destructive",
+        availability: { state: "disabled", reason: "Locked by publish" },
+        target: { kind: "reference", field: "block" },
+      },
+    ];
+    tableView.columns = tableView.columns.map((column) =>
+      column.type === "operationControl"
+        ? {
+            type: "operationControl",
+            operations: ["block.update", "block.delete"],
+            align: "end",
+            width: "xs",
+          }
+        : column,
+    );
+
+    const result = selectTableResultModel(
+      schema,
+      tableView,
+      "block-placement",
+      schema.entities["block-placement"],
+    );
+    const column = result.columns.find((candidate) => candidate.type === "operationControl");
+
+    if (column?.type !== "operationControl") {
+      throw new Error("Missing operation-control column.");
+    }
+
+    const bindings = projectTableOperationControlBindings(column, {
+      executionTargetKey: "block-1",
+    });
+    const deleteOperation = selectEntityOperationByKind(
+      "block",
+      schema.entities.block,
+      "delete",
+      "record",
+    );
+
+    if (!deleteOperation) {
+      throw new Error("Missing block delete operation.");
+    }
+
+    const standaloneDelete = projectRecordDeleteOperationControlBinding({
+      entityLabel: "Block",
+      operation: deleteOperation,
+      recordLabel: "Hero",
+      options: { executionTargetKey: "block-1" },
+    });
+
+    expect(column.controls.map((control) => control.bindingName)).toEqual(["block.delete"]);
+    expect(bindings).toHaveLength(1);
+    expect(bindings[0]).toMatchObject({
+      id: "table:block.delete",
+      executionKey: "block.delete:block-1",
+      canonicalOperationKey: "block.delete",
+      label: "Delete block",
+      availability: { state: "disabled", reason: "Locked by publish" },
+      disabledReason: "Locked by publish",
+      destructive: true,
+      confirmation: {
+        title: "Delete block?",
+        actionLabel: "Delete block",
+      },
+      input: { kind: "tableStatic" },
+    });
+    expect(standaloneDelete?.executionKey).toBe(bindings[0]?.executionKey);
+    expect(standaloneDelete?.canonicalOperationKey).toBe("block.delete");
+  });
+
+  it("projects transition, tree, ordering, public, and workspace operation facts", () => {
+    const taskSchema = sourceLikeTaskSchema();
+    const taskEntity = taskSchema.entities.task;
+
+    taskEntity.stateMachines = {
+      priorityFlow: {
+        field: "priority",
+        initial: "low",
+        terminal: ["high"],
+        transitions: {
+          escalate: {
+            label: "Escalate",
+            from: ["low"],
+            to: "normal",
+          },
+        },
+      },
+    };
+    taskEntity.operations = {
+      ...taskEntity.operations,
+      escalatePriority: {
+        label: "Escalate",
+        kind: "command",
+        scope: "record",
+        effect: {
+          type: "operationHandler",
+          handler: "transition-state",
+          config: {
+            machine: "priorityFlow",
+            transition: "escalate",
+          },
+        },
+        output: { type: "command" },
+        idempotency: { required: true },
+        audit: { input: "summary" },
+      },
+    };
+
+    const transition = selectTransitionStateOperations("task", taskEntity)[0];
+
+    if (!transition) {
+      throw new Error("Missing transition operation.");
+    }
+
+    const transitionBinding = projectStateTransitionOperationControlBinding({
+      operation: transition,
+      availability: selectTransitionStateOperationAvailability({
+        operation: transition,
+        currentValue: "high",
+        field: transition.field,
+      }),
+      options: { executionTargetKey: "task-1" },
+    });
+
+    expect(transitionBinding).toMatchObject({
+      executionKey: "task.escalatePriority:task-1",
+      canonicalOperationKey: "task.escalatePriority",
+      kind: "stateTransition",
+      operationKind: "command",
+      availability: { state: "disabled", reason: "Requires Low." },
+      input: {
+        kind: "stateTransition",
+        machineName: "priorityFlow",
+        transitionName: "escalate",
+        targetState: "normal",
+      },
+    });
+
+    const siteSchema = sourceLikeSiteSchema();
+    const treeView = requiredCollectionView(siteSchema, "siteCompositionHome");
+
+    if (treeView.result.type !== "tree") {
+      throw new Error("Expected tree result.");
+    }
+
+    const treeResult = selectTreeResultModel(
+      siteSchema,
+      treeView.result,
+      "block-placement",
+      siteSchema.entities["block-placement"],
+    );
+    const treeBindings = projectTreeCompositionOperationControlBindings(treeResult.composition, {
+      executionTargetKey: "placement-1",
+    });
+    const orderingBinding = projectOrderingMoveOperationControlBinding({
+      direction: "up",
+      label: "Move up",
+      ordering: treeResult.ordering!,
+      updateOperation: treeResult.placementUpdateOperation,
+    });
+    const publicBinding = projectPublicOperationFormControlBinding({
+      canonicalKey: "contact-message.submit",
+      entityName: "contact-message",
+      operationName: "submit",
+      route: "/api/site/public/operations/contact-message/submit",
+      buttonLabel: "Send",
+      successLabel: "Sent.",
+      fields: [{ name: "email", label: "Email", required: true, control: "text" }],
+      sourceBlockId: "block-contact",
+    });
+    const workspaceBinding = projectWorkspaceOperationControlBinding({
+      key: "workspace.source.push",
+      kind: "push",
+      label: "Push",
+      bootstrapAllowed: false,
+      inputFields: ["dryRun", "targetAlias"],
+      mode: "write",
+      requiredCapability: "workspace-source-sync",
+    });
+
+    expect(treeBindings.map((binding) => binding.canonicalOperationKey)).toEqual([
+      "block-placement.addTreeChild",
+      "block-placement.removeTreePlacement",
+    ]);
+    expect(treeBindings[1]).toMatchObject({
+      destructive: true,
+      confirmation: {
+        description: "The placement will be removed without deleting the child record.",
+      },
+      input: { kind: "treeComposition", action: "remove" },
+    });
+    expect(orderingBinding).toMatchObject({
+      canonicalOperationKey: "block-placement.update",
+      kind: "ordering",
+      input: {
+        kind: "orderingMove",
+        direction: "up",
+        fieldName: "order",
+        scopeFieldNames: ["parent", "slot"],
+      },
+    });
+    expect(publicBinding).toMatchObject({
+      canonicalOperationKey: "contact-message.submit",
+      scope: "public",
+      kind: "publicForm",
+      feedback: { successLabel: "Sent." },
+      input: {
+        kind: "publicForm",
+        route: "/api/site/public/operations/contact-message/submit",
+        sourceBlockId: "block-contact",
+      },
+    });
+    expect(workspaceBinding).toMatchObject({
+      canonicalOperationKey: "workspace.source.push",
+      scope: "workspace",
+      kind: "workspace",
+      input: {
+        kind: "workspace",
+        inputFields: ["dryRun", "targetAlias"],
+        requiredCapability: "workspace-source-sync",
+      },
+    });
+  });
+});
+
+function requiredCollectionView(schema: AppSchema, viewName: string): CollectionViewSchema {
+  const view = schema.views[viewName];
+
+  if (!view || view.type !== "collection") {
+    throw new Error(`Missing collection view "${viewName}".`);
+  }
+
+  return view;
+}

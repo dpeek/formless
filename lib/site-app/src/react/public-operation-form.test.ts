@@ -6,6 +6,8 @@ import {
 
 import type { SitePublicOperationInputFieldNode } from "../types.ts";
 import {
+  executePublicOperationForm,
+  normalizePublicOperationFormResponse,
   publicOperationFormInputValuesFromFormData,
   publicOperationFormRequestBody,
   submitPublicOperationForm,
@@ -330,6 +332,46 @@ describe("generic public operation form submit helpers", () => {
         turnstileToken: "bad-token",
       }),
     ).rejects.toThrow("Public operation input failed validation.");
+  });
+
+  it("normalizes public form submission execution results", async () => {
+    const committed = normalizePublicOperationFormResponse({
+      invocationId: "operation-1",
+      operation: {
+        entityName: "intake-request",
+        operationName: "submit",
+        canonicalKey: "intake-request.submit",
+        kind: "command",
+      },
+      output: {
+        type: "command",
+        affectedChangeIds: ["10", "11"],
+        cursor: 12,
+      },
+      status: "committed",
+    });
+
+    expect(committed).toMatchObject({
+      type: "committed",
+      affectedCount: 2,
+    });
+
+    const failed = await executePublicOperationForm({
+      fetcher: async () =>
+        Response.json({ error: "Public operation input failed validation." }, { status: 400 }),
+      idempotencyKey: "site-public-operation:block-1:key-1",
+      input: {
+        summary: "Send lab results",
+      },
+      route: "/api/intake/public/operations/intake-request/submit",
+      siteBlockId: "block-1",
+      turnstileToken: "bad-token",
+    });
+
+    expect(failed).toEqual({
+      type: "failed",
+      displayError: "Public operation input failed validation.",
+    });
   });
 });
 

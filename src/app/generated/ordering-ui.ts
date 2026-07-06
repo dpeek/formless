@@ -1,6 +1,4 @@
 import type { ResultOrderingConfig } from "../../client/result-ordering-model.ts";
-import { submitOperation, type SubmitOperationOptions } from "../../client/sync.ts";
-import type { ClientAppTarget } from "../../client/app-target.ts";
 import type { EntityOperationPresentationConfig } from "../../client/operation-presentation-model.ts";
 import type { StoredRecord } from "@dpeek/formless-storage";
 import {
@@ -8,7 +6,6 @@ import {
   calculateOrderingMovePlan,
   sortRecordIdsByOrdering,
   type OrderingMoveDirection,
-  type OrderingMovePatchPlan,
   type OrderingMovePlan,
   type OrderingRankOptions,
 } from "../../shared/result-ordering.ts";
@@ -238,31 +235,6 @@ export function orderingMoveAriaLabel(item: OrderingMoveMenuItem) {
   }
 
   return item.label;
-}
-
-export async function submitOrderingPatch(
-  target: ClientAppTarget,
-  orderingContext: ResultOrderingContext,
-  plan: OrderingMovePatchPlan,
-  options: SubmitOperationOptions = {},
-) {
-  if (orderingContext.updateOperation === undefined) {
-    throw new Error("Update operation is unavailable for ordering.");
-  }
-
-  await submitOperation(
-    target,
-    orderingContext.entityName,
-    orderingContext.updateOperation.operationName,
-    {
-      recordId: plan.recordId,
-      input: {
-        [orderingContext.ordering.fieldName]: plan.rank,
-      },
-    },
-    undefined,
-    options,
-  );
 }
 
 function orderingRankOptions(ordering: ResultOrderingConfig): OrderingRankOptions {

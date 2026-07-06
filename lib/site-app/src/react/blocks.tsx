@@ -27,8 +27,8 @@ import {
 import { createSiteContactIdempotencyKey, submitSiteContactForm } from "./contact-form.ts";
 import {
   createPublicOperationFormIdempotencyKey,
+  executePublicOperationForm,
   publicOperationFormInputValuesFromFormData,
-  submitPublicOperationForm,
   turnstileResponseTokenFromFormData as publicOperationFormTurnstileResponseTokenFromFormData,
 } from "./public-operation-form.ts";
 import { TurnstileChallenge } from "./turnstile.tsx";
@@ -695,21 +695,23 @@ function PublicOperationFormBlock({ block }: { block: SiteBlockNode }) {
     setStatus("submitting");
     setError(undefined);
 
-    try {
-      await submitPublicOperationForm({
-        idempotencyKey: idempotencyKey.current,
-        input: inputResult.input,
-        route: publicOperation.route,
-        siteBlockId: block.id,
-        turnstileToken,
-      });
-      setStatus("success");
-    } catch (submitError) {
+    const result = await executePublicOperationForm({
+      idempotencyKey: idempotencyKey.current,
+      input: inputResult.input,
+      route: publicOperation.route,
+      siteBlockId: block.id,
+      turnstileToken,
+    });
+
+    if (result.type === "failed") {
       setStatus("error");
-      setError(
-        submitError instanceof Error ? submitError.message : "Public operation request failed.",
-      );
+      setError(result.displayError);
       setChallengeResetSignal((value) => value + 1);
+      return;
+    }
+
+    if (result.type === "committed" || result.type === "replayed") {
+      setStatus("success");
     }
   }
 

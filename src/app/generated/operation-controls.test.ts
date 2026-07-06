@@ -1,0 +1,632 @@
+import { describe, expect, it } from "vite-plus/test";
+import {
+  createGeneratedOperationController,
+  projectOrderingMoveOperationControlBinding,
+  projectCollectionOperationControlBinding,
+  projectTableOperationControlBinding,
+  projectTreeCompositionOperationControlBindings,
+  selectCollectionModels,
+  type GeneratedOperationAuthoritySubmitter,
+  type HomeOperationConfig,
+  type ResultOrderingConfig,
+  type TableOperationControlConfig,
+} from "../../client/views.ts";
+import {
+  selectEntityOperationByKind,
+  type EntityOperationPresentationConfig,
+} from "../../client/operation-presentation-model.ts";
+import { selectTreeResultModel } from "../../client/tree-result-model.ts";
+import type { SubmitOperationOptions } from "../../client/sync.ts";
+import type { SyncStatus } from "../../client/sync-status.ts";
+import type {
+  OperationInvocationRequest,
+  OperationInvocationResponse,
+} from "../../shared/operation-invocation.ts";
+import type { ChangeRow } from "../../shared/protocol.ts";
+import { siteSourceSchema, taskSourceSchema } from "../../test/schema-apps.ts";
+import type { StoredRecord } from "@dpeek/formless-storage";
+import {
+  executeGeneratedOperationControl,
+  executeGeneratedOrderingMoveOperation,
+  selectGeneratedOperationControlTriggerDecision,
+} from "./operation-control-runtime.ts";
+import {
+  executeHomeCommandOperation,
+  homeCommandOperationCommittedMessage,
+} from "./operations.tsx";
+import {
+  executeRecordDeleteOperation,
+  projectDeleteRecordButtonBinding,
+} from "./record-delete.tsx";
+
+describe("generated operation controls", () => {
+  it("reports collection command committed feedback with affected counts", async () => {
+    const operation = requiredClearCompletedOperation();
+    const binding = projectCollectionOperationControlBinding(operation);
+    const output = commandOutput(["write-1", "write-2"]);
+    const submit = captureAuthoritySubmitter(operationResponse(output));
+    const controller = createGeneratedOperationController({
+      bindings: [binding],
+      submitAuthorityOperation: submit.submit,
+      target: "tasks",
+    });
+    const statuses: SyncStatus[] = [];
+
+    const result = await executeHomeCommandOperation({
+      binding,
+      controller,
+      operation,
+      setStatus: (status) => statuses.push(status),
+    });
+
+    expect(submit.calls).toMatchObject([
+      {
+        entityName: "task",
+        operationName: "clearCompletedTasks",
+        request: {
+          source: { protocol: "generated-ui", surface: "button" },
+        },
+        target: "tasks",
+      },
+    ]);
+    expect(result).toMatchObject({ type: "committed", affectedCount: 2 });
+    expect(homeCommandOperationCommittedMessage(operation, result)).toBe(
+      "Clear completed synced. 2 affected.",
+    );
+    expect(statuses).toEqual([
+      { state: "syncing", message: "Clear completed..." },
+      { state: "idle", message: "Clear completed synced. 2 affected." },
+    ]);
+  });
+
+  it("reports collection command replay and failure feedback from normalized results", async () => {
+    const operation = requiredClearCompletedOperation();
+    const binding = projectCollectionOperationControlBinding(operation);
+    const replayStatuses: SyncStatus[] = [];
+    const replayController = createGeneratedOperationController({
+      bindings: [binding],
+      submitAuthorityOperation: captureAuthoritySubmitter(
+        operationResponse(commandOutput(["write-1"]), "replayed"),
+      ).submit,
+      target: "tasks",
+    });
+
+    await expect(
+      executeHomeCommandOperation({
+        binding,
+        controller: replayController,
+        operation,
+        setStatus: (status) => replayStatuses.push(status),
+      }),
+    ).resolves.toMatchObject({ type: "replayed", affectedCount: 1 });
+    expect(replayStatuses).toEqual([
+      { state: "syncing", message: "Clear completed..." },
+      { state: "idle", message: "Clear completed replayed." },
+    ]);
+
+    const failureStatuses: SyncStatus[] = [];
+    const failureController = createGeneratedOperationController({
+      bindings: [binding],
+      submitAuthorityOperation: async () => {
+        throw new Error("Operation endpoint unavailable.");
+      },
+      target: "tasks",
+    });
+
+    await expect(
+      executeHomeCommandOperation({
+        binding,
+        controller: failureController,
+        operation,
+        setStatus: (status) => failureStatuses.push(status),
+      }),
+    ).resolves.toEqual({
+      type: "failed",
+      displayError: "Operation endpoint unavailable.",
+    });
+    expect(failureStatuses).toEqual([
+      { state: "syncing", message: "Clear completed..." },
+      { state: "error", message: "Operation endpoint unavailable." },
+    ]);
+  });
+
+  it("keeps destructive delete confirmation labels while executing through controller state", async () => {
+    const deleteOperation = selectEntityOperationByKind(
+      "block",
+      siteSourceSchema.entities.block,
+      "delete",
+      "record",
+    );
+
+    if (deleteOperation === undefined) {
+      throw new Error("Missing block delete operation.");
+    }
+
+    const binding = projectDeleteRecordButtonBinding({
+      deleteOperation,
+      entityLabel: "Block",
+      recordId: "block-1",
+      recordLabel: "Hero block",
+    });
+
+    if (binding === undefined) {
+      throw new Error("Missing delete binding.");
+    }
+
+    expect(binding).toMatchObject({
+      canonicalOperationKey: "block.delete",
+      confirmation: {
+        actionLabel: "Delete",
+        description:
+          "The record will be hidden from active views. Active references can block deletion.",
+        title: "Delete Hero block?",
+      },
+      destructive: true,
+      executionKey: "block.delete:block-1",
+      visualIntent: "destructive",
+    });
+
+    const submit = captureAuthoritySubmitter(
+      operationResponse({
+        type: "delete",
+        affectedChangeIds: ["write-3"],
+        changes: [change(3, { ...record("block-1", "Hero block", "block"), deletedAt })],
+        cursor: 3,
+        recordId: "block-1",
+      }),
+    );
+    const controller = createGeneratedOperationController({
+      bindings: [binding],
+      submitAuthorityOperation: submit.submit,
+      target: "site",
+    });
+    const statuses: SyncStatus[] = [];
+
+    await expect(
+      executeRecordDeleteOperation({
+        binding,
+        controller,
+        recordId: "block-1",
+        recordLabel: "Hero block",
+        setStatus: (status) => statuses.push(status),
+      }),
+    ).resolves.toMatchObject({ type: "committed", affectedCount: 1 });
+
+    expect(submit.calls).toMatchObject([
+      {
+        entityName: "block",
+        operationName: "delete",
+        request: {
+          recordId: "block-1",
+          source: { protocol: "generated-ui", surface: "confirmationDialog" },
+        },
+        target: "site",
+      },
+    ]);
+    expect(statuses).toEqual([
+      { state: "syncing", message: "Deleting Hero block..." },
+      { state: "idle", message: "Deleted Hero block." },
+    ]);
+  });
+
+  it("executes table static row controls through projected bindings", async () => {
+    const control: TableOperationControlConfig = {
+      bindingName: "archive",
+      type: "static",
+      label: "Archive",
+      variant: "default",
+      disabled: false,
+      operation: recordCommandOperation("task.archive", "archive"),
+    };
+    const binding = projectTableOperationControlBinding(control, {
+      executionTargetKey: "task-1",
+    });
+
+    if (binding === undefined) {
+      throw new Error("Missing table operation binding.");
+    }
+
+    const submit = captureAuthoritySubmitter(operationResponse(commandOutput(["write-6"])));
+    const controller = createGeneratedOperationController({
+      bindings: [binding],
+      submitAuthorityOperation: submit.submit,
+      target: "tasks",
+    });
+    const statuses: SyncStatus[] = [];
+
+    await expect(
+      executeGeneratedOperationControl({
+        binding,
+        callerInput: {
+          bindingId: binding.id,
+          recordId: "task-1",
+          source: "menuItem",
+        },
+        controller,
+        setStatus: (status) => statuses.push(status),
+      }),
+    ).resolves.toMatchObject({ type: "committed", affectedCount: 1 });
+
+    expect(submit.calls).toMatchObject([
+      {
+        entityName: "task",
+        operationName: "archive",
+        request: {
+          recordId: "task-1",
+          source: { protocol: "generated-ui", surface: "menuItem" },
+        },
+      },
+    ]);
+    expect(statuses).toEqual([
+      { state: "syncing", message: "Archive..." },
+      { state: "idle", message: "Archive synced." },
+    ]);
+  });
+
+  it("requires confirmation before executing destructive table and tree controls", async () => {
+    const tableControl: TableOperationControlConfig = {
+      bindingName: "delete",
+      type: "static",
+      label: "Delete row",
+      variant: "destructive",
+      disabled: false,
+      operation: recordCommandOperation("task.deleteRow", "deleteRow", "Delete row"),
+    };
+    const tableBinding = projectTableOperationControlBinding(tableControl, {
+      executionTargetKey: "task-1",
+    });
+
+    if (tableBinding === undefined) {
+      throw new Error("Missing table operation binding.");
+    }
+
+    expect(tableBinding.confirmation).toMatchObject({
+      actionLabel: "Delete row",
+      title: "Delete row?",
+    });
+    expect(selectGeneratedOperationControlTriggerDecision({ binding: tableBinding })).toEqual({
+      type: "confirm",
+    });
+
+    const tableSubmit = captureAuthoritySubmitter(operationResponse(commandOutput(["write-8"])));
+    const tableController = createGeneratedOperationController({
+      bindings: [tableBinding],
+      submitAuthorityOperation: tableSubmit.submit,
+      target: "tasks",
+    });
+
+    await expect(
+      executeGeneratedOperationControl({
+        binding: tableBinding,
+        callerInput: {
+          bindingId: tableBinding.id,
+          recordId: "task-1",
+          source: "confirmationDialog",
+        },
+        controller: tableController,
+      }),
+    ).resolves.toMatchObject({ type: "committed", affectedCount: 1 });
+    expect(tableSubmit.calls).toMatchObject([
+      {
+        entityName: "task",
+        operationName: "deleteRow",
+        request: {
+          recordId: "task-1",
+          source: { protocol: "generated-ui", surface: "confirmationDialog" },
+        },
+      },
+    ]);
+
+    const treeBinding = requiredTreeRemoveBinding();
+
+    expect(treeBinding.confirmation).toMatchObject({
+      actionLabel: "Remove child",
+      description: "The placement will be removed without deleting the child record.",
+    });
+    expect(selectGeneratedOperationControlTriggerDecision({ binding: treeBinding })).toEqual({
+      type: "confirm",
+    });
+
+    const treeSubmit = captureAuthoritySubmitter(operationResponse(commandOutput(["write-9"])));
+    const treeController = createGeneratedOperationController({
+      bindings: [treeBinding],
+      submitAuthorityOperation: treeSubmit.submit,
+      target: "site",
+    });
+
+    await expect(
+      executeGeneratedOperationControl({
+        binding: treeBinding,
+        callerInput: {
+          bindingId: treeBinding.id,
+          recordId: "placement-1",
+          source: "confirmationDialog",
+        },
+        controller: treeController,
+      }),
+    ).resolves.toMatchObject({ type: "committed", affectedCount: 1 });
+    expect(treeSubmit.calls).toMatchObject([
+      {
+        entityName: "block-placement",
+        operationName: "removeTreePlacement",
+        request: {
+          input: { placementId: "placement-1" },
+          source: { protocol: "generated-ui", surface: "confirmationDialog" },
+        },
+      },
+    ]);
+  });
+
+  it("executes ordering moves through adapter-built operation input", async () => {
+    const binding = projectOrderingMoveOperationControlBinding({
+      direction: "up",
+      label: "Move up",
+      ordering: placementOrdering,
+      updateOperation: placementUpdateOperation,
+    });
+
+    if (binding === undefined) {
+      throw new Error("Missing ordering operation binding.");
+    }
+
+    const submit = captureAuthoritySubmitter(
+      operationResponse({
+        type: "update",
+        affectedChangeIds: ["write-7"],
+        changes: [change(7, placementRecord("placement-1", 500))],
+        cursor: 7,
+        record: placementRecord("placement-1", 500),
+      }),
+    );
+    const controller = createGeneratedOperationController({
+      bindings: [binding],
+      submitAuthorityOperation: submit.submit,
+      target: "site",
+    });
+    const statuses: SyncStatus[] = [];
+
+    await expect(
+      executeGeneratedOrderingMoveOperation({
+        binding,
+        controller,
+        orderingContext: {
+          entityName: "block-placement",
+          orderedRecordIds: ["placement-1", "placement-2"],
+          ordering: placementOrdering,
+          recordsById: {
+            "placement-1": placementRecord("placement-1", 1000),
+            "placement-2": placementRecord("placement-2", 2000),
+          },
+          updateOperation: placementUpdateOperation,
+        },
+        plan: { kind: "patch", recordId: "placement-1", rank: 500 },
+        source: "button",
+        setStatus: (status) => statuses.push(status),
+        successMessage: "Placement moved and synced.",
+        syncingMessage: "Moving placement...",
+      }),
+    ).resolves.toMatchObject({ type: "committed", affectedCount: 1 });
+
+    expect(submit.calls).toMatchObject([
+      {
+        entityName: "block-placement",
+        operationName: "update",
+        request: {
+          input: { order: 500 },
+          recordId: "placement-1",
+          source: { protocol: "generated-ui", surface: "button" },
+        },
+      },
+    ]);
+    expect(statuses).toEqual([
+      { state: "syncing", message: "Moving placement..." },
+      { state: "idle", message: "Placement moved and synced." },
+    ]);
+  });
+});
+
+type AuthoritySubmitCall = {
+  entityName: string;
+  operationName: string;
+  options: SubmitOperationOptions;
+  request: OperationInvocationRequest;
+  target: string;
+};
+
+function captureAuthoritySubmitter(
+  response: OperationInvocationResponse | Promise<OperationInvocationResponse>,
+): { calls: AuthoritySubmitCall[]; submit: GeneratedOperationAuthoritySubmitter } {
+  const calls: AuthoritySubmitCall[] = [];
+
+  return {
+    calls,
+    submit: async (target, entityName, operationName, request, _fetcher, options) => {
+      calls.push({
+        target: typeof target === "string" ? target : target.browserDatabaseName,
+        entityName,
+        operationName,
+        request,
+        options,
+      });
+
+      return response;
+    },
+  };
+}
+
+function requiredClearCompletedOperation(): Extract<HomeOperationConfig, { type: "command" }> {
+  const model = selectCollectionModels(taskSourceSchema).find(
+    (candidate) => candidate.viewName === "taskHome",
+  );
+  const operation = model?.operations.find(
+    (candidate) =>
+      candidate.type === "command" && candidate.operationName === "clearCompletedTasks",
+  );
+
+  if (operation?.type !== "command") {
+    throw new Error("Missing clear completed operation.");
+  }
+
+  return operation;
+}
+
+function requiredTreeRemoveBinding() {
+  const treeView = siteSourceSchema.views.siteCompositionHome;
+
+  if (treeView === undefined || treeView.type !== "collection" || treeView.result.type !== "tree") {
+    throw new Error("Missing Site composition tree view.");
+  }
+
+  const treeResult = selectTreeResultModel(
+    siteSourceSchema,
+    treeView.result,
+    "block-placement",
+    siteSourceSchema.entities["block-placement"],
+  );
+  const binding = projectTreeCompositionOperationControlBindings(treeResult.composition, {
+    executionTargetKey: "placement-1",
+  }).find(
+    (candidate) =>
+      candidate.input.kind === "treeComposition" && candidate.input.action === "remove",
+  );
+
+  if (binding === undefined) {
+    throw new Error("Missing tree remove binding.");
+  }
+
+  return binding;
+}
+
+function operationResponse(
+  output: OperationInvocationResponse["output"],
+  status: OperationInvocationResponse["status"] = "committed",
+): OperationInvocationResponse {
+  return {
+    invocation: {} as OperationInvocationResponse["invocation"],
+    output,
+    status,
+  };
+}
+
+function commandOutput(
+  affectedChangeIds: string[],
+): Extract<OperationInvocationResponse["output"], { type: "command" }> {
+  return {
+    type: "command",
+    affectedChangeIds,
+    changes: affectedChangeIds.map((writeId, index) =>
+      change(index + 1, { ...record(`task-${index + 1}`, "Done"), deletedAt }, "delete", writeId),
+    ),
+    cursor: affectedChangeIds.length,
+  };
+}
+
+function record(id: string, title: string, entity = "task"): StoredRecord {
+  return {
+    id,
+    entity,
+    values: { title },
+    createdAt: "2026-07-06T00:00:00.000Z",
+    updatedAt: "2026-07-06T00:00:00.000Z",
+  };
+}
+
+function change(
+  seq: number,
+  storedRecord: StoredRecord,
+  operationKind: ChangeRow["operationKind"] = "create",
+  writeId = `write-${seq}`,
+): ChangeRow {
+  return {
+    seq,
+    writeId,
+    operationKind,
+    entity: storedRecord.entity,
+    recordId: storedRecord.id,
+    payload: storedRecord,
+    createdAt: "2026-07-06T00:00:00.000Z",
+  };
+}
+
+const deletedAt = "2026-07-06T00:00:00.000Z";
+
+const placementOrdering: ResultOrderingConfig = {
+  fieldName: "order",
+  field: { type: "number", required: true, min: 0 },
+  scope: [
+    {
+      kind: "field",
+      fieldName: "parent",
+      field: { type: "reference", required: false, to: "block" },
+    },
+  ],
+  presentations: ["dragHandle", "moveMenu"],
+};
+
+const placementUpdateOperation = recordUpdateOperation(
+  "block-placement.update",
+  "update",
+  "Update",
+);
+
+function recordCommandOperation(
+  canonicalKey: string,
+  operationName: string,
+  label = "Archive",
+): EntityOperationPresentationConfig {
+  const entityName = canonicalKey.split(".")[0] ?? "task";
+
+  return {
+    entityName,
+    operationName,
+    canonicalKey,
+    label,
+    operation: {
+      kind: "command",
+      scope: "record",
+      input: { fields: {} },
+      effect: {
+        type: "operationHandler",
+        handler: "clear-completed",
+        config: { query: "completed" },
+      },
+      output: { type: "command" },
+      idempotency: { required: true },
+      audit: { input: "summary" },
+    },
+  };
+}
+
+function recordUpdateOperation(
+  canonicalKey: string,
+  operationName: string,
+  label: string,
+): EntityOperationPresentationConfig {
+  const entityName = canonicalKey.split(".")[0] ?? "task";
+
+  return {
+    entityName,
+    operationName,
+    canonicalKey,
+    label,
+    operation: {
+      kind: "update",
+      scope: "record",
+      input: { fields: {} },
+      effect: { type: "patchRecord" },
+      output: { type: "update" },
+      idempotency: { required: true },
+      audit: { input: "summary" },
+    },
+  };
+}
+
+function placementRecord(id: string, order: number): StoredRecord {
+  return {
+    id,
+    entity: "block-placement",
+    values: { parent: "page-1", order },
+    createdAt: "2026-07-06T00:00:00.000Z",
+    updatedAt: "2026-07-06T00:00:00.000Z",
+  };
+}

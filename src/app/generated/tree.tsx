@@ -1,19 +1,34 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { DragDropProvider, type DragEndEvent } from "@dnd-kit/react";
 import { isSortableOperation, useSortable } from "@dnd-kit/react/sortable";
 import { Button, buttonStyles } from "@dpeek/formless-ui/button";
 import { AddIcon, MenuIcon, RemoveIcon } from "@dpeek/formless-ui/icons";
-import { ModalBody, ModalContent, ModalHeader, ModalTitle } from "@dpeek/formless-ui/modal";
+import {
+  ModalBody,
+  ModalClose,
+  ModalContent,
+  ModalDescription,
+  ModalFooter,
+  ModalHeader,
+  ModalTitle,
+} from "@dpeek/formless-ui/modal";
 import { Menu, MenuContent, MenuItem, MenuLabel, MenuTrigger } from "@dpeek/formless-ui/menu";
 import { useRecordReadinessWarnings, useRecordsById } from "../../client/store.ts";
 import { setSyncStatus } from "../../client/sync-status.ts";
-import { submitOperation, type SubmitOperationOptions } from "../../client/sync.ts";
 import type {
   CreateDefaultConfig,
   CreateFieldConfig,
+  GeneratedOperationCallerInput,
+  GeneratedOperationControlBinding,
+  GeneratedOperationController,
+  GeneratedOperationExecutionResult,
   HomeContextConfig,
   RecordFieldConfig,
   RecordVariantContextLinkPresentationConfig,
+} from "../../client/views.ts";
+import {
+  projectOrderingMoveOperationControlBinding,
+  projectTreeCompositionOperationControlBindings,
 } from "../../client/views.ts";
 import type {
   TreeAllowedChildVariantConfig,
@@ -21,8 +36,8 @@ import type {
 } from "../../client/tree-result-model.ts";
 import type { QueryEvaluationContext } from "@dpeek/formless-schema";
 import type { FieldValue, RecordValues, StoredRecord } from "@dpeek/formless-storage";
-import type { ClientAppTarget } from "../../client/app-target.ts";
 import type { EntitySchema } from "@dpeek/formless-schema";
+import type { OperationCommandOutput } from "../../shared/operation-invocation.ts";
 import { GeneratedCreateDialogForm, type CreateHomeOperationConfig } from "./create.tsx";
 import {
   ORDERING_DND_TYPE,
@@ -32,18 +47,23 @@ import {
   selectOrderingMoveMenuItems,
   selectOrderedResultRecordIds,
   selectResultOrderingContext,
-  submitOrderingPatch,
   type ResultOrderingContext,
   type ResultOrderingDragData,
   type ResultOrderingDragFact,
 } from "./ordering-ui.ts";
 import { RecordReadinessWarnings } from "./readiness-warnings.tsx";
 import { RecordFieldEditor } from "./record-field-editor.tsx";
-import { useSchemaAppTarget, useSchemaAppWriteOptions } from "./schema-app-context.tsx";
 import {
   selectRecordContextLinkForActiveUnion,
   selectRecordFieldsForActiveUnion,
 } from "./union-presentation.ts";
+import {
+  executeGeneratedOperationControl,
+  executeGeneratedOrderingMoveOperation,
+  selectGeneratedOperationControlTriggerDecision,
+  useGeneratedOperationController,
+  useGeneratedOperationControllerVersion,
+} from "./operation-control-runtime.ts";
 
 type TreeResultConfig = TreeResultModel;
 
@@ -125,8 +145,6 @@ function PlacementSiblingList({
   result: TreeResultConfig;
   selectableContextRecordIds?: Set<string>;
 }) {
-  const appTarget = useSchemaAppTarget();
-  const writeOptions = useSchemaAppWriteOptions();
   const recordsById = useRecordsById();
   const [pendingDragRecordId, setPendingDragRecordId] = useState<string | null>(null);
   const recordIds = placements.map((placement) => placement.id);
@@ -142,6 +160,24 @@ function PlacementSiblingList({
     .map((recordId) => recordsById[recordId])
     .filter((record): record is StoredRecord => record?.entity === entityName);
   const orderingDragFacts = selectOrderingDragFacts(orderingContext);
+  const orderingDragBinding = useMemo(
+    () =>
+      orderingContext?.updateOperation === undefined
+        ? undefined
+        : projectOrderingMoveOperationControlBinding({
+            direction: "drag",
+            label: "Move placement",
+            ordering: orderingContext.ordering,
+            updateOperation: orderingContext.updateOperation,
+          }),
+    [orderingContext],
+  );
+  const orderingBindings = useMemo(
+    () => (orderingDragBinding === undefined ? [] : [orderingDragBinding]),
+    [orderingDragBinding],
+  );
+  const orderingController = useGeneratedOperationController(orderingBindings);
+  useGeneratedOperationControllerVersion(orderingController);
 
   async function handleOrderingDragEnd(event: DragEndEvent) {
     if (!orderingContext || event.canceled || !isSortableOperation(event.operation)) {
@@ -181,17 +217,23 @@ function PlacementSiblingList({
       return;
     }
 
+    if (orderingDragBinding === undefined) {
+      return;
+    }
+
     const suspendedDrop = event.suspend();
     setPendingDragRecordId(dragData.recordId);
-    setSyncStatus({ state: "syncing", message: "Moving placement..." });
 
     try {
-      await submitOrderingPatch(appTarget, orderingContext, plan, writeOptions);
-      setSyncStatus({ state: "idle", message: "Placement moved and synced." });
-    } catch (error) {
-      setSyncStatus({
-        state: "error",
-        message: error instanceof Error ? error.message : "Drag reorder failed.",
+      await executeGeneratedOrderingMoveOperation({
+        binding: orderingDragBinding,
+        controller: orderingController,
+        failedMessage: "Drag reorder failed.",
+        orderingContext,
+        plan,
+        source: "button",
+        successMessage: "Placement moved and synced.",
+        syncingMessage: "Moving placement...",
       });
     } finally {
       setPendingDragRecordId(null);
@@ -379,7 +421,7 @@ function PlacementTreeItem({
       ref={itemRef}
     >
       <div className="relative rounded border border-slate-200 bg-white">
-        <TreePlacementActions entityName={entityName} placement={placement} result={result} />
+        <TreePlacementActions placement={placement} result={result} />
         <div className="grid min-w-0 gap-3 p-3 pr-8">
           <div className="flex min-w-0 items-start gap-2">
             <PlacementOrderingControls
@@ -441,13 +483,28 @@ function TreeChildAddControls({
   parentRecord: StoredRecord;
   result: TreeResultConfig;
 }) {
-  const appTarget = useSchemaAppTarget();
-  const writeOptions = useSchemaAppWriteOptions();
   const [activeVariant, setActiveVariant] = useState<TreeAllowedChildVariantConfig | null>(null);
   const allowedChildVariants = selectAllowedTreeChildVariants(result, parentRecord);
   const createOperation = activeVariant
     ? createTreeChildCreateOperation(result, activeVariant)
     : undefined;
+  const createBinding = useMemo(
+    () =>
+      activeVariant === null
+        ? undefined
+        : selectTreeCompositionOperationBinding(
+            result,
+            "create",
+            `${parentRecord.id}:${activeVariant.variantValue}`,
+          ),
+    [activeVariant, parentRecord.id, result],
+  );
+  const createBindings = useMemo(
+    () => (createBinding === undefined ? [] : [createBinding]),
+    [createBinding],
+  );
+  const createController = useGeneratedOperationController(createBindings);
+  useGeneratedOperationControllerVersion(createController);
 
   if (allowedChildVariants.length === 0) {
     return null;
@@ -518,13 +575,13 @@ function TreeChildAddControls({
               operation={createOperation}
               onSuccess={() => setActiveVariant(null)}
               submitValues={(values) =>
-                submitTreeChildCreateOperation(
-                  appTarget,
+                executeTreeChildCreateOperation(
+                  createBinding,
+                  createController,
                   result,
                   parentRecord,
                   values,
                   activeVariant.placementValues,
-                  writeOptions,
                 )
               }
             />
@@ -555,11 +612,9 @@ function TreePlacementSlotBadge({ placement }: { placement: StoredRecord }) {
 }
 
 function TreePlacementActions({
-  entityName,
   placement,
   result,
 }: {
-  entityName: string;
   placement: StoredRecord;
   result: TreeResultConfig;
 }) {
@@ -569,74 +624,125 @@ function TreePlacementActions({
 
   return (
     <div className="absolute right-2 top-2">
-      <TreePlacementRemoveButton entityName={entityName} placement={placement} result={result} />
+      <TreePlacementRemoveButton placement={placement} result={result} />
     </div>
   );
 }
 
 function TreePlacementRemoveButton({
-  entityName,
   placement,
   result,
 }: {
-  entityName: string;
   placement: StoredRecord;
   result: TreeResultConfig;
 }) {
-  const appTarget = useSchemaAppTarget();
-  const writeOptions = useSchemaAppWriteOptions();
-  const [isRemoving, setIsRemoving] = useState(false);
   const removeOperation = result.composition?.remove;
+  const [confirmationOpen, setConfirmationOpen] = useState(false);
+  const removeBinding = useMemo(
+    () => selectTreeCompositionOperationBinding(result, "remove", placement.id),
+    [placement.id, result],
+  );
+  const removeBindings = useMemo(
+    () => (removeBinding === undefined ? [] : [removeBinding]),
+    [removeBinding],
+  );
+  const removeController = useGeneratedOperationController(removeBindings);
+  useGeneratedOperationControllerVersion(removeController);
+  const isRemoving =
+    removeBinding === undefined ? false : removeController.isPending(removeBinding.id);
 
   if (!removeOperation) {
     return null;
   }
 
-  async function removePlacement() {
-    if (isRemoving || !removeOperation) {
+  async function removePlacement(source: GeneratedOperationCallerInput["source"]) {
+    if (isRemoving || removeBinding === undefined) {
       return;
     }
 
-    setIsRemoving(true);
-    setSyncStatus({ state: "syncing", message: "Removing placement..." });
+    const operationResult = await executeGeneratedOperationControl({
+      binding: removeBinding,
+      callerInput: {
+        bindingId: removeBinding.id,
+        recordId: placement.id,
+        source,
+      },
+      controller: removeController,
+      feedback: {
+        committedMessage: "Placement removed and synced.",
+        failedMessage: "Remove failed.",
+        progressMessage: "Removing placement...",
+        replayedMessage: "Placement removed and synced.",
+      },
+    });
 
-    try {
-      await submitOperation(
-        appTarget,
-        entityName,
-        removeOperation.operationName,
-        {
-          input: {
-            placementId: placement.id,
-          },
-        },
-        undefined,
-        writeOptions,
-      );
-      setSyncStatus({ state: "idle", message: "Placement removed and synced." });
-    } catch (error) {
-      setSyncStatus({
-        state: "error",
-        message: error instanceof Error ? error.message : "Remove failed.",
-      });
-    } finally {
-      setIsRemoving(false);
+    if (operationResult.type !== "failed") {
+      setConfirmationOpen(false);
+    }
+  }
+
+  function requestRemovePlacement() {
+    const decision = selectGeneratedOperationControlTriggerDecision({
+      binding: removeBinding,
+      pending: isRemoving,
+    });
+
+    if (decision.type === "confirm") {
+      setConfirmationOpen(true);
+      return;
+    }
+
+    if (decision.type === "execute") {
+      void removePlacement("button");
     }
   }
 
   return (
-    <Button
-      aria-label="Remove child placement"
-      data-formless-tree-remove-operation={removeOperation.operation.canonicalKey}
-      data-formless-tree-remove-placement={placement.id}
-      isPending={isRemoving}
-      onPress={() => void removePlacement()}
-      size="sq-xs"
-      type="button"
-      intent="plain"
-    >
-      <RemoveIcon />
-    </Button>
+    <>
+      <Button
+        aria-label="Remove child placement"
+        data-formless-tree-remove-operation={removeOperation.operation.canonicalKey}
+        data-formless-tree-remove-placement={placement.id}
+        isDisabled={removeBinding === undefined || isRemoving}
+        isPending={isRemoving}
+        onPress={requestRemovePlacement}
+        size="sq-xs"
+        type="button"
+        intent="plain"
+      >
+        <RemoveIcon />
+      </Button>
+      {removeBinding?.confirmation ? (
+        <ModalContent
+          closeButton={false}
+          isOpen={confirmationOpen}
+          onOpenChange={(open) => {
+            if (!isRemoving) {
+              setConfirmationOpen(open);
+            }
+          }}
+          role="alertdialog"
+        >
+          <ModalHeader>
+            <ModalTitle>{removeBinding.confirmation.title}</ModalTitle>
+            <ModalDescription>{removeBinding.confirmation.description}</ModalDescription>
+          </ModalHeader>
+          <ModalFooter>
+            <ModalClose intent="outline" isDisabled={isRemoving} type="button">
+              Cancel
+            </ModalClose>
+            <Button
+              isDisabled={isRemoving}
+              onPress={() => void removePlacement("confirmationDialog")}
+              type="button"
+              intent="danger"
+            >
+              {isRemoving ? "Removing..." : removeBinding.confirmation.actionLabel}
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      ) : null}
+    </>
   );
 }
 
@@ -655,14 +761,45 @@ function PlacementOrderingControls({
   placement: StoredRecord;
   siblingCount: number;
 }) {
-  const appTarget = useSchemaAppTarget();
-  const writeOptions = useSchemaAppWriteOptions();
   const showDragHandle = orderingContext?.ordering.presentations.includes("dragHandle") === true;
   const moveItems = selectOrderingMoveMenuItems({
     includeOrdering: orderingContext?.ordering.presentations.includes("moveMenu") === true,
     orderingContext,
     sourceRecordId: placement.id,
   }).filter((item) => item.direction === "up" || item.direction === "down");
+  const moveBindings = useMemo(
+    () =>
+      moveItems.map((item) => ({
+        binding:
+          orderingContext === undefined
+            ? undefined
+            : projectOrderingMoveOperationControlBinding(
+                {
+                  direction: item.direction,
+                  label: item.label,
+                  ordering: orderingContext.ordering,
+                  updateOperation: orderingContext.updateOperation,
+                  disabledReason: item.disabledReason,
+                },
+                {
+                  executionTargetKey: placement.id,
+                  idPrefix: `tree-ordering:${placement.id}`,
+                },
+              ),
+        item,
+      })),
+    [moveItems, orderingContext, placement.id],
+  );
+  const orderingBindings = useMemo(
+    () =>
+      moveBindings
+        .map(({ binding }) => binding)
+        .filter((binding): binding is GeneratedOperationControlBinding => binding !== undefined),
+    [moveBindings],
+  );
+  const orderingController = useGeneratedOperationController(orderingBindings);
+  useGeneratedOperationControllerVersion(orderingController);
+  const isMoving = orderingBindings.some((binding) => orderingController.isPending(binding.id));
 
   if ((!showDragHandle && moveItems.length === 0) || siblingCount <= 1) {
     return <div className="w-7 shrink-0" />;
@@ -680,17 +817,32 @@ function PlacementOrderingControls({
       return;
     }
 
-    setSyncStatus({ state: "syncing", message: "Moving placement..." });
+    const binding = moveBindings.find((candidate) => candidate.item === item)?.binding;
 
-    try {
-      await submitOrderingPatch(appTarget, orderingContext, item.plan, writeOptions);
-      setSyncStatus({ state: "idle", message: "Placement moved and synced." });
-    } catch (error) {
-      setSyncStatus({
-        state: "error",
-        message: error instanceof Error ? error.message : "Move failed.",
-      });
+    if (binding === undefined || isMoving) {
+      return;
     }
+
+    await executeGeneratedOrderingMoveOperation({
+      binding,
+      controller: orderingController,
+      failedMessage: "Move failed.",
+      orderingContext,
+      plan: item.plan,
+      source: "button",
+      successMessage: "Placement moved and synced.",
+      syncingMessage: "Moving placement...",
+    });
+  }
+
+  function moveBindingForItem(item: (typeof moveItems)[number]) {
+    return moveBindings.find((candidate) => candidate.item === item)?.binding;
+  }
+
+  function moveIsPending(item: (typeof moveItems)[number]) {
+    const binding = moveBindingForItem(item);
+
+    return binding === undefined ? false : orderingController.isPending(binding.id);
   }
 
   return (
@@ -713,14 +865,18 @@ function PlacementOrderingControls({
           aria-label={item.direction === "up" ? "Move placement up" : "Move placement down"}
           key={item.direction}
           isDisabled={
-            item.disabled || (item.direction === "up" ? index === 0 : index >= siblingCount - 1)
+            item.disabled ||
+            isMoving ||
+            (item.direction === "up" ? index === 0 : index >= siblingCount - 1)
           }
           onPress={() => void runMove(item)}
           size="sq-xs"
           type="button"
           intent="plain"
         >
-          <span aria-hidden="true">{item.direction === "up" ? "↑" : "↓"}</span>
+          <span aria-hidden="true">
+            {moveIsPending(item) ? "..." : item.direction === "up" ? "↑" : "↓"}
+          </span>
         </Button>
       ))}
     </div>
@@ -994,56 +1150,84 @@ function uniqueCreateFields(fields: CreateFieldConfig[]): CreateFieldConfig[] {
   return uniqueFields;
 }
 
-async function submitTreeChildCreateOperation(
-  target: ClientAppTarget,
+function selectTreeCompositionOperationBinding(
+  result: TreeResultConfig,
+  action: "create" | "remove",
+  executionTargetKey: string,
+): GeneratedOperationControlBinding | undefined {
+  return projectTreeCompositionOperationControlBindings(result.composition, {
+    executionTargetKey,
+  }).find((binding) => binding.input.kind === "treeComposition" && binding.input.action === action);
+}
+
+async function executeTreeChildCreateOperation(
+  binding: GeneratedOperationControlBinding | undefined,
+  controller: GeneratedOperationController,
   result: TreeResultConfig,
   parentRecord: StoredRecord,
   childValues: RecordValues,
   placementValues?: RecordValues,
-  options: SubmitOperationOptions = {},
 ): Promise<{ recordId: string }> {
-  const createOperation = result.composition?.create;
-
-  if (!createOperation) {
+  if (binding === undefined) {
     throw new Error("Tree child creation is not configured.");
   }
 
-  const response = await submitOperation(
-    target,
-    result.relationship.to.entity,
-    createOperation.operationName,
-    {
-      input: {
-        parentRecordId: parentRecord.id,
+  const operationResult = await executeGeneratedOperationControl({
+    binding,
+    callerInput: {
+      bindingId: binding.id,
+      recordId: parentRecord.id,
+      source: "submitButton",
+      values: {
         childValues,
         ...(placementValues === undefined ? {} : { placementValues }),
       },
     },
-    undefined,
-    options,
-  );
-  const childRecord = selectCreatedTreeChildRecord(response, result.childEntityName);
+    controller,
+    setStatus: () => {},
+  });
 
-  return { recordId: childRecord.id };
+  return {
+    recordId: selectCreatedTreeChildRecordId(operationResult, result.childEntityName),
+  };
 }
 
-function selectCreatedTreeChildRecord(
-  response: Awaited<ReturnType<typeof submitOperation>>,
+function selectCreatedTreeChildRecordId(
+  result: GeneratedOperationExecutionResult,
   childEntityName: string,
-): StoredRecord {
-  if (response.output.type !== "command") {
-    throw new Error("Tree child operation did not return a command response.");
+): string {
+  if (result.type === "failed") {
+    throw new Error(result.displayError);
   }
 
-  const record = response.output.changes.find(
-    (change) => change.payload.entity === childEntityName && !change.payload.deletedAt,
-  )?.payload;
+  if (isOperationCommandOutput(result.output)) {
+    const record = result.output.changes.find(
+      (change) => change.payload.entity === childEntityName && !change.payload.deletedAt,
+    )?.payload;
 
-  if (!record) {
+    if (record) {
+      return record.id;
+    }
+  }
+
+  const recordId = result.createdRecordIds?.[0];
+
+  if (recordId === undefined) {
     throw new Error("Tree child operation did not create a child record.");
   }
 
-  return record;
+  return recordId;
+}
+
+function isOperationCommandOutput(output: unknown): output is OperationCommandOutput {
+  return (
+    typeof output === "object" &&
+    output !== null &&
+    "type" in output &&
+    output.type === "command" &&
+    "changes" in output &&
+    Array.isArray(output.changes)
+  );
 }
 
 function isTreeBranchLeaf(result: TreeResultConfig, childRecord: StoredRecord): boolean {
