@@ -225,6 +225,7 @@ export function appArchiveControlPlaneRecords(archive: AppArchive): StoredRecord
       archive.app.packageAppKey === "site"
         ? (`/sites/${archive.app.installId}/` as `/sites/${string}/`)
         : undefined,
+    registrationPolicy: "closed",
     sourceSchemaHash: archive.app.sourceSchemaHash,
     status: archive.app.status,
     updatedAt: archive.app.updatedAt,
@@ -241,6 +242,7 @@ export function appInstallControlPlaneRecords(install: AppInstall): StoredRecord
       packageRevision: install.packageRevision,
       sourceSchemaHash: install.sourceSchemaHash,
       label: install.label,
+      registrationPolicy: install.registrationPolicy,
       status: install.status,
       storageIdentity: `app:${install.installId}`,
       createdAt: install.createdAt,

@@ -21,6 +21,7 @@ import {
   type IdentityControlPlaneRoleKey,
   type IdentityInvitationTargetSurface,
 } from "@dpeek/formless-identity-control-plane";
+import type { AppInstallRegistrationPolicy } from "@dpeek/formless-installed-apps";
 
 import { parseOwnerSetupToken, type OwnerIdentity, type OwnerIdentityInput } from "./protocol.ts";
 
@@ -277,6 +278,7 @@ export type AccountCompletionAppRegistrationGate = {
   appInstallId?: string;
   kind: "app-registration";
   operation?: AccountCompletionGateOperationReference;
+  registrationPolicy?: AppInstallRegistrationPolicy;
   selectedOrganization?: string;
 };
 
@@ -853,7 +855,7 @@ export function parseAccountCompletionGate(value: unknown): AccountCompletionGat
         "Account completion app-registration gate",
         object,
         ["kind"],
-        ["appInstallId", "operation", "selectedOrganization"],
+        ["appInstallId", "operation", "registrationPolicy", "selectedOrganization"],
       );
 
       return {
@@ -864,6 +866,7 @@ export function parseAccountCompletionGate(value: unknown): AccountCompletionGat
           "appInstallId",
           object,
         ),
+        ...parseOptionalAppRegistrationPolicy(object.registrationPolicy),
         ...parseOptionalStringField(
           "Account completion app-registration gate selectedOrganization",
           "selectedOrganization",
@@ -1338,6 +1341,20 @@ function parseAccountCompletionGateOperationReference(
     operationKey: parseTrimmedNonEmptyString(`${context} operationKey`, object.operationKey),
     ...parseOptionalStringField(`${context} operationName`, "operationName", object),
   };
+}
+
+function parseOptionalAppRegistrationPolicy(value: unknown): {
+  registrationPolicy?: AppInstallRegistrationPolicy;
+} {
+  if (value === undefined) {
+    return {};
+  }
+
+  if (value === "closed") {
+    return { registrationPolicy: value };
+  }
+
+  throw new Error("Account completion app-registration gate registrationPolicy is unsupported.");
 }
 
 function parseAccountCompletionGatePolicyReferences(

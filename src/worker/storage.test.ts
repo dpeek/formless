@@ -1056,6 +1056,7 @@ function controlPlaneRefreshRecords(): StoredRecord[] {
         packageRevision: 1,
         sourceSchemaHash: sourceHash("a"),
         label: "Site",
+        registrationPolicy: "closed",
         status: "installed",
         storageIdentity: "app:site",
       },

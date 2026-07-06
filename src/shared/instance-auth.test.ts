@@ -337,6 +337,7 @@ describe("account completion gate protocol", () => {
       {
         kind: "app-registration",
         appInstallId: "site",
+        registrationPolicy: "closed",
         selectedOrganization: "organization:acme",
         operation: {
           appInstallId: "site",
@@ -454,6 +455,12 @@ describe("account completion gate protocol", () => {
         credentialMethod: "oauth",
       }),
     ).toThrow("Account completion credential gate credentialMethod is unsupported.");
+    expect(() =>
+      parseAccountCompletionGate({
+        kind: "app-registration",
+        registrationPolicy: "email-verified",
+      }),
+    ).toThrow("Account completion app-registration gate registrationPolicy is unsupported.");
     expect(() =>
       parseAccountCompletionGateResolutionResult({
         status: "waiting",

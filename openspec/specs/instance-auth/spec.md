@@ -688,6 +688,9 @@ or using browser access for an authenticated target.
   blocking the requested target
 - AND `app-registration` requires an active `app-registration` record for the
   requested app install, principal or selected organization, and target context
+- AND for app installs whose registration policy is `closed`, a missing
+  `app-registration` remains a blocking `app-registration` gate that cannot be
+  self-service completed by the authenticated principal
 - AND `profile-completion` is satisfied only by app-owned records or explicit
   app operations declared for that target, not by arbitrary auth-runtime writes
   to app storage
@@ -735,6 +738,34 @@ or using browser access for an authenticated target.
   exposed through another target's gate response
 - AND public anonymous operations remain available through their public action
   policy without creating account completion gates
+
+#### Scenario: Closed app registration gate
+
+- GIVEN account completion evaluates an app target whose app install has
+  registration policy `closed`
+- AND the active principal has no active identity `app-registration` record for
+  the requested app install and current principal or selected organization
+  context
+- WHEN the runtime resolves the next blocking account gate
+- THEN it returns a display-safe `app-registration` gate with the target app
+  install id, target facts, and registration policy `closed`
+- AND the auth origin renders the gate as a blocked state rather than a signup
+  or app profile form
+- AND the runtime does not create or activate principal, principal-email,
+  app-registration, role-assignment, app-owned profile, credential, central
+  session, host session, or handoff grant state from that gate
+
+#### Scenario: Closed app registration satisfied
+
+- GIVEN account completion evaluates an app target whose app install has
+  registration policy `closed`
+- AND the active principal or selected organization has an active identity
+  `app-registration` record for the requested app install
+- WHEN the runtime resolves account completion for that target
+- THEN the `app-registration` gate is satisfied
+- AND later gates for verified email, credential, invitation, profile
+  completion, terms acceptance, and role review still evaluate normally for
+  the same target
 
 ### Requirement: Principal-Backed Authenticated Authorization
 

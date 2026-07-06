@@ -3,6 +3,11 @@ import {
   type IdentityControlPlaneRoleKey,
   type IdentityInvitationTargetSurface,
 } from "@dpeek/formless-identity-control-plane";
+import {
+  INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX,
+  INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
+} from "@dpeek/formless-instance-control-plane";
+import type { AppInstallRegistrationPolicy } from "@dpeek/formless-installed-apps";
 import type { StoredRecord } from "@dpeek/formless-storage";
 
 import {
@@ -25,6 +30,8 @@ import { readPasskeyCredentialsForPrincipal } from "./instance-auth-state.ts";
 
 export const INSTANCE_AUTH_ACCOUNT_COMPLETION_RESOLVE_PATH =
   "/_internal/instance-auth/account-completion/resolve";
+
+const internalReadControlPlaneRecordsPath = "/_internal/read-records";
 
 type AccountCompletionResolverActorKind = "anonymous" | "authenticated" | "owner";
 
@@ -95,6 +102,7 @@ export async function resolveAccountCompletionGate(input: {
   const state =
     (await readInternalAccountCompletionIdentityState(input.env, { principalId, target })) ??
     emptyAccountCompletionIdentityState();
+  const appRegistrationPolicy = await readTargetAppInstallRegistrationPolicy(input.env, target);
 
   if (!state.principal || state.principal.values.status !== "active") {
     return blockedResult(target, roleReviewGate(input.input.requiredRole, target, state));
@@ -114,10 +122,15 @@ export async function resolveAccountCompletionGate(input: {
     return blockedResult(target, invitationGate(pendingInvitation));
   }
 
-  if (target.appInstallId !== undefined && !hasActiveAppRegistration(state)) {
+  if (
+    target.appInstallId !== undefined &&
+    appRegistrationPolicy === "closed" &&
+    !hasActiveAppRegistration(state)
+  ) {
     return blockedResult(target, {
       appInstallId: target.appInstallId,
       kind: "app-registration",
+      registrationPolicy: appRegistrationPolicy,
       ...(target.selectedOrganization === undefined
         ? {}
         : { selectedOrganization: target.selectedOrganization }),
@@ -221,6 +234,63 @@ function verifiedPrimaryEmail(primaryEmail: StoredRecord | null): boolean {
 
 function hasActiveAppRegistration(state: AccountCompletionIdentityState): boolean {
   return state.appRegistrations.some((record) => record.values.status === "active");
+}
+
+async function readTargetAppInstallRegistrationPolicy(
+  env: IdentityOwnerInternalEnv,
+  target: AccountCompletionGateTarget,
+): Promise<AppInstallRegistrationPolicy | undefined> {
+  if (target.appInstallId === undefined) {
+    return undefined;
+  }
+
+  if (!env.FORMLESS_AUTHORITY) {
+    throw new Error("Account completion app install policy lookup requires authority access.");
+  }
+
+  const id = env.FORMLESS_AUTHORITY.idFromName(INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY);
+  const response = await env.FORMLESS_AUTHORITY.get(id).fetch(
+    new Request(
+      `http://internal${INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX}${internalReadControlPlaneRecordsPath}`,
+      {
+        headers: { Accept: "application/json" },
+        method: "GET",
+      },
+    ),
+  );
+  const body = (await response.json()) as { error?: string; records?: StoredRecord[] };
+
+  if (!response.ok || !Array.isArray(body.records)) {
+    throw new Error(body.error ?? "Control-plane app install policy lookup failed.");
+  }
+
+  const appInstall = body.records.find(
+    (record) =>
+      record.entity === "app-install" &&
+      !record.deletedAt &&
+      record.values.installId === target.appInstallId &&
+      record.values.status === "installed",
+  );
+
+  if (!appInstall) {
+    throw new Error(`App install "${target.appInstallId}" is not installed.`);
+  }
+
+  return appInstallRegistrationPolicyFromValue(
+    appInstall.values.registrationPolicy,
+    target.appInstallId,
+  );
+}
+
+function appInstallRegistrationPolicyFromValue(
+  value: unknown,
+  appInstallId: string,
+): AppInstallRegistrationPolicy {
+  if (value === "closed") {
+    return value;
+  }
+
+  throw new Error(`App install "${appInstallId}" has unsupported registration policy.`);
 }
 
 function missingAcceptedPolicies(state: AccountCompletionIdentityState): StoredRecord[] {

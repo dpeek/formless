@@ -144,6 +144,12 @@ describe("instance control-plane schema contracts", () => {
       type: "text",
       required: true,
     });
+    expect(schema.entities["app-install"]?.fields.registrationPolicy).toEqual({
+      label: "Registration policy",
+      type: "enum",
+      required: true,
+      values: { closed: { label: "Closed" } },
+    });
     expect(schema.screens?.apps.path).toBe("/");
     expect(schema.screens?.routes.path).toBe("/routes");
     expect(schema.screens?.deployments.path).toBe("/deployments");
@@ -519,6 +525,30 @@ describe("instance control-plane schema contracts", () => {
         output: { type: "update" },
       },
     });
+    expect(
+      Object.keys(schema.entities["app-install"]?.operations?.create.input?.fields ?? {}),
+    ).toEqual([
+      "installId",
+      "packageAppKey",
+      "packageRevision",
+      "sourceSchemaHash",
+      "label",
+      "registrationPolicy",
+      "status",
+      "storageIdentity",
+    ]);
+    expect(
+      Object.keys(schema.entities["app-install"]?.operations?.update.input?.fields ?? {}),
+    ).toEqual([
+      "installId",
+      "packageAppKey",
+      "packageRevision",
+      "sourceSchemaHash",
+      "label",
+      "registrationPolicy",
+      "status",
+      "storageIdentity",
+    ]);
     expect(Object.keys(schema.entities.route?.operations?.create.input?.fields ?? {})).toEqual([
       "enabled",
       "matchHost",
@@ -802,6 +832,7 @@ describe("instance control-plane schema contracts", () => {
       { field: "label", display: "editor" },
       { field: "installId", display: "readOnly" },
       { field: "packageAppKey", display: "readOnly" },
+      { field: "registrationPolicy", display: "readOnly" },
       { field: "status", display: "readOnly" },
       { field: "storageIdentity", display: "readOnly" },
       { field: "packageRevision", display: "readOnly" },
@@ -969,6 +1000,7 @@ describe("instance control-plane schema contracts", () => {
         packageRevision: 1,
         publicRoute: "/sites/personal",
         publicRoutePrefix: "/sites/personal/",
+        registrationPolicy: "closed",
         sourceSchemaHash: siteSourceSchemaHash,
         status: "installed",
         updatedAt: now,
@@ -984,6 +1016,7 @@ describe("instance control-plane schema contracts", () => {
         packageRevision: 1,
         sourceSchemaHash: siteSourceSchemaHash,
         label: "Personal Site",
+        registrationPolicy: "closed",
         status: "installed",
         storageIdentity: "app:personal",
       },
@@ -1330,10 +1363,12 @@ describe("instance control-plane schema contracts", () => {
       adminRoute: "/apps/personal-admin",
       publicRoute: "/public/personal",
       publicRoutePrefix: "/public/personal/",
+      registrationPolicy: "closed",
       launchLinks: links.slice(0, 2),
     });
     expect(installs[1]).toMatchObject({
       adminRoute: "/apps/verifi-labs",
+      registrationPolicy: "closed",
       launchLinks: [links[2]],
     });
     expect(installs[1]).not.toHaveProperty("publicRoute");
@@ -1479,6 +1514,26 @@ describe("instance control-plane schema contracts", () => {
         { packageResolver: controlPlanePackageResolver },
       ),
     ).toThrow("cannot store control-plane secret values");
+    expect(() =>
+      parseInstanceControlPlaneStorageSnapshot(
+        "Instance archive controlPlane",
+        {
+          ...snapshot,
+          records: controlPlaneRecords().map((record) =>
+            record.entity === "app-install"
+              ? {
+                  ...record,
+                  values: {
+                    ...record.values,
+                    registrationPolicy: "email-verified",
+                  },
+                }
+              : record,
+          ),
+        },
+        { packageResolver: controlPlanePackageResolver },
+      ),
+    ).toThrow('record "site" has invalid field "instance:app-install.registrationPolicy"');
   });
 });
 
@@ -1570,6 +1625,7 @@ function storedAppInstallRecord(input: {
       installId: input.installId,
       packageAppKey: input.packageAppKey,
       label: input.label,
+      registrationPolicy: "closed",
       status: "installed",
       storageIdentity: `app:${input.installId}`,
     },
@@ -1661,6 +1717,7 @@ function controlPlaneRecords(
         installId: "site",
         packageAppKey: "site",
         label: "Site",
+        registrationPolicy: "closed",
         status: "installed",
         storageIdentity: "app:site",
       },

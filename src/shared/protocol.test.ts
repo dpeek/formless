@@ -198,6 +198,20 @@ describe("app install protocol", () => {
       packageAppKey: "site",
       installId: "personal",
       label: "Personal Site",
+      registrationPolicy: "closed",
+    });
+    expect(
+      parseCreateAppInstallRequest({
+        packageAppKey: "site",
+        installId: "members",
+        label: "Members",
+        registrationPolicy: "closed",
+      }),
+    ).toEqual({
+      packageAppKey: "site",
+      installId: "members",
+      label: "Members",
+      registrationPolicy: "closed",
     });
   });
 
@@ -213,6 +227,14 @@ describe("app install protocol", () => {
         route: "/apps/personal",
       }),
     ).toThrow('App install request has unsupported key "route".');
+    expect(() =>
+      parseCreateAppInstallRequest({
+        packageAppKey: "site",
+        installId: "personal",
+        label: "Site",
+        registrationPolicy: "email-verified",
+      }),
+    ).toThrow('App install registration policy must be "closed".');
   });
 });
 

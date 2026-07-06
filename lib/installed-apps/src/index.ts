@@ -5,6 +5,7 @@ import {
   type AppInstallId,
   type AppInstallIdValidationResult,
   type AppInstallInitializationPlan,
+  type AppInstallRegistrationPolicy,
   type AppInstallRegistryError,
   type AppInstallRegistryErrorCode,
   type AppPackageCapability,
@@ -313,6 +314,7 @@ export function createAppInstall(input: CreateAppInstallInput): CreateAppInstall
     label,
     now: input.now,
     packageApp,
+    registrationPolicy: input.registrationPolicy ?? defaultAppInstallRegistrationPolicy(),
   });
   const initialization = initializationPlanForInstall(packageApp, install);
 
@@ -377,6 +379,10 @@ export function appInstallRegistryError(
   };
 }
 
+export function defaultAppInstallRegistrationPolicy(): AppInstallRegistrationPolicy {
+  return "closed";
+}
+
 export function sourceSchemaCanonicalJson(schema: unknown): string {
   return JSON.stringify(stableJsonValue(schema));
 }
@@ -439,6 +445,7 @@ function appInstallFromPackage(input: {
   label: string;
   now: string;
   packageApp: ResolvedAppPackage;
+  registrationPolicy: AppInstallRegistrationPolicy;
 }): AppInstall {
   return {
     installId: input.installId,
@@ -446,6 +453,7 @@ function appInstallFromPackage(input: {
     packageRevision: input.packageApp.packageRevision,
     sourceSchemaHash: input.packageApp.sourceSchemaHash,
     label: input.label,
+    registrationPolicy: input.registrationPolicy,
     status: "installed",
     createdAt: input.now,
     updatedAt: input.now,

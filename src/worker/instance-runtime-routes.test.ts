@@ -404,6 +404,7 @@ function appInstall(installId: string, packageAppKey: SchemaKey): AppInstall {
           publicRoutePrefix: `/sites/${installId}/` as `/${string}/`,
         }
       : {}),
+    registrationPolicy: "closed",
     sourceSchemaHash: bundledSourceSchemaHashFixtures[packageAppKey],
     status: "installed",
     updatedAt: "2026-06-02T00:00:00.000Z",

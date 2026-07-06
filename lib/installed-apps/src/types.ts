@@ -4,6 +4,7 @@ export type PackageAppRevision = number;
 export type PackageAppKey = string;
 export type AppPackageKey = PackageAppKey;
 export type AppInstallId = string;
+export type AppInstallRegistrationPolicy = "closed";
 export type AppInstallStatus = "installed";
 export type AppInstallRouteAccess = "anonymous" | "authenticated" | "owner";
 export type AppInstallRouteKind = "admin" | "publicSite";
@@ -33,6 +34,7 @@ export type AppInstall = {
   packageRevision: PackageAppRevision;
   sourceSchemaHash: SourceSchemaHash;
   label: string;
+  registrationPolicy: AppInstallRegistrationPolicy;
   status: AppInstallStatus;
   createdAt: string;
   updatedAt: string;
@@ -147,6 +149,7 @@ export type CreateAppInstallInput = {
   now: string;
   packageAppKey: string;
   packageResolver: AppPackageResolver;
+  registrationPolicy?: AppInstallRegistrationPolicy;
   validateInitialSource?: (
     context: AppInstallSourceValidationContext,
   ) => AppInstallRegistryError | undefined;

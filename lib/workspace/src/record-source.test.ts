@@ -25,6 +25,7 @@ describe("workspace control-plane record source validation", () => {
           installId: "labs",
           packageAppKey: "private-labs",
           label: "Private Labs",
+          registrationPolicy: "closed",
           status: "installed",
           storageIdentity: "app:labs",
         },

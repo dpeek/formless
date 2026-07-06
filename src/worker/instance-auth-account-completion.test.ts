@@ -16,6 +16,7 @@ import {
   INSTANCE_AUTH_ACCOUNT_COMPLETION_RESOLVE_PATH,
   type AccountCompletionGateResolverInput,
 } from "./instance-auth-account-completion.ts";
+import type { CreateAppInstallResponse } from "../shared/protocol.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
 
 type Harness = Awaited<ReturnType<typeof createWorkerHarness>>;
@@ -46,6 +47,8 @@ beforeEach(async () => {
       },
     },
   );
+  await createAppInstall({ installId: "crm", label: "CRM", packageAppKey: "crm" });
+  await createAppInstall({ installId: "billing", label: "Billing", packageAppKey: "tasks" });
 });
 
 afterEach(async () => {
@@ -248,6 +251,40 @@ describe("instance auth account completion resolver", () => {
     });
   });
 
+  it("resolves closed app registration policy and continues after active registration", async () => {
+    const principal = await createPrincipal("Closed Registration");
+
+    await createPrimaryEmail(principal.id, "closed-registration@example.com", "verified");
+    await createCredential(principal.id, "closed-registration");
+
+    const blocked = await expectGate(
+      { principalId: principal.id, target: appTarget() },
+      "app-registration",
+    );
+
+    expect(blocked).toMatchObject({
+      gate: {
+        appInstallId: "crm",
+        kind: "app-registration",
+        registrationPolicy: "closed",
+      },
+      status: "blocked",
+      target: appTarget(),
+    });
+    expect(JSON.stringify(blocked)).not.toContain("session");
+    expect(JSON.stringify(blocked)).not.toContain("grantSecret");
+    expect(JSON.stringify(blocked)).not.toContain("credential");
+    expect(JSON.stringify(blocked)).not.toContain("tokenHash");
+
+    await createAppRegistration(principal.id, { appInstallId: "crm" });
+
+    await expect(resolveGate({ principalId: principal.id, target: appTarget() })).resolves.toEqual({
+      continueTo: "/dashboard",
+      status: "complete",
+      target: appTarget(),
+    });
+  });
+
   it("keeps app profile completion evidence explicit and app-owned", async () => {
     const principal = await createPrincipal("Profile Evidence");
 
@@ -362,6 +399,23 @@ async function resolveGate(
   expect(response.status).toBe(200);
 
   return parseAccountCompletionGateResolutionResult(body);
+}
+
+async function createAppInstall(input: {
+  installId: string;
+  label: string;
+  packageAppKey: string;
+}) {
+  const response = await harness.fetch("/api/formless/app-installs", {
+    body: JSON.stringify(input),
+    headers: adminHeaders({ "Content-Type": "application/json" }),
+    method: "POST",
+  });
+  const body = (await response.json()) as CreateAppInstallResponse;
+
+  expect(response.status).toBe(201);
+
+  return body.install;
 }
 
 async function createPrincipal(displayName: string) {

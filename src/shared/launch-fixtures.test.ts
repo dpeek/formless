@@ -100,6 +100,7 @@ describe("launch fixture registry", () => {
             label: "CRM",
             packageAppKey: "crm",
             packageRevision: 1,
+            registrationPolicy: "closed",
             sourceSchemaHash: crmPackageManifest.sourceSchemaHash,
             status: "installed",
             updatedAt: now,

@@ -134,6 +134,33 @@ describe("auth account route view", () => {
       expect(html, testCase.heading).not.toContain("tokenHash");
     }
   });
+
+  it("renders closed app-registration gates without self-service controls", () => {
+    const html = renderAuthAccountState({
+      result: blockedResult({
+        appInstallId: "task-workspace",
+        kind: "app-registration",
+        operation: { label: "Sign up", operationKey: "signup" },
+        registrationPolicy: "closed",
+        selectedOrganization: "org:north",
+      }),
+      status: "blocked",
+    });
+
+    expect(html).toContain("Registration closed");
+    expect(html).toContain("This app uses closed registration.");
+    expect(html).toContain("Closed app registration");
+    expect(html).toContain("Registration policy");
+    expect(html).toContain("Closed");
+    expect(html).toContain("task-workspace");
+    expect(html).toContain("org:north");
+    expect(html).not.toContain("Register for app");
+    expect(html).not.toContain("Sign up");
+    expect(html).not.toContain("Complete profile");
+    expect(html).not.toContain("Action");
+    expect(html).not.toContain("<button");
+    expect(html).not.toContain("<form");
+  });
 });
 
 describe("auth account route data flow", () => {

@@ -5,6 +5,7 @@ import {
   type AppInstall,
   type AppInstallId,
   type AppInstallLaunchLink,
+  type AppInstallRegistrationPolicy,
   type AppInstallRouteAccess,
   type AppInstallRoute,
   type AppInstallRouteKind,
@@ -39,7 +40,7 @@ export const INSTANCE_CONTROL_PLANE_BOUNDARY_SCHEMA_KEY = "instance";
 export const INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY = "instance:control-plane";
 export const INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX = "/api/formless/control-plane";
 export const INSTANCE_CONTROL_PLANE_SOURCE_SCHEMA_HASH =
-  "sha256:1ee1276b57278f7eab8db33a4c4d03716ea87e86c72eabcfccf6ac14c5bfef15" satisfies SourceSchemaHash;
+  "sha256:abf61b0583a7799d7733d549fb436874fde8a54b28c024fc27b5da700e44c159" satisfies SourceSchemaHash;
 export const INSTANCE_CONTROL_PLANE_INSTANCE_SETTINGS_ID = "instance";
 export const instanceControlPlaneSchemaProvenance = {
   kind: "instance-control-plane",
@@ -110,6 +111,7 @@ export type InstanceControlPlaneProjectionRecord = {
 };
 
 export type InstanceControlPlaneAppInstallStatus = "disabled" | "failed" | "installed";
+export type InstanceControlPlaneAppInstallRegistrationPolicy = AppInstallRegistrationPolicy;
 
 export type InstanceControlPlaneAppInstallValues = {
   installId: AppInstallId;
@@ -117,6 +119,7 @@ export type InstanceControlPlaneAppInstallValues = {
   packageRevision?: PackageAppRevision;
   sourceSchemaHash?: SourceSchemaHash;
   label: string;
+  registrationPolicy: InstanceControlPlaneAppInstallRegistrationPolicy;
   status: InstanceControlPlaneAppInstallStatus;
   storageIdentity: `app:${AppInstallId}`;
 };
@@ -322,6 +325,9 @@ export const instanceControlPlaneSourceSchema = {
         packageRevision: optionalNumberField("Package revision"),
         sourceSchemaHash: optionalTextField("Source schema hash"),
         label: textField("Label"),
+        registrationPolicy: enumField("Registration policy", {
+          closed: "Closed",
+        }),
         status: enumField("Status", {
           disabled: "Disabled",
           failed: "Failed",
@@ -335,6 +341,7 @@ export const instanceControlPlaneSourceSchema = {
         "packageRevision",
         "sourceSchemaHash",
         "label",
+        "registrationPolicy",
         "status",
         "storageIdentity",
       ]),
@@ -700,7 +707,13 @@ export const instanceControlPlaneSourceSchema = {
     emailSenderEnabled: whereQuery("Enabled email senders", "email-sender", "enabled", true),
   },
   itemViews: {
-    appInstallItem: itemView("app-install", ["label", "installId", "packageAppKey", "status"]),
+    appInstallItem: itemView("app-install", [
+      "label",
+      "installId",
+      "packageAppKey",
+      "registrationPolicy",
+      "status",
+    ]),
     routeItem: itemView("route", ["matchHost", "matchPath", "kind", "enabled"]),
     deploymentConfigItem: itemView("deployment-config", [
       "label",
@@ -725,6 +738,7 @@ export const instanceControlPlaneSourceSchema = {
       { field: "label", display: "editor" },
       { field: "installId", display: "readOnly" },
       { field: "packageAppKey", display: "readOnly" },
+      { field: "registrationPolicy", display: "readOnly" },
       { field: "status", display: "readOnly" },
       { field: "storageIdentity", display: "readOnly" },
       { field: "packageRevision", display: "readOnly" },
@@ -863,6 +877,7 @@ export const instanceControlPlaneSourceSchema = {
       "packageRevision",
       "sourceSchemaHash",
       "label",
+      "registrationPolicy",
       "status",
       "storageIdentity",
     ]),
@@ -1134,6 +1149,7 @@ export function instanceControlPlaneAppInstallRecord(
       packageRevision: install.packageRevision,
       sourceSchemaHash: install.sourceSchemaHash,
       label: install.label,
+      registrationPolicy: install.registrationPolicy,
       status: install.status,
       storageIdentity: instanceControlPlaneStorageIdentityForInstall(install.installId),
     },
@@ -1210,6 +1226,10 @@ function appInstallFromControlPlaneRecord(
 
   const installId = stringControlPlaneValue(values.installId) ?? "";
   const label = stringControlPlaneValue(values.label) ?? "";
+  const registrationPolicy = appInstallRegistrationPolicyFromControlPlaneValue(
+    values.registrationPolicy,
+    record.id,
+  );
   const routes = appInstallRoutesFromControlPlaneRoutes(routeRecords, packageApp);
   const hasRouteRecords = routeRecords.length > 0;
   const adminRoute =
@@ -1234,6 +1254,7 @@ function appInstallFromControlPlaneRecord(
       packageApp.sourceSchemaHash,
     ),
     label,
+    registrationPolicy,
     status: "installed",
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
@@ -1497,6 +1518,17 @@ function sourceSchemaHashFromControlPlaneValue(
   fallback: SourceSchemaHash,
 ): SourceSchemaHash {
   return isSourceSchemaHash(value) ? value : fallback;
+}
+
+function appInstallRegistrationPolicyFromControlPlaneValue(
+  value: unknown,
+  installId: string,
+): AppInstallRegistrationPolicy {
+  if (value === "closed") {
+    return value;
+  }
+
+  throw new Error(`Stored app install "${installId}" has unsupported registration policy.`);
 }
 
 function stringControlPlaneValue(value: unknown): string | undefined {
@@ -2059,6 +2091,7 @@ function validateInstanceControlPlaneRecord(
 
   if (entity === "app-install") {
     validateAppInstallImmutableIdentity(context, record);
+    validateAppInstallRegistrationPolicy(context, record);
   }
 
   if (entity === "deployment-config") {
@@ -2173,6 +2206,16 @@ function validateAppInstallImmutableIdentity(context: string, record: StoredReco
   if (storageIdentity !== `app:${installId}`) {
     throw new Error(
       `${context} record "${record.id}" field "${controlPlaneFieldLabel(record, "storageIdentity")}" must be "app:${installId}".`,
+    );
+  }
+}
+
+function validateAppInstallRegistrationPolicy(context: string, record: StoredRecord) {
+  const registrationPolicy = requiredStringValue(context, record, "registrationPolicy");
+
+  if (registrationPolicy !== "closed") {
+    throw new Error(
+      `${context} record "${record.id}" has invalid field "${controlPlaneFieldLabel(record, "registrationPolicy")}".`,
     );
   }
 }
@@ -3774,6 +3817,7 @@ function editorForField(field: string): FieldEditor {
     field === "surface" ||
     field === "access" ||
     field === "packageCapability" ||
+    field === "registrationPolicy" ||
     field === "targetKind" ||
     field === "targetProfile" ||
     field === "providerFamily" ||

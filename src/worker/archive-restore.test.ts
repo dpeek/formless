@@ -426,6 +426,7 @@ function siteInstall(installId: string): AppInstall {
     packageRevision: 1,
     publicRoute: `/sites/${installId}`,
     publicRoutePrefix: `/sites/${installId}/`,
+    registrationPolicy: "closed",
     sourceSchemaHash: bundledSourceSchemaHashFixtures.site,
     status: "installed",
     updatedAt: now,

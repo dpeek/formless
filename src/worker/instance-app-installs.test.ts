@@ -171,6 +171,7 @@ describe("instance app install API routes", () => {
       packageAppKey: "site",
       packageRevision: 1,
       publicRoute: "/sites/site",
+      registrationPolicy: "closed",
       sourceSchemaHash: bundledSourceSchemaHashFixtures.site,
       status: "installed",
     });
@@ -287,6 +288,7 @@ describe("instance app install API routes", () => {
       expect(appInstall?.values).toMatchObject({
         installId: "labs",
         packageAppKey: "private-labs",
+        registrationPolicy: "closed",
         sourceSchemaHash,
       });
       expect(

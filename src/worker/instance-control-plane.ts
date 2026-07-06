@@ -541,6 +541,7 @@ async function handleCreateAppInstallOperation(
       now: receivedAt,
       packageAppKey: parsed.input.packageAppKey,
       packageResolver,
+      registrationPolicy: parsed.input.registrationPolicy,
       validateInitialSource: ({ initialization }) => {
         const source = findActiveWorkerSchemaAppDefinition(initialization.sourceSchemaKey, env);
         const seed = findActiveWorkerSchemaAppDefinition(initialization.seedRecordsKey, env);
@@ -822,6 +823,11 @@ function validateControlPlanePackageBoundary(
 ) {
   if (entityName === "app-install") {
     const packageAppKey = parseRequiredString("packageAppKey", values.packageAppKey);
+    const registrationPolicy = parseRequiredString("registrationPolicy", values.registrationPolicy);
+
+    if (registrationPolicy !== "closed") {
+      throw new BadRequestError('App install registration policy must be "closed".');
+    }
 
     if (!findResolvedAppPackage(packageAppKey, options.packageResolver)) {
       throw new BadRequestError(`App install package "${packageAppKey}" is unsupported.`);

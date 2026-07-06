@@ -315,10 +315,15 @@ function gateFacts(gate: AccountCompletionGate): ReactNode {
     case "app-registration":
       return (
         <>
-          <AccountFact label="Gate">App registration</AccountFact>
+          <AccountFact label="Gate">
+            {isClosedAppRegistrationGate(gate) ? "Closed app registration" : "App registration"}
+          </AccountFact>
+          <AccountFact label="Registration policy">
+            {registrationPolicyLabel(gate.registrationPolicy)}
+          </AccountFact>
           <AccountFact label="App install">{gate.appInstallId}</AccountFact>
           <AccountFact label="Organization">{gate.selectedOrganization}</AccountFact>
-          {operationFact(gate.operation)}
+          {isClosedAppRegistrationGate(gate) ? null : operationFact(gate.operation)}
         </>
       );
     case "profile-completion":
@@ -397,6 +402,14 @@ function gateCopy(gate: AccountCompletionGate): { heading: string; message: stri
         message: "An invitation must be accepted before continuing.",
       };
     case "app-registration":
+      if (isClosedAppRegistrationGate(gate)) {
+        return {
+          heading: "Registration closed",
+          message:
+            "This app uses closed registration. Ask an administrator to grant access before continuing.",
+        };
+      }
+
       return {
         heading: "Register for app",
         message: "App registration is required before continuing.",
@@ -425,6 +438,22 @@ function operationLabel(operation: AccountCompletionGate["operation"]): string |
   }
 
   return operation.label ?? operation.operationName ?? operation.operationKey;
+}
+
+function isClosedAppRegistrationGate(
+  gate: Extract<AccountCompletionGate, { kind: "app-registration" }>,
+): boolean {
+  return gate.registrationPolicy === "closed";
+}
+
+function registrationPolicyLabel(
+  value: Extract<AccountCompletionGate, { kind: "app-registration" }>["registrationPolicy"],
+): string | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  return value === "closed" ? "Closed" : value;
 }
 
 function credentialMethodLabel(

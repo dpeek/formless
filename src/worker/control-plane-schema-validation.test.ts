@@ -516,6 +516,7 @@ async function createControlPlaneAppInstall(packageAppKey: "site" | "tasks", lab
       packageRevision: 1,
       sourceSchemaHash: bundledSourceSchemaHashFixtures[packageAppKey],
       label,
+      registrationPolicy: "closed",
       status: "installed",
       storageIdentity: `app:${installId}`,
     },

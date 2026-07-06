@@ -4,9 +4,11 @@ import type {
   AppInstall,
   AppInstallInitializationPlan,
   AppInstallLaunchLink,
+  AppInstallRegistrationPolicy,
   InstallableAppPackage,
   PackageAppKey,
 } from "@dpeek/formless-installed-apps";
+import { defaultAppInstallRegistrationPolicy } from "@dpeek/formless-installed-apps";
 import type { PackageAppRevision, SourceSchemaHash } from "./upgrade-migrations.ts";
 
 export type EntityName = string;
@@ -208,6 +210,7 @@ export type CreateAppInstallRequest = {
   packageAppKey: string;
   installId: string;
   label: string;
+  registrationPolicy?: AppInstallRegistrationPolicy;
 };
 
 export type CreateAppInstallResponse = {
@@ -303,6 +306,9 @@ export function parseCreateAppInstallRequest(value: unknown): CreateAppInstallRe
     packageAppKey: parseTrimmedNonEmptyString("App install package app key", value.packageAppKey),
     installId: parseTrimmedNonEmptyString("App install id", value.installId),
     label: parseTrimmedNonEmptyString("App install label", value.label),
+    registrationPolicy:
+      parseOptionalAppInstallRegistrationPolicy(value.registrationPolicy) ??
+      defaultAppInstallRegistrationPolicy(),
   };
 }
 
@@ -399,7 +405,7 @@ function assertOwnerSetupRequestKeys(value: Record<string, unknown>) {
 
 function assertCreateAppInstallRequestKeys(value: Record<string, unknown>) {
   const requiredKeys = ["packageAppKey", "installId", "label"];
-  const allowedKeys = new Set(requiredKeys);
+  const allowedKeys = new Set([...requiredKeys, "registrationPolicy"]);
 
   for (const key of Object.keys(value)) {
     if (!allowedKeys.has(key)) {
@@ -412,6 +418,20 @@ function assertCreateAppInstallRequestKeys(value: Record<string, unknown>) {
       throw new Error(`App install request must include "${key}".`);
     }
   }
+}
+
+function parseOptionalAppInstallRegistrationPolicy(
+  value: unknown,
+): AppInstallRegistrationPolicy | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (value === "closed") {
+    return value;
+  }
+
+  throw new Error('App install registration policy must be "closed".');
 }
 
 function parseOwnerIdentityInput(value: unknown): OwnerIdentityInput {

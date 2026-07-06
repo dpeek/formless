@@ -992,6 +992,7 @@ const sourceRecords = [
     values: {
       installId: "site",
       packageAppKey: "site",
+      registrationPolicy: "closed",
       status: "installed",
     },
   },
@@ -1003,6 +1004,7 @@ const sourceRecords = [
     values: {
       installId: "deleted",
       packageAppKey: "site",
+      registrationPolicy: "closed",
       status: "installed",
     },
   },

@@ -66,6 +66,7 @@ import type { DomainProviderPlanPolicy } from "../shared/domain-provider-protoco
 import {
   packageAppFactsForKey,
   type AppInstall,
+  type AppInstallRegistrationPolicy,
   type InstallableAppPackage,
   type PackageAppKey,
 } from "@dpeek/formless-installed-apps";
@@ -1566,6 +1567,10 @@ function parseAppInstall(
       `${context} sourceSchemaHash`,
     ),
     label: parseRequiredString(value.label, undefined, `${context} label`),
+    registrationPolicy: parseAppInstallRegistrationPolicy(
+      value.registrationPolicy,
+      `${context} registrationPolicy`,
+    ),
     status: "installed",
     createdAt: parseRequiredString(value.createdAt, undefined, `${context} createdAt`),
     updatedAt: parseRequiredString(value.updatedAt, undefined, `${context} updatedAt`),
@@ -1589,6 +1594,17 @@ function parseAppInstall(
           ) as `/sites/${string}/`,
         }),
   };
+}
+
+function parseAppInstallRegistrationPolicy(
+  value: unknown,
+  context: string,
+): AppInstallRegistrationPolicy {
+  if (value === "closed") {
+    return value;
+  }
+
+  throw new Error(`${context} failed: value must be "closed".`);
 }
 
 function parsePackageAppKey(

@@ -807,7 +807,7 @@ describe("installed Site custom-domain Worker routing", () => {
       redirect: "manual",
     });
     const missingRegistrationBody = (await missingRegistration.json()) as {
-      gate?: { appInstallId?: string; kind?: string };
+      gate?: { appInstallId?: string; kind?: string; registrationPolicy?: string };
       status?: string;
     };
 
@@ -868,7 +868,7 @@ describe("installed Site custom-domain Worker routing", () => {
     expect(missingRegistration.status).toBe(409);
     expect(missingRegistration.headers.get("Location")).toBeNull();
     expect(missingRegistrationBody).toMatchObject({
-      gate: { appInstallId: taskInstallId, kind: "app-registration" },
+      gate: { appInstallId: taskInstallId, kind: "app-registration", registrationPolicy: "closed" },
       status: "blocked",
     });
 

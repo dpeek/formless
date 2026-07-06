@@ -529,6 +529,7 @@ function controlPlaneRecords(
         installId: "site",
         packageAppKey: "site",
         label: "Site",
+        registrationPolicy: "closed",
         status: "installed",
         storageIdentity: "app:site",
       },

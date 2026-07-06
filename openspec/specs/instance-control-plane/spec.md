@@ -50,13 +50,32 @@ records.
 - GIVEN an app install is created
 - WHEN the control-plane write commits
 - THEN the `app-install` record stores stable install identity, package app key,
-  label, and status
+  label, status, and app registration policy
 - AND created and updated timestamps come from record system fields rather than
   app-install value fields
 - AND install identity, package app key, and storage identity are immutable
   after creation
 - AND the record stores display-safe storage identity such as `app:<installId>`
   without embedding installed app records
+
+#### Scenario: Closed app registration policy
+
+- GIVEN the instance control-plane schema defines `app-install`
+- WHEN app install records are inspected
+- THEN each app install stores a display-safe `registrationPolicy`
+- AND the supported first-pass registration policy is `closed`
+- AND `closed` means app browser access requires an existing active identity
+  `app-registration` for the requested app install and current principal or
+  selected organization context
+- AND invite acceptance, owner/admin access management, or trusted automation
+  may create those `app-registration` records through identity-control-plane
+  writes before the app can be entered
+- AND the app install registration policy does not store principal ids,
+  invitation tokens, credential material, session ids, handoff grants, or
+  app-owned profile values
+- AND self-service `email-verified`, `domain-allowlist`, and
+  `custom-operation` registration policies are not accepted until a later
+  capability defines their account gate completion behavior
 
 #### Scenario: Installed app data boundary
 

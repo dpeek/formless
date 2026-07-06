@@ -1349,6 +1349,7 @@ function appInstall(input: {
     label: input.label,
     packageAppKey: input.packageAppKey,
     packageRevision: 1,
+    registrationPolicy: "closed",
     sourceSchemaHash: bundledSourceSchemaHashFixtures[input.packageAppKey],
     ...(input.packageAppKey === "site"
       ? {
