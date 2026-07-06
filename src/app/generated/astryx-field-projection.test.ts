@@ -1,51 +1,68 @@
 import { describe, expect, it } from "vite-plus/test";
-import type { FieldSchema } from "@dpeek/formless-schema";
+import type { CreateDraftFieldInput, FieldSchema } from "@dpeek/formless-schema";
 import type { CreateFieldConfig, RecordFieldConfig } from "../../client/views.ts";
 import {
   astryxFieldValueToGeneratedFieldValue,
+  createGeneratedCreateAstryxFieldIntentHandlers,
   createGeneratedAstryxFieldIntentHandlers,
   projectGeneratedCreateAstryxFields,
   projectGeneratedRecordAstryxField,
   projectGeneratedRecordAstryxFields,
 } from "./astryx-field-projection.ts";
-import type { GeneratedCreateFieldAuthoringState } from "./create-field-authoring.ts";
+import {
+  generatedCreateDraftFieldInput,
+  initialGeneratedCreateDraftSessionState,
+  nextGeneratedCreateDraftSessionState,
+  resolveGeneratedCreateValues,
+  selectGeneratedCreateDraftSession,
+  type GeneratedCreateDraftSessionState,
+} from "./create-field-authoring.ts";
 
 describe("generated Astryx field projection", () => {
   it("projects visible create field configs and authoring state into Astryx editor data", () => {
-    const state = {
-      discriminatorValue: undefined,
-      inputValues: {
-        owner: "principal-1",
-        title: "Prepare launch",
+    const visibleFields = [
+      createField("title", fields.title, "text"),
+      createField("done", fields.done, "boolean"),
+      createField("owner", fields.owner, "reference"),
+      {
+        ...createField("status", fields.status, "enum"),
+        stateMachine,
       },
-    } satisfies GeneratedCreateFieldAuthoringState;
+    ];
+    const state = {
+      draft: {
+        values: {
+          owner: { kind: "input", value: "principal-1" },
+          title: { kind: "input", value: "Prepare launch" },
+        },
+      },
+      submitAttempted: false,
+    } satisfies GeneratedCreateDraftSessionState;
+    const session = {
+      fieldErrors: {
+        title: {
+          fieldName: "title",
+          message: "Title is required.",
+        },
+      },
+      visibleFields,
+    };
 
-    expect(
-      projectGeneratedCreateAstryxFields({
-        errorsByFieldName: {
-          title: "Title is required.",
-        },
-        fields: [
-          createField("title", fields.title, "text"),
-          createField("done", fields.done, "boolean"),
-          createField("owner", fields.owner, "reference"),
-          {
-            ...createField("status", fields.status, "enum"),
-            stateMachine,
-          },
-        ],
-        pendingByFieldName: {
-          owner: true,
-        },
-        pendingLabelByFieldName: {
-          owner: "Loading people",
-        },
-        referenceOptionsByFieldName: {
-          owner: [{ id: "principal-1", label: "Dana" }],
-        },
-        state,
-      }),
-    ).toMatchObject([
+    const projected = projectGeneratedCreateAstryxFields({
+      pendingByFieldName: {
+        owner: true,
+      },
+      pendingLabelByFieldName: {
+        owner: "Loading people",
+      },
+      referenceOptionsByFieldName: {
+        owner: [{ id: "principal-1", label: "Dana" }],
+      },
+      session,
+      state,
+    });
+
+    expect(projected).toMatchObject([
       {
         accessMode: "editable",
         commitPolicy: "submit",
@@ -78,6 +95,8 @@ describe("generated Astryx field projection", () => {
         kind: "enum",
       },
     ]);
+    expect(projected[0]).not.toHaveProperty("htmlName");
+    expect(projected[0]).not.toHaveProperty("hiddenInput");
   });
 
   it("projects record authoring state, display values, access modes, options, and media metadata", () => {
@@ -268,6 +287,141 @@ describe("generated Astryx field projection", () => {
       ["hero:picker", "media"],
       ["hero:select", "hero.webp"],
       ["hero:upload", file],
+    ]);
+  });
+
+  it("adapts create Astryx intents into typed create draft session updates", () => {
+    const createFields = [
+      createField("title", fields.title, "text"),
+      createField("done", fields.done, "boolean"),
+      createField("owner", fields.owner, "reference"),
+      createField("estimate", fields.estimate, "number"),
+    ];
+    const changes: Array<[string, CreateDraftFieldInput]> = [];
+    const errors: Array<[string, string | null]> = [];
+    const handlers = createGeneratedCreateAstryxFieldIntentHandlers({
+      fields: createFields,
+      onDraftChange: (fieldName, fieldValue) => {
+        changes.push([fieldName, fieldValue]);
+      },
+      onErrorChange: (fieldName, message) => {
+        errors.push([fieldName, message]);
+      },
+    });
+
+    handlers.onDraftChange?.("title", "Prepare launch");
+    handlers.onDraftChange?.("done", true);
+    handlers.onSelectOption?.("owner", "principal-1");
+    handlers.onCommit?.("estimate", "many");
+
+    expect(changes).toEqual([
+      ["title", { kind: "input", value: "Prepare launch" }],
+      ["done", { kind: "value", value: true }],
+      ["owner", { kind: "input", value: "principal-1" }],
+      ["estimate", { kind: "input", value: "many" }],
+    ]);
+    expect(errors).toEqual([
+      ["title", null],
+      ["done", null],
+      ["owner", null],
+      ["estimate", null],
+    ]);
+
+    const state = changes.reduce(
+      (nextState, [fieldName, fieldValue]) =>
+        nextGeneratedCreateDraftSessionState({
+          fieldName,
+          fieldValue,
+          state: nextState,
+        }),
+      initialGeneratedCreateDraftSessionState({ fields: createFields }),
+    );
+
+    expect(
+      selectGeneratedCreateDraftSession({
+        enabled: true,
+        fields: createFields,
+        state,
+      }),
+    ).toMatchObject({
+      canSubmit: false,
+      fieldErrors: {
+        estimate: {
+          draftValue: { kind: "input", value: "many" },
+          fieldName: "estimate",
+          message: "Enter a finite number.",
+        },
+      },
+      values: {
+        done: true,
+        owner: "principal-1",
+        title: "Prepare launch",
+      },
+    });
+  });
+
+  it("keeps Astryx create fields value-driven while native submit adapters use the create resolver", () => {
+    const createFields = [
+      createField("title", fields.title, "text"),
+      createField("done", fields.done, "boolean"),
+      createField("estimate", fields.estimate, "number"),
+    ];
+    const state = ["title", "done", "estimate"].reduce(
+      (nextState, fieldName) => {
+        const value = fieldName === "title" ? "Prepare launch" : fieldName === "done" ? false : 4;
+
+        return nextGeneratedCreateDraftSessionState({
+          fieldName,
+          fieldValue: generatedCreateDraftFieldInput(value),
+          state: nextState,
+        });
+      },
+      initialGeneratedCreateDraftSessionState({ fields: createFields }),
+    );
+    const session = selectGeneratedCreateDraftSession({
+      enabled: true,
+      fields: createFields,
+      state,
+    });
+    const projected = projectGeneratedCreateAstryxFields({
+      session,
+      state,
+    });
+    const formData = new FormData();
+
+    for (const field of projected) {
+      formData.set(field.name, String(field.draftValue ?? ""));
+    }
+
+    expect(projected.map((field) => field.draftValue)).toEqual(["Prepare launch", false, 4]);
+    expect(projected.every((field) => field.commitPolicy === "submit")).toBe(true);
+    expect(
+      resolveGeneratedCreateValues({
+        fields: createFields,
+        formData,
+      }),
+    ).toEqual(session.values);
+  });
+
+  it("projects invalid create number drafts as raw Astryx draft values with field errors", () => {
+    const createFields = [createField("estimate", fields.estimate, "number")];
+    const state = nextGeneratedCreateDraftSessionState({
+      fieldName: "estimate",
+      fieldValue: { kind: "input", value: "many" },
+      state: initialGeneratedCreateDraftSessionState({ fields: createFields }),
+    });
+    const session = selectGeneratedCreateDraftSession({
+      enabled: true,
+      fields: createFields,
+      state,
+    });
+
+    expect(projectGeneratedCreateAstryxFields({ session, state })).toMatchObject([
+      {
+        draftValue: "many",
+        errors: [{ message: "Enter a finite number." }],
+        kind: "number",
+      },
     ]);
   });
 

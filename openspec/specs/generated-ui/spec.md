@@ -340,6 +340,11 @@ The system SHALL render generated field displays and editors from field behavior
   remain foundation behavior
 - AND Astryx receives only projected field data and intent callbacks such as
   draft change, commit, revert, picker open, or upload file
+- AND Astryx field primitives remain controlled value components whose core
+  contract does not require browser form names, hidden inputs, or `FormData`
+  extraction
+- AND browser submit-form adapters may project HTML field names and hidden
+  inputs from Astryx field data only at the submit-form boundary
 - AND Astryx does not import schema parser internals, browser replica APIs,
   app target selectors, write option hooks, `submitOperation`, media clients,
   sync status hooks, or generated UI storage helpers
@@ -399,10 +404,38 @@ The system SHALL honor generated create, edit, `visibleWhen`, create default, un
 
 - GIVEN a create form has hidden literal defaults and `visibleWhen` fields
 - WHEN the user submits the form
-- THEN hidden literal defaults are submitted through the declared create
+- THEN generated UI resolves operation input from a foundation-owned create
+  draft session rather than treating DOM `FormData` as the source of truth
+- AND hidden literal defaults are submitted through the declared create
   operation
 - AND hidden `visibleWhen` fields are not submitted
 - AND active union variant fields follow draft discriminator values
+- AND unresolved context defaults, invalid draft values, and required field
+  errors prevent submit with display-safe field errors before the operation is
+  invoked
+- AND Authority validation remains the source of record validation for submitted
+  create operation input
+
+#### Scenario: Create draft value resolution
+
+- GIVEN a generated create session contains visible draft values, hidden draft
+  values, create defaults, and optional union presentation metadata
+- WHEN generated UI prepares create operation input
+- THEN the schema-owned create value resolver selects the active union fields
+  from the draft discriminator, filters fields by `visibleWhen`, coerces visible
+  drafts to flat record values, and then applies hidden create defaults
+- AND hidden draft values remain available in the local session when fields are
+  hidden and later revealed, but they are not included in operation input while
+  hidden
+- AND boolean, date, enum, text, reference, markdown, icon, image, media, color,
+  and scalar text-backed editors resolve to flat field values through generated
+  field behavior
+- AND number editors preserve invalid raw draft text in the session and expose a
+  field error instead of submitting `NaN` or coercing the invalid draft to an
+  empty value
+- AND a FormData-based submit path, when needed by a public or native form
+  adapter, first converts HTML form values into the same typed draft shape and
+  then uses the same schema-owned create value resolver
 
 #### Scenario: Non-writable fields stay out of authoring
 

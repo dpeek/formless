@@ -8,7 +8,7 @@ import {
   ModalHeader,
   ModalTitle,
 } from "@dpeek/formless-ui/modal";
-import { Fieldset } from "@dpeek/formless-ui/field";
+import { Fieldset, fieldErrorStyles } from "@dpeek/formless-ui/field";
 import { setSyncStatus } from "../../client/sync-status.ts";
 import { selectEntityOperationByKind } from "../../client/operation-presentation-model.ts";
 import {
@@ -25,10 +25,12 @@ import type { RecordValues } from "@dpeek/formless-storage";
 import type { QueryEvaluationContext } from "@dpeek/formless-schema";
 import type { EntitySchema } from "@dpeek/formless-schema";
 import {
-  initialGeneratedCreateFieldAuthoringState,
-  nextGeneratedCreateFieldAuthoringState,
+  generatedCreateDraftFieldInput,
+  initialGeneratedCreateDraftSessionState,
+  markGeneratedCreateDraftSessionSubmitted,
+  nextGeneratedCreateDraftSessionState,
   resolveGeneratedCreateValues,
-  selectGeneratedCreateFieldAuthoring,
+  selectGeneratedCreateDraftSession,
 } from "./create-field-authoring.ts";
 import { GeneratedCreateFieldControl } from "./create-field-control.tsx";
 import {
@@ -53,16 +55,16 @@ export function GeneratedCreateForm({
   union?: CreateUnionPresentationConfig;
 }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [authoringState, setAuthoringState] = useState(() =>
-    initialGeneratedCreateFieldAuthoringState({ defaults, union }),
+  const [draftSessionState, setDraftSessionState] = useState(() =>
+    initialGeneratedCreateDraftSessionState({ defaults, fields: createFields, union }),
   );
   const createOperation = selectEntityOperationByKind(entityName, entity, "create", "collection");
   const canCreate = createOperation !== undefined;
-  const authoring = selectGeneratedCreateFieldAuthoring({
+  const draftSession = selectGeneratedCreateDraftSession({
     defaults,
     enabled: canCreate,
     fields: createFields,
-    state: authoringState,
+    state: draftSessionState,
     union,
   });
   const operationConfig = useMemo(
@@ -95,26 +97,37 @@ export function GeneratedCreateForm({
   useGeneratedOperationControllerVersion(controller);
   const isOperationSubmitting = binding === undefined ? false : controller.isPending(binding.id);
   const submitDisabled = isSubmitting || isOperationSubmitting;
+  const fieldsDisabled = !canCreate || !draftSession.defaultsResolved || submitDisabled;
 
   useEffect(() => {
-    setAuthoringState(initialGeneratedCreateFieldAuthoringState({ defaults, union }));
-  }, [defaults, union]);
+    setDraftSessionState(
+      initialGeneratedCreateDraftSessionState({ defaults, fields: createFields, union }),
+    );
+  }, [createFields, defaults, union]);
 
   async function submitForm(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (!authoring.canSubmit) {
+    if (submitDisabled) {
+      return;
+    }
+
+    const submittedState = markGeneratedCreateDraftSessionSubmitted(draftSessionState);
+    const submittedSession = selectGeneratedCreateDraftSession({
+      defaults,
+      enabled: canCreate,
+      fields: createFields,
+      state: submittedState,
+      union,
+    });
+    setDraftSessionState(submittedState);
+
+    if (!submittedSession.canSubmit) {
       return;
     }
 
     const form = event.currentTarget;
-    const formData = new FormData(form);
-    const values = resolveGeneratedCreateValues({
-      formData,
-      fields: createFields,
-      union,
-      defaults,
-    });
+    const values = submittedSession.values;
 
     setIsSubmitting(true);
 
@@ -135,7 +148,9 @@ export function GeneratedCreateForm({
       }
 
       form.reset();
-      setAuthoringState(initialGeneratedCreateFieldAuthoringState({ defaults, union }));
+      setDraftSessionState(
+        initialGeneratedCreateDraftSessionState({ defaults, fields: createFields, union }),
+      );
     } catch (error) {
       setSyncStatus({
         state: "error",
@@ -147,33 +162,38 @@ export function GeneratedCreateForm({
   }
 
   return (
-    <form className="space-y-4" onSubmit={submitForm}>
+    <form className="space-y-4" noValidate onSubmit={submitForm}>
       <h2 className="text-lg font-medium">Create {entity.label}</h2>
 
       {!canCreate ? (
         <p className="text-sm text-slate-600">Create is disabled for {entity.label}.</p>
       ) : null}
 
-      <Fieldset className="space-y-4" disabled={!authoring.canSubmit || submitDisabled}>
-        {authoring.visibleFields.map((fieldConfig) => (
+      <Fieldset className="space-y-4" disabled={fieldsDisabled}>
+        {draftSession.visibleFields.map((fieldConfig) => (
           <GeneratedCreateFieldControl
+            draftValue={draftSessionState.draft.values[fieldConfig.fieldName]}
+            error={draftSession.fieldErrors[fieldConfig.fieldName]?.message}
             fieldConfig={fieldConfig}
             key={fieldConfig.fieldName}
             onValueChange={(value) => {
-              setAuthoringState((state) =>
-                nextGeneratedCreateFieldAuthoringState({
+              setDraftSessionState((state) =>
+                nextGeneratedCreateDraftSessionState({
                   fieldName: fieldConfig.fieldName,
+                  fieldValue: generatedCreateDraftFieldInput(value),
                   state,
-                  union,
-                  value,
                 }),
               );
             }}
           />
         ))}
       </Fieldset>
+      <GeneratedCreateDraftErrorList
+        fieldErrors={draftSession.fieldErrors}
+        visibleFields={draftSession.visibleFields}
+      />
 
-      <Button isDisabled={!authoring.canSubmit || submitDisabled} type="submit">
+      <Button isDisabled={!draftSession.canSubmit || submitDisabled} type="submit">
         {submitDisabled ? "Saving..." : canCreate ? `Create ${entity.label}` : "Create disabled"}
       </Button>
     </form>
@@ -226,18 +246,19 @@ export function GeneratedCreateDialogForm({
   submitValues?: (values: RecordValues) => Promise<{ recordId: string }>;
 }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [authoringState, setAuthoringState] = useState(() =>
-    initialGeneratedCreateFieldAuthoringState({
+  const [draftSessionState, setDraftSessionState] = useState(() =>
+    initialGeneratedCreateDraftSessionState({
       defaults: operation.defaults,
+      fields: operation.fields,
       union: operation.union,
     }),
   );
-  const authoring = selectGeneratedCreateFieldAuthoring({
+  const draftSession = selectGeneratedCreateDraftSession({
     defaults: operation.defaults,
     enabled: operation.enabled,
     fields: operation.fields,
     queryContext,
-    state: authoringState,
+    state: draftSessionState,
     union: operation.union,
   });
   const binding = useMemo(
@@ -252,26 +273,42 @@ export function GeneratedCreateDialogForm({
   useGeneratedOperationControllerVersion(controller);
   const isOperationSubmitting = binding === undefined ? false : controller.isPending(binding.id);
   const submitDisabled = isSubmitting || isOperationSubmitting;
+  const fieldsDisabled = !operation.enabled || !draftSession.defaultsResolved || submitDisabled;
 
   useEffect(() => {
-    setAuthoringState(
-      initialGeneratedCreateFieldAuthoringState({
+    setDraftSessionState(
+      initialGeneratedCreateDraftSessionState({
         defaults: operation.defaults,
+        fields: operation.fields,
         union: operation.union,
       }),
     );
-  }, [operation.defaults, operation.union]);
+  }, [operation.defaults, operation.fields, operation.union]);
 
   async function submitForm(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (!authoring.canSubmit) {
+    if (submitDisabled) {
+      return;
+    }
+
+    const submittedState = markGeneratedCreateDraftSessionSubmitted(draftSessionState);
+    const submittedSession = selectGeneratedCreateDraftSession({
+      defaults: operation.defaults,
+      enabled: operation.enabled,
+      fields: operation.fields,
+      queryContext,
+      state: submittedState,
+      union: operation.union,
+    });
+    setDraftSessionState(submittedState);
+
+    if (!submittedSession.canSubmit) {
       return;
     }
 
     const form = event.currentTarget;
-    const formData = new FormData(form);
-    const values = resolveCreateValues(formData, operation, queryContext);
+    const values = submittedSession.values;
 
     setIsSubmitting(true);
 
@@ -307,9 +344,10 @@ export function GeneratedCreateDialogForm({
       }
 
       form.reset();
-      setAuthoringState(
-        initialGeneratedCreateFieldAuthoringState({
+      setDraftSessionState(
+        initialGeneratedCreateDraftSessionState({
           defaults: operation.defaults,
+          fields: operation.fields,
           union: operation.union,
         }),
       );
@@ -325,29 +363,34 @@ export function GeneratedCreateDialogForm({
   }
 
   return (
-    <form className="space-y-4" onSubmit={submitForm}>
+    <form className="space-y-4" noValidate onSubmit={submitForm}>
       {!operation.enabled ? (
         <p className="text-sm text-slate-600">Create is disabled for {operation.entity.label}.</p>
       ) : null}
 
-      <Fieldset className="space-y-4" disabled={!authoring.canSubmit || submitDisabled}>
-        {authoring.visibleFields.map((fieldConfig) => (
+      <Fieldset className="space-y-4" disabled={fieldsDisabled}>
+        {draftSession.visibleFields.map((fieldConfig) => (
           <GeneratedCreateFieldControl
+            draftValue={draftSessionState.draft.values[fieldConfig.fieldName]}
+            error={draftSession.fieldErrors[fieldConfig.fieldName]?.message}
             fieldConfig={fieldConfig}
             key={fieldConfig.fieldName}
             onValueChange={(value) => {
-              setAuthoringState((state) =>
-                nextGeneratedCreateFieldAuthoringState({
+              setDraftSessionState((state) =>
+                nextGeneratedCreateDraftSessionState({
                   fieldName: fieldConfig.fieldName,
+                  fieldValue: generatedCreateDraftFieldInput(value),
                   state,
-                  union: operation.union,
-                  value,
                 }),
               );
             }}
           />
         ))}
       </Fieldset>
+      <GeneratedCreateDraftErrorList
+        fieldErrors={draftSession.fieldErrors}
+        visibleFields={draftSession.visibleFields}
+      />
 
       <ModalFooter>
         {renderDialogCancel ? (
@@ -359,11 +402,38 @@ export function GeneratedCreateDialogForm({
             Cancel
           </Button>
         )}
-        <Button isDisabled={!authoring.canSubmit || submitDisabled} type="submit">
+        <Button isDisabled={!draftSession.canSubmit || submitDisabled} type="submit">
           {submitDisabled ? "Saving..." : operation.enabled ? operation.label : "Create disabled"}
         </Button>
       </ModalFooter>
     </form>
+  );
+}
+
+function GeneratedCreateDraftErrorList({
+  fieldErrors,
+  visibleFields,
+}: {
+  fieldErrors: Record<string, { fieldName: string; message: string }>;
+  visibleFields: CreateFieldConfig[];
+}) {
+  const visibleFieldNames = new Set(visibleFields.map((field) => field.fieldName));
+  const hiddenFieldErrors = Object.values(fieldErrors).filter(
+    (error) => !visibleFieldNames.has(error.fieldName),
+  );
+
+  if (hiddenFieldErrors.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="space-y-1" role="alert">
+      {hiddenFieldErrors.map((error) => (
+        <div className={fieldErrorStyles()} data-slot="field-error" key={error.fieldName}>
+          {error.message}
+        </div>
+      ))}
+    </div>
   );
 }
 

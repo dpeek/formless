@@ -5,40 +5,66 @@ import type {
 } from "../../client/views.ts";
 import {
   createDefaultsAreResolved,
+  fieldCreateDefaultValue,
+  fieldHasCreateDefault,
   initialCreateDiscriminatorValue,
+  resolveCreateDraftValues as resolveCreateDefaultDraftValues,
   resolveCreateValues as resolveCreateDefaultValues,
-  selectCreateFieldsForDiscriminator,
-  selectCreateFieldsForInputValues,
+  selectCreateFieldsForDraftInput,
+  type CreateDraftFieldError,
+  type CreateDraftFieldInput,
+  type CreateDraftInput,
 } from "@dpeek/formless-schema";
-import type { RecordValues } from "@dpeek/formless-storage";
+import type { FieldValue, RecordValues } from "@dpeek/formless-storage";
 import type { QueryEvaluationContext } from "@dpeek/formless-schema";
 import type { FieldVisibilityValue } from "@dpeek/formless-schema";
 
-export type GeneratedCreateFieldAuthoringState = {
-  discriminatorValue: string | undefined;
-  inputValues: Record<string, FieldVisibilityValue>;
+export type GeneratedCreateDraftSessionState = {
+  draft: CreateDraftInput;
+  submitAttempted: boolean;
 };
 
-export type GeneratedCreateFieldAuthoringFacts = {
+export type GeneratedCreateDraftSessionFacts = {
   canSubmit: boolean;
   defaultsResolved: boolean;
+  fieldErrors: Record<string, CreateDraftFieldError>;
+  values: RecordValues;
   visibleFields: CreateFieldConfig[];
 };
 
-export function initialGeneratedCreateFieldAuthoringState({
+export function initialGeneratedCreateDraftSessionState({
   defaults = [],
+  fields = [],
   union,
 }: {
   defaults?: CreateDefaultConfig[];
+  fields?: CreateFieldConfig[];
   union?: CreateUnionPresentationConfig;
-}): GeneratedCreateFieldAuthoringState {
+}): GeneratedCreateDraftSessionState {
   return {
-    discriminatorValue: initialCreateDiscriminatorValue(union, defaults),
-    inputValues: {},
+    draft: {
+      values: Object.fromEntries(
+        collectCreateDraftFields(fields, union).flatMap((fieldConfig) => {
+          const draftValue = initialCreateDraftFieldInput(fieldConfig, union, defaults);
+
+          return draftValue === undefined ? [] : [[fieldConfig.fieldName, draftValue]];
+        }),
+      ),
+    },
+    submitAttempted: false,
   };
 }
 
-export function selectGeneratedCreateFieldAuthoring({
+export function markGeneratedCreateDraftSessionSubmitted(
+  state: GeneratedCreateDraftSessionState,
+): GeneratedCreateDraftSessionState {
+  return {
+    ...state,
+    submitAttempted: true,
+  };
+}
+
+export function selectGeneratedCreateDraftSession({
   defaults = [],
   enabled,
   fields,
@@ -50,40 +76,63 @@ export function selectGeneratedCreateFieldAuthoring({
   enabled: boolean;
   fields: CreateFieldConfig[];
   queryContext?: QueryEvaluationContext;
-  state: GeneratedCreateFieldAuthoringState;
+  state: GeneratedCreateDraftSessionState;
   union?: CreateUnionPresentationConfig;
-}): GeneratedCreateFieldAuthoringFacts {
+}): GeneratedCreateDraftSessionFacts {
+  const visibleFields = selectCreateFieldsForDraftInput(
+    fields,
+    union,
+    state.draft,
+    defaults,
+    queryContext,
+  );
+  const resolution = resolveCreateDefaultDraftValues({
+    defaults,
+    draft: state.draft,
+    fields,
+    queryContext,
+    union,
+  });
+  const fieldErrors = state.submitAttempted
+    ? withRequiredCreateDraftFieldErrors(resolution.fieldErrors, visibleFields, resolution.values)
+    : resolution.fieldErrors;
   const defaultsResolved = createDefaultsAreResolved(defaults, queryContext);
 
   return {
-    canSubmit: enabled && defaultsResolved,
+    canSubmit: enabled && defaultsResolved && Object.keys(fieldErrors).length === 0,
     defaultsResolved,
-    visibleFields: selectCreateFieldsForInputValues(
-      selectCreateFieldsForDiscriminator(fields, union, state.discriminatorValue),
-      state.inputValues,
-    ),
+    fieldErrors,
+    values: resolution.values,
+    visibleFields,
   };
 }
 
-export function nextGeneratedCreateFieldAuthoringState({
+export function nextGeneratedCreateDraftSessionState({
   fieldName,
+  fieldValue,
   state,
-  union,
-  value,
 }: {
   fieldName: string;
-  state: GeneratedCreateFieldAuthoringState;
-  union?: CreateUnionPresentationConfig;
-  value: FieldVisibilityValue;
-}): GeneratedCreateFieldAuthoringState {
+  fieldValue: CreateDraftFieldInput;
+  state: GeneratedCreateDraftSessionState;
+}): GeneratedCreateDraftSessionState {
   return {
-    discriminatorValue:
-      fieldName === union?.discriminatorFieldName ? String(value) : state.discriminatorValue,
-    inputValues: {
-      ...state.inputValues,
-      [fieldName]: value,
+    ...state,
+    draft: {
+      values: {
+        ...state.draft.values,
+        [fieldName]: fieldValue,
+      },
     },
   };
+}
+
+export function generatedCreateDraftFieldInput(value: FieldVisibilityValue): CreateDraftFieldInput {
+  if (typeof value === "boolean" || typeof value === "number") {
+    return { kind: "value", value };
+  }
+
+  return { kind: "input", value };
 }
 
 export function resolveGeneratedCreateValues({
@@ -106,4 +155,111 @@ export function resolveGeneratedCreateValues({
     queryContext,
     union,
   });
+}
+
+function collectCreateDraftFields(
+  fields: CreateFieldConfig[],
+  union: CreateUnionPresentationConfig | undefined,
+): CreateFieldConfig[] {
+  const fieldsByName = new Map<string, CreateFieldConfig>();
+  const addFields = (nextFields: CreateFieldConfig[]) => {
+    for (const field of nextFields) {
+      if (!fieldsByName.has(field.fieldName)) {
+        fieldsByName.set(field.fieldName, field);
+      }
+    }
+  };
+
+  addFields(fields);
+
+  for (const variant of union?.variants ?? []) {
+    addFields(variant.presentation.fields);
+  }
+
+  if (union?.fallback !== undefined) {
+    addFields(union.fallback.presentation.fields);
+  }
+
+  return Array.from(fieldsByName.values());
+}
+
+function initialCreateDraftFieldInput(
+  fieldConfig: CreateFieldConfig,
+  union: CreateUnionPresentationConfig | undefined,
+  defaults: CreateDefaultConfig[],
+): CreateDraftFieldInput | undefined {
+  if (fieldConfig.stateMachine !== undefined) {
+    return { kind: "value", value: fieldConfig.stateMachine.initialState };
+  }
+
+  if (fieldConfig.fieldName === union?.discriminatorFieldName) {
+    const discriminatorValue = initialCreateDiscriminatorValue(union, defaults);
+
+    return discriminatorValue === undefined
+      ? undefined
+      : { kind: "value", value: discriminatorValue };
+  }
+
+  if (fieldHasCreateDefault(fieldConfig.field)) {
+    const value = fieldCreateDefaultValue(fieldConfig.field);
+
+    return value === undefined ? undefined : { kind: "value", value };
+  }
+
+  if (fieldConfig.field.type === "boolean") {
+    return { kind: "value", value: false };
+  }
+
+  if (fieldConfig.field.type === "enum") {
+    const value = fieldConfig.field.required ? Object.keys(fieldConfig.field.values)[0] : "";
+
+    return value === undefined ? undefined : { kind: "value", value };
+  }
+
+  if (fieldConfig.field.type === "reference" && !fieldConfig.field.required) {
+    return { kind: "value", value: "" };
+  }
+
+  return undefined;
+}
+
+function withRequiredCreateDraftFieldErrors(
+  fieldErrors: Record<string, CreateDraftFieldError>,
+  visibleFields: CreateFieldConfig[],
+  values: RecordValues,
+): Record<string, CreateDraftFieldError> {
+  const nextErrors = { ...fieldErrors };
+
+  for (const fieldConfig of visibleFields) {
+    if (!fieldConfig.field.required || nextErrors[fieldConfig.fieldName] !== undefined) {
+      continue;
+    }
+
+    const value = values[fieldConfig.fieldName];
+
+    if (!createDraftFieldValueIsEmpty(fieldConfig.field.type, value)) {
+      continue;
+    }
+
+    nextErrors[fieldConfig.fieldName] = {
+      fieldName: fieldConfig.fieldName,
+      message:
+        value === undefined
+          ? `Field "${fieldConfig.fieldName}" is required.`
+          : `Field "${fieldConfig.fieldName}" cannot be empty.`,
+    };
+  }
+
+  return nextErrors;
+}
+
+function createDraftFieldValueIsEmpty(
+  fieldType: CreateFieldConfig["field"]["type"],
+  value: FieldValue | undefined,
+) {
+  if (fieldType === "boolean") {
+    return false;
+  }
+
+  return value === undefined || (typeof value === "string" && value.trim() === "");
 }

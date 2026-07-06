@@ -185,44 +185,50 @@ function FieldEditor({
 
   if (field.kind === "markdown") {
     return (
-      <MarkdownInput
-        {...sharedProps}
-        htmlName={submitAdapter?.htmlName}
-        value={stringValue}
-        isReadOnly={isReadOnly}
-        isLoading={isPending}
-        size={inputSize(field.density)}
-        rows={field.presentation?.maxLines ?? 6}
-        onChange={(value) => handlers.onDraftChange?.(field.id, value)}
-      />
+      <>
+        <MarkdownInput
+          {...sharedProps}
+          value={stringValue}
+          isReadOnly={isReadOnly}
+          isLoading={isPending}
+          size={inputSize(field.density)}
+          rows={field.presentation?.maxLines ?? 6}
+          onChange={(value) => handlers.onDraftChange?.(field.id, value)}
+        />
+        <SubmitHiddenInput submitAdapter={submitAdapter} />
+      </>
     );
   }
 
   if (field.kind === "long-text") {
     return (
-      <TextArea
-        {...sharedProps}
-        htmlName={submitAdapter?.htmlName}
-        value={stringValue}
-        isLoading={isPending}
-        size={inputSize(field.density)}
-        rows={4}
-        onChange={(value) => handlers.onDraftChange?.(field.id, value)}
-      />
+      <>
+        <TextArea
+          {...sharedProps}
+          value={stringValue}
+          isLoading={isPending}
+          size={inputSize(field.density)}
+          rows={4}
+          onChange={(value) => handlers.onDraftChange?.(field.id, value)}
+        />
+        <SubmitHiddenInput submitAdapter={submitAdapter} />
+      </>
     );
   }
 
   if (field.kind === "color") {
     return (
-      <ColorInput
-        id={inputId}
-        {...sharedProps}
-        htmlName={submitAdapter?.htmlName}
-        value={stringValue}
-        density={field.density}
-        isReadOnly={isReadOnly}
-        onChange={(value) => handlers.onDraftChange?.(field.id, value)}
-      />
+      <>
+        <ColorInput
+          id={inputId}
+          {...sharedProps}
+          value={stringValue}
+          density={field.density}
+          isReadOnly={isReadOnly}
+          onChange={(value) => handlers.onDraftChange?.(field.id, value)}
+        />
+        <SubmitHiddenInput submitAdapter={submitAdapter} />
+      </>
     );
   }
 
@@ -243,10 +249,7 @@ function FieldEditor({
           width="100%"
           onChange={(value) => handlers.onDraftChange?.(field.id, value)}
         />
-        <SubmitHiddenInput
-          submitAdapter={submitAdapter}
-          value={field.draftValue === true ? "true" : "false"}
-        />
+        <SubmitHiddenInput submitAdapter={submitAdapter} />
       </>
     );
   }
@@ -275,33 +278,53 @@ function FieldEditor({
           value={dateInputValue(stringValue)}
           onChange={(value) => handlers.onDraftChange?.(field.id, value ?? "")}
         />
-        <SubmitHiddenInput submitAdapter={submitAdapter} value={stringValue} />
+        <SubmitHiddenInput submitAdapter={submitAdapter} />
       </>
     );
   }
 
   if (field.kind === "number") {
+    if (typeof field.draftValue === "string") {
+      return (
+        <>
+          <TextInput
+            {...sharedProps}
+            hasClear
+            isLoading={isPending}
+            size={inputSize(field.density)}
+            value={field.draftValue}
+            onChange={(value) => handlers.onDraftChange?.(field.id, value)}
+          />
+          <SubmitHiddenInput submitAdapter={submitAdapter} />
+        </>
+      );
+    }
+
     return (
-      <NumberInput
-        {...sharedProps}
-        hasClear
-        htmlName={submitAdapter?.htmlName}
-        size={inputSize(field.density)}
-        value={numberInputValue(field.draftValue)}
-        onChange={(value) => handlers.onDraftChange?.(field.id, value)}
-      />
+      <>
+        <NumberInput
+          {...sharedProps}
+          hasClear
+          size={inputSize(field.density)}
+          value={numberInputValue(field.draftValue)}
+          onChange={(value) => handlers.onDraftChange?.(field.id, value)}
+        />
+        <SubmitHiddenInput submitAdapter={submitAdapter} />
+      </>
     );
   }
 
   return (
-    <TextInput
-      {...sharedProps}
-      htmlName={submitAdapter?.htmlName}
-      isLoading={isPending}
-      size={inputSize(field.density)}
-      value={stringValue}
-      onChange={(value) => handlers.onDraftChange?.(field.id, value)}
-    />
+    <>
+      <TextInput
+        {...sharedProps}
+        isLoading={isPending}
+        size={inputSize(field.density)}
+        value={stringValue}
+        onChange={(value) => handlers.onDraftChange?.(field.id, value)}
+      />
+      <SubmitHiddenInput submitAdapter={submitAdapter} />
+    </>
   );
 }
 
@@ -319,6 +342,7 @@ type FieldChromeProps = {
 
 type FieldSubmitAdapter = {
   htmlName: string;
+  hiddenValue: string;
 };
 
 function submitAdapterForField(field: AstryxFieldEditorData): FieldSubmitAdapter | undefined {
@@ -326,7 +350,7 @@ function submitAdapterForField(field: AstryxFieldEditorData): FieldSubmitAdapter
     return undefined;
   }
 
-  return { htmlName: field.name };
+  return { hiddenValue: formatInputValue(field.draftValue), htmlName: field.name };
 }
 
 function SelectorFieldEditor({
@@ -372,7 +396,7 @@ function SelectorFieldEditor({
           value={value || undefined}
           onChange={(nextValue) => onChange(nextValue)}
         />
-        <SubmitHiddenInput submitAdapter={submitAdapter} value={value} />
+        <SubmitHiddenInput submitAdapter={submitAdapter} />
       </>
     );
   }
@@ -385,7 +409,7 @@ function SelectorFieldEditor({
         value={value || null}
         onChange={(nextValue) => onChange(nextValue ?? "")}
       />
-      <SubmitHiddenInput submitAdapter={submitAdapter} value={value} />
+      <SubmitHiddenInput submitAdapter={submitAdapter} />
     </>
   );
 }
@@ -421,18 +445,12 @@ function RichSelectorOption({
   );
 }
 
-function SubmitHiddenInput({
-  submitAdapter,
-  value,
-}: {
-  submitAdapter: FieldSubmitAdapter | undefined;
-  value: string;
-}) {
+function SubmitHiddenInput({ submitAdapter }: { submitAdapter: FieldSubmitAdapter | undefined }) {
   if (!submitAdapter) {
     return null;
   }
 
-  return <input name={submitAdapter.htmlName} type="hidden" value={value} />;
+  return <input name={submitAdapter.htmlName} type="hidden" value={submitAdapter.hiddenValue} />;
 }
 
 function selectorOptions(field: AstryxFieldEditorData): SelectorOptionData[] {

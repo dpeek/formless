@@ -6,49 +6,44 @@ import type {
 } from "../../client/views.ts";
 import type { EntityUnionVariantSchema, FieldSchema } from "@dpeek/formless-schema";
 import {
-  initialGeneratedCreateFieldAuthoringState,
-  nextGeneratedCreateFieldAuthoringState,
+  generatedCreateDraftFieldInput,
+  initialGeneratedCreateDraftSessionState,
+  markGeneratedCreateDraftSessionSubmitted,
+  nextGeneratedCreateDraftSessionState,
   resolveGeneratedCreateValues,
-  selectGeneratedCreateFieldAuthoring,
+  selectGeneratedCreateDraftSession,
 } from "./create-field-authoring.ts";
 
-describe("generated create field authoring", () => {
-  it("selects visible create fields from fixed discriminator defaults and field input state", () => {
+describe("generated create draft session", () => {
+  it("selects visible create fields from fixed discriminator defaults and draft values", () => {
     const defaults = [literalTypeDefault("link")];
-    const state = initialGeneratedCreateFieldAuthoringState({
+    const fields = [createField("label", "text")];
+    const state = initialGeneratedCreateDraftSessionState({
       defaults,
+      fields,
       union: blockUnion,
     });
 
-    expect(state).toEqual({
-      discriminatorValue: "link",
-      inputValues: {},
-    });
     expect(
       fieldNames(
-        selectGeneratedCreateFieldAuthoring({
+        selectGeneratedCreateDraftSession({
           defaults,
           enabled: true,
-          fields: [createField("label", "text")],
+          fields,
           state,
           union: blockUnion,
         }).visibleFields,
       ),
     ).toEqual(["label", "linkTargetMode", "href", "icon"]);
 
-    const internalLinkState = nextGeneratedCreateFieldAuthoringState({
-      fieldName: "linkTargetMode",
-      state,
-      union: blockUnion,
-      value: "internal",
-    });
+    const internalLinkState = nextSessionValue(state, "linkTargetMode", "internal");
 
     expect(
       fieldNames(
-        selectGeneratedCreateFieldAuthoring({
+        selectGeneratedCreateDraftSession({
           defaults,
           enabled: true,
-          fields: [createField("label", "text")],
+          fields,
           state: internalLinkState,
           union: blockUnion,
         }).visibleFields,
@@ -56,20 +51,16 @@ describe("generated create field authoring", () => {
     ).toEqual(["label", "linkTargetMode", "linkTargetBlock", "icon"]);
   });
 
-  it("updates active union fields when the discriminator input changes", () => {
-    const state = initialGeneratedCreateFieldAuthoringState({ union: blockUnion });
-    const linkState = nextGeneratedCreateFieldAuthoringState({
-      fieldName: "type",
-      state,
-      union: blockUnion,
-      value: "link",
-    });
+  it("updates active union fields when the discriminator draft changes", () => {
+    const fields = [createField("type", "enum"), createField("label", "text")];
+    const state = initialGeneratedCreateDraftSessionState({ fields, union: blockUnion });
+    const linkState = nextSessionValue(state, "type", "link");
 
     expect(
       fieldNames(
-        selectGeneratedCreateFieldAuthoring({
+        selectGeneratedCreateDraftSession({
           enabled: true,
-          fields: [createField("type", "enum"), createField("label", "text")],
+          fields,
           state,
           union: blockUnion,
         }).visibleFields,
@@ -77,9 +68,9 @@ describe("generated create field authoring", () => {
     ).toEqual(["type", "label", "href", "icon"]);
     expect(
       fieldNames(
-        selectGeneratedCreateFieldAuthoring({
+        selectGeneratedCreateDraftSession({
           enabled: true,
-          fields: [createField("type", "enum"), createField("label", "text")],
+          fields,
           state: linkState,
           union: blockUnion,
         }).visibleFields,
@@ -87,34 +78,183 @@ describe("generated create field authoring", () => {
     ).toEqual(["type", "label", "linkTargetMode", "href", "icon"]);
   });
 
-  it("exposes submit readiness for context defaults", () => {
+  it("preserves hidden draft values when visibleWhen hides and reveals fields", () => {
+    const defaults = [literalTypeDefault("link")];
+    const fields = [createField("label", "text")];
+    const state = initialGeneratedCreateDraftSessionState({
+      defaults,
+      fields,
+      union: blockUnion,
+    });
+    const internalState = nextSessionValue(
+      nextSessionValue(state, "linkTargetMode", "internal"),
+      "linkTargetBlock",
+      "docs",
+    );
+    const externalState = nextSessionValue(internalState, "linkTargetMode", "external");
+    const revealedState = nextSessionValue(externalState, "linkTargetMode", "internal");
+
+    expect(
+      fieldNames(
+        selectGeneratedCreateDraftSession({
+          defaults,
+          enabled: true,
+          fields,
+          state: externalState,
+          union: blockUnion,
+        }).visibleFields,
+      ),
+    ).toEqual(["label", "linkTargetMode", "href", "icon"]);
+    expect(externalState.draft.values.linkTargetBlock).toEqual({
+      kind: "input",
+      value: "docs",
+    });
+    expect(
+      selectGeneratedCreateDraftSession({
+        defaults,
+        enabled: true,
+        fields,
+        state: revealedState,
+        union: blockUnion,
+      }).values,
+    ).toMatchObject({
+      linkTargetBlock: "docs",
+    });
+  });
+
+  it("exposes submit readiness and hidden field errors for context defaults", () => {
     const defaults = [
       {
         fieldName: "parent",
-        field: fields.parent,
+        field: schemaFields.parent,
         value: { kind: "context", name: "block" },
       },
     ] satisfies CreateDefaultConfig[];
-    const state = initialGeneratedCreateFieldAuthoringState({});
+    const fields = [createField("block", "reference"), createField("label", "text")];
+    const state = initialGeneratedCreateDraftSessionState({ defaults, fields });
 
     expect(
-      selectGeneratedCreateFieldAuthoring({
+      selectGeneratedCreateDraftSession({
         defaults,
         enabled: true,
-        fields: [createField("block", "reference"), createField("label", "text")],
+        fields,
         queryContext: { today: "2026-05-27" },
         state,
       }),
-    ).toMatchObject({ canSubmit: false, defaultsResolved: false });
+    ).toMatchObject({
+      canSubmit: false,
+      defaultsResolved: false,
+      fieldErrors: {
+        parent: {
+          message: 'Create default for "parent" requires selected context "block".',
+        },
+      },
+    });
     expect(
-      selectGeneratedCreateFieldAuthoring({
+      selectGeneratedCreateDraftSession({
         defaults,
         enabled: true,
-        fields: [createField("block", "reference"), createField("label", "text")],
+        fields,
         queryContext: { today: "2026-05-27", values: { block: "home" } },
         state,
       }),
-    ).toMatchObject({ canSubmit: true, defaultsResolved: true });
+    ).toMatchObject({ canSubmit: true, defaultsResolved: true, fieldErrors: {} });
+  });
+
+  it("surfaces required field errors after submit before operation values are used", () => {
+    const fields = [createField("label", "text")];
+    const state = initialGeneratedCreateDraftSessionState({ fields });
+
+    expect(
+      selectGeneratedCreateDraftSession({
+        enabled: true,
+        fields,
+        state,
+      }),
+    ).toMatchObject({ canSubmit: true, fieldErrors: {} });
+
+    const submittedSession = selectGeneratedCreateDraftSession({
+      enabled: true,
+      fields,
+      state: markGeneratedCreateDraftSessionSubmitted(state),
+    });
+
+    expect(submittedSession).toMatchObject({
+      canSubmit: false,
+      fieldErrors: {
+        label: {
+          fieldName: "label",
+          message: 'Field "label" cannot be empty.',
+        },
+      },
+    });
+
+    expect(
+      selectGeneratedCreateDraftSession({
+        enabled: true,
+        fields,
+        state: nextSessionValue(markGeneratedCreateDraftSessionSubmitted(state), "label", "Docs"),
+      }),
+    ).toMatchObject({
+      canSubmit: true,
+      fieldErrors: {},
+      values: { label: "Docs" },
+    });
+  });
+
+  it("keeps invalid number drafts as field errors without operation input", () => {
+    const fields = [createField("estimate", "number"), createField("label", "text")];
+    const state = nextSessionValue(
+      nextSessionValue(initialGeneratedCreateDraftSessionState({ fields }), "label", "Sizing"),
+      "estimate",
+      "many",
+    );
+
+    expect(
+      selectGeneratedCreateDraftSession({
+        enabled: true,
+        fields,
+        state,
+      }),
+    ).toMatchObject({
+      canSubmit: false,
+      fieldErrors: {
+        estimate: {
+          fieldName: "estimate",
+          message: "Enter a finite number.",
+          draftValue: { kind: "input", value: "many" },
+        },
+      },
+      values: { label: "Sizing" },
+    });
+  });
+
+  it("keeps state-machine initial state in the typed draft session", () => {
+    const statusField = {
+      ...createField("status", "enum"),
+      stateMachine: {
+        fieldName: "status",
+        initialState: "new",
+        machine: {
+          field: "status",
+          initial: "new",
+          transitions: {},
+        },
+        machineName: "statusFlow",
+        terminalStates: ["archived"],
+      },
+    } satisfies CreateFieldConfig;
+    const fields = [statusField];
+    const state = initialGeneratedCreateDraftSessionState({ fields });
+
+    expect(state.draft.values.status).toEqual({ kind: "value", value: "new" });
+    expect(
+      selectGeneratedCreateDraftSession({
+        enabled: true,
+        fields,
+        state,
+      }).values,
+    ).toEqual({ status: "new" });
   });
 
   it("resolves submitted values from active visible fields and create defaults", () => {
@@ -149,7 +289,7 @@ describe("generated create field authoring", () => {
         defaults: [
           {
             fieldName: "parent",
-            field: fields.parent,
+            field: schemaFields.parent,
             value: { kind: "context", name: "block" },
           },
         ],
@@ -165,14 +305,26 @@ describe("generated create field authoring", () => {
   });
 });
 
+function nextSessionValue(
+  state: ReturnType<typeof initialGeneratedCreateDraftSessionState>,
+  fieldName: string,
+  value: string | boolean | number,
+) {
+  return nextGeneratedCreateDraftSessionState({
+    fieldName,
+    fieldValue: generatedCreateDraftFieldInput(value),
+    state,
+  });
+}
+
 function fieldNames(fields: CreateFieldConfig[]) {
   return fields.map((field) => field.fieldName);
 }
 
-function createField(fieldName: keyof typeof fields, editor: CreateFieldConfig["editor"]) {
+function createField(fieldName: keyof typeof schemaFields, editor: CreateFieldConfig["editor"]) {
   return {
     fieldName,
-    field: fields[fieldName],
+    field: schemaFields[fieldName],
     editor,
   } satisfies CreateFieldConfig;
 }
@@ -180,12 +332,12 @@ function createField(fieldName: keyof typeof fields, editor: CreateFieldConfig["
 function literalTypeDefault(value: "page" | "link") {
   return {
     fieldName: "type",
-    field: fields.type,
+    field: schemaFields.type,
     value: { kind: "literal", value },
   } satisfies CreateDefaultConfig;
 }
 
-const fields = {
+const schemaFields = {
   type: {
     type: "enum",
     required: true,
@@ -197,6 +349,15 @@ const fields = {
   label: { type: "text", required: true },
   href: { type: "text", required: false, format: "href" },
   icon: { type: "text", required: false, format: "icon" },
+  estimate: { type: "number", required: false },
+  status: {
+    type: "enum",
+    required: true,
+    values: {
+      archived: { label: "Archived" },
+      new: { label: "New" },
+    },
+  },
   linkTargetMode: {
     type: "enum",
     required: false,
@@ -244,7 +405,7 @@ const blockUnion = {
     },
   },
   discriminatorFieldName: "type",
-  discriminatorField: fields.type,
+  discriminatorField: schemaFields.type,
   variants: [
     {
       variantValue: "page",

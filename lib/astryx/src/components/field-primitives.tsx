@@ -25,7 +25,6 @@ const nativeColorFallback = "#000000";
 
 export type ColorInputProps = {
   id?: string;
-  htmlName?: string;
   label: string;
   value: string;
   description?: string;
@@ -45,7 +44,6 @@ export type ColorInputProps = {
 
 export function ColorInput({
   id,
-  htmlName,
   label,
   value,
   description,
@@ -111,7 +109,6 @@ export function ColorInput({
           aria-invalid={status?.type === "error" ? "true" : undefined}
           aria-required={isRequired ? "true" : undefined}
           disabled={isDisabled}
-          name={htmlName}
           placeholder={placeholder}
           readOnly={isReadOnly}
           type="text"
@@ -235,7 +232,7 @@ export function MarkdownFieldDisplay({
   );
 }
 
-export type MarkdownInputProps = TextAreaProps & {
+export type MarkdownInputProps = Omit<TextAreaProps, "htmlName"> & {
   isReadOnly?: boolean;
 };
 

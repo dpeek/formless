@@ -1,5 +1,10 @@
 import type { ImageMediaAssetOption } from "@dpeek/formless-media/client";
-import type { FieldCommitPolicy, FieldSchema, TableColumnFormat } from "@dpeek/formless-schema";
+import type {
+  CreateDraftFieldInput,
+  FieldCommitPolicy,
+  FieldSchema,
+  TableColumnFormat,
+} from "@dpeek/formless-schema";
 import type { FieldValue } from "@dpeek/formless-storage";
 import type {
   AstryxFieldAccessMode,
@@ -25,7 +30,11 @@ import {
   type RecordFieldConfig,
 } from "../../client/views.ts";
 import { resolveIconCatalogSvg } from "../../shared/icon-catalog.ts";
-import type { GeneratedCreateFieldAuthoringState } from "./create-field-authoring.ts";
+import {
+  generatedCreateDraftFieldInput,
+  type GeneratedCreateDraftSessionFacts,
+  type GeneratedCreateDraftSessionState,
+} from "./create-field-authoring.ts";
 import { selectGeneratedFieldControl, type GeneratedFieldControl } from "./field-controls.ts";
 import { selectGeneratedRecordFieldAuthoringAdapter } from "./field-ui-adapters.ts";
 import { formatFieldDisplayValue, inputValueToFieldValue } from "./format.ts";
@@ -52,11 +61,11 @@ export type GeneratedAstryxFieldErrorInput =
 export type ProjectGeneratedCreateAstryxFieldsOptions = {
   density?: AstryxFieldDensity;
   errorsByFieldName?: Readonly<Record<string, GeneratedAstryxFieldErrorInput>>;
-  fields: readonly CreateFieldConfig[];
   pendingByFieldName?: Readonly<Record<string, boolean>>;
   pendingLabelByFieldName?: Readonly<Record<string, string | undefined>>;
   referenceOptionsByFieldName?: Readonly<Record<string, readonly GeneratedAstryxReferenceOption[]>>;
-  state: GeneratedCreateFieldAuthoringState;
+  session: Pick<GeneratedCreateDraftSessionFacts, "fieldErrors" | "visibleFields">;
+  state: GeneratedCreateDraftSessionState;
   surface?: Extract<AstryxFieldSurface, "create" | "public-action">;
 };
 
@@ -68,7 +77,7 @@ export type ProjectGeneratedCreateAstryxFieldOptions = {
   isPending?: boolean;
   pendingLabel?: string;
   referenceOptions?: readonly GeneratedAstryxReferenceOption[];
-  state?: GeneratedCreateFieldAuthoringState;
+  state?: GeneratedCreateDraftSessionState;
   surface?: Extract<AstryxFieldSurface, "create" | "public-action">;
 };
 
@@ -126,20 +135,30 @@ export type GeneratedAstryxFieldIntentHandlers = AstryxFieldIntentHandlers & {
   onSelectOption?: (fieldId: string, value: string) => void;
 };
 
+export type GeneratedCreateAstryxFieldIntentHandlersOptions = {
+  fields: readonly CreateFieldConfig[];
+  onDraftChange: (fieldName: string, fieldValue: CreateDraftFieldInput) => void;
+  onErrorChange?: (fieldName: string, message: string | null) => void;
+  onOpenPicker?: (fieldName: string, picker: AstryxFieldPickerKind) => void;
+  onUploadFile?: (fieldName: string, file: File) => void;
+};
+
 export function projectGeneratedCreateAstryxFields({
   density,
   errorsByFieldName,
-  fields,
   pendingByFieldName,
   pendingLabelByFieldName,
   referenceOptionsByFieldName,
+  session,
   state,
   surface,
 }: ProjectGeneratedCreateAstryxFieldsOptions): AstryxFieldEditorData[] {
-  return fields.map((fieldConfig) =>
+  return session.visibleFields.map((fieldConfig) =>
     projectGeneratedCreateAstryxField({
       density,
-      error: errorsByFieldName?.[fieldConfig.fieldName],
+      error:
+        errorsByFieldName?.[fieldConfig.fieldName] ??
+        session.fieldErrors[fieldConfig.fieldName]?.message,
       fieldConfig,
       isPending: pendingByFieldName?.[fieldConfig.fieldName],
       pendingLabel: pendingLabelByFieldName?.[fieldConfig.fieldName],
@@ -321,6 +340,57 @@ export function projectGeneratedRecordAstryxField({
   };
 }
 
+export function createGeneratedCreateAstryxFieldIntentHandlers({
+  fields,
+  onDraftChange,
+  onErrorChange,
+  onOpenPicker,
+  onUploadFile,
+}: GeneratedCreateAstryxFieldIntentHandlersOptions): GeneratedAstryxFieldIntentHandlers {
+  const fieldsById = new Map(fields.map((fieldConfig) => [fieldConfig.fieldName, fieldConfig]));
+
+  function updateDraft(fieldId: string, value: AstryxFieldValue) {
+    const fieldConfig = fieldsById.get(fieldId);
+
+    if (!fieldConfig) {
+      return;
+    }
+
+    onDraftChange(
+      fieldConfig.fieldName,
+      generatedCreateDraftFieldInput(astryxValueToCreateDraftValue(value)),
+    );
+    onErrorChange?.(fieldConfig.fieldName, null);
+  }
+
+  return {
+    onCommit: updateDraft,
+    onDraftChange: updateDraft,
+    onErrorChange: (fieldId, message) => {
+      const fieldConfig = fieldsById.get(fieldId);
+
+      if (fieldConfig) {
+        onErrorChange?.(fieldConfig.fieldName, message);
+      }
+    },
+    onOpenPicker: (fieldId, picker) => {
+      const fieldConfig = fieldsById.get(fieldId);
+
+      if (fieldConfig) {
+        onOpenPicker?.(fieldConfig.fieldName, picker);
+      }
+    },
+    onSelectOption: updateDraft,
+    onUploadFile: (fieldId, file) => {
+      const fieldConfig = fieldsById.get(fieldId);
+
+      if (fieldConfig) {
+        onUploadFile?.(fieldConfig.fieldName, file);
+      }
+    },
+  };
+}
+
 export function createGeneratedAstryxFieldIntentHandlers(
   adapters: readonly GeneratedAstryxFieldIntentAdapter[],
 ): GeneratedAstryxFieldIntentHandlers {
@@ -399,6 +469,10 @@ export function astryxFieldValueToGeneratedFieldValue(
   return inputValueToFieldValue(field, value === null ? "" : String(value));
 }
 
+function astryxValueToCreateDraftValue(value: AstryxFieldValue) {
+  return value === null ? "" : value;
+}
+
 function projectAstryxFieldBase({
   accessMode,
   density,
@@ -459,9 +533,9 @@ function projectAstryxFieldBase({
 function selectCreateDraftValue(
   fieldConfig: CreateFieldConfig,
   fieldControl: GeneratedFieldControl,
-  state: GeneratedCreateFieldAuthoringState | undefined,
+  state: GeneratedCreateDraftSessionState | undefined,
 ): AstryxFieldValue {
-  const inputValue = state?.inputValues[fieldConfig.fieldName];
+  const inputValue = state?.draft.values[fieldConfig.fieldName]?.value;
 
   if (inputValue !== undefined) {
     return inputValue;

@@ -3,9 +3,8 @@ import {
   createInputValueToFieldValue,
   fieldCreateDefaultValue,
   fieldHasCreateDefault,
-  fieldValueToInputValue,
 } from "./field-types.ts";
-import type { RecordValues } from "./types.ts";
+import type { FieldValue, RecordValues } from "./types.ts";
 import type { QueryEvaluationContext } from "./types.ts";
 import { assertExactKeys, isRecord } from "./schema-parse-helpers.ts";
 import type {
@@ -27,6 +26,34 @@ export type CreateDefaultFieldConfig = {
 export type CreateDefaultConfig = CreateDefaultFieldConfig & {
   value: CreateDefaultValueSchema;
 };
+
+export type CreateDraftFieldInput =
+  | {
+      kind: "input";
+      value: string;
+    }
+  | {
+      kind: "value";
+      value: FieldValue;
+    };
+
+export type CreateDraftInput = {
+  values: Record<string, CreateDraftFieldInput>;
+};
+
+export type CreateDraftFieldError = {
+  fieldName: string;
+  message: string;
+  draftValue?: CreateDraftFieldInput;
+};
+
+export type CreateDraftResolution = {
+  values: RecordValues;
+  fieldErrors: Record<string, CreateDraftFieldError>;
+  visibleFields: string[];
+};
+
+type CreateDraftFormDataFieldConfig = Pick<CreateDefaultFieldConfig, "field" | "fieldName">;
 
 export type CreateDefaultUnionConfig<TField extends CreateDefaultFieldConfig> = {
   discriminatorFieldName: string;
@@ -114,12 +141,84 @@ export function resolveCreateValues<TField extends CreateDefaultFieldConfig>({
   defaults?: CreateDefaultConfig[];
   queryContext?: QueryEvaluationContext;
 }): RecordValues {
-  const values = getVisibleCreateValues(
-    formData,
-    selectCreateFieldsForFormData(fields, union, formData, defaults, queryContext),
-  );
+  const result = resolveCreateDraftValues({
+    defaults,
+    draft: createDraftInputFromFormData(formData, collectCreateDefaultFields(fields, union)),
+    fields,
+    queryContext,
+    union,
+  });
 
-  return applyCreateDefaultValues(values, defaults, queryContext);
+  throwIfCreateDraftHasFieldErrors(result);
+
+  return result.values;
+}
+
+export function createDraftInputFromFormData(
+  formData: FormData,
+  fields: readonly CreateDraftFormDataFieldConfig[] = [],
+): CreateDraftInput {
+  const values: Record<string, CreateDraftFieldInput> = {};
+  const fieldsByName = new Map(fields.map((field) => [field.fieldName, field]));
+
+  formData.forEach((formValue, fieldName) => {
+    const field = fieldsByName.get(fieldName);
+
+    if (field?.field.type === "boolean") {
+      const value = typeof formValue === "string" ? formValue : "";
+      const draftValue = value === "false" ? false : true;
+
+      if (!Object.hasOwn(values, fieldName) || draftValue) {
+        values[fieldName] = { kind: "value", value: draftValue };
+      }
+
+      return;
+    }
+
+    if (Object.hasOwn(values, fieldName)) {
+      return;
+    }
+
+    values[fieldName] = {
+      kind: "input",
+      value: typeof formValue === "string" ? formValue : "",
+    };
+  });
+
+  return { values };
+}
+
+export function resolveCreateDraftValues<TField extends CreateDefaultFieldConfig>({
+  defaults = [],
+  draft,
+  fields,
+  queryContext,
+  union,
+}: {
+  draft: CreateDraftInput;
+  fields: TField[];
+  union?: CreateDefaultUnionConfig<TField>;
+  defaults?: CreateDefaultConfig[];
+  queryContext?: QueryEvaluationContext;
+}): CreateDraftResolution {
+  const visibleFields = selectCreateFieldsForDraftInput(
+    fields,
+    union,
+    draft,
+    defaults,
+    queryContext,
+  );
+  const { fieldErrors, values } = getVisibleCreateDraftValues(draft, visibleFields);
+  const defaultResult = applyCreateDraftDefaultValues(values, defaults, queryContext);
+
+  return {
+    values: defaultResult.values,
+    fieldErrors: {
+      ...fieldErrors,
+      ...defaultResult.fieldErrors,
+    },
+    visibleFields: visibleFields.map((field) => field.fieldName),
+  };
 }
 
 export function applyCreateDefaultValues(
@@ -186,20 +285,39 @@ export function selectCreateFieldsForFormData<TField extends CreateDefaultFieldC
   defaults: CreateDefaultConfig[] = [],
   queryContext?: QueryEvaluationContext,
 ): TField[] {
+  return selectCreateFieldsForDraftInput(
+    baseFields,
+    union,
+    createDraftInputFromFormData(formData, collectCreateDefaultFields(baseFields, union)),
+    defaults,
+    queryContext,
+  );
+}
+
+export function selectCreateFieldsForDraftInput<TField extends CreateDefaultFieldConfig>(
+  baseFields: TField[],
+  union: CreateDefaultUnionConfig<TField> | undefined,
+  draft: CreateDraftInput,
+  defaults: CreateDefaultConfig[] = [],
+  queryContext?: QueryEvaluationContext,
+): TField[] {
   if (union === undefined) {
     return selectCreateFieldsForVisibility(baseFields, (fieldName) =>
-      fieldInputValueForCreateVisibility(fieldName, baseFields, formData, defaults, queryContext),
+      fieldDraftValueForCreateVisibility(fieldName, baseFields, draft, defaults, queryContext),
     );
   }
 
-  const formValue = formData.get(union.discriminatorFieldName);
+  const discriminatorDraft = draft.values[union.discriminatorFieldName];
+  const draftDiscriminatorValue = draftInputVisibilityValue(discriminatorDraft);
   const discriminatorValue =
-    typeof formValue === "string" ? formValue : initialCreateDiscriminatorValue(union, defaults);
+    typeof draftDiscriminatorValue === "string"
+      ? draftDiscriminatorValue
+      : initialCreateDiscriminatorValue(union, defaults);
 
   const fields = selectCreateFieldsForDiscriminator(baseFields, union, discriminatorValue);
 
   return selectCreateFieldsForVisibility(fields, (fieldName) =>
-    fieldInputValueForCreateVisibility(fieldName, fields, formData, defaults, queryContext),
+    fieldDraftValueForCreateVisibility(fieldName, fields, draft, defaults, queryContext),
   );
 }
 
@@ -217,7 +335,7 @@ export function selectCreateFieldsForInputValues<TField extends CreateDefaultFie
     const fieldConfig = fields.find((candidate) => candidate.fieldName === fieldName);
 
     if (fieldConfig && fieldHasCreateDefault(fieldConfig.field)) {
-      return fieldValueToInputValue(fieldConfig.field, fieldCreateDefaultValue(fieldConfig.field));
+      return fieldCreateDefaultVisibilityValue(fieldConfig.field);
     }
 
     return "";
@@ -326,6 +444,32 @@ function parseCreateViewDefault(
   throw new Error(`${context} kind must be a string.`);
 }
 
+function collectCreateDefaultFields<TField extends CreateDefaultFieldConfig>(
+  fields: readonly TField[],
+  union: CreateDefaultUnionConfig<TField> | undefined,
+): CreateDraftFormDataFieldConfig[] {
+  const fieldsByName = new Map<string, CreateDraftFormDataFieldConfig>();
+  const addFields = (nextFields: readonly CreateDraftFormDataFieldConfig[]) => {
+    for (const field of nextFields) {
+      if (!fieldsByName.has(field.fieldName)) {
+        fieldsByName.set(field.fieldName, field);
+      }
+    }
+  };
+
+  addFields(fields);
+
+  for (const variant of union?.variants ?? []) {
+    addFields(variant.presentation.fields);
+  }
+
+  if (union?.fallback !== undefined) {
+    addFields(union.fallback.presentation.fields);
+  }
+
+  return Array.from(fieldsByName.values());
+}
+
 function parseCreateLiteralDefaultValue(
   context: string,
   field: Exclude<FieldSchema, { type: "reference" }>,
@@ -410,22 +554,115 @@ function parseCreateLiteralDefaultValue(
   return value;
 }
 
-function getVisibleCreateValues<TField extends CreateDefaultFieldConfig>(
-  formData: FormData,
+function getVisibleCreateDraftValues<TField extends CreateDefaultFieldConfig>(
+  draft: CreateDraftInput,
   fields: TField[],
-): RecordValues {
+): { values: RecordValues; fieldErrors: Record<string, CreateDraftFieldError> } {
   const values: RecordValues = {};
+  const fieldErrors: Record<string, CreateDraftFieldError> = {};
 
   for (const { field, fieldName } of fields) {
-    const value = formData.get(fieldName);
-    values[fieldName] = createInputValueToFieldValue(
-      field,
-      typeof value === "string" ? value : undefined,
-      formData.has(fieldName),
-    );
+    const draftValue = draft.values[fieldName];
+    const fieldResult = resolveCreateDraftFieldValue(fieldName, field, draftValue);
+
+    if (fieldResult.kind === "error") {
+      fieldErrors[fieldName] = fieldResult.error;
+      continue;
+    }
+
+    values[fieldName] = fieldResult.value;
   }
 
-  return values;
+  return { values, fieldErrors };
+}
+
+function applyCreateDraftDefaultValues(
+  values: RecordValues,
+  defaults: CreateDefaultConfig[],
+  queryContext?: QueryEvaluationContext,
+): { values: RecordValues; fieldErrors: Record<string, CreateDraftFieldError> } {
+  const resolvedValues = { ...values };
+  const fieldErrors: Record<string, CreateDraftFieldError> = {};
+
+  for (const defaultConfig of defaults) {
+    if (Object.hasOwn(resolvedValues, defaultConfig.fieldName)) {
+      continue;
+    }
+
+    if (defaultConfig.value.kind === "context") {
+      try {
+        resolvedValues[defaultConfig.fieldName] = resolveContextDefaultValue(
+          defaultConfig.fieldName,
+          defaultConfig.value.name,
+          queryContext,
+        );
+      } catch (error) {
+        fieldErrors[defaultConfig.fieldName] = {
+          fieldName: defaultConfig.fieldName,
+          message: error instanceof Error ? error.message : "Create default is unresolved.",
+        };
+      }
+    } else {
+      resolvedValues[defaultConfig.fieldName] = defaultConfig.value.value;
+    }
+  }
+
+  return { values: resolvedValues, fieldErrors };
+}
+
+function resolveCreateDraftFieldValue(
+  fieldName: string,
+  field: FieldSchema,
+  draftValue: CreateDraftFieldInput | undefined,
+): { kind: "value"; value: FieldValue } | { kind: "error"; error: CreateDraftFieldError } {
+  const fieldValue =
+    draftValue === undefined
+      ? createInputValueToFieldValue(field, undefined, false)
+      : createInputValueToFieldValueFromDraft(field, draftValue);
+
+  if (field.type === "number" && typeof fieldValue === "number" && !Number.isFinite(fieldValue)) {
+    return {
+      kind: "error",
+      error: {
+        fieldName,
+        message: "Enter a finite number.",
+        ...(draftValue === undefined ? {} : { draftValue }),
+      },
+    };
+  }
+
+  return { kind: "value", value: fieldValue };
+}
+
+function createInputValueToFieldValueFromDraft(
+  field: FieldSchema,
+  draftValue: CreateDraftFieldInput,
+): FieldValue {
+  if (draftValue.kind === "input") {
+    return createInputValueToFieldValue(field, draftValue.value, true);
+  }
+
+  if (field.type === "boolean" && typeof draftValue.value === "boolean") {
+    return draftValue.value;
+  }
+
+  if (field.type === "number") {
+    if (typeof draftValue.value === "number" || draftValue.value === "") {
+      return draftValue.value;
+    }
+
+    if (typeof draftValue.value === "string") {
+      return createInputValueToFieldValue(field, draftValue.value, true);
+    }
+
+    return createInputValueToFieldValue(field, String(draftValue.value), true);
+  }
+
+  if (typeof draftValue.value === "string") {
+    return createInputValueToFieldValue(field, draftValue.value, true);
+  }
+
+  return createInputValueToFieldValue(field, String(draftValue.value), true);
 }
 
 function selectCreateFieldsForVisibility<TField extends CreateDefaultFieldConfig>(
@@ -443,17 +680,17 @@ function selectCreateFieldsForVisibility<TField extends CreateDefaultFieldConfig
   });
 }
 
-function fieldInputValueForCreateVisibility<TField extends CreateDefaultFieldConfig>(
+function fieldDraftValueForCreateVisibility<TField extends CreateDefaultFieldConfig>(
   fieldName: string,
   fields: TField[],
-  formData: FormData,
+  draft: CreateDraftInput,
   defaults: CreateDefaultConfig[],
   queryContext?: QueryEvaluationContext,
 ): FieldVisibilityValue {
-  const formValue = formData.get(fieldName);
+  const draftValue = draftInputVisibilityValue(draft.values[fieldName]);
 
-  if (typeof formValue === "string") {
-    return formValue;
+  if (draftValue !== undefined) {
+    return draftValue;
   }
 
   const defaultConfig = defaults.find((candidate) => candidate.fieldName === fieldName);
@@ -469,10 +706,32 @@ function fieldInputValueForCreateVisibility<TField extends CreateDefaultFieldCon
   const fieldConfig = fields.find((candidate) => candidate.fieldName === fieldName);
 
   if (fieldConfig && fieldHasCreateDefault(fieldConfig.field)) {
-    return fieldValueToInputValue(fieldConfig.field, fieldCreateDefaultValue(fieldConfig.field));
+    return fieldCreateDefaultVisibilityValue(fieldConfig.field);
   }
 
   return "";
+}
+
+function draftInputVisibilityValue(
+  draftValue: CreateDraftFieldInput | undefined,
+): FieldVisibilityValue | undefined {
+  if (draftValue === undefined) {
+    return undefined;
+  }
+
+  return draftValue.value;
+}
+
+function throwIfCreateDraftHasFieldErrors(result: CreateDraftResolution) {
+  const firstError = Object.values(result.fieldErrors)[0];
+
+  if (firstError !== undefined) {
+    throw new Error(firstError.message);
+  }
+}
+
+function fieldCreateDefaultVisibilityValue(field: FieldSchema): FieldVisibilityValue {
+  return fieldCreateDefaultValue(field) ?? "";
 }
 
 function selectActiveCreateUnionPresentation<TField extends CreateDefaultFieldConfig>(
