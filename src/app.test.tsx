@@ -54,7 +54,9 @@ import { InstanceShellRoute } from "./app/routes/instance-shell.tsx";
 import { LocalSessionRoute } from "./app/routes/local-session.tsx";
 import { OwnerLoginRoute } from "./app/routes/owner-login.tsx";
 import { OwnerSetupRoute } from "./app/routes/owner-setup.tsx";
+import { AuthAccountRoute } from "./app/routes/auth-account.tsx";
 import { CollaboratorInvitationAcceptanceRoute } from "./app/routes/collaborator-invitation-acceptance.tsx";
+import { runtimeTopologyRoutes } from "./shared/runtime-topology.ts";
 import { buildSitePageTree, type SitePageTree } from "@dpeek/formless-site-app";
 import {
   createDevRuntimeProfile,
@@ -238,6 +240,7 @@ function SitePageRouteProbe({
 
 function appRouteComponents(overrides: Partial<AppRouteComponents> = {}): AppRouteComponents {
   return {
+    AuthAccountRoute,
     CollaboratorInvitationAcceptanceRoute,
     GeneratedAppFrame,
     HomeRoute,
@@ -869,6 +872,18 @@ describe("App smoke routes", () => {
 
     expect(html).toContain("Checking invitation");
     expect(html).toContain("Loading invitation status.");
+    expect(html).not.toContain('data-frame="workbench"');
+    expect(html).not.toContain('data-frame="generated-app"');
+    expect(html).not.toContain('aria-label="Runtime apps"');
+  });
+
+  it('renders the "/formless/auth" account route outside runtime app chrome', () => {
+    const html = renderRoute(runtimeTopologyRoutes.authAccountRoute);
+    const gateHtml = renderRoute("/formless/auth/profile-completion");
+
+    expect(html).toContain("Checking account");
+    expect(html).toContain("Loading account status.");
+    expect(gateHtml).toContain("Checking account");
     expect(html).not.toContain('data-frame="workbench"');
     expect(html).not.toContain('data-frame="generated-app"');
     expect(html).not.toContain('aria-label="Runtime apps"');
@@ -1815,6 +1830,18 @@ describe("App smoke routes", () => {
     expect(html).not.toContain('data-frame="generated-app"');
   });
 
+  it("renders the account route before published Site wildcard routes", () => {
+    const html = renderRoute(
+      runtimeTopologyRoutes.authAccountRoute,
+      createPublishedSiteRuntimeProfile(),
+    );
+
+    expect(html).toContain("Checking account");
+    expect(html).not.toContain("Loading formless/auth.");
+    expect(html).not.toContain('data-frame="workbench"');
+    expect(html).not.toContain('data-frame="generated-app"');
+  });
+
   it('renders an app profile home at "/" without the multi-app switcher', () => {
     applyBootstrapResponse(bootstrap(crmSeedRecords, crmSourceSchema), "crm");
     const html = renderRoute("/", createAppRuntimeProfile("crm"));
@@ -1833,6 +1860,16 @@ describe("App smoke routes", () => {
     expect(html).not.toContain('href="/site"');
     expect(html).not.toContain('href="/crm"');
     expect(html).not.toContain('href="/crm/schema"');
+  });
+
+  it("keeps account auth routes out of app profile generated screens", () => {
+    const html = renderRoute(
+      runtimeTopologyRoutes.authAccountRoute,
+      createAppRuntimeProfile("crm"),
+    );
+
+    expect(html).toContain("Checking account");
+    expect(html).not.toContain('data-frame="generated-app"');
   });
 
   it('renders an installed app profile home at "/" from the install-scoped target', () => {

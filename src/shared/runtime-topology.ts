@@ -31,12 +31,26 @@ export type RuntimeProfileKindResolverInput = {
   profile?: string | undefined;
 };
 
+const runtimeAuthAccountRoute = "/formless/auth";
+
+export const runtimeAuthAccountGateRoutes = {
+  appRegistration: `${runtimeAuthAccountRoute}/app-registration`,
+  credential: `${runtimeAuthAccountRoute}/credential`,
+  emailVerification: `${runtimeAuthAccountRoute}/email-verification`,
+  invitation: `${runtimeAuthAccountRoute}/invitation`,
+  profileCompletion: `${runtimeAuthAccountRoute}/profile-completion`,
+  roleReview: `${runtimeAuthAccountRoute}/role-review`,
+  termsAcceptance: `${runtimeAuthAccountRoute}/terms-acceptance`,
+} as const satisfies Record<string, `/${string}`>;
+
 export const FORMLESS_RUNTIME_APP_INSTALL_ID_META_NAME = "formless-runtime-app-install-id";
 export const FORMLESS_RUNTIME_PACKAGE_APP_KEY_META_NAME = "formless-runtime-package-app-key";
 export const FORMLESS_RUNTIME_PROFILE_META_NAME = "formless-runtime-profile";
 
 export const runtimeTopologyRoutes = {
   accessRoute: "/access",
+  authAccountRoute: runtimeAuthAccountRoute,
+  authAccountGateRoutePattern: `${runtimeAuthAccountRoute}/*`,
   appRouteBase: "/apps",
   clientShellAssetPath: "/index.html",
   dynamicSiteIconPaths: ["/favicon.svg", "/favicon.ico", "/apple-touch-icon.png"],
@@ -67,6 +81,7 @@ export type RuntimeRouteBaseMatch = {
 };
 
 const ownerSessionClientRoutePaths = [
+  runtimeTopologyRoutes.authAccountRoute,
   runtimeTopologyRoutes.loginRoute,
   runtimeTopologyRoutes.setupRoute,
 ] as const;
@@ -236,6 +251,10 @@ export function isRuntimeInstanceProfileClientShellRoute(pathname: string): bool
       pathname as (typeof instanceProfileClientRoutePaths)[number],
     ) || publishedProfileClientRoutePrefixes.some((prefix) => routeMatchesPrefix(pathname, prefix))
   );
+}
+
+export function isRuntimeAuthAccountRoutePath(pathname: string): boolean {
+  return routeMatchesPrefix(pathname, runtimeTopologyRoutes.authAccountRoute);
 }
 
 export function looksLikeRuntimeStaticAssetPath(pathname: string): boolean {

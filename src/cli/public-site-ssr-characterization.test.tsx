@@ -17,6 +17,7 @@ import { InstanceShellRoute } from "../app/routes/instance-shell.tsx";
 import { LocalSessionRoute } from "../app/routes/local-session.tsx";
 import { OwnerLoginRoute } from "../app/routes/owner-login.tsx";
 import { OwnerSetupRoute } from "../app/routes/owner-setup.tsx";
+import { AuthAccountRoute } from "../app/routes/auth-account.tsx";
 import { CollaboratorInvitationAcceptanceRoute } from "../app/routes/collaborator-invitation-acceptance.tsx";
 import type { SitePageTreeResponse } from "@dpeek/formless-site-app";
 
@@ -165,6 +166,7 @@ function renderPublishedRoute(path: string): string {
 
 function appRouteComponents(): AppRouteComponents {
   return {
+    AuthAccountRoute,
     CollaboratorInvitationAcceptanceRoute,
     GeneratedAppFrame,
     HomeRoute,

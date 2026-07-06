@@ -573,6 +573,84 @@ one-time grants.
 - AND host sessions are not accepted on a different host, route, app install,
   storage identity, target profile, or instance
 
+### Requirement: Auth Origin Account Orchestrator
+
+The system SHALL expose `/formless/auth` on the configured auth origin as the
+runtime-owned account orchestrator for protected browser continuations and
+account completion gates.
+
+#### Scenario: Resolve account continuation
+
+- GIVEN a browser navigates to `/formless/auth` on the configured auth origin
+- AND the request identifies a runtime-owned target through path-only return
+  target facts or target-bound handoff facts
+- AND the browser has an active central auth session for a principal that
+  satisfies the target route access requirement
+- WHEN account completion for that principal and target is complete
+- THEN the orchestrator redirects to the validated path-only same-origin
+  continuation or to the target-bound cross-domain handoff start path
+- AND the redirect target is derived from runtime route resolution, setup state,
+  invitation state, signup state, or app registration state
+- AND absolute, protocol-relative, malformed, unsupported, or app-controlled
+  redirect targets are rejected before redirecting
+- AND no credential material, challenge secrets, token hashes, central session
+  ids, host session cookies, handoff grant secrets, provider responses, recovery
+  material, or app-private profile values are exposed in the response
+
+#### Scenario: Render next blocking account gate
+
+- GIVEN `/formless/auth` resolves a principal and target whose account
+  completion result is blocked
+- WHEN the request accepts HTML
+- THEN the orchestrator renders an auth-origin browser surface for the next
+  blocking gate
+- AND the rendered gate includes only display-safe gate kind, target facts,
+  route facts, and operation or policy references needed to render or launch the
+  next step
+- AND the surface does not issue a host-local session, mint a handoff grant, or
+  redirect to the target while a blocking gate remains
+- AND gates that do not yet have first-pass completion UI render a display-safe
+  blocked state rather than falling through to the protected target
+
+#### Scenario: Browser surface reads account status
+
+- GIVEN a browser surface is rendering `/formless/auth` on the configured auth
+  origin
+- WHEN the surface reads the account status with `Accept: application/json`
+- THEN the runtime returns the existing account completion result contract
+- AND blocked results use the existing display-safe 409 account completion
+  response
+- AND complete results use a display-safe 200 account completion response whose
+  continuation is the validated same-origin target or the target-bound
+  cross-domain handoff path
+- AND the status response does not issue a host-local session cookie, mint a
+  handoff grant, or expose credential material, challenge secrets, token hashes,
+  raw invite tokens, central session ids, host session cookies, handoff grant
+  secrets, provider responses, recovery material, or app-private profile values
+
+#### Scenario: Redirect unauthenticated account browser
+
+- GIVEN a browser navigates to `/formless/auth` with a protected target
+- WHEN the browser has no active central auth session for a principal that can
+  evaluate that target
+- THEN the orchestrator starts the configured credential entry path with a safe
+  path-only return target back to `/formless/auth`
+- AND the credential entry path remains on the configured auth origin
+- AND no target host receives a central auth session cookie before the browser
+  returns through the account orchestrator or handoff flow
+
+#### Scenario: Preserve machine-readable account gate responses
+
+- GIVEN protected browser APIs, installed app APIs, operation requests, or
+  non-HTML handoff requests encounter a blocking account completion gate
+- WHEN the request does not accept an HTML account surface
+- THEN the runtime returns the existing display-safe account completion result
+  as a machine-readable `409` response
+- AND the response does not include credential material, challenge secrets,
+  token hashes, raw invite tokens, central session ids, host session cookies,
+  handoff grant secrets, provider responses, recovery material, or app-private
+  profile values
+
 ### Requirement: Account Completion Gate Resolution
 
 The system SHALL evaluate target-scoped account completion gates before issuing

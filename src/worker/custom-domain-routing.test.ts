@@ -15,6 +15,7 @@ import {
   FORMLESS_RUNTIME_PACKAGE_APP_KEY_META_NAME,
   FORMLESS_RUNTIME_PROFILE_META_NAME,
 } from "../app/runtime-profile.ts";
+import { runtimeTopologyRoutes } from "../shared/runtime-topology.ts";
 import {
   COLLABORATOR_INVITATION_ACCEPT_PATH,
   ownerLoginRedirectLocationForRoute,
@@ -284,7 +285,17 @@ describe("installed Site custom-domain Worker routing", () => {
     const home = await fetchMappedHost("/", {
       headers: { Accept: "text/html" },
     });
+    const homeHtml = await home.text();
+
+    assetRequests = [];
+
     const login = await fetchMappedHost("/login", {
+      headers: { Accept: "text/html" },
+    });
+    const account = await fetchMappedHost(runtimeTopologyRoutes.authAccountRoute, {
+      headers: { Accept: "text/html" },
+    });
+    const accountGate = await fetchMappedHost("/formless/auth/profile-completion", {
       headers: { Accept: "text/html" },
     });
     const passkeyOptions = await fetchMappedHost("/api/formless/passkeys/login/options", {
@@ -297,15 +308,17 @@ describe("installed Site custom-domain Worker routing", () => {
     );
     const session = await fetchMappedHost("/api/formless/session");
     const schemaKeyApi = await fetchMappedHost("/api/site/bootstrap");
-    const homeHtml = await home.text();
 
     expect(home.status).toBe(200);
     expect(homeHtml).toContain(`<meta name="formless-runtime-profile" content="publishedSite" />`);
     expect(login.status).toBe(404);
+    expect(account.status).toBe(404);
+    expect(accountGate.status).toBe(404);
     expect(passkeyOptions.status).toBe(404);
     expect(localSessionBootstrap.status).toBe(404);
     expect(session.status).toBe(404);
     expect(schemaKeyApi.status).toBe(404);
+    expect(assetRequests).toEqual([]);
   });
 
   it("redirects an anonymous instance profile custom host instead of public Site SSR", async () => {
@@ -387,6 +400,12 @@ describe("installed Site custom-domain Worker routing", () => {
     const login = await fetchHost(mappedAppHost, "/login", {
       headers: { Accept: "text/html" },
     });
+    const account = await fetchHost(mappedAppHost, runtimeTopologyRoutes.authAccountRoute, {
+      headers: { Accept: "text/html" },
+    });
+    const accountGate = await fetchHost(mappedAppHost, "/formless/auth/profile-completion", {
+      headers: { Accept: "text/html" },
+    });
     const passkeyOptions = await fetchHost(mappedAppHost, "/api/formless/passkeys/login/options", {
       body: "{}",
       headers: { "Content-Type": "application/json" },
@@ -434,6 +453,8 @@ describe("installed Site custom-domain Worker routing", () => {
       `<meta name="${FORMLESS_RUNTIME_APP_INSTALL_ID_META_NAME}" content="${taskInstallId}" />`,
     );
     expect(login.status).toBe(404);
+    expect(account.status).toBe(404);
+    expect(accountGate.status).toBe(404);
     expect(passkeyOptions.status).toBe(404);
     expect(localSessionBootstrap.status).toBe(404);
     expect(setupCapability.status).toBe(404);
@@ -508,7 +529,9 @@ describe("installed Site custom-domain Worker routing", () => {
 
     expect(unauthenticated.status).toBe(302);
     expect(unauthenticated.headers.get("Location")).toBe(
-      ownerLoginRedirectLocationForRoute(`${INSTANCE_AUTH_HANDOFF_START_PATH}${startUrl.search}`),
+      ownerLoginRedirectLocationForRoute(
+        `${runtimeTopologyRoutes.authAccountRoute}${startUrl.search}`,
+      ),
     );
 
     expect(authenticated.status).toBe(302);
@@ -718,7 +741,7 @@ describe("installed Site custom-domain Worker routing", () => {
     expect(ownerOnlyGrant.status).toBe(302);
     expect(ownerOnlyGrant.headers.get("Location")).toBe(
       ownerLoginRedirectLocationForRoute(
-        `${INSTANCE_AUTH_HANDOFF_START_PATH}${ownerOnlyStartUrl.search}`,
+        `${runtimeTopologyRoutes.authAccountRoute}${ownerOnlyStartUrl.search}`,
       ),
     );
   });
@@ -740,7 +763,34 @@ describe("installed Site custom-domain Worker routing", () => {
       },
       redirect: "manual",
     });
+    const missingEmailHtml = await harness.mf.dispatchFetch(startLocation, {
+      headers: {
+        Accept: "text/html",
+        Cookie: principal.cookie,
+      },
+      redirect: "manual",
+    });
+    const accountSurfaceUrl = new URL(requiredHeader(missingEmailHtml, "Location"), startLocation);
+    const accountSurface = await harness.mf.dispatchFetch(accountSurfaceUrl.toString(), {
+      headers: {
+        Accept: "text/html",
+        Cookie: principal.cookie,
+      },
+      redirect: "manual",
+    });
+    const accountStatus = await harness.mf.dispatchFetch(accountSurfaceUrl.toString(), {
+      headers: {
+        Accept: "application/json",
+        Cookie: principal.cookie,
+      },
+      redirect: "manual",
+    });
     const missingEmailBody = (await missingEmail.json()) as {
+      gate?: { kind?: string };
+      status?: string;
+      target?: { returnTo?: string };
+    };
+    const accountStatusBody = (await accountStatus.json()) as {
       gate?: { kind?: string };
       status?: string;
       target?: { returnTo?: string };
@@ -763,6 +813,18 @@ describe("installed Site custom-domain Worker routing", () => {
 
     await createAppRegistration(principal.principalId, taskInstallId);
 
+    const completeStatus = await harness.mf.dispatchFetch(accountSurfaceUrl.toString(), {
+      headers: {
+        Accept: "application/json",
+        Cookie: principal.cookie,
+      },
+      redirect: "manual",
+    });
+    const completeStatusBody = (await completeStatus.json()) as {
+      continueTo?: string;
+      status?: string;
+      target?: { returnTo?: string; targetOrigin?: string };
+    };
     const granted = await harness.mf.dispatchFetch(startLocation, {
       headers: {
         Accept: "text/html",
@@ -781,6 +843,27 @@ describe("installed Site custom-domain Worker routing", () => {
     });
     expect(JSON.stringify(missingEmailBody)).not.toContain("session");
     expect(JSON.stringify(missingEmailBody)).not.toContain("grantSecret");
+    expect(missingEmailHtml.status).toBe(302);
+    expect(accountSurfaceUrl.pathname).toBe(runtimeTopologyRoutes.authAccountRoute);
+    expect(accountSurfaceUrl.search).toBe(new URL(startLocation).search);
+    expect(missingEmailHtml.headers.get("Set-Cookie") ?? "").not.toContain(
+      `${HOST_AUTH_SESSION_COOKIE_NAME}=`,
+    );
+    expect(accountSurface.status).toBe(200);
+    expect(accountSurface.headers.get("Content-Type")).toContain("text/html");
+
+    expect(accountStatus.status).toBe(409);
+    expect(accountStatus.headers.get("Location")).toBeNull();
+    expect(accountStatus.headers.get("Set-Cookie")).toBeNull();
+    expect(accountStatusBody).toMatchObject({
+      gate: { kind: "email-verification" },
+      status: "blocked",
+      target: { returnTo: "/schema?view=board" },
+    });
+    expect(JSON.stringify(accountStatusBody)).not.toContain("session");
+    expect(JSON.stringify(accountStatusBody)).not.toContain("grantSecret");
+    expect(JSON.stringify(accountStatusBody)).not.toContain("credential");
+    expect(JSON.stringify(accountStatusBody)).not.toContain("tokenHash");
 
     expect(missingRegistration.status).toBe(409);
     expect(missingRegistration.headers.get("Location")).toBeNull();
@@ -788,6 +871,20 @@ describe("installed Site custom-domain Worker routing", () => {
       gate: { appInstallId: taskInstallId, kind: "app-registration" },
       status: "blocked",
     });
+
+    expect(completeStatus.status).toBe(200);
+    expect(completeStatus.headers.get("Location")).toBeNull();
+    expect(completeStatus.headers.get("Set-Cookie")).toBeNull();
+    expect(completeStatusBody).toMatchObject({
+      continueTo: `${INSTANCE_AUTH_HANDOFF_START_PATH}${accountSurfaceUrl.search}`,
+      status: "complete",
+      target: {
+        returnTo: "/schema?view=board",
+        targetOrigin: `https://${mappedAppHost}`,
+      },
+    });
+    expect(JSON.stringify(completeStatusBody)).not.toContain("grantSecret");
+    expect(JSON.stringify(completeStatusBody)).not.toContain("hostSessionCookie");
 
     expect(granted.status).toBe(302);
     expect(callbackUrl.origin).toBe(`https://${mappedAppHost}`);
@@ -898,6 +995,14 @@ describe("installed Site custom-domain Worker routing", () => {
         headers: { Cookie: cookie },
       },
     );
+    const blockedShell = await fetchHost(mappedAppHost, "/schema?view=board", {
+      headers: {
+        Accept: "text/html",
+        Cookie: cookie,
+      },
+      redirect: "manual",
+    });
+    const blockedShellLocation = new URL(requiredHeader(blockedShell, "Location"));
     const blockedBody = (await blocked.json()) as {
       gate?: { kind?: string; policies?: Array<{ accountPolicyId?: string }> };
       status?: string;
@@ -914,6 +1019,12 @@ describe("installed Site custom-domain Worker routing", () => {
     );
 
     expect(blocked.status).toBe(409);
+    expect(blockedShell.status).toBe(302);
+    expect(blockedShellLocation.origin).toBe("https://www.example.com");
+    expect(blockedShellLocation.pathname).toBe(runtimeTopologyRoutes.authAccountRoute);
+    expect(blockedShellLocation.searchParams.get("targetOrigin")).toBe(`https://${mappedAppHost}`);
+    expect(blockedShellLocation.searchParams.get("returnTo")).toBe("/schema?view=board");
+    expect(blockedShell.headers.get("Set-Cookie")).toContain(`${HOST_AUTH_NONCE_COOKIE_NAME}=`);
     expect(blockedBody).toMatchObject({
       gate: {
         kind: "terms-acceptance",
@@ -988,6 +1099,18 @@ describe("installed Site custom-domain Worker routing", () => {
       headers: { Accept: "text/html" },
       redirect: "manual",
     });
+    const account = await fetchHost(
+      mappedInstanceHost,
+      `${runtimeTopologyRoutes.authAccountRoute}?returnTo=%2Fdeployments`,
+      {
+        headers: { Accept: "text/html" },
+        redirect: "manual",
+      },
+    );
+    const accountGate = await fetchHost(mappedInstanceHost, "/formless/auth/profile-completion", {
+      headers: { Accept: "text/html" },
+      redirect: "manual",
+    });
     const setupStatus = await fetchHost(mappedInstanceHost, "/api/formless/setup");
     const sessionStatus = await fetchHost(mappedInstanceHost, "/api/formless/session");
     const setupCapability = await fetchHost(mappedInstanceHost, "/api/formless/setup/capability", {
@@ -1036,6 +1159,17 @@ describe("installed Site custom-domain Worker routing", () => {
     expect(setup.status).toBe(302);
     expect(setup.headers.get("Location")).toBe(`https://www.example.com/setup?token=${setupToken}`);
     expect(setup.headers.get("Set-Cookie")).toBeNull();
+
+    expect(account.status).toBe(302);
+    expect(account.headers.get("Location")).toBe(
+      "https://www.example.com/formless/auth?returnTo=%2Fdeployments",
+    );
+    expect(account.headers.get("Set-Cookie")).toBeNull();
+    expect(accountGate.status).toBe(302);
+    expect(accountGate.headers.get("Location")).toBe(
+      "https://www.example.com/formless/auth/profile-completion",
+    );
+    expect(accountGate.headers.get("Set-Cookie")).toBeNull();
 
     expect(setupStatus.status).toBe(404);
     expect(sessionStatus.status).toBe(404);
@@ -1177,6 +1311,27 @@ describe("installed Site custom-domain Worker routing", () => {
       headers: { Accept: "text/html" },
       redirect: "manual",
     });
+    const account = await fetchHost(mappedInstanceHost, runtimeTopologyRoutes.authAccountRoute, {
+      headers: { Accept: "text/html" },
+      redirect: "manual",
+    });
+    const accountReturn = await fetchHost(
+      mappedInstanceHost,
+      `${runtimeTopologyRoutes.authAccountRoute}?returnTo=%2Fdeployments`,
+      {
+        headers: { Accept: "text/html" },
+        redirect: "manual",
+      },
+    );
+    const unsafeAccountReturn = await fetchHost(
+      mappedInstanceHost,
+      `${runtimeTopologyRoutes.authAccountRoute}?returnTo=${encodeURIComponent("https://evil.example.com/deployments")}`,
+      {
+        headers: { Accept: "application/json" },
+        redirect: "manual",
+      },
+    );
+    const unsafeAccountReturnBody = (await unsafeAccountReturn.json()) as { error?: string };
     const setupCapability = await fetchHost(mappedInstanceHost, "/api/formless/setup/capability", {
       body: JSON.stringify({ setupToken }),
       headers: adminHeaders({ "Content-Type": "application/json" }),
@@ -1195,9 +1350,41 @@ describe("installed Site custom-domain Worker routing", () => {
       options: { rp: { id: string; name: string } };
     };
     const sessionStatus = await fetchHost(mappedInstanceHost, "/api/formless/session");
+    const owner = await ensureTestIdentityOwner(harness, adminToken, {
+      name: "Mapped Auth Origin Owner",
+    });
+    const ownerSession = await createOwnerSessionCookie({
+      env: { FORMLESS_ADMIN_TOKEN: adminToken },
+      maxAgeSeconds: 60,
+      now: "2999-01-01T00:00:00.000Z",
+      owner,
+      request: new Request(`https://${mappedInstanceHost}/`),
+    });
+    const authenticatedAccountReturn = await fetchHost(
+      mappedInstanceHost,
+      `${runtimeTopologyRoutes.authAccountRoute}?returnTo=%2Fdeployments`,
+      {
+        headers: {
+          Accept: "text/html",
+          Cookie: cookiePair(ownerSession.cookie),
+        },
+        redirect: "manual",
+      },
+    );
 
     expect(login.status).toBe(200);
     expect(setup.status).toBe(200);
+    expect(account.status).toBe(200);
+    expect(accountReturn.status).toBe(302);
+    expect(accountReturn.headers.get("Location")).toBe(
+      ownerLoginRedirectLocationForRoute(
+        `${runtimeTopologyRoutes.authAccountRoute}?returnTo=%2Fdeployments`,
+      ),
+    );
+    expect(unsafeAccountReturn.status).toBe(400);
+    expect(unsafeAccountReturnBody.error).toBe("Account return target must be path-only.");
+    expect(authenticatedAccountReturn.status).toBe(302);
+    expect(authenticatedAccountReturn.headers.get("Location")).toBe("/deployments");
     expect(setupCapability.status).toBe(200);
     expect(registerOptions.status).toBe(200);
     expect(registerOptionsBody.options.rp).toEqual({
@@ -1205,7 +1392,7 @@ describe("installed Site custom-domain Worker routing", () => {
       name: "Formless",
     });
     expect(sessionStatus.status).toBe(200);
-    expect(assetRequests).toEqual(["/login", "/setup"]);
+    expect(assetRequests).toEqual(["/login", "/setup", "/index.html"]);
   });
 
   it("accepts host-local sessions for matched mapped instance control-plane APIs", async () => {

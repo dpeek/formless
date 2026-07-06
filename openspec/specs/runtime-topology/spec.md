@@ -107,6 +107,21 @@ The system SHALL mount browser surfaces according to the active runtime profile.
   same host can serve owner auth routes and ordinary instance admin routes
   according to path and route access policy
 
+#### Scenario: Auth origin account orchestrator routes
+
+- GIVEN a browser is on the configured auth origin
+- WHEN it navigates to `/formless/auth` or a reserved account gate path under
+  `/formless/auth/*`
+- THEN the client shell is eligible to render the runtime-owned account
+  orchestrator or account gate surface
+- AND the route is reserved runtime auth behavior rather than an installed app,
+  public Site document, source app screen, generated identity-control-plane
+  editor, schema-key route, or static asset fallback
+- AND protected target continuations remain governed by route access policy and
+  account completion gates before the target surface is served
+- AND mapped app, mapped public Site, and non-auth mapped instance hosts do not
+  become WebAuthn relying parties by serving the account orchestrator routes
+
 #### Scenario: App profile mounts one app
 
 - GIVEN the runtime profile is `app`

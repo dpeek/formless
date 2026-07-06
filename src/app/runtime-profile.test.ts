@@ -153,6 +153,8 @@ describe("runtime profile resolver", () => {
       schemaKeyBrowserRoutes: false,
     });
     expect(runtimeBrowserRoutePatterns(profile)).toEqual({
+      authAccountGateRoutePattern: "/formless/auth/*",
+      authAccountRoute: "/formless/auth",
       instanceAccessRoute: "/access",
       instanceShellRoute: "/",
       installedAppHomeRoutePattern: "/apps/:installId",
@@ -195,6 +197,8 @@ describe("runtime profile resolver", () => {
       schemaKeyBrowserRoutes: true,
     });
     expect(runtimeBrowserRoutePatterns(profile)).toEqual({
+      authAccountGateRoutePattern: "/formless/auth/*",
+      authAccountRoute: "/formless/auth",
       instanceAccessRoute: "/access",
       instanceShellRoute: "/",
       installedAppHomeRoutePattern: "/apps/:installId",
@@ -598,6 +602,8 @@ describe("runtime profile resolver", () => {
       routePattern: "/*",
     });
     expect(runtimeBrowserRoutePatterns(profile)).toEqual({
+      authAccountGateRoutePattern: "/formless/auth/*",
+      authAccountRoute: "/formless/auth",
       ownerLoginRoute: "/login",
       ownerSetupRoute: "/setup",
     });

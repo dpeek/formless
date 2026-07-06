@@ -8,7 +8,7 @@ import {
 import { handleInstanceArchiveApiRequest } from "./archive-api.ts";
 import { authorizeInstanceWrite, authorizeOwnerManagementRead } from "./authority-admin-guard.ts";
 import { selectAuthorityOperation } from "./authority-operations.ts";
-import { handleClientAssetRequest } from "./client-shell.ts";
+import { handleClientAssetRequest, handleClientShellDocumentRequest } from "./client-shell.ts";
 import { handleDeployMetadataRequest } from "./deploy-metadata.ts";
 import {
   handleMediaRequest as handleMediaPackageRequest,
@@ -35,10 +35,13 @@ import {
   HOST_AUTH_SESSION_COOKIE_NAME,
   configuredInstanceAuthOrigin,
   accountCompletionBlockedResponse,
+  handleAuthAccountHandoffBrowserContinuation,
   handleInstanceAuthHandoffRequest,
   hostAuthSessionTargetForRuntimeRoute,
   requestOriginForAuth,
+  resolveAuthAccountHandoffContinuation,
   setHostAuthSessionTargetHeaders,
+  startProtectedRouteAuthAccount,
   startOwnerRouteAuthHandoff,
   startProtectedRouteAuthHandoff,
   validateRouteAccessSession,
@@ -51,10 +54,17 @@ import { handleOwnerPasskeyApiRequest } from "./owner-passkeys.ts";
 import {
   ownerLoginRedirectLocationForRoute,
   ownerLoginRedirectTargetFromSearch,
+  parseOwnerLoginRedirectTarget,
+  type AccountCompletionGateTarget,
 } from "../shared/instance-auth.ts";
+import {
+  isRuntimeAuthAccountRoutePath,
+  runtimeTopologyRoutes,
+} from "../shared/runtime-topology.ts";
 import {
   areSchemaKeyApiRoutesEnabledForRequest,
   mappedSiteHostRedirectForRequest,
+  ownerBrowserRouteAccessForRequest,
   publishedSiteRedirectForRequest,
   resolveWorkerRuntimeRequestTopology,
   shouldDeferToStaticAssets,
@@ -252,7 +262,7 @@ export default {
       return instanceAuthHandoffResponse;
     }
 
-    if (isMappedAuthBlockedProfileHost && isOwnerAuthRoute(requestTopology.pathname)) {
+    if (isMappedAuthBlockedProfileHost && isReservedAuthOriginRoute(requestTopology.pathname)) {
       return notFoundResponse(requestTopology.apiPath);
     }
 
@@ -265,6 +275,30 @@ export default {
 
     if (nonAuthOwnerRouteResponse) {
       return nonAuthOwnerRouteResponse;
+    }
+
+    const authAccountStatusResponse = await handleAuthAccountStatusRequest(
+      request,
+      env,
+      requestTopology,
+    );
+
+    if (authAccountStatusResponse) {
+      return authAccountStatusResponse;
+    }
+
+    const authAccountBrowserResponse = await handleAuthAccountBrowserRequest(
+      request,
+      env,
+      requestTopology,
+    );
+
+    if (authAccountBrowserResponse) {
+      return authAccountBrowserResponse;
+    }
+
+    if (isRuntimeAuthAccountRoutePath(requestTopology.pathname)) {
+      return notFoundResponse(requestTopology.apiPath);
     }
 
     const localSessionBootstrapResponse = isLocalSessionBootstrapApiPath(requestTopology.pathname)
@@ -508,6 +542,231 @@ function isOwnerAuthRoute(pathname: string): boolean {
     pathname === "/api/formless/passkeys" ||
     pathname.startsWith("/api/formless/passkeys/")
   );
+}
+
+function isReservedAuthOriginRoute(pathname: string): boolean {
+  return isOwnerAuthRoute(pathname) || isRuntimeAuthAccountRoutePath(pathname);
+}
+
+async function handleAuthAccountStatusRequest(
+  request: Request,
+  env: Env,
+  requestTopology: WorkerRuntimeRequestTopology,
+): Promise<Response | undefined> {
+  if (
+    !isRuntimeAuthAccountRoutePath(requestTopology.pathname) ||
+    !requestTopology.readMethod ||
+    requestTopology.acceptsHtml ||
+    requestTopology.apiPath ||
+    requestTopology.staticAssetPath
+  ) {
+    return undefined;
+  }
+
+  const authOrigin = await configuredInstanceAuthOrigin(request, env);
+
+  if (!authOrigin || authOrigin !== requestOriginForAuth(request)) {
+    return Response.json({ error: "Not found." }, { status: 404 });
+  }
+
+  try {
+    const handoffContinuation = await resolveAuthAccountHandoffContinuation(request, env);
+
+    if (handoffContinuation?.kind === "login-required") {
+      return Response.json(
+        { error: "Authenticated account session is required." },
+        { status: 401 },
+      );
+    }
+
+    if (handoffContinuation?.kind === "blocked") {
+      return accountCompletionBlockedResponse(handoffContinuation.accountCompletion);
+    }
+
+    if (handoffContinuation?.kind === "complete") {
+      return Response.json(handoffContinuation.accountCompletion);
+    }
+
+    return await handleAuthAccountReturnTargetStatusRequest(request, env);
+  } catch (error) {
+    return Response.json({ error: errorMessage(error) }, { status: 400 });
+  }
+}
+
+async function handleAuthAccountBrowserRequest(
+  request: Request,
+  env: Env,
+  requestTopology: WorkerRuntimeRequestTopology,
+): Promise<Response | undefined> {
+  if (
+    !isRuntimeAuthAccountRoutePath(requestTopology.pathname) ||
+    !requestTopology.readMethod ||
+    !requestTopology.acceptsHtml ||
+    requestTopology.apiPath ||
+    requestTopology.staticAssetPath
+  ) {
+    return undefined;
+  }
+
+  const authOrigin = await configuredInstanceAuthOrigin(request, env);
+
+  if (!authOrigin) {
+    return new Response(null, { status: 404 });
+  }
+
+  if (authOrigin !== requestOriginForAuth(request)) {
+    return redirectResponse(authOriginLocationForRequest(authOrigin, request), 302);
+  }
+
+  const handoffContinuation = await handleAuthAccountHandoffBrowserContinuation(request, env);
+
+  if (handoffContinuation?.kind === "response") {
+    return handoffContinuation.response;
+  }
+
+  if (handoffContinuation?.kind === "blocked") {
+    return await handleClientShellDocumentRequest(request, env);
+  }
+
+  const returnTargetContinuation = await handleAuthAccountReturnTargetBrowserRequest(request, env);
+
+  if (returnTargetContinuation?.kind === "response") {
+    return returnTargetContinuation.response;
+  }
+
+  if (returnTargetContinuation?.kind === "blocked") {
+    return await handleClientShellDocumentRequest(request, env);
+  }
+
+  return await handleClientShellDocumentRequest(request, env);
+}
+
+async function handleAuthAccountReturnTargetBrowserRequest(
+  request: Request,
+  env: Env,
+): Promise<{ kind: "blocked" } | { kind: "response"; response: Response } | undefined> {
+  const returnTo = parseOwnerLoginRedirectTarget(new URL(request.url).searchParams.get("returnTo"));
+
+  if (!returnTo) {
+    return undefined;
+  }
+
+  const targetUrl = new URL(returnTo, request.url);
+  const targetRequest = new Request(targetUrl, {
+    headers: request.headers,
+    method: request.method,
+  });
+  const runtimeRoute = await resolveInstanceRuntimeRouteForRequest(targetRequest, env);
+  const runtimeProfile =
+    runtimeRoute?.kind === "mount" && runtimeRoute.targetProfile !== "public-site"
+      ? runtimeRoute.targetProfile
+      : env.FORMLESS_RUNTIME_PROFILE;
+  const targetTopology = resolveWorkerRuntimeRequestTopology(
+    targetRequest,
+    workerRuntimeProfileInput(runtimeProfile),
+  );
+  const requiredAccess = ownerBrowserRouteAccessForRequest(
+    targetRequest,
+    targetTopology,
+    runtimeRoute,
+  );
+
+  if (requiredAccess === "anonymous") {
+    return { kind: "response", response: redirectResponse(returnTo, 302) };
+  }
+
+  const session = await validateRouteAccessSession(targetRequest, env, {
+    requiredAccess,
+    ...(runtimeRoute?.kind === "mount" ? { runtimeRoute } : {}),
+  });
+
+  if (session.ok) {
+    return { kind: "response", response: redirectResponse(returnTo, 302) };
+  }
+
+  if (session.reason === "account-completion-required" && session.accountCompletion !== undefined) {
+    return { kind: "blocked" };
+  }
+
+  return {
+    kind: "response",
+    response: redirectResponse(
+      ownerLoginRedirectLocationForRoute(authAccountRedirectTarget(request)),
+      302,
+    ),
+  };
+}
+
+async function handleAuthAccountReturnTargetStatusRequest(
+  request: Request,
+  env: Env,
+): Promise<Response> {
+  const returnTo = parseOwnerLoginRedirectTarget(new URL(request.url).searchParams.get("returnTo"));
+
+  if (!returnTo) {
+    return Response.json({ error: "Account return target must be path-only." }, { status: 400 });
+  }
+
+  const targetUrl = new URL(returnTo, request.url);
+  const targetRequest = new Request(targetUrl, {
+    headers: request.headers,
+    method: request.method,
+  });
+  const runtimeRoute = await resolveInstanceRuntimeRouteForRequest(targetRequest, env);
+  const runtimeProfile =
+    runtimeRoute?.kind === "mount" && runtimeRoute.targetProfile !== "public-site"
+      ? runtimeRoute.targetProfile
+      : env.FORMLESS_RUNTIME_PROFILE;
+  const targetTopology = resolveWorkerRuntimeRequestTopology(
+    targetRequest,
+    workerRuntimeProfileInput(runtimeProfile),
+  );
+  const requiredAccess = ownerBrowserRouteAccessForRequest(
+    targetRequest,
+    targetTopology,
+    runtimeRoute,
+  );
+
+  if (requiredAccess === "anonymous") {
+    return Response.json({ error: "Account continuation target is public." }, { status: 400 });
+  }
+
+  const session = await validateRouteAccessSession(targetRequest, env, {
+    requiredAccess,
+    ...(runtimeRoute?.kind === "mount" ? { runtimeRoute } : {}),
+  });
+
+  if (session.ok) {
+    if (session.target === undefined) {
+      return Response.json({ error: "Account completion target is unavailable." }, { status: 400 });
+    }
+
+    return Response.json({
+      continueTo: returnTo,
+      status: "complete",
+      target: accountCompletionTargetFromSessionTarget(returnTo, session.target),
+    });
+  }
+
+  if (session.reason === "account-completion-required" && session.accountCompletion !== undefined) {
+    return accountCompletionBlockedResponse(session.accountCompletion);
+  }
+
+  return Response.json({ error: "Authenticated account session is required." }, { status: 401 });
+}
+
+function accountCompletionTargetFromSessionTarget(
+  returnTo: `/${string}`,
+  target: NonNullable<ReturnType<typeof hostAuthSessionTargetForRuntimeRoute>>,
+): AccountCompletionGateTarget {
+  return {
+    ...(target.appInstallId === undefined ? {} : { appInstallId: target.appInstallId }),
+    returnTo,
+    routeId: target.routeId,
+    ...(target.storageIdentity === undefined ? {} : { storageIdentity: target.storageIdentity }),
+    targetOrigin: target.targetOrigin,
+    targetProfile: target.targetProfile,
+  };
 }
 
 async function handleNonAuthOriginOwnerAuthRoute(
@@ -755,7 +1014,10 @@ async function redirectAnonymousProtectedBrowserRoute(
   }
 
   if (session.reason === "account-completion-required" && session.accountCompletion !== undefined) {
-    return accountCompletionBlockedResponse(session.accountCompletion);
+    return (
+      (await startProtectedRouteAuthAccount(request, env, runtimeRoute)) ??
+      accountCompletionBlockedResponse(session.accountCompletion)
+    );
   }
 
   const handoffRedirect = await startProtectedRouteAuthHandoff(request, env, runtimeRoute);
@@ -776,6 +1038,13 @@ function ownerBrowserRedirectTarget(request: Request) {
   return `${url.pathname}${url.search}`;
 }
 
+function authAccountRedirectTarget(request: Request) {
+  const url = new URL(request.url);
+  const target = `${runtimeTopologyRoutes.authAccountRoute}${url.search}`;
+
+  return parseOwnerLoginRedirectTarget(target) ?? runtimeTopologyRoutes.authAccountRoute;
+}
+
 function notFoundResponse(json: boolean): Response {
   return json
     ? Response.json({ error: "Not found." }, { status: 404 })
@@ -790,6 +1059,10 @@ function requestHasCookie(request: Request, name: string): boolean {
   }
 
   return header.split(";").some((part) => part.split("=", 1)[0]?.trim() === name);
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "Unknown error.";
 }
 
 const FORMLESS_ORIGINAL_REQUEST_HOST_HEADER = "x-formless-original-request-host";

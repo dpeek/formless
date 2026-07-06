@@ -715,6 +715,8 @@ describe("Worker document routing", () => {
     expect(isClientShellRoute("/site/schema")).toBe(true);
     expect(isClientShellRoute("/apps/personal")).toBe(true);
     expect(isClientShellRoute("/sites/personal/blog")).toBe(true);
+    expect(isClientShellRoute("/formless/auth")).toBe(true);
+    expect(isClientShellRoute("/formless/auth/profile-completion")).toBe(true);
     expect(isClientShellRoute("/setup")).toBe(true);
     expect(isClientShellRoute("/login")).toBe(true);
     expect(isClientShellRoute("/local-session")).toBe(true);

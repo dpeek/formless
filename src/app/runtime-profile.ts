@@ -22,6 +22,7 @@ import {
   FORMLESS_RUNTIME_APP_INSTALL_ID_META_NAME,
   FORMLESS_RUNTIME_PACKAGE_APP_KEY_META_NAME,
   FORMLESS_RUNTIME_PROFILE_META_NAME,
+  isRuntimeAuthAccountRoutePath,
   matchRuntimeRouteBase,
   resolveRuntimeProfileKind,
   runtimeRouteFromBase,
@@ -116,6 +117,8 @@ export type RuntimeRoutePolicy = {
 };
 
 export type RuntimeBrowserRoutePatterns = {
+  authAccountGateRoutePattern?: typeof runtimeTopologyRoutes.authAccountGateRoutePattern;
+  authAccountRoute?: typeof runtimeTopologyRoutes.authAccountRoute;
   instanceAccessRoute?: typeof runtimeTopologyRoutes.accessRoute;
   instanceShellRoute?: typeof runtimeTopologyRoutes.instanceRootRoute;
   installedAppHomeRoutePattern?: `/${string}`;
@@ -255,6 +258,8 @@ export function runtimeBrowserRoutePatterns(profile: RuntimeProfile): RuntimeBro
   return {
     ...(policy.ownerSessionBrowserRoutes
       ? {
+          authAccountGateRoutePattern: runtimeTopologyRoutes.authAccountGateRoutePattern,
+          authAccountRoute: runtimeTopologyRoutes.authAccountRoute,
           ownerLoginRoute: runtimeTopologyRoutes.loginRoute,
           ownerSetupRoute: runtimeTopologyRoutes.setupRoute,
         }
@@ -320,6 +325,7 @@ export function shouldRenderRuntimeRouteOutsideGeneratedAppFrame(
   const routes = runtimeBrowserRoutePatterns(profile);
 
   return (
+    isRuntimeAuthAccountRoutePath(path) ||
     path === COLLABORATOR_INVITATION_ACCEPT_PATH ||
     path === routes.ownerLoginRoute ||
     path === routes.ownerSetupRoute ||

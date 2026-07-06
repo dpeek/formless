@@ -15,6 +15,7 @@ import {
   type AccountCompletionGateResolutionResult,
   type AccountCompletionGateTarget,
 } from "../shared/instance-auth.ts";
+import { acceptsRuntimeHtml, runtimeTopologyRoutes } from "../shared/runtime-topology.ts";
 import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
 import {
   INSTANCE_AUTH_ACCOUNT_COMPLETION_RESOLVE_PATH,
@@ -147,21 +148,36 @@ export async function startProtectedRouteAuthHandoff(
   env: InstanceAuthHandoffEnv,
   runtimeRoute: InstanceRuntimeRouteResolution | undefined,
 ): Promise<Response | undefined> {
+  return startProtectedRouteAuthRedirect(request, env, runtimeRoute, {
+    entryPath: INSTANCE_AUTH_HANDOFF_START_PATH,
+    requireCrossOrigin: true,
+  });
+}
+
+export async function startProtectedRouteAuthAccount(
+  request: Request,
+  env: InstanceAuthHandoffEnv,
+  runtimeRoute: InstanceRuntimeRouteResolution | undefined,
+): Promise<Response | undefined> {
+  return startProtectedRouteAuthRedirect(request, env, runtimeRoute, {
+    entryPath: runtimeTopologyRoutes.authAccountRoute,
+    requireCrossOrigin: false,
+  });
+}
+
+async function startProtectedRouteAuthRedirect(
+  request: Request,
+  env: InstanceAuthHandoffEnv,
+  runtimeRoute: InstanceRuntimeRouteResolution | undefined,
+  options: { entryPath: string; requireCrossOrigin: boolean },
+): Promise<Response | undefined> {
   const target = hostAuthSessionTargetForRuntimeRoute(request, runtimeRoute, {
     minimumAccess: "authenticated",
   });
 
-  if (!target) {
-    return undefined;
-  }
-
   const authOrigin = await configuredInstanceAuthOrigin(request, env);
 
   if (!authOrigin) {
-    return undefined;
-  }
-
-  if (authOrigin === requestOriginForAuth(request)) {
     return undefined;
   }
 
@@ -172,10 +188,27 @@ export async function startProtectedRouteAuthHandoff(
     return jsonResponse({ error: "Handoff return target must be path-only." }, 400);
   }
 
+  const requestOrigin = requestOriginForAuth(request);
+
+  if (!target || authOrigin === requestOrigin) {
+    if (options.requireCrossOrigin) {
+      return undefined;
+    }
+
+    const location = new URL(runtimeTopologyRoutes.authAccountRoute, authOrigin);
+
+    location.searchParams.set("returnTo", returnTo);
+
+    return redirectResponse(
+      authOrigin === requestOrigin ? `${location.pathname}${location.search}` : location.toString(),
+      302,
+    );
+  }
+
   const nonce = randomBase64Url(32);
   const nonceHash = await sha256Base64Url(nonce);
   const state = randomBase64Url(32);
-  const location = new URL(INSTANCE_AUTH_HANDOFF_START_PATH, authOrigin);
+  const location = new URL(options.entryPath, authOrigin);
 
   location.searchParams.set("targetOrigin", target.targetOrigin);
   location.searchParams.set("routeId", target.routeId);
@@ -245,6 +278,111 @@ export async function handleInstanceAuthHandoffRequest(
   return env.FORMLESS_AUTHORITY.get(id).fetch(request);
 }
 
+export type AuthAccountHandoffBrowserContinuationResult =
+  | {
+      accountCompletion: Extract<AccountCompletionGateResolutionResult, { status: "blocked" }>;
+      kind: "blocked";
+    }
+  | { kind: "response"; response: Response };
+
+export type AuthAccountHandoffContinuationResolution =
+  | {
+      accountCompletion: Extract<AccountCompletionGateResolutionResult, { status: "blocked" }>;
+      kind: "blocked";
+    }
+  | {
+      accountCompletion: Extract<AccountCompletionGateResolutionResult, { status: "complete" }>;
+      kind: "complete";
+    }
+  | { kind: "login-required"; redirectTo: `/${string}` };
+
+export async function handleAuthAccountHandoffBrowserContinuation(
+  request: Request,
+  env: InstanceAuthHandoffEnv,
+): Promise<AuthAccountHandoffBrowserContinuationResult | undefined> {
+  try {
+    const resolution = await resolveAuthAccountHandoffContinuation(request, env);
+
+    if (resolution === undefined) {
+      return undefined;
+    }
+
+    if (resolution.kind === "login-required") {
+      return {
+        kind: "response",
+        response: redirectResponse(resolution.redirectTo, 302),
+      };
+    }
+
+    if (resolution.kind === "blocked") {
+      return {
+        accountCompletion: resolution.accountCompletion,
+        kind: "blocked",
+      };
+    }
+
+    return {
+      kind: "response",
+      response: redirectResponse(resolution.accountCompletion.continueTo, 302),
+    };
+  } catch (error) {
+    return {
+      kind: "response",
+      response: jsonResponse({ error: errorMessage(error) }, 400),
+    };
+  }
+}
+
+export async function resolveAuthAccountHandoffContinuation(
+  request: Request,
+  env: InstanceAuthHandoffEnv,
+): Promise<AuthAccountHandoffContinuationResolution | undefined> {
+  const url = new URL(request.url);
+
+  if (!url.searchParams.has("targetOrigin")) {
+    return undefined;
+  }
+
+  const target = await verifiedHandoffStartTargetFromSearch(request, env, url);
+  const session =
+    target.requiredAccess === "owner"
+      ? await validateOwnerSessionAuthority(request, env)
+      : await validateOwnerSessionPrincipal(request, env);
+
+  if (!session.ok) {
+    return {
+      kind: "login-required",
+      redirectTo: ownerLoginRedirectLocationForRoute(authAccountRedirectTargetForRequest(request)),
+    };
+  }
+
+  const accountCompletionTarget = accountCompletionTargetForHandoffTarget(target);
+  const accountCompletion =
+    target.requiredAccess === "authenticated"
+      ? await resolveAccountCompletionForTarget(
+          request,
+          env,
+          session.session.principalId,
+          accountCompletionTarget,
+        )
+      : completeAccountContinuationResult(accountCompletionTarget);
+
+  if (accountCompletion.status === "blocked") {
+    return {
+      accountCompletion,
+      kind: "blocked",
+    };
+  }
+
+  return {
+    accountCompletion: {
+      ...accountCompletion,
+      continueTo: handoffStartRedirectTargetForAuthAccountRequest(request),
+    },
+    kind: "complete",
+  };
+}
+
 export async function handleInstanceAuthHandoffDurableObjectRequest(
   request: Request,
   storage: DurableObjectStorage,
@@ -277,7 +415,7 @@ export async function handleInstanceAuthHandoffDurableObjectRequest(
 
     if (!session.ok) {
       return redirectResponse(
-        ownerLoginRedirectLocationForRoute(`${url.pathname}${url.search}`),
+        ownerLoginRedirectLocationForRoute(authAccountRedirectTargetForRequest(request)),
         302,
       );
     }
@@ -294,6 +432,10 @@ export async function handleInstanceAuthHandoffDurableObjectRequest(
       });
 
       if (accountCompletion.status === "blocked") {
+        if (acceptsRuntimeHtml(request.headers.get("Accept"))) {
+          return redirectResponse(authAccountRedirectTargetForRequest(request), 302);
+        }
+
         return accountCompletionBlockedResponse(accountCompletion);
       }
     }
@@ -670,6 +812,33 @@ async function resolveRouteAccessAccountCompletion(
   return parseAccountCompletionGateResolutionResult(body);
 }
 
+async function resolveAccountCompletionForTarget(
+  request: Request,
+  env: InstanceAuthHandoffEnv,
+  principalId: string,
+  target: AccountCompletionGateTarget,
+): Promise<AccountCompletionGateResolutionResult> {
+  const id = env.FORMLESS_AUTHORITY.idFromName(FORMLESS_INSTANCE_AUTHORITY_NAME);
+  const response = await env.FORMLESS_AUTHORITY.get(id).fetch(
+    new Request(new URL(INSTANCE_AUTH_ACCOUNT_COMPLETION_RESOLVE_PATH, request.url), {
+      body: JSON.stringify({
+        actorKind: "authenticated",
+        principalId,
+        target,
+      }),
+      headers: { "Content-Type": "application/json" },
+      method: "POST",
+    }),
+  );
+  const body = await response.json();
+
+  if (!response.ok) {
+    throw new Error(accountCompletionResolutionErrorMessage(body));
+  }
+
+  return parseAccountCompletionGateResolutionResult(body);
+}
+
 function accountCompletionTargetForHandoffTarget(
   target: Omit<
     CreateHandoffGrantInput,
@@ -713,8 +882,40 @@ function accountCompletionTargetForRouteRequest(
   };
 }
 
+function completeAccountContinuationResult(
+  target: AccountCompletionGateTarget,
+): Extract<AccountCompletionGateResolutionResult, { status: "complete" }> {
+  return {
+    continueTo: target.returnTo,
+    status: "complete",
+    target,
+  };
+}
+
 function parseAccountCompletionTargetPayload(value: unknown): AccountCompletionGateTarget {
   return parseAccountCompletionGateTarget(value);
+}
+
+function authAccountRedirectTargetForRequest(request: Request) {
+  const url = new URL(request.url);
+
+  url.pathname = runtimeTopologyRoutes.authAccountRoute;
+
+  return (
+    parseOwnerLoginRedirectTarget(`${url.pathname}${url.search}`) ??
+    runtimeTopologyRoutes.authAccountRoute
+  );
+}
+
+function handoffStartRedirectTargetForAuthAccountRequest(request: Request) {
+  const url = new URL(request.url);
+
+  url.pathname = INSTANCE_AUTH_HANDOFF_START_PATH;
+
+  return (
+    parseOwnerLoginRedirectTarget(`${url.pathname}${url.search}`) ??
+    INSTANCE_AUTH_HANDOFF_START_PATH
+  );
 }
 
 function accountCompletionResolutionErrorMessage(value: unknown): string {

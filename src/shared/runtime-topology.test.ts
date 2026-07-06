@@ -6,6 +6,7 @@ import {
   isRuntimeRouteAccess,
   isRuntimeApiPath,
   isRuntimeClientShellRoute,
+  isRuntimeAuthAccountRoutePath,
   isRuntimeDynamicSiteIconPath,
   isRuntimeInstanceProfileClientShellRoute,
   isRuntimePublishedProfileClientShellRoute,
@@ -17,6 +18,7 @@ import {
   publishedSiteRedirectLocation,
   resolveRuntimeProfileKind,
   runtimeRouteFromBase,
+  runtimeAuthAccountGateRoutes,
   runtimeProfileKindFromHost,
   runtimeRoutePolicyForProfileKind,
   stricterRuntimeRouteAccess,
@@ -137,12 +139,23 @@ describe("runtime topology", () => {
   it("owns installed route bases and public Site route constants", () => {
     expect(runtimeTopologyRoutes.accessRoute).toBe("/access");
     expect(runtimeTopologyRoutes.appRouteBase).toBe("/apps");
+    expect(runtimeTopologyRoutes.authAccountRoute).toBe("/formless/auth");
+    expect(runtimeTopologyRoutes.authAccountGateRoutePattern).toBe("/formless/auth/*");
     expect(runtimeTopologyRoutes.formlessRouteBase).toBe("/formless");
     expect(runtimeTopologyRoutes.siteRouteBase).toBe("/sites");
     expect(runtimeTopologyRoutes.publicSiteHomeSlug).toBe("home");
     expect(runtimeTopologyRoutes.publicSitePackageAppKey).toBe("site");
     expect(runtimeTopologyRoutes.publicSitePreviewRouteBase).toBe("/pages");
     expect(runtimeTopologyRoutes.siteAdminRoute).toBe("/admin");
+    expect(runtimeAuthAccountGateRoutes).toEqual({
+      appRegistration: "/formless/auth/app-registration",
+      credential: "/formless/auth/credential",
+      emailVerification: "/formless/auth/email-verification",
+      invitation: "/formless/auth/invitation",
+      profileCompletion: "/formless/auth/profile-completion",
+      roleReview: "/formless/auth/role-review",
+      termsAcceptance: "/formless/auth/terms-acceptance",
+    });
   });
 
   it("matches and builds runtime routes under shared route bases", () => {
@@ -178,6 +191,8 @@ describe("runtime topology", () => {
     expect(isRuntimeClientShellRoute("/crm/audiences")).toBe(true);
     expect(isRuntimeClientShellRoute("/site/schema")).toBe(true);
     expect(isRuntimeClientShellRoute("/schema")).toBe(true);
+    expect(isRuntimeClientShellRoute("/formless/auth")).toBe(true);
+    expect(isRuntimeClientShellRoute("/formless/auth/profile-completion")).toBe(true);
     expect(isRuntimeClientShellRoute("/formless/auth/invitations/accept")).toBe(true);
     expect(isRuntimeClientShellRoute("/apps/personal")).toBe(true);
     expect(isRuntimeClientShellRoute("/sites/personal/blog")).toBe(true);
@@ -188,6 +203,10 @@ describe("runtime topology", () => {
     expect(isRuntimeClientShellRoute("/blog")).toBe(false);
 
     expect(isRuntimePublishedProfileClientShellRoute("/apps/personal")).toBe(true);
+    expect(isRuntimePublishedProfileClientShellRoute("/formless/auth")).toBe(true);
+    expect(isRuntimePublishedProfileClientShellRoute("/formless/auth/profile-completion")).toBe(
+      true,
+    );
     expect(isRuntimePublishedProfileClientShellRoute("/formless/auth/callback")).toBe(true);
     expect(isRuntimePublishedProfileClientShellRoute("/sites/personal/blog")).toBe(true);
     expect(isRuntimePublishedProfileClientShellRoute("/login")).toBe(true);
@@ -199,11 +218,18 @@ describe("runtime topology", () => {
     expect(isRuntimeInstanceProfileClientShellRoute("/")).toBe(true);
     expect(isRuntimeInstanceProfileClientShellRoute("/access")).toBe(true);
     expect(isRuntimeInstanceProfileClientShellRoute("/local-session")).toBe(true);
+    expect(isRuntimeInstanceProfileClientShellRoute("/formless/auth")).toBe(true);
+    expect(isRuntimeInstanceProfileClientShellRoute("/formless/auth/profile-completion")).toBe(
+      true,
+    );
     expect(isRuntimeInstanceProfileClientShellRoute("/deployments")).toBe(false);
     expect(isRuntimeInstanceProfileClientShellRoute("/apps/personal")).toBe(true);
     expect(isRuntimeInstanceProfileClientShellRoute("/sites/personal")).toBe(true);
     expect(isRuntimeInstanceProfileClientShellRoute("/tasks")).toBe(false);
     expect(isRuntimeInstanceProfileClientShellRoute("/pages/home")).toBe(false);
+    expect(isRuntimeAuthAccountRoutePath("/formless/auth")).toBe(true);
+    expect(isRuntimeAuthAccountRoutePath("/formless/auth/profile-completion")).toBe(true);
+    expect(isRuntimeAuthAccountRoutePath("/formless/authentic")).toBe(false);
   });
 
   it("classifies API, read method, dynamic icon, static asset, and HTML accept facts", () => {

@@ -54,7 +54,7 @@ import {
   ownerLoginRedirectLocationForRoute,
   type OwnerLoginRedirectTarget,
 } from "./shared/instance-auth.ts";
-import type { RuntimeRouteAccess } from "./shared/runtime-topology.ts";
+import { runtimeTopologyRoutes, type RuntimeRouteAccess } from "./shared/runtime-topology.ts";
 import type { AppInstallsResponse } from "./shared/protocol.ts";
 
 type HomeRouteProps = {
@@ -77,6 +77,7 @@ export type RuntimeInstalledAppRouteRegistry = {
 };
 
 export type AppRouteComponents = {
+  AuthAccountRoute: ElementType;
   CollaboratorInvitationAcceptanceRoute: ElementType;
   GeneratedAppFrame: ElementType<GeneratedAppFrameProps>;
   HomeRoute: ElementType<HomeRouteProps>;
@@ -94,6 +95,11 @@ const defaultPublicSiteReactAdapters = createPublicSiteReactAdapterRegistry(
 );
 
 const defaultRouteComponents: AppRouteComponents = {
+  AuthAccountRoute: lazy(() =>
+    import("./app/routes/auth-account.tsx").then((module) => ({
+      default: module.AuthAccountRoute,
+    })),
+  ),
   CollaboratorInvitationAcceptanceRoute: lazy(() =>
     import("./app/routes/collaborator-invitation-acceptance.tsx").then((module) => ({
       default: module.CollaboratorInvitationAcceptanceRoute,
@@ -648,6 +654,7 @@ function AppRoutes({
   runtimeProfile: RuntimeProfile;
 }) {
   const {
+    AuthAccountRoute,
     CollaboratorInvitationAcceptanceRoute,
     HomeRoute,
     InstanceShellRoute,
@@ -671,6 +678,12 @@ function AppRoutes({
       ) : null}
       <Route path={COLLABORATOR_INVITATION_ACCEPT_PATH}>
         <CollaboratorInvitationAcceptanceRoute />
+      </Route>
+      <Route path={runtimeTopologyRoutes.authAccountRoute}>
+        <AuthAccountRoute />
+      </Route>
+      <Route path={runtimeTopologyRoutes.authAccountGateRoutePattern}>
+        <AuthAccountRoute />
       </Route>
       {browserRoutes.ownerSetupRoute ? (
         <Route path={browserRoutes.ownerSetupRoute}>
