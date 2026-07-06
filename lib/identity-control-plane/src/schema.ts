@@ -3,6 +3,8 @@ import {
   identityControlPlaneEntityNames,
   identityControlPlaneImmutableFields,
   identityControlPlaneRoleKeys,
+  type IdentityAccountPolicyScopeKind,
+  type IdentityAccountPolicyStatus,
   type IdentityAppRegistrationStatus,
   type IdentityAppRegistrationTargetKind,
   type IdentityContainerStatus,
@@ -11,6 +13,7 @@ import {
   type IdentityInvitationTargetSurface,
   type IdentityMembershipStatus,
   type IdentityMembershipTargetKind,
+  type IdentityPrincipalPolicyAcceptanceStatus,
   type IdentityPrincipalEmailVerificationStatus,
   type IdentityPrincipalKind,
   type IdentityPrincipalStatus,
@@ -111,6 +114,22 @@ const invitationStatusLabels = {
   pending: "Pending",
   revoked: "Revoked",
 } satisfies Record<IdentityInvitationStatus, string>;
+
+const accountPolicyScopeKindLabels = {
+  "app-install": "App install",
+  instance: "Instance",
+  organization: "Organization",
+} satisfies Record<IdentityAccountPolicyScopeKind, string>;
+
+const accountPolicyStatusLabels = {
+  active: "Active",
+  retired: "Retired",
+} satisfies Record<IdentityAccountPolicyStatus, string>;
+
+const principalPolicyAcceptanceStatusLabels = {
+  accepted: "Accepted",
+  revoked: "Revoked",
+} satisfies Record<IdentityPrincipalPolicyAcceptanceStatus, string>;
 
 const roleKeyLabels = Object.fromEntries(
   identityControlPlaneRoleKeys.map((roleKey) => [roleKey, roleKey]),
@@ -288,6 +307,48 @@ const entityViewConfig = {
       "expiresAt",
       "acceptedAt",
     ],
+  },
+  "account-policy": {
+    createFields: [
+      "displayName",
+      "policyKey",
+      "version",
+      "scopeKind",
+      {
+        field: "appInstallId",
+        visibleWhen: { field: "scopeKind", values: ["app-install"] },
+      },
+      {
+        field: "scopeOrganization",
+        visibleWhen: { field: "scopeKind", values: ["organization"] },
+      },
+      "status",
+      "publishedAt",
+      "policyDocumentUrl",
+      "policyContentRef",
+    ],
+    editFields: ["displayName", "status", "publishedAt"],
+    itemFields: ["displayName", "policyKey", "version", "scopeKind", "status"],
+    label: "Account policies",
+    tableFields: [
+      "displayName",
+      "policyKey",
+      "version",
+      "scopeKind",
+      "appInstallId",
+      "scopeOrganization",
+      "status",
+      "publishedAt",
+      "policyDocumentUrl",
+      "policyContentRef",
+    ],
+  },
+  "principal-policy-acceptance": {
+    createFields: ["principal", "accountPolicy", "status", "acceptedAt"],
+    editFields: ["status"],
+    itemFields: ["principal", "accountPolicy", "status", "acceptedAt"],
+    label: "Policy acceptances",
+    tableFields: ["principal", "accountPolicy", "status", "acceptedAt"],
   },
 } as const satisfies Record<
   IdentityControlPlaneEntityName,
@@ -511,6 +572,59 @@ export const identityControlPlaneSourceSchema = {
         },
       ),
     },
+    "account-policy": {
+      label: "Account policy",
+      fields: {
+        displayName: textField("Display name"),
+        policyKey: textField("Policy key"),
+        version: textField("Version"),
+        scopeKind: enumField("Scope kind", accountPolicyScopeKindLabels),
+        appInstallId: optionalTextField("App install id"),
+        scopeOrganization: optionalReferenceField(
+          "Scope organization",
+          "organization",
+          "displayName",
+        ),
+        status: enumField("Status", accountPolicyStatusLabels, "active"),
+        publishedAt: optionalTextField("Published at"),
+        policyDocumentUrl: optionalTextField("Policy document URL", "href"),
+        policyContentRef: optionalTextField("Policy content ref"),
+      },
+      operations: writeOperations(
+        "account policy",
+        [
+          "displayName",
+          "policyKey",
+          "version",
+          "scopeKind",
+          "appInstallId",
+          "scopeOrganization",
+          "status",
+          "publishedAt",
+          "policyDocumentUrl",
+          "policyContentRef",
+        ],
+        {
+          updateFields: ["displayName", "status", "publishedAt"],
+        },
+      ),
+    },
+    "principal-policy-acceptance": {
+      label: "Principal policy acceptance",
+      fields: {
+        principal: referenceField("Principal", "principal", "displayName"),
+        accountPolicy: referenceField("Account policy", "account-policy", "displayName"),
+        status: enumField("Status", principalPolicyAcceptanceStatusLabels, "accepted"),
+        acceptedAt: textField("Accepted at"),
+      },
+      operations: writeOperations(
+        "principal policy acceptance",
+        ["principal", "accountPolicy", "status", "acceptedAt"],
+        {
+          updateFields: ["status"],
+        },
+      ),
+    },
   },
   relationships: {
     principalEmailPrincipal: toOne(
@@ -643,6 +757,40 @@ export const identityControlPlaneSourceSchema = {
       "inviterPrincipal",
       "principal",
     ),
+    accountPolicyScopeOrganization: toOne(
+      "Account policy scope organization",
+      "account-policy",
+      "scopeOrganization",
+      "organization",
+    ),
+    principalPolicyAcceptancePrincipal: toOne(
+      "Principal policy acceptance principal",
+      "principal-policy-acceptance",
+      "principal",
+      "principal",
+      "principalPolicyAcceptances",
+    ),
+    principalPolicyAcceptances: toMany(
+      "Principal policy acceptances",
+      "principal",
+      "principal-policy-acceptance",
+      "principal",
+      "principalPolicyAcceptancePrincipal",
+    ),
+    principalPolicyAcceptancePolicy: toOne(
+      "Principal policy acceptance policy",
+      "principal-policy-acceptance",
+      "accountPolicy",
+      "account-policy",
+      "policyAcceptances",
+    ),
+    policyAcceptances: toMany(
+      "Policy acceptances",
+      "account-policy",
+      "principal-policy-acceptance",
+      "accountPolicy",
+      "principalPolicyAcceptancePolicy",
+    ),
   },
   queries: Object.fromEntries(
     identityControlPlaneEntityNames.map((entityName) => [
@@ -701,6 +849,10 @@ export const identityControlPlaneSourceSchema = {
     ]),
     apps: screen("Apps", "/apps", [["app-registrations", "appRegistrationList"]]),
     invitations: screen("Invitations", "/invitations", [["invitations", "invitationList"]]),
+    policies: screen("Policies", "/policies", [
+      ["account-policies", "accountPolicyList"],
+      ["policy-acceptances", "principalPolicyAcceptanceList"],
+    ]),
   },
   runtime: {
     owner: "runtime",
@@ -715,12 +867,12 @@ export const identityControlPlaneSourceSchema = {
   },
 } satisfies AppSchema;
 
-function textField(label: string): FieldSchema {
-  return { type: "text", required: true, label };
+function textField(label: string, format?: "href" | "longText"): FieldSchema {
+  return { type: "text", required: true, label, ...(format === undefined ? {} : { format }) };
 }
 
-function optionalTextField(label: string): FieldSchema {
-  return { type: "text", required: false, label };
+function optionalTextField(label: string, format?: "href" | "longText"): FieldSchema {
+  return { type: "text", required: false, label, ...(format === undefined ? {} : { format }) };
 }
 
 function booleanField(label: string, defaultValue: boolean): FieldSchema {
@@ -1013,6 +1165,7 @@ function editorForField(field: string): FieldEditor {
 
   if (
     field === "principal" ||
+    field === "accountPolicy" ||
     field === "role" ||
     field === "targetPrincipal" ||
     field === "targetGroup" ||

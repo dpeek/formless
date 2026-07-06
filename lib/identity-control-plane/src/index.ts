@@ -28,7 +28,7 @@ export * from "./types.ts";
 export { identityControlPlaneSourceSchema } from "./schema.ts";
 
 export const IDENTITY_CONTROL_PLANE_SOURCE_SCHEMA_HASH =
-  "sha256:beac60209c2ac533788edc3aeff37c52e761aebef90ed1d5cb10b979b42dde10" satisfies SourceSchemaHash;
+  "sha256:ffc253202e4a33c12fe6a50edd4a93290976a8e92dd2f1e16526053b38bd5642" satisfies SourceSchemaHash;
 
 export const identityControlPlaneSchemaProvenance = {
   kind: "identity-control-plane",
@@ -224,6 +224,7 @@ export function validateIdentityControlPlaneRecords(
   validateUniqueActiveMemberships(context, records);
   validateUniqueActiveRoleAssignments(context, records);
   validateUniqueActiveAppRegistrations(context, records);
+  validateUniqueAcceptedPolicyAcceptances(context, records);
 }
 
 export function reviewableIdentityControlPlaneRecordValues(
@@ -396,6 +397,14 @@ function validateIdentityControlPlaneRecord(
   if (entity === "invitation") {
     validateInvitationRecord(context, record);
   }
+
+  if (entity === "account-policy") {
+    validateAccountPolicyRecord(context, record);
+  }
+
+  if (entity === "principal-policy-acceptance") {
+    validatePrincipalPolicyAcceptanceRecord(context, record);
+  }
 }
 
 function validateIdentityControlPlaneReference(
@@ -525,6 +534,28 @@ function validateUniqueActiveAppRegistrations(context: string, records: readonly
   }
 }
 
+function validateUniqueAcceptedPolicyAcceptances(
+  context: string,
+  records: readonly StoredRecord[],
+) {
+  const seen = new Set<string>();
+
+  for (const record of acceptedStatusRecordsForEntity(records, "principal-policy-acceptance")) {
+    const key = identityUniqueKey([
+      requiredStringValue(context, record, "principal"),
+      requiredStringValue(context, record, "accountPolicy"),
+    ]);
+
+    if (seen.has(key)) {
+      throw new Error(
+        `${context} violates identity uniqueness "${formatIdentityControlPlaneBoundaryEntityName("principal-policy-acceptance")}.uniqueAcceptedPrincipalPolicy".`,
+      );
+    }
+
+    seen.add(key);
+  }
+}
+
 function activeRecordsForEntity(
   records: readonly StoredRecord[],
   entityName: IdentityControlPlaneEntityName,
@@ -541,6 +572,15 @@ function activeStatusRecordsForEntity(
 ) {
   return activeRecordsForEntity(records, entityName).filter(
     (record) => record.values.status === "active",
+  );
+}
+
+function acceptedStatusRecordsForEntity(
+  records: readonly StoredRecord[],
+  entityName: IdentityControlPlaneEntityName,
+) {
+  return activeRecordsForEntity(records, entityName).filter(
+    (record) => record.values.status === "accepted",
   );
 }
 
@@ -824,6 +864,29 @@ function validateInvitationRecord(context: string, record: StoredRecord) {
   }
 }
 
+function validateAccountPolicyRecord(context: string, record: StoredRecord) {
+  const scopeKind = requiredStringValue(context, record, "scopeKind");
+
+  assertKnownFieldStringValue(context, record, "scopeKind", [
+    "app-install",
+    "instance",
+    "organization",
+  ]);
+  assertKnownFieldStringValue(context, record, "status", ["active", "retired"]);
+  assertSelectedTargetField(context, record, "scopeKind", scopeKind, {
+    "app-install": "appInstallId",
+    organization: "scopeOrganization",
+  });
+
+  if (scopeKind === "instance") {
+    assertUnsetFields(context, record, "scopeKind", ["appInstallId", "scopeOrganization"]);
+  }
+}
+
+function validatePrincipalPolicyAcceptanceRecord(context: string, record: StoredRecord) {
+  assertKnownFieldStringValue(context, record, "status", ["accepted", "revoked"]);
+}
+
 function selectedMembershipTargetValue(context: string, record: StoredRecord): string {
   const targetKind = requiredStringValue(context, record, "targetKind");
 
@@ -917,6 +980,21 @@ function assertUnsetFields(
         `${context} record "${record.id}" field "${identityFieldLabel(record, selectorField)}" cannot set field "${identityFieldLabel(record, fieldName)}".`,
       );
     }
+  }
+}
+
+function assertKnownFieldStringValue(
+  context: string,
+  record: StoredRecord,
+  fieldName: string,
+  allowedValues: readonly string[],
+) {
+  const value = requiredStringValue(context, record, fieldName);
+
+  if (!allowedValues.includes(value)) {
+    throw new Error(
+      `${context} record "${record.id}" has invalid field "${identityFieldLabel(record, fieldName)}".`,
+    );
   }
 }
 

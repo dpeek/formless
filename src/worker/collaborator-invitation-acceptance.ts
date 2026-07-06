@@ -10,6 +10,7 @@ import {
   type CollaboratorInvitationPasskeyRegistrationOptionsResponse,
   type CollaboratorInvitationPasskeyRegistrationVerifyResponse,
   type CollaboratorInvitationAcceptanceStatusResponse,
+  type AccountCompletionGateTarget,
   ownerLoginRedirectLocationForRoute,
   parseInstanceAuthCanonicalOrigin,
   parseOwnerLoginRedirectTarget,
@@ -17,7 +18,10 @@ import {
 import { normalizeEmailDeliveryAddress } from "../shared/email-runtime.ts";
 import { nowIsoString } from "../shared/clock.ts";
 import { acceptsRuntimeHtml } from "../shared/runtime-topology.ts";
-import { instanceControlPlanePreferredAdminOriginFromRecords } from "@dpeek/formless-instance-control-plane";
+import {
+  INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
+  instanceControlPlanePreferredAdminOriginFromRecords,
+} from "@dpeek/formless-instance-control-plane";
 import type { OwnerIdentity } from "../shared/protocol.ts";
 import type { StoredRecord } from "@dpeek/formless-storage";
 import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
@@ -45,6 +49,7 @@ import {
 import { createOwnerSessionCookie } from "./owner-session.ts";
 import { readControlPlaneRecords } from "./deployment-control-plane-client.ts";
 import { handleClientShellDocumentRequest } from "./client-shell.ts";
+import { resolveAccountCompletionGate } from "./instance-auth-account-completion.ts";
 
 type CollaboratorInvitationAcceptanceEnv = {
   ASSETS?: Fetcher;
@@ -373,9 +378,21 @@ async function handlePasskeyRegistrationVerifyRequest(
 
   await createPrivateCentralAuthSession(storage, session.session);
 
-  const handoff = await collaboratorInvitationAcceptanceHandoff(request, env, {
+  const continuation = await collaboratorInvitationAcceptanceContinuation(request, env, {
     invitation: identityAcceptance.invitation,
   });
+  const accountCompletion =
+    continuation === undefined
+      ? undefined
+      : await resolveAccountCompletionGate({
+          env,
+          input: {
+            actorKind: "authenticated",
+            principalId: identityAcceptance.principalId,
+            target: continuation.target,
+          },
+          storage,
+        });
   const headers = new Headers();
 
   headers.set("Set-Cookie", session.cookie);
@@ -385,7 +402,10 @@ async function handlePasskeyRegistrationVerifyRequest(
       displayName: acceptedPrincipal.name,
       principalId: acceptedPrincipal.id,
     },
-    ...(handoff === undefined ? {} : { handoff }),
+    ...(accountCompletion?.status === "blocked" ? { accountCompletion } : {}),
+    ...(accountCompletion?.status === "blocked" || continuation?.handoff === undefined
+      ? {}
+      : { handoff: continuation.handoff }),
     invitation: collaboratorInvitationSummary(identityAcceptance.invitation),
     session: { expiresAt: session.session.expiresAt },
     verified: true,
@@ -441,19 +461,21 @@ async function createPrivateCentralAuthSession(
   throw new Error("Central auth session could not be issued.");
 }
 
-async function collaboratorInvitationAcceptanceHandoff(
+async function collaboratorInvitationAcceptanceContinuation(
   request: Request,
   env: CollaboratorInvitationAcceptanceEnv,
   input: { invitation: IdentityCollaboratorInvitationAcceptanceStatus },
-): Promise<CollaboratorInvitationAcceptanceHandoffSummary | undefined> {
+): Promise<
+  | {
+      handoff?: CollaboratorInvitationAcceptanceHandoffSummary;
+      target: AccountCompletionGateTarget;
+    }
+  | undefined
+> {
   const records = (await readControlPlaneRecords({ env, requestUrl: request.url })) ?? [];
   const target = invitationAcceptanceHandoffTarget(records, input.invitation);
 
   if (!target) {
-    return undefined;
-  }
-
-  if (target.targetOrigin === new URL(request.url).origin) {
     return undefined;
   }
 
@@ -462,32 +484,45 @@ async function collaboratorInvitationAcceptanceHandoff(
   return returnTo === undefined
     ? undefined
     : {
-        returnTo,
-        targetOrigin: target.targetOrigin,
+        ...(target.targetOrigin === new URL(request.url).origin
+          ? {}
+          : {
+              handoff: {
+                returnTo,
+                targetOrigin: target.targetOrigin,
+              },
+            }),
+        target,
       };
 }
 
 function invitationAcceptanceHandoffTarget(
   records: readonly StoredRecord[],
   invitation: IdentityCollaboratorInvitationAcceptanceStatus,
-): { returnTo: `/${string}`; targetOrigin: string } | undefined {
+): AccountCompletionGateTarget | undefined {
   if (invitation.targetSurface === "instance") {
     return preferredAdminInvitationTarget(records);
   }
 
   const route = mappedInvitationTargetRoute(records, invitation);
 
-  return route === undefined
-    ? undefined
-    : {
-        returnTo: route.matchPath,
-        targetOrigin: parseInstanceAuthCanonicalOrigin(`https://${route.matchHost}`),
-      };
+  if (route === undefined || route.appInstall === undefined) {
+    return undefined;
+  }
+
+  return {
+    appInstallId: route.appInstall,
+    returnTo: route.matchPath,
+    routeId: route.recordId,
+    storageIdentity: `app:${route.appInstall}`,
+    targetOrigin: parseInstanceAuthCanonicalOrigin(`https://${route.matchHost}`),
+    targetProfile: route.targetProfile,
+  };
 }
 
 function preferredAdminInvitationTarget(
   records: readonly StoredRecord[],
-): { returnTo: `/${string}`; targetOrigin: string } | undefined {
+): AccountCompletionGateTarget | undefined {
   const resolution = instanceControlPlanePreferredAdminOriginFromRecords({ records });
 
   if (resolution.status !== "resolved" || resolution.source === "deploymentTargetUrl") {
@@ -502,14 +537,17 @@ function preferredAdminInvitationTarget(
     ? undefined
     : {
         returnTo: ownerLoginRedirectLocationForRoute(route.matchPath),
+        routeId: route.recordId,
+        storageIdentity: INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
         targetOrigin: parseInstanceAuthCanonicalOrigin(resolution.adminOrigin),
+        targetProfile: "instance",
       };
 }
 
 function mappedInvitationTargetRoute(
   records: readonly StoredRecord[],
   invitation: IdentityCollaboratorInvitationAcceptanceStatus,
-): { matchHost: string; matchPath: `/${string}` } | undefined {
+): NonNullable<ReturnType<typeof routeRecordTarget>> | undefined {
   return records
     .flatMap((record) => {
       const route = routeRecordTarget(record);

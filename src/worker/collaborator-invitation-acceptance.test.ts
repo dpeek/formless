@@ -825,6 +825,7 @@ describe("collaborator invitation acceptance status", () => {
       targetEmail,
       targetSurface: "app-install",
       targetAppInstallId: appInstallId,
+      appRegistrations: [{ appInstallId }],
       invitedPrincipal: {
         id: `principal:mapped-app-${unique}`,
         displayName: "Mapped App Collaborator",

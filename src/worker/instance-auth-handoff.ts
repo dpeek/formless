@@ -8,10 +8,18 @@ import { nowIsoString } from "../shared/clock.ts";
 import {
   FORMLESS_INSTANCE_AUTH_ORIGIN_ENV_NAME,
   ownerLoginRedirectLocationForRoute,
+  parseAccountCompletionGateTarget,
+  parseAccountCompletionGateResolutionResult,
   parseInstanceAuthCanonicalOrigin,
   parseOwnerLoginRedirectTarget,
+  type AccountCompletionGateResolutionResult,
+  type AccountCompletionGateTarget,
 } from "../shared/instance-auth.ts";
 import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
+import {
+  INSTANCE_AUTH_ACCOUNT_COMPLETION_RESOLVE_PATH,
+  resolveAccountCompletionGate,
+} from "./instance-auth-account-completion.ts";
 import {
   consumeHandoffGrant,
   createHandoffGrant,
@@ -81,6 +89,7 @@ export type HostAuthSession = InstanceAuthSessionTargetBinding & {
 };
 
 export type HostAuthSessionValidationFailureReason =
+  | "account-completion-required"
   | "expired"
   | "malformed-cookie"
   | "malformed-payload"
@@ -103,6 +112,7 @@ export type HostAuthSessionAuthorityValidationResult =
     }
   | {
       ok: false;
+      accountCompletion?: AccountCompletionGateResolutionResult;
       reason: HostAuthSessionValidationFailureReason;
     };
 
@@ -125,6 +135,7 @@ export type RouteAccessSessionValidationResult =
     }
   | {
       ok: false;
+      accountCompletion?: AccountCompletionGateResolutionResult;
       reason:
         | HostAuthSessionValidationFailureReason
         | "missing-owner-authority"
@@ -269,6 +280,22 @@ export async function handleInstanceAuthHandoffDurableObjectRequest(
         ownerLoginRedirectLocationForRoute(`${url.pathname}${url.search}`),
         302,
       );
+    }
+
+    if (target.requiredAccess === "authenticated") {
+      const accountCompletion = await resolveAccountCompletionGate({
+        env,
+        input: {
+          actorKind: "authenticated",
+          principalId: session.session.principalId,
+          target: accountCompletionTargetForHandoffTarget(target),
+        },
+        storage,
+      });
+
+      if (accountCompletion.status === "blocked") {
+        return accountCompletionBlockedResponse(accountCompletion);
+      }
     }
 
     return await issueHandoffGrantRedirect(storage, target, {
@@ -462,12 +489,21 @@ async function validateHostAuthSessionRequirement(
   const id = env.FORMLESS_AUTHORITY.idFromName(FORMLESS_INSTANCE_AUTHORITY_NAME);
   const response = await env.FORMLESS_AUTHORITY.get(id).fetch(
     new Request(new URL(instanceAuthHostSessionValidatePath, request.url), {
-      body: JSON.stringify({ requiredAccess, session: validated.session }),
+      body: JSON.stringify({
+        requiredAccess,
+        session: validated.session,
+        ...(requiredAccess === "authenticated"
+          ? {
+              target: accountCompletionTargetForRouteRequest(request, target),
+            }
+          : {}),
+      }),
       headers: { "Content-Type": "application/json" },
       method: "POST",
     }),
   );
   const body = (await response.json()) as {
+    accountCompletion?: AccountCompletionGateResolutionResult;
     authorized?: boolean;
     reason?: HostAuthSessionValidationFailureReason;
   };
@@ -475,6 +511,11 @@ async function validateHostAuthSessionRequirement(
   if (!response.ok || body.authorized !== true) {
     return {
       ok: false,
+      ...(body.accountCompletion === undefined
+        ? {}
+        : {
+            accountCompletion: parseAccountCompletionGateResolutionResult(body.accountCompletion),
+          }),
       reason: body.reason ?? missingAuthorityReason(requiredAccess),
     };
   }
@@ -505,6 +546,22 @@ export async function validateRouteAccessSession(
       : await validateOwnerSessionPrincipal(request, env, { now: options.now });
 
   if (ownerSession.ok) {
+    const accountCompletion = await resolveRouteAccessAccountCompletion(
+      request,
+      env,
+      options.requiredAccess,
+      ownerSession.session.principalId,
+      target,
+    );
+
+    if (accountCompletion?.status === "blocked") {
+      return {
+        ok: false,
+        accountCompletion,
+        reason: "account-completion-required",
+      };
+    }
+
     return {
       ok: true,
       ownerAuthorized: options.requiredAccess === "owner",
@@ -537,12 +594,21 @@ export async function validateRouteAccessSession(
 
   return {
     ok: false,
+    ...(hostSession?.accountCompletion === undefined
+      ? {}
+      : { accountCompletion: hostSession.accountCompletion }),
     reason:
       hostSession?.reason ??
       (ownerSession.reason === "missing-owner-authority"
         ? "missing-owner-authority"
         : "missing-principal"),
   };
+}
+
+export function accountCompletionBlockedResponse(
+  result: AccountCompletionGateResolutionResult,
+): Response {
+  return jsonResponse(parseAccountCompletionGateResolutionResult(result), 409);
 }
 
 export function authenticatedOperationActorForSession(session: {
@@ -570,6 +636,91 @@ export function authenticatedOperationActorForSession(session: {
         : { storageIdentity: session.target.storageIdentity }),
     },
   };
+}
+
+async function resolveRouteAccessAccountCompletion(
+  request: Request,
+  env: InstanceAuthHandoffEnv,
+  requiredAccess: ProtectedRouteAccess,
+  principalId: string,
+  target: InstanceAuthSessionTargetBinding | undefined,
+): Promise<AccountCompletionGateResolutionResult | undefined> {
+  if (requiredAccess !== "authenticated" || target === undefined) {
+    return undefined;
+  }
+
+  const id = env.FORMLESS_AUTHORITY.idFromName(FORMLESS_INSTANCE_AUTHORITY_NAME);
+  const response = await env.FORMLESS_AUTHORITY.get(id).fetch(
+    new Request(new URL(INSTANCE_AUTH_ACCOUNT_COMPLETION_RESOLVE_PATH, request.url), {
+      body: JSON.stringify({
+        actorKind: "authenticated",
+        principalId,
+        target: accountCompletionTargetForRouteRequest(request, target),
+      }),
+      headers: { "Content-Type": "application/json" },
+      method: "POST",
+    }),
+  );
+  const body = await response.json();
+
+  if (!response.ok) {
+    throw new Error(accountCompletionResolutionErrorMessage(body));
+  }
+
+  return parseAccountCompletionGateResolutionResult(body);
+}
+
+function accountCompletionTargetForHandoffTarget(
+  target: Omit<
+    CreateHandoffGrantInput,
+    "expiresAt" | "grantSecretHash" | "instanceId" | "principalId"
+  >,
+): AccountCompletionGateTarget {
+  const returnTo = parseOwnerLoginRedirectTarget(target.returnTo);
+
+  if (!returnTo) {
+    throw new Error("Account completion handoff return target must be path-only.");
+  }
+
+  return {
+    ...(target.appInstallId === undefined ? {} : { appInstallId: target.appInstallId }),
+    returnTo,
+    routeId: target.routeId,
+    ...(target.storageIdentity === undefined ? {} : { storageIdentity: target.storageIdentity }),
+    targetOrigin: target.targetOrigin,
+    targetProfile: target.targetProfile,
+  };
+}
+
+function accountCompletionTargetForRouteRequest(
+  request: Request,
+  target: InstanceAuthSessionTargetBinding,
+): AccountCompletionGateTarget {
+  const url = new URL(request.url);
+  const returnTo = parseOwnerLoginRedirectTarget(`${url.pathname}${url.search}`);
+
+  if (!returnTo) {
+    throw new Error("Account completion return target must be path-only.");
+  }
+
+  return {
+    ...(target.appInstallId === undefined ? {} : { appInstallId: target.appInstallId }),
+    returnTo,
+    routeId: target.routeId,
+    ...(target.storageIdentity === undefined ? {} : { storageIdentity: target.storageIdentity }),
+    targetOrigin: target.targetOrigin,
+    targetProfile: target.targetProfile,
+  };
+}
+
+function parseAccountCompletionTargetPayload(value: unknown): AccountCompletionGateTarget {
+  return parseAccountCompletionGateTarget(value);
+}
+
+function accountCompletionResolutionErrorMessage(value: unknown): string {
+  return isRecord(value) && typeof value.error === "string"
+    ? value.error
+    : "Account completion gate resolution failed.";
 }
 
 async function handleHandoffCallbackDurableObjectRequest(
@@ -629,7 +780,11 @@ async function handleHostAuthSessionValidationDurableObjectRequest(
   }
 
   try {
-    const body = (await request.json()) as { requiredAccess?: unknown; session?: unknown };
+    const body = (await request.json()) as {
+      requiredAccess?: unknown;
+      session?: unknown;
+      target?: unknown;
+    };
     const requiredAccess = parseHostSessionAuthorityRequirement(body.requiredAccess) ?? "owner";
     const session = parseHostAuthSession(body.session);
 
@@ -651,6 +806,29 @@ async function handleHostAuthSessionValidationDurableObjectRequest(
 
     if ((currentVersion?.sessionVersion ?? 0) !== session.sessionVersion) {
       return jsonResponse({ authorized: false, reason: "revoked-session" }, 401);
+    }
+
+    if (requiredAccess === "authenticated") {
+      const accountCompletion = await resolveAccountCompletionGate({
+        env,
+        input: {
+          actorKind: "authenticated",
+          principalId: session.principalId,
+          target: parseAccountCompletionTargetPayload(body.target),
+        },
+        storage,
+      });
+
+      if (accountCompletion.status === "blocked") {
+        return jsonResponse(
+          {
+            accountCompletion: parseAccountCompletionGateResolutionResult(accountCompletion),
+            authorized: false,
+            reason: "account-completion-required",
+          },
+          409,
+        );
+      }
     }
 
     return jsonResponse({ authorized: true });
@@ -792,6 +970,26 @@ async function validateHostAuthSessionRequirementInStorage(
 
   if ((currentVersion?.sessionVersion ?? 0) !== validated.session.sessionVersion) {
     return { ok: false, reason: "revoked-session" };
+  }
+
+  if (requiredAccess === "authenticated") {
+    const accountCompletion = await resolveAccountCompletionGate({
+      env,
+      input: {
+        actorKind: "authenticated",
+        principalId: validated.session.principalId,
+        target: accountCompletionTargetForRouteRequest(request, target),
+      },
+      storage,
+    });
+
+    if (accountCompletion.status === "blocked") {
+      return {
+        ok: false,
+        accountCompletion,
+        reason: "account-completion-required",
+      };
+    }
   }
 
   return validated;

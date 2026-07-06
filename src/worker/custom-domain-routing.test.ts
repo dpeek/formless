@@ -1,4 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vite-plus/test";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { computeSourceSchemaHash } from "@dpeek/formless-installed-apps";
 import {
   INSTANCE_CONTROL_PLANE_INSTANCE_SETTINGS_ID,
@@ -56,10 +59,13 @@ const setupToken = "abcDEF0123456789_-abcDEF0123456789_-";
 
 let harness: Harness;
 let defaultHarness: Harness;
+let harnessDir: string;
+let harnessPath: string;
 let assetRequests: string[];
 const routeRecordIds = new Map<string, string>();
 
 beforeAll(async () => {
+  harnessPath = await writeCustomDomainHarness();
   defaultHarness = await createCustomDomainHarness("instance");
 });
 
@@ -71,6 +77,7 @@ beforeEach(async () => {
 
 afterAll(async () => {
   await defaultHarness.dispose();
+  await rm(harnessDir, { force: true, recursive: true });
 });
 
 describe("installed Site custom-domain Worker routing", () => {
@@ -669,7 +676,7 @@ describe("installed Site custom-domain Worker routing", () => {
     await setupPrimaryProductionIdentity();
     await setupMappedApp({ access: "authenticated" });
 
-    const principal = await createActivePrincipalSessionCookie("Authenticated Principal");
+    const principal = await createCompletionReadyPrincipalSessionCookie("Authenticated Principal");
     const start = await fetchHost(mappedAppHost, "/schema?view=board", {
       headers: { Accept: "text/html" },
       redirect: "manual",
@@ -714,6 +721,78 @@ describe("installed Site custom-domain Worker routing", () => {
         `${INSTANCE_AUTH_HANDOFF_START_PATH}${ownerOnlyStartUrl.search}`,
       ),
     );
+  });
+
+  it("blocks authenticated handoff grants until target account gates are satisfied", async () => {
+    await setupPrimaryProductionIdentity();
+    await setupMappedApp({ access: "authenticated" });
+
+    const principal = await createActivePrincipalSessionCookie("Blocked Authenticated Principal");
+    const start = await fetchHost(mappedAppHost, "/schema?view=board", {
+      headers: { Accept: "text/html" },
+      redirect: "manual",
+    });
+    const startLocation = requiredHeader(start, "Location");
+    const missingEmail = await harness.mf.dispatchFetch(startLocation, {
+      headers: {
+        Accept: "application/json",
+        Cookie: principal.cookie,
+      },
+      redirect: "manual",
+    });
+    const missingEmailBody = (await missingEmail.json()) as {
+      gate?: { kind?: string };
+      status?: string;
+      target?: { returnTo?: string };
+    };
+
+    await createVerifiedPrimaryEmail(principal.principalId, "blocked-authenticated@example.com");
+    await createPrivateCredentialForPrincipal(principal.principalId, "blocked-authenticated");
+
+    const missingRegistration = await harness.mf.dispatchFetch(startLocation, {
+      headers: {
+        Accept: "application/json",
+        Cookie: principal.cookie,
+      },
+      redirect: "manual",
+    });
+    const missingRegistrationBody = (await missingRegistration.json()) as {
+      gate?: { appInstallId?: string; kind?: string };
+      status?: string;
+    };
+
+    await createAppRegistration(principal.principalId, taskInstallId);
+
+    const granted = await harness.mf.dispatchFetch(startLocation, {
+      headers: {
+        Accept: "text/html",
+        Cookie: principal.cookie,
+      },
+      redirect: "manual",
+    });
+    const callbackUrl = new URL(requiredHeader(granted, "Location"));
+
+    expect(missingEmail.status).toBe(409);
+    expect(missingEmail.headers.get("Location")).toBeNull();
+    expect(missingEmailBody).toMatchObject({
+      gate: { kind: "email-verification" },
+      status: "blocked",
+      target: { returnTo: "/schema?view=board" },
+    });
+    expect(JSON.stringify(missingEmailBody)).not.toContain("session");
+    expect(JSON.stringify(missingEmailBody)).not.toContain("grantSecret");
+
+    expect(missingRegistration.status).toBe(409);
+    expect(missingRegistration.headers.get("Location")).toBeNull();
+    expect(missingRegistrationBody).toMatchObject({
+      gate: { appInstallId: taskInstallId, kind: "app-registration" },
+      status: "blocked",
+    });
+
+    expect(granted.status).toBe(302);
+    expect(callbackUrl.origin).toBe(`https://${mappedAppHost}`);
+    expect(callbackUrl.pathname).toBe(INSTANCE_AUTH_HANDOFF_CALLBACK_PATH);
+    expect(callbackUrl.searchParams.get("grantSecret")).toMatch(/^[A-Za-z0-9_-]+$/);
   });
 
   it("executes authenticated operations from matched host-local sessions", async () => {
@@ -797,6 +876,54 @@ describe("installed Site custom-domain Worker routing", () => {
       },
     });
     expect(operationRecord(writeBody).values.title).toBe("Authenticated host operation");
+  });
+
+  it("blocks authenticated host-local sessions when target gates become current blockers", async () => {
+    await setupPrimaryProductionIdentity();
+    await setupMappedApp({ access: "authenticated" });
+
+    const { cookie, principalId } = await createAuthenticatedMappedAppHostSession(
+      "Policy Gated Host Session",
+    );
+    const policy = await createAccountPolicy({
+      appInstallId: taskInstallId,
+      displayName: "Task workspace terms",
+      policyKey: "task-workspace-terms",
+    });
+
+    const blocked = await fetchHost(
+      mappedAppHost,
+      `/api/app-installs/tasks/${taskInstallId}/bootstrap`,
+      {
+        headers: { Cookie: cookie },
+      },
+    );
+    const blockedBody = (await blocked.json()) as {
+      gate?: { kind?: string; policies?: Array<{ accountPolicyId?: string }> };
+      status?: string;
+    };
+
+    await acceptPolicy(principalId, policy.id);
+
+    const continued = await fetchHost(
+      mappedAppHost,
+      `/api/app-installs/tasks/${taskInstallId}/bootstrap`,
+      {
+        headers: { Cookie: cookie },
+      },
+    );
+
+    expect(blocked.status).toBe(409);
+    expect(blockedBody).toMatchObject({
+      gate: {
+        kind: "terms-acceptance",
+        policies: [{ accountPolicyId: policy.id }],
+      },
+      status: "blocked",
+    });
+    expect(JSON.stringify(blockedBody)).not.toContain("credentialId");
+    expect(JSON.stringify(blockedBody)).not.toContain("session");
+    expect(continued.status).toBe(200);
   });
 
   it("rejects stale, disabled, and target-mismatched authenticated host sessions", async () => {
@@ -1906,7 +2033,7 @@ async function createMappedAppHostSession(ownerName: string) {
 }
 
 async function createAuthenticatedMappedAppHostSession(displayName: string) {
-  const principal = await createActivePrincipalSessionCookie(displayName);
+  const principal = await createCompletionReadyPrincipalSessionCookie(displayName);
   const hostSession = await createMappedAppHostSessionFromCentralCookie(principal.cookie);
 
   return {
@@ -1970,6 +2097,116 @@ async function createActivePrincipalSessionCookie(displayName: string) {
     cookie: cookiePair(session.cookie),
     principalId: principal.id,
   };
+}
+
+async function createCompletionReadyPrincipalSessionCookie(displayName: string) {
+  const principal = await createActivePrincipalSessionCookie(displayName);
+
+  await createVerifiedPrimaryEmail(
+    principal.principalId,
+    `${displayName.replace(/\W+/g, "-").toLowerCase()}@example.com`,
+  );
+  await createPrivateCredentialForPrincipal(principal.principalId, displayName);
+  await createAppRegistration(principal.principalId, taskInstallId);
+
+  return principal;
+}
+
+async function createVerifiedPrimaryEmail(principalId: string, email: string) {
+  await postAdminJson(
+    `${IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX}/operations/principal-email/create`,
+    {
+      idempotencyKey: `verified-email-${principalId.replace(/\W+/g, "-")}`,
+      input: {
+        displayEmail: email,
+        normalizedEmail: email.toLowerCase(),
+        primary: true,
+        principal: principalId,
+        recovery: false,
+        verificationStatus: "verified",
+        verifiedAt: "2026-07-06T00:00:00.000Z",
+      },
+    },
+  );
+}
+
+async function createAppRegistration(principalId: string, appInstallId: string) {
+  await postAdminJson(
+    `${IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX}/operations/app-registration/create`,
+    {
+      idempotencyKey: [
+        "app-registration",
+        principalId.replace(/\W+/g, "-"),
+        appInstallId.replace(/\W+/g, "-"),
+      ].join("-"),
+      input: {
+        appInstallId,
+        status: "active",
+        targetKind: "principal",
+        targetPrincipal: principalId,
+      },
+    },
+  );
+}
+
+async function createAccountPolicy(input: {
+  appInstallId: string;
+  displayName: string;
+  policyKey: string;
+}) {
+  const response = await postAdminJson(
+    `${IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX}/operations/account-policy/create`,
+    {
+      idempotencyKey: `account-policy-${input.policyKey}`,
+      input: {
+        appInstallId: input.appInstallId,
+        displayName: input.displayName,
+        policyKey: input.policyKey,
+        scopeKind: "app-install",
+        status: "active",
+        version: "2026-07-06",
+      },
+    },
+  );
+
+  return operationRecord((await response.json()) as OperationInvocationResponse);
+}
+
+async function acceptPolicy(principalId: string, accountPolicy: string) {
+  await postAdminJson(
+    `${IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX}/operations/principal-policy-acceptance/create`,
+    {
+      idempotencyKey: [
+        "policy-acceptance",
+        principalId.replace(/\W+/g, "-"),
+        accountPolicy.replace(/\W+/g, "-"),
+      ].join("-"),
+      input: {
+        acceptedAt: "2026-07-06T00:00:00.000Z",
+        accountPolicy,
+        principal: principalId,
+        status: "accepted",
+      },
+    },
+  );
+}
+
+async function createPrivateCredentialForPrincipal(principalId: string, label: string) {
+  const response = await harness.durableObjectFetch(
+    "FORMLESS_AUTHORITY",
+    FORMLESS_INSTANCE_AUTHORITY_NAME,
+    "/harness/auth/credential",
+    {
+      body: JSON.stringify({
+        credentialId: Buffer.from(`credential:${principalId}:${label}`).toString("base64url"),
+        principalId,
+      }),
+      headers: { "Content-Type": "application/json" },
+      method: "POST",
+    },
+  );
+
+  expect(response.status).toBe(200);
 }
 
 async function createInstanceAdminPrincipalSessionCookie(displayName: string) {
@@ -2294,9 +2531,9 @@ function createCustomDomainHarness(
   bindings: Record<string, string> = {},
 ) {
   return createWorkerHarness(
-    "src/worker/index.ts",
+    harnessPath,
     {
-      FORMLESS_AUTHORITY: { className: "FormlessAuthority", useSQLite: true },
+      FORMLESS_AUTHORITY: { className: "CustomDomainHarnessAuthority", useSQLite: true },
     },
     {
       bindings: {
@@ -2311,6 +2548,47 @@ function createCustomDomainHarness(
       },
     },
   );
+}
+
+async function writeCustomDomainHarness() {
+  harnessDir = await mkdtemp(join(tmpdir(), "formless-custom-domain-harness-"));
+  const path = join(harnessDir, "custom-domain-harness.ts");
+
+  await writeFile(
+    path,
+    `
+      import worker, { FormlessAuthority } from "${process.cwd()}/src/worker/index.ts";
+      import { createPasskeyCredential } from "${process.cwd()}/src/worker/instance-auth-state.ts";
+
+      export class CustomDomainHarnessAuthority extends FormlessAuthority {
+        async fetch(request) {
+          const url = new URL(request.url);
+
+          if (url.pathname === "/harness/auth/credential" && request.method === "POST") {
+            const body = await request.json();
+
+            return Response.json(createPasskeyCredential(this.ctx.storage, {
+              credentialBackedUp: false,
+              credentialDeviceType: "singleDevice",
+              credentialId: body.credentialId,
+              counter: 0,
+              createdAt: "2026-07-06T00:00:00.000Z",
+              principalId: body.principalId,
+              publicKey: new Uint8Array([1, 2, 3, 4]),
+              transports: [],
+              updatedAt: "2026-07-06T00:00:00.000Z",
+            }));
+          }
+
+          return super.fetch(request);
+        }
+      }
+
+      export default worker;
+    `,
+  );
+
+  return path;
 }
 
 async function privatePublicSiteRuntimePackages(): Promise<string> {

@@ -273,6 +273,48 @@ describe("identity control-plane schema contracts", () => {
       expiresAt: { type: "text", required: true },
       acceptedAt: { type: "text", required: false },
     });
+    expect(schema.entities["account-policy"].fields).toMatchObject({
+      displayName: { type: "text", required: true },
+      policyKey: { type: "text", required: true },
+      version: { type: "text", required: true },
+      scopeKind: {
+        type: "enum",
+        required: true,
+        values: {
+          "app-install": { label: "App install" },
+          instance: { label: "Instance" },
+          organization: { label: "Organization" },
+        },
+      },
+      appInstallId: { type: "text", required: false },
+      scopeOrganization: { type: "reference", required: false, to: "organization" },
+      status: {
+        type: "enum",
+        required: true,
+        values: {
+          active: { label: "Active" },
+          retired: { label: "Retired" },
+        },
+      },
+      publishedAt: { type: "text", required: false },
+      policyDocumentUrl: { type: "text", required: false, format: "href" },
+      policyContentRef: { type: "text", required: false },
+    });
+    expect(schema.entities["account-policy"].constraints ?? {}).toEqual({});
+    expect(schema.entities["principal-policy-acceptance"].fields).toMatchObject({
+      principal: { type: "reference", required: true, to: "principal" },
+      accountPolicy: { type: "reference", required: true, to: "account-policy" },
+      status: {
+        type: "enum",
+        required: true,
+        values: {
+          accepted: { label: "Accepted" },
+          revoked: { label: "Revoked" },
+        },
+      },
+      acceptedAt: { type: "text", required: true },
+    });
+    expect(schema.entities["principal-policy-acceptance"].constraints ?? {}).toEqual({});
   });
 
   it("declares local relationship shapes for fixed identity references", () => {
@@ -316,6 +358,21 @@ describe("identity control-plane schema contracts", () => {
       kind: "toOne",
       from: { entity: "invitation", field: "invitedPrincipal" },
       to: { entity: "principal" },
+    });
+    expect(schema.relationships?.accountPolicyScopeOrganization).toMatchObject({
+      kind: "toOne",
+      from: { entity: "account-policy", field: "scopeOrganization" },
+      to: { entity: "organization" },
+    });
+    expect(schema.relationships?.principalPolicyAcceptancePrincipal).toMatchObject({
+      kind: "toOne",
+      from: { entity: "principal-policy-acceptance", field: "principal" },
+      to: { entity: "principal" },
+    });
+    expect(schema.relationships?.principalPolicyAcceptancePolicy).toMatchObject({
+      kind: "toOne",
+      from: { entity: "principal-policy-acceptance", field: "accountPolicy" },
+      to: { entity: "account-policy" },
     });
   });
 
@@ -369,6 +426,14 @@ describe("identity control-plane schema contracts", () => {
       "status",
       "acceptedAt",
     ]);
+    expect(
+      Object.keys(schema.entities["account-policy"].operations?.update.input?.fields ?? {}),
+    ).toEqual(["displayName", "status", "publishedAt"]);
+    expect(
+      Object.keys(
+        schema.entities["principal-policy-acceptance"].operations?.update.input?.fields ?? {},
+      ),
+    ).toEqual(["status"]);
 
     for (const privateEntity of privateAuthStateEntities) {
       expect(schema.entities).not.toHaveProperty(privateEntity);
@@ -387,14 +452,21 @@ describe("identity control-plane schema contracts", () => {
     expect(IDENTITY_CONTROL_PLANE_STORAGE_IDENTITY).toBe("instance:identity");
     expect(formatIdentityControlPlaneBoundaryEntityName("principal")).toBe("auth:principal");
     expect(formatIdentityControlPlaneBoundaryEntityName("organization")).toBe("auth:organization");
+    expect(formatIdentityControlPlaneBoundaryEntityName("account-policy")).toBe(
+      "auth:account-policy",
+    );
     expect(parseIdentityControlPlaneBoundaryEntityName("Archive record entity", "auth:group")).toBe(
       "group",
     );
     expect(identityControlPlaneRecordSourceEntityName("auth:principal-email")).toBe(
       "principal-email",
     );
+    expect(identityControlPlaneRecordSourceEntityName("auth:principal-policy-acceptance")).toBe(
+      "principal-policy-acceptance",
+    );
     expect(identityControlPlaneRecordSourceEntityName("role-assignment")).toBe("role-assignment");
     expect(isIdentityControlPlaneEntityName("app-registration")).toBe(true);
+    expect(isIdentityControlPlaneEntityName("account-policy")).toBe(true);
     expect(isIdentityControlPlaneEntityName("auth-session")).toBe(false);
     expect(() =>
       parseIdentityControlPlaneBoundaryEntityName(
@@ -634,6 +706,63 @@ describe("identity control-plane schema contracts", () => {
         "Identity records",
         replaceRecord(
           records,
+          accountPolicyRecord("account-policy:terms", {
+            appInstallId: undefined,
+            scopeKind: "app-install",
+          }),
+        ),
+      ),
+    ).toThrow('requires field "auth:account-policy.appInstallId"');
+    expect(() =>
+      validateIdentityControlPlaneRecords(
+        "Identity records",
+        replaceRecord(
+          records,
+          accountPolicyRecord("account-policy:terms", {
+            appInstallId: "site",
+          }),
+        ),
+      ),
+    ).toThrow('cannot set field "auth:account-policy.appInstallId"');
+    expect(() =>
+      validateIdentityControlPlaneRecords(
+        "Identity records",
+        replaceRecord(
+          records,
+          accountPolicyRecord("account-policy:terms", {
+            scopeKind: "organization",
+            scopeOrganization: undefined,
+          }),
+        ),
+      ),
+    ).toThrow('requires field "auth:account-policy.scopeOrganization"');
+    expect(() =>
+      validateIdentityControlPlaneRecords(
+        "Identity records",
+        replaceRecord(
+          records,
+          principalPolicyAcceptanceRecord("principal-policy-acceptance:ada-terms", {
+            accountPolicy: "account-policy:missing",
+          }),
+        ),
+      ),
+    ).toThrow('references unknown auth:account-policy record "account-policy:missing"');
+    expect(() =>
+      validateIdentityControlPlaneRecords(
+        "Identity records",
+        replaceRecord(
+          records,
+          principalPolicyAcceptanceRecord("principal-policy-acceptance:ada-terms", {
+            status: "pending",
+          }),
+        ),
+      ),
+    ).toThrow('has invalid field "auth:principal-policy-acceptance.status"');
+    expect(() =>
+      validateIdentityControlPlaneRecords(
+        "Identity records",
+        replaceRecord(
+          records,
           invitationRecord("invitation:ada", { inviteTokenHash: "sha256:private" }),
         ),
       ),
@@ -732,6 +861,95 @@ describe("identity control-plane schema contracts", () => {
         },
       ]),
     ).not.toThrow();
+    expect(() =>
+      validateIdentityControlPlaneRecords("Identity records", [
+        ...recordsWithAlternateTargets,
+        accountPolicyRecord("account-policy:app-terms", {
+          appInstallId: "site",
+          policyKey: "terms",
+          scopeKind: "app-install",
+          version: "2026-07",
+        }),
+        principalPolicyAcceptanceRecord("principal-policy-acceptance:ada-app-terms", {
+          accountPolicy: "account-policy:app-terms",
+        }),
+      ]),
+    ).not.toThrow();
+    expect(() =>
+      validateIdentityControlPlaneRecords("Identity records", [
+        ...records,
+        principalPolicyAcceptanceRecord("principal-policy-acceptance:ada-terms-duplicate"),
+      ]),
+    ).toThrow(
+      'violates identity uniqueness "auth:principal-policy-acceptance.uniqueAcceptedPrincipalPolicy"',
+    );
+    expect(() =>
+      validateIdentityControlPlaneRecords("Identity records", [
+        ...records,
+        principalPolicyAcceptanceRecord("principal-policy-acceptance:ada-terms-revoked", {
+          status: "revoked",
+        }),
+      ]),
+    ).not.toThrow();
+    expect(() =>
+      validateIdentityControlPlaneRecords("Identity records", [
+        ...records,
+        {
+          ...principalPolicyAcceptanceRecord(
+            "principal-policy-acceptance:ada-terms-tombstoned-duplicate",
+          ),
+          deletedAt: testNow,
+        },
+      ]),
+    ).not.toThrow();
+  });
+
+  it("keeps account policy acceptance flat and outside authentication authority", () => {
+    const records = [
+      ...identityCollaboratorInvitationGrantPolicyRecords(),
+      accountPolicyRecord("account-policy:terms", {
+        policyDocumentUrl: "https://example.com/legal/terms",
+      }),
+      principalPolicyAcceptanceRecord("principal-policy-acceptance:ordinary-terms", {
+        principal: "principal:ordinary",
+      }),
+    ];
+
+    expect(validateIdentityControlPlaneRecords("Identity records", records)).toBeUndefined();
+    expect(
+      resolveIdentityCollaboratorInvitationGrantAuthority(records, "principal:ordinary"),
+    ).toEqual({
+      instanceAdmin: false,
+      instanceOwner: false,
+      principalId: "principal:ordinary",
+    });
+    expect(() =>
+      validateIdentityCollaboratorInvitationGrants("Collaborator invitation grants", {
+        grantRecords: [invitedPrincipalGrantRecord()],
+        inviterPrincipalId: "principal:ordinary",
+        records,
+      }),
+    ).toThrow("requires current instance owner or instance admin authority");
+
+    const policy = records.find((record) => record.entity === "account-policy");
+    const acceptance = records.find((record) => record.entity === "principal-policy-acceptance");
+
+    expect(policy?.values).toEqual({
+      displayName: "Terms of service",
+      policyContentRef: "site:terms",
+      policyDocumentUrl: "https://example.com/legal/terms",
+      policyKey: "terms",
+      publishedAt: testNow,
+      scopeKind: "instance",
+      status: "active",
+      version: "2026-07",
+    });
+    expect(acceptance?.values).toEqual({
+      acceptedAt: testNow,
+      accountPolicy: "account-policy:terms",
+      principal: "principal:ordinary",
+      status: "accepted",
+    });
   });
 
   it("resolves and accepts owner collaborator invitation grant authority", () => {
@@ -1044,6 +1262,8 @@ function identityRecords(): StoredRecord[] {
     roleAssignmentRecord("role-assignment:ada-owner"),
     appRegistrationRecord("app-registration:site-ada"),
     invitationRecord("invitation:ada"),
+    accountPolicyRecord("account-policy:terms"),
+    principalPolicyAcceptanceRecord("principal-policy-acceptance:ada-terms"),
   ];
 }
 
@@ -1149,6 +1369,46 @@ function invitationRecord(
       targetAppInstallId: "site",
       targetEmail: "ada@example.com",
       targetSurface: "app-install",
+      ...overrides,
+    }),
+  );
+}
+
+function accountPolicyRecord(
+  id: string,
+  overrides: Record<string, string | undefined> = {},
+): StoredRecord {
+  return identityRecord(
+    "account-policy",
+    id,
+    omitUndefined({
+      appInstallId: undefined,
+      displayName: "Terms of service",
+      policyContentRef: "site:terms",
+      policyDocumentUrl: undefined,
+      policyKey: "terms",
+      publishedAt: testNow,
+      scopeKind: "instance",
+      scopeOrganization: undefined,
+      status: "active",
+      version: "2026-07",
+      ...overrides,
+    }),
+  );
+}
+
+function principalPolicyAcceptanceRecord(
+  id: string,
+  overrides: Record<string, string | undefined> = {},
+): StoredRecord {
+  return identityRecord(
+    "principal-policy-acceptance",
+    id,
+    omitUndefined({
+      acceptedAt: testNow,
+      accountPolicy: "account-policy:terms",
+      principal: "principal:ada",
+      status: "accepted",
       ...overrides,
     }),
   );

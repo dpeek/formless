@@ -5,10 +5,12 @@
 Instance auth owns product instance passkey credentials, WebAuthn challenge
 ceremonies, canonical auth origin policy, principal-backed owner session
 issuance, central auth sessions, host-local sessions, cross-domain handoff
-grants, collaborator invitation token state, logout, and admin bearer recovery
-boundaries. Reviewable owner identity, owner authority, and pending invitation
-facts are stored as identity control-plane principal, principal-email,
-invitation, membership, app-registration, and role-assignment records.
+grants, account completion gates, collaborator invitation token state, logout,
+and admin bearer recovery boundaries. Reviewable owner identity, owner
+authority, pending invitation facts, and policy acceptance facts are stored as
+identity control-plane principal, principal-email, invitation, membership,
+app-registration, role-assignment, account-policy, and
+principal-policy-acceptance records.
 
 ## Requirements
 
@@ -570,6 +572,91 @@ one-time grants.
   revoked session versions invalidate or narrow future authorization
 - AND host sessions are not accepted on a different host, route, app install,
   storage identity, target profile, or instance
+
+### Requirement: Account Completion Gate Resolution
+
+The system SHALL evaluate target-scoped account completion gates before issuing
+or using browser access for an authenticated target.
+
+#### Scenario: Resolve next blocking account gate
+
+- GIVEN an active principal has a central auth session or matching host-local
+  session
+- AND the runtime has resolved a requested target with target origin, route id,
+  target profile, target app install or storage identity, path-only return
+  target, and optional selected organization context
+- WHEN the auth runtime evaluates account completion for that target
+- THEN it returns either a display-safe continuation target or the next blocking
+  gate for that principal and target
+- AND supported first-pass gate kinds are `email-verification`, `credential`,
+  `invitation`, `app-registration`, `profile-completion`,
+  `terms-acceptance`, and `role-review`
+- AND the gate response includes only display-safe gate kind, target facts,
+  route facts, and operation or policy references needed to render or launch the
+  next step
+- AND it does not expose credential material, challenge secrets, token hashes,
+  raw invite tokens, central session ids, host session cookies, handoff grant
+  secrets, provider responses, recovery material, or app-private profile values
+
+#### Scenario: Gate satisfaction reads current target state
+
+- GIVEN account completion evaluates a target for an active principal
+- WHEN the runtime checks gate satisfaction
+- THEN `email-verification` requires a verified primary `principal-email`
+  record for the principal
+- AND `credential` requires an accepted credential method in private auth state
+  for the principal
+- AND `invitation` requires the target invitation to be accepted or no longer
+  blocking the requested target
+- AND `app-registration` requires an active `app-registration` record for the
+  requested app install, principal or selected organization, and target context
+- AND `profile-completion` is satisfied only by app-owned records or explicit
+  app operations declared for that target, not by arbitrary auth-runtime writes
+  to app storage
+- AND `terms-acceptance` requires an accepted
+  `principal-policy-acceptance` record for each active account policy whose
+  scope applies to the target
+- AND `role-review` requires the current identity-control-plane role,
+  membership, or approval records that authorize the requested high-privilege
+  target
+- AND stale signed session facts do not satisfy gates after principal status,
+  role assignments, memberships, app registrations, policy records, or policy
+  acceptances change
+
+#### Scenario: Gate completion writes through owning records
+
+- GIVEN the browser completes a blocking account gate on the configured auth
+  origin
+- WHEN the runtime commits the completion
+- THEN it writes only the flat identity-control-plane, instance control-plane,
+  private auth, or app-owned records that own that gate
+- AND app profile completion uses explicit app operations or app-owned records
+  rather than direct auth-runtime materialization of arbitrary app data
+- AND terms acceptance writes `principal-policy-acceptance` records rather than
+  changing credential or session state
+- AND invitation completion continues to consume private invite token state and
+  commit identity invitation acceptance atomically with the existing invitation
+  acceptance contract
+- AND gate completion returns a path-only continuation target or a display-safe
+  cross-domain handoff target only after all earlier blocking gates for the same
+  requested target are satisfied
+- AND no host-local session or handoff grant is issued while a blocking gate
+  remains
+
+#### Scenario: Target-scoped gates remain isolated
+
+- GIVEN a principal can access one app install, organization, or route target
+- AND another target has a missing app registration, profile completion, terms
+  acceptance, invitation, or role-review gate
+- WHEN account completion evaluates either target
+- THEN satisfied gates for the first target do not satisfy unrelated gates for
+  the second target
+- AND selected organization context is explicit when it affects app
+  registration, role, profile, or terms gates
+- AND app-private profile fields for one app install or organization are not
+  exposed through another target's gate response
+- AND public anonymous operations remain available through their public action
+  policy without creating account completion gates
 
 ### Requirement: Principal-Backed Authenticated Authorization
 

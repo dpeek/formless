@@ -16,7 +16,11 @@ import type {
   RegistrationResponseJSON,
   UserVerificationRequirement,
 } from "@simplewebauthn/server";
-import type { IdentityInvitationTargetSurface } from "@dpeek/formless-identity-control-plane";
+import {
+  identityControlPlaneRoleKeys,
+  type IdentityControlPlaneRoleKey,
+  type IdentityInvitationTargetSurface,
+} from "@dpeek/formless-identity-control-plane";
 
 import { parseOwnerSetupToken, type OwnerIdentity, type OwnerIdentityInput } from "./protocol.ts";
 
@@ -160,11 +164,168 @@ export type CollaboratorInvitationPasskeyRegistrationVerifyRequest = {
 
 export type CollaboratorInvitationPasskeyRegistrationVerifyResponse = {
   acceptedPrincipal: CollaboratorInvitationAcceptedPrincipalSummary;
+  accountCompletion?: AccountCompletionGateResolutionResult;
   handoff?: CollaboratorInvitationAcceptanceHandoffSummary;
   invitation: CollaboratorInvitationAcceptanceInvitationSummary;
   session: OwnerSessionSummary;
   verified: true;
 };
+
+export const accountCompletionGateTargetProfiles = ["app", "instance", "public-site"] as const;
+export type AccountCompletionGateTargetProfile =
+  (typeof accountCompletionGateTargetProfiles)[number];
+
+export const accountCompletionGateKinds = [
+  "email-verification",
+  "credential",
+  "invitation",
+  "app-registration",
+  "profile-completion",
+  "terms-acceptance",
+  "role-review",
+] as const;
+export type AccountCompletionGateKind = (typeof accountCompletionGateKinds)[number];
+
+export const accountCompletionCredentialMethods = ["passkey"] as const;
+export type AccountCompletionCredentialMethod = (typeof accountCompletionCredentialMethods)[number];
+
+export const accountCompletionRoleScopeKinds = ["app-install", "instance", "organization"] as const;
+export type AccountCompletionRoleScopeKind = (typeof accountCompletionRoleScopeKinds)[number];
+
+export const accountCompletionBrowserVisiblePrivateFieldNames = [
+  "appPrivateProfile",
+  "appPrivateProfileMaterial",
+  "appPrivateProfileValues",
+  "centralSessionId",
+  "challengeSecret",
+  "credential",
+  "credentialId",
+  "credentialMaterial",
+  "credentialPublicKey",
+  "grant",
+  "grantSecret",
+  "grantSecretHash",
+  "hostSessionCookie",
+  "inviteToken",
+  "password",
+  "profileValues",
+  "providerResponse",
+  "providerState",
+  "providerStatePayload",
+  "publicKey",
+  "rawInviteToken",
+  "recoveryMaterial",
+  "recoveryToken",
+  "session",
+  "sessionCookie",
+  "sessionId",
+  "token",
+  "tokenHash",
+] as const;
+export type AccountCompletionBrowserVisiblePrivateFieldName =
+  (typeof accountCompletionBrowserVisiblePrivateFieldNames)[number];
+
+export type AccountCompletionGateTarget = {
+  appInstallId?: string;
+  returnTo: OwnerLoginRedirectTarget;
+  routeId: string;
+  selectedOrganization?: string;
+  storageIdentity?: string;
+  targetOrigin: string;
+  targetProfile: AccountCompletionGateTargetProfile;
+};
+
+export type AccountCompletionGateOperationReference = {
+  appInstallId?: string;
+  entityName?: string;
+  label?: string;
+  operationKey: string;
+  operationName?: string;
+};
+
+export type AccountCompletionGatePolicyReference = {
+  accountPolicyId: string;
+  displayName: string;
+  policyContentRef?: string;
+  policyDocumentUrl?: string;
+  policyKey: string;
+  version: string;
+};
+
+export type AccountCompletionEmailVerificationGate = {
+  displayEmail?: string;
+  kind: "email-verification";
+  operation?: AccountCompletionGateOperationReference;
+  principalEmailId?: string;
+};
+
+export type AccountCompletionCredentialGate = {
+  credentialMethod?: AccountCompletionCredentialMethod;
+  kind: "credential";
+  operation?: AccountCompletionGateOperationReference;
+};
+
+export type AccountCompletionInvitationGate = {
+  invitationId?: string;
+  kind: "invitation";
+  operation?: AccountCompletionGateOperationReference;
+  targetEmail?: string;
+  targetSurface?: IdentityInvitationTargetSurface;
+};
+
+export type AccountCompletionAppRegistrationGate = {
+  appInstallId?: string;
+  kind: "app-registration";
+  operation?: AccountCompletionGateOperationReference;
+  selectedOrganization?: string;
+};
+
+export type AccountCompletionProfileCompletionGate = {
+  appInstallId?: string;
+  kind: "profile-completion";
+  operation?: AccountCompletionGateOperationReference;
+  profileRecordId?: string;
+  selectedOrganization?: string;
+};
+
+export type AccountCompletionTermsAcceptanceGate = {
+  kind: "terms-acceptance";
+  operation?: AccountCompletionGateOperationReference;
+  policies: AccountCompletionGatePolicyReference[];
+};
+
+export type AccountCompletionRoleReviewGate = {
+  kind: "role-review";
+  operation?: AccountCompletionGateOperationReference;
+  roleId?: string;
+  roleKey?: IdentityControlPlaneRoleKey;
+  scopeKind?: AccountCompletionRoleScopeKind;
+};
+
+export type AccountCompletionGate =
+  | AccountCompletionEmailVerificationGate
+  | AccountCompletionCredentialGate
+  | AccountCompletionInvitationGate
+  | AccountCompletionAppRegistrationGate
+  | AccountCompletionProfileCompletionGate
+  | AccountCompletionTermsAcceptanceGate
+  | AccountCompletionRoleReviewGate;
+
+export type AccountCompletionGateResult = {
+  gate: AccountCompletionGate;
+  status: "blocked";
+  target: AccountCompletionGateTarget;
+};
+
+export type AccountCompletionContinuationResult = {
+  continueTo: OwnerLoginRedirectTarget;
+  status: "complete";
+  target: AccountCompletionGateTarget;
+};
+
+export type AccountCompletionGateResolutionResult =
+  | AccountCompletionContinuationResult
+  | AccountCompletionGateResult;
 
 export type OwnerLoginRedirectTarget = `/${string}`;
 
@@ -268,6 +429,9 @@ const attestationFormats = [
   "packed",
   "tpm",
 ] as const;
+const accountCompletionPrivateResponseFieldKeys = new Set(
+  accountCompletionBrowserVisiblePrivateFieldNames.map(normalizeAccountCompletionResponseKey),
+);
 
 export function parseInstanceAuthConfigInput(value: unknown): InstanceAuthConfigInput {
   const object = parseObject("Instance auth config", value);
@@ -552,6 +716,297 @@ export function parseInstanceAuthErrorResponse(value: unknown): InstanceAuthErro
   };
 }
 
+export function parseAccountCompletionGateTarget(value: unknown): AccountCompletionGateTarget {
+  const object = parseObject("Account completion gate target", value);
+
+  assertKeys(
+    "Account completion gate target",
+    object,
+    ["returnTo", "routeId", "targetOrigin", "targetProfile"],
+    ["appInstallId", "selectedOrganization", "storageIdentity"],
+  );
+
+  const appInstallId = parseOptionalTrimmedNonEmptyString(
+    "Account completion gate target appInstallId",
+    object.appInstallId,
+  );
+  const storageIdentity = parseOptionalTrimmedNonEmptyString(
+    "Account completion gate target storageIdentity",
+    object.storageIdentity,
+  );
+
+  if (appInstallId === undefined && storageIdentity === undefined) {
+    throw new Error("Account completion gate target requires appInstallId or storageIdentity.");
+  }
+
+  const selectedOrganization = parseOptionalTrimmedNonEmptyString(
+    "Account completion gate target selectedOrganization",
+    object.selectedOrganization,
+  );
+
+  return {
+    ...(appInstallId === undefined ? {} : { appInstallId }),
+    returnTo: parseOwnerLoginContinuationTarget(
+      "Account completion gate target returnTo",
+      object.returnTo,
+    ),
+    routeId: parseTrimmedNonEmptyString("Account completion gate target routeId", object.routeId),
+    ...(selectedOrganization === undefined ? {} : { selectedOrganization }),
+    ...(storageIdentity === undefined ? {} : { storageIdentity }),
+    targetOrigin: parseInstanceAuthCanonicalOrigin(object.targetOrigin),
+    targetProfile: parseStringLiteral(
+      "Account completion gate target profile",
+      object.targetProfile,
+      accountCompletionGateTargetProfiles,
+    ),
+  };
+}
+
+export function parseAccountCompletionGate(value: unknown): AccountCompletionGate {
+  const object = parseObject("Account completion gate", value);
+  const kind = parseStringLiteral(
+    "Account completion gate kind",
+    object.kind,
+    accountCompletionGateKinds,
+  );
+
+  switch (kind) {
+    case "email-verification": {
+      assertKeys(
+        "Account completion email-verification gate",
+        object,
+        ["kind"],
+        ["displayEmail", "operation", "principalEmailId"],
+      );
+
+      return {
+        kind,
+        ...parseOptionalGateOperation("Account completion email-verification gate", object),
+        ...parseOptionalStringField(
+          "Account completion email-verification gate displayEmail",
+          "displayEmail",
+          object,
+        ),
+        ...parseOptionalStringField(
+          "Account completion email-verification gate principalEmailId",
+          "principalEmailId",
+          object,
+        ),
+      };
+    }
+    case "credential": {
+      assertKeys(
+        "Account completion credential gate",
+        object,
+        ["kind"],
+        ["credentialMethod", "operation"],
+      );
+
+      return {
+        kind,
+        ...parseOptionalGateOperation("Account completion credential gate", object),
+        ...(object.credentialMethod === undefined
+          ? {}
+          : {
+              credentialMethod: parseStringLiteral(
+                "Account completion credential gate credentialMethod",
+                object.credentialMethod,
+                accountCompletionCredentialMethods,
+              ),
+            }),
+      };
+    }
+    case "invitation": {
+      assertKeys(
+        "Account completion invitation gate",
+        object,
+        ["kind"],
+        ["invitationId", "operation", "targetEmail", "targetSurface"],
+      );
+
+      return {
+        kind,
+        ...parseOptionalGateOperation("Account completion invitation gate", object),
+        ...parseOptionalStringField(
+          "Account completion invitation gate invitationId",
+          "invitationId",
+          object,
+        ),
+        ...parseOptionalStringField(
+          "Account completion invitation gate targetEmail",
+          "targetEmail",
+          object,
+        ),
+        ...(object.targetSurface === undefined
+          ? {}
+          : {
+              targetSurface: parseStringLiteral(
+                "Account completion invitation gate targetSurface",
+                object.targetSurface,
+                collaboratorInvitationAcceptanceTargetSurfaces,
+              ),
+            }),
+      };
+    }
+    case "app-registration": {
+      assertKeys(
+        "Account completion app-registration gate",
+        object,
+        ["kind"],
+        ["appInstallId", "operation", "selectedOrganization"],
+      );
+
+      return {
+        kind,
+        ...parseOptionalGateOperation("Account completion app-registration gate", object),
+        ...parseOptionalStringField(
+          "Account completion app-registration gate appInstallId",
+          "appInstallId",
+          object,
+        ),
+        ...parseOptionalStringField(
+          "Account completion app-registration gate selectedOrganization",
+          "selectedOrganization",
+          object,
+        ),
+      };
+    }
+    case "profile-completion": {
+      assertKeys(
+        "Account completion profile-completion gate",
+        object,
+        ["kind"],
+        ["appInstallId", "operation", "profileRecordId", "selectedOrganization"],
+      );
+
+      return {
+        kind,
+        ...parseOptionalGateOperation("Account completion profile-completion gate", object),
+        ...parseOptionalStringField(
+          "Account completion profile-completion gate appInstallId",
+          "appInstallId",
+          object,
+        ),
+        ...parseOptionalStringField(
+          "Account completion profile-completion gate profileRecordId",
+          "profileRecordId",
+          object,
+        ),
+        ...parseOptionalStringField(
+          "Account completion profile-completion gate selectedOrganization",
+          "selectedOrganization",
+          object,
+        ),
+      };
+    }
+    case "terms-acceptance": {
+      assertKeys(
+        "Account completion terms-acceptance gate",
+        object,
+        ["kind", "policies"],
+        ["operation"],
+      );
+
+      return {
+        kind,
+        ...parseOptionalGateOperation("Account completion terms-acceptance gate", object),
+        policies: parseAccountCompletionGatePolicyReferences(object.policies),
+      };
+    }
+    case "role-review": {
+      assertKeys(
+        "Account completion role-review gate",
+        object,
+        ["kind"],
+        ["operation", "roleId", "roleKey", "scopeKind"],
+      );
+
+      return {
+        kind,
+        ...parseOptionalGateOperation("Account completion role-review gate", object),
+        ...parseOptionalStringField("Account completion role-review gate roleId", "roleId", object),
+        ...(object.roleKey === undefined
+          ? {}
+          : {
+              roleKey: parseStringLiteral(
+                "Account completion role-review gate roleKey",
+                object.roleKey,
+                identityControlPlaneRoleKeys,
+              ),
+            }),
+        ...(object.scopeKind === undefined
+          ? {}
+          : {
+              scopeKind: parseStringLiteral(
+                "Account completion role-review gate scopeKind",
+                object.scopeKind,
+                accountCompletionRoleScopeKinds,
+              ),
+            }),
+      };
+    }
+  }
+}
+
+export function parseAccountCompletionGateResult(value: unknown): AccountCompletionGateResult {
+  assertNoAccountCompletionPrivateResponseKeys("Account completion gate result", value);
+
+  const object = parseObject("Account completion gate result", value);
+
+  assertKeys("Account completion gate result", object, ["gate", "status", "target"]);
+
+  if (object.status !== "blocked") {
+    throw new Error('Account completion gate result status must be "blocked".');
+  }
+
+  return {
+    gate: parseAccountCompletionGate(object.gate),
+    status: "blocked",
+    target: parseAccountCompletionGateTarget(object.target),
+  };
+}
+
+export function parseAccountCompletionContinuationResult(
+  value: unknown,
+): AccountCompletionContinuationResult {
+  assertNoAccountCompletionPrivateResponseKeys("Account completion continuation result", value);
+
+  const object = parseObject("Account completion continuation result", value);
+
+  assertKeys("Account completion continuation result", object, ["continueTo", "status", "target"]);
+
+  if (object.status !== "complete") {
+    throw new Error('Account completion continuation result status must be "complete".');
+  }
+
+  return {
+    continueTo: parseOwnerLoginContinuationTarget(
+      "Account completion continuation result continueTo",
+      object.continueTo,
+    ),
+    status: "complete",
+    target: parseAccountCompletionGateTarget(object.target),
+  };
+}
+
+export function parseAccountCompletionGateResolutionResult(
+  value: unknown,
+): AccountCompletionGateResolutionResult {
+  assertNoAccountCompletionPrivateResponseKeys("Account completion result", value);
+
+  const object = parseObject("Account completion result", value);
+
+  if (object.status === "blocked") {
+    return parseAccountCompletionGateResult(object);
+  }
+
+  if (object.status === "complete") {
+    return parseAccountCompletionContinuationResult(object);
+  }
+
+  throw new Error("Account completion result status is unsupported.");
+}
+
 export function parseCollaboratorInvitationAcceptanceRequest(
   value: unknown,
 ): CollaboratorInvitationAcceptanceRequest {
@@ -666,7 +1121,7 @@ export function parseCollaboratorInvitationPasskeyRegistrationVerifyResponse(
     "Collaborator invitation passkey registration verify response",
     object,
     ["acceptedPrincipal", "invitation", "session", "verified"],
-    ["handoff"],
+    ["accountCompletion", "handoff"],
   );
 
   if (object.verified !== true) {
@@ -679,6 +1134,11 @@ export function parseCollaboratorInvitationPasskeyRegistrationVerifyResponse(
     acceptedPrincipal: parseCollaboratorInvitationAcceptedPrincipalSummary(
       object.acceptedPrincipal,
     ),
+    ...(object.accountCompletion === undefined
+      ? {}
+      : {
+          accountCompletion: parseAccountCompletionGateResolutionResult(object.accountCompletion),
+        }),
     ...(object.handoff === undefined
       ? {}
       : { handoff: parseCollaboratorInvitationAcceptanceHandoffSummary(object.handoff) }),
@@ -842,6 +1302,162 @@ function parseCollaboratorInvitationAcceptanceTargetFacts(
   }
 
   return { targetSurface };
+}
+
+function parseOptionalGateOperation(
+  context: string,
+  object: Record<string, unknown>,
+): { operation?: AccountCompletionGateOperationReference } {
+  return object.operation === undefined
+    ? {}
+    : {
+        operation: parseAccountCompletionGateOperationReference(
+          `${context} operation`,
+          object.operation,
+        ),
+      };
+}
+
+function parseAccountCompletionGateOperationReference(
+  context: string,
+  value: unknown,
+): AccountCompletionGateOperationReference {
+  const object = parseObject(context, value);
+
+  assertKeys(
+    context,
+    object,
+    ["operationKey"],
+    ["appInstallId", "entityName", "label", "operationName"],
+  );
+
+  return {
+    ...parseOptionalStringField(`${context} appInstallId`, "appInstallId", object),
+    ...parseOptionalStringField(`${context} entityName`, "entityName", object),
+    ...parseOptionalStringField(`${context} label`, "label", object),
+    operationKey: parseTrimmedNonEmptyString(`${context} operationKey`, object.operationKey),
+    ...parseOptionalStringField(`${context} operationName`, "operationName", object),
+  };
+}
+
+function parseAccountCompletionGatePolicyReferences(
+  value: unknown,
+): AccountCompletionGatePolicyReference[] {
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new Error("Account completion terms-acceptance gate policies must be a non-empty array.");
+  }
+
+  return value.map((item, index) =>
+    parseAccountCompletionGatePolicyReference(
+      `Account completion terms-acceptance gate policies[${index}]`,
+      item,
+    ),
+  );
+}
+
+function parseAccountCompletionGatePolicyReference(
+  context: string,
+  value: unknown,
+): AccountCompletionGatePolicyReference {
+  const object = parseObject(context, value);
+
+  assertKeys(
+    context,
+    object,
+    ["accountPolicyId", "displayName", "policyKey", "version"],
+    ["policyContentRef", "policyDocumentUrl"],
+  );
+
+  return {
+    accountPolicyId: parseTrimmedNonEmptyString(
+      `${context} accountPolicyId`,
+      object.accountPolicyId,
+    ),
+    displayName: parseTrimmedNonEmptyString(`${context} displayName`, object.displayName),
+    ...parseOptionalStringField(`${context} policyContentRef`, "policyContentRef", object),
+    ...(object.policyDocumentUrl === undefined
+      ? {}
+      : {
+          policyDocumentUrl: parseAccountCompletionDisplaySafeUrl(
+            `${context} policyDocumentUrl`,
+            object.policyDocumentUrl,
+          ),
+        }),
+    policyKey: parseTrimmedNonEmptyString(`${context} policyKey`, object.policyKey),
+    version: parseTrimmedNonEmptyString(`${context} version`, object.version),
+  };
+}
+
+function parseOptionalStringField<Field extends string>(
+  context: string,
+  field: Field,
+  object: Record<string, unknown>,
+): { [Key in Field]?: string } {
+  const parsed = parseOptionalTrimmedNonEmptyString(context, object[field]);
+
+  return (parsed === undefined ? {} : { [field]: parsed }) as { [Key in Field]?: string };
+}
+
+function parseAccountCompletionDisplaySafeUrl(context: string, value: unknown): string {
+  const raw = parseTrimmedNonEmptyString(context, value);
+  let url: URL;
+
+  try {
+    url = new URL(raw);
+  } catch {
+    throw new Error(`${context} must be an absolute URL.`);
+  }
+
+  if (url.username || url.password) {
+    throw new Error(`${context} must not include credentials.`);
+  }
+
+  if (url.protocol !== "https:" && url.protocol !== "http:") {
+    throw new Error(`${context} must use HTTP or HTTPS.`);
+  }
+
+  if (hasOwnerLoginRedirectControlCharacter(raw)) {
+    throw new Error(`${context} must not include control characters.`);
+  }
+
+  return url.toString();
+}
+
+function assertNoAccountCompletionPrivateResponseKeys(
+  context: string,
+  value: unknown,
+  path: string[] = [],
+) {
+  if (Array.isArray(value)) {
+    value.forEach((item, index) =>
+      assertNoAccountCompletionPrivateResponseKeys(context, item, [...path, `[${index}]`]),
+    );
+    return;
+  }
+
+  if (typeof value !== "object" || value === null) {
+    return;
+  }
+
+  for (const [key, nested] of Object.entries(value)) {
+    const nestedPath = [...path, key];
+
+    if (accountCompletionPrivateResponseFieldKeys.has(normalizeAccountCompletionResponseKey(key))) {
+      throw new Error(
+        `${context} cannot include private browser-visible field "${formatAccountCompletionResponsePath(nestedPath)}".`,
+      );
+    }
+
+    assertNoAccountCompletionPrivateResponseKeys(context, nested, nestedPath);
+  }
+}
+
+function normalizeAccountCompletionResponseKey(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function formatAccountCompletionResponsePath(path: readonly string[]): string {
+  return path.join(".").replaceAll(".[", "[");
 }
 
 function parseCreationOptions(
@@ -1357,6 +1973,10 @@ function parseTrimmedNonEmptyString(context: string, value: unknown): string {
   }
 
   return value.trim();
+}
+
+function parseOptionalTrimmedNonEmptyString(context: string, value: unknown): string | undefined {
+  return value === undefined ? undefined : parseTrimmedNonEmptyString(context, value);
 }
 
 function parseString(context: string, value: unknown): string {

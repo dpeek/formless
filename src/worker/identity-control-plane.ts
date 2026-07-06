@@ -65,12 +65,15 @@ import { normalizeEmailDeliveryAddress } from "../shared/email-runtime.ts";
 import type { EmailDeliveryRecord, EmailDeliveryScheduleRequest } from "../shared/email-runtime.ts";
 import {
   INTERNAL_IDENTITY_ACTIVE_PRINCIPAL_PATH,
+  INTERNAL_IDENTITY_ACCOUNT_COMPLETION_STATE_PATH,
   INTERNAL_IDENTITY_OWNER_PATH,
   INTERNAL_IDENTITY_OWNER_PRINCIPAL_PATH,
   INTERNAL_IDENTITY_PRINCIPAL_AUTHORITY_PATH,
   INTERNAL_IDENTITY_OWNER_RESET_PATH,
+  type AccountCompletionIdentityState,
   type ActiveIdentityAuthority,
 } from "./identity-owner-internal.ts";
+import { parseAccountCompletionGateTarget } from "../shared/instance-auth.ts";
 import {
   executeAuthorityOperation,
   selectAuthorityOperation,
@@ -786,6 +789,21 @@ async function handleIdentityOwnerInternalRequest(
     });
   }
 
+  if (url.pathname === INTERNAL_IDENTITY_ACCOUNT_COMPLETION_STATE_PATH) {
+    if (request.method !== "POST") {
+      return jsonResponse({ error: "Method not allowed." }, 405, { Allow: "POST" });
+    }
+
+    ensureIdentityControlPlaneStorage(storage);
+
+    return jsonResponse({
+      state: readAccountCompletionIdentityState(
+        storage,
+        parseAccountCompletionStateRequest(await readJson(request)),
+      ),
+    });
+  }
+
   if (url.pathname === INTERNAL_COLLABORATOR_INVITATION_ACCEPTANCE_STATUS_PATH) {
     if (request.method !== "GET") {
       return jsonResponse({ error: "Method not allowed." }, 405, { Allow: "GET" });
@@ -841,6 +859,23 @@ function parseIdentityAppReferenceTargetLookup(value: unknown): IdentityReferenc
   return {
     id: parseNonEmptyString("Identity app reference target id", object.id),
     target: parseNonEmptyString("Identity app reference target", object.target),
+  };
+}
+
+function parseAccountCompletionStateRequest(value: unknown): {
+  principalId: string;
+  target: ReturnType<typeof parseAccountCompletionGateTarget>;
+} {
+  const object = parseRecord("Identity account completion state request", value);
+
+  assertAllowedKeys("Identity account completion state request", object, ["principalId", "target"]);
+
+  return {
+    principalId: parseNonEmptyString(
+      "Identity account completion principal id",
+      object.principalId,
+    ),
+    target: parseAccountCompletionGateTarget(object.target),
   };
 }
 
@@ -2703,6 +2738,205 @@ function readActiveIdentityPrincipal(
   );
 
   return principal ? { id: principal.id } : null;
+}
+
+function readAccountCompletionIdentityState(
+  storage: DurableObjectStorage,
+  input: {
+    principalId: string;
+    target: ReturnType<typeof parseAccountCompletionGateTarget>;
+  },
+): AccountCompletionIdentityState {
+  ensureIdentityControlPlaneStorage(storage);
+
+  const records = getBootstrapRecords(storage);
+  const principal = records.find(
+    (record) =>
+      record.id === input.principalId && record.entity === "principal" && !record.deletedAt,
+  );
+  const emails = records
+    .filter(
+      (record) =>
+        record.entity === "principal-email" &&
+        !record.deletedAt &&
+        record.values.principal === input.principalId,
+    )
+    .sort(compareStoredRecords);
+
+  return {
+    accountPolicies: records
+      .filter(
+        (record) =>
+          record.entity === "account-policy" &&
+          !record.deletedAt &&
+          accountPolicyAppliesToCompletionTarget(record, input.target),
+      )
+      .sort(compareStoredRecords),
+    appRegistrations: records
+      .filter(
+        (record) =>
+          record.entity === "app-registration" &&
+          !record.deletedAt &&
+          appRegistrationAppliesToCompletionTarget(record, input.principalId, input.target),
+      )
+      .sort(compareStoredRecords),
+    invitations: records
+      .filter(
+        (record) =>
+          record.entity === "invitation" &&
+          !record.deletedAt &&
+          record.values.invitedPrincipal === input.principalId &&
+          invitationAppliesToCompletionTarget(record, input.target),
+      )
+      .sort(compareStoredRecords),
+    memberships: records
+      .filter(
+        (record) =>
+          record.entity === "membership" &&
+          !record.deletedAt &&
+          record.values.principal === input.principalId,
+      )
+      .sort(compareStoredRecords),
+    policyAcceptances: records
+      .filter(
+        (record) =>
+          record.entity === "principal-policy-acceptance" &&
+          !record.deletedAt &&
+          record.values.principal === input.principalId,
+      )
+      .sort(compareStoredRecords),
+    primaryEmail: emails.find((record) => record.values.primary === true) ?? null,
+    principal: principal ?? null,
+    roleAssignments: records
+      .filter(
+        (record) =>
+          record.entity === "role-assignment" &&
+          !record.deletedAt &&
+          roleAssignmentAppliesToCompletionTarget(record, input.principalId, input.target, records),
+      )
+      .sort(compareStoredRecords),
+    roles: records
+      .filter((record) => record.entity === "role" && !record.deletedAt)
+      .sort(compareStoredRecords),
+  };
+}
+
+function appRegistrationAppliesToCompletionTarget(
+  record: StoredRecord,
+  principalId: string,
+  target: ReturnType<typeof parseAccountCompletionGateTarget>,
+): boolean {
+  if (target.appInstallId === undefined || record.values.appInstallId !== target.appInstallId) {
+    return false;
+  }
+
+  if (target.selectedOrganization !== undefined) {
+    return (
+      (record.values.targetKind === "organization" &&
+        record.values.targetOrganization === target.selectedOrganization) ||
+      (record.values.targetKind === "principal" &&
+        record.values.targetPrincipal === principalId &&
+        record.values.selectedOrganization === target.selectedOrganization)
+    );
+  }
+
+  return record.values.targetKind === "principal" && record.values.targetPrincipal === principalId;
+}
+
+function invitationAppliesToCompletionTarget(
+  record: StoredRecord,
+  target: ReturnType<typeof parseAccountCompletionGateTarget>,
+): boolean {
+  if (record.values.targetSurface === "instance") {
+    return target.targetProfile === "instance";
+  }
+
+  if (record.values.targetSurface === "app-install") {
+    return (
+      target.appInstallId !== undefined && record.values.targetAppInstallId === target.appInstallId
+    );
+  }
+
+  return (
+    target.selectedOrganization !== undefined &&
+    record.values.targetSurface === "organization" &&
+    record.values.targetOrganization === target.selectedOrganization
+  );
+}
+
+function accountPolicyAppliesToCompletionTarget(
+  record: StoredRecord,
+  target: ReturnType<typeof parseAccountCompletionGateTarget>,
+): boolean {
+  if (record.values.scopeKind === "instance") {
+    return true;
+  }
+
+  if (record.values.scopeKind === "app-install") {
+    return target.appInstallId !== undefined && record.values.appInstallId === target.appInstallId;
+  }
+
+  return (
+    target.selectedOrganization !== undefined &&
+    record.values.scopeKind === "organization" &&
+    record.values.scopeOrganization === target.selectedOrganization
+  );
+}
+
+function roleAssignmentAppliesToCompletionTarget(
+  record: StoredRecord,
+  principalId: string,
+  target: ReturnType<typeof parseAccountCompletionGateTarget>,
+  records: readonly StoredRecord[],
+): boolean {
+  if (!roleAssignmentScopeAppliesToCompletionTarget(record, target)) {
+    return false;
+  }
+
+  if (record.values.targetKind === "principal") {
+    return record.values.targetPrincipal === principalId;
+  }
+
+  if (record.values.targetKind === "group") {
+    return records.some(
+      (candidate) =>
+        candidate.entity === "membership" &&
+        !candidate.deletedAt &&
+        candidate.values.status === "active" &&
+        candidate.values.principal === principalId &&
+        candidate.values.targetKind === "group" &&
+        candidate.values.targetGroup === record.values.targetGroup,
+    );
+  }
+
+  return records.some(
+    (candidate) =>
+      candidate.entity === "membership" &&
+      !candidate.deletedAt &&
+      candidate.values.status === "active" &&
+      candidate.values.principal === principalId &&
+      candidate.values.targetKind === "organization" &&
+      candidate.values.targetOrganization === record.values.targetOrganization,
+  );
+}
+
+function roleAssignmentScopeAppliesToCompletionTarget(
+  record: StoredRecord,
+  target: ReturnType<typeof parseAccountCompletionGateTarget>,
+): boolean {
+  if (record.values.scopeKind === "instance") {
+    return true;
+  }
+
+  if (record.values.scopeKind === "app-install") {
+    return target.appInstallId !== undefined && record.values.appInstallId === target.appInstallId;
+  }
+
+  return (
+    target.selectedOrganization !== undefined &&
+    record.values.scopeKind === "organization" &&
+    record.values.scopeOrganization === target.selectedOrganization
+  );
 }
 
 function hasActiveInstanceRoleAssignment(

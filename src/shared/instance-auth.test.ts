@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  parseAccountCompletionContinuationResult,
+  parseAccountCompletionGate,
+  parseAccountCompletionGateResolutionResult,
+  parseAccountCompletionGateResult,
+  parseAccountCompletionGateTarget,
   parseCollaboratorInvitationAcceptanceRequest,
   parseCollaboratorInvitationAcceptanceStatusResponse,
   parseCollaboratorInvitationPasskeyRegistrationOptionsRequest,
@@ -192,6 +197,49 @@ describe("collaborator invitation acceptance protocol", () => {
       session: { expiresAt: "2026-06-28T00:00:00.000Z" },
       verified: true,
     });
+    expect(
+      parseCollaboratorInvitationPasskeyRegistrationVerifyResponse({
+        acceptedPrincipal: {
+          principalId: "principal:ada",
+          displayName: "Ada Collaborator",
+        },
+        accountCompletion: {
+          gate: { credentialMethod: "passkey", kind: "credential" },
+          status: "blocked",
+          target: accountCompletionTarget(),
+        },
+        invitation: {
+          invitationId: "invitation:ada",
+          targetEmail: "Ada.Collab@example.com",
+          targetSurface: "app-install",
+          targetAppInstallId: "site",
+          expiresAt: "2999-02-01T00:00:00.000Z",
+          passkeyRegistrationRequired: true,
+        },
+        session: { expiresAt: "2026-06-28T00:00:00.000Z" },
+        verified: true,
+      }),
+    ).toEqual({
+      acceptedPrincipal: {
+        principalId: "principal:ada",
+        displayName: "Ada Collaborator",
+      },
+      accountCompletion: {
+        gate: { credentialMethod: "passkey", kind: "credential" },
+        status: "blocked",
+        target: accountCompletionTarget(),
+      },
+      invitation: {
+        invitationId: "invitation:ada",
+        targetEmail: "Ada.Collab@example.com",
+        targetSurface: "app-install",
+        targetAppInstallId: "site",
+        expiresAt: "2999-02-01T00:00:00.000Z",
+        passkeyRegistrationRequired: true,
+      },
+      session: { expiresAt: "2026-06-28T00:00:00.000Z" },
+      verified: true,
+    });
   });
 
   it("rejects malformed invitation acceptance payloads and private fields", () => {
@@ -260,6 +308,212 @@ describe("collaborator invitation acceptance protocol", () => {
         response: { ...registrationResponse(), type: "password" },
       }),
     ).toThrow('Collaborator invitation passkey registration response type must be "public-key".');
+  });
+});
+
+describe("account completion gate protocol", () => {
+  it("parses all first-pass gate kinds with display-safe target facts", () => {
+    const target = accountCompletionTarget();
+    const gates = [
+      {
+        kind: "email-verification",
+        displayEmail: "Ada.User@example.com",
+        principalEmailId: "principal-email:ada",
+      },
+      {
+        kind: "credential",
+        credentialMethod: "passkey",
+        operation: {
+          operationKey: "auth.passkey.create",
+          label: "Create passkey",
+        },
+      },
+      {
+        kind: "invitation",
+        invitationId: "invitation:ada",
+        targetEmail: "ada@example.com",
+        targetSurface: "app-install",
+      },
+      {
+        kind: "app-registration",
+        appInstallId: "site",
+        selectedOrganization: "organization:acme",
+        operation: {
+          appInstallId: "site",
+          entityName: "app-registration",
+          operationKey: "app.registration.accept",
+        },
+      },
+      {
+        kind: "profile-completion",
+        appInstallId: "crm",
+        profileRecordId: "profile:ada",
+        selectedOrganization: "organization:acme",
+        operation: {
+          appInstallId: "crm",
+          entityName: "profile",
+          operationKey: "profile.complete",
+          operationName: "complete",
+        },
+      },
+      {
+        kind: "terms-acceptance",
+        policies: [
+          {
+            accountPolicyId: "account-policy:terms",
+            displayName: "Terms of Service",
+            policyContentRef: "block:terms",
+            policyDocumentUrl: "https://policies.example.com/terms",
+            policyKey: "terms",
+            version: "2026-07",
+          },
+        ],
+      },
+      {
+        kind: "role-review",
+        roleId: "role:app-admin",
+        roleKey: "app.admin",
+        scopeKind: "app-install",
+        operation: {
+          operationKey: "role-review.request",
+        },
+      },
+    ] as const;
+
+    for (const gate of gates) {
+      expect(parseAccountCompletionGateResult({ gate, status: "blocked", target })).toEqual({
+        gate,
+        status: "blocked",
+        target,
+      });
+    }
+  });
+
+  it("parses target binding fields and requires a selected app install or storage identity", () => {
+    expect(
+      parseAccountCompletionGateTarget({
+        appInstallId: " site ",
+        returnTo: "/records?view=mine",
+        routeId: " route:site ",
+        selectedOrganization: " organization:acme ",
+        storageIdentity: " app:site ",
+        targetOrigin: "https://App.Example.com/",
+        targetProfile: "app",
+      }),
+    ).toEqual({
+      appInstallId: "site",
+      returnTo: "/records?view=mine",
+      routeId: "route:site",
+      selectedOrganization: "organization:acme",
+      storageIdentity: "app:site",
+      targetOrigin: "https://app.example.com",
+      targetProfile: "app",
+    });
+
+    expect(() =>
+      parseAccountCompletionGateTarget({
+        returnTo: "/",
+        routeId: "route:site",
+        targetOrigin: "https://app.example.com",
+        targetProfile: "app",
+      }),
+    ).toThrow("Account completion gate target requires appInstallId or storageIdentity.");
+  });
+
+  it("keeps continuation targets path-only", () => {
+    const complete = {
+      continueTo: "/formless/auth/handoff?targetOrigin=https%3A%2F%2Fapp.example.com",
+      status: "complete",
+      target: accountCompletionTarget(),
+    } as const;
+
+    expect(parseAccountCompletionContinuationResult(complete)).toEqual(complete);
+    expect(parseAccountCompletionGateResolutionResult(complete)).toEqual(complete);
+
+    expect(() =>
+      parseAccountCompletionContinuationResult({
+        ...complete,
+        continueTo: "https://evil.example.com/formless/auth/handoff",
+      }),
+    ).toThrow("Account completion continuation result continueTo must be path-only.");
+    expect(() =>
+      parseAccountCompletionContinuationResult({
+        ...complete,
+        continueTo: "/formless/auth/handoff#session",
+      }),
+    ).toThrow("Account completion continuation result continueTo must be path-only.");
+  });
+
+  it("rejects unsupported gates and gate payload values", () => {
+    expect(() => parseAccountCompletionGate({ kind: "captcha" })).toThrow(
+      "Account completion gate kind is unsupported.",
+    );
+    expect(() =>
+      parseAccountCompletionGate({
+        kind: "credential",
+        credentialMethod: "oauth",
+      }),
+    ).toThrow("Account completion credential gate credentialMethod is unsupported.");
+    expect(() =>
+      parseAccountCompletionGateResolutionResult({
+        status: "waiting",
+        target: accountCompletionTarget(),
+      }),
+    ).toThrow("Account completion result status is unsupported.");
+  });
+
+  it("rejects private material in browser-visible gate and continuation responses", () => {
+    const target = accountCompletionTarget();
+    const privateResponses = [
+      {
+        gate: { kind: "email-verification" },
+        sessionId: "private-session",
+        status: "blocked",
+        target,
+      },
+      {
+        gate: { kind: "invitation", tokenHash: "private-token-hash" },
+        status: "blocked",
+        target,
+      },
+      {
+        gate: { credentialId: "private-credential-id", kind: "credential" },
+        status: "blocked",
+        target,
+      },
+      {
+        gate: {
+          kind: "email-verification",
+          operation: {
+            operationKey: "auth.verify-email",
+            providerResponse: { id: "provider-response" },
+          },
+        },
+        status: "blocked",
+        target,
+      },
+      {
+        gate: {
+          appInstallId: "crm",
+          kind: "profile-completion",
+          profileValues: { firstName: "Ada" },
+        },
+        status: "blocked",
+        target,
+      },
+      {
+        continueTo: "/apps/site",
+        hostSessionCookie: "private-cookie",
+        status: "complete",
+        target,
+      },
+    ] as const;
+
+    for (const response of privateResponses) {
+      expect(() => parseAccountCompletionGateResolutionResult(response)).toThrow(
+        "private browser-visible field",
+      );
+    }
   });
 });
 
@@ -447,6 +701,18 @@ describe("owner login redirects", () => {
     );
   });
 });
+
+function accountCompletionTarget() {
+  return {
+    appInstallId: "site",
+    returnTo: "/apps/site?screen=home",
+    routeId: "route:site",
+    selectedOrganization: "organization:acme",
+    storageIdentity: "app:site",
+    targetOrigin: "https://app.example.com",
+    targetProfile: "app",
+  } as const;
+}
 
 function registrationOptions() {
   return {

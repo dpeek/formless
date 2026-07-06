@@ -4,9 +4,9 @@
 
 Identity control plane defines the runtime-owned, reviewable identity records
 for a Formless instance. It supplies common principal, email, group,
-organization, role, membership, app registration, and invitation contracts while
-keeping credentials, challenges, token hashes, sessions, grants, and provider
-state outside reviewable app records.
+organization, role, membership, app registration, invitation, account policy,
+and policy acceptance contracts while keeping credentials, challenges, token
+hashes, sessions, grants, and provider state outside reviewable app records.
 
 ## Requirements
 
@@ -24,6 +24,8 @@ schema source.
 - AND it defines flat records for principals, principal emails, groups,
   organizations, memberships, roles, role assignments, app registrations, and
   invitations
+- AND it defines flat records for account policies and principal policy
+  acceptances used by account completion gates
 - AND broad identity records are not added to the instance control-plane schema
   that owns app installs, routes, deployments, production identity, and email
   intent
@@ -109,8 +111,8 @@ runtime-owned Authority storage.
 - WHEN the runtime validates the write before commit
 - THEN it validates the candidate identity record set with
   identity-control-plane validation helpers
-- AND selected-target uniqueness for memberships, role assignments, and app
-  registrations is enforced before commit
+- AND selected-target uniqueness for memberships, role assignments, app
+  registrations, and policy acceptances is enforced before commit
 - AND invalid references, unsupported entity names, duplicate active role keys,
   duplicate normalized active emails, and duplicate selected-target facts reject
   the write without a partial commit
@@ -245,6 +247,53 @@ facts without storing raw auth secrets.
   `expired`
 - AND raw invite tokens, token hashes, verification challenge secrets, delivery
   provider responses, and email recovery secrets remain private runtime state
+
+### Requirement: Account Policy Acceptance Records
+
+The system SHALL store target-scoped account policy and terms acceptance facts as
+flat identity records without treating acceptance as a credential.
+
+#### Scenario: Account policy record shape
+
+- GIVEN the identity control-plane schema defines `account-policy`
+- WHEN account policy records are inspected
+- THEN each policy stores display name, policy key, version, scope kind,
+  optional scope reference, status, and optional published timestamp as flat
+  values
+- AND supported first-pass scope kinds are `instance`, `app-install`, and
+  `organization`
+- AND `instance` scope does not require a scope reference
+- AND `app-install` and `organization` scopes require the selected scope
+  reference
+- AND supported first-pass statuses are `active` and `retired`
+- AND the policy record may reference display-safe policy text, document, or
+  app-owned content by id or URL, but it does not store credentials, sessions,
+  challenge secrets, provider responses, or raw recovery material
+
+#### Scenario: Principal policy acceptance record shape
+
+- GIVEN the identity control-plane schema defines `principal-policy-acceptance`
+- WHEN acceptance records are inspected
+- THEN each acceptance stores a principal reference, account policy reference,
+  acceptance status, and accepted timestamp as flat values
+- AND supported first-pass statuses are `accepted` and `revoked`
+- AND active accepted records are unique by principal and account policy
+- AND terms or policy acceptance does not by itself authenticate the principal,
+  grant roles, activate app registrations, issue sessions, or mint handoff
+  grants
+
+#### Scenario: Account policy acceptance target scope
+
+- GIVEN an active account policy is scoped to an instance, app install, or
+  organization
+- WHEN account completion evaluates a `terms-acceptance` gate for a target
+- THEN only policies whose scope applies to that target can block that target
+- AND accepting a policy for one app install or organization does not satisfy an
+  unrelated app-install or organization policy
+- AND stale, revoked, retired, tombstoned, or wrong-scope acceptance records do
+  not satisfy the gate
+- AND policy acceptance records remain reviewable identity records rather than
+  private auth session state
 
 ### Requirement: Collaborator Invitation Creation
 
@@ -527,6 +576,17 @@ target and scope rather than raw optional fields.
 - AND tombstoned duplicate app registrations do not block the active
   registration
 
+#### Scenario: Policy acceptance uniqueness allows multiple policies
+
+- GIVEN one active principal accepts two different active account policies
+- OR two different active principals accept the same active account policy
+- WHEN identity-control-plane records are validated
+- THEN the records are valid
+- AND a duplicate accepted principal policy acceptance for the same principal and
+  account policy is rejected
+- AND tombstoned duplicate policy acceptances do not block the active
+  acceptance
+
 ### Requirement: Identity Boundary For App References
 
 The system SHALL expose identity records through stable qualified entity names
@@ -582,8 +642,8 @@ reviewable identity records.
   state, archives, sync payloads, generated UI, or reviewable snapshots
 - THEN those private auth facts are absent
 - AND display-safe identity records may reference principals, roles, groups,
-  organizations, app installs, invitations, and verification status without
-  exposing raw secrets
+  organizations, app installs, invitations, account policies, policy
+  acceptances, and verification status without exposing raw secrets
 
 #### Scenario: Owner auth uses principal and role records
 

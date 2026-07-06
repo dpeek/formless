@@ -34,6 +34,7 @@ import { mappedAppHostFromRuntimeRoute } from "./mapped-app-host.ts";
 import {
   HOST_AUTH_SESSION_COOKIE_NAME,
   configuredInstanceAuthOrigin,
+  accountCompletionBlockedResponse,
   handleInstanceAuthHandoffRequest,
   hostAuthSessionTargetForRuntimeRoute,
   requestOriginForAuth,
@@ -680,6 +681,13 @@ async function authorizeInstalledAppRouteAccess(
     return undefined;
   }
 
+  if (
+    authorization.reason === "account-completion-required" &&
+    authorization.accountCompletion !== undefined
+  ) {
+    return accountCompletionBlockedResponse(authorization.accountCompletion);
+  }
+
   return Response.json(
     { error: "Authenticated session is required for this route." },
     {
@@ -744,6 +752,10 @@ async function redirectAnonymousProtectedBrowserRoute(
 
   if (session.ok) {
     return undefined;
+  }
+
+  if (session.reason === "account-completion-required" && session.accountCompletion !== undefined) {
+    return accountCompletionBlockedResponse(session.accountCompletion);
   }
 
   const handoffRedirect = await startProtectedRouteAuthHandoff(request, env, runtimeRoute);

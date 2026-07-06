@@ -37,6 +37,8 @@ export const identityControlPlaneEntityNames = [
   "role-assignment",
   "app-registration",
   "invitation",
+  "account-policy",
+  "principal-policy-acceptance",
 ] as const;
 
 export type IdentityControlPlaneEntityName = (typeof identityControlPlaneEntityNames)[number];
@@ -66,6 +68,9 @@ export type IdentityAppRegistrationTargetKind = "organization" | "principal";
 export type IdentityAppRegistrationStatus = "active" | "disabled" | "pending";
 export type IdentityInvitationTargetSurface = "app-install" | "instance" | "organization";
 export type IdentityInvitationStatus = "accepted" | "expired" | "pending" | "revoked";
+export type IdentityAccountPolicyScopeKind = "app-install" | "instance" | "organization";
+export type IdentityAccountPolicyStatus = "active" | "retired";
+export type IdentityPrincipalPolicyAcceptanceStatus = "accepted" | "revoked";
 
 export type IdentityPrincipalValues = {
   displayName: string;
@@ -140,16 +145,38 @@ export type IdentityInvitationValues = {
   acceptedAt?: string;
 };
 
+export type IdentityAccountPolicyValues = {
+  displayName: string;
+  policyKey: string;
+  version: string;
+  scopeKind: IdentityAccountPolicyScopeKind;
+  appInstallId?: string;
+  scopeOrganization?: string;
+  status: IdentityAccountPolicyStatus;
+  publishedAt?: string;
+  policyDocumentUrl?: string;
+  policyContentRef?: string;
+};
+
+export type IdentityPrincipalPolicyAcceptanceValues = {
+  principal: string;
+  accountPolicy: string;
+  status: IdentityPrincipalPolicyAcceptanceStatus;
+  acceptedAt: string;
+};
+
 export type IdentityControlPlaneRecordValuesByEntity = {
+  "account-policy": IdentityAccountPolicyValues;
+  "app-registration": IdentityAppRegistrationValues;
   group: IdentityGroupValues;
   invitation: IdentityInvitationValues;
   membership: IdentityMembershipValues;
   organization: IdentityOrganizationValues;
   principal: IdentityPrincipalValues;
   "principal-email": IdentityPrincipalEmailValues;
+  "principal-policy-acceptance": IdentityPrincipalPolicyAcceptanceValues;
   role: IdentityRoleValues;
   "role-assignment": IdentityRoleAssignmentValues;
-  "app-registration": IdentityAppRegistrationValues;
 };
 
 export const identityControlPlaneImmutableFields = {
@@ -171,6 +198,16 @@ export const identityControlPlaneImmutableFields = {
   ],
   "app-registration": ["appInstallId", "targetKind", "targetPrincipal", "targetOrganization"],
   invitation: ["targetEmail", "targetSurface", "targetAppInstallId", "targetOrganization"],
+  "account-policy": [
+    "policyKey",
+    "version",
+    "scopeKind",
+    "appInstallId",
+    "scopeOrganization",
+    "policyDocumentUrl",
+    "policyContentRef",
+  ],
+  "principal-policy-acceptance": ["principal", "accountPolicy", "acceptedAt"],
 } as const satisfies Record<IdentityControlPlaneEntityName, readonly string[]>;
 
 export type IdentityAccessPrimaryEmailSummary = {
