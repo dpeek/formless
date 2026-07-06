@@ -1083,7 +1083,7 @@ function RecordMarkdownFieldRenderer({
   onDraftRevert: () => void;
   onValueCommit: (value: FieldValue) => void;
 }) {
-  function handleMarkdownBlur(event: FocusEvent<HTMLDivElement>) {
+  function handleMarkdownBlur(event: FocusEvent<HTMLTextAreaElement>) {
     const nextTarget = event.relatedTarget;
 
     if (nextTarget && event.currentTarget.contains(nextTarget as Node)) {
@@ -1095,7 +1095,7 @@ function RecordMarkdownFieldRenderer({
     }
   }
 
-  function handleMarkdownKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+  function handleMarkdownKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     if (event.key === "Escape") {
       event.preventDefault();
       onDraftRevert();

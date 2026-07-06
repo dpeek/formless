@@ -48,9 +48,9 @@ export function GeneratedMarkdownFieldControl({
 }: {
   ariaInvalid?: boolean;
   label: string;
-  onBlur?: FocusEventHandler<HTMLDivElement>;
+  onBlur?: FocusEventHandler<HTMLTextAreaElement>;
   onChange: (value: string) => void;
-  onKeyDown?: KeyboardEventHandler<HTMLDivElement>;
+  onKeyDown?: KeyboardEventHandler<HTMLTextAreaElement>;
   readOnly?: boolean;
   value: string;
 }) {

@@ -11,11 +11,10 @@ import xml from "highlight.js/lib/languages/xml";
 import yaml from "highlight.js/lib/languages/yaml";
 import { createLowlight } from "lowlight";
 
-export const markdownPlateLowlight = createLowlight();
+export const markdownLowlight = createLowlight();
 
-// Keep both dependencies declared: Plate consumes a Lowlight instance for code
-// block syntax leaves, and Lowlight core needs explicit Highlight.js grammars.
-markdownPlateLowlight.register({
+// Lowlight core needs explicit Highlight.js grammars for the renderer.
+markdownLowlight.register({
   bash,
   css,
   diff,
@@ -38,16 +37,16 @@ type HighlightNode = {
 };
 
 export function isMarkdownHighlightLanguageRegistered(language: string): boolean {
-  return markdownPlateLowlight.registered(language);
+  return markdownLowlight.registered(language);
 }
 
 export function highlightMarkdownCodeHtml(code: string, language: string): string | null {
-  if (!markdownPlateLowlight.registered(language)) {
+  if (!markdownLowlight.registered(language)) {
     return null;
   }
 
   try {
-    return highlightNodeToHtml(markdownPlateLowlight.highlight(language, code) as HighlightNode);
+    return highlightNodeToHtml(markdownLowlight.highlight(language, code) as HighlightNode);
   } catch {
     return null;
   }

@@ -296,14 +296,14 @@ function linkHtml(html: string, href: string): string {
 function sidebarItemHtml(html: string, text: string): string {
   const labelIndex = html.indexOf(`>${text}</span>`);
   const slotIndex = html.lastIndexOf('data-slot="sidebar-item"', labelIndex);
-  const itemStart = html.lastIndexOf("<a", slotIndex);
-  const itemEnd = html.indexOf("</a>", labelIndex);
+  const itemStart = html.lastIndexOf("<", slotIndex);
+  const labelEnd = html.indexOf("</span>", labelIndex);
 
-  if (labelIndex === -1 || slotIndex === -1 || itemStart === -1 || itemEnd === -1) {
+  if (labelIndex === -1 || slotIndex === -1 || itemStart === -1 || labelEnd === -1) {
     throw new Error(`Missing sidebar item for "${text}".`);
   }
 
-  return html.slice(itemStart, itemEnd + "</a>".length);
+  return html.slice(itemStart, labelEnd + "</span>".length);
 }
 
 function articleHtml(html: string, text: string): string {
@@ -3954,7 +3954,7 @@ describe("generated collection home", () => {
     expect(html).not.toContain('data-formless-delete-record="rec_site_settings_primary"');
     expect(html).toContain('data-web-autosize-text-input="true"');
     expect(html).toContain("h-9 w-full text-2xl font-semibold");
-    expect(html).toContain('data-web-markdown-editor="plate"');
+    expect(html).toContain('data-web-markdown-editor="textarea"');
     expect(html).toContain('aria-label="Body"');
     expect(html).not.toContain(">Home</h2>");
     expect(html).toContain("Home");
@@ -5142,7 +5142,7 @@ describe("generated forms and records", () => {
     expect(html).not.toContain("Hidden title");
   });
 
-  it("renders markdown create controls as rich editors with hidden string inputs", () => {
+  it("renders markdown create controls as source editors with hidden string inputs", () => {
     const task = taskEntityWithMarkdownBody();
     const entityOperation = testCreateOperation("task");
     const createOperationConfig: Extract<HomeOperationConfig, { type: "create" }> = {
@@ -5167,12 +5167,13 @@ describe("generated forms and records", () => {
     );
 
     expect(html).toMatch(inputWithNameAndType("body", "hidden"));
-    expect(html).toContain('data-web-markdown-editor="plate"');
+    expect(html).toContain('data-web-markdown-editor="textarea"');
+    expect(html).toContain('data-web-markdown-source="textarea"');
     expect(html).toContain('aria-label="Body"');
     expect(html).toContain("Body");
   });
 
-  it("renders markdown inline editors as rich editors outside compact contexts", () => {
+  it("renders markdown inline editors as source editors outside compact contexts", () => {
     const task = taskEntityWithMarkdownBody();
     const recordFields: RecordFieldConfig[] = [
       {
@@ -5193,10 +5194,11 @@ describe("generated forms and records", () => {
       />,
     );
 
-    expect(html).toContain('data-web-markdown-editor="plate"');
+    expect(html).toContain('data-web-markdown-editor="textarea"');
+    expect(html).toContain('data-web-markdown-source="textarea"');
     expect(html).toContain('aria-label="Body"');
-    expect(html).toContain("<h2");
-    expect(html).toContain("Draft");
+    expect(html).not.toContain("<h2");
+    expect(html).toContain("## Draft");
     expect(html).not.toContain('type="text"');
   });
 
@@ -5795,7 +5797,7 @@ describe("generated forms and records", () => {
     expect(html).not.toContain('data-web-autosize-text-input="true"');
     expect(html).toMatch(textareaWithName("summary"));
     expect(html).toMatch(inputWithNameAndType("body", "hidden"));
-    expect(html).toContain('data-web-markdown-editor="plate"');
+    expect(html).toContain('data-web-markdown-editor="textarea"');
     expect(html).toMatch(inputWithNameAndType("color", "hidden"));
     expect(html).toContain('aria-label="Choose Color"');
     expect(html).toMatch(inputWithAriaLabelAndType("Color", "text"));
@@ -5853,7 +5855,7 @@ describe("generated forms and records", () => {
     expect(html).not.toContain('data-web-autosize-text-input="true"');
     expect(html).toContain('value="Plain title"');
     expect(html).toMatch(textareaWithAriaLabel("Summary"));
-    expect(html).toContain('data-web-markdown-editor="plate"');
+    expect(html).toContain('data-web-markdown-editor="textarea"');
     expect(html).toContain('aria-label="Body"');
     expect(html).toContain("Heading");
     expect(html).toMatch(inputWithAriaLabelAndType("Color", "text"));
@@ -6294,7 +6296,7 @@ describe("generated forms and records", () => {
     expect(createHtml).toContain("Post");
     expect(createHtml).not.toMatch(inputWithNameAndType("body", "hidden"));
     expect(createHtml).not.toContain('name="templateKey"');
-    expect(createHtml).not.toContain('data-web-markdown-editor="plate"');
+    expect(createHtml).not.toContain('data-web-markdown-editor="textarea"');
     expect(createHtml).not.toContain('name="featured"');
     expect(createHtml).not.toContain('name="publishedAt"');
     expect(createHtml).not.toContain('aria-label="Select date"');

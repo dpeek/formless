@@ -273,6 +273,17 @@ The system SHALL render generated field displays and editors from field behavior
 - AND image fields support upload with preview and manual URL fallback
 - AND media fields select or upload core image media assets
 
+#### Scenario: Markdown source editor
+
+- GIVEN text fields use `markdown` editor metadata
+- WHEN generated editors render
+- THEN markdown fields use the shared `MarkdownEditor` component boundary with
+  a controlled textarea source editor
+- AND the source editor uses monospace text styling, disables spellcheck, and
+  stores and commits the field value as flat Markdown text
+- AND generated markdown editing does not require Plate, Slate, or other rich
+  text editor runtime modules
+
 #### Scenario: Presentation fallbacks
 
 - GIVEN enum `iconOnly`, boolean `completion`, and optional date `valueOrInteraction` presentations

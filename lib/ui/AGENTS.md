@@ -8,7 +8,7 @@ Read this when editing `lib/ui/*`.
 
 - Shared browser UI primitives.
 - Shared editor chrome.
-- Plate-backed Markdown render/edit parts.
+- Shared Markdown render/edit parts.
 - Plain source preview/edit controls.
 - Browser-only utilities and styling.
 - Shared theme tokens through `.light` and `.dark` root classes.
@@ -50,7 +50,7 @@ Read this when editing `lib/ui/*`.
 ## Markdown Rules
 
 - `MarkdownRenderer` owns read-only Markdown render path.
-- `MarkdownEditor` owns rich Markdown edit path.
+- `MarkdownEditor` owns textarea-backed Markdown source edit path.
 - Both use shared GFM parsing and `.graph-markdown` document skin.
 - `MarkdownRenderer` applies `.graph-markdown` and Tailwind Typography `prose` classes by default.
 - Consumers may pass layout classes.
@@ -58,10 +58,9 @@ Read this when editing `lib/ui/*`.
 - Graphle-specific Markdown CSS stays limited to design-token bridging around upstream typography rules.
 - Heading IDs are deterministic and display-only.
 - Callers with page-level headings may pass `minHeadingLevel`.
-- `minHeadingLevel` demotes imported or pasted headings during render, edit init, and serialization.
+- `minHeadingLevel` demotes imported or pasted headings during render.
 - Fenced code blocks preserve language labels, filename metadata, copy controls, plain-code fallback, and syntax highlighting.
 - Keep both `lowlight` and direct `highlight.js/lib/languages/*` imports.
-- Plate consumes Lowlight for editor syntax leaves.
 - Lowlight core needs explicit Highlight.js grammar registration for supported languages.
 
 ## Source Edit Rules

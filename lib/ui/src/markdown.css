@@ -84,11 +84,6 @@
   box-shadow: 0 0 0 3px color-mix(in oklch, var(--danger) 18%, transparent);
 }
 
-.graph-markdown.graph-markdown-editor [data-slate-placeholder="true"] {
-  color: var(--muted-fg);
-  opacity: 0.78;
-}
-
 .graph-markdown .graph-markdown-list,
 .graph-markdown .graph-markdown-task-list {
   margin-block: 1.25em;

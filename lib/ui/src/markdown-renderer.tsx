@@ -5,10 +5,9 @@ import { createElement, useEffect, useState, type ReactNode } from "react";
 
 import { parseMarkdownCodeInfo } from "./markdown-code-info.js";
 import { highlightMarkdownCodeHtml } from "./markdown-highlighting.js";
-import type { MarkdownHeadingLevel } from "./markdown-plate-value.js";
 import { cn } from "./primitive";
 
-export type { MarkdownHeadingLevel } from "./markdown-plate-value.js";
+export type MarkdownHeadingLevel = 1 | 2 | 3 | 4 | 5 | 6;
 
 export function MarkdownRenderer({
   className,

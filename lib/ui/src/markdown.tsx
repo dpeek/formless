@@ -1,31 +1,16 @@
 "use client";
 
 import { cn } from "./primitive";
-import { useEffect, useRef } from "react";
-import { type Value } from "platejs";
-import { Plate, PlateContent, usePlateEditor } from "platejs/react";
-
-import { MarkdownFloatingToolbar } from "./markdown-floating-toolbar.js";
-import { markdownPlateEditorComponents } from "./markdown-plate-components.js";
-import { createMarkdownPlatePlugins } from "./markdown-plate-kit.js";
-import {
-  decorateMarkdownPlateValue,
-  deserializeMarkdownToPlateValue,
-  hasMarkdownHeadingBelowMinimum,
-  normalizeMarkdownPlateValue,
-  serializePlateValueToMarkdown,
-  type MarkdownHeadingLevel,
-  type MarkdownPlateValue,
-} from "./markdown-plate-value.js";
+import type { FocusEventHandler, KeyboardEventHandler } from "react";
+import type { MarkdownHeadingLevel } from "./markdown-renderer.js";
 
 export { MarkdownRenderer } from "./markdown-renderer.js";
-export type { MarkdownHeadingLevel } from "./markdown-plate-value.js";
+export type { MarkdownHeadingLevel } from "./markdown-renderer.js";
 
 export function MarkdownEditor({
   "aria-invalid": ariaInvalid,
   "aria-label": ariaLabel,
   className,
-  minHeadingLevel,
   onChange,
   onBlur,
   onKeyDown,
@@ -38,107 +23,30 @@ export function MarkdownEditor({
   className?: string;
   minHeadingLevel?: MarkdownHeadingLevel;
   onChange: (nextMarkdown: string) => void;
-  onBlur?: React.FocusEventHandler<HTMLDivElement>;
-  onKeyDown?: React.KeyboardEventHandler<HTMLDivElement>;
+  onBlur?: FocusEventHandler<HTMLTextAreaElement>;
+  onKeyDown?: KeyboardEventHandler<HTMLTextAreaElement>;
   placeholder?: string;
   readOnly?: boolean;
   value: string;
 }) {
-  const onChangeRef = useRef(onChange);
-  const initialValueRef = useRef<MarkdownPlateValue | null>(null);
-  const lastEmittedMarkdownRef = useRef<string | null>(null);
-  const lastPropValueRef = useRef(value);
-  const suppressChangeRef = useRef(false);
-
-  if (initialValueRef.current === null) {
-    initialValueRef.current = markdownStringToPlateValue(value, minHeadingLevel);
-  }
-
-  useEffect(() => {
-    onChangeRef.current = onChange;
-  }, [onChange]);
-
-  const editor = usePlateEditor({
-    components: markdownPlateEditorComponents,
-    plugins: createMarkdownPlatePlugins(),
-    value: initialValueRef.current,
-  });
-
-  useEffect(() => {
-    if (value === lastPropValueRef.current) {
-      return;
-    }
-
-    lastPropValueRef.current = value;
-
-    if (value === lastEmittedMarkdownRef.current) {
-      return;
-    }
-
-    suppressChangeRef.current = true;
-    editor.tf.setValue(markdownStringToPlateValue(value, minHeadingLevel) as Value);
-    editor.operations = [];
-    editor.marks = null;
-
-    if (editor.history) {
-      editor.history.undos = [];
-      editor.history.redos = [];
-    }
-
-    suppressChangeRef.current = false;
-  }, [editor, minHeadingLevel, value]);
-
   return (
-    <Plate
-      editor={editor}
+    <textarea
+      aria-label={ariaLabel}
+      aria-invalid={ariaInvalid || undefined}
+      aria-readonly={readOnly || undefined}
+      className={cn(
+        "graph-markdown graph-markdown-editor min-h-32 w-full resize-y whitespace-pre-wrap rounded border border-input bg-bg px-3 py-2 font-mono text-sm leading-6 text-fg placeholder:text-muted-fg outline-none transition focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30",
+        className,
+      )}
+      data-web-markdown-editor="textarea"
+      data-web-markdown-source="textarea"
+      onBlur={onBlur}
+      onChange={(event) => onChange(event.currentTarget.value)}
+      onKeyDown={onKeyDown}
+      placeholder={placeholder}
       readOnly={readOnly}
-      onValueChange={({ value }) => {
-        if (suppressChangeRef.current) {
-          return;
-        }
-
-        const normalizedValue = normalizeMarkdownPlateValue(value, { minHeadingLevel });
-
-        if (hasMarkdownHeadingBelowMinimum(value, minHeadingLevel)) {
-          suppressChangeRef.current = true;
-          editor.tf.setValue(normalizedValue as Value);
-          editor.operations = [];
-          suppressChangeRef.current = false;
-        }
-
-        const nextMarkdown = serializePlateValueToMarkdown(normalizedValue, { minHeadingLevel });
-
-        lastEmittedMarkdownRef.current = nextMarkdown;
-        onChangeRef.current(nextMarkdown);
-      }}
-    >
-      <PlateContent
-        aria-label={ariaLabel}
-        aria-invalid={ariaInvalid || undefined}
-        aria-readonly={readOnly || undefined}
-        className={cn(
-          "graph-markdown graph-markdown-editor prose max-w-none dark:prose-invert",
-          className,
-        )}
-        data-web-markdown-editor="plate"
-        onBlur={onBlur}
-        onKeyDown={onKeyDown}
-        placeholder={placeholder}
-      />
-      <MarkdownFloatingToolbar />
-    </Plate>
-  );
-}
-
-function markdownStringToPlateValue(
-  markdown: string,
-  minHeadingLevel: MarkdownHeadingLevel | undefined,
-): MarkdownPlateValue {
-  return decorateMarkdownPlateValue(
-    deserializeMarkdownToPlateValue(markdown, { minHeadingLevel }),
-    markdown,
-    {
-      minHeadingLevel,
-    },
+      spellCheck={false}
+      value={value}
+    />
   );
 }

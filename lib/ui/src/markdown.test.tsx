@@ -9,11 +9,6 @@ import {
   highlightMarkdownCodeHtml,
   isMarkdownHighlightLanguageRegistered,
 } from "./markdown-highlighting.js";
-import {
-  decorateMarkdownPlateValue,
-  deserializeMarkdownToPlateValue,
-  serializePlateValueToMarkdown,
-} from "./markdown-plate-value.js";
 import { MarkdownEditor, MarkdownRenderer } from "./markdown.js";
 
 type BunMarkdownApi = {
@@ -215,31 +210,33 @@ describe("MarkdownRenderer", () => {
 });
 
 describe("MarkdownEditor", () => {
-  it("renders editable Plate markup with the shared markdown skin", () => {
+  it("renders editable textarea markup with the shared markdown skin", () => {
     const markup = renderToStaticMarkup(
       <MarkdownEditor onChange={() => undefined} placeholder="Write notes" value="# Probe notes" />,
     );
 
     expect(markup).toContain("graph-markdown");
     expect(markup).toContain("graph-markdown-editor");
-    expect(markup).toContain("prose");
-    expect(markup).toContain("max-w-none");
-    expect(markup).toContain('data-web-markdown-editor="plate"');
-    expect(markup).toContain('data-slate-editor="true"');
-    expect(markup).toContain('contentEditable="true"');
-    expect(markup).toContain("<h1");
-    expect(markup).toContain('id="probe-notes"');
-    expect(markup).toContain("Probe notes");
+    expect(markup).toContain("font-mono");
+    expect(markup).toContain("<textarea");
+    expect(markup).toContain('data-web-markdown-editor="textarea"');
+    expect(markup).toContain('data-web-markdown-source="textarea"');
+    expect(markup).toContain('spellCheck="false"');
+    expect(markup).toContain('placeholder="Write notes"');
+    expect(markup).toContain("# Probe notes");
+    expect(markup).not.toContain('data-slate-editor="true"');
+    expect(markup).not.toContain("contentEditable");
+    expect(markup).not.toContain("<h1");
   });
 
-  it("passes invalid state to the editable markdown root", () => {
+  it("passes invalid state to the markdown source textarea", () => {
     const markup = renderToStaticMarkup(
       <MarkdownEditor aria-invalid onChange={() => undefined} placeholder="Write notes" value="" />,
     );
 
-    expect(markup).toContain('data-web-markdown-editor="plate"');
+    expect(markup).toContain('data-web-markdown-editor="textarea"');
     expect(markup).toContain('aria-invalid="true"');
-    expect(markup).not.toContain('data-web-markdown-source="textarea"');
+    expect(markup).toContain('data-web-markdown-source="textarea"');
   });
 
   it("can render an accessible read-only editor surface", () => {
@@ -254,10 +251,11 @@ describe("MarkdownEditor", () => {
 
     expect(markup).toContain('aria-label="Notes"');
     expect(markup).toContain('aria-readonly="true"');
-    expect(markup).toContain('contentEditable="false"');
+    expect(markup).toContain("readOnly");
+    expect(markup).not.toContain("contentEditable");
   });
 
-  it("can initialize the editor with headings constrained to h2+", () => {
+  it("keeps markdown source text unchanged when heading constraints are passed", () => {
     const markup = renderToStaticMarkup(
       <MarkdownEditor
         minHeadingLevel={2}
@@ -268,11 +266,11 @@ describe("MarkdownEditor", () => {
     );
 
     expect(markup).not.toContain("<h1");
-    expect(markup).toContain("<h2");
-    expect(markup).toContain("Probe notes");
+    expect(markup).not.toContain("<h2");
+    expect(markup).toContain("# Probe notes");
   });
 
-  it("renders editable code blocks with Lowlight syntax leaves", () => {
+  it("keeps fenced code blocks as editable source text", () => {
     const markup = renderToStaticMarkup(
       <MarkdownEditor
         onChange={() => undefined}
@@ -281,13 +279,11 @@ describe("MarkdownEditor", () => {
       />,
     );
 
-    expect(markup).toContain("graph-markdown-code-block");
-    expect(markup).toContain('data-highlight-language="tsx"');
-    expect(markup).toContain('data-language="tsx"');
+    expect(markup).toContain("```tsx filename=&quot;schema.tsx&quot;");
     expect(markup).toContain("schema.tsx");
-    expect(markup).toContain("graph-markdown-code-syntax");
-    expect(markup).toContain("hljs-keyword");
-    expect(markup).toContain("hljs-number");
+    expect(markup).not.toContain("graph-markdown-code-block");
+    expect(markup).not.toContain("graph-markdown-code-syntax");
+    expect(markup).not.toContain("hljs-keyword");
   });
 });
 
@@ -359,25 +355,5 @@ describe("parseMarkdownCodeInfo", () => {
       label: "MDX",
       language: "mdx",
     });
-  });
-});
-
-describe("markdown Plate value code blocks", () => {
-  it("serializes code block language and filename metadata", () => {
-    const markdown = ['```tsx filename="schema.tsx"', "const value = 1;", "```"].join("\n");
-    const value = decorateMarkdownPlateValue(deserializeMarkdownToPlateValue(markdown), markdown);
-
-    expect(serializePlateValueToMarkdown(value)).toBe(markdown);
-  });
-
-  it("serializes path-only and no-highlight fences", () => {
-    for (const markdown of [
-      ["```lib/graphle-web-ui/src/markdown.tsx", "const value = 1;", "```"].join("\n"),
-      ["```nohighlight", "literal", "```"].join("\n"),
-    ]) {
-      const value = decorateMarkdownPlateValue(deserializeMarkdownToPlateValue(markdown), markdown);
-
-      expect(serializePlateValueToMarkdown(value)).toBe(markdown);
-    }
   });
 });

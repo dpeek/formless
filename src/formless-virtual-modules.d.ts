@@ -9,3 +9,16 @@ declare module "virtual:formless/site-public-renderer/worker" {
 
   export const sitePublicRenderer: SitePublicRendererComponent | undefined;
 }
+
+interface ImportMetaEnv extends Record<string, string | boolean | undefined> {
+  readonly VITE_FORMLESS_RUNTIME_PROFILE?: string;
+  readonly VITE_FORMLESS_SCHEMA_KEY?: string;
+}
+
+interface ImportMeta {
+  readonly env: ImportMetaEnv;
+}
+
+declare module "*.css";
+declare module "@dpeek/formless-ui/global.css";
+declare module "@dpeek/formless-ui/global";
