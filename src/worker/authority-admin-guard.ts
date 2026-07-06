@@ -1,9 +1,12 @@
 import type { AuthorityOperation } from "./authority-operations.ts";
 import {
+  validateCentralAuthSessionAuthority,
+  validateCentralAuthSessionManagementAuthority,
   validateHostAuthSessionAuthority,
   validateHostAuthSessionManagementAuthority,
   type HostAuthSession,
 } from "./instance-auth-handoff.ts";
+import type { CentralAuthSession } from "./central-auth-session.ts";
 import type { InstanceAuthSessionTargetBinding } from "./instance-auth-state.ts";
 import {
   readInternalIdentityAuthorityForPrincipal,
@@ -16,6 +19,7 @@ import {
   type OwnerSessionAuthorityResolver,
   type OwnerSessionEnv,
 } from "./owner-session.ts";
+import { isLocalOwnerSessionRuntime } from "./local-session-bootstrap.ts";
 
 export type AuthorityAdminGuardEnv = OwnerSessionEnv & {
   FORMLESS_ADMIN_TOKEN?: string;
@@ -33,8 +37,8 @@ export type AuthorityAdminGuardResult =
 export type InstanceWriteAuthorizationResult =
   | {
       authorized: true;
-      session?: HostAuthSession | OwnerSession;
-      via: "admin-bearer" | "host-session" | "owner-session" | "open";
+      session?: CentralAuthSession | HostAuthSession | OwnerSession;
+      via: "admin-bearer" | "central-session" | "host-session" | "owner-session" | "open";
     }
   | {
       authorized: false;
@@ -134,6 +138,34 @@ export async function authorizeOperationalManagement(
   });
 }
 
+async function validateCentralOwnerSession(
+  request: Request,
+  env: AuthorityAdminGuardEnv,
+): Promise<Awaited<ReturnType<typeof validateCentralAuthSessionAuthority>>> {
+  if (env.FORMLESS_AUTHORITY === undefined) {
+    return { ok: false, ownerSessionFallbackAllowed: false, reason: "missing-auth-origin" };
+  }
+
+  return validateCentralAuthSessionAuthority(request, {
+    ...env,
+    FORMLESS_AUTHORITY: env.FORMLESS_AUTHORITY,
+  });
+}
+
+async function validateCentralManagementSession(
+  request: Request,
+  env: AuthorityAdminGuardEnv,
+): Promise<Awaited<ReturnType<typeof validateCentralAuthSessionManagementAuthority>>> {
+  if (env.FORMLESS_AUTHORITY === undefined) {
+    return { ok: false, ownerSessionFallbackAllowed: false, reason: "missing-auth-origin" };
+  }
+
+  return validateCentralAuthSessionManagementAuthority(request, {
+    ...env,
+    FORMLESS_AUTHORITY: env.FORMLESS_AUTHORITY,
+  });
+}
+
 async function authorizeOwnerSessionOrAdmin(
   request: Request,
   env: AuthorityAdminGuardEnv,
@@ -155,11 +187,20 @@ async function authorizeOwnerSessionOrAdmin(
     return { authorized: true, via: "admin-bearer" };
   }
 
-  const ownerSession = await validateOwnerSessionAuthority(request, env, {
-    resolveOwnerSession: options.resolveOwnerSession,
-  });
+  const centralSession = await validateCentralOwnerSession(request, env);
 
-  if (ownerSession.ok) {
+  if (centralSession.ok) {
+    return { authorized: true, session: centralSession.session, via: "central-session" };
+  }
+
+  const ownerSession =
+    centralSession.ownerSessionFallbackAllowed || isLocalOwnerSessionRuntime(request, env)
+      ? await validateOwnerSessionAuthority(request, env, {
+          resolveOwnerSession: options.resolveOwnerSession,
+        })
+      : undefined;
+
+  if (ownerSession?.ok) {
     return { authorized: true, session: ownerSession.session, via: "owner-session" };
   }
 
@@ -209,9 +250,18 @@ async function authorizeManagementSessionOrAdmin(
     return { authorized: true, via: "admin-bearer" };
   }
 
-  const ownerSession = await validateOwnerSessionCookie(request, env);
+  const centralSession = await validateCentralManagementSession(request, env);
 
-  if (ownerSession.ok) {
+  if (centralSession.ok) {
+    return { authorized: true, session: centralSession.session, via: "central-session" };
+  }
+
+  const ownerSession =
+    centralSession.ownerSessionFallbackAllowed || isLocalOwnerSessionRuntime(request, env)
+      ? await validateOwnerSessionCookie(request, env)
+      : undefined;
+
+  if (ownerSession?.ok) {
     const authority = options.resolveManagementAuthority
       ? await options.resolveManagementAuthority(ownerSession.session)
       : await readInternalIdentityAuthorityForPrincipal(env, ownerSession.session.principalId);

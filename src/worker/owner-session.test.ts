@@ -1,4 +1,9 @@
 import { describe, expect, it } from "vite-plus/test";
+import {
+  LOCAL_SESSION_BOOTSTRAP_TOKEN_ENV,
+  WORKSPACE_GATEWAY_PROXY_TOKEN_ENV,
+  WORKSPACE_GATEWAY_SIDECAR_URL_ENV,
+} from "@dpeek/formless-gateway";
 
 import type { OwnerIdentity } from "../shared/protocol.ts";
 import { authorizeInstanceWrite, authorizeOperationalManagement } from "./authority-admin-guard.ts";
@@ -19,6 +24,13 @@ const issuedAt = "2026-05-21T00:00:00.000Z";
 const futureIssuedAt = "2999-01-01T00:00:00.000Z";
 const sessionSecret = "session-secret";
 const adminToken = "admin-token";
+const localOwnerSessionEnv = {
+  FORMLESS_OWNER_SESSION_SECRET: sessionSecret,
+  FORMLESS_RUNTIME_PROFILE: "instance",
+  [LOCAL_SESSION_BOOTSTRAP_TOKEN_ENV]: "local-bootstrap-token",
+  [WORKSPACE_GATEWAY_PROXY_TOKEN_ENV]: "local-proxy-token",
+  [WORKSPACE_GATEWAY_SIDECAR_URL_ENV]: "http://127.0.0.1:4111",
+};
 
 describe("owner session cookies", () => {
   it("creates host-scoped HTTP-only owner session cookies", async () => {
@@ -217,7 +229,7 @@ describe("shared write authorization", () => {
         requestWithCookie(created.cookie, "https://example.com/api"),
         {
           FORMLESS_ADMIN_TOKEN: adminToken,
-          FORMLESS_OWNER_SESSION_SECRET: sessionSecret,
+          ...localOwnerSessionEnv,
         },
         {
           resolveOwnerSession: async (session) => (session.principalId === owner.id ? owner : null),
@@ -227,6 +239,37 @@ describe("shared write authorization", () => {
         authorized: true,
         session: created.session,
         via: "owner-session",
+      },
+    );
+  });
+
+  it("rejects valid owner session cookies outside local owner-session fallback", async () => {
+    const created = await createOwnerSessionCookie({
+      env: { FORMLESS_OWNER_SESSION_SECRET: sessionSecret },
+      maxAgeSeconds: 60,
+      now: futureIssuedAt,
+      owner,
+      request: request("https://example.com/admin"),
+    });
+
+    await expectAuthorizationResult(
+      authorizeInstanceWrite(
+        requestWithCookie(created.cookie, "https://example.com/api"),
+        {
+          FORMLESS_ADMIN_TOKEN: adminToken,
+          FORMLESS_OWNER_SESSION_SECRET: sessionSecret,
+        },
+        {
+          resolveOwnerSession: async (session) => (session.principalId === owner.id ? owner : null),
+        },
+      ),
+      {
+        authorized: false,
+        error: "Owner session or admin authorization is required for this write endpoint.",
+        headers: {
+          "WWW-Authenticate": 'Bearer realm="formless-admin"',
+        },
+        status: 401,
       },
     );
   });
@@ -250,7 +293,7 @@ describe("shared write authorization", () => {
         requestWithCookie(created.cookie, "https://example.com/api"),
         {
           FORMLESS_ADMIN_TOKEN: adminToken,
-          FORMLESS_OWNER_SESSION_SECRET: sessionSecret,
+          ...localOwnerSessionEnv,
         },
         { resolveOwnerSession: async () => null },
       ),
@@ -304,7 +347,7 @@ describe("operational management authorization", () => {
       await expectAuthorizationResult(
         authorizeOperationalManagement(
           requestWithCookie(created.cookie, "https://example.com/api"),
-          { FORMLESS_OWNER_SESSION_SECRET: sessionSecret },
+          localOwnerSessionEnv,
           {
             resolveManagementAuthority: async (session) => ({
               id: session.principalId,
@@ -396,7 +439,7 @@ async function expectRejectedOperationalManagement(
   await expectAuthorizationResult(
     authorizeOperationalManagement(
       requestWithCookie(created.cookie, "https://example.com/api"),
-      { FORMLESS_OWNER_SESSION_SECRET: sessionSecret },
+      localOwnerSessionEnv,
       { resolveManagementAuthority: async () => authority },
     ),
     {

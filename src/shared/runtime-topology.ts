@@ -51,12 +51,13 @@ export const runtimeTopologyRoutes = {
   accessRoute: "/access",
   authAccountRoute: runtimeAuthAccountRoute,
   authAccountGateRoutePattern: `${runtimeAuthAccountRoute}/*`,
+  authAccountSetupRoute: `${runtimeAuthAccountRoute}/setup`,
+  authAccountSignInRoute: `${runtimeAuthAccountRoute}/sign-in`,
   appRouteBase: "/apps",
   clientShellAssetPath: "/index.html",
   dynamicSiteIconPaths: ["/favicon.svg", "/favicon.ico", "/apple-touch-icon.png"],
   formlessRouteBase: "/formless",
   instanceRootRoute: "/",
-  loginRoute: "/login",
   localSessionRoute: "/local-session",
   publicSiteClientAssetManifestPath: "/assets/formless-client-manifest.json",
   publicSiteClientManifestEntryKey: "src/public-site-main.tsx",
@@ -65,7 +66,6 @@ export const runtimeTopologyRoutes = {
   publicSiteHomeSlug: "home",
   publicSitePackageAppKey: "site",
   publicSitePreviewRouteBase: "/pages",
-  setupRoute: "/setup",
   siteAdminRoute: "/admin",
   siteRouteBase: "/sites",
   staticAssetPathPrefixes: ["/@fs/", "/@id/", "/@vite/", "/@react-refresh"],
@@ -80,11 +80,7 @@ export type RuntimeRouteBaseMatch = {
   suffixSegments: readonly string[];
 };
 
-const ownerSessionClientRoutePaths = [
-  runtimeTopologyRoutes.authAccountRoute,
-  runtimeTopologyRoutes.loginRoute,
-  runtimeTopologyRoutes.setupRoute,
-] as const;
+const ownerSessionClientRoutePaths = [runtimeTopologyRoutes.authAccountRoute] as const;
 const clientRoutePaths = [
   runtimeTopologyRoutes.localSessionRoute,
   ...ownerSessionClientRoutePaths,
@@ -106,8 +102,6 @@ const instanceProfileClientRoutePaths = [
   runtimeTopologyRoutes.instanceRootRoute,
   runtimeTopologyRoutes.accessRoute,
   runtimeTopologyRoutes.localSessionRoute,
-  runtimeTopologyRoutes.loginRoute,
-  runtimeTopologyRoutes.setupRoute,
 ] as const;
 
 export function resolveRuntimeProfileKind(

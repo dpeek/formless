@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  runtimeTopologyRoutes,
   runtimeProfileKinds,
   runtimeRoutePolicyForProfileKind,
 } from "../shared/runtime-topology.ts";
@@ -152,11 +153,23 @@ describe("Worker document routing", () => {
       true,
     );
     expect(
-      shouldDeferToStaticAssets(documentRequest("http://example.com/setup"), instanceProfile),
+      shouldDeferToStaticAssets(
+        documentRequest(`http://example.com${runtimeTopologyRoutes.authAccountSetupRoute}`),
+        instanceProfile,
+      ),
     ).toBe(true);
     expect(
-      shouldDeferToStaticAssets(documentRequest("http://example.com/login"), instanceProfile),
+      shouldDeferToStaticAssets(
+        documentRequest(`http://example.com${runtimeTopologyRoutes.authAccountSignInRoute}`),
+        instanceProfile,
+      ),
     ).toBe(true);
+    expect(
+      shouldDeferToStaticAssets(documentRequest("http://example.com/setup"), instanceProfile),
+    ).toBe(false);
+    expect(
+      shouldDeferToStaticAssets(documentRequest("http://example.com/login"), instanceProfile),
+    ).toBe(false);
     expect(
       shouldDeferToStaticAssets(
         documentRequest("http://example.com/local-session"),
@@ -232,6 +245,21 @@ describe("Worker document routing", () => {
       matchPrefix: "/",
       surface: "admin",
       targetProfile: "app",
+    } as const;
+    const mappedAuthenticatedAppRoute = {
+      ...mappedOwnerAppRoute,
+      access: "authenticated",
+      id: "route:host:app:authenticated-tasks.example.com",
+    } as const;
+    const mappedProtectedSiteRoute = {
+      access: "authenticated",
+      id: "route:host:public-site:site.example.com",
+      kind: "mount",
+      matchHost: "site.example.com",
+      matchPath: "/",
+      matchPrefix: "/",
+      surface: "public-site",
+      targetProfile: "public-site",
     } as const;
 
     expect(
@@ -326,6 +354,34 @@ describe("Worker document routing", () => {
       ),
     ).toBe(true);
     expect(
+      shouldRedirectAnonymousProtectedBrowserRoute(
+        documentRequest("https://tasks.example.com/schema"),
+        { profile: "app" },
+        mappedAuthenticatedAppRoute,
+      ),
+    ).toBe(true);
+    expect(
+      shouldRedirectAnonymousOwnerBrowserRoute(
+        documentRequest("https://tasks.example.com/schema"),
+        { profile: "app" },
+        mappedAuthenticatedAppRoute,
+      ),
+    ).toBe(false);
+    expect(
+      shouldRedirectAnonymousProtectedBrowserRoute(
+        documentRequest("https://site.example.com/blog"),
+        { profile: "publishedSite" },
+        mappedProtectedSiteRoute,
+      ),
+    ).toBe(true);
+    expect(
+      shouldRedirectAnonymousProtectedBrowserRoute(
+        documentRequest("https://site.example.com/assets/index.js"),
+        { profile: "publishedSite" },
+        mappedProtectedSiteRoute,
+      ),
+    ).toBe(false);
+    expect(
       ownerBrowserRouteAccessForRequest(
         documentRequest("http://example.com/apps/tasks"),
         instanceProfile,
@@ -414,8 +470,8 @@ describe("Worker document routing", () => {
       documentRequest("http://example.com/crm/audiences"),
       documentRequest("http://example.com/site/schema"),
       documentRequest("http://example.com/schema"),
-      documentRequest("http://example.com/setup"),
-      documentRequest("http://example.com/login"),
+      documentRequest(`http://example.com${runtimeTopologyRoutes.authAccountSetupRoute}`),
+      documentRequest(`http://example.com${runtimeTopologyRoutes.authAccountSignInRoute}`),
       documentRequest("http://example.com/local-session"),
       documentRequest("http://example.com/apps/personal"),
       documentRequest("http://example.com/sites/personal"),
@@ -520,6 +576,16 @@ describe("Worker document routing", () => {
     expect(shouldDeferToStaticAssets(documentRequest("http://example.com/sites/personal"))).toBe(
       true,
     );
+    expect(
+      shouldDeferToStaticAssets(
+        documentRequest(`http://example.com${runtimeTopologyRoutes.authAccountSetupRoute}`),
+      ),
+    ).toBe(true);
+    expect(
+      shouldDeferToStaticAssets(
+        documentRequest(`http://example.com${runtimeTopologyRoutes.authAccountSignInRoute}`),
+      ),
+    ).toBe(true);
     expect(shouldDeferToStaticAssets(documentRequest("http://example.com/setup"))).toBe(true);
     expect(shouldDeferToStaticAssets(documentRequest("http://example.com/login"))).toBe(true);
     expect(shouldDeferToStaticAssets(documentRequest("http://example.com/local-session"))).toBe(
@@ -584,11 +650,27 @@ describe("Worker document routing", () => {
       shouldDeferToStaticAssets(documentRequest("http://example.com/setup"), {
         profile: "publishedSite",
       }),
-    ).toBe(true);
+    ).toBe(false);
     expect(
       shouldDeferToStaticAssets(documentRequest("http://example.com/login"), {
         profile: "publishedSite",
       }),
+    ).toBe(false);
+    expect(
+      shouldDeferToStaticAssets(
+        documentRequest(`http://example.com${runtimeTopologyRoutes.authAccountSetupRoute}`),
+        {
+          profile: "publishedSite",
+        },
+      ),
+    ).toBe(true);
+    expect(
+      shouldDeferToStaticAssets(
+        documentRequest(`http://example.com${runtimeTopologyRoutes.authAccountSignInRoute}`),
+        {
+          profile: "publishedSite",
+        },
+      ),
     ).toBe(true);
     expect(
       shouldDeferToStaticAssets(documentRequest("http://example.com/site"), {
@@ -717,8 +799,10 @@ describe("Worker document routing", () => {
     expect(isClientShellRoute("/sites/personal/blog")).toBe(true);
     expect(isClientShellRoute("/formless/auth")).toBe(true);
     expect(isClientShellRoute("/formless/auth/profile-completion")).toBe(true);
-    expect(isClientShellRoute("/setup")).toBe(true);
-    expect(isClientShellRoute("/login")).toBe(true);
+    expect(isClientShellRoute(runtimeTopologyRoutes.authAccountSetupRoute)).toBe(true);
+    expect(isClientShellRoute(runtimeTopologyRoutes.authAccountSignInRoute)).toBe(true);
+    expect(isClientShellRoute("/setup")).toBe(false);
+    expect(isClientShellRoute("/login")).toBe(false);
     expect(isClientShellRoute("/local-session")).toBe(true);
     expect(isClientShellRoute("/rates")).toBe(false);
     expect(isClientShellRoute("/blog")).toBe(false);

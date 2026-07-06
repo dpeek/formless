@@ -24,6 +24,7 @@ import {
 import type { AppInstallRegistrationPolicy } from "@dpeek/formless-installed-apps";
 
 import { parseOwnerSetupToken, type OwnerIdentity, type OwnerIdentityInput } from "./protocol.ts";
+import { runtimeTopologyRoutes } from "./runtime-topology.ts";
 
 export type InstanceAuthConfigInput = {
   canonicalOrigin: string;
@@ -69,7 +70,6 @@ export type OwnerPasskeyLoginOptionsResponse = {
 };
 
 export type OwnerPasskeyLoginVerifyRequest = {
-  redirectTo?: string;
   response: AuthenticationResponseJSON;
 };
 
@@ -332,6 +332,8 @@ export type AccountCompletionGateResolutionResult =
 export type OwnerLoginRedirectTarget = `/${string}`;
 
 export const ownerLoginDefaultRedirectTarget = "/" satisfies OwnerLoginRedirectTarget;
+export const ownerPasskeyLoginContinuationTarget =
+  "/formless/auth" satisfies OwnerLoginRedirectTarget;
 
 const ownerLoginRedirectBaseOrigin = "https://formless.local";
 
@@ -371,11 +373,13 @@ export function ownerLoginRedirectTargetFromSearch(search: string): OwnerLoginRe
   return parseOwnerLoginRedirectTarget(redirectTo) ?? ownerLoginDefaultRedirectTarget;
 }
 
-export function ownerLoginRedirectLocationForRoute(routeTarget: string): `/login?${string}` {
+export function ownerLoginRedirectLocationForRoute(
+  routeTarget: string,
+): `${typeof runtimeTopologyRoutes.authAccountSignInRoute}?${string}` {
   const redirectTarget =
     parseOwnerLoginRedirectTarget(routeTarget) ?? ownerLoginDefaultRedirectTarget;
 
-  return `/login?redirectTo=${encodeURIComponent(redirectTarget)}`;
+  return `${runtimeTopologyRoutes.authAccountSignInRoute}?redirectTo=${encodeURIComponent(redirectTarget)}`;
 }
 
 function hasOwnerLoginRedirectControlCharacter(value: string): boolean {
@@ -610,14 +614,9 @@ export function parseOwnerPasskeyLoginVerifyRequest(
 ): OwnerPasskeyLoginVerifyRequest {
   const object = parseObject("Passkey login verify request", value);
 
-  assertKeys("Passkey login verify request", object, ["response"], ["redirectTo"]);
+  assertKeys("Passkey login verify request", object, ["response"]);
 
   return {
-    ...(object.redirectTo === undefined
-      ? {}
-      : {
-          redirectTo: parseString("Passkey login verify request redirectTo", object.redirectTo),
-        }),
     response: parseAuthenticationResponse("Passkey login response", object.response),
   };
 }
@@ -640,7 +639,7 @@ export function parseOwnerPasskeyLoginVerifyResponse(
 
   return {
     authenticated: true,
-    continueTo: parseOwnerLoginContinuationTarget(
+    continueTo: parseOwnerPasskeyLoginContinuationTarget(
       "Passkey login verify response continueTo",
       object.continueTo,
     ),
@@ -1200,6 +1199,20 @@ function parseOwnerLoginContinuationTarget(
 
   if (!target) {
     throw new Error(`${context} must be path-only.`);
+  }
+
+  return target;
+}
+
+function parseOwnerPasskeyLoginContinuationTarget(
+  context: string,
+  value: unknown,
+): OwnerLoginRedirectTarget {
+  const target = parseOwnerLoginContinuationTarget(context, value);
+  const targetUrl = new URL(target, ownerLoginRedirectBaseOrigin);
+
+  if (targetUrl.pathname !== ownerPasskeyLoginContinuationTarget) {
+    throw new Error(`${context} must route through /formless/auth.`);
   }
 
   return target;
@@ -1994,14 +2007,6 @@ function parseTrimmedNonEmptyString(context: string, value: unknown): string {
 
 function parseOptionalTrimmedNonEmptyString(context: string, value: unknown): string | undefined {
   return value === undefined ? undefined : parseTrimmedNonEmptyString(context, value);
-}
-
-function parseString(context: string, value: unknown): string {
-  if (typeof value !== "string") {
-    throw new Error(`${context} must be a string.`);
-  }
-
-  return value;
 }
 
 function parseObject(context: string, value: unknown): Record<string, unknown> {

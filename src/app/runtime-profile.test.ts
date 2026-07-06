@@ -157,6 +157,8 @@ describe("runtime profile resolver", () => {
     expect(runtimeBrowserRoutePatterns(profile)).toEqual({
       authAccountGateRoutePattern: "/formless/auth/*",
       authAccountRoute: "/formless/auth",
+      authAccountSetupRoute: "/formless/auth/setup",
+      authAccountSignInRoute: "/formless/auth/sign-in",
       instanceAccessRoute: "/access",
       instanceShellRoute: "/",
       installedAppHomeRoutePattern: "/apps/:installId",
@@ -164,8 +166,6 @@ describe("runtime profile resolver", () => {
       installedSitePublicHomeRoutePattern: "/sites/:installId",
       installedSitePublicSlugRoutePattern: "/sites/:installId/*",
       localSessionRoute: "/local-session",
-      ownerLoginRoute: "/login",
-      ownerSetupRoute: "/setup",
     });
   });
 
@@ -201,6 +201,8 @@ describe("runtime profile resolver", () => {
     expect(runtimeBrowserRoutePatterns(profile)).toEqual({
       authAccountGateRoutePattern: "/formless/auth/*",
       authAccountRoute: "/formless/auth",
+      authAccountSetupRoute: "/formless/auth/setup",
+      authAccountSignInRoute: "/formless/auth/sign-in",
       instanceAccessRoute: "/access",
       instanceShellRoute: "/",
       installedAppHomeRoutePattern: "/apps/:installId",
@@ -208,8 +210,6 @@ describe("runtime profile resolver", () => {
       installedSitePublicHomeRoutePattern: "/sites/:installId",
       installedSitePublicSlugRoutePattern: "/sites/:installId/*",
       localSessionRoute: "/local-session",
-      ownerLoginRoute: "/login",
-      ownerSetupRoute: "/setup",
     });
     expect(runtimeProfileNeedsInstalledAppRouteInstalls(profile)).toBe(true);
   });
@@ -606,8 +606,8 @@ describe("runtime profile resolver", () => {
     expect(runtimeBrowserRoutePatterns(profile)).toEqual({
       authAccountGateRoutePattern: "/formless/auth/*",
       authAccountRoute: "/formless/auth",
-      ownerLoginRoute: "/login",
-      ownerSetupRoute: "/setup",
+      authAccountSetupRoute: "/formless/auth/setup",
+      authAccountSignInRoute: "/formless/auth/sign-in",
     });
     expect(shouldRenderRuntimeRouteOutsideGeneratedAppFrame(profile, "/projects", undefined)).toBe(
       true,

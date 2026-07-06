@@ -682,19 +682,19 @@ function AppRoutes({
       <Route path={runtimeTopologyRoutes.authAccountRoute}>
         <AuthAccountRoute />
       </Route>
-      <Route path={runtimeTopologyRoutes.authAccountGateRoutePattern}>
-        <AuthAccountRoute />
-      </Route>
-      {browserRoutes.ownerSetupRoute ? (
-        <Route path={browserRoutes.ownerSetupRoute}>
+      {browserRoutes.authAccountSetupRoute ? (
+        <Route path={browserRoutes.authAccountSetupRoute}>
           <OwnerSetupRoute />
         </Route>
       ) : null}
-      {browserRoutes.ownerLoginRoute ? (
-        <Route path={browserRoutes.ownerLoginRoute}>
+      {browserRoutes.authAccountSignInRoute ? (
+        <Route path={browserRoutes.authAccountSignInRoute}>
           <OwnerLoginRoute />
         </Route>
       ) : null}
+      <Route path={runtimeTopologyRoutes.authAccountGateRoutePattern}>
+        <AuthAccountRoute />
+      </Route>
       {browserRoutes.localSessionRoute && localWorkspaceGatewayAvailable ? (
         <Route path={browserRoutes.localSessionRoute}>
           <LocalSessionRoute />

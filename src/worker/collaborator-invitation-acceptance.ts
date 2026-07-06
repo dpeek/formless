@@ -11,7 +11,6 @@ import {
   type CollaboratorInvitationPasskeyRegistrationVerifyResponse,
   type CollaboratorInvitationAcceptanceStatusResponse,
   type AccountCompletionGateTarget,
-  ownerLoginRedirectLocationForRoute,
   parseInstanceAuthCanonicalOrigin,
   parseOwnerLoginRedirectTarget,
 } from "../shared/instance-auth.ts";
@@ -28,11 +27,9 @@ import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
 import {
   COLLABORATOR_INVITATION_ACCEPT_PATH,
   consumeCollaboratorInvitationTokenInCurrentTransaction,
-  createCentralAuthSession,
   createPasskeyCredentialInCurrentTransaction,
   consumePasskeyChallenge,
   createPasskeyChallenge,
-  generateCollaboratorInvitationToken,
   hashCollaboratorInvitationToken,
   readPasskeyCredential,
   readCollaboratorInvitationToken,
@@ -46,7 +43,7 @@ import {
   type IdentityCollaboratorInvitationAcceptanceCommitFailureReason,
   type IdentityCollaboratorInvitationAcceptanceStatus,
 } from "./identity-control-plane.ts";
-import { createOwnerSessionCookie } from "./owner-session.ts";
+import { createCentralAuthSessionCookie } from "./central-auth-session.ts";
 import { readControlPlaneRecords } from "./deployment-control-plane-client.ts";
 import { handleClientShellDocumentRequest } from "./client-shell.ts";
 import { resolveAccountCompletionGate } from "./instance-auth-account-completion.ts";
@@ -369,14 +366,12 @@ async function handlePasskeyRegistrationVerifyRequest(
   }
 
   const acceptedPrincipal = acceptedPrincipalIdentity(identityAcceptance, completedAt);
-  const session = await createOwnerSessionCookie({
+  const session = await createCentralAuthSessionCookie(storage, {
     env,
     now: completedAt,
-    owner: acceptedPrincipal,
+    principalId: identityAcceptance.principalId,
     request,
   });
-
-  await createPrivateCentralAuthSession(storage, session.session);
 
   const continuation = await collaboratorInvitationAcceptanceContinuation(request, env, {
     invitation: identityAcceptance.invitation,
@@ -402,8 +397,8 @@ async function handlePasskeyRegistrationVerifyRequest(
       displayName: acceptedPrincipal.name,
       principalId: acceptedPrincipal.id,
     },
-    ...(accountCompletion?.status === "blocked" ? { accountCompletion } : {}),
-    ...(accountCompletion?.status === "blocked" || continuation?.handoff === undefined
+    ...(accountCompletion === undefined ? {} : { accountCompletion }),
+    ...(accountCompletion?.status !== "complete" || continuation?.handoff === undefined
       ? {}
       : { handoff: continuation.handoff }),
     invitation: collaboratorInvitationSummary(identityAcceptance.invitation),
@@ -437,28 +432,6 @@ function acceptedPrincipalIdentity(
       identityAcceptance.invitation.invitedPrincipalDisplayName ??
       identityAcceptance.invitation.targetEmail,
   };
-}
-
-async function createPrivateCentralAuthSession(
-  storage: DurableObjectStorage,
-  session: { expiresAt: string; instanceId: string; issuedAt: string; principalId: string },
-) {
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    const sessionId = generateCollaboratorInvitationToken();
-    const created = createCentralAuthSession(storage, {
-      expiresAt: session.expiresAt,
-      instanceId: session.instanceId,
-      issuedAt: session.issuedAt,
-      principalId: session.principalId,
-      sessionIdHash: await sha256Base64Url(sessionId),
-    });
-
-    if (created.ok) {
-      return created.session;
-    }
-  }
-
-  throw new Error("Central auth session could not be issued.");
 }
 
 async function collaboratorInvitationAcceptanceContinuation(
@@ -536,7 +509,7 @@ function preferredAdminInvitationTarget(
   return route === undefined
     ? undefined
     : {
-        returnTo: ownerLoginRedirectLocationForRoute(route.matchPath),
+        returnTo: route.matchPath,
         routeId: route.recordId,
         storageIdentity: INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
         targetOrigin: parseInstanceAuthCanonicalOrigin(resolution.adminOrigin),
@@ -971,12 +944,6 @@ function stringValue(value: unknown): string | undefined {
 
 function pathValue(value: unknown): `/${string}` | undefined {
   return typeof value === "string" && value.startsWith("/") ? (value as `/${string}`) : undefined;
-}
-
-async function sha256Base64Url(value: string): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
-
-  return base64UrlEncode(new Uint8Array(digest));
 }
 
 function base64UrlDecode(value: string): Uint8Array<ArrayBuffer> {

@@ -133,7 +133,7 @@ workspace operations that are promoted to public CLI bindings.
 - **AND** if owner setup is incomplete, the CLI uses the selected admin token
   source to create one owner setup capability by posting to
   `/api/formless/setup/capability` on the setup origin and displays the
-  intended `/setup?token=...` URL on the same setup origin
+  intended `/formless/auth/setup?token=...` URL on the same setup origin
 - **AND** if a configured auth origin is reported but capability creation on
   that origin fails, the CLI fails clearly without retrying capability creation
   on the deployment host

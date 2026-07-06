@@ -18,6 +18,7 @@ import {
   type CollaboratorInvitationPasskeyRegistrationVerifyRequest,
   type CollaboratorInvitationPasskeyRegistrationVerifyResponse,
 } from "../../shared/instance-auth.ts";
+import { runtimeTopologyRoutes } from "../../shared/runtime-topology.ts";
 import {
   browserSupportsPasskeys,
   createBrowserPasskeyRegistrationResponse,
@@ -39,7 +40,8 @@ export type CollaboratorInvitationAcceptanceRouteState =
   | {
       status: "continuing";
       acceptedPrincipal: CollaboratorInvitationAcceptedPrincipalSummary;
-      handoff: CollaboratorInvitationAcceptanceHandoffSummary;
+      continueTo: string;
+      handoff?: CollaboratorInvitationAcceptanceHandoffSummary;
       invitation: CollaboratorInvitationAcceptanceInvitationSummary;
       session: CollaboratorInvitationPasskeyRegistrationVerifyResponse["session"];
     }
@@ -122,11 +124,12 @@ export function CollaboratorInvitationAcceptanceRoute() {
       });
       const continuationUrl = collaboratorInvitationAcceptanceContinuationUrl(accepted);
 
-      if (accepted.handoff && continuationUrl) {
+      if (continuationUrl) {
         setState({
           status: "continuing",
           acceptedPrincipal: accepted.acceptedPrincipal,
-          handoff: accepted.handoff,
+          continueTo: continuationUrl,
+          ...(accepted.handoff === undefined ? {} : { handoff: accepted.handoff }),
           invitation: accepted.invitation,
           session: accepted.session,
         });
@@ -370,16 +373,29 @@ export async function verifyCollaboratorInvitationPasskeyRegistration({
 }
 
 export function collaboratorInvitationAcceptanceContinuationUrl(
-  accepted: Pick<CollaboratorInvitationPasskeyRegistrationVerifyResponse, "handoff">,
+  accepted: Pick<
+    CollaboratorInvitationPasskeyRegistrationVerifyResponse,
+    "accountCompletion" | "handoff"
+  >,
   currentOrigin = typeof window === "undefined" ? undefined : window.location.origin,
 ): string | undefined {
-  if (!accepted.handoff) {
+  if (accepted.accountCompletion?.status !== "complete") {
     return undefined;
   }
 
-  const target = new URL(accepted.handoff.returnTo, accepted.handoff.targetOrigin);
+  if (accepted.handoff) {
+    const target = new URL(accepted.handoff.returnTo, accepted.handoff.targetOrigin);
 
-  return target.origin === currentOrigin ? undefined : target.toString();
+    if (target.origin !== currentOrigin) {
+      return target.toString();
+    }
+  }
+
+  const searchParams = new URLSearchParams();
+
+  searchParams.set("returnTo", accepted.accountCompletion.continueTo);
+
+  return `${runtimeTopologyRoutes.authAccountRoute}?${searchParams}`;
 }
 
 export class CollaboratorInvitationAcceptanceApiError extends Error {
@@ -403,7 +419,7 @@ function CollaboratorInvitationAcceptanceStateBody({
     case "accepted":
       return <AcceptedInvitation accepted={state} />;
     case "continuing":
-      return <AcceptedInvitation accepted={state} continuing />;
+      return <AcceptedInvitation accepted={state} />;
     case "eligible":
       return <EligibleInvitation invitation={state.invitation} onAccept={onAccept} />;
     case "failed":
@@ -513,21 +529,23 @@ function PasskeyUnavailableInvitation({
 
 function AcceptedInvitation({
   accepted,
-  continuing = false,
 }: {
   accepted: Extract<
     CollaboratorInvitationAcceptanceRouteState,
     { status: "accepted" | "continuing" }
   >;
-  continuing?: boolean;
 }) {
+  const continuing = accepted.status === "continuing";
+
   return (
     <div className="space-y-5">
       <InvitationAcceptanceHeader
         heading="Invitation accepted"
         message={
-          continuing && accepted.handoff
-            ? `Signed in as ${accepted.acceptedPrincipal.displayName}. Continuing to ${accepted.handoff.targetOrigin}.`
+          continuing
+            ? `Signed in as ${accepted.acceptedPrincipal.displayName}. Continuing to ${
+                accepted.handoff?.targetOrigin ?? accepted.continueTo
+              }.`
             : `Signed in as ${accepted.acceptedPrincipal.displayName}.`
         }
       />
@@ -540,6 +558,8 @@ function AcceptedInvitation({
             {accepted.handoff.targetOrigin}
             {accepted.handoff.returnTo}
           </InvitationFact>
+        ) : continuing ? (
+          <InvitationFact label="Continue to">{accepted.continueTo}</InvitationFact>
         ) : null}
       </dl>
     </div>

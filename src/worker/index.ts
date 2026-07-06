@@ -42,8 +42,8 @@ import {
   resolveAuthAccountHandoffContinuation,
   setHostAuthSessionTargetHeaders,
   startProtectedRouteAuthAccount,
-  startOwnerRouteAuthHandoff,
-  startProtectedRouteAuthHandoff,
+  validateCentralAuthSessionAuthority,
+  validateCentralAuthSessionPrincipal,
   validateRouteAccessSession,
 } from "./instance-auth-handoff.ts";
 import {
@@ -53,8 +53,9 @@ import {
 import { handleOwnerPasskeyApiRequest } from "./owner-passkeys.ts";
 import {
   ownerLoginRedirectLocationForRoute,
-  ownerLoginRedirectTargetFromSearch,
   parseOwnerLoginRedirectTarget,
+  type AccountCompletionContinuationResult,
+  type AccountCompletionGateResult,
   type AccountCompletionGateTarget,
 } from "../shared/instance-auth.ts";
 import {
@@ -260,6 +261,15 @@ export default {
 
     if (instanceAuthHandoffResponse) {
       return instanceAuthHandoffResponse;
+    }
+
+    const mappedAuthBlockedAccountGateResponse =
+      isMappedAuthBlockedProfileHost && isAuthAccountCredentialGateBrowserRequest(requestTopology)
+        ? await handleNonAuthOriginAccountGateBrowserRequest(request, env)
+        : undefined;
+
+    if (mappedAuthBlockedAccountGateResponse) {
+      return mappedAuthBlockedAccountGateResponse;
     }
 
     if (isMappedAuthBlockedProfileHost && isReservedAuthOriginRoute(requestTopology.pathname)) {
@@ -532,8 +542,6 @@ function redirectResponse(location: string, status: number): Response {
 
 function isOwnerAuthRoute(pathname: string): boolean {
   return (
-    pathname === "/setup" ||
-    pathname === "/login" ||
     isLocalSessionBootstrapApiPath(pathname) ||
     pathname === "/api/formless/setup" ||
     pathname.startsWith("/api/formless/setup/") ||
@@ -645,111 +653,54 @@ async function handleAuthAccountReturnTargetBrowserRequest(
   request: Request,
   env: Env,
 ): Promise<{ kind: "blocked" } | { kind: "response"; response: Response } | undefined> {
-  const returnTo = parseOwnerLoginRedirectTarget(new URL(request.url).searchParams.get("returnTo"));
+  const rawReturnTo = new URL(request.url).searchParams.get("returnTo");
 
-  if (!returnTo) {
+  if (rawReturnTo === null) {
     return undefined;
   }
 
-  const targetUrl = new URL(returnTo, request.url);
-  const targetRequest = new Request(targetUrl, {
-    headers: request.headers,
-    method: request.method,
-  });
-  const runtimeRoute = await resolveInstanceRuntimeRouteForRequest(targetRequest, env);
-  const runtimeProfile =
-    runtimeRoute?.kind === "mount" && runtimeRoute.targetProfile !== "public-site"
-      ? runtimeRoute.targetProfile
-      : env.FORMLESS_RUNTIME_PROFILE;
-  const targetTopology = resolveWorkerRuntimeRequestTopology(
-    targetRequest,
-    workerRuntimeProfileInput(runtimeProfile),
-  );
-  const requiredAccess = ownerBrowserRouteAccessForRequest(
-    targetRequest,
-    targetTopology,
-    runtimeRoute,
-  );
+  const resolution = await resolveAuthAccountReturnTargetContinuation(request, env);
 
-  if (requiredAccess === "anonymous") {
-    return { kind: "response", response: redirectResponse(returnTo, 302) };
+  switch (resolution.kind) {
+    case "blocked":
+      return { kind: "blocked" };
+    case "complete":
+      return {
+        kind: "response",
+        response: redirectResponse(resolution.accountCompletion.continueTo, 302),
+      };
+    case "invalid":
+      return {
+        kind: "response",
+        response: Response.json({ error: resolution.error }, { status: 400 }),
+      };
+    case "login-required":
+      return {
+        kind: "response",
+        response: redirectResponse(
+          ownerLoginRedirectLocationForRoute(authAccountRedirectTarget(request)),
+          302,
+        ),
+      };
   }
-
-  const session = await validateRouteAccessSession(targetRequest, env, {
-    requiredAccess,
-    ...(runtimeRoute?.kind === "mount" ? { runtimeRoute } : {}),
-  });
-
-  if (session.ok) {
-    return { kind: "response", response: redirectResponse(returnTo, 302) };
-  }
-
-  if (session.reason === "account-completion-required" && session.accountCompletion !== undefined) {
-    return { kind: "blocked" };
-  }
-
-  return {
-    kind: "response",
-    response: redirectResponse(
-      ownerLoginRedirectLocationForRoute(authAccountRedirectTarget(request)),
-      302,
-    ),
-  };
 }
 
 async function handleAuthAccountReturnTargetStatusRequest(
   request: Request,
   env: Env,
 ): Promise<Response> {
-  const returnTo = parseOwnerLoginRedirectTarget(new URL(request.url).searchParams.get("returnTo"));
+  const resolution = await resolveAuthAccountReturnTargetContinuation(request, env);
 
-  if (!returnTo) {
-    return Response.json({ error: "Account return target must be path-only." }, { status: 400 });
+  if (resolution.kind === "complete") {
+    return Response.json(resolution.accountCompletion);
   }
 
-  const targetUrl = new URL(returnTo, request.url);
-  const targetRequest = new Request(targetUrl, {
-    headers: request.headers,
-    method: request.method,
-  });
-  const runtimeRoute = await resolveInstanceRuntimeRouteForRequest(targetRequest, env);
-  const runtimeProfile =
-    runtimeRoute?.kind === "mount" && runtimeRoute.targetProfile !== "public-site"
-      ? runtimeRoute.targetProfile
-      : env.FORMLESS_RUNTIME_PROFILE;
-  const targetTopology = resolveWorkerRuntimeRequestTopology(
-    targetRequest,
-    workerRuntimeProfileInput(runtimeProfile),
-  );
-  const requiredAccess = ownerBrowserRouteAccessForRequest(
-    targetRequest,
-    targetTopology,
-    runtimeRoute,
-  );
-
-  if (requiredAccess === "anonymous") {
-    return Response.json({ error: "Account continuation target is public." }, { status: 400 });
+  if (resolution.kind === "blocked") {
+    return accountCompletionBlockedResponse(resolution.accountCompletion);
   }
 
-  const session = await validateRouteAccessSession(targetRequest, env, {
-    requiredAccess,
-    ...(runtimeRoute?.kind === "mount" ? { runtimeRoute } : {}),
-  });
-
-  if (session.ok) {
-    if (session.target === undefined) {
-      return Response.json({ error: "Account completion target is unavailable." }, { status: 400 });
-    }
-
-    return Response.json({
-      continueTo: returnTo,
-      status: "complete",
-      target: accountCompletionTargetFromSessionTarget(returnTo, session.target),
-    });
-  }
-
-  if (session.reason === "account-completion-required" && session.accountCompletion !== undefined) {
-    return accountCompletionBlockedResponse(session.accountCompletion);
+  if (resolution.kind === "invalid") {
+    return Response.json({ error: resolution.error }, { status: 400 });
   }
 
   return Response.json({ error: "Authenticated account session is required." }, { status: 401 });
@@ -767,6 +718,89 @@ function accountCompletionTargetFromSessionTarget(
     targetOrigin: target.targetOrigin,
     targetProfile: target.targetProfile,
   };
+}
+
+type AuthAccountReturnTargetContinuation =
+  | { accountCompletion: AccountCompletionGateResult; kind: "blocked" }
+  | { accountCompletion: AccountCompletionContinuationResult; kind: "complete" }
+  | { error: string; kind: "invalid" }
+  | { kind: "login-required" };
+
+async function resolveAuthAccountReturnTargetContinuation(
+  request: Request,
+  env: Env,
+): Promise<AuthAccountReturnTargetContinuation> {
+  const returnTo = parseOwnerLoginRedirectTarget(new URL(request.url).searchParams.get("returnTo"));
+
+  if (!returnTo) {
+    return { error: "Account return target must be path-only.", kind: "invalid" };
+  }
+
+  const targetUrl = new URL(returnTo, request.url);
+  const targetRequest = new Request(targetUrl, {
+    headers: request.headers,
+    method: request.method,
+  });
+  const runtimeRoute = await resolveInstanceRuntimeRouteForRequest(targetRequest, env);
+  const runtimeProfile =
+    runtimeRoute?.kind === "mount" && runtimeRoute.targetProfile !== "public-site"
+      ? runtimeRoute.targetProfile
+      : env.FORMLESS_RUNTIME_PROFILE;
+  const targetTopology = resolveWorkerRuntimeRequestTopology(
+    targetRequest,
+    workerRuntimeProfileInput(runtimeProfile),
+  );
+  const requiredAccess = ownerBrowserRouteAccessForRequest(
+    targetRequest,
+    targetTopology,
+    runtimeRoute,
+  );
+
+  if (requiredAccess === "anonymous") {
+    return { error: "Account continuation target is public.", kind: "invalid" };
+  }
+
+  const target =
+    runtimeRoute?.kind === "mount"
+      ? hostAuthSessionTargetForRuntimeRoute(targetRequest, runtimeRoute, {
+          minimumAccess: "authenticated",
+        })
+      : undefined;
+
+  if (target === undefined) {
+    return { error: "Account completion target is unavailable.", kind: "invalid" };
+  }
+
+  const accountCompletionTarget = accountCompletionTargetFromSessionTarget(returnTo, target);
+  const session =
+    requiredAccess === "owner"
+      ? await validateCentralAuthSessionAuthority(targetRequest, env)
+      : await validateCentralAuthSessionPrincipal(targetRequest, env, {
+          accountCompletionTarget,
+        });
+
+  if (session.ok) {
+    return {
+      accountCompletion: {
+        continueTo: returnTo,
+        status: "complete",
+        target: accountCompletionTarget,
+      },
+      kind: "complete",
+    };
+  }
+
+  if (
+    session.reason === "account-completion-required" &&
+    session.accountCompletion?.status === "blocked"
+  ) {
+    return {
+      accountCompletion: session.accountCompletion,
+      kind: "blocked",
+    };
+  }
+
+  return { kind: "login-required" };
 }
 
 async function handleNonAuthOriginOwnerAuthRoute(
@@ -799,23 +833,20 @@ async function handleNonAuthOriginOwnerAuthRoute(
     }
   }
 
-  if (isOwnerLoginBrowserRequest(requestTopology)) {
-    const handoffRedirect = await startOwnerRouteAuthHandoff(
-      ownerLoginHandoffRequest(request),
-      env,
-      runtimeRoute,
-    );
-
-    return (
-      handoffRedirect ?? redirectResponse(authOriginLocationForRequest(authOrigin, request), 302)
-    );
-  }
-
-  if (isOwnerSetupBrowserRequest(requestTopology)) {
-    return redirectResponse(authOriginLocationForRequest(authOrigin, request), 302);
-  }
-
   return notFoundResponse(requestTopology.apiPath);
+}
+
+async function handleNonAuthOriginAccountGateBrowserRequest(
+  request: Request,
+  env: Env,
+): Promise<Response | undefined> {
+  const authOrigin = await configuredInstanceAuthOrigin(request, env);
+
+  if (!authOrigin || authOrigin === requestOriginForAuth(request)) {
+    return undefined;
+  }
+
+  return redirectResponse(authOriginLocationForRequest(authOrigin, request), 302);
 }
 
 function isMappedInstanceHostSessionApiRequest(
@@ -829,33 +860,17 @@ function isMappedInstanceHostSessionApiRequest(
   );
 }
 
-function isOwnerLoginBrowserRequest(requestTopology: WorkerRuntimeRequestTopology): boolean {
+function isAuthAccountCredentialGateBrowserRequest(
+  requestTopology: WorkerRuntimeRequestTopology,
+): boolean {
   return (
-    requestTopology.pathname === "/login" &&
+    (requestTopology.pathname === runtimeTopologyRoutes.authAccountSignInRoute ||
+      requestTopology.pathname === runtimeTopologyRoutes.authAccountSetupRoute) &&
     requestTopology.readMethod &&
     requestTopology.acceptsHtml &&
-    !requestTopology.apiPath
+    !requestTopology.apiPath &&
+    !requestTopology.staticAssetPath
   );
-}
-
-function isOwnerSetupBrowserRequest(requestTopology: WorkerRuntimeRequestTopology): boolean {
-  return (
-    requestTopology.pathname === "/setup" &&
-    requestTopology.readMethod &&
-    requestTopology.acceptsHtml &&
-    !requestTopology.apiPath
-  );
-}
-
-function ownerLoginHandoffRequest(request: Request): Request {
-  const sourceUrl = new URL(request.url);
-  const returnTo = ownerLoginRedirectTargetFromSearch(sourceUrl.search);
-  const handoffUrl = new URL(returnTo, request.url);
-
-  return new Request(handoffUrl, {
-    headers: request.headers,
-    method: request.method,
-  });
 }
 
 function authOriginLocationForRequest(authOrigin: string, request: Request): string {
@@ -1020,10 +1035,10 @@ async function redirectAnonymousProtectedBrowserRoute(
     );
   }
 
-  const handoffRedirect = await startProtectedRouteAuthHandoff(request, env, runtimeRoute);
+  const accountRedirect = await startProtectedRouteAuthAccount(request, env, runtimeRoute);
 
-  if (handoffRedirect) {
-    return handoffRedirect;
+  if (accountRedirect) {
+    return accountRedirect;
   }
 
   return redirectResponse(

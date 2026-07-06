@@ -466,7 +466,7 @@ describe("Formless CLI", () => {
         fromRemote: true,
         name: "personal-sites",
         targetAlias: "prod",
-        targetUrl: "https://personal.dpeek.workers.dev/setup?token=ignored",
+        targetUrl: "https://personal.dpeek.workers.dev/formless/auth/setup?token=ignored",
         workspacePath: workspaceRoot,
       },
       cliDeps(tempDir, {
@@ -583,7 +583,7 @@ describe("Formless CLI", () => {
     const logs: string[] = [];
     const setupInputs: CreateFormlessInstanceOwnerSetupCapabilityInput[] = [];
     const authOrigin = "https://auth.example.com";
-    const setupUrl = `${authOrigin}/setup?token=${setupToken}`;
+    const setupUrl = `${authOrigin}/formless/auth/setup?token=${setupToken}`;
 
     await writeWorkspaceManifest(workspaceRoot);
     await writeWorkspaceControlPlaneStorageSnapshot(workspaceRoot);
@@ -634,7 +634,7 @@ describe("Formless CLI", () => {
     const setupInputs: CreateFormlessInstanceOwnerSetupCapabilityInput[] = [];
     const adminOrigin = "https://admin.example.com";
     const authOrigin = "https://auth.example.com";
-    const setupUrl = `${authOrigin}/setup?token=${setupToken}`;
+    const setupUrl = `${authOrigin}/formless/auth/setup?token=${setupToken}`;
 
     await writeWorkspaceManifest(workspaceRoot);
     await writeWorkspaceControlPlaneStorageSnapshot(workspaceRoot);
@@ -687,7 +687,7 @@ describe("Formless CLI", () => {
     const logs: string[] = [];
     const setupInputs: CreateFormlessInstanceOwnerSetupCapabilityInput[] = [];
     const authOrigin = "https://auth.example.com";
-    const setupUrl = `${authOrigin}/setup?token=${setupToken}`;
+    const setupUrl = `${authOrigin}/formless/auth/setup?token=${setupToken}`;
 
     await writeWorkspaceManifest(workspaceRoot);
     await writeWorkspaceControlPlaneStorageSnapshot(workspaceRoot);
@@ -844,7 +844,7 @@ describe("Formless CLI", () => {
     const responses = responseQueue();
     const logs: string[] = [];
     const setupInputs: CreateFormlessInstanceOwnerSetupCapabilityInput[] = [];
-    const setupUrl = `https://personal.dpeek.workers.dev/setup?token=${setupToken}`;
+    const setupUrl = `https://personal.dpeek.workers.dev/formless/auth/setup?token=${setupToken}`;
 
     await writeWorkspaceManifest(workspaceRoot);
     await writeWorkspaceControlPlaneStorageSnapshot(workspaceRoot);

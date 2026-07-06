@@ -24,11 +24,9 @@ import type {
   BootstrapResponse,
   CreateAppInstallResponse,
 } from "../shared/protocol.ts";
-import {
-  OWNER_SESSION_COOKIE_NAME,
-  createOwnerSessionCookie,
-  validateOwnerSessionCookie,
-} from "./owner-session.ts";
+import { CENTRAL_AUTH_SESSION_COOKIE_NAME } from "./central-auth-session.ts";
+import { HOST_AUTH_SESSION_COOKIE_NAME } from "./instance-auth-handoff.ts";
+import { OWNER_SESSION_COOKIE_NAME } from "./owner-session.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
 
 type Harness = Awaited<ReturnType<typeof createWorkerHarness>>;
@@ -172,9 +170,16 @@ describe("owner passkey API routes", () => {
       },
     );
     const identity = await getJson<BootstrapResponse>("/api/formless/identity/bootstrap");
+    const setCookie = verified.response.headers.get("Set-Cookie");
+    const statusWithCentralSession = await getJson<OwnerSessionStatusResponse>(
+      "/api/formless/session",
+      { headers: { Cookie: cookiePair(setCookie) } },
+    );
 
     expect(verified.response.status).toBe(200);
-    expect(verified.response.headers.get("Set-Cookie")).toContain(`${OWNER_SESSION_COOKIE_NAME}=`);
+    expect(setCookie).toContain(`${CENTRAL_AUTH_SESSION_COOKIE_NAME}=`);
+    expect(setCookie).not.toContain(`${OWNER_SESSION_COOKIE_NAME}=`);
+    expect(setCookie).not.toContain(`${HOST_AUTH_SESSION_COOKIE_NAME}=`);
     expect(verified.body).toEqual({
       setupComplete: true,
       owner: {
@@ -184,6 +189,12 @@ describe("owner passkey API routes", () => {
         createdAt: expect.any(String),
       },
       session: { expiresAt: expect.any(String) },
+    });
+    expect(statusWithCentralSession.body).toEqual({
+      authenticated: true,
+      owner: verified.body.owner,
+      session: { expiresAt: expect.any(String) },
+      setupComplete: true,
     });
     expectIdentityOwnerRecords(identity.body, verified.body.owner);
   });
@@ -217,7 +228,15 @@ describe("owner passkey API routes", () => {
     });
     expect(statusAfterMissing.body).toEqual({ authenticated: false, setupComplete: false });
     expect(verified.response.status).toBe(200);
-    expect(verified.response.headers.get("Set-Cookie")).toContain(`${OWNER_SESSION_COOKIE_NAME}=`);
+    expect(verified.response.headers.get("Set-Cookie")).toContain(
+      `${CENTRAL_AUTH_SESSION_COOKIE_NAME}=`,
+    );
+    expect(verified.response.headers.get("Set-Cookie")).not.toContain(
+      `${OWNER_SESSION_COOKIE_NAME}=`,
+    );
+    expect(verified.response.headers.get("Set-Cookie")).not.toContain(
+      `${HOST_AUTH_SESSION_COOKIE_NAME}=`,
+    );
     expect(verified.body).toEqual({
       setupComplete: true,
       owner: {
@@ -279,33 +298,13 @@ describe("owner passkey API routes", () => {
     });
   });
 
-  it("integrates first passkey setup with sessions, logout, and write authorization", async () => {
+  it("issues central sessions from first passkey setup without owner or host-local cookies", async () => {
     const registered = await registerOwnerPasskey(new VirtualPasskey(credentialId));
-    const sessionCookie = cookiePair(registered.response.headers.get("Set-Cookie"));
-    const validatedSession = await validateOwnerSessionCookie(
-      requestWithCookie(sessionCookie, "http://example.com/api/formless/session"),
-      { FORMLESS_ADMIN_TOKEN: adminToken },
-    );
-    const otherPrincipalSession = await createOwnerSessionCookie({
-      env: { FORMLESS_ADMIN_TOKEN: adminToken },
-      maxAgeSeconds: 60,
-      now: futureExpiresAt,
-      owner: {
-        id: "other-principal",
-        name: "Other Principal",
-        createdAt: futureExpiresAt,
-      },
-      request: new Request("http://example.com/"),
-    });
+    const setCookie = registered.response.headers.get("Set-Cookie");
+    const sessionCookie = cookiePair(setCookie);
     const statusWithCookie = await getJson<OwnerSessionStatusResponse>("/api/formless/session", {
       headers: { Cookie: sessionCookie },
     });
-    const statusWithOtherPrincipalCookie = await getJson<OwnerSessionStatusResponse>(
-      "/api/formless/session",
-      {
-        headers: { Cookie: cookiePair(otherPrincipalSession.cookie) },
-      },
-    );
     const appInstallsBefore = await getJson<AppInstallsResponse>("/api/formless/app-installs");
     const ownerWrite = await postJson<CreateAppInstallResponse>(
       "/api/formless/app-installs",
@@ -315,15 +314,6 @@ describe("owner passkey API routes", () => {
         label: "Site",
       },
       { headers: { Cookie: sessionCookie } },
-    );
-    const adminWrite = await postJson<CreateAppInstallResponse>(
-      "/api/formless/app-installs",
-      {
-        packageAppKey: "crm",
-        installId: "crm-admin",
-        label: "CRM Admin",
-      },
-      { headers: { Authorization: `Bearer ${adminToken}` } },
     );
     const tokenOnlyLogin = await postJson<{
       authenticated: false;
@@ -337,44 +327,22 @@ describe("owner passkey API routes", () => {
     const appInstallsAfter = await getJson<AppInstallsResponse>("/api/formless/app-installs");
     const statusAfterLogout = await getJson<OwnerSessionStatusResponse>("/api/formless/session");
 
-    expect(validatedSession).toEqual({
-      ok: true,
-      session: {
-        expiresAt: expect.any(String),
-        instanceId: "example.com",
-        issuedAt: expect.any(String),
-        principalId: registered.body.owner.id,
-      },
-    });
+    expect(setCookie).toContain(`${CENTRAL_AUTH_SESSION_COOKIE_NAME}=`);
+    expect(setCookie).not.toContain(`${OWNER_SESSION_COOKIE_NAME}=`);
+    expect(setCookie).not.toContain(`${HOST_AUTH_SESSION_COOKIE_NAME}=`);
     expect(statusWithCookie.body).toEqual({
       authenticated: true,
       owner: registered.body.owner,
-      session: registered.body.session,
-      setupComplete: true,
-    });
-    expect(statusWithOtherPrincipalCookie.body).toEqual({
-      authenticated: false,
-      owner: registered.body.owner,
+      session: { expiresAt: expect.any(String) },
       setupComplete: true,
     });
     expect(appInstallsBefore.body.installs).toEqual([]);
     expect(ownerWrite.response.status).toBe(201);
     expect(ownerWrite.body.install).toMatchObject({
-      adminRoute: "/apps/site",
       installId: "site",
-      label: "Site",
       packageAppKey: "site",
-      publicRoute: "/sites/site",
     });
-    expect(adminWrite.response.status).toBe(201);
-    expect(adminWrite.body.install).toMatchObject({
-      installId: "crm-admin",
-      packageAppKey: "crm",
-    });
-    expect(appInstallsAfter.body.installs.map((install) => install.installId)).toEqual([
-      "site",
-      "crm-admin",
-    ]);
+    expect(appInstallsAfter.body.installs.map((install) => install.installId)).toEqual(["site"]);
     expect(tokenOnlyLogin.response.status).toBe(401);
     expect(tokenOnlyLogin.response.headers.get("Set-Cookie")).toBeNull();
     expect(tokenOnlyLogin.body).toEqual({
@@ -382,8 +350,15 @@ describe("owner passkey API routes", () => {
       error: "Passkey login is required.",
     });
     expect(logout.response.status).toBe(200);
-    expect(logout.response.headers.get("Set-Cookie")).toContain(`${OWNER_SESSION_COOKIE_NAME}=`);
-    expect(logout.response.headers.get("Set-Cookie")).toContain("Max-Age=0");
+    expect(logout.response.headers.get("Set-Cookie")).toContain(
+      `${CENTRAL_AUTH_SESSION_COOKIE_NAME}=;`,
+    );
+    expect(logout.response.headers.get("Set-Cookie")).not.toContain(
+      `${OWNER_SESSION_COOKIE_NAME}=`,
+    );
+    expect(logout.response.headers.get("Set-Cookie")).not.toContain(
+      `${HOST_AUTH_SESSION_COOKIE_NAME}=`,
+    );
     expect(logout.body).toEqual({ authenticated: false });
     expect(statusAfterLogout.body).toEqual({
       authenticated: false,
@@ -420,14 +395,23 @@ describe("owner passkey API routes", () => {
     );
 
     expect(accepted.response.status).toBe(200);
-    expect(accepted.response.headers.get("Set-Cookie")).toContain(`${OWNER_SESSION_COOKIE_NAME}=`);
+    expect(accepted.response.headers.get("Set-Cookie")).toContain(
+      `${CENTRAL_AUTH_SESSION_COOKIE_NAME}=`,
+    );
+    expect(accepted.response.headers.get("Set-Cookie")).not.toContain(
+      `${OWNER_SESSION_COOKIE_NAME}=`,
+    );
+    expect(accepted.response.headers.get("Set-Cookie")).not.toContain(
+      `${HOST_AUTH_SESSION_COOKIE_NAME}=`,
+    );
     expect(accepted.body).toEqual({
       authenticated: true,
-      continueTo: "/",
+      continueTo: "/formless/auth",
       owner: registered.body.owner,
       session: { expiresAt: expect.any(String) },
     });
     expect(replay.response.status).toBe(401);
+    expect(replay.response.headers.get("Set-Cookie")).toBeNull();
     expect(replay.body).toEqual({ error: "Passkey challenge is invalid." });
 
     await createStoredCredential("Y3JlZGVudGlhbC0y", "other-principal");
@@ -445,6 +429,7 @@ describe("owner passkey API routes", () => {
     );
 
     expect(wrongPrincipalCredential.response.status).toBe(401);
+    expect(wrongPrincipalCredential.response.headers.get("Set-Cookie")).toBeNull();
     expect(wrongPrincipalCredential.body).toEqual({
       authenticated: false,
       error: "Passkey credential is invalid.",
@@ -460,6 +445,7 @@ describe("owner passkey API routes", () => {
     );
 
     expect(wrongOrigin.response.status).toBe(401);
+    expect(wrongOrigin.response.headers.get("Set-Cookie")).toBeNull();
     expect(wrongOrigin.body).toEqual({
       authenticated: false,
       error: "Passkey login verification failed.",
@@ -475,6 +461,7 @@ describe("owner passkey API routes", () => {
     );
 
     expect(wrongRp.response.status).toBe(401);
+    expect(wrongRp.response.headers.get("Set-Cookie")).toBeNull();
     expect(wrongRp.body).toEqual({
       authenticated: false,
       error: "Passkey login verification failed.",
@@ -490,64 +477,44 @@ describe("owner passkey API routes", () => {
     );
 
     expect(counterRegression.response.status).toBe(401);
+    expect(counterRegression.response.headers.get("Set-Cookie")).toBeNull();
     expect(counterRegression.body).toEqual({
       authenticated: false,
       error: "Passkey login verification failed.",
     });
   });
 
-  it("returns validated login continuations after successful assertion verification", async () => {
+  it("rejects app-controlled redirect input without consuming the login challenge", async () => {
     const authenticator = new VirtualPasskey(credentialId);
     const registered = await registerOwnerPasskey(authenticator);
-    const handoffTarget =
-      "/formless/auth/handoff?targetOrigin=https%3A%2F%2Fadmin.example.com&state=c0tPAI";
 
-    const safeOptions = await loginOptions();
-    const safe = await verifyLogin(
-      authenticator.authenticationResponse(safeOptions.body.options, {
-        counter: 1,
-        origin: canonicalOrigin,
-        rpId: relyingPartyId,
-      }),
-      { redirectTo: "/apps/site?screen=owner" },
-    );
-    const unsafeOptions = await loginOptions();
-    const unsafe = await verifyLogin(
-      authenticator.authenticationResponse(unsafeOptions.body.options, {
-        counter: 2,
-        origin: canonicalOrigin,
-        rpId: relyingPartyId,
-      }),
-      { redirectTo: "https://evil.example/apps/site" },
-    );
-    const handoffOptions = await loginOptions();
-    const handoff = await verifyLogin(
-      authenticator.authenticationResponse(handoffOptions.body.options, {
-        counter: 3,
-        origin: canonicalOrigin,
-        rpId: relyingPartyId,
-      }),
-      { redirectTo: handoffTarget },
-    );
+    const options = await loginOptions();
+    const response = authenticator.authenticationResponse(options.body.options, {
+      counter: 1,
+      origin: canonicalOrigin,
+      rpId: relyingPartyId,
+    });
+    const rejected = await verifyLogin(response, { redirectTo: "/apps/site?screen=owner" });
+    const accepted = await verifyLogin(response);
 
-    expect(safe.response.status).toBe(200);
-    expect(safe.body).toEqual({
-      authenticated: true,
-      continueTo: "/apps/site?screen=owner",
-      owner: registered.body.owner,
-      session: { expiresAt: expect.any(String) },
+    expect(rejected.response.status).toBe(400);
+    expect(rejected.response.headers.get("Set-Cookie")).toBeNull();
+    expect(rejected.body).toEqual({
+      error: 'Passkey login verify request has unsupported key "redirectTo".',
     });
-    expect(unsafe.response.status).toBe(200);
-    expect(unsafe.body).toEqual({
+    expect(accepted.response.status).toBe(200);
+    expect(accepted.response.headers.get("Set-Cookie")).toContain(
+      `${CENTRAL_AUTH_SESSION_COOKIE_NAME}=`,
+    );
+    expect(accepted.response.headers.get("Set-Cookie")).not.toContain(
+      `${OWNER_SESSION_COOKIE_NAME}=`,
+    );
+    expect(accepted.response.headers.get("Set-Cookie")).not.toContain(
+      `${HOST_AUTH_SESSION_COOKIE_NAME}=`,
+    );
+    expect(accepted.body).toEqual({
       authenticated: true,
-      continueTo: "/",
-      owner: registered.body.owner,
-      session: { expiresAt: expect.any(String) },
-    });
-    expect(handoff.response.status).toBe(200);
-    expect(handoff.body).toEqual({
-      authenticated: true,
-      continueTo: handoffTarget,
+      continueTo: "/formless/auth",
       owner: registered.body.owner,
       session: { expiresAt: expect.any(String) },
     });
@@ -690,10 +657,6 @@ function cookiePair(cookie: string | null) {
   }
 
   return cookie.split(";")[0] ?? cookie;
-}
-
-function requestWithCookie(cookie: string, url: string) {
-  return new Request(url, { headers: { Cookie: cookie } });
 }
 
 function expectIdentityOwnerRecords(

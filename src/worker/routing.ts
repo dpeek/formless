@@ -280,13 +280,16 @@ function protectedBrowserRouteCandidate(
     !topology.acceptsHtml ||
     topology.apiPath ||
     topology.staticAssetPath ||
-    topology.pathname === runtimeTopologyRoutes.loginRoute ||
-    topology.pathname === runtimeTopologyRoutes.setupRoute
+    isLegacyOwnerAuthBrowserPath(topology.pathname)
   ) {
     return false;
   }
 
   return true;
+}
+
+function isLegacyOwnerAuthBrowserPath(pathname: string): boolean {
+  return pathname === "/login" || pathname === "/setup";
 }
 
 export function ownerBrowserRouteAccessForRequest(

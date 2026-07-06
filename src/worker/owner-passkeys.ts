@@ -6,8 +6,7 @@ import {
 } from "@simplewebauthn/server";
 
 import {
-  ownerLoginDefaultRedirectTarget,
-  parseOwnerLoginRedirectTarget,
+  ownerPasskeyLoginContinuationTarget,
   parseOwnerPasskeyLoginOptionsRequest,
   parseOwnerPasskeyLoginVerifyRequest,
   parseOwnerPasskeyRegistrationOptionsRequest,
@@ -19,6 +18,7 @@ import {
 } from "../shared/instance-auth.ts";
 import { nowIsoString } from "../shared/clock.ts";
 import { type AuthorityAdminGuardEnv } from "./authority-admin-guard.ts";
+import { createCentralAuthSessionCookie } from "./central-auth-session.ts";
 import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
 import {
   completeFirstOwnerSetupInCurrentTransaction,
@@ -39,7 +39,6 @@ import {
   type StoredInstanceAuthConfig,
 } from "./instance-auth-state.ts";
 import { ensureIdentityOwner, readIdentityOwner } from "./identity-control-plane.ts";
-import { createOwnerSessionCookie, ownerSessionSigningSecret } from "./owner-session.ts";
 
 export const OWNER_PASSKEY_API_PATH = "/api/formless/passkeys";
 
@@ -185,11 +184,6 @@ export async function completeOwnerPasskeyRegistration(
 ): Promise<Response> {
   const body = parseOwnerPasskeyRegistrationVerifyRequest(value);
   const config = requireInstanceAuthConfig(storage);
-  const signingSecret = ownerSessionSigningSecret(env);
-
-  if (!signingSecret) {
-    return jsonResponse({ error: "Owner session signing secret is not configured." }, 500);
-  }
 
   const setupTokenHash = await hashOwnerSetupToken(body.setupToken);
   const setup = await validateSetupCapability(storage, request, env, {
@@ -297,9 +291,9 @@ export async function completeOwnerPasskeyRegistration(
     return setupFailureResponse(completed);
   }
 
-  const session = await createOwnerSessionCookie({
+  const session = await createCentralAuthSessionCookie(storage, {
     env,
-    owner: completed.owner,
+    principalId: completed.owner.id,
     request,
   });
   const headers = new Headers();
@@ -453,20 +447,18 @@ async function handleLoginVerifyRequest(
     return jsonResponse({ authenticated: false, error: "Passkey login verification failed." }, 401);
   }
 
-  const session = await createOwnerSessionCookie({
+  const session = await createCentralAuthSessionCookie(storage, {
     env,
-    owner: state.owner,
+    principalId: state.owner.id,
     request,
   });
   const headers = new Headers();
-  const continueTo =
-    parseOwnerLoginRedirectTarget(body.redirectTo) ?? ownerLoginDefaultRedirectTarget;
 
   headers.set("Set-Cookie", session.cookie);
 
   const response: OwnerPasskeyLoginVerifyResponse = {
     authenticated: true,
-    continueTo,
+    continueTo: ownerPasskeyLoginContinuationTarget,
     owner: state.owner,
     session: { expiresAt: session.session.expiresAt },
   };

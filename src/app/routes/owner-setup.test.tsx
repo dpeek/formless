@@ -14,6 +14,7 @@ import type {
   OwnerPasskeyRegistrationVerifyRequest,
 } from "../../shared/instance-auth.ts";
 import type { OwnerIdentity } from "../../shared/protocol.ts";
+import { isRuntimeClientShellRoute, runtimeTopologyRoutes } from "../../shared/runtime-topology.ts";
 
 const setupToken = "abcDEF0123456789_-abcDEF0123456789_-";
 const owner: OwnerIdentity = {
@@ -24,6 +25,12 @@ const owner: OwnerIdentity = {
 };
 
 describe("owner setup route view", () => {
+  it("uses the account setup gate route instead of the deleted legacy setup route", () => {
+    expect(runtimeTopologyRoutes.authAccountSetupRoute).toBe("/formless/auth/setup");
+    expect(isRuntimeClientShellRoute(runtimeTopologyRoutes.authAccountSetupRoute)).toBe(true);
+    expect(isRuntimeClientShellRoute("/setup")).toBe(false);
+  });
+
   it("renders visible setup states", () => {
     expect(renderOwnerSetupState({ status: "loading" })).toContain("Checking setup link");
     expect(

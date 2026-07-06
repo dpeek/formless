@@ -244,6 +244,66 @@ describe("auth account route data flow", () => {
     ]);
   });
 
+  it("surfaces missing central session failures without continuing", async () => {
+    const states: AuthAccountRouteState[] = [];
+    const navigations: string[] = [];
+    const stop = startAuthAccountRouteSession({
+      fetcher: recordingJsonFetcher(
+        [],
+        { error: "Authenticated account session is required." },
+        { status: 401 },
+      ),
+      locationSearch: "?returnTo=%2Fdeployments",
+      navigateTo: (target) => navigations.push(target),
+      onState: (state) => states.push(state),
+    });
+
+    try {
+      await waitFor(() => states.some((state) => state.status === "failed"));
+    } finally {
+      stop();
+    }
+
+    expect(navigations).toEqual([]);
+    expect(states).toEqual([
+      { status: "loading" },
+      {
+        message: "Authenticated account session is required.",
+        status: "failed",
+      },
+    ]);
+  });
+
+  it("surfaces unsafe return target failures without continuing", async () => {
+    const states: AuthAccountRouteState[] = [];
+    const navigations: string[] = [];
+    const stop = startAuthAccountRouteSession({
+      fetcher: recordingJsonFetcher(
+        [],
+        { error: "Account return target must be path-only." },
+        { status: 400 },
+      ),
+      locationSearch: "?returnTo=https%3A%2F%2Fevil.example.com%2Fdeployments",
+      navigateTo: (target) => navigations.push(target),
+      onState: (state) => states.push(state),
+    });
+
+    try {
+      await waitFor(() => states.some((state) => state.status === "failed"));
+    } finally {
+      stop();
+    }
+
+    expect(navigations).toEqual([]);
+    expect(states).toEqual([
+      { status: "loading" },
+      {
+        message: "Account return target must be path-only.",
+        status: "failed",
+      },
+    ]);
+  });
+
   it("continues through the cross-domain handoff path after completion", async () => {
     const locationSearch =
       "?targetOrigin=https%3A%2F%2Ftasks.example.com&routeId=route%3Atasks&targetProfile=app&appInstallId=task-workspace&storageIdentity=app%3Atask-workspace&returnTo=%2Fschema%3Fview%3Dboard&nonceHash=bm9uY2U&state=c3RhdGU";

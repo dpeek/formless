@@ -133,6 +133,7 @@ describe("collaborator invitation acceptance route view", () => {
         displayName: "Ada Collaborator",
         principalId: "principal:accepted",
       },
+      continueTo: "https://site.example.com/dashboard?view=home",
       handoff: {
         returnTo: "/dashboard?view=home",
         targetOrigin: "https://site.example.com",
@@ -351,19 +352,22 @@ describe("collaborator invitation acceptance route data flow", () => {
     expect(calls).toHaveLength(2);
   });
 
-  it("builds continuation URLs only for cross-origin handoff targets", () => {
+  it("builds continuation URLs through target handoff or account auth", () => {
     expect(
       collaboratorInvitationAcceptanceContinuationUrl(
-        { handoff: { returnTo: "/dashboard?view=home", targetOrigin: "https://site.example.com" } },
+        {
+          accountCompletion: completeAccountCompletion("https://site.example.com"),
+          handoff: { returnTo: "/dashboard?view=home", targetOrigin: "https://site.example.com" },
+        },
         "https://auth.example.com",
       ),
     ).toBe("https://site.example.com/dashboard?view=home");
     expect(
       collaboratorInvitationAcceptanceContinuationUrl(
-        { handoff: { returnTo: "/", targetOrigin: "https://auth.example.com" } },
+        { accountCompletion: completeAccountCompletion("https://auth.example.com") },
         "https://auth.example.com",
       ),
-    ).toBeUndefined();
+    ).toBe("/formless/auth?returnTo=%2Fdashboard%3Fview%3Dhome");
     expect(
       collaboratorInvitationAcceptanceContinuationUrl({}, "https://auth.example.com"),
     ).toBeUndefined();
@@ -421,6 +425,7 @@ function acceptedResponse() {
       displayName: "Ada Collaborator",
       principalId: "principal:accepted",
     },
+    accountCompletion: completeAccountCompletion("https://site.example.com"),
     handoff: {
       returnTo: "/dashboard?view=home",
       targetOrigin: "https://site.example.com",
@@ -428,6 +433,21 @@ function acceptedResponse() {
     invitation: eligibleInvitation,
     session: { expiresAt: "2026-07-02T00:00:00.000Z" },
     verified: true,
+  } as const;
+}
+
+function completeAccountCompletion(targetOrigin: string) {
+  return {
+    continueTo: "/dashboard?view=home",
+    status: "complete",
+    target: {
+      appInstallId: "site",
+      returnTo: "/dashboard?view=home",
+      routeId: "route:site",
+      storageIdentity: "app:site",
+      targetOrigin,
+      targetProfile: "app",
+    },
   } as const;
 }
 

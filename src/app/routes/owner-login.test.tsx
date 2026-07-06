@@ -17,6 +17,7 @@ import type {
   OwnerPasskeyLoginVerifyRequest,
 } from "../../shared/instance-auth.ts";
 import type { OwnerIdentity } from "../../shared/protocol.ts";
+import { isRuntimeClientShellRoute, runtimeTopologyRoutes } from "../../shared/runtime-topology.ts";
 
 const owner: OwnerIdentity = {
   id: "owner-1",
@@ -26,6 +27,12 @@ const owner: OwnerIdentity = {
 };
 
 describe("owner login route view", () => {
+  it("uses the account sign-in gate route instead of the deleted legacy login route", () => {
+    expect(runtimeTopologyRoutes.authAccountSignInRoute).toBe("/formless/auth/sign-in");
+    expect(isRuntimeClientShellRoute(runtimeTopologyRoutes.authAccountSignInRoute)).toBe(true);
+    expect(isRuntimeClientShellRoute("/login")).toBe(false);
+  });
+
   it("renders visible login states", () => {
     expect(renderOwnerLoginState({ status: "loading" })).toContain("Checking owner session");
     expect(renderOwnerLoginState({ status: "setup-incomplete" })).toContain(
@@ -218,7 +225,7 @@ describe("owner login route data flow", () => {
 
       return Response.json({
         authenticated: true,
-        continueTo: "/formless/auth/handoff?state=runtime",
+        continueTo: "/formless/auth",
         owner,
         session: { expiresAt: "2026-06-21T00:00:00.000Z" },
       });
@@ -228,11 +235,10 @@ describe("owner login route data flow", () => {
       loginWithPasskey({
         createAuthenticationResponse: async () => authenticationResponse,
         fetcher,
-        redirectTo: "/apps/personal/settings?panel=routes",
       }),
     ).resolves.toEqual({
       authenticated: true,
-      continueTo: "/formless/auth/handoff?state=runtime",
+      continueTo: "/formless/auth",
       owner,
       session: { expiresAt: "2026-06-21T00:00:00.000Z" },
     });
@@ -247,7 +253,6 @@ describe("owner login route data flow", () => {
       {
         authorization: null,
         body: {
-          redirectTo: "/apps/personal/settings?panel=routes",
           response: authenticationResponse,
         },
         credentials: "same-origin",

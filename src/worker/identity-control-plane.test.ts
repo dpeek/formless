@@ -24,6 +24,11 @@ import {
   COLLABORATOR_INVITATION_ACCEPT_PATH,
   type CollaboratorInvitationAcceptanceStatusResponse,
 } from "../shared/instance-auth.ts";
+import {
+  LOCAL_SESSION_BOOTSTRAP_TOKEN_ENV,
+  WORKSPACE_GATEWAY_PROXY_TOKEN_ENV,
+  WORKSPACE_GATEWAY_SIDECAR_URL_ENV,
+} from "@dpeek/formless-gateway";
 import { computeSourceSchemaHash } from "../shared/upgrade-migrations.ts";
 import { recordOperationRequest } from "../test/authority-write.ts";
 import { ensureTestIdentityOwner } from "../test/identity-owner.ts";
@@ -94,6 +99,10 @@ function createHarness() {
       bindings: {
         FORMLESS_ADMIN_TOKEN: adminToken,
         FORMLESS_INSTANCE_AUTH_ORIGIN: authOrigin,
+        FORMLESS_RUNTIME_PROFILE: "instance",
+        [LOCAL_SESSION_BOOTSTRAP_TOKEN_ENV]: "identity-local-bootstrap-token",
+        [WORKSPACE_GATEWAY_PROXY_TOKEN_ENV]: "identity-local-proxy-token",
+        [WORKSPACE_GATEWAY_SIDECAR_URL_ENV]: "http://127.0.0.1:4555",
       },
       queueProducers: {
         FORMLESS_EMAIL_DELIVERY_QUEUE: "formless-email-delivery",

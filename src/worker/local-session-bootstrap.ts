@@ -117,7 +117,7 @@ function validateLocalSessionBootstrapRequest(
   request: Request,
   env: LocalSessionBootstrapEnv,
 ): BootstrapValidation {
-  if (!isLocalWorkspaceRuntime(request, env)) {
+  if (!isLocalOwnerSessionRuntime(request, env)) {
     return { ok: false, error: "Not found.", status: 404 };
   }
 
@@ -139,7 +139,18 @@ function validateLocalSessionBootstrapRequest(
   return { ok: true, token: actual };
 }
 
-function isLocalWorkspaceRuntime(request: Request, env: LocalSessionBootstrapEnv): boolean {
+export function isLocalOwnerSessionRuntime(
+  request: Request,
+  env: Pick<
+    LocalSessionBootstrapEnv,
+    | "FORMLESS_ADMIN_TOKEN"
+    | "FORMLESS_OWNER_SESSION_SECRET"
+    | "FORMLESS_RUNTIME_PROFILE"
+    | typeof LOCAL_SESSION_BOOTSTRAP_TOKEN_ENV
+    | typeof WORKSPACE_GATEWAY_PROXY_TOKEN_ENV
+    | typeof WORKSPACE_GATEWAY_SIDECAR_URL_ENV
+  >,
+): boolean {
   const requestUrl = new URL(request.url);
   const profileKind = resolveRuntimeProfileKind({
     hostname: requestUrl.hostname,

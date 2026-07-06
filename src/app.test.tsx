@@ -847,8 +847,8 @@ describe("App smoke routes", () => {
     expect(installedSchemaHtml).not.toContain('href="/apps/personal/schema"');
   });
 
-  it('renders the "/setup" owner setup route outside workbench chrome', () => {
-    const html = renderRoute("/setup");
+  it('renders the "/formless/auth/setup" owner setup route outside workbench chrome', () => {
+    const html = renderRoute(runtimeTopologyRoutes.authAccountSetupRoute);
 
     expect(html).toContain("Checking setup link");
     expect(html).toContain("Loading setup status.");
@@ -857,8 +857,8 @@ describe("App smoke routes", () => {
     expect(html).not.toContain('aria-label="Runtime apps"');
   });
 
-  it('renders the "/login" owner login route outside workbench chrome', () => {
-    const html = renderRoute("/login");
+  it('renders the "/formless/auth/sign-in" owner login route outside workbench chrome', () => {
+    const html = renderRoute(runtimeTopologyRoutes.authAccountSignInRoute);
 
     expect(html).toContain("Checking owner session");
     expect(html).toContain("Loading sign-in state.");
@@ -907,21 +907,27 @@ describe("App smoke routes", () => {
     expect(unavailableHtml).not.toContain('data-frame="workbench"');
   });
 
-  it("keeps deployed owner auth routes available outside default instance onboarding", () => {
+  it("keeps deployed account gate routes available outside default instance onboarding", () => {
     const instanceProfile = createInstanceRuntimeProfile();
     const shellHtml = renderRoute("/", instanceProfile);
-    const setupHtml = renderRoute("/setup", instanceProfile);
-    const loginHtml = renderRoute("/login", instanceProfile);
+    const setupHtml = renderRoute(runtimeTopologyRoutes.authAccountSetupRoute, instanceProfile);
+    const signInHtml = renderRoute(runtimeTopologyRoutes.authAccountSignInRoute, instanceProfile);
+    const legacySetupHtml = renderRoute("/setup", instanceProfile);
+    const legacyLoginHtml = renderRoute("/login", instanceProfile);
 
     expect(shellHtml).toContain("Loading installed apps...");
     expect(shellHtml).not.toContain("Owner setup");
     expect(shellHtml).not.toContain("Owner sign in");
     expect(setupHtml).toContain("Checking setup link");
     expect(setupHtml).toContain("Loading setup status.");
-    expect(loginHtml).toContain("Checking owner session");
-    expect(loginHtml).toContain("Loading sign-in state.");
+    expect(signInHtml).toContain("Checking owner session");
+    expect(signInHtml).toContain("Loading sign-in state.");
     expect(setupHtml).not.toContain('data-frame="generated-app"');
-    expect(loginHtml).not.toContain('data-frame="generated-app"');
+    expect(signInHtml).not.toContain('data-frame="generated-app"');
+    expect(legacySetupHtml).toContain("Not found");
+    expect(legacySetupHtml).not.toContain("Checking setup link");
+    expect(legacyLoginHtml).toContain("Not found");
+    expect(legacyLoginHtml).not.toContain("Checking owner session");
   });
 
   it("renders product instance routes outside the dev workbench route vocabulary", () => {
@@ -1088,14 +1094,14 @@ describe("App smoke routes", () => {
         />
       </Router>,
     );
-    const loginHtml = renderRoute("/login");
-    const setupHtml = renderRoute("/setup");
+    const signInHtml = renderRoute(runtimeTopologyRoutes.authAccountSignInRoute);
+    const setupHtml = renderRoute(runtimeTopologyRoutes.authAccountSetupRoute);
 
     for (const html of [
       appProfileHtml,
       installedProfileHtml,
       publishedSiteHtml,
-      loginHtml,
+      signInHtml,
       setupHtml,
     ]) {
       expect(html).not.toContain('data-formless-instance-rail="true"');
@@ -1815,8 +1821,11 @@ describe("App smoke routes", () => {
     expect(html).not.toContain('href="/site/schema"');
   });
 
-  it("renders the owner setup route before published Site wildcard routes", () => {
-    const html = renderRoute("/setup", createPublishedSiteRuntimeProfile());
+  it("renders the account setup route before published Site wildcard routes", () => {
+    const html = renderRoute(
+      runtimeTopologyRoutes.authAccountSetupRoute,
+      createPublishedSiteRuntimeProfile(),
+    );
 
     expect(html).toContain("Checking setup link");
     expect(html).not.toContain("Loading setup.");
@@ -1824,8 +1833,11 @@ describe("App smoke routes", () => {
     expect(html).not.toContain('data-frame="generated-app"');
   });
 
-  it("renders the owner login route before published Site wildcard routes", () => {
-    const html = renderRoute("/login", createPublishedSiteRuntimeProfile());
+  it("renders the account sign-in route before published Site wildcard routes", () => {
+    const html = renderRoute(
+      runtimeTopologyRoutes.authAccountSignInRoute,
+      createPublishedSiteRuntimeProfile(),
+    );
 
     expect(html).toContain("Checking owner session");
     expect(html).not.toContain("Loading login.");

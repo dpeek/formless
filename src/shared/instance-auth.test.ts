@@ -162,6 +162,11 @@ describe("collaborator invitation acceptance protocol", () => {
           principalId: "principal:ada",
           displayName: "Ada Collaborator",
         },
+        accountCompletion: {
+          continueTo: "/apps/site?screen=home",
+          status: "complete",
+          target: accountCompletionTarget(),
+        },
         handoff: {
           targetOrigin: "https://app.example.com",
           returnTo: "/",
@@ -181,6 +186,11 @@ describe("collaborator invitation acceptance protocol", () => {
       acceptedPrincipal: {
         principalId: "principal:ada",
         displayName: "Ada Collaborator",
+      },
+      accountCompletion: {
+        continueTo: "/apps/site?screen=home",
+        status: "complete",
+        target: accountCompletionTarget(),
       },
       handoff: {
         targetOrigin: "https://app.example.com",
@@ -563,32 +573,21 @@ describe("owner passkey protocol", () => {
     });
     expect(
       parseOwnerPasskeyLoginVerifyRequest({
-        redirectTo: "/apps/site?screen=owner",
         response: authenticationResponse(),
       }),
     ).toEqual({
-      redirectTo: "/apps/site?screen=owner",
-      response: authenticationResponse(),
-    });
-    expect(
-      parseOwnerPasskeyLoginVerifyRequest({
-        redirectTo: "https://evil.example/apps/site",
-        response: authenticationResponse(),
-      }),
-    ).toEqual({
-      redirectTo: "https://evil.example/apps/site",
       response: authenticationResponse(),
     });
     expect(
       parseOwnerPasskeyLoginVerifyResponse({
         authenticated: true,
-        continueTo: "/formless/auth/handoff?targetOrigin=https%3A%2F%2Fadmin.example.com",
+        continueTo: "/formless/auth",
         owner,
         session: { expiresAt: "2026-06-28T00:00:00.000Z" },
       }),
     ).toEqual({
       authenticated: true,
-      continueTo: "/formless/auth/handoff?targetOrigin=https%3A%2F%2Fadmin.example.com",
+      continueTo: "/formless/auth",
       owner,
       session: { expiresAt: "2026-06-28T00:00:00.000Z" },
     });
@@ -635,10 +634,10 @@ describe("owner passkey protocol", () => {
     ).toThrow('Passkey registration verify request has unsupported key "redirectTo".');
     expect(() =>
       parseOwnerPasskeyLoginVerifyRequest({
-        redirectTo: 42,
+        redirectTo: "/apps/site",
         response: authenticationResponse(),
       }),
-    ).toThrow("Passkey login verify request redirectTo must be a string.");
+    ).toThrow('Passkey login verify request has unsupported key "redirectTo".');
     expect(() =>
       parseOwnerPasskeyLoginVerifyRequest({
         response: {
@@ -655,6 +654,14 @@ describe("owner passkey protocol", () => {
         session: { expiresAt: "2026-06-28T00:00:00.000Z" },
       }),
     ).toThrow("Passkey login verify response continueTo must be path-only.");
+    expect(() =>
+      parseOwnerPasskeyLoginVerifyResponse({
+        authenticated: true,
+        continueTo: "/apps/site",
+        owner,
+        session: { expiresAt: "2026-06-28T00:00:00.000Z" },
+      }),
+    ).toThrow("Passkey login verify response continueTo must route through /formless/auth.");
     expect(() => parseOwnerPasskeyLoginOptionsRequest({ setupToken })).toThrow(
       'Passkey login options request has unsupported key "setupToken".',
     );
@@ -684,7 +691,7 @@ describe("owner login redirects", () => {
       ),
     ).toBe("/apps/personal/settings?panel=deploy");
     expect(ownerLoginRedirectLocationForRoute("/apps/personal?screen=routes")).toBe(
-      "/login?redirectTo=%2Fapps%2Fpersonal%3Fscreen%3Droutes",
+      "/formless/auth/sign-in?redirectTo=%2Fapps%2Fpersonal%3Fscreen%3Droutes",
     );
   });
 
@@ -704,7 +711,7 @@ describe("owner login redirects", () => {
 
     expect(ownerLoginRedirectTargetFromSearch("?redirectTo=https%3A%2F%2Fexample.com")).toBe("/");
     expect(ownerLoginRedirectLocationForRoute("https://example.com/apps/personal")).toBe(
-      "/login?redirectTo=%2F",
+      "/formless/auth/sign-in?redirectTo=%2F",
     );
   });
 });

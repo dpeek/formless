@@ -3,10 +3,10 @@
 ## Purpose
 
 Instance auth owns product instance passkey credentials, WebAuthn challenge
-ceremonies, canonical auth origin policy, principal-backed owner session
-issuance, central auth sessions, host-local sessions, cross-domain handoff
-grants, account completion gates, collaborator invitation token state, logout,
-and admin bearer recovery boundaries. Reviewable owner identity, owner
+ceremonies, canonical auth origin policy, central auth sessions, local-dev
+owner session issuance, host-local sessions, cross-domain handoff grants,
+account completion gates, collaborator invitation token state, logout, and
+admin bearer recovery boundaries. Reviewable owner identity, owner
 authority, pending invitation facts, and policy acceptance facts are stored as
 identity control-plane principal, principal-email, invitation, membership,
 app-registration, role-assignment, account-policy, and
@@ -86,7 +86,9 @@ first-owner setup.
 - AND the system stores the passkey credential for that principal
 - AND the setup capability is consumed
 - AND no app install metadata or route record is created by owner setup
-- AND an owner session cookie is issued for that principal
+- AND a central auth session cookie is issued for that principal on the
+  configured auth origin
+- AND deployed passkey setup does not issue a host-local session cookie
 
 #### Scenario: Reject setup without valid passkey
 
@@ -96,7 +98,8 @@ first-owner setup.
 - THEN setup completion is rejected
 - AND no owner principal or owner role assignment is stored
 - AND no setup capability is consumed
-- AND no owner session cookie is issued
+- AND no central auth session, owner session, or host-local session cookie is
+  issued
 
 ### Requirement: Passkey Credential Storage
 
@@ -343,8 +346,8 @@ an installed app route or generated app UI.
 - AND mapped instance targets use the preferred admin origin resolved from the
   selected admin route, eligible primary route, or one unambiguous enabled
   custom admin route
-- AND mapped instance continuations enter that preferred admin origin's owner
-  login route with a path-only return target
+- AND mapped instance continuations enter the `/formless/auth` continuation
+  contract with target-bound handoff facts and a path-only return target
 - AND the redirect target remains path-only for the target origin
 - AND the auth origin does not issue a host-local session cookie directly for
   the target host
@@ -353,7 +356,7 @@ an installed app route or generated app UI.
 
 ### Requirement: Passkey Login
 
-The system SHALL issue owner sessions after successful passkey assertion
+The system SHALL issue central auth sessions after successful passkey assertion
 verification.
 
 #### Scenario: Successful passkey login
@@ -365,28 +368,35 @@ verification.
 - WHEN the owner submits a valid assertion for the active login challenge,
   canonical origin, relying-party id, and stored credential public key
 - THEN the system updates the stored credential verification facts
-- AND the system issues the existing owner session cookie for that principal
+- AND the system issues a central auth session cookie for that principal scoped
+  to the configured auth origin
+- AND the response includes a display-safe continuation target back through
+  `/formless/auth`
+- AND deployed passkey login does not issue a host-local session cookie
 
 #### Scenario: Reject invalid passkey login
 
 - WHEN a passkey login assertion has the wrong challenge, origin, relying-party
   id, credential id, principal, signature, or authenticator counter
 - THEN login is rejected
-- AND no owner session cookie is issued
+- AND no central auth session, owner session, or host-local session cookie is
+  issued
 - AND stored credential verification facts are not advanced
 
-### Requirement: Owner Session Status And Logout
+### Requirement: Auth Session Status And Logout
 
-The system SHALL expose owner session status and logout for passkey-backed,
-local-dev, and mapped host-local owner sessions.
+The system SHALL expose account session status and logout for central auth
+sessions, local-dev owner sessions, and mapped host-local sessions.
 
-#### Scenario: Session status after passkey login
+#### Scenario: Session status after central passkey login
 
 - GIVEN an owner principal has logged in with a passkey
 - WHEN the browser requests `/api/formless/session`
 - THEN the response reports the owner as authenticated
 - AND the response includes the display-safe owner identity from the principal
-  records and session expiry
+  records and central session expiry
+- AND the response is available only on the configured auth origin for the
+  central auth session cookie
 
 #### Scenario: Session status after local dev bootstrap
 
@@ -396,11 +406,13 @@ local-dev, and mapped host-local owner sessions.
 - AND the response includes the display-safe owner identity from the principal
   records and session expiry
 
-#### Scenario: Logout clears owner session
+#### Scenario: Logout clears auth-origin session
 
-- GIVEN a browser has an owner session cookie
+- GIVEN a browser has a central auth session cookie or local-dev owner session
+  cookie
 - WHEN the browser posts to the logout endpoint
-- THEN the response clears the owner session cookie
+- THEN the runtime revokes any matching central auth session row
+- AND the response clears the matching auth-origin session cookie
 - AND later session status requests without a valid cookie report
   unauthenticated state
 
@@ -415,23 +427,23 @@ local-dev, and mapped host-local owner sessions.
 - WHEN the browser posts to `/api/formless/session/logout` from that mapped
   host
 - THEN the response clears the host-local session cookie
-- AND the response does not issue a central owner session cookie on the mapped
+- AND the response does not issue a central auth session cookie on the mapped
   host
 
-### Requirement: Owner Login Redirects
+### Requirement: Account Auth Continuations
 
-The system SHALL preserve safe owner-login return targets for browser routes
-that require an owner session through a runtime-owned continuation contract.
+The system SHALL preserve safe account return targets for protected browser
+routes through `/formless/auth` as the runtime-owned continuation contract.
 
-#### Scenario: Login completes with return target
+#### Scenario: Account continuation completes with return target
 
-- GIVEN an anonymous browser was redirected from an owner-only route to
-  `/login` with a same-origin `redirectTo` path and query
+- GIVEN an anonymous browser was redirected from a protected route to
+  `/formless/auth` with a same-origin `returnTo` path and query
 - WHEN passkey login succeeds
-- THEN an owner session cookie is issued
-- AND the passkey verification response includes a display-safe continuation
-  target equal to the validated path-only return target
-- AND the browser is returned to the requested route by following the returned
+- THEN a central auth session cookie is issued on the configured auth origin
+- AND `/formless/auth` validates route access and account completion for the
+  target before continuing
+- AND the browser is returned to the requested route only through the validated
   continuation target
 - AND browser client code does not synthesize the final post-login destination
   from raw URL search parameters after login succeeds
@@ -440,22 +452,20 @@ that require an owner session through a runtime-owned continuation contract.
 
 #### Scenario: Unsafe return target rejected
 
-- GIVEN an owner login URL contains an absolute, protocol-relative,
-  cross-origin, malformed, or unsupported `redirectTo` value
+- GIVEN an account continuation URL contains an absolute, protocol-relative,
+  cross-origin, malformed, or unsupported `returnTo` value
 - WHEN login renders or completes
 - THEN the unsafe return target is ignored
-- AND the passkey verification response uses the product instance root as the
-  continuation target after successful login
+- AND `/formless/auth` uses the product instance root as the continuation
+  target after successful login
 
-#### Scenario: Login continuation may enter auth handoff
+#### Scenario: Account continuation may enter auth handoff
 
-- GIVEN an anonymous browser was redirected to `/login` with a safe path-only
-  `redirectTo` value that targets `/formless/auth/handoff`
+- GIVEN an anonymous browser was redirected to `/formless/auth` with
+  target-bound handoff facts
 - WHEN passkey login succeeds
-- THEN the passkey verification response includes that handoff path and query
-  as the continuation target
-- AND the browser follows the continuation with document navigation so the
-  runtime-owned handoff route can issue a target-bound one-time grant
+- THEN `/formless/auth` follows the continuation with document navigation so
+  the runtime-owned handoff route can issue a target-bound one-time grant
 - AND no absolute, protocol-relative, cross-origin, malformed, or unsupported
   handoff target is accepted
 
@@ -467,8 +477,9 @@ one-time grants.
 
 #### Scenario: Central auth session origin
 
-- GIVEN a passkey login succeeds on the configured auth origin
-- WHEN the runtime issues browser session state for that login
+- GIVEN passkey setup, passkey login, or invitation acceptance succeeds on the
+  configured auth origin
+- WHEN the runtime issues browser session state for that principal
 - THEN the central auth session is scoped to the auth origin host
 - AND the session is signed, instance-bound, principal-bound, and expires
 - AND mapped instance admin hosts, mapped app hosts, and mapped public Site
@@ -477,13 +488,16 @@ one-time grants.
 - AND mapped instance admin hosts, mapped app hosts, and mapped public Site
   hosts do not start passkey registration or login ceremonies unless they are
   also the configured auth origin
+- AND the owner session cookie is accepted only for local-dev bootstrap flows,
+  not for normal deployed passkey login, setup, invitation acceptance, or
+  account continuation
 
-#### Scenario: Non-auth admin host owner login starts handoff
+#### Scenario: Non-auth admin host protected entry starts handoff
 
 - GIVEN an enabled exact-host route mounts the instance admin surface
 - AND the mapped admin host is not the configured auth origin
-- AND a browser navigates to the owner login route on that admin host with an
-  optional safe path-only `redirectTo` target
+- AND a browser navigates to a protected admin route on that admin host with an
+  optional safe path-only target
 - WHEN the browser does not include a valid host-local session for that admin
   route and `instance:control-plane` target
 - THEN the admin host redirects to the configured auth origin through the
@@ -491,24 +505,25 @@ one-time grants.
 - AND the handoff target origin is the admin host origin
 - AND the handoff target route is the matched instance admin route
 - AND the handoff target storage identity is `instance:control-plane`
-- AND the return target is the safe path-only `redirectTo` value or the admin
-  route root when no safe target is supplied
-- AND the admin host does not render owner login UI, start a passkey ceremony,
+- AND the return target is the original protected path and query when safe, or
+  the admin route root when no safe target is available
+- AND the admin host does not render account sign-in UI, start a passkey ceremony,
   issue a central auth session cookie, or silently mint credentials for its own
   host
 
-#### Scenario: Non-auth admin host owner setup redirects to auth origin
+#### Scenario: Non-auth admin host account gates redirect to auth origin
 
 - GIVEN a configured auth origin exists
 - AND an enabled exact-host route mounts the instance admin surface on another
   host
-- WHEN a browser navigates to the owner setup route on the admin host
+- WHEN a browser navigates to the account sign-in or setup gate route on the
+  admin host
 - THEN the admin host redirects to the same path and query on the configured
   auth origin
 - AND setup status, setup capability creation, owner passkey registration, and
   setup completion remain accepted only on the configured auth origin when
   production auth is configured
-- AND the admin host does not render owner setup UI or start passkey
+- AND the admin host does not render account setup UI or start passkey
   registration unless it is also the configured auth origin
 
 #### Scenario: One-time grant issuance
@@ -638,6 +653,18 @@ account completion gates.
 - AND the credential entry path remains on the configured auth origin
 - AND no target host receives a central auth session cookie before the browser
   returns through the account orchestrator or handoff flow
+
+#### Scenario: Account sign-in and setup gates use account orchestrator
+
+- GIVEN a browser navigates to `/formless/auth/sign-in` or
+  `/formless/auth/setup` on the configured auth origin
+- WHEN the runtime can express the requested work as a `/formless/auth`
+  continuation, credential, or setup gate
+- THEN the runtime redirects or renders through the `/formless/auth`
+  orchestrator contract
+- AND sign-in and setup gates do not become durable logged-in account surfaces
+- AND passkey ceremonies remain scoped to the configured auth origin and
+  relying-party id
 
 #### Scenario: Preserve machine-readable account gate responses
 
@@ -770,13 +797,16 @@ or using browser access for an authenticated target.
 ### Requirement: Principal-Backed Authenticated Authorization
 
 The system SHALL authorize authenticated browser access through an active
-principal with a valid instance or host-local browser session.
+principal with a valid central auth-origin, local-dev owner, or host-local
+browser session.
 
 #### Scenario: Session resolves to active authenticated principal
 
-- GIVEN a browser request includes a valid owner session or host-local session
+- GIVEN a browser request includes a valid central auth session for the
+  configured auth origin, local-dev owner session, or host-local session
 - WHEN the session principal is active
-- AND the session target matches the request host, route, target profile, and
+- AND central auth sessions are used only on the configured auth origin
+- AND host-local sessions match the request host, route, target profile, and
   target app install or storage identity
 - THEN authenticated browser routes and operations accept the request as
   authenticated
@@ -786,7 +816,8 @@ principal with a valid instance or host-local browser session.
 
 #### Scenario: Session without active authenticated principal
 
-- GIVEN a browser request includes a valid owner session or host-local session
+- GIVEN a browser request includes a valid central auth session, local-dev owner
+  session, or host-local session
 - WHEN the session principal is missing, disabled, revoked, or scoped to a
   different host, route, profile, app install, storage identity, or instance
 - THEN authenticated browser routes and operations reject the request as
@@ -799,18 +830,20 @@ principal with a valid instance or host-local browser session.
 The system SHALL authorize browser owner access through an active principal
 with active `instance.owner` authority.
 
-#### Scenario: Owner session resolves to active owner principal
+#### Scenario: Owner access resolves to active owner principal
 
-- GIVEN a browser request includes a valid owner session cookie
+- GIVEN a browser request includes a valid central auth session on the configured
+  auth origin, local-dev owner session cookie, or matching host-local session
 - WHEN the session principal is active
 - AND the principal has an active `instance.owner` role assignment at instance
   scope
 - THEN owner-only browser routes and owner-protected management reads and writes
   accept the request as owner-authorized
 
-#### Scenario: Owner session without active owner authority
+#### Scenario: Owner access without active owner authority
 
-- GIVEN a browser request includes a valid owner session cookie
+- GIVEN a browser request includes a valid central auth session, local-dev owner
+  session cookie, or matching host-local session
 - WHEN the session principal is missing, disabled, or no longer has an active
   `instance.owner` role assignment at instance scope
 - THEN owner-only browser routes and owner-protected management reads and writes
@@ -826,8 +859,8 @@ recovery authority.
 
 #### Scenario: Instance admin session resolves to management authority
 
-- GIVEN a browser request includes a valid owner session or matching
-  host-local session
+- GIVEN a browser request includes a valid central auth session on the configured
+  auth origin, local-dev owner session, or matching host-local session
 - WHEN the session principal is active
 - AND the principal has an active `instance.admin` role assignment at instance
   scope
@@ -840,8 +873,8 @@ recovery authority.
 
 #### Scenario: Instance admin session without active admin authority
 
-- GIVEN a browser request includes a valid owner session or matching
-  host-local session
+- GIVEN a browser request includes a valid central auth session, local-dev owner
+  session, or matching host-local session
 - WHEN the session principal is missing, disabled, or no longer has active
   `instance.admin` or `instance.owner` authority at instance scope
 - THEN operational instance management reads and writes reject the request as
@@ -860,7 +893,7 @@ recovery authority.
 - AND owner-only recovery includes granting, revoking, or disabling
   `instance.owner`, removing the last active owner, owner setup replacement,
   owner credential recovery, changing auth origin or relying-party policy,
-  rotating owner-session signing policy, and creating or rotating admin-bearer
+  rotating browser session signing policy, and creating or rotating admin-bearer
   recovery material
 
 ### Requirement: Admin Bearer Boundary
@@ -907,9 +940,9 @@ login.
   trusted CLI
 - AND the deployed instance reports an effective auth origin in owner setup
   status
-- WHEN the CLI prepares an owner setup URL
+- WHEN the CLI prepares an owner account setup URL
 - THEN the CLI creates the setup capability on that auth origin
-- AND the browser setup URL uses the same auth origin
+- AND the browser account setup URL uses the same auth origin
 - AND the runtime does not silently fall back to the workers.dev deployment host
   when the auth-origin capability request is unreachable or misconfigured
 
@@ -917,19 +950,22 @@ login.
 
 - GIVEN owner setup is incomplete and an admin bearer token is available to a
   trusted CLI
-- WHEN the CLI prepares an owner setup URL
+- WHEN the CLI prepares an owner account setup URL
 - THEN it may read owner setup status and create the setup capability without
   first reading installed app, route, deployment, archive, or browser session
   state
-- AND protected management reads remain separately authorized by owner session
-  or admin bearer authorization
+- AND protected management reads remain separately authorized by central
+  auth-origin session, local-dev owner session, host-local session, or admin
+  bearer authorization
 
 #### Scenario: Browser login does not accept admin token
 
 - GIVEN owner setup is complete and passkey login is available
-- WHEN a browser attempts normal owner login by submitting only an admin token
+- WHEN a browser attempts normal browser passkey login by submitting only an
+  admin token
 - THEN browser login is rejected
-- AND no owner session cookie is issued from that token-only login attempt
+- AND no central auth session or owner session cookie is issued from that
+  token-only login attempt
 
 ### Requirement: Local Dev Owner Session Bootstrap
 
@@ -946,6 +982,8 @@ without requiring passkey registration.
   `instance.owner` role assignment if no owner principal exists
 - **AND** the runtime issues the existing owner session cookie for that
   principal
+- **AND** local dev bootstrap does not create a central auth session unless a
+  configured local auth origin explicitly uses the normal deployed auth flow
 - **AND** no passkey credential, passkey challenge, setup capability, app
   install, route record, Cloudflare resource, Alchemy resource, or provider
   resource is created

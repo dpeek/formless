@@ -18,6 +18,7 @@ import {
   FORMLESS_TURNSTILE_SECRET_KEY_ENV_NAME,
   FORMLESS_TURNSTILE_SITE_KEY_ENV_NAME,
 } from "../shared/turnstile-config.ts";
+import { runtimeTopologyRoutes } from "../shared/runtime-topology.ts";
 import { FORMLESS_WORKSPACE_APP_PACKAGES_ENV_NAME } from "../shared/workspace-runtime-packages.ts";
 import {
   FORMLESS_SITE_PROJECT_ROOT_ENV_NAME,
@@ -49,7 +50,7 @@ export const FORMLESS_INSTANCE_STATE_FILE = "formless.instance.json";
 export const FORMLESS_INSTANCE_STATE_VERSION = 1;
 export const FORMLESS_INSTANCE_STATE_KIND = "formless-instance";
 export const FORMLESS_WORKER_COMPATIBILITY_DATE = "2026-04-28";
-export const FORMLESS_OWNER_SETUP_ROUTE_PATH = "/setup";
+export const FORMLESS_OWNER_SETUP_ROUTE_PATH = runtimeTopologyRoutes.authAccountSetupRoute;
 
 const FORMLESS_OWNER_SETUP_CAPABILITY_API_PATH = "/api/formless/setup/capability";
 const FORMLESS_INSTANCE_WORKER_BUILD_COMMAND = "node_modules/.bin/vp build";

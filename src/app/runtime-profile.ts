@@ -119,6 +119,8 @@ export type RuntimeRoutePolicy = {
 export type RuntimeBrowserRoutePatterns = {
   authAccountGateRoutePattern?: typeof runtimeTopologyRoutes.authAccountGateRoutePattern;
   authAccountRoute?: typeof runtimeTopologyRoutes.authAccountRoute;
+  authAccountSetupRoute?: typeof runtimeTopologyRoutes.authAccountSetupRoute;
+  authAccountSignInRoute?: typeof runtimeTopologyRoutes.authAccountSignInRoute;
   instanceAccessRoute?: typeof runtimeTopologyRoutes.accessRoute;
   instanceShellRoute?: typeof runtimeTopologyRoutes.instanceRootRoute;
   installedAppHomeRoutePattern?: `/${string}`;
@@ -126,8 +128,6 @@ export type RuntimeBrowserRoutePatterns = {
   installedSitePublicHomeRoutePattern?: `/${string}`;
   installedSitePublicSlugRoutePattern?: `/${string}`;
   localSessionRoute?: typeof runtimeTopologyRoutes.localSessionRoute;
-  ownerLoginRoute?: typeof runtimeTopologyRoutes.loginRoute;
-  ownerSetupRoute?: typeof runtimeTopologyRoutes.setupRoute;
 };
 
 export type RuntimeProfileResolverInput = {
@@ -260,8 +260,8 @@ export function runtimeBrowserRoutePatterns(profile: RuntimeProfile): RuntimeBro
       ? {
           authAccountGateRoutePattern: runtimeTopologyRoutes.authAccountGateRoutePattern,
           authAccountRoute: runtimeTopologyRoutes.authAccountRoute,
-          ownerLoginRoute: runtimeTopologyRoutes.loginRoute,
-          ownerSetupRoute: runtimeTopologyRoutes.setupRoute,
+          authAccountSetupRoute: runtimeTopologyRoutes.authAccountSetupRoute,
+          authAccountSignInRoute: runtimeTopologyRoutes.authAccountSignInRoute,
         }
       : {}),
     ...(hasInstanceBrowserShell
@@ -327,8 +327,6 @@ export function shouldRenderRuntimeRouteOutsideGeneratedAppFrame(
   return (
     isRuntimeAuthAccountRoutePath(path) ||
     path === COLLABORATOR_INVITATION_ACCEPT_PATH ||
-    path === routes.ownerLoginRoute ||
-    path === routes.ownerSetupRoute ||
     path === routes.localSessionRoute ||
     isRuntimePublicSiteRoute(profile, path, context) ||
     isInstalledSitePublicRoutePath(profile, path) ||

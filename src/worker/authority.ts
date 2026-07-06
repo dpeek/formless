@@ -65,10 +65,15 @@ import {
   authenticatedOperationActorForSession,
   handleInstanceAuthHandoffDurableObjectRequest,
   hostAuthSessionTargetFromRequestHeaders,
+  validateCentralAuthSessionAuthority,
+  validateCentralAuthSessionPrincipal,
   validateHostAuthSessionAuthority,
 } from "./instance-auth-handoff.ts";
 import { validateOwnerSessionAuthority, validateOwnerSessionPrincipal } from "./owner-session.ts";
-import { handleLocalSessionBootstrapDurableObjectRequest } from "./local-session-bootstrap.ts";
+import {
+  handleLocalSessionBootstrapDurableObjectRequest,
+  isLocalOwnerSessionRuntime,
+} from "./local-session-bootstrap.ts";
 import {
   executePublicOperationRequest,
   PublicOperationError,
@@ -563,14 +568,14 @@ async function operationActorCandidatesForRequest(
   target: ReturnType<typeof hostAuthSessionTargetFromRequestHeaders>,
 ): Promise<OperationInvocationActorCandidates> {
   const candidates: OperationInvocationActorCandidates = {};
-  const ownerSession = await validateOwnerSessionAuthority(request, env);
+  const centralOwnerSession = await validateCentralAuthSessionAuthority(request, env);
 
-  if (ownerSession.ok) {
+  if (centralOwnerSession.ok) {
     candidates.owner = { kind: "owner" };
 
     const actor = authenticatedOperationActorForSession({
-      principalId: ownerSession.session.principalId,
-      session: ownerSession.session,
+      principalId: centralOwnerSession.session.principalId,
+      session: centralOwnerSession.session,
       target,
     });
 
@@ -581,17 +586,56 @@ async function operationActorCandidatesForRequest(
     return candidates;
   }
 
-  const principalSession = await validateOwnerSessionPrincipal(request, env);
+  const ownerSessionFallbackAllowed =
+    centralOwnerSession.ownerSessionFallbackAllowed || isLocalOwnerSessionRuntime(request, env);
 
-  if (principalSession.ok) {
+  if (ownerSessionFallbackAllowed) {
+    const ownerSession = await validateOwnerSessionAuthority(request, env);
+
+    if (ownerSession.ok) {
+      candidates.owner = { kind: "owner" };
+
+      const actor = authenticatedOperationActorForSession({
+        principalId: ownerSession.session.principalId,
+        session: ownerSession.session,
+        target,
+      });
+
+      if (actor) {
+        candidates.authenticated = actor;
+      }
+
+      return candidates;
+    }
+  }
+
+  const centralPrincipalSession = await validateCentralAuthSessionPrincipal(request, env);
+
+  if (centralPrincipalSession.ok) {
     const actor = authenticatedOperationActorForSession({
-      principalId: principalSession.session.principalId,
-      session: principalSession.session,
+      principalId: centralPrincipalSession.session.principalId,
+      session: centralPrincipalSession.session,
       target,
     });
 
     if (actor) {
       candidates.authenticated = actor;
+    }
+  }
+
+  if (ownerSessionFallbackAllowed) {
+    const principalSession = await validateOwnerSessionPrincipal(request, env);
+
+    if (principalSession.ok) {
+      const actor = authenticatedOperationActorForSession({
+        principalId: principalSession.session.principalId,
+        session: principalSession.session,
+        target,
+      });
+
+      if (actor) {
+        candidates.authenticated = actor;
+      }
     }
   }
 

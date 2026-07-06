@@ -980,7 +980,7 @@ function identityAccessGrantAuthorityFromAuthorization(
   storage: DurableObjectStorage,
   authorization: {
     session?: { principalId?: string };
-    via: "admin-bearer" | "host-session" | "owner-session" | "open";
+    via: "admin-bearer" | "central-session" | "host-session" | "owner-session" | "open";
   },
 ): IdentityAccessInvitationGrantAuthoritySummary {
   const principalId = authorization.session?.principalId;

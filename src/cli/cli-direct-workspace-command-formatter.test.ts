@@ -77,7 +77,7 @@ describe("direct workspace command CLI formatter", () => {
   });
 
   it("renders owner setup status, setup URL, and browser-opened output", () => {
-    const setupUrl = "https://personal.dpeek.workers.dev/setup?token=setup-token";
+    const setupUrl = "https://personal.dpeek.workers.dev/formless/auth/setup?token=setup-token";
     const created = formatCliInstanceOwnerSetupOutput(
       {
         opened: true,
@@ -112,7 +112,7 @@ describe("direct workspace command CLI formatter", () => {
   });
 
   it("renders reported admin origin as the browser continuation URL", () => {
-    const setupUrl = "https://auth.example.com/setup?token=setup-token";
+    const setupUrl = "https://auth.example.com/formless/auth/setup?token=setup-token";
     const created = formatCliInstanceOwnerSetupOutput(
       {
         opened: false,

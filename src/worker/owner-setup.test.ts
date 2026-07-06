@@ -14,6 +14,7 @@ import type {
 import type { OperationInvocationResponse } from "../shared/operation-invocation.ts";
 import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
+import { CENTRAL_AUTH_SESSION_COOKIE_NAME } from "./central-auth-session.ts";
 import { OWNER_SESSION_COOKIE_NAME } from "./owner-session.ts";
 import { INTERNAL_RESET_OWNER_SETUP_PATH } from "./owner-setup.ts";
 
@@ -242,6 +243,9 @@ describe("owner setup API routes", () => {
       },
     });
     expect(completed.response.headers.get("Set-Cookie")).toContain(`${OWNER_SESSION_COOKIE_NAME}=`);
+    expect(completed.response.headers.get("Set-Cookie")).not.toContain(
+      `${CENTRAL_AUTH_SESSION_COOKIE_NAME}=`,
+    );
     expect(completed.response.headers.get("Set-Cookie")).toContain("HttpOnly");
     expect(completed.response.headers.get("Set-Cookie")).toContain("SameSite=Lax");
     expect(status.body).toEqual(completed.body);

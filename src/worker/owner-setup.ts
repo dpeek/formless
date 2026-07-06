@@ -24,6 +24,12 @@ import {
   ownerSessionSigningSecret,
   validateOwnerSessionCookie,
 } from "./owner-session.ts";
+import {
+  CENTRAL_AUTH_SESSION_COOKIE_NAME,
+  clearCentralAuthSessionCookie,
+  revokeCentralAuthSessionCookie,
+  validateCentralAuthSessionCookie,
+} from "./central-auth-session.ts";
 import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
 import { readInstanceAuthConfig, resetInstanceAuthTables } from "./instance-auth-state.ts";
 import {
@@ -32,6 +38,7 @@ import {
   hostAuthSessionTargetFromRequestHeaders,
   validateHostAuthSessionAuthorityInStorage,
 } from "./instance-auth-handoff.ts";
+import { isLocalOwnerSessionRuntime } from "./local-session-bootstrap.ts";
 import {
   ensureIdentityOwner,
   readIdentityOwner,
@@ -96,7 +103,7 @@ export async function handleOwnerSetupDurableObjectRequest(
 
   try {
     if (pathname === OWNER_SESSION_LOGOUT_API_PATH) {
-      return handleOwnerLogoutRequest(request);
+      return await handleOwnerLogoutRequest(request, storage, env);
     }
 
     if (pathname === OWNER_SESSION_API_PATH) {
@@ -160,15 +167,28 @@ async function handleOwnerSessionStatusRequest(
     return jsonResponse({ authenticated: false, setupComplete: false });
   }
 
-  const session = await validateOwnerSessionCookie(request, env);
+  const centralSession = await validateCentralAuthSessionCookie(request, storage, env);
 
-  if (session.ok && session.session.principalId === state.owner.id) {
+  if (centralSession.ok && centralSession.session.principalId === state.owner.id) {
     return jsonResponse({
       authenticated: true,
       owner: state.owner,
-      session: { expiresAt: session.session.expiresAt },
+      session: { expiresAt: centralSession.session.expiresAt },
       setupComplete: true,
     });
+  }
+
+  if (ownerSessionFallbackAllowed(request, storage, env)) {
+    const session = await validateOwnerSessionCookie(request, env);
+
+    if (session.ok && session.session.principalId === state.owner.id) {
+      return jsonResponse({
+        authenticated: true,
+        owner: state.owner,
+        session: { expiresAt: session.session.expiresAt },
+        setupComplete: true,
+      });
+    }
   }
 
   const hostSession = await hostOwnerSessionStatusResponse(request, storage, env, state.owner);
@@ -209,7 +229,11 @@ async function handleOwnerLoginRequest(
   );
 }
 
-function handleOwnerLogoutRequest(request: Request): Response {
+async function handleOwnerLogoutRequest(
+  request: Request,
+  storage: DurableObjectStorage,
+  env: OwnerSetupApiEnv,
+): Promise<Response> {
   if (request.method !== "POST") {
     return methodNotAllowedResponse("POST");
   }
@@ -222,9 +246,18 @@ function handleOwnerLogoutRequest(request: Request): Response {
     });
   }
 
-  return jsonResponse({ authenticated: false }, 200, {
-    "Set-Cookie": clearOwnerSessionCookie(request),
-  });
+  const headers = new Headers();
+
+  if (requestHasCookie(request, CENTRAL_AUTH_SESSION_COOKIE_NAME)) {
+    await revokeCentralAuthSessionCookie(request, storage, env);
+    headers.append("Set-Cookie", clearCentralAuthSessionCookie(request));
+  }
+
+  if (ownerSessionFallbackAllowed(request, storage, env)) {
+    headers.append("Set-Cookie", clearOwnerSessionCookie(request));
+  }
+
+  return jsonResponse({ authenticated: false }, 200, headers);
 }
 
 async function hostOwnerSessionStatusResponse(
@@ -264,6 +297,14 @@ async function hostOwnerSessionStatusResponse(
     session: { expiresAt: hostSession.session.expiresAt },
     setupComplete: true,
   });
+}
+
+function ownerSessionFallbackAllowed(
+  request: Request,
+  storage: DurableObjectStorage,
+  env: OwnerSetupApiEnv,
+): boolean {
+  return readInstanceAuthConfig(storage) === undefined || isLocalOwnerSessionRuntime(request, env);
 }
 
 async function handleOwnerSetupStatusRequest(
@@ -521,6 +562,16 @@ async function readJson(request: Request): Promise<unknown> {
 
 function requestInstanceId(request: Request): string {
   return new URL(request.url).hostname.toLowerCase();
+}
+
+function requestHasCookie(request: Request, name: string): boolean {
+  const header = request.headers.get("Cookie");
+
+  if (!header) {
+    return false;
+  }
+
+  return header.split(";").some((part) => part.split("=", 1)[0]?.trim() === name);
 }
 
 function methodNotAllowedResponse(allow: string): Response {

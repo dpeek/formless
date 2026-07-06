@@ -24,6 +24,7 @@ import {
 import {
   consumeHandoffGrant,
   createHandoffGrant,
+  readInstanceAuthConfig,
   type CreateHandoffGrantInput,
   readHostSessionRevocationVersion,
   type InstanceAuthHandoffTargetProfile,
@@ -44,6 +45,11 @@ import {
   type OwnerSessionEnv,
 } from "./owner-session.ts";
 import {
+  validateCentralAuthSessionCookie,
+  type CentralAuthSession,
+  type CentralAuthSessionValidationFailureReason,
+} from "./central-auth-session.ts";
+import {
   resolveInstanceRuntimeRouteFromRecords,
   type InstanceRuntimeMountRouteResolution,
   type InstanceRuntimeRouteResolution,
@@ -53,6 +59,7 @@ import {
   type ActiveRuntimeAppPackageEnv,
 } from "./runtime-app-packages.ts";
 import type { OperationInvocationActor } from "../shared/operation-invocation.ts";
+import { isLocalOwnerSessionRuntime } from "./local-session-bootstrap.ts";
 
 export const INSTANCE_AUTH_HANDOFF_START_PATH = "/formless/auth/handoff";
 export const INSTANCE_AUTH_HANDOFF_CALLBACK_PATH = "/formless/auth/callback";
@@ -60,6 +67,7 @@ export const HOST_AUTH_NONCE_COOKIE_NAME = "formless_host_auth_nonce";
 export const HOST_AUTH_SESSION_COOKIE_NAME = "formless_host_session";
 
 const instanceAuthHostSessionValidatePath = "/formless/auth/host-session/validate";
+const instanceAuthCentralSessionValidatePath = "/formless/auth/central-session/validate";
 const handoffGrantTtlMs = 5 * 60 * 1000;
 const hostNonceMaxAgeSeconds = 5 * 60;
 const hostSessionMaxAgeSeconds = 12 * 60 * 60;
@@ -124,15 +132,34 @@ type HostAuthSessionPayload = HostAuthSession & {
 
 type ProtectedRouteAccess = "authenticated" | "owner";
 type HostSessionAuthorityRequirement = ProtectedRouteAccess | "management";
+type CentralSessionAuthorityRequirement = ProtectedRouteAccess | "management";
+type CentralAuthSessionAuthorityValidationFailureReason =
+  | CentralAuthSessionValidationFailureReason
+  | "account-completion-required"
+  | "missing-management-authority"
+  | "missing-owner-authority";
+
+type CentralAuthSessionAuthorityValidationResult =
+  | {
+      ok: true;
+      ownerSessionFallbackAllowed: boolean;
+      session: CentralAuthSession;
+    }
+  | {
+      ok: false;
+      accountCompletion?: AccountCompletionGateResolutionResult;
+      ownerSessionFallbackAllowed: boolean;
+      reason: CentralAuthSessionAuthorityValidationFailureReason;
+    };
 
 export type RouteAccessSessionValidationResult =
   | {
       ok: true;
       ownerAuthorized: boolean;
       principalId: string;
-      session: HostAuthSession | OwnerSession;
+      session: CentralAuthSession | HostAuthSession | OwnerSession;
       target?: InstanceAuthSessionTargetBinding;
-      via: "host-session" | "owner-session";
+      via: "central-session" | "host-session" | "owner-session";
     }
   | {
       ok: false;
@@ -344,10 +371,7 @@ export async function resolveAuthAccountHandoffContinuation(
   }
 
   const target = await verifiedHandoffStartTargetFromSearch(request, env, url);
-  const session =
-    target.requiredAccess === "owner"
-      ? await validateOwnerSessionAuthority(request, env)
-      : await validateOwnerSessionPrincipal(request, env);
+  const session = await validateAuthOriginSession(request, env, target.requiredAccess);
 
   if (!session.ok) {
     return {
@@ -394,6 +418,10 @@ export async function handleInstanceAuthHandoffDurableObjectRequest(
     return handleHostAuthSessionValidationDurableObjectRequest(request, storage, env);
   }
 
+  if (url.pathname === instanceAuthCentralSessionValidatePath) {
+    return handleCentralAuthSessionValidationDurableObjectRequest(request, storage, env);
+  }
+
   if (url.pathname === INSTANCE_AUTH_HANDOFF_CALLBACK_PATH) {
     return handleHandoffCallbackDurableObjectRequest(request, storage, env);
   }
@@ -408,16 +436,14 @@ export async function handleInstanceAuthHandoffDurableObjectRequest(
 
   try {
     const target = await verifiedHandoffStartTargetFromSearch(request, env, url);
-    const session =
-      target.requiredAccess === "owner"
-        ? await validateOwnerSessionAuthority(request, env)
-        : await validateOwnerSessionPrincipal(request, env);
+    const session = await validateAuthOriginSession(request, env, target.requiredAccess);
 
     if (!session.ok) {
-      return redirectResponse(
-        ownerLoginRedirectLocationForRoute(authAccountRedirectTargetForRequest(request)),
-        302,
-      );
+      if (!acceptsRuntimeHtml(request.headers.get("Accept"))) {
+        return jsonResponse({ error: "Authenticated account session is required." }, 401);
+      }
+
+      return redirectResponse(authAccountRedirectTargetForRequest(request), 302);
     }
 
     if (target.requiredAccess === "authenticated") {
@@ -604,6 +630,142 @@ export async function validateHostAuthSessionManagementAuthority(
   });
 }
 
+export async function validateCentralAuthSessionAuthority(
+  request: Request,
+  env: InstanceAuthHandoffEnv,
+  options: {
+    now?: string;
+  } = {},
+): Promise<CentralAuthSessionAuthorityValidationResult> {
+  return validateCentralAuthSessionRequirement(request, env, {
+    now: options.now,
+    requiredAccess: "owner",
+  });
+}
+
+export async function validateCentralAuthSessionPrincipal(
+  request: Request,
+  env: InstanceAuthHandoffEnv,
+  options: {
+    accountCompletionTarget?: AccountCompletionGateTarget;
+    now?: string;
+  } = {},
+): Promise<CentralAuthSessionAuthorityValidationResult> {
+  return validateCentralAuthSessionRequirement(request, env, {
+    accountCompletionTarget: options.accountCompletionTarget,
+    now: options.now,
+    requiredAccess: "authenticated",
+  });
+}
+
+export async function validateCentralAuthSessionManagementAuthority(
+  request: Request,
+  env: InstanceAuthHandoffEnv,
+  options: {
+    now?: string;
+  } = {},
+): Promise<CentralAuthSessionAuthorityValidationResult> {
+  return validateCentralAuthSessionRequirement(request, env, {
+    now: options.now,
+    requiredAccess: "management",
+  });
+}
+
+async function validateCentralAuthSessionRequirement(
+  request: Request,
+  env: InstanceAuthHandoffEnv,
+  options: {
+    accountCompletionTarget?: AccountCompletionGateTarget;
+    now?: string;
+    requiredAccess: CentralSessionAuthorityRequirement;
+  },
+): Promise<CentralAuthSessionAuthorityValidationResult> {
+  const id = env.FORMLESS_AUTHORITY.idFromName(FORMLESS_INSTANCE_AUTHORITY_NAME);
+  const response = await env.FORMLESS_AUTHORITY.get(id).fetch(
+    new Request(new URL(instanceAuthCentralSessionValidatePath, request.url), {
+      body: JSON.stringify({
+        requiredAccess: options.requiredAccess,
+        ...(options.accountCompletionTarget === undefined
+          ? {}
+          : { accountCompletionTarget: options.accountCompletionTarget }),
+        ...(options.now === undefined ? {} : { now: options.now }),
+      }),
+      headers: request.headers,
+      method: "POST",
+    }),
+  );
+  const body = (await response.json()) as {
+    accountCompletion?: AccountCompletionGateResolutionResult;
+    authorized?: boolean;
+    ownerSessionFallbackAllowed?: boolean;
+    reason?: CentralAuthSessionAuthorityValidationFailureReason;
+    session?: CentralAuthSession;
+  };
+  const ownerSessionFallbackAllowed = body.ownerSessionFallbackAllowed === true;
+
+  if (!response.ok || body.authorized !== true || body.session === undefined) {
+    return {
+      ok: false,
+      ...(body.accountCompletion === undefined
+        ? {}
+        : {
+            accountCompletion: parseAccountCompletionGateResolutionResult(body.accountCompletion),
+          }),
+      ownerSessionFallbackAllowed,
+      reason: body.reason ?? missingCentralAuthorityReason(options.requiredAccess),
+    };
+  }
+
+  return {
+    ok: true,
+    ownerSessionFallbackAllowed,
+    session: parseCentralAuthSessionBody(body.session),
+  };
+}
+
+async function validateAuthOriginSession(
+  request: Request,
+  env: InstanceAuthHandoffEnv,
+  requiredAccess: ProtectedRouteAccess,
+  options: { now?: string } = {},
+): Promise<
+  | { ok: true; session: CentralAuthSession | OwnerSession }
+  | {
+      ok: false;
+      reason: CentralAuthSessionAuthorityValidationFailureReason | "missing-principal";
+    }
+> {
+  const centralSession =
+    requiredAccess === "owner"
+      ? await validateCentralAuthSessionAuthority(request, env, { now: options.now })
+      : await validateCentralAuthSessionPrincipal(request, env, { now: options.now });
+
+  if (centralSession.ok) {
+    return { ok: true, session: centralSession.session };
+  }
+
+  if (!centralSession.ownerSessionFallbackAllowed && !isLocalOwnerSessionRuntime(request, env)) {
+    return { ok: false, reason: centralSession.reason };
+  }
+
+  const ownerSession =
+    requiredAccess === "owner"
+      ? await validateOwnerSessionAuthority(request, env, { now: options.now })
+      : await validateOwnerSessionPrincipal(request, env, { now: options.now });
+
+  if (ownerSession.ok) {
+    return { ok: true, session: ownerSession.session };
+  }
+
+  return {
+    ok: false,
+    reason:
+      ownerSession.reason === "missing-owner-authority"
+        ? "missing-owner-authority"
+        : "missing-principal",
+  };
+}
+
 async function validateHostAuthSessionRequirement(
   request: Request,
   env: InstanceAuthHandoffEnv,
@@ -682,12 +844,35 @@ export async function validateRouteAccessSession(
       : hostAuthSessionTargetForRuntimeRoute(request, options.runtimeRoute, {
           minimumAccess: options.requiredAccess,
         }));
-  const ownerSession =
+  const centralSession =
     options.requiredAccess === "owner"
-      ? await validateOwnerSessionAuthority(request, env, { now: options.now })
-      : await validateOwnerSessionPrincipal(request, env, { now: options.now });
+      ? await validateCentralAuthSessionAuthority(request, env, { now: options.now })
+      : await validateCentralAuthSessionPrincipal(request, env, {
+          ...(target === undefined
+            ? {}
+            : { accountCompletionTarget: accountCompletionTargetForRouteRequest(request, target) }),
+          now: options.now,
+        });
 
-  if (ownerSession.ok) {
+  if (centralSession.ok) {
+    return {
+      ok: true,
+      ownerAuthorized: options.requiredAccess === "owner",
+      principalId: centralSession.session.principalId,
+      session: centralSession.session,
+      ...(target === undefined ? {} : { target }),
+      via: "central-session",
+    };
+  }
+
+  const ownerSession =
+    centralSession.ownerSessionFallbackAllowed || isLocalOwnerSessionRuntime(request, env)
+      ? options.requiredAccess === "owner"
+        ? await validateOwnerSessionAuthority(request, env, { now: options.now })
+        : await validateOwnerSessionPrincipal(request, env, { now: options.now })
+      : undefined;
+
+  if (ownerSession?.ok) {
     const accountCompletion = await resolveRouteAccessAccountCompletion(
       request,
       env,
@@ -734,16 +919,19 @@ export async function validateRouteAccessSession(
     };
   }
 
+  const accountCompletion = hostSession?.accountCompletion ?? centralSession.accountCompletion;
+
   return {
     ok: false,
-    ...(hostSession?.accountCompletion === undefined
-      ? {}
-      : { accountCompletion: hostSession.accountCompletion }),
+    ...(accountCompletion === undefined ? {} : { accountCompletion }),
     reason:
       hostSession?.reason ??
-      (ownerSession.reason === "missing-owner-authority"
-        ? "missing-owner-authority"
-        : "missing-principal"),
+      (centralSession.reason === "account-completion-required"
+        ? "account-completion-required"
+        : ownerSession?.reason === "missing-owner-authority" ||
+            centralSession.reason === "missing-owner-authority"
+          ? "missing-owner-authority"
+          : "missing-principal"),
   };
 }
 
@@ -755,7 +943,7 @@ export function accountCompletionBlockedResponse(
 
 export function authenticatedOperationActorForSession(session: {
   principalId: string;
-  session: Pick<HostAuthSession | OwnerSession, "instanceId">;
+  session: Pick<CentralAuthSession | HostAuthSession | OwnerSession, "instanceId">;
   target?: InstanceAuthSessionTargetBinding;
 }): OperationInvocationActor | undefined {
   if (session.target === undefined) {
@@ -1036,6 +1224,112 @@ async function handleHostAuthSessionValidationDurableObjectRequest(
   } catch {
     return jsonResponse({ authorized: false, reason: "malformed-payload" }, 400);
   }
+}
+
+async function handleCentralAuthSessionValidationDurableObjectRequest(
+  request: Request,
+  storage: DurableObjectStorage,
+  env: InstanceAuthHandoffEnv,
+): Promise<Response> {
+  if (request.method !== "POST") {
+    return jsonResponse({ error: "Method not allowed." }, 405, { Allow: "POST" });
+  }
+
+  const ownerSessionFallbackAllowed = readInstanceAuthConfig(storage) === undefined;
+
+  try {
+    const body = (await request.json()) as {
+      accountCompletionTarget?: unknown;
+      now?: unknown;
+      requiredAccess?: unknown;
+    };
+    const requiredAccess = parseCentralSessionAuthorityRequirement(body.requiredAccess) ?? "owner";
+    const session = await validateCentralAuthSessionCookie(request, storage, env, {
+      now: typeof body.now === "string" ? body.now : undefined,
+    });
+
+    if (!session.ok) {
+      return jsonResponse(
+        {
+          authorized: false,
+          ownerSessionFallbackAllowed,
+          reason: session.reason,
+        },
+        401,
+      );
+    }
+
+    if (!(await centralSessionPrincipalSatisfiesAuthority(env, session.session, requiredAccess))) {
+      return jsonResponse(
+        {
+          authorized: false,
+          ownerSessionFallbackAllowed,
+          reason: missingAuthorityReason(requiredAccess),
+        },
+        401,
+      );
+    }
+
+    if (requiredAccess === "authenticated" && body.accountCompletionTarget !== undefined) {
+      const accountCompletion = await resolveAccountCompletionGate({
+        env,
+        input: {
+          actorKind: "authenticated",
+          principalId: session.session.principalId,
+          target: parseAccountCompletionTargetPayload(body.accountCompletionTarget),
+        },
+        storage,
+      });
+
+      if (accountCompletion.status === "blocked") {
+        return jsonResponse(
+          {
+            accountCompletion: parseAccountCompletionGateResolutionResult(accountCompletion),
+            authorized: false,
+            ownerSessionFallbackAllowed,
+            reason: "account-completion-required",
+          },
+          409,
+        );
+      }
+    }
+
+    return jsonResponse({
+      authorized: true,
+      ownerSessionFallbackAllowed,
+      session: session.session,
+    });
+  } catch {
+    return jsonResponse(
+      {
+        authorized: false,
+        ownerSessionFallbackAllowed,
+        reason: "malformed-payload",
+      },
+      400,
+    );
+  }
+}
+
+async function centralSessionPrincipalSatisfiesAuthority(
+  env: InstanceAuthHandoffEnv,
+  session: CentralAuthSession,
+  requiredAccess: CentralSessionAuthorityRequirement,
+): Promise<boolean> {
+  if (requiredAccess === "management") {
+    const authority = await readInternalIdentityAuthorityForPrincipal(env, session.principalId);
+
+    return (
+      authority?.id === session.principalId && (authority.instanceAdmin || authority.instanceOwner)
+    );
+  }
+
+  const principal =
+    requiredAccess === "owner"
+      ? await readInternalIdentityOwnerForPrincipal(env, session.principalId)
+      : await readInternalActiveIdentityPrincipal(env, session.principalId);
+
+  return principal?.id === session.principalId;
 }
 
 async function hostSessionPrincipalSatisfiesAuthority(
@@ -1548,6 +1842,34 @@ function parseHostAuthSession(value: unknown): HostAuthSession | undefined {
   };
 }
 
+function parseCentralAuthSessionBody(value: unknown): CentralAuthSession {
+  if (
+    !isRecord(value) ||
+    typeof value.instanceId !== "string" ||
+    value.instanceId.trim() === "" ||
+    typeof value.principalId !== "string" ||
+    value.principalId.trim() === "" ||
+    typeof value.issuedAt !== "string" ||
+    value.issuedAt.trim() === "" ||
+    typeof value.expiresAt !== "string" ||
+    value.expiresAt.trim() === "" ||
+    typeof value.sessionIdHash !== "string" ||
+    value.sessionIdHash.trim() === "" ||
+    !isTimestamp(value.issuedAt) ||
+    !isTimestamp(value.expiresAt)
+  ) {
+    throw new Error("Central auth session validation response is malformed.");
+  }
+
+  return {
+    expiresAt: value.expiresAt,
+    instanceId: value.instanceId.trim(),
+    issuedAt: value.issuedAt,
+    principalId: value.principalId.trim(),
+    sessionIdHash: value.sessionIdHash.trim(),
+  };
+}
+
 function hostAuthSessionTargetBindingsEqual(
   left: InstanceAuthSessionTargetBinding,
   right: InstanceAuthSessionTargetBinding,
@@ -1587,6 +1909,25 @@ function parseHostSessionAuthorityRequirement(
   value: unknown,
 ): HostSessionAuthorityRequirement | undefined {
   return value === "management" ? value : parseProtectedRouteAccess(value);
+}
+
+function parseCentralSessionAuthorityRequirement(
+  value: unknown,
+): CentralSessionAuthorityRequirement | undefined {
+  return value === "management" ? value : parseProtectedRouteAccess(value);
+}
+
+function missingCentralAuthorityReason(
+  requiredAccess: CentralSessionAuthorityRequirement,
+): CentralAuthSessionAuthorityValidationFailureReason {
+  switch (requiredAccess) {
+    case "authenticated":
+      return "missing-principal";
+    case "management":
+      return "missing-management-authority";
+    case "owner":
+      return "missing-owner-authority";
+  }
 }
 
 function missingAuthorityReason(

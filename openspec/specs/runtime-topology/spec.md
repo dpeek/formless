@@ -42,15 +42,15 @@ the product instance profile.
 - WHEN a request targets schema-key browser or schema-key API routes
 - THEN those schema-key routes are not available
 - AND installed app API routes, installed app browser routes, installed Site
-  public routes, principal-backed owner session browser routes, instance
-  browser routes, and the workspace gateway API route family remain
+  public routes, account auth routes, principal-backed browser session routes,
+  instance browser routes, and the workspace gateway API route family remain
   route-policy eligible
 
 #### Scenario: Dev route policy
 
 - GIVEN the runtime profile is `dev`
 - WHEN a request targets bundled source app, installed app, installed Site,
-  instance, owner session, schema-key API, or workspace gateway API routes
+  instance, account auth, schema-key API, or workspace gateway API routes
 - THEN those route families remain available
 - AND the dev workbench can compose source app and product instance surfaces together
 
@@ -61,7 +61,7 @@ The system SHALL mount browser surfaces according to the active runtime profile.
 #### Scenario: Product instance browser routes
 
 - GIVEN the runtime profile is `instance`
-- WHEN a browser navigates to `/`, `/deployments`, `/access`, `/setup`, `/login`,
+- WHEN a browser navigates to `/`, `/deployments`, `/access`,
   `/apps/<installId>`, `/sites/<installId>`, or `/sites/<installId>/*`
 - THEN the request is eligible for the client shell
 - AND source app routes such as `/tasks`, `/crm/audiences`, `/site/schema`, and
@@ -79,9 +79,9 @@ The system SHALL mount browser surfaces according to the active runtime profile.
   identity summary reads, collaborator invitation creation, role grants, and
   destructive identity actions remain authorized by identity-control-plane
   management rules
-- AND installed app routing, public Site routing, owner setup, owner login, and
-  raw generated identity-control-plane record editing remain separate route
-  families
+- AND installed app routing, public Site routing, account orchestrator routes,
+  account gate routes, and raw generated identity-control-plane record editing
+  remain separate route families
 
 #### Scenario: Product instance deployment route
 
@@ -91,21 +91,22 @@ The system SHALL mount browser surfaces according to the active runtime profile.
 - AND the route is treated as an owner-only instance browser surface unless a
   less restrictive route access policy explicitly allows anonymous or
   authenticated access
-- AND installed app routing, public Site routing, owner setup, and owner login
-  routes remain separate route families
+- AND installed app routing, public Site routing, account orchestrator routes,
+  and account gate routes remain separate route families
 
-#### Scenario: Product instance owner auth routes
+#### Scenario: Product instance account gate routes
 
 - GIVEN a browser is on the configured auth origin
-- WHEN it navigates to `/setup` or `/login`
-- THEN the client shell is eligible to render the owner setup or owner login
-  route
+- WHEN it navigates to `/formless/auth/setup` or `/formless/auth/sign-in`
+- THEN the runtime may redirect or render through the account orchestrator
+  contract
 - AND passkey ceremony API calls use the canonical instance auth origin
 - AND auth route eligibility is origin-scoped reserved runtime behavior rather
   than an exclusive runtime profile
 - AND when the configured auth origin is also the preferred admin origin, the
-  same host can serve owner auth routes and ordinary instance admin routes
+  same host can serve account gate routes and ordinary instance admin routes
   according to path and route access policy
+- AND account gate routes do not become durable logged-in account surfaces
 
 #### Scenario: Auth origin account orchestrator routes
 
@@ -148,17 +149,18 @@ surfaces or protected management API data.
 - WHEN the request does not include a valid session for an active principal on
   the matched host, route, target profile, and target app install or storage
   identity
-- THEN the runtime redirects to the configured auth origin through the same
-  safe return-target rules used for protected browser routes
+- THEN the runtime redirects to `/formless/auth` on the configured auth origin
+  through safe return-target or target-bound handoff rules
 - AND the authenticated browser shell, generated app surface, public Site
   document, or app screen is not served before authentication completes
 
 #### Scenario: Authenticated browser route
 
 - GIVEN a runtime browser route has effective access `authenticated`
-- WHEN the request includes a valid owner session or host-local session for an
-  active principal on the matched host, route, target profile, and target app
-  install or storage identity
+- WHEN the request includes a valid central auth session on the configured auth
+  origin, local-dev owner session, or host-local session for an active principal
+  on the matched host, route, target profile, and target app install or storage
+  identity
 - THEN the route remains eligible for the matching browser shell, generated app
   surface, public Site document, or app screen
 - AND `authenticated` access does not by itself grant owner-only instance
@@ -168,10 +170,11 @@ surfaces or protected management API data.
 
 - GIVEN a runtime browser route has effective access `owner`
 - AND the request is a `GET` or `HEAD` request that accepts HTML
-- WHEN the request does not include a valid owner session for an active
-  principal with active `instance.owner` authority
-- THEN the runtime redirects to the owner login route on the configured auth
-  origin, or starts cross-domain auth handoff when the matched host is not the
+- WHEN the request does not include a valid central auth session on the
+  configured auth origin, local-dev owner session, or host-local session for an
+  active principal with active `instance.owner` authority
+- THEN the runtime redirects to `/formless/auth` on the configured auth origin,
+  or starts cross-domain auth handoff when the matched host is not the
   configured auth origin
 - AND the owner-only browser shell, instance dashboard, generated app surface,
   or app screen is not served
@@ -194,26 +197,30 @@ surfaces or protected management API data.
 #### Scenario: Authenticated owner browser route
 
 - GIVEN a runtime browser route has effective access `owner`
-- WHEN the request includes a valid owner session or host-local session for an
-  active principal with active `instance.owner` authority
+- WHEN the request includes a valid central auth session on the configured auth
+  origin, local-dev owner session, or host-local session for an active principal
+  with active `instance.owner` authority
 - THEN the route remains eligible for the matching instance dashboard,
   generated app surface, or app screen
+- AND deployed auth-origin owner access may be satisfied by a central auth
+  session whose principal still has active `instance.owner` authority
 
 #### Scenario: Anonymous route remains public
 
 - GIVEN a runtime browser route has effective access `anonymous`
 - WHEN the request is otherwise eligible for the active runtime profile
 - THEN the route can be served without a principal-backed browser session
-- AND owner setup, owner login, installed Site public routes, published Site
-  documents, public Site resources, static assets, and public actions remain
-  available according to their existing route policies
+- AND account orchestrator routes, account gate routes, installed Site public
+  routes, published Site documents, public Site resources, static assets, and
+  public actions remain available according to their existing route policies
 
 #### Scenario: Authenticated app API route
 
 - GIVEN a browser API route is protected by effective access `authenticated`
-- WHEN the request does not include a valid owner session or host-local session
-  for an active principal on the matched host, route, target profile, and target
-  app install or storage identity
+- WHEN the request does not include a valid central auth session on the
+  configured auth origin, local-dev owner session, or host-local session for an
+  active principal on the matched host, route, target profile, and target app
+  install or storage identity
 - THEN the runtime returns an unauthorized JSON response
 - AND route access does not replace operation actor policy for generated app
   reads, writes, or command execution
@@ -222,9 +229,10 @@ surfaces or protected management API data.
 
 - GIVEN a management API route exposes owner-only instance dashboard or
   generated app administration data
-- WHEN the request does not include a valid owner session for an active
-  principal with active `instance.owner` authority, valid host-local session
-  for the matched owner-only route target, or valid admin bearer authorization
+- WHEN the request does not include a valid central auth session on the
+  configured auth origin, local-dev owner session for an active principal with
+  active `instance.owner` authority, valid host-local session for the matched
+  owner-only route target, or valid admin bearer authorization
 - THEN the runtime returns an unauthorized JSON response
 - AND public Site document reads, public Site indexing resources, public
   actions, and public route discovery needed for anonymous Site rendering are
@@ -243,8 +251,8 @@ surfaces or protected management API data.
   `instance:control-plane` storage identity
 - AND the runtime still rejects host-local sessions minted for a different
   mapped host, app install, route, profile, storage identity, or instance
-- AND the request does not require the central auth origin owner session cookie
-  to be scoped to the mapped instance host
+- AND the request does not require the central auth origin session cookie to be
+  scoped to the mapped instance host
 
 ### Requirement: Published Site Documents
 
@@ -333,8 +341,11 @@ profile behavior.
 - **THEN** the response is rendered from that installed Site storage
 - **AND** public links, indexing resources, root icons, and core media use
   top-level mapped-host paths
-- **AND** generated app routes, schema-key routes, instance shell routes, owner
-  setup, owner login, and passkey ceremony requests are blocked on that host
+- **AND** generated app routes, schema-key routes, instance shell routes,
+  account orchestrator routes, account completion gate routes, and passkey
+  ceremony requests are blocked on that host
+- **AND** account setup and sign-in gate browser requests redirect to the
+  configured auth origin when the mapped public Site host is not that origin
 - **AND** public Site document, indexing, and icon behavior is selected from the
   package runtime adapter registered for the route target's package app key
 
@@ -346,8 +357,8 @@ profile behavior.
 - **THEN** runtime topology reserves the request for cross-domain auth grant
   consumption
 - **AND** app schemas, generated app routes, public Site SSR, clean redirects,
-  static asset fallback, schema-key routes, owner setup, owner login, and
-  passkey ceremony routes do not claim the callback path
+  static asset fallback, schema-key routes, account gate routes, and passkey
+  ceremony routes do not claim the callback path
 - **AND** callback handling may issue only a host-local session for the matched
   route target before redirecting to a path-only return target
 
@@ -364,10 +375,12 @@ profile behavior.
   source app lookup
 - **AND** schema-key API routes are not exposed on the mapped app host while
   the matching installed app API route remains available
-- **AND** owner setup, owner login, and passkey ceremony requests do not treat
-  the mapped app host as a WebAuthn relying party
+- **AND** account setup and sign-in gate browser requests redirect to the
+  configured auth origin when the mapped app host is not that origin
+- **AND** account setup, account sign-in, and passkey ceremony requests do not
+  treat the mapped app host as a WebAuthn relying party
 - **AND** owner-only access on the mapped app host uses cross-domain auth
-  handoff and a host-local session instead of local owner login or passkey
+  handoff and a host-local session instead of local account sign-in or passkey
   ceremony routes
 
 #### Scenario: Mapped instance admin host
@@ -385,12 +398,12 @@ profile behavior.
   storage identity `instance:control-plane`
 - **AND** schema-key browser routes, source app routes, and unrelated installed
   app storage identities are not exposed through the mapped admin host
-- **AND** owner setup, owner login, owner session, and passkey ceremony routes
-  are served on the mapped admin host only when that host is also the configured
-  auth origin
-- **AND** when the mapped admin host is not the configured auth origin, owner
-  login and setup browser requests redirect to the configured auth origin and
-  passkey ceremony API requests do not run locally
+- **AND** account setup, account sign-in, central auth session, and passkey
+  ceremony routes are served on the mapped admin host only when that host is
+  also the configured auth origin
+- **AND** when the mapped admin host is not the configured auth origin, account
+  gate browser requests redirect to the configured auth origin and passkey
+  ceremony API requests do not run locally
 
 ### Requirement: Schema-Owned App Route Resolution
 

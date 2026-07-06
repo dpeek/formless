@@ -22,12 +22,11 @@ import type { OperationInvocationResponse } from "../shared/operation-invocation
 import type { BootstrapResponse } from "../shared/protocol.ts";
 import { recordOperationRequest } from "../test/authority-write.ts";
 import {
-  HOST_AUTH_NONCE_COOKIE_NAME,
   HOST_AUTH_SESSION_COOKIE_NAME,
   INSTANCE_AUTH_HANDOFF_CALLBACK_PATH,
   INSTANCE_AUTH_HANDOFF_START_PATH,
-  setHostAuthSessionTargetHeaders,
 } from "./instance-auth-handoff.ts";
+import { CENTRAL_AUTH_SESSION_COOKIE_NAME } from "./central-auth-session.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
 import { OWNER_SESSION_COOKIE_NAME } from "./owner-session.ts";
 import { handleCollaboratorInvitationAcceptanceBrowserRequest } from "./collaborator-invitation-acceptance.ts";
@@ -469,7 +468,15 @@ describe("collaborator invitation acceptance status", () => {
       handoffGrants: 0,
     });
     expect(verified.response.status).toBe(200);
-    expect(verified.response.headers.get("Set-Cookie")).toContain(`${OWNER_SESSION_COOKIE_NAME}=`);
+    expect(verified.response.headers.get("Set-Cookie")).toContain(
+      `${CENTRAL_AUTH_SESSION_COOKIE_NAME}=`,
+    );
+    expect(verified.response.headers.get("Set-Cookie")).not.toContain(
+      `${OWNER_SESSION_COOKIE_NAME}=`,
+    );
+    expect(verified.response.headers.get("Set-Cookie")).not.toContain(
+      `${HOST_AUTH_SESSION_COOKIE_NAME}=`,
+    );
     expect(verified.body).toMatchObject({
       acceptedPrincipal: {
         principalId: "principal:passkey",
@@ -819,7 +826,6 @@ describe("collaborator invitation acceptance status", () => {
     const appInstallId = `invite-target-${unique}`;
     const mappedHost = `invite-target-${unique}.example.com`;
     const targetEmail = `mapped-app-${unique}@example.com`;
-    const wrongMappedHost = `invite-target-wrong-${unique}.example.com`;
     const invitation = await createInvitation({
       invitationId: `invitation:mapped-app-${unique}`,
       targetEmail,
@@ -876,7 +882,8 @@ describe("collaborator invitation acceptance status", () => {
     const sessionCookie = requiredHeader(verified.response, "Set-Cookie");
 
     expect(verified.response.status).toBe(200);
-    expect(sessionCookie).toContain(`${OWNER_SESSION_COOKIE_NAME}=`);
+    expect(sessionCookie).toContain(`${CENTRAL_AUTH_SESSION_COOKIE_NAME}=`);
+    expect(sessionCookie).not.toContain(`${OWNER_SESSION_COOKIE_NAME}=`);
     expect(sessionCookie).not.toContain(`${HOST_AUTH_SESSION_COOKIE_NAME}=`);
     expect(verified.body).toMatchObject({
       acceptedPrincipal: {
@@ -886,6 +893,18 @@ describe("collaborator invitation acceptance status", () => {
       handoff: {
         returnTo: "/",
         targetOrigin: `https://${mappedHost}`,
+      },
+      accountCompletion: {
+        continueTo: "/",
+        status: "complete",
+        target: {
+          appInstallId,
+          returnTo: "/",
+          routeId: route.id,
+          storageIdentity: `app:${appInstallId}`,
+          targetOrigin: `https://${mappedHost}`,
+          targetProfile: "app",
+        },
       },
       session: { expiresAt: expect.any(String) },
       verified: true,
@@ -926,12 +945,15 @@ describe("collaborator invitation acceptance status", () => {
       },
       redirect: "manual",
     });
-    const callbackUrl = new URL(requiredHeader(grant, "Location"));
+    const grantLocation = new URL(requiredHeader(grant, "Location"), authOrigin);
 
     expect(grant.status).toBe(302);
-    expect(callbackUrl.origin).toBe(`https://${mappedHost}`);
-    expect(callbackUrl.pathname).toBe(INSTANCE_AUTH_HANDOFF_CALLBACK_PATH);
-    expect(callbackUrl.searchParams.get("grantSecret")).toMatch(/^[A-Za-z0-9_-]+$/);
+    expect(grantLocation.origin).toBe(target.targetOrigin);
+    expect(grantLocation.pathname).toBe(INSTANCE_AUTH_HANDOFF_CALLBACK_PATH);
+    expect(grantLocation.searchParams.get("grantId")).toEqual(expect.any(String));
+    expect(grantLocation.searchParams.get("grantSecret")).toEqual(expect.any(String));
+    expect(grantLocation.searchParams.get("state")).toBe(state);
+    expect(grantLocation.search).not.toContain(token);
     expect(await defaultAuthCounts()).toEqual({
       centralSessions: countsBefore.centralSessions + 1,
       challenges: countsBefore.challenges + 1,
@@ -939,53 +961,109 @@ describe("collaborator invitation acceptance status", () => {
       handoffGrants: countsBefore.handoffGrants + 1,
     });
 
-    const wrongRoute = await createDefaultRoute(`route:mapped-app-wrong:${unique}`, {
-      access: "authenticated",
-      appInstall: appInstallId,
-      enabled: true,
-      kind: "mount",
-      matchHost: wrongMappedHost,
-      matchPath: "/",
-      matchPrefix: "/",
-      surface: "admin",
-      targetProfile: "app",
-    });
-
-    const wrongHost = await harness.mf.dispatchFetch(callbackUrl.toString(), {
-      headers: handoffCallbackHeaders(`${HOST_AUTH_NONCE_COOKIE_NAME}=${nonce}`, {
-        ...target,
-        routeId: wrongRoute.id,
-        targetOrigin: `https://${wrongMappedHost}`,
-      }),
-      redirect: "manual",
-    });
-    const callback = await harness.mf.dispatchFetch(callbackUrl.toString(), {
-      headers: handoffCallbackHeaders(`${HOST_AUTH_NONCE_COOKIE_NAME}=${nonce}`, target),
-      redirect: "manual",
-    });
-    const replay = await harness.mf.dispatchFetch(callbackUrl.toString(), {
-      headers: handoffCallbackHeaders(`${HOST_AUTH_NONCE_COOKIE_NAME}=${nonce}`, target),
-      redirect: "manual",
-    });
-    const callbackCookie = requiredHeader(callback, "Set-Cookie");
-
     expect(route.values).toMatchObject({
       appInstall: appInstallId,
       matchHost: mappedHost,
       targetProfile: "app",
     });
-    expect(wrongHost.status).toBe(400);
-    expect(wrongHost.headers.get("Set-Cookie") ?? "").not.toContain(
-      `${HOST_AUTH_SESSION_COOKIE_NAME}=`,
+  });
+
+  it("blocks mapped handoff when account completion still requires app registration", async () => {
+    const unique = randomUUID().replace(/-/g, "");
+    const appInstallId = `invite-blocked-${unique}`;
+    const mappedHost = `invite-blocked-${unique}.example.com`;
+    const targetEmail = `blocked-mapped-app-${unique}@example.com`;
+    const invitation = await createInvitation({
+      invitationId: `invitation:blocked-mapped-app-${unique}`,
+      targetEmail,
+      targetSurface: "app-install",
+      targetAppInstallId: appInstallId,
+      invitedPrincipal: {
+        id: `principal:blocked-mapped-app-${unique}`,
+        displayName: "Blocked App Collaborator",
+      },
+    });
+    const token = rawTokenFor(invitation.id);
+
+    await writeDefaultAuthConfig();
+    await configureDefaultProductionIdentity();
+    await createDefaultAppInstall(appInstallId);
+    const route = await createDefaultRoute(`route:blocked-mapped-app:${unique}`, {
+      access: "authenticated",
+      appInstall: appInstallId,
+      enabled: true,
+      kind: "mount",
+      matchHost: mappedHost,
+      matchPath: "/",
+      matchPrefix: "/",
+      surface: "admin",
+      targetProfile: "app",
+    });
+    await createDefaultPrivateToken({
+      invitationId: invitation.id,
+      rawToken: token,
+      targetEmail,
+      targetSurface: "app-install",
+      targetAppInstallId: appInstallId,
+    });
+
+    const countsBefore = await defaultAuthCounts();
+    const options = await fetchDefaultPasskeyRegistrationOptions(invitation.id, token);
+    const authenticator = new VirtualPasskey(
+      Buffer.from(`blocked-mapped-app-credential:${unique}`).toString("base64url"),
     );
-    expect(callback.status).toBe(302);
-    expect(callback.headers.get("Location")).toBe("/");
-    expect(callbackCookie).toContain(`${HOST_AUTH_SESSION_COOKIE_NAME}=`);
-    expect(callbackCookie).toContain(`${HOST_AUTH_NONCE_COOKIE_NAME}=;`);
-    expect(replay.status).toBe(400);
-    expect(replay.headers.get("Set-Cookie") ?? "").not.toContain(
-      `${HOST_AUTH_SESSION_COOKIE_NAME}=`,
+
+    if (!("options" in options.body)) {
+      throw new Error(`Expected passkey options, received ${JSON.stringify(options.body)}.`);
+    }
+
+    const verified = await verifyDefaultPasskeyRegistration(
+      invitation.id,
+      token,
+      authenticator.registrationResponse(options.body.options, {
+        origin: authOrigin,
+        rpId: "example.com",
+      }),
     );
+    const sessionCookie = requiredHeader(verified.response, "Set-Cookie");
+
+    expect(verified.response.status).toBe(200);
+    expect(sessionCookie).toContain(`${CENTRAL_AUTH_SESSION_COOKIE_NAME}=`);
+    expect(sessionCookie).not.toContain(`${OWNER_SESSION_COOKIE_NAME}=`);
+    expect(sessionCookie).not.toContain(`${HOST_AUTH_SESSION_COOKIE_NAME}=`);
+    expect(verified.body).toMatchObject({
+      acceptedPrincipal: {
+        displayName: "Blocked App Collaborator",
+        principalId: `principal:blocked-mapped-app-${unique}`,
+      },
+      accountCompletion: {
+        gate: {
+          appInstallId,
+          kind: "app-registration",
+          registrationPolicy: "closed",
+        },
+        status: "blocked",
+        target: {
+          appInstallId,
+          returnTo: "/",
+          routeId: route.id,
+          storageIdentity: `app:${appInstallId}`,
+          targetOrigin: `https://${mappedHost}`,
+          targetProfile: "app",
+        },
+      },
+      session: { expiresAt: expect.any(String) },
+      verified: true,
+    });
+    expect(isObjectWithKey(verified.body, "handoff")).toBe(false);
+    expect(JSON.stringify(verified.body)).not.toContain(token);
+    expect(JSON.stringify(verified.body)).not.toContain("grantSecret");
+    expect(await defaultAuthCounts()).toEqual({
+      centralSessions: countsBefore.centralSessions + 1,
+      challenges: countsBefore.challenges + 1,
+      credentials: countsBefore.credentials + 1,
+      handoffGrants: countsBefore.handoffGrants,
+    });
   });
 
   it("continues instance targets through the preferred admin origin and normal handoff", async () => {
@@ -1072,7 +1150,8 @@ describe("collaborator invitation acceptance status", () => {
     };
 
     expect(verified.response.status).toBe(200);
-    expect(sessionCookie).toContain(`${OWNER_SESSION_COOKIE_NAME}=`);
+    expect(sessionCookie).toContain(`${CENTRAL_AUTH_SESSION_COOKIE_NAME}=`);
+    expect(sessionCookie).not.toContain(`${OWNER_SESSION_COOKIE_NAME}=`);
     expect(sessionCookie).not.toContain(`${HOST_AUTH_SESSION_COOKIE_NAME}=`);
     expect(decoyRoute.values.matchHost).toBe(decoyHost);
     expect(verified.body).toMatchObject({
@@ -1081,8 +1160,19 @@ describe("collaborator invitation acceptance status", () => {
         principalId: `principal:mapped-instance-${unique}`,
       },
       handoff: {
-        returnTo: "/login?redirectTo=%2F",
+        returnTo: "/",
         targetOrigin: `https://${adminHost}`,
+      },
+      accountCompletion: {
+        continueTo: "/",
+        status: "complete",
+        target: {
+          returnTo: "/",
+          routeId: adminRoute.id,
+          storageIdentity: INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
+          targetOrigin: `https://${adminHost}`,
+          targetProfile: "instance",
+        },
       },
       session: { expiresAt: expect.any(String) },
       verified: true,
@@ -1115,8 +1205,8 @@ describe("collaborator invitation acceptance status", () => {
     handoffStartUrl.searchParams.set("state", state);
 
     expect(continuationUrl.origin).toBe(`https://${adminHost}`);
-    expect(continuationUrl.pathname).toBe("/login");
-    expect(continuationUrl.searchParams.get("redirectTo")).toBe("/");
+    expect(continuationUrl.pathname).toBe("/");
+    expect(continuationUrl.search).toBe("");
     expect(handoffStartUrl.searchParams.get("targetOrigin")).toBe(`https://${adminHost}`);
     expect(handoffStartUrl.searchParams.get("routeId")).toBe(adminRoute.id);
     expect(handoffStartUrl.searchParams.get("targetProfile")).toBe("instance");
@@ -1132,20 +1222,21 @@ describe("collaborator invitation acceptance status", () => {
       },
       redirect: "manual",
     });
-    const callbackUrl = new URL(requiredHeader(grant, "Location"));
-    const callback = await harness.mf.dispatchFetch(callbackUrl.toString(), {
-      headers: handoffCallbackHeaders(`${HOST_AUTH_NONCE_COOKIE_NAME}=${nonce}`, target),
-      redirect: "manual",
-    });
-    const callbackCookie = requiredHeader(callback, "Set-Cookie");
+    const grantLocation = new URL(requiredHeader(grant, "Location"), authOrigin);
 
     expect(grant.status).toBe(302);
-    expect(callbackUrl.origin).toBe(`https://${adminHost}`);
-    expect(callbackUrl.pathname).toBe(INSTANCE_AUTH_HANDOFF_CALLBACK_PATH);
-    expect(callback.status).toBe(302);
-    expect(callback.headers.get("Location")).toBe("/");
-    expect(callbackCookie).toContain(`${HOST_AUTH_SESSION_COOKIE_NAME}=`);
-    expect(callbackCookie).not.toContain(`${OWNER_SESSION_COOKIE_NAME}=`);
+    expect(grantLocation.origin).toBe(target.targetOrigin);
+    expect(grantLocation.pathname).toBe(INSTANCE_AUTH_HANDOFF_CALLBACK_PATH);
+    expect(grantLocation.searchParams.get("grantId")).toEqual(expect.any(String));
+    expect(grantLocation.searchParams.get("grantSecret")).toEqual(expect.any(String));
+    expect(grantLocation.searchParams.get("state")).toBe(state);
+    expect(grantLocation.search).not.toContain(token);
+    expect(await defaultAuthCounts()).toEqual({
+      centralSessions: countsBefore.centralSessions + 1,
+      challenges: countsBefore.challenges + 1,
+      credentials: countsBefore.credentials + 1,
+      handoffGrants: countsBefore.handoffGrants + 1,
+    });
   });
 
   it("does not start invitation passkey ceremonies on mapped app or public Site hosts", async () => {
@@ -1738,23 +1829,6 @@ function requiredHeader(
   }
 
   return value;
-}
-
-function handoffCallbackHeaders(
-  cookie: string,
-  target: {
-    appInstallId?: string;
-    routeId: string;
-    storageIdentity?: string;
-    targetOrigin: string;
-    targetProfile: "app" | "instance" | "public-site";
-  },
-) {
-  const headers = new Headers({ Cookie: cookie });
-
-  setHostAuthSessionTargetHeaders(headers, target);
-
-  return Object.fromEntries(headers.entries());
 }
 
 function sha256Base64Url(value: string) {
