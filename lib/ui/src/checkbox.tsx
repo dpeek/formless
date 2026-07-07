@@ -1,9 +1,10 @@
-import { Checkbox as CheckboxPrimitive, type CheckboxProps } from "react-aria-components/Checkbox";
 import {
+  Checkbox as CheckboxPrimitive,
   CheckboxGroup as CheckboxGroupPrimitive,
   type CheckboxGroupProps,
-} from "react-aria-components/CheckboxGroup";
-import { composeRenderProps } from "react-aria-components/composeRenderProps";
+  type CheckboxProps,
+  composeRenderProps,
+} from "react-aria-components";
 import { twMerge } from "tailwind-merge";
 import { cx } from "./primitive";
 import { Label } from "./field";

@@ -374,6 +374,29 @@ The system SHALL render generated field displays and editors from field behavior
   invalid, alpha, missing, or unknown stored text values remain visible as
   field draft or display text rather than being coerced by Astryx
 
+#### Scenario: Astryx generated-field vertical slice
+
+- GIVEN the standalone Astryx package renders a generated-field migration slice
+- WHEN the slice renders one coherent record workflow and one public operation
+  form workflow
+- THEN create form fields, record edit fields, table-cell fields, detail or
+  read-only fields, and public-action form fields are composed from the same
+  projected Astryx field data contract
+- AND a package-local generated foundation fixture owns shared draft state,
+  validation errors, pending state, baseline values, commit, revert, missing
+  reference fallback, and submit readiness for the slice
+- AND text, long text, boolean, enum, reference, number, markdown, source SVG
+  icon, color, image-shaped, and media-shaped values are represented without
+  importing Formless storage, browser replica, generated write hooks, operation
+  executors, or media clients into Astryx
+- AND field-commit interactions invoke commit and revert intents, immediate
+  fields commit on change, and submit fields resolve through a submit-form
+  adapter boundary
+- AND invalid number draft text, missing reference ids, alpha or unknown color
+  values, markdown source, source icon SVG, media asset ids, media preview hrefs,
+  and display-safe field errors remain visible instead of being coerced by
+  Astryx primitives
+
 ### Requirement: Media Field Package Adapter
 
 The system SHALL keep generated field layout and commit behavior in generated UI
