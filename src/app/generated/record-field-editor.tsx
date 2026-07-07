@@ -8,18 +8,33 @@ import { useRecord, useSchema } from "../../client/store.ts";
 import { setSyncStatus } from "../../client/sync-status.ts";
 import { submitOperation } from "../../client/sync.ts";
 import type { EntityOperationPresentationConfig } from "../../client/operation-presentation-model.ts";
-import { fieldLabel, recordFieldIsWritable, type RecordFieldConfig } from "../../client/views.ts";
+import {
+  fieldLabel,
+  recordFieldIsWritable,
+  type RecordFieldConfig,
+  type RecordUnionPresentationConfig,
+} from "../../client/views.ts";
 import type { FieldValue, RecordValues } from "@dpeek/formless-storage";
 import { GeneratedRecordFieldControl } from "./record-field-control.tsx";
 import { RecordFieldDisplay } from "./record-field-display.tsx";
 import {
   fieldValueToRecordFieldEditorInputValue,
+  generatedRecordFieldEditorDraftFromUpdateDraftInput,
+  generatedRecordFieldUsesUpdateDraftResolver,
+  generatedUpdateDraftInputFromEditorDraft,
+  generatedUpdateDraftInputFromFieldValue,
   imageMediaAssetOptionFromUpload,
+  resolveGeneratedMediaUploadUpdateDraftPatchValues,
+  resolveGeneratedUpdateDraftPatchValues,
+  resolveGeneratedValueUnitUpdateDraftPatchValues,
   selectGeneratedIconDialogDraft,
   selectGeneratedRecordFieldDraftValues,
   selectGeneratedRecordFieldMediaAuthoring,
   selectGeneratedRecordFieldPatchValues,
-  siteImageUploadPatchValues,
+  type GeneratedRecordValueUnitDraftCommit,
+  type GeneratedUpdateDraftInput,
+  type GeneratedUpdateDraftFieldInput,
+  type GeneratedUpdateDraftResolution,
   upsertMediaAssetOption,
 } from "./record-field-authoring.ts";
 import { inputValueToFieldValue } from "./format.ts";
@@ -28,12 +43,31 @@ import { StateMachineStateBadge } from "./state-machine-ui.tsx";
 
 type RecordFieldEditorProps = {
   density?: "default" | "compact";
+  draftInput?: GeneratedUpdateDraftFieldInput;
   entityName: string;
   fieldConfig: RecordFieldConfig;
+  onDraftInputChange?: (
+    fieldName: string,
+    draftInput: GeneratedUpdateDraftFieldInput | undefined,
+  ) => void;
   presentation?: "default" | "heading";
   recordId: string;
   showLabel?: boolean;
+  updateDraftContext?: RecordFieldUpdateDraftContext;
   updateOperation?: EntityOperationPresentationConfig;
+};
+
+type RecordFieldUpdateDraftContext = {
+  baselineValues: RecordValues;
+  draft: GeneratedUpdateDraftInput;
+  fields: RecordFieldConfig[];
+  union?: RecordUnionPresentationConfig;
+};
+
+type CommitPatchOptions = {
+  allowWhilePending?: boolean;
+  autoSaveSource?: "media-reference";
+  managePending?: boolean;
 };
 
 export function RecordFieldEditor(props: RecordFieldEditorProps) {
@@ -75,11 +109,14 @@ function ReadOnlyRecordFieldDisplay({
 
 function EditableRecordFieldEditor({
   density = "default",
+  draftInput,
   entityName,
   fieldConfig,
+  onDraftInputChange,
   presentation = "default",
   recordId,
   showLabel = false,
+  updateDraftContext,
   updateOperation,
 }: RecordFieldEditorProps) {
   const appTarget = useSchemaAppTarget();
@@ -98,9 +135,15 @@ function EditableRecordFieldEditor({
     recordValue,
     unitRecordValue,
   });
-  const [draft, setDraft] = useState(() => initialDraftValues.draft);
+  const initialDraft = generatedRecordFieldEditorDraftFromUpdateDraftInput({
+    draftInput,
+    fieldConfig,
+    numberFormat,
+    recordValue,
+  });
+  const [draft, setDraft] = useState(() => initialDraft);
   const [iconDialogOpen, setIconDialogOpen] = useState(false);
-  const [iconDialogDraft, setIconDialogDraft] = useState(() => initialDraftValues.draft);
+  const [iconDialogDraft, setIconDialogDraft] = useState(() => initialDraft);
   const [unitDraft, setUnitDraft] = useState(() => initialDraftValues.unitDraft);
   const [mediaAssetOptions, setMediaAssetOptions] = useState<ImageMediaAssetOption[]>([]);
   const [isPending, setIsPending] = useState(false);
@@ -115,14 +158,19 @@ function EditableRecordFieldEditor({
   const { mediaEditorMode } = mediaAuthoring;
 
   useEffect(() => {
-    const nextDraft = fieldValueToRecordFieldEditorInputValue(field, recordValue, numberFormat);
+    const nextDraft = generatedRecordFieldEditorDraftFromUpdateDraftInput({
+      draftInput,
+      fieldConfig,
+      numberFormat,
+      recordValue,
+    });
 
     setDraft(nextDraft);
 
     if (!iconDialogOpen) {
       setIconDialogDraft(nextDraft);
     }
-  }, [field, numberFormat, recordValue]);
+  }, [draftInput, fieldConfig, numberFormat, recordValue, iconDialogOpen]);
 
   useEffect(() => {
     setUnitDraft(
@@ -162,11 +210,7 @@ function EditableRecordFieldEditor({
 
   async function commitPatch(
     values: Partial<RecordValues>,
-    options: {
-      allowWhilePending?: boolean;
-      autoSaveSource?: "media-reference";
-      managePending?: boolean;
-    } = {},
+    options: CommitPatchOptions = {},
   ): Promise<boolean> {
     const managePending = options.managePending ?? true;
 
@@ -220,6 +264,7 @@ function EditableRecordFieldEditor({
 
       setDraft(resetDraftValues.draft);
       setUnitDraft(resetDraftValues.unitDraft);
+      notifyDraftInputChange(undefined);
       setError(message);
       setSyncStatus({
         state: "error",
@@ -234,11 +279,97 @@ function EditableRecordFieldEditor({
   }
 
   async function commit(value: FieldValue): Promise<boolean> {
+    if (generatedRecordFieldUsesUpdateDraftResolver(fieldConfig)) {
+      return commitGeneratedUpdateDraft(generatedUpdateDraftInputFromFieldValue(value));
+    }
+
     return commitPatch({ [fieldName]: value });
+  }
+
+  async function commitGeneratedUpdateDraft(
+    nextDraftInput: GeneratedUpdateDraftFieldInput,
+  ): Promise<boolean> {
+    notifyDraftInputChange(nextDraftInput);
+
+    const resolution = resolveGeneratedUpdateDraftPatchValues({
+      baselineValues: updateDraftContext?.baselineValues ?? record?.values ?? {},
+      draft: {
+        values: {
+          ...updateDraftContext?.draft.values,
+          [fieldName]: nextDraftInput,
+        },
+      },
+      fieldNames: [fieldName],
+      fields: updateDraftContext?.fields ?? [fieldConfig],
+      union: updateDraftContext?.union,
+    });
+
+    return commitGeneratedUpdateDraftResolution(resolution);
+  }
+
+  async function commitGeneratedValueUnitDraft({
+    fieldDraftInput,
+    unitDraftInput,
+  }: GeneratedRecordValueUnitDraftCommit): Promise<boolean> {
+    if (valueUnitConfig === undefined) {
+      return false;
+    }
+
+    notifyDraftInputChange(fieldDraftInput);
+
+    const resolution = resolveGeneratedValueUnitUpdateDraftPatchValues({
+      baselineValues: updateDraftContext?.baselineValues ?? record?.values ?? {},
+      draft: { values: { ...updateDraftContext?.draft.values } },
+      fieldConfig: {
+        ...fieldConfig,
+        valueUnit: valueUnitConfig,
+      },
+      fieldDraftInput,
+      fields: updateDraftContext?.fields ?? [fieldConfig],
+      union: updateDraftContext?.union,
+      unitDraftInput,
+    });
+
+    return commitGeneratedUpdateDraftResolution(resolution);
+  }
+
+  async function commitGeneratedUpdateDraftResolution(
+    resolution: GeneratedUpdateDraftResolution,
+    options?: CommitPatchOptions,
+  ): Promise<boolean> {
+    const fieldError =
+      resolution.fieldErrors[fieldName] ?? Object.values(resolution.fieldErrors)[0];
+
+    if (fieldError !== undefined) {
+      setError(fieldError.message);
+      return false;
+    }
+
+    return commitPatch(resolution.patchValues, options);
+  }
+
+  function notifyDraftInputChange(nextDraftInput: GeneratedUpdateDraftFieldInput | undefined) {
+    if (!generatedRecordFieldUsesUpdateDraftResolver(fieldConfig)) {
+      return;
+    }
+
+    onDraftInputChange?.(fieldName, nextDraftInput);
+  }
+
+  function handleDraftChange(value: string) {
+    setDraft(value);
+    notifyDraftInputChange(
+      generatedUpdateDraftInputFromEditorDraft({
+        fieldConfig,
+        numberFormat,
+        value,
+      }),
+    );
   }
 
   function revertDraftToRecordValue() {
     setDraft(fieldValueToRecordFieldEditorInputValue(field, recordValue, numberFormat));
+    notifyDraftInputChange(undefined);
   }
 
   function revertUnitDraftToRecordValue() {
@@ -296,22 +427,33 @@ function EditableRecordFieldEditor({
 
     try {
       const upload = await uploadCoreImageMediaFile(file);
-      const saved = await commitPatch(
-        siteImageUploadPatchValues({
-          ...mediaAuthoring.uploadPatchFields,
-          upload,
-        }),
-        { allowWhilePending: true, autoSaveSource: "media-reference", managePending: false },
-      );
+      const resolution = resolveGeneratedMediaUploadUpdateDraftPatchValues({
+        baselineValues: updateDraftContext?.baselineValues ?? record?.values ?? {},
+        draft: { values: { ...updateDraftContext?.draft.values } },
+        entityName,
+        fieldConfig,
+        fields: updateDraftContext?.fields ?? [fieldConfig],
+        schema,
+        union: updateDraftContext?.union,
+        upload,
+        uploadPatchFields: mediaAuthoring.uploadPatchFields,
+      });
+      const saved = await commitGeneratedUpdateDraftResolution(resolution, {
+        allowWhilePending: true,
+        autoSaveSource: "media-reference",
+        managePending: false,
+      });
 
       if (saved) {
         const uploadedOption = imageMediaAssetOptionFromUpload(upload);
 
         if (mediaEditorMode === "asset" && uploadedOption) {
           setDraft(uploadedOption.id);
+          notifyDraftInputChange(generatedUpdateDraftInputFromFieldValue(uploadedOption.id));
           setMediaAssetOptions((current) => upsertMediaAssetOption(current, uploadedOption));
         } else {
           setDraft(upload.href);
+          notifyDraftInputChange(generatedUpdateDraftInputFromFieldValue(upload.href));
         }
       }
     } catch (error) {
@@ -344,7 +486,7 @@ function EditableRecordFieldEditor({
       iconDialogOpen={iconDialogOpen}
       isPending={isPending}
       numberFormat={numberFormat}
-      onDraftChange={setDraft}
+      onDraftChange={handleDraftChange}
       onDraftRevert={revertDraftToRecordValue}
       onErrorChange={setError}
       onIconCancel={cancelIconEdit}
@@ -353,13 +495,13 @@ function EditableRecordFieldEditor({
       onIconSave={handleIconSave}
       onImageFileSelect={(file) => void handleImageUpload(file)}
       onMediaAssetSelect={(assetId) => void handleMediaAssetSelect(assetId)}
-      onPatchValues={(values) => {
-        void commitPatch(values);
-      }}
       onUnitDraftChange={setUnitDraft}
       onUnitDraftRevert={revertUnitDraftToRecordValue}
       onValueCommit={(value) => {
         void commit(value);
+      }}
+      onValueUnitCommit={(commit) => {
+        void commitGeneratedValueUnitDraft(commit);
       }}
       presentation={presentation}
       recordValue={recordValue}

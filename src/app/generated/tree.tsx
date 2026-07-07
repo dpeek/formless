@@ -1176,12 +1176,12 @@ async function executeTreeChildCreateOperation(
     binding,
     callerInput: {
       bindingId: binding.id,
-      recordId: parentRecord.id,
-      source: "submitButton",
-      values: {
+      input: {
         childValues,
         ...(placementValues === undefined ? {} : { placementValues }),
       },
+      recordId: parentRecord.id,
+      source: "submitButton",
     },
     controller,
     setStatus: () => {},

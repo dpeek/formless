@@ -5,6 +5,7 @@ export {
   parseQualifiedEntityName,
 } from "./entity-names.ts";
 export * from "./create-defaults.ts";
+export * from "./field-drafts.ts";
 export * from "./field-types.ts";
 export * from "./fields.ts";
 export * from "./query.ts";

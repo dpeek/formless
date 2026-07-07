@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 import {
-  createDraftInputFromFormData,
   createDefaultsAreResolved,
+  generatedFieldDraftInputFromNativeFormData,
   parseCreateViewDefaults,
   resolveCreateDraftValues,
   resolveCreateValues,
@@ -181,13 +181,13 @@ describe("create defaults primitive", () => {
     });
   });
 
-  it("adapts FormData values into typed draft input before resolving", () => {
+  it("adapts native FormData values into shared typed draft input before resolving", () => {
     const formData = new FormData();
     formData.set("resource", "resource-1");
     formData.set("cost", "325");
     formData.set("price", "475");
 
-    const draft = createDraftInputFromFormData(formData);
+    const draft = generatedFieldDraftInputFromNativeFormData(formData);
 
     expect(draft).toEqual({
       values: {
@@ -221,13 +221,13 @@ describe("create defaults primitive", () => {
     );
   });
 
-  it("adapts boolean FormData values with field-aware typed drafts", () => {
+  it("adapts boolean native FormData values with field-aware typed drafts", () => {
     const formData = new FormData();
     formData.append("featured", "false");
     formData.append("featured", "on");
 
     expect(
-      createDraftInputFromFormData(formData, [
+      generatedFieldDraftInputFromNativeFormData(formData, [
         { fieldName: "featured", field: blockEntity.fields.featured },
       ]),
     ).toEqual({
@@ -293,7 +293,7 @@ describe("create defaults primitive", () => {
     expect(createDefaultsAreResolved(rateCreateDefaults, { today: "2026-05-12" })).toBe(false);
     expect(
       resolveCreateDraftValues({
-        draft: createDraftInputFromFormData(formData),
+        draft: generatedFieldDraftInputFromNativeFormData(formData),
         fields: [
           { fieldName: "resource", field: rateEntity.fields.resource },
           { fieldName: "cost", field: rateEntity.fields.cost },

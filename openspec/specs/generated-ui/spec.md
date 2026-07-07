@@ -400,6 +400,32 @@ while delegating media-specific controls to the Media React adapter.
 
 The system SHALL honor generated create, edit, `visibleWhen`, create default, union variant, and delete policies across record surfaces.
 
+#### Scenario: Shared authoring session foundation
+
+- GIVEN generated create forms, record update/edit surfaces, public operation
+  forms, or generated Astryx projections author field-shaped values
+- WHEN the user changes authored values
+- THEN a generated authoring session owns typed draft values, visible field
+  selection, field errors, submit or commit readiness, and optional baseline
+  values for future save/cancel behavior
+- AND generated controls and Astryx projections read from and write to that
+  session as the source of truth instead of reading values back from browser
+  form controls
+- AND schema-owned or generated-ui-owned resolvers convert typed drafts into
+  flat `RecordValues`, flat patch values, or declared operation input before
+  operation submission
+- AND `FormData`, browser field names, hidden submit inputs, and native form
+  extraction are adapter-only concerns at submit boundaries
+- AND shared draft resolution preserves boolean `false`, invalid number raw
+  draft text, reference ids with missing-option fallback, text-backed markdown,
+  icon, image, media, and color values, and display-safe field errors
+- AND public operation forms use the same controlled field authoring and
+  validation projection as generated admin forms for supported scalar operation
+  input fields
+- AND the foundation may carry baseline and revert facts needed by later
+  save/cancel edit sessions without requiring this flow to expose a full
+  cancelable edit mode
+
 #### Scenario: Create form submission
 
 - GIVEN a create form has hidden literal defaults and `visibleWhen` fields
@@ -436,6 +462,29 @@ The system SHALL honor generated create, edit, `visibleWhen`, create default, un
 - AND a FormData-based submit path, when needed by a public or native form
   adapter, first converts HTML form values into the same typed draft shape and
   then uses the same schema-owned create value resolver
+
+#### Scenario: Update draft patch resolution
+
+- GIVEN an existing record edit session contains committed baseline values and
+  typed draft values for writable generated fields
+- WHEN a field commit, edit dialog submit, or generated Astryx record intent
+  prepares an update
+- THEN generated UI resolves the draft through a generated patch resolver before
+  invoking the declared update operation
+- AND the resolver selects visible fields from draft-aware `visibleWhen` and
+  union discriminator state where a session is active
+- AND the resolver omits hidden fields, unchanged values, record system fields,
+  non-writable fields, and state-machine-owned fields from patch input
+- AND hidden drafts may remain available in the local session when fields are
+  hidden and later revealed, but they are not included in patch input while
+  hidden
+- AND invalid number drafts remain visible as raw text with a display-safe field
+  error instead of submitting `NaN` or reverting the draft
+- AND grouped generated adapters such as value-unit controls and media upload
+  controls resolve to flat patch values while media upload, picker, and preview
+  state remain generated or runtime adapter behavior outside schema storage
+- AND Authority validation remains the source of record validation for submitted
+  update operation input
 
 #### Scenario: Non-writable fields stay out of authoring
 
@@ -587,6 +636,40 @@ entity operations and view operation bindings.
 - AND generated UI surfaces unavailable target operations, missing Turnstile
   configuration, unsupported required input fields, and invalid target route
   facts as configuration feedback instead of rendering a working public form
+
+#### Scenario: Public operation form runtime authoring
+
+- GIVEN a public Site renders a working public operation form from
+  `operation.input.fields`
+- WHEN a visitor edits and submits the form
+- THEN generated UI uses a client-side controlled generated operation draft
+  session as the source of truth for submitted input values
+- AND the public form reuses generated field projection, editor selection,
+  display-safe validation, and Astryx-compatible field data for supported text,
+  long text, boolean, date, number, and enum input fields
+- AND generated validation owns required, type, enum, text format, and invalid
+  number errors before submission while the public operation executor remains
+  authoritative for server-side validation
+- AND native browser validation does not decide whether the generated public
+  form can submit
+- AND the resolved public input stays keyed by declared operation input names
+  until the operation execution boundary maps entity-backed inputs for
+  materialization
+- AND Turnstile proof values, source block ids, route facts, and idempotency
+  keys remain public operation adapter facts outside field authoring state
+- AND a native `FormData` path, when present, is only a submit adapter that
+  converts browser form values into the same typed operation draft shape before
+  resolution
+
+#### Scenario: Ordering stays direct operation input
+
+- GIVEN generated ordering controls prepare a sparse rank move for an ordered
+  result
+- WHEN the user moves a row, list item, or tree placement
+- THEN generated UI may continue to send the declared ordering patch value
+  directly through the operation controller
+- AND ordering moves do not require a generated authoring session unless a
+  future operation form explicitly exposes user-authored ordering input fields
 
 #### Scenario: Table controls bind operations directly
 

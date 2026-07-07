@@ -21,7 +21,7 @@ import { useRef } from "react";
 import { MediaFieldControl, type ImageMediaAssetOption } from "@dpeek/formless-media/react";
 import { useReferenceOptions, type ReferenceOption } from "../../client/store.ts";
 import { fieldLabel, type RecordFieldConfig } from "../../client/views.ts";
-import type { FieldValue, RecordValues } from "@dpeek/formless-storage";
+import type { FieldValue } from "@dpeek/formless-storage";
 import type {
   FieldPresentationEnumContent,
   FieldPresentationSchema,
@@ -51,9 +51,9 @@ import {
 import type { GeneratedFieldControl } from "./field-controls.ts";
 import { selectGeneratedRecordFieldAuthoringAdapter } from "./field-ui-adapters.ts";
 import {
+  type GeneratedRecordValueUnitDraftCommit,
   type GeneratedRecordFieldMediaEditorMode,
   selectGeneratedRecordFieldEditability,
-  selectValueUnitRecordPatchValues,
 } from "./record-field-authoring.ts";
 import {
   type GeneratedRecordFieldControlDensity,
@@ -97,9 +97,9 @@ export function GeneratedRecordFieldControl({
   onIconSave,
   onImageFileSelect,
   onMediaAssetSelect,
-  onPatchValues,
   onUnitDraftChange,
   onUnitDraftRevert,
+  onValueUnitCommit,
   onValueCommit,
   presentation = "default",
   recordValue,
@@ -128,9 +128,9 @@ export function GeneratedRecordFieldControl({
   onIconSave: () => Promise<void>;
   onImageFileSelect: (file: File | undefined) => void;
   onMediaAssetSelect: (assetId: string) => void;
-  onPatchValues: (values: Partial<RecordValues>) => void;
   onUnitDraftChange: (value: string) => void;
   onUnitDraftRevert: () => void;
+  onValueUnitCommit: (commit: GeneratedRecordValueUnitDraftCommit) => void;
   onValueCommit: (value: FieldValue) => void;
   presentation?: GeneratedRecordFieldControlPresentation;
   recordValue: FieldValue | undefined;
@@ -271,7 +271,6 @@ export function GeneratedRecordFieldControl({
         density={controlDensity}
         draft={draft}
         error={error}
-        fieldName={fieldName}
         fieldControl={fieldControl}
         isPending={isPending}
         labelClass={labelClass}
@@ -279,9 +278,9 @@ export function GeneratedRecordFieldControl({
         onDraftChange={onDraftChange}
         onDraftRevert={onDraftRevert}
         onErrorChange={onErrorChange}
-        onPatchValues={onPatchValues}
         onUnitDraftChange={onUnitDraftChange}
         onUnitDraftRevert={onUnitDraftRevert}
+        onValueUnitCommit={onValueUnitCommit}
         unitDraft={unitDraft}
         valueUnit={fieldConfig.valueUnit}
       />
@@ -959,7 +958,6 @@ function RecordValueUnitFieldRenderer({
   density,
   draft,
   error,
-  fieldName,
   fieldControl,
   isPending,
   labelClass,
@@ -967,9 +965,9 @@ function RecordValueUnitFieldRenderer({
   onDraftChange,
   onDraftRevert,
   onErrorChange,
-  onPatchValues,
   onUnitDraftChange,
   onUnitDraftRevert,
+  onValueUnitCommit,
   unitDraft,
   valueUnit,
 }: {
@@ -978,7 +976,6 @@ function RecordValueUnitFieldRenderer({
   density: GeneratedRecordFieldControlDensity;
   draft: string;
   error: string | null;
-  fieldName: string;
   fieldControl: GeneratedFieldControl;
   isPending: boolean;
   labelClass: string;
@@ -986,9 +983,9 @@ function RecordValueUnitFieldRenderer({
   onDraftChange: (value: string) => void;
   onDraftRevert: () => void;
   onErrorChange: (message: string | null) => void;
-  onPatchValues: (values: Partial<RecordValues>) => void;
   onUnitDraftChange: (value: string) => void;
   onUnitDraftRevert: () => void;
+  onValueUnitCommit: (commit: GeneratedRecordValueUnitDraftCommit) => void;
   unitDraft: string;
   valueUnit: NonNullable<RecordFieldConfig["valueUnit"]>;
 }) {
@@ -1018,9 +1015,9 @@ function RecordValueUnitFieldRenderer({
             onInputValueChange={onDraftChange}
             onInputValueCommit={(value) => {
               onErrorChange(null);
-              onPatchValues({
-                [fieldName]: value,
-                [valueUnit.unitFieldName]: inputValueToFieldValue(valueUnit.unitField, unitDraft),
+              onValueUnitCommit({
+                fieldDraftInput: { kind: "value", value },
+                unitDraftInput: { kind: "input", value: unitDraft },
               });
             }}
             onInputValueRevert={() => {
@@ -1033,15 +1030,10 @@ function RecordValueUnitFieldRenderer({
             onUnitChange={onUnitDraftChange}
             onUnitCommit={(unit) => {
               onErrorChange(null);
-              onPatchValues(
-                selectValueUnitRecordPatchValues({
-                  draft,
-                  fieldName,
-                  numberFormat,
-                  unit,
-                  valueUnitConfig: valueUnit,
-                }),
-              );
+              onValueUnitCommit({
+                fieldDraftInput: valueUnitFieldDraftInputFromEditorDraft(draft, numberFormat),
+                unitDraftInput: { kind: "input", value: unit },
+              });
             }}
             options={enumValueUnitOptions(valueUnit.unitField)}
             unit={unitDraft}
@@ -1054,6 +1046,17 @@ function RecordValueUnitFieldRenderer({
       </TextField>
     </div>
   );
+}
+
+function valueUnitFieldDraftInputFromEditorDraft(
+  draft: string,
+  numberFormat: TableColumnFormat,
+): GeneratedRecordValueUnitDraftCommit["fieldDraftInput"] {
+  const amount = decodeNumberEditorInputValue(draft, numberFormat);
+
+  return amount.kind === "valid"
+    ? { kind: "value", value: amount.value }
+    : { kind: "input", value: draft };
 }
 
 function RecordMarkdownFieldRenderer({

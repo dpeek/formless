@@ -271,6 +271,8 @@ invocation envelope before validating input or committing effects.
 - THEN the body contains submitted public input values, a
   `proof.turnstileToken` value, optional `source.siteBlockId`, and optional
   idempotency key using the public operation request envelope
+- AND generated public operation forms may resolve controlled operation drafts
+  into flat public input values before calling the browser client helper
 - AND product-specific forms remain responsible for mapping their own UI fields
   into the submitted public input values
 
@@ -368,6 +370,23 @@ input contract before challenge verification commits records.
 - WHEN input is validated
 - THEN the request is rejected with a public-safe validation error
 - AND no operation effects are committed
+
+#### Scenario: Public form draft projection
+
+- GIVEN a generated public form projects public-safe fields from a declared
+  operation input contract
+- WHEN browser code prepares the public operation request
+- THEN client-side form state is held as typed operation drafts keyed by
+  declared operation input name
+- AND the browser resolves those drafts to flat public input values before
+  constructing the public operation request envelope
+- AND optional empty drafts are omitted, boolean `false` remains explicit,
+  invalid number drafts remain visible as raw draft text with a display-safe
+  error, and required or unsupported inputs block client submission
+- AND native browser validation and raw `FormData` extraction are not the source
+  of truth for generated public operation input
+- AND server-side public operation input validation still validates the request
+  before challenge verification or successful outcome reservation
 
 ### Requirement: Turnstile Challenge
 

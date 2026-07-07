@@ -1,5 +1,16 @@
 import type { SitePublicOperationInputFieldNode } from "../types.ts";
-import { validateTextValueForStorage } from "@dpeek/formless-schema";
+import {
+  generatedFieldDraftInput,
+  generatedFieldDraftInputFromNativeFormData,
+  resolveGeneratedFieldDraftValues,
+  validateTextValueForStorage,
+  type FieldEditor,
+  type FieldSchema,
+  type FieldValue,
+  type GeneratedFieldDraft,
+  type GeneratedFieldDraftError,
+  type GeneratedFieldDraftInput,
+} from "@dpeek/formless-schema";
 import {
   TURNSTILE_RESPONSE_FIELD_NAME,
   buildPublicOperationRequestBody,
@@ -19,6 +30,9 @@ export type PublicOperationFormInputValue = PublicOperationInputValue;
 export type PublicOperationFormInputValues = PublicOperationInputValues;
 export type PublicOperationFormRequest = PublicOperationRequestEnvelope;
 export type PublicOperationFormResponse = PublicOperationResponse;
+export type PublicOperationFormDraftFieldInput = GeneratedFieldDraftInput;
+export type PublicOperationFormDraftInput = GeneratedFieldDraft;
+export type PublicOperationFormDraftFieldError = GeneratedFieldDraftError;
 export type PublicOperationFormExecutionResult =
   | {
       type: "committed" | "replayed";
@@ -29,6 +43,24 @@ export type PublicOperationFormExecutionResult =
       type: "failed";
       displayError: string;
     };
+
+export type PublicOperationFormInputFieldConfig = SitePublicOperationInputFieldNode & {
+  editor: FieldEditor;
+  field: FieldSchema;
+  fieldName: string;
+  inputName: string;
+};
+
+export type PublicOperationFormDraftSessionState = {
+  draft: PublicOperationFormDraftInput;
+};
+
+export type PublicOperationFormDraftSessionFacts = {
+  canSubmit: boolean;
+  fieldErrors: Record<string, PublicOperationFormDraftFieldError>;
+  input: PublicOperationFormInputValues;
+  visibleFields: PublicOperationFormInputFieldConfig[];
+};
 
 export type PublicOperationFormRequestInput = {
   idempotencyKey: string;
@@ -52,14 +84,156 @@ export type PublicOperationFormInputCoercionResult =
       error: string;
     };
 
-type CoercedFormFieldValue =
+type PublicOperationFormInputFieldValueResolution =
   | {
-      present: true;
+      kind: "set";
       value: PublicOperationFormInputValue;
     }
   | {
-      present: false;
+      kind: "omit";
+    }
+  | {
+      kind: "error";
+      error: PublicOperationFormDraftFieldError;
     };
+
+export function initialPublicOperationFormDraftSessionState({
+  fields,
+}: {
+  fields: readonly SitePublicOperationInputFieldNode[];
+}): PublicOperationFormDraftSessionState {
+  return {
+    draft: {
+      values: Object.fromEntries(
+        publicOperationFormInputFieldConfigs(fields).map((fieldConfig) => [
+          fieldConfig.inputName,
+          initialPublicOperationFormDraftFieldInput(fieldConfig),
+        ]),
+      ),
+    },
+  };
+}
+
+export function nextPublicOperationFormDraftSessionState({
+  inputName,
+  inputValue,
+  state,
+}: {
+  inputName: string;
+  inputValue: PublicOperationFormDraftFieldInput | undefined;
+  state: PublicOperationFormDraftSessionState;
+}): PublicOperationFormDraftSessionState {
+  const values = { ...state.draft.values };
+
+  if (inputValue === undefined) {
+    delete values[inputName];
+  } else {
+    values[inputName] = inputValue;
+  }
+
+  return {
+    ...state,
+    draft: { values },
+  };
+}
+
+export function selectPublicOperationFormDraftSession({
+  enabled = true,
+  fields,
+  state,
+}: {
+  enabled?: boolean;
+  fields: readonly SitePublicOperationInputFieldNode[];
+  state: PublicOperationFormDraftSessionState;
+}): PublicOperationFormDraftSessionFacts {
+  const visibleFields = publicOperationFormInputFieldConfigs(fields);
+  const resolution = resolvePublicOperationFormDraftInput({
+    draft: state.draft,
+    fields,
+  });
+
+  return {
+    canSubmit: enabled && Object.keys(resolution.fieldErrors).length === 0,
+    fieldErrors: resolution.fieldErrors,
+    input: resolution.input,
+    visibleFields,
+  };
+}
+
+export function resolvePublicOperationFormDraftInput({
+  draft,
+  fields,
+}: {
+  draft: PublicOperationFormDraftInput;
+  fields: readonly SitePublicOperationInputFieldNode[];
+}): {
+  fieldErrors: Record<string, PublicOperationFormDraftFieldError>;
+  input: PublicOperationFormInputValues;
+  visibleFields: string[];
+} {
+  const visibleFields = publicOperationFormInputFieldConfigs(fields);
+  const resolution = resolveGeneratedFieldDraftValues({
+    draft,
+    fields: visibleFields,
+    missingDraft: "omit",
+  });
+  const fieldErrors = { ...resolution.fieldErrors };
+  const input: PublicOperationFormInputValues = {};
+
+  for (const fieldConfig of visibleFields) {
+    if (fieldErrors[fieldConfig.inputName] !== undefined) {
+      continue;
+    }
+
+    const valueResolution = resolvePublicOperationFormInputFieldValue(
+      fieldConfig,
+      resolution.values[fieldConfig.inputName],
+    );
+
+    if (valueResolution.kind === "error") {
+      fieldErrors[fieldConfig.inputName] = valueResolution.error;
+      continue;
+    }
+
+    if (valueResolution.kind === "set") {
+      input[fieldConfig.inputName] = valueResolution.value;
+    }
+  }
+
+  return {
+    fieldErrors,
+    input,
+    visibleFields: visibleFields.map((field) => field.inputName),
+  };
+}
+
+export function publicOperationFormDraftInput(
+  value: FieldValue,
+): PublicOperationFormDraftFieldInput {
+  return generatedFieldDraftInput(value);
+}
+
+export function publicOperationFormDraftFromFormData(
+  fields: readonly SitePublicOperationInputFieldNode[],
+  formData: FormData,
+): PublicOperationFormDraftInput {
+  return generatedFieldDraftInputFromNativeFormData(
+    formData,
+    publicOperationFormInputFieldConfigs(fields),
+  );
+}
+
+export function publicOperationFormInputFieldConfigs(
+  fields: readonly SitePublicOperationInputFieldNode[],
+): PublicOperationFormInputFieldConfig[] {
+  return fields.map((field) => ({
+    ...field,
+    editor: publicOperationFormInputFieldEditor(field),
+    field: publicOperationFormInputFieldSchema(field),
+    fieldName: field.name,
+    inputName: field.name,
+  }));
+}
 
 export function publicOperationFormRequestBody(
   input: PublicOperationFormRequestInput,
@@ -114,104 +288,302 @@ export function publicOperationFormInputValuesFromFormData(
   fields: readonly SitePublicOperationInputFieldNode[],
   formData: FormData,
 ): PublicOperationFormInputCoercionResult {
-  const input: PublicOperationFormInputValues = {};
+  const result = resolvePublicOperationFormDraftInput({
+    draft: publicOperationFormDraftFromFormData(fields, formData),
+    fields,
+  });
+  const firstError = firstPublicOperationFormDraftError(result);
 
-  for (const field of fields) {
-    const result = publicOperationFormFieldValueFromFormData(field, formData);
-
-    if ("error" in result) {
-      return {
+  return firstError === undefined
+    ? {
+        ok: true,
+        input: result.input,
+      }
+    : {
         ok: false,
-        error: result.error,
+        error: firstError.message,
       };
-    }
-
-    if (result.present) {
-      input[field.name] = result.value;
-    }
-  }
-
-  return {
-    ok: true,
-    input,
-  };
 }
 
-function publicOperationFormFieldValueFromFormData(
-  field: SitePublicOperationInputFieldNode,
-  formData: FormData,
-): CoercedFormFieldValue | { error: string } {
-  if (field.control === "boolean") {
+function initialPublicOperationFormDraftFieldInput(
+  fieldConfig: PublicOperationFormInputFieldConfig,
+): PublicOperationFormDraftFieldInput {
+  if (fieldConfig.field.type === "boolean") {
+    return { kind: "value", value: false };
+  }
+
+  return { kind: "input", value: "" };
+}
+
+function firstPublicOperationFormDraftError(input: {
+  fieldErrors: Record<string, PublicOperationFormDraftFieldError>;
+}): PublicOperationFormDraftFieldError | undefined {
+  return Object.values(input.fieldErrors)[0];
+}
+
+function resolvePublicOperationFormInputFieldValue(
+  fieldConfig: PublicOperationFormInputFieldConfig,
+  value: FieldValue | undefined,
+): PublicOperationFormInputFieldValueResolution {
+  if (value === undefined) {
+    if (fieldConfig.field.type === "boolean") {
+      return { kind: "set", value: false };
+    }
+
+    return fieldConfig.required
+      ? {
+          kind: "error",
+          error: publicOperationFormInputFieldError(
+            fieldConfig.inputName,
+            `Field "${fieldConfig.inputName}" is required.`,
+          ),
+        }
+      : { kind: "omit" };
+  }
+
+  switch (fieldConfig.control) {
+    case "text":
+    case "longText":
+      return resolvePublicOperationFormTextInputFieldValue(fieldConfig, value);
+    case "boolean":
+      return typeof value === "boolean"
+        ? { kind: "set", value }
+        : {
+            kind: "error",
+            error: publicOperationFormInputFieldError(
+              fieldConfig.inputName,
+              `Field "${fieldConfig.inputName}" must be a boolean.`,
+            ),
+          };
+    case "date":
+      return resolvePublicOperationFormDateInputFieldValue(fieldConfig, value);
+    case "number":
+      return resolvePublicOperationFormNumberInputFieldValue(fieldConfig, value);
+    case "enum":
+      return resolvePublicOperationFormEnumInputFieldValue(fieldConfig, value);
+  }
+}
+
+function resolvePublicOperationFormTextInputFieldValue(
+  fieldConfig: PublicOperationFormInputFieldConfig,
+  value: FieldValue,
+): PublicOperationFormInputFieldValueResolution {
+  if (typeof value !== "string") {
     return {
-      present: true,
-      value: formData.has(field.name),
+      kind: "error",
+      error: publicOperationFormInputFieldError(
+        fieldConfig.inputName,
+        `Field "${fieldConfig.inputName}" must be text.`,
+      ),
     };
   }
 
-  const rawValue = formData.get(field.name);
-
-  if (rawValue === null || (typeof rawValue === "string" && rawValue.trim() === "")) {
-    return field.required ? { error: `${field.label} is required.` } : { present: false };
+  if (value.trim() === "") {
+    return fieldConfig.required
+      ? {
+          kind: "error",
+          error: publicOperationFormInputFieldError(
+            fieldConfig.inputName,
+            `Field "${fieldConfig.inputName}" cannot be empty.`,
+          ),
+        }
+      : { kind: "omit" };
   }
 
-  if (typeof rawValue !== "string") {
-    return { error: `${field.label} must be text.` };
-  }
-
-  switch (field.control) {
-    case "text":
-    case "longText":
-      return publicOperationTextFieldValue(rawValue, field);
-    case "date":
-      return isValidDateInputValue(rawValue)
-        ? {
-            present: true,
-            value: rawValue,
-          }
-        : { error: `${field.label} must be a valid date.` };
-    case "number": {
-      const numberValue = Number(rawValue);
-
-      return Number.isFinite(numberValue)
-        ? {
-            present: true,
-            value: numberValue,
-          }
-        : { error: `${field.label} must be a finite number.` };
-    }
-    case "enum":
-      return field.options?.some((option) => option.value === rawValue)
-        ? {
-            present: true,
-            value: rawValue,
-          }
-        : { error: `${field.label} must match a declared option.` };
-    default:
-      return { error: `${field.label} is not supported by this form.` };
-  }
-}
-
-function publicOperationTextFieldValue(
-  rawValue: string,
-  field: SitePublicOperationInputFieldNode,
-): CoercedFormFieldValue | { error: string } {
   try {
-    const result = validateTextValueForStorage({ format: field.format }, rawValue);
+    const result = validateTextValueForStorage({ format: fieldConfig.format }, value);
 
     return result.kind === "set"
       ? {
-          present: true,
+          kind: "set",
           value: result.value,
         }
-      : { present: false };
+      : { kind: "omit" };
   } catch (error) {
     return {
-      error: error instanceof Error ? error.message : `${field.label} is invalid.`,
+      kind: "error",
+      error: publicOperationFormInputFieldError(
+        fieldConfig.inputName,
+        error instanceof Error ? error.message : `Field "${fieldConfig.inputName}" is invalid.`,
+      ),
     };
   }
 }
 
-function isValidDateInputValue(value: string): boolean {
+function resolvePublicOperationFormDateInputFieldValue(
+  fieldConfig: PublicOperationFormInputFieldConfig,
+  value: FieldValue,
+): PublicOperationFormInputFieldValueResolution {
+  if (typeof value !== "string") {
+    return {
+      kind: "error",
+      error: publicOperationFormInputFieldError(
+        fieldConfig.inputName,
+        `Field "${fieldConfig.inputName}" must be a date.`,
+      ),
+    };
+  }
+
+  if (value.trim() === "") {
+    return fieldConfig.required
+      ? {
+          kind: "error",
+          error: publicOperationFormInputFieldError(
+            fieldConfig.inputName,
+            `Field "${fieldConfig.inputName}" cannot be empty.`,
+          ),
+        }
+      : { kind: "omit" };
+  }
+
+  return isValidPublicOperationFormDateInputValue(value)
+    ? {
+        kind: "set",
+        value,
+      }
+    : {
+        kind: "error",
+        error: publicOperationFormInputFieldError(
+          fieldConfig.inputName,
+          `Field "${fieldConfig.inputName}" must be a YYYY-MM-DD date.`,
+        ),
+      };
+}
+
+function resolvePublicOperationFormNumberInputFieldValue(
+  fieldConfig: PublicOperationFormInputFieldConfig,
+  value: FieldValue,
+): PublicOperationFormInputFieldValueResolution {
+  if (value === "") {
+    return fieldConfig.required
+      ? {
+          kind: "error",
+          error: publicOperationFormInputFieldError(
+            fieldConfig.inputName,
+            `Field "${fieldConfig.inputName}" cannot be empty.`,
+          ),
+        }
+      : { kind: "omit" };
+  }
+
+  return typeof value === "number" && Number.isFinite(value)
+    ? { kind: "set", value }
+    : {
+        kind: "error",
+        error: publicOperationFormInputFieldError(fieldConfig.inputName, "Enter a finite number."),
+      };
+}
+
+function resolvePublicOperationFormEnumInputFieldValue(
+  fieldConfig: PublicOperationFormInputFieldConfig,
+  value: FieldValue,
+): PublicOperationFormInputFieldValueResolution {
+  if (typeof value !== "string") {
+    return {
+      kind: "error",
+      error: publicOperationFormInputFieldError(
+        fieldConfig.inputName,
+        `Field "${fieldConfig.inputName}" must be a known enum value.`,
+      ),
+    };
+  }
+
+  if (value === "") {
+    return fieldConfig.required
+      ? {
+          kind: "error",
+          error: publicOperationFormInputFieldError(
+            fieldConfig.inputName,
+            `Field "${fieldConfig.inputName}" cannot be empty.`,
+          ),
+        }
+      : { kind: "omit" };
+  }
+
+  return fieldConfig.options?.some((option) => option.value === value) === true
+    ? { kind: "set", value }
+    : {
+        kind: "error",
+        error: publicOperationFormInputFieldError(
+          fieldConfig.inputName,
+          `Field "${fieldConfig.inputName}" must be a known enum value.`,
+        ),
+      };
+}
+
+function publicOperationFormInputFieldSchema(
+  field: SitePublicOperationInputFieldNode,
+): FieldSchema {
+  if (field.control === "text" || field.control === "longText") {
+    return {
+      type: "text",
+      required: field.required,
+      label: field.label,
+      ...(field.control === "longText" && field.format === undefined
+        ? { format: "longText" as const }
+        : {}),
+      ...(field.format === undefined ? {} : { format: field.format }),
+      ...(field.suggestions === undefined ? {} : { suggestions: field.suggestions }),
+    };
+  }
+
+  if (field.control === "boolean") {
+    return { type: "boolean", required: field.required, label: field.label };
+  }
+
+  if (field.control === "date") {
+    return { type: "date", required: field.required, label: field.label };
+  }
+
+  if (field.control === "number") {
+    return { type: "number", required: field.required, label: field.label };
+  }
+
+  return {
+    type: "enum",
+    required: field.required,
+    label: field.label,
+    values: Object.fromEntries((field.options ?? []).map((option) => [option.value, option])),
+  };
+}
+
+function publicOperationFormInputFieldEditor(
+  field: SitePublicOperationInputFieldNode,
+): FieldEditor {
+  if (field.control === "longText") {
+    return "textarea";
+  }
+
+  if (field.control === "boolean") {
+    return "boolean";
+  }
+
+  if (field.control === "date") {
+    return "date";
+  }
+
+  if (field.control === "number") {
+    return "number";
+  }
+
+  if (field.control === "enum") {
+    return "enum";
+  }
+
+  return "text";
+}
+
+function publicOperationFormInputFieldError(
+  inputName: string,
+  message: string,
+): PublicOperationFormDraftFieldError {
+  return {
+    fieldName: inputName,
+    message,
+  };
+}
+
+function isValidPublicOperationFormDateInputValue(value: string): boolean {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
 
   if (!match) {

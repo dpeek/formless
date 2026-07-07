@@ -144,7 +144,6 @@ export type GeneratedOperationCallerInput = {
   idempotencyKey?: string;
   input?: unknown;
   recordId?: string;
-  values?: Record<string, unknown>;
 };
 
 export type GeneratedOperationExecutionResult =

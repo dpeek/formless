@@ -1,22 +1,40 @@
 import { describe, expect, it } from "vite-plus/test";
-import type { CreateDraftFieldInput, FieldSchema } from "@dpeek/formless-schema";
+import type {
+  CreateDraftFieldInput,
+  FieldSchema,
+  PublicSafeOperationInputField,
+} from "@dpeek/formless-schema";
+import { generatedFieldDraftInput } from "@dpeek/formless-schema";
 import type { CreateFieldConfig, RecordFieldConfig } from "../../client/views.ts";
 import {
-  astryxFieldValueToGeneratedFieldValue,
   createGeneratedCreateAstryxFieldIntentHandlers,
-  createGeneratedAstryxFieldIntentHandlers,
+  createGeneratedOperationAstryxFieldIntentHandlers,
+  createGeneratedUpdateAstryxFieldIntentHandlers,
   projectGeneratedCreateAstryxFields,
+  projectGeneratedOperationAstryxFields,
   projectGeneratedRecordAstryxField,
   projectGeneratedRecordAstryxFields,
 } from "./astryx-field-projection.ts";
 import {
-  generatedCreateDraftFieldInput,
   initialGeneratedCreateDraftSessionState,
   nextGeneratedCreateDraftSessionState,
   resolveGeneratedCreateValues,
   selectGeneratedCreateDraftSession,
   type GeneratedCreateDraftSessionState,
 } from "./create-field-authoring.ts";
+import {
+  initialGeneratedUpdateDraftSessionState,
+  nextGeneratedUpdateDraftSessionState,
+  selectGeneratedUpdateDraftSession,
+  type GeneratedUpdateDraftFieldInput,
+} from "./record-field-authoring.ts";
+import {
+  initialGeneratedOperationDraftSessionState,
+  nextGeneratedOperationDraftSessionState,
+  selectGeneratedOperationDraftSession,
+  selectGeneratedOperationInputFieldConfigs,
+  type GeneratedOperationDraftFieldInput,
+} from "./operation-field-authoring.ts";
 
 describe("generated Astryx field projection", () => {
   it("projects visible create field configs and authoring state into Astryx editor data", () => {
@@ -100,53 +118,71 @@ describe("generated Astryx field projection", () => {
   });
 
   it("projects record authoring state, display values, access modes, options, and media metadata", () => {
+    const recordFields = [
+      recordField("title", fields.title, "text"),
+      recordField("done", fields.done, "boolean", { commit: "immediate" }),
+      recordField("owner", fields.owner, "reference", { commit: "immediate" }),
+      recordField("accentColor", fields.color, "color"),
+      recordField("hero", fields.image, "media"),
+      {
+        ...recordField("updatedAt", fields.systemText, "text", {
+          fieldRef: { kind: "system", name: "updatedAt" },
+          writable: false,
+        }),
+        label: "Updated at",
+      },
+      {
+        ...recordField("status", fields.status, "enum"),
+        stateMachine,
+      },
+    ];
+    const baselineValues = {
+      accentColor: "#2563EB80",
+      done: false,
+      hero: "hero.webp",
+      owner: "missing-owner",
+      status: "new",
+      title: "Committed title",
+      updatedAt: "2026-07-06T05:00:00Z",
+    };
+    const draftInputs: Array<[string, GeneratedUpdateDraftFieldInput]> = [
+      ["accentColor", generatedFieldDraftInput("#2563EB80")],
+      ["owner", generatedFieldDraftInput("missing-owner")],
+      ["title", generatedFieldDraftInput("Edited title")],
+    ];
+    const state = draftInputs.reduce(
+      (nextState, [fieldName, fieldValue]) =>
+        nextGeneratedUpdateDraftSessionState({
+          fieldName,
+          fieldValue,
+          state: nextState,
+        }),
+      initialGeneratedUpdateDraftSessionState({
+        baselineValues,
+        fields: recordFields,
+      }),
+    );
+    const session = selectGeneratedUpdateDraftSession({
+      fields: recordFields,
+      state,
+    });
     const projected = projectGeneratedRecordAstryxFields({
       canPatch: true,
       density: "compact",
-      draftsByFieldName: {
-        accentColor: "#2563EB80",
-        owner: "missing-owner",
-        title: "Edited title",
-      },
       errorsByFieldName: {
         title: "Save failed.",
       },
-      fields: [
-        recordField("title", fields.title, "text"),
-        recordField("done", fields.done, "boolean", { commit: "immediate" }),
-        recordField("owner", fields.owner, "reference", { commit: "immediate" }),
-        recordField("accentColor", fields.color, "color"),
-        recordField("hero", fields.image, "media"),
-        {
-          ...recordField("updatedAt", fields.systemText, "text", {
-            fieldRef: { kind: "system", name: "updatedAt" },
-            writable: false,
-          }),
-          label: "Updated at",
-        },
-        {
-          ...recordField("status", fields.status, "enum"),
-          stateMachine,
-        },
-      ],
       mediaAssetOptionsByFieldName: {
         hero: [{ href: "/media/hero.webp", id: "hero.webp", label: "Hero" }],
       },
       mediaPreviewHrefByFieldName: {
         hero: "/media/hero.webp",
       },
-      recordValues: {
-        accentColor: "#2563EB80",
-        done: false,
-        hero: "hero.webp",
-        owner: "missing-owner",
-        status: "new",
-        title: "Committed title",
-        updatedAt: "2026-07-06T05:00:00Z",
-      },
       referenceOptionsByFieldName: {
         owner: [],
       },
+      session,
+      state,
       surface: "table-cell",
     });
 
@@ -207,6 +243,59 @@ describe("generated Astryx field projection", () => {
     ]);
   });
 
+  it("projects only visible update-session fields and keeps hidden drafts out of Astryx", () => {
+    const recordFields = [
+      recordField("linkTargetMode", fields.linkTargetMode, "enum", { commit: "immediate" }),
+      {
+        ...recordField("href", fields.image, "text"),
+        visibleWhen: { field: "linkTargetMode", values: ["external"] },
+      },
+      {
+        ...recordField("linkTargetBlock", fields.blockReference, "reference"),
+        visibleWhen: { field: "linkTargetMode", values: ["internal"] },
+      },
+    ];
+    const initial = initialGeneratedUpdateDraftSessionState({
+      baselineValues: {
+        href: "https://old.example",
+        linkTargetMode: "external",
+      },
+      fields: recordFields,
+    });
+    const withHiddenHrefDraft = nextGeneratedUpdateDraftSessionState({
+      fieldName: "href",
+      fieldValue: generatedFieldDraftInput("https://draft.example"),
+      state: initial,
+    });
+    const state = nextGeneratedUpdateDraftSessionState({
+      fieldName: "linkTargetMode",
+      fieldValue: generatedFieldDraftInput("internal"),
+      state: withHiddenHrefDraft,
+    });
+    const session = selectGeneratedUpdateDraftSession({
+      fields: recordFields,
+      state,
+    });
+
+    const projected = projectGeneratedRecordAstryxFields({
+      canPatch: true,
+      referenceOptionsByFieldName: {
+        linkTargetBlock: [],
+      },
+      session,
+      state,
+    });
+
+    expect(projected.map((field) => field.id)).toEqual(["linkTargetMode", "linkTargetBlock"]);
+    expect(projected).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: "href" })]),
+    );
+    expect(state.draft.values.href).toEqual({
+      kind: "input",
+      value: "https://draft.example",
+    });
+  });
+
   it("projects disabled writable record fields without losing commit and draft data", () => {
     expect(
       projectGeneratedRecordAstryxField({
@@ -223,69 +312,60 @@ describe("generated Astryx field projection", () => {
     });
   });
 
-  it("adapts Astryx intents to generated draft, commit, revert, option, upload, and error callbacks", () => {
+  it("adapts update Astryx intents to typed drafts and resolver-backed commits", () => {
     const events: unknown[] = [];
     const file = { name: "hero.webp" } as File;
-    const handlers = createGeneratedAstryxFieldIntentHandlers([
-      {
-        commitPolicy: "immediate",
-        field: fields.owner,
-        fieldId: "owner",
-        onCommit: (value) => events.push(["owner:commit", value]),
-        onDraftChange: (value) => events.push(["owner:draft", value]),
-        onErrorChange: (message) => events.push(["owner:error", message]),
-        onReferenceOptionSelect: (value) => events.push(["owner:select", value]),
+    const recordFields = [
+      recordField("owner", fields.owner, "reference", { commit: "immediate" }),
+      recordField("title", fields.title, "text"),
+      recordField("estimate", fields.estimate, "number", { commit: "immediate" }),
+      recordField("hero", fields.image, "media"),
+    ];
+    const state = initialGeneratedUpdateDraftSessionState({
+      baselineValues: {
+        estimate: 2,
+        owner: "principal-1",
+        title: "Existing title",
       },
-      {
-        commitPolicy: "field",
-        field: fields.title,
-        fieldId: "title",
-        onCommit: (value) => events.push(["title:commit", value]),
-        onDraftChange: (value) => events.push(["title:draft", value]),
-        onErrorChange: (message) => events.push(["title:error", message]),
-        onRevert: () => events.push(["title:revert"]),
-      },
-      {
-        commitPolicy: "field",
-        field: fields.estimate,
-        fieldId: "estimate",
-        onCommit: (value) => events.push(["estimate:commit", value]),
-        onErrorChange: (message) => events.push(["estimate:error", message]),
-      },
-      {
-        commitPolicy: "field",
-        field: fields.image,
-        fieldId: "hero",
-        onMediaAssetSelect: (assetId) => events.push(["hero:select", assetId]),
-        onOpenPicker: (picker) => events.push(["hero:picker", picker]),
-        onUploadFile: (uploadedFile) => events.push(["hero:upload", uploadedFile]),
-      },
-    ]);
+      fields: recordFields,
+    });
+    const handlers = createGeneratedUpdateAstryxFieldIntentHandlers({
+      fields: recordFields,
+      onCommit: (fieldName, resolution) =>
+        events.push([`${fieldName}:commit`, resolution.patchValues]),
+      onDraftChange: (fieldName, fieldValue) => events.push([`${fieldName}:draft`, fieldValue]),
+      onErrorChange: (fieldName, message) => events.push([`${fieldName}:error`, message]),
+      onOpenPicker: (fieldName, picker) => events.push([`${fieldName}:picker`, picker]),
+      onUploadFile: (fieldName, uploadedFile) => events.push([`${fieldName}:upload`, uploadedFile]),
+      state,
+    });
 
-    handlers.onDraftChange?.("owner", "principal-1");
     handlers.onSelectOption?.("owner", "principal-2");
     handlers.onDraftChange?.("title", "Draft title");
     handlers.onCommit?.("title", "Saved title");
     handlers.onCommit?.("estimate", "not a number");
+    handlers.onCommit?.("title", "Existing title");
     handlers.onRevert?.("title");
     handlers.onOpenPicker?.("hero", "media");
-    handlers.onSelectOption?.("hero", "hero.webp");
     handlers.onUploadFile?.("hero", file);
 
     expect(events).toEqual([
-      ["owner:draft", "principal-1"],
+      ["owner:draft", { kind: "input", value: "principal-2" }],
       ["owner:error", null],
-      ["owner:commit", "principal-1"],
-      ["owner:draft", "principal-2"],
-      ["owner:select", "principal-2"],
-      ["title:draft", "Draft title"],
+      ["owner:commit", { owner: "principal-2" }],
+      ["title:draft", { kind: "input", value: "Draft title" }],
       ["title:error", null],
-      ["title:commit", "Saved title"],
+      ["title:draft", { kind: "input", value: "Saved title" }],
+      ["title:error", null],
+      ["title:commit", { title: "Saved title" }],
+      ["estimate:draft", { kind: "input", value: "not a number" }],
       ["estimate:error", "Enter a finite number."],
-      ["title:revert"],
+      ["title:draft", { kind: "input", value: "Existing title" }],
+      ["title:error", null],
+      ["title:commit", {}],
+      ["title:draft", undefined],
       ["title:error", null],
       ["hero:picker", "media"],
-      ["hero:select", "hero.webp"],
       ["hero:upload", file],
     ]);
   });
@@ -372,7 +452,7 @@ describe("generated Astryx field projection", () => {
 
         return nextGeneratedCreateDraftSessionState({
           fieldName,
-          fieldValue: generatedCreateDraftFieldInput(value),
+          fieldValue: generatedFieldDraftInput(value),
           state: nextState,
         });
       },
@@ -403,6 +483,163 @@ describe("generated Astryx field projection", () => {
     ).toEqual(session.values);
   });
 
+  it("projects public operation draft sessions into Astryx public-action field data", () => {
+    const operationFields = [
+      operationInputField("contactEmail", "Email", "text", true, { format: "email" }),
+      operationInputField("message", "Message", "longText", false),
+      operationInputField("acceptedTerms", "Accepted terms", "boolean", true),
+      operationInputField("requestedDate", "Requested date", "date", false),
+      operationInputField("teamSize", "Team size", "number", false),
+      operationInputField("topic", "Topic", "enum", true, {
+        options: [
+          { label: "Sales", value: "sales" },
+          { label: "Support", value: "support" },
+        ],
+      }),
+    ];
+    const draftValues: Array<[string, GeneratedOperationDraftFieldInput]> = [
+      ["contactEmail", { kind: "input", value: "ada@example.com" }],
+      ["message", { kind: "input", value: "Hello" }],
+      ["acceptedTerms", generatedFieldDraftInput(false)],
+      ["requestedDate", { kind: "input", value: "2026-07-09" }],
+      ["teamSize", { kind: "input", value: "many" }],
+      ["topic", { kind: "input", value: "sales" }],
+    ];
+    const state = draftValues.reduce(
+      (nextState, [inputName, inputValue]) =>
+        nextGeneratedOperationDraftSessionState({
+          inputName,
+          inputValue,
+          state: nextState,
+        }),
+      initialGeneratedOperationDraftSessionState({ fields: operationFields }),
+    );
+    const session = selectGeneratedOperationDraftSession({
+      fields: operationFields,
+      state,
+    });
+    const projected = projectGeneratedOperationAstryxFields({
+      pendingByFieldName: { contactEmail: true },
+      pendingLabelByFieldName: { contactEmail: "Submitting email" },
+      session,
+      state,
+    });
+
+    expect(projected).toMatchObject([
+      {
+        accessMode: "editable",
+        commitPolicy: "submit",
+        draftValue: "ada@example.com",
+        kind: "text",
+        mode: "editor",
+        name: "contactEmail",
+        pending: { isPending: true, label: "Submitting email" },
+        presentation: { format: "email", placeholder: "Email" },
+        surface: "public-action",
+      },
+      {
+        commitPolicy: "submit",
+        draftValue: "Hello",
+        kind: "long-text",
+        presentation: { maxLines: 4, placeholder: "Message" },
+      },
+      {
+        draftValue: false,
+        kind: "boolean",
+      },
+      {
+        draftValue: "2026-07-09",
+        kind: "date",
+      },
+      {
+        draftValue: "many",
+        errors: [{ message: "Enter a finite number." }],
+        kind: "number",
+      },
+      {
+        draftValue: "sales",
+        kind: "enum",
+        options: [
+          { label: "Sales", value: "sales" },
+          { label: "Support", value: "support" },
+        ],
+      },
+    ]);
+    expect(projected[0]).not.toHaveProperty("htmlName");
+    expect(projected[0]).not.toHaveProperty("hiddenInput");
+  });
+
+  it("adapts public operation Astryx intents into typed operation drafts", () => {
+    const operationFields = [
+      operationInputField("contactEmail", "Email", "text", true, { format: "email" }),
+      operationInputField("acceptedTerms", "Accepted terms", "boolean", true),
+      operationInputField("teamSize", "Team size", "number", false),
+      operationInputField("topic", "Topic", "enum", true, {
+        options: [{ label: "Sales", value: "sales" }],
+      }),
+    ];
+    const changes: Array<[string, GeneratedOperationDraftFieldInput]> = [];
+    const errors: Array<[string, string | null]> = [];
+    const handlers = createGeneratedOperationAstryxFieldIntentHandlers({
+      fields: selectGeneratedOperationInputFieldConfigs(operationFields),
+      onDraftChange: (inputName, inputValue) => {
+        changes.push([inputName, inputValue]);
+      },
+      onErrorChange: (inputName, message) => {
+        errors.push([inputName, message]);
+      },
+    });
+
+    handlers.onDraftChange?.("contactEmail", "ada@example.com");
+    handlers.onDraftChange?.("acceptedTerms", false);
+    handlers.onCommit?.("teamSize", "many");
+    handlers.onSelectOption?.("topic", "sales");
+
+    expect(changes).toEqual([
+      ["contactEmail", { kind: "input", value: "ada@example.com" }],
+      ["acceptedTerms", { kind: "value", value: false }],
+      ["teamSize", { kind: "input", value: "many" }],
+      ["topic", { kind: "input", value: "sales" }],
+    ]);
+    expect(errors).toEqual([
+      ["contactEmail", null],
+      ["acceptedTerms", null],
+      ["teamSize", null],
+      ["topic", null],
+    ]);
+
+    const state = changes.reduce(
+      (nextState, [inputName, inputValue]) =>
+        nextGeneratedOperationDraftSessionState({
+          inputName,
+          inputValue,
+          state: nextState,
+        }),
+      initialGeneratedOperationDraftSessionState({ fields: operationFields }),
+    );
+
+    expect(
+      selectGeneratedOperationDraftSession({
+        fields: operationFields,
+        state,
+      }),
+    ).toMatchObject({
+      canSubmit: false,
+      fieldErrors: {
+        teamSize: {
+          draftValue: { kind: "input", value: "many" },
+          fieldName: "teamSize",
+          message: "Enter a finite number.",
+        },
+      },
+      input: {
+        acceptedTerms: false,
+        contactEmail: "ada@example.com",
+        topic: "sales",
+      },
+    });
+  });
+
   it("projects invalid create number drafts as raw Astryx draft values with field errors", () => {
     const createFields = [createField("estimate", fields.estimate, "number")];
     const state = nextGeneratedCreateDraftSessionState({
@@ -425,11 +662,28 @@ describe("generated Astryx field projection", () => {
     ]);
   });
 
-  it("coerces Astryx field values through existing generated field value semantics", () => {
-    expect(astryxFieldValueToGeneratedFieldValue(fields.done, true)).toBe(true);
-    expect(astryxFieldValueToGeneratedFieldValue(fields.estimate, 3.5)).toBe(3.5);
-    expect(astryxFieldValueToGeneratedFieldValue(fields.estimate, "4")).toBe(4);
-    expect(astryxFieldValueToGeneratedFieldValue(fields.title, null)).toBe("");
+  it("projects invalid update number drafts as raw Astryx draft values with field errors", () => {
+    const recordFields = [recordField("estimate", fields.estimate, "number")];
+    const state = nextGeneratedUpdateDraftSessionState({
+      fieldName: "estimate",
+      fieldValue: { kind: "input", value: "many" },
+      state: initialGeneratedUpdateDraftSessionState({
+        baselineValues: { estimate: 2 },
+        fields: recordFields,
+      }),
+    });
+    const session = selectGeneratedUpdateDraftSession({
+      fields: recordFields,
+      state,
+    });
+
+    expect(projectGeneratedRecordAstryxFields({ canPatch: true, session, state })).toMatchObject([
+      {
+        draftValue: "many",
+        errors: [{ message: "Enter a finite number." }],
+        kind: "number",
+      },
+    ]);
   });
 });
 
@@ -465,11 +719,36 @@ function recordField(
   };
 }
 
+function operationInputField(
+  name: string,
+  label: string,
+  control: PublicSafeOperationInputField["control"],
+  required: boolean,
+  options: Partial<PublicSafeOperationInputField> = {},
+): PublicSafeOperationInputField {
+  return {
+    name,
+    label,
+    required,
+    control,
+    ...options,
+  } as PublicSafeOperationInputField;
+}
+
 const fields = {
+  blockReference: { type: "reference", required: false, to: "block", displayField: "title" },
   color: { type: "text", required: false, format: "color" },
   done: { type: "boolean", required: true, default: true },
   estimate: { type: "number", required: false },
   image: { type: "text", required: false, format: "href" },
+  linkTargetMode: {
+    type: "enum",
+    required: true,
+    values: {
+      external: { label: "External" },
+      internal: { label: "Internal" },
+    },
+  },
   owner: { type: "reference", required: false, to: "auth:principal", displayField: "name" },
   status: {
     type: "enum",

@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { DragDropProvider, type DragEndEvent } from "@dnd-kit/react";
 import { isSortableOperation, useSortable } from "@dnd-kit/react/sortable";
 import { Button } from "@dpeek/formless-ui/button";
@@ -77,12 +77,17 @@ import {
   type GeneratedTableReadinessWarningPresentation,
   type GeneratedTableRowPresentation,
 } from "./table-presentation.ts";
-import { selectRecordFieldsForActiveUnion } from "./union-presentation.ts";
 import {
   executeGeneratedOrderingMoveOperation,
   useGeneratedOperationController,
   useGeneratedOperationControllerVersion,
 } from "./operation-control-runtime.ts";
+import {
+  initialGeneratedUpdateDraftSessionState,
+  nextGeneratedUpdateDraftSessionState,
+  selectGeneratedUpdateDraftSession,
+  type GeneratedUpdateDraftFieldInput,
+} from "./record-field-authoring.ts";
 
 export function RecordTable({
   entity,
@@ -1014,16 +1019,48 @@ export function ReferencedRecordEditorFields({
   referenceRecordId: string;
 }) {
   const referenceRecord = useRecord(referenceRecordId);
-  const visibleFields = selectRecordFieldsForActiveUnion(
-    referenceItem.recordFields,
-    referenceItem.recordUnion,
-    referenceRecord,
+  const [session, setSession] = useState(() =>
+    initialGeneratedUpdateDraftSessionState({
+      baselineValues: referenceRecord?.values ?? {},
+      fields: referenceItem.recordFields,
+      union: referenceItem.recordUnion,
+    }),
   );
+
+  useEffect(() => {
+    setSession(
+      initialGeneratedUpdateDraftSessionState({
+        baselineValues: referenceRecord?.values ?? {},
+        fields: referenceItem.recordFields,
+        union: referenceItem.recordUnion,
+      }),
+    );
+  }, [referenceItem, referenceRecord, referenceRecordId]);
+
+  const sessionFacts = selectGeneratedUpdateDraftSession({
+    fields: referenceItem.recordFields,
+    state: session,
+    union: referenceItem.recordUnion,
+  });
+
+  function updateSessionDraft(
+    fieldName: string,
+    draftInput: GeneratedUpdateDraftFieldInput | undefined,
+  ) {
+    setSession((current) =>
+      nextGeneratedUpdateDraftSessionState({
+        fieldName,
+        fieldValue: draftInput,
+        state: current,
+      }),
+    );
+  }
 
   return (
     <div className="flex flex-wrap items-end gap-3">
-      {visibleFields.map((fieldConfig) => (
+      {sessionFacts.visibleFields.map((fieldConfig) => (
         <RecordFieldEditor
+          draftInput={session.draft.values[fieldConfig.fieldName]}
           entityName={referenceItem.entityName}
           fieldConfig={fieldConfig}
           key={recordFieldEditorKey(
@@ -1031,8 +1068,15 @@ export function ReferencedRecordEditorFields({
             referenceRecordId,
             fieldConfig.fieldName,
           )}
+          onDraftInputChange={updateSessionDraft}
           recordId={referenceRecordId}
           showLabel={true}
+          updateDraftContext={{
+            baselineValues: session.baselineValues,
+            draft: session.draft,
+            fields: referenceItem.recordFields,
+            union: referenceItem.recordUnion,
+          }}
           updateOperation={referenceItem.updateOperation}
         />
       ))}

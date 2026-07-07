@@ -5,8 +5,8 @@ import type {
   CreateUnionPresentationConfig,
 } from "../../client/views.ts";
 import type { EntityUnionVariantSchema, FieldSchema } from "@dpeek/formless-schema";
+import { generatedFieldDraftInput } from "@dpeek/formless-schema";
 import {
-  generatedCreateDraftFieldInput,
   initialGeneratedCreateDraftSessionState,
   markGeneratedCreateDraftSessionSubmitted,
   nextGeneratedCreateDraftSessionState,
@@ -312,7 +312,7 @@ function nextSessionValue(
 ) {
   return nextGeneratedCreateDraftSessionState({
     fieldName,
-    fieldValue: generatedCreateDraftFieldInput(value),
+    fieldValue: generatedFieldDraftInput(value),
     state,
   });
 }

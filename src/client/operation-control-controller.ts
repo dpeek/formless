@@ -39,7 +39,6 @@ export type GeneratedOperationRuntimeAdapterRequest = {
     surface: GeneratedOperationCallerInput["source"];
   };
   sourceBlockId?: string;
-  values?: Record<string, unknown>;
 };
 
 export type GeneratedOperationRuntimeAdapterResponse =
@@ -239,7 +238,7 @@ export function buildGeneratedOperationInvocationRequest(
     case "tableStatic":
       return withOptionalOperationInput(base, callerInput);
     case "createForm":
-      return withInput(base, callerInput.input ?? callerInput.values);
+      return withInput(base, callerInput.input);
     case "recordDelete":
       return {
         ...base,
@@ -259,7 +258,7 @@ export function buildGeneratedOperationInvocationRequest(
       return withInput(base, treeCompositionOperationInput(binding.input, callerInput));
     case "orderingMove":
       return {
-        ...withInput(base, orderingMoveOperationInput(binding.input, callerInput)),
+        ...withInput(base, orderingMoveOperationInput(callerInput)),
         recordId: requiredRecordId(binding, callerInput),
       };
     case "publicForm":
@@ -283,7 +282,6 @@ export function buildGeneratedOperationRuntimeAdapterRequest(
       : { idempotencyKey: callerInput.idempotencyKey }),
     ...(callerInput.input === undefined ? {} : { input: callerInput.input }),
     ...(callerInput.recordId === undefined ? {} : { recordId: callerInput.recordId }),
-    ...(callerInput.values === undefined ? {} : { values: callerInput.values }),
   };
 
   if (binding.input.kind === "publicForm") {
@@ -293,7 +291,7 @@ export function buildGeneratedOperationRuntimeAdapterRequest(
       ...(binding.input.sourceBlockId === undefined
         ? {}
         : { sourceBlockId: binding.input.sourceBlockId }),
-      input: callerInput.input ?? callerInput.values,
+      ...(callerInput.input === undefined ? {} : { input: callerInput.input }),
     };
   }
 
@@ -359,7 +357,7 @@ function withOptionalOperationInput(
   request: OperationInvocationRequest,
   callerInput: GeneratedOperationCallerInput,
 ): OperationInvocationRequest {
-  const input = callerInput.input ?? callerInput.values;
+  const input = callerInput.input;
 
   return input === undefined
     ? {
@@ -384,7 +382,7 @@ function treeCompositionOperationInput(
   adapter: Extract<GeneratedOperationInputAdapter, { kind: "treeComposition" }>,
   callerInput: GeneratedOperationCallerInput,
 ): unknown {
-  const input = callerInput.input ?? callerInput.values;
+  const input = callerInput.input;
   const recordIdInput =
     callerInput.recordId === undefined
       ? undefined
@@ -408,21 +406,8 @@ function treeCompositionOperationInput(
   return mergePlacementValues(recordIdInput, adapter.placementValues);
 }
 
-function orderingMoveOperationInput(
-  adapter: Extract<GeneratedOperationInputAdapter, { kind: "orderingMove" }>,
-  callerInput: GeneratedOperationCallerInput,
-): unknown {
-  if (callerInput.input !== undefined) {
-    return callerInput.input;
-  }
-
-  if (callerInput.values && adapter.fieldName in callerInput.values) {
-    return {
-      [adapter.fieldName]: callerInput.values[adapter.fieldName],
-    };
-  }
-
-  return callerInput.values;
+function orderingMoveOperationInput(callerInput: GeneratedOperationCallerInput): unknown {
+  return callerInput.input;
 }
 
 function mergePlacementValues(

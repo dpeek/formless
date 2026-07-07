@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button, buttonStyles } from "@dpeek/formless-ui/button";
 import {
   ModalBody,
@@ -33,7 +33,12 @@ import {
 import type { StoredRecord } from "@dpeek/formless-storage";
 import { RecordFieldEditor } from "./record-field-editor.tsx";
 import { RecordTransitionOperationControls } from "./state-machine-ui.tsx";
-import { selectRecordFieldsForActiveUnion } from "./union-presentation.ts";
+import {
+  initialGeneratedUpdateDraftSessionState,
+  nextGeneratedUpdateDraftSessionState,
+  selectGeneratedUpdateDraftSession,
+  type GeneratedUpdateDraftFieldInput,
+} from "./record-field-authoring.ts";
 import {
   orderingMoveAriaLabel,
   selectOrderingMoveMenuItems,
@@ -599,20 +604,63 @@ export function EditViewFields({
   targetRecord: StoredRecord;
   targetRecordId: string;
 }) {
-  const fields = selectRecordFieldsForActiveUnion(editView.fields, editView.union, targetRecord);
+  const [session, setSession] = useState(() =>
+    initialGeneratedUpdateDraftSessionState({
+      baselineValues: targetRecord.values,
+      fields: editView.fields,
+      union: editView.union,
+    }),
+  );
+
+  useEffect(() => {
+    setSession(
+      initialGeneratedUpdateDraftSessionState({
+        baselineValues: targetRecord.values,
+        fields: editView.fields,
+        union: editView.union,
+      }),
+    );
+  }, [editView, targetRecord]);
+
+  const sessionFacts = selectGeneratedUpdateDraftSession({
+    fields: editView.fields,
+    state: session,
+    union: editView.union,
+  });
+
+  function updateSessionDraft(
+    fieldName: string,
+    draftInput: GeneratedUpdateDraftFieldInput | undefined,
+  ) {
+    setSession((current) =>
+      nextGeneratedUpdateDraftSessionState({
+        fieldName,
+        fieldValue: draftInput,
+        state: current,
+      }),
+    );
+  }
 
   return (
     <div className="grid gap-3 md:grid-cols-2">
-      {fields.map((fieldConfig) => (
+      {sessionFacts.visibleFields.map((fieldConfig) => (
         <div
           className={editFieldClass(fieldConfig)}
           key={recordFieldEditorKey(editView.entityName, targetRecordId, fieldConfig.fieldName)}
         >
           <RecordFieldEditor
+            draftInput={session.draft.values[fieldConfig.fieldName]}
             entityName={editView.entityName}
             fieldConfig={fieldConfig}
+            onDraftInputChange={updateSessionDraft}
             recordId={targetRecordId}
             showLabel={true}
+            updateDraftContext={{
+              baselineValues: session.baselineValues,
+              draft: session.draft,
+              fields: editView.fields,
+              union: editView.union,
+            }}
             updateOperation={editView.updateOperation}
           />
         </div>

@@ -127,11 +127,11 @@ export async function executeGeneratedOrderingMoveOperation({
     binding,
     callerInput: {
       bindingId: binding.id,
-      recordId: plan.recordId,
-      source,
-      values: {
+      input: {
         [orderingContext.ordering.fieldName]: plan.rank,
       },
+      recordId: plan.recordId,
+      source,
     },
     controller,
     feedback: {

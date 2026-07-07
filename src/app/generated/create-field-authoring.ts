@@ -7,6 +7,7 @@ import {
   createDefaultsAreResolved,
   fieldCreateDefaultValue,
   fieldHasCreateDefault,
+  generatedFieldDraftInput,
   initialCreateDiscriminatorValue,
   resolveCreateDraftValues as resolveCreateDefaultDraftValues,
   resolveCreateValues as resolveCreateDefaultValues,
@@ -17,7 +18,6 @@ import {
 } from "@dpeek/formless-schema";
 import type { FieldValue, RecordValues } from "@dpeek/formless-storage";
 import type { QueryEvaluationContext } from "@dpeek/formless-schema";
-import type { FieldVisibilityValue } from "@dpeek/formless-schema";
 
 export type GeneratedCreateDraftSessionState = {
   draft: CreateDraftInput;
@@ -127,13 +127,7 @@ export function nextGeneratedCreateDraftSessionState({
   };
 }
 
-export function generatedCreateDraftFieldInput(value: FieldVisibilityValue): CreateDraftFieldInput {
-  if (typeof value === "boolean" || typeof value === "number") {
-    return { kind: "value", value };
-  }
-
-  return { kind: "input", value };
-}
+export { generatedFieldDraftInput };
 
 export function resolveGeneratedCreateValues({
   defaults = [],

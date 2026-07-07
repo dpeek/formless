@@ -47,8 +47,8 @@ describe("generated operation control controller", () => {
     const result = await controller.execute({
       bindingId: "create-task",
       idempotencyKey: "create-task-1",
+      input: { title: "Ship controller" },
       source: "submitButton",
-      values: { title: "Ship controller" },
     });
 
     expect(submit.calls).toEqual([
@@ -182,8 +182,8 @@ describe("generated operation control controller", () => {
 
     const result = await controller.execute({
       bindingId: "create-task",
+      input: { title: "Hidden error" },
       source: "submitButton",
-      values: { title: "Hidden error" },
     });
 
     expect(result).toEqual({
@@ -244,6 +244,59 @@ describe("generated operation control controller", () => {
       type: "committed",
       displayMessage: "Push started.",
       output: { operationId: "workspace-op-1" },
+    });
+  });
+
+  it("passes resolved public form input to runtime adapters", async () => {
+    let captured: GeneratedOperationRuntimeAdapterRequest | undefined;
+    const controller = createGeneratedOperationController({
+      bindings: [
+        binding({
+          id: "submit-contact",
+          canonicalOperationKey: "contact-message.submit",
+          entityName: "contact-message",
+          input: {
+            fields: [{ name: "email", label: "Email", required: true, control: "text" }],
+            kind: "publicForm",
+            route: "/api/site/public/operations/contact-message/submit",
+            sourceBlockId: "block-contact",
+          },
+          kind: "publicForm",
+          label: "Send",
+          operationName: "submit",
+          scope: "public",
+        }),
+      ],
+      runtimeAdapters: {
+        publicForm: async (request) => {
+          captured = request;
+          return {
+            status: "committed",
+            affectedCount: 1,
+          };
+        },
+      },
+    });
+
+    const result = await controller.execute({
+      bindingId: "submit-contact",
+      idempotencyKey: "public-form-1",
+      input: { email: "reader@example.com" },
+      source: "submitButton",
+    });
+
+    expect(captured).toMatchObject({
+      binding: { id: "submit-contact" },
+      idempotencyKey: "public-form-1",
+      input: { email: "reader@example.com" },
+      route: "/api/site/public/operations/contact-message/submit",
+      source: { surface: "submitButton" },
+      sourceBlockId: "block-contact",
+    });
+    expect(captured).not.toHaveProperty("values");
+    expect(result).toEqual({
+      type: "committed",
+      affectedCount: 1,
     });
   });
 
@@ -330,9 +383,9 @@ describe("generated operation control controller", () => {
         }),
         {
           bindingId: "move-up",
+          input: { order: 20 },
           recordId: "placement-1",
           source: "menuItem",
-          values: { order: 20, parent: "root" },
         },
       ),
     ).toMatchObject({
@@ -356,9 +409,9 @@ describe("generated operation control controller", () => {
         }),
         {
           bindingId: "add-child",
+          input: { childValues: { title: "Draft" } },
           recordId: "parent-1",
           source: "submitButton",
-          values: { childValues: { title: "Draft" } },
         },
       ),
     ).toMatchObject({

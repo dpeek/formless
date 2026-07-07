@@ -2202,7 +2202,7 @@ describe("public operation runtime", () => {
     }
   });
 
-  it("fails closed when Turnstile secret configuration is missing or blank", async () => {
+  it("fails closed when Turnstile secret configuration is missing", async () => {
     const missingConfigRequests: unknown[] = [];
     const missingConfigHarness = await createPublicOperationWorkerHarness({
       bindings: {
@@ -2230,7 +2230,9 @@ describe("public operation runtime", () => {
     } finally {
       await missingConfigHarness.dispose();
     }
+  });
 
+  it("fails closed when Turnstile secret configuration is blank", async () => {
     const blankConfigRequests: unknown[] = [];
     const blankConfigHarness = await createPublicOperationWorkerHarness({
       bindings: {

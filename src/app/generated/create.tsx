@@ -25,7 +25,7 @@ import type { RecordValues } from "@dpeek/formless-storage";
 import type { QueryEvaluationContext } from "@dpeek/formless-schema";
 import type { EntitySchema } from "@dpeek/formless-schema";
 import {
-  generatedCreateDraftFieldInput,
+  generatedFieldDraftInput,
   initialGeneratedCreateDraftSessionState,
   markGeneratedCreateDraftSessionSubmitted,
   nextGeneratedCreateDraftSessionState,
@@ -180,7 +180,7 @@ export function GeneratedCreateForm({
               setDraftSessionState((state) =>
                 nextGeneratedCreateDraftSessionState({
                   fieldName: fieldConfig.fieldName,
-                  fieldValue: generatedCreateDraftFieldInput(value),
+                  fieldValue: generatedFieldDraftInput(value),
                   state,
                 }),
               );
@@ -379,7 +379,7 @@ export function GeneratedCreateDialogForm({
               setDraftSessionState((state) =>
                 nextGeneratedCreateDraftSessionState({
                   fieldName: fieldConfig.fieldName,
-                  fieldValue: generatedCreateDraftFieldInput(value),
+                  fieldValue: generatedFieldDraftInput(value),
                   state,
                 }),
               );

@@ -28,8 +28,13 @@ import { createSiteContactIdempotencyKey, submitSiteContactForm } from "./contac
 import {
   createPublicOperationFormIdempotencyKey,
   executePublicOperationForm,
-  publicOperationFormInputValuesFromFormData,
+  initialPublicOperationFormDraftSessionState,
+  nextPublicOperationFormDraftSessionState,
+  publicOperationFormDraftInput,
+  selectPublicOperationFormDraftSession,
   turnstileResponseTokenFromFormData as publicOperationFormTurnstileResponseTokenFromFormData,
+  type PublicOperationFormDraftFieldError,
+  type PublicOperationFormDraftFieldInput,
 } from "./public-operation-form.ts";
 import { TurnstileChallenge } from "./turnstile.tsx";
 import type {
@@ -657,9 +662,18 @@ function PublicOperationFormBlock({ block }: { block: SiteBlockNode }) {
   const operation = block.publicOperation;
   const siteKey =
     operation?.challenge.kind === "turnstile" ? operation.challenge.siteKey : undefined;
-  const fields = operation?.fields;
+  const publicOperationFields = operation?.fields ?? [];
+  const [draftState, setDraftState] = useState(() =>
+    initialPublicOperationFormDraftSessionState({ fields: publicOperationFields }),
+  );
+  const disabled = status === "submitting" || status === "success";
+  const draftSession = selectPublicOperationFormDraftSession({
+    enabled: !disabled,
+    fields: publicOperationFields,
+    state: draftState,
+  });
 
-  if (!operation || !siteKey || !fields) {
+  if (!operation || !siteKey || !operation.fields) {
     return (
       <section className="max-w-2xl space-y-3" data-block-type={block.type}>
         <PublicOperationFormHeading block={block} />
@@ -671,18 +685,19 @@ function PublicOperationFormBlock({ block }: { block: SiteBlockNode }) {
   }
 
   const publicOperation = operation;
-  const publicOperationFields = fields;
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     const formData = new FormData(event.currentTarget);
     const turnstileToken = publicOperationFormTurnstileResponseTokenFromFormData(formData);
-    const inputResult = publicOperationFormInputValuesFromFormData(publicOperationFields, formData);
 
-    if (!inputResult.ok) {
+    if (!draftSession.canSubmit) {
       setStatus("error");
-      setError(inputResult.error);
+      setError(
+        firstPublicOperationFormFieldError(draftSession.fieldErrors)?.message ??
+          "Check the form fields.",
+      );
       return;
     }
 
@@ -697,7 +712,7 @@ function PublicOperationFormBlock({ block }: { block: SiteBlockNode }) {
 
     const result = await executePublicOperationForm({
       idempotencyKey: idempotencyKey.current,
-      input: inputResult.input,
+      input: draftSession.input,
       route: publicOperation.route,
       siteBlockId: block.id,
       turnstileToken,
@@ -715,7 +730,20 @@ function PublicOperationFormBlock({ block }: { block: SiteBlockNode }) {
     }
   }
 
-  const disabled = status === "submitting" || status === "success";
+  function onInputValue(inputName: string, inputValue: PublicOperationFormDraftFieldInput) {
+    setDraftState((state) =>
+      nextPublicOperationFormDraftSessionState({
+        inputName,
+        inputValue,
+        state,
+      }),
+    );
+
+    if (status === "error") {
+      setStatus("idle");
+      setError(undefined);
+    }
+  }
 
   return (
     <section className="max-w-2xl space-y-4" data-block-type={block.type}>
@@ -727,14 +755,18 @@ function PublicOperationFormBlock({ block }: { block: SiteBlockNode }) {
         data-site-public-operation-key={publicOperation.canonicalKey}
         data-site-public-operation-route={publicOperation.route}
         method="post"
+        noValidate
         onSubmit={onSubmit}
       >
         {publicOperationFields.map((field) => (
           <PublicOperationInputField
             disabled={disabled}
+            error={status === "error" ? draftSession.fieldErrors[field.name] : undefined}
             field={field}
             inputId={`${formInputIdPrefix}-${field.name}`}
+            inputValue={draftState.draft.values[field.name]}
             key={field.name}
+            onInputValue={onInputValue}
           />
         ))}
         <TurnstileChallenge resetSignal={challengeResetSignal} siteKey={siteKey} />
@@ -777,30 +809,46 @@ function PublicOperationFormHeading({ block }: { block: SiteBlockNode }) {
 
 function PublicOperationInputField({
   disabled,
+  error,
   field,
   inputId,
+  inputValue,
+  onInputValue,
 }: {
   disabled: boolean;
+  error?: PublicOperationFormDraftFieldError;
   field: SitePublicOperationInputFieldNode;
   inputId: string;
+  inputValue?: PublicOperationFormDraftFieldInput;
+  onInputValue: (inputName: string, inputValue: PublicOperationFormDraftFieldInput) => void;
 }) {
+  const errorId = error === undefined ? undefined : `${inputId}-error`;
+
   if (field.control === "boolean") {
     return (
-      <label
-        className="flex items-center gap-3 text-sm font-medium text-zinc-700 dark:text-zinc-200"
-        data-site-public-operation-field={field.name}
-        htmlFor={inputId}
-      >
-        <input
-          className="size-4 rounded border-zinc-300 text-zinc-950 focus:ring-zinc-300 disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-950 dark:focus:ring-zinc-700"
-          disabled={disabled}
-          id={inputId}
-          name={field.name}
-          type="checkbox"
-          value="true"
-        />
-        <span>{field.label}</span>
-      </label>
+      <div className="grid gap-1" data-site-public-operation-field={field.name}>
+        <label
+          className="flex items-center gap-3 text-sm font-medium text-zinc-700 dark:text-zinc-200"
+          htmlFor={inputId}
+        >
+          <input
+            aria-describedby={errorId}
+            aria-invalid={error === undefined ? undefined : true}
+            checked={publicOperationFormBooleanInputChecked(inputValue)}
+            className="size-4 rounded border-zinc-300 text-zinc-950 focus:ring-zinc-300 disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-950 dark:focus:ring-zinc-700"
+            disabled={disabled}
+            id={inputId}
+            name={field.name}
+            onChange={(event) =>
+              onInputValue(field.name, publicOperationFormDraftInput(event.currentTarget.checked))
+            }
+            type="checkbox"
+            value="true"
+          />
+          <span>{field.label}</span>
+        </label>
+        <PublicOperationInputFieldError error={error} id={errorId} />
+      </div>
     );
   }
 
@@ -811,40 +859,68 @@ function PublicOperationInputField({
       htmlFor={inputId}
     >
       <span>{field.label}</span>
-      {renderPublicOperationInputControl({ disabled, field, inputId })}
+      {renderPublicOperationInputControl({
+        describedBy: errorId,
+        disabled,
+        error,
+        field,
+        inputId,
+        inputValue,
+        onInputValue,
+      })}
+      <PublicOperationInputFieldError error={error} id={errorId} />
     </label>
   );
 }
 
 function renderPublicOperationInputControl({
+  describedBy,
   disabled,
+  error,
   field,
   inputId,
+  inputValue,
+  onInputValue,
 }: {
+  describedBy?: string;
   disabled: boolean;
+  error?: PublicOperationFormDraftFieldError;
   field: SitePublicOperationInputFieldNode;
   inputId: string;
+  inputValue?: PublicOperationFormDraftFieldInput;
+  onInputValue: (inputName: string, inputValue: PublicOperationFormDraftFieldInput) => void;
 }) {
   switch (field.control) {
     case "longText":
       return (
         <textarea
+          aria-describedby={describedBy}
+          aria-invalid={error === undefined ? undefined : true}
           className={siteFormTextareaClassName}
+          data-site-public-operation-control="longText"
           disabled={disabled}
           id={inputId}
           name={field.name}
-          required={field.required}
+          onChange={(event) =>
+            onInputValue(field.name, { kind: "input", value: event.currentTarget.value })
+          }
+          value={publicOperationFormTextInputValue(inputValue)}
         />
       );
     case "enum":
       return (
         <select
+          aria-describedby={describedBy}
+          aria-invalid={error === undefined ? undefined : true}
           className={siteFormInputClassName}
-          defaultValue=""
+          data-site-public-operation-control="enum"
           disabled={disabled}
           id={inputId}
           name={field.name}
-          required={field.required}
+          onChange={(event) =>
+            onInputValue(field.name, { kind: "input", value: event.currentTarget.value })
+          }
+          value={publicOperationFormTextInputValue(inputValue)}
         >
           <option disabled={field.required} value="">
             Select...
@@ -859,39 +935,68 @@ function renderPublicOperationInputControl({
     case "date":
       return (
         <input
+          aria-describedby={describedBy}
+          aria-invalid={error === undefined ? undefined : true}
           className={siteFormInputClassName}
+          data-site-public-operation-control="date"
           disabled={disabled}
           id={inputId}
           name={field.name}
-          required={field.required}
+          onChange={(event) =>
+            onInputValue(field.name, { kind: "input", value: event.currentTarget.value })
+          }
           type="date"
+          value={publicOperationFormTextInputValue(inputValue)}
         />
       );
     case "number":
       return (
         <input
+          aria-describedby={describedBy}
+          aria-invalid={error === undefined ? undefined : true}
           className={siteFormInputClassName}
+          data-site-public-operation-control="number"
           disabled={disabled}
           id={inputId}
+          inputMode="decimal"
           name={field.name}
-          required={field.required}
-          type="number"
+          onChange={(event) =>
+            onInputValue(field.name, { kind: "input", value: event.currentTarget.value })
+          }
+          type="text"
+          value={publicOperationFormTextInputValue(inputValue)}
         />
       );
     case "text":
     default:
-      return renderPublicOperationTextInput({ disabled, field, inputId });
+      return renderPublicOperationTextInput({
+        describedBy,
+        disabled,
+        error,
+        field,
+        inputId,
+        inputValue,
+        onInputValue,
+      });
   }
 }
 
 function renderPublicOperationTextInput({
+  describedBy,
   disabled,
+  error,
   field,
   inputId,
+  inputValue,
+  onInputValue,
 }: {
+  describedBy?: string;
   disabled: boolean;
+  error?: PublicOperationFormDraftFieldError;
   field: SitePublicOperationInputFieldNode;
   inputId: string;
+  inputValue?: PublicOperationFormDraftFieldInput;
+  onInputValue: (inputName: string, inputValue: PublicOperationFormDraftFieldInput) => void;
 }) {
   const suggestionsId =
     field.suggestions && field.suggestions.length > 0 ? `${inputId}-suggestions` : undefined;
@@ -900,13 +1005,19 @@ function renderPublicOperationTextInput({
   return (
     <>
       <input
+        aria-describedby={describedBy}
+        aria-invalid={error === undefined ? undefined : true}
         className={siteFormInputClassName}
+        data-site-public-operation-control="text"
         disabled={disabled}
         id={inputId}
         list={suggestionsId}
         name={field.name}
-        required={field.required}
+        onChange={(event) =>
+          onInputValue(field.name, { kind: "input", value: event.currentTarget.value })
+        }
         type={type}
+        value={publicOperationFormTextInputValue(inputValue)}
       />
       {suggestionsId ? (
         <datalist id={suggestionsId}>
@@ -917,6 +1028,46 @@ function renderPublicOperationTextInput({
       ) : null}
     </>
   );
+}
+
+function PublicOperationInputFieldError({
+  error,
+  id,
+}: {
+  error?: PublicOperationFormDraftFieldError;
+  id?: string;
+}) {
+  return error === undefined ? null : (
+    <p className="text-xs font-medium text-red-700 dark:text-red-300" id={id}>
+      {error.message}
+    </p>
+  );
+}
+
+function publicOperationFormTextInputValue(
+  inputValue: PublicOperationFormDraftFieldInput | undefined,
+): string {
+  if (inputValue === undefined) {
+    return "";
+  }
+
+  if (typeof inputValue.value === "boolean") {
+    return inputValue.value ? "true" : "false";
+  }
+
+  return String(inputValue.value);
+}
+
+function publicOperationFormBooleanInputChecked(
+  inputValue: PublicOperationFormDraftFieldInput | undefined,
+): boolean {
+  return inputValue?.value === true;
+}
+
+function firstPublicOperationFormFieldError(
+  fieldErrors: Record<string, PublicOperationFormDraftFieldError>,
+): PublicOperationFormDraftFieldError | undefined {
+  return Object.values(fieldErrors)[0];
 }
 
 function ContentListBlock({ block }: { block: SiteBlockNode }) {

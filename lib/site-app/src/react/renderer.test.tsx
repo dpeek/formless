@@ -421,8 +421,10 @@ describe("public Site renderer characterization", () => {
     expect(html).toContain('type="date"');
     expect(html).toContain('name="neededBy"');
     expect(html).toContain('data-site-public-operation-field="sampleCount"');
-    expect(html).toContain('type="number"');
+    expect(html).toContain('data-site-public-operation-control="number"');
     expect(html).toContain('name="sampleCount"');
+    expect(html).not.toContain('required=""');
+    expect(html).not.toContain(" required");
     expect(html).toContain("Submit request");
     expect(countOccurrences(html, 'class="cf-turnstile"')).toBe(0);
     expect(html).toContain('data-site-turnstile="true"');

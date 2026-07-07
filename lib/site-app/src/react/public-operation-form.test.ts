@@ -7,10 +7,18 @@ import {
 import type { SitePublicOperationInputFieldNode } from "../types.ts";
 import {
   executePublicOperationForm,
+  initialPublicOperationFormDraftSessionState,
+  nextPublicOperationFormDraftSessionState,
   normalizePublicOperationFormResponse,
+  publicOperationFormDraftFromFormData,
+  publicOperationFormDraftInput,
   publicOperationFormInputValuesFromFormData,
   publicOperationFormRequestBody,
+  resolvePublicOperationFormDraftInput,
+  selectPublicOperationFormDraftSession,
   submitPublicOperationForm,
+  type PublicOperationFormDraftFieldInput,
+  type PublicOperationFormDraftSessionState,
 } from "./public-operation-form.ts";
 
 const fields: SitePublicOperationInputFieldNode[] = [
@@ -84,6 +92,96 @@ const fields: SitePublicOperationInputFieldNode[] = [
 ];
 
 describe("generic public operation form submit helpers", () => {
+  it("resolves controlled generated drafts to flat input keyed by declared operation input names", () => {
+    const state = withPublicOperationFormDraftValues(
+      initialPublicOperationFormDraftSessionState({ fields }),
+      [
+        ["summary", { kind: "input", value: "Send lab results" }],
+        ["replyEmail", { kind: "input", value: "  name@example.com  " }],
+        ["phone", { kind: "input", value: " +1 (555) 123-4567 " }],
+        ["inquiryType", { kind: "input", value: "Custom" }],
+        ["details", { kind: "input", value: "Include chain of custody." }],
+        ["category", { kind: "input", value: "priority" }],
+        ["confirmed", publicOperationFormDraftInput(false)],
+        ["neededBy", { kind: "input", value: "2026-07-12" }],
+        ["quantity", { kind: "input", value: "3.5" }],
+        ["notes", { kind: "input", value: "" }],
+      ],
+    );
+    const session = selectPublicOperationFormDraftSession({ fields, state });
+
+    expect(session).toMatchObject({
+      canSubmit: true,
+      fieldErrors: {},
+      input: {
+        summary: "Send lab results",
+        replyEmail: "name@example.com",
+        phone: "+1 (555) 123-4567",
+        inquiryType: "Custom",
+        details: "Include chain of custody.",
+        category: "priority",
+        confirmed: false,
+        neededBy: "2026-07-12",
+        quantity: 3.5,
+      },
+    });
+    expect(session.input).not.toHaveProperty("notes");
+    expect(session).not.toHaveProperty("turnstileToken");
+    expect(session).not.toHaveProperty("siteBlockId");
+    expect(session).not.toHaveProperty("route");
+    expect(session).not.toHaveProperty("idempotencyKey");
+    expect(session).not.toHaveProperty("response");
+  });
+
+  it("surfaces generated field errors before submit while preserving invalid draft text", () => {
+    const state = withPublicOperationFormDraftValues(
+      initialPublicOperationFormDraftSessionState({ fields }),
+      [
+        ["summary", { kind: "input", value: "" }],
+        ["replyEmail", { kind: "input", value: "not an email" }],
+        ["phone", { kind: "input", value: "555-abc" }],
+        ["category", { kind: "input", value: "private" }],
+        ["neededBy", { kind: "input", value: "2026-02-31" }],
+        ["quantity", { kind: "input", value: "many" }],
+      ],
+    );
+    const resolution = resolvePublicOperationFormDraftInput({
+      draft: state.draft,
+      fields,
+    });
+
+    expect(resolution.input).toEqual({
+      confirmed: false,
+    });
+    expect(resolution.fieldErrors).toMatchObject({
+      summary: {
+        fieldName: "summary",
+        message: 'Field "summary" cannot be empty.',
+      },
+      replyEmail: {
+        fieldName: "replyEmail",
+        message: TEXT_EMAIL_FORMAT_INVALID_MESSAGE,
+      },
+      phone: {
+        fieldName: "phone",
+        message: TEXT_PHONE_FORMAT_INVALID_MESSAGE,
+      },
+      category: {
+        fieldName: "category",
+        message: 'Field "category" must be a known enum value.',
+      },
+      neededBy: {
+        fieldName: "neededBy",
+        message: 'Field "neededBy" must be a YYYY-MM-DD date.',
+      },
+      quantity: {
+        draftValue: { kind: "input", value: "many" },
+        fieldName: "quantity",
+        message: "Enter a finite number.",
+      },
+    });
+  });
+
   it("builds the public operation body from typed input, source block id, idempotency key, and Turnstile token", () => {
     expect(
       publicOperationFormRequestBody({
@@ -114,7 +212,7 @@ describe("generic public operation form submit helpers", () => {
     });
   });
 
-  it("coerces browser form values to declared public operation input values", () => {
+  it("adapts browser FormData to typed drafts before resolving operation input values", () => {
     const formData = new FormData();
     formData.set("summary", "Send lab results");
     formData.set("replyEmail", "  name@example.com  ");
@@ -126,9 +224,16 @@ describe("generic public operation form submit helpers", () => {
     formData.set("neededBy", "2026-07-12");
     formData.set("quantity", "3.5");
     formData.set("notes", "");
+    const draft = publicOperationFormDraftFromFormData(fields, formData);
+    const resolution = resolvePublicOperationFormDraftInput({ draft, fields });
 
-    expect(publicOperationFormInputValuesFromFormData(fields, formData)).toEqual({
-      ok: true,
+    expect(draft.values).toMatchObject({
+      summary: { kind: "input", value: "Send lab results" },
+      confirmed: { kind: "value", value: true },
+      quantity: { kind: "input", value: "3.5" },
+    });
+    expect(resolution).toMatchObject({
+      fieldErrors: {},
       input: {
         summary: "Send lab results",
         replyEmail: "name@example.com",
@@ -140,6 +245,10 @@ describe("generic public operation form submit helpers", () => {
         neededBy: "2026-07-12",
         quantity: 3.5,
       },
+    });
+    expect(publicOperationFormInputValuesFromFormData(fields, formData)).toEqual({
+      ok: true,
+      input: resolution.input,
     });
   });
 
@@ -165,7 +274,7 @@ describe("generic public operation form submit helpers", () => {
   it("rejects missing required, non-finite number, invalid date, and undeclared enum values", () => {
     expect(publicOperationFormInputValuesFromFormData(fields, new FormData())).toEqual({
       ok: false,
-      error: "Summary is required.",
+      error: 'Field "summary" is required.',
     });
 
     expect(
@@ -175,7 +284,7 @@ describe("generic public operation form submit helpers", () => {
       ),
     ).toEqual({
       ok: false,
-      error: "Quantity must be a finite number.",
+      error: "Enter a finite number.",
     });
 
     expect(
@@ -185,7 +294,7 @@ describe("generic public operation form submit helpers", () => {
       ),
     ).toEqual({
       ok: false,
-      error: "Needed by must be a valid date.",
+      error: 'Field "neededBy" must be a YYYY-MM-DD date.',
     });
 
     expect(
@@ -203,7 +312,7 @@ describe("generic public operation form submit helpers", () => {
       ),
     ).toEqual({
       ok: false,
-      error: "Category must match a declared option.",
+      error: 'Field "category" must be a known enum value.',
     });
 
     expect(
@@ -392,6 +501,21 @@ function formDataWith(name: string, value: string): FormData {
   const formData = new FormData();
   formData.set(name, value);
   return formData;
+}
+
+function withPublicOperationFormDraftValues(
+  state: PublicOperationFormDraftSessionState,
+  values: Array<[string, PublicOperationFormDraftFieldInput]>,
+): PublicOperationFormDraftSessionState {
+  return values.reduce(
+    (nextState, [inputName, inputValue]) =>
+      nextPublicOperationFormDraftSessionState({
+        inputName,
+        inputValue,
+        state: nextState,
+      }),
+    state,
+  );
 }
 
 function requestUrlString(input: RequestInfo | URL): string {

@@ -346,10 +346,10 @@ function renderRecordControl(
       onIconSave={() => Promise.resolve()}
       onImageFileSelect={() => undefined}
       onMediaAssetSelect={() => undefined}
-      onPatchValues={(_values: Partial<RecordValues>) => undefined}
       onUnitDraftChange={() => undefined}
       onUnitDraftRevert={() => undefined}
       onValueCommit={() => undefined}
+      onValueUnitCommit={() => undefined}
       recordValue={options.recordValue}
       showLabel={options.showLabel ?? false}
       unitDraft=""
@@ -388,10 +388,10 @@ function recordMediaFieldControlProps({
       onIconSave={() => Promise.resolve()}
       onImageFileSelect={() => undefined}
       onMediaAssetSelect={() => undefined}
-      onPatchValues={() => undefined}
       onUnitDraftChange={() => undefined}
       onUnitDraftRevert={() => undefined}
       onValueCommit={onValueCommit}
+      onValueUnitCommit={() => undefined}
       recordValue="/record.webp"
       unitDraft=""
       uploadEnabled={true}
@@ -435,10 +435,10 @@ function recordReferenceSelectProps({
       onIconSave={() => Promise.resolve()}
       onImageFileSelect={() => undefined}
       onMediaAssetSelect={() => undefined}
-      onPatchValues={() => undefined}
       onUnitDraftChange={() => undefined}
       onUnitDraftRevert={() => undefined}
       onValueCommit={onValueCommit}
+      onValueUnitCommit={() => undefined}
       recordValue="principal-1"
       unitDraft=""
       uploadEnabled={true}

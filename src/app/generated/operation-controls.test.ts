@@ -357,7 +357,7 @@ describe("generated operation controls", () => {
     ]);
   });
 
-  it("executes ordering moves through adapter-built operation input", async () => {
+  it("sends ordering moves as direct sparse rank operation input", async () => {
     const binding = projectOrderingMoveOperationControlBinding({
       direction: "up",
       label: "Move up",
@@ -407,15 +407,17 @@ describe("generated operation controls", () => {
       }),
     ).resolves.toMatchObject({ type: "committed", affectedCount: 1 });
 
-    expect(submit.calls).toMatchObject([
+    expect(submit.calls).toEqual([
       {
         entityName: "block-placement",
         operationName: "update",
+        options: {},
         request: {
           input: { order: 500 },
           recordId: "placement-1",
           source: { protocol: "generated-ui", surface: "button" },
         },
+        target: "site",
       },
     ]);
     expect(statuses).toEqual([
