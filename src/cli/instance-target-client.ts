@@ -65,6 +65,7 @@ import {
 import type { DomainProviderPlanPolicy } from "../shared/domain-provider-protocol.ts";
 import {
   packageAppFactsForKey,
+  parseAppInstallRegistrationPolicy,
   type AppInstall,
   type AppInstallRegistrationPolicy,
   type InstallableAppPackage,
@@ -1567,7 +1568,7 @@ function parseAppInstall(
       `${context} sourceSchemaHash`,
     ),
     label: parseRequiredString(value.label, undefined, `${context} label`),
-    registrationPolicy: parseAppInstallRegistrationPolicy(
+    registrationPolicy: parseTargetAppInstallRegistrationPolicy(
       value.registrationPolicy,
       `${context} registrationPolicy`,
     ),
@@ -1596,15 +1597,20 @@ function parseAppInstall(
   };
 }
 
-function parseAppInstallRegistrationPolicy(
+function parseTargetAppInstallRegistrationPolicy(
   value: unknown,
   context: string,
 ): AppInstallRegistrationPolicy {
-  if (value === "closed") {
-    return value;
-  }
+  try {
+    return parseAppInstallRegistrationPolicy(value, "value");
+  } catch (error) {
+    const message =
+      error instanceof Error && error.message.trim() !== ""
+        ? error.message
+        : "value is unsupported.";
 
-  throw new Error(`${context} failed: value must be "closed".`);
+    throw new Error(`${context} failed: ${message}`);
+  }
 }
 
 function parsePackageAppKey(

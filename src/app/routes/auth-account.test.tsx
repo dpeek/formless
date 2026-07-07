@@ -4,8 +4,15 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   AuthAccountRouteView,
   authAccountContinuationTarget,
+  authAccountCompletionApiContinuationTarget,
+  authAccountSignupTargetFromSearch,
+  completeAuthAccountAppRegistrationGate,
+  completeAuthAccountTermsAcceptanceGate,
+  completeEmailVerifiedSignupWithPasskey,
   fetchAuthAccountStatus,
+  requestAuthAccountEmailVerification,
   startAuthAccountRouteSession,
+  startEmailVerifiedSignup,
   type AuthAccountApiError,
   type AuthAccountRouteState,
 } from "./auth-account.tsx";
@@ -14,6 +21,7 @@ import type {
   AccountCompletionGate,
   AccountCompletionGateResult,
   AccountCompletionGateTarget,
+  OwnerPasskeyRegistrationVerifyRequest,
 } from "../../shared/instance-auth.ts";
 
 const privateValues = [
@@ -161,6 +169,90 @@ describe("auth account route view", () => {
     expect(html).not.toContain("<button");
     expect(html).not.toContain("<form");
   });
+
+  it("renders self-service controls only for runtime-owned completable gates", () => {
+    const emailHtml = renderAuthAccountState({
+      result: blockedResult({
+        displayEmail: "Ada.User@example.com",
+        kind: "email-verification",
+      }),
+      status: "blocked",
+    });
+    const appRegistrationHtml = renderAuthAccountState({
+      result: blockedResult({
+        appInstallId: "task-workspace",
+        kind: "app-registration",
+        operation: {
+          appInstallId: "task-workspace",
+          entityName: "app-registration",
+          label: "Register for app",
+          operationKey: "auth.app-registration.complete",
+        },
+        registrationPolicy: "email-verified",
+      }),
+      status: "blocked",
+    });
+    const termsHtml = renderAuthAccountState({
+      result: blockedResult({
+        kind: "terms-acceptance",
+        operation: {
+          entityName: "principal-policy-acceptance",
+          label: "Accept terms",
+          operationKey: "auth.terms-acceptance.complete",
+        },
+        policies: [
+          {
+            accountPolicyId: "policy:workspace",
+            displayName: "Workspace terms",
+            policyKey: "workspace-terms",
+            version: "2026-07-06",
+          },
+        ],
+      }),
+      status: "blocked",
+    });
+    const roleReviewHtml = renderAuthAccountState({
+      result: blockedResult({ kind: "role-review", roleKey: "app.user" }),
+      status: "blocked",
+    });
+
+    expect(emailHtml).toContain("Send verification email");
+    expect(emailHtml).toContain('name="email"');
+    expect(appRegistrationHtml).toContain("Register for app");
+    expect(appRegistrationHtml).toContain("<form");
+    expect(termsHtml).toContain("Accept terms");
+    expect(termsHtml).toContain('name="acceptedPolicyIds"');
+    expect(roleReviewHtml).not.toContain("<form");
+    expect(roleReviewHtml).not.toContain("<button");
+  });
+
+  it("renders signup email and passkey setup states", () => {
+    expect(
+      renderAuthAccountState({
+        status: "signup-ready",
+        target: accountTarget(),
+      }),
+    ).toContain("Create account");
+    expect(
+      renderAuthAccountState({
+        challengeId: "challenge:signup",
+        displayName: "Ada User",
+        email: "ada@example.com",
+        expiresAt: "2026-07-07T16:00:00.000Z",
+        status: "signup-email-sent",
+        target: accountTarget(),
+      }),
+    ).toContain("Verification token");
+    expect(
+      renderAuthAccountState({
+        challengeId: "challenge:signup",
+        displayName: "Ada User",
+        email: "ada@example.com",
+        status: "signup-credential-ready",
+        target: accountTarget(),
+      }),
+    ).toContain("Create passkey");
+  });
 });
 
 describe("auth account route data flow", () => {
@@ -214,6 +306,39 @@ describe("auth account route data flow", () => {
     expect(states).toEqual([{ status: "loading" }, { result: blocked, status: "blocked" }]);
     expect(JSON.stringify(states)).not.toContain("sessionId");
     expect(JSON.stringify(states)).not.toContain("grantSecret");
+  });
+
+  it("renders signup when an anonymous target-bound account status can expose safe target facts", async () => {
+    const calls: FetchCall[] = [];
+    const states: AuthAccountRouteState[] = [];
+    const locationSearch = targetBoundLocationSearch();
+    const stop = startAuthAccountRouteSession({
+      fetcher: recordingJsonFetcher(
+        calls,
+        { error: "Authenticated account session is required." },
+        { status: 401 },
+      ),
+      locationSearch,
+      onState: (state) => states.push(state),
+    });
+
+    try {
+      await waitFor(() => states.some((state) => state.status === "signup-ready"));
+    } finally {
+      stop();
+    }
+
+    expect(calls).toEqual([
+      {
+        credentials: "same-origin",
+        input: `/formless/auth${locationSearch}`,
+        method: undefined,
+      },
+    ]);
+    expect(states).toEqual([
+      { status: "loading" },
+      { status: "signup-ready", target: accountTarget() },
+    ]);
   });
 
   it("continues to a same-origin path-only target after completion", async () => {
@@ -305,13 +430,203 @@ describe("auth account route data flow", () => {
   });
 
   it("continues through the cross-domain handoff path after completion", async () => {
-    const locationSearch =
-      "?targetOrigin=https%3A%2F%2Ftasks.example.com&routeId=route%3Atasks&targetProfile=app&appInstallId=task-workspace&storageIdentity=app%3Atask-workspace&returnTo=%2Fschema%3Fview%3Dboard&nonceHash=bm9uY2U&state=c3RhdGU";
-    const complete = completeResult();
+    const locationSearch = targetBoundLocationSearch();
+    const complete = {
+      ...completeResult(),
+      continueTo: `/formless/auth/handoff${locationSearch}` as const,
+    };
 
     expect(
       authAccountContinuationTarget(complete, locationSearch, "https://auth.example.com"),
     ).toBe(`/formless/auth/handoff${locationSearch}`);
+  });
+
+  it("uses server-returned completion continuations without rebuilding target facts", () => {
+    const locationSearch =
+      "?targetOrigin=https%3A%2F%2Fevil.example.com&routeId=route%3Aevil&targetProfile=app&appInstallId=evil&storageIdentity=app%3Aevil&returnTo=%2Fevil&nonceHash=bm9uY2U&state=c3RhdGU";
+    const target = accountTarget({
+      returnTo: "/schema?view=board",
+      targetOrigin: "https://tasks.example.com",
+    });
+    const continueTo =
+      "/formless/auth/handoff?targetOrigin=https%3A%2F%2Ftasks.example.com&routeId=route%3Atasks&targetProfile=app&appInstallId=task-workspace&storageIdentity=app%3Atask-workspace&returnTo=%2Fschema%3Fview%3Dboard&nonceHash=bm9uY2U&state=c3RhdGU" as const;
+
+    expect(
+      authAccountCompletionApiContinuationTarget(
+        {
+          accountCompletion: completeResult(target),
+          continueTo,
+          handoff: { returnTo: "/schema?view=board", targetOrigin: "https://tasks.example.com" },
+        },
+        locationSearch,
+        "https://auth.example.com",
+      ),
+    ).toBe(continueTo);
+    expect(
+      authAccountCompletionApiContinuationTarget(
+        {
+          accountCompletion: completeResult(target),
+          handoff: { returnTo: "/schema?view=board", targetOrigin: "https://tasks.example.com" },
+        },
+        locationSearch,
+        "https://auth.example.com",
+      ),
+    ).toBeUndefined();
+    expect(
+      authAccountContinuationTarget(
+        completeResult(target),
+        locationSearch,
+        "https://auth.example.com",
+      ),
+    ).toBeUndefined();
+  });
+
+  it("passes continuation search only to completion APIs", async () => {
+    const calls: JsonFetchCall[] = [];
+    const locationSearch = targetBoundLocationSearch();
+    const target = accountTarget();
+
+    await completeAuthAccountAppRegistrationGate({
+      fetcher: recordingJsonSequenceFetcher(calls, [
+        {
+          body: {
+            accountCompletion: completeResult(),
+            appRegistration: {
+              appInstallId: "task-workspace",
+              appRegistrationId: "app-registration:ada",
+              status: "active",
+            },
+            completed: true,
+            continueTo: "/formless/auth/handoff?state=runtime",
+          },
+        },
+      ]),
+      locationSearch,
+      target,
+    });
+
+    expect(calls).toEqual([
+      {
+        body: { target },
+        credentials: "same-origin",
+        input: `/formless/auth/app-registration/complete${locationSearch}`,
+        method: "POST",
+      },
+    ]);
+  });
+
+  it("parses target-bound signup searches without accepting return-only searches", () => {
+    expect(authAccountSignupTargetFromSearch(targetBoundLocationSearch())).toEqual(accountTarget());
+    expect(authAccountSignupTargetFromSearch("?returnTo=%2Fschema")).toBeUndefined();
+  });
+
+  it("posts email verification and gate completion submissions to runtime APIs", async () => {
+    const calls: JsonFetchCall[] = [];
+    const target = accountTarget();
+
+    await requestAuthAccountEmailVerification({
+      email: "ada@example.com",
+      fetcher: recordingJsonSequenceFetcher(calls, [
+        {
+          body: {
+            challenge: {
+              challengeId: "challenge:email",
+              displayEmail: "ada@example.com",
+              expiresAt: "2026-07-07T16:00:00.000Z",
+              purpose: "account-completion",
+            },
+          },
+        },
+      ]),
+      target,
+    });
+    await completeAuthAccountAppRegistrationGate({
+      fetcher: recordingJsonSequenceFetcher(calls, [
+        {
+          body: {
+            accountCompletion: completeResult(),
+            appRegistration: {
+              appInstallId: "task-workspace",
+              appRegistrationId: "app-registration:ada",
+              status: "active",
+            },
+            completed: true,
+          },
+        },
+      ]),
+      target,
+    });
+    await completeAuthAccountTermsAcceptanceGate({
+      acceptedPolicyIds: ["policy:workspace"],
+      fetcher: recordingJsonSequenceFetcher(calls, [
+        {
+          body: {
+            acceptedPolicies: [],
+            accountCompletion: completeResult(),
+            completed: true,
+          },
+        },
+      ]),
+      target,
+    });
+
+    expect(calls.map((call) => call.input)).toEqual([
+      "/formless/auth/email-verification/request",
+      "/formless/auth/app-registration/complete",
+      "/formless/auth/terms-acceptance/complete",
+    ]);
+    expect(calls.map((call) => call.method)).toEqual(["POST", "POST", "POST"]);
+    expect(calls[0]?.body).toEqual({
+      email: "ada@example.com",
+      purpose: "account-completion",
+      target,
+    });
+    expect(calls[1]?.body).toEqual({ target });
+    expect(calls[2]?.body).toEqual({ acceptedPolicyIds: ["policy:workspace"], target });
+  });
+
+  it("sets up email-verified signup credentials through runtime APIs", async () => {
+    const calls: JsonFetchCall[] = [];
+    const target = accountTarget();
+    const signup = {
+      challengeId: "challenge:signup",
+      displayEmail: "ada.signup@example.com",
+      expiresAt: "2026-07-07T16:00:00.000Z",
+      target,
+    };
+
+    await startEmailVerifiedSignup({
+      email: "ada.signup@example.com",
+      fetcher: recordingJsonSequenceFetcher(calls, [{ body: { signup } }]),
+      target,
+    });
+    const completed = await completeEmailVerifiedSignupWithPasskey({
+      challengeId: signup.challengeId,
+      createRegistrationResponse: async () => passkeyRegistrationResponse(),
+      displayName: "Ada Signup",
+      email: signup.displayEmail,
+      fetcher: recordingJsonSequenceFetcher(calls, [
+        { body: { options: passkeyRegistrationOptions() } },
+        {
+          body: {
+            accountCompletion: completeResult(),
+            principal: { displayName: "Ada Signup", principalId: "principal:signup" },
+            session: { expiresAt: "2026-07-07T20:00:00.000Z" },
+            verified: true,
+          },
+        },
+      ]),
+      target,
+    });
+
+    expect(completed.accountCompletion.status).toBe("complete");
+    expect(calls.map((call) => call.input)).toEqual([
+      "/formless/auth/signup/start",
+      "/formless/auth/signup/passkeys/register/options",
+      "/formless/auth/signup/passkeys/register/verify",
+    ]);
+    expect(JSON.stringify(calls)).not.toContain("sessionId");
+    expect(JSON.stringify(calls)).not.toContain("grantSecret");
   });
 
   it("rejects status responses that expose private session or grant material", async () => {
@@ -336,6 +651,10 @@ type FetchCall = {
   method: string | undefined;
 };
 
+type JsonFetchCall = FetchCall & {
+  body: unknown;
+};
+
 function renderAuthAccountState(state: AuthAccountRouteState) {
   return renderToStaticMarkup(<AuthAccountRouteView state={state} />);
 }
@@ -353,6 +672,31 @@ function recordingJsonFetcher(
     });
 
     return Response.json(body, init);
+  };
+}
+
+function recordingJsonSequenceFetcher(
+  calls: JsonFetchCall[],
+  responses: Array<{ body: unknown; init?: ResponseInit }>,
+): typeof fetch {
+  return async (input, requestInit) => {
+    const body =
+      typeof requestInit?.body === "string" ? JSON.parse(requestInit.body) : requestInit?.body;
+
+    calls.push({
+      body,
+      credentials: requestInit?.credentials,
+      input: requestInputString(input),
+      method: requestInit?.method,
+    });
+
+    const response = responses.shift();
+
+    if (!response) {
+      throw new Error("No recorded response.");
+    }
+
+    return Response.json(response.body, response.init);
   };
 }
 
@@ -387,6 +731,29 @@ function accountTarget(
     targetOrigin: "https://tasks.example.com",
     targetProfile: "app",
     ...input,
+  };
+}
+
+function targetBoundLocationSearch(): string {
+  return "?targetOrigin=https%3A%2F%2Ftasks.example.com&routeId=route%3Atasks&targetProfile=app&appInstallId=task-workspace&storageIdentity=app%3Atask-workspace&returnTo=%2Fschema%3Fview%3Dboard&nonceHash=bm9uY2U&state=c3RhdGU";
+}
+
+function passkeyRegistrationOptions() {
+  return {
+    challenge: "registration-challenge",
+  };
+}
+
+function passkeyRegistrationResponse(): OwnerPasskeyRegistrationVerifyRequest["response"] {
+  return {
+    id: "credential-id",
+    rawId: "credential-id",
+    response: {
+      attestationObject: "attestation-object",
+      clientDataJSON: "client-data-json",
+    },
+    type: "public-key",
+    clientExtensionResults: {},
   };
 }
 

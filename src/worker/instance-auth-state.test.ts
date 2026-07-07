@@ -7,23 +7,28 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vite-plus
 import { createWorkerHarness } from "./miniflare-test.ts";
 import type {
   ConsumeCollaboratorInvitationTokenResult,
+  ConsumeEmailVerificationChallengeResult,
   ConsumeHandoffGrantResult,
   ConsumePasskeyChallengeResult,
   CreateCentralAuthSessionResult,
   CreateCollaboratorInvitationTokenResult,
+  CreateEmailVerificationChallengeResult,
   CreateHandoffGrantResult,
   CreatePasskeyChallengeResult,
   CreatePasskeyCredentialResult,
+  RevokeEmailVerificationChallengeResult,
   RevokeCollaboratorInvitationTokenResult,
   RevokeCentralAuthSessionResult,
   StoredCollaboratorInvitationToken,
   StoredCentralAuthSession,
+  StoredEmailVerificationChallenge,
   StoredHandoffGrant,
   StoredHostSessionRevocationVersion,
   StoredInstanceAuthConfig,
   StoredPasskeyChallenge,
   StoredPasskeyCredential,
   UpdatePasskeyCredentialVerificationResult,
+  ValidateEmailVerificationChallengeResult,
 } from "./instance-auth-state.ts";
 
 type Harness = Awaited<ReturnType<typeof createWorkerHarness>>;
@@ -37,6 +42,7 @@ const expiresAt = "2026-05-21T01:00:00.000Z";
 const expiredAt = "2026-05-21T00:00:30.000Z";
 const registrationChallenge = "cmVnaXN0cmF0aW9uLWNoYWxsZW5nZQ";
 const invitationRegistrationChallenge = "aW52aXRhdGlvbi1yZWdpc3RyYXRpb24tY2hhbGxlbmdl";
+const signupRegistrationChallenge = "c2lnbnVwLXJlZ2lzdHJhdGlvbi1jaGFsbGVuZ2U";
 const loginChallenge = "bG9naW4tY2hhbGxlbmdl";
 const deleteChallenge = "ZGVsZXRlLWNoYWxsZW5nZQ";
 const setupTokenHash = "c2V0dXAtdG9rZW4taGFzaA";
@@ -61,6 +67,12 @@ const revokedInvitationId = "invitation:grace";
 const duplicateInvitationId = "invitation:duplicate";
 const invitationRawToken = "aW52aXRlLXJhdy10b2tlbi0x";
 const revokedInvitationRawToken = "aW52aXRlLXJhdy10b2tlbi0y";
+const emailVerificationRawToken = "ZW1haWwtdmVyaWZpY2F0aW9uLXJhdy10b2tlbi0x";
+const revokedEmailVerificationRawToken = "ZW1haWwtdmVyaWZpY2F0aW9uLXJhdy10b2tlbi0y";
+const emailVerificationChallengeId = "email-verification:ada";
+const signupEmailChallengeId = "email-verification:signup";
+const revokedEmailVerificationChallengeId = "email-verification:grace";
+const expiredEmailVerificationChallengeId = "email-verification:expired";
 const credentialId = "Y3JlZGVudGlhbC0x";
 const publicKey = [1, 2, 3, 4, 5];
 const publicKeyBase64Url = "AQIDBAU";
@@ -179,10 +191,26 @@ describe("instance auth state", () => {
       createdAt,
       expiresAt,
     });
+    const signupRegistration = await createChallenge({
+      kind: "registration",
+      challenge: signupRegistrationChallenge,
+      signupEmailChallengeId,
+      principalId,
+      canonicalOrigin,
+      relyingPartyId,
+      createdAt,
+      expiresAt,
+    });
     const storedInvitationRegistration = await readChallenge(invitationRegistrationChallenge);
+    const storedSignupRegistration = await readChallenge(signupRegistrationChallenge);
     const consumedInvitationRegistration = await consumeChallenge({
       kind: "registration",
       challenge: invitationRegistrationChallenge,
+      now: updatedAt,
+    });
+    const consumedSignupRegistration = await consumeChallenge({
+      kind: "registration",
+      challenge: signupRegistrationChallenge,
       now: updatedAt,
     });
 
@@ -222,10 +250,34 @@ describe("instance auth state", () => {
     expect(storedInvitationRegistration).toEqual({
       challenge: invitationRegistration.ok ? invitationRegistration.challenge : undefined,
     });
+    expect(signupRegistration).toEqual({
+      ok: true,
+      challenge: {
+        id: expect.any(String),
+        kind: "registration",
+        challenge: signupRegistrationChallenge,
+        signupEmailChallengeId,
+        principalId,
+        canonicalOrigin,
+        relyingPartyId,
+        createdAt,
+        expiresAt,
+      },
+    });
+    expect(storedSignupRegistration).toEqual({
+      challenge: signupRegistration.ok ? signupRegistration.challenge : undefined,
+    });
     expect(consumedInvitationRegistration).toEqual({
       ok: true,
       challenge: {
         ...(invitationRegistration.ok ? invitationRegistration.challenge : undefined),
+        consumedAt: updatedAt,
+      },
+    });
+    expect(consumedSignupRegistration).toEqual({
+      ok: true,
+      challenge: {
+        ...(signupRegistration.ok ? signupRegistration.challenge : undefined),
         consumedAt: updatedAt,
       },
     });
@@ -652,6 +704,227 @@ describe("instance auth state", () => {
     expect(privateAuthSessionState).not.toContain(tokenHash);
   });
 
+  it("stores email verification challenge hashes with target binding and consumed or revoked status", async () => {
+    const tokenHash = await hashEmailVerificationToken(emailVerificationRawToken);
+    const revokedTokenHash = await hashEmailVerificationToken(revokedEmailVerificationRawToken);
+    const created = await createEmailVerificationChallenge({
+      authOrigin: `${canonicalOrigin}/`,
+      challengeId: emailVerificationChallengeId,
+      createdAt,
+      email: "Ada@Example.COM",
+      expiresAt,
+      idempotencyKey: "email-verification:ada",
+      principalId,
+      purpose: "account-completion",
+      target: accountCompletionTarget(),
+      tokenHash,
+    });
+    const replayedCreate = await createEmailVerificationChallenge({
+      authOrigin: canonicalOrigin,
+      challengeId: "email-verification:ada-replay",
+      createdAt,
+      email: "ada@example.com",
+      expiresAt,
+      idempotencyKey: "email-verification:ada",
+      principalId,
+      purpose: "account-completion",
+      target: accountCompletionTarget(),
+      tokenHash: revokedTokenHash,
+    });
+    const link = await buildEmailVerificationLink({
+      authOrigin: canonicalOrigin,
+      challengeId: emailVerificationChallengeId,
+      token: emailVerificationRawToken,
+    });
+    const wrongToken = await validateEmailVerificationChallenge({
+      challengeId: emailVerificationChallengeId,
+      email: "ada@example.com",
+      now: updatedAt,
+      principalId,
+      purpose: "account-completion",
+      target: accountCompletionTarget(),
+      tokenHash: revokedTokenHash,
+    });
+    const wrongEmail = await validateEmailVerificationChallenge({
+      challengeId: emailVerificationChallengeId,
+      email: "grace@example.com",
+      now: updatedAt,
+      principalId,
+      purpose: "account-completion",
+      target: accountCompletionTarget(),
+      tokenHash,
+    });
+    const wrongTarget = await validateEmailVerificationChallenge({
+      challengeId: emailVerificationChallengeId,
+      email: "ada@example.com",
+      now: updatedAt,
+      principalId,
+      purpose: "account-completion",
+      target: { ...accountCompletionTarget(), appInstallId: "crm" },
+      tokenHash,
+    });
+    const validated = await validateEmailVerificationChallenge({
+      challengeId: emailVerificationChallengeId,
+      email: "ada@example.com",
+      now: updatedAt,
+      principalId,
+      purpose: "account-completion",
+      target: accountCompletionTarget(),
+      tokenHash,
+    });
+    const consumed = await consumeEmailVerificationChallenge({
+      challengeId: emailVerificationChallengeId,
+      email: "ada@example.com",
+      now: updatedAt,
+      principalId,
+      purpose: "account-completion",
+      target: accountCompletionTarget(),
+      tokenHash,
+    });
+    const replay = await consumeEmailVerificationChallenge({
+      challengeId: emailVerificationChallengeId,
+      email: "ada@example.com",
+      now: updatedAt,
+      principalId,
+      purpose: "account-completion",
+      target: accountCompletionTarget(),
+      tokenHash,
+    });
+    const stored = await readEmailVerificationChallenge(emailVerificationChallengeId);
+
+    await createEmailVerificationChallenge({
+      authOrigin: canonicalOrigin,
+      challengeId: expiredEmailVerificationChallengeId,
+      createdAt,
+      email: "expired@example.com",
+      expiresAt: expiredAt,
+      idempotencyKey: "email-verification:expired",
+      principalId,
+      purpose: "account-completion",
+      target: accountCompletionTarget(),
+      tokenHash: await hashEmailVerificationToken("ZXhwaXJlZC1lbWFpbC12ZXJpZmljYXRpb24"),
+    });
+
+    const expired = await consumeEmailVerificationChallenge({
+      challengeId: expiredEmailVerificationChallengeId,
+      email: "expired@example.com",
+      now: updatedAt,
+      principalId,
+      purpose: "account-completion",
+      target: accountCompletionTarget(),
+      tokenHash: await hashEmailVerificationToken("ZXhwaXJlZC1lbWFpbC12ZXJpZmljYXRpb24"),
+    });
+
+    await createEmailVerificationChallenge({
+      authOrigin: canonicalOrigin,
+      challengeId: revokedEmailVerificationChallengeId,
+      createdAt,
+      email: "grace@example.com",
+      expiresAt,
+      idempotencyKey: "email-verification:grace",
+      principalId,
+      purpose: "account-completion",
+      target: accountCompletionTarget(),
+      tokenHash: revokedTokenHash,
+    });
+
+    const revoked = await revokeEmailVerificationChallenge(
+      revokedEmailVerificationChallengeId,
+      updatedAt,
+    );
+    const consumedRevoked = await consumeEmailVerificationChallenge({
+      challengeId: revokedEmailVerificationChallengeId,
+      email: "grace@example.com",
+      now: updatedAt,
+      principalId,
+      purpose: "account-completion",
+      target: accountCompletionTarget(),
+      tokenHash: revokedTokenHash,
+    });
+
+    expect(created).toEqual({
+      ok: true,
+      replayed: false,
+      challenge: {
+        ...accountCompletionTarget(),
+        authOrigin: canonicalOrigin,
+        challengeId: emailVerificationChallengeId,
+        createdAt,
+        displayEmail: "Ada@example.com",
+        expiresAt,
+        idempotencyKey: "email-verification:ada",
+        normalizedEmail: "ada@example.com",
+        principalId,
+        purpose: "account-completion",
+        tokenHash,
+      },
+    });
+    expect(replayedCreate).toEqual({
+      ok: true,
+      replayed: true,
+      challenge: created.ok ? created.challenge : undefined,
+    });
+    expect(link).toBe(
+      `${canonicalOrigin}/formless/auth/email-verification?challengeId=email-verification%3Aada&token=${emailVerificationRawToken}`,
+    );
+    expect(wrongToken).toEqual({
+      ok: false,
+      challenge: created.ok ? created.challenge : undefined,
+      reason: "wrong-token",
+    });
+    expect(wrongEmail).toEqual({
+      ok: false,
+      challenge: created.ok ? created.challenge : undefined,
+      reason: "wrong-email",
+    });
+    expect(wrongTarget).toEqual({
+      ok: false,
+      challenge: created.ok ? created.challenge : undefined,
+      reason: "wrong-target",
+    });
+    expect(validated).toEqual({
+      ok: true,
+      challenge: created.ok ? created.challenge : undefined,
+    });
+    expect(consumed).toEqual({
+      ok: true,
+      challenge: {
+        ...(created.ok ? created.challenge : undefined),
+        consumedAt: updatedAt,
+      },
+    });
+    expect(replay).toEqual({
+      ok: false,
+      challenge: consumed.ok ? consumed.challenge : undefined,
+      reason: "already-consumed",
+    });
+    expect(stored.challenge).toEqual(consumed.ok ? consumed.challenge : undefined);
+    expect(expired).toEqual({
+      ok: false,
+      challenge: expect.objectContaining({
+        challengeId: expiredEmailVerificationChallengeId,
+        expiresAt: expiredAt,
+      }),
+      reason: "expired-challenge",
+    });
+    expect(revoked).toEqual({
+      ok: true,
+      challenge: expect.objectContaining({
+        challengeId: revokedEmailVerificationChallengeId,
+        revokedAt: updatedAt,
+      }),
+    });
+    expect(consumedRevoked).toEqual({
+      ok: false,
+      challenge: revoked.ok ? revoked.challenge : undefined,
+      reason: "revoked-challenge",
+    });
+    expect(JSON.stringify([created, consumed, revoked])).not.toContain(emailVerificationRawToken);
+    expect(JSON.stringify([created, consumed, revoked])).not.toContain(
+      revokedEmailVerificationRawToken,
+    );
+  });
+
   it("reports missing credentials before verification facts are updated", async () => {
     expect(
       await updateCredentialVerification({
@@ -788,9 +1061,52 @@ function buildInvitationLink(input: unknown) {
   return postJson<string>("/invitation-link", input);
 }
 
+function buildEmailVerificationLink(input: unknown) {
+  return postJson<string>("/email-verification-link", input);
+}
+
+function createEmailVerificationChallenge(input: Record<string, unknown>) {
+  return postJson<CreateEmailVerificationChallengeResult>("/email-verification-challenge", input);
+}
+
+function readEmailVerificationChallenge(id: string) {
+  return getJson<{ challenge: StoredEmailVerificationChallenge | null }>(
+    `/email-verification-challenge?challengeId=${encodeURIComponent(id)}`,
+  );
+}
+
+function validateEmailVerificationChallenge(input: unknown) {
+  return postJson<ValidateEmailVerificationChallengeResult>(
+    "/email-verification-challenge/validate",
+    input,
+  );
+}
+
+function consumeEmailVerificationChallenge(input: unknown) {
+  return postJson<ConsumeEmailVerificationChallengeResult>(
+    "/email-verification-challenge/consume",
+    input,
+  );
+}
+
+function revokeEmailVerificationChallenge(id: string, now: string) {
+  return postJson<RevokeEmailVerificationChallengeResult>("/email-verification-challenge/revoke", {
+    challengeId: id,
+    now,
+  });
+}
+
 async function hashInvitationToken(token: string) {
   const body = await getJson<{ hash: string }>(
     `/invitation-token/hash?token=${encodeURIComponent(token)}`,
+  );
+
+  return body.hash;
+}
+
+async function hashEmailVerificationToken(token: string) {
+  const body = await getJson<{ hash: string }>(
+    `/email-verification-token/hash?token=${encodeURIComponent(token)}`,
   );
 
   return body.hash;
@@ -812,6 +1128,17 @@ function handoffGrantInput() {
     state,
     createdAt,
     expiresAt,
+  };
+}
+
+function accountCompletionTarget() {
+  return {
+    appInstallId,
+    returnTo: "/formless/auth",
+    routeId,
+    storageIdentity,
+    targetOrigin,
+    targetProfile: "app",
   };
 }
 
@@ -864,12 +1191,15 @@ async function writeInstanceAuthHarness() {
       import { DurableObject } from "cloudflare:workers";
       import {
         buildCollaboratorInvitationLink,
+        buildEmailVerificationLink,
         bumpHostSessionRevocationVersion,
         consumeCollaboratorInvitationToken,
+        consumeEmailVerificationChallenge,
         consumeHandoffGrant,
         consumePasskeyChallenge,
         createCentralAuthSession,
         createCollaboratorInvitationToken,
+        createEmailVerificationChallenge,
         createHandoffGrant,
         createPasskeyChallenge,
         createPasskeyCredential,
@@ -877,9 +1207,11 @@ async function writeInstanceAuthHarness() {
         ensureInstanceAuthTables,
         expirePasskeyChallenges,
         hashCollaboratorInvitationToken,
+        hashEmailVerificationToken,
         passkeyCredentialToWebAuthnCredential,
         readCentralAuthSession,
         readCollaboratorInvitationToken,
+        readEmailVerificationChallenge,
         readHandoffGrant,
         readHostSessionRevocationVersion,
         readInstanceAuthConfig,
@@ -887,8 +1219,10 @@ async function writeInstanceAuthHarness() {
         readPasskeyCredential,
         readPasskeyCredentialsForPrincipal,
         revokeCollaboratorInvitationToken,
+        revokeEmailVerificationChallenge,
         revokeCentralAuthSession,
         updatePasskeyCredentialVerification,
+        validateEmailVerificationChallenge,
         writeInstanceAuthConfig,
       } from "${process.cwd()}/src/worker/instance-auth-state.ts";
 
@@ -993,8 +1327,63 @@ async function writeInstanceAuthHarness() {
               });
             }
 
+            if (request.method === "POST" && url.pathname === "/email-verification-challenge") {
+              return Response.json(
+                createEmailVerificationChallenge(this.ctx.storage, await request.json()),
+              );
+            }
+
+            if (request.method === "GET" && url.pathname === "/email-verification-challenge") {
+              return Response.json({
+                challenge:
+                  readEmailVerificationChallenge(
+                    this.ctx.storage,
+                    url.searchParams.get("challengeId"),
+                  ) ?? null,
+              });
+            }
+
+            if (
+              request.method === "POST" &&
+              url.pathname === "/email-verification-challenge/validate"
+            ) {
+              return Response.json(
+                validateEmailVerificationChallenge(this.ctx.storage, await request.json()),
+              );
+            }
+
+            if (
+              request.method === "POST" &&
+              url.pathname === "/email-verification-challenge/consume"
+            ) {
+              return Response.json(
+                consumeEmailVerificationChallenge(this.ctx.storage, await request.json()),
+              );
+            }
+
+            if (
+              request.method === "POST" &&
+              url.pathname === "/email-verification-challenge/revoke"
+            ) {
+              const body = await request.json();
+
+              return Response.json(
+                revokeEmailVerificationChallenge(this.ctx.storage, body.challengeId, body.now),
+              );
+            }
+
+            if (request.method === "GET" && url.pathname === "/email-verification-token/hash") {
+              return Response.json({
+                hash: await hashEmailVerificationToken(url.searchParams.get("token")),
+              });
+            }
+
             if (request.method === "POST" && url.pathname === "/invitation-link") {
               return Response.json(buildCollaboratorInvitationLink(await request.json()));
+            }
+
+            if (request.method === "POST" && url.pathname === "/email-verification-link") {
+              return Response.json(buildEmailVerificationLink(await request.json()));
             }
 
             if (request.method === "POST" && url.pathname === "/challenge") {

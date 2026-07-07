@@ -11,6 +11,8 @@ export const INTERNAL_IDENTITY_OWNER_PRINCIPAL_PATH =
 export const INTERNAL_IDENTITY_PRINCIPAL_AUTHORITY_PATH = "/_internal/identity-owner/authority";
 export const INTERNAL_IDENTITY_ACCOUNT_COMPLETION_STATE_PATH =
   "/_internal/identity-owner/account-completion-state";
+export const INTERNAL_IDENTITY_EMAIL_VERIFICATION_COMMIT_PATH =
+  "/_internal/identity-owner/email-verification-commit";
 
 export type IdentityOwnerInternalEnv = {
   FORMLESS_AUTHORITY?: DurableObjectNamespace;

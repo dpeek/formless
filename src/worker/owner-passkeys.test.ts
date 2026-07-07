@@ -359,7 +359,10 @@ describe("owner passkey API routes", () => {
     expect(logout.response.headers.get("Set-Cookie")).not.toContain(
       `${HOST_AUTH_SESSION_COOKIE_NAME}=`,
     );
-    expect(logout.body).toEqual({ authenticated: false });
+    expect(logout.body).toEqual({
+      authenticated: false,
+      continueTo: "/formless/auth/sign-in",
+    });
     expect(statusAfterLogout.body).toEqual({
       authenticated: false,
       owner: registered.body.owner,

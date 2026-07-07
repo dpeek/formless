@@ -16,6 +16,7 @@ import {
   listInstallableAppPackages,
   listResolvedAppPackages,
   packageAppFactsForKey,
+  parseAppInstallRegistrationPolicy,
   parseAppPackageManifest,
   sourceSchemaCanonicalJson,
   validateAppInstallId,
@@ -221,6 +222,18 @@ describe("app install registry", () => {
     ]);
   });
 
+  it("parses supported app install registration policies", () => {
+    expect(parseAppInstallRegistrationPolicy("closed", "App install registration policy")).toBe(
+      "closed",
+    );
+    expect(
+      parseAppInstallRegistrationPolicy("email-verified", "App install registration policy"),
+    ).toBe("email-verified");
+    expect(() =>
+      parseAppInstallRegistrationPolicy("domain-allowlist", "App install registration policy"),
+    ).toThrow('App install registration policy must be "closed" or "email-verified".');
+  });
+
   it("validates route-safe install ids", () => {
     expect(validateAppInstallId(" docs-site ")).toEqual({
       ok: true,
@@ -279,6 +292,17 @@ describe("app install registry", () => {
         packageResolver: resolver,
       }),
     );
+    const members = expectSuccess(
+      createAppInstall({
+        existingInstalls: [],
+        installId: "members",
+        label: " Members ",
+        now,
+        packageAppKey: "site",
+        packageResolver: resolver,
+        registrationPolicy: "email-verified",
+      }),
+    );
 
     expect(site.install).toEqual({
       adminRoute: "/apps/personal",
@@ -311,6 +335,11 @@ describe("app install registry", () => {
       sourceSchemaHash: tasksSourceSchemaHash,
       status: "installed",
       updatedAt: now,
+    });
+    expect(members.install).toMatchObject({
+      installId: "members",
+      label: "Members",
+      registrationPolicy: "email-verified",
     });
     expect(appInstallInitializationPlan(site.install, resolver)).toEqual(site.initialization);
   });
@@ -431,13 +460,27 @@ describe("app install registry", () => {
         packageResolver: resolver,
       }),
     );
+    const unsupportedPolicy = expectFailure(
+      createAppInstall({
+        existingInstalls: existing,
+        installId: "members",
+        label: "Members",
+        now,
+        packageAppKey: "site",
+        packageResolver: resolver,
+        registrationPolicy: "domain-allowlist" as never,
+      }),
+    );
 
     expect(unsupportedPackage.error.code).toBe("unsupported-package");
     expect(invalidLabel.error.code).toBe("invalid-label");
     expect(duplicateInstallId.error.code).toBe("duplicate-install-id");
+    expect(unsupportedPolicy.error.code).toBe("invalid-registration-policy");
+    expect(unsupportedPolicy.error.field).toBe("registrationPolicy");
     expect(unsupportedPackage.installs).toBe(existing);
     expect(invalidLabel.installs).toBe(existing);
     expect(duplicateInstallId.installs).toBe(existing);
+    expect(unsupportedPolicy.installs).toBe(existing);
   });
 
   it("keeps existing installs unchanged when initial source validation fails", () => {

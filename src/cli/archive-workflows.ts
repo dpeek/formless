@@ -435,6 +435,7 @@ async function buildRemoteAppArchiveEntry(input: {
       sourceSchemaKey,
       sourceSchemaHash,
       label: input.install.label,
+      registrationPolicy: input.install.registrationPolicy,
       status: input.install.status,
       createdAt: input.install.createdAt,
       updatedAt: input.install.updatedAt,

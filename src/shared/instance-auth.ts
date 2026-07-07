@@ -58,6 +58,7 @@ export type OwnerPasskeyRegistrationVerifyRequest = {
 };
 
 export type OwnerPasskeyRegistrationVerifyResponse = {
+  continueTo?: AuthSuccessContinuationTarget;
   owner: OwnerIdentity;
   session?: OwnerSessionSummary;
   setupComplete: true;
@@ -95,6 +96,7 @@ export type OwnerSessionStatusResponse =
 
 export type OwnerLogoutResponse = {
   authenticated: false;
+  continueTo?: OwnerLoginRedirectTarget;
 };
 
 export type InstanceAuthErrorResponse = {
@@ -166,6 +168,7 @@ export type CollaboratorInvitationPasskeyRegistrationVerifyRequest = {
 export type CollaboratorInvitationPasskeyRegistrationVerifyResponse = {
   acceptedPrincipal: CollaboratorInvitationAcceptedPrincipalSummary;
   accountCompletion?: AccountCompletionGateResolutionResult;
+  continueTo?: AuthSuccessContinuationTarget;
   handoff?: CollaboratorInvitationAcceptanceHandoffSummary;
   invitation: CollaboratorInvitationAcceptanceInvitationSummary;
   session: OwnerSessionSummary;
@@ -330,6 +333,10 @@ export type AccountCompletionGateResolutionResult =
   | AccountCompletionGateResult;
 
 export type OwnerLoginRedirectTarget = `/${string}`;
+export type AuthSuccessContinuationTarget =
+  | OwnerLoginRedirectTarget
+  | `http://${string}`
+  | `https://${string}`;
 
 export const ownerLoginDefaultRedirectTarget = "/" satisfies OwnerLoginRedirectTarget;
 export const ownerPasskeyLoginContinuationTarget =
@@ -380,6 +387,15 @@ export function ownerLoginRedirectLocationForRoute(
     parseOwnerLoginRedirectTarget(routeTarget) ?? ownerLoginDefaultRedirectTarget;
 
   return `${runtimeTopologyRoutes.authAccountSignInRoute}?redirectTo=${encodeURIComponent(redirectTarget)}`;
+}
+
+export function authAccountContinuationLocationForReturnTarget(
+  routeTarget: string,
+): OwnerLoginRedirectTarget {
+  const redirectTarget =
+    parseOwnerLoginRedirectTarget(routeTarget) ?? ownerLoginDefaultRedirectTarget;
+
+  return `${runtimeTopologyRoutes.authAccountRoute}?returnTo=${encodeURIComponent(redirectTarget)}` as OwnerLoginRedirectTarget;
 }
 
 function hasOwnerLoginRedirectControlCharacter(value: string): boolean {
@@ -571,7 +587,7 @@ export function parseOwnerPasskeyRegistrationVerifyResponse(
     "Passkey registration verify response",
     object,
     ["owner", "setupComplete"],
-    ["session"],
+    ["continueTo", "session"],
   );
 
   if (object.setupComplete !== true) {
@@ -579,6 +595,14 @@ export function parseOwnerPasskeyRegistrationVerifyResponse(
   }
 
   return {
+    ...(object.continueTo === undefined
+      ? {}
+      : {
+          continueTo: parseAuthSuccessContinuationTarget(
+            "Passkey registration verify response continueTo",
+            object.continueTo,
+          ),
+        }),
     owner: parseOwnerIdentity("Passkey registration owner", object.owner),
     ...(object.session === undefined
       ? {}
@@ -698,13 +722,23 @@ export function parseOwnerSessionStatusResponse(value: unknown): OwnerSessionSta
 export function parseOwnerLogoutResponse(value: unknown): OwnerLogoutResponse {
   const object = parseObject("Owner logout response", value);
 
-  assertKeys("Owner logout response", object, ["authenticated"]);
+  assertKeys("Owner logout response", object, ["authenticated"], ["continueTo"]);
 
   if (object.authenticated !== false) {
     throw new Error("Owner logout response authenticated must be false.");
   }
 
-  return { authenticated: false };
+  return {
+    authenticated: false,
+    ...(object.continueTo === undefined
+      ? {}
+      : {
+          continueTo: parseOwnerLoginContinuationTarget(
+            "Owner logout response continueTo",
+            object.continueTo,
+          ),
+        }),
+  };
 }
 
 export function parseInstanceAuthErrorResponse(value: unknown): InstanceAuthErrorResponse {
@@ -1123,7 +1157,7 @@ export function parseCollaboratorInvitationPasskeyRegistrationVerifyResponse(
     "Collaborator invitation passkey registration verify response",
     object,
     ["acceptedPrincipal", "invitation", "session", "verified"],
-    ["accountCompletion", "handoff"],
+    ["accountCompletion", "continueTo", "handoff"],
   );
 
   if (object.verified !== true) {
@@ -1140,6 +1174,14 @@ export function parseCollaboratorInvitationPasskeyRegistrationVerifyResponse(
       ? {}
       : {
           accountCompletion: parseAccountCompletionGateResolutionResult(object.accountCompletion),
+        }),
+    ...(object.continueTo === undefined
+      ? {}
+      : {
+          continueTo: parseAuthSuccessContinuationTarget(
+            "Collaborator invitation passkey registration verify response continueTo",
+            object.continueTo,
+          ),
         }),
     ...(object.handoff === undefined
       ? {}
@@ -1216,6 +1258,40 @@ function parseOwnerPasskeyLoginContinuationTarget(
   }
 
   return target;
+}
+
+function parseAuthSuccessContinuationTarget(
+  context: string,
+  value: unknown,
+): AuthSuccessContinuationTarget {
+  const pathOnlyTarget = parseOwnerLoginRedirectTarget(value);
+
+  if (pathOnlyTarget) {
+    return pathOnlyTarget;
+  }
+
+  if (typeof value !== "string" || value === "" || hasOwnerLoginRedirectControlCharacter(value)) {
+    throw new Error(`${context} must be path-only or an HTTP(S) URL.`);
+  }
+
+  let url: URL;
+
+  try {
+    url = new URL(value);
+  } catch {
+    throw new Error(`${context} must be path-only or an HTTP(S) URL.`);
+  }
+
+  if (
+    (url.protocol !== "https:" && url.protocol !== "http:") ||
+    url.username ||
+    url.password ||
+    url.hash
+  ) {
+    throw new Error(`${context} must be path-only or an HTTP(S) URL without credentials or hash.`);
+  }
+
+  return `${url.origin}${url.pathname}${url.search}` as AuthSuccessContinuationTarget;
 }
 
 function parseCollaboratorInvitationAcceptanceInvitationSummary(
@@ -1363,7 +1439,7 @@ function parseOptionalAppRegistrationPolicy(value: unknown): {
     return {};
   }
 
-  if (value === "closed") {
+  if (value === "closed" || value === "email-verified") {
     return { registrationPolicy: value };
   }
 

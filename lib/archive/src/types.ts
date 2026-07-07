@@ -2,9 +2,12 @@
  * Versioned public archive contract declarations, parsers, and formatters.
  */
 import {
+  defaultAppInstallRegistrationPolicy,
   isSourceSchemaHash,
+  parseAppInstallRegistrationPolicy,
   validateAppInstallId,
   type AppPackageResolver,
+  type AppInstallRegistrationPolicy,
   type PackageAppRevision,
   type SourceSchemaHash,
 } from "@dpeek/formless-installed-apps";
@@ -44,6 +47,7 @@ export type ArchivedAppInstall = {
   sourceSchemaKey: string;
   sourceSchemaHash: SourceSchemaHash;
   label: string;
+  registrationPolicy: AppInstallRegistrationPolicy;
   status: "installed";
   createdAt: string;
   updatedAt: string;
@@ -237,6 +241,7 @@ function parseArchivedAppInstall(context: string, value: unknown): ArchivedAppIn
     "sourceSchemaKey",
     "sourceSchemaHash",
     "label",
+    ...("registrationPolicy" in object ? ["registrationPolicy"] : []),
     "status",
     "createdAt",
     "updatedAt",
@@ -263,6 +268,13 @@ function parseArchivedAppInstall(context: string, value: unknown): ArchivedAppIn
     ),
     sourceSchemaHash: parseSourceSchemaHash(`${context} sourceSchemaHash`, object.sourceSchemaHash),
     label: parseTrimmedNonEmptyString(`${context} label`, object.label),
+    registrationPolicy:
+      object.registrationPolicy === undefined
+        ? defaultAppInstallRegistrationPolicy()
+        : parseAppInstallRegistrationPolicy(
+            object.registrationPolicy,
+            `${context} registrationPolicy`,
+          ),
     status: "installed",
     createdAt: parseIsoTimestamp(`${context} createdAt`, object.createdAt),
     updatedAt: parseIsoTimestamp(`${context} updatedAt`, object.updatedAt),
@@ -588,6 +600,7 @@ function canonicalArchivedAppInstall(app: ArchivedAppInstall): ArchivedAppInstal
     sourceSchemaKey: app.sourceSchemaKey,
     sourceSchemaHash: app.sourceSchemaHash,
     label: app.label,
+    registrationPolicy: app.registrationPolicy,
     status: "installed",
     createdAt: app.createdAt,
     updatedAt: app.updatedAt,

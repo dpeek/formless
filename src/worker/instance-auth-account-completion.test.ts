@@ -13,9 +13,12 @@ import {
 import { recordOperationRequest } from "../test/authority-write.ts";
 import type { OperationInvocationResponse } from "../shared/operation-invocation.ts";
 import {
+  INSTANCE_AUTH_APP_REGISTRATION_GATE_COMPLETE_PATH,
   INSTANCE_AUTH_ACCOUNT_COMPLETION_RESOLVE_PATH,
+  INSTANCE_AUTH_TERMS_ACCEPTANCE_GATE_COMPLETE_PATH,
   type AccountCompletionGateResolverInput,
 } from "./instance-auth-account-completion.ts";
+import { CENTRAL_AUTH_SESSION_COOKIE_NAME } from "./central-auth-session.ts";
 import type { CreateAppInstallResponse } from "../shared/protocol.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
 
@@ -44,6 +47,7 @@ beforeEach(async () => {
       bindings: {
         FORMLESS_ADMIN_TOKEN: adminToken,
         FORMLESS_INSTANCE_AUTH_ORIGIN: "https://auth.example.com",
+        FORMLESS_OWNER_SESSION_SECRET: "test-owner-session-secret",
       },
     },
   );
@@ -285,6 +289,223 @@ describe("instance auth account completion resolver", () => {
     });
   });
 
+  it("returns a self-service email-verified app registration gate", async () => {
+    await createAppInstall({
+      installId: "portal",
+      label: "Portal",
+      packageAppKey: "tasks",
+      registrationPolicy: "email-verified",
+    });
+    const principal = await createPrincipal("Email Verified Registration");
+    const target = appTarget({
+      appInstallId: "portal",
+      returnTo: "/portal",
+      routeId: "route:portal",
+      storageIdentity: "app:portal",
+      targetOrigin: "https://portal.example.com",
+    });
+
+    await createPrimaryEmail(principal.id, "email-verified-registration@example.com", "verified");
+    await createCredential(principal.id, "email-verified-registration");
+
+    const blocked = await expectGate({ principalId: principal.id, target }, "app-registration");
+
+    expect(blocked).toMatchObject({
+      gate: {
+        appInstallId: "portal",
+        kind: "app-registration",
+        operation: {
+          appInstallId: "portal",
+          entityName: "app-registration",
+          label: "Register for app",
+          operationKey: "auth.app-registration.complete",
+          operationName: "completeEmailVerifiedAppRegistration",
+        },
+        registrationPolicy: "email-verified",
+      },
+      status: "blocked",
+      target,
+    });
+    expect(JSON.stringify(blocked)).not.toContain("session");
+    expect(JSON.stringify(blocked)).not.toContain("grantSecret");
+    expect(JSON.stringify(blocked)).not.toContain("credential");
+    expect(JSON.stringify(blocked)).not.toContain("tokenHash");
+  });
+
+  it("completes an email-verified app registration gate and returns a safe continuation", async () => {
+    const install = await createAppInstall({
+      installId: "portal",
+      label: "Portal",
+      packageAppKey: "tasks",
+      registrationPolicy: "email-verified",
+    });
+    const principal = await createPrincipal("Complete Registration");
+    const target = appTargetForInstall(install);
+
+    await createPrimaryEmail(principal.id, "complete-registration@example.com", "verified");
+    await createCredential(principal.id, "complete-registration");
+
+    const completed = await completeAppRegistrationGate({
+      cookie: await createCentralSessionCookie(principal.id),
+      target,
+    });
+    const records = await identityRecords();
+    const privateCounts = await authPrivateCounts();
+
+    expect(completed.status).toBe(200);
+    expect(completed.setCookie).toBeNull();
+    expect(completed.body).toMatchObject({
+      accountCompletion: {
+        continueTo: "/apps/portal",
+        status: "complete",
+        target,
+      },
+      appRegistration: {
+        appInstallId: "portal",
+        status: "active",
+        targetKind: "principal",
+        targetPrincipal: principal.id,
+      },
+      completed: true,
+      continueTo: "/apps/portal",
+    });
+    expect(completed.body).not.toHaveProperty("handoff");
+    expect(records.records).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          entity: "app-registration",
+          values: expect.objectContaining({
+            appInstallId: "portal",
+            status: "active",
+            targetKind: "principal",
+            targetPrincipal: principal.id,
+          }),
+        }),
+      ]),
+    );
+    expect(privateCounts.handoffGrants).toBe(0);
+  });
+
+  it("re-evaluates account completion after app registration before returning continuation", async () => {
+    const install = await createAppInstall({
+      installId: "portal",
+      label: "Portal",
+      packageAppKey: "tasks",
+      registrationPolicy: "email-verified",
+    });
+    const principal = await createPrincipal("Blocked After Registration");
+    const target = appTargetForInstall(install);
+
+    await createPrimaryEmail(principal.id, "blocked-after-registration@example.com", "verified");
+    await createCredential(principal.id, "blocked-after-registration");
+    await createAccountPolicy({
+      appInstallId: "portal",
+      displayName: "Portal terms",
+      policyKey: "portal-terms",
+      scopeKind: "app-install",
+    });
+
+    const completed = await completeAppRegistrationGate({
+      cookie: await createCentralSessionCookie(principal.id),
+      target,
+    });
+    const privateCounts = await authPrivateCounts();
+
+    expect(completed.status).toBe(409);
+    expect(completed.body).toMatchObject({
+      accountCompletion: {
+        gate: {
+          kind: "terms-acceptance",
+          policies: [expect.objectContaining({ policyKey: "portal-terms" })],
+        },
+        status: "blocked",
+        target,
+      },
+      completed: true,
+    });
+    expect(completed.body).not.toHaveProperty("handoff");
+    expect(privateCounts.handoffGrants).toBe(0);
+  });
+
+  it("rejects app registration completion when the current gate is not email-verified", async () => {
+    const install = await createAppInstall({
+      installId: "closed-portal",
+      label: "Closed Portal",
+      packageAppKey: "tasks",
+    });
+    const principal = await createPrincipal("Reject Closed Registration");
+    const target = appTargetForInstall(install);
+
+    await createPrimaryEmail(principal.id, "reject-closed-registration@example.com", "verified");
+    await createCredential(principal.id, "reject-closed-registration");
+
+    const rejected = await completeAppRegistrationGate({
+      cookie: await createCentralSessionCookie(principal.id),
+      target,
+    });
+    const records = await identityRecords();
+
+    expect(rejected.status).toBe(409);
+    expect(rejected.body).toMatchObject({
+      accountCompletion: {
+        gate: {
+          appInstallId: "closed-portal",
+          kind: "app-registration",
+          registrationPolicy: "closed",
+        },
+        status: "blocked",
+      },
+      error: "Email-verified app-registration gate is not current.",
+    });
+    expect(
+      records.records.some(
+        (record) =>
+          record.entity === "app-registration" &&
+          record.values.appInstallId === "closed-portal" &&
+          record.values.targetPrincipal === principal.id,
+      ),
+    ).toBe(false);
+  });
+
+  it("rejects app registration completion while an earlier credential gate is current", async () => {
+    const install = await createAppInstall({
+      installId: "credential-portal",
+      label: "Credential Portal",
+      packageAppKey: "tasks",
+      registrationPolicy: "email-verified",
+    });
+    const principal = await createPrincipal("Reject Missing Credential");
+    const target = appTargetForInstall(install);
+
+    await createPrimaryEmail(principal.id, "reject-missing-credential@example.com", "verified");
+
+    const rejected = await completeAppRegistrationGate({
+      cookie: await createCentralSessionCookie(principal.id),
+      target,
+    });
+    const records = await identityRecords();
+
+    expect(rejected.status).toBe(409);
+    expect(rejected.body).toMatchObject({
+      accountCompletion: {
+        gate: {
+          credentialMethod: "passkey",
+          kind: "credential",
+        },
+        status: "blocked",
+      },
+      error: "Email-verified app-registration gate is not current.",
+    });
+    expect(
+      records.records.some(
+        (record) =>
+          record.entity === "app-registration" &&
+          record.values.appInstallId === "credential-portal" &&
+          record.values.targetPrincipal === principal.id,
+      ),
+    ).toBe(false);
+  });
+
   it("keeps app profile completion evidence explicit and app-owned", async () => {
     const principal = await createPrincipal("Profile Evidence");
 
@@ -338,6 +559,296 @@ describe("instance auth account completion resolver", () => {
       status: "complete",
       target: appTarget(),
     });
+  });
+
+  it("completes terms acceptance and reuses already accepted policy records", async () => {
+    const install = await createAppInstall({
+      installId: "terms-portal",
+      label: "Terms Portal",
+      packageAppKey: "tasks",
+    });
+    const principal = await createPrincipal("Terms Acceptance");
+    const target = appTargetForInstall(install);
+
+    await createPrimaryEmail(principal.id, "terms-acceptance@example.com", "verified");
+    await createCredential(principal.id, "terms-acceptance");
+    await createAppRegistration(principal.id, { appInstallId: "terms-portal" });
+    const privacyPolicy = await createAccountPolicy({
+      appInstallId: "terms-portal",
+      displayName: "Portal privacy",
+      policyKey: "terms-portal-privacy",
+      scopeKind: "app-install",
+    });
+    const termsPolicy = await createAccountPolicy({
+      appInstallId: "terms-portal",
+      displayName: "Portal terms",
+      policyKey: "terms-portal-terms",
+      scopeKind: "app-install",
+    });
+    const existingAcceptance = await acceptPolicy(principal.id, privacyPolicy.id);
+    const blocked = await expectGate({ principalId: principal.id, target }, "terms-acceptance");
+
+    expect(blocked).toMatchObject({
+      gate: {
+        kind: "terms-acceptance",
+        operation: {
+          entityName: "principal-policy-acceptance",
+          operationKey: "auth.terms-acceptance.complete",
+          operationName: "completeTermsAcceptance",
+        },
+        policies: [expect.objectContaining({ accountPolicyId: termsPolicy.id })],
+      },
+      status: "blocked",
+      target,
+    });
+
+    const cookie = await createCentralSessionCookie(principal.id);
+    const beforeRecords = await identityRecords();
+    const beforeCounts = identityRecordCounts(beforeRecords.records);
+    const beforePrivateCounts = await authPrivateCounts();
+    const completed = await completeTermsAcceptanceGate({
+      acceptedPolicyIds: [privacyPolicy.id, termsPolicy.id],
+      cookie,
+      target,
+    });
+    const afterRecords = await identityRecords();
+    const afterCounts = identityRecordCounts(afterRecords.records);
+    const afterPrivateCounts = await authPrivateCounts();
+
+    expect(completed.status).toBe(200);
+    expect(completed.setCookie).toBeNull();
+    expect(completed.body).toMatchObject({
+      acceptedPolicies: expect.arrayContaining([
+        expect.objectContaining({
+          accountPolicyId: privacyPolicy.id,
+          principalPolicyAcceptanceId: existingAcceptance.id,
+          status: "accepted",
+        }),
+        expect.objectContaining({
+          accountPolicyId: termsPolicy.id,
+          status: "accepted",
+        }),
+      ]),
+      accountCompletion: {
+        continueTo: "/apps/terms-portal",
+        status: "complete",
+        target,
+      },
+      completed: true,
+      continueTo: "/apps/terms-portal",
+    });
+    expect(afterCounts).toMatchObject({
+      appRegistrations: beforeCounts.appRegistrations,
+      roleAssignments: beforeCounts.roleAssignments,
+    });
+    expect(afterCounts.acceptedPolicies).toBe(beforeCounts.acceptedPolicies + 1);
+    expect(afterPrivateCounts).toEqual(beforePrivateCounts);
+  });
+
+  it("rejects wrong-scope, retired, and tombstoned terms policies without acceptance writes", async () => {
+    const install = await createAppInstall({
+      installId: "reject-terms",
+      label: "Reject Terms",
+      packageAppKey: "tasks",
+    });
+    const principal = await createPrincipal("Reject Terms");
+    const target = appTargetForInstall(install);
+
+    await createPrimaryEmail(principal.id, "reject-terms@example.com", "verified");
+    await createCredential(principal.id, "reject-terms");
+    await createAppRegistration(principal.id, { appInstallId: "reject-terms" });
+    const requiredPolicy = await createAccountPolicy({
+      appInstallId: "reject-terms",
+      displayName: "Required terms",
+      policyKey: "reject-terms-required",
+      scopeKind: "app-install",
+    });
+    const wrongScopePolicy = await createAccountPolicy({
+      appInstallId: "billing",
+      displayName: "Wrong app terms",
+      policyKey: "wrong-app-terms",
+      scopeKind: "app-install",
+    });
+    const retiredPolicy = await createAccountPolicy({
+      appInstallId: "reject-terms",
+      displayName: "Retired terms",
+      policyKey: "retired-terms",
+      scopeKind: "app-install",
+    });
+    const tombstonedPolicy = await createAccountPolicy({
+      appInstallId: "reject-terms",
+      displayName: "Tombstoned terms",
+      policyKey: "tombstoned-terms",
+      scopeKind: "app-install",
+    });
+
+    await updateIdentityRecord("account-policy", retiredPolicy.id, { status: "retired" });
+    await deleteIdentityRecord("account-policy", tombstonedPolicy.id);
+
+    const cookie = await createCentralSessionCookie(principal.id);
+
+    for (const invalidPolicy of [wrongScopePolicy, retiredPolicy, tombstonedPolicy]) {
+      const beforeRecords = await identityRecords();
+      const rejected = await completeTermsAcceptanceGate({
+        acceptedPolicyIds: [requiredPolicy.id, invalidPolicy.id],
+        cookie,
+        target,
+      });
+      const afterRecords = await identityRecords();
+
+      expect(rejected.status).toBe(409);
+      expect(rejected.body).toEqual({
+        error: "Terms acceptance policies must be active and target-scoped.",
+      });
+      expect(identityRecordCounts(afterRecords.records)).toEqual(
+        identityRecordCounts(beforeRecords.records),
+      );
+    }
+  });
+
+  it("rejects duplicate and partial terms acceptance submissions without writes", async () => {
+    const install = await createAppInstall({
+      installId: "partial-terms",
+      label: "Partial Terms",
+      packageAppKey: "tasks",
+    });
+    const principal = await createPrincipal("Partial Terms");
+    const target = appTargetForInstall(install);
+
+    await createPrimaryEmail(principal.id, "partial-terms@example.com", "verified");
+    await createCredential(principal.id, "partial-terms");
+    await createAppRegistration(principal.id, { appInstallId: "partial-terms" });
+    const firstPolicy = await createAccountPolicy({
+      appInstallId: "partial-terms",
+      displayName: "First terms",
+      policyKey: "partial-terms-first",
+      scopeKind: "app-install",
+    });
+    const secondPolicy = await createAccountPolicy({
+      appInstallId: "partial-terms",
+      displayName: "Second terms",
+      policyKey: "partial-terms-second",
+      scopeKind: "app-install",
+    });
+    const cookie = await createCentralSessionCookie(principal.id);
+    const beforeRecords = await identityRecords();
+    const duplicate = await completeTermsAcceptanceGate({
+      acceptedPolicyIds: [firstPolicy.id, firstPolicy.id],
+      cookie,
+      target,
+    });
+    const partial = await completeTermsAcceptanceGate({
+      acceptedPolicyIds: [firstPolicy.id],
+      cookie,
+      target,
+    });
+    const afterRecords = await identityRecords();
+
+    expect(duplicate.status).toBe(400);
+    expect(duplicate.body).toEqual({
+      error: "Account completion terms acceptance acceptedPolicyIds must not contain duplicates.",
+    });
+    expect(partial.status).toBe(409);
+    expect(partial.body).toMatchObject({
+      accountCompletion: {
+        gate: {
+          kind: "terms-acceptance",
+          policies: expect.arrayContaining([
+            expect.objectContaining({ accountPolicyId: firstPolicy.id }),
+            expect.objectContaining({ accountPolicyId: secondPolicy.id }),
+          ]),
+        },
+        status: "blocked",
+      },
+      error: "Terms acceptance request does not include every current policy.",
+    });
+    expect(identityRecordCounts(afterRecords.records)).toEqual(
+      identityRecordCounts(beforeRecords.records),
+    );
+  });
+
+  it("treats revoked and tombstoned policy acceptances as unsatisfied before creating new accepted records", async () => {
+    const install = await createAppInstall({
+      installId: "stale-acceptances",
+      label: "Stale Acceptances",
+      packageAppKey: "tasks",
+    });
+    const principal = await createPrincipal("Stale Acceptances");
+    const target = appTargetForInstall(install);
+
+    await createPrimaryEmail(principal.id, "stale-acceptances@example.com", "verified");
+    await createCredential(principal.id, "stale-acceptances");
+    await createAppRegistration(principal.id, { appInstallId: "stale-acceptances" });
+    const revokedPolicy = await createAccountPolicy({
+      appInstallId: "stale-acceptances",
+      displayName: "Revoked terms",
+      policyKey: "revoked-terms",
+      scopeKind: "app-install",
+    });
+    const tombstonedPolicy = await createAccountPolicy({
+      appInstallId: "stale-acceptances",
+      displayName: "Deleted acceptance terms",
+      policyKey: "deleted-acceptance-terms",
+      scopeKind: "app-install",
+    });
+    const revokedAcceptance = await acceptPolicy(principal.id, revokedPolicy.id);
+    const tombstonedAcceptance = await acceptPolicy(principal.id, tombstonedPolicy.id);
+
+    await updateIdentityRecord("principal-policy-acceptance", revokedAcceptance.id, {
+      status: "revoked",
+    });
+    await deleteIdentityRecord("principal-policy-acceptance", tombstonedAcceptance.id);
+
+    const blocked = await expectGate({ principalId: principal.id, target }, "terms-acceptance");
+
+    expect(blocked).toMatchObject({
+      gate: {
+        policies: expect.arrayContaining([
+          expect.objectContaining({ accountPolicyId: revokedPolicy.id }),
+          expect.objectContaining({ accountPolicyId: tombstonedPolicy.id }),
+        ]),
+      },
+    });
+
+    const completed = await completeTermsAcceptanceGate({
+      acceptedPolicyIds: [revokedPolicy.id, tombstonedPolicy.id],
+      cookie: await createCentralSessionCookie(principal.id),
+      target,
+    });
+    const records = (await identityRecords()).records;
+
+    expect(completed.status).toBe(200);
+    expect(completed.body).toMatchObject({
+      accountCompletion: { status: "complete" },
+      completed: true,
+      continueTo: "/apps/stale-acceptances",
+    });
+    expect(
+      records.filter(
+        (record) =>
+          record.entity === "principal-policy-acceptance" &&
+          record.values.principal === principal.id &&
+          record.values.accountPolicy === revokedPolicy.id &&
+          record.values.status === "accepted" &&
+          !record.deletedAt,
+      ),
+    ).toHaveLength(1);
+    expect(
+      records.filter(
+        (record) =>
+          record.entity === "principal-policy-acceptance" &&
+          record.values.principal === principal.id &&
+          record.values.accountPolicy === tombstonedPolicy.id &&
+          record.values.status === "accepted" &&
+          !record.deletedAt,
+      ),
+    ).toHaveLength(1);
+    expect(records.find((record) => record.id === revokedAcceptance.id)?.values.status).toBe(
+      "revoked",
+    );
+    expect(records.find((record) => record.id === tombstonedAcceptance.id)?.deletedAt).toEqual(
+      expect.any(String),
+    );
   });
 });
 
@@ -401,10 +912,93 @@ async function resolveGate(
   return parseAccountCompletionGateResolutionResult(body);
 }
 
+async function completeAppRegistrationGate(input: {
+  cookie: string;
+  target: AccountCompletionGateTarget;
+}) {
+  const response = await fetchAuthOrigin(INSTANCE_AUTH_APP_REGISTRATION_GATE_COMPLETE_PATH, {
+    body: JSON.stringify({ target: input.target }),
+    headers: {
+      "Content-Type": "application/json",
+      Cookie: input.cookie,
+    },
+    method: "POST",
+  });
+
+  return {
+    body: (await response.json()) as Record<string, unknown>,
+    setCookie: response.headers.get("Set-Cookie"),
+    status: response.status,
+  };
+}
+
+async function completeTermsAcceptanceGate(input: {
+  acceptedPolicyIds: string[];
+  cookie: string;
+  target: AccountCompletionGateTarget;
+}) {
+  const response = await fetchAuthOrigin(INSTANCE_AUTH_TERMS_ACCEPTANCE_GATE_COMPLETE_PATH, {
+    body: JSON.stringify({
+      acceptedPolicyIds: input.acceptedPolicyIds,
+      target: input.target,
+    }),
+    headers: {
+      "Content-Type": "application/json",
+      Cookie: input.cookie,
+    },
+    method: "POST",
+  });
+
+  return {
+    body: (await response.json()) as Record<string, unknown>,
+    setCookie: response.headers.get("Set-Cookie"),
+    status: response.status,
+  };
+}
+
+async function createCentralSessionCookie(principalId: string) {
+  const response = await fetchAuthOrigin("/harness/auth/session", {
+    body: JSON.stringify({ principalId }),
+    headers: { "Content-Type": "application/json" },
+    method: "POST",
+  });
+  const cookie = response.headers.get("Set-Cookie") ?? "";
+
+  expect(response.status).toBe(200);
+  expect(cookie).toContain(`${CENTRAL_AUTH_SESSION_COOKIE_NAME}=`);
+
+  return cookie.split(";")[0] ?? cookie;
+}
+
+async function identityRecords() {
+  const response = await fetchAuthOrigin("/harness/identity-records");
+
+  expect(response.status).toBe(200);
+
+  return (await response.json()) as { records: StoredRecord[] };
+}
+
+async function authPrivateCounts() {
+  const response = await fetchAuthOrigin("/harness/auth/private-counts");
+
+  expect(response.status).toBe(200);
+
+  return (await response.json()) as {
+    centralSessions: number;
+    handoffGrants: number;
+    passkeyCredentials: number;
+  };
+}
+
+function fetchAuthOrigin(path: string, init?: Parameters<Harness["mf"]["dispatchFetch"]>[1]) {
+  return harness.mf.dispatchFetch(`https://auth.example.com${path}`, init);
+}
+
 async function createAppInstall(input: {
   installId: string;
   label: string;
   packageAppKey: string;
+  registrationPolicy?: "closed" | "email-verified";
 }) {
   const response = await harness.fetch("/api/formless/app-installs", {
     body: JSON.stringify(input),
@@ -598,6 +1192,23 @@ async function updateIdentityRecord(
   });
 }
 
+async function deleteIdentityRecord(entity: string, recordId: string) {
+  const response = await fetchAuthOrigin("/harness/identity/tombstone", {
+    body: JSON.stringify({
+      entity,
+      idempotencyKey: nextWriteKey(`${entity}-tombstone`),
+      recordId,
+    }),
+    headers: { "Content-Type": "application/json" },
+    method: "POST",
+  });
+  const body = (await response.json()) as { record: StoredRecord };
+
+  expect(response.status).toBe(200);
+
+  return body.record;
+}
+
 async function postIdentityRecordOperation(input: Parameters<typeof recordOperationRequest>[0]) {
   const request = recordOperationRequest(input);
   const response = await harness.fetch(`${identityApi}${request.path.slice("/api".length)}`, {
@@ -607,7 +1218,7 @@ async function postIdentityRecordOperation(input: Parameters<typeof recordOperat
   });
   const body = (await response.json()) as OperationInvocationResponse;
 
-  expect(response.status).toBe(200);
+  expect(response.status, JSON.stringify(body)).toBe(200);
 
   return request.response(body).record as StoredRecord;
 }
@@ -623,6 +1234,43 @@ function appTarget(
     targetOrigin: "https://crm.example.com",
     targetProfile: "app",
     ...overrides,
+  };
+}
+
+function appTargetForInstall(
+  install: CreateAppInstallResponse["install"],
+  overrides: Partial<AccountCompletionGateTarget> = {},
+): AccountCompletionGateTarget {
+  const route = install.routes?.find((candidate) => candidate.routeKind === "admin");
+
+  if (!route) {
+    throw new Error(`Install "${install.installId}" did not expose an admin route.`);
+  }
+
+  return appTarget({
+    appInstallId: install.installId,
+    returnTo: route.path,
+    routeId: route.id,
+    storageIdentity: `app:${install.installId}`,
+    targetOrigin: "https://auth.example.com",
+    ...overrides,
+  });
+}
+
+function identityRecordCounts(records: StoredRecord[]) {
+  return {
+    acceptedPolicies: records.filter(
+      (record) =>
+        record.entity === "principal-policy-acceptance" &&
+        !record.deletedAt &&
+        record.values.status === "accepted",
+    ).length,
+    appRegistrations: records.filter(
+      (record) => record.entity === "app-registration" && !record.deletedAt,
+    ).length,
+    roleAssignments: records.filter(
+      (record) => record.entity === "role-assignment" && !record.deletedAt,
+    ).length,
   };
 }
 
@@ -648,12 +1296,69 @@ async function writeAccountCompletionHarness() {
     `
       import { IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX, IDENTITY_CONTROL_PLANE_STORAGE_IDENTITY } from "@dpeek/formless-identity-control-plane";
       import { FormlessAuthority } from "${process.cwd()}/src/worker/authority.ts";
+      import { createCentralAuthSessionCookie } from "${process.cwd()}/src/worker/central-auth-session.ts";
       import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "${process.cwd()}/src/worker/formless-instance.ts";
       import { createPasskeyCredential } from "${process.cwd()}/src/worker/instance-auth-state.ts";
+      import { getBootstrapRecords, writeRecordSetForCommandOperationOutcome } from "${process.cwd()}/src/worker/storage.ts";
 
       export class AccountCompletionHarness extends FormlessAuthority {
+        constructor(ctx, env) {
+          super(ctx, env);
+          this.env = env;
+        }
+
         async fetch(request) {
           const url = new URL(request.url);
+
+          if (url.pathname === "/harness/identity-records") {
+            return Response.json({ records: getBootstrapRecords(this.ctx.storage) });
+          }
+
+          if (url.pathname === "/harness/identity/tombstone" && request.method === "POST") {
+            const body = await request.json();
+            const record = getBootstrapRecords(this.ctx.storage).find(
+              (candidate) => candidate.entity === body.entity && candidate.id === body.recordId,
+            );
+
+            if (!record) {
+              return Response.json({ error: "Missing identity record." }, { status: 404 });
+            }
+
+            const outcome = writeRecordSetForCommandOperationOutcome(
+              this.ctx.storage,
+              \`harness-tombstone:\${body.entity}:\${body.recordId}:\${body.idempotencyKey}\`,
+              [{ kind: "delete", record }],
+              undefined,
+              { now: "2026-07-06T00:00:00.000Z" },
+            );
+
+            return Response.json({
+              record: outcome.response.changes.at(-1)?.payload,
+            });
+          }
+
+          if (url.pathname === "/harness/auth/private-counts") {
+            return Response.json({
+              centralSessions: this.ctx.storage.sql.exec("SELECT COUNT(*) AS count FROM instance_auth_central_sessions").one().count,
+              handoffGrants: this.ctx.storage.sql.exec("SELECT COUNT(*) AS count FROM instance_auth_handoff_grants").one().count,
+              passkeyCredentials: this.ctx.storage.sql.exec("SELECT COUNT(*) AS count FROM instance_auth_passkey_credentials").one().count,
+            });
+          }
+
+          if (url.pathname === "/harness/auth/session" && request.method === "POST") {
+            const body = await request.json();
+            const session = await createCentralAuthSessionCookie(this.ctx.storage, {
+              env: this.env,
+              now: "2026-07-06T00:00:00.000Z",
+              principalId: body.principalId,
+              request,
+            });
+
+            return Response.json(
+              { session: session.session },
+              { headers: { "Set-Cookie": session.cookie } },
+            );
+          }
 
           if (url.pathname === "/harness/auth/credential" && request.method === "POST") {
             const body = await request.json();
@@ -678,7 +1383,10 @@ async function writeAccountCompletionHarness() {
       export default {
         fetch(request, env) {
           const url = new URL(request.url);
-          const authorityName = url.pathname.startsWith(IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX)
+          const authorityName =
+            url.pathname.startsWith(IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX) ||
+            url.pathname === "/harness/identity-records" ||
+            url.pathname === "/harness/identity/tombstone"
             ? IDENTITY_CONTROL_PLANE_STORAGE_IDENTITY
             : FORMLESS_INSTANCE_AUTHORITY_NAME;
           const id = env.FORMLESS_AUTHORITY.idFromName(authorityName);

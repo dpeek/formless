@@ -50,6 +50,9 @@ import {
   handleCollaboratorInvitationAcceptanceApiRequest,
   handleCollaboratorInvitationAcceptanceBrowserRequest,
 } from "./collaborator-invitation-acceptance.ts";
+import { handleInstanceAuthEmailVerificationApiRequest } from "./instance-auth-email-verification.ts";
+import { handleInstanceAuthSignupApiRequest } from "./instance-auth-signup.ts";
+import { handleInstanceAuthAccountCompletionApiRequest } from "./instance-auth-account-completion.ts";
 import { handleOwnerPasskeyApiRequest } from "./owner-passkeys.ts";
 import {
   ownerLoginRedirectLocationForRoute,
@@ -162,6 +165,15 @@ export default {
 
     if (earlyCollaboratorInvitationAcceptanceResponse) {
       return earlyCollaboratorInvitationAcceptanceResponse;
+    }
+
+    const earlyEmailVerificationResponse = await handleInstanceAuthEmailVerificationApiRequest(
+      request,
+      env,
+    );
+
+    if (earlyEmailVerificationResponse) {
+      return earlyEmailVerificationResponse;
     }
 
     const runtimeRoute = await resolveInstanceRuntimeRouteForRequest(request, env, {
@@ -285,6 +297,21 @@ export default {
 
     if (nonAuthOwnerRouteResponse) {
       return nonAuthOwnerRouteResponse;
+    }
+
+    const authAccountCompletionApiResponse = await handleInstanceAuthAccountCompletionApiRequest(
+      request,
+      env,
+    );
+
+    if (authAccountCompletionApiResponse) {
+      return authAccountCompletionApiResponse;
+    }
+
+    const authSignupApiResponse = await handleInstanceAuthSignupApiRequest(request, env);
+
+    if (authSignupApiResponse) {
+      return authSignupApiResponse;
     }
 
     const authAccountStatusResponse = await handleAuthAccountStatusRequest(

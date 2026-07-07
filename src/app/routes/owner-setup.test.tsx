@@ -53,6 +53,13 @@ describe("owner setup route view", () => {
     ).toContain("Signed in as Ada Owner.");
     expect(
       renderOwnerSetupState({
+        continueTo: "/formless/auth?returnTo=%2F",
+        owner,
+        status: "continuing",
+      }),
+    ).toContain("Continuing to /formless/auth?returnTo=%2F.");
+    expect(
+      renderOwnerSetupState({
         status: "failed",
         message: "Owner setup failed.",
         setupToken,
@@ -262,6 +269,7 @@ describe("owner setup route data flow", () => {
       }
 
       return Response.json({
+        continueTo: "/formless/auth?returnTo=%2F",
         owner,
         session: { expiresAt: "2026-06-21T00:00:00.000Z" },
         setupComplete: true,
@@ -276,6 +284,7 @@ describe("owner setup route data flow", () => {
         setupToken,
       }),
     ).resolves.toEqual({
+      continueTo: "/formless/auth?returnTo=%2F",
       owner,
       session: { expiresAt: "2026-06-21T00:00:00.000Z" },
       setupComplete: true,

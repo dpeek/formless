@@ -4,9 +4,8 @@ import {
   type OwnerSetupCompleteResponse,
   type OwnerSetupStatusResponse,
 } from "../shared/protocol.ts";
-import { isWorkersDevHost } from "../shared/runtime-topology.ts";
+import { runtimeTopologyRoutes } from "../shared/runtime-topology.ts";
 import { nowIsoString } from "../shared/clock.ts";
-import { instanceControlPlanePreferredAdminOriginFromRecords } from "@dpeek/formless-instance-control-plane";
 import { authorizeAdminWrite, type AuthorityAdminGuardEnv } from "./authority-admin-guard.ts";
 import {
   completeFirstOwnerSetupInCurrentTransaction,
@@ -45,7 +44,7 @@ import {
   resetIdentityOwner,
 } from "./identity-control-plane.ts";
 import { completeOwnerPasskeyRegistration } from "./owner-passkeys.ts";
-import { readControlPlaneRecords } from "./deployment-control-plane-client.ts";
+import { ownerSetupAdminOrigin, ownerSetupSuccessContinueTo } from "./owner-setup-continuation.ts";
 
 export const OWNER_SETUP_API_PATH = "/api/formless/setup";
 export const OWNER_SESSION_API_PATH = "/api/formless/session";
@@ -241,9 +240,13 @@ async function handleOwnerLogoutRequest(
   const hostSessionTarget = hostAuthSessionTargetFromRequestHeaders(request.headers);
 
   if (hostSessionTarget) {
-    return jsonResponse({ authenticated: false }, 200, {
-      "Set-Cookie": clearHostAuthSessionCookie(hostSessionTarget.targetOrigin),
-    });
+    return jsonResponse(
+      { authenticated: false, continueTo: runtimeTopologyRoutes.authAccountSignInRoute },
+      200,
+      {
+        "Set-Cookie": clearHostAuthSessionCookie(hostSessionTarget.targetOrigin),
+      },
+    );
   }
 
   const headers = new Headers();
@@ -257,7 +260,11 @@ async function handleOwnerLogoutRequest(
     headers.append("Set-Cookie", clearOwnerSessionCookie(request));
   }
 
-  return jsonResponse({ authenticated: false }, 200, headers);
+  return jsonResponse(
+    { authenticated: false, continueTo: runtimeTopologyRoutes.authAccountSignInRoute },
+    200,
+    headers,
+  );
 }
 
 async function hostOwnerSessionStatusResponse(
@@ -428,24 +435,6 @@ async function ownerSetupStatusResponse(
   };
 }
 
-async function ownerSetupAdminOrigin(
-  request: Request,
-  env: OwnerSetupApiEnv,
-): Promise<string | undefined> {
-  const requestUrl = new URL(request.url);
-  const deploymentTargetUrl = isWorkersDevHost(requestUrl.hostname) ? requestUrl.origin : undefined;
-  const resolution = instanceControlPlanePreferredAdminOriginFromRecords({
-    ...(deploymentTargetUrl === undefined ? {} : { deploymentTargetUrl }),
-    records:
-      (await readControlPlaneRecords({
-        env,
-        requestUrl: request.url,
-      })) ?? [],
-  });
-
-  return resolution.status === "resolved" ? resolution.adminOrigin : undefined;
-}
-
 function ownerSetupCapabilityResponse(result: WriteOwnerSetupCapabilityResult): Response {
   if (!result.ok) {
     return jsonResponse(
@@ -470,13 +459,15 @@ function ownerSetupCapabilityResponse(result: WriteOwnerSetupCapabilityResult): 
 
 async function ownerSetupCompleteResponse(
   request: Request,
-  env: AuthorityAdminGuardEnv,
+  env: OwnerSetupApiEnv,
   result: CompleteFirstOwnerSetupResult,
 ): Promise<Response> {
   if (result.ok) {
+    const continueTo = await ownerSetupSuccessContinueTo(request, env);
     const response: OwnerSetupCompleteResponse = {
       setupComplete: true,
       owner: result.owner,
+      ...(continueTo === undefined ? {} : { continueTo }),
     };
     const headers = new Headers();
 

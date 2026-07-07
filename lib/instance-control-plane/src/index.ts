@@ -1,5 +1,6 @@
 import {
   findResolvedAppPackage,
+  isAppInstallRegistrationPolicy,
   isSourceSchemaHash,
   listAppInstalls,
   type AppInstall,
@@ -40,7 +41,7 @@ export const INSTANCE_CONTROL_PLANE_BOUNDARY_SCHEMA_KEY = "instance";
 export const INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY = "instance:control-plane";
 export const INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX = "/api/formless/control-plane";
 export const INSTANCE_CONTROL_PLANE_SOURCE_SCHEMA_HASH =
-  "sha256:abf61b0583a7799d7733d549fb436874fde8a54b28c024fc27b5da700e44c159" satisfies SourceSchemaHash;
+  "sha256:580d72faf9e379b983fe3ea1748a690a0e92dce0c0bbaa44b3f32520fa0368bf" satisfies SourceSchemaHash;
 export const INSTANCE_CONTROL_PLANE_INSTANCE_SETTINGS_ID = "instance";
 export const instanceControlPlaneSchemaProvenance = {
   kind: "instance-control-plane",
@@ -327,6 +328,7 @@ export const instanceControlPlaneSourceSchema = {
         label: textField("Label"),
         registrationPolicy: enumField("Registration policy", {
           closed: "Closed",
+          "email-verified": "Email verified",
         }),
         status: enumField("Status", {
           disabled: "Disabled",
@@ -1524,7 +1526,7 @@ function appInstallRegistrationPolicyFromControlPlaneValue(
   value: unknown,
   installId: string,
 ): AppInstallRegistrationPolicy {
-  if (value === "closed") {
+  if (isAppInstallRegistrationPolicy(value)) {
     return value;
   }
 
@@ -2213,7 +2215,7 @@ function validateAppInstallImmutableIdentity(context: string, record: StoredReco
 function validateAppInstallRegistrationPolicy(context: string, record: StoredRecord) {
   const registrationPolicy = requiredStringValue(context, record, "registrationPolicy");
 
-  if (registrationPolicy !== "closed") {
+  if (!isAppInstallRegistrationPolicy(registrationPolicy)) {
     throw new Error(
       `${context} record "${record.id}" has invalid field "${controlPlaneFieldLabel(record, "registrationPolicy")}".`,
     );

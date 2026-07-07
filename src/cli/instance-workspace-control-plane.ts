@@ -11,7 +11,12 @@ import {
   type PortableArchive,
 } from "@dpeek/formless-archive";
 import type { ArchiveDiskMediaFile } from "@dpeek/formless-archive/node";
-import type { AppInstall } from "@dpeek/formless-installed-apps";
+import {
+  defaultAppInstallRegistrationPolicy,
+  isAppInstallRegistrationPolicy,
+  type AppInstall,
+  type AppInstallRegistrationPolicy,
+} from "@dpeek/formless-installed-apps";
 import {
   INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
   INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
@@ -57,6 +62,7 @@ export type WorkspaceControlPlaneAppInstallRecord = {
   label: string;
   packageAppKey: string;
   packageRevision?: number;
+  registrationPolicy: AppInstallRegistrationPolicy;
   sourceSchemaHash?: AppArchive["app"]["sourceSchemaHash"];
   status: "installed";
   updatedAt: string;
@@ -125,6 +131,8 @@ export function controlPlaneAppInstallRecords(
       ...(numberRecordValue(record, "packageRevision") === undefined
         ? {}
         : { packageRevision: numberRecordValue(record, "packageRevision") }),
+      registrationPolicy:
+        appInstallRegistrationPolicyRecordValue(record) ?? defaultAppInstallRegistrationPolicy(),
       ...(sourceSchemaHashRecordValue(record) === undefined
         ? {}
         : { sourceSchemaHash: sourceSchemaHashRecordValue(record) }),
@@ -132,6 +140,14 @@ export function controlPlaneAppInstallRecords(
       updatedAt: record.updatedAt,
     }))
     .sort((left, right) => left.installId.localeCompare(right.installId));
+}
+
+function appInstallRegistrationPolicyRecordValue(
+  record: WorkspaceRecordValueSource,
+): AppInstallRegistrationPolicy | undefined {
+  const value = stringRecordValue(record, "registrationPolicy");
+
+  return isAppInstallRegistrationPolicy(value) ? value : undefined;
 }
 
 export function assertWorkspaceControlPlanePackagesAvailable(input: {
@@ -225,7 +241,7 @@ export function appArchiveControlPlaneRecords(archive: AppArchive): StoredRecord
       archive.app.packageAppKey === "site"
         ? (`/sites/${archive.app.installId}/` as `/sites/${string}/`)
         : undefined,
-    registrationPolicy: "closed",
+    registrationPolicy: archive.app.registrationPolicy,
     sourceSchemaHash: archive.app.sourceSchemaHash,
     status: archive.app.status,
     updatedAt: archive.app.updatedAt,

@@ -88,6 +88,9 @@ first-owner setup.
 - AND no app install metadata or route record is created by owner setup
 - AND a central auth session cookie is issued for that principal on the
   configured auth origin
+- AND when a valid admin target exists, the response includes a display-safe
+  continuation target that moves the browser through the account continuation
+  or mapped-admin entry flow instead of leaving a durable setup-complete surface
 - AND deployed passkey setup does not issue a host-local session cookie
 
 #### Scenario: Reject setup without valid passkey
@@ -270,8 +273,8 @@ principals, committing identity acceptance, and issuing central auth sessions.
 - AND it commits the identity-control-plane invitation acceptance changes for
   the same principal and target facts
 - AND it issues a central auth session scoped to the configured auth origin
-- AND it redirects through the normal cross-domain grant flow when the
-  accepted invitation targets a mapped app, mapped public Site, or mapped
+- AND it returns a display-safe continuation target when the accepted invitation
+  targets a same-origin route, mapped app, mapped public Site, or mapped
   instance host
 - AND raw invite tokens, token hashes, passkey challenge secrets, credential
   material, central session ids, host session cookies, and handoff grant
@@ -332,7 +335,7 @@ an installed app route or generated app UI.
   the registration through the invitation acceptance APIs
 - AND successful completion stores the credential, consumes the invite token,
   commits identity acceptance, and receives only display-safe accepted
-  principal, session-expiry, and optional handoff target facts
+  principal, session-expiry, and optional continuation target facts
 - AND mapped app hosts and mapped public Site hosts do not render or start the
   passkey ceremony unless they are also the configured auth origin
 
@@ -343,6 +346,8 @@ an installed app route or generated app UI.
   instance target
 - THEN the browser surface continues through the target-bound cross-domain
   handoff flow
+- AND it follows only the runtime-returned continuation target instead of
+  synthesizing a cross-origin redirect target from raw URL search parameters
 - AND mapped instance targets use the preferred admin origin resolved from the
   selected admin route, eligible primary route, or one unambiguous enabled
   custom admin route
@@ -413,6 +418,8 @@ sessions, local-dev owner sessions, and mapped host-local sessions.
 - WHEN the browser posts to the logout endpoint
 - THEN the runtime revokes any matching central auth session row
 - AND the response clears the matching auth-origin session cookie
+- AND the response includes a path-only continuation target for the
+  runtime-owned sign-in route
 - AND later session status requests without a valid cookie report
   unauthenticated state
 
@@ -466,6 +473,9 @@ routes through `/formless/auth` as the runtime-owned continuation contract.
 - WHEN passkey login succeeds
 - THEN `/formless/auth` follows the continuation with document navigation so
   the runtime-owned handoff route can issue a target-bound one-time grant
+- AND gate completion, signup completion, and handoff continuation clients use
+  the runtime-returned continuation target rather than constructing
+  cross-origin handoff URLs from raw account URL parameters
 - AND no absolute, protocol-relative, cross-origin, malformed, or unsupported
   handoff target is accepted
 
@@ -793,6 +803,144 @@ or using browser access for an authenticated target.
 - AND later gates for verified email, credential, invitation, profile
   completion, terms acceptance, and role review still evaluate normally for
   the same target
+
+#### Scenario: Email-verified app registration gate
+
+- GIVEN account completion evaluates an app target whose app install has
+  registration policy `email-verified`
+- AND the active principal has a verified primary `principal-email` record and
+  an accepted credential method
+- AND the active principal or selected organization has no active identity
+  `app-registration` record for the requested app install
+- WHEN the runtime resolves the next blocking account gate
+- THEN it returns a display-safe `app-registration` gate with the target app
+  install id, target facts, registration policy `email-verified`, and a
+  runtime-owned completion operation reference
+- AND the gate response does not expose email challenge secrets, credential
+  material, central session ids, host session cookies, handoff grant secrets,
+  app-owned profile values, provider responses, or app-controlled redirect
+  targets
+
+#### Scenario: Complete email-verified app registration gate
+
+- GIVEN a browser with an active central auth session completes an
+  `email-verified` app-registration gate on the configured auth origin
+- AND the principal still has active status, a verified primary email, an
+  accepted credential, and a target whose app install still has registration
+  policy `email-verified`
+- WHEN the runtime commits the gate completion
+- THEN identity storage creates or reuses one active `app-registration` record
+  for the requested app install and principal or selected organization context
+- AND the write is rejected without a partial commit when the target app
+  install is missing, disabled, no longer `email-verified`, scoped to another
+  target, or already has a conflicting active app-registration
+- AND completion does not create role assignments, app-owned profile records,
+  credentials, owner authority, host-local sessions, or cross-domain handoff
+  grants
+- AND the runtime re-evaluates account completion for the same target before
+  returning a continuation target or starting target-bound handoff
+
+### Requirement: Email Verification Challenge State
+
+The system SHALL store email verification challenge secrets as private
+instance auth state bound to the configured auth origin and account target.
+
+#### Scenario: Create email verification challenge
+
+- GIVEN the account journey needs a verified email for owner setup, signup,
+  invitation acceptance, recovery, or account completion
+- WHEN the runtime creates an email verification challenge
+- THEN private auth state stores only a token hash, normalized email, purpose,
+  target facts, created timestamp, expiry, and consumed or revoked status
+- AND the challenge email is scheduled through the email runtime with an
+  idempotent source record or private challenge identifier
+- AND the verification link uses the configured auth origin
+- AND raw verification tokens and token hashes are not stored in identity
+  control-plane records, email-delivery records, queue messages, workspace
+  state, archives, sync payloads, or reviewable snapshots
+- AND creating an email verification challenge does not verify an email, create
+  an app-registration, issue credentials, issue sessions, or mint handoff
+  grants
+
+#### Scenario: Verify email challenge
+
+- GIVEN a browser submits an email verification token on the configured auth
+  origin for the matching account target
+- WHEN private auth state verifies an unexpired, unrevoked, unconsumed token
+- THEN identity storage creates or updates one `principal-email` record for the
+  principal with normalized email, display email, verified status, primary flag,
+  and verified timestamp according to the target flow
+- AND the token is consumed only when the matching identity write is durable
+- AND wrong-token, wrong-email, wrong-target, expired, revoked, consumed, or
+  missing challenge attempts do not reveal whether an unrelated principal
+  exists for the same email
+- AND verification does not create app-registration records, role assignments,
+  credentials, owner authority, host-local sessions, or handoff grants
+
+### Requirement: Email-Verified App Signup
+
+The system SHALL support self-service app signup for app installs whose
+registration policy is `email-verified`.
+
+#### Scenario: Start email-verified app signup
+
+- GIVEN an anonymous browser requests an app route whose target app install has
+  registration policy `email-verified`
+- WHEN the route requires authenticated browser access and no valid principal
+  session exists
+- THEN the runtime redirects through `/formless/auth` on the configured auth
+  origin with target-bound continuation facts
+- AND the auth-origin signup surface may request a display name and email
+  address for the target app install
+- AND signup start rejects missing auth configuration, missing email delivery
+  configuration, disabled app installs, unsupported registration policies,
+  unsafe return targets, and app-controlled redirect targets before creating
+  verification challenges or identity records
+
+#### Scenario: Complete email-verified app signup
+
+- GIVEN an email-verified signup flow has verified control of the requested
+  primary email on the configured auth origin
+- AND passkey registration has been verified for the signup principal on the
+  configured auth origin and relying-party id
+- WHEN the runtime commits signup for the requested app target
+- THEN it stores or reuses an active principal, stores a verified primary
+  `principal-email`, stores the passkey credential as private auth state,
+  creates or reuses an active app-registration for the requested app install,
+  and issues a central auth session on the configured auth origin
+- AND duplicate normalized active emails, duplicate credentials, wrong-origin
+  passkey ceremonies, wrong-target signup state, unsupported registration
+  policy, and stale target facts reject signup without a partial commit
+- AND signup does not grant owner authority, create `instance.admin` authority,
+  create app-owned profile records, issue host-local sessions directly from the
+  auth origin, or expose raw verification tokens, token hashes, credential
+  material, central session ids, host session cookies, or handoff grant secrets
+- AND after signup commits, the runtime re-evaluates account completion for the
+  target before returning a path-only continuation or target-bound handoff
+
+### Requirement: Terms Acceptance Completion
+
+The system SHALL let authenticated principals complete target-scoped
+terms-acceptance gates by writing reviewable identity policy acceptance records.
+
+#### Scenario: Complete terms acceptance gate
+
+- GIVEN account completion returns a `terms-acceptance` gate for an active
+  principal and target
+- WHEN the browser accepts the listed active policies on the configured auth
+  origin
+- THEN identity storage creates accepted `principal-policy-acceptance` records
+  for the principal and every required active policy whose scope applies to the
+  target
+- AND existing accepted records for the same principal and policy are reused
+  rather than duplicated
+- AND retired, wrong-scope, revoked, tombstoned, or app-controlled policies do
+  not satisfy the target gate
+- AND terms acceptance does not authenticate the principal, create credentials,
+  create app-registration records, grant roles, issue host-local sessions, or
+  mint handoff grants
+- AND the runtime re-evaluates account completion for the same target before
+  returning a continuation target or starting target-bound handoff
 
 ### Requirement: Principal-Backed Authenticated Authorization
 

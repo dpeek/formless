@@ -8,6 +8,7 @@ import {
   logoutOwnerSession,
   navigateAfterOwnerLogin,
   ownerLoginRedirectRequiresDocumentNavigation,
+  ownerLoginSuccessContinuationTarget,
   startOwnerLoginRouteSession,
   type OwnerLoginApiError,
   type OwnerLoginRouteState,
@@ -105,6 +106,27 @@ describe("owner login route data flow", () => {
     expect(ownerLoginRedirectRequiresDocumentNavigation(handoffTarget)).toBe(true);
     expect(documentLocations).toEqual([handoffTarget]);
     expect(clientLocations).toEqual([]);
+  });
+
+  it("routes passkey login success through the account continuation contract", () => {
+    expect(
+      ownerLoginSuccessContinuationTarget(
+        "/formless/auth",
+        "?redirectTo=%2Fapps%2Fpersonal%3Fscreen%3Droutes",
+      ),
+    ).toBe("/formless/auth?returnTo=%2Fapps%2Fpersonal%3Fscreen%3Droutes");
+    expect(
+      ownerLoginSuccessContinuationTarget(
+        "/formless/auth",
+        "?redirectTo=https%3A%2F%2Fevil.example.com%2Fadmin",
+      ),
+    ).toBe("/formless/auth?returnTo=%2F");
+    expect(
+      ownerLoginSuccessContinuationTarget(
+        "/formless/auth?returnTo=%2Fdeployments",
+        "?redirectTo=%2Fapps%2Fpersonal",
+      ),
+    ).toBe("/formless/auth?returnTo=%2Fdeployments");
   });
 
   it("uses client navigation for normal owner login redirects", () => {
@@ -292,10 +314,13 @@ describe("owner login route data flow", () => {
         method: init?.method,
       });
 
-      return Response.json({ authenticated: false });
+      return Response.json({ authenticated: false, continueTo: "/formless/auth/sign-in" });
     };
 
-    await expect(logoutOwnerSession({ fetcher })).resolves.toEqual({ authenticated: false });
+    await expect(logoutOwnerSession({ fetcher })).resolves.toEqual({
+      authenticated: false,
+      continueTo: "/formless/auth/sign-in",
+    });
     expect(calls).toEqual([
       {
         authorization: null,

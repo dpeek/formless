@@ -8,7 +8,10 @@ import type {
   InstallableAppPackage,
   PackageAppKey,
 } from "@dpeek/formless-installed-apps";
-import { defaultAppInstallRegistrationPolicy } from "@dpeek/formless-installed-apps";
+import {
+  defaultAppInstallRegistrationPolicy,
+  parseAppInstallRegistrationPolicy,
+} from "@dpeek/formless-installed-apps";
 import type { PackageAppRevision, SourceSchemaHash } from "./upgrade-migrations.ts";
 
 export type EntityName = string;
@@ -196,6 +199,7 @@ export type OwnerSetupCompleteRequest = {
 };
 
 export type OwnerSetupCompleteResponse = {
+  continueTo?: string;
   setupComplete: true;
   owner: OwnerIdentity;
 };
@@ -427,11 +431,7 @@ function parseOptionalAppInstallRegistrationPolicy(
     return undefined;
   }
 
-  if (value === "closed") {
-    return value;
-  }
-
-  throw new Error('App install registration policy must be "closed".');
+  return parseAppInstallRegistrationPolicy(value, "App install registration policy");
 }
 
 function parseOwnerIdentityInput(value: unknown): OwnerIdentityInput {

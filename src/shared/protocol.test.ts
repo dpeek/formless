@@ -205,13 +205,13 @@ describe("app install protocol", () => {
         packageAppKey: "site",
         installId: "members",
         label: "Members",
-        registrationPolicy: "closed",
+        registrationPolicy: "email-verified",
       }),
     ).toEqual({
       packageAppKey: "site",
       installId: "members",
       label: "Members",
-      registrationPolicy: "closed",
+      registrationPolicy: "email-verified",
     });
   });
 
@@ -232,9 +232,9 @@ describe("app install protocol", () => {
         packageAppKey: "site",
         installId: "personal",
         label: "Site",
-        registrationPolicy: "email-verified",
+        registrationPolicy: "domain-allowlist",
       }),
-    ).toThrow('App install registration policy must be "closed".');
+    ).toThrow('App install registration policy must be "closed" or "email-verified".');
   });
 });
 

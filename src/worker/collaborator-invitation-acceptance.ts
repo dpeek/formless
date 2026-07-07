@@ -4,6 +4,7 @@ import {
   parseCollaboratorInvitationAcceptanceRequest,
   parseCollaboratorInvitationPasskeyRegistrationOptionsRequest,
   parseCollaboratorInvitationPasskeyRegistrationVerifyRequest,
+  authAccountContinuationLocationForReturnTarget,
   type CollaboratorInvitationAcceptanceFailureReason,
   type CollaboratorInvitationAcceptanceHandoffSummary,
   type CollaboratorInvitationAcceptanceInvitationSummary,
@@ -11,6 +12,7 @@ import {
   type CollaboratorInvitationPasskeyRegistrationVerifyResponse,
   type CollaboratorInvitationAcceptanceStatusResponse,
   type AccountCompletionGateTarget,
+  type AuthSuccessContinuationTarget,
   parseInstanceAuthCanonicalOrigin,
   parseOwnerLoginRedirectTarget,
 } from "../shared/instance-auth.ts";
@@ -388,6 +390,10 @@ async function handlePasskeyRegistrationVerifyRequest(
           },
           storage,
         });
+  const continueTo =
+    accountCompletion?.status === "complete"
+      ? collaboratorInvitationAcceptanceContinueTo(accountCompletion, continuation)
+      : undefined;
   const headers = new Headers();
 
   headers.set("Set-Cookie", session.cookie);
@@ -398,6 +404,7 @@ async function handlePasskeyRegistrationVerifyRequest(
       principalId: acceptedPrincipal.id,
     },
     ...(accountCompletion === undefined ? {} : { accountCompletion }),
+    ...(continueTo === undefined ? {} : { continueTo }),
     ...(accountCompletion?.status !== "complete" || continuation?.handoff === undefined
       ? {}
       : { handoff: continuation.handoff }),
@@ -407,6 +414,28 @@ async function handlePasskeyRegistrationVerifyRequest(
   };
 
   return jsonResponse(response, 200, headers);
+}
+
+function collaboratorInvitationAcceptanceContinueTo(
+  accountCompletion: Extract<
+    NonNullable<CollaboratorInvitationPasskeyRegistrationVerifyResponse["accountCompletion"]>,
+    { status: "complete" }
+  >,
+  continuation:
+    | {
+        handoff?: CollaboratorInvitationAcceptanceHandoffSummary;
+        target: AccountCompletionGateTarget;
+      }
+    | undefined,
+): AuthSuccessContinuationTarget | undefined {
+  if (continuation?.handoff !== undefined) {
+    return new URL(
+      continuation.handoff.returnTo,
+      continuation.handoff.targetOrigin,
+    ).toString() as AuthSuccessContinuationTarget;
+  }
+
+  return authAccountContinuationLocationForReturnTarget(accountCompletion.continueTo);
 }
 
 function acceptedPrincipalIdentity(

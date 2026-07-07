@@ -177,6 +177,27 @@ describe("portable archive protocol", () => {
     expect(parsePortableArchive(archive)).toEqual(archive);
   });
 
+  it("accepts and preserves app install registration policy metadata", () => {
+    const archive = appArchive({
+      app: { ...archivedInstall("members", "Members"), registrationPolicy: "email-verified" },
+    });
+    const formatted = JSON.parse(formatAppArchive(archive)) as AppArchive;
+    const omittedPolicyApp = { ...archive.app } as Record<string, unknown>;
+    delete omittedPolicyApp.registrationPolicy;
+
+    expect(parseAppArchive(archive).app.registrationPolicy).toBe("email-verified");
+    expect(formatted.app.registrationPolicy).toBe("email-verified");
+    expect(parseAppArchive({ ...archive, app: omittedPolicyApp }).app.registrationPolicy).toBe(
+      "closed",
+    );
+    expect(() =>
+      parseAppArchive({
+        ...archive,
+        app: { ...archive.app, registrationPolicy: "domain-allowlist" },
+      }),
+    ).toThrow('App archive app registrationPolicy must be "closed" or "email-verified".');
+  });
+
   it("parses instance archives as app archive collections", () => {
     const archive = instanceArchive({
       apps: [
@@ -512,6 +533,7 @@ function archivedInstall(installId: string, label: string): AppArchive["app"] {
     sourceSchemaKey: "site",
     sourceSchemaHash: siteSourceSchemaHash,
     label,
+    registrationPolicy: "closed",
     status: "installed",
     createdAt: "2026-05-23T00:00:00.000Z",
     updatedAt: "2026-05-23T00:01:00.000Z",

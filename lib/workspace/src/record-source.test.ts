@@ -25,7 +25,7 @@ describe("workspace control-plane record source validation", () => {
           installId: "labs",
           packageAppKey: "private-labs",
           label: "Private Labs",
-          registrationPolicy: "closed",
+          registrationPolicy: "email-verified",
           status: "installed",
           storageIdentity: "app:labs",
         },
@@ -57,6 +57,14 @@ describe("workspace control-plane record source validation", () => {
         { packageResolver },
       ).records.find((record) => record.id === "labs")?.values.packageAppKey,
     ).toBe("private-labs");
+    expect(
+      parseInstanceWorkspaceControlPlaneRecordSourceControlPlane(
+        "Workspace source",
+        "2026-06-18T00:00:01.000Z",
+        records,
+        { packageResolver },
+      ).records.find((record) => record.id === "labs")?.values.registrationPolicy,
+    ).toBe("email-verified");
     expect(() =>
       parseInstanceWorkspaceControlPlaneRecordSourceControlPlane(
         "Workspace source",

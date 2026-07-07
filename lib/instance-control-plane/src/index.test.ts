@@ -148,7 +148,7 @@ describe("instance control-plane schema contracts", () => {
       label: "Registration policy",
       type: "enum",
       required: true,
-      values: { closed: { label: "Closed" } },
+      values: { closed: { label: "Closed" }, "email-verified": { label: "Email verified" } },
     });
     expect(schema.screens?.apps.path).toBe("/");
     expect(schema.screens?.routes.path).toBe("/routes");
@@ -1021,6 +1021,33 @@ describe("instance control-plane schema contracts", () => {
         storageIdentity: "app:personal",
       },
     });
+    expect(
+      Object.keys(
+        instanceControlPlaneAppInstallRecord({
+          adminRoute: "/apps/members",
+          createdAt: now,
+          installId: "members",
+          label: "Members",
+          packageAppKey: "site",
+          packageRevision: 1,
+          publicRoute: "/sites/members",
+          publicRoutePrefix: "/sites/members/",
+          registrationPolicy: "email-verified",
+          sourceSchemaHash: siteSourceSchemaHash,
+          status: "installed",
+          updatedAt: now,
+        }).values,
+      ).sort(),
+    ).toEqual([
+      "installId",
+      "label",
+      "packageAppKey",
+      "packageRevision",
+      "registrationPolicy",
+      "sourceSchemaHash",
+      "status",
+      "storageIdentity",
+    ]);
 
     expect(
       instanceControlPlaneDefaultRoutesForInstall({
@@ -1514,6 +1541,29 @@ describe("instance control-plane schema contracts", () => {
         { packageResolver: controlPlanePackageResolver },
       ),
     ).toThrow("cannot store control-plane secret values");
+    const emailVerifiedSnapshot = parseInstanceControlPlaneStorageSnapshot(
+      "Instance archive controlPlane",
+      {
+        ...snapshot,
+        records: controlPlaneRecords().map((record) =>
+          record.entity === "app-install"
+            ? {
+                ...record,
+                values: {
+                  ...record.values,
+                  registrationPolicy: "email-verified",
+                },
+              }
+            : record,
+        ),
+      },
+      { packageResolver: controlPlanePackageResolver },
+    );
+
+    expect(
+      emailVerifiedSnapshot.records.find((record) => record.entity === "app-install")?.values
+        .registrationPolicy,
+    ).toBe("email-verified");
     expect(() =>
       parseInstanceControlPlaneStorageSnapshot(
         "Instance archive controlPlane",
@@ -1525,7 +1575,7 @@ describe("instance control-plane schema contracts", () => {
                   ...record,
                   values: {
                     ...record.values,
-                    registrationPolicy: "email-verified",
+                    registrationPolicy: "domain-allowlist",
                   },
                 }
               : record,

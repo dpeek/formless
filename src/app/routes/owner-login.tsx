@@ -3,6 +3,7 @@ import { Button } from "@dpeek/formless-ui/button";
 import { fieldErrorStyles } from "@dpeek/formless-ui/field";
 import { useLocation } from "wouter";
 import {
+  authAccountContinuationLocationForReturnTarget,
   ownerLoginRedirectTargetFromSearch,
   parseOwnerLogoutResponse,
   parseOwnerPasskeyLoginOptionsResponse,
@@ -15,6 +16,7 @@ import {
   type OwnerSessionStatusResponse,
 } from "../../shared/instance-auth.ts";
 import type { OwnerIdentity } from "../../shared/protocol.ts";
+import { runtimeTopologyRoutes } from "../../shared/runtime-topology.ts";
 import {
   browserSupportsPasskeys,
   createBrowserPasskeyAuthenticationResponse,
@@ -77,9 +79,13 @@ export function OwnerLoginRoute() {
 
     try {
       const response = await loginWithPasskey();
+      const continueTo = ownerLoginSuccessContinuationTarget(
+        response.continueTo,
+        ownerLoginSearchFromRouteLocation(location),
+      );
 
       setState({ status: "complete", owner: response.owner });
-      navigateAfterOwnerLogin(response.continueTo, { setLocation });
+      navigateAfterOwnerLogin(continueTo, { setLocation });
     } catch (error) {
       setState({
         status: "failed",
@@ -99,7 +105,13 @@ export function OwnerLoginRoute() {
     setState({ status: "logging-out", owner: loggedOutOwner });
 
     try {
-      await logoutOwnerSession();
+      const response = await logoutOwnerSession();
+
+      if (response.continueTo) {
+        navigateAfterOwnerLogin(response.continueTo, { setLocation });
+        return;
+      }
+
       setState({ status: "ready", owner: loggedOutOwner });
     } catch (error) {
       setState({
@@ -144,6 +156,24 @@ export function ownerLoginRedirectRequiresDocumentNavigation(
   redirectTarget: `/${string}`,
 ): boolean {
   return redirectTarget === "/formless" || redirectTarget.startsWith("/formless/");
+}
+
+export function ownerLoginSuccessContinuationTarget(
+  continueTo: `/${string}`,
+  locationSearch: string,
+): `/${string}` {
+  const continuationUrl = new URL(continueTo, "https://formless.local");
+
+  if (
+    continuationUrl.pathname !== runtimeTopologyRoutes.authAccountRoute ||
+    continuationUrl.search !== ""
+  ) {
+    return continueTo;
+  }
+
+  return authAccountContinuationLocationForReturnTarget(
+    ownerLoginRedirectTargetFromSearch(locationSearch),
+  );
 }
 
 export function OwnerLoginRouteView({

@@ -66,6 +66,7 @@ import type { EmailDeliveryRecord, EmailDeliveryScheduleRequest } from "../share
 import {
   INTERNAL_IDENTITY_ACTIVE_PRINCIPAL_PATH,
   INTERNAL_IDENTITY_ACCOUNT_COMPLETION_STATE_PATH,
+  INTERNAL_IDENTITY_EMAIL_VERIFICATION_COMMIT_PATH,
   INTERNAL_IDENTITY_OWNER_PATH,
   INTERNAL_IDENTITY_OWNER_PRINCIPAL_PATH,
   INTERNAL_IDENTITY_PRINCIPAL_AUTHORITY_PATH,
@@ -142,6 +143,11 @@ export const INTERNAL_COLLABORATOR_INVITATION_ACCEPTANCE_STATUS_PATH =
   "/_internal/identity/collaborator-invitation-acceptance-status";
 export const INTERNAL_COLLABORATOR_INVITATION_ACCEPTANCE_COMMIT_PATH =
   "/_internal/identity/collaborator-invitation-acceptance-commit";
+export const INTERNAL_EMAIL_VERIFIED_SIGNUP_COMMIT_PATH =
+  "/_internal/identity/email-verified-signup-commit";
+export const INTERNAL_EMAIL_VERIFIED_APP_REGISTRATION_COMMIT_PATH =
+  "/_internal/identity/email-verified-app-registration-commit";
+export const INTERNAL_TERMS_ACCEPTANCE_COMMIT_PATH = "/_internal/identity/terms-acceptance-commit";
 export const INTERNAL_IDENTITY_APP_REFERENCE_TARGET_PATH =
   "/_internal/identity/app-reference-target";
 const identityControlPlaneApp = {
@@ -327,6 +333,154 @@ export type IdentityCollaboratorInvitationAcceptanceCommitResult =
       error: string;
       ok: false;
       reason: IdentityCollaboratorInvitationAcceptanceCommitFailureReason;
+    };
+
+export type IdentityEmailVerificationCommitInput = {
+  challengeId: string;
+  displayEmail: string;
+  normalizedEmail: string;
+  principalId: string;
+  primary: boolean;
+  recovery: boolean;
+  verifiedAt: string;
+};
+
+export type IdentityEmailVerificationPrincipalEmailSummary = {
+  displayEmail: string;
+  normalizedEmail: string;
+  primary: boolean;
+  principalEmailId: string;
+  recovery: boolean;
+  verificationStatus: "verified";
+  verifiedAt: string;
+};
+
+export type IdentityEmailVerificationCommitFailureReason =
+  | "email-owned-by-another-principal"
+  | "identity-validation-failed"
+  | "missing-principal";
+
+export type IdentityEmailVerificationCommitResult =
+  | {
+      ok: true;
+      output: OperationCommandOutput;
+      principalEmail: IdentityEmailVerificationPrincipalEmailSummary;
+      records: StoredRecord[];
+      status: "committed" | "replayed";
+    }
+  | {
+      error: string;
+      ok: false;
+      reason: IdentityEmailVerificationCommitFailureReason;
+    };
+
+export type IdentityEmailVerifiedSignupCommitInput = {
+  appInstallId: string;
+  displayEmail: string;
+  displayName: string;
+  normalizedEmail: string;
+  principalId: string;
+  selectedOrganization?: string;
+  signupId: string;
+  verifiedAt: string;
+};
+
+export type IdentityEmailVerifiedSignupPrincipalSummary = {
+  displayName: string;
+  principalId: string;
+};
+
+export type IdentityEmailVerifiedSignupAppRegistrationSummary = {
+  appInstallId: string;
+  appRegistrationId: string;
+  selectedOrganization?: string;
+  status: "active";
+  targetKind: "principal";
+  targetPrincipal: string;
+};
+
+export type IdentityEmailVerifiedSignupCommitFailureReason =
+  | "email-owned-by-another-principal"
+  | "identity-validation-failed"
+  | "inactive-principal";
+
+export type IdentityEmailVerifiedSignupCommitResult =
+  | {
+      appRegistration: IdentityEmailVerifiedSignupAppRegistrationSummary;
+      ok: true;
+      output: OperationCommandOutput;
+      principal: IdentityEmailVerifiedSignupPrincipalSummary;
+      principalEmail: IdentityEmailVerificationPrincipalEmailSummary;
+      records: StoredRecord[];
+      status: "committed" | "replayed";
+    }
+  | {
+      error: string;
+      ok: false;
+      reason: IdentityEmailVerifiedSignupCommitFailureReason;
+    };
+
+export type IdentityEmailVerifiedAppRegistrationCommitInput = {
+  appInstallId: string;
+  completedAt: string;
+  completionId: string;
+  principalId: string;
+  selectedOrganization?: string;
+};
+
+export type IdentityEmailVerifiedAppRegistrationCommitFailureReason =
+  | "conflicting-active-app-registration"
+  | "identity-validation-failed"
+  | "inactive-principal"
+  | "missing-verified-primary-email";
+
+export type IdentityEmailVerifiedAppRegistrationCommitResult =
+  | {
+      appRegistration: IdentityEmailVerifiedSignupAppRegistrationSummary;
+      ok: true;
+      output: OperationCommandOutput;
+      records: StoredRecord[];
+      status: "committed" | "replayed";
+    }
+  | {
+      error: string;
+      ok: false;
+      reason: IdentityEmailVerifiedAppRegistrationCommitFailureReason;
+    };
+
+export type IdentityTermsAcceptanceCommitInput = {
+  acceptedAt: string;
+  acceptedPolicyIds: string[];
+  acceptanceId: string;
+  principalId: string;
+  target: ReturnType<typeof parseAccountCompletionGateTarget>;
+};
+
+export type IdentityTermsAcceptanceSummary = {
+  acceptedAt: string;
+  accountPolicyId: string;
+  principalId: string;
+  principalPolicyAcceptanceId: string;
+  status: "accepted";
+};
+
+export type IdentityTermsAcceptanceCommitFailureReason =
+  | "identity-validation-failed"
+  | "inactive-principal"
+  | "invalid-policy";
+
+export type IdentityTermsAcceptanceCommitResult =
+  | {
+      acceptedPolicies: IdentityTermsAcceptanceSummary[];
+      ok: true;
+      output: OperationCommandOutput;
+      records: StoredRecord[];
+      status: "committed" | "replayed";
+    }
+  | {
+      error: string;
+      ok: false;
+      reason: IdentityTermsAcceptanceCommitFailureReason;
     };
 
 export type EnsureIdentityOwnerInput = {
@@ -706,6 +860,80 @@ export async function acceptIdentityCollaboratorInvitation(
   return body;
 }
 
+export async function commitIdentityEmailVerification(
+  env: IdentityOwnerEnv,
+  input: IdentityEmailVerificationCommitInput,
+): Promise<IdentityEmailVerificationCommitResult> {
+  const response = await fetchIdentityOwnerInternal(
+    env,
+    INTERNAL_IDENTITY_EMAIL_VERIFICATION_COMMIT_PATH,
+    {
+      body: JSON.stringify(input),
+      headers: { "Content-Type": "application/json" },
+      method: "POST",
+    },
+  );
+  const body = (await response.json()) as
+    | IdentityEmailVerificationCommitResult
+    | { error?: string };
+
+  if (!response.ok || !isIdentityEmailVerificationCommitResult(body)) {
+    throw new Error(responseBodyError(body) ?? "Identity email verification commit failed.");
+  }
+
+  return body;
+}
+
+export async function commitIdentityEmailVerifiedSignup(
+  env: IdentityOwnerEnv,
+  input: IdentityEmailVerifiedSignupCommitInput,
+): Promise<IdentityEmailVerifiedSignupCommitResult> {
+  const response = await fetchIdentityOwnerInternal(
+    env,
+    INTERNAL_EMAIL_VERIFIED_SIGNUP_COMMIT_PATH,
+    {
+      body: JSON.stringify(input),
+      headers: { "Content-Type": "application/json" },
+      method: "POST",
+    },
+  );
+  const body = (await response.json()) as
+    | IdentityEmailVerifiedSignupCommitResult
+    | { error?: string };
+
+  if (!response.ok || !isIdentityEmailVerifiedSignupCommitResult(body)) {
+    throw new Error(responseBodyError(body) ?? "Identity email-verified signup commit failed.");
+  }
+
+  return body;
+}
+
+export async function commitIdentityEmailVerifiedAppRegistration(
+  env: IdentityOwnerEnv,
+  input: IdentityEmailVerifiedAppRegistrationCommitInput,
+): Promise<IdentityEmailVerifiedAppRegistrationCommitResult> {
+  const response = await fetchIdentityOwnerInternal(
+    env,
+    INTERNAL_EMAIL_VERIFIED_APP_REGISTRATION_COMMIT_PATH,
+    {
+      body: JSON.stringify(input),
+      headers: { "Content-Type": "application/json" },
+      method: "POST",
+    },
+  );
+  const body = (await response.json()) as
+    | IdentityEmailVerifiedAppRegistrationCommitResult
+    | { error?: string };
+
+  if (!response.ok || !isIdentityEmailVerifiedAppRegistrationCommitResult(body)) {
+    throw new Error(
+      responseBodyError(body) ?? "Identity email-verified app-registration commit failed.",
+    );
+  }
+
+  return body;
+}
+
 async function fetchIdentityOwnerInternal(
   env: IdentityOwnerEnv,
   path: string,
@@ -825,6 +1053,46 @@ async function handleIdentityOwnerInternalRequest(
     }
 
     const result = acceptCollaboratorInvitationIntoIdentity(storage, await readJson(request));
+
+    return jsonResponse(result);
+  }
+
+  if (url.pathname === INTERNAL_IDENTITY_EMAIL_VERIFICATION_COMMIT_PATH) {
+    if (request.method !== "POST") {
+      return jsonResponse({ error: "Method not allowed." }, 405, { Allow: "POST" });
+    }
+
+    const result = commitEmailVerificationIntoIdentity(storage, await readJson(request));
+
+    return jsonResponse(result);
+  }
+
+  if (url.pathname === INTERNAL_EMAIL_VERIFIED_SIGNUP_COMMIT_PATH) {
+    if (request.method !== "POST") {
+      return jsonResponse({ error: "Method not allowed." }, 405, { Allow: "POST" });
+    }
+
+    const result = commitEmailVerifiedSignupIntoIdentity(storage, await readJson(request));
+
+    return jsonResponse(result);
+  }
+
+  if (url.pathname === INTERNAL_EMAIL_VERIFIED_APP_REGISTRATION_COMMIT_PATH) {
+    if (request.method !== "POST") {
+      return jsonResponse({ error: "Method not allowed." }, 405, { Allow: "POST" });
+    }
+
+    const result = commitEmailVerifiedAppRegistrationIntoIdentity(storage, await readJson(request));
+
+    return jsonResponse(result);
+  }
+
+  if (url.pathname === INTERNAL_TERMS_ACCEPTANCE_COMMIT_PATH) {
+    if (request.method !== "POST") {
+      return jsonResponse({ error: "Method not allowed." }, 405, { Allow: "POST" });
+    }
+
+    const result = commitTermsAcceptanceIntoIdentity(storage, await readJson(request));
 
     return jsonResponse(result);
   }
@@ -1823,6 +2091,985 @@ function collaboratorInvitationPrincipalEmailWritePlans(
   ];
 }
 
+function commitEmailVerificationIntoIdentity(
+  storage: DurableObjectStorage,
+  value: unknown,
+): IdentityEmailVerificationCommitResult {
+  const input = parseIdentityEmailVerificationCommitRequest(value);
+
+  ensureIdentityControlPlaneStorage(storage);
+
+  let plans: OperationRecordWritePlan[];
+
+  try {
+    const planned = emailVerificationPrincipalEmailWritePlans(getBootstrapRecords(storage), input);
+
+    if (!planned.ok) {
+      return planned;
+    }
+
+    plans = planned.plans;
+  } catch {
+    return identityEmailVerificationCommitFailure("identity-validation-failed");
+  }
+
+  let outcome: WriteOutcome<OperationCommandOutput>;
+
+  try {
+    outcome = writeRecordSetForCommandOperationOutcome(
+      storage,
+      `email-verification:${input.challengeId}`,
+      plans,
+      validateIdentityControlPlaneRecordConstraint(storage),
+      { now: input.verifiedAt },
+    );
+  } catch {
+    return identityEmailVerificationCommitFailure("identity-validation-failed");
+  }
+
+  const records = outcome.response.changes.map((change) => change.payload);
+  const principalEmail =
+    records.find(
+      (record) =>
+        record.entity === "principal-email" &&
+        !record.deletedAt &&
+        record.values.normalizedEmail === input.normalizedEmail &&
+        record.values.principal === input.principalId,
+    ) ??
+    getBootstrapRecords(storage).find(
+      (record) =>
+        record.entity === "principal-email" &&
+        !record.deletedAt &&
+        record.values.normalizedEmail === input.normalizedEmail &&
+        record.values.principal === input.principalId,
+    );
+
+  if (!principalEmail) {
+    return identityEmailVerificationCommitFailure("identity-validation-failed");
+  }
+
+  return {
+    ok: true,
+    output: outcome.response,
+    principalEmail: emailVerificationPrincipalEmailSummary(principalEmail),
+    records,
+    status: outcome.kind === "replay" ? "replayed" : "committed",
+  };
+}
+
+function emailVerificationPrincipalEmailWritePlans(
+  records: readonly StoredRecord[],
+  input: IdentityEmailVerificationCommitInput,
+):
+  | { ok: true; plans: OperationRecordWritePlan[] }
+  | Extract<IdentityEmailVerificationCommitResult, { ok: false }> {
+  const principal = records.find(
+    (record) => record.entity === "principal" && record.id === input.principalId,
+  );
+
+  if (!principal || principal.deletedAt || principal.values.status !== "active") {
+    return identityEmailVerificationCommitFailure("missing-principal");
+  }
+
+  const existingEmail = records.find(
+    (record) =>
+      record.entity === "principal-email" &&
+      !record.deletedAt &&
+      record.values.normalizedEmail === input.normalizedEmail,
+  );
+
+  if (existingEmail && existingEmail.values.principal !== input.principalId) {
+    return identityEmailVerificationCommitFailure("email-owned-by-another-principal");
+  }
+
+  const plans: OperationRecordWritePlan[] = [];
+
+  if (input.primary) {
+    for (const record of records) {
+      if (
+        record.entity === "principal-email" &&
+        !record.deletedAt &&
+        record.values.principal === input.principalId &&
+        record.values.primary === true &&
+        record.id !== existingEmail?.id
+      ) {
+        plans.push({
+          kind: "patch",
+          record,
+          values: {
+            ...record.values,
+            primary: false,
+          },
+        });
+      }
+    }
+  }
+
+  if (existingEmail) {
+    plans.push({
+      kind: "patch",
+      record: existingEmail,
+      values: {
+        ...existingEmail.values,
+        displayEmail: input.displayEmail,
+        normalizedEmail: input.normalizedEmail,
+        primary: input.primary,
+        recovery: input.recovery,
+        verificationStatus: "verified",
+        verifiedAt: input.verifiedAt,
+      },
+    });
+
+    return { ok: true, plans };
+  }
+
+  plans.push({
+    kind: "create",
+    entity: "principal-email",
+    id: generatedIdentityRecordId("principal-email"),
+    values: {
+      principal: input.principalId,
+      displayEmail: input.displayEmail,
+      normalizedEmail: input.normalizedEmail,
+      verificationStatus: "verified",
+      primary: input.primary,
+      recovery: input.recovery,
+      verifiedAt: input.verifiedAt,
+    },
+  });
+
+  return { ok: true, plans };
+}
+
+function parseIdentityEmailVerificationCommitRequest(
+  value: unknown,
+): IdentityEmailVerificationCommitInput {
+  const object = parseRecord("Identity email verification commit request", value);
+
+  assertAllowedKeys("Identity email verification commit request", object, [
+    "challengeId",
+    "displayEmail",
+    "normalizedEmail",
+    "principalId",
+    "primary",
+    "recovery",
+    "verifiedAt",
+  ]);
+
+  const displayEmail = normalizeEmailDeliveryAddress(
+    "Identity email verification display email",
+    object.displayEmail,
+  );
+  const normalizedEmail = normalizeEmailDeliveryAddress(
+    "Identity email verification normalized email",
+    object.normalizedEmail,
+  ).toLowerCase();
+
+  if (displayEmail.toLowerCase() !== normalizedEmail) {
+    throw new Error("Identity email verification display email must match normalized email.");
+  }
+
+  return {
+    challengeId: parseNonEmptyString(
+      "Identity email verification challenge id",
+      object.challengeId,
+    ),
+    displayEmail,
+    normalizedEmail,
+    principalId: parseNonEmptyString(
+      "Identity email verification principal id",
+      object.principalId,
+    ),
+    primary: parseBoolean("Identity email verification primary", object.primary),
+    recovery: parseBoolean("Identity email verification recovery", object.recovery),
+    verifiedAt: parseIsoTimestamp("Identity email verification verifiedAt", object.verifiedAt),
+  };
+}
+
+function identityEmailVerificationCommitFailure(
+  reason: IdentityEmailVerificationCommitFailureReason,
+): Extract<IdentityEmailVerificationCommitResult, { ok: false }> {
+  return {
+    error:
+      reason === "missing-principal"
+        ? "Email verification requires an active principal."
+        : reason === "email-owned-by-another-principal"
+          ? "Email verification could not be committed."
+          : "Email verification could not be committed.",
+    ok: false,
+    reason,
+  };
+}
+
+function emailVerificationPrincipalEmailSummary(
+  record: StoredRecord,
+): IdentityEmailVerificationPrincipalEmailSummary {
+  return {
+    displayEmail: parseNonEmptyString(
+      "Identity email verification principal-email displayEmail",
+      record.values.displayEmail,
+    ),
+    normalizedEmail: parseNonEmptyString(
+      "Identity email verification principal-email normalizedEmail",
+      record.values.normalizedEmail,
+    ),
+    primary: parseBoolean(
+      "Identity email verification principal-email primary",
+      record.values.primary,
+    ),
+    principalEmailId: record.id,
+    recovery: parseBoolean(
+      "Identity email verification principal-email recovery",
+      record.values.recovery,
+    ),
+    verificationStatus: "verified",
+    verifiedAt: parseIsoTimestamp(
+      "Identity email verification principal-email verifiedAt",
+      record.values.verifiedAt,
+    ),
+  };
+}
+
+function commitEmailVerifiedSignupIntoIdentity(
+  storage: DurableObjectStorage,
+  value: unknown,
+): IdentityEmailVerifiedSignupCommitResult {
+  const input = parseIdentityEmailVerifiedSignupCommitRequest(value);
+
+  ensureIdentityControlPlaneStorage(storage);
+
+  let plans: OperationRecordWritePlan[];
+
+  try {
+    const planned = emailVerifiedSignupWritePlans(getBootstrapRecords(storage), input);
+
+    if (!planned.ok) {
+      return planned;
+    }
+
+    plans = planned.plans;
+  } catch {
+    return identityEmailVerifiedSignupCommitFailure("identity-validation-failed");
+  }
+
+  let outcome: WriteOutcome<OperationCommandOutput>;
+
+  try {
+    outcome = writeRecordSetForCommandOperationOutcome(
+      storage,
+      `email-verified-signup:${input.signupId}`,
+      plans,
+      validateIdentityControlPlaneRecordConstraint(storage),
+      { now: input.verifiedAt },
+    );
+  } catch {
+    return identityEmailVerifiedSignupCommitFailure("identity-validation-failed");
+  }
+
+  const records = getBootstrapRecords(storage);
+  const principal = records.find(
+    (record) =>
+      record.entity === "principal" &&
+      record.id === input.principalId &&
+      !record.deletedAt &&
+      record.values.status === "active",
+  );
+  const principalEmail = records.find(
+    (record) =>
+      record.entity === "principal-email" &&
+      !record.deletedAt &&
+      record.values.normalizedEmail === input.normalizedEmail &&
+      record.values.principal === input.principalId,
+  );
+  const appRegistration = records.find(
+    (record) =>
+      record.entity === "app-registration" &&
+      !record.deletedAt &&
+      record.values.appInstallId === input.appInstallId &&
+      record.values.targetKind === "principal" &&
+      record.values.targetPrincipal === input.principalId &&
+      record.values.status === "active" &&
+      (record.values.selectedOrganization ?? undefined) ===
+        (input.selectedOrganization ?? undefined),
+  );
+
+  if (!principal || !principalEmail || !appRegistration) {
+    return identityEmailVerifiedSignupCommitFailure("identity-validation-failed");
+  }
+
+  return {
+    appRegistration: emailVerifiedSignupAppRegistrationSummary(appRegistration),
+    ok: true,
+    output: outcome.response,
+    principal: {
+      displayName: parseNonEmptyString(
+        "Identity email-verified signup principal displayName",
+        principal.values.displayName,
+      ),
+      principalId: principal.id,
+    },
+    principalEmail: emailVerificationPrincipalEmailSummary(principalEmail),
+    records: outcome.response.changes.map((change) => change.payload),
+    status: outcome.kind === "replay" ? "replayed" : "committed",
+  };
+}
+
+function emailVerifiedSignupWritePlans(
+  records: readonly StoredRecord[],
+  input: IdentityEmailVerifiedSignupCommitInput,
+):
+  | { ok: true; plans: OperationRecordWritePlan[] }
+  | Extract<IdentityEmailVerifiedSignupCommitResult, { ok: false }> {
+  const principal = records.find(
+    (record) => record.entity === "principal" && record.id === input.principalId,
+  );
+
+  if (principal?.deletedAt || (principal && principal.values.status !== "active")) {
+    return identityEmailVerifiedSignupCommitFailure("inactive-principal");
+  }
+
+  const existingEmail = records.find(
+    (record) =>
+      record.entity === "principal-email" &&
+      !record.deletedAt &&
+      record.values.normalizedEmail === input.normalizedEmail,
+  );
+
+  if (existingEmail && existingEmail.values.principal !== input.principalId) {
+    return identityEmailVerifiedSignupCommitFailure("email-owned-by-another-principal");
+  }
+
+  const plans: OperationRecordWritePlan[] = [];
+
+  if (!principal) {
+    plans.push({
+      kind: "create",
+      entity: "principal",
+      id: input.principalId,
+      values: {
+        displayName: input.displayName,
+        kind: "human",
+        status: "active",
+      },
+    });
+  } else if (principal.values.displayName !== input.displayName) {
+    plans.push({
+      kind: "patch",
+      record: principal,
+      values: {
+        ...principal.values,
+        displayName: input.displayName,
+      },
+    });
+  }
+
+  plans.push(...emailVerifiedSignupPrimaryEmailWritePlans(records, input, existingEmail));
+  plans.push(...emailVerifiedSignupAppRegistrationWritePlans(records, input));
+
+  return { ok: true, plans };
+}
+
+function emailVerifiedSignupPrimaryEmailWritePlans(
+  records: readonly StoredRecord[],
+  input: IdentityEmailVerifiedSignupCommitInput,
+  existingEmail: StoredRecord | undefined,
+): OperationRecordWritePlan[] {
+  const plans: OperationRecordWritePlan[] = [];
+
+  for (const record of records) {
+    if (
+      record.entity === "principal-email" &&
+      !record.deletedAt &&
+      record.values.principal === input.principalId &&
+      record.values.primary === true &&
+      record.id !== existingEmail?.id
+    ) {
+      plans.push({
+        kind: "patch",
+        record,
+        values: {
+          ...record.values,
+          primary: false,
+        },
+      });
+    }
+  }
+
+  if (existingEmail) {
+    plans.push({
+      kind: "patch",
+      record: existingEmail,
+      values: {
+        ...existingEmail.values,
+        displayEmail: input.displayEmail,
+        normalizedEmail: input.normalizedEmail,
+        verificationStatus: "verified",
+        primary: true,
+        recovery: false,
+        verifiedAt: input.verifiedAt,
+      },
+    });
+
+    return plans;
+  }
+
+  plans.push({
+    kind: "create",
+    entity: "principal-email",
+    id: generatedIdentityRecordId("principal-email"),
+    values: {
+      principal: input.principalId,
+      displayEmail: input.displayEmail,
+      normalizedEmail: input.normalizedEmail,
+      verificationStatus: "verified",
+      primary: true,
+      recovery: false,
+      verifiedAt: input.verifiedAt,
+    },
+  });
+
+  return plans;
+}
+
+function emailVerifiedSignupAppRegistrationWritePlans(
+  records: readonly StoredRecord[],
+  input: IdentityEmailVerifiedSignupCommitInput,
+): OperationRecordWritePlan[] {
+  const existing = records.find(
+    (record) =>
+      record.entity === "app-registration" &&
+      !record.deletedAt &&
+      record.values.appInstallId === input.appInstallId &&
+      record.values.targetKind === "principal" &&
+      record.values.targetPrincipal === input.principalId &&
+      (record.values.selectedOrganization ?? undefined) ===
+        (input.selectedOrganization ?? undefined),
+  );
+
+  if (existing) {
+    if (existing.values.status === "active") {
+      return [];
+    }
+
+    return [
+      {
+        kind: "patch",
+        record: existing,
+        values: {
+          ...existing.values,
+          status: "active",
+        },
+      },
+    ];
+  }
+
+  return [
+    {
+      kind: "create",
+      entity: "app-registration",
+      id: generatedIdentityRecordId("app-registration"),
+      values: {
+        appInstallId: input.appInstallId,
+        targetKind: "principal",
+        targetPrincipal: input.principalId,
+        status: "active",
+        ...(input.selectedOrganization === undefined
+          ? {}
+          : { selectedOrganization: input.selectedOrganization }),
+      },
+    },
+  ];
+}
+
+function parseIdentityEmailVerifiedSignupCommitRequest(
+  value: unknown,
+): IdentityEmailVerifiedSignupCommitInput {
+  const object = parseRecord("Identity email-verified signup commit request", value);
+
+  assertAllowedKeys("Identity email-verified signup commit request", object, [
+    "appInstallId",
+    "displayEmail",
+    "displayName",
+    "normalizedEmail",
+    "principalId",
+    "selectedOrganization",
+    "signupId",
+    "verifiedAt",
+  ]);
+
+  const displayEmail = normalizeEmailDeliveryAddress(
+    "Identity email-verified signup display email",
+    object.displayEmail,
+  );
+  const normalizedEmail = normalizeEmailDeliveryAddress(
+    "Identity email-verified signup normalized email",
+    object.normalizedEmail,
+  ).toLowerCase();
+
+  if (displayEmail.toLowerCase() !== normalizedEmail) {
+    throw new BadRequestError("Identity email-verified signup display email must match email.");
+  }
+
+  return {
+    appInstallId: parseNonEmptyString(
+      "Identity email-verified signup app install id",
+      object.appInstallId,
+    ),
+    displayEmail,
+    displayName: parseNonEmptyString(
+      "Identity email-verified signup display name",
+      object.displayName,
+    ),
+    normalizedEmail,
+    principalId: parseNonEmptyString(
+      "Identity email-verified signup principal id",
+      object.principalId,
+    ),
+    ...(object.selectedOrganization === undefined
+      ? {}
+      : {
+          selectedOrganization: parseNonEmptyString(
+            "Identity email-verified signup selected organization",
+            object.selectedOrganization,
+          ),
+        }),
+    signupId: parseNonEmptyString("Identity email-verified signup id", object.signupId),
+    verifiedAt: parseIsoTimestamp("Identity email-verified signup verifiedAt", object.verifiedAt),
+  };
+}
+
+function identityEmailVerifiedSignupCommitFailure(
+  reason: IdentityEmailVerifiedSignupCommitFailureReason,
+): Extract<IdentityEmailVerifiedSignupCommitResult, { ok: false }> {
+  return {
+    error:
+      reason === "inactive-principal"
+        ? "Email-verified signup principal is inactive."
+        : reason === "email-owned-by-another-principal"
+          ? "Email-verified signup could not be committed."
+          : "Email-verified signup could not be committed.",
+    ok: false,
+    reason,
+  };
+}
+
+function emailVerifiedSignupAppRegistrationSummary(
+  record: StoredRecord,
+): IdentityEmailVerifiedSignupAppRegistrationSummary {
+  return {
+    appInstallId: parseNonEmptyString(
+      "Identity email-verified signup app-registration appInstallId",
+      record.values.appInstallId,
+    ),
+    appRegistrationId: record.id,
+    ...(record.values.selectedOrganization === undefined
+      ? {}
+      : {
+          selectedOrganization: parseNonEmptyString(
+            "Identity email-verified signup app-registration selectedOrganization",
+            record.values.selectedOrganization,
+          ),
+        }),
+    status: "active",
+    targetKind: "principal",
+    targetPrincipal: parseNonEmptyString(
+      "Identity email-verified signup app-registration targetPrincipal",
+      record.values.targetPrincipal,
+    ),
+  };
+}
+
+function commitEmailVerifiedAppRegistrationIntoIdentity(
+  storage: DurableObjectStorage,
+  value: unknown,
+): IdentityEmailVerifiedAppRegistrationCommitResult {
+  const input = parseIdentityEmailVerifiedAppRegistrationCommitRequest(value);
+
+  ensureIdentityControlPlaneStorage(storage);
+
+  let plans: OperationRecordWritePlan[];
+
+  try {
+    const planned = emailVerifiedAppRegistrationWritePlans(getBootstrapRecords(storage), input);
+
+    if (!planned.ok) {
+      return planned;
+    }
+
+    plans = planned.plans;
+  } catch {
+    return identityEmailVerifiedAppRegistrationCommitFailure("identity-validation-failed");
+  }
+
+  let outcome: WriteOutcome<OperationCommandOutput>;
+
+  try {
+    outcome = writeRecordSetForCommandOperationOutcome(
+      storage,
+      `email-verified-app-registration:${input.completionId}`,
+      plans,
+      validateIdentityControlPlaneRecordConstraint(storage),
+      { now: input.completedAt },
+    );
+  } catch {
+    return identityEmailVerifiedAppRegistrationCommitFailure("identity-validation-failed");
+  }
+
+  const records = getBootstrapRecords(storage);
+  const appRegistration = records.find(
+    (record) =>
+      record.entity === "app-registration" &&
+      !record.deletedAt &&
+      record.values.appInstallId === input.appInstallId &&
+      record.values.targetKind === "principal" &&
+      record.values.targetPrincipal === input.principalId &&
+      record.values.status === "active" &&
+      (record.values.selectedOrganization ?? undefined) ===
+        (input.selectedOrganization ?? undefined),
+  );
+
+  if (!appRegistration) {
+    return identityEmailVerifiedAppRegistrationCommitFailure("identity-validation-failed");
+  }
+
+  return {
+    appRegistration: emailVerifiedSignupAppRegistrationSummary(appRegistration),
+    ok: true,
+    output: outcome.response,
+    records: outcome.response.changes.map((change) => change.payload),
+    status: outcome.kind === "replay" ? "replayed" : "committed",
+  };
+}
+
+function emailVerifiedAppRegistrationWritePlans(
+  records: readonly StoredRecord[],
+  input: IdentityEmailVerifiedAppRegistrationCommitInput,
+):
+  | { ok: true; plans: OperationRecordWritePlan[] }
+  | Extract<IdentityEmailVerifiedAppRegistrationCommitResult, { ok: false }> {
+  const principal = records.find(
+    (record) => record.entity === "principal" && record.id === input.principalId,
+  );
+
+  if (!principal || principal.deletedAt || principal.values.status !== "active") {
+    return identityEmailVerifiedAppRegistrationCommitFailure("inactive-principal");
+  }
+
+  const primaryEmail = records.find(
+    (record) =>
+      record.entity === "principal-email" &&
+      !record.deletedAt &&
+      record.values.principal === input.principalId &&
+      record.values.primary === true &&
+      record.values.verificationStatus === "verified",
+  );
+
+  if (!primaryEmail) {
+    return identityEmailVerifiedAppRegistrationCommitFailure("missing-verified-primary-email");
+  }
+
+  const existing = records.find(
+    (record) =>
+      record.entity === "app-registration" &&
+      !record.deletedAt &&
+      record.values.appInstallId === input.appInstallId &&
+      record.values.targetKind === "principal" &&
+      record.values.targetPrincipal === input.principalId,
+  );
+
+  if (existing) {
+    if (existing.values.status === "active") {
+      return (existing.values.selectedOrganization ?? undefined) ===
+        (input.selectedOrganization ?? undefined)
+        ? { ok: true, plans: [] }
+        : identityEmailVerifiedAppRegistrationCommitFailure("conflicting-active-app-registration");
+    }
+
+    const values: RecordValues = {
+      ...existing.values,
+      status: "active",
+    };
+
+    if (input.selectedOrganization === undefined) {
+      delete values.selectedOrganization;
+    } else {
+      values.selectedOrganization = input.selectedOrganization;
+    }
+
+    return {
+      ok: true,
+      plans: [
+        {
+          kind: "patch",
+          record: existing,
+          values,
+        },
+      ],
+    };
+  }
+
+  return {
+    ok: true,
+    plans: [
+      {
+        kind: "create",
+        entity: "app-registration",
+        id: generatedIdentityRecordId("app-registration"),
+        values: {
+          appInstallId: input.appInstallId,
+          targetKind: "principal",
+          targetPrincipal: input.principalId,
+          status: "active",
+          ...(input.selectedOrganization === undefined
+            ? {}
+            : { selectedOrganization: input.selectedOrganization }),
+        },
+      },
+    ],
+  };
+}
+
+function parseIdentityEmailVerifiedAppRegistrationCommitRequest(
+  value: unknown,
+): IdentityEmailVerifiedAppRegistrationCommitInput {
+  const object = parseRecord("Identity email-verified app-registration commit request", value);
+
+  assertAllowedKeys("Identity email-verified app-registration commit request", object, [
+    "appInstallId",
+    "completedAt",
+    "completionId",
+    "principalId",
+    "selectedOrganization",
+  ]);
+
+  return {
+    appInstallId: parseNonEmptyString(
+      "Identity email-verified app-registration app install id",
+      object.appInstallId,
+    ),
+    completedAt: parseIsoTimestamp(
+      "Identity email-verified app-registration completedAt",
+      object.completedAt,
+    ),
+    completionId: parseNonEmptyString(
+      "Identity email-verified app-registration completion id",
+      object.completionId,
+    ),
+    principalId: parseNonEmptyString(
+      "Identity email-verified app-registration principal id",
+      object.principalId,
+    ),
+    ...(object.selectedOrganization === undefined
+      ? {}
+      : {
+          selectedOrganization: parseNonEmptyString(
+            "Identity email-verified app-registration selected organization",
+            object.selectedOrganization,
+          ),
+        }),
+  };
+}
+
+function identityEmailVerifiedAppRegistrationCommitFailure(
+  reason: IdentityEmailVerifiedAppRegistrationCommitFailureReason,
+): Extract<IdentityEmailVerifiedAppRegistrationCommitResult, { ok: false }> {
+  return {
+    error:
+      reason === "inactive-principal"
+        ? "Email-verified app-registration requires an active principal."
+        : reason === "missing-verified-primary-email"
+          ? "Email-verified app-registration requires a verified primary email."
+          : "Email-verified app-registration could not be committed.",
+    ok: false,
+    reason,
+  };
+}
+
+function commitTermsAcceptanceIntoIdentity(
+  storage: DurableObjectStorage,
+  value: unknown,
+): IdentityTermsAcceptanceCommitResult {
+  const input = parseIdentityTermsAcceptanceCommitRequest(value);
+
+  ensureIdentityControlPlaneStorage(storage);
+
+  let plans: OperationRecordWritePlan[];
+
+  try {
+    const planned = termsAcceptanceWritePlans(getBootstrapRecords(storage), input);
+
+    if (!planned.ok) {
+      return planned;
+    }
+
+    plans = planned.plans;
+  } catch {
+    return identityTermsAcceptanceCommitFailure("identity-validation-failed");
+  }
+
+  let outcome: WriteOutcome<OperationCommandOutput>;
+
+  try {
+    outcome = writeRecordSetForCommandOperationOutcome(
+      storage,
+      `terms-acceptance:${input.acceptanceId}`,
+      plans,
+      validateIdentityControlPlaneRecordConstraint(storage),
+      { now: input.acceptedAt },
+    );
+  } catch {
+    return identityTermsAcceptanceCommitFailure("identity-validation-failed");
+  }
+
+  const records = getBootstrapRecords(storage);
+  const acceptedPolicies = input.acceptedPolicyIds.map((policyId) =>
+    records.find(
+      (record) =>
+        record.entity === "principal-policy-acceptance" &&
+        !record.deletedAt &&
+        record.values.principal === input.principalId &&
+        record.values.accountPolicy === policyId &&
+        record.values.status === "accepted",
+    ),
+  );
+
+  if (acceptedPolicies.some((record) => record === undefined)) {
+    return identityTermsAcceptanceCommitFailure("identity-validation-failed");
+  }
+
+  return {
+    acceptedPolicies: acceptedPolicies.map((record) =>
+      termsAcceptanceSummary(record as StoredRecord),
+    ),
+    ok: true,
+    output: outcome.response,
+    records: outcome.response.changes.map((change) => change.payload),
+    status: outcome.kind === "replay" ? "replayed" : "committed",
+  };
+}
+
+function termsAcceptanceWritePlans(
+  records: readonly StoredRecord[],
+  input: IdentityTermsAcceptanceCommitInput,
+):
+  | { ok: true; plans: OperationRecordWritePlan[] }
+  | Extract<IdentityTermsAcceptanceCommitResult, { ok: false }> {
+  const principal = records.find(
+    (record) => record.entity === "principal" && record.id === input.principalId,
+  );
+
+  if (!principal || principal.deletedAt || principal.values.status !== "active") {
+    return identityTermsAcceptanceCommitFailure("inactive-principal");
+  }
+
+  const policiesById = new Map(
+    records
+      .filter(
+        (record) =>
+          record.entity === "account-policy" &&
+          !record.deletedAt &&
+          record.values.status === "active" &&
+          accountPolicyAppliesToCompletionTarget(record, input.target),
+      )
+      .map((record) => [record.id, record]),
+  );
+  const plans: OperationRecordWritePlan[] = [];
+
+  for (const policyId of input.acceptedPolicyIds) {
+    const policy = policiesById.get(policyId);
+
+    if (!policy) {
+      return identityTermsAcceptanceCommitFailure("invalid-policy");
+    }
+
+    const accepted = records.find(
+      (record) =>
+        record.entity === "principal-policy-acceptance" &&
+        !record.deletedAt &&
+        record.values.principal === input.principalId &&
+        record.values.accountPolicy === policy.id &&
+        record.values.status === "accepted",
+    );
+
+    if (accepted) {
+      continue;
+    }
+
+    plans.push({
+      kind: "create",
+      entity: "principal-policy-acceptance",
+      id: generatedIdentityRecordId("principal-policy-acceptance"),
+      values: {
+        acceptedAt: input.acceptedAt,
+        accountPolicy: policy.id,
+        principal: input.principalId,
+        status: "accepted",
+      },
+    });
+  }
+
+  return { ok: true, plans };
+}
+
+function parseIdentityTermsAcceptanceCommitRequest(
+  value: unknown,
+): IdentityTermsAcceptanceCommitInput {
+  const object = parseRecord("Identity terms acceptance commit request", value);
+
+  assertAllowedKeys("Identity terms acceptance commit request", object, [
+    "acceptedAt",
+    "acceptedPolicyIds",
+    "acceptanceId",
+    "principalId",
+    "target",
+  ]);
+
+  return {
+    acceptedAt: parseIsoTimestamp("Identity terms acceptance acceptedAt", object.acceptedAt),
+    acceptedPolicyIds: parseUniqueNonEmptyStringList(
+      "Identity terms acceptance acceptedPolicyIds",
+      object.acceptedPolicyIds,
+    ),
+    acceptanceId: parseNonEmptyString(
+      "Identity terms acceptance acceptance id",
+      object.acceptanceId,
+    ),
+    principalId: parseNonEmptyString("Identity terms acceptance principal id", object.principalId),
+    target: parseAccountCompletionGateTarget(object.target),
+  };
+}
+
+function termsAcceptanceSummary(record: StoredRecord): IdentityTermsAcceptanceSummary {
+  return {
+    acceptedAt: parseIsoTimestamp("Identity terms acceptance acceptedAt", record.values.acceptedAt),
+    accountPolicyId: parseNonEmptyString(
+      "Identity terms acceptance account policy",
+      record.values.accountPolicy,
+    ),
+    principalId: parseNonEmptyString(
+      "Identity terms acceptance principal",
+      record.values.principal,
+    ),
+    principalPolicyAcceptanceId: record.id,
+    status: "accepted",
+  };
+}
+
+function identityTermsAcceptanceCommitFailure(
+  reason: IdentityTermsAcceptanceCommitFailureReason,
+): Extract<IdentityTermsAcceptanceCommitResult, { ok: false }> {
+  return {
+    error:
+      reason === "inactive-principal"
+        ? "Terms acceptance requires an active principal."
+        : reason === "invalid-policy"
+          ? "Terms acceptance policies must be active and target-scoped."
+          : "Terms acceptance could not be committed.",
+    ok: false,
+    reason,
+  };
+}
+
 function parseIdentityCollaboratorInvitationAcceptanceCommitRequest(
   value: unknown,
 ): IdentityCollaboratorInvitationAcceptanceCommitInput {
@@ -1896,6 +3143,85 @@ function isIdentityCollaboratorInvitationAcceptanceCommitResult(
       Array.isArray(record.records) &&
       typeof record.output === "object" &&
       record.output !== null
+    );
+  }
+
+  return (
+    record.ok === false && typeof record.reason === "string" && typeof record.error === "string"
+  );
+}
+
+function isIdentityEmailVerificationCommitResult(
+  value: unknown,
+): value is IdentityEmailVerificationCommitResult {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+
+  const record = value as Record<string, unknown>;
+
+  if (record.ok === true) {
+    return (
+      typeof record.status === "string" &&
+      typeof record.output === "object" &&
+      record.output !== null &&
+      typeof record.principalEmail === "object" &&
+      record.principalEmail !== null &&
+      Array.isArray(record.records)
+    );
+  }
+
+  return (
+    record.ok === false && typeof record.reason === "string" && typeof record.error === "string"
+  );
+}
+
+function isIdentityEmailVerifiedSignupCommitResult(
+  value: unknown,
+): value is IdentityEmailVerifiedSignupCommitResult {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+
+  const record = value as Record<string, unknown>;
+
+  if (record.ok === true) {
+    return (
+      typeof record.status === "string" &&
+      typeof record.output === "object" &&
+      record.output !== null &&
+      typeof record.principal === "object" &&
+      record.principal !== null &&
+      typeof record.principalEmail === "object" &&
+      record.principalEmail !== null &&
+      typeof record.appRegistration === "object" &&
+      record.appRegistration !== null &&
+      Array.isArray(record.records)
+    );
+  }
+
+  return (
+    record.ok === false && typeof record.reason === "string" && typeof record.error === "string"
+  );
+}
+
+function isIdentityEmailVerifiedAppRegistrationCommitResult(
+  value: unknown,
+): value is IdentityEmailVerifiedAppRegistrationCommitResult {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+
+  const record = value as Record<string, unknown>;
+
+  if (record.ok === true) {
+    return (
+      typeof record.status === "string" &&
+      typeof record.output === "object" &&
+      record.output !== null &&
+      typeof record.appRegistration === "object" &&
+      record.appRegistration !== null &&
+      Array.isArray(record.records)
     );
   }
 
@@ -3605,6 +4931,21 @@ function parseNonEmptyString(context: string, value: unknown): string {
   return value.trim();
 }
 
+function parseUniqueNonEmptyStringList(context: string, value: unknown): string[] {
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new BadRequestError(`${context} must be a non-empty array.`);
+  }
+
+  const parsed = value.map((item, index) => parseNonEmptyString(`${context}[${index}]`, item));
+  const unique = new Set(parsed);
+
+  if (unique.size !== parsed.length) {
+    throw new BadRequestError(`${context} must not contain duplicates.`);
+  }
+
+  return parsed;
+}
+
 function parseOptionalNonEmptyString(context: string, value: unknown): string | undefined {
   return value === undefined ? undefined : parseNonEmptyString(context, value);
 }
@@ -3630,6 +4971,14 @@ function parseIsoTimestamp(context: string, value: unknown): string {
 
 function parseOptionalIsoTimestamp(context: string, value: unknown): string | undefined {
   return value === undefined ? undefined : parseIsoTimestamp(context, value);
+}
+
+function parseBoolean(context: string, value: unknown): boolean {
+  if (typeof value !== "boolean") {
+    throw new BadRequestError(`${context} must be a boolean.`);
+  }
+
+  return value;
 }
 
 function parseOptionalBoolean(context: string, value: unknown): boolean | undefined {

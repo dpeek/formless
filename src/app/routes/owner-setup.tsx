@@ -27,6 +27,7 @@ import {
 export type OwnerSetupRouteState =
   | { status: "already-complete"; adminOrigin?: string; owner?: OwnerIdentity }
   | { status: "complete"; adminOrigin?: string; owner: OwnerIdentity }
+  | { continueTo: string; owner: OwnerIdentity; status: "continuing" }
   | { status: "failed"; adminOrigin?: string; message: string; setupToken?: string }
   | { status: "invalid-link"; message: string }
   | { status: "loading" }
@@ -52,11 +53,16 @@ type CompleteOwnerSetupOptions = OwnerSetupFetchOptions & {
   setupToken: string;
 };
 
+type OwnerSetupContinuationNavigator = (target: string) => void;
+
 export function OwnerSetupRoute() {
   const locationSearch = useSearch();
   const [state, setState] = useState<OwnerSetupRouteState>({ status: "loading" });
   const [ownerName, setOwnerName] = useState("");
   const [ownerEmail, setOwnerEmail] = useState("");
+  const navigateTo: OwnerSetupContinuationNavigator = (target) => {
+    window.location.assign(target);
+  };
 
   useEffect(
     () =>
@@ -94,6 +100,16 @@ export function OwnerSetupRoute() {
         owner,
         setupToken: activeSetupToken,
       });
+
+      if (completed.continueTo) {
+        setState({
+          continueTo: completed.continueTo,
+          owner: completed.owner,
+          status: "continuing",
+        });
+        navigateTo(completed.continueTo);
+        return;
+      }
 
       setState({
         status: "complete",
@@ -389,6 +405,13 @@ function OwnerSetupStateBody({
           action={<OwnerSetupContinueLink adminOrigin={state.adminOrigin} />}
           heading="Owner setup complete"
           message={`Signed in as ${state.owner.name}.`}
+        />
+      );
+    case "continuing":
+      return (
+        <OwnerSetupMessage
+          heading="Owner setup complete"
+          message={`Signed in as ${state.owner.name}. Continuing to ${state.continueTo}.`}
         />
       );
     case "failed":

@@ -102,7 +102,7 @@ describe("Formless instance target client", () => {
                 packageAppKey: "site",
                 publicRoute: "/sites/site",
                 publicRoutePrefix: "/sites/site/",
-                registrationPolicy: "closed",
+                registrationPolicy: "email-verified",
                 status: "installed",
                 updatedAt: "2026-05-28T00:00:00.000Z",
               },
@@ -116,6 +116,7 @@ describe("Formless instance target client", () => {
         installId: "site",
         packageAppKey: "site",
         packageRevision: 1,
+        registrationPolicy: "email-verified",
         sourceSchemaHash: bundledSourceSchemaHashFixtures.site,
       }),
     ]);

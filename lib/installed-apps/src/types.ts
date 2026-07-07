@@ -4,7 +4,7 @@ export type PackageAppRevision = number;
 export type PackageAppKey = string;
 export type AppPackageKey = PackageAppKey;
 export type AppInstallId = string;
-export type AppInstallRegistrationPolicy = "closed";
+export type AppInstallRegistrationPolicy = "closed" | "email-verified";
 export type AppInstallStatus = "installed";
 export type AppInstallRouteAccess = "anonymous" | "authenticated" | "owner";
 export type AppInstallRouteKind = "admin" | "publicSite";
@@ -115,6 +115,7 @@ export type AppInstallInitializationPlan = {
 
 export type AppInstallRegistryErrorCode =
   | "duplicate-install-id"
+  | "invalid-registration-policy"
   | "invalid-install-id"
   | "invalid-label"
   | "source-validation-failed"
@@ -122,7 +123,7 @@ export type AppInstallRegistryErrorCode =
 
 export type AppInstallRegistryError = {
   code: AppInstallRegistryErrorCode;
-  field?: "installId" | "label" | "packageAppKey" | "source";
+  field?: "installId" | "label" | "packageAppKey" | "registrationPolicy" | "source";
   message: string;
 };
 

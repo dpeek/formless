@@ -18,7 +18,6 @@ import {
   type CollaboratorInvitationPasskeyRegistrationVerifyRequest,
   type CollaboratorInvitationPasskeyRegistrationVerifyResponse,
 } from "../../shared/instance-auth.ts";
-import { runtimeTopologyRoutes } from "../../shared/runtime-topology.ts";
 import {
   browserSupportsPasskeys,
   createBrowserPasskeyRegistrationResponse,
@@ -375,27 +374,13 @@ export async function verifyCollaboratorInvitationPasskeyRegistration({
 export function collaboratorInvitationAcceptanceContinuationUrl(
   accepted: Pick<
     CollaboratorInvitationPasskeyRegistrationVerifyResponse,
-    "accountCompletion" | "handoff"
+    "accountCompletion" | "continueTo" | "handoff"
   >,
   currentOrigin = typeof window === "undefined" ? undefined : window.location.origin,
 ): string | undefined {
-  if (accepted.accountCompletion?.status !== "complete") {
-    return undefined;
-  }
+  void currentOrigin;
 
-  if (accepted.handoff) {
-    const target = new URL(accepted.handoff.returnTo, accepted.handoff.targetOrigin);
-
-    if (target.origin !== currentOrigin) {
-      return target.toString();
-    }
-  }
-
-  const searchParams = new URLSearchParams();
-
-  searchParams.set("returnTo", accepted.accountCompletion.continueTo);
-
-  return `${runtimeTopologyRoutes.authAccountRoute}?${searchParams}`;
+  return accepted.accountCompletion?.status === "complete" ? accepted.continueTo : undefined;
 }
 
 export class CollaboratorInvitationAcceptanceApiError extends Error {

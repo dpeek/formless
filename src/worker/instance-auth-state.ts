@@ -6,21 +6,32 @@ import type {
 
 import {
   COLLABORATOR_INVITATION_ACCEPT_PATH as SHARED_COLLABORATOR_INVITATION_ACCEPT_PATH,
+  parseAccountCompletionGateTarget,
   parseInstanceAuthCanonicalOrigin,
   parseInstanceAuthConfigInput,
   parseInstanceAuthRelyingPartyId,
   parseOwnerLoginRedirectTarget,
+  type AccountCompletionGateTarget,
   type InstanceAuthConfigInput,
   type OwnerLoginRedirectTarget,
 } from "../shared/instance-auth.ts";
+import { runtimeAuthAccountGateRoutes } from "../shared/runtime-topology.ts";
 import { normalizeEmailDeliveryAddress } from "../shared/email-runtime.ts";
 import { nowIsoString } from "../shared/clock.ts";
 import type { IdentityInvitationTargetSurface } from "@dpeek/formless-identity-control-plane";
 
 const base64UrlPattern = /^[A-Za-z0-9_-]+$/;
+const signupPasskeyChallengeScopeHash = "c2lnbnVwLWVtYWlsLWNoYWxsZW5nZQ";
 const credentialDeviceTypes = ["multiDevice", "singleDevice"] as const;
 const passkeyChallengeKinds = ["login", "registration"] as const;
 const instanceAuthHandoffTargetProfiles = ["instance", "app", "public-site"] as const;
+const emailVerificationChallengePurposes = [
+  "account-completion",
+  "invitation-acceptance",
+  "owner-setup",
+  "recovery",
+  "signup",
+] as const;
 const collaboratorInvitationTargetSurfaces = [
   "app-install",
   "instance",
@@ -129,6 +140,28 @@ type CollaboratorInvitationTokenRow = {
   revoked_at: string | null;
 };
 
+type EmailVerificationChallengeRow = {
+  challenge_id: string;
+  idempotency_key: string;
+  token_hash: string;
+  normalized_email: string;
+  display_email: string;
+  purpose: string;
+  principal_id: string;
+  auth_origin: string;
+  target_origin: string;
+  route_id: string;
+  target_profile: string;
+  app_install_id: string | null;
+  storage_identity: string | null;
+  selected_organization: string | null;
+  return_to: string;
+  created_at: string;
+  expires_at: string;
+  consumed_at: string | null;
+  revoked_at: string | null;
+};
+
 export type StoredInstanceAuthConfig = InstanceAuthConfigInput & {
   createdAt: string;
   updatedAt: string;
@@ -164,9 +197,23 @@ export type StoredCollaboratorInvitationPasskeyRegistrationChallenge = {
   relyingPartyId: string;
 };
 
+export type StoredEmailVerifiedSignupPasskeyRegistrationChallenge = {
+  canonicalOrigin: string;
+  challenge: string;
+  consumedAt?: string;
+  createdAt: string;
+  expiresAt: string;
+  id: string;
+  kind: "registration";
+  principalId: string;
+  relyingPartyId: string;
+  signupEmailChallengeId: string;
+};
+
 export type StoredPasskeyRegistrationChallenge =
   | StoredOwnerPasskeyRegistrationChallenge
-  | StoredCollaboratorInvitationPasskeyRegistrationChallenge;
+  | StoredCollaboratorInvitationPasskeyRegistrationChallenge
+  | StoredEmailVerifiedSignupPasskeyRegistrationChallenge;
 
 export type StoredPasskeyLoginChallenge = {
   id: string;
@@ -202,6 +249,17 @@ export type CreatePasskeyChallengeInput =
       kind: "registration";
       principalId: string;
       relyingPartyId: string;
+    }
+  | {
+      canonicalOrigin: string;
+      challenge: string;
+      createdAt?: string;
+      expiresAt: string;
+      id?: string;
+      kind: "registration";
+      principalId: string;
+      relyingPartyId: string;
+      signupEmailChallengeId: string;
     }
   | {
       id?: string;
@@ -481,6 +539,91 @@ type CollaboratorInvitationTokenMismatchReason =
   | "wrong-target-email"
   | "wrong-token";
 
+export type EmailVerificationChallengePurpose = (typeof emailVerificationChallengePurposes)[number];
+
+export type StoredEmailVerificationChallenge = AccountCompletionGateTarget & {
+  authOrigin: string;
+  challengeId: string;
+  consumedAt?: string;
+  createdAt: string;
+  displayEmail: string;
+  expiresAt: string;
+  idempotencyKey: string;
+  normalizedEmail: string;
+  principalId: string;
+  purpose: EmailVerificationChallengePurpose;
+  revokedAt?: string;
+  tokenHash: string;
+};
+
+export type CreateEmailVerificationChallengeInput = {
+  authOrigin: string;
+  challengeId?: string;
+  createdAt?: string;
+  email: string;
+  expiresAt: string;
+  idempotencyKey: string;
+  principalId: string;
+  purpose: EmailVerificationChallengePurpose;
+  target: AccountCompletionGateTarget;
+  tokenHash: string;
+};
+
+export type CreateEmailVerificationChallengeResult =
+  | { ok: true; challenge: StoredEmailVerificationChallenge; replayed: boolean }
+  | {
+      ok: false;
+      challenge: StoredEmailVerificationChallenge;
+      reason: "duplicate-challenge-id" | "duplicate-token-hash";
+    };
+
+export type EmailVerificationChallengeExpectation = {
+  email?: string;
+  principalId?: string;
+  purpose?: EmailVerificationChallengePurpose;
+  target?: AccountCompletionGateTarget;
+  tokenHash: string;
+};
+
+export type ValidateEmailVerificationChallengeInput = EmailVerificationChallengeExpectation & {
+  challengeId: string;
+  now?: string;
+};
+
+export type ValidateEmailVerificationChallengeResult =
+  | { ok: true; challenge: StoredEmailVerificationChallenge }
+  | {
+      ok: false;
+      challenge?: StoredEmailVerificationChallenge;
+      reason:
+        | "already-consumed"
+        | "expired-challenge"
+        | "missing-challenge"
+        | "revoked-challenge"
+        | "wrong-email"
+        | "wrong-purpose"
+        | "wrong-target"
+        | "wrong-token";
+    };
+
+export type ConsumeEmailVerificationChallengeInput = ValidateEmailVerificationChallengeInput;
+
+export type ConsumeEmailVerificationChallengeResult = ValidateEmailVerificationChallengeResult;
+
+export type RevokeEmailVerificationChallengeResult =
+  | { ok: true; challenge: StoredEmailVerificationChallenge }
+  | {
+      ok: false;
+      challenge?: StoredEmailVerificationChallenge;
+      reason: "already-consumed" | "expired-challenge" | "missing-challenge" | "revoked-challenge";
+    };
+
+type EmailVerificationChallengeMismatchReason =
+  | "wrong-email"
+  | "wrong-purpose"
+  | "wrong-target"
+  | "wrong-token";
+
 export function ensureInstanceAuthTables(storage: DurableObjectStorage) {
   storage.sql.exec(`
     CREATE TABLE IF NOT EXISTS instance_auth_config (
@@ -668,6 +811,52 @@ export function ensureInstanceAuthTables(storage: DurableObjectStorage) {
         target_app_install_id,
         target_organization
       );
+
+    CREATE TABLE IF NOT EXISTS instance_auth_email_verification_challenges (
+      challenge_id TEXT PRIMARY KEY,
+      idempotency_key TEXT NOT NULL UNIQUE,
+      token_hash TEXT NOT NULL UNIQUE,
+      normalized_email TEXT NOT NULL,
+      display_email TEXT NOT NULL,
+      purpose TEXT NOT NULL CHECK (
+        purpose IN (
+          'account-completion',
+          'invitation-acceptance',
+          'owner-setup',
+          'recovery',
+          'signup'
+        )
+      ),
+      principal_id TEXT NOT NULL,
+      auth_origin TEXT NOT NULL,
+      target_origin TEXT NOT NULL,
+      route_id TEXT NOT NULL,
+      target_profile TEXT NOT NULL CHECK (target_profile IN ('app', 'instance', 'public-site')),
+      app_install_id TEXT,
+      storage_identity TEXT,
+      selected_organization TEXT,
+      return_to TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      consumed_at TEXT,
+      revoked_at TEXT,
+      CHECK (app_install_id IS NOT NULL OR storage_identity IS NOT NULL)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_instance_auth_email_verification_challenges_expires_at
+      ON instance_auth_email_verification_challenges (expires_at);
+
+    CREATE INDEX IF NOT EXISTS idx_instance_auth_email_verification_challenges_principal_id
+      ON instance_auth_email_verification_challenges (principal_id);
+
+    CREATE INDEX IF NOT EXISTS idx_instance_auth_email_verification_challenges_target
+      ON instance_auth_email_verification_challenges (
+        target_origin,
+        route_id,
+        target_profile,
+        app_install_id,
+        storage_identity
+      );
   `);
 }
 
@@ -676,6 +865,7 @@ export function resetInstanceAuthTables(storage: DurableObjectStorage) {
 
   storage.transactionSync(() => {
     storage.sql.exec(`
+      DELETE FROM instance_auth_email_verification_challenges;
       DELETE FROM instance_auth_collaborator_invitation_tokens;
       DELETE FROM instance_auth_handoff_grants;
       DELETE FROM instance_auth_host_session_versions;
@@ -782,8 +972,16 @@ export function createPasskeyChallenge(
       normalizedChallenge.id,
       normalizedChallenge.kind,
       normalizedChallenge.challenge,
-      "invitationId" in normalizedChallenge ? normalizedChallenge.invitationId : null,
-      "invitationTokenHash" in normalizedChallenge ? normalizedChallenge.invitationTokenHash : null,
+      "signupEmailChallengeId" in normalizedChallenge
+        ? normalizedChallenge.signupEmailChallengeId
+        : "invitationId" in normalizedChallenge
+          ? normalizedChallenge.invitationId
+          : null,
+      "signupEmailChallengeId" in normalizedChallenge
+        ? signupPasskeyChallengeScopeHash
+        : "invitationTokenHash" in normalizedChallenge
+          ? normalizedChallenge.invitationTokenHash
+          : null,
       "setupTokenHash" in normalizedChallenge ? normalizedChallenge.setupTokenHash : null,
       "principalId" in normalizedChallenge ? normalizedChallenge.principalId : null,
       "canonicalOrigin" in normalizedChallenge ? normalizedChallenge.canonicalOrigin : null,
@@ -1544,6 +1742,260 @@ export function revokeCollaboratorInvitationToken(
   });
 }
 
+export function createEmailVerificationChallenge(
+  storage: DurableObjectStorage,
+  input: CreateEmailVerificationChallengeInput,
+): CreateEmailVerificationChallengeResult {
+  ensureInstanceAuthTables(storage);
+
+  return storage.transactionSync(() => {
+    const challenge = normalizeCreateEmailVerificationChallengeInput(input);
+    const existingByIdempotency = readEmailVerificationChallengeByIdempotencyKey(
+      storage,
+      challenge.idempotencyKey,
+    );
+
+    if (existingByIdempotency) {
+      return { ok: true, challenge: existingByIdempotency, replayed: true };
+    }
+
+    const existingById = readEmailVerificationChallengeById(storage, challenge.challengeId);
+
+    if (existingById) {
+      return { ok: false, challenge: existingById, reason: "duplicate-challenge-id" };
+    }
+
+    const existingByHash = readEmailVerificationChallengeByHash(storage, challenge.tokenHash);
+
+    if (existingByHash) {
+      return { ok: false, challenge: existingByHash, reason: "duplicate-token-hash" };
+    }
+
+    storage.sql.exec(
+      `
+        INSERT INTO instance_auth_email_verification_challenges (
+          challenge_id,
+          idempotency_key,
+          token_hash,
+          normalized_email,
+          display_email,
+          purpose,
+          principal_id,
+          auth_origin,
+          target_origin,
+          route_id,
+          target_profile,
+          app_install_id,
+          storage_identity,
+          selected_organization,
+          return_to,
+          created_at,
+          expires_at,
+          consumed_at,
+          revoked_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL)
+      `,
+      challenge.challengeId,
+      challenge.idempotencyKey,
+      challenge.tokenHash,
+      challenge.normalizedEmail,
+      challenge.displayEmail,
+      challenge.purpose,
+      challenge.principalId,
+      challenge.authOrigin,
+      challenge.targetOrigin,
+      challenge.routeId,
+      challenge.targetProfile,
+      challenge.appInstallId ?? null,
+      challenge.storageIdentity ?? null,
+      challenge.selectedOrganization ?? null,
+      challenge.returnTo,
+      challenge.createdAt,
+      challenge.expiresAt,
+    );
+
+    return { ok: true, challenge, replayed: false };
+  });
+}
+
+export function readEmailVerificationChallenge(
+  storage: DurableObjectStorage,
+  challengeId: unknown,
+): StoredEmailVerificationChallenge | undefined {
+  ensureInstanceAuthTables(storage);
+
+  return readEmailVerificationChallengeById(
+    storage,
+    parseNonEmptyString("Email verification challenge id", challengeId),
+  );
+}
+
+export function listEmailVerificationChallenges(
+  storage: DurableObjectStorage,
+): StoredEmailVerificationChallenge[] {
+  ensureInstanceAuthTables(storage);
+
+  return storage.sql
+    .exec<EmailVerificationChallengeRow>(
+      `
+        SELECT
+          challenge_id,
+          idempotency_key,
+          token_hash,
+          normalized_email,
+          display_email,
+          purpose,
+          principal_id,
+          auth_origin,
+          target_origin,
+          route_id,
+          target_profile,
+          app_install_id,
+          storage_identity,
+          selected_organization,
+          return_to,
+          created_at,
+          expires_at,
+          consumed_at,
+          revoked_at
+        FROM instance_auth_email_verification_challenges
+        ORDER BY created_at ASC, challenge_id ASC
+      `,
+    )
+    .toArray()
+    .map(emailVerificationChallengeFromRow);
+}
+
+export function validateEmailVerificationChallenge(
+  storage: DurableObjectStorage,
+  input: ValidateEmailVerificationChallengeInput,
+): ValidateEmailVerificationChallengeResult {
+  ensureInstanceAuthTables(storage);
+
+  const challengeId = parseNonEmptyString("Email verification challenge id", input.challengeId);
+  const now = parseTimestamp(
+    "Email verification challenge validation time",
+    input.now ?? nowIsoString(),
+  );
+  const challenge = readEmailVerificationChallengeById(storage, challengeId);
+
+  if (!challenge) {
+    return { ok: false, reason: "missing-challenge" };
+  }
+
+  if (challenge.revokedAt !== undefined) {
+    return { ok: false, challenge, reason: "revoked-challenge" };
+  }
+
+  if (challenge.consumedAt !== undefined) {
+    return { ok: false, challenge, reason: "already-consumed" };
+  }
+
+  if (challenge.expiresAt <= now) {
+    return { ok: false, challenge, reason: "expired-challenge" };
+  }
+
+  const mismatchReason = emailVerificationChallengeMismatchReason(
+    challenge,
+    normalizeEmailVerificationChallengeExpectation(input),
+  );
+
+  if (mismatchReason) {
+    return { ok: false, challenge, reason: mismatchReason };
+  }
+
+  return { ok: true, challenge };
+}
+
+export function consumeEmailVerificationChallenge(
+  storage: DurableObjectStorage,
+  input: ConsumeEmailVerificationChallengeInput,
+): ConsumeEmailVerificationChallengeResult {
+  ensureInstanceAuthTables(storage);
+
+  return storage.transactionSync(() => {
+    const consumedAt = parseTimestamp(
+      "Email verification challenge consumedAt",
+      input.now ?? nowIsoString(),
+    );
+    const validation = validateEmailVerificationChallenge(storage, {
+      ...input,
+      now: consumedAt,
+    });
+
+    if (!validation.ok) {
+      return validation;
+    }
+
+    storage.sql.exec(
+      `
+        UPDATE instance_auth_email_verification_challenges
+        SET consumed_at = ?
+        WHERE challenge_id = ?
+      `,
+      consumedAt,
+      validation.challenge.challengeId,
+    );
+
+    return {
+      ok: true,
+      challenge: {
+        ...validation.challenge,
+        consumedAt,
+      },
+    };
+  });
+}
+
+export function revokeEmailVerificationChallenge(
+  storage: DurableObjectStorage,
+  challengeId: unknown,
+  now: unknown = nowIsoString(),
+): RevokeEmailVerificationChallengeResult {
+  ensureInstanceAuthTables(storage);
+
+  return storage.transactionSync(() => {
+    const id = parseNonEmptyString("Email verification challenge id", challengeId);
+    const revokedAt = parseTimestamp("Email verification challenge revokedAt", now);
+    const challenge = readEmailVerificationChallengeById(storage, id);
+
+    if (!challenge) {
+      return { ok: false, reason: "missing-challenge" };
+    }
+
+    if (challenge.revokedAt !== undefined) {
+      return { ok: false, challenge, reason: "revoked-challenge" };
+    }
+
+    if (challenge.consumedAt !== undefined) {
+      return { ok: false, challenge, reason: "already-consumed" };
+    }
+
+    if (challenge.expiresAt <= revokedAt) {
+      return { ok: false, challenge, reason: "expired-challenge" };
+    }
+
+    storage.sql.exec(
+      `
+        UPDATE instance_auth_email_verification_challenges
+        SET revoked_at = ?
+        WHERE challenge_id = ?
+      `,
+      revokedAt,
+      challenge.challengeId,
+    );
+
+    return {
+      ok: true,
+      challenge: {
+        ...challenge,
+        revokedAt,
+      },
+    };
+  });
+}
+
 export function generateCollaboratorInvitationToken(byteLength = 32): string {
   const length = parsePositiveInteger("Collaborator invitation token byte length", byteLength);
   const bytes = new Uint8Array(new ArrayBuffer(length));
@@ -1558,6 +2010,41 @@ export async function hashCollaboratorInvitationToken(value: unknown): Promise<s
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(token));
 
   return base64UrlEncode(new Uint8Array(digest));
+}
+
+export function generateEmailVerificationToken(byteLength = 32): string {
+  const length = parsePositiveInteger("Email verification token byte length", byteLength);
+  const bytes = new Uint8Array(new ArrayBuffer(length));
+
+  crypto.getRandomValues(bytes);
+
+  return base64UrlEncode(bytes);
+}
+
+export async function hashEmailVerificationToken(value: unknown): Promise<string> {
+  const token = parseBase64UrlString("Email verification token", value);
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(token));
+
+  return base64UrlEncode(new Uint8Array(digest));
+}
+
+export function buildEmailVerificationLink(input: {
+  authOrigin: string;
+  challengeId: string;
+  token: string;
+}): string {
+  const url = new URL(
+    runtimeAuthAccountGateRoutes.emailVerification,
+    parseInstanceAuthCanonicalOrigin(input.authOrigin),
+  );
+
+  url.searchParams.set(
+    "challengeId",
+    parseNonEmptyString("Email verification challenge id", input.challengeId),
+  );
+  url.searchParams.set("token", parseBase64UrlString("Email verification token", input.token));
+
+  return url.toString();
 }
 
 export function buildCollaboratorInvitationLink(input: {
@@ -1650,6 +2137,25 @@ function normalizePasskeyChallengeInput(
 
     const canonicalOrigin = parseInstanceAuthCanonicalOrigin(input.canonicalOrigin);
 
+    if ("signupEmailChallengeId" in input) {
+      return {
+        id,
+        kind,
+        challenge,
+        canonicalOrigin,
+        principalId: parseNonEmptyString("Passkey challenge principal id", input.principalId),
+        relyingPartyId: parseInstanceAuthRelyingPartyId(input.relyingPartyId, {
+          canonicalOrigin,
+        }),
+        signupEmailChallengeId: parseNonEmptyString(
+          "Passkey challenge signup email challenge id",
+          input.signupEmailChallengeId,
+        ),
+        createdAt,
+        expiresAt,
+      };
+    }
+
     return {
       id,
       kind,
@@ -1731,6 +2237,23 @@ function passkeyChallengeFromRow(row: PasskeyChallengeRow): StoredPasskeyChallen
         ...base,
         kind: "registration",
         setupTokenHash: row.setup_token_hash,
+      };
+    }
+
+    if (
+      row.invitation_id !== null &&
+      row.invitation_token_hash === signupPasskeyChallengeScopeHash &&
+      row.principal_id !== null &&
+      row.registration_origin !== null &&
+      row.registration_relying_party_id !== null
+    ) {
+      return {
+        ...base,
+        kind: "registration",
+        canonicalOrigin: row.registration_origin,
+        principalId: row.principal_id,
+        relyingPartyId: row.registration_relying_party_id,
+        signupEmailChallengeId: row.invitation_id,
       };
     }
 
@@ -2286,6 +2809,292 @@ function collaboratorInvitationTokenFromRow(
     ...(row.consumed_at === null ? {} : { consumedAt: row.consumed_at }),
     ...(row.revoked_at === null ? {} : { revokedAt: row.revoked_at }),
   };
+}
+
+function normalizeCreateEmailVerificationChallengeInput(
+  input: CreateEmailVerificationChallengeInput,
+): StoredEmailVerificationChallenge {
+  const createdAt = parseTimestamp(
+    "Email verification challenge createdAt",
+    input.createdAt ?? nowIsoString(),
+  );
+  const expiresAt = parseTimestamp("Email verification challenge expiresAt", input.expiresAt);
+
+  if (expiresAt <= createdAt) {
+    throw new Error("Email verification challenge expiresAt must be after createdAt.");
+  }
+
+  const displayEmail = normalizeEmailDeliveryAddress("Email verification email", input.email);
+  const target = parseAccountCompletionGateTarget(input.target);
+
+  return {
+    ...target,
+    authOrigin: parseInstanceAuthCanonicalOrigin(input.authOrigin),
+    challengeId:
+      input.challengeId === undefined
+        ? crypto.randomUUID()
+        : parseNonEmptyString("Email verification challenge id", input.challengeId),
+    createdAt,
+    displayEmail,
+    expiresAt,
+    idempotencyKey: parseNonEmptyString(
+      "Email verification challenge idempotency key",
+      input.idempotencyKey,
+    ),
+    normalizedEmail: displayEmail.toLowerCase(),
+    principalId: parseNonEmptyString(
+      "Email verification challenge principal id",
+      input.principalId,
+    ),
+    purpose: parseEmailVerificationChallengePurpose(input.purpose),
+    tokenHash: parseBase64UrlString("Email verification token hash", input.tokenHash),
+  };
+}
+
+function normalizeEmailVerificationChallengeExpectation(
+  input: EmailVerificationChallengeExpectation,
+): {
+  normalizedEmail?: string;
+  principalId?: string;
+  purpose?: EmailVerificationChallengePurpose;
+  target?: AccountCompletionGateTarget;
+  tokenHash: string;
+} {
+  return {
+    ...(input.email === undefined
+      ? {}
+      : {
+          normalizedEmail: normalizeEmailDeliveryAddress(
+            "Email verification expected email",
+            input.email,
+          ).toLowerCase(),
+        }),
+    ...(input.principalId === undefined
+      ? {}
+      : {
+          principalId: parseNonEmptyString(
+            "Email verification expected principal id",
+            input.principalId,
+          ),
+        }),
+    ...(input.purpose === undefined
+      ? {}
+      : { purpose: parseEmailVerificationChallengePurpose(input.purpose) }),
+    ...(input.target === undefined
+      ? {}
+      : { target: parseAccountCompletionGateTarget(input.target) }),
+    tokenHash: parseBase64UrlString("Email verification token hash", input.tokenHash),
+  };
+}
+
+function emailVerificationChallengeMismatchReason(
+  challenge: StoredEmailVerificationChallenge,
+  expected: ReturnType<typeof normalizeEmailVerificationChallengeExpectation>,
+): EmailVerificationChallengeMismatchReason | undefined {
+  if (expected.tokenHash !== challenge.tokenHash) {
+    return "wrong-token";
+  }
+
+  if (
+    expected.normalizedEmail !== undefined &&
+    expected.normalizedEmail !== challenge.normalizedEmail
+  ) {
+    return "wrong-email";
+  }
+
+  if (expected.purpose !== undefined && expected.purpose !== challenge.purpose) {
+    return "wrong-purpose";
+  }
+
+  if (expected.principalId !== undefined && expected.principalId !== challenge.principalId) {
+    return "wrong-target";
+  }
+
+  if (
+    expected.target !== undefined &&
+    !accountCompletionGateTargetsEqual(expected.target, challenge)
+  ) {
+    return "wrong-target";
+  }
+
+  return undefined;
+}
+
+function readEmailVerificationChallengeById(
+  storage: DurableObjectStorage,
+  challengeId: string,
+): StoredEmailVerificationChallenge | undefined {
+  const row = storage.sql
+    .exec<EmailVerificationChallengeRow>(
+      `
+        SELECT
+          challenge_id,
+          idempotency_key,
+          token_hash,
+          normalized_email,
+          display_email,
+          purpose,
+          principal_id,
+          auth_origin,
+          target_origin,
+          route_id,
+          target_profile,
+          app_install_id,
+          storage_identity,
+          selected_organization,
+          return_to,
+          created_at,
+          expires_at,
+          consumed_at,
+          revoked_at
+        FROM instance_auth_email_verification_challenges
+        WHERE challenge_id = ?
+      `,
+      challengeId,
+    )
+    .next();
+
+  return row.done ? undefined : emailVerificationChallengeFromRow(row.value);
+}
+
+function readEmailVerificationChallengeByHash(
+  storage: DurableObjectStorage,
+  tokenHash: string,
+): StoredEmailVerificationChallenge | undefined {
+  const row = storage.sql
+    .exec<EmailVerificationChallengeRow>(
+      `
+        SELECT
+          challenge_id,
+          idempotency_key,
+          token_hash,
+          normalized_email,
+          display_email,
+          purpose,
+          principal_id,
+          auth_origin,
+          target_origin,
+          route_id,
+          target_profile,
+          app_install_id,
+          storage_identity,
+          selected_organization,
+          return_to,
+          created_at,
+          expires_at,
+          consumed_at,
+          revoked_at
+        FROM instance_auth_email_verification_challenges
+        WHERE token_hash = ?
+      `,
+      tokenHash,
+    )
+    .next();
+
+  return row.done ? undefined : emailVerificationChallengeFromRow(row.value);
+}
+
+function readEmailVerificationChallengeByIdempotencyKey(
+  storage: DurableObjectStorage,
+  idempotencyKey: string,
+): StoredEmailVerificationChallenge | undefined {
+  const row = storage.sql
+    .exec<EmailVerificationChallengeRow>(
+      `
+        SELECT
+          challenge_id,
+          idempotency_key,
+          token_hash,
+          normalized_email,
+          display_email,
+          purpose,
+          principal_id,
+          auth_origin,
+          target_origin,
+          route_id,
+          target_profile,
+          app_install_id,
+          storage_identity,
+          selected_organization,
+          return_to,
+          created_at,
+          expires_at,
+          consumed_at,
+          revoked_at
+        FROM instance_auth_email_verification_challenges
+        WHERE idempotency_key = ?
+      `,
+      idempotencyKey,
+    )
+    .next();
+
+  return row.done ? undefined : emailVerificationChallengeFromRow(row.value);
+}
+
+function emailVerificationChallengeFromRow(
+  row: EmailVerificationChallengeRow,
+): StoredEmailVerificationChallenge {
+  return {
+    authOrigin: row.auth_origin,
+    challengeId: row.challenge_id,
+    createdAt: row.created_at,
+    displayEmail: row.display_email,
+    expiresAt: row.expires_at,
+    idempotencyKey: row.idempotency_key,
+    normalizedEmail: row.normalized_email,
+    principalId: row.principal_id,
+    purpose: parseEmailVerificationChallengePurpose(row.purpose),
+    returnTo: parsePathOnlyReturnTarget(
+      "Email verification challenge return target",
+      row.return_to,
+    ),
+    routeId: row.route_id,
+    targetOrigin: row.target_origin,
+    targetProfile: parseAccountCompletionGateTargetProfile(row.target_profile),
+    tokenHash: row.token_hash,
+    ...(row.app_install_id === null ? {} : { appInstallId: row.app_install_id }),
+    ...(row.consumed_at === null ? {} : { consumedAt: row.consumed_at }),
+    ...(row.revoked_at === null ? {} : { revokedAt: row.revoked_at }),
+    ...(row.selected_organization === null
+      ? {}
+      : { selectedOrganization: row.selected_organization }),
+    ...(row.storage_identity === null ? {} : { storageIdentity: row.storage_identity }),
+  };
+}
+
+function accountCompletionGateTargetsEqual(
+  left: AccountCompletionGateTarget,
+  right: AccountCompletionGateTarget,
+): boolean {
+  return (
+    left.returnTo === right.returnTo &&
+    left.routeId === right.routeId &&
+    left.targetOrigin === right.targetOrigin &&
+    left.targetProfile === right.targetProfile &&
+    (left.appInstallId ?? undefined) === (right.appInstallId ?? undefined) &&
+    (left.selectedOrganization ?? undefined) === (right.selectedOrganization ?? undefined) &&
+    (left.storageIdentity ?? undefined) === (right.storageIdentity ?? undefined)
+  );
+}
+
+function parseEmailVerificationChallengePurpose(value: unknown): EmailVerificationChallengePurpose {
+  return parseStringLiteral(
+    "Email verification challenge purpose",
+    value,
+    emailVerificationChallengePurposes,
+  );
+}
+
+function parseAccountCompletionGateTargetProfile(
+  value: unknown,
+): AccountCompletionGateTarget["targetProfile"] {
+  return parseAccountCompletionGateTarget({
+    appInstallId: "parse-target-profile",
+    returnTo: "/formless/auth",
+    routeId: "parse-target-profile",
+    targetOrigin: "https://parse-target-profile.example.com",
+    targetProfile: value,
+  }).targetProfile;
 }
 
 function normalizeCollaboratorInvitationTargetFacts(

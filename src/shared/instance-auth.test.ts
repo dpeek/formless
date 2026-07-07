@@ -171,6 +171,7 @@ describe("collaborator invitation acceptance protocol", () => {
           targetOrigin: "https://app.example.com",
           returnTo: "/",
         },
+        continueTo: "https://app.example.com/",
         invitation: {
           invitationId: "invitation:ada",
           targetEmail: "Ada.Collab@example.com",
@@ -196,6 +197,7 @@ describe("collaborator invitation acceptance protocol", () => {
         targetOrigin: "https://app.example.com",
         returnTo: "/",
       },
+      continueTo: "https://app.example.com/",
       invitation: {
         invitationId: "invitation:ada",
         targetEmail: "Ada.Collab@example.com",
@@ -356,6 +358,18 @@ describe("account completion gate protocol", () => {
         },
       },
       {
+        kind: "app-registration",
+        appInstallId: "site",
+        registrationPolicy: "email-verified",
+        operation: {
+          appInstallId: "site",
+          entityName: "app-registration",
+          label: "Register for app",
+          operationKey: "auth.app-registration.complete",
+          operationName: "completeEmailVerifiedAppRegistration",
+        },
+      },
+      {
         kind: "profile-completion",
         appInstallId: "crm",
         profileRecordId: "profile:ada",
@@ -468,7 +482,7 @@ describe("account completion gate protocol", () => {
     expect(() =>
       parseAccountCompletionGate({
         kind: "app-registration",
-        registrationPolicy: "email-verified",
+        registrationPolicy: "domain-allowlist",
       }),
     ).toThrow("Account completion app-registration gate registrationPolicy is unsupported.");
     expect(() =>
@@ -555,11 +569,13 @@ describe("owner passkey protocol", () => {
     });
     expect(
       parseOwnerPasskeyRegistrationVerifyResponse({
+        continueTo: "/formless/auth?returnTo=%2F",
         owner,
         session: { expiresAt: "2026-06-28T00:00:00.000Z" },
         setupComplete: true,
       }),
     ).toEqual({
+      continueTo: "/formless/auth?returnTo=%2F",
       owner,
       session: { expiresAt: "2026-06-28T00:00:00.000Z" },
       setupComplete: true,
@@ -615,7 +631,9 @@ describe("owner passkey protocol", () => {
       session: { expiresAt: "2026-06-28T00:00:00.000Z" },
       setupComplete: true,
     });
-    expect(parseOwnerLogoutResponse({ authenticated: false })).toEqual({ authenticated: false });
+    expect(
+      parseOwnerLogoutResponse({ authenticated: false, continueTo: "/formless/auth/sign-in" }),
+    ).toEqual({ authenticated: false, continueTo: "/formless/auth/sign-in" });
   });
 
   it("rejects malformed passkey payloads and unsupported keys", () => {
@@ -664,6 +682,15 @@ describe("owner passkey protocol", () => {
     ).toThrow("Passkey login verify response continueTo must route through /formless/auth.");
     expect(() => parseOwnerPasskeyLoginOptionsRequest({ setupToken })).toThrow(
       'Passkey login options request has unsupported key "setupToken".',
+    );
+    expect(() =>
+      parseOwnerPasskeyRegistrationVerifyResponse({
+        continueTo: "https://admin.example.com/#session",
+        owner,
+        setupComplete: true,
+      }),
+    ).toThrow(
+      "Passkey registration verify response continueTo must be path-only or an HTTP(S) URL without credentials or hash.",
     );
   });
 

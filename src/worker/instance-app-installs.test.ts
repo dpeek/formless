@@ -316,6 +316,62 @@ describe("instance app install API routes", () => {
     }
   });
 
+  it("accepts email-verified app install policy as flat install metadata", async () => {
+    const created = await postAdminJson<CreateAppInstallResponse>("/api/formless/app-installs", {
+      packageAppKey: "site",
+      installId: "members",
+      label: "Members",
+      registrationPolicy: "email-verified",
+    });
+    const after = await getJson<AppInstallsResponse>("/api/formless/app-installs");
+    const controlPlane = await getJson<BootstrapResponse>("/api/formless/control-plane/bootstrap");
+    const appInstall = controlPlane.body.records.find(
+      (record) => record.entity === "app-install" && record.id === "members",
+    );
+
+    if (!appInstall) {
+      throw new Error("Expected members app-install record.");
+    }
+
+    expect(created.response.status).toBe(201);
+    expect(created.body.install).toMatchObject({
+      installId: "members",
+      label: "Members",
+      registrationPolicy: "email-verified",
+    });
+    expect(after.body.installs.find((install) => install.installId === "members")).toMatchObject({
+      installId: "members",
+      registrationPolicy: "email-verified",
+    });
+    expect(appInstall.values.registrationPolicy).toBe("email-verified");
+    expect(Object.keys(appInstall.values).sort()).toEqual([
+      "installId",
+      "label",
+      "packageAppKey",
+      "packageRevision",
+      "registrationPolicy",
+      "sourceSchemaHash",
+      "status",
+      "storageIdentity",
+    ]);
+
+    for (const key of [
+      "appRegistration",
+      "appRegistrationId",
+      "challenge",
+      "credential",
+      "handoff",
+      "principal",
+      "principalId",
+      "profile",
+      "role",
+      "roleAssignment",
+      "session",
+    ]) {
+      expect(appInstall.values).not.toHaveProperty(key);
+    }
+  });
+
   it("derives app install API responses from control-plane install and route records", async () => {
     await postAdminJson<CreateAppInstallResponse>("/api/formless/app-installs", {
       packageAppKey: "site",

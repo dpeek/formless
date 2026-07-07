@@ -188,6 +188,38 @@ describe("owner setup API routes", () => {
     expect(adminOne.id).not.toBe(adminTwo.id);
   });
 
+  it("returns account continuation after setup when the admin target is same-origin", async () => {
+    const origin = "https://personal.dpeek.workers.dev";
+    const capability = await postJsonToUrl<OwnerSetupCapabilityResponse>(
+      `${origin}/api/formless/setup/capability`,
+      { setupToken, expiresAt: futureExpiresAt },
+    );
+    const completed = await postJsonToUrl<OwnerSetupCompleteResponse>(
+      `${origin}/api/formless/setup/complete`,
+      {
+        setupToken,
+        owner: {
+          name: "Ada Owner",
+          email: "ada@example.com",
+        },
+      },
+    );
+
+    expect(capability.body).toEqual({
+      capabilityCreated: true,
+      expiresAt: futureExpiresAt,
+      setupComplete: false,
+    });
+    expect(completed.body).toMatchObject({
+      continueTo: "/formless/auth?returnTo=%2F",
+      setupComplete: true,
+      owner: {
+        name: "Ada Owner",
+        email: "ada@example.com",
+      },
+    });
+  });
+
   it("requires the admin bearer token before creating setup capabilities", async () => {
     const rejected = await harness.fetch("/api/formless/setup/capability", {
       body: "not-json",
@@ -618,6 +650,24 @@ async function postAdminJson<T>(path: string, body: unknown) {
     },
     method: "POST",
   });
+
+  return {
+    body: (await response.json()) as T,
+    response,
+  };
+}
+
+async function postJsonToUrl<T>(url: string, body: unknown) {
+  const response = await harness.mf.dispatchFetch(url, {
+    body: JSON.stringify(body),
+    headers: {
+      Authorization: `Bearer ${adminToken}`,
+      "Content-Type": "application/json",
+    },
+    method: "POST",
+  });
+
+  expect(response.status).toBe(200);
 
   return {
     body: (await response.json()) as T,

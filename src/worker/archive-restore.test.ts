@@ -321,6 +321,7 @@ function archivedInstall(installId: string, label: string): AppArchive["app"] {
     sourceSchemaKey: "site",
     sourceSchemaHash: bundledSourceSchemaHashFixtures.site,
     label,
+    registrationPolicy: "closed",
     status: "installed",
     createdAt: "2026-05-23T00:00:00.000Z",
     updatedAt: "2026-05-23T00:01:00.000Z",

@@ -39,6 +39,7 @@ import {
   type StoredInstanceAuthConfig,
 } from "./instance-auth-state.ts";
 import { ensureIdentityOwner, readIdentityOwner } from "./identity-control-plane.ts";
+import { ownerSetupSuccessContinueTo } from "./owner-setup-continuation.ts";
 
 export const OWNER_PASSKEY_API_PATH = "/api/formless/passkeys";
 
@@ -300,7 +301,9 @@ export async function completeOwnerPasskeyRegistration(
 
   headers.set("Set-Cookie", session.cookie);
 
+  const continueTo = await ownerSetupSuccessContinueTo(request, env);
   const response: OwnerPasskeyRegistrationVerifyResponse = {
+    ...(continueTo === undefined ? {} : { continueTo }),
     owner: completed.owner,
     session: { expiresAt: session.session.expiresAt },
     setupComplete: true,

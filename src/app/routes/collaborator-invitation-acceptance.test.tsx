@@ -352,7 +352,26 @@ describe("collaborator invitation acceptance route data flow", () => {
     expect(calls).toHaveLength(2);
   });
 
-  it("builds continuation URLs through target handoff or account auth", () => {
+  it("uses server-returned continuation URLs without rebuilding handoff targets", () => {
+    expect(
+      collaboratorInvitationAcceptanceContinuationUrl(
+        {
+          accountCompletion: completeAccountCompletion("https://site.example.com"),
+          continueTo: "https://site.example.com/dashboard?view=home",
+          handoff: { returnTo: "/dashboard?view=home", targetOrigin: "https://site.example.com" },
+        },
+        "https://auth.example.com",
+      ),
+    ).toBe("https://site.example.com/dashboard?view=home");
+    expect(
+      collaboratorInvitationAcceptanceContinuationUrl(
+        {
+          accountCompletion: completeAccountCompletion("https://auth.example.com"),
+          continueTo: "/formless/auth?returnTo=%2Fdashboard%3Fview%3Dhome",
+        },
+        "https://auth.example.com",
+      ),
+    ).toBe("/formless/auth?returnTo=%2Fdashboard%3Fview%3Dhome");
     expect(
       collaboratorInvitationAcceptanceContinuationUrl(
         {
@@ -361,13 +380,7 @@ describe("collaborator invitation acceptance route data flow", () => {
         },
         "https://auth.example.com",
       ),
-    ).toBe("https://site.example.com/dashboard?view=home");
-    expect(
-      collaboratorInvitationAcceptanceContinuationUrl(
-        { accountCompletion: completeAccountCompletion("https://auth.example.com") },
-        "https://auth.example.com",
-      ),
-    ).toBe("/formless/auth?returnTo=%2Fdashboard%3Fview%3Dhome");
+    ).toBeUndefined();
     expect(
       collaboratorInvitationAcceptanceContinuationUrl({}, "https://auth.example.com"),
     ).toBeUndefined();
@@ -426,6 +439,7 @@ function acceptedResponse() {
       principalId: "principal:accepted",
     },
     accountCompletion: completeAccountCompletion("https://site.example.com"),
+    continueTo: "https://site.example.com/dashboard?view=home",
     handoff: {
       returnTo: "/dashboard?view=home",
       targetOrigin: "https://site.example.com",

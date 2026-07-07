@@ -55,6 +55,8 @@ import {
 import { handleOwnerSetupDurableObjectRequest } from "./owner-setup.ts";
 import { handleOwnerPasskeyDurableObjectRequest } from "./owner-passkeys.ts";
 import { handleCollaboratorInvitationAcceptanceDurableObjectRequest } from "./collaborator-invitation-acceptance.ts";
+import { handleInstanceAuthEmailVerificationDurableObjectRequest } from "./instance-auth-email-verification.ts";
+import { handleInstanceAuthSignupDurableObjectRequest } from "./instance-auth-signup.ts";
 import { handleInstanceAuthAccountCompletionDurableObjectRequest } from "./instance-auth-account-completion.ts";
 import { handleInstanceDomainProviderDurableObjectRequest } from "./domain-provider-api.ts";
 import { handleInstanceDomainMappingsDurableObjectRequest } from "./instance-domain-mappings.ts";
@@ -169,6 +171,27 @@ export class FormlessAuthority extends DurableObject<Env> {
 
     if (collaboratorInvitationAcceptanceResponse) {
       return collaboratorInvitationAcceptanceResponse;
+    }
+
+    const instanceAuthEmailVerificationResponse =
+      await handleInstanceAuthEmailVerificationDurableObjectRequest(
+        request,
+        this.ctx.storage,
+        this.bindings,
+      );
+
+    if (instanceAuthEmailVerificationResponse) {
+      return instanceAuthEmailVerificationResponse;
+    }
+
+    const instanceAuthSignupResponse = await handleInstanceAuthSignupDurableObjectRequest(
+      request,
+      this.ctx.storage,
+      this.bindings,
+    );
+
+    if (instanceAuthSignupResponse) {
+      return instanceAuthSignupResponse;
     }
 
     const instanceAuthHandoffResponse = await handleInstanceAuthHandoffDurableObjectRequest(

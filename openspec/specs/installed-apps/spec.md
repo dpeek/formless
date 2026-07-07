@@ -171,6 +171,25 @@ instance `route` records.
   `/apps/<installId>`
 - **AND** no public Site route record is created for that install
 
+#### Scenario: App install registration policy metadata
+
+- GIVEN app install metadata is parsed, created, returned, archived, restored,
+  or projected for launch navigation
+- WHEN the install record carries registration policy metadata
+- THEN supported policies are `closed` and `email-verified`
+- AND omitted registration policy defaults to `closed`
+- AND `closed` means browser app entry requires an existing active identity
+  app-registration for the requested app install and principal or selected
+  organization context
+- AND `email-verified` means the account journey may self-service create an
+  active identity app-registration for the requested app install after the
+  principal has a verified primary email and accepted credential
+- AND the app install metadata does not store principal ids, identity
+  app-registration records, email challenge secrets, credentials, sessions,
+  handoff grants, app-owned profile values, or role assignments
+- AND `domain-allowlist` and `custom-operation` registration policies remain
+  unsupported until later specs define their account gate completion behavior
+
 #### Scenario: Route-derived launch navigation
 
 - **GIVEN** instance shell navigation needs launch links for installed apps and

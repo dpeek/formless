@@ -1,3 +1,4 @@
+import { createHash, generateKeyPairSync, type KeyObject } from "node:crypto";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vite-plus/test";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -19,7 +20,9 @@ import { runtimeTopologyRoutes } from "../shared/runtime-topology.ts";
 import {
   COLLABORATOR_INVITATION_ACCEPT_PATH,
   ownerLoginRedirectLocationForRoute,
+  type AccountCompletionGateTarget,
 } from "../shared/instance-auth.ts";
+import type { EmailDeliveryRenderedMessage } from "../shared/email-runtime.ts";
 import { LOCAL_SESSION_BOOTSTRAP_API_PATH } from "@dpeek/formless-gateway";
 import { PUBLIC_SITE_INDEXING_CACHE_CONTROL } from "@dpeek/formless-site-app/worker";
 import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
@@ -43,6 +46,12 @@ import {
 } from "../shared/workspace-runtime-packages.ts";
 import { siteSeedRecords, siteSourceSchema } from "../test/schema-apps.ts";
 import { workspaceAppPackageManifestFixture } from "../test/workspace-app-package.ts";
+import type {
+  PublicKeyCredentialCreationOptionsJSON,
+  RegistrationResponseJSON,
+} from "@simplewebauthn/server";
+import type { StoredPasskeyCredential } from "./instance-auth-state.ts";
+import type { StoredRecord } from "@dpeek/formless-storage";
 
 type Harness = Awaited<ReturnType<typeof createWorkerHarness>>;
 type DispatchFetchInit = Parameters<Harness["mf"]["dispatchFetch"]>[1];
@@ -1149,6 +1158,280 @@ describe("installed Site custom-domain Worker routing", () => {
     expect(callbackUrl.origin).toBe(`https://${mappedAppHost}`);
     expect(callbackUrl.pathname).toBe(INSTANCE_AUTH_HANDOFF_CALLBACK_PATH);
     expect(callbackUrl.searchParams.get("grantSecret")).toMatch(/^[A-Za-z0-9_-]+$/);
+  });
+
+  it("signs up same-origin app users through verified email, passkey, app registration, and continuation", async () => {
+    await withHarness(
+      await createCustomDomainHarness("instance", {
+        FORMLESS_INSTANCE_AUTH_ORIGIN: "https://www.example.com",
+        FORMLESS_INSTANCE_AUTH_RELYING_PARTY_ID: "example.com",
+      }),
+      async () => {
+        await configureAuthEmail({ settingsMode: "create", testKey: "same-origin-signup" });
+        await setupTaskAppInstall({ registrationPolicy: "email-verified" });
+        await patchRouteRecord("route:task-workspace:admin", { access: "authenticated" });
+        assetRequests = [];
+
+        const entry = await fetchHost("www.example.com", "/apps/task-workspace?screen=board", {
+          headers: { Accept: "text/html" },
+          redirect: "manual",
+        });
+        const accountLocation = requiredHeader(entry, "Location");
+        const signup = await completeEmailVerifiedSignup({
+          accountSearch: new URL(accountLocation, "https://www.example.com").search,
+          credentialId: "Y3JlZGVudGlhbC1zYW1lLW9yaWdpbi0x",
+          displayName: "Same Origin Signup",
+          email: "Same.Origin.Signup@example.com",
+          rpId: "example.com",
+          target: sameOriginTaskAppSignupTarget("/apps/task-workspace?screen=board"),
+        });
+        const setCookie = requiredHeader(signup.response, "Set-Cookie");
+        const identity = await readIdentityRecords();
+        const credentials = await readPrivateCredentials(signup.body.principal.principalId);
+        const continued = await fetchHost("www.example.com", signup.body.continueTo ?? "/", {
+          headers: {
+            Accept: "text/html",
+            Cookie: cookiePair(setCookie),
+          },
+          redirect: "manual",
+        });
+
+        expect(entry.status).toBe(302);
+        expect(accountLocation).toBe(
+          `${runtimeTopologyRoutes.authAccountRoute}?returnTo=%2Fapps%2Ftask-workspace%3Fscreen%3Dboard`,
+        );
+        expect(entry.headers.get("Set-Cookie")).toBeNull();
+
+        expect(signup.response.status).toBe(200);
+        expect(setCookie).toContain(`${CENTRAL_AUTH_SESSION_COOKIE_NAME}=`);
+        expect(setCookie).not.toContain(`${HOST_AUTH_SESSION_COOKIE_NAME}=`);
+        expect(signup.body).toMatchObject({
+          accountCompletion: {
+            continueTo: "/apps/task-workspace?screen=board",
+            status: "complete",
+          },
+          continueTo: "/apps/task-workspace?screen=board",
+          principal: {
+            displayName: "Same Origin Signup",
+            principalId: expect.stringMatching(/^principal:signup:/),
+          },
+          verified: true,
+        });
+        expect(credentials.credentials).toHaveLength(1);
+        expect(identity.records).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              entity: "principal",
+              id: signup.body.principal.principalId,
+              values: expect.objectContaining({
+                displayName: "Same Origin Signup",
+                kind: "human",
+                status: "active",
+              }),
+            }),
+            expect.objectContaining({
+              entity: "principal-email",
+              values: expect.objectContaining({
+                displayEmail: "Same.Origin.Signup@example.com",
+                normalizedEmail: "same.origin.signup@example.com",
+                principal: signup.body.principal.principalId,
+                primary: true,
+                verificationStatus: "verified",
+              }),
+            }),
+            expect.objectContaining({
+              entity: "app-registration",
+              values: expect.objectContaining({
+                appInstallId: taskInstallId,
+                status: "active",
+                targetKind: "principal",
+                targetPrincipal: signup.body.principal.principalId,
+              }),
+            }),
+          ]),
+        );
+        expect(JSON.stringify(identity.records)).not.toContain(signup.token);
+        expect(JSON.stringify(identity.records)).not.toContain(sha256Base64Url(signup.token));
+        expect(continued.status).toBe(200);
+        expect(assetRequests).toEqual(["/apps/task-workspace"]);
+      },
+    );
+  }, 10_000);
+
+  it("signs up mapped app users through auth-origin continuation, handoff, callback, and original path return", async () => {
+    await setupPrimaryProductionIdentity();
+    await configureAuthEmail({ settingsMode: "update", testKey: "mapped-signup" });
+    await setupMappedAppRouteRecord(
+      { access: "authenticated" },
+      { registrationPolicy: "email-verified" },
+    );
+    assetRequests = [];
+
+    const entry = await fetchHost(mappedAppHost, "/schema?view=board", {
+      headers: { Accept: "text/html" },
+      redirect: "manual",
+    });
+    const nonceCookie = cookiePair(requiredHeader(entry, "Set-Cookie"));
+    const accountUrl = new URL(requiredHeader(entry, "Location"));
+    const target = signupTargetFromAccountUrl(accountUrl);
+    const signup = await completeEmailVerifiedSignup({
+      accountSearch: accountUrl.search,
+      credentialId: "Y3JlZGVudGlhbC1tYXBwZWQtaG9zdC0x",
+      displayName: "Mapped Signup",
+      email: "Mapped.Signup@example.com",
+      rpId: "example.com",
+      target,
+    });
+    const centralCookie = cookiePair(requiredHeader(signup.response, "Set-Cookie"));
+    const handoffUrl = new URL(signup.body.continueTo ?? "/", "https://www.example.com");
+    const grant = await harness.mf.dispatchFetch(handoffUrl.toString(), {
+      headers: {
+        Accept: "text/html",
+        Cookie: centralCookie,
+      },
+      redirect: "manual",
+    });
+    const callbackLocation = requiredHeader(grant, "Location");
+    const callback = await harness.mf.dispatchFetch(callbackLocation, {
+      headers: { Cookie: nonceCookie },
+      redirect: "manual",
+    });
+    const replay = await harness.mf.dispatchFetch(callbackLocation, {
+      headers: { Cookie: nonceCookie },
+      redirect: "manual",
+    });
+    const setCookie = requiredHeader(callback, "Set-Cookie");
+    const hostSessionPayload = signedCookiePayload(setCookie, HOST_AUTH_SESSION_COOKIE_NAME);
+    const continued = await fetchHost(mappedAppHost, "/schema?view=board", {
+      headers: {
+        Accept: "text/html",
+        Cookie: cookiePair(setCookie),
+      },
+      redirect: "manual",
+    });
+
+    expect(entry.status).toBe(302);
+    expect(accountUrl.origin).toBe("https://www.example.com");
+    expect(accountUrl.pathname).toBe(runtimeTopologyRoutes.authAccountRoute);
+    expect(target).toMatchObject({
+      appInstallId: taskInstallId,
+      returnTo: "/schema?view=board",
+      storageIdentity: `app:${taskInstallId}`,
+      targetOrigin: `https://${mappedAppHost}`,
+      targetProfile: "app",
+    });
+
+    expect(signup.response.status).toBe(200);
+    expect(requiredHeader(signup.response, "Set-Cookie")).not.toContain(
+      `${HOST_AUTH_SESSION_COOKIE_NAME}=`,
+    );
+    expect(signup.body).toMatchObject({
+      accountCompletion: { status: "complete" },
+      continueTo: expect.stringContaining(INSTANCE_AUTH_HANDOFF_START_PATH),
+      handoff: { returnTo: "/schema?view=board", targetOrigin: `https://${mappedAppHost}` },
+      principal: { displayName: "Mapped Signup" },
+      verified: true,
+    });
+
+    expect(handoffUrl.pathname).toBe(INSTANCE_AUTH_HANDOFF_START_PATH);
+    expect(handoffUrl.searchParams.get("targetOrigin")).toBe(`https://${mappedAppHost}`);
+    expect(grant.status).toBe(302);
+    expect(new URL(callbackLocation).origin).toBe(`https://${mappedAppHost}`);
+    expect(new URL(callbackLocation).pathname).toBe(INSTANCE_AUTH_HANDOFF_CALLBACK_PATH);
+
+    expect(callback.status).toBe(302);
+    expect(callback.headers.get("Location")).toBe("/schema?view=board");
+    expect(setCookie).toContain(`${HOST_AUTH_SESSION_COOKIE_NAME}=`);
+    expect(setCookie).toContain(`${HOST_AUTH_NONCE_COOKIE_NAME}=;`);
+    expect(hostSessionPayload).toEqual(
+      expect.objectContaining({
+        appInstallId: taskInstallId,
+        principalId: signup.body.principal.principalId,
+        purpose: "host-session",
+        routeId: routeRecordIds.get(`route:host:app:${mappedAppHost}`),
+        storageIdentity: `app:${taskInstallId}`,
+        targetOrigin: `https://${mappedAppHost}`,
+        targetProfile: "app",
+        version: 1,
+      }),
+    );
+    expect(replay.status).toBe(400);
+    expect(continued.status).toBe(200);
+    expect(assetRequests).toEqual(["/index.html"]);
+  }, 10_000);
+
+  it("keeps closed and unsafe signup targets from issuing host sessions or handoff grants", async () => {
+    await setupPrimaryProductionIdentity();
+    await configureAuthEmail({ settingsMode: "update", testKey: "blocked-signup" });
+    await setupMappedApp({ access: "authenticated" });
+
+    const principal = await createActivePrincipalSessionCookie("Closed Policy Principal");
+    await createVerifiedPrimaryEmail(principal.principalId, "closed-policy@example.com");
+    await createPrivateCredentialForPrincipal(principal.principalId, "closed-policy");
+
+    const entry = await fetchHost(mappedAppHost, "/schema?view=board", {
+      headers: { Accept: "text/html" },
+      redirect: "manual",
+    });
+    const accountUrl = new URL(requiredHeader(entry, "Location"));
+    const target = signupTargetFromAccountUrl(accountUrl);
+    const blocked = await harness.mf.dispatchFetch(accountUrl.toString(), {
+      headers: {
+        Accept: "application/json",
+        Cookie: principal.cookie,
+      },
+      redirect: "manual",
+    });
+    const blockedBody = (await blocked.json()) as {
+      gate?: { kind?: string; registrationPolicy?: string };
+      status?: string;
+    };
+    const handoffStart = await harness.mf.dispatchFetch(
+      new URL(`${INSTANCE_AUTH_HANDOFF_START_PATH}${accountUrl.search}`, accountUrl).toString(),
+      {
+        headers: {
+          Accept: "application/json",
+          Cookie: principal.cookie,
+        },
+        redirect: "manual",
+      },
+    );
+    const handoffStartBody = (await handoffStart.json()) as {
+      gate?: { kind?: string; registrationPolicy?: string };
+      status?: string;
+    };
+    const unsafeSignup = await postAuthJsonFailure("/formless/auth/signup/start", {
+      email: "unsafe.signup@example.com",
+      target: { ...target, returnTo: "https://evil.example.com/schema" },
+    });
+    const counts = await readPrivateAuthCounts();
+
+    expect(blocked.status).toBe(409);
+    expect(blocked.headers.get("Location")).toBeNull();
+    expect(blocked.headers.get("Set-Cookie")).toBeNull();
+    expect(blockedBody).toMatchObject({
+      gate: { kind: "app-registration", registrationPolicy: "closed" },
+      status: "blocked",
+    });
+
+    expect(handoffStart.status).toBe(409);
+    expect(handoffStart.headers.get("Location")).toBeNull();
+    expect(handoffStart.headers.get("Set-Cookie")).toBeNull();
+    expect(handoffStartBody).toMatchObject({
+      gate: { kind: "app-registration", registrationPolicy: "closed" },
+      status: "blocked",
+    });
+
+    expect(unsafeSignup.status).toBe(400);
+    expect(unsafeSignup.body.error).toBe(
+      "Account completion gate target returnTo must be path-only.",
+    );
+    expect(counts).toMatchObject({
+      centralSessions: 1,
+      handoffGrants: 0,
+    });
+    expect(JSON.stringify(blockedBody)).not.toContain("grantSecret");
+    expect(JSON.stringify(handoffStartBody)).not.toContain("grantSecret");
   });
 
   it("resolves auth-origin return targets from central sessions before same-origin continuation", async () => {
@@ -2528,6 +2811,77 @@ async function setupPrimaryProductionIdentityForHost(host: string) {
   });
 }
 
+async function configureAuthEmail(input: { settingsMode: "create" | "update"; testKey: string }) {
+  const emailDomain = await postAdminJson(`${controlPlaneApi}/operations/email-domain/create`, {
+    idempotencyKey: `${input.testKey}-auth-email-domain`,
+    input: {
+      enabled: true,
+      providerFamily: "cloudflare",
+      domain: `${input.testKey}.mail.example.com`,
+    },
+  });
+  const emailSender = await postAdminJson(`${controlPlaneApi}/operations/email-sender/create`, {
+    idempotencyKey: `${input.testKey}-auth-email-sender`,
+    input: {
+      enabled: true,
+      address: `auth@${input.testKey}.mail.example.com`,
+      displayName: "Auth",
+      purpose: "auth",
+      emailDomain: operationRecord((await emailDomain.json()) as OperationInvocationResponse).id,
+    },
+  });
+  const sender = operationRecord((await emailSender.json()) as OperationInvocationResponse);
+  const domain = sender.values.emailDomain;
+
+  if (typeof domain !== "string") {
+    throw new Error("Expected auth email sender to reference an email domain.");
+  }
+
+  if (input.settingsMode === "create") {
+    await postAdminJson(`${controlPlaneApi}/operations/instance-settings/create`, {
+      idempotencyKey: `${input.testKey}-settings-auth-email`,
+      input: {
+        settingsId: INSTANCE_CONTROL_PLANE_INSTANCE_SETTINGS_ID,
+        defaultEmailDomain: domain,
+        defaultAuthSender: sender.id,
+        productionIdentityStatus: "unconfigured",
+      },
+    });
+    return;
+  }
+
+  await postAdminJson(`${controlPlaneApi}/operations/instance-settings/update`, {
+    idempotencyKey: `${input.testKey}-settings-auth-email`,
+    recordId: await instanceSettingsRecordId(),
+    input: {
+      defaultEmailDomain: domain,
+      defaultAuthSender: sender.id,
+    },
+  });
+}
+
+async function instanceSettingsRecordId(): Promise<string> {
+  const response = await harness.fetch(`${controlPlaneApi}/bootstrap`, {
+    headers: adminHeaders(),
+  });
+
+  expect(response.status).toBe(200);
+
+  const body = (await response.json()) as { records?: StoredRecord[] };
+  const settings = body.records?.find(
+    (record) =>
+      record.entity === "instance-settings" &&
+      !record.deletedAt &&
+      record.values.settingsId === INSTANCE_CONTROL_PLANE_INSTANCE_SETTINGS_ID,
+  );
+
+  if (!settings) {
+    throw new Error("Expected active instance-settings record.");
+  }
+
+  return settings.id;
+}
+
 async function setupMappedSite() {
   await setupMappedSiteRouteRecord();
 }
@@ -2568,12 +2922,11 @@ async function setupMappedSiteRouteRecord() {
   });
 }
 
-async function setupMappedAppRouteRecord(values: Record<string, unknown> = {}) {
-  await postAdminJson("/api/formless/app-installs", {
-    packageAppKey: "tasks",
-    installId: taskInstallId,
-    label: "Task Workspace",
-  });
+async function setupMappedAppRouteRecord(
+  values: Record<string, unknown> = {},
+  installValues: Record<string, unknown> = {},
+) {
+  await setupTaskAppInstall(installValues);
   await createRouteRecord(`route:host:app:${mappedAppHost}`, {
     enabled: true,
     matchHost: mappedAppHost,
@@ -2583,6 +2936,15 @@ async function setupMappedAppRouteRecord(values: Record<string, unknown> = {}) {
     targetProfile: "app",
     appInstall: taskInstallId,
     surface: "admin",
+    ...values,
+  });
+}
+
+async function setupTaskAppInstall(values: Record<string, unknown> = {}) {
+  await postAdminJson("/api/formless/app-installs", {
+    packageAppKey: "tasks",
+    installId: taskInstallId,
+    label: "Task Workspace",
     ...values,
   });
 }
@@ -2665,6 +3027,190 @@ function fetchHarnessHost(
 
 function cookiePair(cookie: string) {
   return cookie.split(";")[0] ?? cookie;
+}
+
+function sameOriginTaskAppSignupTarget(returnTo: `/${string}`): AccountCompletionGateTarget {
+  return {
+    appInstallId: taskInstallId,
+    returnTo,
+    routeId: `route:${taskInstallId}:admin`,
+    storageIdentity: `app:${taskInstallId}`,
+    targetOrigin: "https://www.example.com",
+    targetProfile: "app",
+  };
+}
+
+function signupTargetFromAccountUrl(url: URL): AccountCompletionGateTarget {
+  return {
+    appInstallId: requiredSearchParam(url, "appInstallId"),
+    returnTo: requiredSearchParam(url, "returnTo") as `/${string}`,
+    routeId: requiredSearchParam(url, "routeId"),
+    storageIdentity: requiredSearchParam(url, "storageIdentity"),
+    targetOrigin: requiredSearchParam(url, "targetOrigin"),
+    targetProfile: requiredSearchParam(
+      url,
+      "targetProfile",
+    ) as AccountCompletionGateTarget["targetProfile"],
+  };
+}
+
+async function completeEmailVerifiedSignup(input: {
+  accountSearch: string;
+  credentialId: string;
+  displayName: string;
+  email: string;
+  rpId: string;
+  target: AccountCompletionGateTarget;
+}) {
+  const started = await postAuthJson<SignupStartResponse>("/formless/auth/signup/start", {
+    email: input.email,
+    target: input.target,
+  });
+  const message = await readRenderedEmailMessage(started.delivery.deliveryId);
+  const token = verificationTokenFromMessage(message.message);
+
+  await postAuthJson<SignupEmailVerifyResponse>("/formless/auth/signup/email/verify", {
+    challengeId: started.signup.challengeId,
+    email: started.signup.displayEmail,
+    target: started.signup.target,
+    token,
+  });
+
+  const options = await postAuthJson<SignupPasskeyOptionsResponse>(
+    "/formless/auth/signup/passkeys/register/options",
+    {
+      challengeId: started.signup.challengeId,
+      displayName: input.displayName,
+      email: started.signup.displayEmail,
+      target: started.signup.target,
+    },
+  );
+  const passkey = new VirtualPasskey(input.credentialId);
+  const response = await fetchAuth(
+    `/formless/auth/signup/passkeys/register/verify${input.accountSearch}`,
+    {
+      body: JSON.stringify({
+        challengeId: started.signup.challengeId,
+        displayName: input.displayName,
+        email: started.signup.displayEmail,
+        response: passkey.registrationResponse(options.options, {
+          origin: "https://www.example.com",
+          rpId: input.rpId,
+        }),
+        target: started.signup.target,
+      }),
+      headers: { "Content-Type": "application/json" },
+      method: "POST",
+    },
+  );
+  const body = (await response.json()) as SignupPasskeyVerifyResponse;
+
+  expect(response.status).toBe(200);
+
+  return { body, response, started, token };
+}
+
+function fetchAuth(path: string, init?: DispatchFetchInit) {
+  return harness.mf.dispatchFetch(`https://www.example.com${path}`, init);
+}
+
+async function postAuthJson<T>(path: string, body: unknown): Promise<T> {
+  const response = await fetchAuth(path, {
+    body: JSON.stringify(body),
+    headers: { "Content-Type": "application/json" },
+    method: "POST",
+  });
+
+  if (response.status !== 200) {
+    throw new Error(
+      `Expected auth POST ${path} to return 200, got ${response.status}: ${await response.text()}`,
+    );
+  }
+
+  return (await response.json()) as T;
+}
+
+async function postAuthJsonFailure(path: string, body: unknown) {
+  const response = await fetchAuth(path, {
+    body: JSON.stringify(body),
+    headers: { "Content-Type": "application/json" },
+    method: "POST",
+  });
+
+  return {
+    body: (await response.json()) as { error: string },
+    status: response.status,
+  };
+}
+
+async function readRenderedEmailMessage(deliveryId: string) {
+  const response = await harness.durableObjectFetch(
+    "FORMLESS_AUTHORITY",
+    FORMLESS_INSTANCE_AUTHORITY_NAME,
+    `/harness/internal-message/${encodeURIComponent(deliveryId)}`,
+  );
+
+  expect(response.status).toBe(200);
+
+  return (await response.json()) as { message?: EmailDeliveryRenderedMessage };
+}
+
+async function readPrivateCredentials(principalId: string) {
+  const response = await harness.durableObjectFetch(
+    "FORMLESS_AUTHORITY",
+    FORMLESS_INSTANCE_AUTHORITY_NAME,
+    `/harness/credentials/${encodeURIComponent(principalId)}`,
+  );
+
+  expect(response.status).toBe(200);
+
+  return (await response.json()) as { credentials: StoredPasskeyCredential[] };
+}
+
+async function readPrivateAuthCounts() {
+  const response = await harness.durableObjectFetch(
+    "FORMLESS_AUTHORITY",
+    FORMLESS_INSTANCE_AUTHORITY_NAME,
+    "/harness/auth/counts",
+  );
+
+  expect(response.status).toBe(200);
+
+  return (await response.json()) as {
+    centralSessions: number;
+    handoffGrants: number;
+    passkeyCredentials: number;
+  };
+}
+
+async function readIdentityRecords() {
+  const response = await harness.fetch(`${IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX}/bootstrap`, {
+    headers: adminHeaders(),
+  });
+
+  expect(response.status).toBe(200);
+
+  return (await response.json()) as { records: StoredRecord[] };
+}
+
+function verificationTokenFromMessage(message: EmailDeliveryRenderedMessage | undefined): string {
+  const match = message?.text.match(/[?&]token=([A-Za-z0-9_-]+)/);
+
+  if (!match?.[1]) {
+    throw new Error("Verification token was not rendered.");
+  }
+
+  return match[1];
+}
+
+function requiredSearchParam(url: URL, name: string): string {
+  const value = url.searchParams.get(name);
+
+  if (!value) {
+    throw new Error(`Missing ${name} search param.`);
+  }
+
+  return value;
 }
 
 async function issueHandoffGrantFromAuthAccount(startLocation: string, centralCookie: string) {
@@ -2981,6 +3527,235 @@ async function createMappedInstanceHostSession(ownerName: string) {
   };
 }
 
+type SignupStartResponse = {
+  delivery: {
+    deliveryId: string;
+    queued: boolean;
+    replayed: boolean;
+    status: "scheduled";
+  };
+  signup: {
+    challengeId: string;
+    displayEmail: string;
+    expiresAt: string;
+    target: AccountCompletionGateTarget;
+  };
+};
+
+type SignupEmailVerifyResponse = {
+  signup: SignupStartResponse["signup"];
+  verified: true;
+};
+
+type SignupPasskeyOptionsResponse = {
+  options: PublicKeyCredentialCreationOptionsJSON;
+};
+
+type SignupPasskeyVerifyResponse = {
+  accountCompletion: {
+    continueTo: `/${string}`;
+    status: "blocked" | "complete";
+    target: AccountCompletionGateTarget;
+  };
+  continueTo?: `/${string}`;
+  handoff?: { returnTo: `/${string}`; targetOrigin: string };
+  principal: {
+    displayName: string;
+    principalId: string;
+  };
+  session: {
+    expiresAt: string;
+  };
+  verified: true;
+};
+
+class VirtualPasskey {
+  private readonly credentialId: string;
+  private readonly publicKey: KeyObject;
+
+  constructor(credentialIdValue: string) {
+    const pair = generateKeyPairSync("ec", { namedCurve: "prime256v1" });
+
+    this.credentialId = credentialIdValue;
+    this.publicKey = pair.publicKey;
+  }
+
+  registrationResponse(
+    options: PublicKeyCredentialCreationOptionsJSON,
+    input: { origin: string; rpId: string },
+  ): RegistrationResponseJSON {
+    const clientDataJSON = clientDataJson("webauthn.create", options.challenge, input.origin);
+    const authData = registrationAuthenticatorData({
+      credentialId: base64UrlDecodeBytes(this.credentialId),
+      credentialPublicKey: this.credentialPublicKey(),
+      counter: 0,
+      rpId: input.rpId,
+    });
+    const attestationObject = cborMap([
+      ["fmt", "none"],
+      ["attStmt", []],
+      ["authData", authData],
+    ]);
+
+    return {
+      id: this.credentialId,
+      rawId: this.credentialId,
+      response: {
+        clientDataJSON: base64UrlEncode(clientDataJSON),
+        attestationObject: base64UrlEncode(attestationObject),
+        transports: ["internal"],
+      },
+      authenticatorAttachment: "platform",
+      clientExtensionResults: {},
+      type: "public-key",
+    };
+  }
+
+  private credentialPublicKey(): Uint8Array {
+    const jwk = this.publicKey.export({ format: "jwk" }) as JsonWebKey;
+
+    if (!jwk.x || !jwk.y) {
+      throw new Error("Virtual passkey public key export is missing coordinates.");
+    }
+
+    return cborMap([
+      [1, 2],
+      [3, -7],
+      [-1, 1],
+      [-2, base64UrlDecodeBytes(jwk.x)],
+      [-3, base64UrlDecodeBytes(jwk.y)],
+    ]);
+  }
+}
+
+function registrationAuthenticatorData(input: {
+  counter: number;
+  credentialId: Uint8Array;
+  credentialPublicKey: Uint8Array;
+  rpId: string;
+}) {
+  const credentialIdLength = new Uint8Array(2);
+  const credentialIdLengthView = new DataView(credentialIdLength.buffer);
+
+  credentialIdLengthView.setUint16(0, input.credentialId.byteLength, false);
+
+  return concatBytes([
+    sha256(new TextEncoder().encode(input.rpId)),
+    new Uint8Array([0x45]),
+    uint32(input.counter),
+    new Uint8Array(16),
+    credentialIdLength,
+    input.credentialId,
+    input.credentialPublicKey,
+  ]);
+}
+
+function clientDataJson(type: "webauthn.create", challenge: string, origin: string) {
+  return new TextEncoder().encode(
+    JSON.stringify({
+      type,
+      challenge,
+      origin,
+      crossOrigin: false,
+    }),
+  );
+}
+
+type CborMapKey = number | string;
+type CborMapEntry = readonly [CborMapKey, CborValue];
+type CborValue = number | string | Uint8Array | readonly CborMapEntry[];
+
+function cborMap(entries: readonly CborMapEntry[]): Uint8Array {
+  return concatBytes([
+    cborHeader(5, entries.length),
+    ...entries.flatMap(([key, value]) => [cborEncode(key), cborEncode(value)]),
+  ]);
+}
+
+function cborEncode(value: CborValue): Uint8Array {
+  if (typeof value === "number") {
+    return value >= 0 ? cborHeader(0, value) : cborHeader(1, -1 - value);
+  }
+
+  if (typeof value === "string") {
+    const bytes = new TextEncoder().encode(value);
+
+    return concatBytes([cborHeader(3, bytes.byteLength), bytes]);
+  }
+
+  if (value instanceof Uint8Array) {
+    return concatBytes([cborHeader(2, value.byteLength), value]);
+  }
+
+  return cborMap(value);
+}
+
+function cborHeader(major: number, value: number): Uint8Array {
+  if (!Number.isInteger(value) || value < 0) {
+    throw new Error("CBOR value must be a non-negative integer.");
+  }
+
+  if (value < 24) {
+    return new Uint8Array([(major << 5) | value]);
+  }
+
+  if (value <= 0xff) {
+    return new Uint8Array([(major << 5) | 24, value]);
+  }
+
+  if (value <= 0xffff) {
+    const bytes = new Uint8Array(3);
+    const view = new DataView(bytes.buffer);
+
+    bytes[0] = (major << 5) | 25;
+    view.setUint16(1, value, false);
+
+    return bytes;
+  }
+
+  const bytes = new Uint8Array(5);
+  const view = new DataView(bytes.buffer);
+
+  bytes[0] = (major << 5) | 26;
+  view.setUint32(1, value, false);
+
+  return bytes;
+}
+
+function uint32(value: number): Uint8Array {
+  const bytes = new Uint8Array(4);
+  const view = new DataView(bytes.buffer);
+
+  view.setUint32(0, value, false);
+
+  return bytes;
+}
+
+function sha256(bytes: Uint8Array): Uint8Array {
+  return createHash("sha256").update(Buffer.from(bytes)).digest();
+}
+
+function sha256Base64Url(value: string) {
+  return createHash("sha256").update(value).digest("base64url");
+}
+
+function concatBytes(chunks: readonly Uint8Array[]): Uint8Array {
+  const totalLength = chunks.reduce((total, chunk) => total + chunk.byteLength, 0);
+  const output = new Uint8Array(totalLength);
+  let offset = 0;
+
+  for (const chunk of chunks) {
+    output.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+
+  return output;
+}
+
+function base64UrlDecodeBytes(value: string): Uint8Array {
+  return new Uint8Array(Buffer.from(value, "base64url"));
+}
+
 function signedCookiePayload(setCookieHeader: string, cookieName: string): Record<string, unknown> {
   const value = setCookieValue(setCookieHeader, cookieName);
   const [payloadPart, signature] = value.split(".", 2);
@@ -3088,7 +3863,11 @@ async function postAdminJson(path: string, body: unknown) {
     method: "POST",
   });
 
-  expect([200, 201]).toContain(response.status);
+  if (![200, 201].includes(response.status)) {
+    throw new Error(
+      `Expected admin POST ${request.path} to return 200/201, got ${response.status}: ${await response.text()}`,
+    );
+  }
 
   return response;
 }
@@ -3236,13 +4015,38 @@ async function writeCustomDomainHarness() {
     path,
     `
       import worker, { FormlessAuthority } from "${process.cwd()}/src/worker/index.ts";
-      import { createPasskeyCredential } from "${process.cwd()}/src/worker/instance-auth-state.ts";
+      import {
+        createPasskeyCredential,
+        ensureInstanceAuthTables,
+        readPasskeyCredentialsForPrincipal,
+      } from "${process.cwd()}/src/worker/instance-auth-state.ts";
       import { createCentralAuthSessionCookie } from "${process.cwd()}/src/worker/central-auth-session.ts";
+      import {
+        ensureEmailDeliveryTables,
+        readEmailDeliveryRenderedMessageById,
+      } from "${process.cwd()}/src/worker/email-runtime-state.ts";
+      import {
+        handleInstanceAuthSignupDurableObjectRequest,
+      } from "${process.cwd()}/src/worker/instance-auth-signup.ts";
       import { ensureRuntimeInstanceAuthConfig } from "${process.cwd()}/src/worker/instance-auth-runtime.ts";
 
       export class CustomDomainHarnessAuthority extends FormlessAuthority {
         async fetch(request) {
           const url = new URL(request.url);
+
+          if (url.pathname.startsWith("/formless/auth/signup/")) {
+            await ensureRuntimeInstanceAuthConfig(this.ctx.storage, request, this.env);
+
+            const signupResponse = await handleInstanceAuthSignupDurableObjectRequest(
+              request,
+              this.ctx.storage,
+              customDomainHarnessEnv(this.env, this.ctx.storage),
+            );
+
+            if (signupResponse) {
+              return signupResponse;
+            }
+          }
 
           if (url.pathname === "/harness/auth/credential" && request.method === "POST") {
             const body = await request.json();
@@ -3279,8 +4083,65 @@ async function writeCustomDomainHarness() {
             );
           }
 
+          if (url.pathname === "/harness/auth/counts" && request.method === "GET") {
+            ensureInstanceAuthTables(this.ctx.storage);
+
+            return Response.json({
+              centralSessions: Number(this.ctx.storage.sql.exec("SELECT COUNT(*) AS count FROM instance_auth_central_sessions").one().count),
+              handoffGrants: Number(this.ctx.storage.sql.exec("SELECT COUNT(*) AS count FROM instance_auth_handoff_grants").one().count),
+              passkeyCredentials: Number(this.ctx.storage.sql.exec("SELECT COUNT(*) AS count FROM instance_auth_passkey_credentials").one().count),
+            });
+          }
+
+          if (url.pathname.startsWith("/harness/internal-message/") && request.method === "GET") {
+            const deliveryId = decodeURIComponent(url.pathname.slice("/harness/internal-message/".length));
+
+            return Response.json({
+              message: readEmailDeliveryRenderedMessageById(this.ctx.storage, deliveryId),
+            });
+          }
+
+          if (url.pathname.startsWith("/harness/credentials/") && request.method === "GET") {
+            const principalId = decodeURIComponent(url.pathname.slice("/harness/credentials/".length));
+
+            return Response.json({
+              credentials: readPasskeyCredentialsForPrincipal(this.ctx.storage, principalId),
+            });
+          }
+
           return super.fetch(request);
         }
+      }
+
+      function customDomainHarnessEnv(env, storage) {
+        return {
+          ...env,
+          FORMLESS_EMAIL_DELIVERY_QUEUE: emailDeliveryQueueBinding(storage),
+        };
+      }
+
+      function emailDeliveryQueueBinding(storage) {
+        return {
+          async send(job) {
+            ensureEmailDeliveryTables(storage);
+            ensureQueueTable(storage);
+            storage.sql.exec(
+              "INSERT INTO fake_email_delivery_queue_jobs (message_json) VALUES (?)",
+              JSON.stringify(job),
+            );
+
+            return {};
+          },
+        };
+      }
+
+      function ensureQueueTable(storage) {
+        storage.sql.exec(\`
+          CREATE TABLE IF NOT EXISTS fake_email_delivery_queue_jobs (
+            send_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            message_json TEXT NOT NULL
+          )
+        \`);
       }
 
       export default worker;

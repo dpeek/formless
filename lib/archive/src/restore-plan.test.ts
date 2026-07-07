@@ -501,6 +501,28 @@ describe("archive restore planner", () => {
     ).toEqual(["media/images/hero.png"]);
   });
 
+  it("preserves app install registration policy in restore plans", () => {
+    const plan = expectPlan(
+      planAppArchiveRestore(
+        appArchive({
+          app: {
+            ...archivedInstall("members", "Members"),
+            registrationPolicy: "email-verified",
+          },
+        }),
+        {
+          packages: archiveTestInstallablePackages,
+          sourceSchemas: { site: siteSourceSchema },
+        },
+      ),
+    );
+
+    expect(plan.steps[0]).toMatchObject({
+      install: { installId: "members", registrationPolicy: "email-verified" },
+      kind: "createInstall",
+    });
+  });
+
   it("reports codec failures as invalid archive planner errors", () => {
     expect(expectFailure(planPortableArchiveRestore({ kind: "formless.futureArchive" }))).toEqual([
       {
@@ -577,6 +599,7 @@ function archivedInstall(
     sourceSchemaKey: packageAppKey,
     sourceSchemaHash: sourceSchemaHashForPackageAppKey(packageAppKey),
     label,
+    registrationPolicy: "closed",
     status: "installed",
     createdAt: "2026-05-23T00:00:00.000Z",
     updatedAt: "2026-05-23T00:01:00.000Z",

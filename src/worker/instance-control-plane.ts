@@ -6,6 +6,7 @@ import {
   appInstallRegistryError,
   createAppInstall,
   findAppInstall,
+  isAppInstallRegistrationPolicy,
   type AppInstall,
   type AppInstallId,
   type PackageAppKey,
@@ -825,8 +826,10 @@ function validateControlPlanePackageBoundary(
     const packageAppKey = parseRequiredString("packageAppKey", values.packageAppKey);
     const registrationPolicy = parseRequiredString("registrationPolicy", values.registrationPolicy);
 
-    if (registrationPolicy !== "closed") {
-      throw new BadRequestError('App install registration policy must be "closed".');
+    if (!isAppInstallRegistrationPolicy(registrationPolicy)) {
+      throw new BadRequestError(
+        'App install registration policy must be "closed" or "email-verified".',
+      );
     }
 
     if (!findResolvedAppPackage(packageAppKey, options.packageResolver)) {

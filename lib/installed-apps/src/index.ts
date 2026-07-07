@@ -30,6 +30,7 @@ const routeSafeIdMinLength = 2;
 const routeSafeIdMaxLength = 64;
 const sourceLocationPathPattern = /^[a-z0-9][a-z0-9._/-]*\.json$/;
 const sha256DigestPattern = /^sha256:[a-f0-9]{64}$/;
+const appInstallRegistrationPolicies = ["closed", "email-verified"] as const;
 const reservedInstallIds = new Set([
   "admin",
   "api",
@@ -309,12 +310,26 @@ export function createAppInstall(input: CreateAppInstallInput): CreateAppInstall
     };
   }
 
+  const registrationPolicy = input.registrationPolicy ?? defaultAppInstallRegistrationPolicy();
+
+  if (!isAppInstallRegistrationPolicy(registrationPolicy)) {
+    return {
+      ok: false,
+      error: appInstallRegistryError(
+        "invalid-registration-policy",
+        "registrationPolicy",
+        'Install registration policy must be "closed" or "email-verified".',
+      ),
+      installs: input.existingInstalls,
+    };
+  }
+
   const install = appInstallFromPackage({
     installId: installIdResult.installId,
     label,
     now: input.now,
     packageApp,
-    registrationPolicy: input.registrationPolicy ?? defaultAppInstallRegistrationPolicy(),
+    registrationPolicy,
   });
   const initialization = initializationPlanForInstall(packageApp, install);
 
@@ -381,6 +396,26 @@ export function appInstallRegistryError(
 
 export function defaultAppInstallRegistrationPolicy(): AppInstallRegistrationPolicy {
   return "closed";
+}
+
+export function isAppInstallRegistrationPolicy(
+  value: unknown,
+): value is AppInstallRegistrationPolicy {
+  return (
+    typeof value === "string" &&
+    appInstallRegistrationPolicies.includes(value as AppInstallRegistrationPolicy)
+  );
+}
+
+export function parseAppInstallRegistrationPolicy(
+  value: unknown,
+  context = "app install registration policy",
+): AppInstallRegistrationPolicy {
+  if (isAppInstallRegistrationPolicy(value)) {
+    return value;
+  }
+
+  throw new Error(`${context} must be "closed" or "email-verified".`);
 }
 
 export function sourceSchemaCanonicalJson(schema: unknown): string {

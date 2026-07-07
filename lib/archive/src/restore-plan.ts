@@ -900,7 +900,7 @@ function appInstallForArchive(
     packageRevision: app.packageRevision,
     sourceSchemaHash: app.sourceSchemaHash,
     label: app.label,
-    registrationPolicy: "closed",
+    registrationPolicy: app.registrationPolicy,
     status: "installed",
     createdAt: app.createdAt,
     updatedAt: app.updatedAt,

@@ -894,6 +894,7 @@ describe("collaborator invitation acceptance status", () => {
         returnTo: "/",
         targetOrigin: `https://${mappedHost}`,
       },
+      continueTo: `https://${mappedHost}/`,
       accountCompletion: {
         continueTo: "/",
         status: "complete",
@@ -1163,6 +1164,7 @@ describe("collaborator invitation acceptance status", () => {
         returnTo: "/",
         targetOrigin: `https://${adminHost}`,
       },
+      continueTo: `https://${adminHost}/`,
       accountCompletion: {
         continueTo: "/",
         status: "complete",
