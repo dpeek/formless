@@ -69,9 +69,6 @@ type GeneratedRecordMediaFieldName = Extract<
   "heroImageId" | "heroMediaId"
 >;
 type GeneratedCreateMediaFieldName = Extract<keyof GeneratedCreateValues, "heroImageId">;
-type GeneratedMediaStatesByFieldId = Readonly<
-  Record<string, GeneratedMediaIntentState | undefined>
->;
 
 type GeneratedRecordWorkflowFixture = {
   id: string;
@@ -111,7 +108,6 @@ type GeneratedFieldFoundationFixture = {
 type GeneratedFieldProjection = {
   createFields: readonly AstryxFieldData[];
   detailFields: readonly AstryxFieldData[];
-  mediaStatesByFieldId: GeneratedMediaStatesByFieldId;
   publicActionFields: readonly AstryxFieldData[];
   recordEditFields: readonly AstryxFieldData[];
   tableCellFields: readonly AstryxFieldData[];
@@ -125,7 +121,6 @@ type GeneratedFieldPanelProps = {
   isPending?: boolean;
   isSubmitReady?: boolean;
   layout?: "stack" | "table-cells";
-  mediaStatesByFieldId: GeneratedMediaStatesByFieldId;
   onAction?: () => void;
 };
 
@@ -138,6 +133,55 @@ const publishedPageIconSource = [
   '<path d="M9.75 15.25h2.5" />',
   "</svg>",
 ].join("");
+
+const generatedImagePreviews = {
+  homepagePreview: "https://picsum.photos/seed/formless-homepage-preview/960/540",
+  homepageHero: "https://picsum.photos/seed/formless-homepage-hero/1280/720",
+  pickedContactPreview: "https://picsum.photos/seed/formless-contact-preview/960/540",
+  pickedHomepageHero: "https://picsum.photos/seed/formless-picked-homepage-hero/1280/720",
+};
+
+const generatedImagePickerOptions = [
+  {
+    value: "image-picked-contact-preview",
+    label: "Contact",
+    detail: "Public sample",
+    mediaAlt: "Contact page preview",
+    mediaPreviewUrl: generatedImagePreviews.pickedContactPreview,
+  },
+  {
+    value: "image-picked-studio-workspace",
+    label: "Studio",
+    detail: "Public sample",
+    mediaAlt: "Studio workspace",
+    mediaPreviewUrl: "https://picsum.photos/seed/formless-studio-workspace/960/540",
+  },
+  {
+    value: "image-picked-product-detail",
+    label: "Detail",
+    detail: "Public sample",
+    mediaAlt: "Product detail preview",
+    mediaPreviewUrl: "https://picsum.photos/seed/formless-product-detail/960/540",
+  },
+  {
+    value: "image-picked-launch-cover",
+    label: "Launch",
+    detail: "Public sample",
+    mediaAlt: "Launch cover",
+    mediaPreviewUrl: "https://picsum.photos/seed/formless-launch-cover/960/540",
+  },
+] satisfies readonly AstryxFieldOption[];
+
+const generatedMediaPickerOptions = [
+  {
+    value: "media-picked-homepage-hero",
+    label: "Hero",
+    detail: "Public sample",
+    mediaAlt: "Homepage hero",
+    mediaPreviewUrl: generatedImagePreviews.pickedHomepageHero,
+  },
+  ...generatedImagePickerOptions,
+] satisfies readonly AstryxFieldOption[];
 
 const generatedCreateFieldNames = new Set<keyof GeneratedCreateValues>([
   "accent",
@@ -205,7 +249,7 @@ export function FormlessGeneratedFieldsLayout() {
           changeGeneratedDraft(currentFixture, field, value),
         );
       },
-      onOpenPicker: (fieldId, picker) => {
+      onOpenPicker: (fieldId, picker, value) => {
         const field = findProjectedField(generatedFieldProjection, fieldId);
 
         if (!field || field.mode !== "editor") {
@@ -213,7 +257,7 @@ export function FormlessGeneratedFieldsLayout() {
         }
 
         setGeneratedFieldFoundationFixture((currentFixture) =>
-          applyGeneratedMediaPickerIntent(currentFixture, field, picker),
+          applyGeneratedMediaPickerIntent(currentFixture, field, picker, value),
         );
       },
       onRevert: (fieldId) => {
@@ -243,64 +287,61 @@ export function FormlessGeneratedFieldsLayout() {
   );
 
   return (
-    <VStack gap={6} width="100%">
-      <HStack hAlign="between" vAlign="start" gap={4} wrap="wrap">
-        <VStack gap={1}>
-          <Heading level={1}>Generated Fields</Heading>
-          <Text type="body" as="p" color="secondary">
-            A task record and public contact action projected into Astryx field data.
-          </Text>
+    <VStack hAlign="center" paddingBlock={6} paddingInline={4} width="100%">
+      <VStack gap={6} maxWidth={920} width="100%">
+        <HStack hAlign="between" vAlign="start" gap={4} wrap="wrap" width="100%">
+          <VStack gap={1}>
+            <Heading level={1}>Generated Fields</Heading>
+            <Text type="body" as="p" color="secondary">
+              A task record and public contact action projected into Astryx field data.
+            </Text>
+          </VStack>
+        </HStack>
+        <VStack gap={4} width="100%">
+          <GeneratedFieldPanel
+            title="Create Task"
+            fields={generatedFieldProjection.createFields}
+            actionLabel="Create task"
+            handlers={handlers}
+            isPending={generatedFieldFoundationFixture.create.isPending}
+            isSubmitReady={generatedFieldFoundationFixture.create.submitReady}
+            onAction={() =>
+              setGeneratedFieldFoundationFixture((currentFixture) =>
+                submitGeneratedCreate(currentFixture),
+              )
+            }
+          />
+          <GeneratedFieldPanel
+            title="Record Edit"
+            fields={generatedFieldProjection.recordEditFields}
+            handlers={handlers}
+          />
+          <GeneratedFieldPanel
+            title="Table Cells"
+            fields={generatedFieldProjection.tableCellFields}
+            handlers={handlers}
+            layout="table-cells"
+          />
+          <GeneratedFieldPanel
+            title="Detail"
+            fields={generatedFieldProjection.detailFields}
+            handlers={handlers}
+          />
+          <GeneratedFieldPanel
+            title="Public Contact Action"
+            fields={generatedFieldProjection.publicActionFields}
+            actionLabel="Send message"
+            handlers={handlers}
+            isPending={generatedFieldFoundationFixture.publicAction.isPending}
+            isSubmitReady={generatedFieldFoundationFixture.publicAction.submitReady}
+            onAction={() =>
+              setGeneratedFieldFoundationFixture((currentFixture) =>
+                submitGeneratedPublicAction(currentFixture),
+              )
+            }
+          />
         </VStack>
-      </HStack>
-      <Grid columns={{ minWidth: 340, max: 2 }} gap={4} width="100%">
-        <GeneratedFieldPanel
-          title="Create Task"
-          fields={generatedFieldProjection.createFields}
-          actionLabel="Create task"
-          handlers={handlers}
-          isPending={generatedFieldFoundationFixture.create.isPending}
-          isSubmitReady={generatedFieldFoundationFixture.create.submitReady}
-          mediaStatesByFieldId={generatedFieldProjection.mediaStatesByFieldId}
-          onAction={() =>
-            setGeneratedFieldFoundationFixture((currentFixture) =>
-              submitGeneratedCreate(currentFixture),
-            )
-          }
-        />
-        <GeneratedFieldPanel
-          title="Record Edit"
-          fields={generatedFieldProjection.recordEditFields}
-          handlers={handlers}
-          mediaStatesByFieldId={generatedFieldProjection.mediaStatesByFieldId}
-        />
-        <GeneratedFieldPanel
-          title="Table Cells"
-          fields={generatedFieldProjection.tableCellFields}
-          handlers={handlers}
-          layout="table-cells"
-          mediaStatesByFieldId={generatedFieldProjection.mediaStatesByFieldId}
-        />
-        <GeneratedFieldPanel
-          title="Detail"
-          fields={generatedFieldProjection.detailFields}
-          handlers={handlers}
-          mediaStatesByFieldId={generatedFieldProjection.mediaStatesByFieldId}
-        />
-        <GeneratedFieldPanel
-          title="Public Contact Action"
-          fields={generatedFieldProjection.publicActionFields}
-          actionLabel="Send message"
-          handlers={handlers}
-          isPending={generatedFieldFoundationFixture.publicAction.isPending}
-          isSubmitReady={generatedFieldFoundationFixture.publicAction.submitReady}
-          mediaStatesByFieldId={generatedFieldProjection.mediaStatesByFieldId}
-          onAction={() =>
-            setGeneratedFieldFoundationFixture((currentFixture) =>
-              submitGeneratedPublicAction(currentFixture),
-            )
-          }
-        />
-      </Grid>
+      </VStack>
     </VStack>
   );
 }
@@ -312,7 +353,6 @@ function GeneratedFieldPanel({
   isPending = false,
   isSubmitReady,
   layout = "stack",
-  mediaStatesByFieldId,
   onAction,
   title,
 }: GeneratedFieldPanelProps) {
@@ -333,14 +373,15 @@ function GeneratedFieldPanel({
           fields={fields}
           handlers={handlers}
           includeSubmitAdapters={Boolean(actionLabel)}
+          isSubmitLocked={isPending}
           layout={layout}
-          mediaStatesByFieldId={mediaStatesByFieldId}
         />
         {actionLabel ? (
           <Button
             label={actionLabel}
             variant="primary"
             isDisabled={!isSubmitReady || isPending}
+            isLoading={isPending}
             onClick={onAction}
           />
         ) : null}
@@ -353,14 +394,14 @@ function GeneratedFieldList({
   fields,
   handlers,
   includeSubmitAdapters,
+  isSubmitLocked,
   layout,
-  mediaStatesByFieldId,
 }: {
   fields: readonly AstryxFieldData[];
   handlers: AstryxFieldIntentHandlers;
   includeSubmitAdapters: boolean;
+  isSubmitLocked: boolean;
   layout: "stack" | "table-cells";
-  mediaStatesByFieldId: GeneratedMediaStatesByFieldId;
 }) {
   if (layout === "table-cells") {
     return (
@@ -371,7 +412,7 @@ function GeneratedFieldList({
             field={field}
             handlers={handlers}
             includeSubmitAdapter={includeSubmitAdapters}
-            mediaState={mediaStatesByFieldId[field.id]}
+            isSubmitLocked={isSubmitLocked}
           />
         ))}
       </Grid>
@@ -386,7 +427,7 @@ function GeneratedFieldList({
           field={field}
           handlers={handlers}
           includeSubmitAdapter={includeSubmitAdapters}
-          mediaState={mediaStatesByFieldId[field.id]}
+          isSubmitLocked={isSubmitLocked}
         />
       ))}
     </VStack>
@@ -397,36 +438,46 @@ function GeneratedField({
   field,
   handlers,
   includeSubmitAdapter,
-  mediaState,
+  isSubmitLocked,
 }: {
   field: AstryxFieldData;
   handlers: AstryxFieldIntentHandlers;
   includeSubmitAdapter: boolean;
-  mediaState: GeneratedMediaIntentState | undefined;
+  isSubmitLocked: boolean;
 }) {
+  const renderedField = isSubmitLocked ? lockSubmitField(field) : field;
+
   return (
     <VStack gap={1}>
-      <AstryxFieldRenderer field={field} handlers={handlers} />
-      {includeSubmitAdapter ? <AstryxFieldSubmitFormAdapter field={field} /> : null}
-      <GeneratedFieldMeta field={field} handlers={handlers} mediaState={mediaState} />
+      <AstryxFieldRenderer field={renderedField} handlers={handlers} />
+      {includeSubmitAdapter ? <AstryxFieldSubmitFormAdapter field={renderedField} /> : null}
+      <GeneratedFieldMeta field={renderedField} handlers={handlers} />
     </VStack>
   );
+}
+
+function lockSubmitField(field: AstryxFieldData): AstryxFieldData {
+  if (field.mode !== "editor") {
+    return field;
+  }
+
+  return {
+    ...field,
+    accessMode: field.accessMode === "editable" ? "disabled" : field.accessMode,
+    pending: undefined,
+  };
 }
 
 function GeneratedFieldMeta({
   field,
   handlers,
-  mediaState,
 }: {
   field: AstryxFieldData;
   handlers: AstryxFieldIntentHandlers;
-  mediaState: GeneratedMediaIntentState | undefined;
 }) {
   const isPending = Boolean(field.pending?.isPending);
   const isFieldCommit = field.mode === "editor" && field.commitPolicy === "field";
-  const hasMediaIntents =
-    field.mode === "editor" && (field.kind === "image" || field.kind === "media");
-  const hasMeta = isPending || isFieldCommit || hasMediaIntents || Boolean(mediaState);
+  const hasMeta = isPending || isFieldCommit;
 
   if (!hasMeta) {
     return null;
@@ -459,63 +510,14 @@ function GeneratedFieldMeta({
             />
           </>
         ) : null}
-        {hasMediaIntents ? (
-          <>
-            <Button
-              label="Pick"
-              variant="secondary"
-              onClick={() =>
-                handlers.onOpenPicker?.(field.id, field.kind === "image" ? "image" : "media")
-              }
-            />
-            <Button
-              label="Upload"
-              variant="secondary"
-              onClick={() => handlers.onUploadFile?.(field.id, createStubUploadFile(field))}
-            />
-          </>
-        ) : null}
       </HStack>
-      <GeneratedMediaState field={field} mediaState={mediaState} />
-    </VStack>
-  );
-}
-
-function GeneratedMediaState({
-  field,
-  mediaState,
-}: {
-  field: AstryxFieldData;
-  mediaState: GeneratedMediaIntentState | undefined;
-}) {
-  const previewHref = mediaState?.previewHref ?? field.presentation?.mediaPreviewUrl;
-
-  if (field.kind !== "image" && field.kind !== "media") {
-    return null;
-  }
-
-  return (
-    <VStack gap={1}>
-      <Text type="supporting" color="secondary" maxLines={1}>
-        Asset {field.mode === "editor" ? formatFieldValue(field.draftValue) : field.displayValue}
-      </Text>
-      {previewHref ? (
-        <Text type="supporting" color="secondary" maxLines={1}>
-          Preview {previewHref}
-        </Text>
-      ) : null}
-      {mediaState?.result ? (
-        <Text type="supporting" color="secondary" maxLines={2}>
-          Result {JSON.stringify(mediaState.result)}
-        </Text>
-      ) : null}
     </VStack>
   );
 }
 
 function createGeneratedFieldFoundationFixture(): GeneratedFieldFoundationFixture {
   const committedValues = {
-    accent: "#2563eb80",
+    accent: "#2563eb",
     completed: false,
     estimateHours: 4,
     heroImageId: "image-homepage-hero",
@@ -532,7 +534,7 @@ function createGeneratedFieldFoundationFixture(): GeneratedFieldFoundationFixtur
   const fixture = {
     create: {
       draftValues: {
-        accent: "#0f766e88",
+        accent: "#0f766e",
         estimateHours: 3,
         heroImageId: "image-contact-preview",
         ownerId: "principal-jordan",
@@ -543,7 +545,7 @@ function createGeneratedFieldFoundationFixture(): GeneratedFieldFoundationFixtur
       isPending: false,
       media: {
         heroImageId: {
-          previewHref: "/astryx/generated/homepage-preview.png",
+          previewHref: generatedImagePreviews.homepagePreview,
         },
       },
       submitReady: true,
@@ -575,10 +577,10 @@ function createGeneratedFieldFoundationFixture(): GeneratedFieldFoundationFixtur
       errors: {},
       media: {
         heroImageId: {
-          previewHref: "/astryx/generated/homepage-preview.png",
+          previewHref: generatedImagePreviews.homepagePreview,
         },
         heroMediaId: {
-          previewHref: "/astryx/generated/homepage-hero.png",
+          previewHref: generatedImagePreviews.homepageHero,
         },
       },
       pendingFieldIds: [],
@@ -615,7 +617,6 @@ function projectGeneratedFieldFixture(
   return {
     createFields,
     detailFields,
-    mediaStatesByFieldId: projectMediaStatesByFieldId(fixture),
     publicActionFields,
     recordEditFields,
     tableCellFields,
@@ -639,7 +640,7 @@ function projectCreateFields(fixture: GeneratedFieldFoundationFixture): readonly
       committedDisplayValue: "",
       commitPolicy: "submit",
       presentation: { placeholder: "Task name" },
-      pending: pendingForCreateField(create, "title", "Creating task"),
+      pending: pendingForCreateField(create, "title"),
       errors: errorsFor(create.errors, "title"),
     }),
     createEditorField({
@@ -654,7 +655,7 @@ function projectCreateFields(fixture: GeneratedFieldFoundationFixture): readonly
       committedDisplayValue: "",
       commitPolicy: "submit",
       presentation: { placeholder: "What needs to happen?" },
-      pending: pendingForCreateField(create, "summary", "Creating task"),
+      pending: pendingForCreateField(create, "summary"),
       errors: errorsFor(create.errors, "summary"),
     }),
     createEditorField({
@@ -670,7 +671,7 @@ function projectCreateFields(fixture: GeneratedFieldFoundationFixture): readonly
       committedDisplayValue: "",
       commitPolicy: "submit",
       options: referenceOptions.owners,
-      pending: pendingForCreateField(create, "ownerId", "Creating task"),
+      pending: pendingForCreateField(create, "ownerId"),
       errors: errorsFor(create.errors, "ownerId"),
     }),
     createEditorField({
@@ -685,7 +686,7 @@ function projectCreateFields(fixture: GeneratedFieldFoundationFixture): readonly
       committedDisplayValue: "",
       commitPolicy: "submit",
       presentation: { placeholder: "Hours" },
-      pending: pendingForCreateField(create, "estimateHours", "Creating task"),
+      pending: pendingForCreateField(create, "estimateHours"),
       errors: errorsFor(create.errors, "estimateHours"),
     }),
     createEditorField({
@@ -699,7 +700,7 @@ function projectCreateFields(fixture: GeneratedFieldFoundationFixture): readonly
       draftValue: create.draftValues.accent,
       committedDisplayValue: "",
       commitPolicy: "submit",
-      pending: pendingForCreateField(create, "accent", "Creating task"),
+      pending: pendingForCreateField(create, "accent"),
       errors: errorsFor(create.errors, "accent"),
     }),
     createEditorField({
@@ -717,10 +718,11 @@ function projectCreateFields(fixture: GeneratedFieldFoundationFixture): readonly
         mediaAlt: "Homepage preview",
         mediaPreviewUrl: mediaPreviewHref(
           create.media.heroImageId,
-          "/astryx/generated/homepage-preview.png",
+          generatedImagePreviews.homepagePreview,
         ),
       },
-      pending: pendingForCreateField(create, "heroImageId", "Creating task"),
+      options: generatedImagePickerOptions,
+      pending: pendingForCreateField(create, "heroImageId"),
       errors: errorsFor(create.errors, "heroImageId"),
     }),
   ];
@@ -827,9 +829,10 @@ function projectRecordEditFields(
         mediaAlt: "Published homepage hero",
         mediaPreviewUrl: mediaPreviewHref(
           record.media.heroMediaId,
-          "/astryx/generated/homepage-hero.png",
+          generatedImagePreviews.homepageHero,
         ),
       },
+      options: generatedMediaPickerOptions,
       pending: pendingForRecordField(record, "heroMediaId", "Preparing upload"),
       errors: errorsFor(record.errors, "heroMediaId"),
     }),
@@ -974,7 +977,7 @@ function projectDetailFields(fixture: GeneratedFieldFoundationFixture): readonly
         mediaAlt: "Homepage preview",
         mediaPreviewUrl: mediaPreviewHref(
           record.media.heroImageId,
-          "/astryx/generated/homepage-preview.png",
+          generatedImagePreviews.homepagePreview,
         ),
       },
     }),
@@ -992,7 +995,7 @@ function projectDetailFields(fixture: GeneratedFieldFoundationFixture): readonly
         mediaAlt: "Published homepage hero",
         mediaPreviewUrl: mediaPreviewHref(
           record.media.heroMediaId,
-          "/astryx/generated/homepage-hero.png",
+          generatedImagePreviews.homepageHero,
         ),
       },
       pending: pendingForRecordField(record, "heroMediaId", "Preparing upload"),
@@ -1018,7 +1021,6 @@ function projectPublicActionFields(
       draftValue: publicAction.draftValues.contactName,
       committedDisplayValue: "",
       commitPolicy: "submit",
-      pending: pendingForPublicAction(publicAction, "Sending message"),
       errors: errorsFor(publicAction.errors, "contactName"),
     }),
     createEditorField({
@@ -1034,7 +1036,6 @@ function projectPublicActionFields(
       committedDisplayValue: "",
       commitPolicy: "submit",
       presentation: { format: "email", placeholder: "name@example.com" },
-      pending: pendingForPublicAction(publicAction, "Sending message"),
       errors: errorsFor(publicAction.errors, "contactEmail"),
     }),
     createEditorField({
@@ -1048,7 +1049,6 @@ function projectPublicActionFields(
       draftValue: publicAction.draftValues.message,
       committedDisplayValue: "",
       commitPolicy: "submit",
-      pending: pendingForPublicAction(publicAction, "Sending message"),
       errors: errorsFor(publicAction.errors, "message"),
     }),
     createEditorField({
@@ -1063,7 +1063,6 @@ function projectPublicActionFields(
       committedDisplayValue: "",
       commitPolicy: "submit",
       options: referenceOptions.audiences,
-      pending: pendingForPublicAction(publicAction, "Sending message"),
       errors: errorsFor(publicAction.errors, "audienceId"),
     }),
     createEditorField({
@@ -1077,7 +1076,6 @@ function projectPublicActionFields(
       draftValue: publicAction.draftValues.subscribe,
       committedDisplayValue: "",
       commitPolicy: "submit",
-      pending: pendingForPublicAction(publicAction, "Sending message"),
       errors: errorsFor(publicAction.errors, "subscribe"),
     }),
   ];
@@ -1269,6 +1267,7 @@ function applyGeneratedMediaPickerIntent(
   fixture: GeneratedFieldFoundationFixture,
   field: AstryxFieldEditorData,
   picker: "reference" | "icon" | "image" | "media",
+  value?: string,
 ): GeneratedFieldFoundationFixture {
   const target = resolveMediaFieldTarget(field);
 
@@ -1276,12 +1275,17 @@ function applyGeneratedMediaPickerIntent(
     return fixture;
   }
 
+  const selectedOption = value
+    ? field.options?.find((option) => option.value === value)
+    : undefined;
   const assetId =
-    picker === "image" ? "image-picked-contact-preview" : "media-picked-homepage-hero";
+    selectedOption?.value ??
+    (picker === "image" ? "image-picked-contact-preview" : "media-picked-homepage-hero");
   const previewHref =
-    picker === "image"
-      ? "/astryx/generated/picker-contact-preview.png"
-      : "/astryx/generated/picker-homepage-hero.png";
+    selectedOption?.mediaPreviewUrl ??
+    (picker === "image"
+      ? generatedImagePreviews.pickedContactPreview
+      : generatedImagePreviews.pickedHomepageHero);
 
   return applyGeneratedMediaIntentResult(fixture, target, {
     assetId,
@@ -1303,7 +1307,7 @@ function applyGeneratedMediaUploadIntent(
 
   const fileName = file.name || `${field.name}.png`;
   const assetId = `${field.kind}-upload-${slugifyFileName(fileName)}`;
-  const previewHref = `/astryx/generated/uploads/${assetId}.png`;
+  const previewHref = URL.createObjectURL(file);
 
   return applyGeneratedMediaIntentResult(
     fixture,
@@ -1408,10 +1412,12 @@ function validateCreateValues(values: GeneratedCreateValues): FieldErrorMap<Gene
     ];
   }
 
-  if (typeof values.accent === "string" && !opaqueHexColorIsValid(values.accent)) {
-    errors.accent = [
-      fieldError("create-accent-alpha", "Alpha color text is preserved.", "warning"),
-    ];
+  if (
+    typeof values.accent === "string" &&
+    values.accent !== "" &&
+    !opaqueHexColorIsValid(values.accent)
+  ) {
+    errors.accent = [fieldError("create-accent-hex", "Use an opaque hex color.")];
   }
 
   return errors;
@@ -1550,17 +1556,6 @@ function normalizeCommittedValue(
   return Number.isFinite(numericValue) ? numericValue : value;
 }
 
-function projectMediaStatesByFieldId(
-  fixture: GeneratedFieldFoundationFixture,
-): GeneratedMediaStatesByFieldId {
-  return {
-    "generated-create-image": fixture.create.media.heroImageId,
-    "generated-detail-image": fixture.record.media.heroImageId,
-    "generated-detail-media": fixture.record.media.heroMediaId,
-    "generated-record-media": fixture.record.media.heroMediaId,
-  };
-}
-
 function referenceOptionsWithMissingValue(
   options: readonly AstryxFieldOption[],
   value: AstryxFieldValue,
@@ -1587,7 +1582,6 @@ function referenceOptionsWithMissingValue(
 function pendingForCreateField(
   create: GeneratedCreateWorkflowFixture,
   fieldName: keyof GeneratedCreateValues,
-  label: string,
 ) {
   const mediaState = isGeneratedCreateMediaFieldName(fieldName)
     ? create.media[fieldName]
@@ -1597,11 +1591,7 @@ function pendingForCreateField(
     return { isPending: true, label: mediaState.pendingLabel };
   }
 
-  return create.isPending ? { isPending: true, label } : undefined;
-}
-
-function pendingForPublicAction(publicAction: GeneratedPublicActionWorkflowFixture, label: string) {
-  return publicAction.isPending ? { isPending: true, label } : undefined;
+  return undefined;
 }
 
 function pendingForRecordField(
@@ -1630,20 +1620,6 @@ function fieldIsDirty(field: AstryxFieldEditorData) {
 
 function fieldHasBlockingError(field: AstryxFieldEditorData) {
   return field.errors?.some((error) => (error.severity ?? "error") === "error") ?? false;
-}
-
-function createStubUploadFile(field: AstryxFieldEditorData) {
-  return new File([`stub upload for ${field.id}`], `${field.name}-stub.png`, {
-    type: "image/png",
-  });
-}
-
-function formatFieldValue(value: AstryxFieldValue) {
-  if (value === null) {
-    return "Empty";
-  }
-
-  return String(value);
 }
 
 function clearRecordMediaPending(
@@ -1686,10 +1662,10 @@ function resetRecordMediaState(
 
 function defaultRecordMediaPreviewHref(fieldName: GeneratedRecordMediaFieldName) {
   if (fieldName === "heroImageId") {
-    return "/astryx/generated/homepage-preview.png";
+    return generatedImagePreviews.homepagePreview;
   }
 
-  return "/astryx/generated/homepage-hero.png";
+  return generatedImagePreviews.homepageHero;
 }
 
 function fieldError(

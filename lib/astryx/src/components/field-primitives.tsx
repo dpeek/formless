@@ -1,13 +1,10 @@
 import {
   createElement,
-  useId,
   useMemo,
-  type ChangeEvent,
   type ReactNode,
   type SVGProps,
 } from "react";
 import * as stylex from "@stylexjs/stylex";
-import { Field, type FieldStatusInput } from "@astryxdesign/core/Field";
 import { Icon, type IconProps, type IconType } from "@astryxdesign/core/Icon";
 import { Markdown, type MarkdownProps } from "@astryxdesign/core/Markdown";
 import { TextArea, type TextAreaProps } from "@astryxdesign/core/TextArea";
@@ -17,113 +14,11 @@ import {
   colorVars,
   radiusVars,
   spacingVars,
-  typographyVars,
 } from "@astryxdesign/core/theme/tokens.stylex";
 import type { AstryxFieldDensity } from "../field-contract.ts";
+import { opaqueHexColorForNativeInput } from "./color-input.tsx";
 
-const nativeColorFallback = "#000000";
-
-export type ColorInputProps = {
-  id?: string;
-  label: string;
-  value: string;
-  description?: string;
-  placeholder?: string;
-  pickerLabel?: string;
-  density?: AstryxFieldDensity;
-  isDisabled?: boolean;
-  isLabelHidden?: boolean;
-  isReadOnly?: boolean;
-  isRequired?: boolean;
-  labelTooltip?: string;
-  status?: FieldStatusInput;
-  width?: number | string;
-  "aria-describedby"?: string;
-  onChange?: (value: string, event: ChangeEvent<HTMLInputElement>) => void;
-};
-
-export function ColorInput({
-  id,
-  label,
-  value,
-  description,
-  placeholder,
-  pickerLabel = "Choose color",
-  density = "balanced",
-  isDisabled = false,
-  isLabelHidden = false,
-  isReadOnly = false,
-  isRequired = false,
-  labelTooltip,
-  status,
-  width,
-  "aria-describedby": ariaDescribedBy,
-  onChange,
-}: ColorInputProps) {
-  const generatedId = useId();
-  const inputId = id ?? generatedId;
-  const pickerValue = opaqueHexColorForNativeInput(value);
-  const isCompact = density === "compact";
-  const isPickerDisabled = isDisabled || isReadOnly;
-  const describedBy =
-    [
-      description ? `${inputId}-desc` : null,
-      status?.message ? (status.messageID ?? `${inputId}-status`) : null,
-      ariaDescribedBy,
-    ]
-      .filter(Boolean)
-      .join(" ") || undefined;
-
-  return (
-    <Field
-      label={label}
-      isLabelHidden={isLabelHidden}
-      description={description}
-      inputID={inputId}
-      isRequired={isRequired}
-      isDisabled={isDisabled}
-      labelTooltip={labelTooltip}
-      status={status}
-      width={width}
-    >
-      <div
-        {...stylex.props(
-          styles.colorInput,
-          isCompact && styles.compactColorInput,
-          isDisabled && styles.disabledControl,
-        )}
-        data-astryx-color-input="true"
-        data-astryx-color-picker-valid={pickerValue ? "true" : "false"}
-      >
-        <input
-          aria-label={pickerLabel}
-          disabled={isPickerDisabled}
-          type="color"
-          value={pickerValue ?? nativeColorFallback}
-          onChange={(event) => onChange?.(event.currentTarget.value, event)}
-          {...stylex.props(styles.nativeColorInput, isCompact && styles.compactNativeColorInput)}
-        />
-        <input
-          id={inputId}
-          aria-describedby={describedBy}
-          aria-invalid={status?.type === "error" ? "true" : undefined}
-          aria-required={isRequired ? "true" : undefined}
-          disabled={isDisabled}
-          placeholder={placeholder}
-          readOnly={isReadOnly}
-          type="text"
-          value={value}
-          onChange={(event) => onChange?.(event.currentTarget.value, event)}
-          {...stylex.props(
-            styles.colorTextInput,
-            isCompact && styles.compactColorTextInput,
-            isReadOnly && styles.readOnlyTextInput,
-          )}
-        />
-      </div>
-    </Field>
-  );
-}
+export { ColorInput, type ColorInputProps } from "./color-input.tsx";
 
 export type ColorValueDisplayProps = {
   value: string;
@@ -250,21 +145,6 @@ export function MarkdownInput({
       data-astryx-markdown-editor="textarea"
     />
   );
-}
-
-function opaqueHexColorForNativeInput(value: string) {
-  const trimmedValue = value.trim();
-
-  if (/^#[0-9A-Fa-f]{6}$/.test(trimmedValue)) {
-    return trimmedValue;
-  }
-
-  if (/^#[0-9A-Fa-f]{3}$/.test(trimmedValue)) {
-    const [, red, green, blue] = trimmedValue;
-    return `#${red}${red}${green}${green}${blue}${blue}`;
-  }
-
-  return null;
 }
 
 type SourceSvgTag =
@@ -536,63 +416,6 @@ function EmptySourceSvgIcon(props: SVGProps<SVGSVGElement>) {
 }
 
 const styles = stylex.create({
-  colorInput: {
-    boxSizing: "border-box",
-    display: "flex",
-    alignItems: "center",
-    gap: spacingVars["--spacing-2"],
-    width: "100%",
-    minWidth: 0,
-  },
-  compactColorInput: {
-    gap: spacingVars["--spacing-1"],
-  },
-  disabledControl: {
-    opacity: 0.5,
-  },
-  nativeColorInput: {
-    flexShrink: 0,
-    width: spacingVars["--spacing-10"],
-    height: spacingVars["--spacing-10"],
-    padding: 0,
-    borderWidth: borderVars["--border-width"],
-    borderStyle: "solid",
-    borderColor: colorVars["--color-border-emphasized"],
-    borderRadius: radiusVars["--radius-element"],
-    backgroundColor: colorVars["--color-background-surface"],
-    cursor: "pointer",
-  },
-  compactNativeColorInput: {
-    width: spacingVars["--spacing-8"],
-    height: spacingVars["--spacing-8"],
-  },
-  colorTextInput: {
-    boxSizing: "border-box",
-    flex: "1 1 auto",
-    minWidth: 0,
-    minHeight: spacingVars["--spacing-10"],
-    paddingBlock: spacingVars["--spacing-2"],
-    paddingInline: spacingVars["--spacing-3"],
-    color: colorVars["--color-text-primary"],
-    backgroundColor: colorVars["--color-background-surface"],
-    borderWidth: borderVars["--border-width"],
-    borderStyle: "solid",
-    borderColor: colorVars["--color-border-emphasized"],
-    borderRadius: radiusVars["--radius-element"],
-    fontFamily: typographyVars["--font-family-body"],
-    fontSize: "inherit",
-    lineHeight: "inherit",
-    letterSpacing: 0,
-  },
-  compactColorTextInput: {
-    minHeight: spacingVars["--spacing-8"],
-    paddingBlock: spacingVars["--spacing-1"],
-    paddingInline: spacingVars["--spacing-2"],
-  },
-  readOnlyTextInput: {
-    color: colorVars["--color-text-secondary"],
-    backgroundColor: colorVars["--color-background-muted"],
-  },
   colorDisplay: {
     boxSizing: "border-box",
     display: "flex",

@@ -15,12 +15,13 @@ import {
   spacingVars,
 } from "@astryxdesign/core/theme/tokens.stylex";
 import {
-  ColorInput,
   ColorValueDisplay,
   MarkdownFieldDisplay,
   MarkdownInput,
   SourceIcon,
 } from "./field-primitives.tsx";
+import { ColorInput } from "./color-input.tsx";
+import { ImageInput, ImageValueDisplay } from "./image-input.tsx";
 import type {
   AstryxFieldData,
   AstryxFieldDisplayData,
@@ -138,6 +139,36 @@ function FieldEditor({
         density={field.density}
         isReadOnly={isReadOnly}
         onChange={(value) => handlers.onDraftChange?.(field.id, value)}
+      />
+    );
+  }
+
+  if (field.kind === "image" || field.kind === "media") {
+    return (
+      <ImageInput
+        id={inputId}
+        {...sharedProps}
+        accept={field.presentation?.accept}
+        alt={field.presentation?.mediaAlt}
+        density={field.density}
+        isLoading={isPending}
+        isReadOnly={isReadOnly}
+        options={field.options}
+        previewUrl={field.presentation?.mediaPreviewUrl}
+        value={stringValue}
+        onSelectOption={(option) => {
+          if (handlers.onOpenPicker) {
+            handlers.onOpenPicker(
+              field.id,
+              field.kind === "image" ? "image" : "media",
+              option.value,
+            );
+            return;
+          }
+
+          handlers.onDraftChange?.(field.id, option.value);
+        }}
+        onUploadFile={(file) => handlers.onUploadFile?.(field.id, file)}
       />
     );
   }
@@ -392,6 +423,18 @@ function FieldDisplay({ field }: { field: AstryxFieldDisplayData }) {
   if (field.kind === "color") {
     return (
       <ColorValueDisplay label={field.label} value={field.displayValue} density={field.density} />
+    );
+  }
+
+  if (field.kind === "image" || field.kind === "media") {
+    return (
+      <ImageValueDisplay
+        alt={field.presentation?.mediaAlt}
+        density={field.density}
+        label={field.label}
+        previewUrl={field.presentation?.mediaPreviewUrl}
+        value={field.displayValue}
+      />
     );
   }
 

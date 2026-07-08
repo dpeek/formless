@@ -41,6 +41,8 @@ export type AstryxFieldOption = {
   color?: string;
   icon?: string;
   source?: string;
+  mediaPreviewUrl?: string;
+  mediaAlt?: string;
   isDisabled?: boolean;
   isMissing?: boolean;
 };
@@ -109,6 +111,6 @@ export type AstryxFieldIntentHandlers = {
   onDraftChange?: (fieldId: string, value: AstryxFieldValue) => void;
   onCommit?: (fieldId: string, value: AstryxFieldValue) => void;
   onRevert?: (fieldId: string) => void;
-  onOpenPicker?: (fieldId: string, picker: AstryxFieldPickerKind) => void;
+  onOpenPicker?: (fieldId: string, picker: AstryxFieldPickerKind, value?: string) => void;
   onUploadFile?: (fieldId: string, file: File) => void;
 };
