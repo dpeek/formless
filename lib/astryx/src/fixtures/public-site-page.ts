@@ -679,7 +679,6 @@ export const publicSitePageFixture = {
     {
       blockId: "projected_form_subscribe",
       state: "submitting",
-      message: "Subscribing.",
     },
     {
       blockId: "projected_form_contact",
@@ -702,7 +701,6 @@ export const publicSitePageFixture = {
     {
       blockId: "projected_form_public_operation",
       state: "submitting",
-      message: "Submitting request.",
     },
     {
       blockId: "projected_form_public_operation",

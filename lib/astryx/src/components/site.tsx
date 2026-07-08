@@ -1,6 +1,5 @@
 import { useState, type ReactNode } from "react";
 import * as stylex from "@stylexjs/stylex";
-import { Badge } from "@astryxdesign/core/Badge";
 import { Button } from "@astryxdesign/core/Button";
 import {
   borderVars,
@@ -26,6 +25,7 @@ import { SideNavItem, SideNavSection } from "@astryxdesign/core/SideNav";
 import { TextArea } from "@astryxdesign/core/TextArea";
 import { Heading, Text } from "@astryxdesign/core/Text";
 import { TextInput } from "@astryxdesign/core/TextInput";
+import { createStaticSource, Typeahead, type SearchableItem } from "@astryxdesign/core/Typeahead";
 import {
   TopNav,
   TopNavHeading,
@@ -783,6 +783,8 @@ function ProjectedPublicFormVariant({
   const isSubmitting = formState.state === "submitting";
   const canRenderFields = !isUnavailable && !isComplete;
   const message = publicFormStateMessage(block, formState, warning, hasProjectedOperation);
+  const noticeState = isUnavailable ? "unavailable" : formState.state;
+  const shouldRenderNoticeBeforeActions = noticeState === "failed" && canRenderFields;
 
   return (
     <Card padding={5} variant={isUnavailable ? "muted" : undefined}>
@@ -801,22 +803,15 @@ function ProjectedPublicFormVariant({
               <Heading level={3}>{block.label}</Heading>
               <ProjectedMarkdown body={block.body} headingLevelStart={4} />
             </VStack>
-            <Badge
-              label={publicFormStateLabel(isUnavailable ? "unavailable" : formState.state)}
-              variant={publicFormStateBadgeVariant[isUnavailable ? "unavailable" : formState.state]}
-            />
           </HStack>
-          {message ? (
-            <PublicFormStateNotice state={isUnavailable ? "unavailable" : formState.state}>
-              {message}
-            </PublicFormStateNotice>
+          {message && !shouldRenderNoticeBeforeActions ? (
+            <PublicFormStateNotice state={noticeState}>{message}</PublicFormStateNotice>
           ) : null}
           {canRenderFields ? (
-            <ProjectedPublicFormFields
-              block={block}
-              isDisabled={isSubmitting}
-              isSubmitting={isSubmitting}
-            />
+            <ProjectedPublicFormFields block={block} isDisabled={isSubmitting} />
+          ) : null}
+          {message && shouldRenderNoticeBeforeActions ? (
+            <PublicFormStateNotice state={noticeState}>{message}</PublicFormStateNotice>
           ) : null}
           {canRenderFields ? (
             <div {...stylex.props(styles.publicFormActions)}>
@@ -862,11 +857,9 @@ function PublicFormStateNotice({
 function ProjectedPublicFormFields({
   block,
   isDisabled,
-  isSubmitting,
 }: {
   block: AstryxProjectedSiteBlockNode;
   isDisabled: boolean;
-  isSubmitting: boolean;
 }) {
   if (block.type === "subscribeForm") {
     return <ProjectedSubscribeFormFields block={block} isDisabled={isDisabled} />;
@@ -876,13 +869,7 @@ function ProjectedPublicFormFields({
     return <ProjectedContactFormFields block={block} isDisabled={isDisabled} />;
   }
 
-  return (
-    <ProjectedPublicOperationFormFields
-      block={block}
-      isDisabled={isDisabled}
-      isSubmitting={isSubmitting}
-    />
-  );
+  return <ProjectedPublicOperationFormFields block={block} isDisabled={isDisabled} />;
 }
 
 function ProjectedSubscribeFormFields({
@@ -963,11 +950,9 @@ function ProjectedContactFormFields({
 function ProjectedPublicOperationFormFields({
   block,
   isDisabled,
-  isSubmitting,
 }: {
   block: AstryxProjectedSiteBlockNode;
   isDisabled: boolean;
-  isSubmitting: boolean;
 }) {
   const operation = block.publicOperation;
   const fields = operation?.fields ?? [];
@@ -987,7 +972,7 @@ function ProjectedPublicOperationFormFields({
   return (
     <VStack gap={3} {...stylex.props(styles.publicFormFields)}>
       {fields.map((field) => {
-        const fieldData = toPublicOperationFieldData(field, draftValues, isDisabled, isSubmitting);
+        const fieldData = toPublicOperationFieldData(field, draftValues, isDisabled);
 
         return (
           <ProjectedPublicOperationField key={fieldData.id} field={fieldData} handlers={handlers} />
@@ -1105,26 +1090,74 @@ function renderPublicOperationFieldControl(
     );
   }
 
+  if (field.options?.length) {
+    return (
+      <ProjectedPublicOperationTypeahead
+        field={field}
+        handlers={handlers}
+        sharedProps={sharedProps}
+      />
+    );
+  }
+
+  return (
+    <TextInput
+      {...sharedProps}
+      {...publicTextInputElementProps(field)}
+      hasClear={!field.isRequired}
+      htmlName={field.name}
+      type={field.presentation?.format === "email" ? "email" : "text"}
+      value={formatPublicFieldValue(field.draftValue)}
+      onChange={(value) => handlers.onDraftChange?.(field.id, value)}
+    />
+  );
+}
+
+type PublicSuggestionItem = SearchableItem<{ value: string }>;
+
+function ProjectedPublicOperationTypeahead({
+  field,
+  handlers,
+  sharedProps,
+}: {
+  field: AstryxFieldEditorData;
+  handlers: AstryxFieldIntentHandlers;
+  sharedProps: {
+    description?: string;
+    isDisabled: boolean;
+    isLoading: boolean;
+    isRequired?: boolean;
+    label: string;
+    placeholder?: string;
+    width: "100%";
+  };
+}) {
+  const items = publicSuggestionItems(field.options ?? []);
+  const searchSource = createStaticSource(items);
+  const value = formatPublicFieldValue(field.draftValue);
+  const selectedItem = items.find((item) => publicSuggestionItemValue(item) === value) ?? null;
+
   return (
     <>
-      <TextInput
-        {...sharedProps}
-        {...publicTextInputElementProps(field)}
+      <Typeahead
+        description={sharedProps.description}
+        emptySearchResultsText="No suggestions"
         hasClear={!field.isRequired}
-        htmlName={field.name}
-        type={field.presentation?.format === "email" ? "email" : "text"}
-        value={formatPublicFieldValue(field.draftValue)}
-        onChange={(value) => handlers.onDraftChange?.(field.id, value)}
+        hasEntriesOnFocus
+        isDisabled={sharedProps.isDisabled}
+        isRequired={sharedProps.isRequired}
+        label={sharedProps.label}
+        placeholder={sharedProps.placeholder}
+        searchSource={searchSource}
+        value={selectedItem}
+        width={sharedProps.width}
+        debounceMs={0}
+        onChange={(item) =>
+          handlers.onDraftChange?.(field.id, item ? publicSuggestionItemValue(item) : "")
+        }
+        onChangeQuery={(query) => handlers.onDraftChange?.(field.id, query)}
       />
-      {field.options?.length ? (
-        <datalist id={publicTextSuggestionListId(field)}>
-          {field.options.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </datalist>
-      ) : null}
+      <input name={field.name} readOnly type="hidden" value={value} />
     </>
   );
 }
@@ -1174,14 +1207,6 @@ function ProjectedPublicOperationSelector({
 type PublicOperationDraftValues = Record<string, AstryxFieldValue>;
 type ISODateInputValue =
   `${number}${number}${number}${number}-${number}${number}-${number}${number}`;
-
-const publicFormStateBadgeVariant = {
-  valid: "neutral",
-  unavailable: "warning",
-  submitting: "info",
-  success: "success",
-  failed: "error",
-} as const satisfies Record<AstryxPublicFormPrototypeState["state"], string>;
 
 function projectedFormStateVariants(
   block: AstryxProjectedSiteBlockNode,
@@ -1250,10 +1275,6 @@ function publicFormStateMessage(
     return formState.message ?? "Submission failed. Try again.";
   }
 
-  if (formState.state === "submitting") {
-    return formState.message ?? "Submitting.";
-  }
-
   return null;
 }
 
@@ -1307,7 +1328,6 @@ function toPublicOperationFieldData(
   field: AstryxProjectedSitePublicOperationInputFieldNode,
   draftValues: PublicOperationDraftValues,
   isDisabled: boolean,
-  isSubmitting: boolean,
 ): AstryxFieldEditorData {
   const draftValue = draftValues[field.name] ?? initialPublicOperationFieldValue(field);
 
@@ -1325,12 +1345,6 @@ function toPublicOperationFieldData(
       format: field.format,
       placeholder: publicOperationFieldPlaceholder(field),
     },
-    pending: isSubmitting
-      ? {
-          isPending: true,
-          label: "Submitting",
-        }
-      : undefined,
     mode: "editor",
     draftValue,
     committedDisplayValue: formatPublicFieldValue(draftValue),
@@ -1384,13 +1398,8 @@ function publicOperationFieldPlaceholder(field: AstryxProjectedSitePublicOperati
 function publicTextInputElementProps(field: AstryxFieldEditorData) {
   return {
     inputMode: field.presentation?.format === "phone" ? "tel" : undefined,
-    list: field.options?.length ? publicTextSuggestionListId(field) : undefined,
     pattern: field.presentation?.format === "phone" ? "[0-9+() -]*" : undefined,
   } satisfies Record<string, string | undefined>;
-}
-
-function publicTextSuggestionListId(field: AstryxFieldEditorData) {
-  return `astryx-public-${field.id}-suggestions`;
 }
 
 function publicSelectorOptions(options: readonly AstryxFieldOption[]): SelectorOptionData[] {
@@ -1399,6 +1408,20 @@ function publicSelectorOptions(options: readonly AstryxFieldOption[]): SelectorO
     label: option.label,
     value: option.value,
   }));
+}
+
+function publicSuggestionItems(options: readonly AstryxFieldOption[]): PublicSuggestionItem[] {
+  return options.map((option) => ({
+    id: option.value,
+    label: option.label,
+    auxiliaryData: {
+      value: option.value,
+    },
+  }));
+}
+
+function publicSuggestionItemValue(item: PublicSuggestionItem) {
+  return item.auxiliaryData?.value ?? item.id;
 }
 
 function publicOperationFieldControlName(field: AstryxFieldEditorData) {
