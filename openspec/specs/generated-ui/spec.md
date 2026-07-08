@@ -397,6 +397,29 @@ The system SHALL render generated field displays and editors from field behavior
   and display-safe field errors remain visible instead of being coerced by
   Astryx primitives
 
+#### Scenario: Astryx public Site rendering vertical slice
+
+- GIVEN the standalone Astryx package renders a public Site migration slice
+- WHEN the slice renders a package-local projected `SitePageTree` fixture
+- THEN the fixture includes Site settings with source SVG icon, header and
+  footer frame roots, a page/root block tree, and ordered placement output
+  rendered as nested public layout
+- AND markdown content, image/media display, section, card grid, card, metric
+  grid, metric, `contactForm`, `subscribeForm`, and `publicOperationForm`
+  blocks are represented from projected block facts
+- AND fixed public forms and generic public operation forms cover valid,
+  warning or unavailable, submitting, success, and display-safe failure states
+- AND generic public operation form controls cover projected text, long text,
+  boolean, date, number, enum, email-formatted text, phone-formatted text, and
+  suggested text input fields through Astryx-compatible field data
+- AND desktop and mobile viewport checks verify the public header, footer,
+  nested placement layout, media, generic blocks, and form states without
+  depending on generated admin chrome
+- AND the slice does not include the full Site editor, placement drag and drop,
+  app admin chrome, generated field editors, browser replica sync, raw storage
+  records, app target selectors, write hooks, operation executors, media
+  clients, or real Turnstile execution
+
 ### Requirement: Media Field Package Adapter
 
 The system SHALL keep generated field layout and commit behavior in generated UI

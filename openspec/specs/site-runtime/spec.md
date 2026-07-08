@@ -155,6 +155,20 @@ projection, routes, media delivery, or public action storage contracts.
 - AND the default renderer continues to consume the same public Site projection
   contract used by workspace renderers
 
+#### Scenario: Renderer migration input stays projection shaped
+
+- GIVEN a public Site renderer migration or prototype exercises public page
+  rendering behavior
+- WHEN it renders Site content outside the generated admin shell
+- THEN its fixture input is a projected `SitePageTree` or structurally
+  equivalent public projection
+- AND the fixture can include Site settings, SVG icon source, header and footer
+  frame roots, page/root block placements, media delivery facts, tree warnings,
+  and projected public operation facts
+- AND it does not use raw Authority storage records, app install records,
+  browser replica state, generated admin route state, provider credentials, or
+  private challenge secrets as renderer input
+
 ### Requirement: Subscribe Form Public Tree Projection
 
 The system SHALL project subscribe form blocks into public Site trees for the
@@ -541,6 +555,20 @@ forms on preview, installed, and mapped public Site routes.
 - THEN the page shows the configured success state
 - AND the visitor is not shown operation-created records, provider delivery
   state, notification recipient configuration, or admin-only app records
+
+#### Scenario: Render public-only form states
+
+- GIVEN a public Site page renders `subscribeForm`, `contactForm`, or
+  `publicOperationForm` blocks
+- WHEN a block has no projected public operation facts because projection
+  recorded a warning
+- THEN the public renderer shows the form as unavailable instead of exposing a
+  working submit target
+- AND when a valid form is submitting, succeeds, or fails in the browser, the
+  renderer shows only public pending, success, or display-safe failure state
+- AND submitting, success, and failure state does not expose raw request
+  envelopes, private challenge facts, submitted private records, provider
+  delivery state, notification recipient configuration, or admin-only records
 
 ### Requirement: Public Site Client Runtime
 
