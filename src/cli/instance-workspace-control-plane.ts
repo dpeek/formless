@@ -15,6 +15,7 @@ import {
   defaultAppInstallRegistrationPolicy,
   isAppInstallRegistrationPolicy,
   type AppInstall,
+  type AppInstallRegistrationOperation,
   type AppInstallRegistrationPolicy,
 } from "@dpeek/formless-installed-apps";
 import {
@@ -62,6 +63,7 @@ export type WorkspaceControlPlaneAppInstallRecord = {
   label: string;
   packageAppKey: string;
   packageRevision?: number;
+  registrationOperation?: AppInstallRegistrationOperation;
   registrationPolicy: AppInstallRegistrationPolicy;
   sourceSchemaHash?: AppArchive["app"]["sourceSchemaHash"];
   status: "installed";
@@ -133,6 +135,14 @@ export function controlPlaneAppInstallRecords(
         : { packageRevision: numberRecordValue(record, "packageRevision") }),
       registrationPolicy:
         appInstallRegistrationPolicyRecordValue(record) ?? defaultAppInstallRegistrationPolicy(),
+      ...(stringRecordValue(record, "registrationOperation") === undefined
+        ? {}
+        : {
+            registrationOperation: stringRecordValue(
+              record,
+              "registrationOperation",
+            ) as AppInstallRegistrationOperation,
+          }),
       ...(sourceSchemaHashRecordValue(record) === undefined
         ? {}
         : { sourceSchemaHash: sourceSchemaHashRecordValue(record) }),
@@ -242,6 +252,9 @@ export function appArchiveControlPlaneRecords(archive: AppArchive): StoredRecord
         ? (`/sites/${archive.app.installId}/` as `/sites/${string}/`)
         : undefined,
     registrationPolicy: archive.app.registrationPolicy,
+    ...(archive.app.registrationOperation === undefined
+      ? {}
+      : { registrationOperation: archive.app.registrationOperation }),
     sourceSchemaHash: archive.app.sourceSchemaHash,
     status: archive.app.status,
     updatedAt: archive.app.updatedAt,
@@ -259,6 +272,9 @@ export function appInstallControlPlaneRecords(install: AppInstall): StoredRecord
       sourceSchemaHash: install.sourceSchemaHash,
       label: install.label,
       registrationPolicy: install.registrationPolicy,
+      ...(install.registrationOperation === undefined
+        ? {}
+        : { registrationOperation: install.registrationOperation }),
       status: install.status,
       storageIdentity: `app:${install.installId}`,
       createdAt: install.createdAt,

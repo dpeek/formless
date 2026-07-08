@@ -7,9 +7,11 @@ import {
   authAccountCompletionApiContinuationTarget,
   authAccountSignupTargetFromSearch,
   completeAuthAccountAppRegistrationGate,
+  completeAuthAccountProfileCompletionGate,
   completeAuthAccountTermsAcceptanceGate,
   completeEmailVerifiedSignupWithPasskey,
   fetchAuthAccountStatus,
+  profileCompletionInputValuesFromFormData,
   requestAuthAccountEmailVerification,
   startAuthAccountRouteSession,
   startEmailVerifiedSignup,
@@ -19,6 +21,7 @@ import {
 import type {
   AccountCompletionContinuationResult,
   AccountCompletionGate,
+  AccountCompletionGateOperationInputContract,
   AccountCompletionGateResult,
   AccountCompletionGateTarget,
   OwnerPasskeyRegistrationVerifyRequest,
@@ -224,6 +227,55 @@ describe("auth account route view", () => {
     expect(termsHtml).toContain('name="acceptedPolicyIds"');
     expect(roleReviewHtml).not.toContain("<form");
     expect(roleReviewHtml).not.toContain("<button");
+  });
+
+  it("renders operation-backed profile-completion gates from the input contract", () => {
+    const html = renderAuthAccountState({
+      result: blockedResult(profileCompletionGate()),
+      status: "blocked",
+    });
+
+    expect(html).toContain("Complete profile");
+    expect(html).toContain("Display name");
+    expect(html).toContain('name="displayName"');
+    expect(html).toContain("Contact preference");
+    expect(html).toContain('name="contactPreference"');
+    expect(html).toContain("Email");
+    expect(html).toContain("<form");
+    expect(html).toContain("<button");
+    expect(html).not.toContain("profileValue-private");
+    expect(html).not.toContain("principal:private");
+    expect(html).not.toContain("grantSecret");
+  });
+
+  it("renders unavailable profile-completion states without app-private data", () => {
+    const missingOperationHtml = renderAuthAccountState({
+      result: blockedResult({
+        appInstallId: "task-workspace",
+        kind: "profile-completion",
+      }),
+      status: "blocked",
+    });
+    const unsupportedHtml = renderAuthAccountState({
+      result: blockedResult(
+        profileCompletionGate({
+          inputContract: {
+            fields: [],
+            unsupportedRequiredFields: ["principal"],
+          },
+        }),
+      ),
+      status: "blocked",
+    });
+
+    expect(missingOperationHtml).toContain("Profile completion operation is unavailable.");
+    expect(missingOperationHtml).not.toContain("<form");
+    expect(unsupportedHtml).toContain(
+      "Profile completion requires fields this form cannot render.",
+    );
+    expect(unsupportedHtml).not.toContain('name="principal"');
+    expect(unsupportedHtml).not.toContain("principal:private");
+    expect(unsupportedHtml).not.toContain("profileValue-private");
   });
 
   it("renders signup email and passkey setup states", () => {
@@ -585,6 +637,122 @@ describe("auth account route data flow", () => {
     expect(calls[2]?.body).toEqual({ acceptedPolicyIds: ["policy:workspace"], target });
   });
 
+  it("posts profile completion input to the auth-origin runtime endpoint", async () => {
+    const calls: JsonFetchCall[] = [];
+    const target = accountTarget();
+    const operation = profileCompletionOperation();
+    const input = profileCompletionInputValuesFromFormData(
+      profileCompletionInputContract(),
+      formData([
+        ["displayName", "Ada Profile"],
+        ["contactPreference", "email"],
+      ]),
+    );
+
+    expect(input).toEqual({
+      input: { contactPreference: "email", displayName: "Ada Profile" },
+      ok: true,
+    });
+
+    const completed = await completeAuthAccountProfileCompletionGate({
+      fetcher: recordingJsonSequenceFetcher(calls, [
+        {
+          body: {
+            accountCompletion: completeResult(target),
+            completed: true,
+            continueTo: "/formless/auth/handoff?state=runtime",
+          },
+        },
+      ]),
+      idempotencyKey: "profile-completion-test",
+      input: input.ok ? input.input : {},
+      locationSearch: targetBoundLocationSearch(),
+      operation,
+      target,
+    });
+
+    expect(completed.accountCompletion.status).toBe("complete");
+    expect(calls).toEqual([
+      {
+        body: {
+          idempotencyKey: "profile-completion-test",
+          input: { contactPreference: "email", displayName: "Ada Profile" },
+          operation,
+          target,
+        },
+        credentials: "same-origin",
+        input: `/formless/auth/profile-completion/complete${targetBoundLocationSearch()}`,
+        method: "POST",
+      },
+    ]);
+    expect(
+      authAccountCompletionApiContinuationTarget(
+        completed,
+        "?targetOrigin=https%3A%2F%2Fevil.example.com&returnTo=%2Fevil",
+        "https://auth.example.com",
+      ),
+    ).toBe("/formless/auth/handoff?state=runtime");
+  });
+
+  it("returns blocked profile completion results without inventing continuation targets", async () => {
+    const calls: JsonFetchCall[] = [];
+    const blocked = blockedResult(
+      profileCompletionGate({ inputContract: { fields: [], unsupportedRequiredFields: [] } }),
+    );
+
+    const completed = await completeAuthAccountProfileCompletionGate({
+      fetcher: recordingJsonSequenceFetcher(calls, [
+        {
+          body: {
+            accountCompletion: blocked,
+            completed: true,
+            error: "Profile-completion gate is not current.",
+          },
+          init: { status: 409 },
+        },
+      ]),
+      idempotencyKey: "profile-completion-blocked",
+      input: {},
+      operation: profileCompletionOperation(),
+      target: accountTarget(),
+    });
+
+    expect(completed).toEqual({ accountCompletion: blocked });
+    expect(
+      authAccountCompletionApiContinuationTarget(
+        completed,
+        targetBoundLocationSearch(),
+        "https://auth.example.com",
+      ),
+    ).toBeUndefined();
+    expect(JSON.stringify(calls)).not.toContain("grantSecret");
+  });
+
+  it("surfaces display-safe profile completion errors", async () => {
+    await expect(
+      completeAuthAccountProfileCompletionGate({
+        fetcher: recordingJsonSequenceFetcher(
+          [],
+          [
+            {
+              body: {
+                appPrivateProfileValues: { profileValue: "profileValue-private" },
+                error: "Profile completion failed.",
+              },
+              init: { status: 400 },
+            },
+          ],
+        ),
+        idempotencyKey: "profile-completion-error",
+        input: {},
+        operation: profileCompletionOperation(),
+        target: accountTarget(),
+      }),
+    ).rejects.toMatchObject({
+      message: "Profile completion failed.",
+    } satisfies Partial<AuthAccountApiError>);
+  });
+
   it("sets up email-verified signup credentials through runtime APIs", async () => {
     const calls: JsonFetchCall[] = [];
     const target = accountTarget();
@@ -720,6 +888,55 @@ function completeResult(
   };
 }
 
+function profileCompletionGate(
+  input: Partial<Extract<AccountCompletionGate, { kind: "profile-completion" }>> = {},
+): Extract<AccountCompletionGate, { kind: "profile-completion" }> {
+  return {
+    appInstallId: "task-workspace",
+    inputContract: profileCompletionInputContract(),
+    kind: "profile-completion",
+    operation: profileCompletionOperation(),
+    ...input,
+  };
+}
+
+function profileCompletionOperation() {
+  return {
+    appInstallId: "task-workspace",
+    entityName: "profile",
+    label: "Complete profile",
+    operationKey: "profile.completeRegistration",
+    operationName: "completeRegistration",
+  };
+}
+
+function profileCompletionInputContract(
+  input: Partial<AccountCompletionGateOperationInputContract> = {},
+): AccountCompletionGateOperationInputContract {
+  return {
+    fields: [
+      {
+        control: "text",
+        label: "Display name",
+        name: "displayName",
+        required: true,
+      },
+      {
+        control: "enum",
+        label: "Contact preference",
+        name: "contactPreference",
+        options: [
+          { label: "Email", value: "email" },
+          { label: "Phone", value: "phone" },
+        ],
+        required: false,
+      },
+    ],
+    unsupportedRequiredFields: [],
+    ...input,
+  };
+}
+
 function accountTarget(
   input: Partial<AccountCompletionGateTarget> = {},
 ): AccountCompletionGateTarget {
@@ -732,6 +949,16 @@ function accountTarget(
     targetProfile: "app",
     ...input,
   };
+}
+
+function formData(entries: Array<[string, string]>): FormData {
+  const data = new FormData();
+
+  for (const [key, value] of entries) {
+    data.set(key, value);
+  }
+
+  return data;
 }
 
 function targetBoundLocationSearch(): string {

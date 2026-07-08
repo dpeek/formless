@@ -1389,6 +1389,9 @@ function appArchiveFromWorkspaceSnapshot(input: {
       sourceSchemaHash,
       label: input.install.label,
       registrationPolicy: input.install.registrationPolicy,
+      ...(input.install.registrationOperation === undefined
+        ? {}
+        : { registrationOperation: input.install.registrationOperation }),
       status: input.install.status,
       createdAt: input.install.createdAt,
       updatedAt: input.install.updatedAt,

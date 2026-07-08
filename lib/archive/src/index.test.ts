@@ -181,21 +181,58 @@ describe("portable archive protocol", () => {
     const archive = appArchive({
       app: { ...archivedInstall("members", "Members"), registrationPolicy: "email-verified" },
     });
+    const customOperationArchive = appArchive({
+      app: {
+        ...archivedInstall("profiles", "Profiles"),
+        registrationOperation: "profile.register",
+        registrationPolicy: "custom-operation",
+      },
+    });
     const formatted = JSON.parse(formatAppArchive(archive)) as AppArchive;
+    const formattedCustomOperation = JSON.parse(
+      formatAppArchive(customOperationArchive),
+    ) as AppArchive;
     const omittedPolicyApp = { ...archive.app } as Record<string, unknown>;
     delete omittedPolicyApp.registrationPolicy;
 
     expect(parseAppArchive(archive).app.registrationPolicy).toBe("email-verified");
+    expect(parseAppArchive(customOperationArchive).app).toMatchObject({
+      registrationOperation: "profile.register",
+      registrationPolicy: "custom-operation",
+    });
     expect(formatted.app.registrationPolicy).toBe("email-verified");
+    expect(formattedCustomOperation.app.registrationOperation).toBe("profile.register");
     expect(parseAppArchive({ ...archive, app: omittedPolicyApp }).app.registrationPolicy).toBe(
       "closed",
     );
     expect(() =>
       parseAppArchive({
         ...archive,
+        app: { ...archive.app, registrationPolicy: "custom-operation" },
+      }),
+    ).toThrow(
+      'App archive app registrationOperation is required when registrationPolicy is "custom-operation".',
+    );
+    expect(() =>
+      parseAppArchive({
+        ...archive,
+        app: {
+          ...archive.app,
+          registrationOperation: "profile.register",
+          registrationPolicy: "email-verified",
+        },
+      }),
+    ).toThrow(
+      'App archive app registrationOperation must be omitted unless registrationPolicy is "custom-operation".',
+    );
+    expect(() =>
+      parseAppArchive({
+        ...archive,
         app: { ...archive.app, registrationPolicy: "domain-allowlist" },
       }),
-    ).toThrow('App archive app registrationPolicy must be "closed" or "email-verified".');
+    ).toThrow(
+      'App archive app registrationPolicy must be "closed", "email-verified", or "custom-operation".',
+    );
   });
 
   it("parses instance archives as app archive collections", () => {

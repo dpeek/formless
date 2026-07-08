@@ -16,11 +16,22 @@ import {
   parseCollaboratorInvitationAcceptanceStatusResponse,
   parseCollaboratorInvitationPasskeyRegistrationOptionsResponse,
   parseCollaboratorInvitationPasskeyRegistrationVerifyResponse,
+  type AccountCompletionGateTarget,
   type CollaboratorInvitationAcceptanceFailureReason,
 } from "../shared/instance-auth.ts";
 import type { OperationInvocationResponse } from "../shared/operation-invocation.ts";
 import type { BootstrapResponse } from "../shared/protocol.ts";
 import { recordOperationRequest } from "../test/authority-write.ts";
+import {
+  customOnboardingPackageAppKey,
+  customOnboardingProfileCompletionOperation,
+  customOnboardingRegistrationOperationKey,
+  customOnboardingWorkspacePackageFixture,
+} from "../test/custom-onboarding-app.ts";
+import {
+  FORMLESS_WORKSPACE_APP_PACKAGES_ENV_NAME,
+  formatRuntimeWorkspaceAppPackages,
+} from "../shared/workspace-runtime-packages.ts";
 import {
   HOST_AUTH_SESSION_COOKIE_NAME,
   INSTANCE_AUTH_HANDOFF_CALLBACK_PATH,
@@ -30,6 +41,7 @@ import { CENTRAL_AUTH_SESSION_COOKIE_NAME } from "./central-auth-session.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
 import { OWNER_SESSION_COOKIE_NAME } from "./owner-session.ts";
 import { handleCollaboratorInvitationAcceptanceBrowserRequest } from "./collaborator-invitation-acceptance.ts";
+import { INSTANCE_AUTH_PROFILE_COMPLETION_GATE_COMPLETE_PATH } from "./instance-auth-account-completion.ts";
 
 type Harness = Awaited<ReturnType<typeof createWorkerHarness>>;
 
@@ -66,6 +78,8 @@ let harnessDir: string | undefined;
 let instanceAuthHarnessName: string;
 
 beforeAll(async () => {
+  const customOnboardingPackage = await customOnboardingWorkspacePackageFixture();
+
   harness = await createWorkerHarness(
     await writeCollaboratorInvitationAcceptanceHarness(),
     {
@@ -75,7 +89,12 @@ beforeAll(async () => {
       },
     },
     {
-      bindings: { FORMLESS_ADMIN_TOKEN: adminToken },
+      bindings: {
+        FORMLESS_ADMIN_TOKEN: adminToken,
+        [FORMLESS_WORKSPACE_APP_PACKAGES_ENV_NAME]: formatRuntimeWorkspaceAppPackages([
+          customOnboardingPackage,
+        ]),
+      },
     },
   );
 });
@@ -1067,6 +1086,179 @@ describe("collaborator invitation acceptance status", () => {
     });
   });
 
+  it("blocks accepted custom-operation app invitations until profile completion commits", async () => {
+    const unique = randomUUID().replace(/-/g, "");
+    const appInstallId = `invite-custom-${unique}`;
+    const mappedHost = `invite-custom-${unique}.example.com`;
+    const targetEmail = `custom-invite-${unique}@example.com`;
+    const principalId = `principal:custom-invite-${unique}`;
+    const invitation = await createInvitation({
+      invitationId: `invitation:custom-invite-${unique}`,
+      targetEmail,
+      targetSurface: "app-install",
+      targetAppInstallId: appInstallId,
+      appRegistrations: [{ appInstallId }],
+      invitedPrincipal: {
+        id: principalId,
+        displayName: "Custom App Collaborator",
+      },
+    });
+    const token = rawTokenFor(invitation.id);
+
+    await writeDefaultAuthConfig();
+    await configureDefaultProductionIdentity();
+    await createDefaultAppInstall(appInstallId, {
+      label: "Custom invitation target",
+      packageAppKey: customOnboardingPackageAppKey,
+      registrationOperation: customOnboardingRegistrationOperationKey,
+      registrationPolicy: "custom-operation",
+    });
+    const route = await createDefaultRoute(`route:custom-invite:${unique}`, {
+      access: "authenticated",
+      appInstall: appInstallId,
+      enabled: true,
+      kind: "mount",
+      matchHost: mappedHost,
+      matchPath: "/",
+      matchPrefix: "/",
+      surface: "admin",
+      targetProfile: "app",
+    });
+    const target: AccountCompletionGateTarget = {
+      appInstallId,
+      returnTo: "/",
+      routeId: route.id,
+      storageIdentity: `app:${appInstallId}`,
+      targetOrigin: `https://${mappedHost}`,
+      targetProfile: "app",
+    };
+
+    await createDefaultPrivateToken({
+      invitationId: invitation.id,
+      rawToken: token,
+      targetEmail,
+      targetSurface: "app-install",
+      targetAppInstallId: appInstallId,
+    });
+
+    const countsBefore = await defaultAuthCounts();
+    const options = await fetchDefaultPasskeyRegistrationOptions(invitation.id, token);
+    const authenticator = new VirtualPasskey(
+      Buffer.from(`custom-invite-credential:${unique}`).toString("base64url"),
+    );
+
+    if (!("options" in options.body)) {
+      throw new Error(`Expected passkey options, received ${JSON.stringify(options.body)}.`);
+    }
+
+    const verified = await verifyDefaultPasskeyRegistration(
+      invitation.id,
+      token,
+      authenticator.registrationResponse(options.body.options, {
+        origin: authOrigin,
+        rpId: "example.com",
+      }),
+    );
+    const sessionCookie = requiredHeader(verified.response, "Set-Cookie");
+    const nonce = Buffer.from(`nonce:${unique}`).toString("base64url");
+    const state = Buffer.from(`state:${unique}`).toString("base64url");
+    const profileCompletion = await completeDefaultProfileCompletionGate({
+      cookie: cookiePair(sessionCookie),
+      idempotencyKey: `custom-invite-profile-${unique}`,
+      input: {
+        displayName: "Custom Invitation Profile",
+        principal: principalId,
+      },
+      nonceHash: sha256Base64Url(nonce),
+      operation: customOnboardingProfileCompletionOperation(appInstallId),
+      state,
+      target,
+    });
+    const handoffUrl = new URL(stringBodyValue(profileCompletion.body, "continueTo"), authOrigin);
+    const grant = await harness.mf.dispatchFetch(handoffUrl.toString(), {
+      headers: {
+        Accept: "text/html",
+        Cookie: cookiePair(sessionCookie),
+      },
+      redirect: "manual",
+    });
+    const grantLocation = new URL(requiredHeader(grant, "Location"), authOrigin);
+    const appRecords = await readDefaultAppRecords(customOnboardingPackageAppKey, appInstallId);
+    const profiles = appRecords.records.filter(
+      (record) => record.entity === "profile" && !record.deletedAt,
+    );
+
+    expect(verified.response.status).toBe(200);
+    expect(sessionCookie).toContain(`${CENTRAL_AUTH_SESSION_COOKIE_NAME}=`);
+    expect(sessionCookie).not.toContain(`${OWNER_SESSION_COOKIE_NAME}=`);
+    expect(sessionCookie).not.toContain(`${HOST_AUTH_SESSION_COOKIE_NAME}=`);
+    expect(verified.body).toMatchObject({
+      acceptedPrincipal: {
+        displayName: "Custom App Collaborator",
+        principalId,
+      },
+      accountCompletion: {
+        gate: {
+          appInstallId,
+          kind: "profile-completion",
+          operation: customOnboardingProfileCompletionOperation(appInstallId),
+        },
+        status: "blocked",
+        target,
+      },
+      session: { expiresAt: expect.any(String) },
+      verified: true,
+    });
+    expect(isObjectWithKey(verified.body, "continueTo")).toBe(false);
+    expect(isObjectWithKey(verified.body, "handoff")).toBe(false);
+    expect(JSON.stringify(verified.body)).not.toContain(token);
+    expect(JSON.stringify(verified.body)).not.toContain("grantSecret");
+
+    expect(profileCompletion.response.status).toBe(200);
+    expect(profileCompletion.body).toMatchObject({
+      accountCompletion: {
+        continueTo: "/",
+        status: "complete",
+        target,
+      },
+      completed: true,
+      handoff: {
+        returnTo: "/",
+        targetOrigin: `https://${mappedHost}`,
+      },
+    });
+    expect(handoffUrl.pathname).toBe(INSTANCE_AUTH_HANDOFF_START_PATH);
+    expect(handoffUrl.searchParams.get("targetOrigin")).toBe(`https://${mappedHost}`);
+    expect(handoffUrl.searchParams.get("appInstallId")).toBe(appInstallId);
+    expect(handoffUrl.searchParams.get("storageIdentity")).toBe(`app:${appInstallId}`);
+    expect(handoffUrl.searchParams.get("nonceHash")).toBe(sha256Base64Url(nonce));
+    expect(handoffUrl.searchParams.get("state")).toBe(state);
+    expect(JSON.stringify(profileCompletion.body)).not.toContain("Custom Invitation Profile");
+
+    expect(grant.status).toBe(302);
+    expect(grantLocation.origin).toBe(`https://${mappedHost}`);
+    expect(grantLocation.pathname).toBe(INSTANCE_AUTH_HANDOFF_CALLBACK_PATH);
+    expect(grantLocation.searchParams.get("grantId")).toEqual(expect.any(String));
+    expect(grantLocation.searchParams.get("grantSecret")).toEqual(expect.any(String));
+    expect(grantLocation.searchParams.get("state")).toBe(state);
+
+    expect(profiles).toHaveLength(1);
+    expect(profiles[0]).toMatchObject({
+      entity: "profile",
+      values: {
+        actorPrincipalId: principalId,
+        displayName: "Custom Invitation Profile",
+        principal: principalId,
+      },
+    });
+    expect(await defaultAuthCounts()).toEqual({
+      centralSessions: countsBefore.centralSessions + 1,
+      challenges: countsBefore.challenges + 1,
+      credentials: countsBefore.credentials + 1,
+      handoffGrants: countsBefore.handoffGrants + 1,
+    });
+  });
+
   it("continues instance targets through the preferred admin origin and normal handoff", async () => {
     const unique = randomUUID().replace(/-/g, "");
     const decoyHost = `invite-instance-decoy-${unique}.example.com`;
@@ -1682,6 +1874,40 @@ async function verifyDefaultPasskeyRegistration(
   return { body, response };
 }
 
+async function completeDefaultProfileCompletionGate(input: {
+  cookie: string;
+  idempotencyKey: string;
+  input: Record<string, unknown>;
+  nonceHash: string;
+  operation: Record<string, unknown>;
+  state: string;
+  target: AccountCompletionGateTarget;
+}) {
+  const url = new URL(INSTANCE_AUTH_PROFILE_COMPLETION_GATE_COMPLETE_PATH, authOrigin);
+
+  url.searchParams.set("nonceHash", input.nonceHash);
+  url.searchParams.set("state", input.state);
+
+  const response = await harness.mf.dispatchFetch(url.toString(), {
+    body: JSON.stringify({
+      idempotencyKey: input.idempotencyKey,
+      input: input.input,
+      operation: input.operation,
+      target: input.target,
+    }),
+    headers: {
+      "Content-Type": "application/json",
+      Cookie: input.cookie,
+    },
+    method: "POST",
+  });
+
+  return {
+    body: (await response.json()) as Record<string, unknown>,
+    response,
+  };
+}
+
 async function configureDefaultProductionIdentity(input: { adminRoute?: string } = {}) {
   const values = {
     ...(input.adminRoute === undefined ? {} : { adminRoute: input.adminRoute }),
@@ -1701,16 +1927,25 @@ async function configureDefaultProductionIdentity(input: { adminRoute?: string }
   );
 }
 
-async function createDefaultAppInstall(installId: string) {
+async function createDefaultAppInstall(
+  installId: string,
+  values: {
+    label?: string;
+    packageAppKey?: string;
+    registrationOperation?: string;
+    registrationPolicy?: "closed" | "custom-operation" | "email-verified";
+  } = {},
+) {
   const response = await harness.fetch(
     `${controlPlaneApi}/operations/app-install/createAppInstall`,
     {
       body: JSON.stringify({
         idempotencyKey: `create-install-${installId}`,
         input: {
-          packageAppKey: "tasks",
           installId,
           label: "Invitation target",
+          packageAppKey: "tasks",
+          ...values,
         },
       }),
       headers: adminHeaders({ "Content-Type": "application/json" }),
@@ -1793,6 +2028,20 @@ async function readDefaultControlPlaneRecords(): Promise<StoredRecord[]> {
   return body.records;
 }
 
+async function readDefaultAppRecords(
+  packageAppKey: string,
+  appInstallId: string,
+): Promise<{ records: StoredRecord[] }> {
+  const response = await harness.fetch(
+    `/harness/app-records?installId=${encodeURIComponent(appInstallId)}&packageAppKey=${encodeURIComponent(packageAppKey)}`,
+  );
+  const body = (await response.json()) as { records: StoredRecord[] };
+
+  expect(response.status).toBe(200);
+
+  return body;
+}
+
 function operationRecord(response: OperationInvocationResponse): StoredRecord {
   const output = response.output;
 
@@ -1843,6 +2092,16 @@ function cookiePair(cookie: string) {
 
 function generatedInvitationPrincipalId(invitationId: string) {
   return `principal:invitation:${Buffer.from(invitationId).toString("base64url")}`;
+}
+
+function stringBodyValue(body: Record<string, unknown>, key: string): string {
+  const value = body[key];
+
+  if (typeof value !== "string") {
+    throw new Error(`Expected response field "${key}" to be a string.`);
+  }
+
+  return value;
 }
 
 function isObjectWithKey(value: unknown, key: string): value is Record<string, unknown> {
@@ -2053,6 +2312,7 @@ async function writeCollaboratorInvitationAcceptanceHarness() {
       import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "${process.cwd()}/src/worker/formless-instance.ts";
       import { IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX, IDENTITY_CONTROL_PLANE_STORAGE_IDENTITY } from "@dpeek/formless-identity-control-plane";
       import { INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX, INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY } from "@dpeek/formless-instance-control-plane";
+      import { getBootstrapRecords } from "${process.cwd()}/src/worker/storage.ts";
       import {
         consumeCollaboratorInvitationToken,
         createCollaboratorInvitationToken,
@@ -2141,6 +2401,28 @@ async function writeCollaboratorInvitationAcceptanceHarness() {
               createdAt: "2026-06-01T00:00:00.000Z",
               updatedAt: "2026-06-01T00:00:00.000Z",
             }));
+          }
+
+          if (url.pathname === "/harness/app-records") {
+            const installId = url.searchParams.get("installId");
+            const packageAppKey = url.searchParams.get("packageAppKey");
+
+            if (!installId || !packageAppKey) {
+              return Response.json({ error: "App record read requires installId and packageAppKey." }, { status: 400 });
+            }
+
+            const schemaResponse = await super.fetch(
+              new Request(\`http://internal/api/app-installs/\${packageAppKey}/\${installId}/schema\`, {
+                headers: { Accept: "application/json" },
+                method: "GET",
+              }),
+            );
+
+            if (!schemaResponse.ok) {
+              return schemaResponse;
+            }
+
+            return Response.json({ records: getBootstrapRecords(this.ctx.storage) });
           }
 
           if (url.pathname === "/harness/identity/invitation-target" && request.method === "POST") {
@@ -2266,7 +2548,11 @@ async function writeCollaboratorInvitationAcceptanceHarness() {
         fetch(request, env) {
           const url = new URL(request.url);
           const instanceAuthHarnessName = request.headers.get("x-instance-auth-harness-name");
-          const authorityName = url.pathname.startsWith(IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX) ||
+          const harnessAppRecordsInstallId =
+            url.pathname === "/harness/app-records" ? url.searchParams.get("installId") : null;
+          const authorityName = harnessAppRecordsInstallId
+            ? \`app:\${harnessAppRecordsInstallId}\`
+            : url.pathname.startsWith(IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX) ||
             url.pathname.startsWith("/harness/identity/")
             ? IDENTITY_CONTROL_PLANE_STORAGE_IDENTITY
             : url.pathname.startsWith(INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX)

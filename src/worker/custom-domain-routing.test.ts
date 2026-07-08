@@ -46,12 +46,20 @@ import {
 } from "../shared/workspace-runtime-packages.ts";
 import { siteSeedRecords, siteSourceSchema } from "../test/schema-apps.ts";
 import { workspaceAppPackageManifestFixture } from "../test/workspace-app-package.ts";
+import {
+  customOnboardingDefaultInstallId,
+  customOnboardingPackageAppKey,
+  customOnboardingProfileCompletionOperation,
+  customOnboardingRegistrationOperationKey,
+  customOnboardingWorkspacePackageFixture,
+} from "../test/custom-onboarding-app.ts";
 import type {
   PublicKeyCredentialCreationOptionsJSON,
   RegistrationResponseJSON,
 } from "@simplewebauthn/server";
 import type { StoredPasskeyCredential } from "./instance-auth-state.ts";
 import type { StoredRecord } from "@dpeek/formless-storage";
+import { INSTANCE_AUTH_PROFILE_COMPLETION_GATE_COMPLETE_PATH } from "./instance-auth-account-completion.ts";
 
 type Harness = Awaited<ReturnType<typeof createWorkerHarness>>;
 type DispatchFetchInit = Parameters<Harness["mf"]["dispatchFetch"]>[1];
@@ -1254,6 +1262,131 @@ describe("installed Site custom-domain Worker routing", () => {
         expect(JSON.stringify(identity.records)).not.toContain(sha256Base64Url(signup.token));
         expect(continued.status).toBe(200);
         expect(assetRequests).toEqual(["/apps/task-workspace"]);
+      },
+    );
+  }, 10_000);
+
+  it("signs up same-origin custom-operation app users through profile completion and continuation", async () => {
+    await withHarness(
+      await createCustomDomainHarness("instance", {
+        FORMLESS_INSTANCE_AUTH_ORIGIN: "https://www.example.com",
+        FORMLESS_INSTANCE_AUTH_RELYING_PARTY_ID: "example.com",
+        [FORMLESS_WORKSPACE_APP_PACKAGES_ENV_NAME]: await customOnboardingRuntimePackages(),
+      }),
+      async () => {
+        await configureAuthEmail({ settingsMode: "create", testKey: "custom-operation-signup" });
+        await setupCustomOnboardingAppInstall();
+        await patchRouteRecord(`route:${customOnboardingDefaultInstallId}:admin`, {
+          access: "authenticated",
+        });
+        assetRequests = [];
+
+        const returnTo = `/apps/${customOnboardingDefaultInstallId}?screen=profileHome` as const;
+        const target = customOnboardingSignupTarget(returnTo);
+        const entry = await fetchHost("www.example.com", returnTo, {
+          headers: { Accept: "text/html" },
+          redirect: "manual",
+        });
+        const accountLocation = requiredHeader(entry, "Location");
+        const signup = await completeEmailVerifiedSignup({
+          accountSearch: new URL(accountLocation, "https://www.example.com").search,
+          credentialId: "Y3JlZGVudGlhbC1jdXN0b20tc2lnbnVwLTE",
+          displayName: "Custom Operation Signup",
+          email: "Custom.Operation.Signup@example.com",
+          rpId: "example.com",
+          target,
+        });
+        const centralCookie = cookiePair(requiredHeader(signup.response, "Set-Cookie"));
+        const profileCompletion = await completeProfileCompletionGate({
+          cookie: centralCookie,
+          idempotencyKey: "custom-operation-signup-profile",
+          input: {
+            displayName: "Custom Operation Profile",
+            principal: signup.body.principal.principalId,
+          },
+          operation: customOnboardingProfileCompletionOperation(customOnboardingDefaultInstallId),
+          target,
+        });
+        const identity = await readIdentityRecords();
+        const appRecords = await readInstalledAppRecords(
+          customOnboardingPackageAppKey,
+          customOnboardingDefaultInstallId,
+        );
+        const continued = await fetchHost("www.example.com", returnTo, {
+          headers: {
+            Accept: "text/html",
+            Cookie: centralCookie,
+          },
+          redirect: "manual",
+        });
+        const profiles = appRecords.records.filter(
+          (record) => record.entity === "profile" && !record.deletedAt,
+        );
+
+        expect(entry.status).toBe(302);
+        expect(accountLocation).toBe(
+          `${runtimeTopologyRoutes.authAccountRoute}?returnTo=%2Fapps%2Fcustom-onboarding%3Fscreen%3DprofileHome`,
+        );
+        expect(signup.response.status).toBe(200);
+        expect(signup.body).toMatchObject({
+          accountCompletion: {
+            gate: {
+              appInstallId: customOnboardingDefaultInstallId,
+              kind: "profile-completion",
+              operation: customOnboardingProfileCompletionOperation(
+                customOnboardingDefaultInstallId,
+              ),
+            },
+            status: "blocked",
+            target,
+          },
+          principal: {
+            displayName: "Custom Operation Signup",
+            principalId: expect.stringMatching(/^principal:signup:/),
+          },
+          verified: true,
+        });
+        expect(signup.body).not.toHaveProperty("continueTo");
+        expect(signup.body).not.toHaveProperty("handoff");
+
+        expect(profileCompletion.status).toBe(200);
+        expect(profileCompletion.setCookie).toBeNull();
+        expect(profileCompletion.body).toMatchObject({
+          accountCompletion: {
+            continueTo: returnTo,
+            status: "complete",
+            target,
+          },
+          completed: true,
+          continueTo: returnTo,
+        });
+        expect(profileCompletion.body).not.toHaveProperty("handoff");
+        expect(JSON.stringify(profileCompletion.body)).not.toContain("Custom Operation Profile");
+
+        expect(identity.records).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              entity: "app-registration",
+              values: expect.objectContaining({
+                appInstallId: customOnboardingDefaultInstallId,
+                status: "active",
+                targetKind: "principal",
+                targetPrincipal: signup.body.principal.principalId,
+              }),
+            }),
+          ]),
+        );
+        expect(profiles).toHaveLength(1);
+        expect(profiles[0]).toMatchObject({
+          entity: "profile",
+          values: {
+            actorPrincipalId: signup.body.principal.principalId,
+            displayName: "Custom Operation Profile",
+            principal: signup.body.principal.principalId,
+          },
+        });
+        expect(continued.status).toBe(200);
+        expect(assetRequests).toEqual([`/apps/${customOnboardingDefaultInstallId}`]);
       },
     );
   }, 10_000);
@@ -2949,6 +3082,17 @@ async function setupTaskAppInstall(values: Record<string, unknown> = {}) {
   });
 }
 
+async function setupCustomOnboardingAppInstall(values: Record<string, unknown> = {}) {
+  await postAdminJson("/api/formless/app-installs", {
+    packageAppKey: customOnboardingPackageAppKey,
+    installId: customOnboardingDefaultInstallId,
+    label: "Custom Onboarding",
+    registrationOperation: customOnboardingRegistrationOperationKey,
+    registrationPolicy: "custom-operation",
+    ...values,
+  });
+}
+
 async function setupMappedPrivateSiteRouteRecord() {
   await postAdminJson("/api/formless/app-installs", {
     packageAppKey: privateSitePackageAppKey,
@@ -3040,6 +3184,17 @@ function sameOriginTaskAppSignupTarget(returnTo: `/${string}`): AccountCompletio
   };
 }
 
+function customOnboardingSignupTarget(returnTo: `/${string}`): AccountCompletionGateTarget {
+  return {
+    appInstallId: customOnboardingDefaultInstallId,
+    returnTo,
+    routeId: `route:${customOnboardingDefaultInstallId}:admin`,
+    storageIdentity: `app:${customOnboardingDefaultInstallId}`,
+    targetOrigin: "https://www.example.com",
+    targetProfile: "app",
+  };
+}
+
 function signupTargetFromAccountUrl(url: URL): AccountCompletionGateTarget {
   return {
     appInstallId: requiredSearchParam(url, "appInstallId"),
@@ -3108,6 +3263,34 @@ async function completeEmailVerifiedSignup(input: {
   expect(response.status).toBe(200);
 
   return { body, response, started, token };
+}
+
+async function completeProfileCompletionGate(input: {
+  cookie: string;
+  idempotencyKey: string;
+  input: Record<string, unknown>;
+  operation: Record<string, unknown>;
+  target: AccountCompletionGateTarget;
+}) {
+  const response = await fetchAuth(INSTANCE_AUTH_PROFILE_COMPLETION_GATE_COMPLETE_PATH, {
+    body: JSON.stringify({
+      idempotencyKey: input.idempotencyKey,
+      input: input.input,
+      operation: input.operation,
+      target: input.target,
+    }),
+    headers: {
+      "Content-Type": "application/json",
+      Cookie: input.cookie,
+    },
+    method: "POST",
+  });
+
+  return {
+    body: (await response.json()) as Record<string, unknown>,
+    setCookie: response.headers.get("Set-Cookie"),
+    status: response.status,
+  };
 }
 
 function fetchAuth(path: string, init?: DispatchFetchInit) {
@@ -3187,6 +3370,19 @@ async function readIdentityRecords() {
   const response = await harness.fetch(`${IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX}/bootstrap`, {
     headers: adminHeaders(),
   });
+
+  expect(response.status).toBe(200);
+
+  return (await response.json()) as { records: StoredRecord[] };
+}
+
+async function readInstalledAppRecords(packageAppKey: string, appInstallId: string) {
+  const response = await harness.fetch(
+    `/api/app-installs/${packageAppKey}/${appInstallId}/bootstrap`,
+    {
+      headers: adminHeaders(),
+    },
+  );
 
   expect(response.status).toBe(200);
 
@@ -3553,7 +3749,8 @@ type SignupPasskeyOptionsResponse = {
 
 type SignupPasskeyVerifyResponse = {
   accountCompletion: {
-    continueTo: `/${string}`;
+    continueTo?: `/${string}`;
+    gate?: Record<string, unknown>;
     status: "blocked" | "complete";
     target: AccountCompletionGateTarget;
   };
@@ -4170,4 +4367,8 @@ async function privatePublicSiteRuntimePackages(): Promise<string> {
       seedRecords: siteSeedRecords,
     },
   ]);
+}
+
+async function customOnboardingRuntimePackages(): Promise<string> {
+  return formatRuntimeWorkspaceAppPackages([await customOnboardingWorkspacePackageFixture()]);
 }

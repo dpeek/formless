@@ -840,6 +840,73 @@ or using browser access for an authenticated target.
 - AND the runtime re-evaluates account completion for the same target before
   returning a continuation target or starting target-bound handoff
 
+#### Scenario: Custom operation app registration gate
+
+- GIVEN account completion evaluates an app target whose app install has
+  registration policy `custom-operation`
+- AND the active principal has a verified primary `principal-email` record and
+  an accepted credential method
+- AND the active principal or selected organization has no active identity
+  `app-registration` record for the requested app install
+- WHEN the runtime resolves the next blocking account gate
+- THEN it returns a display-safe `app-registration` gate with the target app
+  install id, target facts, registration policy `custom-operation`, and a
+  runtime-owned completion operation reference
+- AND the operation reference is derived from the app install's
+  `registrationOperation` metadata and includes only the target app install,
+  canonical operation key, operation name, entity name, and display label needed
+  to launch the next account step
+- AND the gate response does not expose email challenge secrets, credential
+  material, central session ids, host session cookies, handoff grant secrets,
+  app-owned profile values, operation input values, provider responses, or
+  app-controlled redirect targets
+
+#### Scenario: Complete custom operation app registration gate
+
+- GIVEN a browser with an active central auth session completes a
+  `custom-operation` app-registration gate on the configured auth origin
+- AND the principal still has active status, a verified primary email, an
+  accepted credential, and a target whose app install still has registration
+  policy `custom-operation`
+- WHEN the runtime commits the app-registration part of the gate
+- THEN identity storage creates or reuses one active `app-registration` record
+  for the requested app install and principal or selected organization context
+- AND completion does not create role assignments, app-owned profile records,
+  credentials, owner authority, host-local sessions, or cross-domain handoff
+  grants
+- AND the runtime re-evaluates account completion for the same target and
+  returns a `profile-completion` gate for the app-owned registration operation
+  when the app profile requirement remains unsatisfied
+
+#### Scenario: Complete operation-backed profile gate
+
+- GIVEN account completion returns a `profile-completion` gate with an app-owned
+  registration operation reference
+- AND the gate includes only the display-safe operation input contract fields
+  and unsupported required input field names needed to render or block the form
+- AND the browser submits declared operation input for that gate on the
+  configured auth origin
+- WHEN the runtime validates the current central auth session, target facts,
+  current gate, operation reference, and operation input
+- THEN the runtime invokes the declared operation against the target app storage
+  identity with authenticated actor facts for the active principal and target
+  session
+- AND app profile records are created or updated only through the declared app
+  operation effect, operation handler, or record plan
+- AND operation record plans may write flat app records that reference
+  `auth:principal`, `auth:organization`, or `auth:group` using normal identity
+  reference validation
+- AND the auth runtime does not directly materialize arbitrary app profile
+  records outside the operation model
+- AND after the operation commits, the runtime re-evaluates account completion
+  for the same target before returning a continuation target or starting
+  target-bound handoff
+- AND the profile gate response does not expose credential material, challenge
+  secrets, token hashes, central session ids, host session cookies, handoff
+  grant secrets, provider responses, recovery material, app-private profile
+  values beyond the operation's authenticated response contract, or
+  app-controlled redirect targets
+
 ### Requirement: Email Verification Challenge State
 
 The system SHALL store email verification challenge secrets as private

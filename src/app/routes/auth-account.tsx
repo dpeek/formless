@@ -1,5 +1,9 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { useLocation, useSearch } from "wouter";
+import {
+  generatedFieldDraftInputFromNativeFormData,
+  type PublicSafeOperationInputField,
+} from "@dpeek/formless-schema";
 import { Button } from "@dpeek/formless-ui/button";
 
 import {
@@ -10,15 +14,22 @@ import {
   type AccountCompletionAppRegistrationGate,
   type AccountCompletionContinuationResult,
   type AccountCompletionGate,
+  type AccountCompletionGateOperationInputContract,
   type AccountCompletionGateResolutionResult,
   type AccountCompletionGateResult,
   type AccountCompletionGateTarget,
+  type AccountCompletionProfileCompletionGate,
   type AccountCompletionTermsAcceptanceGate,
 } from "../../shared/instance-auth.ts";
 import {
   runtimeAuthAccountGateRoutes,
   runtimeTopologyRoutes,
 } from "../../shared/runtime-topology.ts";
+import {
+  resolveGeneratedOperationDraftInput,
+  selectGeneratedOperationInputFieldConfigs,
+  type GeneratedOperationDraftFieldError,
+} from "../generated/operation-field-authoring.ts";
 import {
   browserSupportsPasskeys,
   createBrowserPasskeyRegistrationResponse,
@@ -34,6 +45,7 @@ const signupEmailVerifyPath = `${runtimeTopologyRoutes.authAccountRoute}/signup/
 const signupPasskeyRegistrationOptionsPath = `${runtimeTopologyRoutes.authAccountRoute}/signup/passkeys/register/options`;
 const signupPasskeyRegistrationVerifyPath = `${runtimeTopologyRoutes.authAccountRoute}/signup/passkeys/register/verify`;
 const appRegistrationGateCompletePath = `${runtimeAuthAccountGateRoutes.appRegistration}/complete`;
+const profileCompletionGateCompletePath = `${runtimeAuthAccountGateRoutes.profileCompletion}/complete`;
 const termsAcceptanceGateCompletePath = `${runtimeAuthAccountGateRoutes.termsAcceptance}/complete`;
 
 type AuthAccountGateActionState =
@@ -52,7 +64,13 @@ type AuthAccountGateActionState =
       kind: "email-verification-verifying";
     }
   | { kind: "gate-submitting" }
-  | { kind: "gate-unavailable"; message: string };
+  | { kind: "gate-unavailable"; message: string }
+  | {
+      fieldErrors: Record<string, GeneratedOperationDraftFieldError>;
+      kind: "profile-completion-invalid";
+      message?: string;
+    }
+  | { kind: "profile-completion-submitting" };
 
 type AuthAccountSignupState = {
   challengeId?: string;
@@ -347,6 +365,72 @@ export function AuthAccountRoute() {
     }
   }
 
+  async function submitProfileCompletion(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (state.status !== "blocked" || state.result.gate.kind !== "profile-completion") {
+      return;
+    }
+
+    const { gate } = state.result;
+
+    if (gate.operation === undefined || gate.inputContract === undefined) {
+      setState({
+        action: {
+          kind: "gate-unavailable",
+          message: "Profile completion operation is unavailable.",
+        },
+        result: state.result,
+        status: "blocked",
+      });
+      return;
+    }
+
+    const inputResolution = profileCompletionInputValuesFromFormData(
+      gate.inputContract,
+      new FormData(event.currentTarget),
+    );
+
+    if (!inputResolution.ok) {
+      setState({
+        action: {
+          fieldErrors: inputResolution.fieldErrors,
+          kind: "profile-completion-invalid",
+          message: inputResolution.message,
+        },
+        result: state.result,
+        status: "blocked",
+      });
+      return;
+    }
+
+    setState({
+      action: { kind: "profile-completion-submitting" },
+      result: state.result,
+      status: "blocked",
+    });
+
+    try {
+      applyGateCompletionResult(
+        await completeAuthAccountProfileCompletionGate({
+          input: inputResolution.input,
+          locationSearch,
+          operation: gate.operation,
+          target: state.result.target,
+        }),
+      );
+    } catch (error) {
+      setState({
+        action: {
+          kind: "gate-unavailable",
+          message: error instanceof Error ? error.message : "Profile completion failed.",
+        },
+        result: state.result,
+        status: "blocked",
+      });
+    }
+  }
+
   async function submitSignupStart(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -480,6 +564,7 @@ export function AuthAccountRoute() {
       onSignupEmailVerify={submitSignupEmailToken}
       onSignupPasskeyRegister={submitSignupPasskey}
       onSignupStart={submitSignupStart}
+      onProfileCompletionComplete={submitProfileCompletion}
       onTermsAcceptanceComplete={submitTermsAcceptance}
       state={state}
     />
@@ -490,6 +575,7 @@ export function AuthAccountRouteView({
   onAppRegistrationComplete,
   onEmailVerificationRequest,
   onEmailVerificationVerify,
+  onProfileCompletionComplete,
   onSignupEmailVerify,
   onSignupPasskeyRegister,
   onSignupStart,
@@ -499,6 +585,7 @@ export function AuthAccountRouteView({
   onAppRegistrationComplete?: (event: FormEvent<HTMLFormElement>) => void;
   onEmailVerificationRequest?: (event: FormEvent<HTMLFormElement>) => void;
   onEmailVerificationVerify?: (event: FormEvent<HTMLFormElement>) => void;
+  onProfileCompletionComplete?: (event: FormEvent<HTMLFormElement>) => void;
   onSignupEmailVerify?: (event: FormEvent<HTMLFormElement>) => void;
   onSignupPasskeyRegister?: (event: FormEvent<HTMLFormElement>) => void;
   onSignupStart?: (event: FormEvent<HTMLFormElement>) => void;
@@ -513,6 +600,7 @@ export function AuthAccountRouteView({
             onAppRegistrationComplete={onAppRegistrationComplete}
             onEmailVerificationRequest={onEmailVerificationRequest}
             onEmailVerificationVerify={onEmailVerificationVerify}
+            onProfileCompletionComplete={onProfileCompletionComplete}
             onSignupEmailVerify={onSignupEmailVerify}
             onSignupPasskeyRegister={onSignupPasskeyRegister}
             onSignupStart={onSignupStart}
@@ -814,6 +902,31 @@ export async function completeAuthAccountAppRegistrationGate({
   return parseGateCompletionResponse(response, "App registration completion response");
 }
 
+export async function completeAuthAccountProfileCompletionGate({
+  fetcher = fetch,
+  idempotencyKey = profileCompletionIdempotencyKey(),
+  input,
+  locationSearch = "",
+  operation,
+  signal,
+  target,
+}: AuthAccountApiOptions & {
+  idempotencyKey?: string;
+  input: Record<string, unknown>;
+  locationSearch?: string;
+  operation: NonNullable<AccountCompletionProfileCompletionGate["operation"]>;
+  target: AccountCompletionGateTarget;
+}): Promise<AuthAccountCompletionApiResult> {
+  const response = await postAuthAccountJson({
+    body: { idempotencyKey, input, operation, target },
+    fetcher,
+    path: authAccountApiPathWithSearch(profileCompletionGateCompletePath, locationSearch),
+    signal,
+  });
+
+  return parseGateCompletionResponse(response, "Profile completion response");
+}
+
 export async function completeAuthAccountTermsAcceptanceGate({
   acceptedPolicyIds,
   fetcher = fetch,
@@ -833,6 +946,43 @@ export async function completeAuthAccountTermsAcceptanceGate({
   });
 
   return parseGateCompletionResponse(response, "Terms acceptance completion response");
+}
+
+export function profileCompletionInputValuesFromFormData(
+  inputContract: AccountCompletionGateOperationInputContract,
+  formData: FormData,
+):
+  | { input: Record<string, unknown>; ok: true }
+  | {
+      fieldErrors: Record<string, GeneratedOperationDraftFieldError>;
+      message?: string;
+      ok: false;
+    } {
+  const resolution = resolveGeneratedOperationDraftInput({
+    draft: generatedFieldDraftInputFromNativeFormData(
+      formData,
+      selectGeneratedOperationInputFieldConfigs(inputContract.fields),
+    ),
+    fields: inputContract.fields,
+    unsupportedRequiredInputNames: inputContract.unsupportedRequiredFields,
+  });
+
+  if (resolution.configurationErrors.length > 0) {
+    return {
+      fieldErrors: {},
+      message: "Profile completion operation requires unsupported fields.",
+      ok: false,
+    };
+  }
+
+  if (Object.keys(resolution.fieldErrors).length > 0) {
+    return {
+      fieldErrors: resolution.fieldErrors,
+      ok: false,
+    };
+  }
+
+  return { input: resolution.input, ok: true };
 }
 
 export function authAccountContinuationTarget(
@@ -929,6 +1079,7 @@ function AuthAccountStateBody({
   onAppRegistrationComplete,
   onEmailVerificationRequest,
   onEmailVerificationVerify,
+  onProfileCompletionComplete,
   onSignupEmailVerify,
   onSignupPasskeyRegister,
   onSignupStart,
@@ -938,6 +1089,7 @@ function AuthAccountStateBody({
   onAppRegistrationComplete?: (event: FormEvent<HTMLFormElement>) => void;
   onEmailVerificationRequest?: (event: FormEvent<HTMLFormElement>) => void;
   onEmailVerificationVerify?: (event: FormEvent<HTMLFormElement>) => void;
+  onProfileCompletionComplete?: (event: FormEvent<HTMLFormElement>) => void;
   onSignupEmailVerify?: (event: FormEvent<HTMLFormElement>) => void;
   onSignupPasskeyRegister?: (event: FormEvent<HTMLFormElement>) => void;
   onSignupStart?: (event: FormEvent<HTMLFormElement>) => void;
@@ -952,6 +1104,7 @@ function AuthAccountStateBody({
           onAppRegistrationComplete={onAppRegistrationComplete}
           onEmailVerificationRequest={onEmailVerificationRequest}
           onEmailVerificationVerify={onEmailVerificationVerify}
+          onProfileCompletionComplete={onProfileCompletionComplete}
           onTermsAcceptanceComplete={onTermsAcceptanceComplete}
           result={state.result}
         />
@@ -993,6 +1146,7 @@ function BlockedAccountGate({
   onAppRegistrationComplete,
   onEmailVerificationRequest,
   onEmailVerificationVerify,
+  onProfileCompletionComplete,
   onTermsAcceptanceComplete,
   result,
 }: {
@@ -1000,6 +1154,7 @@ function BlockedAccountGate({
   onAppRegistrationComplete?: (event: FormEvent<HTMLFormElement>) => void;
   onEmailVerificationRequest?: (event: FormEvent<HTMLFormElement>) => void;
   onEmailVerificationVerify?: (event: FormEvent<HTMLFormElement>) => void;
+  onProfileCompletionComplete?: (event: FormEvent<HTMLFormElement>) => void;
   onTermsAcceptanceComplete?: (event: FormEvent<HTMLFormElement>) => void;
   result: AccountCompletionGateResult;
 }) {
@@ -1036,6 +1191,7 @@ function BlockedAccountGate({
         onAppRegistrationComplete={onAppRegistrationComplete}
         onEmailVerificationRequest={onEmailVerificationRequest}
         onEmailVerificationVerify={onEmailVerificationVerify}
+        onProfileCompletionComplete={onProfileCompletionComplete}
         onTermsAcceptanceComplete={onTermsAcceptanceComplete}
       />
     </div>
@@ -1048,6 +1204,7 @@ function BlockedAccountGateControl({
   onAppRegistrationComplete,
   onEmailVerificationRequest,
   onEmailVerificationVerify,
+  onProfileCompletionComplete,
   onTermsAcceptanceComplete,
 }: {
   action?: AuthAccountGateActionState;
@@ -1055,6 +1212,7 @@ function BlockedAccountGateControl({
   onAppRegistrationComplete?: (event: FormEvent<HTMLFormElement>) => void;
   onEmailVerificationRequest?: (event: FormEvent<HTMLFormElement>) => void;
   onEmailVerificationVerify?: (event: FormEvent<HTMLFormElement>) => void;
+  onProfileCompletionComplete?: (event: FormEvent<HTMLFormElement>) => void;
   onTermsAcceptanceComplete?: (event: FormEvent<HTMLFormElement>) => void;
 }) {
   if (action?.kind === "gate-unavailable") {
@@ -1093,9 +1251,16 @@ function BlockedAccountGateControl({
       return (
         <TermsAcceptanceGateForm action={action} gate={gate} onAccept={onTermsAcceptanceComplete} />
       );
+    case "profile-completion":
+      return (
+        <ProfileCompletionGateForm
+          action={action}
+          gate={gate}
+          onComplete={onProfileCompletionComplete}
+        />
+      );
     case "credential":
     case "invitation":
-    case "profile-completion":
     case "role-review":
       return null;
   }
@@ -1204,6 +1369,173 @@ function TermsAcceptanceGateForm({
       </Button>
     </form>
   );
+}
+
+function ProfileCompletionGateForm({
+  action,
+  gate,
+  onComplete,
+}: {
+  action?: AuthAccountGateActionState;
+  gate: AccountCompletionProfileCompletionGate;
+  onComplete?: (event: FormEvent<HTMLFormElement>) => void;
+}) {
+  if (gate.operation === undefined || gate.inputContract === undefined) {
+    return (
+      <p className="text-sm text-destructive" role="alert">
+        Profile completion operation is unavailable.
+      </p>
+    );
+  }
+
+  if (gate.inputContract.unsupportedRequiredFields.length > 0) {
+    return (
+      <p className="text-sm text-destructive" role="alert">
+        Profile completion requires fields this form cannot render.
+      </p>
+    );
+  }
+
+  const fieldErrors = action?.kind === "profile-completion-invalid" ? action.fieldErrors : {};
+  const submitting = action?.kind === "profile-completion-submitting";
+
+  return (
+    <form className="space-y-4" onSubmit={onComplete}>
+      {gate.inputContract.fields.length > 0 ? (
+        <div className="space-y-3">
+          {gate.inputContract.fields.map((field) => (
+            <ProfileCompletionInputField
+              error={fieldErrors[field.name]}
+              field={field}
+              key={field.name}
+            />
+          ))}
+        </div>
+      ) : null}
+      {action?.kind === "profile-completion-invalid" && action.message ? (
+        <p className="text-sm text-destructive" role="alert">
+          {action.message}
+        </p>
+      ) : null}
+      <Button className="w-full" isDisabled={submitting} type="submit">
+        {submitting ? "Saving..." : (operationLabel(gate.operation) ?? "Complete profile")}
+      </Button>
+    </form>
+  );
+}
+
+function ProfileCompletionInputField({
+  error,
+  field,
+}: {
+  error?: GeneratedOperationDraftFieldError;
+  field: PublicSafeOperationInputField;
+}) {
+  const inputId = `profile-completion-${field.name}`;
+  const errorId = `${inputId}-error`;
+  const inputClassName = "w-full rounded-md border border-border bg-bg px-3 py-2 text-fg";
+
+  if (field.control === "boolean") {
+    return (
+      <label className="flex items-start gap-3 rounded-md border border-border p-3 text-sm">
+        <input
+          aria-describedby={error ? errorId : undefined}
+          className="mt-1"
+          id={inputId}
+          name={field.name}
+          type="checkbox"
+          value="true"
+        />
+        <span>
+          <span className="font-medium">{field.label}</span>
+          {field.required ? <span className="text-muted-fg"> required</span> : null}
+          <ProfileCompletionInputError error={error} id={errorId} />
+        </span>
+      </label>
+    );
+  }
+
+  return (
+    <label className="block space-y-1 text-sm" htmlFor={inputId}>
+      <span className="font-medium">{field.label}</span>
+      {renderProfileCompletionInputControl({
+        className: inputClassName,
+        describedBy: error ? errorId : undefined,
+        field,
+        id: inputId,
+      })}
+      <ProfileCompletionInputError error={error} id={errorId} />
+    </label>
+  );
+}
+
+function renderProfileCompletionInputControl({
+  className,
+  describedBy,
+  field,
+  id,
+}: {
+  className: string;
+  describedBy?: string;
+  field: PublicSafeOperationInputField;
+  id: string;
+}) {
+  if (field.control === "longText") {
+    return (
+      <textarea
+        aria-describedby={describedBy}
+        className={className}
+        id={id}
+        name={field.name}
+        required={field.required}
+        rows={4}
+      />
+    );
+  }
+
+  if (field.control === "enum") {
+    return (
+      <select
+        aria-describedby={describedBy}
+        className={className}
+        id={id}
+        name={field.name}
+        required={field.required}
+      >
+        <option value="">Select</option>
+        {(field.options ?? []).map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    );
+  }
+
+  return (
+    <input
+      aria-describedby={describedBy}
+      className={className}
+      id={id}
+      name={field.name}
+      required={field.required}
+      type={profileCompletionInputType(field)}
+    />
+  );
+}
+
+function ProfileCompletionInputError({
+  error,
+  id,
+}: {
+  error?: GeneratedOperationDraftFieldError;
+  id: string;
+}) {
+  return error ? (
+    <p className="mt-1 text-sm text-destructive" id={id} role="alert">
+      {error.message}
+    </p>
+  ) : null;
 }
 
 function SignupStartForm({
@@ -1631,6 +1963,22 @@ function scopeKindLabel(
     .join(" ");
 }
 
+function profileCompletionInputType(field: PublicSafeOperationInputField): string {
+  if (field.control === "date" || field.control === "number") {
+    return field.control;
+  }
+
+  if (field.format === "email") {
+    return "email";
+  }
+
+  if (field.format === "phone") {
+    return "tel";
+  }
+
+  return "text";
+}
+
 function authAccountStatusRequestPath(locationSearch: string): string {
   return `${runtimeTopologyRoutes.authAccountRoute}${normalizedSearch(locationSearch)}`;
 }
@@ -1702,6 +2050,16 @@ function parseGateCompletionResponse(
   throw new AuthAccountApiError(authAccountErrorMessage(response.body, `${context} failed.`), {
     status: response.status,
   });
+}
+
+function profileCompletionIdempotencyKey(): string {
+  const cryptoApi = globalThis.crypto;
+
+  if (typeof cryptoApi?.randomUUID === "function") {
+    return `profile-completion:${cryptoApi.randomUUID()}`;
+  }
+
+  return `profile-completion:${Date.now()}:${Math.random().toString(36).slice(2)}`;
 }
 
 function parseAuthAccountCompletionApiResult(

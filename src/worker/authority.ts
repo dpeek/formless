@@ -1,6 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import type {
   BootstrapResponse,
+  SchemaResponse,
   SyncResponse,
   SyncSocketAttachment,
   SyncSocketServerMessage,
@@ -38,6 +39,7 @@ import {
   type AuthorityOperation,
   type OperationInvocationActorCandidates,
 } from "./authority-operations.ts";
+import type { OperationInvocationActor } from "../shared/operation-invocation.ts";
 import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
 import { handleInstanceAppInstallsDurableObjectRequest } from "./instance-app-installs.ts";
 import { handleInstanceControlPlaneDurableObjectRequest } from "./instance-control-plane.ts";
@@ -57,7 +59,11 @@ import { handleOwnerPasskeyDurableObjectRequest } from "./owner-passkeys.ts";
 import { handleCollaboratorInvitationAcceptanceDurableObjectRequest } from "./collaborator-invitation-acceptance.ts";
 import { handleInstanceAuthEmailVerificationDurableObjectRequest } from "./instance-auth-email-verification.ts";
 import { handleInstanceAuthSignupDurableObjectRequest } from "./instance-auth-signup.ts";
-import { handleInstanceAuthAccountCompletionDurableObjectRequest } from "./instance-auth-account-completion.ts";
+import {
+  handleInstanceAuthAccountCompletionDurableObjectRequest,
+  INTERNAL_AUTH_PROFILE_COMPLETION_OPERATION_PATH,
+  INTERNAL_AUTH_PROFILE_COMPLETION_SCHEMA_PATH,
+} from "./instance-auth-account-completion.ts";
 import { handleInstanceDomainProviderDurableObjectRequest } from "./domain-provider-api.ts";
 import { handleInstanceDomainMappingsDurableObjectRequest } from "./instance-domain-mappings.ts";
 import { handleInstanceDeploymentRuntimeDurableObjectRequest } from "./deployment-runtime-api.ts";
@@ -360,6 +366,21 @@ export class FormlessAuthority extends DurableObject<Env> {
       const writes = new AuthorityWriteModule(this.ctx.storage, source, () =>
         this.ctx.getWebSockets(),
       );
+
+      const internalAuthProfileCompletionResponse =
+        await handleInternalAuthProfileCompletionRequest({
+          env: this.bindings,
+          request,
+          route,
+          source,
+          storage: this.ctx.storage,
+          url,
+          writes,
+        });
+
+      if (internalAuthProfileCompletionResponse) {
+        return internalAuthProfileCompletionResponse;
+      }
 
       const appStorageUpgradeStatusResponse =
         await handleAppStorageUpgradeStatusDurableObjectRequest({
@@ -978,6 +999,99 @@ function sendSyncSocketError(socket: WebSocket, message: string) {
   }
 }
 
+async function handleInternalAuthProfileCompletionRequest(input: {
+  env: Env;
+  request: Request;
+  route: { app: WorkerSchemaAppDefinition; identity: AppStorageIdentity; path: string };
+  source: StorageSource;
+  storage: DurableObjectStorage;
+  url: URL;
+  writes: AuthorityWriteModule;
+}): Promise<Response | undefined> {
+  if (
+    input.route.path !== INTERNAL_AUTH_PROFILE_COMPLETION_OPERATION_PATH &&
+    input.route.path !== INTERNAL_AUTH_PROFILE_COMPLETION_SCHEMA_PATH
+  ) {
+    return undefined;
+  }
+
+  if (input.url.origin !== "http://internal" || input.route.identity.kind !== "appInstall") {
+    return jsonResponse({ error: "Not found." }, 404);
+  }
+
+  if (input.route.path === INTERNAL_AUTH_PROFILE_COMPLETION_SCHEMA_PATH) {
+    if (input.request.method !== "GET") {
+      return jsonResponse({ error: "Method not allowed." }, 405, { Allow: "GET" });
+    }
+
+    ensureStorageTables(input.storage);
+    const storedSchema = initializeStorageFromSource(input.storage, input.source, {
+      refreshActiveSchema: false,
+    });
+
+    return jsonResponse({
+      schema: storedSchema.schema,
+      ...(storedSchema.schemaProvenance === undefined
+        ? {}
+        : { schemaProvenance: storedSchema.schemaProvenance }),
+      updatedAt: storedSchema.updatedAt,
+    } satisfies SchemaResponse);
+  }
+
+  if (input.request.method !== "POST") {
+    return jsonResponse({ error: "Method not allowed." }, 405, { Allow: "POST" });
+  }
+
+  const body = parseInternalAuthProfileCompletionOperationRequest(await readJson(input.request));
+  const operation = selectAuthorityOperation({
+    method: "POST",
+    path: `/operations/${encodeURIComponent(body.operation.entityName)}/${encodeURIComponent(
+      body.operation.operationName,
+    )}`,
+    searchParams: new URLSearchParams(),
+  });
+
+  if (!operation) {
+    return jsonResponse({ error: "Profile-completion operation is unavailable." }, 404);
+  }
+
+  ensureStorageTables(input.storage);
+  const source = currentActiveSchemaSource(input.storage, input.source);
+  const result = await executeAuthorityOperation({
+    actor: body.actor,
+    app: input.route.app,
+    body: body.request,
+    identity: input.route.identity,
+    identityReferenceResolver: (lookup) => resolveIdentityAppReferenceTarget(input.env, lookup),
+    operation,
+    packageResolver: activeAppPackageResolver(input.env),
+    source,
+    sourceSchemas: activeWorkerSourceSchemas(input.env),
+    storage: input.storage,
+    turnstileSiteKey: turnstileSiteKeyFromEnv(input.env),
+    writes: input.writes,
+  });
+
+  return jsonResponse(result.body, result.status, result.headers);
+}
+
+function currentActiveSchemaSource(
+  storage: DurableObjectStorage,
+  source: StorageSource,
+): StorageSource {
+  const storedSchema = initializeStorageFromSource(storage, source, {
+    refreshActiveSchema: false,
+  });
+
+  return {
+    ...source,
+    schema: storedSchema.schema,
+    ...(storedSchema.schemaProvenance === undefined
+      ? { schemaProvenance: undefined }
+      : { schemaProvenance: storedSchema.schemaProvenance }),
+  };
+}
+
 function parseAuthorityRoute(
   pathname: string,
   env: Env,
@@ -1003,6 +1117,158 @@ async function readJson(request: Request): Promise<unknown> {
   } catch {
     throw new BadRequestError("Request body must be valid JSON.");
   }
+}
+
+function parseInternalAuthProfileCompletionOperationRequest(value: unknown): {
+  actor: OperationInvocationActor;
+  operation: { entityName: string; operationName: string };
+  request: Record<string, unknown>;
+} {
+  const object = parseInternalRecord("Internal profile-completion operation request", value);
+  assertInternalAllowedKeys("Internal profile-completion operation request", object, [
+    "actor",
+    "operation",
+    "request",
+  ]);
+  const operation = parseInternalRecord(
+    "Internal profile-completion operation reference",
+    object.operation,
+  );
+
+  assertInternalAllowedKeys("Internal profile-completion operation reference", operation, [
+    "entityName",
+    "operationName",
+  ]);
+
+  return {
+    actor: parseInternalAuthenticatedOperationActor(object.actor),
+    operation: {
+      entityName: parseInternalNonEmptyString(
+        "Internal profile-completion operation entityName",
+        operation.entityName,
+      ),
+      operationName: parseInternalNonEmptyString(
+        "Internal profile-completion operation operationName",
+        operation.operationName,
+      ),
+    },
+    request: parseInternalOperationRequest(object.request),
+  };
+}
+
+function parseInternalAuthenticatedOperationActor(value: unknown): OperationInvocationActor {
+  const object = parseInternalRecord("Internal profile-completion operation actor", value);
+  assertInternalAllowedKeys("Internal profile-completion operation actor", object, [
+    "kind",
+    "principalId",
+    "sessionTarget",
+  ]);
+
+  if (object.kind !== "authenticated") {
+    throw new BadRequestError(
+      'Internal profile-completion operation actor kind must be "authenticated".',
+    );
+  }
+
+  const target = parseInternalRecord(
+    "Internal profile-completion operation actor sessionTarget",
+    object.sessionTarget,
+  );
+  assertInternalAllowedKeys("Internal profile-completion operation actor sessionTarget", target, [
+    "appInstallId",
+    "instanceId",
+    "routeId",
+    "storageIdentity",
+    "targetOrigin",
+    "targetProfile",
+  ]);
+
+  return {
+    kind: "authenticated",
+    principalId: parseInternalNonEmptyString(
+      "Internal profile-completion operation actor principalId",
+      object.principalId,
+    ),
+    sessionTarget: {
+      appInstallId: parseInternalNonEmptyString(
+        "Internal profile-completion operation actor target appInstallId",
+        target.appInstallId,
+      ),
+      instanceId: parseInternalNonEmptyString(
+        "Internal profile-completion operation actor target instanceId",
+        target.instanceId,
+      ),
+      routeId: parseInternalNonEmptyString(
+        "Internal profile-completion operation actor target routeId",
+        target.routeId,
+      ),
+      storageIdentity: parseInternalNonEmptyString(
+        "Internal profile-completion operation actor target storageIdentity",
+        target.storageIdentity,
+      ),
+      targetOrigin: parseInternalNonEmptyString(
+        "Internal profile-completion operation actor target targetOrigin",
+        target.targetOrigin,
+      ),
+      targetProfile: parseInternalTargetProfile(target.targetProfile),
+    },
+  };
+}
+
+function parseInternalOperationRequest(value: unknown): Record<string, unknown> {
+  const object = parseInternalRecord("Internal profile-completion operation input", value);
+  assertInternalAllowedKeys("Internal profile-completion operation input", object, [
+    "idempotencyKey",
+    "input",
+    "recordId",
+  ]);
+
+  return object;
+}
+
+function parseInternalTargetProfile(value: unknown): "app" | "instance" | "public-site" {
+  const profile = parseInternalNonEmptyString(
+    "Internal profile-completion operation actor target targetProfile",
+    value,
+  );
+
+  if (profile !== "app" && profile !== "instance" && profile !== "public-site") {
+    throw new BadRequestError(
+      "Internal profile-completion operation actor target targetProfile is unsupported.",
+    );
+  }
+
+  return profile;
+}
+
+function parseInternalRecord(context: string, value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new BadRequestError(`${context} must be an object.`);
+  }
+
+  return value as Record<string, unknown>;
+}
+
+function assertInternalAllowedKeys(
+  context: string,
+  object: Record<string, unknown>,
+  allowedKeys: readonly string[],
+) {
+  const allowed = new Set(allowedKeys);
+
+  for (const key of Object.keys(object)) {
+    if (!allowed.has(key)) {
+      throw new BadRequestError(`${context} has unsupported key "${key}".`);
+    }
+  }
+}
+
+function parseInternalNonEmptyString(context: string, value: unknown): string {
+  if (typeof value !== "string" || value.trim() === "") {
+    throw new BadRequestError(`${context} must be a non-empty string.`);
+  }
+
+  return value.trim();
 }
 
 function isRetiredWriteRoute(method: string, path: string) {

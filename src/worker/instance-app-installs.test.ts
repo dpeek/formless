@@ -372,6 +372,82 @@ describe("instance app install API routes", () => {
     }
   });
 
+  it("accepts custom-operation app install metadata as a flat operation reference", async () => {
+    const created = await postAdminJson<CreateAppInstallResponse>("/api/formless/app-installs", {
+      packageAppKey: "site",
+      installId: "members",
+      label: "Members",
+      registrationOperation: "profile.register",
+      registrationPolicy: "custom-operation",
+    });
+    const after = await getJson<AppInstallsResponse>("/api/formless/app-installs");
+    const controlPlane = await getJson<BootstrapResponse>("/api/formless/control-plane/bootstrap");
+    const appInstall = controlPlane.body.records.find(
+      (record) => record.entity === "app-install" && record.id === "members",
+    );
+
+    expect(created.response.status).toBe(201);
+    expect(created.body.install).toMatchObject({
+      installId: "members",
+      label: "Members",
+      registrationOperation: "profile.register",
+      registrationPolicy: "custom-operation",
+    });
+    expect(after.body.installs.find((install) => install.installId === "members")).toMatchObject({
+      installId: "members",
+      registrationOperation: "profile.register",
+      registrationPolicy: "custom-operation",
+    });
+    expect(appInstall?.values).toMatchObject({
+      registrationOperation: "profile.register",
+      registrationPolicy: "custom-operation",
+    });
+    expect(Object.keys(appInstall?.values ?? {}).sort()).toEqual([
+      "installId",
+      "label",
+      "packageAppKey",
+      "packageRevision",
+      "registrationOperation",
+      "registrationPolicy",
+      "sourceSchemaHash",
+      "status",
+      "storageIdentity",
+    ]);
+  });
+
+  it("rejects missing or extra custom registration operation metadata", async () => {
+    const missing = await postAdminJson<AppInstallFailureResponse>("/api/formless/app-installs", {
+      packageAppKey: "site",
+      installId: "members",
+      label: "Members",
+      registrationPolicy: "custom-operation",
+    });
+    const extra = await postAdminJson<AppInstallFailureResponse>("/api/formless/app-installs", {
+      packageAppKey: "tasks",
+      installId: "tasks",
+      label: "Tasks",
+      registrationOperation: "profile.register",
+      registrationPolicy: "email-verified",
+    });
+    const after = await getJson<AppInstallsResponse>("/api/formless/app-installs");
+
+    expect(missing.response.status).toBe(400);
+    expect(missing.body).toMatchObject({
+      code: "invalid-registration-operation",
+      field: "registrationOperation",
+    });
+    expect(missing.body.error).toContain('required when registration policy is "custom-operation"');
+    expect(extra.response.status).toBe(400);
+    expect(extra.body).toMatchObject({
+      code: "invalid-registration-operation",
+      field: "registrationOperation",
+    });
+    expect(extra.body.error).toContain(
+      'must be omitted unless registration policy is "custom-operation"',
+    );
+    expect(after.body.installs).toEqual([]);
+  });
+
   it("derives app install API responses from control-plane install and route records", async () => {
     await postAdminJson<CreateAppInstallResponse>("/api/formless/app-installs", {
       packageAppKey: "site",

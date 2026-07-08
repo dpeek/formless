@@ -1,0 +1,158 @@
+import { computeSourceSchemaHash } from "@dpeek/formless-installed-apps";
+
+import { workspaceAppPackageManifestFixture } from "./workspace-app-package.ts";
+
+export const customOnboardingPackageAppKey = "custom-onboarding";
+export const customOnboardingDefaultInstallId = "custom-onboarding";
+export const customOnboardingRegistrationOperationKey = "profile.completeRegistration";
+
+export const customOnboardingSourceSchema = {
+  version: 1,
+  entities: {
+    profile: {
+      label: "Profile",
+      fields: {
+        actorPrincipalId: {
+          type: "text",
+          required: true,
+          label: "Actor principal",
+        },
+        displayName: {
+          type: "text",
+          required: true,
+          label: "Display name",
+        },
+        principal: {
+          type: "reference",
+          required: true,
+          label: "Principal",
+          to: "auth:principal",
+        },
+      },
+      operations: {
+        completeRegistration: {
+          label: "Complete profile",
+          kind: "command",
+          scope: "collection",
+          policy: {
+            actors: ["authenticated"],
+          },
+          input: {
+            fields: {
+              displayName: {
+                field: "displayName",
+              },
+              principal: {
+                field: "principal",
+              },
+            },
+          },
+          effect: {
+            type: "recordPlan",
+            steps: [
+              {
+                name: "createProfile",
+                kind: "create",
+                entity: "profile",
+                recordId: { kind: "generatedId", prefix: "profile" },
+                values: {
+                  actorPrincipalId: { kind: "actor", field: "principalId" },
+                  displayName: { kind: "input", field: "displayName" },
+                  principal: {
+                    kind: "reference",
+                    entity: "auth:principal",
+                    id: { kind: "input", field: "principal" },
+                  },
+                },
+              },
+            ],
+          },
+          output: {
+            type: "command",
+          },
+          idempotency: {
+            required: true,
+          },
+        },
+      },
+    },
+  },
+  queries: {
+    profileAll: {
+      label: "All",
+      entity: "profile",
+      expression: {
+        kind: "all",
+      },
+    },
+  },
+  itemViews: {
+    profileItem: {
+      entity: "profile",
+      fields: {
+        displayName: {
+          editor: "text",
+          commit: "field-commit",
+        },
+      },
+    },
+  },
+  tableViews: {},
+  views: {
+    profileHome: {
+      type: "collection",
+      label: "Profiles",
+      entity: "profile",
+      queries: [{ query: "profileAll" }],
+      defaultQuery: "profileAll",
+      result: {
+        type: "list",
+        itemView: "profileItem",
+      },
+    },
+  },
+  screens: {
+    profileHome: {
+      type: "workspace",
+      label: "Profiles",
+      path: "/",
+      layout: {
+        type: "stack",
+        sections: [
+          {
+            id: "profiles",
+            type: "collection",
+            view: "profileHome",
+          },
+        ],
+      },
+    },
+  },
+};
+
+export async function customOnboardingWorkspacePackageFixture() {
+  const sourceSchemaHash = await computeSourceSchemaHash(customOnboardingSourceSchema);
+
+  return {
+    manifest: workspaceAppPackageManifestFixture({
+      defaultInstallId: customOnboardingDefaultInstallId,
+      label: "Custom Onboarding",
+      packageAppKey: customOnboardingPackageAppKey,
+      packageRevision: 1,
+      sourceSchemaHash,
+      supportsMultipleInstalls: true,
+    }),
+    seedRecords: [],
+    sourceSchema: customOnboardingSourceSchema,
+  };
+}
+
+export function customOnboardingProfileCompletionOperation(appInstallId: string) {
+  return {
+    appInstallId,
+    entityName: "profile",
+    label: "Complete profile",
+    operationKey: customOnboardingRegistrationOperationKey,
+    operationName: "completeRegistration",
+  };
+}

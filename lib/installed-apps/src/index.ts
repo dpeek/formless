@@ -5,6 +5,7 @@ import {
   type AppInstallId,
   type AppInstallIdValidationResult,
   type AppInstallInitializationPlan,
+  type AppInstallRegistrationOperation,
   type AppInstallRegistrationPolicy,
   type AppInstallRegistryError,
   type AppInstallRegistryErrorCode,
@@ -30,7 +31,8 @@ const routeSafeIdMinLength = 2;
 const routeSafeIdMaxLength = 64;
 const sourceLocationPathPattern = /^[a-z0-9][a-z0-9._/-]*\.json$/;
 const sha256DigestPattern = /^sha256:[a-f0-9]{64}$/;
-const appInstallRegistrationPolicies = ["closed", "email-verified"] as const;
+const schemaLocalEntityKeyPattern = /^[a-z][a-z0-9]*(?:-[a-z][a-z0-9]*)*$/;
+const appInstallRegistrationPolicies = ["closed", "email-verified", "custom-operation"] as const;
 const reservedInstallIds = new Set([
   "admin",
   "api",
@@ -318,8 +320,21 @@ export function createAppInstall(input: CreateAppInstallInput): CreateAppInstall
       error: appInstallRegistryError(
         "invalid-registration-policy",
         "registrationPolicy",
-        'Install registration policy must be "closed" or "email-verified".',
+        appInstallRegistrationPolicyMessage("Install registration policy"),
       ),
+      installs: input.existingInstalls,
+    };
+  }
+
+  const registrationOperationResult = validateAppInstallRegistrationOperationForPolicy({
+    registrationOperation: input.registrationOperation,
+    registrationPolicy,
+  });
+
+  if (!registrationOperationResult.ok) {
+    return {
+      ok: false,
+      error: registrationOperationResult.error,
       installs: input.existingInstalls,
     };
   }
@@ -329,6 +344,7 @@ export function createAppInstall(input: CreateAppInstallInput): CreateAppInstall
     label,
     now: input.now,
     packageApp,
+    registrationOperation: registrationOperationResult.registrationOperation,
     registrationPolicy,
   });
   const initialization = initializationPlanForInstall(packageApp, install);
@@ -415,7 +431,29 @@ export function parseAppInstallRegistrationPolicy(
     return value;
   }
 
-  throw new Error(`${context} must be "closed" or "email-verified".`);
+  throw new Error(appInstallRegistrationPolicyMessage(context));
+}
+
+export function parseAppInstallRegistrationOperation(
+  value: unknown,
+  context = "app install registration operation",
+): AppInstallRegistrationOperation {
+  if (typeof value !== "string") {
+    throw new Error(`${context} must be a string.`);
+  }
+
+  const parts = value.split(".");
+
+  if (parts.length !== 2) {
+    throw new Error(`${context} must use "<entity-key>.<operation-key>" format.`);
+  }
+
+  const [entityKey, operationKey] = parts;
+
+  assertAppInstallRegistrationOperationEntityKey(`${context} entity "${entityKey}"`, entityKey);
+  assertAppInstallRegistrationOperationKey(`${context} operation "${operationKey}"`, operationKey);
+
+  return `${entityKey}.${operationKey}`;
 }
 
 export function sourceSchemaCanonicalJson(schema: unknown): string {
@@ -480,6 +518,7 @@ function appInstallFromPackage(input: {
   label: string;
   now: string;
   packageApp: ResolvedAppPackage;
+  registrationOperation: AppInstallRegistrationOperation | undefined;
   registrationPolicy: AppInstallRegistrationPolicy;
 }): AppInstall {
   return {
@@ -489,6 +528,9 @@ function appInstallFromPackage(input: {
     sourceSchemaHash: input.packageApp.sourceSchemaHash,
     label: input.label,
     registrationPolicy: input.registrationPolicy,
+    ...(input.registrationOperation === undefined
+      ? {}
+      : { registrationOperation: input.registrationOperation }),
     status: "installed",
     createdAt: input.now,
     updatedAt: input.now,
@@ -500,6 +542,94 @@ function appInstallFromPackage(input: {
           publicRoutePrefix: `${input.packageApp.publicRouteBase}/${input.installId}/`,
         }),
   };
+}
+
+function validateAppInstallRegistrationOperationForPolicy(input: {
+  registrationOperation: AppInstallRegistrationOperation | undefined;
+  registrationPolicy: AppInstallRegistrationPolicy;
+}):
+  | {
+      ok: true;
+      registrationOperation: AppInstallRegistrationOperation | undefined;
+    }
+  | {
+      ok: false;
+      error: AppInstallRegistryError;
+    } {
+  if (input.registrationPolicy === "custom-operation") {
+    if (input.registrationOperation === undefined) {
+      return {
+        ok: false,
+        error: appInstallRegistryError(
+          "invalid-registration-operation",
+          "registrationOperation",
+          'Install registration operation is required when registration policy is "custom-operation".',
+        ),
+      };
+    }
+
+    try {
+      return {
+        ok: true,
+        registrationOperation: parseAppInstallRegistrationOperation(
+          input.registrationOperation,
+          "Install registration operation",
+        ),
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        error: appInstallRegistryError(
+          "invalid-registration-operation",
+          "registrationOperation",
+          error instanceof Error && error.message.trim() !== ""
+            ? error.message
+            : "Install registration operation is invalid.",
+        ),
+      };
+    }
+  }
+
+  if (input.registrationOperation !== undefined) {
+    return {
+      ok: false,
+      error: appInstallRegistryError(
+        "invalid-registration-operation",
+        "registrationOperation",
+        'Install registration operation must be omitted unless registration policy is "custom-operation".',
+      ),
+    };
+  }
+
+  return {
+    ok: true,
+    registrationOperation: undefined,
+  };
+}
+
+function appInstallRegistrationPolicyMessage(context: string): string {
+  return `${context} must be "closed", "email-verified", or "custom-operation".`;
+}
+
+function assertAppInstallRegistrationOperationEntityKey(context: string, value: string) {
+  if (!schemaLocalEntityKeyPattern.test(value)) {
+    throw new Error(`${context} must be a singular kebab-case entity key.`);
+  }
+}
+
+function assertAppInstallRegistrationOperationKey(context: string, value: string) {
+  if (
+    value.trim() === "" ||
+    value.trim() !== value ||
+    value.includes(".") ||
+    value.includes("/") ||
+    value.includes(":") ||
+    /\s/.test(value)
+  ) {
+    throw new Error(
+      `${context} must be non-empty and must not contain whitespace, dots, slashes, or colons.`,
+    );
+  }
 }
 
 function initializationPlanForInstall(

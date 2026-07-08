@@ -26,7 +26,10 @@ import {
 } from "./email-runtime.ts";
 import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
 import { commitIdentityEmailVerifiedSignup } from "./identity-control-plane.ts";
-import { resolveAccountCompletionGate } from "./instance-auth-account-completion.ts";
+import {
+  customOperationProfileCompletionRequirementForTarget,
+  resolveAccountCompletionGate,
+} from "./instance-auth-account-completion.ts";
 import { accountCompletionContinueToFromRequest } from "./instance-auth-continuations.ts";
 import {
   consumeEmailVerificationChallenge,
@@ -461,11 +464,13 @@ async function handleSignupPasskeyRegistrationVerify(
     principalId: identityCommit.principal.principalId,
     request,
   });
+  const profileCompletion = await customOperationProfileCompletionRequirementForTarget(env, target);
   const accountCompletion = await resolveAccountCompletionGate({
     env,
     input: {
       actorKind: "authenticated",
       principalId: identityCommit.principal.principalId,
+      ...(profileCompletion === undefined ? {} : { profileCompletion }),
       target,
     },
     storage,
@@ -611,7 +616,10 @@ function validatedSignupTarget(
     throw new Error("Signup target app install is disabled.");
   }
 
-  if (install.values.registrationPolicy !== "email-verified") {
+  if (
+    install.values.registrationPolicy !== "email-verified" &&
+    install.values.registrationPolicy !== "custom-operation"
+  ) {
     throw new Error("Signup target app install does not allow email-verified signup.");
   }
 

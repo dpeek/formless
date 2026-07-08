@@ -148,7 +148,16 @@ describe("instance control-plane schema contracts", () => {
       label: "Registration policy",
       type: "enum",
       required: true,
-      values: { closed: { label: "Closed" }, "email-verified": { label: "Email verified" } },
+      values: {
+        closed: { label: "Closed" },
+        "custom-operation": { label: "Custom operation" },
+        "email-verified": { label: "Email verified" },
+      },
+    });
+    expect(schema.entities["app-install"]?.fields.registrationOperation).toEqual({
+      label: "Registration operation",
+      type: "text",
+      required: false,
     });
     expect(schema.screens?.apps.path).toBe("/");
     expect(schema.screens?.routes.path).toBe("/routes");
@@ -534,6 +543,7 @@ describe("instance control-plane schema contracts", () => {
       "sourceSchemaHash",
       "label",
       "registrationPolicy",
+      "registrationOperation",
       "status",
       "storageIdentity",
     ]);
@@ -546,6 +556,7 @@ describe("instance control-plane schema contracts", () => {
       "sourceSchemaHash",
       "label",
       "registrationPolicy",
+      "registrationOperation",
       "status",
       "storageIdentity",
     ]);
@@ -754,6 +765,7 @@ describe("instance control-plane schema contracts", () => {
     expect(instanceControlPlaneImmutableFields["app-install"]).toEqual([
       "installId",
       "packageAppKey",
+      "registrationOperation",
       "storageIdentity",
     ]);
     expect(instanceControlPlaneImmutableFields["deployment-config"]).toEqual([
@@ -776,6 +788,9 @@ describe("instance control-plane schema contracts", () => {
 
     const schema = instanceControlPlaneSchema;
     expect(isRuntimeControlPlaneImmutableField(schema, "app-install", "installId")).toBe(true);
+    expect(
+      isRuntimeControlPlaneImmutableField(schema, "app-install", "registrationOperation"),
+    ).toBe(true);
     expect(isRuntimeControlPlaneImmutableField(schema, "app-install", "label")).toBe(false);
     expect(
       isRuntimeControlPlaneSecretReferenceField(schema, "deployment-config", "credentialRef"),
@@ -833,6 +848,7 @@ describe("instance control-plane schema contracts", () => {
       { field: "installId", display: "readOnly" },
       { field: "packageAppKey", display: "readOnly" },
       { field: "registrationPolicy", display: "readOnly" },
+      { field: "registrationOperation", display: "readOnly" },
       { field: "status", display: "readOnly" },
       { field: "storageIdentity", display: "readOnly" },
       { field: "packageRevision", display: "readOnly" },
@@ -1048,6 +1064,23 @@ describe("instance control-plane schema contracts", () => {
       "status",
       "storageIdentity",
     ]);
+    expect(
+      instanceControlPlaneAppInstallRecord({
+        adminRoute: "/apps/custom",
+        createdAt: now,
+        installId: "custom",
+        label: "Custom",
+        packageAppKey: "site",
+        packageRevision: 1,
+        publicRoute: "/sites/custom",
+        publicRoutePrefix: "/sites/custom/",
+        registrationOperation: "profile.register",
+        registrationPolicy: "custom-operation",
+        sourceSchemaHash: siteSourceSchemaHash,
+        status: "installed",
+        updatedAt: now,
+      }).values.registrationOperation,
+    ).toBe("profile.register");
 
     expect(
       instanceControlPlaneDefaultRoutesForInstall({
@@ -1238,6 +1271,8 @@ describe("instance control-plane schema contracts", () => {
         installId: "verifi",
         label: "Verifi Labs",
         packageAppKey: "verifi",
+        registrationOperation: "profile.register",
+        registrationPolicy: "custom-operation",
       }),
       storedAppInstallRecord({
         createdAt: "2026-05-28T00:02:00.000Z",
@@ -1395,7 +1430,8 @@ describe("instance control-plane schema contracts", () => {
     });
     expect(installs[1]).toMatchObject({
       adminRoute: "/apps/verifi-labs",
-      registrationPolicy: "closed",
+      registrationOperation: "profile.register",
+      registrationPolicy: "custom-operation",
       launchLinks: [links[2]],
     });
     expect(installs[1]).not.toHaveProperty("publicRoute");
@@ -1414,6 +1450,8 @@ describe("instance control-plane schema contracts", () => {
         installId: "verifi",
         label: "Verifi Labs",
         packageAppKey: "verifi",
+        registrationOperation: "profile.register",
+        registrationPolicy: "custom-operation",
       }),
     ];
     const links = instanceControlPlaneAppLaunchLinksFromRecords(
@@ -1461,6 +1499,8 @@ describe("instance control-plane schema contracts", () => {
     expect(installs[0]).not.toHaveProperty("routes");
     expect(installs[1]).toMatchObject({
       adminRoute: "/apps/verifi",
+      registrationOperation: "profile.register",
+      registrationPolicy: "custom-operation",
       launchLinks: [links[2]],
     });
   });
@@ -1564,6 +1604,98 @@ describe("instance control-plane schema contracts", () => {
       emailVerifiedSnapshot.records.find((record) => record.entity === "app-install")?.values
         .registrationPolicy,
     ).toBe("email-verified");
+    const customOperationSnapshot = parseInstanceControlPlaneStorageSnapshot(
+      "Instance archive controlPlane",
+      {
+        ...snapshot,
+        records: controlPlaneRecords().map((record) =>
+          record.entity === "app-install"
+            ? {
+                ...record,
+                values: {
+                  ...record.values,
+                  registrationPolicy: "custom-operation",
+                  registrationOperation: "profile.register",
+                },
+              }
+            : record,
+        ),
+      },
+      { packageResolver: controlPlanePackageResolver },
+    );
+
+    expect(
+      customOperationSnapshot.records.find((record) => record.entity === "app-install")?.values,
+    ).toMatchObject({
+      registrationOperation: "profile.register",
+      registrationPolicy: "custom-operation",
+    });
+    expect(() =>
+      parseInstanceControlPlaneStorageSnapshot(
+        "Instance archive controlPlane",
+        {
+          ...snapshot,
+          records: controlPlaneRecords().map((record) =>
+            record.entity === "app-install"
+              ? {
+                  ...record,
+                  values: {
+                    ...record.values,
+                    registrationPolicy: "custom-operation",
+                  },
+                }
+              : record,
+          ),
+        },
+        { packageResolver: controlPlanePackageResolver },
+      ),
+    ).toThrow(
+      'field "instance:app-install.registrationOperation" is required when registration policy is "custom-operation"',
+    );
+    expect(() =>
+      parseInstanceControlPlaneStorageSnapshot(
+        "Instance archive controlPlane",
+        {
+          ...snapshot,
+          records: controlPlaneRecords().map((record) =>
+            record.entity === "app-install"
+              ? {
+                  ...record,
+                  values: {
+                    ...record.values,
+                    registrationPolicy: "custom-operation",
+                    registrationOperation: "Profile.register",
+                  },
+                }
+              : record,
+          ),
+        },
+        { packageResolver: controlPlanePackageResolver },
+      ),
+    ).toThrow('record "site" has invalid field "instance:app-install.registrationOperation"');
+    expect(() =>
+      parseInstanceControlPlaneStorageSnapshot(
+        "Instance archive controlPlane",
+        {
+          ...snapshot,
+          records: controlPlaneRecords().map((record) =>
+            record.entity === "app-install"
+              ? {
+                  ...record,
+                  values: {
+                    ...record.values,
+                    registrationPolicy: "email-verified",
+                    registrationOperation: "profile.register",
+                  },
+                }
+              : record,
+          ),
+        },
+        { packageResolver: controlPlanePackageResolver },
+      ),
+    ).toThrow(
+      'field "instance:app-install.registrationOperation" must be omitted unless registration policy is "custom-operation"',
+    );
     expect(() =>
       parseInstanceControlPlaneStorageSnapshot(
         "Instance archive controlPlane",
@@ -1665,6 +1797,8 @@ function storedAppInstallRecord(input: {
   installId: string;
   label: string;
   packageAppKey: string;
+  registrationOperation?: string;
+  registrationPolicy?: "closed" | "custom-operation" | "email-verified";
 }): StoredRecord {
   const now = input.createdAt ?? "2026-05-28T00:00:00.000Z";
 
@@ -1675,7 +1809,10 @@ function storedAppInstallRecord(input: {
       installId: input.installId,
       packageAppKey: input.packageAppKey,
       label: input.label,
-      registrationPolicy: "closed",
+      registrationPolicy: input.registrationPolicy ?? "closed",
+      ...(input.registrationOperation === undefined
+        ? {}
+        : { registrationOperation: input.registrationOperation }),
       status: "installed",
       storageIdentity: `app:${input.installId}`,
     },

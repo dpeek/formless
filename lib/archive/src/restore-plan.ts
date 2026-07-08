@@ -901,6 +901,9 @@ function appInstallForArchive(
     sourceSchemaHash: app.sourceSchemaHash,
     label: app.label,
     registrationPolicy: app.registrationPolicy,
+    ...(app.registrationOperation === undefined
+      ? {}
+      : { registrationOperation: app.registrationOperation }),
     status: "installed",
     createdAt: app.createdAt,
     updatedAt: app.updatedAt,

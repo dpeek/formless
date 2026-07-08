@@ -4,6 +4,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX } from "@dpeek/formless-identity-control-plane";
 import type { StoredRecord } from "@dpeek/formless-storage";
+import {
+  FORMLESS_WORKSPACE_APP_PACKAGES_ENV_NAME,
+  formatRuntimeWorkspaceAppPackages,
+} from "../shared/workspace-runtime-packages.ts";
+import { computeSourceSchemaHash } from "../shared/upgrade-migrations.ts";
+import { workspaceAppPackageManifestFixture } from "../test/workspace-app-package.ts";
 
 import {
   parseAccountCompletionGateResolutionResult,
@@ -15,6 +21,7 @@ import type { OperationInvocationResponse } from "../shared/operation-invocation
 import {
   INSTANCE_AUTH_APP_REGISTRATION_GATE_COMPLETE_PATH,
   INSTANCE_AUTH_ACCOUNT_COMPLETION_RESOLVE_PATH,
+  INSTANCE_AUTH_PROFILE_COMPLETION_GATE_COMPLETE_PATH,
   INSTANCE_AUTH_TERMS_ACCEPTANCE_GATE_COMPLETE_PATH,
   type AccountCompletionGateResolverInput,
 } from "./instance-auth-account-completion.ts";
@@ -38,6 +45,7 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   writeCounter = 0;
+  const profilePackage = await profileCompletionWorkspacePackage();
   harness = await createWorkerHarness(
     harnessPath,
     {
@@ -48,6 +56,9 @@ beforeEach(async () => {
         FORMLESS_ADMIN_TOKEN: adminToken,
         FORMLESS_INSTANCE_AUTH_ORIGIN: "https://auth.example.com",
         FORMLESS_OWNER_SESSION_SECRET: "test-owner-session-secret",
+        [FORMLESS_WORKSPACE_APP_PACKAGES_ENV_NAME]: formatRuntimeWorkspaceAppPackages([
+          profilePackage,
+        ]),
       },
     },
   );
@@ -332,6 +343,141 @@ describe("instance auth account completion resolver", () => {
     expect(JSON.stringify(blocked)).not.toContain("tokenHash");
   });
 
+  it("returns a display-safe custom-operation app registration gate without side effects", async () => {
+    const install = await createAppInstall({
+      installId: "members",
+      label: "Members",
+      packageAppKey: "tasks",
+      registrationOperation: "task.create",
+      registrationPolicy: "custom-operation",
+    });
+    const principal = await createPrincipal("Custom Operation Registration");
+    const target = appTargetForInstall(install);
+
+    await createPrimaryEmail(principal.id, "custom-operation-registration@example.com", "verified");
+    await createCredential(principal.id, "custom-operation-registration");
+
+    const beforeAppRecords = await appRecords(install);
+    const beforeRecords = await identityRecords();
+    const beforeCounts = identityRecordCounts(beforeRecords.records);
+    const beforePrivateCounts = await authPrivateCounts();
+    const blocked = await expectGate({ principalId: principal.id, target }, "app-registration");
+    const afterAppRecords = await appRecords(install);
+    const afterRecords = await identityRecords();
+    const afterPrivateCounts = await authPrivateCounts();
+
+    expect(blocked).toMatchObject({
+      gate: {
+        appInstallId: "members",
+        kind: "app-registration",
+        operation: {
+          appInstallId: "members",
+          entityName: "task",
+          label: "Create Task",
+          operationKey: "task.create",
+          operationName: "create",
+        },
+        registrationPolicy: "custom-operation",
+      },
+      status: "blocked",
+      target,
+    });
+    expect(blocked).not.toHaveProperty("continueTo");
+    expect(blocked).not.toHaveProperty("handoff");
+    expect(afterAppRecords.records).toEqual(beforeAppRecords.records);
+    expect(identityRecordCounts(afterRecords.records)).toEqual(beforeCounts);
+    expect(afterPrivateCounts).toEqual(beforePrivateCounts);
+    expect(JSON.stringify(blocked)).not.toContain("session");
+    expect(JSON.stringify(blocked)).not.toContain("grantSecret");
+    expect(JSON.stringify(blocked)).not.toContain("credential");
+    expect(JSON.stringify(blocked)).not.toContain("tokenHash");
+    expect(
+      afterRecords.records.some(
+        (record) =>
+          record.entity === "app-registration" &&
+          record.values.appInstallId === "members" &&
+          record.values.targetPrincipal === principal.id,
+      ),
+    ).toBe(false);
+  });
+
+  it("rejects custom-operation gates with invalid app install operation metadata", async () => {
+    const principal = await createPrincipal("Invalid Custom Operation Registration");
+
+    await createPrimaryEmail(principal.id, "invalid-custom-operation@example.com", "verified");
+    await createCredential(principal.id, "invalid-custom-operation");
+
+    const cases = [
+      {
+        expected: 'App install "missing-operation" registration operation must be a string.',
+        installId: "missing-operation",
+        patch: { deleteFields: ["registrationOperation"] },
+      },
+      {
+        expected:
+          'App install "malformed-operation" registration operation must use "<entity-key>.<operation-key>" format.',
+        installId: "malformed-operation",
+        patch: { values: { registrationOperation: "task/create" } },
+      },
+      {
+        expected: 'App install "unresolved-operation" registration operation does not resolve.',
+        installId: "unresolved-operation",
+        patch: { values: { registrationOperation: "task.missing" } },
+      },
+      {
+        expected: 'App install "disabled-operation" is disabled.',
+        installId: "disabled-operation",
+        patch: { values: { status: "disabled" } },
+      },
+      {
+        expected: "Custom operation app-registration target storage does not match app install.",
+        installId: "wrong-target-operation",
+        target: { storageIdentity: "app:crm" },
+      },
+      {
+        expected: "Custom operation app-registration target route is not available.",
+        installId: "wrong-route-operation",
+        target: { routeId: "route:crm" },
+      },
+    ] as const;
+
+    const installs = new Map<string, CreateAppInstallResponse["install"]>();
+
+    for (const testCase of cases) {
+      const install = await createAppInstall({
+        installId: testCase.installId,
+        label: testCase.installId,
+        packageAppKey: "tasks",
+        registrationOperation: "task.create",
+        registrationPolicy: "custom-operation",
+      });
+
+      installs.set(testCase.installId, install);
+    }
+
+    for (const testCase of cases) {
+      if ("patch" in testCase) {
+        await patchControlPlaneAppInstall({
+          installId: testCase.installId,
+          ...testCase.patch,
+        });
+      }
+
+      const install = installs.get(testCase.installId);
+
+      if (!install) {
+        throw new Error(`Missing test install "${testCase.installId}".`);
+      }
+
+      const rejected = await resolveGateFailure({
+        principalId: principal.id,
+        target: appTargetForInstall(install, "target" in testCase ? testCase.target : {}),
+      });
+
+      expect(rejected.error).toBe(testCase.expected);
+    }
+  });
+
   it("completes an email-verified app registration gate and returns a safe continuation", async () => {
     const install = await createAppInstall({
       installId: "portal",
@@ -427,7 +573,146 @@ describe("instance auth account completion resolver", () => {
     expect(privateCounts.handoffGrants).toBe(0);
   });
 
-  it("rejects app registration completion when the current gate is not email-verified", async () => {
+  it("completes a custom-operation app registration gate and returns profile completion", async () => {
+    const install = await createAppInstall({
+      installId: "members",
+      label: "Members",
+      packageAppKey: "tasks",
+      registrationOperation: "task.create",
+      registrationPolicy: "custom-operation",
+    });
+    const principal = await createPrincipal("Complete Custom Registration");
+    const organization = await createOrganization("Members North");
+    const target = appTargetForInstall(install, { selectedOrganization: organization.id });
+
+    await createPrimaryEmail(principal.id, "complete-custom-registration@example.com", "verified");
+    await createCredential(principal.id, "complete-custom-registration");
+
+    const cookie = await createCentralSessionCookie(principal.id);
+    const beforeAppRecords = await appRecords(install);
+    const beforeRecords = await identityRecords();
+    const beforeCounts = identityRecordCounts(beforeRecords.records);
+    const beforePrivateCounts = await authPrivateCounts();
+    const completed = await completeAppRegistrationGate({ cookie, target });
+    const afterAppRecords = await appRecords(install);
+    const afterRecords = await identityRecords();
+    const afterCounts = identityRecordCounts(afterRecords.records);
+    const afterPrivateCounts = await authPrivateCounts();
+
+    expect(completed.status).toBe(409);
+    expect(completed.setCookie).toBeNull();
+    expect(completed.body).toMatchObject({
+      accountCompletion: {
+        gate: {
+          appInstallId: "members",
+          kind: "profile-completion",
+          operation: {
+            appInstallId: "members",
+            entityName: "task",
+            label: "Create Task",
+            operationKey: "task.create",
+            operationName: "create",
+          },
+          selectedOrganization: organization.id,
+        },
+        status: "blocked",
+        target,
+      },
+      appRegistration: {
+        appInstallId: "members",
+        selectedOrganization: organization.id,
+        status: "active",
+        targetKind: "principal",
+        targetPrincipal: principal.id,
+      },
+      completed: true,
+    });
+    expect(completed.body).not.toHaveProperty("continueTo");
+    expect(completed.body).not.toHaveProperty("handoff");
+    expect(afterAppRecords.records).toEqual(beforeAppRecords.records);
+    expect(afterCounts).toMatchObject({
+      acceptedPolicies: beforeCounts.acceptedPolicies,
+      appRegistrations: beforeCounts.appRegistrations + 1,
+      roleAssignments: beforeCounts.roleAssignments,
+    });
+    expect(afterPrivateCounts).toEqual(beforePrivateCounts);
+    expect(
+      afterRecords.records.filter(
+        (record) =>
+          record.entity === "app-registration" &&
+          !record.deletedAt &&
+          record.values.appInstallId === "members" &&
+          record.values.targetPrincipal === principal.id &&
+          record.values.selectedOrganization === organization.id,
+      ),
+    ).toHaveLength(1);
+  });
+
+  it("reuses an inactive custom-operation app registration for the current principal", async () => {
+    const install = await createAppInstall({
+      installId: "custom-reuse",
+      label: "Custom Reuse",
+      packageAppKey: "tasks",
+      registrationOperation: "task.create",
+      registrationPolicy: "custom-operation",
+    });
+    const principal = await createPrincipal("Reuse Custom Registration");
+    const target = appTargetForInstall(install);
+
+    await createPrimaryEmail(principal.id, "reuse-custom-registration@example.com", "verified");
+    await createCredential(principal.id, "reuse-custom-registration");
+    const pendingRegistration = await createAppRegistration(principal.id, {
+      appInstallId: "custom-reuse",
+      status: "pending",
+    });
+
+    const completed = await completeAppRegistrationGate({
+      cookie: await createCentralSessionCookie(principal.id),
+      target,
+    });
+    const records = await identityRecords();
+    const registrations = records.records.filter(
+      (record) =>
+        record.entity === "app-registration" &&
+        !record.deletedAt &&
+        record.values.appInstallId === "custom-reuse" &&
+        record.values.targetPrincipal === principal.id,
+    );
+
+    expect(completed.status).toBe(409);
+    expect(completed.body).toMatchObject({
+      accountCompletion: {
+        gate: {
+          appInstallId: "custom-reuse",
+          kind: "profile-completion",
+          operation: {
+            appInstallId: "custom-reuse",
+            operationKey: "task.create",
+          },
+        },
+        status: "blocked",
+        target,
+      },
+      appRegistration: {
+        appRegistrationId: pendingRegistration.id,
+        appInstallId: "custom-reuse",
+        status: "active",
+        targetPrincipal: principal.id,
+      },
+      completed: true,
+    });
+    expect(completed.body).not.toHaveProperty("continueTo");
+    expect(completed.body).not.toHaveProperty("handoff");
+    expect(registrations).toHaveLength(1);
+    expect(registrations[0]).toMatchObject({
+      id: pendingRegistration.id,
+      values: {
+        status: "active",
+      },
+    });
+  });
+
+  it("rejects app registration completion when the current gate is not self-service", async () => {
     const install = await createAppInstall({
       installId: "closed-portal",
       label: "Closed Portal",
@@ -455,7 +740,7 @@ describe("instance auth account completion resolver", () => {
         },
         status: "blocked",
       },
-      error: "Email-verified app-registration gate is not current.",
+      error: "App-registration gate is not current.",
     });
     expect(
       records.records.some(
@@ -494,7 +779,7 @@ describe("instance auth account completion resolver", () => {
         },
         status: "blocked",
       },
-      error: "Email-verified app-registration gate is not current.",
+      error: "App-registration gate is not current.",
     });
     expect(
       records.records.some(
@@ -559,6 +844,147 @@ describe("instance auth account completion resolver", () => {
       status: "complete",
       target: appTarget(),
     });
+  });
+
+  it("completes an operation-backed profile gate through the declared app operation", async () => {
+    const install = await createAppInstall({
+      installId: "profile-runtime",
+      label: "Profile Runtime",
+      packageAppKey: "profile-app",
+      registrationOperation: "profile.completeRegistration",
+      registrationPolicy: "custom-operation",
+    });
+    const principal = await createPrincipal("Profile Runtime User");
+    const target = appTargetForInstall(install);
+
+    await createPrimaryEmail(principal.id, "profile-runtime@example.com", "verified");
+    await createCredential(principal.id, "profile-runtime");
+    await createAppRegistration(principal.id, { appInstallId: install.installId });
+
+    const cookie = await createCentralSessionCookie(principal.id);
+    const beforeAppRecords = await appRecords(install);
+    const beforeIdentityRecords = await identityRecords();
+    const beforeCounts = identityRecordCounts(beforeIdentityRecords.records);
+    const beforePrivateCounts = await authPrivateCounts();
+    const completed = await completeProfileCompletionGate({
+      cookie,
+      idempotencyKey: "profile-runtime-complete",
+      input: {
+        displayName: "Ada Profile",
+        principal: principal.id,
+      },
+      operation: profileCompletionOperation(install.installId),
+      target,
+    });
+    const afterAppRecords = await appRecords(install);
+    const afterIdentityRecords = await identityRecords();
+    const afterPrivateCounts = await authPrivateCounts();
+    const profiles = afterAppRecords.records.filter(
+      (record) => record.entity === "profile" && !record.deletedAt,
+    );
+
+    expect(completed.status).toBe(200);
+    expect(completed.setCookie).toBeNull();
+    expect(completed.body).toMatchObject({
+      accountCompletion: {
+        continueTo: target.returnTo,
+        status: "complete",
+        target,
+      },
+      completed: true,
+      continueTo: target.returnTo,
+    });
+    expect(JSON.stringify(completed.body)).not.toContain("Ada Profile");
+    expect(profiles).toHaveLength(1);
+    expect(profiles[0]).toMatchObject({
+      entity: "profile",
+      values: {
+        actorPrincipalId: principal.id,
+        displayName: "Ada Profile",
+        principal: principal.id,
+      },
+    });
+    expect(afterAppRecords.records.length).toBe(beforeAppRecords.records.length + 1);
+    expect(identityRecordCounts(afterIdentityRecords.records)).toEqual(beforeCounts);
+    expect(afterPrivateCounts).toEqual(beforePrivateCounts);
+  });
+
+  it("rejects profile completion when the profile gate is not current", async () => {
+    const install = await createAppInstall({
+      installId: "profile-not-current",
+      label: "Profile Not Current",
+      packageAppKey: "profile-app",
+      registrationOperation: "profile.completeRegistration",
+      registrationPolicy: "custom-operation",
+    });
+    const principal = await createPrincipal("Profile Not Current User");
+    const target = appTargetForInstall(install);
+
+    await createPrimaryEmail(principal.id, "profile-not-current@example.com", "verified");
+    await createCredential(principal.id, "profile-not-current");
+
+    const beforeAppRecords = await appRecords(install);
+    const rejected = await completeProfileCompletionGate({
+      cookie: await createCentralSessionCookie(principal.id),
+      idempotencyKey: "profile-not-current-complete",
+      input: {
+        displayName: "Not Current",
+        principal: principal.id,
+      },
+      operation: profileCompletionOperation(install.installId),
+      target,
+    });
+    const afterAppRecords = await appRecords(install);
+
+    expect(rejected.status).toBe(409);
+    expect(rejected.body).toMatchObject({
+      accountCompletion: {
+        gate: {
+          appInstallId: install.installId,
+          kind: "app-registration",
+          registrationPolicy: "custom-operation",
+        },
+        status: "blocked",
+      },
+      error: "Profile-completion gate is not current.",
+    });
+    expect(afterAppRecords.records).toEqual(beforeAppRecords.records);
+  });
+
+  it("rejects profile operation writes with invalid identity references", async () => {
+    const install = await createAppInstall({
+      installId: "profile-reference",
+      label: "Profile Reference",
+      packageAppKey: "profile-app",
+      registrationOperation: "profile.completeRegistration",
+      registrationPolicy: "custom-operation",
+    });
+    const principal = await createPrincipal("Profile Reference User");
+    const target = appTargetForInstall(install);
+
+    await createPrimaryEmail(principal.id, "profile-reference@example.com", "verified");
+    await createCredential(principal.id, "profile-reference");
+    await createAppRegistration(principal.id, { appInstallId: install.installId });
+
+    const beforeAppRecords = await appRecords(install);
+    const rejected = await completeProfileCompletionGate({
+      cookie: await createCentralSessionCookie(principal.id),
+      idempotencyKey: "profile-reference-complete",
+      input: {
+        displayName: "Bad Reference",
+        principal: "principal:missing-profile-reference",
+      },
+      operation: profileCompletionOperation(install.installId),
+      target,
+    });
+    const afterAppRecords = await appRecords(install);
+
+    expect(rejected.status).toBe(400);
+    expect(rejected.body).toMatchObject({
+      error:
+        'Field "principal" references unknown auth:principal record "principal:missing-profile-reference".',
+    });
+    expect(afterAppRecords.records).toEqual(beforeAppRecords.records);
   });
 
   it("completes terms acceptance and reuses already accepted policy records", async () => {
@@ -912,12 +1338,53 @@ async function resolveGate(
   return parseAccountCompletionGateResolutionResult(body);
 }
 
+async function resolveGateFailure(input: AccountCompletionGateResolverInput) {
+  const response = await harness.fetch(INSTANCE_AUTH_ACCOUNT_COMPLETION_RESOLVE_PATH, {
+    body: JSON.stringify(input),
+    headers: { "Content-Type": "application/json" },
+    method: "POST",
+  });
+  const body = (await response.json()) as { error: string };
+
+  expect(response.status).toBe(400);
+
+  return body;
+}
+
 async function completeAppRegistrationGate(input: {
   cookie: string;
   target: AccountCompletionGateTarget;
 }) {
   const response = await fetchAuthOrigin(INSTANCE_AUTH_APP_REGISTRATION_GATE_COMPLETE_PATH, {
     body: JSON.stringify({ target: input.target }),
+    headers: {
+      "Content-Type": "application/json",
+      Cookie: input.cookie,
+    },
+    method: "POST",
+  });
+
+  return {
+    body: (await response.json()) as Record<string, unknown>,
+    setCookie: response.headers.get("Set-Cookie"),
+    status: response.status,
+  };
+}
+
+async function completeProfileCompletionGate(input: {
+  cookie: string;
+  idempotencyKey: string;
+  input: Record<string, unknown>;
+  operation: Record<string, unknown>;
+  target: AccountCompletionGateTarget;
+}) {
+  const response = await fetchAuthOrigin(INSTANCE_AUTH_PROFILE_COMPLETION_GATE_COMPLETE_PATH, {
+    body: JSON.stringify({
+      idempotencyKey: input.idempotencyKey,
+      input: input.input,
+      operation: input.operation,
+      target: input.target,
+    }),
     headers: {
       "Content-Type": "application/json",
       Cookie: input.cookie,
@@ -990,6 +1457,195 @@ async function authPrivateCounts() {
   };
 }
 
+async function appRecords(install: CreateAppInstallResponse["install"]) {
+  const response = await harness.fetch(
+    `/harness/app-records?installId=${encodeURIComponent(
+      install.installId,
+    )}&packageAppKey=${encodeURIComponent(install.packageAppKey)}`,
+  );
+  const body = (await response.json()) as { records: StoredRecord[] };
+
+  expect(response.status).toBe(200);
+
+  return body;
+}
+
+async function patchControlPlaneAppInstall(input: {
+  deleteFields?: readonly string[];
+  installId: string;
+  values?: Record<string, unknown>;
+}) {
+  const response = await harness.fetch("/harness/control-plane/app-install/patch", {
+    body: JSON.stringify({
+      deleteFields: input.deleteFields ?? [],
+      idempotencyKey: nextWriteKey("control-plane-app-install-patch"),
+      installId: input.installId,
+      values: input.values ?? {},
+    }),
+    headers: { "Content-Type": "application/json" },
+    method: "POST",
+  });
+  const body = (await response.json()) as { error?: string; record?: StoredRecord };
+
+  expect(response.status, JSON.stringify(body)).toBe(200);
+
+  return body.record;
+}
+
+function profileCompletionOperation(appInstallId: string) {
+  return {
+    appInstallId,
+    entityName: "profile",
+    label: "Complete profile",
+    operationKey: "profile.completeRegistration",
+    operationName: "completeRegistration",
+  };
+}
+
+async function profileCompletionWorkspacePackage() {
+  const sourceSchema = profileCompletionSourceSchema();
+  const sourceSchemaHash = await computeSourceSchemaHash(sourceSchema);
+
+  return {
+    manifest: workspaceAppPackageManifestFixture({
+      defaultInstallId: "profile",
+      label: "Profile App",
+      packageAppKey: "profile-app",
+      packageRevision: 1,
+      sourceSchemaHash,
+      supportsMultipleInstalls: true,
+    }),
+    seedRecords: [],
+    sourceSchema,
+  };
+}
+
+function profileCompletionSourceSchema() {
+  return {
+    version: 1,
+    entities: {
+      profile: {
+        label: "Profile",
+        fields: {
+          actorPrincipalId: {
+            type: "text",
+            required: true,
+            label: "Actor principal",
+          },
+          displayName: {
+            type: "text",
+            required: true,
+            label: "Display name",
+          },
+          principal: {
+            type: "reference",
+            required: true,
+            label: "Principal",
+            to: "auth:principal",
+          },
+        },
+        operations: {
+          completeRegistration: {
+            label: "Complete profile",
+            kind: "command",
+            scope: "collection",
+            policy: {
+              actors: ["authenticated"],
+            },
+            input: {
+              fields: {
+                displayName: {
+                  field: "displayName",
+                },
+                principal: {
+                  field: "principal",
+                },
+              },
+            },
+            effect: {
+              type: "recordPlan",
+              steps: [
+                {
+                  name: "createProfile",
+                  kind: "create",
+                  entity: "profile",
+                  recordId: { kind: "generatedId", prefix: "profile" },
+                  values: {
+                    actorPrincipalId: { kind: "actor", field: "principalId" },
+                    displayName: { kind: "input", field: "displayName" },
+                    principal: {
+                      kind: "reference",
+                      entity: "auth:principal",
+                      id: { kind: "input", field: "principal" },
+                    },
+                  },
+                },
+              ],
+            },
+            output: {
+              type: "command",
+            },
+            idempotency: {
+              required: true,
+            },
+          },
+        },
+      },
+    },
+    queries: {
+      profileAll: {
+        label: "All",
+        entity: "profile",
+        expression: {
+          kind: "all",
+        },
+      },
+    },
+    itemViews: {
+      profileItem: {
+        entity: "profile",
+        fields: {
+          displayName: {
+            editor: "text",
+            commit: "field-commit",
+          },
+        },
+      },
+    },
+    tableViews: {},
+    views: {
+      profileHome: {
+        type: "collection",
+        label: "Profiles",
+        entity: "profile",
+        queries: [{ query: "profileAll" }],
+        defaultQuery: "profileAll",
+        result: {
+          type: "list",
+          itemView: "profileItem",
+        },
+      },
+    },
+    screens: {
+      profileHome: {
+        type: "workspace",
+        label: "Profiles",
+        path: "/",
+        layout: {
+          type: "stack",
+          sections: [
+            {
+              id: "profiles",
+              type: "collection",
+              view: "profileHome",
+            },
+          ],
+        },
+      },
+    },
+  };
+}
+
 function fetchAuthOrigin(path: string, init?: Parameters<Harness["mf"]["dispatchFetch"]>[1]) {
   return harness.mf.dispatchFetch(`https://auth.example.com${path}`, init);
 }
@@ -998,7 +1654,8 @@ async function createAppInstall(input: {
   installId: string;
   label: string;
   packageAppKey: string;
-  registrationPolicy?: "closed" | "email-verified";
+  registrationOperation?: string;
+  registrationPolicy?: "closed" | "custom-operation" | "email-verified";
 }) {
   const response = await harness.fetch("/api/formless/app-installs", {
     body: JSON.stringify(input),
@@ -1007,7 +1664,7 @@ async function createAppInstall(input: {
   });
   const body = (await response.json()) as CreateAppInstallResponse;
 
-  expect(response.status).toBe(201);
+  expect(response.status, JSON.stringify(body)).toBe(201);
 
   return body.install;
 }
@@ -1086,6 +1743,7 @@ async function createAppRegistration(
   input: {
     appInstallId: string;
     selectedOrganization?: string;
+    status?: "active" | "pending";
   },
 ) {
   return postIdentityRecordOperation({
@@ -1095,7 +1753,7 @@ async function createAppRegistration(
     input: {
       appInstallId: input.appInstallId,
       selectedOrganization: input.selectedOrganization,
-      status: "active",
+      status: input.status ?? "active",
       targetKind: "principal",
       targetPrincipal: principalId,
     },
@@ -1295,6 +1953,7 @@ async function writeAccountCompletionHarness() {
     path,
     `
       import { IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX, IDENTITY_CONTROL_PLANE_STORAGE_IDENTITY } from "@dpeek/formless-identity-control-plane";
+      import { INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY } from "@dpeek/formless-instance-control-plane";
       import { FormlessAuthority } from "${process.cwd()}/src/worker/authority.ts";
       import { createCentralAuthSessionCookie } from "${process.cwd()}/src/worker/central-auth-session.ts";
       import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "${process.cwd()}/src/worker/formless-instance.ts";
@@ -1312,6 +1971,62 @@ async function writeAccountCompletionHarness() {
 
           if (url.pathname === "/harness/identity-records") {
             return Response.json({ records: getBootstrapRecords(this.ctx.storage) });
+          }
+
+          if (url.pathname === "/harness/app-records") {
+            const installId = url.searchParams.get("installId");
+            const packageAppKey = url.searchParams.get("packageAppKey");
+
+            if (!installId || !packageAppKey) {
+              return Response.json({ error: "App record read requires installId and packageAppKey." }, { status: 400 });
+            }
+
+            const schemaResponse = await super.fetch(
+              new Request(\`http://internal/api/app-installs/\${packageAppKey}/\${installId}/schema\`, {
+                headers: { Accept: "application/json" },
+                method: "GET",
+              }),
+            );
+
+            if (!schemaResponse.ok) {
+              return schemaResponse;
+            }
+
+            return Response.json({ records: getBootstrapRecords(this.ctx.storage) });
+          }
+
+          if (url.pathname === "/harness/control-plane/app-install/patch" && request.method === "POST") {
+            const body = await request.json();
+            const record = getBootstrapRecords(this.ctx.storage).find(
+              (candidate) =>
+                candidate.entity === "app-install" &&
+                (candidate.id === body.installId || candidate.values.installId === body.installId),
+            );
+
+            if (!record) {
+              return Response.json({ error: "Missing app install." }, { status: 404 });
+            }
+
+            const values = {
+              ...record.values,
+              ...(body.values ?? {}),
+            };
+
+            for (const fieldName of body.deleteFields ?? []) {
+              delete values[fieldName];
+            }
+
+            const outcome = writeRecordSetForCommandOperationOutcome(
+              this.ctx.storage,
+              \`harness-control-plane-app-install-patch:\${body.installId}:\${body.idempotencyKey}\`,
+              [{ kind: "patch", record, values }],
+              undefined,
+              { now: "2026-07-06T00:00:00.000Z" },
+            );
+
+            return Response.json({
+              record: outcome.response.changes.at(-1)?.payload,
+            });
           }
 
           if (url.pathname === "/harness/identity/tombstone" && request.method === "POST") {
@@ -1383,12 +2098,18 @@ async function writeAccountCompletionHarness() {
       export default {
         fetch(request, env) {
           const url = new URL(request.url);
+          const harnessAppRecordsInstallId =
+            url.pathname === "/harness/app-records" ? url.searchParams.get("installId") : null;
           const authorityName =
-            url.pathname.startsWith(IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX) ||
-            url.pathname === "/harness/identity-records" ||
-            url.pathname === "/harness/identity/tombstone"
-            ? IDENTITY_CONTROL_PLANE_STORAGE_IDENTITY
-            : FORMLESS_INSTANCE_AUTHORITY_NAME;
+            harnessAppRecordsInstallId
+              ? \`app:\${harnessAppRecordsInstallId}\`
+              : url.pathname.startsWith("/harness/control-plane")
+              ? INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY
+              : url.pathname.startsWith(IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX) ||
+                  url.pathname === "/harness/identity-records" ||
+                  url.pathname === "/harness/identity/tombstone"
+                ? IDENTITY_CONTROL_PLANE_STORAGE_IDENTITY
+                : FORMLESS_INSTANCE_AUTHORITY_NAME;
           const id = env.FORMLESS_AUTHORITY.idFromName(authorityName);
 
           return env.FORMLESS_AUTHORITY.get(id).fetch(request);

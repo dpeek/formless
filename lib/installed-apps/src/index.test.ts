@@ -16,6 +16,7 @@ import {
   listInstallableAppPackages,
   listResolvedAppPackages,
   packageAppFactsForKey,
+  parseAppInstallRegistrationOperation,
   parseAppInstallRegistrationPolicy,
   parseAppPackageManifest,
   sourceSchemaCanonicalJson,
@@ -229,9 +230,37 @@ describe("app install registry", () => {
     expect(
       parseAppInstallRegistrationPolicy("email-verified", "App install registration policy"),
     ).toBe("email-verified");
+    expect(
+      parseAppInstallRegistrationPolicy("custom-operation", "App install registration policy"),
+    ).toBe("custom-operation");
     expect(() =>
       parseAppInstallRegistrationPolicy("domain-allowlist", "App install registration policy"),
-    ).toThrow('App install registration policy must be "closed" or "email-verified".');
+    ).toThrow(
+      'App install registration policy must be "closed", "email-verified", or "custom-operation".',
+    );
+  });
+
+  it("parses canonical app install registration operation keys", () => {
+    expect(parseAppInstallRegistrationOperation("member-profile.completeRegistration")).toBe(
+      "member-profile.completeRegistration",
+    );
+
+    const invalidCases: [string, unknown, RegExp][] = [
+      ["missing entity", ".completeRegistration", /entity/],
+      ["missing operation", "member-profile.", /operation/],
+      ["missing dot", "completeRegistration", /format/],
+      ["too many parts", "member.profile.completeRegistration", /format/],
+      ["qualified entity", "auth:principal.completeRegistration", /entity/],
+      ["unsafe operation", "member-profile.complete/registration", /operation/],
+      ["spaced operation", "member-profile.complete registration", /operation/],
+    ];
+
+    for (const [label, value, message] of invalidCases) {
+      expect(
+        () => parseAppInstallRegistrationOperation(value, "App install registration operation"),
+        label,
+      ).toThrow(message);
+    }
   });
 
   it("validates route-safe install ids", () => {
@@ -342,6 +371,28 @@ describe("app install registry", () => {
       registrationPolicy: "email-verified",
     });
     expect(appInstallInitializationPlan(site.install, resolver)).toEqual(site.initialization);
+  });
+
+  it("creates custom-operation installs with a declared registration operation", () => {
+    const result = expectSuccess(
+      createAppInstall({
+        existingInstalls: [],
+        installId: "members",
+        label: " Members ",
+        now,
+        packageAppKey: "site",
+        packageResolver: bundledFixtureResolver(),
+        registrationOperation: "member-profile.completeRegistration",
+        registrationPolicy: "custom-operation",
+      }),
+    );
+
+    expect(result.install).toMatchObject({
+      installId: "members",
+      label: "Members",
+      registrationOperation: "member-profile.completeRegistration",
+      registrationPolicy: "custom-operation",
+    });
   });
 
   it("creates a private package install only through the active resolver", () => {
@@ -471,16 +522,53 @@ describe("app install registry", () => {
         registrationPolicy: "domain-allowlist" as never,
       }),
     );
+    const missingRegistrationOperation = expectFailure(
+      createAppInstall({
+        existingInstalls: existing,
+        installId: "members",
+        label: "Members",
+        now,
+        packageAppKey: "site",
+        packageResolver: resolver,
+        registrationPolicy: "custom-operation",
+      }),
+    );
+    const extraRegistrationOperation = expectFailure(
+      createAppInstall({
+        existingInstalls: existing,
+        installId: "subscribers",
+        label: "Subscribers",
+        now,
+        packageAppKey: "site",
+        packageResolver: resolver,
+        registrationOperation: "member-profile.completeRegistration",
+        registrationPolicy: "email-verified",
+      }),
+    );
 
     expect(unsupportedPackage.error.code).toBe("unsupported-package");
     expect(invalidLabel.error.code).toBe("invalid-label");
     expect(duplicateInstallId.error.code).toBe("duplicate-install-id");
     expect(unsupportedPolicy.error.code).toBe("invalid-registration-policy");
     expect(unsupportedPolicy.error.field).toBe("registrationPolicy");
+    expect(missingRegistrationOperation.error).toEqual({
+      code: "invalid-registration-operation",
+      field: "registrationOperation",
+      message:
+        'Install registration operation is required when registration policy is "custom-operation".',
+    });
+    expect(extraRegistrationOperation.error).toEqual({
+      code: "invalid-registration-operation",
+      field: "registrationOperation",
+      message:
+        'Install registration operation must be omitted unless registration policy is "custom-operation".',
+    });
     expect(unsupportedPackage.installs).toBe(existing);
     expect(invalidLabel.installs).toBe(existing);
     expect(duplicateInstallId.installs).toBe(existing);
     expect(unsupportedPolicy.installs).toBe(existing);
+    expect(missingRegistrationOperation.installs).toBe(existing);
+    expect(extraRegistrationOperation.installs).toBe(existing);
   });
 
   it("keeps existing installs unchanged when initial source validation fails", () => {

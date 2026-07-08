@@ -507,7 +507,8 @@ describe("archive restore planner", () => {
         appArchive({
           app: {
             ...archivedInstall("members", "Members"),
-            registrationPolicy: "email-verified",
+            registrationOperation: "profile.register",
+            registrationPolicy: "custom-operation",
           },
         }),
         {
@@ -518,7 +519,11 @@ describe("archive restore planner", () => {
     );
 
     expect(plan.steps[0]).toMatchObject({
-      install: { installId: "members", registrationPolicy: "email-verified" },
+      install: {
+        installId: "members",
+        registrationOperation: "profile.register",
+        registrationPolicy: "custom-operation",
+      },
       kind: "createInstall",
     });
   });

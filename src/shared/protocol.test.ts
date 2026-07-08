@@ -205,6 +205,21 @@ describe("app install protocol", () => {
         packageAppKey: "site",
         installId: "members",
         label: "Members",
+        registrationOperation: "profile.register",
+        registrationPolicy: "custom-operation",
+      }),
+    ).toEqual({
+      packageAppKey: "site",
+      installId: "members",
+      label: "Members",
+      registrationOperation: "profile.register",
+      registrationPolicy: "custom-operation",
+    });
+    expect(
+      parseCreateAppInstallRequest({
+        packageAppKey: "site",
+        installId: "members",
+        label: "Members",
         registrationPolicy: "email-verified",
       }),
     ).toEqual({
@@ -232,9 +247,20 @@ describe("app install protocol", () => {
         packageAppKey: "site",
         installId: "personal",
         label: "Site",
+        registrationOperation: "profile/register",
+        registrationPolicy: "custom-operation",
+      }),
+    ).toThrow('App install registration operation must use "<entity-key>.<operation-key>" format.');
+    expect(() =>
+      parseCreateAppInstallRequest({
+        packageAppKey: "site",
+        installId: "personal",
+        label: "Site",
         registrationPolicy: "domain-allowlist",
       }),
-    ).toThrow('App install registration policy must be "closed" or "email-verified".');
+    ).toThrow(
+      'App install registration policy must be "closed", "email-verified", or "custom-operation".',
+    );
   });
 });
 

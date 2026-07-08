@@ -50,7 +50,8 @@ records.
 - GIVEN an app install is created
 - WHEN the control-plane write commits
 - THEN the `app-install` record stores stable install identity, package app key,
-  label, status, and app registration policy
+  label, status, app registration policy, and optional app registration
+  operation key
 - AND created and updated timestamps come from record system fields rather than
   app-install value fields
 - AND install identity, package app key, and storage identity are immutable
@@ -65,6 +66,8 @@ records.
 - THEN each app install stores a display-safe `registrationPolicy`
 - AND the supported first-pass registration policies are `closed` and
   `email-verified`
+- AND the supported app-owned onboarding registration policy is
+  `custom-operation`
 - AND `closed` means app browser access requires an existing active identity
   `app-registration` for the requested app install and current principal or
   selected organization context
@@ -77,12 +80,20 @@ records.
 - AND `email-verified` completion creates or reuses an active identity
   `app-registration` record for the requested app install and principal or
   selected organization context before the app can be entered
+- AND `custom-operation` means app browser access may be completed only after
+  the account journey creates or reuses an active identity `app-registration`
+  record and the principal completes the app-owned registration operation for
+  the requested app install
+- AND when `registrationPolicy` is `custom-operation`, the `app-install` record
+  stores a required display-safe `registrationOperation` canonical entity
+  operation key that resolves against the installed app schema
+- AND when `registrationPolicy` is `closed` or `email-verified`, the
+  `registrationOperation` field is omitted
 - AND the app install registration policy does not store principal ids,
   invitation tokens, credential material, session ids, handoff grants, or
-  app-owned profile values
-- AND self-service `domain-allowlist` and `custom-operation` registration
-  policies are not accepted until a later capability defines their account gate
-  completion behavior
+  app-owned profile values, operation input values, or role assignments
+- AND self-service `domain-allowlist` registration policy is not accepted until
+  a later capability defines its account gate completion behavior
 
 #### Scenario: Installed app data boundary
 

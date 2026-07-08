@@ -4,9 +4,11 @@
 import {
   defaultAppInstallRegistrationPolicy,
   isSourceSchemaHash,
+  parseAppInstallRegistrationOperation,
   parseAppInstallRegistrationPolicy,
   validateAppInstallId,
   type AppPackageResolver,
+  type AppInstallRegistrationOperation,
   type AppInstallRegistrationPolicy,
   type PackageAppRevision,
   type SourceSchemaHash,
@@ -48,6 +50,7 @@ export type ArchivedAppInstall = {
   sourceSchemaHash: SourceSchemaHash;
   label: string;
   registrationPolicy: AppInstallRegistrationPolicy;
+  registrationOperation?: AppInstallRegistrationOperation;
   status: "installed";
   createdAt: string;
   updatedAt: string;
@@ -242,6 +245,7 @@ function parseArchivedAppInstall(context: string, value: unknown): ArchivedAppIn
     "sourceSchemaHash",
     "label",
     ...("registrationPolicy" in object ? ["registrationPolicy"] : []),
+    ...("registrationOperation" in object ? ["registrationOperation"] : []),
     "status",
     "createdAt",
     "updatedAt",
@@ -258,6 +262,19 @@ function parseArchivedAppInstall(context: string, value: unknown): ArchivedAppIn
     throw new Error(`${context} status must be "installed".`);
   }
 
+  const registrationPolicy =
+    object.registrationPolicy === undefined
+      ? defaultAppInstallRegistrationPolicy()
+      : parseAppInstallRegistrationPolicy(
+          object.registrationPolicy,
+          `${context} registrationPolicy`,
+        );
+  const registrationOperation = parseArchivedAppInstallRegistrationOperation(
+    context,
+    object.registrationOperation,
+    registrationPolicy,
+  );
+
   return {
     installId: installIdResult.installId,
     packageAppKey: parseTrimmedNonEmptyString(`${context} packageAppKey`, object.packageAppKey),
@@ -268,17 +285,36 @@ function parseArchivedAppInstall(context: string, value: unknown): ArchivedAppIn
     ),
     sourceSchemaHash: parseSourceSchemaHash(`${context} sourceSchemaHash`, object.sourceSchemaHash),
     label: parseTrimmedNonEmptyString(`${context} label`, object.label),
-    registrationPolicy:
-      object.registrationPolicy === undefined
-        ? defaultAppInstallRegistrationPolicy()
-        : parseAppInstallRegistrationPolicy(
-            object.registrationPolicy,
-            `${context} registrationPolicy`,
-          ),
+    registrationPolicy,
+    ...(registrationOperation === undefined ? {} : { registrationOperation }),
     status: "installed",
     createdAt: parseIsoTimestamp(`${context} createdAt`, object.createdAt),
     updatedAt: parseIsoTimestamp(`${context} updatedAt`, object.updatedAt),
   };
+}
+
+function parseArchivedAppInstallRegistrationOperation(
+  context: string,
+  value: unknown,
+  registrationPolicy: AppInstallRegistrationPolicy,
+): AppInstallRegistrationOperation | undefined {
+  if (registrationPolicy === "custom-operation") {
+    if (value === undefined) {
+      throw new Error(
+        `${context} registrationOperation is required when registrationPolicy is "custom-operation".`,
+      );
+    }
+
+    return parseAppInstallRegistrationOperation(value, `${context} registrationOperation`);
+  }
+
+  if (value !== undefined) {
+    throw new Error(
+      `${context} registrationOperation must be omitted unless registrationPolicy is "custom-operation".`,
+    );
+  }
+
+  return undefined;
 }
 
 export function parseAppArchiveData(
@@ -601,6 +637,9 @@ function canonicalArchivedAppInstall(app: ArchivedAppInstall): ArchivedAppInstal
     sourceSchemaHash: app.sourceSchemaHash,
     label: app.label,
     registrationPolicy: app.registrationPolicy,
+    ...(app.registrationOperation === undefined
+      ? {}
+      : { registrationOperation: app.registrationOperation }),
     status: "installed",
     createdAt: app.createdAt,
     updatedAt: app.updatedAt,

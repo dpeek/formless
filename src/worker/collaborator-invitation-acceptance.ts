@@ -48,7 +48,10 @@ import {
 import { createCentralAuthSessionCookie } from "./central-auth-session.ts";
 import { readControlPlaneRecords } from "./deployment-control-plane-client.ts";
 import { handleClientShellDocumentRequest } from "./client-shell.ts";
-import { resolveAccountCompletionGate } from "./instance-auth-account-completion.ts";
+import {
+  customOperationProfileCompletionRequirementForTarget,
+  resolveAccountCompletionGate,
+} from "./instance-auth-account-completion.ts";
 
 type CollaboratorInvitationAcceptanceEnv = {
   ASSETS?: Fetcher;
@@ -378,6 +381,10 @@ async function handlePasskeyRegistrationVerifyRequest(
   const continuation = await collaboratorInvitationAcceptanceContinuation(request, env, {
     invitation: identityAcceptance.invitation,
   });
+  const profileCompletion =
+    continuation === undefined
+      ? undefined
+      : await customOperationProfileCompletionRequirementForTarget(env, continuation.target);
   const accountCompletion =
     continuation === undefined
       ? undefined
@@ -386,6 +393,7 @@ async function handlePasskeyRegistrationVerifyRequest(
           input: {
             actorKind: "authenticated",
             principalId: identityAcceptance.principalId,
+            ...(profileCompletion === undefined ? {} : { profileCompletion }),
             target: continuation.target,
           },
           storage,

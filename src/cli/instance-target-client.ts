@@ -65,6 +65,7 @@ import {
 import type { DomainProviderPlanPolicy } from "../shared/domain-provider-protocol.ts";
 import {
   packageAppFactsForKey,
+  parseAppInstallRegistrationOperation,
   parseAppInstallRegistrationPolicy,
   type AppInstall,
   type AppInstallRegistrationPolicy,
@@ -1553,6 +1554,15 @@ function parseAppInstall(
   }
 
   const installId = parseRequiredString(value.installId, undefined, `${context} installId`);
+  const registrationPolicy = parseTargetAppInstallRegistrationPolicy(
+    value.registrationPolicy,
+    `${context} registrationPolicy`,
+  );
+  const registrationOperation = parseTargetAppInstallRegistrationOperation(
+    value.registrationOperation,
+    registrationPolicy,
+    `${context} registrationOperation`,
+  );
 
   return {
     installId,
@@ -1568,10 +1578,8 @@ function parseAppInstall(
       `${context} sourceSchemaHash`,
     ),
     label: parseRequiredString(value.label, undefined, `${context} label`),
-    registrationPolicy: parseTargetAppInstallRegistrationPolicy(
-      value.registrationPolicy,
-      `${context} registrationPolicy`,
-    ),
+    registrationPolicy,
+    ...(registrationOperation === undefined ? {} : { registrationOperation }),
     status: "installed",
     createdAt: parseRequiredString(value.createdAt, undefined, `${context} createdAt`),
     updatedAt: parseRequiredString(value.updatedAt, undefined, `${context} updatedAt`),
@@ -1611,6 +1619,39 @@ function parseTargetAppInstallRegistrationPolicy(
 
     throw new Error(`${context} failed: ${message}`);
   }
+}
+
+function parseTargetAppInstallRegistrationOperation(
+  value: unknown,
+  registrationPolicy: AppInstallRegistrationPolicy,
+  context: string,
+) {
+  if (registrationPolicy === "custom-operation") {
+    if (value === undefined) {
+      throw new Error(
+        `${context} failed: value is required when registrationPolicy is "custom-operation".`,
+      );
+    }
+
+    try {
+      return parseAppInstallRegistrationOperation(value, "value");
+    } catch (error) {
+      const message =
+        error instanceof Error && error.message.trim() !== ""
+          ? error.message
+          : "value is unsupported.";
+
+      throw new Error(`${context} failed: ${message}`);
+    }
+  }
+
+  if (value !== undefined) {
+    throw new Error(
+      `${context} failed: value must be omitted unless registrationPolicy is "custom-operation".`,
+    );
+  }
+
+  return undefined;
 }
 
 function parsePackageAppKey(

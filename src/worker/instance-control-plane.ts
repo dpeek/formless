@@ -7,6 +7,7 @@ import {
   createAppInstall,
   findAppInstall,
   isAppInstallRegistrationPolicy,
+  parseAppInstallRegistrationOperation,
   type AppInstall,
   type AppInstallId,
   type PackageAppKey,
@@ -542,6 +543,7 @@ async function handleCreateAppInstallOperation(
       now: receivedAt,
       packageAppKey: parsed.input.packageAppKey,
       packageResolver,
+      registrationOperation: parsed.input.registrationOperation,
       registrationPolicy: parsed.input.registrationPolicy,
       validateInitialSource: ({ initialization }) => {
         const source = findActiveWorkerSchemaAppDefinition(initialization.sourceSchemaKey, env);
@@ -828,9 +830,11 @@ function validateControlPlanePackageBoundary(
 
     if (!isAppInstallRegistrationPolicy(registrationPolicy)) {
       throw new BadRequestError(
-        'App install registration policy must be "closed" or "email-verified".',
+        'App install registration policy must be "closed", "email-verified", or "custom-operation".',
       );
     }
+
+    validateAppInstallRegistrationOperationBoundary(values, registrationPolicy);
 
     if (!findResolvedAppPackage(packageAppKey, options.packageResolver)) {
       throw new BadRequestError(`App install package "${packageAppKey}" is unsupported.`);
@@ -882,6 +886,38 @@ function validateControlPlanePackageBoundary(
   if (packageApp.publicRouteBase === undefined) {
     throw new BadRequestError(
       `Package app "${packageApp.packageAppKey}" does not support public Site routes.`,
+    );
+  }
+}
+
+function validateAppInstallRegistrationOperationBoundary(
+  values: RecordValues,
+  registrationPolicy: string,
+) {
+  const registrationOperation = values.registrationOperation;
+
+  if (registrationPolicy === "custom-operation") {
+    if (registrationOperation === undefined) {
+      throw new BadRequestError(
+        'App install registration operation is required when registration policy is "custom-operation".',
+      );
+    }
+
+    try {
+      parseAppInstallRegistrationOperation(
+        registrationOperation,
+        "App install registration operation",
+      );
+    } catch (error) {
+      throw new BadRequestError(errorMessage(error));
+    }
+
+    return;
+  }
+
+  if (registrationOperation !== undefined) {
+    throw new BadRequestError(
+      'App install registration operation must be omitted unless registration policy is "custom-operation".',
     );
   }
 }

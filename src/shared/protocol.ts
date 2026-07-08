@@ -4,12 +4,14 @@ import type {
   AppInstall,
   AppInstallInitializationPlan,
   AppInstallLaunchLink,
+  AppInstallRegistrationOperation,
   AppInstallRegistrationPolicy,
   InstallableAppPackage,
   PackageAppKey,
 } from "@dpeek/formless-installed-apps";
 import {
   defaultAppInstallRegistrationPolicy,
+  parseAppInstallRegistrationOperation,
   parseAppInstallRegistrationPolicy,
 } from "@dpeek/formless-installed-apps";
 import type { PackageAppRevision, SourceSchemaHash } from "./upgrade-migrations.ts";
@@ -214,6 +216,7 @@ export type CreateAppInstallRequest = {
   packageAppKey: string;
   installId: string;
   label: string;
+  registrationOperation?: AppInstallRegistrationOperation;
   registrationPolicy?: AppInstallRegistrationPolicy;
 };
 
@@ -313,6 +316,14 @@ export function parseCreateAppInstallRequest(value: unknown): CreateAppInstallRe
     registrationPolicy:
       parseOptionalAppInstallRegistrationPolicy(value.registrationPolicy) ??
       defaultAppInstallRegistrationPolicy(),
+    ...(value.registrationOperation === undefined
+      ? {}
+      : {
+          registrationOperation: parseAppInstallRegistrationOperation(
+            value.registrationOperation,
+            "App install registration operation",
+          ),
+        }),
   };
 }
 
@@ -409,7 +420,7 @@ function assertOwnerSetupRequestKeys(value: Record<string, unknown>) {
 
 function assertCreateAppInstallRequestKeys(value: Record<string, unknown>) {
   const requiredKeys = ["packageAppKey", "installId", "label"];
-  const allowedKeys = new Set([...requiredKeys, "registrationPolicy"]);
+  const allowedKeys = new Set([...requiredKeys, "registrationOperation", "registrationPolicy"]);
 
   for (const key of Object.keys(value)) {
     if (!allowedKeys.has(key)) {

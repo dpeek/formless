@@ -4,7 +4,8 @@ export type PackageAppRevision = number;
 export type PackageAppKey = string;
 export type AppPackageKey = PackageAppKey;
 export type AppInstallId = string;
-export type AppInstallRegistrationPolicy = "closed" | "email-verified";
+export type AppInstallRegistrationPolicy = "closed" | "email-verified" | "custom-operation";
+export type AppInstallRegistrationOperation = `${string}.${string}`;
 export type AppInstallStatus = "installed";
 export type AppInstallRouteAccess = "anonymous" | "authenticated" | "owner";
 export type AppInstallRouteKind = "admin" | "publicSite";
@@ -35,6 +36,7 @@ export type AppInstall = {
   sourceSchemaHash: SourceSchemaHash;
   label: string;
   registrationPolicy: AppInstallRegistrationPolicy;
+  registrationOperation?: AppInstallRegistrationOperation;
   status: AppInstallStatus;
   createdAt: string;
   updatedAt: string;
@@ -115,6 +117,7 @@ export type AppInstallInitializationPlan = {
 
 export type AppInstallRegistryErrorCode =
   | "duplicate-install-id"
+  | "invalid-registration-operation"
   | "invalid-registration-policy"
   | "invalid-install-id"
   | "invalid-label"
@@ -123,7 +126,13 @@ export type AppInstallRegistryErrorCode =
 
 export type AppInstallRegistryError = {
   code: AppInstallRegistryErrorCode;
-  field?: "installId" | "label" | "packageAppKey" | "registrationPolicy" | "source";
+  field?:
+    | "installId"
+    | "label"
+    | "packageAppKey"
+    | "registrationOperation"
+    | "registrationPolicy"
+    | "source";
   message: string;
 };
 
@@ -150,6 +159,7 @@ export type CreateAppInstallInput = {
   now: string;
   packageAppKey: string;
   packageResolver: AppPackageResolver;
+  registrationOperation?: AppInstallRegistrationOperation;
   registrationPolicy?: AppInstallRegistrationPolicy;
   validateInitialSource?: (
     context: AppInstallSourceValidationContext,

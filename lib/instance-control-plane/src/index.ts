@@ -3,9 +3,11 @@ import {
   isAppInstallRegistrationPolicy,
   isSourceSchemaHash,
   listAppInstalls,
+  parseAppInstallRegistrationOperation,
   type AppInstall,
   type AppInstallId,
   type AppInstallLaunchLink,
+  type AppInstallRegistrationOperation,
   type AppInstallRegistrationPolicy,
   type AppInstallRouteAccess,
   type AppInstallRoute,
@@ -41,7 +43,7 @@ export const INSTANCE_CONTROL_PLANE_BOUNDARY_SCHEMA_KEY = "instance";
 export const INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY = "instance:control-plane";
 export const INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX = "/api/formless/control-plane";
 export const INSTANCE_CONTROL_PLANE_SOURCE_SCHEMA_HASH =
-  "sha256:580d72faf9e379b983fe3ea1748a690a0e92dce0c0bbaa44b3f32520fa0368bf" satisfies SourceSchemaHash;
+  "sha256:af060135a2cf1e5667cdc2216d3eae565554e16164e14558ab31f455b9e3adff" satisfies SourceSchemaHash;
 export const INSTANCE_CONTROL_PLANE_INSTANCE_SETTINGS_ID = "instance";
 export const instanceControlPlaneSchemaProvenance = {
   kind: "instance-control-plane",
@@ -121,6 +123,7 @@ export type InstanceControlPlaneAppInstallValues = {
   sourceSchemaHash?: SourceSchemaHash;
   label: string;
   registrationPolicy: InstanceControlPlaneAppInstallRegistrationPolicy;
+  registrationOperation?: AppInstallRegistrationOperation;
   status: InstanceControlPlaneAppInstallStatus;
   storageIdentity: `app:${AppInstallId}`;
 };
@@ -293,7 +296,7 @@ export type AnyInstanceControlPlaneRecord = {
 }[InstanceControlPlaneEntityName];
 
 export const instanceControlPlaneImmutableFields = {
-  "app-install": ["installId", "packageAppKey", "storageIdentity"],
+  "app-install": ["installId", "packageAppKey", "registrationOperation", "storageIdentity"],
   "deployment-config": ["targetId", "targetKind", "providerFamily"],
   "email-domain": ["providerFamily"],
   "email-sender": ["emailDomain"],
@@ -329,7 +332,9 @@ export const instanceControlPlaneSourceSchema = {
         registrationPolicy: enumField("Registration policy", {
           closed: "Closed",
           "email-verified": "Email verified",
+          "custom-operation": "Custom operation",
         }),
+        registrationOperation: optionalTextField("Registration operation"),
         status: enumField("Status", {
           disabled: "Disabled",
           failed: "Failed",
@@ -344,6 +349,7 @@ export const instanceControlPlaneSourceSchema = {
         "sourceSchemaHash",
         "label",
         "registrationPolicy",
+        "registrationOperation",
         "status",
         "storageIdentity",
       ]),
@@ -714,6 +720,7 @@ export const instanceControlPlaneSourceSchema = {
       "installId",
       "packageAppKey",
       "registrationPolicy",
+      "registrationOperation",
       "status",
     ]),
     routeItem: itemView("route", ["matchHost", "matchPath", "kind", "enabled"]),
@@ -741,6 +748,7 @@ export const instanceControlPlaneSourceSchema = {
       { field: "installId", display: "readOnly" },
       { field: "packageAppKey", display: "readOnly" },
       { field: "registrationPolicy", display: "readOnly" },
+      { field: "registrationOperation", display: "readOnly" },
       { field: "status", display: "readOnly" },
       { field: "storageIdentity", display: "readOnly" },
       { field: "packageRevision", display: "readOnly" },
@@ -880,6 +888,7 @@ export const instanceControlPlaneSourceSchema = {
       "sourceSchemaHash",
       "label",
       "registrationPolicy",
+      "registrationOperation",
       "status",
       "storageIdentity",
     ]),
@@ -1152,6 +1161,9 @@ export function instanceControlPlaneAppInstallRecord(
       sourceSchemaHash: install.sourceSchemaHash,
       label: install.label,
       registrationPolicy: install.registrationPolicy,
+      ...(install.registrationOperation === undefined
+        ? {}
+        : { registrationOperation: install.registrationOperation }),
       status: install.status,
       storageIdentity: instanceControlPlaneStorageIdentityForInstall(install.installId),
     },
@@ -1232,6 +1244,11 @@ function appInstallFromControlPlaneRecord(
     values.registrationPolicy,
     record.id,
   );
+  const registrationOperation = appInstallRegistrationOperationFromControlPlaneValues(
+    values,
+    registrationPolicy,
+    record.id,
+  );
   const routes = appInstallRoutesFromControlPlaneRoutes(routeRecords, packageApp);
   const hasRouteRecords = routeRecords.length > 0;
   const adminRoute =
@@ -1257,6 +1274,7 @@ function appInstallFromControlPlaneRecord(
     ),
     label,
     registrationPolicy,
+    ...(registrationOperation === undefined ? {} : { registrationOperation }),
     status: "installed",
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
@@ -1531,6 +1549,31 @@ function appInstallRegistrationPolicyFromControlPlaneValue(
   }
 
   throw new Error(`Stored app install "${installId}" has unsupported registration policy.`);
+}
+
+function appInstallRegistrationOperationFromControlPlaneValues(
+  values: Readonly<Record<string, unknown>>,
+  registrationPolicy: AppInstallRegistrationPolicy,
+  installId: string,
+): AppInstallRegistrationOperation | undefined {
+  const value = values.registrationOperation;
+
+  if (registrationPolicy === "custom-operation") {
+    try {
+      return parseAppInstallRegistrationOperation(
+        value,
+        `Stored app install "${installId}" registrationOperation`,
+      );
+    } catch {
+      throw new Error(`Stored app install "${installId}" has invalid registration operation.`);
+    }
+  }
+
+  if (value !== undefined) {
+    throw new Error(`Stored app install "${installId}" has unexpected registration operation.`);
+  }
+
+  return undefined;
 }
 
 function stringControlPlaneValue(value: unknown): string | undefined {
@@ -2218,6 +2261,49 @@ function validateAppInstallRegistrationPolicy(context: string, record: StoredRec
   if (!isAppInstallRegistrationPolicy(registrationPolicy)) {
     throw new Error(
       `${context} record "${record.id}" has invalid field "${controlPlaneFieldLabel(record, "registrationPolicy")}".`,
+    );
+  }
+
+  validateAppInstallRegistrationOperation(
+    context,
+    record,
+    registrationPolicy,
+    `${context} record "${record.id}"`,
+  );
+}
+
+function validateAppInstallRegistrationOperation(
+  context: string,
+  record: Pick<StoredRecord, "entity" | "id" | "values">,
+  registrationPolicy: AppInstallRegistrationPolicy,
+  recordContext: string,
+) {
+  const registrationOperation = record.values.registrationOperation;
+
+  if (registrationPolicy === "custom-operation") {
+    if (registrationOperation === undefined) {
+      throw new Error(
+        `${recordContext} field "${controlPlaneFieldLabel(record, "registrationOperation")}" is required when registration policy is "custom-operation".`,
+      );
+    }
+
+    try {
+      parseAppInstallRegistrationOperation(
+        registrationOperation,
+        `${recordContext} field "${controlPlaneFieldLabel(record, "registrationOperation")}"`,
+      );
+    } catch {
+      throw new Error(
+        `${context} record "${record.id}" has invalid field "${controlPlaneFieldLabel(record, "registrationOperation")}".`,
+      );
+    }
+
+    return;
+  }
+
+  if (registrationOperation !== undefined) {
+    throw new Error(
+      `${recordContext} field "${controlPlaneFieldLabel(record, "registrationOperation")}" must be omitted unless registration policy is "custom-operation".`,
     );
   }
 }

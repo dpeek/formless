@@ -370,6 +370,18 @@ describe("account completion gate protocol", () => {
         },
       },
       {
+        kind: "app-registration",
+        appInstallId: "members",
+        registrationPolicy: "custom-operation",
+        operation: {
+          appInstallId: "members",
+          entityName: "profile",
+          label: "Complete profile",
+          operationKey: "profile.completeRegistration",
+          operationName: "completeRegistration",
+        },
+      },
+      {
         kind: "profile-completion",
         appInstallId: "crm",
         profileRecordId: "profile:ada",

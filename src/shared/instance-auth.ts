@@ -22,6 +22,11 @@ import {
   type IdentityInvitationTargetSurface,
 } from "@dpeek/formless-identity-control-plane";
 import type { AppInstallRegistrationPolicy } from "@dpeek/formless-installed-apps";
+import type {
+  ContactTextFieldFormat,
+  PublicSafeOperationInputControl,
+  PublicSafeOperationInputField,
+} from "@dpeek/formless-schema";
 
 import { parseOwnerSetupToken, type OwnerIdentity, type OwnerIdentityInput } from "./protocol.ts";
 import { runtimeTopologyRoutes } from "./runtime-topology.ts";
@@ -247,6 +252,11 @@ export type AccountCompletionGateOperationReference = {
   operationName?: string;
 };
 
+export type AccountCompletionGateOperationInputContract = {
+  fields: PublicSafeOperationInputField[];
+  unsupportedRequiredFields: string[];
+};
+
 export type AccountCompletionGatePolicyReference = {
   accountPolicyId: string;
   displayName: string;
@@ -287,6 +297,7 @@ export type AccountCompletionAppRegistrationGate = {
 
 export type AccountCompletionProfileCompletionGate = {
   appInstallId?: string;
+  inputContract?: AccountCompletionGateOperationInputContract;
   kind: "profile-completion";
   operation?: AccountCompletionGateOperationReference;
   profileRecordId?: string;
@@ -438,6 +449,18 @@ const collaboratorInvitationAcceptanceFailureReasons = [
   "wrong-target",
   "wrong-token",
 ] as const satisfies readonly CollaboratorInvitationAcceptanceFailureReason[];
+const accountCompletionOperationInputControls = [
+  "text",
+  "longText",
+  "boolean",
+  "date",
+  "number",
+  "enum",
+] as const satisfies readonly PublicSafeOperationInputControl[];
+const accountCompletionOperationTextFormats = [
+  "email",
+  "phone",
+] as const satisfies readonly ContactTextFieldFormat[];
 const publicKeyCredentialHints = ["client-device", "hybrid", "security-key"] as const;
 const userVerificationRequirements = ["discouraged", "preferred", "required"] as const;
 const residentKeyRequirements = ["discouraged", "preferred", "required"] as const;
@@ -912,12 +935,13 @@ export function parseAccountCompletionGate(value: unknown): AccountCompletionGat
         "Account completion profile-completion gate",
         object,
         ["kind"],
-        ["appInstallId", "operation", "profileRecordId", "selectedOrganization"],
+        ["appInstallId", "inputContract", "operation", "profileRecordId", "selectedOrganization"],
       );
 
       return {
         kind,
         ...parseOptionalGateOperation("Account completion profile-completion gate", object),
+        ...parseOptionalGateInputContract("Account completion profile-completion gate", object),
         ...parseOptionalStringField(
           "Account completion profile-completion gate appInstallId",
           "appInstallId",
@@ -1432,6 +1456,112 @@ function parseAccountCompletionGateOperationReference(
   };
 }
 
+function parseOptionalGateInputContract(
+  context: string,
+  object: Record<string, unknown>,
+): { inputContract?: AccountCompletionGateOperationInputContract } {
+  return object.inputContract === undefined
+    ? {}
+    : {
+        inputContract: parseAccountCompletionGateOperationInputContract(
+          `${context} input contract`,
+          object.inputContract,
+        ),
+      };
+}
+
+function parseAccountCompletionGateOperationInputContract(
+  context: string,
+  value: unknown,
+): AccountCompletionGateOperationInputContract {
+  const object = parseObject(context, value);
+
+  assertKeys(context, object, ["fields", "unsupportedRequiredFields"]);
+
+  return {
+    fields: parseAccountCompletionGateOperationInputFields(`${context} fields`, object.fields),
+    unsupportedRequiredFields: parseStringArray(
+      `${context} unsupportedRequiredFields`,
+      object.unsupportedRequiredFields,
+    ),
+  };
+}
+
+function parseAccountCompletionGateOperationInputFields(
+  context: string,
+  value: unknown,
+): PublicSafeOperationInputField[] {
+  if (!Array.isArray(value)) {
+    throw new Error(`${context} must be an array.`);
+  }
+
+  return value.map((item, index) =>
+    parseAccountCompletionGateOperationInputField(`${context}[${index}]`, item),
+  );
+}
+
+function parseAccountCompletionGateOperationInputField(
+  context: string,
+  value: unknown,
+): PublicSafeOperationInputField {
+  const object = parseObject(context, value);
+
+  assertKeys(
+    context,
+    object,
+    ["control", "label", "name", "required"],
+    ["format", "options", "suggestions"],
+  );
+
+  const control = parseStringLiteral(
+    `${context} control`,
+    object.control,
+    accountCompletionOperationInputControls,
+  );
+
+  return {
+    name: parseTrimmedNonEmptyString(`${context} name`, object.name),
+    label: parseTrimmedNonEmptyString(`${context} label`, object.label),
+    required: parseBoolean(`${context} required`, object.required),
+    control,
+    ...(object.format === undefined
+      ? {}
+      : {
+          format: parseStringLiteral(
+            `${context} format`,
+            object.format,
+            accountCompletionOperationTextFormats,
+          ),
+        }),
+    ...(object.options === undefined
+      ? {}
+      : { options: parseAccountCompletionGateOperationInputOptions(context, object.options) }),
+    ...(object.suggestions === undefined
+      ? {}
+      : { suggestions: parseStringArray(`${context} suggestions`, object.suggestions) }),
+  };
+}
+
+function parseAccountCompletionGateOperationInputOptions(
+  context: string,
+  value: unknown,
+): PublicSafeOperationInputField["options"] {
+  if (!Array.isArray(value)) {
+    throw new Error(`${context} options must be an array.`);
+  }
+
+  return value.map((item, index) => {
+    const option = parseObject(`${context} options[${index}]`, item);
+
+    assertKeys(`${context} options[${index}]`, option, ["label", "value"]);
+
+    return {
+      label: parseTrimmedNonEmptyString(`${context} options[${index}] label`, option.label),
+      value: parseTrimmedNonEmptyString(`${context} options[${index}] value`, option.value),
+    };
+  });
+}
+
 function parseOptionalAppRegistrationPolicy(value: unknown): {
   registrationPolicy?: AppInstallRegistrationPolicy;
 } {
@@ -1439,7 +1569,7 @@ function parseOptionalAppRegistrationPolicy(value: unknown): {
     return {};
   }
 
-  if (value === "closed" || value === "email-verified") {
+  if (value === "closed" || value === "email-verified" || value === "custom-operation") {
     return { registrationPolicy: value };
   }
 
@@ -1502,6 +1632,14 @@ function parseOptionalStringField<Field extends string>(
   const parsed = parseOptionalTrimmedNonEmptyString(context, object[field]);
 
   return (parsed === undefined ? {} : { [field]: parsed }) as { [Key in Field]?: string };
+}
+
+function parseStringArray(context: string, value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    throw new Error(`${context} must be an array.`);
+  }
+
+  return value.map((item, index) => parseTrimmedNonEmptyString(`${context}[${index}]`, item));
 }
 
 function parseAccountCompletionDisplaySafeUrl(context: string, value: unknown): string {
