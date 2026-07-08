@@ -4,6 +4,7 @@ import type {
   GeneratedOperationControlBinding,
   GeneratedOperationExecutionResult,
   GeneratedOperationExecutionState,
+  GeneratedOperationProgress,
   GeneratedOperationInputAdapter,
 } from "./operation-control-model.ts";
 import { createIdleGeneratedOperationExecutionState } from "./operation-control-model.ts";
@@ -38,8 +39,11 @@ export type GeneratedOperationRuntimeAdapterRequest = {
   source: {
     surface: GeneratedOperationCallerInput["source"];
   };
+  reportProgress: GeneratedOperationProgressReporter;
   sourceBlockId?: string;
 };
+
+export type GeneratedOperationProgressReporter = (progress: GeneratedOperationProgress) => void;
 
 export type GeneratedOperationRuntimeAdapterResponse =
   | {
@@ -48,10 +52,12 @@ export type GeneratedOperationRuntimeAdapterResponse =
       createdRecordIds?: readonly string[];
       displayMessage?: string;
       output?: unknown;
+      progress?: GeneratedOperationProgress;
     }
   | {
       status: "failed";
       displayError: string;
+      progress?: GeneratedOperationProgress;
     };
 
 export type GeneratedOperationRuntimeAdapter = (
@@ -104,12 +110,16 @@ export function createGeneratedOperationController(
     startedAt: number,
     result: GeneratedOperationExecutionResult,
   ) {
+    const currentState = states.get(binding.executionKey);
+    const pendingProgress = currentState?.status === "pending" ? currentState.progress : undefined;
+
     setState(binding.executionKey, {
       executionKey: binding.executionKey,
       status: result.type,
       result,
       startedAt,
       completedAt: now(),
+      ...(pendingProgress === undefined ? {} : { progress: pendingProgress }),
     });
 
     return result;
@@ -202,9 +212,27 @@ export function createGeneratedOperationController(
       return failedResult("Runtime operation adapter is unavailable.");
     }
 
-    return normalizeGeneratedOperationRuntimeAdapterResponse(
-      await adapter(buildGeneratedOperationRuntimeAdapterRequest(binding, callerInput)),
+    const reportProgress: GeneratedOperationProgressReporter = (progress) => {
+      const currentState = states.get(binding.executionKey);
+
+      if (currentState?.status !== "pending") {
+        return;
+      }
+
+      setState(binding.executionKey, {
+        ...currentState,
+        progress,
+      });
+    };
+    const response = await adapter(
+      buildGeneratedOperationRuntimeAdapterRequest(binding, callerInput, reportProgress),
     );
+
+    if (response.progress !== undefined) {
+      reportProgress(response.progress);
+    }
+
+    return normalizeGeneratedOperationRuntimeAdapterResponse(response);
   }
 
   return {
@@ -270,6 +298,7 @@ export function buildGeneratedOperationInvocationRequest(
 export function buildGeneratedOperationRuntimeAdapterRequest(
   binding: GeneratedOperationControlBinding,
   callerInput: GeneratedOperationCallerInput,
+  reportProgress: GeneratedOperationProgressReporter = noopProgressReporter,
 ): GeneratedOperationRuntimeAdapterRequest {
   const request: GeneratedOperationRuntimeAdapterRequest = {
     binding,
@@ -277,6 +306,7 @@ export function buildGeneratedOperationRuntimeAdapterRequest(
     source: {
       surface: callerInput.source,
     },
+    reportProgress,
     ...(callerInput.idempotencyKey === undefined
       ? {}
       : { idempotencyKey: callerInput.idempotencyKey }),
@@ -485,6 +515,8 @@ function failedResult(displayError: string): GeneratedOperationExecutionResult {
     displayError,
   };
 }
+
+function noopProgressReporter(_progress: GeneratedOperationProgress) {}
 
 function displaySafeErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "Operation failed.";

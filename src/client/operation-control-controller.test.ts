@@ -5,10 +5,12 @@ import {
   createGeneratedOperationController,
   type GeneratedOperationAuthoritySubmitter,
   type GeneratedOperationRuntimeAdapterRequest,
+  type GeneratedOperationRuntimeAdapterResponse,
 } from "./operation-control-controller.ts";
 import type {
   GeneratedOperationControlBinding,
   GeneratedOperationInputAdapter,
+  GeneratedOperationProgress,
 } from "./operation-control-model.ts";
 import type { SubmitOperationOptions } from "./sync.ts";
 import type {
@@ -210,6 +212,7 @@ describe("generated operation control controller", () => {
             inputFields: ["dryRun"],
             kind: "workspace",
             mode: "write",
+            operationKind: "push",
           },
           kind: "workspace",
           label: "Push",
@@ -366,6 +369,155 @@ describe("generated operation control controller", () => {
     expect(controller.getState("delete-menu")?.status).toBe("committed");
   });
 
+  it("shares runtime adapter progress across controls with the same execution key", async () => {
+    let resolveAdapter: (response: GeneratedOperationRuntimeAdapterResponse) => void = () => {};
+    const adapterResponse = new Promise<GeneratedOperationRuntimeAdapterResponse>((resolve) => {
+      resolveAdapter = resolve;
+    });
+    const pendingProgress = operationProgress({
+      title: "Pushing workspace",
+      detail: "Preparing source changes.",
+      updatedAt: 2_000,
+      steps: [
+        {
+          id: "prepare",
+          label: "Prepare source",
+          status: "running",
+        },
+        {
+          id: "submit",
+          label: "Submit push",
+          status: "pending",
+        },
+      ],
+    });
+    const controller = createGeneratedOperationController({
+      bindings: [
+        workspaceBinding("push-button", "workspace.source.push"),
+        workspaceBinding("push-menu", "workspace.source.push"),
+      ],
+      runtimeAdapters: {
+        workspace: (request) => {
+          request.reportProgress(pendingProgress);
+          return adapterResponse;
+        },
+      },
+    });
+
+    const first = controller.execute({
+      bindingId: "push-button",
+      input: { dryRun: false },
+      source: "button",
+    });
+
+    expect(controller.getState("push-button")).toMatchObject({
+      executionKey: "workspace.source.push",
+      status: "pending",
+      progress: pendingProgress,
+    });
+    expect(controller.getState("push-menu")).toMatchObject({
+      executionKey: "workspace.source.push",
+      status: "pending",
+      progress: pendingProgress,
+    });
+
+    resolveAdapter({
+      status: "committed",
+      displayMessage: "Push committed.",
+      output: { operationId: "workspace-op-1" },
+    });
+
+    await expect(first).resolves.toEqual({
+      type: "committed",
+      displayMessage: "Push committed.",
+      output: { operationId: "workspace-op-1" },
+    });
+    expect(controller.getState("push-menu")).toMatchObject({
+      status: "committed",
+      progress: pendingProgress,
+    });
+  });
+
+  it("normalizes runtime adapter replayed and failed results with display-safe progress", async () => {
+    const replayProgress = operationProgress({
+      title: "Pushing workspace",
+      updatedAt: 3_000,
+      steps: [
+        {
+          id: "submit",
+          label: "Submit push",
+          status: "succeeded",
+        },
+      ],
+    });
+    const replayController = createGeneratedOperationController({
+      bindings: [workspaceBinding("push-workspace", "workspace.source.push")],
+      runtimeAdapters: {
+        workspace: async () => ({
+          status: "replayed",
+          displayMessage: "Push already applied.",
+          progress: replayProgress,
+        }),
+      },
+    });
+
+    await expect(
+      replayController.execute({
+        bindingId: "push-workspace",
+        source: "button",
+      }),
+    ).resolves.toEqual({
+      type: "replayed",
+      displayMessage: "Push already applied.",
+    });
+    expect(replayController.getState("push-workspace")).toMatchObject({
+      status: "replayed",
+      progress: replayProgress,
+    });
+
+    const failedProgress = operationProgress({
+      title: "Pushing workspace",
+      detail: "Provider details are hidden.",
+      updatedAt: 4_000,
+      steps: [
+        {
+          id: "submit",
+          label: "Submit push",
+          detail: "Push failed.",
+          status: "failed",
+        },
+      ],
+    });
+    const failedController = createGeneratedOperationController({
+      bindings: [workspaceBinding("push-workspace", "workspace.source.push")],
+      runtimeAdapters: {
+        workspace: async () => ({
+          status: "failed",
+          displayError: "Push failed.",
+          progress: failedProgress,
+        }),
+      },
+    });
+
+    await expect(
+      failedController.execute({
+        bindingId: "push-workspace",
+        source: "button",
+      }),
+    ).resolves.toEqual({
+      type: "failed",
+      displayError: "Push failed.",
+    });
+    expect(failedController.getState("push-workspace")).toMatchObject({
+      status: "failed",
+      progress: failedProgress,
+      result: {
+        type: "failed",
+        displayError: "Push failed.",
+      },
+    });
+  });
+
   it("builds specialized Authority request shapes", () => {
     expect(
       buildGeneratedOperationInvocationRequest(
@@ -474,6 +626,30 @@ function binding(
     ...(overrides.feedback === undefined ? {} : { feedback: overrides.feedback }),
     input: overrides.input,
   };
+}
+
+function workspaceBinding(id: string, executionKey: string): GeneratedOperationControlBinding {
+  return binding({
+    id,
+    canonicalOperationKey: executionKey,
+    entityName: undefined,
+    executionKey,
+    input: {
+      bootstrapAllowed: false,
+      inputFields: ["dryRun"],
+      kind: "workspace",
+      mode: "write",
+      operationKind: "push",
+    },
+    kind: "workspace",
+    label: "Push",
+    operationName: executionKey,
+    scope: "workspace",
+  });
+}
+
+function operationProgress(progress: GeneratedOperationProgress): GeneratedOperationProgress {
+  return progress;
 }
 
 function operationResponse(

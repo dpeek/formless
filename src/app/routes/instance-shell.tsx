@@ -44,6 +44,12 @@ import {
   type ClientAppTarget,
 } from "../../client/app-target.ts";
 import {
+  normalizeGeneratedOperationRuntimeAdapterResponse,
+  workspaceGatewayOperationGeneratedProgress,
+  workspaceGatewayOperationGeneratedRuntimeAdapterResponse,
+  type GeneratedOperationExecutionState,
+} from "../../client/views.ts";
+import {
   type AppPackageResolver,
   type AppInstall,
   type InstallableAppPackage,
@@ -91,6 +97,7 @@ import type {
 } from "@dpeek/formless-identity-control-plane";
 import type { AppInstallsResponse } from "../../shared/protocol.ts";
 import { runtimeTopologyRoutes } from "../../shared/runtime-topology.ts";
+import { GeneratedOperationCompactStatus } from "../generated/operation-status.tsx";
 import { InstanceRail } from "../instance-rail.tsx";
 
 export type InstanceShellHomeRouteProps = {
@@ -950,6 +957,13 @@ function WorkspaceGatewayManagementSection({
   const progressOperation =
     state.status === "ready" ? workspaceManagementOperation(state) : undefined;
   const progressError = state.status === "ready" ? state.error : undefined;
+  const operationState =
+    state.status === "ready"
+      ? workspacePushOperationExecutionState({
+          error: progressError,
+          operation: progressOperation,
+        })
+      : undefined;
 
   return (
     <section
@@ -961,8 +975,12 @@ function WorkspaceGatewayManagementSection({
         <h2 id="workspace-gateway-heading" className="sr-only">
           Workspace
         </h2>
-        {state.status === "ready" ? (
-          <WorkspaceOperationCompactStatus error={progressError} operation={progressOperation} />
+        {operationState ? (
+          <GeneratedOperationCompactStatus
+            displayText={displaySafeText}
+            operationLabel="Push"
+            state={operationState}
+          />
         ) : null}
       </div>
       <WorkspaceGatewayOperationControls
@@ -1025,48 +1043,6 @@ function WorkspaceGatewayOperationControls({
           </Button>
         );
       })}
-    </div>
-  );
-}
-
-function WorkspaceOperationCompactStatus({
-  error,
-  operation,
-}: {
-  operation?: WorkspaceGatewayOperation;
-  error?: string;
-}) {
-  if (!operation && !error) {
-    return null;
-  }
-
-  const succeeded = operation?.status === "succeeded";
-  const failed = operation?.status === "failed" || Boolean(error);
-
-  if (!succeeded && !failed) {
-    return null;
-  }
-
-  const label = error
-    ? "Push failed"
-    : operation
-      ? `${workspaceOperationKindLabel(operation.operation)} ${workspaceOperationStatusLabel(operation.status).toLowerCase()}`
-      : "Push failed";
-
-  return (
-    <div data-formless-workspace-operation-feedback="true">
-      {error ? (
-        <p className={fieldErrorStyles()} data-slot="field-error" role="alert">
-          {displaySafeText(error)}
-        </p>
-      ) : (
-        <p
-          className={failed ? "text-xs text-red-700" : "text-xs text-muted-fg"}
-          role={failed ? "alert" : undefined}
-        >
-          {displaySafeText(label)}
-        </p>
-      )}
     </div>
   );
 }
@@ -1454,6 +1430,71 @@ function workspaceManagementOperation(
   }
 
   return operation;
+}
+
+function workspacePushOperationExecutionState({
+  error,
+  operation,
+}: {
+  error?: string;
+  operation?: WorkspaceGatewayOperation;
+}): GeneratedOperationExecutionState | undefined {
+  if (!operation && !error) {
+    return undefined;
+  }
+
+  const progress = operation ? workspaceGatewayOperationGeneratedProgress(operation) : undefined;
+  const startedAt = workspaceOperationTimestamp(operation?.createdAt);
+  const completedAt = workspaceOperationTimestamp(operation?.updatedAt);
+  const base = {
+    executionKey: "workspace:push",
+    ...(startedAt === undefined ? {} : { startedAt }),
+    ...(progress === undefined ? {} : { progress }),
+  };
+
+  if (error) {
+    return {
+      ...base,
+      status: "failed",
+      result: {
+        type: "failed",
+        displayError: error,
+      },
+      ...(completedAt === undefined ? {} : { completedAt }),
+    };
+  }
+
+  if (!operation) {
+    return undefined;
+  }
+
+  if (operationPollsAutomatically(operation)) {
+    return {
+      ...base,
+      status: "pending",
+    };
+  }
+
+  const result = normalizeGeneratedOperationRuntimeAdapterResponse(
+    workspaceGatewayOperationGeneratedRuntimeAdapterResponse(operation),
+  );
+
+  return {
+    ...base,
+    status: result.type,
+    result,
+    ...(completedAt === undefined ? {} : { completedAt }),
+  };
+}
+
+function workspaceOperationTimestamp(value: string | undefined): number | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  const timestamp = Date.parse(value);
+
+  return Number.isFinite(timestamp) ? timestamp : undefined;
 }
 
 export function AccessManagementRouteView({

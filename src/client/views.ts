@@ -55,6 +55,14 @@ export {
   normalizeGeneratedOperationRuntimeAdapterResponse,
 } from "./operation-control-controller.ts";
 export {
+  createWorkspaceGatewayGeneratedOperationRuntimeAdapter,
+  executeWorkspaceGatewayGeneratedOperation,
+  workspaceGatewayOperationGeneratedProgress,
+  workspaceGatewayOperationGeneratedProgressSteps,
+  workspaceGatewayOperationGeneratedRuntimeAdapterResponse,
+  workspaceGatewayStartInputFromGeneratedOperation,
+} from "./workspace-operation-runtime.ts";
+export {
   createIdleGeneratedOperationExecutionState,
   generatedOperationExecutionKey,
   projectCollectionOperationControlBinding,
@@ -86,11 +94,13 @@ export type {
   GeneratedOperationController,
   GeneratedOperationControllerListener,
   GeneratedOperationControllerOptions,
+  GeneratedOperationProgressReporter,
   GeneratedOperationRuntimeAdapter,
   GeneratedOperationRuntimeAdapterKind,
   GeneratedOperationRuntimeAdapterRequest,
   GeneratedOperationRuntimeAdapterResponse,
 } from "./operation-control-controller.ts";
+export type { WorkspaceGatewayGeneratedOperationRuntimeAdapterOptions } from "./workspace-operation-runtime.ts";
 export type {
   GeneratedOperationCallerInput,
   GeneratedOperationControlAvailability,
@@ -106,6 +116,9 @@ export type {
   GeneratedOperationInputAdapter,
   GeneratedOperationInvocationSource,
   GeneratedOperationProjectionOptions,
+  GeneratedOperationProgress,
+  GeneratedOperationProgressStep,
+  GeneratedOperationProgressStepStatus,
   GeneratedOrderingMoveOperationFacts,
   GeneratedPublicOperationControlFacts,
   GeneratedPublicOperationInputField,

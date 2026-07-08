@@ -688,10 +688,11 @@ describe("instance shell route view", () => {
 
     expect(succeededHtml).toContain('data-formless-workspace-gateway="local"');
     expect(succeededHtml).toContain('data-formless-workspace-operation-controls="true"');
-    expect(succeededHtml).toContain('data-formless-workspace-operation-feedback="true"');
-    expect(succeededHtml).toContain("Workspace source push succeeded");
+    expect(succeededHtml).toContain('data-formless-generated-operation-status="committed"');
+    expect(succeededHtml).toContain("Push synced");
+    expect(succeededHtml).toContain("Workspace push planned.");
+    expect(succeededHtml).not.toContain('data-formless-workspace-operation-feedback="true"');
     expect(succeededHtml).not.toContain('data-formless-workspace-operation-progress="true"');
-    expect(succeededHtml).not.toContain("Workspace push planned");
     expect(succeededHtml).not.toContain("Provider details");
     expect(succeededHtml).not.toContain("desired.instance.primary.3");
     expect(succeededHtml).not.toContain("https://personal.dpeek.workers.dev");
@@ -702,12 +703,55 @@ describe("instance shell route view", () => {
     expect(succeededHtml).not.toContain("sidecar-proxy-token");
     expect(succeededHtml).not.toContain("http://127.0.0.1:7777");
 
-    expect(failedHtml).toContain('data-formless-workspace-operation-feedback="true"');
+    expect(failedHtml).toContain('data-formless-generated-operation-status="failed"');
+    expect(failedHtml).toContain("Push failed");
     expect(failedHtml).toContain("&lt;path&gt;");
     expect(failedHtml).toContain("[redacted]");
     expect(failedHtml).not.toContain('data-formless-workspace-operation-progress="true"');
     expect(failedHtml).not.toContain("secret-token");
     expect(failedHtml).not.toContain("owner-token");
+  });
+
+  it("renders compact pending push feedback with the active generic progress step", () => {
+    const html = renderWithRouter(
+      <InstanceShellRouteView
+        state={readyState({ installs: [siteInstall({ installId: "site", label: "Site" })] })}
+        workspaceGatewayState={workspaceGatewayState({
+          activeOperationId: "op_push_00000003",
+          csrfToken: "csrf-token",
+          currentOperation: workspaceOperation({
+            id: "op_push_00000003",
+            operation: "push",
+            status: "running",
+            steps: [
+              { id: "plan", label: "Plan workspace source", status: "succeeded" },
+              {
+                detail: "Updating deployment intent",
+                id: "provider",
+                label: "Provider reconciliation",
+                status: "running",
+              },
+              { id: "health", label: "Health check", status: "pending" },
+            ],
+            summary: {
+              fields: {
+                proxyToken: "sidecar-proxy-token",
+                workspace: "/Users/dpeek/workspace",
+              },
+              title: "Pushing workspace",
+            },
+          }),
+        })}
+      />,
+    );
+
+    expect(html).toContain('data-formless-generated-operation-status="pending"');
+    expect(html).toContain("Pushing workspace");
+    expect(html).toContain("Provider reconciliation");
+    expect(html).toContain("animate-spin");
+    expect(html).not.toContain('data-formless-workspace-operation-progress="true"');
+    expect(html).not.toContain("sidecar-proxy-token");
+    expect(html).not.toContain("/Users/dpeek");
   });
 
   it("polls only queued or running workspace operations automatically", () => {

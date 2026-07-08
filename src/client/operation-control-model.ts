@@ -103,6 +103,7 @@ export type GeneratedOperationInputAdapter =
       inputFields: readonly string[];
       kind: "workspace";
       mode: "read" | "write";
+      operationKind: string;
       requiredCapability?: string;
     };
 
@@ -173,10 +174,32 @@ export type GeneratedOperationExecutionStatus =
   | "pending"
   | "replayed";
 
+export type GeneratedOperationProgressStepStatus =
+  | "failed"
+  | "pending"
+  | "running"
+  | "skipped"
+  | "succeeded";
+
+export type GeneratedOperationProgressStep = {
+  id: string;
+  label: string;
+  detail?: string;
+  status: GeneratedOperationProgressStepStatus;
+};
+
+export type GeneratedOperationProgress = {
+  title: string;
+  detail?: string;
+  updatedAt: number;
+  steps: readonly GeneratedOperationProgressStep[];
+};
+
 export type GeneratedOperationExecutionState = {
   executionKey: string;
   status: GeneratedOperationExecutionStatus;
   completedAt?: number;
+  progress?: GeneratedOperationProgress;
   result?: GeneratedOperationExecutionResult;
   startedAt?: number;
 };
@@ -550,6 +573,7 @@ export function projectWorkspaceOperationControlBinding(
       inputFields: input.inputFields,
       kind: "workspace",
       mode: input.mode,
+      operationKind: input.kind,
       ...(input.requiredCapability === undefined
         ? {}
         : { requiredCapability: input.requiredCapability }),

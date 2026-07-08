@@ -36,10 +36,19 @@ import {
 } from "@heroicons/react/24/outline";
 
 type OperationScope = "workspace" | "collection" | "record" | "form";
-type OperationKind = "create" | "update" | "delete" | "transition" | "sync" | "bulk";
+type OperationKind =
+  | "create"
+  | "update"
+  | "delete"
+  | "transition"
+  | "sync"
+  | "bulk"
+  | "ordering"
+  | "tree";
 type OperationVariant = ButtonVariant;
 type OperationInvocationSource = "button" | "menuItem" | "submitButton" | "confirmationDialog";
 type OperationExecutionStatus = "idle" | "pending" | "committed" | "replayed" | "failed";
+type OperationProgressStepStatus = "pending" | "running" | "succeeded" | "failed" | "skipped";
 type OperationMockOutcome =
   | {
       type: "committed";
@@ -58,18 +67,17 @@ type OperationMockOutcome =
     };
 
 type OperationBinding = {
-  id: string;
+  bindingId: string;
   executionKey: string;
   canonicalOperationKey: string;
   label: string;
   scope: OperationScope;
   kind: OperationKind;
-  variant: OperationVariant;
+  visualIntent: OperationVariant;
   disabledReason?: string;
   destructive?: boolean;
   confirmation?: OperationConfirmation;
   feedback?: OperationFeedbackCopy;
-  progress?: OperationProgress;
 };
 
 type OperationConfirmation = {
@@ -89,18 +97,37 @@ type OperationFeedbackCopy = {
 };
 
 type OperationProgress = {
-  steps?: readonly OperationProgressStep[];
+  title: string;
+  detail?: string;
+  updatedAt: number;
+  steps: readonly OperationProgressStep[];
+};
+
+type OperationProgressFrame = {
+  atMs: number;
+  progress: Omit<OperationProgress, "updatedAt">;
 };
 
 type OperationProgressStep = {
   id: string;
   label: string;
-  status: "pending" | "running" | "succeeded";
+  detail?: string;
+  status: OperationProgressStepStatus;
 };
 
 type OperationExecutionInput = {
   source: OperationInvocationSource;
   values?: Record<string, string>;
+  recordId?: string;
+  orderingMove?: {
+    direction: "before" | "after";
+    relativeRecordId: string;
+  };
+  treeInput?: {
+    parentRecordId?: string;
+    placementId?: string;
+    childVariant?: string;
+  };
 };
 
 type OperationExecutionResult =
@@ -126,6 +153,7 @@ type OperationExecutionState = {
   executionKey: string;
   status: OperationExecutionStatus;
   result?: OperationExecutionResult;
+  progress?: OperationProgress;
   startedAt?: number;
   completedAt?: number;
 };
@@ -142,6 +170,7 @@ type OperationExecutionController = {
 
 type OperationMockExecutionPlan = {
   outcome: OperationMockOutcome;
+  progress?: readonly OperationProgressFrame[];
 };
 
 type OperationFeedbackPhase = "progress" | "success" | "error";
@@ -207,9 +236,73 @@ const operationExecutionPlans: Record<string, OperationMockExecutionPlan> = {
       delayMs: 4200,
       affectedCount: 2,
     },
+    progress: [
+      {
+        atMs: 900,
+        progress: {
+          title: "Clearing completed tasks",
+          detail: "You can keep working while this finishes.",
+          steps: [
+            { id: "find", label: "Find completed tasks", status: "succeeded" },
+            { id: "clear", label: "Clear matching records", status: "running" },
+            { id: "refresh", label: "Refresh task list", status: "pending" },
+          ],
+        },
+      },
+      {
+        atMs: 2600,
+        progress: {
+          title: "Clearing completed tasks",
+          detail: "Refreshing the collection.",
+          steps: [
+            { id: "find", label: "Find completed tasks", status: "succeeded" },
+            { id: "clear", label: "Clear matching records", status: "succeeded" },
+            { id: "refresh", label: "Refresh task list", status: "running" },
+          ],
+        },
+      },
+    ],
   },
   "workspace:push": {
-    outcome: { type: "replay", delayMs: 760 },
+    outcome: { type: "replay", delayMs: 2800 },
+    progress: [
+      {
+        atMs: 0,
+        progress: {
+          title: "Pushing workspace",
+          detail: "Preparing display-safe workspace changes.",
+          steps: [
+            { id: "collect", label: "Collect source changes", status: "running" },
+            { id: "publish", label: "Publish package changes", status: "pending" },
+            { id: "deploy", label: "Update deployment intent", status: "pending" },
+          ],
+        },
+      },
+      {
+        atMs: 900,
+        progress: {
+          title: "Pushing workspace",
+          detail: "Publishing package changes.",
+          steps: [
+            { id: "collect", label: "Collect source changes", status: "succeeded" },
+            { id: "publish", label: "Publish package changes", status: "running" },
+            { id: "deploy", label: "Update deployment intent", status: "pending" },
+          ],
+        },
+      },
+      {
+        atMs: 1900,
+        progress: {
+          title: "Pushing workspace",
+          detail: "Provider work stays inside push progress.",
+          steps: [
+            { id: "collect", label: "Collect source changes", status: "succeeded" },
+            { id: "publish", label: "Publish package changes", status: "succeeded" },
+            { id: "deploy", label: "Update deployment intent", status: "skipped" },
+          ],
+        },
+      },
+    ],
   },
   "workspace:fail": {
     outcome: {
@@ -217,6 +310,30 @@ const operationExecutionPlans: Record<string, OperationMockExecutionPlan> = {
       delayMs: 700,
       displayError: "The operation was rejected.",
     },
+    progress: [
+      {
+        atMs: 0,
+        progress: {
+          title: "Running operation",
+          detail: "Checking the operation request.",
+          steps: [
+            { id: "request", label: "Check request", status: "running" },
+            { id: "commit", label: "Commit changes", status: "pending" },
+          ],
+        },
+      },
+      {
+        atMs: 560,
+        progress: {
+          title: "Running operation",
+          detail: "The operation could not commit.",
+          steps: [
+            { id: "request", label: "Check request", status: "succeeded" },
+            { id: "commit", label: "Commit changes", status: "failed" },
+          ],
+        },
+      },
+    ],
   },
   [`record:${mockTask.id}:transferOwner`]: {
     outcome: {
@@ -253,6 +370,35 @@ const operationExecutionPlans: Record<string, OperationMockExecutionPlan> = {
       affectedCount: 1,
     },
   },
+  [`ordering:tasks:${mockTask.id}:before`]: {
+    outcome: {
+      type: "committed",
+      delayMs: 520,
+      affectedCount: 1,
+    },
+  },
+  [`ordering:tasks:${mockTask.id}:after`]: {
+    outcome: {
+      type: "committed",
+      delayMs: 520,
+      affectedCount: 1,
+    },
+  },
+  "tree:page-home:add-child": {
+    outcome: {
+      type: "committed",
+      delayMs: 620,
+      affectedCount: 2,
+      createdRecordIds: ["block-callout", "placement-callout"],
+    },
+  },
+  "tree:placement-hero:remove": {
+    outcome: {
+      type: "committed",
+      delayMs: 580,
+      affectedCount: 1,
+    },
+  },
   "form:crm.contacts.create": {
     outcome: {
       type: "committed",
@@ -265,81 +411,74 @@ const operationExecutionPlans: Record<string, OperationMockExecutionPlan> = {
 
 const operationExamples = {
   createTask: {
-    id: "button:tasks.create",
+    bindingId: "button:tasks.create",
     executionKey: "collection:tasks.create",
     canonicalOperationKey: "tasks.create",
     label: "New task",
     scope: "collection",
     kind: "create",
-    variant: "primary",
+    visualIntent: "primary",
     feedback: {
       successTitle: "Task created",
     },
   },
   clearCompleted: {
-    id: "button:tasks.clearCompleted",
+    bindingId: "button:tasks.clearCompleted",
     executionKey: "collection:tasks.clearCompleted",
     canonicalOperationKey: "tasks.clearCompleted",
     label: "Clear completed",
     scope: "collection",
     kind: "bulk",
-    variant: "secondary",
+    visualIntent: "secondary",
     feedback: {
       progressTitle: "Clearing completed tasks",
       progressDetail: "You can keep working while this finishes.",
       successTitle: "Completed tasks cleared",
     },
-    progress: {
-      steps: [
-        { id: "find", label: "Find completed tasks", status: "succeeded" },
-        { id: "clear", label: "Clear matching records", status: "running" },
-        { id: "refresh", label: "Refresh task list", status: "pending" },
-      ],
-    },
   },
   pushWorkspace: {
-    id: "button:workspace.push",
+    bindingId: "button:workspace.push",
     executionKey: "workspace:push",
     canonicalOperationKey: "workspace.push",
     label: "Push workspace",
     scope: "workspace",
     kind: "sync",
-    variant: "secondary",
+    visualIntent: "secondary",
     feedback: {
       replayTitle: "Workspace push already applied",
       replayDetail: "No duplicate changes made.",
     },
   },
   failingOperation: {
-    id: "button:workspace.fail",
+    bindingId: "button:workspace.fail",
     executionKey: "workspace:fail",
     canonicalOperationKey: "workspace.fail",
     label: "Failing operation",
     scope: "workspace",
     kind: "sync",
-    variant: "secondary",
+    visualIntent: "secondary",
     feedback: {
       failureTitle: "Failing operation failed",
     },
   },
   disabledTransfer: {
-    id: `button:${mockTask.id}.transferOwner`,
+    bindingId: `button:${mockTask.id}.transferOwner`,
     executionKey: `record:${mockTask.id}:transferOwner`,
     canonicalOperationKey: "tasks.transferOwner",
     label: "Transfer owner",
     scope: "record",
     kind: "update",
-    variant: "secondary",
+    visualIntent: "secondary",
     disabledReason: "Requires owner role.",
   },
   deleteTask: {
-    id: `button:${mockTask.id}.delete`,
+    bindingId: `button:${mockTask.id}.delete`,
     executionKey: `record:${mockTask.id}:delete`,
     canonicalOperationKey: "tasks.delete",
     label: "Delete task",
     scope: "record",
     kind: "delete",
-    variant: "destructive",
+    visualIntent: "destructive",
     destructive: true,
     confirmation: {
       title: "Delete task?",
@@ -396,6 +535,71 @@ const styles = stylex.create({
     justifyContent: "flex-start",
     flexWrap: "wrap",
     gap: spacingVars["--spacing-2"],
+  },
+  compactStack: {
+    display: "grid",
+    gap: spacingVars["--spacing-2"],
+    minWidth: "min(100%, 280px)",
+  },
+  compactStatus: {
+    borderWidth: borderVars["--border-width"],
+    borderStyle: "solid",
+    borderColor: colorVars["--color-border"],
+    borderRadius: "8px",
+    paddingBlock: spacingVars["--spacing-2"],
+    paddingInline: spacingVars["--spacing-3"],
+    display: "grid",
+    gridTemplateColumns: "auto minmax(0, 1fr)",
+    alignItems: "center",
+    gap: spacingVars["--spacing-2"],
+    minHeight: 44,
+    backgroundColor: colorVars["--color-background-muted"],
+  },
+  compactStatusError: {
+    borderColor: colorVars["--color-error"],
+    backgroundColor: colorVars["--color-error-muted"],
+  },
+  tableSurface: {
+    width: "100%",
+    borderWidth: borderVars["--border-width"],
+    borderStyle: "solid",
+    borderColor: colorVars["--color-border"],
+    borderRadius: "8px",
+    overflow: "hidden",
+  },
+  tableRow: {
+    display: "grid",
+    gridTemplateColumns: "minmax(0, 1.4fr) minmax(72px, 0.6fr) auto",
+    alignItems: "center",
+    gap: spacingVars["--spacing-2"],
+    paddingBlock: spacingVars["--spacing-2"],
+    paddingInline: spacingVars["--spacing-3"],
+    "@media (max-width: 720px)": {
+      gridTemplateColumns: "minmax(0, 1fr)",
+      alignItems: "stretch",
+    },
+  },
+  rowActions: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    flexWrap: "wrap",
+    gap: spacingVars["--spacing-1"],
+    "@media (max-width: 720px)": {
+      justifyContent: "flex-start",
+    },
+  },
+  treeNode: {
+    width: "100%",
+    borderWidth: borderVars["--border-width"],
+    borderStyle: "solid",
+    borderColor: colorVars["--color-border"],
+    borderRadius: "8px",
+    paddingBlock: spacingVars["--spacing-3"],
+    paddingInline: spacingVars["--spacing-3"],
+    display: "grid",
+    gap: spacingVars["--spacing-3"],
+    backgroundColor: colorVars["--color-background-muted"],
   },
   reason: {
     display: "grid",
@@ -493,28 +697,31 @@ function OperationsHeader() {
 }
 
 function OperationCaseGrid() {
+  const taskMenuOperations = createTaskMenuOperations(mockTask);
+
   return (
     <div {...stylex.props(styles.caseGrid)}>
       <OperationCaseCard
-        title="Committed button"
-        operation={operationExamples.createTask}
-        control={<OperationButton operation={operationExamples.createTask} icon={PlusIcon} />}
-      />
-      <OperationCaseCard
-        title="Delayed progress"
-        operation={operationExamples.clearCompleted}
+        title="Collection toolbar"
+        operations={[operationExamples.createTask, operationExamples.clearCompleted]}
         control={
-          <OperationButton
-            operation={operationExamples.clearCompleted}
-            icon={ArchiveBoxXMarkIcon}
-          />
+          <>
+            <OperationButton operation={operationExamples.createTask} icon={PlusIcon} />
+            <OperationButton
+              operation={operationExamples.clearCompleted}
+              icon={ArchiveBoxXMarkIcon}
+            />
+          </>
         }
       />
       <OperationCaseCard
-        title="Already applied"
+        title="Workspace push compact status"
         operation={operationExamples.pushWorkspace}
         control={
-          <OperationButton operation={operationExamples.pushWorkspace} icon={CloudArrowUpIcon} />
+          <div {...stylex.props(styles.compactStack)}>
+            <OperationButton operation={operationExamples.pushWorkspace} icon={CloudArrowUpIcon} />
+            <OperationCompactStatus operation={operationExamples.pushWorkspace} />
+          </div>
         }
       />
       <OperationCaseCard
@@ -541,9 +748,12 @@ function OperationCaseGrid() {
       />
       <OperationCaseCard
         title="Menu items"
-        operations={createTaskMenuOperations(mockTask)}
-        control={<OperationMenu operations={createTaskMenuOperations(mockTask)} />}
+        operations={taskMenuOperations}
+        control={<OperationMenu operations={taskMenuOperations} />}
       />
+      <OperationTableRowCase />
+      <OperationOrderingCase />
+      <OperationTreeCase />
       <OperationSubmitCase />
     </div>
   );
@@ -585,13 +795,13 @@ function OperationSubmitCase() {
   const { controller } = useOperationExecution();
   const createContactOperation = useMemo<OperationBinding>(
     () => ({
-      id: "submit:crm.contacts.create",
+      bindingId: "submit:crm.contacts.create",
       executionKey: "form:crm.contacts.create",
       canonicalOperationKey: "crm.contacts.create",
       label: "Create contact",
       scope: "form",
       kind: "create",
-      variant: "primary",
+      visualIntent: "primary",
       disabledReason: name.trim().length === 0 ? "Enter a contact name." : undefined,
       feedback: {
         successTitle: `${name.trim() || "Contact"} created`,
@@ -642,6 +852,133 @@ function OperationSubmitCase() {
   );
 }
 
+function OperationTableRowCase() {
+  const operations = createTableRowOperations(mockTask);
+  const [editOperation, completeOperation, deleteOperation] = operations;
+
+  return (
+    <OperationCaseCard
+      title="Table row control"
+      operations={operations}
+      control={
+        <div role="table" aria-label="Task table" {...stylex.props(styles.tableSurface)}>
+          <div role="row" {...stylex.props(styles.tableRow)}>
+            <VStack gap={0.5}>
+              <Text type="label" maxLines={1}>
+                {mockTask.title}
+              </Text>
+              <Text type="supporting" color="secondary" maxLines={1}>
+                {mockTask.owner}
+              </Text>
+            </VStack>
+            <Text type="supporting" color="secondary">
+              {mockTask.status}
+            </Text>
+            <div {...stylex.props(styles.rowActions)}>
+              <OperationButton
+                operation={editOperation}
+                icon={PencilSquareIcon}
+                input={{ recordId: mockTask.id }}
+              />
+              <OperationButton
+                operation={completeOperation}
+                icon={CheckCircleIcon}
+                input={{ recordId: mockTask.id }}
+              />
+              <OperationButton
+                operation={deleteOperation}
+                icon={TrashIcon}
+                input={{ recordId: mockTask.id }}
+              />
+            </div>
+          </div>
+        </div>
+      }
+    />
+  );
+}
+
+function OperationOrderingCase() {
+  const operations = createOrderingOperations(mockTask);
+  const [moveBeforeOperation, moveAfterOperation] = operations;
+
+  return (
+    <OperationCaseCard
+      title="Ordering move"
+      operations={operations}
+      control={
+        <>
+          <OperationButton
+            operation={moveBeforeOperation}
+            icon={ArchiveBoxArrowDownIcon}
+            input={{
+              recordId: mockTask.id,
+              orderingMove: {
+                direction: "before",
+                relativeRecordId: "task-prep",
+              },
+            }}
+          />
+          <OperationButton
+            operation={moveAfterOperation}
+            icon={ArchiveBoxArrowDownIcon}
+            input={{
+              recordId: mockTask.id,
+              orderingMove: {
+                direction: "after",
+                relativeRecordId: "task-review",
+              },
+            }}
+          />
+        </>
+      }
+    />
+  );
+}
+
+function OperationTreeCase() {
+  const operations = createTreeOperations();
+  const [addChildOperation, removePlacementOperation] = operations;
+
+  return (
+    <OperationCaseCard
+      title="Tree add and remove"
+      operations={operations}
+      control={
+        <div {...stylex.props(styles.treeNode)}>
+          <VStack gap={0.5}>
+            <Text type="label">Home page</Text>
+            <Text type="supporting" color="secondary">
+              Hero placement
+            </Text>
+          </VStack>
+          <div {...stylex.props(styles.rowActions)}>
+            <OperationButton
+              operation={addChildOperation}
+              icon={PlusIcon}
+              input={{
+                treeInput: {
+                  parentRecordId: "page-home",
+                  childVariant: "callout",
+                },
+              }}
+            />
+            <OperationButton
+              operation={removePlacementOperation}
+              icon={TrashIcon}
+              input={{
+                treeInput: {
+                  placementId: "placement-hero",
+                },
+              }}
+            />
+          </div>
+        </div>
+      }
+    />
+  );
+}
+
 function OperationMetadata({ operations }: { operations: OperationBinding[] }) {
   const firstOperation = operations[0];
 
@@ -685,27 +1022,32 @@ function OperationReasonLine({ operations }: { operations: OperationBinding[] })
 
 function OperationProgressPanel({ operations }: { operations: OperationBinding[] }) {
   const { controller } = useOperationExecution();
-  const pendingOperation = operations.find(
-    (operation) => controller.isPending(operation) && operation.progress?.steps?.length,
-  );
+  const pendingProgress = operations
+    .map((operation) => ({
+      operation,
+      state: controller.getState(operation),
+    }))
+    .find(({ state }) => state.status === "pending" && state.progress?.steps.length);
 
-  if (!pendingOperation?.progress?.steps?.length) {
+  if (!pendingProgress?.state.progress) {
     return null;
   }
+
+  const activeStep = selectActiveOperationProgressStep(pendingProgress.state.progress);
 
   return (
     <div role="status" {...stylex.props(styles.feedbackPanel, styles.feedbackProgress)}>
       <div {...stylex.props(styles.feedbackHeader)}>
         <Spinner size="sm" shade="inherit" />
         <VStack gap={0.5}>
-          <Text type="label">Running</Text>
+          <Text type="label">{pendingProgress.state.progress.title}</Text>
           <Text type="supporting" color="secondary">
-            {pendingOperation.label} is in progress.
+            {activeStep?.detail ?? pendingProgress.state.progress.detail ?? "Running"}
           </Text>
         </VStack>
       </div>
       <div {...stylex.props(styles.progressSteps)}>
-        {pendingOperation.progress.steps.map((step) => (
+        {pendingProgress.state.progress.steps.map((step) => (
           <div key={step.id} {...stylex.props(styles.progressStep)}>
             <OperationProgressStepMarker status={step.status} />
             <Text type="supporting" color={step.status === "pending" ? "secondary" : "primary"}>
@@ -718,9 +1060,57 @@ function OperationProgressPanel({ operations }: { operations: OperationBinding[]
   );
 }
 
+function OperationCompactStatus({ operation }: { operation: OperationBinding }) {
+  const { controller } = useOperationExecution();
+  const state = controller.getState(operation);
+  const progressStep = state.progress
+    ? selectActiveOperationProgressStep(state.progress)
+    : undefined;
+  const statusText = compactOperationStatusText(operation, state, progressStep);
+  const statusStyleProps =
+    state.status === "failed"
+      ? stylex.props(styles.compactStatus, styles.compactStatusError)
+      : stylex.props(styles.compactStatus);
+
+  return (
+    <div role={state.status === "failed" ? "alert" : "status"} {...statusStyleProps}>
+      <OperationCompactStatusMarker state={state} />
+      <VStack gap={0.5}>
+        <Text type="label" maxLines={1}>
+          {statusText.title}
+        </Text>
+        <Text type="supporting" color="secondary" maxLines={2}>
+          {statusText.detail}
+        </Text>
+      </VStack>
+    </div>
+  );
+}
+
+function OperationCompactStatusMarker({ state }: { state: OperationExecutionState }) {
+  if (state.status === "pending") {
+    return <Spinner size="sm" shade="inherit" />;
+  }
+
+  if (state.status === "failed") {
+    return <Icon icon={ExclamationTriangleIcon} color="error" size="sm" />;
+  }
+
+  return (
+    <StatusDot
+      variant={state.status === "committed" ? "success" : "neutral"}
+      label={formatOperationExecutionStatus(state.status)}
+    />
+  );
+}
+
 function OperationProgressStepMarker({ status }: { status: OperationProgressStep["status"] }) {
   if (status === "running") {
     return <Spinner size="sm" shade="inherit" />;
+  }
+
+  if (status === "failed") {
+    return <Icon icon={ExclamationTriangleIcon} color="error" size="sm" />;
   }
 
   return (
@@ -790,7 +1180,15 @@ function OperationFailureAlert({ operations }: { operations: OperationBinding[] 
   );
 }
 
-function OperationButton({ operation, icon }: { operation: OperationBinding; icon?: IconType }) {
+function OperationButton({
+  operation,
+  icon,
+  input,
+}: {
+  operation: OperationBinding;
+  icon?: IconType;
+  input?: Omit<OperationExecutionInput, "source">;
+}) {
   const { controller } = useOperationExecution();
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
   const isPending = controller.isPending(operation);
@@ -806,14 +1204,14 @@ function OperationButton({ operation, icon }: { operation: OperationBinding; ico
       return;
     }
 
-    void controller.execute(operation, { source: "button" });
-  }, [controller, isPending, operation]);
+    void controller.execute(operation, { source: "button", ...input });
+  }, [controller, input, isPending, operation]);
 
   return (
     <>
       <Button
         label={operation.label}
-        variant={operation.variant}
+        variant={operation.visualIntent}
         icon={IconComponent ? <Icon icon={IconComponent} color="inherit" size="sm" /> : undefined}
         isDisabled={Boolean(operation.disabledReason)}
         isLoading={isPending}
@@ -822,6 +1220,7 @@ function OperationButton({ operation, icon }: { operation: OperationBinding; ico
       />
       <OperationConfirmDialog
         operation={operation}
+        input={input}
         isOpen={isConfirmOpen}
         onOpenChange={setIsConfirmOpen}
       />
@@ -844,7 +1243,7 @@ function OperationSubmitButton({
     <Button
       type="submit"
       label={operation.label}
-      variant={operation.variant}
+      variant={operation.visualIntent}
       icon={IconComponent ? <Icon icon={IconComponent} color="inherit" size="sm" /> : undefined}
       isDisabled={Boolean(operation.disabledReason)}
       isLoading={isPending}
@@ -871,7 +1270,7 @@ function OperationMenu({ operations }: { operations: OperationBinding[] }) {
       >
         {operations.map((operation, index) => (
           <OperationMenuItem
-            key={operation.id}
+            key={operation.bindingId}
             operation={operation}
             hasDividerBefore={index === operations.length - 1}
             onConfirm={setConfirmationOperation}
@@ -941,10 +1340,12 @@ function OperationMenuItem({
 
 function OperationConfirmDialog({
   operation,
+  input,
   isOpen,
   onOpenChange,
 }: {
   operation: OperationBinding;
+  input?: Omit<OperationExecutionInput, "source">;
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
 }) {
@@ -963,10 +1364,10 @@ function OperationConfirmDialog({
       title={confirmation.title}
       description={confirmation.description}
       actionLabel={confirmation.actionLabel}
-      actionVariant={operation.destructive ? "destructive" : operation.variant}
+      actionVariant={operation.destructive ? "destructive" : operation.visualIntent}
       isActionLoading={isPending}
       onAction={() => {
-        void controller.execute(operation, { source: "confirmationDialog" }).then(() => {
+        void controller.execute(operation, { source: "confirmationDialog", ...input }).then(() => {
           onOpenChange(false);
         });
       }}
@@ -1000,7 +1401,7 @@ function OperationExecutionProvider({ children }: { children: ReactNode }) {
 
       return {
         id: `operation-event-${eventCounterRef.current}`,
-        bindingId: operation.id,
+        bindingId: operation.bindingId,
         executionKey: operation.executionKey,
         canonicalOperationKey: operation.canonicalOperationKey,
         label: operation.label,
@@ -1055,13 +1456,37 @@ function OperationExecutionProvider({ children }: { children: ReactNode }) {
       const startedAt = Date.now();
       const executionKey = operation.executionKey;
       const plan = operationExecutionPlans[executionKey] ?? defaultOperationExecutionPlan;
+      const immediateProgress = selectImmediateOperationProgress(plan);
 
       runningTokensRef.current.set(executionKey, runToken);
       setExecutionState(executionKey, {
         executionKey,
         status: "pending",
+        ...(immediateProgress ? { progress: materializeOperationProgress(immediateProgress) } : {}),
         startedAt,
       });
+
+      for (const progressFrame of plan.progress ?? []) {
+        if (progressFrame.atMs <= 0) {
+          continue;
+        }
+
+        window.setTimeout(() => {
+          if (runningTokensRef.current.get(executionKey) !== runToken) {
+            return;
+          }
+
+          const currentState = statesRef.current.get(executionKey);
+          if (currentState?.status !== "pending") {
+            return;
+          }
+
+          setExecutionState(executionKey, {
+            ...currentState,
+            progress: materializeOperationProgress(progressFrame),
+          });
+        }, progressFrame.atMs);
+      }
 
       window.setTimeout(() => {
         if (runningTokensRef.current.get(executionKey) !== runToken) {
@@ -1081,10 +1506,12 @@ function OperationExecutionProvider({ children }: { children: ReactNode }) {
       await wait(plan.outcome.delayMs ?? 600);
 
       const result = createOperationExecutionResult(operation, input, plan);
+      const completedProgress = statesRef.current.get(executionKey)?.progress;
       setExecutionState(executionKey, {
         executionKey,
         status: result.type,
         result,
+        ...(completedProgress ? { progress: completedProgress } : {}),
         startedAt,
         completedAt: Date.now(),
       });
@@ -1181,6 +1608,71 @@ const defaultOperationExecutionPlan = {
   },
 } satisfies OperationMockExecutionPlan;
 
+function selectImmediateOperationProgress(
+  plan: OperationMockExecutionPlan,
+): OperationProgressFrame | undefined {
+  let immediateProgress: OperationProgressFrame | undefined;
+
+  for (const progressFrame of plan.progress ?? []) {
+    if (progressFrame.atMs <= 0) {
+      immediateProgress = progressFrame;
+    }
+  }
+
+  return immediateProgress;
+}
+
+function materializeOperationProgress(frame: OperationProgressFrame): OperationProgress {
+  return {
+    ...frame.progress,
+    updatedAt: Date.now(),
+  };
+}
+
+function selectActiveOperationProgressStep(
+  progress: OperationProgress,
+): OperationProgressStep | undefined {
+  return (
+    progress.steps.find((step) => step.status === "running") ??
+    progress.steps.find((step) => step.status === "failed") ??
+    progress.steps.find((step) => step.status === "pending") ??
+    progress.steps.find((step) => step.status === "skipped") ??
+    progress.steps[progress.steps.length - 1]
+  );
+}
+
+function compactOperationStatusText(
+  operation: OperationBinding,
+  state: OperationExecutionState,
+  progressStep: OperationProgressStep | undefined,
+) {
+  if (state.status === "pending") {
+    return {
+      title: state.progress?.title ?? `${operation.label} running`,
+      detail: progressStep?.label ?? state.progress?.detail ?? "Pending",
+    };
+  }
+
+  if (state.result?.type === "failed") {
+    return {
+      title: state.result.title,
+      detail: state.result.displayError,
+    };
+  }
+
+  if (state.result) {
+    return {
+      title: state.result.title,
+      detail: state.result.detail,
+    };
+  }
+
+  return {
+    title: operation.label,
+    detail: "Ready",
+  };
+}
+
 function describeCommittedOperationResult(
   operation: OperationBinding,
   input: OperationExecutionInput,
@@ -1201,8 +1693,10 @@ function describeCommittedOperationResult(
     bulk: "updated",
     create: "created",
     delete: "deleted",
+    ordering: "moved",
     sync: "applied",
     transition: "updated",
+    tree: "updated",
     update: "updated",
   };
 
@@ -1251,50 +1745,50 @@ function useOperationExecution() {
 function createTaskMenuOperations(task: MockTask): OperationBinding[] {
   return [
     {
-      id: `menu:${task.id}.edit`,
+      bindingId: `menu:${task.id}.edit`,
       executionKey: `record:${task.id}:edit`,
       canonicalOperationKey: "tasks.update",
       label: "Edit",
       scope: "record",
       kind: "update",
-      variant: "secondary",
+      visualIntent: "secondary",
       feedback: {
         successTitle: `${task.title} updated`,
       },
     },
     {
-      id: `menu:${task.id}.complete`,
+      bindingId: `menu:${task.id}.complete`,
       executionKey: `record:${task.id}:complete`,
       canonicalOperationKey: "tasks.complete",
       label: "Complete",
       scope: "record",
       kind: "transition",
-      variant: "secondary",
+      visualIntent: "secondary",
       disabledReason: task.status === "Done" ? "Task is already complete." : undefined,
       feedback: {
         successTitle: `${task.title} completed`,
       },
     },
     {
-      id: `menu:${task.id}.archive`,
+      bindingId: `menu:${task.id}.archive`,
       executionKey: `record:${task.id}:archive`,
       canonicalOperationKey: "tasks.archive",
       label: "Archive",
       scope: "record",
       kind: "transition",
-      variant: "secondary",
+      visualIntent: "secondary",
       feedback: {
         successTitle: `${task.title} archived`,
       },
     },
     {
-      id: `menu:${task.id}.delete`,
+      bindingId: `menu:${task.id}.delete`,
       executionKey: `record:${task.id}:delete`,
       canonicalOperationKey: "tasks.delete",
       label: "Delete",
       scope: "record",
       kind: "delete",
-      variant: "destructive",
+      visualIntent: "destructive",
       destructive: true,
       confirmation: {
         title: "Delete task?",
@@ -1303,6 +1797,117 @@ function createTaskMenuOperations(task: MockTask): OperationBinding[] {
       },
       feedback: {
         successTitle: `${task.title} deleted`,
+      },
+    },
+  ];
+}
+
+function createTableRowOperations(task: MockTask): OperationBinding[] {
+  return [
+    {
+      bindingId: `table:${task.id}.edit`,
+      executionKey: `record:${task.id}:edit`,
+      canonicalOperationKey: "tasks.update",
+      label: "Edit",
+      scope: "record",
+      kind: "update",
+      visualIntent: "secondary",
+      feedback: {
+        successTitle: `${task.title} updated`,
+      },
+    },
+    {
+      bindingId: `table:${task.id}.complete`,
+      executionKey: `record:${task.id}:complete`,
+      canonicalOperationKey: "tasks.complete",
+      label: "Complete",
+      scope: "record",
+      kind: "transition",
+      visualIntent: "secondary",
+      feedback: {
+        successTitle: `${task.title} completed`,
+      },
+    },
+    {
+      bindingId: `table:${task.id}.delete`,
+      executionKey: `record:${task.id}:delete`,
+      canonicalOperationKey: "tasks.delete",
+      label: "Delete",
+      scope: "record",
+      kind: "delete",
+      visualIntent: "destructive",
+      destructive: true,
+      confirmation: {
+        title: "Delete task?",
+        description: `${task.title} will be removed from this workspace.`,
+        actionLabel: "Delete",
+      },
+      feedback: {
+        successTitle: `${task.title} deleted`,
+      },
+    },
+  ];
+}
+
+function createOrderingOperations(task: MockTask): OperationBinding[] {
+  return [
+    {
+      bindingId: `ordering:${task.id}.before`,
+      executionKey: `ordering:tasks:${task.id}:before`,
+      canonicalOperationKey: "tasks.updateOrder",
+      label: "Move before",
+      scope: "record",
+      kind: "ordering",
+      visualIntent: "secondary",
+      feedback: {
+        successTitle: `${task.title} moved`,
+      },
+    },
+    {
+      bindingId: `ordering:${task.id}.after`,
+      executionKey: `ordering:tasks:${task.id}:after`,
+      canonicalOperationKey: "tasks.updateOrder",
+      label: "Move after",
+      scope: "record",
+      kind: "ordering",
+      visualIntent: "secondary",
+      feedback: {
+        successTitle: `${task.title} moved`,
+      },
+    },
+  ];
+}
+
+function createTreeOperations(): OperationBinding[] {
+  return [
+    {
+      bindingId: "tree:page-home.add-child",
+      executionKey: "tree:page-home:add-child",
+      canonicalOperationKey: "site.createTreeChild",
+      label: "Add child",
+      scope: "record",
+      kind: "tree",
+      visualIntent: "secondary",
+      feedback: {
+        successTitle: "Child block added",
+      },
+    },
+    {
+      bindingId: "tree:placement-hero.remove",
+      executionKey: "tree:placement-hero:remove",
+      canonicalOperationKey: "site.removeTreePlacement",
+      label: "Remove placement",
+      scope: "record",
+      kind: "tree",
+      visualIntent: "destructive",
+      destructive: true,
+      confirmation: {
+        title: "Remove placement?",
+        description: "The child block stays available outside this parent.",
+        actionLabel: "Remove",
+      },
+      feedback: {
+        successTitle: "Placement removed",
       },
     },
   ];
@@ -1344,18 +1949,34 @@ function formatOperationKind(kind: OperationKind) {
     bulk: "bulk action",
     create: "create action",
     delete: "delete action",
+    ordering: "ordering move",
     sync: "sync action",
     transition: "state change",
+    tree: "tree action",
     update: "update action",
   };
 
   return labelByKind[kind];
 }
 
+function formatOperationExecutionStatus(status: OperationExecutionStatus) {
+  const labelByStatus: Record<OperationExecutionStatus, string> = {
+    committed: "Committed",
+    failed: "Failed",
+    idle: "Idle",
+    pending: "Pending",
+    replayed: "Already applied",
+  };
+
+  return labelByStatus[status];
+}
+
 function formatOperationProgressStepStatus(status: OperationProgressStep["status"]) {
   const labelByStatus: Record<OperationProgressStep["status"], string> = {
+    failed: "Failed",
     pending: "Pending",
     running: "Running",
+    skipped: "Skipped",
     succeeded: "Complete",
   };
 

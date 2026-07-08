@@ -13,6 +13,7 @@ import {
   projectTreeCompositionOperationControlBindings,
   projectWorkspaceOperationControlBinding,
 } from "./operation-control-model.ts";
+import type { GeneratedOperationExecutionState } from "./operation-control-model.ts";
 import { selectEntityOperationByKind } from "./operation-presentation-model.ts";
 import {
   selectTransitionStateOperationAvailability,
@@ -67,6 +68,51 @@ describe("generated operation control model", () => {
         inputKind: "collectionCommand",
       },
     ]);
+  });
+
+  it("models optional display-safe progress on operation execution state", () => {
+    const state = {
+      executionKey: "workspace.source.push",
+      status: "pending",
+      startedAt: 1_000,
+      progress: {
+        title: "Pushing workspace",
+        detail: "Preparing source changes.",
+        updatedAt: 1_100,
+        steps: [
+          {
+            id: "prepare",
+            label: "Prepare source",
+            status: "running",
+          },
+          {
+            id: "submit",
+            label: "Submit push",
+            detail: "Waiting for gateway response.",
+            status: "pending",
+          },
+        ],
+      },
+    } satisfies GeneratedOperationExecutionState;
+
+    expect(state.progress).toEqual({
+      title: "Pushing workspace",
+      detail: "Preparing source changes.",
+      updatedAt: 1_100,
+      steps: [
+        {
+          id: "prepare",
+          label: "Prepare source",
+          status: "running",
+        },
+        {
+          id: "submit",
+          label: "Submit push",
+          detail: "Waiting for gateway response.",
+          status: "pending",
+        },
+      ],
+    });
   });
 
   it("omits hidden table controls and projects disabled destructive confirmations", () => {
@@ -302,6 +348,7 @@ describe("generated operation control model", () => {
       input: {
         kind: "workspace",
         inputFields: ["dryRun", "targetAlias"],
+        operationKind: "push",
         requiredCapability: "workspace-source-sync",
       },
     });

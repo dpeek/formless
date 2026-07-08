@@ -604,7 +604,7 @@ entity operations and view operation bindings.
   workspace operation
 - AND generated UI submits operation invocation requests through operation
   endpoints or runtime operation adapters
-- AND operation response shape drives success, failure, replay, local
+- AND operation response shape drives progress, success, failure, replay, local
   auto-save, and compact status presentation
 
 #### Scenario: Project operation control bindings
@@ -642,6 +642,21 @@ entity operations and view operation bindings.
 - AND created record ids, affected counts, replay status, and display-safe error
   messages come from the normalized operation result rather than from view
   component-specific response parsing
+
+#### Scenario: Operation progress is generic execution state
+
+- GIVEN a generated operation may take long enough to need more than a spinner
+- WHEN the foundation operation controller reports execution state
+- THEN the state can include optional display-safe progress with a title, detail,
+  updated timestamp, and ordered steps
+- AND each progress step has a stable id, label, optional detail, and status of
+  pending, running, succeeded, failed, or skipped
+- AND compact generated UI can render the active progress step while the
+  operation is pending
+- AND richer progress views such as a popover or overlay use the same operation
+  progress state rather than a workspace-specific panel contract
+- AND progress state does not expose app targets, gateway proxy details,
+  filesystem paths, provider secrets, raw logs, or internal tokens
 
 #### Scenario: Astryx operation primitive boundary
 
@@ -1021,6 +1036,8 @@ destination or public workflow.
   setup when needed, remote data restore, and observation refresh steps
 - **AND** any deploy wording is scoped to an internal push step rather than a
   standalone command, route, operation, or destination
+- **AND** push progress maps into the same generic operation progress state used
+  by other generated operations
 - **AND** check operations can display fresh operation results without persisting
   observation fields
 
@@ -1055,15 +1072,20 @@ workspace gateway proxy is available through the local runtime.
 - **THEN** labels, defaults, required fields, option sets, and hidden
   non-browser fields come from the workspace operation definition
 - **AND** the UI posts only the definition-declared gateway input fields
-- **AND** operation progress continues to render from display-safe workspace
-  operation state returned through the gateway
+- **AND** workspace gateway operation state is mapped to generic generated
+  operation progress before it reaches generated view primitives
 
 #### Scenario: Operation status display
 
 - **WHEN** a workspace operation is running or completed
-- **THEN** the UI can display compact operation completion and failure feedback
-  from display-safe operation state returned through the local runtime gateway
-  proxy
+- **THEN** the UI can display compact pending, completion, replay, and failure
+  feedback from display-safe operation state returned through the local runtime
+  gateway proxy
+- **AND** pending feedback describes the active push progress step when one is
+  available instead of showing only an indefinite spinner
+- **AND** failure feedback uses a concise display-safe error message
+- **AND** the instance overview does not require a separate workspace progress
+  panel to render push progress or failure state
 - **AND** provider credentials, local secret values, raw provider state, and
   disallowed filesystem paths are not rendered
 

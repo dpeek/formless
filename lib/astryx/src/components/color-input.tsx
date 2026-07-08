@@ -1,11 +1,4 @@
-import {
-  useEffect,
-  useId,
-  useRef,
-  useState,
-  type ChangeEvent,
-  type MouseEvent,
-} from "react";
+import { useEffect, useId, useRef, useState, type ChangeEvent, type MouseEvent } from "react";
 import * as stylex from "@stylexjs/stylex";
 import { Field, type FieldStatusInput } from "@astryxdesign/core/Field";
 import { Icon } from "@astryxdesign/core/Icon";
@@ -127,11 +120,7 @@ export function ColorInput({
           {!pickerValue ? <span aria-hidden {...stylex.props(styles.emptyColorInputMark)} /> : null}
           <span
             onPointerDown={(event) => {
-              if (
-                event.button !== 0 ||
-                event.target !== event.currentTarget ||
-                isPickerDisabled
-              ) {
+              if (event.button !== 0 || event.target !== event.currentTarget || isPickerDisabled) {
                 return;
               }
 

@@ -1,9 +1,4 @@
-import {
-  createElement,
-  useMemo,
-  type ReactNode,
-  type SVGProps,
-} from "react";
+import { createElement, useMemo, type ReactNode, type SVGProps } from "react";
 import * as stylex from "@stylexjs/stylex";
 import { Icon, type IconProps, type IconType } from "@astryxdesign/core/Icon";
 import { Markdown, type MarkdownProps } from "@astryxdesign/core/Markdown";
