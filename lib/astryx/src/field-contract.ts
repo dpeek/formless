@@ -40,7 +40,7 @@ export type AstryxFieldTransitionOperation = {
   operationKey: string;
   targetValue: string;
   visualIntent?: "primary" | "secondary" | "ghost" | "destructive";
-  isPrimary?: boolean;
+  isHidden?: boolean;
   isDisabled?: boolean;
   disabledReason?: string;
   pending?: AstryxFieldPendingState;
@@ -72,6 +72,8 @@ export type AstryxFieldOption = {
   isMissing?: boolean;
 };
 
+export type AstryxFieldPresentationContent = "icon" | "label" | "both";
+
 export type AstryxFieldPresentation = {
   placeholder?: string;
   compactLabel?: string;
@@ -84,6 +86,17 @@ export type AstryxFieldPresentation = {
   mediaPreviewUrl?: string;
   mediaAlt?: string;
   accept?: string;
+  enum?: {
+    mode?: "iconOnly";
+    trigger?: AstryxFieldPresentationContent;
+    list?: AstryxFieldPresentationContent;
+  };
+  boolean?: {
+    mode?: "completion";
+  };
+  date?: {
+    visibility?: "valueOrInteraction";
+  };
 };
 
 export type AstryxFieldError = {

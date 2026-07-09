@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { CommandPalette } from "@astryxdesign/core/CommandPalette";
+import { ToastViewport } from "@astryxdesign/core/Toast";
 import { createStaticSource, type SearchableItem } from "@astryxdesign/core/Typeahead";
 import { FormlessAuthLayout } from "./components/auth.tsx";
 import { FormlessFieldsLayout } from "./components/fields.tsx";
@@ -49,8 +50,10 @@ export function FormlessRoot() {
 
   return (
     <FormlessThemeProvider>
-      {currentLayout.render()}
-      <FormlessLayoutCommandPalette currentLayoutAnchor={currentLayout.anchor} />
+      <ToastViewport position="bottomEnd" maxVisible={5}>
+        {currentLayout.render()}
+        <FormlessLayoutCommandPalette currentLayoutAnchor={currentLayout.anchor} />
+      </ToastViewport>
     </FormlessThemeProvider>
   );
 }

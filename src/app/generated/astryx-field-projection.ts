@@ -3,6 +3,7 @@ import { generatedFieldDraftInput } from "@dpeek/formless-schema";
 import type {
   CreateDraftFieldInput,
   FieldCommitPolicy,
+  FieldPresentationSchema,
   FieldSchema,
   TableColumnFormat,
 } from "@dpeek/formless-schema";
@@ -243,6 +244,7 @@ export function projectGeneratedCreateAstryxField({
       draftValue,
       field,
       fieldControl,
+      fieldPresentation: fieldConfig.presentation,
       kind,
       mediaPreviewHref: undefined,
       tableFormat: "plain",
@@ -361,6 +363,7 @@ export function projectGeneratedRecordAstryxField({
       draftValue,
       field,
       fieldControl,
+      fieldPresentation: fieldConfig.presentation,
       kind,
       mediaPreviewHref,
       recordValue,
@@ -442,6 +445,7 @@ export function projectGeneratedOperationAstryxField({
       draftValue,
       field,
       fieldControl,
+      fieldPresentation: undefined,
       kind,
       mediaPreviewHref: undefined,
       tableFormat: "plain",
@@ -917,6 +921,7 @@ function projectAstryxFieldPresentation({
   draftValue,
   field,
   fieldControl,
+  fieldPresentation,
   kind,
   mediaPreviewHref,
   recordValue,
@@ -925,6 +930,7 @@ function projectAstryxFieldPresentation({
   draftValue: AstryxFieldValue;
   field: FieldSchema;
   fieldControl: GeneratedFieldControl;
+  fieldPresentation: FieldPresentationSchema | undefined;
   kind: AstryxFieldKind;
   mediaPreviewHref: string | undefined;
   recordValue?: FieldValue;
@@ -980,7 +986,55 @@ function projectAstryxFieldPresentation({
     presentation.format = tableFormat;
   }
 
+  projectSemanticAstryxFieldPresentation({
+    fieldPresentation,
+    kind,
+    presentation,
+  });
+
   return Object.keys(presentation).length === 0 ? undefined : presentation;
+}
+
+function projectSemanticAstryxFieldPresentation({
+  fieldPresentation,
+  kind,
+  presentation,
+}: {
+  fieldPresentation: FieldPresentationSchema | undefined;
+  kind: AstryxFieldKind;
+  presentation: AstryxFieldPresentation;
+}) {
+  if (!fieldPresentation) {
+    return;
+  }
+
+  if (kind === "enum") {
+    const enumPresentation: NonNullable<AstryxFieldPresentation["enum"]> = {};
+
+    if (fieldPresentation.mode === "iconOnly") {
+      enumPresentation.mode = "iconOnly";
+    }
+
+    if (fieldPresentation.trigger !== undefined) {
+      enumPresentation.trigger = fieldPresentation.trigger;
+    }
+
+    if (fieldPresentation.list !== undefined) {
+      enumPresentation.list = fieldPresentation.list;
+    }
+
+    if (Object.keys(enumPresentation).length > 0) {
+      presentation.enum = enumPresentation;
+    }
+  }
+
+  if (kind === "boolean" && fieldPresentation.mode === "completion") {
+    presentation.boolean = { mode: "completion" };
+  }
+
+  if (kind === "date" && fieldPresentation.visibility === "valueOrInteraction") {
+    presentation.date = { visibility: "valueOrInteraction" };
+  }
 }
 
 function selectRecordDisplayValue({

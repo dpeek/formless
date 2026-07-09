@@ -1,14 +1,10 @@
 import * as stylex from "@stylexjs/stylex";
-import { Badge, type BadgeVariant } from "@astryxdesign/core/Badge";
-import { Button, type ButtonVariant } from "@astryxdesign/core/Button";
+import { Badge } from "@astryxdesign/core/Badge";
 import { CheckboxInput } from "@astryxdesign/core/CheckboxInput";
 import { DateInput } from "@astryxdesign/core/DateInput";
-import { DropdownMenu, DropdownMenuItem } from "@astryxdesign/core/DropdownMenu";
 import { Field, type FieldStatusInput } from "@astryxdesign/core/Field";
-import { Icon } from "@astryxdesign/core/Icon";
 import { NumberInput } from "@astryxdesign/core/NumberInput";
 import { Selector, SelectorOption, type SelectorOptionData } from "@astryxdesign/core/Selector";
-import { Spinner } from "@astryxdesign/core/Spinner";
 import { TextArea } from "@astryxdesign/core/TextArea";
 import { Text } from "@astryxdesign/core/Text";
 import { TextInput } from "@astryxdesign/core/TextInput";
@@ -19,13 +15,6 @@ import {
   spacingVars,
 } from "@astryxdesign/core/theme/tokens.stylex";
 import {
-  ArrowPathIcon,
-  CheckCircleIcon,
-  EllipsisHorizontalIcon,
-  ExclamationTriangleIcon,
-  NoSymbolIcon,
-} from "@heroicons/react/24/outline";
-import {
   ColorValueDisplay,
   MarkdownFieldDisplay,
   MarkdownInput,
@@ -33,14 +22,15 @@ import {
 } from "./field-primitives.tsx";
 import { ColorInput } from "./color-input.tsx";
 import { ImageInput, ImageValueDisplay } from "./image-input.tsx";
+import { StateInput } from "./state-input.tsx";
 import type {
   AstryxFieldData,
   AstryxFieldDisplayData,
   AstryxFieldEditorData,
   AstryxFieldIntentHandlers,
   AstryxFieldOption,
-  AstryxFieldStateFact,
-  AstryxFieldTransitionOperation,
+  AstryxFieldPresentation,
+  AstryxFieldPresentationContent,
   AstryxFieldValue,
 } from "../field-contract.ts";
 
@@ -191,7 +181,7 @@ function FieldEditor({
   }
 
   if (field.kind === "boolean") {
-    return (
+    const checkbox = (
       <CheckboxInput
         label={field.label}
         isLabelHidden={fieldLabelIsHidden(field)}
@@ -206,6 +196,19 @@ function FieldEditor({
         width="100%"
         onChange={(value) => handlers.onDraftChange?.(field.id, value)}
       />
+    );
+
+    if (field.presentation?.boolean?.mode !== "completion") {
+      return checkbox;
+    }
+
+    return (
+      <div
+        data-astryx-field-presentation-mode="completion"
+        {...stylex.props(styles.booleanCompletion)}
+      >
+        {checkbox}
+      </div>
     );
   }
 
@@ -222,7 +225,7 @@ function FieldEditor({
   }
 
   if (field.kind === "date") {
-    return (
+    const dateInput = (
       <DateInput
         {...sharedProps}
         hasClear={!field.isRequired}
@@ -231,6 +234,19 @@ function FieldEditor({
         value={dateInputValue(stringValue)}
         onChange={(value) => handlers.onDraftChange?.(field.id, value ?? "")}
       />
+    );
+
+    if (!dateValueOrInteractionIsQuiet(field, stringValue)) {
+      return dateInput;
+    }
+
+    return (
+      <div
+        data-astryx-field-presentation-visibility="valueOrInteraction"
+        {...stylex.props(styles.valueOrInteractionQuiet)}
+      >
+        {dateInput}
+      </div>
     );
   }
 
@@ -282,7 +298,6 @@ function StateMachineField({
   const value = formatInputValue(field.mode === "editor" ? field.draftValue : field.value);
   const option = field.options?.find((candidate) => candidate.value === value);
   const isPending = stateMachineIsPending(field);
-  const error = field.errors?.[0];
   const isCompact = field.surface === "table-cell" || field.density === "compact";
 
   return (
@@ -292,7 +307,6 @@ function StateMachineField({
       isLabelHidden={fieldLabelIsHidden(field)}
       description={field.description}
       isDisabled={field.accessMode === "disabled"}
-      status={fieldStatus(field)}
       isRequired={field.isRequired}
       labelTooltip={field.labelTooltip}
       width="100%"
@@ -301,7 +315,6 @@ function StateMachineField({
         {...stylex.props(
           styles.stateMachine,
           isCompact && styles.stateMachineCompact,
-          error && styles.stateMachineError,
         )}
       >
         <div
@@ -310,241 +323,21 @@ function StateMachineField({
             isCompact && styles.stateMachineControlCompact,
           )}
         >
-          <StateMachineBadge field={field} option={option} value={value} />
-          <StateTransitionActions
-            field={field}
-            handlers={handlers}
+          <StateInput
+            label={field.label}
+            value={value}
+            option={option}
+            stateLabel={field.stateMachine?.stateLabel}
+            transitions={field.stateMachine?.transitions ?? []}
             isCompact={isCompact}
-            isDisabled={field.accessMode === "disabled" || isPending}
+            isDisabled={field.accessMode === "disabled"}
+            isPending={isPending}
+            pendingLabel={field.pending?.label}
+            onTransition={(transition) => handlers.onTransition?.(field.id, transition)}
           />
         </div>
-        {field.pending?.isPending ? (
-          <StateMachineNotice
-            icon="pending"
-            role="status"
-            title={field.pending.label ?? "Updating state"}
-          />
-        ) : null}
-        {field.surface !== "table-cell" && field.stateMachine?.facts?.length ? (
-          <StateMachineFacts facts={field.stateMachine.facts} />
-        ) : null}
       </div>
     </Field>
-  );
-}
-
-function StateMachineBadge({
-  field,
-  option,
-  value,
-}: {
-  field: AstryxFieldData;
-  option: AstryxFieldOption | undefined;
-  value: string;
-}) {
-  const label = option?.label ?? field.stateMachine?.stateLabel ?? (value ? value : "No state");
-  const isUnknown = Boolean(value && !option);
-  const icon =
-    option?.source ? (
-      <SourceIcon source={option.source} size="sm" color="secondary" aria-hidden />
-    ) : option?.color ? (
-      <span
-        aria-label={`${label} color`}
-        role="img"
-        {...stylex.props(styles.stateBadgeSwatch, dynamicStyles.colorSwatch(option.color))}
-      />
-    ) : isUnknown ? (
-      <Icon icon={ExclamationTriangleIcon} color="warning" size="sm" />
-    ) : undefined;
-
-  return (
-    <Badge
-      label={isUnknown ? `Unknown: ${label}` : label}
-      variant={stateBadgeVariant(value, option)}
-      icon={icon}
-    />
-  );
-}
-
-function StateTransitionActions({
-  field,
-  handlers,
-  isCompact,
-  isDisabled,
-}: {
-  field: AstryxFieldData;
-  handlers: AstryxFieldIntentHandlers;
-  isCompact: boolean;
-  isDisabled: boolean;
-}) {
-  const transitions = field.stateMachine?.transitions ?? [];
-  const primaryTransition =
-    transitions.find((transition) => transition.isPrimary) ?? transitions[0];
-  const menuTransitions = transitions.filter(
-    (transition) => transition.id !== primaryTransition?.id,
-  );
-
-  if (!primaryTransition) {
-    return null;
-  }
-
-  return (
-    <div {...stylex.props(styles.stateTransitionActions)}>
-      <StateTransitionButton
-        field={field}
-        handlers={handlers}
-        isCompact={isCompact}
-        isDisabled={isDisabled}
-        transition={primaryTransition}
-      />
-      {menuTransitions.length ? (
-        <StateTransitionMenu
-          field={field}
-          handlers={handlers}
-          isDisabled={isDisabled}
-          transitions={menuTransitions}
-        />
-      ) : null}
-    </div>
-  );
-}
-
-function StateTransitionButton({
-  field,
-  handlers,
-  isCompact,
-  isDisabled,
-  transition,
-}: {
-  field: AstryxFieldData;
-  handlers: AstryxFieldIntentHandlers;
-  isCompact: boolean;
-  isDisabled: boolean;
-  transition: AstryxFieldTransitionOperation;
-}) {
-  const disabledReason = transition.disabledReason;
-  const transitionIsDisabled = isDisabled || transition.isDisabled || transition.pending?.isPending;
-  const isIconOnly = field.surface === "table-cell";
-
-  return (
-    <Button
-      label={transition.label}
-      variant={transitionButtonVariant(transition)}
-      size={isCompact ? "sm" : "md"}
-      icon={
-        <Icon icon={transition.pending?.isPending ? ArrowPathIcon : CheckCircleIcon} size="sm" />
-      }
-      isIconOnly={isIconOnly}
-      isDisabled={Boolean(transitionIsDisabled)}
-      isLoading={transition.pending?.isPending}
-      tooltip={isIconOnly ? disabledReason ?? transition.label : disabledReason}
-      onClick={() => handlers.onTransition?.(field.id, transition)}
-    />
-  );
-}
-
-function StateTransitionMenu({
-  field,
-  handlers,
-  isDisabled,
-  transitions,
-}: {
-  field: AstryxFieldData;
-  handlers: AstryxFieldIntentHandlers;
-  isDisabled: boolean;
-  transitions: readonly AstryxFieldTransitionOperation[];
-}) {
-  return (
-    <DropdownMenu
-      button={{
-        label: "State actions",
-        tooltip: "State actions",
-        variant: "secondary",
-        size: field.density === "compact" ? "sm" : "md",
-        icon: <Icon icon={EllipsisHorizontalIcon} color="inherit" size="sm" />,
-        isIconOnly: true,
-        isDisabled,
-      }}
-      menuWidth={248}
-      placement="below"
-    >
-      {transitions.map((transition) => {
-        const transitionIsDisabled =
-          isDisabled || transition.isDisabled || transition.pending?.isPending;
-
-        return (
-          <DropdownMenuItem
-            key={transition.id}
-            label={transition.label}
-            description={transition.disabledReason}
-            icon={
-              transition.pending?.isPending ? (
-                <Spinner size="sm" shade="inherit" />
-              ) : transition.isDisabled ? (
-                <Icon icon={NoSymbolIcon} color="warning" size="sm" />
-              ) : (
-                <Icon icon={CheckCircleIcon} color="success" size="sm" />
-              )
-            }
-            endContent={
-              transition.pending?.isPending ? (
-                <Text type="supporting" color="secondary">
-                  Running
-                </Text>
-              ) : undefined
-            }
-            isDisabled={Boolean(transitionIsDisabled)}
-            onClick={() => handlers.onTransition?.(field.id, transition)}
-          />
-        );
-      })}
-    </DropdownMenu>
-  );
-}
-
-function StateMachineNotice({
-  icon,
-  role,
-  title,
-}: {
-  icon: "error" | "pending";
-  role: "alert" | "status";
-  title: string;
-}) {
-  return (
-    <div
-      role={role}
-      {...stylex.props(
-        styles.stateMachineNotice,
-        icon === "error" && styles.stateMachineNoticeError,
-      )}
-    >
-      {icon === "pending" ? (
-        <Spinner size="sm" shade="inherit" />
-      ) : (
-        <Icon icon={ExclamationTriangleIcon} color="error" size="sm" />
-      )}
-      <Text type="supporting" color="secondary">
-        {title}
-      </Text>
-    </div>
-  );
-}
-
-function StateMachineFacts({ facts }: { facts: readonly AstryxFieldStateFact[] }) {
-  return (
-    <div {...stylex.props(styles.stateFacts)}>
-      {facts.map((fact) => (
-        <span key={fact.id} {...stylex.props(styles.stateFact)}>
-          <Text type="supporting" color="secondary">
-            {formatStateFactKind(fact.kind)}
-          </Text>
-          <Text type="supporting" maxLines={1}>
-            {fact.label}: {fact.value}
-          </Text>
-        </span>
-      ))}
-    </div>
   );
 }
 
@@ -575,6 +368,20 @@ function SelectorFieldEditor({
 }) {
   const options = selectorOptions(field);
   const optionsByValue = new Map((field.options ?? []).map((option) => [option.value, option]));
+  const usesEnumOptionVisuals = field.kind === "enum";
+  const enumTriggerContent = enumPresentationTriggerContent(field.presentation?.enum);
+  const enumListContent = enumPresentationListContent(field.presentation?.enum);
+  const selectedOption = optionsByValue.get(value);
+  const hasEnumOptionVisuals =
+    usesEnumOptionVisuals && (field.options ?? []).some((option) => hasEnumOptionVisual(option));
+  const invalidEnumValue =
+    field.kind === "enum" && value !== "" && !optionsByValue.has(value) ? value : undefined;
+  const startIcon =
+    usesEnumOptionVisuals &&
+    (enumTriggerContent === "icon" || enumTriggerContent === "both") &&
+    selectedOption
+      ? enumOptionVisual(selectedOption)
+      : undefined;
   const sharedProps = {
     label: field.label,
     isLabelHidden: fieldLabelIsHidden(field),
@@ -584,12 +391,19 @@ function SelectorFieldEditor({
     isLoading,
     labelTooltip: field.labelTooltip,
     options,
-    placeholder: field.presentation?.placeholder ?? "Select",
+    placeholder: invalidEnumValue ?? field.presentation?.placeholder ?? "Select",
+    startIcon,
     renderOption: (option: SelectorOptionData) => (
-      <RichSelectorOption option={optionsByValue.get(option.value)} fallback={option} />
+      <RichSelectorOption
+        option={optionsByValue.get(option.value)}
+        fallback={option}
+        enumListContent={enumListContent}
+        hasEnumOptionVisuals={hasEnumOptionVisuals}
+        usesEnumOptionVisuals={usesEnumOptionVisuals}
+      />
     ),
     size: inputSize(field.density),
-    status: fieldStatus(field),
+    status: fieldStatus(field) ?? invalidEnumFieldStatus(invalidEnumValue),
     width: "100%",
   };
 
@@ -614,25 +428,42 @@ function SelectorFieldEditor({
 }
 
 function RichSelectorOption({
+  enumListContent,
   fallback,
+  hasEnumOptionVisuals,
   option,
+  usesEnumOptionVisuals,
 }: {
+  enumListContent: AstryxFieldPresentationContent;
   fallback: SelectorOptionData;
+  hasEnumOptionVisuals: boolean;
   option: AstryxFieldOption | undefined;
+  usesEnumOptionVisuals: boolean;
 }) {
+  const label = option?.label ?? fallback.label ?? fallback.value;
+  const showEnumVisual = usesEnumOptionVisuals && enumListContent !== "label";
+  const showEnumLabel =
+    !usesEnumOptionVisuals ||
+    enumListContent !== "icon" ||
+    !option ||
+    !hasEnumOptionVisual(option) ||
+    option.isMissing;
+
   return (
     <SelectorOption
       icon={
-        option?.source ? (
+        showEnumVisual ? (
+          enumOptionVisual(option, { reserveSpace: hasEnumOptionVisuals })
+        ) : option?.source ? (
           <SourceIcon source={option.source} size="sm" color="secondary" aria-hidden />
         ) : undefined
       }
-      label={option?.label ?? fallback.label ?? fallback.value}
+      label={showEnumLabel ? label : ""}
       description={option?.detail ?? (option?.isMissing ? "Missing value" : undefined)}
       endContent={
         option?.isMissing ? (
           <Badge label="Missing" variant="warning" />
-        ) : option?.color ? (
+        ) : !usesEnumOptionVisuals && option?.color ? (
           <span
             aria-label={`${option.label} color`}
             role="img"
@@ -642,6 +473,67 @@ function RichSelectorOption({
       }
     />
   );
+}
+
+function hasEnumOptionVisual(option: AstryxFieldOption) {
+  return Boolean(option.source || option.color);
+}
+
+function enumPresentationTriggerContent(
+  presentation: AstryxFieldPresentation["enum"] | undefined,
+): AstryxFieldPresentationContent {
+  return presentation?.trigger ?? (presentation?.mode === "iconOnly" ? "icon" : "both");
+}
+
+function enumPresentationListContent(
+  presentation: AstryxFieldPresentation["enum"] | undefined,
+): AstryxFieldPresentationContent {
+  return presentation?.list ?? "both";
+}
+
+function invalidEnumFieldStatus(value: string | undefined): FieldStatusInput | undefined {
+  if (!value) {
+    return undefined;
+  }
+
+  return {
+    type: "error",
+    message: `"${value}" is not a valid value.`,
+  };
+}
+
+function enumOptionVisual(
+  option: AstryxFieldOption | undefined,
+  { reserveSpace = false }: { reserveSpace?: boolean } = {},
+) {
+  if (!option) {
+    return reserveSpace ? (
+      <span aria-hidden="true" {...stylex.props(styles.optionVisualSpacer)} />
+    ) : undefined;
+  }
+
+  if (option.source) {
+    return option.color ? (
+      <span {...stylex.props(dynamicStyles.color(option.color))}>
+        <SourceIcon source={option.source} size="sm" color="inherit" aria-hidden />
+      </span>
+    ) : (
+      <SourceIcon source={option.source} size="sm" color="secondary" aria-hidden />
+    );
+  }
+
+  if (option.color) {
+    return (
+      <span
+        aria-hidden="true"
+        {...stylex.props(styles.optionColorSwatch, dynamicStyles.colorSwatch(option.color))}
+      />
+    );
+  }
+
+  return reserveSpace ? (
+    <span aria-hidden="true" {...stylex.props(styles.optionVisualSpacer)} />
+  ) : undefined;
 }
 
 function selectorOptions(field: AstryxFieldEditorData): SelectorOptionData[] {
@@ -657,53 +549,7 @@ function isStateMachineEnumField(field: AstryxFieldData) {
 }
 
 function stateMachineIsPending(field: AstryxFieldData) {
-  return Boolean(
-    field.pending?.isPending ||
-      field.stateMachine?.transitions?.some((transition) => transition.pending?.isPending),
-  );
-}
-
-function stateBadgeVariant(
-  value: string,
-  option: AstryxFieldOption | undefined,
-): BadgeVariant {
-  if (!value) {
-    return "neutral";
-  }
-
-  if (!option) {
-    return "warning";
-  }
-
-  const normalizedValue = value.toLowerCase();
-
-  if (["done", "complete", "completed", "published", "active"].includes(normalizedValue)) {
-    return "success";
-  }
-
-  if (["waiting", "queued", "review", "blocked"].includes(normalizedValue)) {
-    return normalizedValue === "blocked" ? "error" : "warning";
-  }
-
-  if (["open", "draft", "new"].includes(normalizedValue)) {
-    return "info";
-  }
-
-  return "neutral";
-}
-
-function transitionButtonVariant(transition: AstryxFieldTransitionOperation): ButtonVariant {
-  return transition.visualIntent ?? "secondary";
-}
-
-function formatStateFactKind(kind: AstryxFieldStateFact["kind"]) {
-  const labelByKind: Record<AstryxFieldStateFact["kind"], string> = {
-    derived: "Derived",
-    hidden: "Hidden",
-    owned: "Owned",
-  };
-
-  return labelByKind[kind];
+  return Boolean(field.pending?.isPending);
 }
 
 function fieldStatus(field: AstryxFieldData): FieldStatusInput | undefined {
@@ -757,16 +603,33 @@ function numberInputValue(value: AstryxFieldValue): number | null {
   return Number.isFinite(number) ? number : null;
 }
 
+function dateValueOrInteractionIsQuiet(field: AstryxFieldEditorData, value: string) {
+  return (
+    field.presentation?.date?.visibility === "valueOrInteraction" &&
+    value === "" &&
+    !field.errors?.length
+  );
+}
+
 function FieldDisplay({ field }: { field: AstryxFieldDisplayData }) {
   if (field.kind === "boolean") {
+    const isCompletion = field.presentation?.boolean?.mode === "completion";
+
     return (
-      <div {...stylex.props(styles.displayValue)}>
+      <div
+        data-astryx-field-presentation-mode={isCompletion ? "completion" : undefined}
+        {...stylex.props(styles.displayValue)}
+      >
         <Badge
-          label={field.value === true ? "Yes" : "No"}
+          label={field.value === true ? (isCompletion ? "Complete" : "Yes") : isCompletion ? "Open" : "No"}
           variant={field.value === true ? "success" : "neutral"}
         />
       </div>
     );
+  }
+
+  if (field.kind === "enum") {
+    return <EnumDisplayValue field={field} />;
   }
 
   if (field.kind === "color") {
@@ -819,6 +682,34 @@ function FieldDisplay({ field }: { field: AstryxFieldDisplayData }) {
   );
 }
 
+function EnumDisplayValue({ field }: { field: AstryxFieldDisplayData }) {
+  const value = formatInputValue(field.value);
+  const option = field.options?.find((candidate) => candidate.value === value);
+  const content = enumPresentationTriggerContent(field.presentation?.enum);
+  const showVisual = content !== "label" && option !== undefined && hasEnumOptionVisual(option);
+  const showLabel = content !== "icon" || !showVisual || option?.isMissing;
+  const label = option?.label ?? field.displayValue ?? value;
+
+  return (
+    <div
+      data-astryx-field-presentation-mode={field.presentation?.enum?.mode}
+      data-astryx-field-presentation-trigger={field.presentation?.enum?.trigger}
+      {...stylex.props(styles.displayValue, styles.enumDisplayValue)}
+    >
+      {showVisual ? enumOptionVisual(option) : null}
+      {showLabel ? (
+        <Text
+          type={field.density === "compact" ? "supporting" : "body"}
+          maxLines={field.presentation?.maxLines ?? 2}
+        >
+          {label || "Empty"}
+        </Text>
+      ) : null}
+      {option?.isMissing ? <Badge label="Missing" variant="warning" /> : null}
+    </div>
+  );
+}
+
 function defaultFieldInputId(field: AstryxFieldData) {
   return `astryx-field-${field.id}`;
 }
@@ -842,6 +733,24 @@ const styles = stylex.create({
   sourceIconDisplay: {
     gap: spacingVars["--spacing-2"],
   },
+  enumDisplayValue: {
+    gap: spacingVars["--spacing-2"],
+  },
+  booleanCompletion: {
+    width: "100%",
+  },
+  valueOrInteractionQuiet: {
+    opacity: 0,
+    transitionProperty: "opacity",
+    transitionDuration: "140ms",
+    transitionTimingFunction: "ease-out",
+    ":hover": {
+      opacity: 1,
+    },
+    ":focus-within": {
+      opacity: 1,
+    },
+  },
   stateMachine: {
     display: "grid",
     gap: spacingVars["--spacing-2"],
@@ -851,14 +760,11 @@ const styles = stylex.create({
   stateMachineCompact: {
     gap: spacingVars["--spacing-1"],
   },
-  stateMachineError: {
-    color: colorVars["--color-text-primary"],
-  },
   stateMachineControl: {
     display: "flex",
     alignItems: "center",
-    justifyContent: "space-between",
-    gap: spacingVars["--spacing-2"],
+    justifyContent: "flex-start",
+    gap: spacingVars["--spacing-1"],
     minHeight: spacingVars["--spacing-9"],
     minWidth: 0,
     flexWrap: "wrap",
@@ -868,49 +774,8 @@ const styles = stylex.create({
     gap: spacingVars["--spacing-1"],
     minHeight: spacingVars["--spacing-8"],
   },
-  stateTransitionActions: {
-    display: "inline-flex",
-    alignItems: "center",
-    gap: spacingVars["--spacing-1"],
-    flexWrap: "wrap",
-  },
-  stateMachineNotice: {
-    display: "grid",
-    gridTemplateColumns: "auto minmax(0, 1fr)",
-    alignItems: "center",
-    gap: spacingVars["--spacing-1"],
-  },
-  stateMachineNoticeError: {
-    color: colorVars["--color-error"],
-  },
-  stateFacts: {
-    display: "flex",
-    flexWrap: "wrap",
-    gap: spacingVars["--spacing-1"],
-  },
-  stateFact: {
-    display: "inline-flex",
-    alignItems: "center",
-    maxWidth: "100%",
-    gap: spacingVars["--spacing-1"],
-    paddingBlock: spacingVars["--spacing-0-5"],
-    paddingInline: spacingVars["--spacing-2"],
-    borderWidth: borderVars["--border-width"],
-    borderStyle: "solid",
-    borderColor: colorVars["--color-border"],
-    borderRadius: radiusVars["--radius-full"],
-    backgroundColor: colorVars["--color-background-muted"],
-  },
-  stateBadgeSwatch: {
-    flexShrink: 0,
-    width: spacingVars["--spacing-2"],
-    height: spacingVars["--spacing-2"],
-    borderWidth: borderVars["--border-width"],
-    borderStyle: "solid",
-    borderColor: colorVars["--color-border-emphasized"],
-    borderRadius: radiusVars["--radius-full"],
-  },
   optionColorSwatch: {
+    boxSizing: "border-box",
     flexShrink: 0,
     width: spacingVars["--spacing-4"],
     height: spacingVars["--spacing-4"],
@@ -919,9 +784,17 @@ const styles = stylex.create({
     borderColor: colorVars["--color-border-emphasized"],
     borderRadius: radiusVars["--radius-full"],
   },
+  optionVisualSpacer: {
+    flexShrink: 0,
+    width: spacingVars["--spacing-4"],
+    height: spacingVars["--spacing-4"],
+  },
 });
 
 const dynamicStyles = stylex.create({
+  color: (color: string) => ({
+    color,
+  }),
   colorSwatch: (color: string) => ({
     backgroundColor: color,
   }),
