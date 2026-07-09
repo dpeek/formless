@@ -34,6 +34,31 @@ export type AstryxFieldCommitPolicy = "immediate" | "field" | "submit";
 
 export type AstryxFieldValue = string | number | boolean | null;
 
+export type AstryxFieldTransitionOperation = {
+  id: string;
+  label: string;
+  operationKey: string;
+  targetValue: string;
+  visualIntent?: "primary" | "secondary" | "ghost" | "destructive";
+  isPrimary?: boolean;
+  isDisabled?: boolean;
+  disabledReason?: string;
+  pending?: AstryxFieldPendingState;
+};
+
+export type AstryxFieldStateFact = {
+  id: string;
+  label: string;
+  value: string;
+  kind: "hidden" | "owned" | "derived";
+};
+
+export type AstryxFieldStateMachine = {
+  stateLabel?: string;
+  transitions?: readonly AstryxFieldTransitionOperation[];
+  facts?: readonly AstryxFieldStateFact[];
+};
+
 export type AstryxFieldOption = {
   value: string;
   label: string;
@@ -85,6 +110,7 @@ export type AstryxFieldBaseData = {
   kind: AstryxFieldKind;
   options?: readonly AstryxFieldOption[];
   presentation?: AstryxFieldPresentation;
+  stateMachine?: AstryxFieldStateMachine;
   pending?: AstryxFieldPendingState;
   errors?: readonly AstryxFieldError[];
 };
@@ -111,6 +137,7 @@ export type AstryxFieldIntentHandlers = {
   onDraftChange?: (fieldId: string, value: AstryxFieldValue) => void;
   onCommit?: (fieldId: string, value: AstryxFieldValue) => void;
   onRevert?: (fieldId: string) => void;
+  onTransition?: (fieldId: string, transition: AstryxFieldTransitionOperation) => void;
   onOpenPicker?: (fieldId: string, picker: AstryxFieldPickerKind, value?: string) => void;
   onUploadFile?: (fieldId: string, file: File) => void;
 };
