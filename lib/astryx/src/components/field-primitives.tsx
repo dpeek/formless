@@ -10,15 +10,15 @@ import {
   radiusVars,
   spacingVars,
 } from "@astryxdesign/core/theme/tokens.stylex";
-import type { AstryxFieldDensity } from "../field-contract.ts";
 import { opaqueHexColorForNativeInput } from "./color-input.tsx";
+import type { AstryxInputDensity } from "./input-density.ts";
 
 export { ColorInput, type ColorInputProps } from "./color-input.tsx";
 
 export type ColorValueDisplayProps = {
   value: string;
   label?: string;
-  density?: AstryxFieldDensity;
+  density?: AstryxInputDensity;
   emptyLabel?: string;
 };
 
@@ -95,7 +95,7 @@ export function SourceIcon({
 
 export type MarkdownFieldDisplayProps = Omit<MarkdownProps, "children" | "density"> & {
   value: string;
-  density?: AstryxFieldDensity;
+  density?: AstryxInputDensity;
 };
 
 export function MarkdownFieldDisplay({

@@ -3,10 +3,7 @@ import * as stylex from "@stylexjs/stylex";
 import { Button } from "@astryxdesign/core/Button";
 import { Card } from "@astryxdesign/core/Card";
 import { HStack } from "@astryxdesign/core/HStack";
-import {
-  SegmentedControl,
-  SegmentedControlItem,
-} from "@astryxdesign/core/SegmentedControl";
+import { SegmentedControl, SegmentedControlItem } from "@astryxdesign/core/SegmentedControl";
 import { Heading, Text } from "@astryxdesign/core/Text";
 import { useToast } from "@astryxdesign/core/Toast";
 import { VStack } from "@astryxdesign/core/VStack";
@@ -16,12 +13,9 @@ import {
   radiusVars,
   spacingVars,
 } from "@astryxdesign/core/theme/tokens.stylex";
-import {
-  fieldKindOptions,
-  fieldScenarioGroups,
-  fieldSurfaceOptions,
-} from "./field-contract-scenarios.ts";
-import { AstryxFieldRenderer, AstryxFieldSubmitFormAdapter } from "./field-renderer.tsx";
+import { fieldKindOptions, fieldScenarioGroups, fieldSurfaceOptions } from "./fields/fixtures.ts";
+import { FormlessUiFieldRenderer, FormlessUiFieldSubmitFormAdapter } from "./fields/renderer.tsx";
+import { applyScenarioFieldIntent, scenarioFieldKey } from "./fields/fixture-helpers.ts";
 import type {
   FieldKindKey,
   FieldScenarioFacet,
@@ -31,27 +25,21 @@ import type {
   FieldScenarioVariant,
 } from "./field-scenario-model.ts";
 import type {
-  AstryxFieldData,
-  AstryxFieldIntentHandlers,
-  AstryxFieldSurface,
-  AstryxFieldTransitionOperation,
-  AstryxFieldValue,
-} from "../field-contract.ts";
+  FormlessUiField,
+  FormlessUiFieldIntentHandler,
+  FormlessUiFieldSurface,
+} from "../formless-ui-contract.ts";
 
-type DraftValues = Record<string, AstryxFieldValue>;
-type StateMachineValues = Record<string, string>;
-type ActiveStateTransitions = Record<string, string>;
+type FieldOverrides = Record<string, FormlessUiField>;
 
 export function FormlessFieldsLayout() {
   const showToast = useToast();
   const [selectedKind, setSelectedKind] = useState<FieldKindKey>("enum");
-  const [selectedSurface, setSelectedSurface] = useState<AstryxFieldSurface>("record");
+  const [selectedSurface, setSelectedSurface] = useState<FormlessUiFieldSurface>("record");
   const [selectedFacetValues, setSelectedFacetValues] = useState<FieldScenarioFacetValues>(() =>
     defaultFacetValues(requiredScenarioGroup("enum", "record")),
   );
-  const [draftValues, setDraftValues] = useState(createInitialDraftValues);
-  const [stateMachineValues, setStateMachineValues] = useState<StateMachineValues>({});
-  const [activeStateTransitions, setActiveStateTransitions] = useState<ActiveStateTransitions>({});
+  const [fieldOverrides, setFieldOverrides] = useState<FieldOverrides>({});
 
   const selectedKindOption =
     fieldKindOptions.find((option) => option.id === selectedKind) ?? fieldKindOptions[0];
@@ -65,25 +53,16 @@ export function FormlessFieldsLayout() {
   const selectedField = useMemo(
     () =>
       selectedVariant
-        ? applyRuntimeToField(
-            selectedVariant.field,
-            draftValues,
-            stateMachineValues,
-            activeStateTransitions,
-          )
+        ? (fieldOverrides[scenarioFieldKey(selectedVariant.field)] ?? selectedVariant.field)
         : null,
-    [activeStateTransitions, draftValues, selectedVariant, stateMachineValues],
+    [fieldOverrides, selectedVariant],
   );
-  const handlers = useFieldMatrixHandlers(
-    setDraftValues,
-    setStateMachineValues,
-    setActiveStateTransitions,
-  );
+  const handleIntent = useFieldMatrixIntentHandler(selectedVariant, setFieldOverrides);
   const stateMachineError =
-    selectedField?.accessMode === "state-machine" && selectedField.kind === "enum"
+    selectedField?.access.kind === "stateMachine" && selectedField.control.kind === "enum"
       ? selectedField.errors?.[0]
       : undefined;
-  const selectedFieldId = selectedField?.id;
+  const selectedFieldId = selectedField ? scenarioFieldKey(selectedField) : undefined;
 
   useEffect(() => {
     if (!selectedFieldId || !stateMachineError) {
@@ -91,20 +70,14 @@ export function FormlessFieldsLayout() {
     }
 
     showToast({
-      uniqueID: `field:${selectedFieldId}:${stateMachineError.id}`,
+      uniqueID: `field:${selectedFieldId}:${stateMachineError.fieldName}:${stateMachineError.message}`,
       collisionBehavior: "overwrite",
       body: stateMachineError.message,
-      type: stateMachineError.severity === "warning" ? "info" : "error",
+      type: "error",
       isAutoHide: true,
       autoHideDuration: 6000,
     });
-  }, [
-    selectedFieldId,
-    showToast,
-    stateMachineError?.id,
-    stateMachineError?.message,
-    stateMachineError?.severity,
-  ]);
+  }, [selectedFieldId, showToast, stateMachineError?.fieldName, stateMachineError?.message]);
 
   return (
     <main {...stylex.props(styles.screen)}>
@@ -148,7 +121,7 @@ export function FormlessFieldsLayout() {
             <SegmentedControl
               value={selectedSurface}
               onChange={(value) => {
-                const nextSurface = value as AstryxFieldSurface;
+                const nextSurface = value as FormlessUiFieldSurface;
                 const nextGroup = findScenarioGroup(selectedKindOption.id, nextSurface);
 
                 setSelectedSurface(nextSurface);
@@ -191,7 +164,7 @@ export function FormlessFieldsLayout() {
 
             <Card padding={4} variant="muted">
               {selectedField ? (
-                <FieldPreview field={selectedField} handlers={handlers} />
+                <FieldPreview field={selectedField} onIntent={handleIntent} />
               ) : (
                 <NoScenario />
               )}
@@ -205,10 +178,10 @@ export function FormlessFieldsLayout() {
 
 function FieldPreview({
   field,
-  handlers,
+  onIntent,
 }: {
-  field: AstryxFieldData;
-  handlers: AstryxFieldIntentHandlers;
+  field: FormlessUiField;
+  onIntent: FormlessUiFieldIntentHandler;
 }) {
   return (
     <div
@@ -218,8 +191,8 @@ function FieldPreview({
         field.surface === "detail" && styles.previewDetail,
       )}
     >
-      <AstryxFieldRenderer field={field} handlers={handlers} />
-      <AstryxFieldSubmitFormAdapter field={field} />
+      <FormlessUiFieldRenderer field={field} onIntent={onIntent} />
+      <FormlessUiFieldSubmitFormAdapter field={field} />
     </div>
   );
 }
@@ -267,148 +240,38 @@ function FieldFacetControl({
   );
 }
 
-function useFieldMatrixHandlers(
-  setDraftValues: React.Dispatch<React.SetStateAction<DraftValues>>,
-  setStateMachineValues: React.Dispatch<React.SetStateAction<StateMachineValues>>,
-  setActiveStateTransitions: React.Dispatch<React.SetStateAction<ActiveStateTransitions>>,
-): AstryxFieldIntentHandlers {
-  const handleTransition = useCallback(
-    (fieldId: string, transition: AstryxFieldTransitionOperation) => {
-      setActiveStateTransitions((currentTransitions) => ({
-        ...currentTransitions,
-        [fieldId]: transition.id,
-      }));
-
-      window.setTimeout(() => {
-        setStateMachineValues((currentValues) => ({
-          ...currentValues,
-          [fieldId]: transition.targetValue,
-        }));
-        setActiveStateTransitions((currentTransitions) => {
-          const nextTransitions = { ...currentTransitions };
-          delete nextTransitions[fieldId];
-          return nextTransitions;
-        });
-      }, 720);
-    },
-    [setActiveStateTransitions, setStateMachineValues],
-  );
-
-  return useMemo(
-    () => ({
-      onDraftChange: (fieldId, value) =>
-        setDraftValues((currentValues) => ({
-          ...currentValues,
-          [fieldId]: value,
-        })),
-      onTransition: handleTransition,
-    }),
-    [handleTransition, setDraftValues],
-  );
-}
-
-function createInitialDraftValues() {
-  const values: DraftValues = {};
-
-  for (const group of fieldScenarioGroups) {
-    for (const variant of group.variants) {
-      if (variant.field.mode === "editor") {
-        values[variant.field.id] = variant.field.draftValue;
+function useFieldMatrixIntentHandler(
+  selectedVariant: FieldScenarioVariant | null,
+  setFieldOverrides: React.Dispatch<React.SetStateAction<FieldOverrides>>,
+): FormlessUiFieldIntentHandler {
+  return useCallback(
+    (intent) => {
+      if (!selectedVariant) {
+        return;
       }
-    }
-  }
 
-  return values;
-}
+      const key = scenarioFieldKey(selectedVariant.field);
 
-function applyRuntimeToField(
-  field: AstryxFieldData,
-  draftValues: DraftValues,
-  stateMachineValues: StateMachineValues,
-  activeStateTransitions: ActiveStateTransitions,
-): AstryxFieldData {
-  let nextField = applyDraftValue(field, draftValues);
+      setFieldOverrides((currentOverrides) => {
+        const currentField = currentOverrides[key] ?? selectedVariant.field;
+        const nextField = applyScenarioFieldIntent(currentField, intent);
 
-  if (nextField.accessMode === "state-machine" && nextField.kind === "enum") {
-    nextField = applyStateMachineRuntime(nextField, stateMachineValues, activeStateTransitions);
-  }
+        if (nextField === currentField) {
+          return currentOverrides;
+        }
 
-  return nextField;
-}
-
-function applyDraftValue(field: AstryxFieldData, draftValues: DraftValues): AstryxFieldData {
-  if (field.mode !== "editor" || !Object.hasOwn(draftValues, field.id)) {
-    return field;
-  }
-
-  return {
-    ...field,
-    draftValue: draftValues[field.id],
-  };
-}
-
-function applyStateMachineRuntime(
-  field: AstryxFieldData,
-  stateMachineValues: StateMachineValues,
-  activeStateTransitions: ActiveStateTransitions,
-): AstryxFieldData {
-  const fieldValue =
-    stateMachineValues[field.id] ??
-    String(field.mode === "editor" ? field.draftValue ?? "" : field.value ?? "");
-  const activeTransitionId = activeStateTransitions[field.id];
-  const projectedTransitions = projectStateTransitions(
-    fieldValue,
-    field.stateMachine?.transitions ?? [],
-    activeTransitionId,
+        return { ...currentOverrides, [key]: nextField };
+      });
+    },
+    [selectedVariant, setFieldOverrides],
   );
-  const projectedStateMachine = {
-    ...field.stateMachine,
-    transitions: projectedTransitions,
-  };
-  const pending = activeTransitionId ? { isPending: true, label: "Changing state" } : field.pending;
-
-  if (field.mode === "editor") {
-    return {
-      ...field,
-      draftValue: fieldValue,
-      pending,
-      stateMachine: projectedStateMachine,
-    };
-  }
-
-  return {
-    ...field,
-    value: fieldValue,
-    displayValue: displayOption(field.options ?? [], fieldValue),
-    pending,
-    stateMachine: projectedStateMachine,
-  };
 }
 
-function projectStateTransitions(
-  value: string,
-  transitions: readonly AstryxFieldTransitionOperation[],
-  activeTransitionId: string | undefined,
-) {
-  return transitions.map((transition) => {
-    const isCurrentState = transition.targetValue === value;
-
-    return {
-      ...transition,
-      isHidden: transition.isHidden || isCurrentState,
-      pending:
-        transition.id === activeTransitionId
-          ? { isPending: true, label: `${transition.label} running` }
-          : transition.pending,
-    };
-  });
-}
-
-function findScenarioGroup(kind: FieldKindKey, surface: AstryxFieldSurface) {
+function findScenarioGroup(kind: FieldKindKey, surface: FormlessUiFieldSurface) {
   return fieldScenarioGroups.find((group) => group.kind === kind && group.surface === surface);
 }
 
-function requiredScenarioGroup(kind: FieldKindKey, surface: AstryxFieldSurface) {
+function requiredScenarioGroup(kind: FieldKindKey, surface: FormlessUiFieldSurface) {
   const group = findScenarioGroup(kind, surface);
 
   if (!group) {
@@ -418,7 +281,7 @@ function requiredScenarioGroup(kind: FieldKindKey, surface: AstryxFieldSurface) 
   return group;
 }
 
-function selectScenarioSurface(kind: FieldKindKey, preferredSurface: AstryxFieldSurface) {
+function selectScenarioSurface(kind: FieldKindKey, preferredSurface: FormlessUiFieldSurface) {
   if (findScenarioGroup(kind, preferredSurface)) {
     return preferredSurface;
   }
@@ -429,7 +292,7 @@ function selectScenarioSurface(kind: FieldKindKey, preferredSurface: AstryxField
   );
 }
 
-function hasScenarioForSurface(kind: FieldKindKey, surface: AstryxFieldSurface) {
+function hasScenarioForSurface(kind: FieldKindKey, surface: FormlessUiFieldSurface) {
   return Boolean(findScenarioGroup(kind, surface));
 }
 
@@ -491,10 +354,6 @@ function countScenariosForKind(kind: FieldKindKey) {
   return fieldScenarioGroups
     .filter((group) => group.kind === kind)
     .reduce((count, group) => count + group.variants.length, 0);
-}
-
-function displayOption(options: readonly { value: string; label: string }[], value: string) {
-  return options.find((option) => option.value === value)?.label ?? value;
 }
 
 const styles = stylex.create({

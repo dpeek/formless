@@ -20,12 +20,7 @@ import type {
   TableColumnFormat,
 } from "@dpeek/formless-schema";
 
-export type FormlessUiFieldSurface =
-  | "create"
-  | "record"
-  | "table-cell"
-  | "detail"
-  | "operation";
+export type FormlessUiFieldSurface = "create" | "record" | "table-cell" | "detail" | "operation";
 
 export type FormlessUiFieldMode = "display" | "editor";
 
@@ -220,11 +215,7 @@ export type FormlessUiMediaAuthoring = {
   uploadPatchFields: FormlessUiMediaUploadPatchFields;
 };
 
-export type FormlessUiFieldPresentationColorIntent =
-  | "neutral"
-  | "success"
-  | "warning"
-  | "danger";
+export type FormlessUiFieldPresentationColorIntent = "neutral" | "success" | "warning" | "danger";
 
 export type FormlessUiFieldPresentationColor = {
   intent: FormlessUiFieldPresentationColorIntent;
@@ -455,9 +446,7 @@ export type FormlessUiFieldIntent =
       transitionName: string;
     };
 
-export type FormlessUiFieldIntentHandler = (
-  intent: FormlessUiFieldIntent,
-) => Promise<void> | void;
+export type FormlessUiFieldIntentHandler = (intent: FormlessUiFieldIntent) => Promise<void> | void;
 
 export type FormlessUiOperationControlContract = {
   kind: "operationControl";

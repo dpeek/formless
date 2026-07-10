@@ -9,23 +9,38 @@ import {
   spacingVars,
   typeScaleVars,
 } from "@astryxdesign/core/theme/tokens.stylex";
-import type {
-  AstryxFieldOption,
-  AstryxFieldTransitionOperation,
-} from "../field-contract.ts";
 import { SourceIcon } from "./field-primitives.tsx";
+
+export type StateInputOption = {
+  color?: string;
+  label: string;
+  source?: string;
+};
+
+export type StateInputTransition = {
+  disabledReason?: string;
+  id: string;
+  isDisabled?: boolean;
+  isHidden?: boolean;
+  label: string;
+  operationKey: string;
+  pending?: {
+    isPending: boolean;
+  };
+  targetValue: string;
+};
 
 export type StateInputProps = {
   label: string;
   value: string;
-  option?: AstryxFieldOption;
+  option?: StateInputOption;
   stateLabel?: string;
-  transitions: readonly AstryxFieldTransitionOperation[];
+  transitions: readonly StateInputTransition[];
   isCompact?: boolean;
   isDisabled?: boolean;
   isPending?: boolean;
   pendingLabel?: string;
-  onTransition?: (transition: AstryxFieldTransitionOperation) => void;
+  onTransition?: (transition: StateInputTransition) => void;
 };
 
 export function StateInput({
@@ -56,9 +71,7 @@ export function StateInput({
           <StateIcon option={option} />
         </span>
       ) : null}
-      <span {...stylex.props(styles.label, isPending && styles.pendingSizer)}>
-        {displayText}
-      </span>
+      <span {...stylex.props(styles.label, isPending && styles.pendingSizer)}>{displayText}</span>
       {isPending ? (
         <span aria-hidden="true" {...stylex.props(styles.spinnerOverlay)}>
           <Spinner size="sm" shade="inherit" />
@@ -109,11 +122,7 @@ export function StateInput({
             key={transition.id}
             label={transition.label}
             description={transition.disabledReason}
-            icon={
-              transition.pending?.isPending ? (
-                <Spinner size="sm" shade="inherit" />
-              ) : undefined
-            }
+            icon={transition.pending?.isPending ? <Spinner size="sm" shade="inherit" /> : undefined}
             endContent={
               transition.pending?.isPending ? (
                 <Text type="supporting" color="secondary">
@@ -130,11 +139,7 @@ export function StateInput({
   );
 }
 
-function StateIcon({
-  option,
-}: {
-  option: AstryxFieldOption | undefined;
-}) {
+function StateIcon({ option }: { option: StateInputOption | undefined }) {
   if (option?.source) {
     return <SourceIcon source={option.source} size="sm" color="inherit" aria-hidden />;
   }
@@ -148,10 +153,7 @@ type StateInputColor = {
   foreground: string;
 };
 
-function stateInputColors(
-  value: string,
-  option: AstryxFieldOption | undefined,
-): StateInputColor {
+function stateInputColors(value: string, option: StateInputOption | undefined): StateInputColor {
   if (option?.color) {
     return {
       background: option.color,

@@ -49,11 +49,19 @@ import {
   type AstryxPublicFormPrototypeState,
 } from "../fixtures/public-site-page.ts";
 import type {
-  AstryxFieldEditorData,
-  AstryxFieldIntentHandlers,
-  AstryxFieldOption,
-  AstryxFieldValue,
-} from "../field-contract.ts";
+  FieldInputAttributes,
+  FieldSchema,
+  FieldValue,
+  GeneratedFieldDraftInput,
+  PublicSafeOperationInputField,
+} from "@dpeek/formless-schema";
+import type {
+  FormlessUiFieldAccess,
+  FormlessUiFieldControl,
+  FormlessUiFieldIntentHandler,
+  FormlessUiFieldOptions,
+  FormlessUiOperationInputField,
+} from "../formless-ui-contract.ts";
 import { SourceIcon } from "./field-primitives.tsx";
 
 export function FormlessSiteLayout() {
@@ -957,13 +965,36 @@ function ProjectedPublicOperationFormFields({
   const operation = block.publicOperation;
   const fields = operation?.fields ?? [];
   const [draftValues, setDraftValues] = useState(() => createInitialPublicOperationDraft(fields));
-  const handlers = {
-    onDraftChange: (fieldId, value) =>
-      setDraftValues((currentValues) => ({
-        ...currentValues,
-        [fieldId]: value,
-      })),
-  } satisfies AstryxFieldIntentHandlers;
+  const handleIntent: FormlessUiFieldIntentHandler = (intent) => {
+    if (intent.type !== "operationDraftChange") {
+      return;
+    }
+
+    setDraftValues((currentValues) => ({
+      ...currentValues,
+      [intent.inputName]: intent.inputValue,
+    }));
+  };
+
+  const updateDraftValue = (inputName: string, value: PublicOperationDraftValue) =>
+    handleIntent({
+      type: "operationDraftChange",
+      inputName,
+      inputValue: publicDraftInputFromValue(value),
+    });
+
+  const clearDraftValue = (inputName: string) =>
+    handleIntent({
+      type: "operationDraftChange",
+      inputName,
+      inputValue: publicDraftInputFromValue(""),
+    });
+
+  const setDraftValue = (inputName: string, inputValue: GeneratedFieldDraftInput | undefined) =>
+    setDraftValues((currentValues) => ({
+      ...currentValues,
+      [inputName]: inputValue,
+    }));
 
   if (!operation || fields.length === 0) {
     return null;
@@ -975,7 +1006,13 @@ function ProjectedPublicOperationFormFields({
         const fieldData = toPublicOperationFieldData(field, draftValues, isDisabled);
 
         return (
-          <ProjectedPublicOperationField key={fieldData.id} field={fieldData} handlers={handlers} />
+          <ProjectedPublicOperationField
+            key={fieldData.inputName}
+            field={fieldData}
+            clearDraftValue={clearDraftValue}
+            setDraftValue={setDraftValue}
+            updateDraftValue={updateDraftValue}
+          />
         );
       })}
     </VStack>
@@ -983,61 +1020,76 @@ function ProjectedPublicOperationFormFields({
 }
 
 function ProjectedPublicOperationField({
+  clearDraftValue,
   field,
-  handlers,
+  setDraftValue,
+  updateDraftValue,
 }: {
-  field: AstryxFieldEditorData;
-  handlers: AstryxFieldIntentHandlers;
+  clearDraftValue: (inputName: string) => void;
+  field: ProjectedPublicOperationFieldData;
+  setDraftValue: (inputName: string, inputValue: GeneratedFieldDraftInput | undefined) => void;
+  updateDraftValue: (inputName: string, value: PublicOperationDraftValue) => void;
 }) {
   const isPending = Boolean(field.pending?.isPending);
-  const isDisabled = field.accessMode !== "editable" || isPending;
+  const isDisabled = field.access.kind !== "editable" || isPending;
   const sharedProps = {
-    description: field.description,
+    description: field.publicDescription,
     isDisabled,
     isLoading: isPending,
-    isRequired: field.isRequired,
+    isRequired: field.required,
     label: field.label,
-    placeholder: field.presentation?.placeholder,
+    placeholder: field.publicPlaceholder,
     width: "100%" as const,
   };
 
   return (
     <div
       data-public-field-control={publicOperationFieldControlName(field)}
-      data-public-field-format={field.presentation?.format}
-      data-public-field-name={field.name}
+      data-public-field-format={field.field.type === "text" ? field.field.format : undefined}
+      data-public-field-name={field.inputName}
     >
-      {renderPublicOperationFieldControl(field, handlers, sharedProps)}
+      {renderPublicOperationFieldControl(field, {
+        clearDraftValue,
+        setDraftValue,
+        sharedProps,
+        updateDraftValue,
+      })}
     </div>
   );
 }
 
 function renderPublicOperationFieldControl(
-  field: AstryxFieldEditorData,
-  handlers: AstryxFieldIntentHandlers,
-  sharedProps: {
-    description?: string;
-    isDisabled: boolean;
-    isLoading: boolean;
-    isRequired?: boolean;
-    label: string;
-    placeholder?: string;
-    width: "100%";
+  field: ProjectedPublicOperationFieldData,
+  input: {
+    clearDraftValue: (inputName: string) => void;
+    setDraftValue: (inputName: string, inputValue: GeneratedFieldDraftInput | undefined) => void;
+    sharedProps: {
+      description?: string;
+      isDisabled: boolean;
+      isLoading: boolean;
+      isRequired?: boolean;
+      label: string;
+      placeholder?: string;
+      width: "100%";
+    };
+    updateDraftValue: (inputName: string, value: PublicOperationDraftValue) => void;
   },
 ) {
-  if (field.kind === "long-text") {
+  const { clearDraftValue, setDraftValue, sharedProps, updateDraftValue } = input;
+
+  if (field.input.control === "longText") {
     return (
       <TextArea
         {...sharedProps}
-        htmlName={field.name}
+        htmlName={field.inputName}
         rows={4}
-        value={formatPublicFieldValue(field.draftValue)}
-        onChange={(value) => handlers.onDraftChange?.(field.id, value)}
+        value={formatPublicFieldValue(field.draftInput)}
+        onChange={(value) => updateDraftValue(field.inputName, value)}
       />
     );
   }
 
-  if (field.kind === "boolean") {
+  if (field.input.control === "boolean") {
     return (
       <CheckboxInput
         description={sharedProps.description}
@@ -1045,56 +1097,60 @@ function renderPublicOperationFieldControl(
         isLoading={sharedProps.isLoading}
         isRequired={sharedProps.isRequired}
         label={sharedProps.label}
-        value={field.draftValue === true}
+        value={field.draftInput?.value === true}
         width="100%"
-        onChange={(value) => handlers.onDraftChange?.(field.id, value)}
+        onChange={(value) => updateDraftValue(field.inputName, value)}
       />
     );
   }
 
-  if (field.kind === "date") {
+  if (field.input.control === "date") {
     return (
       <DateInput
         {...sharedProps}
-        hasClear={!field.isRequired}
-        value={publicDateInputValue(formatPublicFieldValue(field.draftValue))}
-        onChange={(value) => handlers.onDraftChange?.(field.id, value ?? "")}
+        hasClear={!field.required}
+        value={publicDateInputValue(formatPublicFieldValue(field.draftInput))}
+        onChange={(value) => updateDraftValue(field.inputName, value ?? "")}
       />
     );
   }
 
-  if (field.kind === "number") {
+  if (field.input.control === "number") {
     return (
       <NumberInput
         description={sharedProps.description}
         hasClear
-        htmlName={field.name}
+        htmlName={field.inputName}
         isDisabled={sharedProps.isDisabled}
         isRequired={sharedProps.isRequired}
         label={sharedProps.label}
         placeholder={sharedProps.placeholder}
-        value={publicNumberInputValue(field.draftValue)}
+        value={publicNumberInputValue(field.draftInput)}
         width={sharedProps.width}
-        onChange={(value) => handlers.onDraftChange?.(field.id, value)}
+        onChange={(value) =>
+          value === null
+            ? clearDraftValue(field.inputName)
+            : updateDraftValue(field.inputName, value)
+        }
       />
     );
   }
 
-  if (field.kind === "enum") {
+  if (field.input.control === "enum") {
     return (
       <ProjectedPublicOperationSelector
         field={field}
-        handlers={handlers}
+        updateDraftValue={updateDraftValue}
         sharedProps={sharedProps}
       />
     );
   }
 
-  if (field.options?.length) {
+  if (field.options?.referenceOptions?.length) {
     return (
       <ProjectedPublicOperationTypeahead
         field={field}
-        handlers={handlers}
+        setDraftValue={setDraftValue}
         sharedProps={sharedProps}
       />
     );
@@ -1104,11 +1160,11 @@ function renderPublicOperationFieldControl(
     <TextInput
       {...sharedProps}
       {...publicTextInputElementProps(field)}
-      hasClear={!field.isRequired}
-      htmlName={field.name}
-      type={field.presentation?.format === "email" ? "email" : "text"}
-      value={formatPublicFieldValue(field.draftValue)}
-      onChange={(value) => handlers.onDraftChange?.(field.id, value)}
+      hasClear={!field.required}
+      htmlName={field.inputName}
+      type={field.field.type === "text" && field.field.format === "email" ? "email" : "text"}
+      value={formatPublicFieldValue(field.draftInput)}
+      onChange={(value) => updateDraftValue(field.inputName, value)}
     />
   );
 }
@@ -1117,11 +1173,11 @@ type PublicSuggestionItem = SearchableItem<{ value: string }>;
 
 function ProjectedPublicOperationTypeahead({
   field,
-  handlers,
+  setDraftValue,
   sharedProps,
 }: {
-  field: AstryxFieldEditorData;
-  handlers: AstryxFieldIntentHandlers;
+  field: ProjectedPublicOperationFieldData;
+  setDraftValue: (inputName: string, inputValue: GeneratedFieldDraftInput | undefined) => void;
   sharedProps: {
     description?: string;
     isDisabled: boolean;
@@ -1132,9 +1188,9 @@ function ProjectedPublicOperationTypeahead({
     width: "100%";
   };
 }) {
-  const items = publicSuggestionItems(field.options ?? []);
+  const items = publicSuggestionItems(field.options?.referenceOptions ?? []);
   const searchSource = createStaticSource(items);
-  const value = formatPublicFieldValue(field.draftValue);
+  const value = formatPublicFieldValue(field.draftInput);
   const selectedItem = items.find((item) => publicSuggestionItemValue(item) === value) ?? null;
 
   return (
@@ -1142,7 +1198,7 @@ function ProjectedPublicOperationTypeahead({
       <Typeahead
         description={sharedProps.description}
         emptySearchResultsText="No suggestions"
-        hasClear={!field.isRequired}
+        hasClear={!field.required}
         hasEntriesOnFocus
         isDisabled={sharedProps.isDisabled}
         isRequired={sharedProps.isRequired}
@@ -1152,23 +1208,26 @@ function ProjectedPublicOperationTypeahead({
         value={selectedItem}
         width={sharedProps.width}
         debounceMs={0}
-        onChange={(item) =>
-          handlers.onDraftChange?.(field.id, item ? publicSuggestionItemValue(item) : "")
-        }
-        onChangeQuery={(query) => handlers.onDraftChange?.(field.id, query)}
+        onChange={(item) => {
+          const inputValue = item
+            ? publicDraftInputFromValue(publicSuggestionItemValue(item))
+            : publicDraftInputFromValue("");
+
+          setDraftValue(field.inputName, inputValue);
+        }}
+        onChangeQuery={(query) => setDraftValue(field.inputName, publicDraftInputFromValue(query))}
       />
-      <input name={field.name} readOnly type="hidden" value={value} />
+      <input name={field.inputName} readOnly type="hidden" value={value} />
     </>
   );
 }
 
 function ProjectedPublicOperationSelector({
   field,
-  handlers,
   sharedProps,
+  updateDraftValue,
 }: {
-  field: AstryxFieldEditorData;
-  handlers: AstryxFieldIntentHandlers;
+  field: ProjectedPublicOperationFieldData;
   sharedProps: {
     description?: string;
     isDisabled: boolean;
@@ -1178,17 +1237,18 @@ function ProjectedPublicOperationSelector({
     placeholder?: string;
     width: "100%";
   };
+  updateDraftValue: (inputName: string, value: PublicOperationDraftValue) => void;
 }) {
-  const options = publicSelectorOptions(field.options ?? []);
-  const value = formatPublicFieldValue(field.draftValue);
+  const options = publicSelectorOptions(field.options?.enumOptions ?? []);
+  const value = formatPublicFieldValue(field.draftInput);
 
-  if (field.isRequired) {
+  if (field.required) {
     return (
       <Selector
         {...sharedProps}
         options={options}
         value={value || undefined}
-        onChange={(nextValue) => handlers.onDraftChange?.(field.id, nextValue)}
+        onChange={(nextValue) => updateDraftValue(field.inputName, nextValue)}
       />
     );
   }
@@ -1199,12 +1259,17 @@ function ProjectedPublicOperationSelector({
       hasClear
       options={options}
       value={value || null}
-      onChange={(nextValue) => handlers.onDraftChange?.(field.id, nextValue ?? "")}
+      onChange={(nextValue) => updateDraftValue(field.inputName, nextValue ?? "")}
     />
   );
 }
 
-type PublicOperationDraftValues = Record<string, AstryxFieldValue>;
+type PublicOperationDraftValue = FieldValue;
+type PublicOperationDraftValues = Record<string, GeneratedFieldDraftInput | undefined>;
+type ProjectedPublicOperationFieldData = FormlessUiOperationInputField & {
+  publicDescription?: string;
+  publicPlaceholder?: string;
+};
 type ISODateInputValue =
   `${number}${number}${number}${number}-${number}${number}-${number}${number}`;
 
@@ -1284,7 +1349,7 @@ function createInitialPublicOperationDraft(
   const values: PublicOperationDraftValues = {};
 
   for (const field of fields) {
-    values[field.name] = initialPublicOperationFieldValue(field);
+    values[field.name] = publicDraftInputFromValue(initialPublicOperationFieldValue(field));
   }
 
   return values;
@@ -1292,13 +1357,13 @@ function createInitialPublicOperationDraft(
 
 function initialPublicOperationFieldValue(
   field: AstryxProjectedSitePublicOperationInputFieldNode,
-): AstryxFieldValue {
+): PublicOperationDraftValue {
   if (field.control === "boolean") {
     return false;
   }
 
   if (field.control === "number") {
-    return null;
+    return "";
   }
 
   if (field.control === "date") {
@@ -1328,55 +1393,202 @@ function toPublicOperationFieldData(
   field: AstryxProjectedSitePublicOperationInputFieldNode,
   draftValues: PublicOperationDraftValues,
   isDisabled: boolean,
-): AstryxFieldEditorData {
-  const draftValue = draftValues[field.name] ?? initialPublicOperationFieldValue(field);
+): ProjectedPublicOperationFieldData {
+  const draftInput =
+    draftValues[field.name] ?? publicDraftInputFromValue(initialPublicOperationFieldValue(field));
+  const fieldSchema = toPublicOperationFieldSchema(field);
+  const control = toPublicOperationFieldControl(field, fieldSchema);
 
   return {
-    id: field.name,
-    name: field.name,
+    access: publicOperationFieldAccess(isDisabled),
+    commit: "submit",
+    control,
+    draftInput,
+    editor: control.editor,
+    field: fieldSchema,
+    fieldName: field.name,
+    input: toPublicOperationInput(field),
+    inputName: field.name,
     label: field.label,
-    isRequired: field.required,
-    surface: "public-action",
-    density: "balanced",
-    accessMode: isDisabled ? "disabled" : "editable",
-    kind: toPublicOperationFieldKind(field),
     options: toPublicOperationFieldOptions(field),
-    presentation: {
-      format: field.format,
-      placeholder: publicOperationFieldPlaceholder(field),
-    },
+    publicPlaceholder: publicOperationFieldPlaceholder(field),
+    required: field.required,
     mode: "editor",
-    draftValue,
-    committedDisplayValue: formatPublicFieldValue(draftValue),
-    commitPolicy: "submit",
+    surface: "operation",
+    value: draftInput.value,
   };
 }
 
-function toPublicOperationFieldKind(
+function toPublicOperationFieldSchema(
   field: AstryxProjectedSitePublicOperationInputFieldNode,
-): AstryxFieldEditorData["kind"] {
-  if (field.control === "longText") {
-    return "long-text";
+): FieldSchema {
+  if (field.control === "boolean") {
+    return { type: "boolean", required: field.required, label: field.label };
   }
 
-  return field.control;
+  if (field.control === "date") {
+    return { type: "date", required: field.required, label: field.label };
+  }
+
+  if (field.control === "number") {
+    return { type: "number", required: field.required, label: field.label };
+  }
+
+  if (field.control === "enum") {
+    return {
+      type: "enum",
+      required: field.required,
+      label: field.label,
+      values: Object.fromEntries(
+        (field.options ?? []).map((option) => [option.value, { label: option.label }]),
+      ),
+    };
+  }
+
+  return {
+    type: "text",
+    required: field.required,
+    label: field.label,
+    format: field.control === "longText" ? "longText" : field.format,
+    suggestions: field.suggestions ? [...field.suggestions] : undefined,
+  };
 }
 
 function toPublicOperationFieldOptions(
   field: AstryxProjectedSitePublicOperationInputFieldNode,
-): readonly AstryxFieldOption[] | undefined {
+): FormlessUiFieldOptions | undefined {
   if (field.control === "enum") {
-    return field.options;
+    return {
+      enumOptions: (field.options ?? []).map((option) => ({
+        label: option.label,
+        presentation: {
+          color: {
+            intent: "neutral",
+            known: false,
+          },
+          label: option.label,
+        },
+        value: option.value,
+      })),
+    };
   }
 
   if (field.suggestions?.length) {
-    return field.suggestions.map((suggestion) => ({
-      value: suggestion,
-      label: suggestion,
-    }));
+    return {
+      referenceOptions: field.suggestions.map((suggestion) => ({
+        id: suggestion,
+        label: suggestion,
+      })),
+    };
   }
 
   return undefined;
+}
+
+function toPublicOperationFieldControl(
+  field: AstryxProjectedSitePublicOperationInputFieldNode,
+  fieldSchema: FieldSchema,
+): FormlessUiFieldControl {
+  const common = {
+    createDefaultChecked: false,
+    createDefaultValue: undefined,
+    inputAttributes: publicOperationInputAttributes(fieldSchema),
+    label: field.label,
+    required: field.required,
+  };
+
+  if (fieldSchema.type === "boolean") {
+    return {
+      ...common,
+      control: { kind: "checkbox" },
+      controlKind: "checkbox",
+      editor: "boolean",
+      field: fieldSchema,
+      kind: "boolean",
+    };
+  }
+
+  if (fieldSchema.type === "date") {
+    return {
+      ...common,
+      control: { kind: "input", inputType: "date" },
+      controlKind: "date",
+      editor: "date",
+      field: fieldSchema,
+      kind: "date",
+    };
+  }
+
+  if (fieldSchema.type === "number") {
+    return {
+      ...common,
+      control: { kind: "formattedNumber" },
+      controlKind: "number",
+      editor: "number",
+      field: fieldSchema,
+      kind: "number",
+    };
+  }
+
+  if (fieldSchema.type === "enum") {
+    return {
+      ...common,
+      control: { kind: "select" },
+      controlKind: "select",
+      editor: "enum",
+      field: fieldSchema,
+      kind: "enum",
+    };
+  }
+
+  const textField = fieldSchema as Extract<FieldSchema, { type: "text" }>;
+
+  return {
+    ...common,
+    control:
+      field.control === "longText" ? { kind: "textarea" } : { kind: "input", inputType: "text" },
+    controlKind: field.control === "longText" ? "textarea" : "text",
+    editor: field.control === "longText" ? "textarea" : "text",
+    field: textField,
+    kind: "text",
+  };
+}
+
+function toPublicOperationInput(
+  field: AstryxProjectedSitePublicOperationInputFieldNode,
+): PublicSafeOperationInputField {
+  return {
+    name: field.name,
+    label: field.label,
+    required: field.required,
+    control: field.control,
+    format: field.format,
+    suggestions: field.suggestions ? [...field.suggestions] : undefined,
+    options: field.options?.map((option) => ({
+      value: option.value,
+      label: option.label,
+    })),
+  };
+}
+
+function publicOperationFieldAccess(isDisabled: boolean): FormlessUiFieldAccess {
+  if (isDisabled) {
+    return { kind: "disabled", canPatch: false, writable: true };
+  }
+
+  return { kind: "editable", canPatch: true, writable: true };
+}
+
+function publicOperationInputAttributes(field: FieldSchema): FieldInputAttributes {
+  if (field.type !== "number") {
+    return {};
+  }
+
+  return {
+    max: field.max,
+    min: field.min,
+    step: field.integer ? "1" : "any",
+  };
 }
 
 function publicOperationFieldPlaceholder(field: AstryxProjectedSitePublicOperationInputFieldNode) {
@@ -1395,27 +1607,32 @@ function publicOperationFieldPlaceholder(field: AstryxProjectedSitePublicOperati
   return undefined;
 }
 
-function publicTextInputElementProps(field: AstryxFieldEditorData) {
+function publicTextInputElementProps(field: ProjectedPublicOperationFieldData) {
+  const format = field.field.type === "text" ? field.field.format : undefined;
+
   return {
-    inputMode: field.presentation?.format === "phone" ? "tel" : undefined,
-    pattern: field.presentation?.format === "phone" ? "[0-9+() -]*" : undefined,
+    inputMode: format === "phone" ? "tel" : undefined,
+    pattern: format === "phone" ? "[0-9+() -]*" : undefined,
   } satisfies Record<string, string | undefined>;
 }
 
-function publicSelectorOptions(options: readonly AstryxFieldOption[]): SelectorOptionData[] {
+function publicSelectorOptions(
+  options: NonNullable<FormlessUiFieldOptions["enumOptions"]>,
+): SelectorOptionData[] {
   return options.map((option) => ({
-    disabled: option.isDisabled,
     label: option.label,
     value: option.value,
   }));
 }
 
-function publicSuggestionItems(options: readonly AstryxFieldOption[]): PublicSuggestionItem[] {
+function publicSuggestionItems(
+  options: NonNullable<FormlessUiFieldOptions["referenceOptions"]>,
+): PublicSuggestionItem[] {
   return options.map((option) => ({
-    id: option.value,
+    id: option.id,
     label: option.label,
     auxiliaryData: {
-      value: option.value,
+      value: option.id,
     },
   }));
 }
@@ -1424,19 +1641,17 @@ function publicSuggestionItemValue(item: PublicSuggestionItem) {
   return item.auxiliaryData?.value ?? item.id;
 }
 
-function publicOperationFieldControlName(field: AstryxFieldEditorData) {
-  if (field.kind === "long-text") {
-    return "longText";
-  }
-
-  return field.kind;
+function publicOperationFieldControlName(field: ProjectedPublicOperationFieldData) {
+  return field.input.control;
 }
 
 function publicDateInputValue(value: string): ISODateInputValue | undefined {
   return /^\d{4}-\d{2}-\d{2}$/.test(value) ? (value as ISODateInputValue) : undefined;
 }
 
-function publicNumberInputValue(value: AstryxFieldValue) {
+function publicNumberInputValue(input: GeneratedFieldDraftInput | undefined) {
+  const value = input?.value;
+
   if (typeof value === "number" && Number.isFinite(value)) {
     return value;
   }
@@ -1444,12 +1659,16 @@ function publicNumberInputValue(value: AstryxFieldValue) {
   return null;
 }
 
-function formatPublicFieldValue(value: AstryxFieldValue) {
-  if (value === null) {
-    return "";
+function formatPublicFieldValue(input: GeneratedFieldDraftInput | undefined) {
+  return String(input?.value ?? "");
+}
+
+function publicDraftInputFromValue(value: PublicOperationDraftValue): GeneratedFieldDraftInput {
+  if (typeof value === "boolean" || typeof value === "number") {
+    return { kind: "value", value };
   }
 
-  return String(value);
+  return { kind: "input", value };
 }
 
 function ProjectedMarkdown({

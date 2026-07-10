@@ -10,18 +10,20 @@ This is not shipped behavior. Shipped behavior lives in
 ## Current Anchors
 
 - `lib/astryx` is a private Vite prototype package.
-- `lib/astryx/src/field-contract.ts` defines projected field-shaped data and
-  intent callbacks for Astryx field rendering.
-- `lib/astryx/src/components/field-renderer.tsx` renders that field contract
+- `lib/astryx/src/formless-ui-contract.ts` defines canonical field-shaped data
+  and intent callbacks for Formless UI field rendering.
+- `lib/astryx/src/components/fields/renderer.tsx` renders that field contract
   with Astryx primitives.
 - `lib/astryx/src/components/generated-fields.tsx` proves create, record,
   table-cell, detail, and public-action field workflows against package-local
   fixture state.
 - `lib/astryx/src/components/site.tsx` proves public Site rendering from a
   projected public tree fixture.
-- `src/app/generated/astryx-field-projection.ts` already projects generated
-  create, record, and public operation draft sessions into the Astryx field
+- `src/app/generated/formless-ui-projection.ts` already projects generated
+  create, record, and public operation draft sessions into the Formless UI field
   contract.
+- `src/app/generated/formless-ui-intents.ts` adapts Formless UI field intents
+  back to generated draft/session/commit behavior.
 - `openspec/specs/generated-ui/spec.md` already defines the Astryx field
   primitive boundary, field coverage, generated-field vertical slice, and public
   Site vertical slice.
@@ -40,7 +42,7 @@ The package owns:
 
 - Astryx theme and reset CSS for Formless browser surfaces.
 - Reusable Astryx-backed field primitives.
-- The `AstryxFieldData` contract and controlled field renderer.
+- The `FormlessUiField` contract and controlled field renderer.
 - Submit-form adapters that convert projected field data into HTML names and
   hidden inputs only at native form boundaries.
 - App shell, auth, operation feedback, table, navigation, dialog, status, and
@@ -102,8 +104,9 @@ options, and generated view models.
 
 The presentation layer receives data shaped like this:
 
-- field data: `AstryxFieldData`;
-- field intents: draft change, commit, revert, picker open, upload file;
+- field data: `FormlessUiField`;
+- field intents: `FormlessUiFieldIntent` draft change, commit, revert, picker
+  open, upload file, and state transition requests;
 - operation controls: projected operation binding state plus execute intents;
 - shell/navigation: labels, hrefs, selected state, profile display facts, and
   route intents;
@@ -123,7 +126,7 @@ it does not query installs, sessions, route policy, or app schemas.
 Required exports:
 
 - `@dpeek/formless-astryx/global.css`
-- `@dpeek/formless-astryx/field-contract`
+- `@dpeek/formless-astryx/formless-ui-contract`
 - `@dpeek/formless-astryx/fields`
 - `@dpeek/formless-astryx/layout`
 - `@dpeek/formless-astryx/navigation`
@@ -176,15 +179,15 @@ Use that branch as a reference, not as a direct patch. The migration target is:
 1. Package boundary.
    - Add explicit `@dpeek/formless-astryx` exports.
    - Move prototype routes under an unexported prototype namespace.
-   - Replace the relative `field-contract` import in
-     `src/app/generated/astryx-field-projection.ts` with a package import.
+   - Expose the canonical Formless UI field contract and field renderer through
+     package subpaths before production generated surfaces import them.
    - Add import-boundary tests for `lib/astryx`.
    - Adapt the Tailwind/Astryx coexistence reference from the `astryx` branch
      into package-owned global CSS and a package-owned ThemeProvider.
 
 2. Generated field renderer.
    - Wire one production generated field surface through
-     `projectGeneratedCreateAstryxFields` and `AstryxFieldRenderer`.
+     `projectGeneratedCreateFormlessUiFields` and `FormlessUiFieldRenderer`.
    - Keep draft sessions and submit resolution in `src/app/generated`.
    - Skip the full icon picker until the icon input adapter is designed.
    - Expand to record edit fields, table cells, detail fields, and public
@@ -236,7 +239,7 @@ surfaces should be classified before a worker touches them.
 Proceed now:
 
 - Ordinary create, record, table-cell, detail, and public operation scalar
-  fields that fit `AstryxFieldData`.
+  fields that fit `FormlessUiField`.
 - Generated operation buttons, status, menus, dialogs, collection chrome, table
   chrome, auth screens, and unified shell/navigation where the prototype has a
   clear Astryx direction.
@@ -319,11 +322,11 @@ Each slice should have focused evidence:
 Ship these before starting a broad migration goal:
 
 1. Make `lib/astryx` importable as `@dpeek/formless-astryx`.
-2. Export `field-contract`, `fields`, `theme`, and `global.css`.
+2. Export `formless-ui-contract`, `fields`, `theme`, and `global.css`.
 3. Move prototype-only entrypoints behind unexported files.
 4. Add a dependency from the root package to `@dpeek/formless-astryx`.
-5. Replace the relative Astryx field-contract import in generated UI with the
-   package subpath.
+5. Replace relative Formless UI contract imports in generated UI with the
+   package subpath once the package boundary exists.
 6. Add an import-boundary test that fails if `lib/astryx` imports runtime data
    modules.
 7. Add an import-boundary test or lint target that fails if migrated generated
@@ -346,7 +349,8 @@ Goal: prepare and begin the Astryx migration without breaking the data and
 presentation split.
 
 Start with the first changes to ship. Then migrate generated field rendering
-surface by surface through `src/app/generated/astryx-field-projection.ts` and
+surface by surface through `src/app/generated/formless-ui-projection.ts`,
+`src/app/generated/formless-ui-intents.ts`, and
 `@dpeek/formless-astryx/fields`.
 
 Do not spend the first goal designing every missing specialty surface. Leave

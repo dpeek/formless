@@ -1,23 +1,23 @@
-import type { AstryxFieldSurface } from "../field-contract.ts";
-import type { FieldKindOption, FieldScenarioGroup } from "./field-scenario-model.ts";
-import { booleanScenarioGroups } from "./field-scenarios/boolean.ts";
-import { colorScenarioGroups } from "./field-scenarios/color.ts";
-import { dateScenarioGroups } from "./field-scenarios/date.ts";
-import { enumScenarioGroups } from "./field-scenarios/enum.ts";
-import { mediaScenarioGroups } from "./field-scenarios/media.ts";
-import { numberScenarioGroups } from "./field-scenarios/number.ts";
-import { referenceScenarioGroups } from "./field-scenarios/reference.ts";
-import { stateMachineScenarioGroups } from "./field-scenarios/state-machine.ts";
-import { textScenarioGroups } from "./field-scenarios/text.ts";
+import type { FieldKindOption, FieldScenarioGroup } from "../field-scenario-model.ts";
+import type { FormlessUiFieldSurface } from "../../formless-ui-contract.ts";
+import { booleanScenarioGroups } from "./boolean-field.fixtures.ts";
+import { colorScenarioGroups } from "./color-field.fixtures.ts";
+import { dateScenarioGroups } from "./date-field.fixtures.ts";
+import { enumScenarioGroups } from "./enum-field.fixtures.ts";
+import { iconScenarioGroups } from "./icon-field.fixtures.ts";
+import { mediaScenarioGroups } from "./media-field.fixtures.ts";
+import { numberScenarioGroups } from "./number-field.fixtures.ts";
+import { referenceScenarioGroups } from "./reference-field.fixtures.ts";
+import { stateMachineScenarioGroups } from "./state-machine-field.fixtures.ts";
+import { textScenarioGroups } from "./text-field.fixtures.ts";
 
 export const fieldSurfaceOptions = [
   { id: "create", label: "Create" },
   { id: "record", label: "Record" },
   { id: "table-cell", label: "Table Cell" },
   { id: "detail", label: "Detail" },
-  { id: "public-action", label: "Public Action" },
-  { id: "site-authoring", label: "Site Authoring" },
-] satisfies readonly { id: AstryxFieldSurface; label: string }[];
+  { id: "operation", label: "Operation" },
+] satisfies readonly { id: FormlessUiFieldSurface; label: string }[];
 
 export const fieldKindOptions = [
   { id: "state-machine-enum", label: "State" },
@@ -44,5 +44,6 @@ export const fieldScenarioGroups = [
   ...dateScenarioGroups,
   ...booleanScenarioGroups,
   ...colorScenarioGroups,
+  ...iconScenarioGroups,
   ...mediaScenarioGroups,
 ] satisfies readonly FieldScenarioGroup[];

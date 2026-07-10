@@ -13,9 +13,7 @@ import type {
   CreateFieldConfig,
   RecordFieldConfig,
 } from "../../client/views.ts";
-import type {
-  EntityOperationPresentationConfig,
-} from "../../client/operation-presentation-model.ts";
+import type { EntityOperationPresentationConfig } from "../../client/operation-presentation-model.ts";
 import type { TransitionStateOperationConfig } from "../../client/state-machine-model.ts";
 import type {
   FormlessUiDisplayField,

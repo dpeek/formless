@@ -3,6 +3,7 @@ import { CommandPalette } from "@astryxdesign/core/CommandPalette";
 import { ToastViewport } from "@astryxdesign/core/Toast";
 import { createStaticSource, type SearchableItem } from "@astryxdesign/core/Typeahead";
 import { FormlessAuthLayout } from "./components/auth.tsx";
+import { FormlessCanonicalFieldsLayout } from "./components/formless-ui-fields.tsx";
 import { FormlessFieldsLayout } from "./components/fields.tsx";
 import { FormlessGeneratedFieldsLayout } from "./components/generated-fields.tsx";
 import { FormlessOperationsLayout } from "./components/operations.tsx";
@@ -27,6 +28,7 @@ const formlessPrototypeLayouts: FormlessPrototypeLayout[] = [
   createFormlessPrototypeLayout("Auth", () => <FormlessAuthLayout />),
   createFormlessPrototypeLayout("Operations", () => <FormlessOperationsLayout />),
   createFormlessPrototypeLayout("Fields", () => <FormlessFieldsLayout />),
+  createFormlessPrototypeLayout("Canonical Fields", () => <FormlessCanonicalFieldsLayout />),
   createFormlessPrototypeLayout("Generated Fields", () => <FormlessGeneratedFieldsLayout />),
 ];
 

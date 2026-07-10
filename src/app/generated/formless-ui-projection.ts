@@ -147,9 +147,7 @@ export type ProjectGeneratedRecordFormlessUiFieldsOptions =
       Record<string, readonly TransitionStateOperationConfig[]>
     >;
     unitDraftByFieldName?: Readonly<Record<string, string | undefined>>;
-    unitDraftInputByFieldName?: Readonly<
-      Record<string, GeneratedFieldDraftInput | undefined>
-    >;
+    unitDraftInputByFieldName?: Readonly<Record<string, GeneratedFieldDraftInput | undefined>>;
   };
 
 export type ProjectGeneratedRecordFormlessUiFieldOptions = {
@@ -248,8 +246,7 @@ export function projectGeneratedCreateFormlessUiFields({
   return session.visibleFields.map((fieldConfig) =>
     projectGeneratedCreateFormlessUiField({
       error:
-        errorsByFieldName?.[fieldConfig.fieldName] ??
-        session.fieldErrors[fieldConfig.fieldName],
+        errorsByFieldName?.[fieldConfig.fieldName] ?? session.fieldErrors[fieldConfig.fieldName],
       fieldConfig,
       isPending: pendingByFieldName?.[fieldConfig.fieldName],
       pendingLabel: pendingLabelByFieldName?.[fieldConfig.fieldName],
@@ -278,10 +275,7 @@ export function projectGeneratedCreateFormlessUiField({
 
   return {
     ...projectBaseField({
-      access:
-        fieldConfig.stateMachine === undefined
-          ? editableAccess()
-          : stateMachineAccess(),
+      access: fieldConfig.stateMachine === undefined ? editableAccess() : stateMachineAccess(),
       commit: "submit",
       control,
       error,
@@ -363,8 +357,7 @@ export function projectGeneratedRecordFormlessUiFields({
       draftInput: state.draft.values[fieldConfig.fieldName],
       entityName,
       error:
-        errorsByFieldName?.[fieldConfig.fieldName] ??
-        session.fieldErrors[fieldConfig.fieldName],
+        errorsByFieldName?.[fieldConfig.fieldName] ?? session.fieldErrors[fieldConfig.fieldName],
       fieldConfig,
       isPending: pendingByFieldName?.[fieldConfig.fieldName],
       mediaAssetOptions: mediaAssetOptionsByFieldName?.[fieldConfig.fieldName],
@@ -569,8 +562,7 @@ export function projectGeneratedOperationFormlessUiFields({
   return session.visibleFields.map((fieldConfig) =>
     projectGeneratedOperationFormlessUiField({
       error:
-        errorsByFieldName?.[fieldConfig.inputName] ??
-        session.fieldErrors[fieldConfig.inputName],
+        errorsByFieldName?.[fieldConfig.inputName] ?? session.fieldErrors[fieldConfig.inputName],
       fieldConfig,
       isPending: pendingByFieldName?.[fieldConfig.inputName],
       pendingLabel: pendingLabelByFieldName?.[fieldConfig.inputName],
@@ -784,14 +776,16 @@ function projectStateMachineFacts({
     transitions:
       transitionOperations.length === 0
         ? undefined
-        : transitionOperations.map((operation): FormlessUiStateTransitionOperation => ({
-            ...operation,
-            availability: selectTransitionStateOperationAvailability({
-              currentValue,
-              field: operation.field,
-              operation,
+        : transitionOperations.map(
+            (operation): FormlessUiStateTransitionOperation => ({
+              ...operation,
+              availability: selectTransitionStateOperationAvailability({
+                currentValue,
+                field: operation.field,
+                operation,
+              }),
             }),
-          })),
+          ),
   };
 }
 
@@ -1136,15 +1130,13 @@ function isFieldErrorList(
   return Array.isArray(error);
 }
 
-const presentationColorIntents: Record<
-  string,
-  FormlessUiEnumValuePresentation["color"]["intent"]
-> = {
-  danger: "danger",
-  error: "danger",
-  "priority.high": "danger",
-  "priority.low": "success",
-  "priority.normal": "warning",
-  success: "success",
-  warning: "warning",
-};
+const presentationColorIntents: Record<string, FormlessUiEnumValuePresentation["color"]["intent"]> =
+  {
+    danger: "danger",
+    error: "danger",
+    "priority.high": "danger",
+    "priority.low": "success",
+    "priority.normal": "warning",
+    success: "success",
+    warning: "warning",
+  };

@@ -1,17 +1,11 @@
 import { generatedFieldDraftInput } from "@dpeek/formless-schema";
-import type {
-  GeneratedFieldDraftInput,
-  TableColumnFormat,
-} from "@dpeek/formless-schema";
+import type { GeneratedFieldDraftInput, TableColumnFormat } from "@dpeek/formless-schema";
 import type { FieldValue, RecordValues } from "@dpeek/formless-storage";
 import type {
   FormlessUiFieldIntent,
   FormlessUiFieldIntentHandler,
 } from "../../../lib/astryx/src/formless-ui-contract.ts";
-import type {
-  RecordFieldConfig,
-  RecordUnionPresentationConfig,
-} from "../../client/views.ts";
+import type { RecordFieldConfig, RecordUnionPresentationConfig } from "../../client/views.ts";
 import {
   nextGeneratedCreateDraftSessionState,
   type GeneratedCreateDraftSessionState,
@@ -37,62 +31,29 @@ import {
 } from "./record-field-authoring.ts";
 import { inputValueToFieldValue } from "./format.ts";
 
-type CreateDraftChangeIntent = Extract<
-  FormlessUiFieldIntent,
-  { type: "createDraftChange" }
->;
-type OperationDraftChangeIntent = Extract<
-  FormlessUiFieldIntent,
-  { type: "operationDraftChange" }
->;
-type RecordDraftChangeIntent = Extract<
-  FormlessUiFieldIntent,
-  { type: "recordDraftChange" }
->;
+type CreateDraftChangeIntent = Extract<FormlessUiFieldIntent, { type: "createDraftChange" }>;
+type OperationDraftChangeIntent = Extract<FormlessUiFieldIntent, { type: "operationDraftChange" }>;
+type RecordDraftChangeIntent = Extract<FormlessUiFieldIntent, { type: "recordDraftChange" }>;
 type RecordEditorDraftChangeIntent = Extract<
   FormlessUiFieldIntent,
   { type: "recordEditorDraftChange" }
 >;
-type RecordDraftRevertIntent = Extract<
-  FormlessUiFieldIntent,
-  { type: "recordDraftRevert" }
->;
-type RecordValueCommitIntent = Extract<
-  FormlessUiFieldIntent,
-  { type: "recordValueCommit" }
->;
+type RecordDraftRevertIntent = Extract<FormlessUiFieldIntent, { type: "recordDraftRevert" }>;
+type RecordValueCommitIntent = Extract<FormlessUiFieldIntent, { type: "recordValueCommit" }>;
 type RecordValueUnitCommitIntent = Extract<
   FormlessUiFieldIntent,
   { type: "recordValueUnitCommit" }
 >;
-type FieldErrorChangeIntent = Extract<
-  FormlessUiFieldIntent,
-  { type: "fieldErrorChange" }
->;
+type FieldErrorChangeIntent = Extract<FormlessUiFieldIntent, { type: "fieldErrorChange" }>;
 type IconDialogDraftChangeIntent = Extract<
   FormlessUiFieldIntent,
   { type: "iconDialogDraftChange" }
 >;
-type IconDialogOpenChangeIntent = Extract<
-  FormlessUiFieldIntent,
-  { type: "iconDialogOpenChange" }
->;
-type IconDialogCancelIntent = Extract<
-  FormlessUiFieldIntent,
-  { type: "iconDialogCancel" }
->;
-type IconDialogSaveIntent = Extract<
-  FormlessUiFieldIntent,
-  { type: "iconDialogSave" }
->;
-type MediaAssetSelectIntent = Extract<
-  FormlessUiFieldIntent,
-  { type: "mediaAssetSelect" }
->;
-type MediaFileSelectIntent = Extract<
-  FormlessUiFieldIntent,
-  { type: "mediaFileSelect" }
->;
+type IconDialogOpenChangeIntent = Extract<FormlessUiFieldIntent, { type: "iconDialogOpenChange" }>;
+type IconDialogCancelIntent = Extract<FormlessUiFieldIntent, { type: "iconDialogCancel" }>;
+type IconDialogSaveIntent = Extract<FormlessUiFieldIntent, { type: "iconDialogSave" }>;
+type MediaAssetSelectIntent = Extract<FormlessUiFieldIntent, { type: "mediaAssetSelect" }>;
+type MediaFileSelectIntent = Extract<FormlessUiFieldIntent, { type: "mediaFileSelect" }>;
 type StateTransitionInvokeIntent = Extract<
   FormlessUiFieldIntent,
   { type: "stateTransitionInvoke" }
@@ -936,10 +897,7 @@ function recordDraftForField(
   );
 }
 
-function selectFieldError(
-  resolution: GeneratedUpdateDraftResolution,
-  fieldName: string,
-) {
+function selectFieldError(resolution: GeneratedUpdateDraftResolution, fieldName: string) {
   return resolution.fieldErrors[fieldName] ?? Object.values(resolution.fieldErrors)[0];
 }
 

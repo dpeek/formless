@@ -6,16 +6,34 @@ import { HStack } from "@astryxdesign/core/HStack";
 import { Spinner } from "@astryxdesign/core/Spinner";
 import { Heading, Text } from "@astryxdesign/core/Text";
 import { VStack } from "@astryxdesign/core/VStack";
-import { AstryxFieldRenderer, AstryxFieldSubmitFormAdapter } from "./field-renderer.tsx";
 import type {
-  AstryxFieldData,
-  AstryxFieldDisplayData,
-  AstryxFieldEditorData,
-  AstryxFieldError,
-  AstryxFieldIntentHandlers,
-  AstryxFieldOption,
-  AstryxFieldValue,
-} from "../field-contract.ts";
+  FieldEditor,
+  FieldEditorControl,
+  FieldInputAttributes,
+  FieldSchema,
+  FieldValue,
+  GeneratedFieldDraftInput,
+} from "@dpeek/formless-schema";
+import { FormlessUiFieldRenderer, FormlessUiFieldSubmitFormAdapter } from "./fields/renderer.tsx";
+import type {
+  FormlessUiCreateField,
+  FormlessUiDisplayField,
+  FormlessUiEnumOption,
+  FormlessUiField,
+  FormlessUiFieldAccess,
+  FormlessUiFieldControl,
+  FormlessUiFieldError,
+  FormlessUiFieldFormatting,
+  FormlessUiFieldIntent,
+  FormlessUiFieldIntentHandler,
+  FormlessUiFieldOptions,
+  FormlessUiFieldPending,
+  FormlessUiFieldSurface,
+  FormlessUiOperationInputField,
+  FormlessUiRecordField,
+  FormlessUiRecordFieldDensity,
+  FormlessUiRecordFieldRendererKind,
+} from "../formless-ui-contract.ts";
 
 type GeneratedRecordValues = {
   accent: string;
@@ -48,7 +66,13 @@ type GeneratedPublicActionValues = {
   subscribe: boolean;
 };
 
-type FieldErrorMap<TValues> = Partial<Record<keyof TValues, readonly AstryxFieldError[]>>;
+type GeneratedFixtureFieldError = FormlessUiFieldError & {
+  severity?: "error" | "warning";
+};
+
+type FieldErrorMap<TValues> = Partial<Record<keyof TValues, readonly GeneratedFixtureFieldError[]>>;
+type GeneratedEditorField = Extract<FormlessUiField, { mode: "editor" }>;
+type GeneratedDraftValue = FieldValue | string;
 
 type GeneratedMediaIntentResult = {
   assetId: string;
@@ -99,29 +123,42 @@ type GeneratedFieldFoundationFixture = {
   publicAction: GeneratedPublicActionWorkflowFixture;
   record: GeneratedRecordWorkflowFixture;
   referenceOptions: {
-    audiences: readonly AstryxFieldOption[];
-    owners: readonly AstryxFieldOption[];
-    statuses: readonly AstryxFieldOption[];
+    audiences: readonly GeneratedFieldOption[];
+    owners: readonly GeneratedFieldOption[];
+    statuses: readonly GeneratedFieldOption[];
   };
 };
 
 type GeneratedFieldProjection = {
-  createFields: readonly AstryxFieldData[];
-  detailFields: readonly AstryxFieldData[];
-  publicActionFields: readonly AstryxFieldData[];
-  recordEditFields: readonly AstryxFieldData[];
-  tableCellFields: readonly AstryxFieldData[];
+  createFields: readonly FormlessUiField[];
+  detailFields: readonly FormlessUiField[];
+  publicActionFields: readonly FormlessUiField[];
+  recordEditFields: readonly FormlessUiField[];
+  tableCellFields: readonly FormlessUiField[];
 };
 
 type GeneratedFieldPanelProps = {
-  fields: readonly AstryxFieldData[];
+  fields: readonly FormlessUiField[];
   title: string;
   actionLabel?: string;
-  handlers: AstryxFieldIntentHandlers;
+  onIntent: FormlessUiFieldIntentHandler;
+  onRecordRevert: (field: FormlessUiRecordField) => void;
   isPending?: boolean;
   isSubmitReady?: boolean;
   layout?: "stack" | "table-cells";
   onAction?: () => void;
+};
+
+type GeneratedFieldOption = {
+  color?: string;
+  detail?: string;
+  isDisabled?: boolean;
+  isMissing?: boolean;
+  label: string;
+  mediaAlt?: string;
+  mediaPreviewUrl?: string;
+  source?: string;
+  value: string;
 };
 
 const publishedPageIconSource = [
@@ -170,7 +207,7 @@ const generatedImagePickerOptions = [
     mediaAlt: "Launch cover",
     mediaPreviewUrl: "https://picsum.photos/seed/formless-launch-cover/960/540",
   },
-] satisfies readonly AstryxFieldOption[];
+] satisfies readonly GeneratedFieldOption[];
 
 const generatedMediaPickerOptions = [
   {
@@ -181,7 +218,7 @@ const generatedMediaPickerOptions = [
     mediaPreviewUrl: generatedImagePreviews.pickedHomepageHero,
   },
   ...generatedImagePickerOptions,
-] satisfies readonly AstryxFieldOption[];
+] satisfies readonly GeneratedFieldOption[];
 
 const generatedCreateFieldNames = new Set<keyof GeneratedCreateValues>([
   "accent",
@@ -225,66 +262,19 @@ export function FormlessGeneratedFieldsLayout() {
     () => projectGeneratedFieldFixture(generatedFieldFoundationFixture),
     [generatedFieldFoundationFixture],
   );
-  const handlers = useMemo<AstryxFieldIntentHandlers>(
-    () => ({
-      onCommit: (fieldId, value) => {
-        const field = findProjectedField(generatedFieldProjection, fieldId);
-
-        if (!field || field.mode !== "editor") {
-          return;
-        }
-
-        setGeneratedFieldFoundationFixture((currentFixture) =>
-          commitGeneratedField(currentFixture, field, value),
-        );
-      },
-      onDraftChange: (fieldId, value) => {
-        const field = findProjectedField(generatedFieldProjection, fieldId);
-
-        if (!field || field.mode !== "editor") {
-          return;
-        }
-
-        setGeneratedFieldFoundationFixture((currentFixture) =>
-          changeGeneratedDraft(currentFixture, field, value),
-        );
-      },
-      onOpenPicker: (fieldId, picker, value) => {
-        const field = findProjectedField(generatedFieldProjection, fieldId);
-
-        if (!field || field.mode !== "editor") {
-          return;
-        }
-
-        setGeneratedFieldFoundationFixture((currentFixture) =>
-          applyGeneratedMediaPickerIntent(currentFixture, field, picker, value),
-        );
-      },
-      onRevert: (fieldId) => {
-        const field = findProjectedField(generatedFieldProjection, fieldId);
-
-        if (!field || field.mode !== "editor") {
-          return;
-        }
-
-        setGeneratedFieldFoundationFixture((currentFixture) =>
-          revertGeneratedField(currentFixture, field),
-        );
-      },
-      onUploadFile: (fieldId, file) => {
-        const field = findProjectedField(generatedFieldProjection, fieldId);
-
-        if (!field || field.mode !== "editor") {
-          return;
-        }
-
-        setGeneratedFieldFoundationFixture((currentFixture) =>
-          applyGeneratedMediaUploadIntent(currentFixture, field, file),
-        );
-      },
-    }),
+  const handleIntent = useMemo<FormlessUiFieldIntentHandler>(
+    () => (intent) => {
+      setGeneratedFieldFoundationFixture((currentFixture) =>
+        applyGeneratedFieldIntent(currentFixture, generatedFieldProjection, intent),
+      );
+    },
     [generatedFieldProjection],
   );
+  const handleRecordRevert = (field: FormlessUiRecordField) => {
+    setGeneratedFieldFoundationFixture((currentFixture) =>
+      revertGeneratedField(currentFixture, field),
+    );
+  };
 
   return (
     <VStack hAlign="center" paddingBlock={6} paddingInline={4} width="100%">
@@ -293,7 +283,7 @@ export function FormlessGeneratedFieldsLayout() {
           <VStack gap={1}>
             <Heading level={1}>Generated Fields</Heading>
             <Text type="body" as="p" color="secondary">
-              A task record and public contact action projected into Astryx field data.
+              A task record and public contact action projected into Formless UI field data.
             </Text>
           </VStack>
         </HStack>
@@ -302,7 +292,8 @@ export function FormlessGeneratedFieldsLayout() {
             title="Create Task"
             fields={generatedFieldProjection.createFields}
             actionLabel="Create task"
-            handlers={handlers}
+            onIntent={handleIntent}
+            onRecordRevert={handleRecordRevert}
             isPending={generatedFieldFoundationFixture.create.isPending}
             isSubmitReady={generatedFieldFoundationFixture.create.submitReady}
             onAction={() =>
@@ -314,24 +305,28 @@ export function FormlessGeneratedFieldsLayout() {
           <GeneratedFieldPanel
             title="Record Edit"
             fields={generatedFieldProjection.recordEditFields}
-            handlers={handlers}
+            onIntent={handleIntent}
+            onRecordRevert={handleRecordRevert}
           />
           <GeneratedFieldPanel
             title="Table Cells"
             fields={generatedFieldProjection.tableCellFields}
-            handlers={handlers}
+            onIntent={handleIntent}
+            onRecordRevert={handleRecordRevert}
             layout="table-cells"
           />
           <GeneratedFieldPanel
             title="Detail"
             fields={generatedFieldProjection.detailFields}
-            handlers={handlers}
+            onIntent={handleIntent}
+            onRecordRevert={handleRecordRevert}
           />
           <GeneratedFieldPanel
             title="Public Contact Action"
             fields={generatedFieldProjection.publicActionFields}
             actionLabel="Send message"
-            handlers={handlers}
+            onIntent={handleIntent}
+            onRecordRevert={handleRecordRevert}
             isPending={generatedFieldFoundationFixture.publicAction.isPending}
             isSubmitReady={generatedFieldFoundationFixture.publicAction.submitReady}
             onAction={() =>
@@ -349,10 +344,11 @@ export function FormlessGeneratedFieldsLayout() {
 function GeneratedFieldPanel({
   actionLabel,
   fields,
-  handlers,
   isPending = false,
   isSubmitReady,
   layout = "stack",
+  onIntent,
+  onRecordRevert,
   onAction,
   title,
 }: GeneratedFieldPanelProps) {
@@ -371,10 +367,11 @@ function GeneratedFieldPanel({
         </HStack>
         <GeneratedFieldList
           fields={fields}
-          handlers={handlers}
           includeSubmitAdapters={Boolean(actionLabel)}
           isSubmitLocked={isPending}
           layout={layout}
+          onIntent={onIntent}
+          onRecordRevert={onRecordRevert}
         />
         {actionLabel ? (
           <Button
@@ -392,27 +389,30 @@ function GeneratedFieldPanel({
 
 function GeneratedFieldList({
   fields,
-  handlers,
   includeSubmitAdapters,
   isSubmitLocked,
   layout,
+  onIntent,
+  onRecordRevert,
 }: {
-  fields: readonly AstryxFieldData[];
-  handlers: AstryxFieldIntentHandlers;
+  fields: readonly FormlessUiField[];
   includeSubmitAdapters: boolean;
   isSubmitLocked: boolean;
   layout: "stack" | "table-cells";
+  onIntent: FormlessUiFieldIntentHandler;
+  onRecordRevert: (field: FormlessUiRecordField) => void;
 }) {
   if (layout === "table-cells") {
     return (
       <Grid columns={{ minWidth: 112, max: 3 }} gap={2} width="100%">
         {fields.map((field) => (
           <GeneratedField
-            key={field.id}
+            key={generatedFieldKey(field)}
             field={field}
-            handlers={handlers}
             includeSubmitAdapter={includeSubmitAdapters}
             isSubmitLocked={isSubmitLocked}
+            onIntent={onIntent}
+            onRecordRevert={onRecordRevert}
           />
         ))}
       </Grid>
@@ -423,11 +423,12 @@ function GeneratedFieldList({
     <VStack gap={3}>
       {fields.map((field) => (
         <GeneratedField
-          key={field.id}
+          key={generatedFieldKey(field)}
           field={field}
-          handlers={handlers}
           includeSubmitAdapter={includeSubmitAdapters}
           isSubmitLocked={isSubmitLocked}
+          onIntent={onIntent}
+          onRecordRevert={onRecordRevert}
         />
       ))}
     </VStack>
@@ -436,47 +437,58 @@ function GeneratedFieldList({
 
 function GeneratedField({
   field,
-  handlers,
   includeSubmitAdapter,
   isSubmitLocked,
+  onIntent,
+  onRecordRevert,
 }: {
-  field: AstryxFieldData;
-  handlers: AstryxFieldIntentHandlers;
+  field: FormlessUiField;
   includeSubmitAdapter: boolean;
   isSubmitLocked: boolean;
+  onIntent: FormlessUiFieldIntentHandler;
+  onRecordRevert: (field: FormlessUiRecordField) => void;
 }) {
   const renderedField = isSubmitLocked ? lockSubmitField(field) : field;
 
   return (
     <VStack gap={1}>
-      <AstryxFieldRenderer field={renderedField} handlers={handlers} />
-      {includeSubmitAdapter ? <AstryxFieldSubmitFormAdapter field={renderedField} /> : null}
-      <GeneratedFieldMeta field={renderedField} handlers={handlers} />
+      <FormlessUiFieldRenderer field={renderedField} onIntent={onIntent} />
+      {includeSubmitAdapter ? <FormlessUiFieldSubmitFormAdapter field={renderedField} /> : null}
+      <GeneratedFieldMeta
+        field={renderedField}
+        onIntent={onIntent}
+        onRecordRevert={onRecordRevert}
+      />
     </VStack>
   );
 }
 
-function lockSubmitField(field: AstryxFieldData): AstryxFieldData {
+function lockSubmitField(field: FormlessUiField): FormlessUiField {
   if (field.mode !== "editor") {
     return field;
   }
 
   return {
     ...field,
-    accessMode: field.accessMode === "editable" ? "disabled" : field.accessMode,
+    access:
+      field.access.kind === "editable"
+        ? { kind: "disabled", canPatch: false, writable: true }
+        : field.access,
     pending: undefined,
   };
 }
 
 function GeneratedFieldMeta({
   field,
-  handlers,
+  onIntent,
+  onRecordRevert,
 }: {
-  field: AstryxFieldData;
-  handlers: AstryxFieldIntentHandlers;
+  field: FormlessUiField;
+  onIntent: FormlessUiFieldIntentHandler;
+  onRecordRevert: (field: FormlessUiRecordField) => void;
 }) {
   const isPending = Boolean(field.pending?.isPending);
-  const isFieldCommit = field.mode === "editor" && field.commitPolicy === "field";
+  const isFieldCommit = isRecordField(field) && field.commit === "field-commit";
   const hasMeta = isPending || isFieldCommit;
 
   if (!hasMeta) {
@@ -500,13 +512,19 @@ function GeneratedFieldMeta({
               label="Commit"
               variant="primary"
               isDisabled={isPending || !fieldIsDirty(field) || fieldHasBlockingError(field)}
-              onClick={() => handlers.onCommit?.(field.id, field.draftValue)}
+              onClick={() =>
+                onIntent({
+                  type: "recordValueCommit",
+                  fieldName: field.fieldName,
+                  value: generatedRecordFieldDraftValue(field),
+                })
+              }
             />
             <Button
               label="Revert"
               variant="secondary"
               isDisabled={isPending || !fieldIsDirty(field)}
-              onClick={() => handlers.onRevert?.(field.id)}
+              onClick={() => onRecordRevert(field)}
             />
           </>
         ) : null}
@@ -559,7 +577,7 @@ function createGeneratedFieldFoundationFixture(): GeneratedFieldFoundationFixtur
         subscribe: true,
       },
       errors: {
-        contactEmail: [{ id: "contact-email-required", message: "Email is required." }],
+        contactEmail: [fieldError("contactEmail", "Email is required.")],
       },
       isPending: false,
       submitReady: false,
@@ -623,7 +641,7 @@ function projectGeneratedFieldFixture(
   };
 }
 
-function projectCreateFields(fixture: GeneratedFieldFoundationFixture): readonly AstryxFieldData[] {
+function projectCreateFields(fixture: GeneratedFieldFoundationFixture): readonly FormlessUiField[] {
   const { create, referenceOptions } = fixture;
 
   return [
@@ -730,7 +748,7 @@ function projectCreateFields(fixture: GeneratedFieldFoundationFixture): readonly
 
 function projectRecordEditFields(
   fixture: GeneratedFieldFoundationFixture,
-): readonly AstryxFieldData[] {
+): readonly FormlessUiField[] {
   const { record, referenceOptions } = fixture;
 
   return [
@@ -841,7 +859,7 @@ function projectRecordEditFields(
 
 function projectTableCellFields(
   fixture: GeneratedFieldFoundationFixture,
-): readonly AstryxFieldData[] {
+): readonly FormlessUiField[] {
   const { record, referenceOptions } = fixture;
 
   return [
@@ -898,7 +916,7 @@ function projectTableCellFields(
   ];
 }
 
-function projectDetailFields(fixture: GeneratedFieldFoundationFixture): readonly AstryxFieldData[] {
+function projectDetailFields(fixture: GeneratedFieldFoundationFixture): readonly FormlessUiField[] {
   const { record, referenceOptions } = fixture;
 
   return [
@@ -1005,7 +1023,7 @@ function projectDetailFields(fixture: GeneratedFieldFoundationFixture): readonly
 
 function projectPublicActionFields(
   fixture: GeneratedFieldFoundationFixture,
-): readonly AstryxFieldData[] {
+): readonly FormlessUiField[] {
   const { publicAction, referenceOptions } = fixture;
 
   return [
@@ -1014,7 +1032,7 @@ function projectPublicActionFields(
       name: "contactName",
       label: "Name",
       isRequired: true,
-      surface: "public-action",
+      surface: "operation",
       density: "balanced",
       accessMode: "editable",
       kind: "text",
@@ -1028,7 +1046,7 @@ function projectPublicActionFields(
       name: "contactEmail",
       label: "Email",
       isRequired: true,
-      surface: "public-action",
+      surface: "operation",
       density: "balanced",
       accessMode: "editable",
       kind: "text",
@@ -1042,7 +1060,7 @@ function projectPublicActionFields(
       id: "generated-public-message",
       name: "message",
       label: "Message",
-      surface: "public-action",
+      surface: "operation",
       density: "balanced",
       accessMode: "editable",
       kind: "long-text",
@@ -1055,7 +1073,7 @@ function projectPublicActionFields(
       id: "generated-public-audience",
       name: "audienceId",
       label: "Audience",
-      surface: "public-action",
+      surface: "operation",
       density: "balanced",
       accessMode: "editable",
       kind: "reference",
@@ -1069,7 +1087,7 @@ function projectPublicActionFields(
       id: "generated-public-subscribe",
       name: "subscribe",
       label: "Subscribe",
-      surface: "public-action",
+      surface: "operation",
       density: "balanced",
       accessMode: "editable",
       kind: "boolean",
@@ -1090,33 +1108,104 @@ type GeneratedMediaFieldTarget =
   | { scope: "create"; fieldName: GeneratedCreateMediaFieldName }
   | { scope: "record"; fieldName: GeneratedRecordMediaFieldName };
 
-function findProjectedField(
+function applyGeneratedFieldIntent(
+  fixture: GeneratedFieldFoundationFixture,
   projection: GeneratedFieldProjection,
-  fieldId: string,
-): AstryxFieldData | undefined {
-  return [
-    projection.createFields,
-    projection.recordEditFields,
-    projection.tableCellFields,
-    projection.detailFields,
-    projection.publicActionFields,
-  ]
-    .flat()
-    .find((field) => field.id === fieldId);
+  intent: FormlessUiFieldIntent,
+): GeneratedFieldFoundationFixture {
+  if (intent.type === "createDraftChange") {
+    return isGeneratedCreateFieldName(intent.fieldName)
+      ? changeGeneratedDraft(
+          fixture,
+          projection,
+          { scope: "create", fieldName: intent.fieldName },
+          draftValueFromInput(intent.fieldValue),
+        )
+      : fixture;
+  }
+
+  if (intent.type === "operationDraftChange") {
+    return isGeneratedPublicActionFieldName(intent.inputName)
+      ? changeGeneratedDraft(
+          fixture,
+          projection,
+          { scope: "publicAction", fieldName: intent.inputName },
+          draftValueFromInput(intent.inputValue),
+        )
+      : fixture;
+  }
+
+  if (intent.type === "recordEditorDraftChange") {
+    return isGeneratedRecordFieldName(intent.fieldName)
+      ? changeGeneratedDraft(
+          fixture,
+          projection,
+          { scope: "record", fieldName: intent.fieldName },
+          intent.value,
+        )
+      : fixture;
+  }
+
+  if (intent.type === "recordDraftChange") {
+    return isGeneratedRecordFieldName(intent.fieldName)
+      ? changeGeneratedDraft(
+          fixture,
+          projection,
+          { scope: "record", fieldName: intent.fieldName },
+          draftValueFromInput(intent.fieldValue),
+        )
+      : fixture;
+  }
+
+  if (intent.type === "recordValueCommit") {
+    return isGeneratedRecordFieldName(intent.fieldName)
+      ? commitGeneratedRecordField(fixture, projection, intent.fieldName, intent.value)
+      : fixture;
+  }
+
+  if (intent.type === "recordValueUnitCommit") {
+    return isGeneratedRecordFieldName(intent.fieldName)
+      ? commitGeneratedRecordField(
+          fixture,
+          projection,
+          intent.fieldName,
+          draftValueFromInput(intent.commit.fieldDraftInput),
+        )
+      : fixture;
+  }
+
+  if (intent.type === "fieldErrorChange") {
+    return isGeneratedRecordFieldName(intent.fieldName)
+      ? applyGeneratedFieldErrorChange(fixture, intent.fieldName, intent.message)
+      : fixture;
+  }
+
+  if (intent.type === "mediaAssetSelect") {
+    return applyGeneratedMediaPickerIntent(fixture, projection, intent.fieldName, intent.assetId);
+  }
+
+  if (intent.type === "mediaFileSelect") {
+    return intent.file
+      ? applyGeneratedMediaUploadIntent(fixture, projection, intent.fieldName, intent.file)
+      : fixture;
+  }
+
+  return fixture;
 }
 
 function changeGeneratedDraft(
   fixture: GeneratedFieldFoundationFixture,
-  field: AstryxFieldEditorData,
-  value: AstryxFieldValue,
+  projection: GeneratedFieldProjection,
+  target: GeneratedEditorFieldTarget,
+  value: GeneratedDraftValue,
 ): GeneratedFieldFoundationFixture {
-  const target = resolveEditorFieldTarget(field);
-
-  if (!target) {
-    return fixture;
-  }
-
   if (target.scope === "create") {
+    const mediaState = generatedMediaStateForDraft(
+      projection.createFields,
+      target.fieldName,
+      value,
+    );
+
     return validateGeneratedFieldFixture({
       ...fixture,
       create: {
@@ -1126,6 +1215,12 @@ function changeGeneratedDraft(
           ...fixture.create.draftValues,
           [target.fieldName]: value,
         } as GeneratedCreateValues,
+        media: mediaState
+          ? {
+              ...fixture.create.media,
+              [target.fieldName]: mediaState,
+            }
+          : fixture.create.media,
       },
     });
   }
@@ -1144,47 +1239,32 @@ function changeGeneratedDraft(
     });
   }
 
-  const nextValue =
-    field.commitPolicy === "immediate" ? normalizeCommittedValue(field, value) : value;
-  const nextRecord = {
-    ...fixture.record,
-    committedValues:
-      field.commitPolicy === "immediate"
-        ? ({
-            ...fixture.record.committedValues,
-            [target.fieldName]: nextValue,
-          } as GeneratedRecordValues)
-        : fixture.record.committedValues,
-    draftValues: {
-      ...fixture.record.draftValues,
-      [target.fieldName]: nextValue,
-    } as GeneratedRecordValues,
-  };
-
   return validateGeneratedFieldFixture({
     ...fixture,
-    record: nextRecord,
+    record: {
+      ...fixture.record,
+      draftValues: {
+        ...fixture.record.draftValues,
+        [target.fieldName]: value,
+      } as GeneratedRecordValues,
+    },
   });
 }
 
-function commitGeneratedField(
+function commitGeneratedRecordField(
   fixture: GeneratedFieldFoundationFixture,
-  field: AstryxFieldEditorData,
-  value: AstryxFieldValue,
+  projection: GeneratedFieldProjection,
+  fieldName: keyof GeneratedRecordValues,
+  value: FieldValue,
 ): GeneratedFieldFoundationFixture {
-  const target = resolveEditorFieldTarget(field);
-
-  if (!target || target.scope !== "record" || field.commitPolicy !== "field") {
-    return fixture;
-  }
-
   const validatedFixture = validateGeneratedFieldFixture(fixture);
-  const fieldErrors = validatedFixture.record.errors[target.fieldName] ?? [];
+  const fieldErrors = validatedFixture.record.errors[fieldName] ?? [];
 
   if (fieldErrors.some((error) => (error.severity ?? "error") === "error")) {
     return validatedFixture;
   }
 
+  const field = findGeneratedRecordField(projection, fieldName);
   const committedValue = normalizeCommittedValue(field, value);
 
   return validateGeneratedFieldFixture({
@@ -1193,24 +1273,24 @@ function commitGeneratedField(
       ...validatedFixture.record,
       committedValues: {
         ...validatedFixture.record.committedValues,
-        [target.fieldName]: committedValue,
+        [fieldName]: committedValue,
       } as GeneratedRecordValues,
       draftValues: {
         ...validatedFixture.record.draftValues,
-        [target.fieldName]: committedValue,
+        [fieldName]: committedValue,
       } as GeneratedRecordValues,
-      media: clearRecordMediaPending(validatedFixture.record.media, target.fieldName),
+      media: clearRecordMediaPending(validatedFixture.record.media, fieldName),
     },
   });
 }
 
 function revertGeneratedField(
   fixture: GeneratedFieldFoundationFixture,
-  field: AstryxFieldEditorData,
+  field: FormlessUiRecordField,
 ): GeneratedFieldFoundationFixture {
-  const target = resolveEditorFieldTarget(field);
+  const fieldName = field.fieldName;
 
-  if (!target || target.scope !== "record") {
+  if (!isGeneratedRecordFieldName(fieldName)) {
     return fixture;
   }
 
@@ -1220,9 +1300,9 @@ function revertGeneratedField(
       ...fixture.record,
       draftValues: {
         ...fixture.record.draftValues,
-        [target.fieldName]: fixture.record.committedValues[target.fieldName],
+        [fieldName]: fixture.record.committedValues[fieldName],
       } as GeneratedRecordValues,
-      media: resetRecordMediaState(fixture.record.media, target.fieldName),
+      media: resetRecordMediaState(fixture.record.media, fieldName),
     },
   });
 }
@@ -1265,25 +1345,20 @@ function submitGeneratedPublicAction(
 
 function applyGeneratedMediaPickerIntent(
   fixture: GeneratedFieldFoundationFixture,
-  field: AstryxFieldEditorData,
-  picker: "reference" | "icon" | "image" | "media",
-  value?: string,
+  projection: GeneratedFieldProjection,
+  fieldName: string,
+  assetId: string,
 ): GeneratedFieldFoundationFixture {
-  const target = resolveMediaFieldTarget(field);
+  const target = resolveMediaFieldTarget(fieldName);
 
-  if (!target || (picker !== "image" && picker !== "media")) {
+  if (!target) {
     return fixture;
   }
 
-  const selectedOption = value
-    ? field.options?.find((option) => option.value === value)
-    : undefined;
-  const assetId =
-    selectedOption?.value ??
-    (picker === "image" ? "image-picked-contact-preview" : "media-picked-homepage-hero");
+  const selectedOption = findGeneratedMediaAssetOption(projection, fieldName, assetId);
   const previewHref =
-    selectedOption?.mediaPreviewUrl ??
-    (picker === "image"
+    selectedOption?.href ??
+    (target.scope === "create"
       ? generatedImagePreviews.pickedContactPreview
       : generatedImagePreviews.pickedHomepageHero);
 
@@ -1296,17 +1371,19 @@ function applyGeneratedMediaPickerIntent(
 
 function applyGeneratedMediaUploadIntent(
   fixture: GeneratedFieldFoundationFixture,
-  field: AstryxFieldEditorData,
+  projection: GeneratedFieldProjection,
+  fieldName: string,
   file: File,
 ): GeneratedFieldFoundationFixture {
-  const target = resolveMediaFieldTarget(field);
+  const target = resolveMediaFieldTarget(fieldName);
 
   if (!target) {
     return fixture;
   }
 
-  const fileName = file.name || `${field.name}.png`;
-  const assetId = `${field.kind}-upload-${slugifyFileName(fileName)}`;
+  const field = findGeneratedEditorField(projection, fieldName);
+  const fileName = file.name || `${fieldName}.png`;
+  const assetId = `${field?.control.controlKind ?? "media"}-upload-${slugifyFileName(fileName)}`;
   const previewHref = URL.createObjectURL(file);
 
   return applyGeneratedMediaIntentResult(
@@ -1399,16 +1476,16 @@ function validateCreateValues(values: GeneratedCreateValues): FieldErrorMap<Gene
   const errors: FieldErrorMap<GeneratedCreateValues> = {};
 
   if (isBlankText(values.title)) {
-    errors.title = [fieldError("create-title-required", "Task is required.")];
+    errors.title = [fieldError("title", "Task is required.")];
   }
 
   if (isBlankText(values.ownerId)) {
-    errors.ownerId = [fieldError("create-owner-required", "Owner is required.")];
+    errors.ownerId = [fieldError("ownerId", "Owner is required.")];
   }
 
   if (!numberDraftIsValid(values.estimateHours)) {
     errors.estimateHours = [
-      fieldError("create-estimate-number", "Estimate keeps invalid text until it is numeric."),
+      fieldError("estimateHours", "Estimate keeps invalid text until it is numeric."),
     ];
   }
 
@@ -1417,7 +1494,7 @@ function validateCreateValues(values: GeneratedCreateValues): FieldErrorMap<Gene
     values.accent !== "" &&
     !opaqueHexColorIsValid(values.accent)
   ) {
-    errors.accent = [fieldError("create-accent-hex", "Use an opaque hex color.")];
+    errors.accent = [fieldError("accent", "Use an opaque hex color.")];
   }
 
   return errors;
@@ -1429,17 +1506,17 @@ function validatePublicActionValues(
   const errors: FieldErrorMap<GeneratedPublicActionValues> = {};
 
   if (isBlankText(values.contactName)) {
-    errors.contactName = [fieldError("contact-name-required", "Name is required.")];
+    errors.contactName = [fieldError("contactName", "Name is required.")];
   }
 
   if (isBlankText(values.contactEmail)) {
-    errors.contactEmail = [fieldError("contact-email-required", "Email is required.")];
+    errors.contactEmail = [fieldError("contactEmail", "Email is required.")];
   } else if (!emailTextIsValid(values.contactEmail)) {
-    errors.contactEmail = [fieldError("contact-email-format", "Enter a valid email address.")];
+    errors.contactEmail = [fieldError("contactEmail", "Enter a valid email address.")];
   }
 
   if (isBlankText(values.audienceId)) {
-    errors.audienceId = [fieldError("public-audience-required", "Audience is required.")];
+    errors.audienceId = [fieldError("audienceId", "Audience is required.")];
   }
 
   return errors;
@@ -1452,12 +1529,12 @@ function validateRecordValues(
   const errors: FieldErrorMap<GeneratedRecordValues> = {};
 
   if (isBlankText(values.title)) {
-    errors.title = [fieldError("record-title-required", "Task is required.")];
+    errors.title = [fieldError("title", "Task is required.")];
   }
 
   if (!numberDraftIsValid(values.estimateHours)) {
     errors.estimateHours = [
-      fieldError("record-estimate-number", "Estimate keeps invalid text until it is numeric."),
+      fieldError("estimateHours", "Estimate keeps invalid text until it is numeric."),
     ];
   }
 
@@ -1466,46 +1543,19 @@ function validateRecordValues(
     values.ownerId !== "" &&
     !referenceOptions.owners.some((option) => option.value === values.ownerId)
   ) {
-    errors.ownerId = [
-      fieldError("record-owner-missing", "Missing reference id is preserved.", "warning"),
-    ];
+    errors.ownerId = [fieldError("ownerId", "Missing reference id is preserved.", "warning")];
   }
 
   return errors;
 }
 
-function resolveEditorFieldTarget(field: AstryxFieldEditorData): GeneratedEditorFieldTarget | null {
-  if (field.surface === "create" && isGeneratedCreateFieldName(field.name)) {
-    return { scope: "create", fieldName: field.name };
+function resolveMediaFieldTarget(fieldName: string): GeneratedMediaFieldTarget | null {
+  if (isGeneratedCreateFieldName(fieldName) && isGeneratedCreateMediaFieldName(fieldName)) {
+    return { scope: "create", fieldName };
   }
 
-  if (field.surface === "public-action" && isGeneratedPublicActionFieldName(field.name)) {
-    return { scope: "publicAction", fieldName: field.name };
-  }
-
-  if (
-    (field.surface === "record" || field.surface === "table-cell") &&
-    isGeneratedRecordFieldName(field.name)
-  ) {
-    return { scope: "record", fieldName: field.name };
-  }
-
-  return null;
-}
-
-function resolveMediaFieldTarget(field: AstryxFieldEditorData): GeneratedMediaFieldTarget | null {
-  const target = resolveEditorFieldTarget(field);
-
-  if (!target) {
-    return null;
-  }
-
-  if (target.scope === "create" && isGeneratedCreateMediaFieldName(target.fieldName)) {
-    return { scope: "create", fieldName: target.fieldName };
-  }
-
-  if (target.scope === "record" && isGeneratedRecordMediaFieldName(target.fieldName)) {
-    return { scope: "record", fieldName: target.fieldName };
+  if (isGeneratedRecordFieldName(fieldName) && isGeneratedRecordMediaFieldName(fieldName)) {
+    return { scope: "record", fieldName };
   }
 
   return null;
@@ -1538,17 +1588,17 @@ function isGeneratedRecordMediaFieldName(
 }
 
 function normalizeCommittedValue(
-  field: AstryxFieldEditorData,
-  value: AstryxFieldValue,
-): AstryxFieldValue {
-  if (field.kind !== "number" || typeof value !== "string") {
+  field: FormlessUiRecordField | undefined,
+  value: FieldValue,
+): FieldValue {
+  if (field?.field.type !== "number" || typeof value !== "string") {
     return value;
   }
 
   const trimmedValue = value.trim();
 
   if (trimmedValue === "") {
-    return null;
+    return "";
   }
 
   const numericValue = Number(trimmedValue);
@@ -1557,9 +1607,9 @@ function normalizeCommittedValue(
 }
 
 function referenceOptionsWithMissingValue(
-  options: readonly AstryxFieldOption[],
-  value: AstryxFieldValue,
-): readonly AstryxFieldOption[] {
+  options: readonly GeneratedFieldOption[],
+  value: GeneratedDraftValue,
+): readonly GeneratedFieldOption[] {
   if (
     typeof value !== "string" ||
     value === "" ||
@@ -1582,7 +1632,7 @@ function referenceOptionsWithMissingValue(
 function pendingForCreateField(
   create: GeneratedCreateWorkflowFixture,
   fieldName: keyof GeneratedCreateValues,
-) {
+): FormlessUiFieldPending | undefined {
   const mediaState = isGeneratedCreateMediaFieldName(fieldName)
     ? create.media[fieldName]
     : undefined;
@@ -1598,7 +1648,7 @@ function pendingForRecordField(
   record: GeneratedRecordWorkflowFixture,
   fieldName: keyof GeneratedRecordValues,
   label: string,
-) {
+): FormlessUiFieldPending | undefined {
   const mediaState = isGeneratedRecordMediaFieldName(fieldName)
     ? record.media[fieldName]
     : undefined;
@@ -1614,12 +1664,14 @@ function mediaPreviewHref(mediaState: GeneratedMediaIntentState | undefined, fal
   return mediaState?.previewHref ?? fallback;
 }
 
-function fieldIsDirty(field: AstryxFieldEditorData) {
-  return field.draftValue !== (field.committedValue ?? null);
+function fieldIsDirty(field: FormlessUiRecordField) {
+  return generatedRecordFieldDraftValue(field) !== (field.drafts.recordValue ?? null);
 }
 
-function fieldHasBlockingError(field: AstryxFieldEditorData) {
-  return field.errors?.some((error) => (error.severity ?? "error") === "error") ?? false;
+function fieldHasBlockingError(field: FormlessUiField) {
+  const errors = field.errors as readonly GeneratedFixtureFieldError[] | undefined;
+
+  return errors?.some((error) => (error.severity ?? "error") === "error") ?? false;
 }
 
 function clearRecordMediaPending(
@@ -1669,16 +1721,16 @@ function defaultRecordMediaPreviewHref(fieldName: GeneratedRecordMediaFieldName)
 }
 
 function fieldError(
-  id: string,
+  fieldName: string,
   message: string,
-  severity: AstryxFieldError["severity"] = "error",
-): AstryxFieldError {
-  return { id, message, severity };
+  severity: GeneratedFixtureFieldError["severity"] = "error",
+): GeneratedFixtureFieldError {
+  return { fieldName, message, severity };
 }
 
 function errorsAllowSubmit<TValues>(errors: FieldErrorMap<TValues>) {
   const fieldErrorsByName = Object.values(errors) as readonly (
-    | readonly AstryxFieldError[]
+    | readonly GeneratedFixtureFieldError[]
     | undefined
   )[];
 
@@ -1687,11 +1739,11 @@ function errorsAllowSubmit<TValues>(errors: FieldErrorMap<TValues>) {
   );
 }
 
-function isBlankText(value: AstryxFieldValue) {
+function isBlankText(value: GeneratedDraftValue) {
   return typeof value !== "string" || value.trim() === "";
 }
 
-function numberDraftIsValid(value: AstryxFieldValue) {
+function numberDraftIsValid(value: GeneratedDraftValue) {
   if (value === null) {
     return true;
   }
@@ -1715,7 +1767,7 @@ function opaqueHexColorIsValid(value: string) {
   return /^#[0-9A-Fa-f]{6}$/.test(trimmedValue) || /^#[0-9A-Fa-f]{3}$/.test(trimmedValue);
 }
 
-function emailTextIsValid(value: AstryxFieldValue) {
+function emailTextIsValid(value: GeneratedDraftValue) {
   return typeof value === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
@@ -1727,24 +1779,679 @@ function slugifyFileName(fileName: string) {
     .slice(0, 40);
 }
 
-function createEditorField(field: Omit<AstryxFieldEditorData, "mode">): AstryxFieldEditorData {
-  return { ...field, mode: "editor" };
+type GeneratedFieldKind =
+  | "boolean"
+  | "color"
+  | "enum"
+  | "image"
+  | "long-text"
+  | "markdown"
+  | "media"
+  | "number"
+  | "reference"
+  | "source-icon"
+  | "text";
+
+type GeneratedFieldAccessMode = "disabled" | "editable" | "read-only";
+type GeneratedFieldDensity = "balanced" | "comfortable" | "compact";
+type GeneratedFieldCommitPolicy = "field" | "immediate" | "submit";
+
+type GeneratedFieldPresentation = {
+  accept?: string;
+  format?: "email";
+  maxLines?: number;
+  mediaAlt?: string;
+  mediaPreviewUrl?: string;
+  placeholder?: string;
+  sourceIcon?: string;
+};
+
+type GeneratedFieldInput = {
+  accessMode: GeneratedFieldAccessMode;
+  density: GeneratedFieldDensity;
+  errors?: readonly GeneratedFixtureFieldError[];
+  id: string;
+  isRequired?: boolean;
+  kind: GeneratedFieldKind;
+  label: string;
+  name: string;
+  options?: readonly GeneratedFieldOption[];
+  pending?: FormlessUiFieldPending;
+  presentation?: GeneratedFieldPresentation;
+  surface: FormlessUiFieldSurface;
+};
+
+type GeneratedEditorFieldInput = GeneratedFieldInput & {
+  commitPolicy: GeneratedFieldCommitPolicy;
+  committedDisplayValue: string;
+  committedValue?: GeneratedDraftValue;
+  draftValue: GeneratedDraftValue;
+};
+
+type GeneratedDisplayFieldInput = GeneratedFieldInput & {
+  displayValue: string;
+  value: GeneratedDraftValue;
+};
+
+function createEditorField(input: GeneratedEditorFieldInput): FormlessUiField {
+  const field = generatedFieldSchema(input);
+  const control = generatedFieldControl(input, field);
+  const options = generatedFieldOptions(input, field, input.draftValue);
+  const base = generatedBaseField(input, field, control, options);
+  const draftInput = draftInputFromValue(input.draftValue);
+
+  if (input.surface === "create") {
+    return {
+      ...base,
+      access: generatedFieldAccess(input.accessMode),
+      commit: "submit",
+      draftInput,
+      mode: "editor",
+      surface: "create",
+      value: input.draftValue,
+    } satisfies FormlessUiCreateField;
+  }
+
+  if (input.surface === "operation") {
+    return {
+      ...base,
+      access: generatedFieldAccess(input.accessMode),
+      commit: "submit",
+      draftInput,
+      input: generatedOperationInput(input, field),
+      inputName: input.name,
+      mode: "editor",
+      surface: "operation",
+      value: input.draftValue,
+    } satisfies FormlessUiOperationInputField;
+  }
+
+  return {
+    ...base,
+    access: generatedFieldAccess(input.accessMode),
+    commit: generatedCommitPolicy(input.commitPolicy),
+    density: generatedRecordDensity(input.density),
+    drafts: {
+      draft: String(input.draftValue ?? ""),
+      draftInput,
+      recordValue: input.committedValue,
+    },
+    formatting: {
+      displayValue: input.committedDisplayValue,
+    },
+    media: generatedMediaAuthoring(input),
+    mode: "editor",
+    presentationMode: "default",
+    rendererKind: generatedRendererKind(input.kind),
+    surface: input.surface,
+  } satisfies FormlessUiRecordField;
 }
 
-function createDisplayField(field: Omit<AstryxFieldDisplayData, "mode">): AstryxFieldDisplayData {
-  return { ...field, mode: "display" };
+function createDisplayField(input: GeneratedDisplayFieldInput): FormlessUiDisplayField {
+  const field = generatedFieldSchema(input);
+  const control = generatedFieldControl(input, field);
+  const displayValue =
+    input.kind === "source-icon" && input.presentation?.sourceIcon
+      ? input.presentation.sourceIcon
+      : input.value;
+  const options = generatedFieldOptions(input, field, displayValue);
+
+  return {
+    ...generatedBaseField(input, field, control, options),
+    access: generatedFieldAccess(input.accessMode),
+    commit: "submit",
+    formatting: generatedDisplayFormatting(input, field),
+    mode: "display",
+    surface: input.surface,
+    value: displayValue,
+  };
+}
+
+function generatedBaseField(
+  input: GeneratedFieldInput,
+  field: FieldSchema,
+  control: FormlessUiFieldControl,
+  options: FormlessUiFieldOptions | undefined,
+) {
+  return {
+    control,
+    editor: control.editor,
+    errors: input.errors,
+    field,
+    fieldName: input.name,
+    label: input.label,
+    options,
+    pending: input.pending,
+    required: Boolean(input.isRequired),
+    surface: input.surface,
+  };
+}
+
+function generatedFieldSchema(input: GeneratedFieldInput): FieldSchema {
+  if (input.kind === "boolean") {
+    return { type: "boolean", required: Boolean(input.isRequired), label: input.label };
+  }
+
+  if (input.kind === "number") {
+    return { type: "number", required: Boolean(input.isRequired), label: input.label };
+  }
+
+  if (input.kind === "enum") {
+    return {
+      type: "enum",
+      required: Boolean(input.isRequired),
+      label: input.label,
+      values: Object.fromEntries(
+        (input.options ?? []).map((option) => [
+          option.value,
+          {
+            label: option.label,
+            presentation: option.color ? { color: option.color } : undefined,
+          },
+        ]),
+      ),
+    };
+  }
+
+  if (input.kind === "reference") {
+    return {
+      type: "reference",
+      required: Boolean(input.isRequired),
+      label: input.label,
+      to: "principal",
+    };
+  }
+
+  return {
+    type: "text",
+    required: Boolean(input.isRequired),
+    label: input.label,
+    format:
+      input.kind === "long-text"
+        ? "longText"
+        : input.kind === "markdown"
+          ? "markdown"
+          : input.kind === "color"
+            ? "color"
+            : input.kind === "source-icon"
+              ? "icon"
+              : input.presentation?.format,
+  };
+}
+
+function generatedFieldControl(
+  input: GeneratedFieldInput,
+  field: FieldSchema,
+): FormlessUiFieldControl {
+  const common = {
+    createDefaultValue: undefined,
+    createDefaultChecked: false,
+    inputAttributes: generatedInputAttributes(field),
+    label: input.label,
+    required: Boolean(input.isRequired),
+  };
+
+  if (field.type === "boolean") {
+    return {
+      ...common,
+      control: { kind: "checkbox" },
+      controlKind: "checkbox",
+      editor: "boolean",
+      field,
+      kind: "boolean",
+    };
+  }
+
+  if (field.type === "number") {
+    return {
+      ...common,
+      control: { kind: "formattedNumber" },
+      controlKind: "number",
+      editor: "number",
+      field,
+      kind: "number",
+    };
+  }
+
+  if (field.type === "enum") {
+    return {
+      ...common,
+      control: { kind: "select" },
+      controlKind: "select",
+      createDefaultValue: field.default,
+      editor: "enum",
+      field,
+      kind: "enum",
+    };
+  }
+
+  if (field.type === "reference") {
+    return {
+      ...common,
+      control: { kind: "reference" },
+      controlKind: "reference",
+      editor: "reference",
+      field,
+      kind: "reference",
+    };
+  }
+
+  const textField = field as Extract<FieldSchema, { type: "text" }>;
+  const editor = generatedTextEditor(input.kind, input.presentation);
+
+  return {
+    ...common,
+    control: generatedTextEditorControl(editor),
+    controlKind: generatedTextControlKind(editor),
+    editor,
+    field: textField,
+    kind: "text",
+  };
+}
+
+function generatedInputAttributes(field: FieldSchema): FieldInputAttributes {
+  if (field.type !== "number") {
+    return {};
+  }
+
+  return {
+    max: field.max,
+    min: field.min,
+    step: field.integer ? "1" : "any",
+  };
+}
+
+function generatedTextEditor(
+  kind: GeneratedFieldKind,
+  presentation: GeneratedFieldPresentation | undefined,
+): Extract<
+  FieldEditor,
+  "color" | "href" | "icon" | "image" | "markdown" | "media" | "slug" | "text" | "textarea"
+> {
+  if (kind === "color") {
+    return "color";
+  }
+
+  if (kind === "image") {
+    return "image";
+  }
+
+  if (kind === "long-text") {
+    return "textarea";
+  }
+
+  if (kind === "markdown") {
+    return "markdown";
+  }
+
+  if (kind === "media") {
+    return "media";
+  }
+
+  if (kind === "source-icon") {
+    return "icon";
+  }
+
+  if (presentation?.format === "email") {
+    return "text";
+  }
+
+  return "text";
+}
+
+function generatedTextEditorControl(editor: FieldEditor): FieldEditorControl {
+  if (editor === "image") {
+    return { kind: "imageUpload" };
+  }
+
+  if (editor === "media") {
+    return { kind: "mediaUpload" };
+  }
+
+  if (editor === "icon") {
+    return { kind: "icon" };
+  }
+
+  if (editor === "markdown" || editor === "textarea") {
+    return { kind: "textarea" };
+  }
+
+  return { kind: "input", inputType: "text" };
+}
+
+function generatedTextControlKind(
+  editor: Extract<
+    FieldEditor,
+    "color" | "href" | "icon" | "image" | "markdown" | "media" | "slug" | "text" | "textarea"
+  >,
+): Extract<
+  FormlessUiFieldControl["controlKind"],
+  "color" | "icon" | "image" | "markdown" | "media" | "text" | "textarea"
+> {
+  if (editor === "href" || editor === "slug") {
+    return "text";
+  }
+
+  return editor;
+}
+
+function generatedFieldAccess(accessMode: GeneratedFieldAccessMode): FormlessUiFieldAccess {
+  if (accessMode === "disabled") {
+    return { kind: "disabled", canPatch: false, writable: true };
+  }
+
+  if (accessMode === "read-only") {
+    return { kind: "readOnly", writable: false };
+  }
+
+  return { kind: "editable", canPatch: true, writable: true };
+}
+
+function generatedCommitPolicy(
+  commitPolicy: GeneratedFieldCommitPolicy,
+): FormlessUiRecordField["commit"] {
+  return commitPolicy === "immediate" ? "immediate" : "field-commit";
+}
+
+function generatedRecordDensity(density: GeneratedFieldDensity): FormlessUiRecordFieldDensity {
+  return density === "compact" ? "compact" : "default";
+}
+
+function generatedRendererKind(kind: GeneratedFieldKind): FormlessUiRecordFieldRendererKind {
+  if (kind === "boolean") {
+    return "checkbox";
+  }
+
+  if (kind === "long-text") {
+    return "textarea";
+  }
+
+  if (kind === "source-icon") {
+    return "icon";
+  }
+
+  return kind;
+}
+
+function generatedDisplayFormatting(
+  input: GeneratedDisplayFieldInput,
+  field: FieldSchema,
+): FormlessUiFieldFormatting & { displayValue: string } {
+  return {
+    displayValue: input.displayValue,
+    enumValuePresentation:
+      field.type === "enum" && typeof input.value === "string"
+        ? enumPresentationForOption(input.options?.find((option) => option.value === input.value))
+        : undefined,
+  };
+}
+
+function generatedFieldOptions(
+  input: GeneratedFieldInput,
+  field: FieldSchema,
+  selectedValue: GeneratedDraftValue,
+): FormlessUiFieldOptions | undefined {
+  if (field.type === "enum") {
+    const enumOptions = (input.options ?? []).map(generatedEnumOption);
+
+    return {
+      enumOptions,
+      unknownEnumValue:
+        typeof selectedValue === "string" &&
+        selectedValue !== "" &&
+        !enumOptions.some((option) => option.value === selectedValue)
+          ? selectedValue
+          : undefined,
+    };
+  }
+
+  if (field.type === "reference") {
+    const referenceOptions = (input.options ?? []).map((option) => ({
+      id: option.value,
+      label: option.label,
+      missing: option.isMissing,
+    }));
+
+    return {
+      missingReferenceValue:
+        typeof selectedValue === "string" &&
+        selectedValue !== "" &&
+        !referenceOptions.some((option) => option.id === selectedValue)
+          ? selectedValue
+          : undefined,
+      referenceOptions,
+    };
+  }
+
+  if (input.kind === "image" || input.kind === "media") {
+    return {
+      mediaAssetOptions: generatedMediaAssetOptions(input, selectedValue),
+    };
+  }
+
+  return undefined;
+}
+
+function generatedEnumOption(option: GeneratedFieldOption): FormlessUiEnumOption {
+  return {
+    label: option.label,
+    missing: option.isMissing,
+    presentation: enumPresentationForOption(option),
+    value: option.value,
+  };
+}
+
+function enumPresentationForOption(
+  option: GeneratedFieldOption | undefined,
+): FormlessUiEnumOption["presentation"] {
+  return {
+    color: {
+      intent: "neutral",
+      known: Boolean(option?.color),
+      token: option?.color,
+    },
+    ...(option?.source ? { icon: { kind: "svg" as const, source: option.source } } : {}),
+    label: option?.label ?? "",
+  };
+}
+
+function generatedMediaAssetOptions(
+  input: GeneratedFieldInput,
+  selectedValue: GeneratedDraftValue,
+): NonNullable<FormlessUiFieldOptions["mediaAssetOptions"]> {
+  const options = (input.options ?? []).map((option) => ({
+    height: undefined,
+    href: option.mediaPreviewUrl ?? "",
+    id: option.value,
+    label: option.label,
+    width: undefined,
+  }));
+
+  if (
+    typeof selectedValue === "string" &&
+    selectedValue !== "" &&
+    input.presentation?.mediaPreviewUrl &&
+    !options.some((option) => option.id === selectedValue)
+  ) {
+    return [
+      ...options,
+      {
+        href: input.presentation.mediaPreviewUrl,
+        id: selectedValue,
+        label: input.label,
+      },
+    ];
+  }
+
+  return options;
+}
+
+function generatedMediaAuthoring(input: GeneratedEditorFieldInput): FormlessUiRecordField["media"] {
+  if (input.kind !== "image" && input.kind !== "media") {
+    return undefined;
+  }
+
+  return {
+    mediaEditorMode: "asset",
+    mediaPreviewHref: input.presentation?.mediaPreviewUrl,
+    uploadEnabled: true,
+    uploadPatchFields: {
+      mediaAssetFieldName: input.name,
+    },
+  };
+}
+
+function generatedOperationInput(input: GeneratedFieldInput, field: FieldSchema) {
+  return {
+    name: input.name,
+    label: input.label,
+    required: Boolean(input.isRequired),
+    control:
+      input.kind === "long-text"
+        ? "longText"
+        : field.type === "boolean"
+          ? "boolean"
+          : field.type === "number"
+            ? "number"
+            : field.type === "enum"
+              ? "enum"
+              : "text",
+    options:
+      field.type === "enum"
+        ? (input.options ?? []).map((option) => ({ value: option.value, label: option.label }))
+        : undefined,
+  } satisfies FormlessUiOperationInputField["input"];
+}
+
+function draftInputFromValue(value: GeneratedDraftValue): GeneratedFieldDraftInput {
+  if (typeof value === "boolean" || typeof value === "number") {
+    return { kind: "value", value };
+  }
+
+  return { kind: "input", value };
+}
+
+function draftValueFromInput(input: GeneratedFieldDraftInput | undefined): GeneratedDraftValue {
+  return input?.value ?? "";
+}
+
+function generatedRecordFieldDraftValue(field: FormlessUiRecordField): FieldValue {
+  const draftValue = field.drafts.draftInput?.value ?? field.drafts.draft;
+
+  return normalizeCommittedValue(field, draftValue);
+}
+
+function generatedFieldKey(field: FormlessUiField) {
+  return `${field.surface}:${field.recordId ?? "fixture"}:${field.inputName ?? field.fieldName}`;
+}
+
+function isRecordField(field: FormlessUiField): field is FormlessUiRecordField {
+  return field.mode === "editor" && field.surface !== "create" && field.surface !== "operation";
+}
+
+function findGeneratedEditorField(
+  projection: GeneratedFieldProjection,
+  fieldName: string,
+): GeneratedEditorField | undefined {
+  return [
+    projection.createFields,
+    projection.recordEditFields,
+    projection.tableCellFields,
+    projection.publicActionFields,
+  ]
+    .flat()
+    .find(
+      (field): field is GeneratedEditorField =>
+        field.mode === "editor" && (field.inputName === fieldName || field.fieldName === fieldName),
+    );
+}
+
+function findGeneratedRecordField(
+  projection: GeneratedFieldProjection,
+  fieldName: keyof GeneratedRecordValues,
+): FormlessUiRecordField | undefined {
+  return [...projection.recordEditFields, ...projection.tableCellFields].find(
+    (field): field is FormlessUiRecordField =>
+      isRecordField(field) && field.fieldName === fieldName,
+  );
+}
+
+function findGeneratedMediaAssetOption(
+  projection: GeneratedFieldProjection,
+  fieldName: string,
+  assetId: string,
+) {
+  return findGeneratedEditorField(projection, fieldName)?.options?.mediaAssetOptions?.find(
+    (option) => option.id === assetId,
+  );
+}
+
+function generatedMediaStateForDraft(
+  fields: readonly FormlessUiField[],
+  fieldName: string,
+  value: GeneratedDraftValue,
+): GeneratedMediaIntentState | undefined {
+  if (typeof value !== "string" || value === "") {
+    return undefined;
+  }
+
+  const asset = fields
+    .find((field) => field.fieldName === fieldName)
+    ?.options?.mediaAssetOptions?.find((option) => option.id === value);
+
+  if (!asset) {
+    return undefined;
+  }
+
+  return {
+    previewHref: asset.href,
+    result: {
+      assetId: asset.id,
+      previewHref: asset.href,
+      source: "picker",
+    },
+  };
+}
+
+function applyGeneratedFieldErrorChange(
+  fixture: GeneratedFieldFoundationFixture,
+  fieldName: keyof GeneratedRecordValues,
+  message: string | null,
+): GeneratedFieldFoundationFixture {
+  if (message === null) {
+    const { [fieldName]: _fieldErrors, ...errors } = fixture.record.errors;
+
+    return {
+      ...fixture,
+      record: {
+        ...fixture.record,
+        errors,
+      },
+    };
+  }
+
+  return {
+    ...fixture,
+    record: {
+      ...fixture.record,
+      errors: {
+        ...fixture.record.errors,
+        [fieldName]: [fieldError(fieldName, message)],
+      },
+    },
+  };
 }
 
 function errorsFor<TValues>(
   errors: FieldErrorMap<TValues>,
   fieldName: keyof TValues,
-): readonly AstryxFieldError[] | undefined {
+): readonly GeneratedFixtureFieldError[] | undefined {
   const fieldErrors = errors[fieldName];
 
   return fieldErrors?.length ? fieldErrors : undefined;
 }
 
-function displayOption(options: readonly AstryxFieldOption[], value: AstryxFieldValue) {
+function displayOption(options: readonly GeneratedFieldOption[], value: GeneratedDraftValue) {
   if (typeof value !== "string") {
     return String(value ?? "");
   }

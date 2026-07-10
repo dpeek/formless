@@ -1,15 +1,19 @@
-import type {
-  AstryxFieldBaseData,
-  AstryxFieldCommitPolicy,
-  AstryxFieldData,
-  AstryxFieldDisplayData,
-  AstryxFieldEditorData,
-  AstryxFieldKind,
-  AstryxFieldSurface,
-  AstryxFieldValue,
-} from "../field-contract.ts";
+import type { FormlessUiField, FormlessUiFieldSurface } from "../formless-ui-contract.ts";
 
-export type FieldKindKey = AstryxFieldKind | "state-machine-enum";
+export type FieldKindKey =
+  | "boolean"
+  | "color"
+  | "date"
+  | "enum"
+  | "image"
+  | "long-text"
+  | "markdown"
+  | "media"
+  | "number"
+  | "reference"
+  | "source-icon"
+  | "state-machine-enum"
+  | "text";
 
 export type FieldKindOption = {
   id: FieldKindKey;
@@ -19,7 +23,7 @@ export type FieldKindOption = {
 export type FieldScenarioGroup = {
   id: string;
   kind: FieldKindKey;
-  surface: AstryxFieldSurface;
+  surface: FormlessUiFieldSurface;
   facets: readonly FieldScenarioFacet[];
   variants: readonly FieldScenarioVariant[];
 };
@@ -54,24 +58,16 @@ export type FieldScenarioVariant = {
   id: string;
   label: string;
   facets: FieldScenarioFacetValues;
-  field: AstryxFieldData;
+  field: FormlessUiField;
 };
 
 export type FieldScenarioFacetValues = Partial<Record<FieldScenarioFacetId, string>>;
 
-export type FieldScenarioFieldPatch = Partial<AstryxFieldBaseData> & {
-  committedDisplayValue?: string;
-  committedValue?: AstryxFieldValue;
-  commitPolicy?: AstryxFieldCommitPolicy;
-  displayValue?: AstryxFieldDisplayData["displayValue"];
-  draftValue?: AstryxFieldEditorData["draftValue"];
-  mode?: AstryxFieldData["mode"];
-  value?: AstryxFieldDisplayData["value"];
-};
+export type FieldScenarioFieldPatch = Partial<FormlessUiField> & Record<string, unknown>;
 
 export type FieldScenarioFieldModifier =
   | FieldScenarioFieldPatch
-  | ((field: AstryxFieldData) => AstryxFieldData);
+  | ((field: FormlessUiField) => FormlessUiField);
 
 export type FieldScenarioComposeOption = FieldScenarioFacetOption & {
   modify?: FieldScenarioFieldModifier | readonly FieldScenarioFieldModifier[];
@@ -85,7 +81,7 @@ export type FieldScenarioComposeAxis = {
 
 export type FieldScenarioComposeContext = {
   facets: FieldScenarioFacetValues;
-  field: AstryxFieldData;
+  field: FormlessUiField;
   optionIds: readonly string[];
   optionLabels: readonly string[];
   options: readonly FieldScenarioComposeOption[];
@@ -94,11 +90,11 @@ export type FieldScenarioComposeContext = {
 export type ComposeScenarioGroupInput = {
   id: string;
   kind: FieldKindKey;
-  surface: AstryxFieldSurface;
-  base: AstryxFieldData;
+  surface: FormlessUiFieldSurface;
+  base: FormlessUiField;
   axes: readonly FieldScenarioComposeAxis[];
   include?: (context: FieldScenarioComposeContext) => boolean;
-  finalizeField?: (context: FieldScenarioComposeContext) => AstryxFieldData;
+  finalizeField?: (context: FieldScenarioComposeContext) => FormlessUiField;
   variantId?: (context: FieldScenarioComposeContext) => string;
   variantLabel?: (context: FieldScenarioComposeContext) => string;
 };
@@ -137,9 +133,9 @@ export function composeScenarioGroup({
 
       const optionIds = options.map((option) => option.id);
       const optionLabels = options.map((option) => option.label);
-      let field = options.reduce<AstryxFieldData>(
+      let field = options.reduce<FormlessUiField>(
         (currentField, option) => applyFieldScenarioModifiers(currentField, option.modify),
-        { ...base } as AstryxFieldData,
+        { ...base } as FormlessUiField,
       );
       let context: FieldScenarioComposeContext = {
         facets,
@@ -187,7 +183,7 @@ export function composeScenarioAxis(
 export function scenarioGroup(
   id: string,
   kind: FieldKindKey,
-  surface: AstryxFieldSurface,
+  surface: FormlessUiFieldSurface,
   facetsOrAxes: readonly FieldScenarioFacet[] | readonly FieldScenarioAxis[],
   variants?: readonly FieldScenarioVariant[],
 ): FieldScenarioGroup {
@@ -244,7 +240,7 @@ export function facetOption(id: string, label: string): FieldScenarioFacetOption
 export function scenarioVariant(
   id: string,
   label: string,
-  field: AstryxFieldData,
+  field: FormlessUiField,
   facets: FieldScenarioFacetValues = {},
 ): FieldScenarioVariant {
   return { facets, field, id, label };
@@ -255,23 +251,21 @@ function scenarioOptionCombinations(
 ): FieldScenarioComposeOption[][] {
   return axes.reduce<FieldScenarioComposeOption[][]>(
     (combinations, axis) =>
-      combinations.flatMap((combination) =>
-        axis.options.map((option) => [...combination, option]),
-      ),
+      combinations.flatMap((combination) => axis.options.map((option) => [...combination, option])),
     [[]],
   );
 }
 
 function applyFieldScenarioModifiers(
-  field: AstryxFieldData,
+  field: FormlessUiField,
   modifiers: FieldScenarioComposeOption["modify"],
-): AstryxFieldData {
+): FormlessUiField {
   if (modifiers === undefined) {
     return field;
   }
 
   if (fieldScenarioModifiersAreArray(modifiers)) {
-    return modifiers.reduce<AstryxFieldData>(
+    return modifiers.reduce<FormlessUiField>(
       (currentField, modifier) => applyFieldScenarioModifier(currentField, modifier),
       field,
     );
@@ -287,12 +281,12 @@ function fieldScenarioModifiersAreArray(
 }
 
 function applyFieldScenarioModifier(
-  field: AstryxFieldData,
+  field: FormlessUiField,
   modifier: FieldScenarioFieldModifier,
-): AstryxFieldData {
+): FormlessUiField {
   if (typeof modifier === "function") {
     return modifier(field);
   }
 
-  return { ...field, ...modifier } as AstryxFieldData;
+  return { ...field, ...modifier } as FormlessUiField;
 }

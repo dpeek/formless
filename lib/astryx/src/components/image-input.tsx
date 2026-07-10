@@ -15,7 +15,17 @@ import {
   radiusVars,
   spacingVars,
 } from "@astryxdesign/core/theme/tokens.stylex";
-import type { AstryxFieldDensity, AstryxFieldOption } from "../field-contract.ts";
+import type { AstryxInputDensity } from "./input-density.ts";
+
+export type ImageInputOption = {
+  detail?: string;
+  isDisabled?: boolean;
+  isMissing?: boolean;
+  label: string;
+  mediaAlt?: string;
+  mediaPreviewUrl?: string;
+  value: string;
+};
 
 export type ImageInputProps = {
   id?: string;
@@ -23,7 +33,7 @@ export type ImageInputProps = {
   value: string;
   accept?: string;
   alt?: string;
-  density?: AstryxFieldDensity;
+  density?: AstryxInputDensity;
   description?: string;
   isDisabled?: boolean;
   isLabelHidden?: boolean;
@@ -31,11 +41,11 @@ export type ImageInputProps = {
   isReadOnly?: boolean;
   isRequired?: boolean;
   labelTooltip?: string;
-  options?: readonly AstryxFieldOption[];
+  options?: readonly ImageInputOption[];
   previewUrl?: string;
   status?: FieldStatusInput;
   width?: number | string;
-  onSelectOption?: (option: AstryxFieldOption) => void;
+  onSelectOption?: (option: ImageInputOption) => void;
   onUploadFile?: (file: File) => void;
 };
 
@@ -143,7 +153,7 @@ export function ImageValueDisplay({
   value,
 }: {
   alt?: string;
-  density?: AstryxFieldDensity;
+  density?: AstryxInputDensity;
   label: string;
   previewUrl?: string;
   value: string;
@@ -182,9 +192,9 @@ function ImageInputPopoverContent({
   canPick: boolean;
   canUpload: boolean;
   label: string;
-  options: readonly AstryxFieldOption[];
+  options: readonly ImageInputOption[];
   selectedValue: string;
-  onSelectOption: (option: AstryxFieldOption) => void;
+  onSelectOption: (option: ImageInputOption) => void;
   onUploadFile: (file: File) => void;
 }) {
   return (
@@ -262,7 +272,7 @@ function ImageOptionButton({
   onSelect,
 }: {
   label: string;
-  option: AstryxFieldOption;
+  option: ImageInputOption;
   isSelected: boolean;
   onSelect: () => void;
 }) {

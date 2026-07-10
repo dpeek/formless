@@ -11,7 +11,7 @@ import {
   sizeVars,
   spacingVars,
 } from "@astryxdesign/core/theme/tokens.stylex";
-import type { AstryxFieldDensity } from "../field-contract.ts";
+import type { AstryxInputDensity } from "./input-density.ts";
 
 const nativeColorFallback = "#000000";
 
@@ -22,7 +22,7 @@ export type ColorInputProps = {
   description?: string;
   placeholder?: string;
   pickerLabel?: string;
-  density?: AstryxFieldDensity;
+  density?: AstryxInputDensity;
   isDisabled?: boolean;
   isLabelHidden?: boolean;
   isReadOnly?: boolean;
