@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 
 import type { EmailDeliveryRecord, EmailDeliveryRenderedMessage } from "../shared/email-runtime.ts";
+import type { AccountCompletionGateResolutionResult } from "../shared/instance-auth.ts";
 import type {
   PublicKeyCredentialCreationOptionsJSON,
   RegistrationResponseJSON,
@@ -71,7 +72,7 @@ async function expectSignupStartRejected(input: {
   expect(records.records.some((record) => record.entity === "principal")).toBe(false);
 }
 
-describe("email-verified signup API", () => {
+describe("self-service app signup API", () => {
   it("rejects disabled installs before writing auth or identity state", async () => {
     await expectSignupStartRejected({
       bindings: { INSTALL_STATUS: "disabled" },
@@ -83,7 +84,7 @@ describe("email-verified signup API", () => {
   it("rejects unsupported registration policies before writing auth or identity state", async () => {
     await expectSignupStartRejected({
       bindings: { REGISTRATION_POLICY: "closed" },
-      expected: "Signup target app install does not allow email-verified signup.",
+      expected: "Signup target app install does not allow self-service signup.",
       target: signupTarget,
     });
   });
@@ -97,65 +98,17 @@ describe("email-verified signup API", () => {
   });
 
   it("verifies email, registers a passkey, commits app registration, and issues a central session", async () => {
-    harness = await createSignupHarness();
+    const { completedBody, completedStatus, cookie, credentials, records, token, verifiedEmail } =
+      await completeSignupFlow();
 
-    const started = await postAuthJson<SignupStartResponse>("/formless/auth/signup/start", {
-      email: "Ada.Signup@Example.com",
-      target: signupTarget,
-    });
-    const message = await getHarnessJson<{ message?: EmailDeliveryRenderedMessage }>(
-      `/harness/internal-message/${started.delivery.deliveryId}`,
-    );
-    const token = verificationTokenFromMessage(message.message);
-    const verifiedEmail = await postAuthJson<SignupEmailVerifyResponse>(
-      "/formless/auth/signup/email/verify",
-      {
-        challengeId: started.signup.challengeId,
-        email: "ada.signup@example.com",
-        target: started.signup.target,
-        token,
-      },
-    );
-    const options = await postAuthJson<SignupPasskeyOptionsResponse>(
-      "/formless/auth/signup/passkeys/register/options",
-      {
-        challengeId: started.signup.challengeId,
-        displayName: "Ada Signup",
-        email: "ada.signup@example.com",
-        target: started.signup.target,
-      },
-    );
-    const passkey = new VirtualPasskey("Y3JlZGVudGlhbC1zaWdudXAtMQ");
-    const completed = await fetchAuth("/formless/auth/signup/passkeys/register/verify", {
-      body: JSON.stringify({
-        challengeId: started.signup.challengeId,
-        displayName: "Ada Signup",
-        email: "ada.signup@example.com",
-        response: passkey.registrationResponse(options.options, {
-          origin: authOrigin,
-          rpId: "auth.example.com",
-        }),
-        target: started.signup.target,
-      }),
-      headers: { "Content-Type": "application/json" },
-      method: "POST",
-    });
-    const completedBody = (await completed.json()) as SignupPasskeyVerifyResponse;
-    const records = await identityRecords();
-    expect({ body: completedBody, status: completed.status }).toMatchObject({
+    expect({ body: completedBody, status: completedStatus }).toMatchObject({
       body: { verified: true },
       status: 200,
     });
 
-    const credentials = await getHarnessJson<{ credentials: StoredPasskeyCredential[] }>(
-      `/harness/credentials/${encodeURIComponent(completedBody.principal.principalId)}`,
-    );
-    const cookie = completed.headers.get("Set-Cookie") ?? "";
-
     expect(verifiedEmail).toMatchObject({
       verified: true,
       signup: {
-        challengeId: started.signup.challengeId,
         displayEmail: "Ada.Signup@example.com",
       },
     });
@@ -172,8 +125,8 @@ describe("email-verified signup API", () => {
       },
       verified: true,
     });
-    expect(credentials.credentials).toHaveLength(1);
-    expect(records.records).toEqual(
+    expect(credentials).toHaveLength(1);
+    expect(records).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           entity: "principal",
@@ -206,10 +159,136 @@ describe("email-verified signup API", () => {
         }),
       ]),
     );
-    expect(JSON.stringify(records.records)).not.toContain(token);
-    expect(JSON.stringify(records.records)).not.toContain(sha256Base64Url(token));
+    expect(JSON.stringify(records)).not.toContain(token);
+    expect(JSON.stringify(records)).not.toContain(sha256Base64Url(token));
+  });
+
+  it("verifies custom-operation signup and returns the app-owned profile gate", async () => {
+    const { completedBody, completedStatus, records } = await completeSignupFlow({
+      bindings: {
+        REGISTRATION_OPERATION: "profile.completeRegistration",
+        REGISTRATION_POLICY: "custom-operation",
+      },
+      credentialId: "Y3JlZGVudGlhbC1zaWdudXAtY3VzdG9t",
+      displayName: "Ada Profile Signup",
+    });
+
+    expect({ body: completedBody, status: completedStatus }).toMatchObject({
+      body: {
+        accountCompletion: {
+          gate: {
+            appInstallId: "crm",
+            inputContract: {
+              fields: expect.arrayContaining([expect.objectContaining({ name: "displayName" })]),
+              unsupportedRequiredFields: ["principal"],
+            },
+            kind: "profile-completion",
+            operation: {
+              appInstallId: "crm",
+              entityName: "profile",
+              label: "Complete profile",
+              operationKey: "profile.completeRegistration",
+              operationName: "completeRegistration",
+            },
+          },
+          status: "blocked",
+        },
+        principal: {
+          displayName: "Ada Profile Signup",
+          principalId: expect.stringMatching(/^principal:signup:/),
+        },
+        verified: true,
+      },
+      status: 200,
+    });
+    expect(completedBody).not.toHaveProperty("continueTo");
+    expect(records).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          entity: "app-registration",
+          values: expect.objectContaining({
+            appInstallId: "crm",
+            status: "active",
+            targetKind: "principal",
+            targetPrincipal: completedBody.principal.principalId,
+          }),
+        }),
+      ]),
+    );
   });
 });
+
+async function completeSignupFlow({
+  bindings = {},
+  credentialId = "Y3JlZGVudGlhbC1zaWdudXAtMQ",
+  displayName = "Ada Signup",
+  email = "Ada.Signup@Example.com",
+}: {
+  bindings?: Record<string, string>;
+  credentialId?: string;
+  displayName?: string;
+  email?: string;
+} = {}) {
+  harness = await createSignupHarness(bindings);
+
+  const normalizedEmail = email.toLowerCase();
+  const started = await postAuthJson<SignupStartResponse>("/formless/auth/signup/start", {
+    email,
+    target: signupTarget,
+  });
+  const message = await getHarnessJson<{ message?: EmailDeliveryRenderedMessage }>(
+    `/harness/internal-message/${started.delivery.deliveryId}`,
+  );
+  const token = verificationTokenFromMessage(message.message);
+  const verifiedEmail = await postAuthJson<SignupEmailVerifyResponse>(
+    "/formless/auth/signup/email/verify",
+    {
+      challengeId: started.signup.challengeId,
+      email: normalizedEmail,
+      target: started.signup.target,
+      token,
+    },
+  );
+  const options = await postAuthJson<SignupPasskeyOptionsResponse>(
+    "/formless/auth/signup/passkeys/register/options",
+    {
+      challengeId: started.signup.challengeId,
+      displayName,
+      email: normalizedEmail,
+      target: started.signup.target,
+    },
+  );
+  const passkey = new VirtualPasskey(credentialId);
+  const completed = await fetchAuth("/formless/auth/signup/passkeys/register/verify", {
+    body: JSON.stringify({
+      challengeId: started.signup.challengeId,
+      displayName,
+      email: normalizedEmail,
+      response: passkey.registrationResponse(options.options, {
+        origin: authOrigin,
+        rpId: "auth.example.com",
+      }),
+      target: started.signup.target,
+    }),
+    headers: { "Content-Type": "application/json" },
+    method: "POST",
+  });
+  const completedBody = (await completed.json()) as SignupPasskeyVerifyResponse;
+  const records = await identityRecords();
+  const credentials = await getHarnessJson<{ credentials: StoredPasskeyCredential[] }>(
+    `/harness/credentials/${encodeURIComponent(completedBody.principal.principalId)}`,
+  );
+
+  return {
+    completedBody,
+    completedStatus: completed.status,
+    cookie: completed.headers.get("Set-Cookie") ?? "",
+    credentials: credentials.credentials,
+    records: records.records,
+    token,
+    verifiedEmail,
+  };
+}
 
 async function createSignupHarness(bindings: Record<string, string> = {}): Promise<Harness> {
   return createWorkerHarness(
@@ -324,6 +403,9 @@ async function writeSignupHarness() {
         handleInstanceAuthSignupDurableObjectRequest,
       } from "${process.cwd()}/src/worker/instance-auth-signup.ts";
       import {
+        INTERNAL_AUTH_PROFILE_COMPLETION_SCHEMA_PATH,
+      } from "${process.cwd()}/src/worker/instance-auth-account-completion.ts";
+      import {
         ensureInstanceAuthTables,
         listEmailVerificationChallenges,
         readPasskeyCredentialsForPrincipal,
@@ -411,6 +493,20 @@ async function writeSignupHarness() {
             );
 
             return response ?? Response.json({ error: "Not found." }, { status: 404 });
+          }
+
+          if (this.ctx.id.name === "app:crm") {
+            if (
+              request.method === "GET" &&
+              url.pathname === \`/api/app-installs/crm/crm\${INTERNAL_AUTH_PROFILE_COMPLETION_SCHEMA_PATH}\`
+            ) {
+              return Response.json({
+                schema: profileCompletionSourceSchema(),
+                updatedAt: "${createdAt}",
+              });
+            }
+
+            return Response.json({ error: "Not found." }, { status: 404 });
           }
 
           const signupResponse = await handleInstanceAuthSignupDurableObjectRequest(
@@ -518,6 +614,9 @@ async function writeSignupHarness() {
             packageAppKey: "crm",
             label: "CRM",
             registrationPolicy: env.REGISTRATION_POLICY,
+            ...(env.REGISTRATION_OPERATION === undefined
+              ? {}
+              : { registrationOperation: env.REGISTRATION_OPERATION }),
             status: env.INSTALL_STATUS,
             storageIdentity: "app:crm",
           }),
@@ -534,6 +633,81 @@ async function writeSignupHarness() {
 
       function record(id, entity, values) {
         return { id, entity, values, createdAt: "${createdAt}", updatedAt: "${createdAt}" };
+      }
+
+      function profileCompletionSourceSchema() {
+        return {
+          version: 1,
+          entities: {
+            profile: {
+              label: "Profile",
+              fields: {
+                displayName: {
+                  type: "text",
+                  required: true,
+                  label: "Display name",
+                },
+                principal: {
+                  type: "reference",
+                  required: true,
+                  label: "Principal",
+                  to: "auth:principal",
+                },
+              },
+              operations: {
+                completeRegistration: {
+                  label: "Complete profile",
+                  kind: "command",
+                  scope: "collection",
+                  policy: {
+                    actors: ["authenticated"],
+                  },
+                  input: {
+                    fields: {
+                      displayName: {
+                        field: "displayName",
+                      },
+                      principal: {
+                        field: "principal",
+                        required: true,
+                      },
+                    },
+                  },
+                  effect: {
+                    type: "recordPlan",
+                    steps: [
+                      {
+                        name: "createProfile",
+                        kind: "create",
+                        entity: "profile",
+                        recordId: { kind: "generatedId", prefix: "profile" },
+                        values: {
+                          displayName: { kind: "input", field: "displayName" },
+                          principal: {
+                            kind: "reference",
+                            entity: "auth:principal",
+                            id: { kind: "input", field: "principal" },
+                          },
+                        },
+                      },
+                    ],
+                  },
+                  output: {
+                    type: "command",
+                  },
+                  idempotency: {
+                    required: true,
+                  },
+                },
+              },
+            },
+          },
+          queries: {},
+          itemViews: {},
+          tableViews: {},
+          views: {},
+          screens: {},
+        };
       }
     `,
   );
@@ -566,10 +740,7 @@ type SignupPasskeyOptionsResponse = {
 };
 
 type SignupPasskeyVerifyResponse = {
-  accountCompletion: {
-    continueTo: string;
-    status: "complete";
-  };
+  accountCompletion: AccountCompletionGateResolutionResult;
   continueTo?: string;
   principal: {
     displayName: string;

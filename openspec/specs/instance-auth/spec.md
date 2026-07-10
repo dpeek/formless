@@ -944,15 +944,16 @@ instance auth state bound to the configured auth origin and account target.
 - AND verification does not create app-registration records, role assignments,
   credentials, owner authority, host-local sessions, or handoff grants
 
-### Requirement: Email-Verified App Signup
+### Requirement: Self-Service App Signup
 
-The system SHALL support self-service app signup for app installs whose
-registration policy is `email-verified`.
+The system SHALL support email-verification based self-service app signup for
+app installs whose registration policy is `email-verified` or
+`custom-operation`.
 
-#### Scenario: Start email-verified app signup
+#### Scenario: Start self-service app signup
 
 - GIVEN an anonymous browser requests an app route whose target app install has
-  registration policy `email-verified`
+  registration policy `email-verified` or `custom-operation`
 - WHEN the route requires authenticated browser access and no valid principal
   session exists
 - THEN the runtime redirects through `/formless/auth` on the configured auth
@@ -964,9 +965,9 @@ registration policy is `email-verified`.
   unsafe return targets, and app-controlled redirect targets before creating
   verification challenges or identity records
 
-#### Scenario: Complete email-verified app signup
+#### Scenario: Complete self-service app signup
 
-- GIVEN an email-verified signup flow has verified control of the requested
+- GIVEN a self-service signup flow has verified control of the requested
   primary email on the configured auth origin
 - AND passkey registration has been verified for the signup principal on the
   configured auth origin and relying-party id
@@ -982,8 +983,12 @@ registration policy is `email-verified`.
   create app-owned profile records, issue host-local sessions directly from the
   auth origin, or expose raw verification tokens, token hashes, credential
   material, central session ids, host session cookies, or handoff grant secrets
-- AND after signup commits, the runtime re-evaluates account completion for the
-  target before returning a path-only continuation or target-bound handoff
+- AND after signup commits for an `email-verified` target, the runtime
+  re-evaluates account completion for the target before returning a path-only
+  continuation or target-bound handoff
+- AND after signup commits for a `custom-operation` target, the runtime
+  re-evaluates account completion and returns a `profile-completion` gate when
+  the app-owned profile remains unsatisfied
 
 ### Requirement: Terms Acceptance Completion
 

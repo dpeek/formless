@@ -620,7 +620,7 @@ function validatedSignupTarget(
     install.values.registrationPolicy !== "email-verified" &&
     install.values.registrationPolicy !== "custom-operation"
   ) {
-    throw new Error("Signup target app install does not allow email-verified signup.");
+    throw new Error("Signup target app install does not allow self-service signup.");
   }
 
   const route = records.find(
