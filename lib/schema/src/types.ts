@@ -791,7 +791,6 @@ export type StateMachineTransitionSchema = {
   label: string;
   from: string[];
   to: string;
-  allowTerminalRecovery?: boolean;
 };
 
 export type StateMachineTransitionEventFieldMappingsSchema = {

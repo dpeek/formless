@@ -18,7 +18,8 @@ import type { TransitionStateOperationConfig } from "../../client/state-machine-
 import type {
   FormlessUiDisplayField,
   FormlessUiRecordField,
-} from "../../../lib/astryx/src/formless-ui-contract.ts";
+} from "@dpeek/formless-astryx/contract";
+import { resolveIconCatalogSvg } from "../../shared/icon-catalog.ts";
 import {
   initialGeneratedCreateDraftSessionState,
   markGeneratedCreateDraftSessionSubmitted,
@@ -41,6 +42,7 @@ import {
   projectGeneratedDisplayFormlessUiField,
   projectGeneratedOperationFormlessUiFields,
   projectGeneratedOperationFormlessUiSession,
+  projectGeneratedRecordFormlessUiField,
   projectGeneratedRecordFormlessUiFields,
   projectGeneratedRecordFormlessUiSession,
   selectFormlessUiValueUnitCommit,
@@ -284,7 +286,10 @@ describe("generated Formless UI projection", () => {
     });
     expect(hero).toMatchObject({
       media: {
+        fileSelectEnabled: true,
         mediaEditorMode: "asset",
+        previewHref: "/media/hero.webp",
+        selectedAssetId: "hero.webp",
         mediaPreviewHref: "/media/hero.webp",
         uploadEnabled: true,
         uploadPatchFields: {
@@ -332,7 +337,7 @@ describe("generated Formless UI projection", () => {
         terminal: true,
         transitions: [
           { availability: { valid: false, disabledReason: "Requires New." } },
-          { availability: { valid: true } },
+          { availability: { valid: false, disabledReason: "Requires New." } },
         ],
       },
       value: "archived",
@@ -348,6 +353,82 @@ describe("generated Formless UI projection", () => {
       mode: "display",
       value: "Locked",
     });
+  });
+
+  it("projects source-backed icon picker options and dialog state", () => {
+    const addIconSource = requiredIconSource("add");
+    const customIconSource = '<svg viewBox="0 0 24 24"><path d="M4 4h16v16H4z" /></svg>';
+    const catalogField = asRecordField(
+      projectGeneratedRecordFormlessUiField({
+        canPatch: true,
+        fieldConfig: recordField("icon", fields.icon, "icon", { commit: "immediate" }),
+        iconDialogDraft: addIconSource,
+        iconDialogOpen: true,
+        recordValue: customIconSource,
+      }),
+    );
+    const customField = asRecordField(
+      projectGeneratedRecordFormlessUiField({
+        canPatch: true,
+        fieldConfig: recordField("icon", fields.icon, "icon", { commit: "immediate" }),
+        iconDialogDraft: customIconSource,
+        iconDialogOpen: true,
+        iconParseError: "Enter valid SVG.",
+        recordValue: addIconSource,
+      }),
+    );
+
+    expect(catalogField.options?.iconOptions?.find((option) => option.id === "add")).toEqual({
+      group: "ui",
+      id: "add",
+      label: "Add",
+      source: addIconSource,
+    });
+    expect(catalogField.icon).toMatchObject({
+      dialogDraft: addIconSource,
+      dialogOpen: true,
+      emptyValue: false,
+      previewSource: addIconSource,
+      selection: { kind: "option", optionId: "add", source: addIconSource },
+      valueMode: "svgSource",
+    });
+    expect(customField.icon).toMatchObject({
+      canCancel: true,
+      canSave: true,
+      customParseError: "Enter valid SVG.",
+      dialogDraft: customIconSource,
+      dialogOpen: true,
+      emptyValue: false,
+      previewSource: customIconSource,
+      selection: { kind: "customSource", source: customIconSource },
+      valueMode: "svgSource",
+    });
+  });
+
+  it("projects missing media asset picker facts without changing stored asset ids", () => {
+    const missingMediaField = asRecordField(
+      projectGeneratedRecordFormlessUiField({
+        canPatch: true,
+        entityName: "task",
+        fieldConfig: recordField("hero", fields.image, "media"),
+        mediaAssetOptions: [],
+        recordValue: "not/a-core-asset",
+        schema: blockSchema,
+      }),
+    );
+
+    expect(missingMediaField.media).toMatchObject({
+      fileSelectEnabled: true,
+      mediaEditorMode: "asset",
+      missingSelectedAsset: {
+        assetId: "not/a-core-asset",
+        label: "not/a-core-asset",
+        reason: "Selected media asset is unavailable.",
+      },
+      selectedAssetId: "not/a-core-asset",
+      uploadEnabled: true,
+    });
+    expect(missingMediaField.drafts.recordValue).toBe("not/a-core-asset");
   });
 
   it("projects display fields with formatted values, suffixes, references, and badges", () => {
@@ -383,7 +464,7 @@ describe("generated Formless UI projection", () => {
         terminal: false,
         transitions: [
           { availability: { valid: false, disabledReason: "Requires New." } },
-          { availability: { valid: false, disabledReason: "Requires Archived." } },
+          { availability: { valid: false, disabledReason: "Requires New." } },
         ],
       },
     });
@@ -616,6 +697,7 @@ const fields = {
   },
   estimate: { type: "number", required: false },
   image: { type: "text", required: false, format: "href" },
+  icon: { type: "text", required: false, format: "icon" },
   owner: { type: "reference", required: false, to: "auth:principal", displayField: "name" },
   priority: {
     type: "enum",
@@ -646,7 +728,7 @@ const stateMachine = {
     terminal: ["archived"],
     transitions: {
       archive: { label: "Archive", from: ["new"], to: "archived" },
-      reopen: { label: "Reopen", from: ["archived"], to: "new" },
+      reopen: { label: "Reopen", from: ["new"], to: "new" },
     },
   },
   machineName: "statusFlow",
@@ -691,3 +773,13 @@ const blockSchema = {
   tableViews: {},
   views: {},
 } as unknown as AppSchema;
+
+function requiredIconSource(key: string): string {
+  const source = resolveIconCatalogSvg(key);
+
+  if (source === undefined) {
+    throw new Error(`Missing test icon ${key}.`);
+  }
+
+  return source;
+}

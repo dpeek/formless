@@ -4,7 +4,6 @@ import type { FormlessUiField, FormlessUiFieldIntentHandler } from "../../formle
 import { StateInput } from "../state-input.tsx";
 import {
   FieldChrome,
-  fieldInteractionIsDisabled,
   formatInputValue,
   isRecordEditorField,
   stateMachineFieldValue,
@@ -26,6 +25,7 @@ export function StateMachineField({
     disabledReason: transition.availability?.disabledReason,
     id: transition.transitionName,
     isDisabled: transition.availability?.valid === false,
+    isHidden: transition.availability?.valid === false,
     label: transition.label,
     operationKey: transition.operationName,
     pending: transition.pending,
@@ -50,7 +50,7 @@ export function StateMachineField({
           stateLabel={field.stateMachineFacts?.terminal ? "Terminal" : undefined}
           transitions={transitions}
           isCompact={isCompact}
-          isDisabled={fieldInteractionIsDisabled(field)}
+          isDisabled={stateMachineTransitionControlIsDisabled(field)}
           isPending={Boolean(field.pending?.isPending)}
           pendingLabel={field.pending?.label}
           onTransition={(transition) => {
@@ -60,7 +60,7 @@ export function StateMachineField({
               return;
             }
 
-            onIntent?.({
+            void onIntent?.({
               type: "stateTransitionInvoke",
               fieldName: field.fieldName,
               operationName: selectedTransition.operationName,
@@ -75,11 +75,19 @@ export function StateMachineField({
   );
 }
 
+function stateMachineTransitionControlIsDisabled(field: FormlessUiField) {
+  return (
+    field.access.kind === "disabled" ||
+    field.access.kind === "readOnly" ||
+    field.access.kind === "system"
+  );
+}
+
 const styles = stylex.create({
   stateMachine: {
-    display: "grid",
+    display: "inline-block",
+    maxWidth: "100%",
     minWidth: 0,
-    width: "100%",
   },
   stateMachineCompact: {
     gap: spacingVars["--spacing-1"],

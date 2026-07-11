@@ -23,7 +23,11 @@ import type {
   FormlessUiFieldPending,
   FormlessUiFieldSession,
   FormlessUiFieldSurface,
+  FormlessUiIconOption,
+  FormlessUiIconPickerFacts,
+  FormlessUiIconPickerSelection,
   FormlessUiMediaAssetOption,
+  FormlessUiMediaAuthoring,
   FormlessUiOperationInputField,
   FormlessUiRecordField,
   FormlessUiRecordFieldDensity,
@@ -33,7 +37,7 @@ import type {
   FormlessUiStateMachineFacts,
   FormlessUiStateTransitionOperation,
   FormlessUiValueUnitCommit,
-} from "../../../lib/astryx/src/formless-ui-contract.ts";
+} from "@dpeek/formless-astryx/contract";
 import {
   fieldLabel,
   recordFieldIsWritable,
@@ -47,7 +51,11 @@ import {
   stateMachineStateIsTerminal,
   type TransitionStateOperationConfig,
 } from "../../client/state-machine-model.ts";
-import { resolveIconCatalogSvg } from "../../shared/icon-catalog.ts";
+import {
+  listIconCatalogEntries,
+  resolveIconCatalogSvg,
+  type IconCatalogEntry,
+} from "../../shared/icon-catalog.ts";
 import type {
   GeneratedCreateDraftSessionFacts,
   GeneratedCreateDraftSessionState,
@@ -68,7 +76,6 @@ import {
 import {
   generatedRecordFieldEditorDraftFromUpdateDraftInput,
   selectGeneratedRecordFieldMediaAuthoring,
-  type GeneratedRecordFieldMediaAuthoring,
   type GeneratedUpdateDraftSessionFacts,
   type GeneratedUpdateDraftSessionState,
 } from "./record-field-authoring.ts";
@@ -132,6 +139,9 @@ export type ProjectGeneratedRecordFormlessUiFieldsOptions =
     disabledReasonByFieldName?: Readonly<Record<string, string | undefined>>;
     entityName?: string;
     errorsByFieldName?: Readonly<Record<string, GeneratedFormlessUiFieldErrorInput>>;
+    iconDialogDraftByFieldName?: Readonly<Record<string, string | undefined>>;
+    iconDialogOpenByFieldName?: Readonly<Record<string, boolean | undefined>>;
+    iconParseErrorByFieldName?: Readonly<Record<string, string | undefined>>;
     mediaAssetOptionsByFieldName?: Readonly<Record<string, readonly ImageMediaAssetOption[]>>;
     pendingByFieldName?: Readonly<Record<string, boolean>>;
     pendingLabelByFieldName?: Readonly<Record<string, string | undefined>>;
@@ -158,6 +168,9 @@ export type ProjectGeneratedRecordFormlessUiFieldOptions = {
   entityName?: string;
   error?: GeneratedFormlessUiFieldErrorInput;
   fieldConfig: GeneratedFormlessUiRecordFieldConfig;
+  iconDialogDraft?: string;
+  iconDialogOpen?: boolean;
+  iconParseError?: string;
   isPending?: boolean;
   mediaAssetOptions?: readonly ImageMediaAssetOption[];
   pendingLabel?: string;
@@ -294,6 +307,7 @@ export function projectGeneratedCreateFormlessUiField({
       label,
       options: projectFieldOptions({
         field,
+        includeIconOptions: control.controlKind === "icon",
         optionValue: draftInput?.value ?? currentValue,
         referenceOptions,
       }),
@@ -331,6 +345,9 @@ export function projectGeneratedRecordFormlessUiFields({
   disabledReasonByFieldName,
   entityName,
   errorsByFieldName,
+  iconDialogDraftByFieldName,
+  iconDialogOpenByFieldName,
+  iconParseErrorByFieldName,
   mediaAssetOptionsByFieldName,
   pendingByFieldName,
   pendingLabelByFieldName,
@@ -359,6 +376,9 @@ export function projectGeneratedRecordFormlessUiFields({
       error:
         errorsByFieldName?.[fieldConfig.fieldName] ?? session.fieldErrors[fieldConfig.fieldName],
       fieldConfig,
+      iconDialogDraft: iconDialogDraftByFieldName?.[fieldConfig.fieldName],
+      iconDialogOpen: iconDialogOpenByFieldName?.[fieldConfig.fieldName],
+      iconParseError: iconParseErrorByFieldName?.[fieldConfig.fieldName],
       isPending: pendingByFieldName?.[fieldConfig.fieldName],
       mediaAssetOptions: mediaAssetOptionsByFieldName?.[fieldConfig.fieldName],
       pendingLabel: pendingLabelByFieldName?.[fieldConfig.fieldName],
@@ -388,6 +408,9 @@ export function projectGeneratedRecordFormlessUiField({
   entityName = "",
   error,
   fieldConfig,
+  iconDialogDraft,
+  iconDialogOpen,
+  iconParseError,
   isPending = false,
   mediaAssetOptions = [],
   pendingLabel,
@@ -454,6 +477,14 @@ export function projectGeneratedRecordFormlessUiField({
     rendererKind,
     schema,
   });
+  const iconAuthoring = selectProjectedIconAuthoring({
+    dialogDraft: iconDialogDraft,
+    dialogOpen: iconDialogOpen,
+    draft,
+    isPending,
+    parseError: iconParseError,
+    rendererKind,
+  });
 
   return {
     ...projectBaseField({
@@ -465,6 +496,7 @@ export function projectGeneratedRecordFormlessUiField({
       label,
       options: projectFieldOptions({
         field,
+        includeIconOptions: control.controlKind === "icon",
         mediaAssetOptions,
         optionValue: draft,
         referenceOptions,
@@ -489,6 +521,7 @@ export function projectGeneratedRecordFormlessUiField({
       unitRecordValue,
     },
     formatting: displayField.formatting,
+    ...(iconAuthoring === undefined ? {} : { icon: iconAuthoring }),
     ...(mediaAuthoring === undefined ? {} : { media: mediaAuthoring }),
     mode: "editor",
     presentationMode: presentation,
@@ -595,6 +628,7 @@ export function projectGeneratedOperationFormlessUiField({
       label,
       options: projectFieldOptions({
         field,
+        includeIconOptions: control.controlKind === "icon",
         optionValue: draftInput?.value ?? value,
       }),
       pending: projectPending(isPending, pendingLabel),
@@ -689,11 +723,13 @@ function projectBaseField({
 
 function projectFieldOptions({
   field,
+  includeIconOptions = false,
   mediaAssetOptions,
   optionValue,
   referenceOptions = [],
 }: {
   field: FieldSchema;
+  includeIconOptions?: boolean;
   mediaAssetOptions?: readonly ImageMediaAssetOption[];
   optionValue: FieldValue | undefined;
   referenceOptions?: readonly GeneratedFormlessUiReferenceOption[];
@@ -717,6 +753,12 @@ function projectFieldOptions({
     return {
       missingReferenceValue,
       referenceOptions: projectReferenceOptions(referenceOptions, missingReferenceValue),
+    };
+  }
+
+  if (includeIconOptions) {
+    return {
+      iconOptions: projectIconOptions(),
     };
   }
 
@@ -803,18 +845,75 @@ function selectProjectedMediaAuthoring({
   mediaAssetOptions: readonly ImageMediaAssetOption[];
   rendererKind: FormlessUiRecordFieldRendererKind;
   schema: AppSchema | null;
-}): GeneratedRecordFieldMediaAuthoring | undefined {
+}): FormlessUiMediaAuthoring | undefined {
   if (rendererKind !== "image" && rendererKind !== "media") {
     return undefined;
   }
 
-  return selectGeneratedRecordFieldMediaAuthoring({
+  const mediaAuthoring = selectGeneratedRecordFieldMediaAuthoring({
     draft,
     entityName,
     fieldConfig,
     mediaAssetOptions: Array.from(mediaAssetOptions),
     schema,
   });
+  const selectedAssetId =
+    mediaAuthoring.mediaEditorMode === "asset" && draft !== "" ? draft : undefined;
+  const selectedUrl = mediaAuthoring.mediaEditorMode === "url" && draft !== "" ? draft : undefined;
+  const previewHref = mediaAuthoring.mediaPreviewHref ?? selectedUrl;
+  const missingSelectedAsset =
+    selectedAssetId !== undefined && mediaAuthoring.mediaPreviewHref === undefined
+      ? {
+          assetId: selectedAssetId,
+          label: selectedAssetId,
+          reason: "Selected media asset is unavailable.",
+        }
+      : undefined;
+
+  return {
+    ...mediaAuthoring,
+    fileSelectEnabled: mediaAuthoring.uploadEnabled,
+    ...(missingSelectedAsset === undefined ? {} : { missingSelectedAsset }),
+    ...(previewHref === undefined ? {} : { previewHref }),
+    ...(selectedAssetId === undefined ? {} : { selectedAssetId }),
+    ...(selectedUrl === undefined ? {} : { selectedUrl }),
+  };
+}
+
+function selectProjectedIconAuthoring({
+  dialogDraft,
+  dialogOpen = false,
+  draft,
+  isPending,
+  parseError,
+  rendererKind,
+}: {
+  dialogDraft?: string;
+  dialogOpen?: boolean;
+  draft: string;
+  isPending: boolean;
+  parseError?: string;
+  rendererKind: FormlessUiRecordFieldRendererKind;
+}): FormlessUiIconPickerFacts | undefined {
+  if (rendererKind !== "icon") {
+    return undefined;
+  }
+
+  const projectedDialogDraft = dialogDraft ?? draft;
+  const previewSource = dialogOpen ? projectedDialogDraft : draft;
+
+  return {
+    canCancel: true,
+    canSave: !isPending,
+    ...(parseError === undefined ? {} : { customParseError: parseError }),
+    dialogDraft: projectedDialogDraft,
+    dialogOpen,
+    emptyValue: projectedDialogDraft.trim() === "",
+    previewSource,
+    savePending: isPending,
+    selection: selectIconPickerSelection(projectedDialogDraft),
+    valueMode: "svgSource",
+  };
 }
 
 function selectRecordAccess(
@@ -949,6 +1048,40 @@ function projectMediaAssetOption(option: ImageMediaAssetOption): FormlessUiMedia
     id: option.id,
     label: option.label,
     ...(option.width === undefined ? {} : { width: option.width }),
+  };
+}
+
+function projectIconOptions(): readonly FormlessUiIconOption[] {
+  return listIconCatalogEntries().map(projectIconOption);
+}
+
+function projectIconOption(entry: IconCatalogEntry): FormlessUiIconOption {
+  return {
+    group: entry.group,
+    id: entry.key,
+    label: entry.label,
+    source: entry.source,
+  };
+}
+
+function selectIconPickerSelection(source: string): FormlessUiIconPickerSelection {
+  if (source.trim() === "") {
+    return { kind: "empty" };
+  }
+
+  const option = projectIconOptions().find((entry) => entry.source === source);
+
+  if (option !== undefined) {
+    return {
+      kind: "option",
+      optionId: option.id,
+      source: option.source,
+    };
+  }
+
+  return {
+    kind: "customSource",
+    source,
   };
 }
 

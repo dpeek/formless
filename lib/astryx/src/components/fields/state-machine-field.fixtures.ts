@@ -9,40 +9,57 @@ import type {
   FieldScenarioGroup,
 } from "../field-scenario-model.ts";
 import type { FieldSchema, StateMachineSchema } from "@dpeek/formless-schema";
-import type { FormlessUiField, FormlessUiStateMachineFacts } from "../../formless-ui-contract.ts";
+import type { FormlessUiField } from "../../formless-ui-contract.ts";
 import {
   displayField,
   enumControl,
   enumOptions,
   enumValuePresentation,
-  fieldError,
   stateMachineFacts,
   stateMachineField,
 } from "./fixture-helpers.ts";
+
+const priorityMarkerIconSource = [
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">',
+  '<path d="M12 4.75v14.5" />',
+  '<path d="m6.75 10 5.25-5.25L17.25 10" />',
+  "</svg>",
+].join("");
+
+const closeIconSource = [
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">',
+  '<path d="m6.75 6.75 10.5 10.5" />',
+  '<path d="m17.25 6.75-10.5 10.5" />',
+  "</svg>",
+].join("");
+
+const confirmIconSource = [
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">',
+  '<path d="m5 12 5 5L20 7" />',
+  "</svg>",
+].join("");
 
 const stateStatusField = {
   type: "enum",
   required: true,
   label: "Status",
   values: {
-    open: { label: "Open", presentation: { color: "#2563eb" } },
-    waiting: { label: "Waiting", presentation: { color: "#d97706" } },
-    blocked: { label: "Blocked", presentation: { color: "danger" } },
-    done: { label: "Done", presentation: { color: "success" } },
+    open: {
+      label: "Open",
+      presentation: { color: "blue", icon: "priority-marker" },
+    },
+    waiting: { label: "Waiting", presentation: { color: "orange" } },
+    blocked: { label: "Blocked", presentation: { color: "red", icon: "close" } },
+    done: { label: "Done", presentation: { color: "green", icon: "confirm" } },
   },
   default: "open",
 } as const;
 
-const longStateStatusField = {
-  ...stateStatusField,
-  values: {
-    ...stateStatusField.values,
-    waiting: {
-      label: "Waiting on final launch readiness review",
-      presentation: { color: "#d97706" },
-    },
-  },
-} as const;
+const stateStatusOptions = enumOptions(stateStatusField, {
+  blocked: { iconSource: closeIconSource },
+  done: { iconSource: confirmIconSource },
+  open: { iconSource: priorityMarkerIconSource },
+});
 
 const taskWorkflowMachine = {
   field: "status",
@@ -53,38 +70,10 @@ const taskWorkflowMachine = {
     sendWaiting: { label: "Send to waiting", from: ["open", "blocked"], to: "waiting" },
     reopen: {
       label: "Reopen",
-      from: ["waiting", "blocked", "done"],
+      from: ["waiting", "blocked"],
       to: "open",
-      allowTerminalRecovery: true,
     },
     block: { label: "Block", from: ["open", "waiting"], to: "blocked" },
-  },
-} satisfies StateMachineSchema;
-
-const oneTransitionMachine = {
-  ...taskWorkflowMachine,
-  transitions: {
-    complete: taskWorkflowMachine.transitions.complete,
-  },
-} satisfies StateMachineSchema;
-
-const noTransitionMachine = {
-  ...taskWorkflowMachine,
-  transitions: {},
-} satisfies StateMachineSchema;
-
-const longLabelMachine = {
-  ...taskWorkflowMachine,
-  transitions: {
-    ...taskWorkflowMachine.transitions,
-    complete: {
-      ...taskWorkflowMachine.transitions.complete,
-      label: "Complete after final launch readiness review",
-    },
-    sendWaiting: {
-      ...taskWorkflowMachine.transitions.sendWaiting,
-      label: "Send back to waiting for external dependency review",
-    },
   },
 } satisfies StateMachineSchema;
 
@@ -98,7 +87,7 @@ const operationNames = {
 const stateMachineRecordBase = stateMachineDisplayField({
   recordId: "state-status-record",
   surface: "record",
-  value: "waiting",
+  value: "open",
 });
 
 const stateMachineTableCellBase = stateMachineDisplayField({
@@ -107,23 +96,11 @@ const stateMachineTableCellBase = stateMachineDisplayField({
   value: "open",
 });
 
-const recordStateMachineCombinations = new Set([
-  "many-transitions|open|idle",
-  "many-transitions|waiting|idle",
-  "many-transitions|blocked|idle",
-  "many-transitions|done|idle",
-  "many-transitions|unknown|idle",
-  "no-transitions|waiting|idle",
-  "one-transition|open|idle",
-  "long-labels|waiting|idle",
-  "terminal|done|idle",
-  "many-transitions|waiting|field-pending",
-  "many-transitions|waiting|transition-pending",
-  "many-transitions|waiting|disabled-transition",
-  "many-transitions|blocked|transition-error",
-]);
-
-const tableCellStateMachineCombinations = new Set(["open|idle", "blocked|transition-error"]);
+const stateMachineDetailBase = stateMachineDisplayField({
+  recordId: "state-status-detail",
+  surface: "detail",
+  value: "open",
+});
 
 export const stateMachineScenarioGroups = [
   composeScenarioGroup({
@@ -132,51 +109,11 @@ export const stateMachineScenarioGroups = [
     surface: "record",
     base: stateMachineRecordBase,
     axes: [
-      composeScenarioAxis("machine", "Machine", [
-        scenarioOption("many-transitions", "Many Transitions"),
-        scenarioOption("no-transitions", "No Transitions", withMachine(noTransitionMachine)),
-        scenarioOption("one-transition", "One Transition", withMachine(oneTransitionMachine)),
-        scenarioOption(
-          "long-labels",
-          "Long Labels",
-          withMachine(longLabelMachine, longStateStatusField),
-        ),
-        scenarioOption("terminal", "Terminal", withMachine(taskWorkflowMachine)),
-      ]),
       composeScenarioAxis("value", "Value", [
-        scenarioOption("open", "Open", withStateValue("open")),
-        scenarioOption("waiting", "Waiting", withStateValue("waiting")),
-        scenarioOption("blocked", "Blocked", withStateValue("blocked")),
-        scenarioOption("done", "Done", withStateValue("done")),
+        scenarioOption("open", "Known", withStateValue("open")),
         scenarioOption("unknown", "Unknown", withStateValue("paused")),
       ]),
-      composeScenarioAxis("runtime", "Runtime", [
-        scenarioOption("idle", "Idle"),
-        scenarioOption("field-pending", "Field Pending", {
-          pending: { isPending: true, label: "Completing task" },
-        }),
-        scenarioOption(
-          "transition-pending",
-          "Transition Pending",
-          withTransitionPatch("complete", { pending: { isPending: true, label: "Running" } }),
-        ),
-        scenarioOption(
-          "disabled-transition",
-          "Disabled Transition",
-          withTransitionPatch("complete", {
-            availability: {
-              valid: false,
-              disabledReason: "Complete is unavailable until required fields are filled.",
-            },
-          }),
-        ),
-        scenarioOption("transition-error", "Transition Error", {
-          errors: [fieldError("status", "Transition rejected by workflow.")],
-        }),
-      ]),
     ],
-    include: ({ facets }) =>
-      recordStateMachineCombinations.has(`${facets.machine}|${facets.value}|${facets.runtime}`),
     finalizeField: finalizeRecordStateMachineField,
   }),
   composeScenarioGroup({
@@ -186,22 +123,24 @@ export const stateMachineScenarioGroups = [
     base: stateMachineTableCellBase,
     axes: [
       composeScenarioAxis("value", "Value", [
-        scenarioOption("open", "Open", withStateValue("open")),
-        scenarioOption("blocked", "Blocked", withStateValue("blocked")),
-      ]),
-      composeScenarioAxis("runtime", "Runtime", [
-        scenarioOption("idle", "Idle"),
-        scenarioOption("transition-error", "Transition Error", {
-          errors: [fieldError("status", "Transition rejected by workflow.")],
-        }),
+        scenarioOption("open", "Known", withStateValue("open")),
+        scenarioOption("unknown", "Unknown", withStateValue("paused")),
       ]),
     ],
-    include: ({ facets }) =>
-      tableCellStateMachineCombinations.has(`${facets.value}|${facets.runtime}`),
-    finalizeField: ({ field, optionIds }) => ({
-      ...field,
-      recordId: `state-status-cell-${optionIds.join("-")}`,
-    }),
+    finalizeField: finalizeTableCellStateMachineField,
+  }),
+  composeScenarioGroup({
+    id: "state-machine-detail",
+    kind: "state-machine-enum",
+    surface: "detail",
+    base: stateMachineDetailBase,
+    axes: [
+      composeScenarioAxis("value", "Value", [
+        scenarioOption("open", "Known", withStateValue("open")),
+        scenarioOption("unknown", "Unknown", withStateValue("paused")),
+      ]),
+    ],
+    finalizeField: finalizeDetailStateMachineField,
   }),
 ] satisfies readonly FieldScenarioGroup[];
 
@@ -212,48 +151,27 @@ function finalizeRecordStateMachineField({ field, optionIds }: FieldScenarioComp
   };
 }
 
-function withMachine(
-  machine: StateMachineSchema,
-  field: Extract<FieldSchema, { type: "enum" }> = stateStatusField,
-): FieldScenarioFieldModifier {
-  return (currentField) =>
-    applyStateMachineFacts(currentField, {
-      field,
-      machine,
-      value: currentField.stateMachineFacts?.currentValue,
-    });
+function finalizeTableCellStateMachineField({ field, optionIds }: FieldScenarioComposeContext) {
+  return {
+    ...field,
+    recordId: `state-status-cell-${optionIds.join("-")}`,
+  };
+}
+
+function finalizeDetailStateMachineField({ field, optionIds }: FieldScenarioComposeContext) {
+  return {
+    ...field,
+    recordId: `state-status-detail-${optionIds.join("-")}`,
+  };
 }
 
 function withStateValue(value: string): FieldScenarioFieldModifier {
   return (field) => applyStateMachineFacts(field, { value });
 }
 
-function withTransitionPatch(
-  transitionName: string,
-  patch: Partial<NonNullable<FormlessUiStateMachineFacts["transitions"]>[number]>,
-): FieldScenarioFieldModifier {
-  return (field) => {
-    const facts = field.stateMachineFacts;
-
-    if (facts === undefined) {
-      return field;
-    }
-
-    return {
-      ...field,
-      stateMachineFacts: {
-        ...facts,
-        transitions: facts.transitions?.map((transition) =>
-          transition.transitionName === transitionName ? { ...transition, ...patch } : transition,
-        ),
-      },
-    };
-  };
-}
-
 function stateMachineDisplayField(input: {
   recordId: string;
-  surface: "record" | "table-cell";
+  surface: "detail" | "record" | "table-cell";
   value: string;
 }) {
   const stateMachine = stateMachineField({
@@ -270,9 +188,9 @@ function stateMachineDisplayField(input: {
     access: { kind: "stateMachine", writable: false },
     formatting: {
       displayValue: displayOption(stateStatusField, input.value),
-      enumValuePresentation: enumValuePresentation(stateStatusField, input.value),
+      enumValuePresentation: stateValuePresentation(stateStatusField, input.value),
     },
-    options: { enumOptions: enumOptions(stateStatusField) },
+    options: { enumOptions: stateStatusOptions },
     recordId: input.recordId,
     stateMachine,
     stateMachineFacts: stateMachineFacts({
@@ -322,10 +240,14 @@ function applyStateMachineFacts(
     formatting: {
       ...field.formatting,
       displayValue: displayOption(enumField, value),
-      enumValuePresentation: enumValuePresentation(enumField, value),
+      enumValuePresentation: stateValuePresentation(enumField, value),
     },
     options: {
-      enumOptions: enumOptions(enumField),
+      enumOptions: enumOptions(enumField, {
+        blocked: { iconSource: closeIconSource },
+        done: { iconSource: confirmIconSource },
+        open: { iconSource: priorityMarkerIconSource },
+      }),
       unknownEnumValue: !hasKnownValue && value !== "" ? value : undefined,
     },
     stateMachine,
@@ -341,4 +263,20 @@ function applyStateMachineFacts(
 
 function displayOption(field: Extract<FieldSchema, { type: "enum" }>, value: string) {
   return field.values[value]?.label ?? value;
+}
+
+function stateValuePresentation(
+  field: Extract<FieldSchema, { type: "enum" }>,
+  value: string,
+) {
+  const iconSource =
+    value === "open"
+      ? priorityMarkerIconSource
+      : value === "blocked"
+        ? closeIconSource
+        : value === "done"
+          ? confirmIconSource
+          : undefined;
+
+  return enumValuePresentation(field, value, iconSource);
 }

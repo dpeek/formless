@@ -205,21 +205,15 @@ function parseTransition(
     throw new Error(`${context} must be an object.`);
   }
 
-  assertExactKeys(context, value, ["label", "from", "to"], ["allowTerminalRecovery"]);
+  assertExactKeys(context, value, ["label", "from", "to"]);
 
   const label = parseRequiredNonEmptyString(`${context} label`, value.label);
   const from = parseStateList(`${context} from`, value.from, states);
   const to = parseRequiredState(`${context} to`, value.to, states);
-  const allowTerminalRecovery = parseOptionalTerminalRecovery(
-    `${context} allowTerminalRecovery`,
-    value.allowTerminalRecovery,
-  );
 
   for (const sourceState of from) {
-    if (terminalStates.has(sourceState) && allowTerminalRecovery !== true) {
-      throw new Error(
-        `${context} from state "${sourceState}" is terminal and requires allowTerminalRecovery.`,
-      );
+    if (terminalStates.has(sourceState)) {
+      throw new Error(`${context} from state "${sourceState}" is terminal.`);
     }
   }
 
@@ -227,20 +221,7 @@ function parseTransition(
     label,
     from,
     to,
-    ...(allowTerminalRecovery === undefined ? {} : { allowTerminalRecovery }),
   };
-}
-
-function parseOptionalTerminalRecovery(context: string, value: unknown): boolean | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-
-  if (typeof value !== "boolean") {
-    throw new Error(`${context} must be a boolean.`);
-  }
-
-  return value;
 }
 
 function parseStateList(context: string, value: unknown, validStates: Set<string>): string[] {

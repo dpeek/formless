@@ -4,7 +4,7 @@ import type { FieldValue, RecordValues } from "@dpeek/formless-storage";
 import type {
   FormlessUiFieldIntent,
   FormlessUiFieldIntentHandler,
-} from "../../../lib/astryx/src/formless-ui-contract.ts";
+} from "@dpeek/formless-astryx/contract";
 import type { RecordFieldConfig, RecordUnionPresentationConfig } from "../../client/views.ts";
 import {
   nextGeneratedCreateDraftSessionState,

@@ -1,9 +1,9 @@
 import {
   composeScenarioAxis,
-  composeScenarioGroup,
+  projectScenarioGroup,
   scenarioOption,
 } from "../field-scenario-model.ts";
-import type { FieldScenarioComposeContext, FieldScenarioGroup } from "../field-scenario-model.ts";
+import type { FieldScenarioGroup, FieldScenarioProjectionContext } from "../field-scenario-model.ts";
 import {
   enumControl,
   enumOptions,
@@ -12,7 +12,11 @@ import {
   recordDrafts,
   recordField,
 } from "./fixture-helpers.ts";
-import type { FormlessUiField } from "../../formless-ui-contract.ts";
+import type {
+  FormlessUiField,
+  FormlessUiFieldSurface,
+  FormlessUiRecordFieldRendererKind,
+} from "../../formless-ui-contract.ts";
 
 const priorityMarkerIconSource = [
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">',
@@ -49,90 +53,43 @@ const statusOptions = enumOptions(statusField, {
   open: { iconSource: priorityMarkerIconSource },
 });
 
-const enumRecordBase = recordField({
-  fieldName: "status",
-  field: statusField,
-  editor: "enum",
-  control: enumControl(statusField),
-  commit: "immediate",
-  drafts: recordDrafts({ recordValue: "waiting" }),
-  formatting: {
-    displayValue: "Waiting",
-    enumValuePresentation: enumValuePresentation(statusField, "waiting"),
-  },
-  options: { enumOptions: statusOptions },
-  recordId: "record-status",
-  rendererKind: "enum",
-});
-
-const enumTableCellBase = recordField({
-  fieldName: "status",
-  field: statusField,
-  editor: "enum",
-  control: enumControl(statusField),
-  commit: "immediate",
-  density: "compact",
-  drafts: recordDrafts({ recordValue: "waiting" }),
-  formatting: {
-    displayValue: "Waiting",
-    enumValuePresentation: enumValuePresentation(statusField, "waiting"),
-  },
-  options: { enumOptions: statusOptions },
-  recordId: "cell-status",
-  rendererKind: "enum",
-  surface: "table-cell",
-});
+const enumAxes = [
+  composeScenarioAxis("surface", "Surface", [
+    scenarioOption("record", "Record"),
+    scenarioOption("table-cell", "Table Cell"),
+  ]),
+  composeScenarioAxis("requiredness", "Required", [
+    scenarioOption("required", "Required"),
+    scenarioOption("optional", "Optional"),
+  ]),
+  composeScenarioAxis("value", "Value", [
+    scenarioOption("filled", "Known"),
+    scenarioOption("empty", "Empty"),
+    scenarioOption("unknown", "Unknown"),
+  ]),
+  composeScenarioAxis("presentation", "Presentation", [
+    scenarioOption("default", "Default"),
+    scenarioOption("icon-only-trigger", "Icon Trigger"),
+    scenarioOption("trigger-both", "Trigger Both"),
+    scenarioOption("list-label", "List Label"),
+  ]),
+];
 
 export const enumScenarioGroups = [
-  composeScenarioGroup({
-    id: "enum-record",
+  projectScenarioGroup({
+    id: "enum",
     kind: "enum",
-    surface: "record",
-    base: enumRecordBase,
-    axes: [
-      composeScenarioAxis("requiredness", "Required", [
-        scenarioOption("required", "Required"),
-        scenarioOption("optional", "Optional", withEnumRequired(false)),
-      ]),
-      composeScenarioAxis("value", "Value", [
-        scenarioOption("filled", "Filled", withEnumValue("waiting")),
-        scenarioOption("empty", "Empty", withEnumValue("")),
-      ]),
-      composeScenarioAxis("presentation", "Presentation", [
-        scenarioOption("default", "Default"),
-        scenarioOption("icon-only-trigger", "Icon Trigger", {
-          ...withEnumValuePatch("open"),
-          presentation: { mode: "iconOnly", trigger: "icon", list: "both" },
-          rendererKind: "enum-icon",
-        }),
-        scenarioOption("trigger-both", "Trigger Both", {
-          ...withEnumValuePatch("blocked"),
-          presentation: { trigger: "both", list: "both" },
-          rendererKind: "enum-icon",
-        }),
-        scenarioOption("list-label", "List Label", {
-          ...withEnumValuePatch("waiting"),
-          presentation: { trigger: "both", list: "label" },
-        }),
-        scenarioOption("invalid-stored-value", "Invalid Value", {
-          ...withEnumValuePatch("paused"),
-          options: { enumOptions: statusOptions, unknownEnumValue: "paused" },
-        }),
-      ]),
-    ],
-    include: enumRecordCombinationIsValid,
-    finalizeField: finalizeEnumRecordField,
-  }),
-  composeScenarioGroup({
-    id: "enum-table-cell",
-    kind: "enum",
-    surface: "table-cell",
-    base: enumTableCellBase,
-    axes: [composeScenarioAxis("mode", "Mode", [scenarioOption("default", "Default")])],
+    axes: enumAxes,
+    include: enumCombinationIsValid,
+    projectField: projectEnumField,
   }),
 ] satisfies readonly FieldScenarioGroup[];
 
-function enumRecordCombinationIsValid({ facets }: FieldScenarioComposeContext) {
+function enumCombinationIsValid({ facets }: FieldScenarioProjectionContext) {
+  if (facets.value === "unknown") {
+    return facets.requiredness === "required" && facets.presentation === "default";
+  }
+
   if (facets.presentation === "default") {
     return true;
   }
@@ -140,69 +97,84 @@ function enumRecordCombinationIsValid({ facets }: FieldScenarioComposeContext) {
   return facets.requiredness === "required" && facets.value === "filled";
 }
 
-function finalizeEnumRecordField({
+function projectEnumField({
   facets,
-  field,
   optionIds,
-}: FieldScenarioComposeContext): FormlessUiField {
-  if (field.mode !== "editor" || field.surface === "create" || field.surface === "operation") {
-    return field;
-  }
+}: FieldScenarioProjectionContext): FormlessUiField {
+  const surface = enumSurface(facets.surface);
+  const value = enumValue(facets.value);
+  const required = facets.requiredness !== "optional";
+  const field = { ...statusField, required };
+  const presentation = enumPresentation(facets.presentation);
 
-  const draftValue = "drafts" in field ? field.drafts.draft : "";
-
-  return {
-    ...field,
-    formatting: {
-      ...field.formatting,
-      displayValue: displayOption(draftValue),
-      enumValuePresentation:
-        draftValue === "" ? undefined : enumValuePresentation(statusField, draftValue),
-    },
-    recordId: `record-status-${optionIds.join("-")}`,
-    errors:
-      facets.requiredness === "required" && facets.value === "empty"
-        ? [fieldError("status", "Choose a status.")]
-        : undefined,
-  };
-}
-
-function withEnumRequired(required: boolean) {
-  return (field: FormlessUiField): FormlessUiField => {
-    const nextField = { ...statusField, required };
-
-    if (field.control.kind !== "enum") {
-      return field;
-    }
-
-    return {
-      ...field,
-      control: enumControl(nextField),
-      field: nextField,
-      required,
-    };
-  };
-}
-
-function withEnumValue(value: string) {
-  return (_field: FormlessUiField): FormlessUiField => ({
-    ..._field,
-    ...withEnumValuePatch(value),
-  });
-}
-
-function withEnumValuePatch(value: string) {
-  return {
+  return recordField({
+    fieldName: "status",
+    field,
+    editor: "enum",
+    control: enumControl(field),
+    commit: "immediate",
+    density: surface === "table-cell" ? "compact" : "default",
     drafts: recordDrafts({
       draft: value,
-      draftInput: { kind: "input" as const, value },
+      draftInput: { kind: "input", value },
       recordValue: value,
     }),
+    errors: required && value === "" ? [fieldError("status", "Choose a status.")] : undefined,
     formatting: {
       displayValue: displayOption(value),
       enumValuePresentation: value === "" ? undefined : enumValuePresentation(statusField, value),
     },
-  };
+    options: {
+      enumOptions: statusOptions,
+      unknownEnumValue: value === "paused" ? "paused" : undefined,
+    },
+    presentation,
+    recordId: `${surface}-status-${optionIds.join("-")}`,
+    rendererKind: enumRendererKind(facets.presentation),
+    surface,
+  });
+}
+
+function enumSurface(
+  surface: string | undefined,
+): Extract<FormlessUiFieldSurface, "record" | "table-cell"> {
+  return surface === "table-cell" ? "table-cell" : "record";
+}
+
+function enumValue(value: string | undefined) {
+  if (value === "empty") {
+    return "";
+  }
+
+  if (value === "unknown") {
+    return "paused";
+  }
+
+  return "open";
+}
+
+function enumRendererKind(
+  presentation: string | undefined,
+): FormlessUiRecordFieldRendererKind {
+  return presentation === "icon-only-trigger" || presentation === "trigger-both"
+    ? "enum-icon"
+    : "enum";
+}
+
+function enumPresentation(presentation: string | undefined): FormlessUiField["presentation"] {
+  if (presentation === "icon-only-trigger") {
+    return { mode: "iconOnly", trigger: "icon", list: "both" };
+  }
+
+  if (presentation === "trigger-both") {
+    return { trigger: "both", list: "both" };
+  }
+
+  if (presentation === "list-label") {
+    return { trigger: "both", list: "label" };
+  }
+
+  return undefined;
 }
 
 function displayOption(value: string) {

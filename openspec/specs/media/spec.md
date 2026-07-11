@@ -100,17 +100,25 @@ provider store adapters.
 - THEN those facts stay in Media-owned metadata and provider adapters
 - AND app records do not store provider-specific URLs
 
-### Requirement: Media React Adapter
+### Requirement: Media UI Adapter Boundary
 
-The Media React adapter SHALL own media-specific picker, upload, preview, and
-broken-asset UI behavior.
+The Media package SHALL keep media contracts, pure helpers, client adapters, and
+Worker adapters renderer-independent. The current React adapter MAY remain as a
+legacy UI adapter while legacy generated surfaces still use it, but it is not
+the future renderer boundary.
 
-#### Scenario: Media-specific controls
+#### Scenario: Legacy media control adapter
 
 - GIVEN generated authoring needs media asset selection, image upload, preview,
   or broken-asset display
-- WHEN media-specific controls render
-- THEN generated UI uses Media React adapter controls or adapter models
+- WHEN the legacy generated UI renderer seam renders media-specific controls
+- THEN the seam may use the Media React adapter internally
+- AND generated UI passes selected asset state, media asset options, preview
+  hrefs, missing selected asset facts, upload availability, and file-select
+  intent availability through the Formless UI field contract instead of
+  importing the Media React adapter directly
+- AND replacement media controls live with the replacement renderer package, not
+  in the Media package
 
 #### Scenario: Generic layout stays outside Media
 
@@ -118,6 +126,15 @@ broken-asset UI behavior.
   renders
 - WHEN generic layout or commit behavior is needed
 - THEN that behavior remains outside the Media package
+
+#### Scenario: Renderer code stays outside Media
+
+- GIVEN new generated UI renderer controls are added for media fields
+- WHEN the controls need picker, upload, preview, or broken-asset presentation
+- THEN the controls consume renderer-neutral media facts and intent callbacks
+- AND the Media package does not import generic UI primitives, generated UI
+  modules, renderer packages, Tailwind classes, or React component libraries for
+  the replacement renderer
 
 ### Requirement: Media Ownership Exclusions
 

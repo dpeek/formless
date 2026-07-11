@@ -1,4 +1,8 @@
-import type { FieldKindOption, FieldScenarioGroup } from "../field-scenario-model.ts";
+import {
+  mergeScenarioGroupsByKind,
+  type FieldKindOption,
+  type FieldScenarioGroup,
+} from "../field-scenario-model.ts";
 import type { FormlessUiFieldSurface } from "../../formless-ui-contract.ts";
 import { booleanScenarioGroups } from "./boolean-field.fixtures.ts";
 import { colorScenarioGroups } from "./color-field.fixtures.ts";
@@ -35,7 +39,7 @@ export const fieldKindOptions = [
   { id: "media", label: "Media" },
 ] satisfies readonly FieldKindOption[];
 
-export const fieldScenarioGroups = [
+const rawFieldScenarioGroups = [
   ...stateMachineScenarioGroups,
   ...enumScenarioGroups,
   ...referenceScenarioGroups,
@@ -47,3 +51,8 @@ export const fieldScenarioGroups = [
   ...iconScenarioGroups,
   ...mediaScenarioGroups,
 ] satisfies readonly FieldScenarioGroup[];
+
+export const fieldScenarioGroups = mergeScenarioGroupsByKind(
+  rawFieldScenarioGroups,
+  fieldSurfaceOptions,
+);

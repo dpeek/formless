@@ -10,6 +10,7 @@ import {
   fieldChromeProps,
   fieldIsReadOnly,
   formatInputValue,
+  isRecordEditorField,
   type FormlessUiEditorField,
 } from "./field-chrome.tsx";
 import { mediaPickerOptions, mediaPreviewHref } from "./field-options.tsx";
@@ -24,6 +25,7 @@ export function MediaFieldEditor({
   onIntent: FormlessUiFieldIntentHandler | undefined;
 }) {
   const value = formatInputValue(editorFieldValue(field));
+  const fileSelectEnabled = !isRecordEditorField(field) || field.media?.fileSelectEnabled !== false;
 
   return (
     <ImageInput
@@ -38,12 +40,15 @@ export function MediaFieldEditor({
       previewUrl={mediaPreviewHref(field)}
       value={value}
       onSelectOption={(option) => emitMediaAssetSelect(field, option.value, onIntent)}
-      onUploadFile={(file) =>
-        onIntent?.({
-          type: "mediaFileSelect",
-          fieldName: field.fieldName,
-          file,
-        })
+      onUploadFile={
+        !fileSelectEnabled
+          ? undefined
+          : (file) =>
+              void onIntent?.({
+                type: "mediaFileSelect",
+                fieldName: field.fieldName,
+                file,
+              })
       }
     />
   );

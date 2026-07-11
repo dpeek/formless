@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "exports": {
+    "./contract": "./src/formless-ui-contract.ts"
+  },
   "scripts": {
     "dev": "vite"
   },

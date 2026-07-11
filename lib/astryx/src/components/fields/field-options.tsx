@@ -12,6 +12,7 @@ import type {
   FormlessUiMediaAssetOption,
 } from "../../formless-ui-contract.ts";
 import { SourceIcon } from "../field-primitives.tsx";
+import { astryxPresentationColors } from "../presentation-color.ts";
 import {
   editorFieldValue,
   formatInputValue,
@@ -21,6 +22,7 @@ import {
 
 export type SelectorVisualOption = {
   color?: string;
+  colorToken?: string;
   detail?: string;
   isMissing?: boolean;
   label: string;
@@ -59,6 +61,7 @@ export function enumOptionToSelectorVisualOption(
 ): SelectorVisualOption {
   return {
     color: enumOptionColor(option),
+    colorToken: option.presentation.color.token,
     isMissing: option.missing,
     label: option.label,
     source: option.presentation.icon?.source,
@@ -87,7 +90,9 @@ export function selectedMediaAsset(field: FormlessUiField): FormlessUiMediaAsset
 
 export function mediaPreviewHref(field: FormlessUiField) {
   if (isRecordEditorField(field)) {
-    return field.media?.mediaPreviewHref ?? selectedMediaAsset(field)?.href;
+    return (
+      field.media?.previewHref ?? field.media?.mediaPreviewHref ?? selectedMediaAsset(field)?.href
+    );
   }
 
   return selectedMediaAsset(field)?.href;
@@ -96,6 +101,12 @@ export function mediaPreviewHref(field: FormlessUiField) {
 export function enumOptionColor(option: FormlessUiEnumOption) {
   if (option.presentation.color.token?.startsWith("#")) {
     return option.presentation.color.token;
+  }
+
+  const semanticColor = astryxPresentationColors(option.presentation.color.token);
+
+  if (semanticColor) {
+    return semanticColor.visual;
   }
 
   if (option.presentation.color.intent === "success") {

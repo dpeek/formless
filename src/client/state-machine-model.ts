@@ -114,6 +114,10 @@ export function selectTransitionStateOperationAvailability({
   }
 
   if (field.values[currentValue] === undefined) {
+    if (operation.transition.to === operation.machine.initial) {
+      return { valid: true };
+    }
+
     return {
       valid: false,
       disabledReason: `Current state "${currentValue}" is not declared.`,

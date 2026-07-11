@@ -79,8 +79,11 @@ const mediaRecordBase = recordField({
   drafts: recordDrafts({ recordValue: "media-homepage-hero" }),
   formatting: { displayValue: "media-homepage-hero" },
   media: {
+    fileSelectEnabled: true,
     mediaEditorMode: "asset",
     mediaPreviewHref: mediaPreviewUrls.homepageHero,
+    previewHref: mediaPreviewUrls.homepageHero,
+    selectedAssetId: "media-homepage-hero",
     uploadEnabled: true,
     uploadPatchFields: { mediaAssetFieldName: "heroMediaId" },
   },

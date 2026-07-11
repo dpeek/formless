@@ -224,7 +224,7 @@ describe("generated Formless UI intent adapter", () => {
       },
     });
 
-    handler({ type: "fieldErrorChange", fieldName: "title", message: null });
+    void handler({ type: "fieldErrorChange", fieldName: "title", message: null });
 
     expect(returned.fieldErrorChange).toEqual({
       fieldName: "title",

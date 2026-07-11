@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as stylex from "@stylexjs/stylex";
 import { Button } from "@astryxdesign/core/Button";
+import { ButtonGroup } from "@astryxdesign/core/ButtonGroup";
 import { Card } from "@astryxdesign/core/Card";
 import { HStack } from "@astryxdesign/core/HStack";
 import { SegmentedControl, SegmentedControlItem } from "@astryxdesign/core/SegmentedControl";
@@ -13,7 +14,7 @@ import {
   radiusVars,
   spacingVars,
 } from "@astryxdesign/core/theme/tokens.stylex";
-import { fieldKindOptions, fieldScenarioGroups, fieldSurfaceOptions } from "./fields/fixtures.ts";
+import { fieldKindOptions, fieldScenarioGroups } from "./fields/fixtures.ts";
 import { FormlessUiFieldRenderer, FormlessUiFieldSubmitFormAdapter } from "./fields/renderer.tsx";
 import { applyScenarioFieldIntent, scenarioFieldKey } from "./fields/fixture-helpers.ts";
 import type {
@@ -26,24 +27,29 @@ import type {
 } from "./field-scenario-model.ts";
 import type {
   FormlessUiField,
+  FormlessUiFieldIntent,
   FormlessUiFieldIntentHandler,
-  FormlessUiFieldSurface,
 } from "../formless-ui-contract.ts";
 
 type FieldOverrides = Record<string, FormlessUiField>;
+type StateTransitionInvokeIntent = Extract<
+  FormlessUiFieldIntent,
+  { type: "stateTransitionInvoke" }
+>;
+
+const stateTransitionSimulationDelayMs = 700;
 
 export function FormlessFieldsLayout() {
   const showToast = useToast();
   const [selectedKind, setSelectedKind] = useState<FieldKindKey>("enum");
-  const [selectedSurface, setSelectedSurface] = useState<FormlessUiFieldSurface>("record");
   const [selectedFacetValues, setSelectedFacetValues] = useState<FieldScenarioFacetValues>(() =>
-    defaultFacetValues(requiredScenarioGroup("enum", "record")),
+    defaultFacetValues(requiredScenarioGroup("enum")),
   );
   const [fieldOverrides, setFieldOverrides] = useState<FieldOverrides>({});
 
   const selectedKindOption =
     fieldKindOptions.find((option) => option.id === selectedKind) ?? fieldKindOptions[0];
-  const selectedGroup = findScenarioGroup(selectedKindOption.id, selectedSurface);
+  const selectedGroup = findScenarioGroup(selectedKindOption.id);
   const normalizedFacetValues = selectedGroup
     ? normalizeFacetValues(selectedGroup, selectedFacetValues)
     : {};
@@ -97,11 +103,9 @@ export function FormlessFieldsLayout() {
                 variant={option.id === selectedKindOption.id ? "primary" : "ghost"}
                 xstyle={styles.kindButton}
                 onClick={() => {
-                  const nextSurface = selectScenarioSurface(option.id, selectedSurface);
-                  const nextGroup = findScenarioGroup(option.id, nextSurface);
+                  const nextGroup = findScenarioGroup(option.id);
 
                   setSelectedKind(option.id);
-                  setSelectedSurface(nextSurface);
                   setSelectedFacetValues(nextGroup ? defaultFacetValues(nextGroup) : {});
                 }}
               />
@@ -118,45 +122,27 @@ export function FormlessFieldsLayout() {
               </Text>
             </HStack>
 
-            <SegmentedControl
-              value={selectedSurface}
-              onChange={(value) => {
-                const nextSurface = value as FormlessUiFieldSurface;
-                const nextGroup = findScenarioGroup(selectedKindOption.id, nextSurface);
-
-                setSelectedSurface(nextSurface);
-                setSelectedFacetValues(nextGroup ? defaultFacetValues(nextGroup) : {});
-              }}
-              label="Surface"
-              layout="fill"
-              size="sm"
-            >
-              {fieldSurfaceOptions.map((surface) => (
-                <SegmentedControlItem
-                  key={surface.id}
-                  value={surface.id}
-                  label={surface.label}
-                  isDisabled={!hasScenarioForSurface(selectedKindOption.id, surface.id)}
-                />
-              ))}
-            </SegmentedControl>
-
             {selectedGroup ? (
               <div {...stylex.props(styles.facetGrid)}>
-                {selectedGroup.facets.map((facet) => (
+                {activeScenarioFacets(selectedGroup, normalizedFacetValues).map((facet) => (
                   <FieldFacetControl
                     key={facet.id}
                     facet={facet}
                     group={selectedGroup}
                     selectedValues={normalizedFacetValues}
-                    onChange={(value) =>
-                      setSelectedFacetValues((currentValues) =>
-                        normalizeFacetValues(selectedGroup, {
-                          ...currentValues,
-                          [facet.id]: value,
-                        }),
-                      )
-                    }
+                    onChange={(value) => {
+                      const nextValues = normalizeFacetValues(selectedGroup, {
+                        ...normalizedFacetValues,
+                        [facet.id]: value,
+                      });
+                      const nextVariant = findScenarioVariant(selectedGroup, nextValues);
+
+                      if (nextVariant) {
+                        resetFieldOverride(setFieldOverrides, nextVariant.field);
+                      }
+
+                      setSelectedFacetValues(nextValues);
+                    }}
                   />
                 ))}
               </div>
@@ -218,13 +204,34 @@ function FieldFacetControl({
 }) {
   const value = selectedValues[facet.id] ?? facet.options[0]?.id ?? "";
 
+  if (fieldScenarioFacetIsAction(facet.id)) {
+    return (
+      <div {...stylex.props(styles.facetControl)}>
+        <ButtonGroup label={facet.label} size="md">
+          {facet.options.map((option) => {
+            const isDisabled = !facetOptionHasScenario(group, facet.id, option.id, selectedValues);
+
+            return (
+              <Button
+                key={option.id}
+                label={option.label}
+                variant="secondary"
+                isDisabled={isDisabled}
+                onClick={() => onChange(option.id)}
+              />
+            );
+          })}
+        </ButtonGroup>
+      </div>
+    );
+  }
+
   return (
     <div {...stylex.props(styles.facetControl)}>
       <SegmentedControl
         value={value}
         onChange={onChange}
         label={facet.label}
-        size="sm"
         layout="hug"
       >
         {facet.options.map((option) => (
@@ -240,10 +247,43 @@ function FieldFacetControl({
   );
 }
 
+function fieldScenarioFacetIsAction(facetId: FieldScenarioFacetId) {
+  return facetId === "value";
+}
+
+function resetFieldOverride(
+  setFieldOverrides: React.Dispatch<React.SetStateAction<FieldOverrides>>,
+  field: FormlessUiField,
+) {
+  const key = scenarioFieldKey(field);
+
+  setFieldOverrides((currentOverrides) => {
+    if (!(key in currentOverrides)) {
+      return currentOverrides;
+    }
+
+    const nextOverrides = { ...currentOverrides };
+    delete nextOverrides[key];
+    return nextOverrides;
+  });
+}
+
 function useFieldMatrixIntentHandler(
   selectedVariant: FieldScenarioVariant | null,
   setFieldOverrides: React.Dispatch<React.SetStateAction<FieldOverrides>>,
 ): FormlessUiFieldIntentHandler {
+  const transitionTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+
+  useEffect(
+    () => () => {
+      for (const timer of transitionTimersRef.current.values()) {
+        clearTimeout(timer);
+      }
+      transitionTimersRef.current.clear();
+    },
+    [],
+  );
+
   return useCallback(
     (intent) => {
       if (!selectedVariant) {
@@ -251,6 +291,46 @@ function useFieldMatrixIntentHandler(
       }
 
       const key = scenarioFieldKey(selectedVariant.field);
+
+      if (intent.type === "stateTransitionInvoke") {
+        const timerKey = `${key}:${intent.fieldName}:${intent.transitionName}`;
+        const existingTimer = transitionTimersRef.current.get(timerKey);
+
+        if (existingTimer) {
+          clearTimeout(existingTimer);
+        }
+
+        setFieldOverrides((currentOverrides) => {
+          const currentField = currentOverrides[key] ?? selectedVariant.field;
+          const nextField = applyStateTransitionPending(currentField, intent);
+
+          if (nextField === currentField) {
+            return currentOverrides;
+          }
+
+          return { ...currentOverrides, [key]: nextField };
+        });
+
+        const timer = setTimeout(() => {
+          transitionTimersRef.current.delete(timerKey);
+          setFieldOverrides((currentOverrides) => {
+            const currentField = currentOverrides[key] ?? selectedVariant.field;
+            const nextField = clearStateTransitionPending(
+              applyScenarioFieldIntent(currentField, intent),
+              intent,
+            );
+
+            if (nextField === currentField) {
+              return currentOverrides;
+            }
+
+            return { ...currentOverrides, [key]: nextField };
+          });
+        }, stateTransitionSimulationDelayMs);
+
+        transitionTimersRef.current.set(timerKey, timer);
+        return;
+      }
 
       setFieldOverrides((currentOverrides) => {
         const currentField = currentOverrides[key] ?? selectedVariant.field;
@@ -267,33 +347,80 @@ function useFieldMatrixIntentHandler(
   );
 }
 
-function findScenarioGroup(kind: FieldKindKey, surface: FormlessUiFieldSurface) {
-  return fieldScenarioGroups.find((group) => group.kind === kind && group.surface === surface);
+function applyStateTransitionPending(
+  field: FormlessUiField,
+  intent: StateTransitionInvokeIntent,
+): FormlessUiField {
+  if (
+    field.fieldName !== intent.fieldName ||
+    field.stateMachineFacts === undefined ||
+    field.pending?.isPending
+  ) {
+    return field;
+  }
+
+  const transition = field.stateMachineFacts.transitions?.find(
+    (candidate) => candidate.transitionName === intent.transitionName,
+  );
+
+  if (!transition || transition.availability?.valid === false) {
+    return field;
+  }
+
+  return {
+    ...field,
+    pending: { isPending: true, label: `${transition.label}...` },
+    stateMachineFacts: {
+      ...field.stateMachineFacts,
+      transitions: field.stateMachineFacts.transitions?.map((candidate) =>
+        candidate.transitionName === intent.transitionName
+          ? {
+              ...candidate,
+              pending: { isPending: true, label: "Running" },
+            }
+          : candidate,
+      ),
+    },
+  };
 }
 
-function requiredScenarioGroup(kind: FieldKindKey, surface: FormlessUiFieldSurface) {
-  const group = findScenarioGroup(kind, surface);
+function clearStateTransitionPending(
+  field: FormlessUiField,
+  intent: StateTransitionInvokeIntent,
+): FormlessUiField {
+  if (field.fieldName !== intent.fieldName || field.stateMachineFacts === undefined) {
+    return field;
+  }
+
+  return {
+    ...field,
+    pending: undefined,
+    stateMachineFacts: {
+      ...field.stateMachineFacts,
+      transitions: field.stateMachineFacts.transitions?.map((candidate) =>
+        candidate.transitionName === intent.transitionName
+          ? {
+              ...candidate,
+              pending: undefined,
+            }
+          : candidate,
+      ),
+    },
+  };
+}
+
+function findScenarioGroup(kind: FieldKindKey) {
+  return fieldScenarioGroups.find((group) => group.kind === kind);
+}
+
+function requiredScenarioGroup(kind: FieldKindKey) {
+  const group = findScenarioGroup(kind);
 
   if (!group) {
-    throw new Error(`Missing ${kind} ${surface} field scenario group.`);
+    throw new Error(`Missing ${kind} field scenario group.`);
   }
 
   return group;
-}
-
-function selectScenarioSurface(kind: FieldKindKey, preferredSurface: FormlessUiFieldSurface) {
-  if (findScenarioGroup(kind, preferredSurface)) {
-    return preferredSurface;
-  }
-
-  return (
-    fieldSurfaceOptions.find((surface) => findScenarioGroup(kind, surface.id))?.id ??
-    preferredSurface
-  );
-}
-
-function hasScenarioForSurface(kind: FieldKindKey, surface: FormlessUiFieldSurface) {
-  return Boolean(findScenarioGroup(kind, surface));
 }
 
 function defaultFacetValues(group: FieldScenarioGroup): FieldScenarioFacetValues {
@@ -305,8 +432,19 @@ function normalizeFacetValues(
   values: FieldScenarioFacetValues,
 ): FieldScenarioFacetValues {
   const nextValues: FieldScenarioFacetValues = {};
+  const surfaceFacet = group.facets.find((facet) => facet.id === "surface");
 
-  for (const facet of group.facets) {
+  if (surfaceFacet) {
+    const selectedSurface = values.surface;
+    const surfaceIsAvailable = surfaceFacet.options.some((option) => option.id === selectedSurface);
+
+    nextValues.surface =
+      selectedSurface && surfaceIsAvailable
+        ? selectedSurface
+        : group.variants[0]?.facets.surface ?? surfaceFacet.options[0]?.id;
+  }
+
+  for (const facet of activeScenarioFacets(group, nextValues)) {
     const selectedValue = values[facet.id];
     const selectedOption =
       selectedValue && facet.options.some((option) => option.id === selectedValue)
@@ -317,23 +455,46 @@ function normalizeFacetValues(
       selectedOption ?? group.variants[0]?.facets[facet.id] ?? facet.options[0]?.id;
   }
 
-  if (findScenarioVariant(group, nextValues)) {
+  if (scenarioVariantExists(group, nextValues)) {
     return nextValues;
   }
 
-  return group.variants[0]?.facets ?? nextValues;
+  const fallbackVariant =
+    group.variants.find((variant) => variant.facets.surface === nextValues.surface) ??
+    group.variants[0];
+
+  return fallbackVariant ? normalizeFacetValues(group, fallbackVariant.facets) : nextValues;
 }
 
 function findScenarioVariant(
   group: FieldScenarioGroup,
   values: FieldScenarioFacetValues,
 ): FieldScenarioVariant | null {
+  const activeFacets = activeScenarioFacets(group, values);
+
   return (
     group.variants.find((variant) =>
-      group.facets.every((facet) => variant.facets[facet.id] === values[facet.id]),
+      activeFacets.every((facet) => variant.facets[facet.id] === values[facet.id]),
     ) ??
+    group.variants.find((variant) => variant.facets.surface === values.surface) ??
     group.variants[0] ??
     null
+  );
+}
+
+function activeScenarioFacets(
+  group: FieldScenarioGroup,
+  values: FieldScenarioFacetValues,
+): readonly FieldScenarioFacet[] {
+  const selectedSurface = values.surface ?? group.variants[0]?.facets.surface;
+
+  return group.facets.filter(
+    (facet) =>
+      facet.id === "surface" ||
+      group.variants.some(
+        (variant) =>
+          variant.facets.surface === selectedSurface && variant.facets[facet.id] !== undefined,
+      ),
   );
 }
 
@@ -343,10 +504,19 @@ function facetOptionHasScenario(
   optionId: string,
   selectedValues: FieldScenarioFacetValues,
 ) {
-  const nextValues = { ...selectedValues, [facetId]: optionId };
+  const nextValues =
+    facetId === "surface"
+      ? normalizeFacetValues(group, { ...selectedValues, [facetId]: optionId })
+      : { ...selectedValues, [facetId]: optionId };
+
+  return scenarioVariantExists(group, nextValues);
+}
+
+function scenarioVariantExists(group: FieldScenarioGroup, values: FieldScenarioFacetValues) {
+  const activeFacets = activeScenarioFacets(group, values);
 
   return group.variants.some((variant) =>
-    group.facets.every((facet) => variant.facets[facet.id] === nextValues[facet.id]),
+    activeFacets.every((facet) => variant.facets[facet.id] === values[facet.id]),
   );
 }
 

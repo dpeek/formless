@@ -4610,9 +4610,8 @@ describe("source schemas", () => {
           escalate: { label: "Escalate", from: ["normal"], to: "high" },
           lower: {
             label: "Lower",
-            from: ["high"],
-            to: "normal",
-            allowTerminalRecovery: true,
+            from: ["normal"],
+            to: "low",
           },
         },
       },

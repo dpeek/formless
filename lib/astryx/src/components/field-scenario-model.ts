@@ -35,6 +35,7 @@ export type FieldScenarioFacetId =
   | "requiredness"
   | "runtime"
   | "state"
+  | "surface"
   | "value";
 
 export type FieldScenarioAxis = {
@@ -97,6 +98,23 @@ export type ComposeScenarioGroupInput = {
   finalizeField?: (context: FieldScenarioComposeContext) => FormlessUiField;
   variantId?: (context: FieldScenarioComposeContext) => string;
   variantLabel?: (context: FieldScenarioComposeContext) => string;
+};
+
+export type FieldScenarioProjectionContext = {
+  facets: FieldScenarioFacetValues;
+  optionIds: readonly string[];
+  optionLabels: readonly string[];
+  options: readonly FieldScenarioFacetOption[];
+};
+
+export type ProjectScenarioGroupInput = {
+  id: string;
+  kind: FieldKindKey;
+  axes: readonly FieldScenarioComposeAxis[];
+  include?: (context: FieldScenarioProjectionContext) => boolean;
+  projectField: (context: FieldScenarioProjectionContext) => FormlessUiField;
+  variantId?: (context: FieldScenarioProjectionContext) => string;
+  variantLabel?: (context: FieldScenarioProjectionContext) => string;
 };
 
 export function composeScenarioGroup({
@@ -162,6 +180,97 @@ export function composeScenarioGroup({
       );
     }),
   };
+}
+
+export function projectScenarioGroup({
+  axes,
+  id,
+  include,
+  kind,
+  projectField,
+  variantId,
+  variantLabel,
+}: ProjectScenarioGroupInput): FieldScenarioGroup {
+  const variants = scenarioOptionCombinations(axes).flatMap((options) => {
+    const facets: FieldScenarioFacetValues = {};
+
+    for (const [index, option] of options.entries()) {
+      facets[axes[index].id] = option.id;
+    }
+
+    const optionIds = options.map((option) => option.id);
+    const optionLabels = options.map((option) => option.label);
+    const context: FieldScenarioProjectionContext = {
+      facets,
+      optionIds,
+      optionLabels,
+      options,
+    };
+
+    if (include && !include(context)) {
+      return [];
+    }
+
+    const field = projectField(context);
+
+    return scenarioVariant(
+      variantId?.(context) ?? optionIds.join("-"),
+      variantLabel?.(context) ?? optionLabels.join(" / "),
+      field,
+      facets,
+    );
+  });
+
+  return {
+    facets: axes.map((axis) => ({
+      id: axis.id,
+      label: axis.label,
+      options: axis.options.map((option) => ({
+        id: option.id,
+        label: option.label,
+      })),
+    })),
+    id,
+    kind,
+    surface: variants[0]?.field.surface ?? "record",
+    variants,
+  };
+}
+
+export function mergeScenarioGroupsByKind(
+  groups: readonly FieldScenarioGroup[],
+  surfaceOptions: readonly { id: FormlessUiFieldSurface; label: string }[],
+): FieldScenarioGroup[] {
+  const groupsByKind = new Map<FieldKindKey, FieldScenarioGroup[]>();
+
+  for (const group of groups) {
+    groupsByKind.set(group.kind, [...(groupsByKind.get(group.kind) ?? []), group]);
+  }
+
+  return Array.from(groupsByKind.entries()).map(([kind, kindGroups]) => {
+    const facets = mergeScenarioFacets(
+      [
+        surfaceScenarioFacet(surfaceOptions, kindGroups),
+        ...kindGroups.flatMap((group) => group.facets),
+      ],
+    );
+
+    return {
+      facets,
+      id: `${kind}-fields`,
+      kind,
+      surface: kindGroups[0]?.surface ?? "record",
+      variants: kindGroups.flatMap((group) =>
+        group.variants.map((variant) => ({
+          ...variant,
+          facets: {
+            surface: variant.facets.surface ?? group.surface,
+            ...variant.facets,
+          },
+        })),
+      ),
+    };
+  });
 }
 
 export function scenarioOption(
@@ -244,6 +353,66 @@ export function scenarioVariant(
   facets: FieldScenarioFacetValues = {},
 ): FieldScenarioVariant {
   return { facets, field, id, label };
+}
+
+function surfaceScenarioFacet(
+  surfaceOptions: readonly { id: FormlessUiFieldSurface; label: string }[],
+  kindGroups: readonly FieldScenarioGroup[],
+): FieldScenarioFacet {
+  const surfaces = new Set<FormlessUiFieldSurface>();
+
+  for (const kindGroup of kindGroups) {
+    surfaces.add(kindGroup.surface);
+
+    for (const variant of kindGroup.variants) {
+      if (variant.facets.surface) {
+        surfaces.add(variant.facets.surface as FormlessUiFieldSurface);
+      }
+    }
+  }
+
+  return scenarioFacet(
+    "surface",
+    "Surface",
+    surfaceOptions
+      .filter((option) => surfaces.has(option.id))
+      .map((option) => facetOption(option.id, option.label)),
+  );
+}
+
+function mergeScenarioFacets(facets: readonly FieldScenarioFacet[]): FieldScenarioFacet[] {
+  const merged = new Map<FieldScenarioFacetId, FieldScenarioFacet>();
+
+  for (const facet of facets) {
+    const existingFacet = merged.get(facet.id);
+
+    if (!existingFacet) {
+      merged.set(facet.id, facet);
+      continue;
+    }
+
+    merged.set(facet.id, {
+      ...existingFacet,
+      options: mergeScenarioFacetOptions(existingFacet.options, facet.options),
+    });
+  }
+
+  return Array.from(merged.values());
+}
+
+function mergeScenarioFacetOptions(
+  existingOptions: readonly FieldScenarioFacetOption[],
+  nextOptions: readonly FieldScenarioFacetOption[],
+): FieldScenarioFacetOption[] {
+  const options = new Map(existingOptions.map((option) => [option.id, option]));
+
+  for (const option of nextOptions) {
+    if (!options.has(option.id)) {
+      options.set(option.id, option);
+    }
+  }
+
+  return Array.from(options.values());
 }
 
 function scenarioOptionCombinations(

@@ -24,6 +24,7 @@ import { GeneratedCreateFieldControl } from "./create-field-control.tsx";
 import { RecordFieldEditor } from "./record-field-editor.tsx";
 import {
   executeTransitionStateOperation,
+  RecordStateTransitionMenu,
   RecordTransitionOperationControls,
   StateMachineStateBadge,
 } from "./state-machine-ui.tsx";
@@ -84,6 +85,35 @@ describe("generated state-machine UI", () => {
     expect(html).toContain('data-formless-transition-operation="completeTask"');
     expect(html).toContain('data-formless-transition-state-valid="false"');
     expect(html).toContain('data-formless-transition-disabled-reason="Requires Doing."');
+  });
+
+  it("allows unknown state values to recover only through transitions to the initial state", () => {
+    const schema = lifecycleSchema();
+    const entity = schema.entities.task;
+    const field = entity.fields.status;
+    const stateMachine = selectStateMachineField(entity, "status");
+    const operations = selectTransitionStateOperations("task", entity);
+
+    if (field.type !== "enum" || !stateMachine) {
+      throw new Error("Missing lifecycle field.");
+    }
+
+    const html = renderToStaticMarkup(
+      <RecordStateTransitionMenu
+        entityName="task"
+        field={field}
+        label="Status"
+        operations={operations}
+        recordId="task-1"
+        stateMachine={stateMachine}
+        values={{ status: "paused", title: "First" }}
+      />,
+    );
+
+    expect(html).toContain('data-formless-state-transition-operations="resetTask"');
+    expect(html).toContain('data-formless-state-transition-target-states="todo"');
+    expect(html).not.toContain('data-formless-state-transition-operations="startTask');
+    expect(html).not.toContain('data-formless-state-transition-operations="completeTask');
   });
 
   it("renders existing machine-owned fields as read-only badges", async () => {
@@ -254,6 +284,7 @@ function lifecycleSchema(): AppSchema {
             transitions: {
               start: { label: "Start", from: ["todo"], to: "doing" },
               complete: { label: "Complete", from: ["doing"], to: "done" },
+              reset: { label: "Reset", from: ["doing"], to: "todo" },
             },
           },
         },
@@ -304,6 +335,22 @@ function lifecycleSchema(): AppSchema {
               config: {
                 machine: "statusFlow",
                 transition: "complete",
+              },
+            },
+            output: { type: "command" },
+            idempotency: { required: true },
+            audit: { input: "summary" },
+          },
+          resetTask: {
+            label: "Reset",
+            kind: "command",
+            scope: "record",
+            effect: {
+              type: "operationHandler",
+              handler: "transition-state",
+              config: {
+                machine: "statusFlow",
+                transition: "reset",
               },
             },
             output: { type: "command" },

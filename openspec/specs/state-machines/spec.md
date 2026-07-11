@@ -22,8 +22,7 @@ The system SHALL let an entity declare state machines over required enum fields.
   that field
 - AND every transition declares a non-empty label, one or more allowed source
   states, and one destination state
-- AND terminal states cannot be used as transition source states unless the
-  transition explicitly opts in to terminal recovery
+- AND terminal states cannot be used as transition source states
 
 #### Scenario: Store state as normal field value
 
@@ -56,6 +55,16 @@ operations instead of generic status patches.
   state
 - AND the write commits through normal operation idempotency and write-log behavior
 - AND the operation response includes the committed record change
+
+#### Scenario: Recover undeclared state to initial
+
+- GIVEN an active record has a non-empty current state string that is not
+  declared by the machine enum field
+- WHEN an authorized caller invokes a transition operation whose destination is
+  the machine initial state
+- THEN Authority treats the transition as a recovery transition and patches the
+  machine enum field to the initial state
+- AND transition operations to any other destination remain unavailable
 
 #### Scenario: Reject invalid transition
 

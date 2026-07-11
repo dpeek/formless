@@ -196,6 +196,7 @@ export type FormlessUiMediaAssetOption = {
   href: string;
   id: string;
   label: string;
+  missing?: boolean;
   width?: number;
 };
 
@@ -208,11 +209,61 @@ export type FormlessUiMediaUploadPatchFields = {
   widthFieldName?: string;
 };
 
-export type FormlessUiMediaAuthoring = {
-  mediaEditorMode: FormlessUiMediaEditorMode;
-  mediaPreviewHref?: string;
+export type FormlessUiMissingMediaAsset = {
+  assetId: string;
+  label?: string;
+  reason?: string;
+};
+
+export type FormlessUiMediaPickerFacts = {
+  fileSelectEnabled: boolean;
+  missingSelectedAsset?: FormlessUiMissingMediaAsset;
+  previewHref?: string;
+  selectedAssetId?: string;
+  selectedUrl?: string;
   uploadEnabled: boolean;
   uploadPatchFields: FormlessUiMediaUploadPatchFields;
+};
+
+export type FormlessUiMediaAuthoring = FormlessUiMediaPickerFacts & {
+  mediaEditorMode: FormlessUiMediaEditorMode;
+  mediaPreviewHref?: string;
+};
+
+export type FormlessUiIconOption = {
+  custom?: boolean;
+  group?: string;
+  id: string;
+  label: string;
+  missing?: boolean;
+  source: string;
+};
+
+export type FormlessUiIconPickerSelection =
+  | {
+      kind: "empty";
+    }
+  | {
+      kind: "option";
+      optionId: string;
+      source: string;
+    }
+  | {
+      kind: "customSource";
+      source: string;
+    };
+
+export type FormlessUiIconPickerFacts = {
+  canCancel: boolean;
+  canSave: boolean;
+  customParseError?: string;
+  dialogDraft: string;
+  dialogOpen: boolean;
+  emptyValue: boolean;
+  previewSource: string;
+  savePending?: boolean;
+  selection: FormlessUiIconPickerSelection;
+  valueMode: "svgSource";
 };
 
 export type FormlessUiFieldPresentationColorIntent = "neutral" | "success" | "warning" | "danger";
@@ -243,6 +294,7 @@ export type FormlessUiEnumOption = {
 
 export type FormlessUiFieldOptions = {
   enumOptions?: readonly FormlessUiEnumOption[];
+  iconOptions?: readonly FormlessUiIconOption[];
   referenceOptions?: readonly FormlessUiReferenceOption[];
   mediaAssetOptions?: readonly FormlessUiMediaAssetOption[];
   missingReferenceValue?: string | null;
@@ -334,6 +386,7 @@ export type FormlessUiRecordField = FormlessUiBaseField & {
   density: FormlessUiRecordFieldDensity;
   drafts: FormlessUiRecordFieldDrafts;
   formatting: FormlessUiFieldFormatting;
+  icon?: FormlessUiIconPickerFacts;
   media?: FormlessUiMediaAuthoring;
   presentationMode: FormlessUiRecordFieldPresentation;
   rendererKind: FormlessUiRecordFieldRendererKind;
@@ -367,6 +420,117 @@ export type FormlessUiOperationInvocationSource =
   | "confirmationDialog"
   | "menuItem"
   | "submitButton";
+
+export type FormlessUiSemanticIconId =
+  | "add"
+  | "archive"
+  | "calendar"
+  | "close"
+  | "confirm"
+  | "copy"
+  | "delete"
+  | "disclosure"
+  | "disclosureDown"
+  | "dragHandle"
+  | "edit"
+  | "indeterminate"
+  | "loading"
+  | "menu"
+  | "next"
+  | "previous"
+  | "publish"
+  | "remove"
+  | "select"
+  | "selectDown"
+  | "sort"
+  | "sync"
+  | "treeDisclosure"
+  | "upload";
+
+export type FormlessUiActionIntent = "neutral" | "primary" | "success" | "warning" | "danger";
+
+export type FormlessUiActionControlState = {
+  disabled?: boolean;
+  disabledReason?: string;
+  errors?: readonly string[];
+  pending?: FormlessUiFieldPending;
+  selected?: boolean;
+};
+
+export type FormlessUiActionControlBase = FormlessUiActionControlState & {
+  accessibilityLabel?: string;
+  icon?: FormlessUiSemanticIconId;
+  id: string;
+  intent?: FormlessUiActionIntent;
+  label: string;
+};
+
+export type FormlessUiActionTriggerIntent = {
+  controlId: string;
+  invocationSource: FormlessUiOperationInvocationSource;
+  operationName?: string;
+};
+
+export type FormlessUiActionIntentHandler = (
+  intent: FormlessUiActionTriggerIntent,
+) => Promise<void> | void;
+
+export type FormlessUiButtonContract = FormlessUiActionControlBase & {
+  kind: "button";
+};
+
+export type FormlessUiActionTriggerContract = FormlessUiActionControlBase & {
+  invocationSource: FormlessUiOperationInvocationSource;
+  invoke: FormlessUiActionTriggerIntent;
+  kind: "actionTrigger";
+  operationName?: string;
+};
+
+export type FormlessUiMenuItemContract = FormlessUiActionControlBase & {
+  invoke: FormlessUiActionTriggerIntent;
+  invocationSource: Extract<FormlessUiOperationInvocationSource, "menuItem">;
+  kind: "menuItem";
+  operationName?: string;
+};
+
+export type FormlessUiMenuContract = {
+  accessibilityLabel?: string;
+  id: string;
+  items: readonly FormlessUiMenuItemContract[];
+  label?: string;
+  trigger: FormlessUiButtonContract;
+};
+
+export type FormlessUiConfirmationPromptContract = {
+  action: FormlessUiActionTriggerContract;
+  cancel: FormlessUiButtonContract;
+  description?: string;
+  id: string;
+  title: string;
+};
+
+export type FormlessUiCompactStatusIntent = "neutral" | "success" | "warning" | "danger" | "info";
+
+export type FormlessUiCompactStatusContract = {
+  accessibilityLabel?: string;
+  detail?: string;
+  id: string;
+  intent: FormlessUiCompactStatusIntent;
+  label: string;
+  pending?: FormlessUiFieldPending;
+};
+
+export type FormlessUiSubmitHiddenInput = {
+  disabled?: boolean;
+  name: string;
+  value: string;
+};
+
+export type FormlessUiSubmitBoundaryAdapter = {
+  hiddenInputs: readonly FormlessUiSubmitHiddenInput[];
+  id: string;
+  kind: "submitBoundary";
+};
 
 export type FormlessUiFieldIntent =
   | {
@@ -450,13 +614,22 @@ export type FormlessUiFieldIntentHandler = (intent: FormlessUiFieldIntent) => Pr
 
 export type FormlessUiOperationControlContract = {
   kind: "operationControl";
-  // Future work: executable operation bindings belong in a platform control contract, not field rendering.
+  confirmation?: FormlessUiConfirmationPromptContract;
+  id: string;
+  menu?: FormlessUiMenuContract;
+  onInvoke?: FormlessUiActionIntentHandler;
+  operationName?: string;
+  status?: FormlessUiCompactStatusContract;
+  trigger: FormlessUiActionTriggerContract;
 };
 
 export type FormlessUiFieldSetContract = {
   kind: "fieldSet";
+  errors?: readonly string[];
   fields: readonly FormlessUiField[];
-  // Future work: union discriminator state and visible-field reasoning belong at the field-set boundary.
+  id?: string;
+  label?: string;
+  submitBoundary?: FormlessUiSubmitBoundaryAdapter;
 };
 
 export type FormlessUiTableContract = {

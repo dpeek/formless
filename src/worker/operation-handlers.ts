@@ -841,7 +841,7 @@ function selectTransitionStateWritePlans(
     );
   }
 
-  if (!transition.from.includes(previousState)) {
+  if (!stateTransitionCanApply(entity, machine, transition, previousState)) {
     throw new BadRequestError(
       `Operation "${context.envelope.operation.canonicalKey}" cannot transition record "${record.id}" from state "${previousState}".`,
     );
@@ -895,6 +895,26 @@ function selectTransitionStateWritePlans(
   }
 
   return plans;
+}
+
+function stateTransitionCanApply(
+  entity: EntitySchema,
+  machine: NonNullable<EntitySchema["stateMachines"]>[string],
+  transition: NonNullable<EntitySchema["stateMachines"]>[string]["transitions"][string],
+  previousState: string,
+) {
+  if (transition.from.includes(previousState)) {
+    return true;
+  }
+
+  const field = entity.fields[machine.field];
+
+  return (
+    field?.type === "enum" &&
+    field.values[previousState] === undefined &&
+    previousState.trim() !== "" &&
+    transition.to === machine.initial
+  );
 }
 
 function transitionEventRecordValues(

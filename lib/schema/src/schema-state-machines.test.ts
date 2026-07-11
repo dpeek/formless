@@ -22,9 +22,8 @@ describe("schema state machines", () => {
         finish: { label: "Finish", from: ["doing"], to: "done" },
         reopen: {
           label: "Reopen",
-          from: ["done"],
-          to: "doing",
-          allowTerminalRecovery: true,
+          from: ["doing"],
+          to: "todo",
         },
       },
       event: {
@@ -118,7 +117,24 @@ describe("schema state machines", () => {
           },
         }),
       ),
-    ).toThrow('from state "done" is terminal and requires allowTerminalRecovery');
+    ).toThrow('from state "done" is terminal');
+
+    expect(() =>
+      parseAppSchema(
+        stateMachineSchema({
+          machine: {
+            transitions: {
+              reopen: {
+                label: "Reopen",
+                from: ["doing"],
+                to: "todo",
+                allowTerminalRecovery: true,
+              },
+            },
+          },
+        }),
+      ),
+    ).toThrow('transitions.reopen has unsupported key "allowTerminalRecovery"');
 
     expect(() =>
       parseAppSchema(
@@ -361,9 +377,8 @@ function statusFlowMachine() {
       finish: { label: "Finish", from: ["doing"], to: "done" },
       reopen: {
         label: "Reopen",
-        from: ["done"],
-        to: "doing",
-        allowTerminalRecovery: true,
+        from: ["doing"],
+        to: "todo",
       },
     },
     event: {

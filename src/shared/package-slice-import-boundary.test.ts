@@ -110,6 +110,27 @@ describe("package slice import boundaries", () => {
     expect(await pathExists(resolve(repoRoot, "schema/apps/tasks"))).toBe(false);
     expect(failures).toEqual([]);
   });
+
+  it("keeps Formless UI contract consumers on the public contract subpath", async () => {
+    const failures: string[] = [];
+
+    for (const filePath of await boundarySourceFiles()) {
+      if (pathInside(filePath, resolve(repoRoot, "lib/astryx"))) {
+        continue;
+      }
+
+      const source = await readFile(filePath, "utf8");
+      const path = relative(repoRoot, filePath);
+
+      for (const specifier of importSpecifiers(source)) {
+        if (forbiddenFormlessAstryxImport(filePath, specifier)) {
+          failures.push(`${path}: imports Formless Astryx through ${specifier}`);
+        }
+      }
+    }
+
+    expect(failures).toEqual([]);
+  });
 });
 
 const allowedArchivePackageImports = new Set([
@@ -259,6 +280,30 @@ function forbiddenTasksPackageImport(specifier: string): boolean {
 
 function forbiddenRootTasksSourceImport(specifier: string): boolean {
   return specifier.includes("schema/apps/tasks/");
+}
+
+function forbiddenFormlessAstryxImport(importerPath: string, specifier: string): boolean {
+  if (specifier === "@dpeek/formless-astryx/contract") {
+    return false;
+  }
+
+  if (specifier === "@dpeek/formless-astryx" || specifier.startsWith("@dpeek/formless-astryx/")) {
+    return true;
+  }
+
+  if (!specifier.startsWith(".")) {
+    return false;
+  }
+
+  const resolvedSpecifier = resolve(dirname(importerPath), specifier);
+
+  return pathInside(resolvedSpecifier, resolve(repoRoot, "lib/astryx/src"));
+}
+
+function pathInside(path: string, parent: string): boolean {
+  const relativePath = relative(parent, path);
+
+  return relativePath === "" || (!relativePath.startsWith("..") && !relativePath.startsWith("/"));
 }
 
 async function pathExists(path: string): Promise<boolean> {

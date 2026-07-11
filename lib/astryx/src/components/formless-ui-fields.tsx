@@ -323,8 +323,11 @@ function createCanonicalFields(): FormlessUiField[] {
       },
       formatting: { displayValue: "asset-hero" },
       media: {
+        fileSelectEnabled: true,
         mediaEditorMode: "asset",
         mediaPreviewHref: mediaAssetOptions[0]?.href,
+        previewHref: mediaAssetOptions[0]?.href,
+        selectedAssetId: "asset-hero",
         uploadEnabled: true,
         uploadPatchFields: { mediaAssetFieldName: "heroImageId" },
       },
@@ -346,8 +349,11 @@ function createCanonicalFields(): FormlessUiField[] {
       },
       formatting: { displayValue: "asset-detail" },
       media: {
+        fileSelectEnabled: true,
         mediaEditorMode: "asset",
         mediaPreviewHref: mediaAssetOptions[1]?.href,
+        previewHref: mediaAssetOptions[1]?.href,
+        selectedAssetId: "asset-detail",
         uploadEnabled: true,
         uploadPatchFields: { mediaAssetFieldName: "heroMediaId" },
       },
@@ -747,6 +753,8 @@ function applyCanonicalFixtureIntent(
             : {
                 ...field.media,
                 mediaPreviewHref: asset?.href ?? field.media.mediaPreviewHref,
+                previewHref: asset?.href ?? field.media.previewHref,
+                selectedAssetId: intent.assetId,
               },
       };
     });
@@ -885,7 +893,11 @@ function statusStateMachineFacts(currentValue: string): FormlessUiStateMachineFa
     stateMachine: statusStateMachine,
     terminal: statusStateMachine.terminalStates.includes(currentValue),
     transitions: Object.entries(statusMachine.transitions).map(([transitionName, transition]) => {
-      const valid = transition.from.includes(currentValue);
+      const valid =
+        transition.from.includes(currentValue) ||
+        (currentValue.trim() !== "" &&
+          !Object.hasOwn(statusField.values, currentValue) &&
+          transition.to === statusStateMachine.initialState);
 
       return {
         operationName:

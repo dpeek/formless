@@ -6,13 +6,16 @@ import {
   colorVars,
   fontWeightVars,
   radiusVars,
+  sizeVars,
   spacingVars,
   typeScaleVars,
 } from "@astryxdesign/core/theme/tokens.stylex";
 import { SourceIcon } from "./field-primitives.tsx";
+import { astryxPresentationColors } from "./presentation-color.ts";
 
 export type StateInputOption = {
   color?: string;
+  colorToken?: string;
   label: string;
   source?: string;
 };
@@ -61,22 +64,17 @@ export function StateInput({
   const controlLabel = isPending
     ? `${label}: ${stateText}. ${pendingLabel ?? "Updating state"}`
     : `${label}: ${stateText}`;
-  const isStatic = isDisabled || isPending || visibleTransitions.length === 0;
+  const isStatic = isDisabled || visibleTransitions.length === 0;
   const displayText = value && !option ? `Unknown: ${stateText}` : stateText;
 
-  const triggerContent = (
+  const staticContent = (
     <span {...stylex.props(styles.content, isCompact && styles.contentCompact)}>
       {option?.source ? (
-        <span {...stylex.props(isPending && styles.pendingSizer)}>
+        <span {...stylex.props(styles.icon)}>
           <StateIcon option={option} />
         </span>
       ) : null}
-      <span {...stylex.props(styles.label, isPending && styles.pendingSizer)}>{displayText}</span>
-      {isPending ? (
-        <span aria-hidden="true" {...stylex.props(styles.spinnerOverlay)}>
-          <Spinner size="sm" shade="inherit" />
-        </span>
-      ) : null}
+      <span {...stylex.props(styles.label)}>{displayText}</span>
     </span>
   );
 
@@ -91,7 +89,7 @@ export function StateInput({
           dynamicStyles.color(colors.background, colors.foreground, colors.border),
         )}
       >
-        {triggerContent}
+        {staticContent}
       </span>
     );
   }
@@ -99,15 +97,16 @@ export function StateInput({
   return (
     <DropdownMenu
       button={{
-        label: controlLabel,
+        label: displayText,
         variant: "secondary",
         size: isCompact ? "sm" : "md",
+        isLoading: isPending,
+        icon: option?.source ? <StateIcon option={option} /> : undefined,
         xstyle: [
           styles.trigger,
           isCompact && styles.triggerCompact,
           dynamicStyles.color(colors.background, colors.foreground, colors.border),
         ],
-        children: triggerContent,
       }}
       hasChevron={false}
       menuWidth={248}
@@ -154,6 +153,12 @@ type StateInputColor = {
 };
 
 function stateInputColors(value: string, option: StateInputOption | undefined): StateInputColor {
+  const semanticColors = astryxPresentationColors(option?.colorToken);
+
+  if (semanticColors) {
+    return semanticColors;
+  }
+
   if (option?.color) {
     return {
       background: option.color,
@@ -240,35 +245,26 @@ function parseHexColor(color: string) {
 const styles = stylex.create({
   trigger: {
     borderRadius: radiusVars["--radius-full"],
-    borderWidth: 0,
-    height: spacingVars["--spacing-9"],
-    minHeight: spacingVars["--spacing-9"],
-    paddingBlock: 0,
-    paddingInline: spacingVars["--spacing-4"],
   },
   triggerCompact: {
-    height: spacingVars["--spacing-8"],
-    minHeight: spacingVars["--spacing-8"],
     minWidth: 0,
   },
   staticControl: {
     boxSizing: "border-box",
     display: "inline-flex",
     alignItems: "center",
-    height: spacingVars["--spacing-9"],
-    minHeight: spacingVars["--spacing-9"],
+    height: sizeVars["--size-element-md"],
     borderRadius: radiusVars["--radius-full"],
     overflow: "hidden",
     paddingBlock: 0,
-    paddingInline: spacingVars["--spacing-4"],
+    paddingInline: spacingVars["--spacing-3"],
     fontFamily: "inherit",
     fontSize: typeScaleVars["--text-label-size"],
     lineHeight: typeScaleVars["--text-label-leading"],
     fontWeight: fontWeightVars["--font-weight-medium"],
   },
   staticControlCompact: {
-    height: spacingVars["--spacing-8"],
-    minHeight: spacingVars["--spacing-8"],
+    height: sizeVars["--size-element-sm"],
   },
   content: {
     position: "relative",
@@ -277,7 +273,6 @@ const styles = stylex.create({
     justifyContent: "center",
     minWidth: 0,
     gap: spacingVars["--spacing-1"],
-    height: "100%",
   },
   contentCompact: {
     maxWidth: "100%",
@@ -287,15 +282,11 @@ const styles = stylex.create({
     overflow: "hidden",
     textOverflow: "ellipsis",
   },
-  pendingSizer: {
-    visibility: "hidden",
-  },
-  spinnerOverlay: {
-    position: "absolute",
-    inset: 0,
-    display: "grid",
-    placeItems: "center",
-    pointerEvents: "none",
+  icon: {
+    display: "inline-flex",
+    alignItems: "center",
+    flexShrink: 0,
+    lineHeight: 0,
   },
 });
 

@@ -320,117 +320,151 @@ The system SHALL render generated field displays and editors from field behavior
   runtime-owned client path, generated UI may use those options without
   changing the stored app record value shape
 
-#### Scenario: Astryx field primitive boundary
+#### Scenario: Formless UI field contract boundary
 
 - GIVEN generated UI renders create forms, record editors, table cells, detail
-  fields, Site block authoring fields, or public operation input fields with
-  Astryx view primitives
+  fields, Site block authoring fields, or public operation input fields through
+  a Formless UI field renderer
 - WHEN the foundation model prepares field data for the view layer
-- THEN it projects each renderable field as plain field-shaped data with a
-  stable field id, field or input name, label, required state, surface, density,
-  access mode, editor or display kind, draft value, committed display value,
-  options, presentation metadata, commit policy, pending state, and
-  display-safe field error
-- AND hidden fields are omitted before they reach Astryx, except hidden literal
-  create defaults remain foundation-owned operation input
+- THEN it projects each renderable field as `FormlessUiField` data with a stable
+  field id, field or input name, label, required state, surface, density, access
+  mode, editor or display kind, draft value, committed display value, options,
+  presentation metadata, commit policy, pending state, and display-safe field
+  error
+- AND hidden fields are omitted before they reach the renderer, except hidden
+  literal create defaults remain foundation-owned operation input
 - AND `visibleWhen`, union discriminator variants, create defaults,
   non-writable fields, system fields, state-machine-owned fields, reference
   option loading, missing reference fallbacks, media upload state, value
   coercion, validation, operation submission, sync status, and local auto-save
   remain foundation behavior
-- AND Astryx receives only projected field data and intent callbacks such as
+- AND schema-shaped field, presentation, state-machine, and operation-input
+  facts in the contract are readonly projection facts
+- AND renderers do not use schema-shaped facts to parse schemas, select fields,
+  validate values, load data, resolve reference or media options, execute
+  operations, infer route policy, or infer write policy
+- AND renderers receive only projected field data and intent callbacks such as
   draft change, commit, revert, picker open, or upload file
-- AND Astryx field primitives remain controlled value components whose core
-  contract does not require browser form names, hidden inputs, or `FormData`
-  extraction
+- AND field renderer implementations remain controlled value components whose
+  core contract does not require browser form names, hidden inputs, or
+  `FormData` extraction
 - AND browser submit-form adapters may project HTML field names and hidden
-  inputs from Astryx field data only at the submit-form boundary
-- AND Astryx does not import schema parser internals, browser replica APIs,
-  app target selectors, write option hooks, `submitOperation`, media clients,
-  sync status hooks, or generated UI storage helpers
-- AND foundation code does not render Astryx components or decide field group,
+  inputs from `FormlessUiField` data only at the submit-form boundary
+- AND production generated surfaces may render `FormlessUiField` through a
+  legacy `@dpeek/formless-ui` seam before the renderer implementation switches
+  to the replacement renderer
+- AND renderer implementations do not import schema parser internals, browser
+  replica APIs, app target selectors, write option hooks, `submitOperation`,
+  media clients, sync status hooks, or generated UI storage helpers
+- AND foundation code does not render renderer components or decide field group,
   form, table, detail, picker, popover, or compact cell layout
 
-#### Scenario: Astryx field primitive coverage
+#### Scenario: Minimal common Formless UI contract foundation
+
+- GIVEN generated UI prepares renderer-facing contracts for the first migration
+  slices
+- WHEN it projects buttons, action triggers, menus, confirmation prompts,
+  compact status, field sets, submit-boundary hidden inputs, media/image picker
+  facts, icon picker facts, or semantic control icons
+- THEN those contracts carry stable ids, labels, accessibility labels, selected
+  state, disabled state, pending state, display-safe errors, operation
+  invocation sources, projected fields, option facts, and intent callbacks
+- AND hidden inputs and native `FormData` handling remain submit-boundary
+  adapter facts rather than the source of runtime state
+- AND semantic renderer icons are represented as ids in the contract rather than
+  React components or renderer package imports
+- AND the contracts do not include legacy component prop names, Astryx component
+  props, storage handles, browser replica hooks, sync functions, Tailwind
+  classes, React components, raw records, or media client calls
+- AND table, collection, shell/navigation, public Site, and tree-builder
+  contracts remain future slice-owned contracts until those surfaces migrate
+
+#### Scenario: Formless UI field contract coverage
 
 - GIVEN generated UI projects supported field display and editor kinds to
-  Astryx
-- WHEN Astryx renders the projected fields
+  `FormlessUiField`
+- WHEN the active Formless UI renderer renders the projected fields
 - THEN text, long text, number, date, boolean, enum, reference, markdown
   display, icon display, source SVG icon display, color, image, and media
-  fields share Astryx field framing, labels, status, density, and keyboard
+  fields share field framing, labels, status, density, and keyboard
   behavior
 - AND markdown editing uses a plain text area while markdown display uses the
-  Astryx Markdown component
-- AND source SVG icon rendering uses an Astryx SourceIcon primitive that wraps
-  the Astryx Icon public props and accepts a display-safe SVG source supplied by
-  generated UI
-- AND SourceIcon preserves Astryx icon sizing, color, accessibility, and layout
-  semantics without importing `@dpeek/formless-ui` icon components
-- AND color fields use an Astryx ColorInput primitive whose public props follow
-  Astryx input conventions while generated UI owns validation, draft value
-  preservation, and commit policy
+  active renderer's Markdown display primitive
+- AND source SVG icon rendering accepts a display-safe SVG source supplied by
+  generated UI and preserves renderer icon sizing, color, accessibility, and
+  layout semantics
+- AND reusable source SVG parsing or sanitizing is not owned by the legacy
+  `@dpeek/formless-ui` renderer package after that package is retired
+- AND color fields use a renderer-owned color input primitive while generated UI
+  owns validation, draft value preservation, and commit policy
 - AND when the color picker control can only represent valid opaque hex colors,
   invalid, alpha, missing, or unknown stored text values remain visible as
-  field draft or display text rather than being coerced by Astryx
+  field draft or display text rather than being coerced by renderer primitives
 
-#### Scenario: Astryx generated-field vertical slice
+#### Scenario: Source-backed icon picker contract
 
-- GIVEN the standalone Astryx package renders a generated-field migration slice
+- GIVEN a generated icon editor field stores an SVG source string
+- WHEN generated UI projects the field through the Formless UI field contract
+- THEN it includes default runtime icon catalog options as `FormlessUiIconOption`
+  facts with ids, labels, groups, and SVG sources
+- AND catalog selection matches by option `source` while SVG-source storage
+  remains active
+- AND custom SVG drafts, parse errors, open state, cancel/save availability,
+  empty value state, and source-backed preview state are explicit contract facts
+- AND the renderer does not infer icon options by reading the runtime icon
+  catalog, parsing app schema, importing legacy icon components, or changing
+  stored icon values to ids
+
+#### Scenario: Formless UI generated-field contract vertical slice
+
+- GIVEN a Formless UI renderer package or seam renders a generated-field
+  migration slice
 - WHEN the slice renders one coherent record workflow and one public operation
   form workflow
 - THEN create form fields, record edit fields, table-cell fields, detail or
   read-only fields, and public-action form fields are composed from the same
-  projected Astryx field data contract
+  projected `FormlessUiField` contract
 - AND a package-local generated foundation fixture owns shared draft state,
   validation errors, pending state, baseline values, commit, revert, missing
   reference fallback, and submit readiness for the slice
 - AND text, long text, boolean, enum, reference, number, markdown, source SVG
   icon, color, image-shaped, and media-shaped values are represented without
   importing Formless storage, browser replica, generated write hooks, operation
-  executors, or media clients into Astryx
+  executors, or media clients into the renderer implementation
 - AND field-commit interactions invoke commit and revert intents, immediate
   fields commit on change, and submit fields resolve through a submit-form
   adapter boundary
 - AND invalid number draft text, missing reference ids, alpha or unknown color
   values, markdown source, source icon SVG, media asset ids, media preview hrefs,
   and display-safe field errors remain visible instead of being coerced by
-  Astryx primitives
+  renderer primitives
 
-#### Scenario: Astryx public Site rendering vertical slice
+#### Scenario: Public Site renderer contracts remain future work
 
-- GIVEN the standalone Astryx package renders a public Site migration slice
-- WHEN the slice renders a package-local projected `SitePageTree` fixture
-- THEN the fixture includes Site settings with source SVG icon, header and
-  footer frame roots, a page/root block tree, and ordered placement output
-  rendered as nested public layout
-- AND markdown content, image/media display, section, card grid, card, metric
-  grid, metric, `contactForm`, `subscribeForm`, and `publicOperationForm`
-  blocks are represented from projected block facts
-- AND fixed public forms and generic public operation forms cover valid,
-  warning or unavailable, submitting, success, and display-safe failure states
-- AND generic public operation form controls cover projected text, long text,
-  boolean, date, number, enum, email-formatted text, phone-formatted text, and
-  suggested text input fields through Astryx-compatible field data
-- AND desktop and mobile viewport checks verify the public header, footer,
-  nested placement layout, media, generic blocks, and form states without
-  depending on generated admin chrome
-- AND the slice does not include the full Site editor, placement drag and drop,
-  app admin chrome, generated field editors, browser replica sync, raw storage
-  records, app target selectors, write hooks, operation executors, media
-  clients, or real Turnstile execution
+- GIVEN this stage settles Formless UI field and operation control contracts
+- WHEN future public Site renderer migration work is planned
+- THEN this stage does not settle public Site shell, navigation, block tree,
+  header, footer, fixed public form, block layout, `SitePageTree`, or viewport
+  verification contracts
+- AND public Site surfaces may still reuse `FormlessUiField` for generic public
+  operation input controls when those controls are projected by generated UI
 
-### Requirement: Media Field Package Adapter
+### Requirement: Media Field Renderer Boundary
 
 The system SHALL keep generated field layout and commit behavior in generated UI
-while delegating media-specific controls to the Media React adapter.
+while delegating media-specific controls to the active Formless UI renderer.
 
-#### Scenario: Media editor uses package control
+#### Scenario: Media editor uses renderer contract
 
 - GIVEN a text field declares the `media` editor
 - WHEN generated UI renders the field
-- THEN generated UI uses the Media React adapter for asset selection, upload,
-  preview, and broken-asset behavior
+- THEN generated UI projects media asset options, selected asset state, preview
+  facts, upload availability, and file-select intent routing through the
+  Formless UI field contract
+- AND the active renderer handles asset selection, upload file selection,
+  preview, and broken-asset display through projected facts and intent callbacks
+- AND the legacy `@dpeek/formless-ui` seam may adapt the current Media React
+  control while the legacy renderer remains active
 - AND the field value remains a flat text value committed by generated UI
 
 #### Scenario: Image editor preserves fallback input
@@ -449,12 +483,12 @@ The system SHALL honor generated create, edit, `visibleWhen`, create default, un
 #### Scenario: Shared authoring session foundation
 
 - GIVEN generated create forms, record update/edit surfaces, public operation
-  forms, or generated Astryx projections author field-shaped values
+  forms, or generated Formless UI projections author field-shaped values
 - WHEN the user changes authored values
 - THEN a generated authoring session owns typed draft values, visible field
   selection, field errors, submit or commit readiness, and optional baseline
   values for future save/cancel behavior
-- AND generated controls and Astryx projections read from and write to that
+- AND generated controls and Formless UI projections read from and write to that
   session as the source of truth instead of reading values back from browser
   form controls
 - AND schema-owned or generated-ui-owned resolvers convert typed drafts into
@@ -513,7 +547,7 @@ The system SHALL honor generated create, edit, `visibleWhen`, create default, un
 
 - GIVEN an existing record edit session contains committed baseline values and
   typed draft values for writable generated fields
-- WHEN a field commit, edit dialog submit, or generated Astryx record intent
+- WHEN a field commit, edit dialog submit, or generated Formless UI record intent
   prepares an update
 - THEN generated UI resolves the draft through a generated patch resolver before
   invoking the declared update operation
@@ -658,17 +692,21 @@ entity operations and view operation bindings.
 - AND progress state does not expose app targets, gateway proxy details,
   filesystem paths, provider secrets, raw logs, or internal tokens
 
-#### Scenario: Astryx operation primitive boundary
+#### Scenario: Formless UI operation control boundary
 
-- GIVEN generated UI renders operation controls with Astryx view primitives
+- GIVEN generated UI renders operation controls through a Formless UI renderer
 - WHEN buttons, menu items, submit buttons, confirmation dialogs, progress
   indicators, compact status, or toast feedback render
-- THEN Astryx consumes only projected operation control data, current execution
-  state, and callback functions supplied by generated UI
-- AND Astryx does not import or call `submitOperation`, app target selectors,
-  schema parsing helpers, browser replica APIs, write option hooks, local
-  auto-save hooks, operation handler helpers, or auth policy helpers
-- AND foundation code does not render Astryx components or decide page, table,
+- THEN the renderer consumes only projected operation control data, current
+  execution state, and callback functions supplied by generated UI
+- AND production generated surfaces may render operation control contracts
+  through a legacy `@dpeek/formless-ui` seam before the renderer implementation
+  switches to the replacement renderer
+- AND renderer implementations do not import or call `submitOperation`, app
+  target selectors, schema parsing helpers, browser replica APIs, write option
+  hooks, local auto-save hooks, operation handler helpers, or auth policy
+  helpers
+- AND foundation code does not render renderer components or decide page, table,
   row, tree, dialog, menu, or toast layout
 
 #### Scenario: Specialized controls use adapters
@@ -706,7 +744,7 @@ entity operations and view operation bindings.
 - THEN generated UI uses a client-side controlled generated operation draft
   session as the source of truth for submitted input values
 - AND the public form reuses generated field projection, editor selection,
-  display-safe validation, and Astryx-compatible field data for supported text,
+  display-safe validation, and Formless UI field data for supported text,
   long text, boolean, date, number, and enum input fields
 - AND generated validation owns required, type, enum, text format, and invalid
   number errors before submission while the public operation executor remains

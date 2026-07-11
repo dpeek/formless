@@ -381,7 +381,11 @@ export function stateMachineFacts(input: {
     stateMachine: input.stateMachine,
     terminal: input.stateMachine.terminalStates.includes(currentValue),
     transitions: Object.entries(transitions).map(([transitionName, transition]) => {
-      const valid = transition.from.includes(currentValue);
+      const valid =
+        transition.from.includes(currentValue) ||
+        (currentValue.trim() !== "" &&
+          input.field.values[currentValue] === undefined &&
+          transition.to === input.stateMachine.initialState);
       const baseTransition = {
         operationName: input.operationNames[transitionName] ?? transitionName,
         label: transition.label,
@@ -741,7 +745,12 @@ function applyMediaAssetSelect(
     media:
       field.media === undefined
         ? undefined
-        : { ...field.media, mediaPreviewHref: asset?.href ?? field.media.mediaPreviewHref },
+        : {
+            ...field.media,
+            mediaPreviewHref: asset?.href ?? field.media.mediaPreviewHref,
+            previewHref: asset?.href ?? field.media.previewHref,
+            selectedAssetId: assetId,
+          },
   };
 }
 

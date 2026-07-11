@@ -2292,8 +2292,15 @@ function generatedMediaAuthoring(input: GeneratedEditorFieldInput): FormlessUiRe
   }
 
   return {
+    fileSelectEnabled: true,
     mediaEditorMode: "asset",
     mediaPreviewHref: input.presentation?.mediaPreviewUrl,
+    ...(input.presentation?.mediaPreviewUrl === undefined
+      ? {}
+      : { previewHref: input.presentation.mediaPreviewUrl }),
+    ...(typeof input.draftValue === "string" && input.draftValue !== ""
+      ? { selectedAssetId: input.draftValue }
+      : {}),
     uploadEnabled: true,
     uploadPatchFields: {
       mediaAssetFieldName: input.name,

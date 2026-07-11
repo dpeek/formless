@@ -31,7 +31,7 @@ export function FieldChrome({
       inputID={inputId}
       isLabelHidden={fieldLabelIsHidden(field)}
       isDisabled={field.access.kind === "disabled"}
-      isRequired={field.required}
+      isRequired={fieldRequiredMarkerIsVisible(field)}
       status={fieldStatus(field)}
       width="100%"
     >
@@ -45,7 +45,7 @@ export function fieldChromeProps(field: FormlessUiEditorField) {
     label: field.label,
     isLabelHidden: fieldLabelIsHidden(field),
     description: fieldDescription(field),
-    isRequired: field.required,
+    isRequired: fieldRequiredMarkerIsVisible(field),
     isDisabled: fieldInteractionIsDisabled(field),
     placeholder: field.control.label,
     status: fieldStatus(field),
@@ -86,6 +86,10 @@ export function fieldIsReadOnly(field: FormlessUiEditorField) {
 
 export function fieldLabelIsHidden(field: FormlessUiField) {
   return field.surface === "table-cell";
+}
+
+function fieldRequiredMarkerIsVisible(field: FormlessUiField) {
+  return field.required && field.access.kind !== "stateMachine";
 }
 
 export function inputSize(field: FormlessUiField): FieldInputSize {
@@ -151,7 +155,7 @@ export function emitFieldDraftChange(
   onIntent: FormlessUiFieldIntentHandler | undefined,
 ) {
   if (field.surface === "create") {
-    onIntent?.({
+    void onIntent?.({
       type: "createDraftChange",
       fieldName: field.fieldName,
       fieldValue: draftInputFromValue(value),
@@ -160,7 +164,7 @@ export function emitFieldDraftChange(
   }
 
   if (field.surface === "operation") {
-    onIntent?.({
+    void onIntent?.({
       type: "operationDraftChange",
       inputName: field.inputName,
       inputValue: draftInputFromValue(value),
@@ -169,7 +173,7 @@ export function emitFieldDraftChange(
   }
 
   if (typeof value === "string") {
-    onIntent?.({
+    void onIntent?.({
       type: "recordEditorDraftChange",
       fieldName: field.fieldName,
       value,
@@ -177,7 +181,7 @@ export function emitFieldDraftChange(
     return;
   }
 
-  onIntent?.({
+  void onIntent?.({
     type: "recordDraftChange",
     fieldName: field.fieldName,
     fieldValue: draftInputFromValue(value),
@@ -193,7 +197,7 @@ export function emitRecordUnitDraftChange(
     return;
   }
 
-  onIntent?.({
+  void onIntent?.({
     type: "recordDraftChange",
     fieldName: field.valueUnit.unitFieldName,
     fieldValue: { kind: "input", value: unit },
@@ -262,7 +266,7 @@ export function emitRecordFieldCommit(
   }
 
   if (field.rendererKind === "number" && numberDraftIsInvalid(field)) {
-    onIntent?.({
+    void onIntent?.({
       type: "fieldErrorChange",
       fieldName: field.fieldName,
       message: "Enter a valid number.",
@@ -270,7 +274,7 @@ export function emitRecordFieldCommit(
     return;
   }
 
-  onIntent?.({
+  void onIntent?.({
     type: "recordValueCommit",
     fieldName: field.fieldName,
     value: fieldValueFromDraftValue(field, value),
@@ -304,7 +308,7 @@ export function emitValueUnitCommit(
     fieldDraftInput.value.trim() !== "" &&
     !Number.isFinite(Number(fieldDraftInput.value))
   ) {
-    onIntent?.({
+    void onIntent?.({
       type: "fieldErrorChange",
       fieldName: field.fieldName,
       message: "Enter a valid number.",
@@ -312,7 +316,7 @@ export function emitValueUnitCommit(
     return;
   }
 
-  onIntent?.({
+  void onIntent?.({
     type: "recordValueUnitCommit",
     fieldName: field.fieldName,
     unitFieldName: field.valueUnit.unitFieldName,
@@ -332,7 +336,7 @@ export function emitMediaAssetSelect(
   onIntent: FormlessUiFieldIntentHandler | undefined,
 ) {
   if (isRecordEditorField(field)) {
-    onIntent?.({
+    void onIntent?.({
       type: "mediaAssetSelect",
       assetId,
       fieldName: field.fieldName,
