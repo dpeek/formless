@@ -1,11 +1,17 @@
 import {
   composeScenarioAxis,
-  composeScenarioGroup,
+  projectScenarioGroup,
   scenarioOption,
 } from "../field-scenario-model.ts";
-import type { FieldScenarioGroup } from "../field-scenario-model.ts";
+import type {
+  FieldScenarioGroup,
+  FieldScenarioProjectionContext,
+} from "../field-scenario-model.ts";
+import type { FormlessUiFieldSurface } from "../../formless-ui-contract.ts";
 import {
   booleanControl,
+  createField,
+  displayField,
   draftInput,
   operationField,
   recordDrafts,
@@ -14,65 +20,123 @@ import {
 
 const completedField = {
   type: "boolean",
-  required: false,
+  required: true,
   label: "Completed",
   default: false,
 } as const;
+const optionalCompletedField = { ...completedField, required: false } as const;
 
-const subscribeField = {
-  type: "boolean",
-  required: false,
-  label: "Subscribe",
-  default: true,
-} as const;
-
-const booleanRecordBase = recordField({
-  fieldName: "completed",
-  field: completedField,
-  editor: "boolean",
-  control: booleanControl(completedField),
-  commit: "immediate",
-  drafts: recordDrafts({ recordValue: false }),
-  formatting: { displayValue: "No" },
-  recordId: "record-completed",
-  rendererKind: "checkbox",
-});
-
-const booleanOperationBase = operationField({
-  fieldName: "subscribe",
-  field: subscribeField,
-  editor: "boolean",
-  control: booleanControl(subscribeField),
-  draftInput: draftInput(true),
-  value: true,
-  recordId: "operation-subscribe",
-});
-
+const requirednessAxis = composeScenarioAxis("requiredness", "Requiredness", [
+  scenarioOption("required", "Required"),
+  scenarioOption("optional", "Optional"),
+]);
+const editorValueAxis = composeScenarioAxis("value", "Value", [
+  scenarioOption("true", "True"),
+  scenarioOption("false", "False"),
+]);
+const existingValueAxis = composeScenarioAxis("value", "Value", [
+  ...editorValueAxis.options,
+  scenarioOption("unset", "Unset"),
+]);
+const modeAxis = composeScenarioAxis("mode", "Mode", [
+  scenarioOption("editor", "Editor"),
+  scenarioOption("display", "Display"),
+]);
 export const booleanScenarioGroups = [
-  composeScenarioGroup({
-    id: "boolean-record",
+  projectScenarioGroup({
+    id: "boolean-create",
     kind: "boolean",
-    surface: "record",
-    base: booleanRecordBase,
-    axes: [
-      composeScenarioAxis("presentation", "Presentation", [
-        scenarioOption("default", "Default Checkbox"),
-        scenarioOption("completion", "Completion", {
-          presentation: { mode: "completion" },
-          rendererKind: "completion-checkbox",
-        }),
-      ]),
-    ],
-    finalizeField: ({ field, optionIds }) => ({
-      ...field,
-      recordId: `record-completed-${optionIds.join("-")}`,
-    }),
+    axes: [requirednessAxis, editorValueAxis],
+    projectField: projectCreateBooleanField,
   }),
-  composeScenarioGroup({
+  existingBooleanGroup("record"),
+  existingBooleanGroup("table-cell"),
+  existingBooleanGroup("detail"),
+  projectScenarioGroup({
     id: "boolean-operation",
     kind: "boolean",
-    surface: "operation",
-    base: booleanOperationBase,
-    axes: [composeScenarioAxis("mode", "Mode", [scenarioOption("subscribe", "Subscribe")])],
+    axes: [requirednessAxis, editorValueAxis],
+    projectField: projectOperationBooleanField,
   }),
 ] satisfies readonly FieldScenarioGroup[];
+
+function existingBooleanGroup(
+  surface: Extract<FormlessUiFieldSurface, "detail" | "record" | "table-cell">,
+) {
+  return projectScenarioGroup({
+    id: `boolean-${surface}`,
+    kind: "boolean",
+    axes: [modeAxis, requirednessAxis, existingValueAxis],
+    include: ({ facets }) => facets.mode === "display" || facets.value !== "unset",
+    projectField: (context) => projectExistingBooleanField(surface, context),
+  });
+}
+
+function projectCreateBooleanField({ facets }: FieldScenarioProjectionContext) {
+  const required = facets.requiredness === "required";
+  const field = required ? completedField : optionalCompletedField;
+  const value = facets.value === "true";
+
+  return createField({
+    fieldName: "completed",
+    field,
+    editor: "boolean",
+    control: booleanControl(field),
+    draftInput: draftInput(value),
+    labelVisibility: "visible",
+    recordId: `boolean-create-${facets.requiredness}-${facets.value}`,
+    value,
+  });
+}
+
+function projectOperationBooleanField({ facets }: FieldScenarioProjectionContext) {
+  const required = facets.requiredness === "required";
+  const field = required ? completedField : optionalCompletedField;
+  const value = facets.value === "true";
+
+  return operationField({
+    fieldName: "completed",
+    inputName: "completed",
+    field,
+    editor: "boolean",
+    control: booleanControl(field),
+    draftInput: draftInput(value),
+    labelVisibility: "visible",
+    recordId: `boolean-operation-${facets.requiredness}-${facets.value}`,
+    value,
+  });
+}
+
+function projectExistingBooleanField(
+  surface: Extract<FormlessUiFieldSurface, "detail" | "record" | "table-cell">,
+  { facets }: FieldScenarioProjectionContext,
+) {
+  const required = facets.requiredness === "required";
+  const field = required ? completedField : optionalCompletedField;
+  const value = facets.value === "unset" ? undefined : facets.value === "true";
+  const common = {
+    fieldName: "completed",
+    field,
+    editor: "boolean" as const,
+    control: booleanControl(field),
+    labelVisibility: surface === "detail" ? ("visible" as const) : ("hidden" as const),
+    recordId: `boolean-${surface}-${facets.mode}-${facets.requiredness}-${facets.value}`,
+    surface,
+  };
+
+  return facets.mode === "display"
+    ? displayField({
+        ...common,
+        density: surface === "table-cell" ? "compact" : "default",
+        formatting: { displayValue: value === undefined ? "" : value ? "Yes" : "No" },
+        value,
+      })
+    : recordField({
+        ...common,
+        commit: "immediate",
+        density: surface === "table-cell" ? "compact" : "default",
+        drafts: recordDrafts({ recordValue: value }),
+        formatting: { displayValue: value ? "Yes" : "No" },
+        rendererKind: "checkbox",
+      });
+}

@@ -22,6 +22,7 @@ export type ColorInputProps = {
   description?: string;
   placeholder?: string;
   pickerLabel?: string;
+  pickerValue?: string;
   density?: AstryxInputDensity;
   isDisabled?: boolean;
   isLabelHidden?: boolean;
@@ -35,6 +36,7 @@ export type ColorInputProps = {
     value: string,
     event?: ChangeEvent<HTMLInputElement> | MouseEvent<HTMLButtonElement>,
   ) => void;
+  onCommit?: (value: string) => void;
 };
 
 export function ColorInput({
@@ -43,6 +45,7 @@ export function ColorInput({
   value,
   description,
   pickerLabel = "Choose color",
+  pickerValue,
   density = "balanced",
   isDisabled = false,
   isLabelHidden = false,
@@ -53,12 +56,12 @@ export function ColorInput({
   width,
   "aria-describedby": ariaDescribedBy,
   onChange,
+  onCommit,
 }: ColorInputProps) {
   const generatedId = useId();
   const nativeColorInputRef = useRef<HTMLInputElement>(null);
   const [isPickerOpen, setIsPickerOpen] = useState(false);
   const inputId = id ?? generatedId;
-  const pickerValue = opaqueHexColorForNativeInput(value);
   const isCompact = density === "compact";
   const isComfortable = density === "comfortable";
   const isPickerDisabled = isDisabled || isReadOnly;
@@ -106,18 +109,20 @@ export function ColorInput({
         )}
         data-astryx-color-input="true"
         data-astryx-color-picker-open={isPickerOpen ? "true" : "false"}
-        data-astryx-color-picker-valid={pickerValue ? "true" : "false"}
+        data-astryx-color-picker-valid={pickerValue === undefined ? "false" : "true"}
       >
         <span
           {...stylex.props(
             styles.nativeColorInputContainer,
             isCompact && styles.compactNativeColorInputContainer,
             isComfortable && styles.comfortableNativeColorInputContainer,
-            !pickerValue && styles.emptyNativeColorInputContainer,
+            pickerValue === undefined && styles.emptyNativeColorInputContainer,
             isPickerOpen && styles.openNativeColorInputContainer,
           )}
         >
-          {!pickerValue ? <span aria-hidden {...stylex.props(styles.emptyColorInputMark)} /> : null}
+          {pickerValue === undefined ? (
+            <span aria-hidden {...stylex.props(styles.emptyColorInputMark)} />
+          ) : null}
           <span
             onPointerDown={(event) => {
               if (event.button !== 0 || event.target !== event.currentTarget || isPickerDisabled) {
@@ -149,7 +154,11 @@ export function ColorInput({
               type="color"
               value={pickerValue ?? nativeColorFallback}
               onBlur={() => setIsPickerOpen(false)}
-              onChange={(event) => onChange?.(event.currentTarget.value, event)}
+              onChange={(event) => {
+                const nextValue = event.currentTarget.value;
+                onChange?.(nextValue, event);
+                onCommit?.(nextValue);
+              }}
               onKeyDown={(event) => {
                 if (event.key === "Enter" || event.key === " ") {
                   setIsPickerOpen(true);
@@ -162,7 +171,7 @@ export function ColorInput({
               }}
               {...stylex.props(
                 styles.nativeColorInput,
-                !pickerValue && styles.emptyNativeColorInput,
+                pickerValue === undefined && styles.emptyNativeColorInput,
               )}
             />
           </span>
@@ -178,6 +187,7 @@ export function ColorInput({
               onClick={(event) => {
                 setIsPickerOpen(false);
                 onChange?.("", event);
+                onCommit?.("");
               }}
               {...stylex.props(styles.colorClearButton)}
             >
@@ -188,21 +198,6 @@ export function ColorInput({
       </div>
     </Field>
   );
-}
-
-export function opaqueHexColorForNativeInput(value: string) {
-  const trimmedValue = value.trim();
-
-  if (/^#[0-9A-Fa-f]{6}$/.test(trimmedValue)) {
-    return trimmedValue;
-  }
-
-  if (/^#[0-9A-Fa-f]{3}$/.test(trimmedValue)) {
-    const [, red, green, blue] = trimmedValue;
-    return `#${red}${red}${green}${green}${blue}${blue}`;
-  }
-
-  return null;
 }
 
 const styles = stylex.create({

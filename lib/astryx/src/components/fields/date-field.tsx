@@ -1,14 +1,28 @@
 import * as stylex from "@stylexjs/stylex";
 import { DateInput } from "@astryxdesign/core/DateInput";
-import type { FormlessUiFieldIntentHandler } from "../../formless-ui-contract.ts";
+import { Text } from "@astryxdesign/core/Text";
+import { Timestamp } from "@astryxdesign/core/Timestamp";
 import {
+  durationVars,
+  easeVars,
+  spacingVars,
+} from "@astryxdesign/core/theme/tokens.stylex";
+import type {
+  FormlessUiDisplayField,
+  FormlessUiFieldIntentHandler,
+} from "../../formless-ui-contract.ts";
+import {
+  astryxDensity,
   dateInputValue,
   editorFieldValue,
   emitFieldDraftChange,
-  emitImmediateRecordFieldCommit,
+  emitRecordFieldCommit,
   fieldChromeProps,
+  fieldChromeStyles,
+  fieldDescription,
   formatInputValue,
   inputSize,
+  isRecordEditorField,
   type FormlessUiEditorField,
 } from "./field-chrome.tsx";
 
@@ -22,19 +36,21 @@ export function DateFieldEditor({
   onIntent: FormlessUiFieldIntentHandler | undefined;
 }) {
   const value = formatInputValue(editorFieldValue(field));
+  const changeAction = isRecordEditorField(field)
+    ? (nextValue: string | undefined) => emitRecordFieldCommit(field, nextValue ?? "", onIntent)
+    : undefined;
   const dateInput = (
     <DateInput
       {...fieldChromeProps(field)}
+      changeAction={changeAction}
+      description={undefined}
+      disabledMessage={fieldDescription(field)}
       hasClear={!field.required}
       isLoading={Boolean(field.pending?.isPending)}
+      placeholder={undefined}
       size={inputSize(field)}
       value={dateInputValue(value)}
-      onChange={(nextValue) => {
-        const value = nextValue ?? "";
-
-        emitFieldDraftChange(field, value, onIntent);
-        emitImmediateRecordFieldCommit(field, value, onIntent);
-      }}
+      onChange={(nextValue) => emitFieldDraftChange(field, nextValue ?? "", onIntent)}
     />
   );
 
@@ -52,17 +68,48 @@ export function DateFieldEditor({
   );
 }
 
+export function DateFieldDisplay({ field }: { field: FormlessUiDisplayField }) {
+  const temporal = field.formatting.temporal;
+  const suffix = field.formatting.suffix ?? field.suffix;
+  const textType = astryxDensity(field) === "compact" ? "supporting" : "body";
+
+  return (
+    <div {...stylex.props(fieldChromeStyles.displayValue, styles.displayValue)}>
+      {temporal ? (
+        <Timestamp
+          format={temporal.kind === "date" ? "date" : "date_time"}
+          type={textType}
+          value={temporal.kind === "date" ? `${temporal.value}T00:00:00` : temporal.value}
+        />
+      ) : (
+        <Text type={textType}>{field.formatting.displayValue}</Text>
+      )}
+      {suffix ? (
+        <Text color="secondary" type={textType}>
+          {suffix}
+        </Text>
+      ) : null}
+    </div>
+  );
+}
+
 const styles = stylex.create({
+  displayValue: {
+    gap: spacingVars["--spacing-1"],
+  },
   valueOrInteractionQuiet: {
-    opacity: 0,
+    opacity: {
+      default: 0,
+      ":hover": {
+        "@media (hover: hover)": 1,
+      },
+      ":focus-within": 1,
+    },
     transitionProperty: "opacity",
-    transitionDuration: "140ms",
-    transitionTimingFunction: "ease-out",
-    ":hover": {
-      opacity: 1,
+    transitionDuration: {
+      default: durationVars["--duration-fast"],
+      "@media (prefers-reduced-motion: reduce)": "0s",
     },
-    ":focus-within": {
-      opacity: 1,
-    },
+    transitionTimingFunction: easeVars["--ease-standard"],
   },
 });

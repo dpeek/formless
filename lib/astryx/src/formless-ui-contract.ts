@@ -24,7 +24,7 @@ export type FormlessUiFieldSurface = "create" | "record" | "table-cell" | "detai
 
 export type FormlessUiFieldMode = "display" | "editor";
 
-export type FormlessUiRecordFieldDensity = "default" | "compact";
+export type FormlessUiFieldDensity = "default" | "compact";
 
 export type FormlessUiRecordFieldPresentation = "default" | "heading";
 
@@ -72,8 +72,17 @@ export type FormlessUiFieldMetadata = {
 };
 
 export type FormlessUiValueUnitField = {
+  clearable: boolean;
+  options: readonly FormlessUiValueUnitOption[];
+  required: boolean;
   unitFieldName: string;
   unitField: Extract<FieldSchema, { type: "enum" }>;
+};
+
+export type FormlessUiValueUnitOption = {
+  label: string;
+  status: "declared" | "undeclaredCurrent";
+  value: string;
 };
 
 export type FormlessUiStateMachineField = {
@@ -188,8 +197,31 @@ export type FormlessUiFieldPending = {
 export type FormlessUiReferenceOption = {
   id: string;
   label: string;
-  missing?: boolean;
 };
+
+export type FormlessUiReferenceValueStatus =
+  | {
+      kind: "resolved";
+      value: string;
+    }
+  | {
+      kind: "unset";
+    }
+  | {
+      kind: "missing";
+      value: string;
+    };
+
+export type FormlessUiReferenceFacts =
+  | {
+      clearable: boolean;
+      kind: "editor";
+      valueStatus: FormlessUiReferenceValueStatus;
+    }
+  | {
+      kind: "display";
+      valueStatus: FormlessUiReferenceValueStatus;
+    };
 
 export type FormlessUiMediaAssetOption = {
   height?: number;
@@ -211,21 +243,25 @@ export type FormlessUiMediaUploadPatchFields = {
 
 export type FormlessUiMissingMediaAsset = {
   assetId: string;
-  label?: string;
   reason?: string;
 };
 
-export type FormlessUiMediaPickerFacts = {
-  fileSelectEnabled: boolean;
+export type FormlessUiMediaPresentation = {
   missingSelectedAsset?: FormlessUiMissingMediaAsset;
   previewHref?: string;
   selectedAssetId?: string;
   selectedUrl?: string;
+};
+
+export type FormlessUiMediaPickerFacts = FormlessUiMediaPresentation & {
+  fileSelectEnabled: boolean;
   uploadEnabled: boolean;
   uploadPatchFields: FormlessUiMediaUploadPatchFields;
 };
 
 export type FormlessUiMediaAuthoring = FormlessUiMediaPickerFacts & {
+  accept?: string;
+  maxSize?: number;
   mediaEditorMode: FormlessUiMediaEditorMode;
   mediaPreviewHref?: string;
 };
@@ -282,30 +318,70 @@ export type FormlessUiFieldPresentationIcon = {
 export type FormlessUiEnumValuePresentation = {
   color: FormlessUiFieldPresentationColor;
   icon?: FormlessUiFieldPresentationIcon;
+  iconKnown: boolean;
+  iconToken?: string;
   label: string;
 };
 
 export type FormlessUiEnumOption = {
   label: string;
   presentation: FormlessUiEnumValuePresentation;
+  status: "declared";
   value: string;
-  missing?: boolean;
 };
+
+export type FormlessUiEnumValueStatus =
+  | {
+      kind: "declared";
+      value: string;
+    }
+  | {
+      kind: "unset";
+    }
+  | {
+      kind: "undeclared";
+      value: string;
+    };
+
+export type FormlessUiEnumFacts =
+  | {
+      clearable: boolean;
+      kind: "editor";
+      listContent: "icon" | "label" | "both";
+      placeholder?: string;
+      style: "plain" | "rich";
+      triggerContent: "label" | "both";
+      valueStatus: FormlessUiEnumValueStatus;
+    }
+  | {
+      content: "icon" | "label";
+      kind: "display";
+      valueStatus: FormlessUiEnumValueStatus;
+    };
 
 export type FormlessUiFieldOptions = {
   enumOptions?: readonly FormlessUiEnumOption[];
   iconOptions?: readonly FormlessUiIconOption[];
   referenceOptions?: readonly FormlessUiReferenceOption[];
   mediaAssetOptions?: readonly FormlessUiMediaAssetOption[];
-  missingReferenceValue?: string | null;
-  unknownEnumValue?: string | null;
 };
+
+export type FormlessUiTemporalDisplay =
+  | {
+      kind: "date";
+      value: string;
+    }
+  | {
+      kind: "dateTime";
+      value: string;
+    };
 
 export type FormlessUiFieldFormatting = {
   displayValue?: string;
   enumValuePresentation?: FormlessUiEnumValuePresentation;
   format?: TableColumnFormat;
   suffix?: string;
+  temporal?: FormlessUiTemporalDisplay;
 };
 
 export type FormlessUiStateTransitionAvailability = {
@@ -326,26 +402,73 @@ export type FormlessUiStateTransitionOperation = {
   pending?: FormlessUiFieldPending;
 };
 
+export type FormlessUiStateMachineInteraction =
+  | {
+      kind: "display";
+    }
+  | {
+      kind: "transitions";
+      invocationSource: Extract<FormlessUiOperationInvocationSource, "menuItem">;
+      transitions: readonly FormlessUiStateTransitionOperation[];
+    };
+
+export type FormlessUiStateMachineValueStatus =
+  | {
+      kind: "declared";
+      value: string;
+    }
+  | {
+      kind: "unset";
+      message: string;
+    }
+  | {
+      kind: "undeclared";
+      message: string;
+      value: string;
+    };
+
 export type FormlessUiStateMachineFacts = {
   currentValue: FieldValue | undefined;
   initialState: string;
+  interaction: FormlessUiStateMachineInteraction;
   stateMachine: FormlessUiStateMachineField;
   terminal: boolean;
-  transitions?: readonly FormlessUiStateTransitionOperation[];
+  valueStatus: FormlessUiStateMachineValueStatus;
+};
+
+export type FormlessUiColorValue =
+  | {
+      kind: "hex";
+      value: string;
+    }
+  | {
+      kind: "unavailable";
+    };
+
+export type FormlessUiColorFacts = {
+  picker: FormlessUiColorValue;
+  swatch: FormlessUiColorValue;
 };
 
 export type FormlessUiBaseField = FormlessUiFieldConfig & {
   access: FormlessUiFieldAccess;
+  color?: FormlessUiColorFacts;
   control: FormlessUiFieldControl;
+  enum?: FormlessUiEnumFacts;
   errors?: readonly FormlessUiFieldError[];
+  icon?: FormlessUiIconPickerFacts;
+  labelVisibility: "hidden" | "visible";
   options?: FormlessUiFieldOptions;
   pending?: FormlessUiFieldPending;
+  reference?: FormlessUiReferenceFacts;
   stateMachineFacts?: FormlessUiStateMachineFacts;
   surface: FormlessUiFieldSurface;
 };
 
 export type FormlessUiDisplayField = FormlessUiBaseField & {
+  density: FormlessUiFieldDensity;
   mode: "display";
+  media?: FormlessUiMediaPresentation;
   value: FieldValue | undefined;
   formatting: FormlessUiFieldFormatting & {
     displayValue: string;
@@ -356,7 +479,9 @@ export type FormlessUiCreateField = FormlessUiBaseField & {
   surface: "create";
   mode: "editor";
   commit: "submit";
+  density: FormlessUiFieldDensity;
   draftInput?: GeneratedFieldDraftInput;
+  media?: FormlessUiMediaAuthoring;
   value: FieldValue | undefined;
 };
 
@@ -364,9 +489,11 @@ export type FormlessUiOperationInputField = FormlessUiBaseField & {
   surface: "operation";
   mode: "editor";
   commit: "submit";
+  density: FormlessUiFieldDensity;
   input: PublicSafeOperationInputField;
   inputName: string;
   draftInput?: GeneratedFieldDraftInput;
+  media?: FormlessUiMediaAuthoring;
   value: FieldValue | undefined;
 };
 
@@ -383,10 +510,9 @@ export type FormlessUiRecordField = FormlessUiBaseField & {
   surface: "detail" | "record" | "table-cell";
   mode: "editor";
   commit: FieldCommitPolicy;
-  density: FormlessUiRecordFieldDensity;
+  density: FormlessUiFieldDensity;
   drafts: FormlessUiRecordFieldDrafts;
   formatting: FormlessUiFieldFormatting;
-  icon?: FormlessUiIconPickerFacts;
   media?: FormlessUiMediaAuthoring;
   presentationMode: FormlessUiRecordFieldPresentation;
   rendererKind: FormlessUiRecordFieldRendererKind;
@@ -558,6 +684,11 @@ export type FormlessUiFieldIntent =
       fieldName: string;
     }
   | {
+      type: "recordDraftCommit";
+      fieldName: string;
+      fieldValue: GeneratedFieldDraftInput;
+    }
+  | {
       type: "recordValueCommit";
       fieldName: string;
       value: FieldValue;
@@ -606,7 +737,7 @@ export type FormlessUiFieldIntent =
       fieldName: string;
       operationName: string;
       recordId: string;
-      source: Extract<FormlessUiOperationInvocationSource, "button" | "menuItem">;
+      source: Extract<FormlessUiOperationInvocationSource, "menuItem">;
       transitionName: string;
     };
 

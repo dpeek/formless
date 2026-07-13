@@ -29,13 +29,21 @@ export type FieldScenarioGroup = {
 };
 
 export type FieldScenarioFacetId =
+  | "composition"
+  | "format"
+  | "interaction"
+  | "list"
   | "machine"
   | "mode"
   | "presentation"
   | "requiredness"
   | "runtime"
   | "state"
+  | "suffix"
   | "surface"
+  | "trigger"
+  | "unit-requiredness"
+  | "unit-state"
   | "value";
 
 export type FieldScenarioAxis = {
@@ -353,6 +361,56 @@ export function scenarioVariant(
   facets: FieldScenarioFacetValues = {},
 ): FieldScenarioVariant {
   return { facets, field, id, label };
+}
+
+export function closestScenarioVariantForFacet(
+  group: FieldScenarioGroup,
+  selectedValues: FieldScenarioFacetValues,
+  facetId: FieldScenarioFacetId,
+  optionId: string,
+): FieldScenarioVariant | undefined {
+  const selectedSurface =
+    facetId === "surface" ? optionId : selectedValues.surface ?? group.surface;
+  let closestVariant: FieldScenarioVariant | undefined;
+  let closestScore = -1;
+
+  for (const variant of group.variants) {
+    const variantSurface = variant.facets.surface ?? group.surface;
+    const variantOption = facetId === "surface" ? variantSurface : variant.facets[facetId];
+
+    if (variantSurface !== selectedSurface || variantOption !== optionId) {
+      continue;
+    }
+
+    const score = scenarioVariantFacetMatchScore(variant, selectedValues, facetId);
+
+    if (score > closestScore) {
+      closestVariant = variant;
+      closestScore = score;
+    }
+  }
+
+  return closestVariant;
+}
+
+function scenarioVariantFacetMatchScore(
+  variant: FieldScenarioVariant,
+  selectedValues: FieldScenarioFacetValues,
+  changedFacetId: FieldScenarioFacetId,
+) {
+  let score = 0;
+
+  for (const [facetId, selectedValue] of Object.entries(selectedValues)) {
+    if (facetId === changedFacetId || selectedValue === undefined) {
+      continue;
+    }
+
+    if (variant.facets[facetId as FieldScenarioFacetId] === selectedValue) {
+      score += 1;
+    }
+  }
+
+  return score;
 }
 
 function surfaceScenarioFacet(

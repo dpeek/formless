@@ -1,7 +1,9 @@
 import * as stylex from "@stylexjs/stylex";
 import { DropdownMenu, DropdownMenuItem } from "@astryxdesign/core/DropdownMenu";
+import { Icon } from "@astryxdesign/core/Icon";
 import { Spinner } from "@astryxdesign/core/Spinner";
 import { Text } from "@astryxdesign/core/Text";
+import { Tooltip } from "@astryxdesign/core/Tooltip";
 import {
   colorVars,
   fontWeightVars,
@@ -14,17 +16,14 @@ import { SourceIcon } from "./field-primitives.tsx";
 import { astryxPresentationColors } from "./presentation-color.ts";
 
 export type StateInputOption = {
-  color?: string;
+  colorIntent?: "neutral" | "success" | "warning" | "danger";
   colorToken?: string;
   label: string;
   source?: string;
 };
 
 export type StateInputTransition = {
-  disabledReason?: string;
   id: string;
-  isDisabled?: boolean;
-  isHidden?: boolean;
   label: string;
   operationKey: string;
   pending?: {
@@ -37,12 +36,16 @@ export type StateInputProps = {
   label: string;
   value: string;
   option?: StateInputOption;
-  stateLabel?: string;
   transitions: readonly StateInputTransition[];
   isCompact?: boolean;
   isDisabled?: boolean;
+  isTerminal?: boolean;
   isPending?: boolean;
   pendingLabel?: string;
+  valueStatus:
+    | { kind: "declared"; value: string }
+    | { kind: "unset"; message: string }
+    | { kind: "undeclared"; message: string; value: string };
   onTransition?: (transition: StateInputTransition) => void;
 };
 
@@ -50,77 +53,95 @@ export function StateInput({
   label,
   value,
   option,
-  stateLabel,
   transitions,
   isCompact = false,
   isDisabled = false,
+  isTerminal = false,
   isPending = false,
   pendingLabel,
+  valueStatus,
   onTransition,
 }: StateInputProps) {
-  const visibleTransitions = transitions.filter((transition) => !transition.isHidden);
-  const stateText = option?.label ?? stateLabel ?? (value ? value : "No state");
-  const colors = stateInputColors(value, option);
+  const stateText = option?.label ?? (value ? value : "No state");
+  const colors = stateInputColors(option);
+  const invalidMessage = valueStatus.kind === "declared" ? undefined : valueStatus.message;
+  const displayText =
+    valueStatus.kind === "unset"
+      ? "Unset"
+      : valueStatus.kind === "undeclared"
+        ? valueStatus.value
+        : stateText;
+  const stateDescription = `${displayText}${isTerminal ? " terminal" : ""}`;
   const controlLabel = isPending
-    ? `${label}: ${stateText}. ${pendingLabel ?? "Updating state"}`
-    : `${label}: ${stateText}`;
-  const isStatic = isDisabled || visibleTransitions.length === 0;
-  const displayText = value && !option ? `Unknown: ${stateText}` : stateText;
+    ? `${label}: ${stateDescription}. ${pendingLabel ?? "Updating state"}`
+    : `${label}: ${stateDescription}`;
+  const isStatic = isDisabled || transitions.length === 0;
+  const stateIcon =
+    valueStatus.kind === "declared" ? (
+      option?.source ? (
+        <StateIcon option={option} />
+      ) : undefined
+    ) : (
+      <Icon icon="warning" color="warning" size="sm" />
+    );
 
   const staticContent = (
     <span {...stylex.props(styles.content, isCompact && styles.contentCompact)}>
-      {option?.source ? (
-        <span {...stylex.props(styles.icon)}>
-          <StateIcon option={option} />
-        </span>
-      ) : null}
+      {stateIcon ? <span {...stylex.props(styles.icon)}>{stateIcon}</span> : null}
       <span {...stylex.props(styles.label)}>{displayText}</span>
     </span>
   );
 
   if (isStatic) {
-    return (
+    const control = (
       <span
         aria-label={controlLabel}
         role="status"
+        tabIndex={invalidMessage ? 0 : undefined}
         {...stylex.props(
           styles.staticControl,
           isCompact && styles.staticControlCompact,
-          dynamicStyles.color(colors.background, colors.foreground, colors.border),
+          invalidMessage
+            ? styles.invalidControl
+            : dynamicStyles.color(colors.background, colors.foreground, colors.border),
         )}
       >
         {staticContent}
       </span>
     );
+
+    return invalidMessage ? <Tooltip content={invalidMessage}>{control}</Tooltip> : control;
   }
 
   return (
     <DropdownMenu
       button={{
-        label: displayText,
-        variant: "secondary",
+        label: `${controlLabel}. Change state`,
+        children: displayText,
+        variant: invalidMessage ? "ghost" : "secondary",
         size: isCompact ? "sm" : "md",
         isLoading: isPending,
-        icon: option?.source ? <StateIcon option={option} /> : undefined,
+        icon: stateIcon,
+        tooltip: invalidMessage,
         xstyle: [
           styles.trigger,
           isCompact && styles.triggerCompact,
-          dynamicStyles.color(colors.background, colors.foreground, colors.border),
+          invalidMessage
+            ? styles.invalidControl
+            : dynamicStyles.color(colors.background, colors.foreground, colors.border),
         ],
       }}
       hasChevron={false}
       menuWidth={248}
       placement="below"
     >
-      {visibleTransitions.map((transition) => {
-        const transitionIsDisabled =
-          isDisabled || isPending || transition.isDisabled || transition.pending?.isPending;
+      {transitions.map((transition) => {
+        const transitionIsDisabled = isDisabled || isPending || transition.pending?.isPending;
 
         return (
           <DropdownMenuItem
             key={transition.id}
             label={transition.label}
-            description={transition.disabledReason}
             icon={transition.pending?.isPending ? <Spinner size="sm" shade="inherit" /> : undefined}
             endContent={
               transition.pending?.isPending ? (
@@ -152,24 +173,14 @@ type StateInputColor = {
   foreground: string;
 };
 
-function stateInputColors(value: string, option: StateInputOption | undefined): StateInputColor {
-  const semanticColors = astryxPresentationColors(option?.colorToken);
+function stateInputColors(option: StateInputOption | undefined): StateInputColor {
+  const projectedColors = astryxPresentationColors(option?.colorToken);
 
-  if (semanticColors) {
-    return semanticColors;
+  if (projectedColors) {
+    return projectedColors;
   }
 
-  if (option?.color) {
-    return {
-      background: option.color,
-      border: option.color,
-      foreground: readableTextColor(option.color),
-    };
-  }
-
-  const normalizedValue = value.toLowerCase();
-
-  if (["done", "complete", "completed", "published", "active"].includes(normalizedValue)) {
+  if (option?.colorIntent === "success") {
     return {
       background: colorVars["--color-success"],
       border: colorVars["--color-success"],
@@ -177,15 +188,7 @@ function stateInputColors(value: string, option: StateInputOption | undefined): 
     };
   }
 
-  if (["blocked"].includes(normalizedValue)) {
-    return {
-      background: colorVars["--color-error"],
-      border: colorVars["--color-error"],
-      foreground: colorVars["--color-on-error"],
-    };
-  }
-
-  if (["waiting", "queued", "review"].includes(normalizedValue)) {
+  if (option?.colorIntent === "warning") {
     return {
       background: colorVars["--color-warning"],
       border: colorVars["--color-warning"],
@@ -193,11 +196,11 @@ function stateInputColors(value: string, option: StateInputOption | undefined): 
     };
   }
 
-  if (["open", "draft", "new"].includes(normalizedValue)) {
+  if (option?.colorIntent === "danger") {
     return {
-      background: colorVars["--color-accent"],
-      border: colorVars["--color-accent"],
-      foreground: colorVars["--color-on-accent"],
+      background: colorVars["--color-error"],
+      border: colorVars["--color-error"],
+      foreground: colorVars["--color-on-error"],
     };
   }
 
@@ -206,40 +209,6 @@ function stateInputColors(value: string, option: StateInputOption | undefined): 
     border: colorVars["--color-neutral"],
     foreground: colorVars["--color-text-primary"],
   };
-}
-
-function readableTextColor(color: string) {
-  const rgb = parseHexColor(color);
-
-  if (!rgb) {
-    return colorVars["--color-on-dark"];
-  }
-
-  const luminance = (0.2126 * rgb.red + 0.7152 * rgb.green + 0.0722 * rgb.blue) / 255;
-
-  return luminance > 0.58 ? colorVars["--color-on-light"] : colorVars["--color-on-dark"];
-}
-
-function parseHexColor(color: string) {
-  const normalized = color.trim().replace(/^#/, "");
-
-  if (/^[0-9a-fA-F]{3}$/.test(normalized)) {
-    const [red, green, blue] = normalized
-      .split("")
-      .map((channel) => parseInt(`${channel}${channel}`, 16));
-
-    return { red, green, blue };
-  }
-
-  if (/^[0-9a-fA-F]{6}$/.test(normalized)) {
-    return {
-      red: parseInt(normalized.slice(0, 2), 16),
-      green: parseInt(normalized.slice(2, 4), 16),
-      blue: parseInt(normalized.slice(4, 6), 16),
-    };
-  }
-
-  return null;
 }
 
 const styles = stylex.create({
@@ -272,7 +241,7 @@ const styles = stylex.create({
     alignItems: "center",
     justifyContent: "center",
     minWidth: 0,
-    gap: spacingVars["--spacing-1"],
+    gap: spacingVars["--spacing-2"],
   },
   contentCompact: {
     maxWidth: "100%",
@@ -287,6 +256,10 @@ const styles = stylex.create({
     alignItems: "center",
     flexShrink: 0,
     lineHeight: 0,
+  },
+  invalidControl: {
+    backgroundColor: "transparent",
+    color: colorVars["--color-warning"],
   },
 });
 

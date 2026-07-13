@@ -19,7 +19,7 @@ export const fieldSurfaceOptions = [
   { id: "create", label: "Create" },
   { id: "record", label: "Record" },
   { id: "table-cell", label: "Table Cell" },
-  { id: "detail", label: "Detail" },
+  { id: "detail", label: "Item Detail" },
   { id: "operation", label: "Operation" },
 ] satisfies readonly { id: FormlessUiFieldSurface; label: string }[];
 
@@ -34,7 +34,7 @@ export const fieldKindOptions = [
   { id: "date", label: "Date" },
   { id: "boolean", label: "Boolean" },
   { id: "color", label: "Color" },
-  { id: "source-icon", label: "Source Icon" },
+  { id: "source-icon", label: "Icon" },
   { id: "image", label: "Image" },
   { id: "media", label: "Media" },
 ] satisfies readonly FieldKindOption[];

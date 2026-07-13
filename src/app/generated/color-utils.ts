@@ -16,6 +16,16 @@ export function expandHexColor(hex: string): string {
   return `#${cleanHex.toUpperCase()}`;
 }
 
+export function toOpaquePickerHexColor(hex: string): string | undefined {
+  const trimmedHex = hex.trim();
+
+  if (!/^#?(?:[a-f\d]{3}|[a-f\d]{6})$/i.test(trimmedHex)) {
+    return undefined;
+  }
+
+  return expandHexColor(trimmedHex);
+}
+
 export function toPickerHexColor(hex: string, fallback = "#000000"): string {
   if (!isHexColor(hex)) return fallback;
   const expanded = expandHexColor(hex);

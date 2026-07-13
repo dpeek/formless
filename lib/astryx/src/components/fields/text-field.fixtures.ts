@@ -1,171 +1,379 @@
 import {
   composeScenarioAxis,
-  composeScenarioGroup,
+  projectScenarioGroup,
   scenarioOption,
 } from "../field-scenario-model.ts";
-import type { FieldScenarioGroup } from "../field-scenario-model.ts";
+import type {
+  FieldKindKey,
+  FieldScenarioGroup,
+  FieldScenarioProjectionContext,
+} from "../field-scenario-model.ts";
+import type {
+  FormlessUiFieldSurface,
+  FormlessUiRecordFieldRendererKind,
+} from "../../formless-ui-contract.ts";
+import type { FieldSchema } from "@dpeek/formless-schema";
 import {
   createField,
   displayField,
   draftInput,
+  fieldError,
+  operationField,
   recordDrafts,
   recordField,
   textControl,
 } from "./fixture-helpers.ts";
 
-const taskField = {
+const requiredTextField = { type: "text", required: true, label: "Task" } as const;
+const optionalTextField = { ...requiredTextField, required: false } as const;
+const requiredLongTextField = {
   type: "text",
   required: true,
-  label: "Task",
-} as const;
-
-const idField = {
-  type: "text",
-  required: true,
-  label: "Record ID",
-} as const;
-
-const summaryField = {
-  type: "text",
-  required: false,
   label: "Summary",
   format: "longText",
 } as const;
-
-const briefField = {
+const optionalLongTextField = { ...requiredLongTextField, required: false } as const;
+const requiredMarkdownField = {
   type: "text",
-  required: false,
+  required: true,
   label: "Brief",
   format: "markdown",
 } as const;
+const optionalMarkdownField = { ...requiredMarkdownField, required: false } as const;
 
-const notesField = {
-  type: "text",
-  required: false,
-  label: "Notes",
-  format: "markdown",
-} as const;
+const requirednessAxis = composeScenarioAxis("requiredness", "Requiredness", [
+  scenarioOption("required", "Required"),
+  scenarioOption("optional", "Optional"),
+]);
+const valueAxis = composeScenarioAxis("value", "Value", [
+  scenarioOption("known", "Known"),
+  scenarioOption("unset", "Unset"),
+]);
+const modeAxis = composeScenarioAxis("mode", "Mode", [
+  scenarioOption("editor", "Editor"),
+  scenarioOption("display", "Display"),
+]);
 
-const textCreateBase = createField({
-  fieldName: "title",
-  field: taskField,
-  editor: "text",
-  control: textControl(taskField),
-  draftInput: draftInput("Prepare launch checklist"),
-  value: "Prepare launch checklist",
-  recordId: "create-title",
-});
-
-const textRecordBase = recordField({
-  fieldName: "title",
-  field: taskField,
-  editor: "text",
-  control: textControl(taskField),
-  commit: "field-commit",
-  drafts: recordDrafts({ recordValue: "Review route changes" }),
-  formatting: { displayValue: "Review route changes" },
-  recordId: "record-title",
-  rendererKind: "text",
-});
-
-const textDetailBase = displayField({
-  fieldName: "id",
-  field: idField,
-  editor: "text",
-  control: textControl(idField),
-  access: { kind: "system", fieldRef: { kind: "system", name: "id" } },
-  fieldRef: { kind: "system", name: "id" },
-  formatting: { displayValue: "task-launch" },
-  recordId: "system-id",
-  value: "task-launch",
-});
-
-const longTextDetailBase = displayField({
-  fieldName: "summary",
-  field: summaryField,
-  editor: "textarea",
-  control: textControl(summaryField, { editor: "textarea", controlKind: "textarea" }),
-  formatting: { displayValue: "Block placement review before publish." },
-  recordId: "detail-summary",
-  value: "Block placement review before publish.",
-});
-
-const markdownCreateBase = createField({
-  fieldName: "brief",
-  field: briefField,
-  editor: "markdown",
-  control: textControl(briefField, { editor: "markdown", controlKind: "markdown" }),
-  draftInput: draftInput("## Launch scope\n\n- Confirm owner\n- Publish public page"),
-  recordId: "create-brief",
-  value: "## Launch scope\n\n- Confirm owner\n- Publish public page",
-});
-
-const markdownDetailBase = displayField({
-  fieldName: "notes",
-  field: notesField,
-  editor: "markdown",
-  control: textControl(notesField, { editor: "markdown", controlKind: "markdown" }),
-  formatting: {
-    displayValue:
-      "### Publish note\n\nReview **routes** and [preview](https://example.com) before release.",
-  },
-  recordId: "detail-markdown",
-  value: "### Publish note\n\nReview **routes** and [preview](https://example.com) before release.",
-});
+const textRecordPresentationAxis = composeScenarioAxis("presentation", "Presentation", [
+  scenarioOption("default", "Default"),
+  scenarioOption("heading", "Heading"),
+  scenarioOption("suffix", "Suffix"),
+]);
+const textRuntimeAxis = composeScenarioAxis("runtime", "Runtime", [
+  scenarioOption("ready", "Ready"),
+  scenarioOption("pending", "Pending"),
+]);
+const textOperationFormatAxis = composeScenarioAxis("format", "Format", [
+  scenarioOption("plain", "Plain"),
+  scenarioOption("email", "Email"),
+  scenarioOption("phone", "Phone"),
+]);
+const textOperationValueAxis = composeScenarioAxis("value", "Value", [
+  scenarioOption("known", "Known"),
+  scenarioOption("unset", "Unset"),
+  scenarioOption("invalid", "Invalid"),
+]);
 
 export const textScenarioGroups = [
-  composeScenarioGroup({
-    id: "text-create",
-    kind: "text",
-    surface: "create",
-    base: textCreateBase,
-    axes: [
-      composeScenarioAxis("requiredness", "Requiredness", [scenarioOption("required", "Required")]),
-    ],
-  }),
-  composeScenarioGroup({
+  scalarTextCreateGroup("text"),
+  projectScenarioGroup({
     id: "text-record",
     kind: "text",
-    surface: "record",
-    base: textRecordBase,
-    axes: [
-      composeScenarioAxis("state", "State", [
-        scenarioOption("default", "Default"),
-        scenarioOption("pending", "Pending", {
-          drafts: recordDrafts({ recordValue: "Publish homepage edits" }),
-          formatting: { displayValue: "Publish homepage edits" },
-          pending: { isPending: true, label: "Saving" },
-          recordId: "pending-title",
-        }),
-      ]),
-    ],
+    axes: [modeAxis, requirednessAxis, valueAxis, textRecordPresentationAxis, textRuntimeAxis],
+    include: textRecordCombinationIsValid,
+    projectField: projectTextRecordField,
   }),
-  composeScenarioGroup({
-    id: "text-detail",
-    kind: "text",
-    surface: "detail",
-    base: textDetailBase,
-    axes: [composeScenarioAxis("state", "State", [scenarioOption("system", "System")])],
-  }),
-  composeScenarioGroup({
-    id: "long-text-detail",
-    kind: "long-text",
-    surface: "detail",
-    base: longTextDetailBase,
-    axes: [composeScenarioAxis("mode", "Mode", [scenarioOption("default", "Default")])],
-  }),
-  composeScenarioGroup({
-    id: "markdown-create",
-    kind: "markdown",
-    surface: "create",
-    base: markdownCreateBase,
-    axes: [composeScenarioAxis("mode", "Mode", [scenarioOption("default", "Default")])],
-  }),
-  composeScenarioGroup({
-    id: "markdown-detail",
-    kind: "markdown",
-    surface: "detail",
-    base: markdownDetailBase,
-    axes: [composeScenarioAxis("mode", "Mode", [scenarioOption("default", "Default")])],
-  }),
+  scalarTextExistingGroup("text", "table-cell"),
+  scalarTextExistingGroup("text", "detail"),
+  scalarTextOperationGroup("text"),
+  scalarTextCreateGroup("long-text"),
+  scalarTextExistingGroup("long-text", "record"),
+  scalarTextExistingGroup("long-text", "table-cell"),
+  scalarTextExistingGroup("long-text", "detail"),
+  scalarTextOperationGroup("long-text"),
+  scalarTextCreateGroup("markdown"),
+  scalarTextExistingGroup("markdown", "record"),
+  scalarTextExistingGroup("markdown", "table-cell"),
+  scalarTextExistingGroup("markdown", "detail"),
 ] satisfies readonly FieldScenarioGroup[];
+
+function scalarTextCreateGroup(kind: Extract<FieldKindKey, "long-text" | "markdown" | "text">) {
+  return projectScenarioGroup({
+    id: `${kind}-create`,
+    kind,
+    axes: [requirednessAxis, valueAxis],
+    projectField: (context) => projectCreateTextField(kind, context),
+  });
+}
+
+function scalarTextExistingGroup(
+  kind: Extract<FieldKindKey, "long-text" | "markdown" | "text">,
+  surface: Extract<FormlessUiFieldSurface, "detail" | "record" | "table-cell">,
+) {
+  return projectScenarioGroup({
+    id: `${kind}-${surface}`,
+    kind,
+    axes: [modeAxis, requirednessAxis, valueAxis],
+    projectField: (context) => projectExistingTextField(kind, surface, context),
+  });
+}
+
+function scalarTextOperationGroup(kind: Extract<FieldKindKey, "long-text" | "text">) {
+  return projectScenarioGroup({
+    id: `${kind}-operation`,
+    kind,
+    axes:
+      kind === "text"
+        ? [requirednessAxis, textOperationFormatAxis, textOperationValueAxis]
+        : [requirednessAxis, valueAxis],
+    include: ({ facets }) =>
+      kind !== "text" || facets.format !== "plain" || facets.value !== "invalid",
+    projectField: (context) => projectOperationTextField(kind, context),
+  });
+}
+
+function textRecordCombinationIsValid({ facets }: FieldScenarioProjectionContext) {
+  if (facets.mode === "display") {
+    return (
+      facets.runtime === "ready" &&
+      (facets.presentation === "default" ||
+        (facets.presentation === "suffix" && facets.value === "known"))
+    );
+  }
+
+  if (facets.presentation === "suffix") {
+    return false;
+  }
+
+  return (
+    facets.runtime === "ready" ||
+    (facets.presentation === "default" &&
+      facets.requiredness === "optional" &&
+      facets.value === "known")
+  );
+}
+
+function projectTextRecordField(context: FieldScenarioProjectionContext) {
+  if (context.facets.presentation === "suffix") {
+    return projectExistingTextField("text", "record", context, "suffix");
+  }
+
+  const field = projectExistingTextField(
+    "text",
+    "record",
+    context,
+    context.facets.presentation === "heading" ? "heading" : "default",
+  );
+
+  return context.facets.runtime === "pending"
+    ? { ...field, pending: { isPending: true, label: "Saving" } }
+    : field;
+}
+
+function projectCreateTextField(
+  kind: Extract<FieldKindKey, "long-text" | "markdown" | "text">,
+  { facets }: FieldScenarioProjectionContext,
+) {
+  const required = facets.requiredness === "required";
+  const field = textField(kind, required);
+  const value = facets.value === "known" ? textValue(kind) : "";
+  const control = textFieldControl(kind, field, "create");
+
+  return createField({
+    fieldName: textFieldName(kind),
+    field,
+    editor: control.editor,
+    control,
+    draftInput: draftInput(value),
+    labelVisibility: "visible",
+    recordId: `${kind}-create-${facets.requiredness}-${facets.value}`,
+    value,
+  });
+}
+
+function projectOperationTextField(
+  kind: Extract<FieldKindKey, "long-text" | "text">,
+  { facets }: FieldScenarioProjectionContext,
+) {
+  const required = facets.requiredness === "required";
+  const format = kind === "text" ? textOperationFormat(facets.format) : "plain";
+  const field = kind === "text" ? operationTextField(required, format) : textField(kind, required);
+  const value = operationTextValue(kind, format, facets.value);
+  const control = textFieldControl(kind, field, "operation");
+  const fieldName = kind === "text" ? operationTextFieldName(format) : textFieldName(kind);
+  const errors =
+    kind === "long-text" && required && facets.value === "unset"
+      ? [fieldError(fieldName, `Field "${fieldName}" cannot be empty.`)]
+      : undefined;
+
+  return operationField({
+    fieldName,
+    inputName: fieldName,
+    field,
+    editor: control.editor,
+    control,
+    draftInput: draftInput(value),
+    errors,
+    input: {
+      control: kind === "long-text" ? "longText" : "text",
+      label: control.label,
+      name: fieldName,
+      required,
+      ...(format === "plain" ? {} : { format }),
+    },
+    labelVisibility: "visible",
+    recordId: `${kind}-operation-${facets.requiredness}-${format}-${facets.value}`,
+    value: value || undefined,
+  });
+}
+
+function textOperationFormat(value: string | undefined): "email" | "phone" | "plain" {
+  return value === "email" || value === "phone" ? value : "plain";
+}
+
+function operationTextField(
+  required: boolean,
+  format: "email" | "phone" | "plain",
+): Extract<FieldSchema, { type: "text" }> {
+  return {
+    type: "text",
+    required,
+    label: format === "email" ? "Email" : format === "phone" ? "Phone" : "Task",
+    ...(format === "plain" ? {} : { format }),
+  };
+}
+
+function operationTextFieldName(format: "email" | "phone" | "plain") {
+  return format === "email" ? "email" : format === "phone" ? "phone" : "title";
+}
+
+function operationTextValue(
+  kind: Extract<FieldKindKey, "long-text" | "text">,
+  format: "email" | "phone" | "plain",
+  valueFacet: string | undefined,
+) {
+  if (valueFacet === "unset") {
+    return "";
+  }
+
+  if (valueFacet === "invalid") {
+    return format === "email" ? "not-an-email" : "not-a-phone";
+  }
+
+  if (format === "email") {
+    return "dana@example.com";
+  }
+
+  if (format === "phone") {
+    return "+61 2 5550 1234";
+  }
+
+  return textValue(kind);
+}
+
+function projectExistingTextField(
+  kind: Extract<FieldKindKey, "long-text" | "markdown" | "text">,
+  surface: Extract<FormlessUiFieldSurface, "detail" | "record" | "table-cell">,
+  { facets }: FieldScenarioProjectionContext,
+  presentation: "default" | "heading" | "suffix" = "default",
+) {
+  const required = facets.requiredness === "required";
+  const field = textField(kind, required);
+  const value = facets.value === "known" ? textValue(kind) : "";
+  const displayValue = value;
+  const labelVisibility = surface === "detail" ? ("visible" as const) : ("hidden" as const);
+  const density = surface === "table-cell" ? ("compact" as const) : ("default" as const);
+  const control = textFieldControl(kind, field, facets.mode === "display" ? "display" : surface);
+  const common = {
+    fieldName: textFieldName(kind),
+    field,
+    editor: control.editor,
+    control,
+    labelVisibility,
+    recordId: `${kind}-${surface}-${facets.mode}-${facets.requiredness}-${facets.value}-${presentation}`,
+    surface,
+  };
+
+  if (facets.mode === "display") {
+    return displayField({
+      ...common,
+      density,
+      formatting: { displayValue, ...(presentation === "suffix" ? { suffix: "tasks" } : {}) },
+      suffix: presentation === "suffix" ? "tasks" : undefined,
+      value: value || undefined,
+    });
+  }
+
+  return recordField({
+    ...common,
+    commit: "field-commit",
+    density,
+    drafts: recordDrafts({ recordValue: value || undefined }),
+    formatting: { displayValue },
+    presentationMode: presentation === "heading" ? "heading" : "default",
+    rendererKind: textRendererKind(kind, surface, presentation),
+  });
+}
+
+function textField(kind: Extract<FieldKindKey, "long-text" | "markdown" | "text">, required: boolean) {
+  if (kind === "long-text") {
+    return required ? requiredLongTextField : optionalLongTextField;
+  }
+
+  if (kind === "markdown") {
+    return required ? requiredMarkdownField : optionalMarkdownField;
+  }
+
+  return required ? requiredTextField : optionalTextField;
+}
+
+function textFieldControl(
+  kind: Extract<FieldKindKey, "long-text" | "markdown" | "text">,
+  field: Extract<FieldSchema, { type: "text" }>,
+  surface: FormlessUiFieldSurface | "display",
+) {
+  if (kind === "long-text") {
+    return textControl(field, { editor: "textarea", controlKind: "textarea" });
+  }
+
+  if (kind === "markdown") {
+    return textControl(field, {
+      editor: "markdown",
+      controlKind: surface === "table-cell" ? "textarea" : "markdown",
+    });
+  }
+
+  return textControl(field, { editor: "text", controlKind: "text" });
+}
+
+function textRendererKind(
+  kind: Extract<FieldKindKey, "long-text" | "markdown" | "text">,
+  surface: Extract<FormlessUiFieldSurface, "detail" | "record" | "table-cell">,
+  presentation: "default" | "heading" | "suffix",
+): FormlessUiRecordFieldRendererKind {
+  if (kind === "long-text" || (kind === "markdown" && surface === "table-cell")) {
+    return "textarea";
+  }
+
+  if (kind === "markdown") {
+    return "markdown";
+  }
+
+  return presentation === "heading" ? "autosize-text" : "text";
+}
+
+function textFieldName(kind: Extract<FieldKindKey, "long-text" | "markdown" | "text">) {
+  return kind === "long-text" ? "summary" : kind === "markdown" ? "brief" : "title";
+}
+
+function textValue(kind: Extract<FieldKindKey, "long-text" | "markdown" | "text">) {
+  if (kind === "long-text") {
+    return "Block placement review before publish.";
+  }
+
+  if (kind === "markdown") {
+    return "## Launch scope\n\n- Confirm owner\n- Publish public page";
+  }
+
+  return "Prepare launch checklist";
+}

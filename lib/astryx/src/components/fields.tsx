@@ -16,7 +16,12 @@ import {
 } from "@astryxdesign/core/theme/tokens.stylex";
 import { fieldKindOptions, fieldScenarioGroups } from "./fields/fixtures.ts";
 import { FormlessUiFieldRenderer, FormlessUiFieldSubmitFormAdapter } from "./fields/renderer.tsx";
-import { applyScenarioFieldIntent, scenarioFieldKey } from "./fields/fixture-helpers.ts";
+import {
+  applyScenarioFieldIntent,
+  applyScenarioFieldSubmit,
+  scenarioFieldKey,
+} from "./fields/fixture-helpers.ts";
+import { closestScenarioVariantForFacet } from "./field-scenario-model.ts";
 import type {
   FieldKindKey,
   FieldScenarioFacet,
@@ -46,6 +51,7 @@ export function FormlessFieldsLayout() {
     defaultFacetValues(requiredScenarioGroup("enum")),
   );
   const [fieldOverrides, setFieldOverrides] = useState<FieldOverrides>({});
+  const [submittedFieldKeys, setSubmittedFieldKeys] = useState<Set<string>>(() => new Set());
 
   const selectedKindOption =
     fieldKindOptions.find((option) => option.id === selectedKind) ?? fieldKindOptions[0];
@@ -63,7 +69,16 @@ export function FormlessFieldsLayout() {
         : null,
     [fieldOverrides, selectedVariant],
   );
-  const handleIntent = useFieldMatrixIntentHandler(selectedVariant, setFieldOverrides);
+  const handleIntent = useFieldMatrixIntentHandler(
+    selectedVariant,
+    setFieldOverrides,
+    submittedFieldKeys,
+  );
+  const handleSubmit = useFieldMatrixSubmitHandler(
+    selectedVariant,
+    setFieldOverrides,
+    setSubmittedFieldKeys,
+  );
   const stateMachineError =
     selectedField?.access.kind === "stateMachine" && selectedField.control.kind === "enum"
       ? selectedField.errors?.[0]
@@ -112,36 +127,31 @@ export function FormlessFieldsLayout() {
             ))}
           </aside>
 
-          <section {...stylex.props(styles.workbench)} aria-labelledby="field-matrix-heading">
-            <HStack hAlign="between" vAlign="center" gap={3} wrap="wrap">
-              <Heading level={2} id="field-matrix-heading">
-                {selectedKindOption.label}
-              </Heading>
-              <Text type="supporting" color="secondary">
-                {countScenariosForKind(selectedKindOption.id)} scenarios
-              </Text>
-            </HStack>
-
+          <section {...stylex.props(styles.workbench)} aria-label={selectedKindOption.label}>
             {selectedGroup ? (
               <div {...stylex.props(styles.facetGrid)}>
-                {activeScenarioFacets(selectedGroup, normalizedFacetValues).map((facet) => (
+                {visibleScenarioFacets(selectedGroup, normalizedFacetValues).map((facet) => (
                   <FieldFacetControl
                     key={facet.id}
                     facet={facet}
                     group={selectedGroup}
                     selectedValues={normalizedFacetValues}
                     onChange={(value) => {
-                      const nextValues = normalizeFacetValues(selectedGroup, {
-                        ...normalizedFacetValues,
-                        [facet.id]: value,
-                      });
-                      const nextVariant = findScenarioVariant(selectedGroup, nextValues);
+                      const nextVariant = closestScenarioVariantForFacet(
+                        selectedGroup,
+                        normalizedFacetValues,
+                        facet.id,
+                        value,
+                      );
 
                       if (nextVariant) {
-                        resetFieldOverride(setFieldOverrides, nextVariant.field);
+                        resetFieldScenarioState(
+                          setFieldOverrides,
+                          setSubmittedFieldKeys,
+                          nextVariant.field,
+                        );
+                        setSelectedFacetValues(nextVariant.facets);
                       }
-
-                      setSelectedFacetValues(nextValues);
                     }}
                   />
                 ))}
@@ -150,7 +160,11 @@ export function FormlessFieldsLayout() {
 
             <Card padding={4} variant="muted">
               {selectedField ? (
-                <FieldPreview field={selectedField} onIntent={handleIntent} />
+                <FieldPreview
+                  field={selectedField}
+                  onIntent={handleIntent}
+                  onSubmit={handleSubmit}
+                />
               ) : (
                 <NoScenario />
               )}
@@ -165,10 +179,19 @@ export function FormlessFieldsLayout() {
 function FieldPreview({
   field,
   onIntent,
+  onSubmit,
 }: {
   field: FormlessUiField;
   onIntent: FormlessUiFieldIntentHandler;
+  onSubmit: () => void;
 }) {
+  const renderer = (
+    <>
+      <FormlessUiFieldRenderer field={field} onIntent={onIntent} />
+      <FormlessUiFieldSubmitFormAdapter field={field} />
+    </>
+  );
+
   return (
     <div
       {...stylex.props(
@@ -177,8 +200,29 @@ function FieldPreview({
         field.surface === "detail" && styles.previewDetail,
       )}
     >
-      <FormlessUiFieldRenderer field={field} onIntent={onIntent} />
-      <FormlessUiFieldSubmitFormAdapter field={field} />
+      {field.mode === "editor" && field.commit === "submit" ? (
+        <form
+          noValidate
+          onSubmit={(event) => {
+            event.preventDefault();
+            onSubmit();
+          }}
+        >
+          <VStack gap={3}>
+            {renderer}
+            <HStack hAlign="end">
+              <Button
+                label="Submit"
+                type="submit"
+                variant="primary"
+                isDisabled={Boolean(field.errors?.length)}
+              />
+            </HStack>
+          </VStack>
+        </form>
+      ) : (
+        renderer
+      )}
     </div>
   );
 }
@@ -203,12 +247,15 @@ function FieldFacetControl({
   selectedValues: FieldScenarioFacetValues;
 }) {
   const value = selectedValues[facet.id] ?? facet.options[0]?.id ?? "";
+  const options = facet.options.filter((option) =>
+    facetOptionExistsForSelectedSurface(group, facet.id, option.id, selectedValues),
+  );
 
   if (fieldScenarioFacetIsAction(facet.id)) {
     return (
       <div {...stylex.props(styles.facetControl)}>
         <ButtonGroup label={facet.label} size="md">
-          {facet.options.map((option) => {
+          {options.map((option) => {
             const isDisabled = !facetOptionHasScenario(group, facet.id, option.id, selectedValues);
 
             return (
@@ -234,7 +281,7 @@ function FieldFacetControl({
         label={facet.label}
         layout="hug"
       >
-        {facet.options.map((option) => (
+        {options.map((option) => (
           <SegmentedControlItem
             key={option.id}
             value={option.id}
@@ -251,8 +298,9 @@ function fieldScenarioFacetIsAction(facetId: FieldScenarioFacetId) {
   return facetId === "value";
 }
 
-function resetFieldOverride(
+function resetFieldScenarioState(
   setFieldOverrides: React.Dispatch<React.SetStateAction<FieldOverrides>>,
+  setSubmittedFieldKeys: React.Dispatch<React.SetStateAction<Set<string>>>,
   field: FormlessUiField,
 ) {
   const key = scenarioFieldKey(field);
@@ -266,11 +314,22 @@ function resetFieldOverride(
     delete nextOverrides[key];
     return nextOverrides;
   });
+
+  setSubmittedFieldKeys((currentKeys) => {
+    if (!currentKeys.has(key)) {
+      return currentKeys;
+    }
+
+    const nextKeys = new Set(currentKeys);
+    nextKeys.delete(key);
+    return nextKeys;
+  });
 }
 
 function useFieldMatrixIntentHandler(
   selectedVariant: FieldScenarioVariant | null,
   setFieldOverrides: React.Dispatch<React.SetStateAction<FieldOverrides>>,
+  submittedFieldKeys: ReadonlySet<string>,
 ): FormlessUiFieldIntentHandler {
   const transitionTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
@@ -334,7 +393,14 @@ function useFieldMatrixIntentHandler(
 
       setFieldOverrides((currentOverrides) => {
         const currentField = currentOverrides[key] ?? selectedVariant.field;
-        const nextField = applyScenarioFieldIntent(currentField, intent);
+        let nextField = applyScenarioFieldIntent(currentField, intent);
+
+        if (
+          intent.type === "operationDraftChange" ||
+          (intent.type === "createDraftChange" && submittedFieldKeys.has(key))
+        ) {
+          nextField = applyScenarioFieldSubmit(nextField);
+        }
 
         if (nextField === currentField) {
           return currentOverrides;
@@ -343,8 +409,38 @@ function useFieldMatrixIntentHandler(
         return { ...currentOverrides, [key]: nextField };
       });
     },
-    [selectedVariant, setFieldOverrides],
+    [selectedVariant, setFieldOverrides, submittedFieldKeys],
   );
+}
+
+function useFieldMatrixSubmitHandler(
+  selectedVariant: FieldScenarioVariant | null,
+  setFieldOverrides: React.Dispatch<React.SetStateAction<FieldOverrides>>,
+  setSubmittedFieldKeys: React.Dispatch<React.SetStateAction<Set<string>>>,
+) {
+  return useCallback(() => {
+    if (!selectedVariant || selectedVariant.field.commit !== "submit") {
+      return;
+    }
+
+    const key = scenarioFieldKey(selectedVariant.field);
+
+    setSubmittedFieldKeys((currentKeys) => {
+      if (currentKeys.has(key)) {
+        return currentKeys;
+      }
+
+      return new Set([...currentKeys, key]);
+    });
+    setFieldOverrides((currentOverrides) => {
+      const currentField = currentOverrides[key] ?? selectedVariant.field;
+      const nextField = applyScenarioFieldSubmit(currentField);
+
+      return nextField === currentField
+        ? currentOverrides
+        : { ...currentOverrides, [key]: nextField };
+    });
+  }, [selectedVariant, setFieldOverrides, setSubmittedFieldKeys]);
 }
 
 function applyStateTransitionPending(
@@ -359,7 +455,11 @@ function applyStateTransitionPending(
     return field;
   }
 
-  const transition = field.stateMachineFacts.transitions?.find(
+  if (field.stateMachineFacts.interaction.kind !== "transitions") {
+    return field;
+  }
+
+  const transition = field.stateMachineFacts.interaction.transitions.find(
     (candidate) => candidate.transitionName === intent.transitionName,
   );
 
@@ -372,14 +472,17 @@ function applyStateTransitionPending(
     pending: { isPending: true, label: `${transition.label}...` },
     stateMachineFacts: {
       ...field.stateMachineFacts,
-      transitions: field.stateMachineFacts.transitions?.map((candidate) =>
-        candidate.transitionName === intent.transitionName
-          ? {
-              ...candidate,
-              pending: { isPending: true, label: "Running" },
-            }
-          : candidate,
-      ),
+      interaction: {
+        ...field.stateMachineFacts.interaction,
+        transitions: field.stateMachineFacts.interaction.transitions.map((candidate) =>
+          candidate.transitionName === intent.transitionName
+            ? {
+                ...candidate,
+                pending: { isPending: true, label: "Running" },
+              }
+            : candidate,
+        ),
+      },
     },
   };
 }
@@ -392,19 +495,26 @@ function clearStateTransitionPending(
     return field;
   }
 
+  if (field.stateMachineFacts.interaction.kind !== "transitions") {
+    return { ...field, pending: undefined };
+  }
+
   return {
     ...field,
     pending: undefined,
     stateMachineFacts: {
       ...field.stateMachineFacts,
-      transitions: field.stateMachineFacts.transitions?.map((candidate) =>
-        candidate.transitionName === intent.transitionName
-          ? {
-              ...candidate,
-              pending: undefined,
-            }
-          : candidate,
-      ),
+      interaction: {
+        ...field.stateMachineFacts.interaction,
+        transitions: field.stateMachineFacts.interaction.transitions.map((candidate) =>
+          candidate.transitionName === intent.transitionName
+            ? {
+                ...candidate,
+                pending: undefined,
+              }
+            : candidate,
+        ),
+      },
     },
   };
 }
@@ -498,18 +608,46 @@ function activeScenarioFacets(
   );
 }
 
+function visibleScenarioFacets(
+  group: FieldScenarioGroup,
+  values: FieldScenarioFacetValues,
+): readonly FieldScenarioFacet[] {
+  return activeScenarioFacets(group, values).filter(
+    (facet) =>
+      group.kind !== "enum" ||
+      values.presentation !== "plain" ||
+      (facet.id !== "trigger" && facet.id !== "list"),
+  );
+}
+
 function facetOptionHasScenario(
   group: FieldScenarioGroup,
   facetId: FieldScenarioFacetId,
   optionId: string,
   selectedValues: FieldScenarioFacetValues,
 ) {
-  const nextValues =
-    facetId === "surface"
-      ? normalizeFacetValues(group, { ...selectedValues, [facetId]: optionId })
-      : { ...selectedValues, [facetId]: optionId };
+  return closestScenarioVariantForFacet(group, selectedValues, facetId, optionId) !== undefined;
+}
 
-  return scenarioVariantExists(group, nextValues);
+function facetOptionExistsForSelectedSurface(
+  group: FieldScenarioGroup,
+  facetId: FieldScenarioFacetId,
+  optionId: string,
+  selectedValues: FieldScenarioFacetValues,
+) {
+  if (facetId === "surface") {
+    return group.variants.some(
+      (variant) => (variant.facets.surface ?? group.surface) === optionId,
+    );
+  }
+
+  const selectedSurface = selectedValues.surface ?? group.surface;
+
+  return group.variants.some(
+    (variant) =>
+      (variant.facets.surface ?? group.surface) === selectedSurface &&
+      variant.facets[facetId] === optionId,
+  );
 }
 
 function scenarioVariantExists(group: FieldScenarioGroup, values: FieldScenarioFacetValues) {
@@ -518,12 +656,6 @@ function scenarioVariantExists(group: FieldScenarioGroup, values: FieldScenarioF
   return group.variants.some((variant) =>
     activeFacets.every((facet) => variant.facets[facet.id] === values[facet.id]),
   );
-}
-
-function countScenariosForKind(kind: FieldKindKey) {
-  return fieldScenarioGroups
-    .filter((group) => group.kind === kind)
-    .reduce((count, group) => count + group.variants.length, 0);
 }
 
 const styles = stylex.create({

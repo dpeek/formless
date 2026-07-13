@@ -25,6 +25,7 @@ import {
   adaptGeneratedFormlessUiStateTransitionInvoke,
   adaptGeneratedOperationFormlessUiDraftChange,
   adaptGeneratedRecordEditorFormlessUiDraftChange,
+  adaptGeneratedRecordFormlessUiDraftCommit,
   adaptGeneratedRecordFormlessUiDraftRevert,
   adaptGeneratedRecordFormlessUiValueCommit,
   adaptGeneratedRecordFormlessUiValueUnitCommit,
@@ -162,6 +163,19 @@ describe("generated Formless UI intent adapter", () => {
     });
   });
 
+  it("commits the foundation-owned typed number draft", () => {
+    const result = adaptGeneratedRecordFormlessUiDraftCommit(
+      { type: "recordDraftCommit", fieldName: "cost", fieldValue: { kind: "value", value: 12.5 } },
+      recordContext([costFieldConfig], { cost: 10 }),
+    ) as GeneratedFormlessUiRecordValueCommitResult;
+
+    expect(result.patchValues).toEqual({ cost: 12.5 });
+    expect(result.draftChange).toEqual({
+      fieldName: "cost",
+      fieldValue: { kind: "value", value: 12.5 },
+    });
+  });
+
   it("adapts record draft revert into the undefined draft input callback shape", () => {
     const state = nextGeneratedUpdateDraftSessionState({
       fieldName: "title",
@@ -207,6 +221,31 @@ describe("generated Formless UI intent adapter", () => {
       costUnit: "hour",
     });
     expect(result.fieldErrorChange).toBeUndefined();
+  });
+
+  it("reverts both value and unit drafts for a value-unit field", () => {
+    const state = nextGeneratedUpdateDraftSessionState({
+      fieldName: "costUnit",
+      fieldValue: { kind: "input", value: "hour" },
+      state: nextGeneratedUpdateDraftSessionState({
+        fieldName: "cost",
+        fieldValue: { kind: "value", value: 12.5 },
+        state: initialGeneratedUpdateDraftSessionState({
+          baselineValues: { cost: 10, costUnit: "day" },
+          fields: [costFieldConfig],
+        }),
+      }),
+    });
+    const result = adaptGeneratedRecordFormlessUiDraftRevert(
+      { type: "recordDraftRevert", fieldName: "cost" },
+      { fields: [costFieldConfig], state },
+    ) as GeneratedFormlessUiRecordDraftChangeResult;
+
+    expect(result.additionalDraftChanges).toEqual([
+      { fieldName: "costUnit", fieldValue: undefined },
+    ]);
+    expect(result.state?.draft.values.cost).toBeUndefined();
+    expect(result.state?.draft.values.costUnit).toBeUndefined();
   });
 
   it("adapts field error intents into current field error callback payloads", () => {
@@ -268,10 +307,11 @@ describe("generated Formless UI intent adapter", () => {
       fieldName: "icon",
       value: newSvg,
     });
-    const open = adaptGeneratedFormlessUiIconDialogOpenChange(
-      { type: "iconDialogOpenChange", fieldName: "icon", open: true },
-      iconContext,
-    ) as GeneratedFormlessUiIconDialogOpenChangeResult;
+    const open = adaptGeneratedFormlessUiIconDialogOpenChange({
+      type: "iconDialogOpenChange",
+      fieldName: "icon",
+      open: true,
+    }) as GeneratedFormlessUiIconDialogOpenChangeResult;
     const cancel = adaptGeneratedFormlessUiIconDialogCancel(
       { type: "iconDialogCancel", fieldName: "icon" },
       iconContext,
@@ -282,7 +322,6 @@ describe("generated Formless UI intent adapter", () => {
     ) as GeneratedFormlessUiIconDialogSaveResult;
 
     expect(draft.iconDialogDraftChange).toEqual({ fieldName: "icon", value: newSvg });
-    expect(open.iconDialogDraftChange).toEqual({ fieldName: "icon", value: draftSvg });
     expect(open.iconDialogOpenChange).toEqual({ fieldName: "icon", open: true });
     expect(cancel.iconDialogDraftChange).toEqual({ fieldName: "icon", value: oldSvg });
     expect(cancel.iconDialogOpenChange).toEqual({ fieldName: "icon", open: false });
@@ -299,7 +338,7 @@ describe("generated Formless UI intent adapter", () => {
       fieldName: "status",
       operationName: "startTask",
       recordId: "task-1",
-      source: "button",
+      source: "menuItem",
       transitionName: "start",
     });
 

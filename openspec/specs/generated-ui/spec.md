@@ -270,7 +270,7 @@ The system SHALL render generated field displays and editors from field behavior
 - GIVEN text fields use `icon`, `image`, or `media` editor metadata
 - WHEN generated editors render
 - THEN icon fields use a catalog-first picker with custom SVG mode
-- AND image fields support upload with preview and manual URL fallback
+- AND image fields render projected previews without exposing raw URL input
 - AND media fields select or upload core image media assets
 
 #### Scenario: Markdown source editor
@@ -435,9 +435,10 @@ The system SHALL render generated field displays and editors from field behavior
   fields commit on change, and submit fields resolve through a submit-form
   adapter boundary
 - AND invalid number draft text, missing reference ids, alpha or unknown color
-  values, markdown source, source icon SVG, media asset ids, media preview hrefs,
-  and display-safe field errors remain visible instead of being coerced by
-  renderer primitives
+  values, markdown source, source icon SVG, and display-safe field errors remain
+  visible instead of being coerced by renderer primitives
+- AND media asset ids and preview hrefs remain renderer contract facts while
+  media fields render only image thumbnails
 
 #### Scenario: Public Site renderer contracts remain future work
 
@@ -463,16 +464,17 @@ while delegating media-specific controls to the active Formless UI renderer.
   Formless UI field contract
 - AND the active renderer handles asset selection, upload file selection,
   preview, and broken-asset display through projected facts and intent callbacks
+- AND media editors, media libraries, and media displays render image thumbnails
+  without raw asset ids, URLs, or asset labels
 - AND the legacy `@dpeek/formless-ui` seam may adapt the current Media React
   control while the legacy renderer remains active
 - AND the field value remains a flat text value committed by generated UI
 
-#### Scenario: Image editor preserves fallback input
+#### Scenario: Image editor does not expose stored URLs
 
 - GIVEN a text field declares the `image` editor
 - WHEN generated UI renders the field
-- THEN generated UI preserves upload with preview and manual URL fallback
-  behavior
+- THEN generated UI renders the projected preview without raw URL input
 - AND generic field labels, validation placement, layout, and commit policy
   remain owned by generated UI
 

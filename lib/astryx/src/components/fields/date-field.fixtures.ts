@@ -1,163 +1,211 @@
 import {
   composeScenarioAxis,
-  composeScenarioGroup,
+  projectScenarioGroup,
   scenarioOption,
 } from "../field-scenario-model.ts";
-import type { FieldScenarioComposeContext, FieldScenarioGroup } from "../field-scenario-model.ts";
+import type {
+  FieldScenarioGroup,
+  FieldScenarioProjectionContext,
+} from "../field-scenario-model.ts";
+import type { FormlessUiFieldSurface } from "../../formless-ui-contract.ts";
 import {
+  createField,
   dateControl,
   displayField,
-  fieldError,
+  draftInput,
+  operationField,
   recordDrafts,
   recordField,
 } from "./fixture-helpers.ts";
-import type { FormlessUiField } from "../../formless-ui-contract.ts";
 
 const dueDate = "2026-07-08";
+const dueDateField = { type: "date", required: true, label: "Due" } as const;
+const optionalDueDateField = { ...dueDateField, required: false } as const;
+const updatedAtField = { type: "date", required: false, label: "Updated" } as const;
 
-const dueDateField = {
-  type: "date",
-  required: false,
-  label: "Due",
-} as const;
-
-const updatedAtField = {
-  type: "date",
-  required: false,
-  label: "Updated",
-} as const;
-
-const dateRecordBase = recordField({
-  fieldName: "dueDate",
-  field: dueDateField,
-  editor: "date",
-  control: dateControl(dueDateField),
-  commit: "field-commit",
-  drafts: recordDrafts({ recordValue: dueDate }),
-  formatting: { displayValue: "Jul 8" },
-  recordId: "record-date",
-  rendererKind: "date",
-});
-
-const dateTableCellBase = displayField({
-  fieldName: "dueDate",
-  field: dueDateField,
-  editor: "date",
-  control: dateControl(dueDateField),
-  access: { kind: "readOnly", writable: false },
-  formatting: { displayValue: "Jul 8" },
-  recordId: "cell-due",
-  surface: "table-cell",
-  value: dueDate,
-});
-
-const dateDetailBase = displayField({
-  fieldName: "updatedAt",
-  field: updatedAtField,
-  editor: "date",
-  control: dateControl(updatedAtField),
-  access: { kind: "system", fieldRef: { kind: "system", name: "updatedAt" } },
-  fieldRef: { kind: "system", name: "updatedAt" },
-  formatting: { displayValue: "Jul 6, 2026 9:30 AM" },
-  recordId: "system-updated",
-  surface: "detail",
-  value: "2026-07-06T09:30:00.000Z",
-});
+const requirednessAxis = composeScenarioAxis("requiredness", "Requiredness", [
+  scenarioOption("required", "Required"),
+  scenarioOption("optional", "Optional"),
+]);
+const valueAxis = composeScenarioAxis("value", "Value", [
+  scenarioOption("known", "Known"),
+  scenarioOption("unset", "Unset"),
+]);
+const modeAxis = composeScenarioAxis("mode", "Mode", [
+  scenarioOption("editor", "Editor"),
+  scenarioOption("display", "Display"),
+]);
+const presentationAxis = composeScenarioAxis("presentation", "Presentation", [
+  scenarioOption("default", "Default"),
+  scenarioOption("value-or-interaction", "Value Or Interaction"),
+]);
+const detailInteractionAxis = composeScenarioAxis("interaction", "Access", [
+  scenarioOption("editable", "Editable"),
+  scenarioOption("read-only", "Read Only"),
+  scenarioOption("system", "System"),
+]);
 
 export const dateScenarioGroups = [
-  composeScenarioGroup({
+  projectScenarioGroup({
+    id: "date-create",
+    kind: "date",
+    axes: [requirednessAxis, valueAxis],
+    projectField: projectCreateDateField,
+  }),
+  projectScenarioGroup({
     id: "date-record",
     kind: "date",
-    surface: "record",
-    base: dateRecordBase,
-    axes: [
-      composeScenarioAxis("requiredness", "Required", [
-        scenarioOption("optional", "Optional"),
-        scenarioOption("required", "Required", requiredDate),
-      ]),
-      composeScenarioAxis("value", "Value", [
-        scenarioOption("filled", "Filled", withDateValue(dueDate, "Jul 8")),
-        scenarioOption("empty", "Empty", withDateValue("", "")),
-      ]),
-      composeScenarioAxis("presentation", "Presentation", [
-        scenarioOption("default", "Default"),
-        scenarioOption("value-or-interaction", "Value Or Interaction", {
-          presentation: { visibility: "valueOrInteraction" },
-          rendererKind: "quiet-date",
-        }),
-      ]),
-    ],
-    include: dateRecordCombinationIsValid,
-    finalizeField: finalizeDateRecordField,
+    axes: [modeAxis, requirednessAxis, valueAxis, presentationAxis],
+    include: datePresentationCombinationIsValid,
+    projectField: (context) => projectExistingDateField("record", context),
   }),
-  composeScenarioGroup({
-    id: "date-table-cell",
-    kind: "date",
-    surface: "table-cell",
-    base: dateTableCellBase,
-    axes: [composeScenarioAxis("state", "State", [scenarioOption("readonly", "Read Only")])],
-  }),
-  composeScenarioGroup({
+  existingDateGroup("table-cell"),
+  projectScenarioGroup({
     id: "date-detail",
     kind: "date",
-    surface: "detail",
-    base: dateDetailBase,
-    axes: [composeScenarioAxis("state", "State", [scenarioOption("system", "System")])],
+    axes: [modeAxis, requirednessAxis, valueAxis, detailInteractionAxis],
+    include: detailDateCombinationIsValid,
+    projectField: projectDetailDateField,
+  }),
+  projectScenarioGroup({
+    id: "date-operation",
+    kind: "date",
+    axes: [requirednessAxis, valueAxis],
+    projectField: projectOperationDateField,
   }),
 ] satisfies readonly FieldScenarioGroup[];
 
-function dateRecordCombinationIsValid({ facets }: FieldScenarioComposeContext) {
-  if (facets.presentation === "value-or-interaction") {
-    return facets.requiredness === "optional" && facets.value === "empty";
-  }
-
-  return true;
+function existingDateGroup(surface: Extract<FormlessUiFieldSurface, "table-cell">) {
+  return projectScenarioGroup({
+    id: `date-${surface}`,
+    kind: "date",
+    axes: [modeAxis, requirednessAxis, valueAxis],
+    projectField: (context) => projectExistingDateField(surface, context),
+  });
 }
 
-function finalizeDateRecordField({ facets, field, optionIds }: FieldScenarioComposeContext) {
-  if (field.mode !== "editor") {
-    return field;
-  }
-
-  return {
-    ...field,
-    recordId: `record-date-${optionIds.join("-")}`,
-    errors:
-      facets.requiredness === "required" && facets.value === "empty"
-        ? [fieldError("dueDate", "Choose a due date.")]
-        : undefined,
-  };
+function datePresentationCombinationIsValid({ facets }: FieldScenarioProjectionContext) {
+  return (
+    facets.presentation === "default" ||
+    (facets.mode === "editor" &&
+      facets.requiredness === "optional" &&
+      facets.value === "unset")
+  );
 }
 
-function requiredDate(field: FormlessUiField): FormlessUiField {
-  const requiredField = { ...dueDateField, required: true };
-
-  if (field.mode !== "editor" || field.surface === "create" || field.surface === "operation") {
-    return field;
+function detailDateCombinationIsValid({ facets }: FieldScenarioProjectionContext) {
+  if (facets.interaction === "editable") {
+    return facets.mode === "editor";
   }
 
-  return {
-    ...field,
-    control: dateControl(requiredField),
-    field: requiredField,
-    required: true,
-  };
+  if (facets.interaction === "system") {
+    return (
+      facets.mode === "display" &&
+      facets.requiredness === "optional" &&
+      facets.value === "known"
+    );
+  }
+
+  return facets.mode === "display";
 }
 
-function withDateValue(value: string, displayValue: string) {
-  return (field: FormlessUiField): FormlessUiField => {
-    if (field.mode !== "editor" || field.surface === "create" || field.surface === "operation") {
-      return field;
-    }
+function projectCreateDateField({ facets }: FieldScenarioProjectionContext) {
+  const required = facets.requiredness === "required";
+  const field = required ? dueDateField : optionalDueDateField;
+  const value = facets.value === "known" ? dueDate : "";
 
-    return {
-      ...field,
-      drafts: recordDrafts({
-        draft: value,
-        draftInput: { kind: "input", value },
-        recordValue: value,
-      }),
-      formatting: { ...field.formatting, displayValue },
-    };
+  return createField({
+    fieldName: "dueDate",
+    field,
+    editor: "date",
+    control: dateControl(field),
+    draftInput: draftInput(value),
+    labelVisibility: "visible",
+    recordId: `date-create-${facets.requiredness}-${facets.value}`,
+    value,
+  });
+}
+
+function projectOperationDateField({ facets }: FieldScenarioProjectionContext) {
+  const required = facets.requiredness === "required";
+  const field = required ? dueDateField : optionalDueDateField;
+  const value = facets.value === "known" ? dueDate : "";
+
+  return operationField({
+    fieldName: "dueDate",
+    inputName: "dueDate",
+    field,
+    editor: "date",
+    control: dateControl(field),
+    draftInput: draftInput(value),
+    labelVisibility: "visible",
+    recordId: `date-operation-${facets.requiredness}-${facets.value}`,
+    value: value || undefined,
+  });
+}
+
+function projectDetailDateField(context: FieldScenarioProjectionContext) {
+  if (context.facets.interaction !== "system") {
+    return projectExistingDateField("detail", context);
+  }
+
+  return displayField({
+    fieldName: "updatedAt",
+    field: updatedAtField,
+    editor: "date",
+    control: dateControl(updatedAtField),
+    access: { kind: "system", fieldRef: { kind: "system", name: "updatedAt" } },
+    density: "default",
+    fieldRef: { kind: "system", name: "updatedAt" },
+    formatting: {
+      displayValue: "Jul 6, 2026 9:30 AM",
+      temporal: { kind: "dateTime", value: "2026-07-06T09:30:00.000Z" },
+    },
+    labelVisibility: "visible",
+    recordId: "date-detail-system",
+    surface: "detail",
+    value: "2026-07-06T09:30:00.000Z",
+  });
+}
+
+function projectExistingDateField(
+  surface: Extract<FormlessUiFieldSurface, "detail" | "record" | "table-cell">,
+  { facets }: FieldScenarioProjectionContext,
+) {
+  const required = facets.requiredness === "required";
+  const field = required ? dueDateField : optionalDueDateField;
+  const value = facets.value === "known" ? dueDate : "";
+  const common = {
+    fieldName: "dueDate",
+    field,
+    editor: "date" as const,
+    control: dateControl(field),
+    labelVisibility: surface === "detail" ? ("visible" as const) : ("hidden" as const),
+    recordId: `date-${surface}-${facets.mode}-${facets.requiredness}-${facets.value}-${facets.presentation ?? "default"}`,
+    surface,
   };
+
+  return facets.mode === "display"
+    ? displayField({
+        ...common,
+        density: surface === "table-cell" ? "compact" : "default",
+        formatting: {
+          displayValue: value ? "Jul 8, 2026" : "",
+          ...(value ? { temporal: { kind: "date" as const, value } } : {}),
+        },
+        value: value || undefined,
+      })
+    : recordField({
+        ...common,
+        commit: "field-commit",
+        density: surface === "table-cell" ? "compact" : "default",
+        drafts: recordDrafts({ recordValue: value || undefined }),
+        formatting: { displayValue: value ? "Jul 8, 2026" : "" },
+        presentation:
+          facets.presentation === "value-or-interaction"
+            ? { visibility: "valueOrInteraction" }
+            : undefined,
+        rendererKind:
+          facets.presentation === "value-or-interaction" ? "quiet-date" : "date",
+      });
 }

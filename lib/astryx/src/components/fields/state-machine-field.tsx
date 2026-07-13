@@ -5,8 +5,6 @@ import { StateInput } from "../state-input.tsx";
 import {
   FieldChrome,
   formatInputValue,
-  isRecordEditorField,
-  stateMachineFieldValue,
 } from "./field-chrome.tsx";
 import { enumOptionForValue } from "./field-options.tsx";
 
@@ -19,26 +17,34 @@ export function StateMachineField({
   inputId: string;
   onIntent: FormlessUiFieldIntentHandler | undefined;
 }) {
-  const value = formatInputValue(stateMachineFieldValue(field));
+  const facts = field.stateMachineFacts;
+
+  if (facts === undefined) {
+    return null;
+  }
+
+  const value = formatInputValue(facts.currentValue);
   const option = enumOptionForValue(field.options, value);
-  const transitions = (field.stateMachineFacts?.transitions ?? []).map((transition) => ({
-    disabledReason: transition.availability?.disabledReason,
+  const transitionOperations =
+    facts.interaction.kind === "transitions"
+      ? facts.interaction.transitions.filter(
+          (transition) => transition.availability?.valid !== false,
+        )
+      : [];
+  const transitions = transitionOperations.map((transition) => ({
     id: transition.transitionName,
-    isDisabled: transition.availability?.valid === false,
-    isHidden: transition.availability?.valid === false,
     label: transition.label,
     operationKey: transition.operationName,
     pending: transition.pending,
     targetValue: transition.transition.to,
   }));
   const selectedTransitionByName = new Map(
-    (field.stateMachineFacts?.transitions ?? []).map((transition) => [
+    transitionOperations.map((transition) => [
       transition.transitionName,
       transition,
     ]),
   );
-  const isCompact =
-    field.surface === "table-cell" || (isRecordEditorField(field) && field.density === "compact");
+  const isCompact = "density" in field && field.density === "compact";
 
   return (
     <FieldChrome field={field} inputId={inputId}>
@@ -47,16 +53,21 @@ export function StateMachineField({
           label={field.label}
           value={value}
           option={option}
-          stateLabel={field.stateMachineFacts?.terminal ? "Terminal" : undefined}
+          isTerminal={facts.terminal}
           transitions={transitions}
           isCompact={isCompact}
           isDisabled={stateMachineTransitionControlIsDisabled(field)}
           isPending={Boolean(field.pending?.isPending)}
           pendingLabel={field.pending?.label}
+          valueStatus={facts.valueStatus}
           onTransition={(transition) => {
             const selectedTransition = selectedTransitionByName.get(transition.id);
 
-            if (!selectedTransition || !field.recordId) {
+            if (
+              !selectedTransition ||
+              !field.recordId ||
+              facts.interaction.kind !== "transitions"
+            ) {
               return;
             }
 
@@ -65,7 +76,7 @@ export function StateMachineField({
               fieldName: field.fieldName,
               operationName: selectedTransition.operationName,
               recordId: field.recordId,
-              source: "button",
+              source: facts.interaction.invocationSource,
               transitionName: selectedTransition.transitionName,
             });
           }}

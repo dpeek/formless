@@ -1,4 +1,5 @@
 import * as stylex from "@stylexjs/stylex";
+import type { KeyboardEvent } from "react";
 import { Text } from "@astryxdesign/core/Text";
 import { TextArea } from "@astryxdesign/core/TextArea";
 import { TextInput } from "@astryxdesign/core/TextInput";
@@ -12,6 +13,7 @@ import {
   editorFieldValue,
   emitFieldDraftChange,
   emitRecordFieldCommit,
+  emitRecordFieldRevert,
   fieldChromeProps,
   fieldChromeStyles,
   fieldIsReadOnly,
@@ -28,6 +30,19 @@ export function TextFieldEditor({
   field: FormlessUiEditorField;
   onIntent: FormlessUiFieldIntentHandler | undefined;
 }) {
+  function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      emitRecordFieldCommit(field, event.currentTarget.value, onIntent);
+      return;
+    }
+
+    if (event.key === "Escape") {
+      event.preventDefault();
+      emitRecordFieldRevert(field, onIntent);
+    }
+  }
+
   return (
     <TextInput
       {...fieldChromeProps(field)}
@@ -35,8 +50,11 @@ export function TextFieldEditor({
       isLoading={Boolean(field.pending?.isPending)}
       size={inputSize(field)}
       value={formatInputValue(editorFieldValue(field))}
+      onBlur={(event) =>
+        emitRecordFieldCommit(field, (event.currentTarget as HTMLInputElement).value, onIntent)
+      }
       onChange={(value) => emitFieldDraftChange(field, value, onIntent)}
-      onEnter={() => emitRecordFieldCommit(field, editorFieldValue(field), onIntent)}
+      onKeyDown={handleKeyDown}
     />
   );
 }
@@ -48,15 +66,24 @@ export function TextareaFieldEditor({
   field: FormlessUiEditorField;
   onIntent: FormlessUiFieldIntentHandler | undefined;
 }) {
+  function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      emitRecordFieldRevert(field, onIntent);
+    }
+  }
+
   return (
     <TextArea
       {...fieldChromeProps(field)}
       isLoading={Boolean(field.pending?.isPending)}
+      placeholder={undefined}
       size={inputSize(field)}
-      rows={4}
+      rows={field.surface === "operation" ? 4 : undefined}
       value={formatInputValue(editorFieldValue(field))}
-      onBlur={() => emitRecordFieldCommit(field, editorFieldValue(field), onIntent)}
+      onBlur={(event) => emitRecordFieldCommit(field, event.currentTarget.value, onIntent)}
       onChange={(value) => emitFieldDraftChange(field, value, onIntent)}
+      onKeyDown={handleKeyDown}
     />
   );
 }
@@ -68,6 +95,13 @@ export function MarkdownFieldEditor({
   field: FormlessUiEditorField;
   onIntent: FormlessUiFieldIntentHandler | undefined;
 }) {
+  function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      emitRecordFieldRevert(field, onIntent);
+    }
+  }
+
   return (
     <MarkdownInput
       {...fieldChromeProps(field)}
@@ -78,6 +112,7 @@ export function MarkdownFieldEditor({
       value={formatInputValue(editorFieldValue(field))}
       onBlur={() => emitRecordFieldCommit(field, editorFieldValue(field), onIntent)}
       onChange={(value) => emitFieldDraftChange(field, value, onIntent)}
+      onKeyDown={handleKeyDown}
     />
   );
 }
@@ -87,9 +122,9 @@ export function TextFieldDisplay({ field }: { field: FormlessUiDisplayField }) {
     <div {...stylex.props(fieldChromeStyles.displayValue)}>
       <Text
         type={astryxDensity(field) === "compact" ? "supporting" : "body"}
-        maxLines={field.control.controlKind === "textarea" ? 3 : 2}
+        maxLines={field.control.controlKind === "textarea" ? undefined : 2}
       >
-        {displayTextWithSuffix(field) || "Empty"}
+        {displayTextWithSuffix(field)}
       </Text>
     </div>
   );

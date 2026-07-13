@@ -3,54 +3,46 @@ import * as stylex from "@stylexjs/stylex";
 import { Icon, type IconProps, type IconType } from "@astryxdesign/core/Icon";
 import { Markdown, type MarkdownProps } from "@astryxdesign/core/Markdown";
 import { TextArea, type TextAreaProps } from "@astryxdesign/core/TextArea";
-import { Text } from "@astryxdesign/core/Text";
 import {
   borderVars,
   colorVars,
-  radiusVars,
   spacingVars,
+  typographyDefaults,
+  typographyVars,
 } from "@astryxdesign/core/theme/tokens.stylex";
-import { opaqueHexColorForNativeInput } from "./color-input.tsx";
 import type { AstryxInputDensity } from "./input-density.ts";
 
 export { ColorInput, type ColorInputProps } from "./color-input.tsx";
 
 export type ColorValueDisplayProps = {
-  value: string;
   label?: string;
   density?: AstryxInputDensity;
-  emptyLabel?: string;
+  swatchValue?: string;
 };
 
 export function ColorValueDisplay({
-  value,
   label = "Color",
   density = "balanced",
-  emptyLabel = "Empty",
+  swatchValue,
 }: ColorValueDisplayProps) {
-  const swatchColor = opaqueHexColorForNativeInput(value);
-  const displayValue = value || emptyLabel;
-
   return (
     <div
       {...stylex.props(styles.colorDisplay, density === "compact" && styles.compactColorDisplay)}
       data-astryx-color-display="true"
-      data-astryx-color-valid={swatchColor ? "true" : "false"}
+      data-astryx-color-valid={swatchValue === undefined ? "false" : "true"}
     >
       <span
-        aria-hidden={swatchColor ? undefined : true}
-        aria-label={swatchColor ? `${label} color swatch` : undefined}
-        role={swatchColor ? "img" : undefined}
+        aria-hidden={swatchValue === undefined ? true : undefined}
+        aria-label={swatchValue === undefined ? undefined : `${label} color swatch`}
+        role={swatchValue === undefined ? undefined : "img"}
         {...stylex.props(
           styles.colorSwatch,
           density === "compact" && styles.compactColorSwatch,
-          swatchColor ? dynamicStyles.colorSwatch(swatchColor) : null,
-          !swatchColor && styles.emptyColorSwatch,
+          swatchValue === undefined
+            ? styles.emptyColorSwatch
+            : dynamicStyles.colorSwatch(swatchValue),
         )}
       />
-      <Text type={density === "compact" ? "supporting" : "body"} maxLines={1}>
-        {displayValue}
-      </Text>
     </div>
   );
 }
@@ -60,6 +52,30 @@ export type SourceIconProps = Omit<IconProps, "icon"> & {
   fallbackIcon?: IconProps["icon"] | null;
 };
 
+export type SourceIconPresentation = {
+  icon: IconProps["icon"];
+  state: "invalid" | "unset" | "valid";
+};
+
+export function useSourceIconPresentation(
+  source: string | null | undefined,
+  fallbackIcon?: IconProps["icon"] | null,
+): SourceIconPresentation {
+  const hasSource = Boolean(source?.trim());
+  const parsedSvg = useMemo(() => parseSourceSvg(source), [source]);
+
+  return useMemo(
+    () => ({
+      icon:
+        parsedSvg === null
+          ? (fallbackIcon ?? (EmptySourceSvgIcon as unknown as IconProps["icon"]))
+          : createSourceSvgIcon(parsedSvg),
+      state: parsedSvg === null ? (hasSource ? "invalid" : "unset") : "valid",
+    }),
+    [fallbackIcon, hasSource, parsedSvg],
+  );
+}
+
 export function SourceIcon({
   source,
   fallbackIcon,
@@ -68,14 +84,7 @@ export function SourceIcon({
   role,
   ...iconProps
 }: SourceIconProps) {
-  const parsedSvg = useMemo(() => parseSourceSvg(source), [source]);
-  const sourceIcon = useMemo<IconProps["icon"]>(() => {
-    if (parsedSvg) {
-      return createSourceSvgIcon(parsedSvg);
-    }
-
-    return fallbackIcon ?? (EmptySourceSvgIcon as unknown as IconProps["icon"]);
-  }, [fallbackIcon, parsedSvg]);
+  const presentation = useSourceIconPresentation(source, fallbackIcon);
   const accessibilityProps =
     ariaLabel !== undefined
       ? { "aria-hidden": ariaHidden, "aria-label": ariaLabel, role: role ?? "img" }
@@ -87,10 +96,14 @@ export function SourceIcon({
     <Icon
       {...iconProps}
       {...accessibilityProps}
-      icon={sourceIcon}
-      data-astryx-source-icon={parsedSvg ? "svg" : "empty"}
+      icon={presentation.icon}
+      data-astryx-source-icon={presentation.state === "valid" ? "svg" : "empty"}
     />
   );
+}
+
+export function sourceIconIsRenderable(source: string | null | undefined) {
+  return parseSourceSvg(source) !== null;
 }
 
 export type MarkdownFieldDisplayProps = Omit<MarkdownProps, "children" | "density"> & {
@@ -126,15 +139,36 @@ export type MarkdownInputProps = Omit<TextAreaProps, "htmlName"> & {
   isReadOnly?: boolean;
 };
 
+export type MonospaceTextAreaProps = TextAreaProps;
+
+const markdownInputTypography = stylex.createTheme(typographyVars, {
+  "--font-family-body": typographyVars["--font-family-code"] as unknown as (
+    typeof typographyDefaults
+  )["--font-family-body"],
+});
+
+const markdownInputTypographyClassName = stylex.props(markdownInputTypography).className;
+
+export function MonospaceTextArea({ className, ...textAreaProps }: MonospaceTextAreaProps) {
+  return (
+    <TextArea
+      {...textAreaProps}
+      className={[markdownInputTypographyClassName, className].filter(Boolean).join(" ")}
+    />
+  );
+}
+
 export function MarkdownInput({
+  className,
   isDisabled = false,
   isReadOnly = false,
   hasSpellCheck = false,
   ...textAreaProps
 }: MarkdownInputProps) {
   return (
-    <TextArea
+    <MonospaceTextArea
       {...textAreaProps}
+      className={className}
       hasSpellCheck={hasSpellCheck}
       isDisabled={isDisabled || isReadOnly}
       data-astryx-markdown-editor="textarea"
@@ -427,7 +461,7 @@ const styles = stylex.create({
     flexShrink: 0,
     width: spacingVars["--spacing-5"],
     height: spacingVars["--spacing-5"],
-    borderRadius: radiusVars["--radius-element"],
+    borderRadius: "50%",
     borderWidth: borderVars["--border-width"],
     borderStyle: "solid",
     borderColor: colorVars["--color-border-emphasized"],

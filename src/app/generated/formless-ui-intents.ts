@@ -23,7 +23,6 @@ import {
   nextGeneratedUpdateDraftSessionState,
   resolveGeneratedUpdateDraftPatchValues,
   resolveGeneratedValueUnitUpdateDraftPatchValues,
-  selectGeneratedIconDialogDraft,
   selectGeneratedRecordFieldPatchValues,
   type GeneratedUpdateDraftFieldInput,
   type GeneratedUpdateDraftResolution,
@@ -39,6 +38,7 @@ type RecordEditorDraftChangeIntent = Extract<
   { type: "recordEditorDraftChange" }
 >;
 type RecordDraftRevertIntent = Extract<FormlessUiFieldIntent, { type: "recordDraftRevert" }>;
+type RecordDraftCommitIntent = Extract<FormlessUiFieldIntent, { type: "recordDraftCommit" }>;
 type RecordValueCommitIntent = Extract<FormlessUiFieldIntent, { type: "recordValueCommit" }>;
 type RecordValueUnitCommitIntent = Extract<
   FormlessUiFieldIntent,
@@ -114,6 +114,7 @@ export type GeneratedFormlessUiOperationDraftChangeResult = {
 };
 
 export type GeneratedFormlessUiRecordDraftChangeResult = {
+  additionalDraftChanges?: readonly GeneratedFormlessUiRecordDraftChange[];
   kind: "recordDraftChange" | "recordEditorDraftChange" | "recordDraftRevert";
   draftChange: GeneratedFormlessUiRecordDraftChange;
   editorDraftChange: GeneratedFormlessUiEditorDraftChange | undefined;
@@ -153,7 +154,6 @@ export type GeneratedFormlessUiIconDialogDraftChangeResult = {
 
 export type GeneratedFormlessUiIconDialogOpenChangeResult = {
   kind: "iconDialogOpenChange";
-  iconDialogDraftChange: GeneratedFormlessUiIconDialogDraftChange;
   iconDialogOpenChange: GeneratedFormlessUiIconDialogOpenChange;
 };
 
@@ -258,6 +258,7 @@ export type GeneratedFormlessUiFieldIntentCallbacks = {
     change: GeneratedFormlessUiRecordDraftChange,
     state: GeneratedUpdateDraftSessionState | undefined,
   ) => void;
+  onRecordEditorDraftChange?: (change: GeneratedFormlessUiEditorDraftChange) => void;
   onRecordPatchResolve?: (
     fieldName: string,
     result:
@@ -378,7 +379,21 @@ export function adaptGeneratedRecordFormlessUiDraftRevert(
     return unsupportedIntent(intent, `Record field "${intent.fieldName}" is not available.`);
   }
 
+  const additionalDraftChanges = fieldConfig.valueUnit
+    ? [{ fieldName: fieldConfig.valueUnit.unitFieldName, fieldValue: undefined }]
+    : [];
+  const state = additionalDraftChanges.reduce(
+    (nextState, change) =>
+      nextGeneratedUpdateDraftSessionState({
+        fieldName: change.fieldName,
+        fieldValue: change.fieldValue,
+        state: nextState,
+      }),
+    options.state,
+  );
+
   return recordDraftChangeResult({
+    additionalDraftChanges,
     draftChange: {
       fieldName: intent.fieldName,
       fieldValue: undefined,
@@ -389,8 +404,29 @@ export function adaptGeneratedRecordFormlessUiDraftRevert(
     },
     fieldErrorChange: undefined,
     kind: "recordDraftRevert",
-    state: options.state,
+    state,
   });
+}
+
+export function adaptGeneratedRecordFormlessUiDraftCommit(
+  intent: RecordDraftCommitIntent,
+  options: AdaptGeneratedRecordFormlessUiIntentOptions,
+): GeneratedFormlessUiRecordValueCommitResult | GeneratedFormlessUiUnsupportedIntentResult {
+  const fieldConfig = findRecordFieldConfig(options.fields, intent.fieldName);
+
+  if (fieldConfig === undefined) {
+    return unsupportedIntent(intent, `Record field "${intent.fieldName}" is not available.`);
+  }
+
+  if (!generatedRecordFieldUsesUpdateDraftResolver(fieldConfig)) {
+    return recordValueCommitResult({
+      fieldConfig,
+      options,
+      value: intent.fieldValue.value,
+    });
+  }
+
+  return recordDraftCommitResult({ fieldConfig, fieldValue: intent.fieldValue, options });
 }
 
 export function adaptGeneratedRecordFormlessUiValueCommit(
@@ -483,24 +519,9 @@ export function adaptGeneratedFormlessUiIconDialogDraftChange(
 
 export function adaptGeneratedFormlessUiIconDialogOpenChange(
   intent: IconDialogOpenChangeIntent,
-  options: AdaptGeneratedRecordFormlessUiIntentOptions,
-): GeneratedFormlessUiFieldIntentResult {
-  const fieldConfig = findRecordFieldConfig(options.fields, intent.fieldName);
-
-  if (fieldConfig === undefined) {
-    return unsupportedIntent(intent, `Record field "${intent.fieldName}" is not available.`);
-  }
-
+): GeneratedFormlessUiIconDialogOpenChangeResult {
   return {
     kind: "iconDialogOpenChange",
-    iconDialogDraftChange: {
-      fieldName: intent.fieldName,
-      value: selectGeneratedIconDialogDraft({
-        draft: editorDraftForField(fieldConfig, options),
-        open: intent.open,
-        recordDraft: recordDraftForField(fieldConfig, options),
-      }),
-    },
     iconDialogOpenChange: {
       fieldName: intent.fieldName,
       open: intent.open,
@@ -647,6 +668,10 @@ export function adaptGeneratedFormlessUiFieldIntent(
       return options.record === undefined
         ? missingRecordContext(intent)
         : adaptGeneratedRecordFormlessUiDraftRevert(intent, options.record);
+    case "recordDraftCommit":
+      return options.record === undefined
+        ? missingRecordContext(intent)
+        : adaptGeneratedRecordFormlessUiDraftCommit(intent, options.record);
     case "recordValueCommit":
       return options.record === undefined
         ? missingRecordContext(intent)
@@ -660,9 +685,7 @@ export function adaptGeneratedFormlessUiFieldIntent(
     case "iconDialogDraftChange":
       return adaptGeneratedFormlessUiIconDialogDraftChange(intent);
     case "iconDialogOpenChange":
-      return options.record === undefined
-        ? missingRecordContext(intent)
-        : adaptGeneratedFormlessUiIconDialogOpenChange(intent, options.record);
+      return adaptGeneratedFormlessUiIconDialogOpenChange(intent);
     case "iconDialogCancel":
       return options.record === undefined
         ? missingRecordContext(intent)
@@ -714,6 +737,12 @@ export function applyGeneratedFormlessUiFieldIntentResult(
     case "recordEditorDraftChange":
     case "recordDraftRevert":
       callbacks.onRecordDraftChange?.(result.draftChange, result.state);
+      for (const change of result.additionalDraftChanges ?? []) {
+        callbacks.onRecordDraftChange?.(change, result.state);
+      }
+      if (result.editorDraftChange) {
+        callbacks.onRecordEditorDraftChange?.(result.editorDraftChange);
+      }
       applyFieldErrorChange(result.fieldErrorChange, callbacks);
       return;
     case "recordValueCommit":
@@ -728,7 +757,6 @@ export function applyGeneratedFormlessUiFieldIntentResult(
       callbacks.onIconDialogDraftChange?.(result.iconDialogDraftChange);
       return;
     case "iconDialogOpenChange":
-      callbacks.onIconDialogDraftChange?.(result.iconDialogDraftChange);
       callbacks.onIconDialogOpenChange?.(result.iconDialogOpenChange);
       return;
     case "iconDialogCancel":
@@ -754,12 +782,14 @@ export function applyGeneratedFormlessUiFieldIntentResult(
 }
 
 function recordDraftChangeResult({
+  additionalDraftChanges,
   draftChange,
   editorDraftChange,
   fieldErrorChange,
   kind,
   state,
 }: {
+  additionalDraftChanges?: readonly GeneratedFormlessUiRecordDraftChange[];
   draftChange: GeneratedFormlessUiRecordDraftChange;
   editorDraftChange: GeneratedFormlessUiEditorDraftChange | undefined;
   fieldErrorChange: GeneratedFormlessUiFieldErrorChange | undefined;
@@ -767,6 +797,7 @@ function recordDraftChangeResult({
   state: GeneratedUpdateDraftSessionState;
 }): GeneratedFormlessUiRecordDraftChangeResult {
   return {
+    additionalDraftChanges,
     kind,
     draftChange,
     editorDraftChange,
@@ -806,6 +837,47 @@ function recordValueCommitResult({
   }
 
   const fieldValue = generatedUpdateDraftInputFromFieldValue(value);
+  const resolution = resolveGeneratedUpdateDraftPatchValues({
+    baselineValues: options.state.baselineValues,
+    draft: {
+      values: {
+        ...options.state.draft.values,
+        [fieldConfig.fieldName]: fieldValue,
+      },
+    },
+    fieldNames: [fieldConfig.fieldName],
+    fields: Array.from(options.fields),
+    union: options.union,
+  });
+  const fieldError = selectFieldError(resolution, fieldConfig.fieldName);
+  const patchValues = fieldError === undefined ? resolution.patchValues : {};
+
+  return {
+    kind: "recordValueCommit",
+    draftChange: {
+      fieldName: fieldConfig.fieldName,
+      fieldValue,
+    },
+    fieldName: fieldConfig.fieldName,
+    fieldErrorChange:
+      fieldError === undefined
+        ? undefined
+        : fieldErrorChange(fieldConfig.fieldName, fieldError.message),
+    noop: fieldError === undefined && Object.keys(patchValues).length === 0,
+    patchValues,
+    resolution,
+  };
+}
+
+function recordDraftCommitResult({
+  fieldConfig,
+  fieldValue,
+  options,
+}: {
+  fieldConfig: RecordFieldConfig;
+  fieldValue: GeneratedUpdateDraftFieldInput;
+  options: AdaptGeneratedRecordFormlessUiIntentOptions;
+}): GeneratedFormlessUiRecordValueCommitResult {
   const resolution = resolveGeneratedUpdateDraftPatchValues({
     baselineValues: options.state.baselineValues,
     draft: {

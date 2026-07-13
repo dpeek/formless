@@ -22,6 +22,7 @@ import type {
   FormlessUiField,
   FormlessUiFieldAccess,
   FormlessUiFieldControl,
+  FormlessUiFieldDensity,
   FormlessUiFieldError,
   FormlessUiFieldFormatting,
   FormlessUiFieldIntent,
@@ -31,8 +32,9 @@ import type {
   FormlessUiFieldSurface,
   FormlessUiOperationInputField,
   FormlessUiRecordField,
-  FormlessUiRecordFieldDensity,
   FormlessUiRecordFieldRendererKind,
+  FormlessUiReferenceFacts,
+  FormlessUiReferenceValueStatus,
 } from "../formless-ui-contract.ts";
 
 type GeneratedRecordValues = {
@@ -153,7 +155,6 @@ type GeneratedFieldOption = {
   color?: string;
   detail?: string;
   isDisabled?: boolean;
-  isMissing?: boolean;
   label: string;
   mediaAlt?: string;
   mediaPreviewUrl?: string;
@@ -893,10 +894,7 @@ function projectTableCellFields(
       committedValue: record.committedValues.ownerId,
       committedDisplayValue: displayOption(referenceOptions.owners, record.committedValues.ownerId),
       commitPolicy: "immediate",
-      options: referenceOptionsWithMissingValue(
-        referenceOptions.owners,
-        record.draftValues.ownerId,
-      ),
+      options: referenceOptions.owners,
       errors: errorsFor(record.errors, "ownerId"),
     }),
     createEditorField({
@@ -942,10 +940,7 @@ function projectDetailFields(fixture: GeneratedFieldFoundationFixture): readonly
       kind: "reference",
       value: record.committedValues.ownerId,
       displayValue: displayOption(referenceOptions.owners, record.committedValues.ownerId),
-      options: referenceOptionsWithMissingValue(
-        referenceOptions.owners,
-        record.committedValues.ownerId,
-      ),
+      options: referenceOptions.owners,
     }),
     createDisplayField({
       id: "generated-detail-markdown",
@@ -1155,6 +1150,26 @@ function applyGeneratedFieldIntent(
           draftValueFromInput(intent.fieldValue),
         )
       : fixture;
+  }
+
+  if (intent.type === "recordDraftCommit") {
+    return isGeneratedRecordFieldName(intent.fieldName)
+      ? commitGeneratedRecordField(
+          fixture,
+          projection,
+          intent.fieldName,
+          draftValueFromInput(intent.fieldValue),
+        )
+      : fixture;
+  }
+
+  if (intent.type === "recordDraftRevert") {
+    if (!isGeneratedRecordFieldName(intent.fieldName)) {
+      return fixture;
+    }
+
+    const field = findGeneratedRecordField(projection, intent.fieldName);
+    return field ? revertGeneratedField(fixture, field) : fixture;
   }
 
   if (intent.type === "recordValueCommit") {
@@ -1451,7 +1466,7 @@ function validateGeneratedFieldFixture(
 ): GeneratedFieldFoundationFixture {
   const createErrors = validateCreateValues(fixture.create.draftValues);
   const publicActionErrors = validatePublicActionValues(fixture.publicAction.draftValues);
-  const recordErrors = validateRecordValues(fixture.record.draftValues, fixture.referenceOptions);
+  const recordErrors = validateRecordValues(fixture.record.draftValues);
 
   return {
     ...fixture,
@@ -1524,7 +1539,6 @@ function validatePublicActionValues(
 
 function validateRecordValues(
   values: GeneratedRecordValues,
-  referenceOptions: GeneratedFieldFoundationFixture["referenceOptions"],
 ): FieldErrorMap<GeneratedRecordValues> {
   const errors: FieldErrorMap<GeneratedRecordValues> = {};
 
@@ -1536,14 +1550,6 @@ function validateRecordValues(
     errors.estimateHours = [
       fieldError("estimateHours", "Estimate keeps invalid text until it is numeric."),
     ];
-  }
-
-  if (
-    typeof values.ownerId === "string" &&
-    values.ownerId !== "" &&
-    !referenceOptions.owners.some((option) => option.value === values.ownerId)
-  ) {
-    errors.ownerId = [fieldError("ownerId", "Missing reference id is preserved.", "warning")];
   }
 
   return errors;
@@ -1604,29 +1610,6 @@ function normalizeCommittedValue(
   const numericValue = Number(trimmedValue);
 
   return Number.isFinite(numericValue) ? numericValue : value;
-}
-
-function referenceOptionsWithMissingValue(
-  options: readonly GeneratedFieldOption[],
-  value: GeneratedDraftValue,
-): readonly GeneratedFieldOption[] {
-  if (
-    typeof value !== "string" ||
-    value === "" ||
-    options.some((option) => option.value === value)
-  ) {
-    return options;
-  }
-
-  return [
-    ...options,
-    {
-      value,
-      label: value,
-      detail: "Missing reference id",
-      isMissing: true,
-    },
-  ];
 }
 
 function pendingForCreateField(
@@ -1837,7 +1820,13 @@ function createEditorField(input: GeneratedEditorFieldInput): FormlessUiField {
   const field = generatedFieldSchema(input);
   const control = generatedFieldControl(input, field);
   const options = generatedFieldOptions(input, field, input.draftValue);
-  const base = generatedBaseField(input, field, control, options);
+  const base = generatedBaseField(
+    input,
+    field,
+    control,
+    options,
+    generatedReferenceEditorFacts(input, field, input.draftValue),
+  );
   const draftInput = draftInputFromValue(input.draftValue);
 
   if (input.surface === "create") {
@@ -1845,6 +1834,7 @@ function createEditorField(input: GeneratedEditorFieldInput): FormlessUiField {
       ...base,
       access: generatedFieldAccess(input.accessMode),
       commit: "submit",
+      density: generatedFieldDensity(input.density),
       draftInput,
       mode: "editor",
       surface: "create",
@@ -1857,6 +1847,7 @@ function createEditorField(input: GeneratedEditorFieldInput): FormlessUiField {
       ...base,
       access: generatedFieldAccess(input.accessMode),
       commit: "submit",
+      density: generatedFieldDensity(input.density),
       draftInput,
       input: generatedOperationInput(input, field),
       inputName: input.name,
@@ -1870,7 +1861,7 @@ function createEditorField(input: GeneratedEditorFieldInput): FormlessUiField {
     ...base,
     access: generatedFieldAccess(input.accessMode),
     commit: generatedCommitPolicy(input.commitPolicy),
-    density: generatedRecordDensity(input.density),
+    density: generatedFieldDensity(input.density),
     drafts: {
       draft: String(input.draftValue ?? ""),
       draftInput,
@@ -1897,9 +1888,16 @@ function createDisplayField(input: GeneratedDisplayFieldInput): FormlessUiDispla
   const options = generatedFieldOptions(input, field, displayValue);
 
   return {
-    ...generatedBaseField(input, field, control, options),
+    ...generatedBaseField(
+      input,
+      field,
+      control,
+      options,
+      generatedReferenceDisplayFacts(input, field, displayValue),
+    ),
     access: generatedFieldAccess(input.accessMode),
     commit: "submit",
+    density: generatedFieldDensity(input.density),
     formatting: generatedDisplayFormatting(input, field),
     mode: "display",
     surface: input.surface,
@@ -1912,6 +1910,7 @@ function generatedBaseField(
   field: FieldSchema,
   control: FormlessUiFieldControl,
   options: FormlessUiFieldOptions | undefined,
+  reference: FormlessUiReferenceFacts | undefined,
 ) {
   return {
     control,
@@ -1920,8 +1919,13 @@ function generatedBaseField(
     field,
     fieldName: input.name,
     label: input.label,
+    labelVisibility:
+      input.surface === "record" || input.surface === "table-cell"
+        ? ("hidden" as const)
+        : ("visible" as const),
     options,
     pending: input.pending,
+    reference,
     required: Boolean(input.isRequired),
     surface: input.surface,
   };
@@ -2153,7 +2157,7 @@ function generatedCommitPolicy(
   return commitPolicy === "immediate" ? "immediate" : "field-commit";
 }
 
-function generatedRecordDensity(density: GeneratedFieldDensity): FormlessUiRecordFieldDensity {
+function generatedFieldDensity(density: GeneratedFieldDensity): FormlessUiFieldDensity {
   return density === "compact" ? "compact" : "default";
 }
 
@@ -2177,11 +2181,16 @@ function generatedDisplayFormatting(
   input: GeneratedDisplayFieldInput,
   field: FieldSchema,
 ): FormlessUiFieldFormatting & { displayValue: string } {
+  const enumOption = input.options?.find((option) => option.value === input.value);
+
   return {
     displayValue: input.displayValue,
     enumValuePresentation:
       field.type === "enum" && typeof input.value === "string"
-        ? enumPresentationForOption(input.options?.find((option) => option.value === input.value))
+        ? {
+            ...enumPresentationForOption(enumOption),
+            label: enumOption?.label ?? input.displayValue,
+          }
         : undefined,
   };
 }
@@ -2196,30 +2205,12 @@ function generatedFieldOptions(
 
     return {
       enumOptions,
-      unknownEnumValue:
-        typeof selectedValue === "string" &&
-        selectedValue !== "" &&
-        !enumOptions.some((option) => option.value === selectedValue)
-          ? selectedValue
-          : undefined,
     };
   }
 
   if (field.type === "reference") {
-    const referenceOptions = (input.options ?? []).map((option) => ({
-      id: option.value,
-      label: option.label,
-      missing: option.isMissing,
-    }));
-
     return {
-      missingReferenceValue:
-        typeof selectedValue === "string" &&
-        selectedValue !== "" &&
-        !referenceOptions.some((option) => option.id === selectedValue)
-          ? selectedValue
-          : undefined,
-      referenceOptions,
+      referenceOptions: generatedReferenceOptions(input),
     };
   }
 
@@ -2232,11 +2223,62 @@ function generatedFieldOptions(
   return undefined;
 }
 
+function generatedReferenceOptions(input: GeneratedFieldInput) {
+  return (input.options ?? []).map((option) => ({
+    id: option.value,
+    label: option.label,
+  }));
+}
+
+function generatedReferenceEditorFacts(
+  input: GeneratedFieldInput,
+  field: FieldSchema,
+  value: GeneratedDraftValue,
+): FormlessUiReferenceFacts | undefined {
+  if (field.type !== "reference") {
+    return undefined;
+  }
+
+  return {
+    clearable: !field.required,
+    kind: "editor",
+    valueStatus: generatedReferenceValueStatus(input, value),
+  };
+}
+
+function generatedReferenceDisplayFacts(
+  input: GeneratedFieldInput,
+  field: FieldSchema,
+  value: GeneratedDraftValue,
+): FormlessUiReferenceFacts | undefined {
+  if (field.type !== "reference") {
+    return undefined;
+  }
+
+  return {
+    kind: "display",
+    valueStatus: generatedReferenceValueStatus(input, value),
+  };
+}
+
+function generatedReferenceValueStatus(
+  input: GeneratedFieldInput,
+  value: GeneratedDraftValue,
+): FormlessUiReferenceValueStatus {
+  if (typeof value !== "string" || value === "") {
+    return { kind: "unset" };
+  }
+
+  return generatedReferenceOptions(input).some((option) => option.id === value)
+    ? { kind: "resolved", value }
+    : { kind: "missing", value };
+}
+
 function generatedEnumOption(option: GeneratedFieldOption): FormlessUiEnumOption {
   return {
     label: option.label,
-    missing: option.isMissing,
     presentation: enumPresentationForOption(option),
+    status: "declared",
     value: option.value,
   };
 }
@@ -2251,6 +2293,7 @@ function enumPresentationForOption(
       token: option?.color,
     },
     ...(option?.source ? { icon: { kind: "svg" as const, source: option.source } } : {}),
+    iconKnown: true,
     label: option?.label ?? "",
   };
 }

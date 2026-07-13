@@ -1,24 +1,31 @@
 import * as stylex from "@stylexjs/stylex";
-import { NumberInput } from "@astryxdesign/core/NumberInput";
+import { InputGroup, InputGroupText } from "@astryxdesign/core/InputGroup";
 import { Selector } from "@astryxdesign/core/Selector";
+import { Text } from "@astryxdesign/core/Text";
 import { TextInput } from "@astryxdesign/core/TextInput";
-import { spacingVars } from "@astryxdesign/core/theme/tokens.stylex";
-import type { FormlessUiFieldIntentHandler } from "../../formless-ui-contract.ts";
+import type { KeyboardEvent } from "react";
+import type {
+  FormlessUiDisplayField,
+  FormlessUiFieldIntentHandler,
+} from "../../formless-ui-contract.ts";
 import {
+  astryxDensity,
   draftInputFromValue,
   editorFieldValue,
   emitFieldDraftChange,
+  emitRecordDraftCommit,
+  emitRecordDraftRevert,
   emitRecordUnitDraftChange,
   emitValueUnitCommit,
   fieldChromeProps,
+  fieldChromeStyles,
+  fieldDescription,
   fieldInteractionIsDisabled,
+  fieldLabelIsHidden,
+  fieldStatus,
   formatInputValue,
   inputSize,
   isRecordEditorField,
-  numberDraftIsInvalid,
-  numberInputValue,
-  recordCommitHandlers,
-  valueUnitCommitHandlers,
   type FormlessUiEditorField,
 } from "./field-chrome.tsx";
 
@@ -31,82 +38,181 @@ export function NumberFieldEditor({
   showUnit: boolean;
   onIntent: FormlessUiFieldIntentHandler | undefined;
 }) {
-  const stringValue = formatInputValue(editorFieldValue(field));
   const recordField = isRecordEditorField(field) ? field : undefined;
   const valueUnit = showUnit ? recordField?.valueUnit : undefined;
-  const fieldCommitHandlers =
-    valueUnit && recordField
-      ? valueUnitCommitHandlers(recordField, onIntent)
-      : recordCommitHandlers(field, onIntent);
-  const renderedInput = numberDraftIsInvalid(field) ? (
+  const draft = formatInputValue(editorFieldValue(field));
+  const format = recordField?.formatting.format ?? field.format ?? "plain";
+  const inputValue = numberInputText(draft, format);
+  const prefix = format === "currency" ? "$" : undefined;
+  const formatSuffix = format === "percent" ? "%" : undefined;
+  const suffix = recordField?.formatting.suffix ?? field.suffix;
+  const disabled = fieldInteractionIsDisabled(field);
+  const grouped =
+    valueUnit !== undefined ||
+    prefix !== undefined ||
+    formatSuffix !== undefined ||
+    suffix !== undefined;
+
+  function commitDraft() {
+    if (recordField && valueUnit) {
+      emitValueUnitCommit(
+        recordField,
+        recordField.drafts.draftInput ?? draftInputFromValue(inputValue),
+        recordField.drafts.unitDraftInput,
+        onIntent,
+      );
+      return;
+    }
+
+    emitRecordDraftCommit(field, onIntent);
+  }
+
+  function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      commitDraft();
+      return;
+    }
+
+    if (event.key === "Escape" && recordField) {
+      event.preventDefault();
+      emitRecordDraftRevert(recordField, onIntent);
+    }
+  }
+
+  const input = (
     <TextInput
       {...fieldChromeProps(field)}
-      hasClear
-      isLoading={Boolean(field.pending?.isPending)}
+      hasClear={false}
+      isLabelHidden={grouped || fieldLabelIsHidden(field)}
+      label={grouped ? "Value" : field.label}
+      placeholder={undefined}
       size={inputSize(field)}
-      value={stringValue}
+      value={inputValue}
+      onBlur={commitDraft}
       onChange={(value) => emitFieldDraftChange(field, value, onIntent)}
-      onEnter={() => fieldCommitHandlers.commitInput(stringValue)}
-    />
-  ) : (
-    <NumberInput
-      {...fieldChromeProps(field)}
-      hasClear
-      size={inputSize(field)}
-      value={numberInputValue(stringValue)}
-      onBlur={() => fieldCommitHandlers.commitInput(stringValue)}
-      onChange={(value) => {
-        const nextValue = value ?? "";
-
-        emitFieldDraftChange(field, nextValue, onIntent);
-        fieldCommitHandlers.commitImmediate(nextValue);
-      }}
-      onKeyDown={(event) => fieldCommitHandlers.onKeyDown(event, stringValue)}
+      onKeyDown={handleKeyDown}
     />
   );
 
-  if (!recordField || !valueUnit) {
-    return renderedInput;
+  if (!grouped) {
+    return input;
   }
 
-  const unitDraft = recordField.drafts.unitDraft ?? "";
-  const unitOptions = Object.entries(valueUnit.unitField.values).map(([value, option]) => ({
+  return (
+    <InputGroup
+      description={fieldDescription(field)}
+      isDisabled={disabled}
+      isLabelHidden={fieldLabelIsHidden(field)}
+      isRequired={field.required}
+      label={field.label}
+      size={inputSize(field)}
+      status={fieldStatus(field)}
+      xstyle={styles.inputGroup}
+    >
+      {prefix ? <InputGroupText>{prefix}</InputGroupText> : null}
+      {input}
+      {formatSuffix ? <InputGroupText>{formatSuffix}</InputGroupText> : null}
+      {suffix ? <InputGroupText>{suffix}</InputGroupText> : null}
+      {recordField && valueUnit ? (
+        <ValueUnitSelector field={recordField} onIntent={onIntent} />
+      ) : null}
+    </InputGroup>
+  );
+}
+
+function ValueUnitSelector({
+  field,
+  onIntent,
+}: {
+  field: Extract<FormlessUiEditorField, { surface: "detail" | "record" | "table-cell" }>;
+  onIntent: FormlessUiFieldIntentHandler | undefined;
+}) {
+  const valueUnit = field.valueUnit;
+
+  if (!valueUnit) {
+    return null;
+  }
+
+  const options = valueUnit.options.map((option) => ({
     label: option.label,
-    value,
+    value: option.value,
   }));
+  const unitDraft = field.drafts.unitDraft ?? "";
+  const commonProps = {
+    isDisabled: fieldInteractionIsDisabled(field),
+    isLabelHidden: true,
+    isRequired: valueUnit.required,
+    label: "Unit",
+    options,
+    placeholder: "",
+    size: inputSize(field),
+    value: unitDraft || undefined,
+    xstyle: styles.unitSelector,
+  } as const;
+  const onChange = (unit: string) => {
+    emitRecordUnitDraftChange(field, unit, onIntent);
+    emitValueUnitCommit(
+      field,
+      field.drafts.draftInput ?? draftInputFromValue(field.drafts.draft),
+      { kind: "input", value: unit },
+      onIntent,
+    );
+  };
+
+  return valueUnit.clearable ? (
+    <Selector
+      {...commonProps}
+      hasClear
+      value={unitDraft || null}
+      onChange={(unit) => onChange(unit ?? "")}
+    />
+  ) : (
+    <Selector {...commonProps} onChange={onChange} />
+  );
+}
+
+export function NumberFieldDisplay({ field }: { field: FormlessUiDisplayField }) {
+  const suffix = field.formatting.suffix ?? field.suffix;
+  const textType = astryxDensity(field) === "compact" ? "supporting" : "body";
 
   return (
-    <div {...stylex.props(styles.valueUnitEditor)}>
-      {renderedInput}
-      <Selector
-        label={`${field.label} unit`}
-        isLabelHidden
-        isDisabled={fieldInteractionIsDisabled(field)}
-        isRequired={valueUnit.unitField.required}
-        options={unitOptions}
-        size={inputSize(field)}
-        value={unitDraft || undefined}
-        width="100%"
-        onChange={(unit) => {
-          emitRecordUnitDraftChange(recordField, unit, onIntent);
-          emitValueUnitCommit(
-            recordField,
-            recordField.drafts.draftInput ?? draftInputFromValue(stringValue),
-            { kind: "input", value: unit },
-            onIntent,
-          );
-        }}
-      />
+    <div {...stylex.props(fieldChromeStyles.displayValue, styles.displayValue)}>
+      <Text type={textType} maxLines={2}>
+        {field.formatting.displayValue}
+      </Text>
+      {suffix && field.formatting.displayValue ? (
+        <Text type="supporting" color="secondary">
+          {suffix}
+        </Text>
+      ) : null}
     </div>
   );
 }
 
+function numberInputText(value: string, format: FormlessUiDisplayField["formatting"]["format"]) {
+  const trimmed = value.trim();
+
+  if (format === "currency") {
+    return trimmed.replace(/^\$/, "");
+  }
+
+  if (format === "percent") {
+    return trimmed.replace(/%$/, "");
+  }
+
+  return value;
+}
+
 const styles = stylex.create({
-  valueUnitEditor: {
-    display: "grid",
-    gridTemplateColumns: "minmax(0, 1fr) auto",
-    alignItems: "end",
-    gap: spacingVars["--spacing-2"],
-    minWidth: 0,
+  inputGroup: {
+    width: "100%",
+  },
+  unitSelector: {
+    flexBasis: "5rem",
+    flexGrow: 0,
+  },
+  displayValue: {
+    gap: 4,
   },
 });

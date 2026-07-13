@@ -85,11 +85,11 @@ export function fieldIsReadOnly(field: FormlessUiEditorField) {
 }
 
 export function fieldLabelIsHidden(field: FormlessUiField) {
-  return field.surface === "table-cell";
+  return field.labelVisibility === "hidden";
 }
 
 function fieldRequiredMarkerIsVisible(field: FormlessUiField) {
-  return field.required && field.access.kind !== "stateMachine";
+  return field.mode === "editor" && field.required && field.access.kind !== "stateMachine";
 }
 
 export function inputSize(field: FormlessUiField): FieldInputSize {
@@ -107,15 +107,7 @@ export function inputSize(field: FormlessUiField): FieldInputSize {
 }
 
 export function astryxDensity(field: FormlessUiField): AstryxInputDensity {
-  if (isRecordEditorField(field) || field.mode === "display") {
-    const density = "density" in field ? field.density : "default";
-
-    if (density === "compact") {
-      return "compact";
-    }
-  }
-
-  return field.surface === "create" || field.surface === "operation" ? "comfortable" : "balanced";
+  return field.density === "compact" ? "compact" : "balanced";
 }
 
 export function editorFieldValue(field: FormlessUiEditorField): FieldValue | string {
@@ -140,13 +132,6 @@ export function editorFieldValue(field: FormlessUiEditorField): FieldValue | str
   }
 
   return field.value ?? field.control.createDefaultValue ?? "";
-}
-
-export function stateMachineFieldValue(field: FormlessUiField): FieldValue | undefined {
-  return (
-    field.stateMachineFacts?.currentValue ??
-    (field.mode === "display" ? field.value : editorFieldValue(field))
-  );
 }
 
 export function emitFieldDraftChange(
@@ -201,6 +186,47 @@ export function emitRecordUnitDraftChange(
     type: "recordDraftChange",
     fieldName: field.valueUnit.unitFieldName,
     fieldValue: { kind: "input", value: unit },
+  });
+}
+
+export function emitRecordDraftCommit(
+  field: FormlessUiEditorField,
+  onIntent: FormlessUiFieldIntentHandler | undefined,
+) {
+  if (!isRecordEditorField(field)) {
+    return;
+  }
+
+  void onIntent?.({
+    type: "recordDraftCommit",
+    fieldName: field.fieldName,
+    fieldValue: field.drafts.draftInput ?? draftInputFromValue(field.drafts.draft),
+  });
+}
+
+export function emitRecordDraftValueCommit(
+  field: FormlessUiEditorField,
+  value: FieldValue | string,
+  onIntent: FormlessUiFieldIntentHandler | undefined,
+) {
+  if (!isRecordEditorField(field) || field.commit !== "field-commit") {
+    return;
+  }
+
+  void onIntent?.({
+    type: "recordDraftCommit",
+    fieldName: field.fieldName,
+    fieldValue: draftInputFromValue(value),
+  });
+}
+
+export function emitRecordDraftRevert(
+  field: FormlessUiRecordField,
+  onIntent: FormlessUiFieldIntentHandler | undefined,
+) {
+  void onIntent?.({
+    type: "recordDraftRevert",
+    fieldName: field.fieldName,
   });
 }
 
@@ -265,19 +291,24 @@ export function emitRecordFieldCommit(
     return;
   }
 
-  if (field.rendererKind === "number" && numberDraftIsInvalid(field)) {
-    void onIntent?.({
-      type: "fieldErrorChange",
-      fieldName: field.fieldName,
-      message: "Enter a valid number.",
-    });
+  return onIntent?.({
+    type: "recordValueCommit",
+    fieldName: field.fieldName,
+    value: fieldValueFromDraftValue(field, value),
+  });
+}
+
+export function emitRecordFieldRevert(
+  field: FormlessUiEditorField,
+  onIntent: FormlessUiFieldIntentHandler | undefined,
+) {
+  if (!isRecordEditorField(field)) {
     return;
   }
 
   void onIntent?.({
-    type: "recordValueCommit",
+    type: "recordDraftRevert",
     fieldName: field.fieldName,
-    value: fieldValueFromDraftValue(field, value),
   });
 }
 
@@ -300,19 +331,6 @@ export function emitValueUnitCommit(
   onIntent: FormlessUiFieldIntentHandler | undefined,
 ) {
   if (!field.valueUnit) {
-    return;
-  }
-
-  if (
-    fieldDraftInput.kind === "input" &&
-    fieldDraftInput.value.trim() !== "" &&
-    !Number.isFinite(Number(fieldDraftInput.value))
-  ) {
-    void onIntent?.({
-      type: "fieldErrorChange",
-      fieldName: field.fieldName,
-      message: "Enter a valid number.",
-    });
     return;
   }
 

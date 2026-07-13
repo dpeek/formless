@@ -9,6 +9,7 @@ import {
   editorFieldValue,
   emitFieldDraftChange,
   emitImmediateRecordFieldCommit,
+  emitRecordDraftValueCommit,
   fieldChromeProps,
   fieldIsReadOnly,
   formatInputValue,
@@ -24,13 +25,17 @@ export function ColorFieldEditor({
   inputId: string;
   onIntent: FormlessUiFieldIntentHandler | undefined;
 }) {
+  const pickerValue = field.color?.picker;
+
   return (
     <ColorInput
       id={inputId}
       {...fieldChromeProps(field)}
       density={astryxDensity(field)}
       isReadOnly={fieldIsReadOnly(field)}
+      pickerValue={pickerValue?.kind === "hex" ? pickerValue.value : undefined}
       value={formatInputValue(editorFieldValue(field))}
+      onCommit={(value) => emitRecordDraftValueCommit(field, value, onIntent)}
       onChange={(value) => {
         emitFieldDraftChange(field, value, onIntent);
         emitImmediateRecordFieldCommit(field, value, onIntent);
@@ -40,10 +45,12 @@ export function ColorFieldEditor({
 }
 
 export function ColorFieldDisplay({ field }: { field: FormlessUiDisplayField }) {
+  const swatchValue = field.color?.swatch;
+
   return (
     <ColorValueDisplay
       label={field.label}
-      value={field.formatting.displayValue}
+      swatchValue={swatchValue?.kind === "hex" ? swatchValue.value : undefined}
       density={astryxDensity(field)}
     />
   );

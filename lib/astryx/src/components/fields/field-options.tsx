@@ -1,30 +1,25 @@
 import * as stylex from "@stylexjs/stylex";
-import {
-  borderVars,
-  colorVars,
-  radiusVars,
-  spacingVars,
-} from "@astryxdesign/core/theme/tokens.stylex";
+import { colorVars, spacingVars } from "@astryxdesign/core/theme/tokens.stylex";
 import type {
   FormlessUiEnumOption,
+  FormlessUiEnumValuePresentation,
   FormlessUiField,
+  FormlessUiFieldPresentationColorIntent,
   FormlessUiFieldOptions,
   FormlessUiMediaAssetOption,
 } from "../../formless-ui-contract.ts";
 import { SourceIcon } from "../field-primitives.tsx";
-import { astryxPresentationColors } from "../presentation-color.ts";
 import {
   editorFieldValue,
   formatInputValue,
-  isRecordEditorField,
   type FormlessUiEditorField,
 } from "./field-chrome.tsx";
 
 export type SelectorVisualOption = {
   color?: string;
+  colorIntent?: FormlessUiFieldPresentationColorIntent;
   colorToken?: string;
   detail?: string;
-  isMissing?: boolean;
   label: string;
   source?: string;
   value: string;
@@ -33,15 +28,6 @@ export type SelectorVisualOption = {
 export function selectorVisualOptions(field: FormlessUiEditorField): SelectorVisualOption[] {
   if (field.control.kind === "enum") {
     return (field.options?.enumOptions ?? []).map(enumOptionToSelectorVisualOption);
-  }
-
-  if (field.control.kind === "reference") {
-    return (field.options?.referenceOptions ?? []).map((option) => ({
-      detail: option.missing ? "Missing value" : undefined,
-      isMissing: option.missing,
-      label: option.label,
-      value: option.id,
-    }));
   }
 
   return [];
@@ -59,24 +45,30 @@ export function enumOptionForValue(
 export function enumOptionToSelectorVisualOption(
   option: FormlessUiEnumOption,
 ): SelectorVisualOption {
+  return enumValuePresentationToSelectorVisualOption(option.presentation, option.value);
+}
+
+export function enumValuePresentationToSelectorVisualOption(
+  presentation: FormlessUiEnumValuePresentation,
+  value: string,
+): SelectorVisualOption {
   return {
-    color: enumOptionColor(option),
-    colorToken: option.presentation.color.token,
-    isMissing: option.missing,
-    label: option.label,
-    source: option.presentation.icon?.source,
-    value: option.value,
+    color: enumPresentationColor(presentation.color.intent),
+    colorIntent: presentation.color.intent,
+    colorToken: presentation.color.token,
+    label: presentation.label,
+    source: presentation.icon?.source,
+    value,
   };
 }
 
 export function mediaPickerOptions(options: FormlessUiFieldOptions | undefined) {
-  return (options?.mediaAssetOptions ?? []).map((option) => ({
-    detail: option.href,
-    label: option.label,
-    mediaAlt: option.label,
-    mediaPreviewUrl: option.href,
-    value: option.id,
-  }));
+  return (options?.mediaAssetOptions ?? [])
+    .filter((option) => option.missing !== true && option.href.trim() !== "")
+    .map((option) => ({
+      previewUrl: option.href,
+      value: option.id,
+    }));
 }
 
 export function selectedMediaAsset(field: FormlessUiField): FormlessUiMediaAssetOption | undefined {
@@ -89,47 +81,50 @@ export function selectedMediaAsset(field: FormlessUiField): FormlessUiMediaAsset
 }
 
 export function mediaPreviewHref(field: FormlessUiField) {
-  if (isRecordEditorField(field)) {
-    return (
-      field.media?.previewHref ?? field.media?.mediaPreviewHref ?? selectedMediaAsset(field)?.href
-    );
+  const value =
+    field.mode === "display"
+      ? formatInputValue(field.value)
+      : formatInputValue(editorFieldValue(field));
+
+  if (value === "") {
+    return undefined;
   }
 
-  return selectedMediaAsset(field)?.href;
+  const selectedAsset = selectedMediaAsset(field);
+
+  if (selectedAsset?.href) {
+    return selectedAsset.href;
+  }
+
+  if (field.media?.selectedAssetId === value || field.media?.selectedUrl === value) {
+    return field.media.previewHref;
+  }
+
+  return undefined;
 }
 
-export function enumOptionColor(option: FormlessUiEnumOption) {
-  if (option.presentation.color.token?.startsWith("#")) {
-    return option.presentation.color.token;
-  }
-
-  const semanticColor = astryxPresentationColors(option.presentation.color.token);
-
-  if (semanticColor) {
-    return semanticColor.visual;
-  }
-
-  if (option.presentation.color.intent === "success") {
+function enumPresentationColor(intent: FormlessUiFieldPresentationColorIntent) {
+  if (intent === "success") {
     return colorVars["--color-success"];
   }
 
-  if (option.presentation.color.intent === "warning") {
+  if (intent === "warning") {
     return colorVars["--color-warning"];
   }
 
-  if (option.presentation.color.intent === "danger") {
+  if (intent === "danger") {
     return colorVars["--color-error"];
   }
 
   return undefined;
 }
 
-export function enumPresentationTriggerContent(field: FormlessUiField): "icon" | "label" | "both" {
-  return field.presentation?.trigger ?? (field.presentation?.mode === "iconOnly" ? "icon" : "both");
+export function enumPresentationTriggerContent(field: FormlessUiField): "label" | "both" {
+  return field.enum?.kind === "editor" ? field.enum.triggerContent : "label";
 }
 
 export function enumPresentationListContent(field: FormlessUiField): "icon" | "label" | "both" {
-  return field.presentation?.list ?? "both";
+  return field.enum?.kind === "editor" ? field.enum.listContent : "label";
 }
 
 export function selectorOptionVisual(
@@ -152,35 +147,16 @@ export function selectorOptionVisual(
     );
   }
 
-  if (option.color) {
-    return (
-      <span
-        aria-hidden="true"
-        {...stylex.props(styles.optionColorSwatch, dynamicStyles.colorSwatch(option.color))}
-      />
-    );
-  }
-
   return reserveSpace ? (
     <span aria-hidden="true" {...stylex.props(styles.optionVisualSpacer)} />
   ) : undefined;
 }
 
 export function hasSelectorOptionVisual(option: SelectorVisualOption) {
-  return Boolean(option.source || option.color);
+  return Boolean(option.source);
 }
 
 const styles = stylex.create({
-  optionColorSwatch: {
-    boxSizing: "border-box",
-    flexShrink: 0,
-    width: spacingVars["--spacing-4"],
-    height: spacingVars["--spacing-4"],
-    borderWidth: borderVars["--border-width"],
-    borderStyle: "solid",
-    borderColor: colorVars["--color-border-emphasized"],
-    borderRadius: radiusVars["--radius-full"],
-  },
   optionVisualSpacer: {
     flexShrink: 0,
     width: spacingVars["--spacing-4"],
@@ -191,8 +167,5 @@ const styles = stylex.create({
 const dynamicStyles = stylex.create({
   color: (color: string) => ({
     color,
-  }),
-  colorSwatch: (color: string) => ({
-    backgroundColor: color,
   }),
 });

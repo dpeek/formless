@@ -1,8 +1,9 @@
 import type {
   FormlessUiDisplayField,
   FormlessUiFieldIntentHandler,
+  FormlessUiMediaAuthoring,
 } from "../../formless-ui-contract.ts";
-import { ImageInput, ImageValueDisplay } from "../image-input.tsx";
+import { MediaInput, MediaValueDisplay } from "../media-input.tsx";
 import {
   astryxDensity,
   editorFieldValue,
@@ -10,7 +11,6 @@ import {
   fieldChromeProps,
   fieldIsReadOnly,
   formatInputValue,
-  isRecordEditorField,
   type FormlessUiEditorField,
 } from "./field-chrome.tsx";
 import { mediaPickerOptions, mediaPreviewHref } from "./field-options.tsx";
@@ -25,21 +25,22 @@ export function MediaFieldEditor({
   onIntent: FormlessUiFieldIntentHandler | undefined;
 }) {
   const value = formatInputValue(editorFieldValue(field));
-  const fileSelectEnabled = !isRecordEditorField(field) || field.media?.fileSelectEnabled !== false;
+  const media = mediaAuthoring(field);
+  const fileSelectEnabled = media?.fileSelectEnabled === true;
 
   return (
-    <ImageInput
+    <MediaInput
       id={inputId}
       {...fieldChromeProps(field)}
-      accept="image/*"
-      alt={field.label}
+      accept={media?.accept ?? "image/*"}
       density={astryxDensity(field)}
       isLoading={Boolean(field.pending?.isPending)}
       isReadOnly={fieldIsReadOnly(field)}
-      options={mediaPickerOptions(field.options)}
+      maxSize={media?.maxSize}
+      options={media?.mediaEditorMode === "asset" ? mediaPickerOptions(field.options) : []}
       previewUrl={mediaPreviewHref(field)}
       value={value}
-      onSelectOption={(option) => emitMediaAssetSelect(field, option.value, onIntent)}
+      onSelectOption={(assetId) => emitMediaAssetSelect(field, assetId, onIntent)}
       onUploadFile={
         !fileSelectEnabled
           ? undefined
@@ -56,12 +57,15 @@ export function MediaFieldEditor({
 
 export function MediaFieldDisplay({ field }: { field: FormlessUiDisplayField }) {
   return (
-    <ImageValueDisplay
-      alt={field.label}
+    <MediaValueDisplay
       density={astryxDensity(field)}
       label={field.label}
       previewUrl={mediaPreviewHref(field)}
       value={formatInputValue(field.value)}
     />
   );
+}
+
+function mediaAuthoring(field: FormlessUiEditorField): FormlessUiMediaAuthoring | undefined {
+  return field.media && "fileSelectEnabled" in field.media ? field.media : undefined;
 }

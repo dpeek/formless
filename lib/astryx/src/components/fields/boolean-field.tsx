@@ -1,7 +1,6 @@
-import * as stylex from "@stylexjs/stylex";
-import { Badge } from "@astryxdesign/core/Badge";
 import { CheckboxInput } from "@astryxdesign/core/CheckboxInput";
-import { spacingVars } from "@astryxdesign/core/theme/tokens.stylex";
+import { Switch } from "@astryxdesign/core/Switch";
+import { Text } from "@astryxdesign/core/Text";
 import type {
   FormlessUiDisplayField,
   FormlessUiFieldIntentHandler,
@@ -22,69 +21,60 @@ import {
 
 export function BooleanFieldEditor({
   field,
-  isCompletion,
   onIntent,
 }: {
   field: FormlessUiEditorField;
-  isCompletion: boolean;
   onIntent: FormlessUiFieldIntentHandler | undefined;
 }) {
-  const checkbox = (
+  const value = editorFieldValue(field) === true;
+  const handleChange = (nextValue: boolean) => {
+    emitFieldDraftChange(field, nextValue, onIntent);
+    emitImmediateRecordFieldCommit(field, nextValue, onIntent);
+  };
+
+  if (field.commit === "immediate") {
+    return (
+      <Switch
+        label={field.label}
+        isLabelHidden={fieldLabelIsHidden(field)}
+        disabledMessage={fieldDescription(field)}
+        isDisabled={fieldInteractionIsDisabled(field)}
+        isLoading={Boolean(field.pending?.isPending)}
+        isRequired={field.required}
+        status={fieldStatus(field)}
+        value={value}
+        width="100%"
+        onChange={handleChange}
+      />
+    );
+  }
+
+  return (
     <CheckboxInput
       label={field.label}
       isLabelHidden={fieldLabelIsHidden(field)}
-      description={fieldDescription(field)}
+      disabledMessage={fieldDescription(field)}
       isDisabled={fieldInteractionIsDisabled(field)}
       isLoading={Boolean(field.pending?.isPending)}
       isReadOnly={fieldIsReadOnly(field)}
       isRequired={field.required}
       size={astryxDensity(field) === "compact" ? "sm" : "md"}
       status={fieldStatus(field)}
-      value={editorFieldValue(field) === true}
+      value={value}
       width="100%"
-      onChange={(value) => {
-        emitFieldDraftChange(field, value, onIntent);
-        emitImmediateRecordFieldCommit(field, value, onIntent);
-      }}
+      onChange={handleChange}
     />
-  );
-
-  if (!isCompletion) {
-    return checkbox;
-  }
-
-  return (
-    <div
-      data-astryx-field-presentation-mode="completion"
-      {...stylex.props(styles.booleanCompletion)}
-    >
-      {checkbox}
-    </div>
   );
 }
 
 export function BooleanFieldDisplay({ field }: { field: FormlessUiDisplayField }) {
-  const isCompletion = field.presentation?.mode === "completion";
-
   return (
-    <div
-      data-astryx-field-presentation-mode={isCompletion ? "completion" : undefined}
-      {...stylex.props(fieldChromeStyles.displayValue)}
+    <Text
+      display="block"
+      type={astryxDensity(field) === "compact" ? "supporting" : "body"}
+      xstyle={fieldChromeStyles.displayValue}
     >
-      <Badge
-        label={
-          field.value === true ? (isCompletion ? "Complete" : "Yes") : isCompletion ? "Open" : "No"
-        }
-        variant={field.value === true ? "success" : "neutral"}
-      />
-    </div>
+      {field.formatting.displayValue}
+    </Text>
   );
 }
-
-const styles = stylex.create({
-  booleanCompletion: {
-    width: "100%",
-    minWidth: 0,
-    gap: spacingVars["--spacing-2"],
-  },
-});

@@ -1,87 +1,127 @@
 import {
   composeScenarioAxis,
-  composeScenarioGroup,
+  projectScenarioGroup,
   scenarioOption,
 } from "../field-scenario-model.ts";
-import type { FieldScenarioGroup } from "../field-scenario-model.ts";
-import { displayField, recordDrafts, recordField, textControl } from "./fixture-helpers.ts";
+import type {
+  FieldScenarioGroup,
+  FieldScenarioProjectionContext,
+} from "../field-scenario-model.ts";
+import type { FormlessUiFieldSurface } from "../../formless-ui-contract.ts";
+import {
+  createField,
+  displayField,
+  draftInput,
+  recordDrafts,
+  recordField,
+  textControl,
+} from "./fixture-helpers.ts";
 
 const accentField = {
   type: "text",
-  required: false,
+  required: true,
   label: "Accent",
   format: "color",
 } as const;
+const optionalAccentField = { ...accentField, required: false } as const;
 
-const colorRecordBase = recordField({
-  fieldName: "accent",
-  field: accentField,
-  editor: "color",
-  control: textControl(accentField, { editor: "color", controlKind: "color" }),
-  commit: "field-commit",
-  drafts: recordDrafts({ recordValue: "#2563eb" }),
-  formatting: { displayValue: "#2563eb" },
-  recordId: "record-accent",
-  rendererKind: "color",
-});
-
-const colorTableCellBase = recordField({
-  fieldName: "accent",
-  field: accentField,
-  editor: "color",
-  control: textControl(accentField, { editor: "color", controlKind: "color" }),
-  commit: "immediate",
-  density: "compact",
-  drafts: recordDrafts({ recordValue: "#38bdf8" }),
-  formatting: { displayValue: "#38bdf8" },
-  recordId: "cell-accent",
-  rendererKind: "color",
-  surface: "table-cell",
-});
-
-const colorDetailBase = displayField({
-  fieldName: "accent",
-  field: accentField,
-  editor: "color",
-  control: textControl(accentField, { editor: "color", controlKind: "color" }),
-  access: { kind: "readOnly", writable: false },
-  formatting: { displayValue: "#2563eb" },
-  recordId: "detail-color",
-  surface: "detail",
-  value: "#2563eb",
-});
+const requirednessAxis = composeScenarioAxis("requiredness", "Requiredness", [
+  scenarioOption("required", "Required"),
+  scenarioOption("optional", "Optional"),
+]);
+const createValueAxis = composeScenarioAxis("value", "Value", [
+  scenarioOption("valid", "Valid Hex"),
+  scenarioOption("unset", "Unset"),
+  scenarioOption("invalid", "Invalid Text"),
+]);
+const valueAxis = composeScenarioAxis("value", "Value", [
+  scenarioOption("valid", "Valid Hex"),
+  scenarioOption("unset", "Unset"),
+  scenarioOption("invalid", "Invalid Text"),
+]);
+const modeAxis = composeScenarioAxis("mode", "Mode", [
+  scenarioOption("editor", "Editor"),
+  scenarioOption("display", "Display"),
+]);
 
 export const colorScenarioGroups = [
-  composeScenarioGroup({
-    id: "color-record",
+  projectScenarioGroup({
+    id: "color-create",
     kind: "color",
-    surface: "record",
-    base: colorRecordBase,
-    axes: [composeScenarioAxis("mode", "Mode", [scenarioOption("hex", "Hex")])],
+    axes: [requirednessAxis, createValueAxis],
+    projectField: projectCreateColorField,
   }),
-  composeScenarioGroup({
-    id: "color-table-cell",
-    kind: "color",
-    surface: "table-cell",
-    base: colorTableCellBase,
-    axes: [composeScenarioAxis("mode", "Mode", [scenarioOption("compact", "Compact")])],
-  }),
-  composeScenarioGroup({
-    id: "color-detail",
-    kind: "color",
-    surface: "detail",
-    base: colorDetailBase,
-    axes: [
-      composeScenarioAxis("mode", "Mode", [
-        scenarioOption("hex", "Hex"),
-        scenarioOption("token", "Token", {
-          fieldName: "themeAccent",
-          formatting: { displayValue: "var(--site-accent)" },
-          label: "Theme Accent",
-          recordId: "detail-color-token",
-          value: "var(--site-accent)",
-        }),
-      ]),
-    ],
-  }),
+  existingColorGroup("record"),
+  existingColorGroup("table-cell"),
+  existingColorGroup("detail"),
 ] satisfies readonly FieldScenarioGroup[];
+
+function existingColorGroup(
+  surface: Extract<FormlessUiFieldSurface, "detail" | "record" | "table-cell">,
+) {
+  return projectScenarioGroup({
+    id: `color-${surface}`,
+    kind: "color",
+    axes: [modeAxis, requirednessAxis, valueAxis],
+    projectField: (context) => projectExistingColorField(surface, context),
+  });
+}
+
+function projectCreateColorField({ facets }: FieldScenarioProjectionContext) {
+  const required = facets.requiredness === "required";
+  const field = required ? accentField : optionalAccentField;
+  const value = colorValue(facets.value);
+
+  return createField({
+    fieldName: "accent",
+    field,
+    editor: "color",
+    control: textControl(field, { editor: "color", controlKind: "color" }),
+    draftInput: draftInput(value),
+    labelVisibility: "visible",
+    recordId: `color-create-${facets.requiredness}-${facets.value}`,
+    value,
+  });
+}
+
+function projectExistingColorField(
+  surface: Extract<FormlessUiFieldSurface, "detail" | "record" | "table-cell">,
+  { facets }: FieldScenarioProjectionContext,
+) {
+  const required = facets.requiredness === "required";
+  const field = required ? accentField : optionalAccentField;
+  const value = colorValue(facets.value);
+  const common = {
+    fieldName: "accent",
+    field,
+    editor: "color" as const,
+    control: textControl(field, { editor: "color", controlKind: "color" }),
+    labelVisibility: surface === "detail" ? ("visible" as const) : ("hidden" as const),
+    recordId: `color-${surface}-${facets.mode}-${facets.requiredness}-${facets.value}`,
+    surface,
+  };
+
+  return facets.mode === "display"
+    ? displayField({
+        ...common,
+        density: surface === "table-cell" ? "compact" : "default",
+        formatting: { displayValue: value },
+        value: value || undefined,
+      })
+    : recordField({
+        ...common,
+        commit: "field-commit",
+        density: surface === "table-cell" ? "compact" : "default",
+        drafts: recordDrafts({ recordValue: value || undefined }),
+        formatting: { displayValue: value },
+        rendererKind: "color",
+      });
+}
+
+function colorValue(value: string | undefined) {
+  return value === "valid"
+    ? "#2563eb"
+    : value === "invalid"
+      ? "not-a-color"
+      : "";
+}

@@ -1,3 +1,5 @@
+import { Text } from "@astryxdesign/core/Text";
+import { VStack } from "@astryxdesign/core/VStack";
 import type {
   FormlessUiDisplayField,
   FormlessUiField,
@@ -5,20 +7,21 @@ import type {
   FormlessUiRecordFieldRendererKind,
 } from "../../formless-ui-contract.ts";
 import { BooleanFieldDisplay, BooleanFieldEditor } from "./boolean-field.tsx";
+import { AutosizeTextFieldEditor } from "./autosize-text-field.tsx";
 import { ColorFieldDisplay, ColorFieldEditor } from "./color-field.tsx";
-import { DateFieldEditor } from "./date-field.tsx";
+import { DateFieldDisplay, DateFieldEditor } from "./date-field.tsx";
 import { EnumFieldDisplay, EnumFieldEditor } from "./enum-field.tsx";
 import {
-  FieldChrome,
   defaultFormlessUiFieldInputId,
   editorFieldValue,
+  fieldLabelIsHidden,
   formatInputValue,
   isRecordEditorField,
   type FormlessUiEditorField,
 } from "./field-chrome.tsx";
 import { IconFieldDisplay, IconFieldEditor } from "./icon-field.tsx";
 import { MediaFieldDisplay, MediaFieldEditor } from "./media-field.tsx";
-import { NumberFieldEditor } from "./number-field.tsx";
+import { NumberFieldDisplay, NumberFieldEditor } from "./number-field.tsx";
 import { ReferenceFieldDisplay, ReferenceFieldEditor } from "./reference-field.tsx";
 import { StateMachineField } from "./state-machine-field.tsx";
 import {
@@ -45,7 +48,7 @@ export function FormlessUiFieldRenderer({
   }
 
   if (field.mode === "display") {
-    return <DisplayField field={field} inputId={inputId} />;
+    return <DisplayField field={field} />;
   }
 
   return <FieldEditor field={field} inputId={inputId} onIntent={onIntent} />;
@@ -66,11 +69,16 @@ export function FormlessUiFieldSubmitFormAdapter({ field }: { field: FormlessUiF
   );
 }
 
-function DisplayField({ field, inputId }: { field: FormlessUiDisplayField; inputId: string }) {
+function DisplayField({ field }: { field: FormlessUiDisplayField }) {
   return (
-    <FieldChrome field={field} inputId={inputId}>
+    <VStack gap={fieldLabelIsHidden(field) ? 0 : 1} width="100%">
+      {fieldLabelIsHidden(field) ? null : (
+        <Text display="block" type="label">
+          {field.label}
+        </Text>
+      )}
       <FieldDisplay field={field} />
-    </FieldChrome>
+    </VStack>
   );
 }
 
@@ -89,6 +97,10 @@ function FieldEditor({
     return <MarkdownFieldEditor field={field} onIntent={onIntent} />;
   }
 
+  if (route === "autosize-text") {
+    return <AutosizeTextFieldEditor field={field} inputId={inputId} onIntent={onIntent} />;
+  }
+
   if (route === "textarea") {
     return <TextareaFieldEditor field={field} onIntent={onIntent} />;
   }
@@ -102,13 +114,7 @@ function FieldEditor({
   }
 
   if (route === "checkbox" || route === "completion-checkbox") {
-    return (
-      <BooleanFieldEditor
-        field={field}
-        isCompletion={route === "completion-checkbox"}
-        onIntent={onIntent}
-      />
-    );
+    return <BooleanFieldEditor field={field} onIntent={onIntent} />;
   }
 
   if (route === "enum" || route === "enum-icon") {
@@ -130,13 +136,21 @@ function FieldEditor({
   }
 
   if (route === "icon") {
-    return <IconFieldEditor field={field} onIntent={onIntent} />;
+    return <IconFieldEditor field={field} inputId={inputId} onIntent={onIntent} />;
   }
 
   return <TextFieldEditor field={field} onIntent={onIntent} />;
 }
 
 function FieldDisplay({ field }: { field: FormlessUiDisplayField }) {
+  if (field.control.kind === "date" || field.formatting.temporal !== undefined) {
+    return <DateFieldDisplay field={field} />;
+  }
+
+  if (field.control.kind === "number") {
+    return <NumberFieldDisplay field={field} />;
+  }
+
   if (field.control.controlKind === "checkbox") {
     return <BooleanFieldDisplay field={field} />;
   }
@@ -173,6 +187,10 @@ function editorRoute(
 ): FormlessUiRecordFieldRendererKind | FormlessUiEditorField["control"]["controlKind"] {
   if (isRecordEditorField(field)) {
     return field.rendererKind;
+  }
+
+  if (field.editor === "enum") {
+    return "enum";
   }
 
   return field.control.controlKind;

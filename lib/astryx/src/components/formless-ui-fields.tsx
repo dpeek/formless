@@ -252,7 +252,16 @@ function createCanonicalFields(): FormlessUiField[] {
       formatting: { displayValue: "4" },
       rendererKind: "number",
       suffix: "h",
-      valueUnit: { unitFieldName: "estimateUnit", unitField },
+      valueUnit: {
+        clearable: false,
+        options: [
+          { label: "h", status: "declared", value: "h" },
+          { label: "d", status: "declared", value: "d" },
+        ],
+        required: true,
+        unitFieldName: "estimateUnit",
+        unitField,
+      },
     }),
     recordField({
       fieldName: "budget",
@@ -270,7 +279,16 @@ function createCanonicalFields(): FormlessUiField[] {
       },
       formatting: { displayValue: "8" },
       rendererKind: "value-unit",
-      valueUnit: { unitFieldName: "estimateUnit", unitField },
+      valueUnit: {
+        clearable: false,
+        options: [
+          { label: "h", status: "declared", value: "h" },
+          { label: "d", status: "declared", value: "d" },
+        ],
+        required: true,
+        unitFieldName: "estimateUnit",
+        unitField,
+      },
     }),
     recordField({
       fieldName: "status",
@@ -301,12 +319,15 @@ function createCanonicalFields(): FormlessUiField[] {
       },
       formatting: { displayValue: "principal-archived" },
       options: {
-        missingReferenceValue: "principal-archived",
         referenceOptions: [
-          { id: "principal-archived", label: "principal-archived", missing: true },
           { id: "principal-dana", label: "Dana Peek" },
           { id: "principal-jordan", label: "Jordan Lee" },
         ],
+      },
+      reference: {
+        clearable: false,
+        kind: "editor",
+        valueStatus: { kind: "missing", value: "principal-archived" },
       },
       rendererKind: "reference",
     }),
@@ -419,6 +440,7 @@ function createField({
     ...baseField({ control, editor, field, fieldName, label: control.label, surface: "create" }),
     access: { kind: "editable", canPatch: true, writable: true },
     commit: "submit",
+    density: "default",
     draftInput,
     mode: "editor",
     surface: "create",
@@ -438,6 +460,7 @@ function recordField({
   media,
   options,
   presentation,
+  reference,
   rendererKind,
   suffix,
   valueUnit,
@@ -448,7 +471,13 @@ function recordField({
   Partial<
     Pick<
       FormlessUiRecordField,
-      "errors" | "media" | "options" | "presentation" | "suffix" | "valueUnit"
+      | "errors"
+      | "media"
+      | "options"
+      | "presentation"
+      | "reference"
+      | "suffix"
+      | "valueUnit"
     >
   >): FormlessUiRecordField {
   return {
@@ -470,6 +499,7 @@ function recordField({
     mode: "editor",
     options,
     presentation,
+    reference,
     presentationMode: "default",
     rendererKind,
     suffix,
@@ -503,6 +533,7 @@ function displayField({
     ...baseField({ control, editor, field, fieldName, label: control.label, surface: "detail" }),
     access,
     commit: "submit",
+    density: "default",
     formatting,
     mode: "display",
     options,
@@ -534,6 +565,10 @@ function baseField({
     field,
     fieldName,
     label,
+    labelVisibility:
+      surface === "record" || surface === "table-cell"
+        ? ("hidden" as const)
+        : ("visible" as const),
     required: field.required,
     surface,
   };
@@ -663,8 +698,10 @@ function enumOptions(field: Extract<FieldSchema, { type: "enum" }>): FormlessUiE
         known: true,
         token: option.presentation?.color,
       },
+      iconKnown: true,
       label: option.label,
     },
+    status: "declared",
     value,
   }));
 }
@@ -726,6 +763,48 @@ function applyCanonicalFixtureIntent(
         },
       };
     });
+  }
+
+  if (intent.type === "recordDraftCommit") {
+    return fields.map((field) => {
+      if (!isRecordField(field) || field.fieldName !== intent.fieldName) {
+        return field;
+      }
+
+      const value = fieldValueFromDraftInput(field.field, intent.fieldValue);
+
+      return {
+        ...field,
+        drafts: {
+          ...field.drafts,
+          draftInput: intent.fieldValue,
+          recordValue: value,
+        },
+        errors: removeFieldErrors(field.errors, field.fieldName),
+        formatting: {
+          ...field.formatting,
+          displayValue: displayFieldValue(field.field, value),
+        },
+      };
+    });
+  }
+
+  if (intent.type === "recordDraftRevert") {
+    return fields.map((field) =>
+      isRecordField(field) && field.fieldName === intent.fieldName
+        ? {
+            ...field,
+            drafts: {
+              ...field.drafts,
+              draft: String(field.drafts.recordValue ?? ""),
+              draftInput: undefined,
+              unitDraft: String(field.drafts.unitRecordValue ?? ""),
+              unitDraftInput: undefined,
+            },
+            errors: removeFieldErrors(field.errors, field.fieldName),
+          }
+        : field,
+    );
   }
 
   if (intent.type === "mediaAssetSelect") {
@@ -852,7 +931,11 @@ function applyCanonicalFixtureIntent(
         return field;
       }
 
-      const transition = field.stateMachineFacts.transitions?.find(
+      if (field.stateMachineFacts.interaction.kind !== "transitions") {
+        return field;
+      }
+
+      const transition = field.stateMachineFacts.interaction.transitions.find(
         (candidate) => candidate.transitionName === intent.transitionName,
       );
       const nextValue = transition?.transition.to;
@@ -890,37 +973,53 @@ function statusStateMachineFacts(currentValue: string): FormlessUiStateMachineFa
   return {
     currentValue,
     initialState: statusMachine.initial,
+    interaction: {
+      invocationSource: "menuItem",
+      kind: "transitions",
+      transitions: Object.entries(statusMachine.transitions).map(
+        ([transitionName, transition]) => {
+          const valid =
+            transition.from.includes(currentValue) ||
+            (currentValue.trim() !== "" &&
+              !Object.hasOwn(statusField.values, currentValue) &&
+              transition.to === statusStateMachine.initialState);
+
+          return {
+            operationName:
+              statusTransitionOperationNames[
+                transitionName as keyof typeof statusTransitionOperationNames
+              ],
+            label: transition.label,
+            machineName: statusStateMachine.machineName,
+            machine: statusMachine,
+            transitionName,
+            transition,
+            fieldName: "status",
+            field: statusField,
+            availability: valid
+              ? { valid: true }
+              : {
+                  valid: false,
+                  disabledReason: `Requires ${transition.from
+                    .map((value) => displayEnumValue(statusField, value))
+                    .join(", ")}.`,
+                },
+          };
+        },
+      ),
+    },
     stateMachine: statusStateMachine,
     terminal: statusStateMachine.terminalStates.includes(currentValue),
-    transitions: Object.entries(statusMachine.transitions).map(([transitionName, transition]) => {
-      const valid =
-        transition.from.includes(currentValue) ||
-        (currentValue.trim() !== "" &&
-          !Object.hasOwn(statusField.values, currentValue) &&
-          transition.to === statusStateMachine.initialState);
-
-      return {
-        operationName:
-          statusTransitionOperationNames[
-            transitionName as keyof typeof statusTransitionOperationNames
-          ],
-        label: transition.label,
-        machineName: statusStateMachine.machineName,
-        machine: statusMachine,
-        transitionName,
-        transition,
-        fieldName: "status",
-        field: statusField,
-        availability: valid
-          ? { valid: true }
+    valueStatus:
+      currentValue.trim() === ""
+        ? { kind: "unset", message: "Current state is missing." }
+        : Object.hasOwn(statusField.values, currentValue)
+          ? { kind: "declared", value: currentValue }
           : {
-              valid: false,
-              disabledReason: `Requires ${transition.from
-                .map((value) => displayEnumValue(statusField, value))
-                .join(", ")}.`,
+              kind: "undeclared",
+              message: `Current state "${currentValue}" is not declared.`,
+              value: currentValue,
             },
-      };
-    }),
   };
 }
 

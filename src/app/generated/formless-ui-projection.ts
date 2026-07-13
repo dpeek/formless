@@ -1,4 +1,9 @@
-import type { ImageMediaAssetOption } from "@dpeek/formless-media/client";
+import { MEDIA_IMAGE_UPLOAD_MAX_BYTES } from "@dpeek/formless-media";
+import {
+  coreImageMediaAssetOptionForId,
+  IMAGE_UPLOAD_ACCEPT,
+  type ImageMediaAssetOption,
+} from "@dpeek/formless-media/client";
 import type {
   AppSchema,
   FieldSchema,
@@ -9,14 +14,17 @@ import type {
 } from "@dpeek/formless-schema";
 import type {
   FormlessUiBaseField,
+  FormlessUiColorFacts,
   FormlessUiCreateDefault,
   FormlessUiCreateField,
   FormlessUiDisplayField,
+  FormlessUiEnumFacts,
   FormlessUiEnumOption,
   FormlessUiEnumValuePresentation,
   FormlessUiField,
   FormlessUiFieldAccess,
   FormlessUiFieldControl,
+  FormlessUiFieldDensity,
   FormlessUiFieldError,
   FormlessUiFieldFormatting,
   FormlessUiFieldOptions,
@@ -28,15 +36,18 @@ import type {
   FormlessUiIconPickerSelection,
   FormlessUiMediaAssetOption,
   FormlessUiMediaAuthoring,
+  FormlessUiMediaPresentation,
   FormlessUiOperationInputField,
   FormlessUiRecordField,
-  FormlessUiRecordFieldDensity,
   FormlessUiRecordFieldPresentation,
   FormlessUiRecordFieldRendererKind,
+  FormlessUiReferenceFacts,
   FormlessUiReferenceOption,
+  FormlessUiReferenceValueStatus,
   FormlessUiStateMachineFacts,
   FormlessUiStateTransitionOperation,
   FormlessUiValueUnitCommit,
+  FormlessUiValueUnitField,
 } from "@dpeek/formless-astryx/contract";
 import {
   fieldLabel,
@@ -69,10 +80,8 @@ import type {
   GeneratedOperationInputConfigurationError,
   GeneratedOperationInputFieldConfig,
 } from "./operation-field-authoring.ts";
-import {
-  generatedMissingReferenceOptionValue,
-  generatedReferenceDisplayLabel,
-} from "./reference-field-options.ts";
+import { generatedReferenceDisplayLabel } from "./reference-field-options.ts";
+import { toOpaquePickerHexColor } from "./color-utils.ts";
 import {
   generatedRecordFieldEditorDraftFromUpdateDraftInput,
   selectGeneratedRecordFieldMediaAuthoring,
@@ -109,8 +118,12 @@ export type ProjectGeneratedCreateFormlessUiSessionOptions = {
 export type ProjectGeneratedCreateFormlessUiFieldsOptions =
   ProjectGeneratedCreateFormlessUiSessionOptions & {
     errorsByFieldName?: Readonly<Record<string, GeneratedFormlessUiFieldErrorInput>>;
+    iconDialogDraftByFieldName?: Readonly<Record<string, string | undefined>>;
+    iconDialogOpenByFieldName?: Readonly<Record<string, boolean | undefined>>;
+    iconParseErrorByFieldName?: Readonly<Record<string, string | undefined>>;
     pendingByFieldName?: Readonly<Record<string, boolean>>;
     pendingLabelByFieldName?: Readonly<Record<string, string | undefined>>;
+    mediaAssetOptionsByFieldName?: Readonly<Record<string, readonly ImageMediaAssetOption[]>>;
     referenceOptionsByFieldName?: Readonly<
       Record<string, readonly GeneratedFormlessUiReferenceOption[]>
     >;
@@ -119,7 +132,11 @@ export type ProjectGeneratedCreateFormlessUiFieldsOptions =
 export type ProjectGeneratedCreateFormlessUiFieldOptions = {
   error?: GeneratedFormlessUiFieldErrorInput;
   fieldConfig: CreateFieldConfig;
+  iconDialogDraft?: string;
+  iconDialogOpen?: boolean;
+  iconParseError?: string;
   isPending?: boolean;
+  mediaAssetOptions?: readonly ImageMediaAssetOption[];
   pendingLabel?: string;
   recordId?: string;
   referenceOptions?: readonly GeneratedFormlessUiReferenceOption[];
@@ -135,8 +152,9 @@ export type ProjectGeneratedRecordFormlessUiSessionOptions = {
 export type ProjectGeneratedRecordFormlessUiFieldsOptions =
   ProjectGeneratedRecordFormlessUiSessionOptions & {
     canPatch: boolean;
-    density?: FormlessUiRecordFieldDensity;
+    density?: FormlessUiFieldDensity;
     disabledReasonByFieldName?: Readonly<Record<string, string | undefined>>;
+    editorDraftByFieldName?: Readonly<Record<string, string | undefined>>;
     entityName?: string;
     errorsByFieldName?: Readonly<Record<string, GeneratedFormlessUiFieldErrorInput>>;
     iconDialogDraftByFieldName?: Readonly<Record<string, string | undefined>>;
@@ -162,9 +180,10 @@ export type ProjectGeneratedRecordFormlessUiFieldsOptions =
 
 export type ProjectGeneratedRecordFormlessUiFieldOptions = {
   canPatch: boolean;
-  density?: FormlessUiRecordFieldDensity;
+  density?: FormlessUiFieldDensity;
   disabledReason?: string;
   draftInput?: GeneratedFieldDraftInput;
+  editorDraft?: string;
   entityName?: string;
   error?: GeneratedFormlessUiFieldErrorInput;
   fieldConfig: GeneratedFormlessUiRecordFieldConfig;
@@ -188,10 +207,13 @@ export type ProjectGeneratedRecordFormlessUiFieldOptions = {
 };
 
 export type ProjectGeneratedDisplayFormlessUiFieldOptions = {
+  density?: FormlessUiFieldDensity;
   fieldConfig: GeneratedFormlessUiRecordFieldConfig;
+  mediaAssetOptions?: readonly ImageMediaAssetOption[];
   recordId?: string;
   recordValue: FieldValue | undefined;
   referenceOptions?: readonly GeneratedFormlessUiReferenceOption[];
+  showLabel?: boolean;
   surface?: Exclude<FormlessUiFieldSurface, "create" | "operation">;
   transitionOperations?: readonly TransitionStateOperationConfig[];
 };
@@ -250,6 +272,10 @@ export function projectGeneratedCreateDefaults(
 
 export function projectGeneratedCreateFormlessUiFields({
   errorsByFieldName,
+  iconDialogDraftByFieldName,
+  iconDialogOpenByFieldName,
+  iconParseErrorByFieldName,
+  mediaAssetOptionsByFieldName,
   pendingByFieldName,
   pendingLabelByFieldName,
   referenceOptionsByFieldName,
@@ -261,7 +287,11 @@ export function projectGeneratedCreateFormlessUiFields({
       error:
         errorsByFieldName?.[fieldConfig.fieldName] ?? session.fieldErrors[fieldConfig.fieldName],
       fieldConfig,
+      iconDialogDraft: iconDialogDraftByFieldName?.[fieldConfig.fieldName],
+      iconDialogOpen: iconDialogOpenByFieldName?.[fieldConfig.fieldName],
+      iconParseError: iconParseErrorByFieldName?.[fieldConfig.fieldName],
       isPending: pendingByFieldName?.[fieldConfig.fieldName],
+      mediaAssetOptions: mediaAssetOptionsByFieldName?.[fieldConfig.fieldName],
       pendingLabel: pendingLabelByFieldName?.[fieldConfig.fieldName],
       referenceOptions: referenceOptionsByFieldName?.[fieldConfig.fieldName],
       state,
@@ -273,7 +303,11 @@ export function projectGeneratedCreateFormlessUiFields({
 export function projectGeneratedCreateFormlessUiField({
   error,
   fieldConfig,
+  iconDialogDraft,
+  iconDialogOpen,
+  iconParseError,
   isPending = false,
+  mediaAssetOptions = [],
   pendingLabel,
   recordId,
   referenceOptions = [],
@@ -284,7 +318,34 @@ export function projectGeneratedCreateFormlessUiField({
   const label = fieldLabel(fieldName, field);
   const control = selectGeneratedFieldControl({ editor, field, label });
   const draftInput = state?.draft.values[fieldName];
-  const currentValue = value ?? stateMachineCreateValue(fieldConfig, draftInput);
+  const referenceDefault =
+    field.type === "reference" &&
+    field.required &&
+    draftInput === undefined &&
+    (value === undefined || value === "")
+      ? referenceOptions[0]?.id
+      : undefined;
+  const projectedDraftInput =
+    referenceDefault === undefined
+      ? draftInput
+      : ({ kind: "input", value: referenceDefault } as const);
+  const currentValue =
+    projectedDraftInput?.value ?? value ?? stateMachineCreateValue(fieldConfig, projectedDraftInput);
+  const media = projectCreateMediaAuthoring({
+    control,
+    fieldName,
+    mediaAssetOptions,
+    value: currentValue,
+  });
+  const icon = selectProjectedIconAuthoring({
+    dialogDraft: iconDialogDraft,
+    dialogOpen: iconDialogOpen,
+    draft: typeof currentValue === "string" ? currentValue : "",
+    isIcon: control.controlKind === "icon",
+    isPending,
+    parseError: iconParseError,
+    required: field.required,
+  });
 
   return {
     ...projectBaseField({
@@ -305,23 +366,42 @@ export function projectGeneratedCreateFormlessUiField({
         ...(fieldConfig.visibleWhen === undefined ? {} : { visibleWhen: fieldConfig.visibleWhen }),
       },
       label,
+      labelVisibility: "visible",
       options: projectFieldOptions({
         field,
         includeIconOptions: control.controlKind === "icon",
-        optionValue: draftInput?.value ?? currentValue,
+        mediaAssetOptions:
+          control.controlKind === "image" || control.controlKind === "media"
+            ? mediaAssetOptions
+            : undefined,
         referenceOptions,
       }),
       pending: projectPending(isPending, pendingLabel),
       recordId,
       stateMachineFacts: projectStateMachineFacts({
         currentValue,
+        field,
         stateMachine: fieldConfig.stateMachine,
       }),
       surface: "create",
     }),
+    color: projectColorFacts(control, currentValue),
     commit: "submit",
-    draftInput,
+    density: "default",
+    draftInput: projectedDraftInput,
+    enum:
+      fieldConfig.stateMachine === undefined
+        ? projectEnumEditorFacts({
+            field,
+            style: "plain",
+            surface: "create",
+            value: projectedDraftInput?.value ?? currentValue,
+          })
+        : undefined,
+    ...(icon === undefined ? {} : { icon }),
     mode: "editor",
+    ...(media === undefined ? {} : { media }),
+    reference: projectReferenceEditorFacts(field, currentValue, referenceOptions),
     surface: "create",
     value: currentValue,
   };
@@ -343,6 +423,7 @@ export function projectGeneratedRecordFormlessUiFields({
   canPatch,
   density = "default",
   disabledReasonByFieldName,
+  editorDraftByFieldName,
   entityName,
   errorsByFieldName,
   iconDialogDraftByFieldName,
@@ -372,6 +453,7 @@ export function projectGeneratedRecordFormlessUiFields({
       density,
       disabledReason: disabledReasonByFieldName?.[fieldConfig.fieldName],
       draftInput: state.draft.values[fieldConfig.fieldName],
+      editorDraft: editorDraftByFieldName?.[fieldConfig.fieldName],
       entityName,
       error:
         errorsByFieldName?.[fieldConfig.fieldName] ?? session.fieldErrors[fieldConfig.fieldName],
@@ -405,6 +487,7 @@ export function projectGeneratedRecordFormlessUiField({
   density = "default",
   disabledReason,
   draftInput,
+  editorDraft,
   entityName = "",
   error,
   fieldConfig,
@@ -431,10 +514,13 @@ export function projectGeneratedRecordFormlessUiField({
   const control = selectGeneratedFieldControl({ editor: fieldConfig.editor, field, label });
   const access = selectRecordAccess(fieldConfig, canPatch, disabledReason);
   const displayField = projectGeneratedDisplayFormlessUiField({
+    density,
     fieldConfig,
+    mediaAssetOptions,
     recordId,
     recordValue,
     referenceOptions,
+    showLabel,
     surface,
     transitionOperations,
   });
@@ -457,12 +543,14 @@ export function projectGeneratedRecordFormlessUiField({
     showLabel,
   });
   const numberFormat = fieldConfig.format ?? "plain";
-  const draft = generatedRecordFieldEditorDraftFromUpdateDraftInput({
-    draftInput,
-    fieldConfig,
-    numberFormat,
-    recordValue,
-  });
+  const draft =
+    editorDraft ??
+    generatedRecordFieldEditorDraftFromUpdateDraftInput({
+      draftInput,
+      fieldConfig,
+      numberFormat,
+      recordValue,
+    });
   const projectedUnitDraft = projectUnitDraft({
     fieldConfig,
     unitDraft,
@@ -481,9 +569,10 @@ export function projectGeneratedRecordFormlessUiField({
     dialogDraft: iconDialogDraft,
     dialogOpen: iconDialogOpen,
     draft,
+    isIcon: rendererKind === "icon",
     isPending,
     parseError: iconParseError,
-    rendererKind,
+    required: field.required,
   });
 
   return {
@@ -494,22 +583,24 @@ export function projectGeneratedRecordFormlessUiField({
       error,
       fieldConfig,
       label,
+      labelVisibility: showLabel && surface !== "table-cell" ? "visible" : "hidden",
       options: projectFieldOptions({
         field,
         includeIconOptions: control.controlKind === "icon",
         mediaAssetOptions,
-        optionValue: draft,
         referenceOptions,
       }),
       pending: projectPending(isPending, pendingLabel),
       recordId,
       stateMachineFacts: projectStateMachineFacts({
         currentValue: recordValue,
+        field,
         stateMachine: fieldConfig.stateMachine,
         transitionOperations,
       }),
       surface,
     }),
+    color: projectColorFacts(control, draft),
     commit: fieldConfig.commit,
     density,
     drafts: {
@@ -521,20 +612,32 @@ export function projectGeneratedRecordFormlessUiField({
       unitRecordValue,
     },
     formatting: displayField.formatting,
+    enum: projectEnumEditorFacts({
+      field,
+      presentation: fieldConfig.presentation,
+      style: rendererKind === "enum-icon" ? "rich" : "plain",
+      surface,
+      value: draft,
+    }),
     ...(iconAuthoring === undefined ? {} : { icon: iconAuthoring }),
     ...(mediaAuthoring === undefined ? {} : { media: mediaAuthoring }),
     mode: "editor",
     presentationMode: presentation,
+    reference: projectReferenceEditorFacts(field, draft, referenceOptions),
     rendererKind,
     surface,
+    valueUnit: projectValueUnitField(fieldConfig.valueUnit, projectedUnitDraft.unitDraft),
   };
 }
 
 export function projectGeneratedDisplayFormlessUiField({
+  density = "default",
   fieldConfig,
+  mediaAssetOptions = [],
   recordId,
   recordValue,
   referenceOptions = [],
+  showLabel,
   surface = "detail",
   transitionOperations,
 }: ProjectGeneratedDisplayFormlessUiFieldOptions): FormlessUiDisplayField {
@@ -544,6 +647,11 @@ export function projectGeneratedDisplayFormlessUiField({
     field: fieldConfig.field,
     label,
   });
+  const media = projectMediaPresentation({
+    control,
+    mediaAssetOptions,
+    value: recordValue,
+  });
 
   return {
     ...projectBaseField({
@@ -552,21 +660,38 @@ export function projectGeneratedDisplayFormlessUiField({
       control,
       fieldConfig,
       label,
+      labelVisibility:
+        surface === "table-cell" || (surface === "record" && showLabel !== true)
+          ? "hidden"
+          : "visible",
       options: projectFieldOptions({
         field: fieldConfig.field,
-        optionValue: recordValue,
+        mediaAssetOptions:
+          control.controlKind === "image" || control.controlKind === "media"
+            ? mediaAssetOptions
+            : undefined,
         referenceOptions,
       }),
       recordId,
       stateMachineFacts: projectStateMachineFacts({
         currentValue: recordValue,
+        field: fieldConfig.field,
         stateMachine: fieldConfig.stateMachine,
         transitionOperations,
       }),
       surface,
     }),
+    color: projectColorFacts(control, recordValue),
+    density,
+    enum: projectEnumDisplayFacts({
+      field: fieldConfig.field,
+      presentation: fieldConfig.presentation,
+      value: recordValue,
+    }),
     formatting: projectDisplayFormatting({ fieldConfig, recordValue, referenceOptions }),
+    ...(media === undefined ? {} : { media }),
     mode: "display",
+    reference: projectReferenceDisplayFacts(fieldConfig.field, recordValue, referenceOptions),
     value: recordValue,
   };
 }
@@ -626,16 +751,24 @@ export function projectGeneratedOperationFormlessUiField({
       fieldConfig,
       inputName,
       label,
+      labelVisibility: "visible",
       options: projectFieldOptions({
         field,
         includeIconOptions: control.controlKind === "icon",
-        optionValue: draftInput?.value ?? value,
       }),
       pending: projectPending(isPending, pendingLabel),
       surface: "operation",
     }),
+    color: projectColorFacts(control, draftInput?.value ?? value),
     commit: "submit",
+    density: "default",
     draftInput,
+    enum: projectEnumEditorFacts({
+      field,
+      style: "plain",
+      surface: "operation",
+      value: draftInput?.value ?? value,
+    }),
     input: fieldConfig,
     inputName,
     mode: "editor",
@@ -671,6 +804,7 @@ function projectBaseField({
   fieldConfig,
   inputName,
   label,
+  labelVisibility,
   options,
   pending,
   recordId,
@@ -687,6 +821,7 @@ function projectBaseField({
     | GeneratedOperationInputFieldConfig;
   inputName?: string;
   label: string;
+  labelVisibility: FormlessUiBaseField["labelVisibility"];
   options?: FormlessUiFieldOptions;
   pending?: FormlessUiFieldPending;
   recordId?: string;
@@ -706,6 +841,7 @@ function projectBaseField({
       : {}),
     ...(inputName === undefined ? {} : { inputName }),
     label,
+    labelVisibility,
     options,
     pending,
     presentation: fieldConfigPresentation(fieldConfig),
@@ -715,9 +851,63 @@ function projectBaseField({
     stateMachineFacts,
     surface,
     suffix: "suffix" in fieldConfig ? fieldConfig.suffix : undefined,
-    valueUnit: "valueUnit" in fieldConfig ? fieldConfig.valueUnit : undefined,
+    valueUnit:
+      "valueUnit" in fieldConfig ? projectValueUnitField(fieldConfig.valueUnit) : undefined,
     visibleWhen: fieldConfigVisibleWhen(fieldConfig),
     writable: "writable" in fieldConfig ? fieldConfig.writable : undefined,
+  };
+}
+
+function projectColorFacts(
+  control: FormlessUiFieldControl,
+  value: FieldValue | undefined,
+): FormlessUiColorFacts | undefined {
+  if (control.controlKind !== "color") {
+    return undefined;
+  }
+
+  const text = typeof value === "string" ? value : "";
+  const colorValue = toOpaquePickerHexColor(text);
+
+  return {
+    picker:
+      colorValue === undefined ? { kind: "unavailable" } : { kind: "hex", value: colorValue },
+    swatch:
+      colorValue === undefined ? { kind: "unavailable" } : { kind: "hex", value: colorValue },
+  };
+}
+
+function projectValueUnitField(
+  valueUnit: GeneratedFormlessUiRecordFieldConfig["valueUnit"] | undefined,
+  currentValue = "",
+): FormlessUiValueUnitField | undefined {
+  if (valueUnit === undefined) {
+    return undefined;
+  }
+
+  const declaredOptions = Object.entries(valueUnit.unitField.values).map(([value, option]) => ({
+    label: option.label,
+    status: "declared" as const,
+    value,
+  }));
+  const options =
+    currentValue !== "" && valueUnit.unitField.values[currentValue] === undefined
+      ? [
+          {
+            label: currentValue,
+            status: "undeclaredCurrent" as const,
+            value: currentValue,
+          },
+          ...declaredOptions,
+        ]
+      : declaredOptions;
+
+  return {
+    clearable: !valueUnit.unitField.required,
+    options,
+    required: valueUnit.unitField.required,
+    unitField: valueUnit.unitField,
+    unitFieldName: valueUnit.unitFieldName,
   };
 }
 
@@ -725,34 +915,22 @@ function projectFieldOptions({
   field,
   includeIconOptions = false,
   mediaAssetOptions,
-  optionValue,
   referenceOptions = [],
 }: {
   field: FieldSchema;
   includeIconOptions?: boolean;
   mediaAssetOptions?: readonly ImageMediaAssetOption[];
-  optionValue: FieldValue | undefined;
   referenceOptions?: readonly GeneratedFormlessUiReferenceOption[];
 }): FormlessUiFieldOptions | undefined {
   if (field.type === "enum") {
-    const enumValue = typeof optionValue === "string" ? optionValue : "";
-
     return {
-      enumOptions: projectEnumOptions(field, enumValue),
-      unknownEnumValue: unknownEnumValue(field, enumValue),
+      enumOptions: projectEnumOptions(field),
     };
   }
 
   if (field.type === "reference") {
-    const referenceValue = typeof optionValue === "string" ? optionValue : "";
-    const missingReferenceValue = generatedMissingReferenceOptionValue(
-      referenceValue,
-      referenceOptions,
-    );
-
     return {
-      missingReferenceValue,
-      referenceOptions: projectReferenceOptions(referenceOptions, missingReferenceValue),
+      referenceOptions: projectReferenceOptions(referenceOptions),
     };
   }
 
@@ -786,6 +964,7 @@ function projectDisplayFormatting({
       : fieldConfig.stateMachine !== undefined
         ? stateMachineDisplayValue(fieldConfig.field, recordValue)
         : formatFieldDisplayValue(fieldConfig, recordValue);
+  const temporal = projectTemporalDisplay(fieldConfig, recordValue);
 
   return {
     displayValue,
@@ -794,15 +973,45 @@ function projectDisplayFormatting({
       : {}),
     format: fieldConfig.format,
     suffix: fieldConfig.suffix,
+    ...(temporal === undefined ? {} : { temporal }),
   };
+}
+
+function projectTemporalDisplay(
+  fieldConfig: GeneratedFormlessUiRecordFieldConfig,
+  recordValue: FieldValue | undefined,
+): FormlessUiFieldFormatting["temporal"] {
+  if (typeof recordValue !== "string" || recordValue === "") {
+    return undefined;
+  }
+
+  if (fieldConfig.field.type === "date") {
+    return /^\d{4}-\d{2}-\d{2}$/.test(recordValue)
+      ? { kind: "date", value: recordValue }
+      : undefined;
+  }
+
+  const fieldRef = recordFieldRef(fieldConfig);
+
+  if (
+    fieldRef.kind === "system" &&
+    fieldRef.name !== "id" &&
+    Number.isFinite(Date.parse(recordValue))
+  ) {
+    return { kind: "dateTime", value: recordValue };
+  }
+
+  return undefined;
 }
 
 function projectStateMachineFacts({
   currentValue,
+  field,
   stateMachine,
   transitionOperations = [],
 }: {
   currentValue: FieldValue | undefined;
+  field: FieldSchema;
   stateMachine: RecordFieldConfig["stateMachine"];
   transitionOperations?: readonly TransitionStateOperationConfig[];
 }): FormlessUiStateMachineFacts | undefined {
@@ -813,21 +1022,118 @@ function projectStateMachineFacts({
   return {
     currentValue,
     initialState: stateMachine.initialState,
+    interaction:
+      transitionOperations.length === 0
+        ? { kind: "display" }
+        : {
+            invocationSource: "menuItem",
+            kind: "transitions",
+            transitions: transitionOperations.map(
+              (operation): FormlessUiStateTransitionOperation => ({
+                ...operation,
+                availability: selectTransitionStateOperationAvailability({
+                  currentValue,
+                  field: operation.field,
+                  operation,
+                }),
+              }),
+            ),
+          },
     stateMachine,
     terminal: stateMachineStateIsTerminal(stateMachine, currentValue),
-    transitions:
-      transitionOperations.length === 0
-        ? undefined
-        : transitionOperations.map(
-            (operation): FormlessUiStateTransitionOperation => ({
-              ...operation,
-              availability: selectTransitionStateOperationAvailability({
-                currentValue,
-                field: operation.field,
-                operation,
-              }),
-            }),
-          ),
+    valueStatus: stateMachineValueStatus(field, currentValue),
+  };
+}
+
+function stateMachineValueStatus(
+  field: FieldSchema,
+  currentValue: FieldValue | undefined,
+): FormlessUiStateMachineFacts["valueStatus"] {
+  if (typeof currentValue !== "string" || currentValue.trim() === "") {
+    return { kind: "unset", message: "Current state is missing." };
+  }
+
+  if (field.type !== "enum" || field.values[currentValue] === undefined) {
+    return {
+      kind: "undeclared",
+      message: `Current state "${currentValue}" is not declared.`,
+      value: currentValue,
+    };
+  }
+
+  return { kind: "declared", value: currentValue };
+}
+
+function projectCreateMediaAuthoring({
+  control,
+  fieldName,
+  mediaAssetOptions,
+  value,
+}: {
+  control: FormlessUiFieldControl;
+  fieldName: string;
+  mediaAssetOptions: readonly ImageMediaAssetOption[];
+  value: FieldValue | undefined;
+}): FormlessUiMediaAuthoring | undefined {
+  if (control.controlKind !== "image" && control.controlKind !== "media") {
+    return undefined;
+  }
+
+  const assetMode = control.controlKind === "media";
+
+  return {
+    ...projectMediaPresentation({ control, mediaAssetOptions, value }),
+    accept: IMAGE_UPLOAD_ACCEPT,
+    fileSelectEnabled: assetMode,
+    maxSize: MEDIA_IMAGE_UPLOAD_MAX_BYTES,
+    mediaEditorMode: assetMode ? "asset" : "url",
+    uploadEnabled: assetMode,
+    uploadPatchFields: assetMode
+      ? { mediaAssetFieldName: fieldName }
+      : { hrefFieldName: fieldName },
+  };
+}
+
+function projectMediaPresentation({
+  control,
+  mediaAssetOptions,
+  value,
+}: {
+  control: FormlessUiFieldControl;
+  mediaAssetOptions: readonly ImageMediaAssetOption[];
+  value: FieldValue | undefined;
+}): FormlessUiMediaPresentation | undefined {
+  if (control.controlKind !== "image" && control.controlKind !== "media") {
+    return undefined;
+  }
+
+  const selectedValue = typeof value === "string" ? value : "";
+
+  if (selectedValue === "") {
+    return {};
+  }
+
+  if (control.controlKind === "image") {
+    return {
+      previewHref: selectedValue,
+      selectedUrl: selectedValue,
+    };
+  }
+
+  const selectedAsset =
+    mediaAssetOptions.find((asset) => asset.id === selectedValue) ??
+    coreImageMediaAssetOptionForId(selectedValue);
+
+  return {
+    ...(selectedAsset === undefined
+      ? {
+          missingSelectedAsset: {
+            assetId: selectedValue,
+            reason: "Selected media asset is unavailable.",
+          },
+        }
+      : { previewHref: selectedAsset.href }),
+    selectedAssetId: selectedValue,
   };
 }
 
@@ -865,14 +1171,15 @@ function selectProjectedMediaAuthoring({
     selectedAssetId !== undefined && mediaAuthoring.mediaPreviewHref === undefined
       ? {
           assetId: selectedAssetId,
-          label: selectedAssetId,
           reason: "Selected media asset is unavailable.",
         }
       : undefined;
 
   return {
     ...mediaAuthoring,
+    accept: IMAGE_UPLOAD_ACCEPT,
     fileSelectEnabled: mediaAuthoring.uploadEnabled,
+    maxSize: MEDIA_IMAGE_UPLOAD_MAX_BYTES,
     ...(missingSelectedAsset === undefined ? {} : { missingSelectedAsset }),
     ...(previewHref === undefined ? {} : { previewHref }),
     ...(selectedAssetId === undefined ? {} : { selectedAssetId }),
@@ -884,18 +1191,20 @@ function selectProjectedIconAuthoring({
   dialogDraft,
   dialogOpen = false,
   draft,
+  isIcon,
   isPending,
   parseError,
-  rendererKind,
+  required,
 }: {
   dialogDraft?: string;
   dialogOpen?: boolean;
   draft: string;
+  isIcon: boolean;
   isPending: boolean;
   parseError?: string;
-  rendererKind: FormlessUiRecordFieldRendererKind;
+  required: boolean;
 }): FormlessUiIconPickerFacts | undefined {
-  if (rendererKind !== "icon") {
+  if (!isIcon) {
     return undefined;
   }
 
@@ -903,13 +1212,17 @@ function selectProjectedIconAuthoring({
   const previewSource = dialogOpen ? projectedDialogDraft : draft;
 
   return {
-    canCancel: true,
-    canSave: !isPending,
+    canCancel: dialogOpen,
+    canSave:
+      dialogOpen &&
+      !isPending &&
+      parseError === undefined &&
+      (!required || projectedDialogDraft.trim() !== ""),
     ...(parseError === undefined ? {} : { customParseError: parseError }),
     dialogDraft: projectedDialogDraft,
     dialogOpen,
     emptyValue: projectedDialogDraft.trim() === "",
-    previewSource,
+    previewSource: parseError === undefined ? previewSource : draft,
     savePending: isPending,
     selection: selectIconPickerSelection(projectedDialogDraft),
     valueMode: "svgSource",
@@ -1028,17 +1341,55 @@ function projectOperationConfigurationErrors(
 
 function projectReferenceOptions(
   options: readonly GeneratedFormlessUiReferenceOption[],
-  missingReferenceValue: string | null,
 ): readonly FormlessUiReferenceOption[] {
-  return [
-    ...(missingReferenceValue === null
-      ? []
-      : [{ id: missingReferenceValue, label: missingReferenceValue, missing: true }]),
-    ...options.map((option) => ({
-      id: option.id,
-      label: option.label,
-    })),
-  ];
+  return options.map((option) => ({
+    id: option.id,
+    label: option.label,
+  }));
+}
+
+function projectReferenceEditorFacts(
+  field: FieldSchema,
+  value: FieldValue | undefined,
+  options: readonly GeneratedFormlessUiReferenceOption[],
+): FormlessUiReferenceFacts | undefined {
+  if (field.type !== "reference") {
+    return undefined;
+  }
+
+  return {
+    clearable: !field.required,
+    kind: "editor",
+    valueStatus: referenceValueStatus(value, options),
+  };
+}
+
+function projectReferenceDisplayFacts(
+  field: FieldSchema,
+  value: FieldValue | undefined,
+  options: readonly GeneratedFormlessUiReferenceOption[],
+): FormlessUiReferenceFacts | undefined {
+  if (field.type !== "reference") {
+    return undefined;
+  }
+
+  return {
+    kind: "display",
+    valueStatus: referenceValueStatus(value, options),
+  };
+}
+
+function referenceValueStatus(
+  value: FieldValue | undefined,
+  options: readonly GeneratedFormlessUiReferenceOption[],
+): FormlessUiReferenceValueStatus {
+  if (typeof value !== "string" || value === "") {
+    return { kind: "unset" };
+  }
+
+  return options.some((option) => option.id === value)
+    ? { kind: "resolved", value }
+    : { kind: "missing", value };
 }
 
 function projectMediaAssetOption(option: ImageMediaAssetOption): FormlessUiMediaAssetOption {
@@ -1087,34 +1438,13 @@ function selectIconPickerSelection(source: string): FormlessUiIconPickerSelectio
 
 function projectEnumOptions(
   field: Extract<FieldSchema, { type: "enum" }>,
-  selectedValue: string,
 ): readonly FormlessUiEnumOption[] {
-  const unknownValue = unknownEnumValue(field, selectedValue);
-
-  return [
-    ...(unknownValue === null
-      ? []
-      : [
-          {
-            label: unknownValue,
-            missing: true,
-            presentation: projectEnumValuePresentation(field, unknownValue),
-            value: unknownValue,
-          },
-        ]),
-    ...Object.entries(field.values).map(([value, option]) => ({
-      label: option.label,
-      presentation: projectEnumValuePresentation(field, value),
-      value,
-    })),
-  ];
-}
-
-function unknownEnumValue(
-  field: Extract<FieldSchema, { type: "enum" }>,
-  value: string,
-): string | null {
-  return value !== "" && !Object.hasOwn(field.values, value) ? value : null;
+  return Object.entries(field.values).map(([value, option]) => ({
+    label: option.label,
+    presentation: projectEnumValuePresentation(field, value),
+    status: "declared",
+    value,
+  }));
 }
 
 function projectEnumValuePresentation(
@@ -1122,13 +1452,88 @@ function projectEnumValuePresentation(
   value: string,
 ): FormlessUiEnumValuePresentation {
   const option = field.values[value];
+  const iconToken = option?.presentation?.icon;
   const icon = resolvePresentationIcon(option?.presentation?.icon);
 
   return {
     color: resolvePresentationColor(option?.presentation?.color),
     ...(icon === undefined ? {} : { icon }),
+    iconKnown: iconToken === undefined || icon !== undefined,
+    ...(iconToken === undefined ? {} : { iconToken }),
     label: option?.label ?? value,
   };
+}
+
+function projectEnumEditorFacts({
+  field,
+  presentation,
+  style,
+  surface,
+  value,
+}: {
+  field: FieldSchema;
+  presentation?: FormlessUiField["presentation"];
+  style: "plain" | "rich";
+  surface: "create" | "detail" | "operation" | "record" | "table-cell";
+  value: FieldValue | undefined;
+}): FormlessUiEnumFacts | undefined {
+  if (field.type !== "enum") {
+    return undefined;
+  }
+
+  const valueStatus = enumValueStatus(field, value);
+  const placeholder =
+    surface === "operation"
+      ? "Select"
+      : style === "rich" && valueStatus.kind === "unset"
+        ? "None"
+        : valueStatus.kind === "unset"
+          ? ""
+          : undefined;
+
+  return {
+    clearable: surface === "operation" || !field.required,
+    kind: "editor",
+    listContent: style === "rich" ? (presentation?.list ?? "both") : "label",
+    ...(placeholder === undefined ? {} : { placeholder }),
+    style,
+    triggerContent:
+      style === "rich" && presentation?.trigger !== "label" ? "both" : "label",
+    valueStatus,
+  };
+}
+
+function projectEnumDisplayFacts({
+  field,
+  presentation,
+  value,
+}: {
+  field: FieldSchema;
+  presentation?: FormlessUiField["presentation"];
+  value: FieldValue | undefined;
+}): FormlessUiEnumFacts | undefined {
+  if (field.type !== "enum") {
+    return undefined;
+  }
+
+  return {
+    content: presentation?.mode === "iconOnly" ? "icon" : "label",
+    kind: "display",
+    valueStatus: enumValueStatus(field, value),
+  };
+}
+
+function enumValueStatus(
+  field: Extract<FieldSchema, { type: "enum" }>,
+  value: FieldValue | undefined,
+): FormlessUiEnumFacts["valueStatus"] {
+  if (typeof value !== "string" || value === "") {
+    return { kind: "unset" };
+  }
+
+  return Object.hasOwn(field.values, value)
+    ? { kind: "declared", value }
+    : { kind: "undeclared", value };
 }
 
 function resolvePresentationIcon(token: string | undefined) {

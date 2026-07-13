@@ -11,6 +11,7 @@ import type {
 import type { FieldSchema, StateMachineSchema } from "@dpeek/formless-schema";
 import type { FormlessUiField } from "../../formless-ui-contract.ts";
 import {
+  createField,
   displayField,
   enumControl,
   enumOptions,
@@ -84,6 +85,8 @@ const operationNames = {
   sendWaiting: "tasks.sendToWaiting",
 };
 
+const stateMachineCreateBase = stateMachineCreateField();
+
 const stateMachineRecordBase = stateMachineDisplayField({
   recordId: "state-status-record",
   surface: "record",
@@ -102,7 +105,21 @@ const stateMachineDetailBase = stateMachineDisplayField({
   value: "open",
 });
 
+const stateMachineInteractionAxis = composeScenarioAxis("interaction", "Interaction", [
+  scenarioOption("transitions", "Transitions"),
+  scenarioOption("display", "Display", withStateMachineInteraction("display")),
+]);
+
 export const stateMachineScenarioGroups = [
+  composeScenarioGroup({
+    id: "state-machine-create",
+    kind: "state-machine-enum",
+    surface: "create",
+    base: stateMachineCreateBase,
+    axes: [
+      composeScenarioAxis("state", "State", [scenarioOption("initial", "Initial")]),
+    ],
+  }),
   composeScenarioGroup({
     id: "state-machine-record",
     kind: "state-machine-enum",
@@ -110,9 +127,12 @@ export const stateMachineScenarioGroups = [
     base: stateMachineRecordBase,
     axes: [
       composeScenarioAxis("value", "Value", [
-        scenarioOption("open", "Known", withStateValue("open")),
-        scenarioOption("unknown", "Unknown", withStateValue("paused")),
+        scenarioOption("open", "Active", withStateValue("open")),
+        scenarioOption("done", "Terminal", withStateValue("done")),
+        scenarioOption("undeclared", "Undeclared", withStateValue("paused")),
+        scenarioOption("unset", "Unset", withStateValue("")),
       ]),
+      stateMachineInteractionAxis,
     ],
     finalizeField: finalizeRecordStateMachineField,
   }),
@@ -123,9 +143,12 @@ export const stateMachineScenarioGroups = [
     base: stateMachineTableCellBase,
     axes: [
       composeScenarioAxis("value", "Value", [
-        scenarioOption("open", "Known", withStateValue("open")),
-        scenarioOption("unknown", "Unknown", withStateValue("paused")),
+        scenarioOption("open", "Active", withStateValue("open")),
+        scenarioOption("done", "Terminal", withStateValue("done")),
+        scenarioOption("undeclared", "Undeclared", withStateValue("paused")),
+        scenarioOption("unset", "Unset", withStateValue("")),
       ]),
+      stateMachineInteractionAxis,
     ],
     finalizeField: finalizeTableCellStateMachineField,
   }),
@@ -136,9 +159,12 @@ export const stateMachineScenarioGroups = [
     base: stateMachineDetailBase,
     axes: [
       composeScenarioAxis("value", "Value", [
-        scenarioOption("open", "Known", withStateValue("open")),
-        scenarioOption("unknown", "Unknown", withStateValue("paused")),
+        scenarioOption("open", "Active", withStateValue("open")),
+        scenarioOption("done", "Terminal", withStateValue("done")),
+        scenarioOption("undeclared", "Undeclared", withStateValue("paused")),
+        scenarioOption("unset", "Unset", withStateValue("")),
       ]),
+      stateMachineInteractionAxis,
     ],
     finalizeField: finalizeDetailStateMachineField,
   }),
@@ -169,6 +195,41 @@ function withStateValue(value: string): FieldScenarioFieldModifier {
   return (field) => applyStateMachineFacts(field, { value });
 }
 
+function withStateMachineInteraction(
+  interaction: "display" | "transitions",
+): FieldScenarioFieldModifier {
+  return (field) => applyStateMachineFacts(field, { interaction });
+}
+
+function stateMachineCreateField() {
+  const stateMachine = stateMachineField({
+    fieldName: "status",
+    machineName: "taskWorkflow",
+    machine: taskWorkflowMachine,
+  });
+
+  return createField({
+    fieldName: "status",
+    field: stateStatusField,
+    editor: "enum",
+    control: enumControl(stateStatusField),
+    draftInput: { kind: "value", value: stateMachine.initialState },
+    access: { kind: "stateMachine", writable: false },
+    labelVisibility: "visible",
+    options: { enumOptions: stateStatusOptions },
+    recordId: "state-status-create",
+    stateMachine,
+    stateMachineFacts: stateMachineFacts({
+      currentValue: stateMachine.initialState,
+      field: stateStatusField,
+      interaction: "display",
+      operationNames,
+      stateMachine,
+    }),
+    value: stateMachine.initialState,
+  });
+}
+
 function stateMachineDisplayField(input: {
   recordId: string;
   surface: "detail" | "record" | "table-cell";
@@ -186,10 +247,12 @@ function stateMachineDisplayField(input: {
     editor: "enum",
     control: enumControl(stateStatusField),
     access: { kind: "stateMachine", writable: false },
+    density: input.surface === "table-cell" ? "compact" : "default",
     formatting: {
       displayValue: displayOption(stateStatusField, input.value),
       enumValuePresentation: stateValuePresentation(stateStatusField, input.value),
     },
+    labelVisibility: input.surface === "detail" ? "visible" : "hidden",
     options: { enumOptions: stateStatusOptions },
     recordId: input.recordId,
     stateMachine,
@@ -208,6 +271,7 @@ function applyStateMachineFacts(
   field: FormlessUiField,
   input: {
     field?: Extract<FieldSchema, { type: "enum" }>;
+    interaction?: "display" | "transitions";
     machine?: StateMachineSchema;
     value?: unknown;
   },
@@ -231,8 +295,6 @@ function applyStateMachineFacts(
     machine,
   });
 
-  const hasKnownValue = Object.hasOwn(enumField.values, value);
-
   return {
     ...field,
     control: enumControl(enumField),
@@ -248,12 +310,12 @@ function applyStateMachineFacts(
         done: { iconSource: confirmIconSource },
         open: { iconSource: priorityMarkerIconSource },
       }),
-      unknownEnumValue: !hasKnownValue && value !== "" ? value : undefined,
     },
     stateMachine,
     stateMachineFacts: stateMachineFacts({
       currentValue: value,
       field: enumField,
+      interaction: input.interaction ?? field.stateMachineFacts?.interaction.kind,
       operationNames,
       stateMachine,
     }),

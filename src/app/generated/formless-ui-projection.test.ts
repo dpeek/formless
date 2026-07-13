@@ -38,6 +38,7 @@ import {
 } from "./record-field-authoring.ts";
 import {
   projectGeneratedCreateFormlessUiFields,
+  projectGeneratedCreateFormlessUiField,
   projectGeneratedCreateFormlessUiSession,
   projectGeneratedDisplayFormlessUiField,
   projectGeneratedOperationFormlessUiFields,
@@ -49,6 +50,40 @@ import {
 } from "./formless-ui-projection.ts";
 
 describe("generated Formless UI projection", () => {
+  it("projects opaque picker and swatch facts for color fields", () => {
+    const colorField = {
+      type: "text",
+      required: false,
+      label: "Accent",
+      format: "color",
+    } satisfies FieldSchema;
+    const createColor = projectGeneratedCreateFormlessUiField({
+      fieldConfig: createField("accent", colorField, "color"),
+      value: "#abc",
+    });
+    const unsupportedAlphaDisplay = projectGeneratedDisplayFormlessUiField({
+      fieldConfig: recordField("accent", colorField, "color"),
+      recordValue: "#2563eb80",
+    });
+    const invalidDisplay = projectGeneratedDisplayFormlessUiField({
+      fieldConfig: recordField("accent", colorField, "color"),
+      recordValue: "not-a-color",
+    });
+
+    expect(createColor.color).toEqual({
+      picker: { kind: "hex", value: "#AABBCC" },
+      swatch: { kind: "hex", value: "#AABBCC" },
+    });
+    expect(unsupportedAlphaDisplay.color).toEqual({
+      picker: { kind: "unavailable" },
+      swatch: { kind: "unavailable" },
+    });
+    expect(invalidDisplay.color).toEqual({
+      picker: { kind: "unavailable" },
+      swatch: { kind: "unavailable" },
+    });
+  });
+
   it("projects create sessions and field configs into submit-bound create fields", () => {
     const createFields = [
       createField("title", fields.title, "text"),
@@ -134,23 +169,87 @@ describe("generated Formless UI projection", () => {
       {
         commit: "submit",
         options: {
-          missingReferenceValue: null,
           referenceOptions: [{ id: "principal-1", label: "Dana" }],
         },
         pending: { isPending: true, label: "Loading people" },
+        reference: {
+          clearable: true,
+          kind: "editor",
+          valueStatus: { kind: "unset" },
+        },
         value: "",
       },
       {
         access: { kind: "stateMachine" },
         commit: "submit",
+        draftInput: { kind: "value", value: "new" },
+        labelVisibility: "visible",
         stateMachineFacts: {
           currentValue: "new",
           initialState: "new",
+          interaction: { kind: "display" },
           terminal: false,
+          valueStatus: { kind: "declared", value: "new" },
         },
         value: "new",
       },
     ]);
+  });
+
+  it("projects required reference defaults from loaded options", () => {
+    const requiredOwner = {
+      ...fields.owner,
+      required: true,
+    } satisfies Extract<FieldSchema, { type: "reference" }>;
+    const requiredField = createField("owner", requiredOwner, "reference");
+    const requiredState = initialGeneratedCreateDraftSessionState({ fields: [requiredField] });
+    const projectedDefault = projectGeneratedCreateFormlessUiField({
+      fieldConfig: requiredField,
+      referenceOptions: [
+        { id: "principal-1", label: "Dana" },
+        { id: "principal-2", label: "Jordan" },
+      ],
+      state: requiredState,
+    });
+    const projectedWithoutOptions = projectGeneratedCreateFormlessUiField({
+      fieldConfig: requiredField,
+      state: requiredState,
+    });
+    const optionalField = createField("owner", fields.owner, "reference");
+    const optionalState = initialGeneratedCreateDraftSessionState({ fields: [optionalField] });
+    const projectedOptional = projectGeneratedCreateFormlessUiField({
+      fieldConfig: optionalField,
+      referenceOptions: [{ id: "principal-1", label: "Dana" }],
+      state: optionalState,
+    });
+
+    expect(projectedDefault).toMatchObject({
+      draftInput: { kind: "input", value: "principal-1" },
+      reference: {
+        clearable: false,
+        kind: "editor",
+        valueStatus: { kind: "resolved", value: "principal-1" },
+      },
+      value: "principal-1",
+    });
+    expect(projectedWithoutOptions).toMatchObject({
+      draftInput: undefined,
+      reference: {
+        clearable: false,
+        kind: "editor",
+        valueStatus: { kind: "unset" },
+      },
+      value: undefined,
+    });
+    expect(projectedOptional).toMatchObject({
+      draftInput: { kind: "value", value: "" },
+      reference: {
+        clearable: true,
+        kind: "editor",
+        valueStatus: { kind: "unset" },
+      },
+      value: "",
+    });
   });
 
   it("projects update fields without flattening draft, renderer, option, media, or access facts", () => {
@@ -199,6 +298,7 @@ describe("generated Formless UI projection", () => {
       canPatch: true,
       density: "compact",
       entityName: "task",
+      editorDraftByFieldName: { cost: "$13." },
       errorsByFieldName: { title: "Save failed." },
       mediaAssetOptionsByFieldName: {
         hero: [
@@ -262,7 +362,7 @@ describe("generated Formless UI projection", () => {
     expect(cost).toMatchObject({
       control: { controlKind: "number" },
       drafts: {
-        draft: "$13.00",
+        draft: "$13.",
         draftInput: { kind: "value", value: 13 },
         recordValue: 12.5,
         unitDraft: "hour",
@@ -270,7 +370,15 @@ describe("generated Formless UI projection", () => {
         unitRecordValue: "day",
       },
       rendererKind: "value-unit",
-      valueUnit: { unitFieldName: "costUnit" },
+      valueUnit: {
+        clearable: true,
+        options: [
+          { label: "Day", status: "declared", value: "day" },
+          { label: "Hour", status: "declared", value: "hour" },
+        ],
+        required: false,
+        unitFieldName: "costUnit",
+      },
     });
     expect(selectFormlessUiValueUnitCommit(cost)).toEqual({
       fieldDraftInput: { kind: "value", value: 13 },
@@ -279,14 +387,20 @@ describe("generated Formless UI projection", () => {
     expect(owner).toMatchObject({
       commit: "immediate",
       options: {
-        missingReferenceValue: "missing-owner",
-        referenceOptions: [{ id: "missing-owner", label: "missing-owner", missing: true }],
+        referenceOptions: [],
+      },
+      reference: {
+        clearable: true,
+        kind: "editor",
+        valueStatus: { kind: "missing", value: "missing-owner" },
       },
       rendererKind: "reference",
     });
     expect(hero).toMatchObject({
       media: {
+        accept: "image/jpeg,image/png,image/webp,image/gif",
         fileSelectEnabled: true,
+        maxSize: 5 * 1024 * 1024,
         mediaEditorMode: "asset",
         previewHref: "/media/hero.webp",
         selectedAssetId: "hero.webp",
@@ -306,49 +420,72 @@ describe("generated Formless UI projection", () => {
       pending: { isPending: true, label: "Uploading" },
       rendererKind: "media",
     });
-    expect(priority.options).toMatchObject({
-      unknownEnumValue: "urgent",
-      enumOptions: [
-        { label: "urgent", missing: true, value: "urgent" },
-        {
-          label: "High",
-          presentation: {
-            color: { intent: "danger", known: true, token: "priority.high" },
-            icon: { kind: "svg" },
+    expect(priority).toMatchObject({
+      enum: {
+        clearable: true,
+        kind: "editor",
+        listContent: "label",
+        style: "plain",
+        triggerContent: "label",
+        valueStatus: { kind: "undeclared", value: "urgent" },
+      },
+      options: {
+        enumOptions: [
+          {
+            label: "High",
+            presentation: {
+              color: { intent: "danger", known: true, token: "priority.high" },
+              icon: { kind: "svg" },
+              iconKnown: true,
+              iconToken: "priority-marker",
+            },
+            status: "declared",
+            value: "high",
           },
-          value: "high",
-        },
-        {
-          label: "Low",
-          presentation: { color: { intent: "success", known: true, token: "priority.low" } },
-          value: "low",
-        },
-      ],
+          {
+            label: "Low",
+            presentation: {
+              color: { intent: "success", known: true, token: "priority.low" },
+            },
+            status: "declared",
+            value: "low",
+          },
+        ],
+      },
     });
     expect(status).toMatchObject({
       access: { kind: "stateMachine" },
+      density: "compact",
       formatting: {
         displayValue: "Archived",
         enumValuePresentation: { label: "Archived" },
       },
       mode: "display",
+      labelVisibility: "hidden",
       stateMachineFacts: {
         currentValue: "archived",
+        interaction: {
+          invocationSource: "menuItem",
+          kind: "transitions",
+          transitions: [
+            { availability: { valid: false, disabledReason: "Requires New." } },
+            { availability: { valid: false, disabledReason: "Requires New." } },
+          ],
+        },
         terminal: true,
-        transitions: [
-          { availability: { valid: false, disabledReason: "Requires New." } },
-          { availability: { valid: false, disabledReason: "Requires New." } },
-        ],
+        valueStatus: { kind: "declared", value: "archived" },
       },
       value: "archived",
     });
     expect(updatedAt).toMatchObject({
       access: { kind: "system", fieldRef: { kind: "system", name: "updatedAt" } },
+      density: "compact",
       mode: "display",
       value: "2026-07-09T00:00:00.000Z",
     });
     expect(summary).toMatchObject({
       access: { kind: "readOnly" },
+      density: "compact",
       formatting: { displayValue: "Locked" },
       mode: "display",
       value: "Locked",
@@ -377,6 +514,12 @@ describe("generated Formless UI projection", () => {
         recordValue: addIconSource,
       }),
     );
+    const createIconField = projectGeneratedCreateFormlessUiField({
+      fieldConfig: createField("icon", fields.icon, "icon"),
+      iconDialogDraft: addIconSource,
+      iconDialogOpen: true,
+      value: customIconSource,
+    });
 
     expect(catalogField.options?.iconOptions?.find((option) => option.id === "add")).toEqual({
       group: "ui",
@@ -394,14 +537,59 @@ describe("generated Formless UI projection", () => {
     });
     expect(customField.icon).toMatchObject({
       canCancel: true,
-      canSave: true,
+      canSave: false,
       customParseError: "Enter valid SVG.",
       dialogDraft: customIconSource,
       dialogOpen: true,
       emptyValue: false,
-      previewSource: customIconSource,
+      previewSource: addIconSource,
       selection: { kind: "customSource", source: customIconSource },
       valueMode: "svgSource",
+    });
+    expect(createIconField.icon).toMatchObject({
+      canCancel: true,
+      canSave: true,
+      dialogDraft: addIconSource,
+      dialogOpen: true,
+      previewSource: addIconSource,
+      selection: { kind: "option", optionId: "add", source: addIconSource },
+      valueMode: "svgSource",
+    });
+  });
+
+  it("projects media assets as thumbnail presentation facts for create and display", () => {
+    const mediaAssetOptions = [
+      { height: 360, href: "/media/hero.webp", id: "hero.webp", label: "Hero", width: 640 },
+    ];
+    const createMediaField = projectGeneratedCreateFormlessUiField({
+      fieldConfig: createField("hero", fields.image, "media"),
+      mediaAssetOptions,
+      value: "hero.webp",
+    });
+    const displayMediaField = projectGeneratedDisplayFormlessUiField({
+      fieldConfig: recordField("hero", fields.image, "media"),
+      mediaAssetOptions,
+      recordValue: "hero.webp",
+    });
+
+    expect(createMediaField).toMatchObject({
+      control: { controlKind: "media" },
+      media: {
+        fileSelectEnabled: true,
+        mediaEditorMode: "asset",
+        previewHref: "/media/hero.webp",
+        selectedAssetId: "hero.webp",
+        uploadEnabled: true,
+      },
+      options: { mediaAssetOptions },
+    });
+    expect(displayMediaField).toMatchObject({
+      control: { controlKind: "media" },
+      media: {
+        previewHref: "/media/hero.webp",
+        selectedAssetId: "hero.webp",
+      },
+      options: { mediaAssetOptions },
     });
   });
 
@@ -422,7 +610,6 @@ describe("generated Formless UI projection", () => {
       mediaEditorMode: "asset",
       missingSelectedAsset: {
         assetId: "not/a-core-asset",
-        label: "not/a-core-asset",
         reason: "Selected media asset is unavailable.",
       },
       selectedAssetId: "not/a-core-asset",
@@ -440,6 +627,11 @@ describe("generated Formless UI projection", () => {
       recordValue: "principal-1",
       referenceOptions: [{ id: "principal-1", label: "Dana" }],
     });
+    const missingReferenceDisplay = projectGeneratedDisplayFormlessUiField({
+      fieldConfig: recordField("owner", fields.owner, "reference"),
+      recordValue: "principal-missing",
+      referenceOptions: [{ id: "principal-1", label: "Dana" }],
+    });
     const stateDisplay = projectGeneratedDisplayFormlessUiField({
       fieldConfig: {
         ...recordField("status", fields.status, "enum"),
@@ -449,24 +641,228 @@ describe("generated Formless UI projection", () => {
       recordValue: "",
       transitionOperations,
     });
+    const unknownStateDisplay = projectGeneratedDisplayFormlessUiField({
+      fieldConfig: {
+        ...recordField("status", fields.status, "enum"),
+        stateMachine,
+      },
+      recordValue: "paused",
+      transitionOperations,
+    });
+    const recordStateDisplay = projectGeneratedDisplayFormlessUiField({
+      fieldConfig: {
+        ...recordField("status", fields.status, "enum"),
+        stateMachine,
+      },
+      recordValue: "new",
+      showLabel: false,
+      surface: "record",
+      transitionOperations,
+    });
+    const tableStateDisplay = projectGeneratedDisplayFormlessUiField({
+      density: "compact",
+      fieldConfig: {
+        ...recordField("status", fields.status, "enum"),
+        stateMachine,
+      },
+      recordValue: "new",
+      surface: "table-cell",
+      transitionOperations,
+    });
+    const dateDisplay = projectGeneratedDisplayFormlessUiField({
+      fieldConfig: recordField("dueDate", fields.dueDate, "date"),
+      recordValue: "2026-07-08",
+      surface: "detail",
+    });
+    const timestampDisplay = projectGeneratedDisplayFormlessUiField({
+      fieldConfig: recordField("updatedAt", fields.systemText, "text", {
+        fieldRef: { kind: "system", name: "updatedAt" },
+        writable: false,
+      }),
+      recordValue: "2026-07-09T00:00:00.000Z",
+      surface: "detail",
+    });
 
     expect(referenceDisplay).toMatchObject({
       formatting: { displayValue: "Dana", suffix: "assigned" },
       options: {
-        missingReferenceValue: null,
         referenceOptions: [{ id: "principal-1", label: "Dana" }],
       },
+      reference: {
+        kind: "display",
+        valueStatus: { kind: "resolved", value: "principal-1" },
+      },
+    });
+    expect(missingReferenceDisplay).toMatchObject({
+      formatting: { displayValue: "principal-missing" },
+      options: {
+        referenceOptions: [{ id: "principal-1", label: "Dana" }],
+      },
+      reference: {
+        kind: "display",
+        valueStatus: { kind: "missing", value: "principal-missing" },
+      },
+    });
+    expect(dateDisplay.formatting.temporal).toEqual({
+      kind: "date",
+      value: "2026-07-08",
+    });
+    expect(timestampDisplay.formatting.temporal).toEqual({
+      kind: "dateTime",
+      value: "2026-07-09T00:00:00.000Z",
     });
     expect(stateDisplay).toMatchObject({
+      density: "default",
       formatting: { displayValue: "Unset", suffix: "current" },
+      labelVisibility: "visible",
       stateMachineFacts: {
         currentValue: "",
+        interaction: {
+          invocationSource: "menuItem",
+          kind: "transitions",
+          transitions: [
+            { availability: { valid: false, disabledReason: "Requires New." } },
+            { availability: { valid: false, disabledReason: "Requires New." } },
+          ],
+        },
         terminal: false,
-        transitions: [
-          { availability: { valid: false, disabledReason: "Requires New." } },
-          { availability: { valid: false, disabledReason: "Requires New." } },
+        valueStatus: { kind: "unset", message: "Current state is missing." },
+      },
+    });
+    expect(unknownStateDisplay).toMatchObject({
+      stateMachineFacts: {
+        currentValue: "paused",
+        valueStatus: {
+          kind: "undeclared",
+          message: 'Current state "paused" is not declared.',
+          value: "paused",
+        },
+      },
+    });
+    expect(recordStateDisplay).toMatchObject({
+      density: "default",
+      labelVisibility: "hidden",
+      stateMachineFacts: {
+        interaction: {
+          invocationSource: "menuItem",
+          kind: "transitions",
+          transitions: [
+            { availability: { valid: true } },
+            { availability: { valid: true } },
+          ],
+        },
+      },
+      surface: "record",
+    });
+    expect(tableStateDisplay).toMatchObject({
+      density: "compact",
+      labelVisibility: "hidden",
+      stateMachineFacts: {
+        interaction: {
+          invocationSource: "menuItem",
+          kind: "transitions",
+          transitions: [
+            { availability: { valid: true } },
+            { availability: { valid: true } },
+          ],
+        },
+      },
+      surface: "table-cell",
+    });
+  });
+
+  it("projects explicit enum presentation, label visibility, and undeclared value facts", () => {
+    const field = {
+      type: "enum",
+      required: true,
+      label: "Status",
+      values: {
+        fallback: {
+          label: "Legacy fallback",
+          presentation: { color: "priority.unknown", icon: "missing-icon" },
+        },
+        open: {
+          label: "Open",
+          presentation: { color: "priority.normal", icon: "priority-marker" },
+        },
+      },
+    } satisfies Extract<FieldSchema, { type: "enum" }>;
+    const fieldConfig = {
+      ...recordField("status", field, "enum", { commit: "immediate" }),
+      presentation: { mode: "iconOnly", trigger: "label", list: "icon" } as const,
+    };
+    const editor = projectGeneratedRecordFormlessUiField({
+      canPatch: true,
+      draftInput: { kind: "input", value: "paused" },
+      fieldConfig,
+      recordValue: "paused",
+      showLabel: false,
+      surface: "record",
+    });
+    const iconTriggerEditor = projectGeneratedRecordFormlessUiField({
+      canPatch: true,
+      fieldConfig: {
+        ...fieldConfig,
+        presentation: { mode: "iconOnly", trigger: "icon", list: "both" },
+      },
+      recordValue: "open",
+      surface: "record",
+    });
+    const display = projectGeneratedDisplayFormlessUiField({
+      fieldConfig,
+      recordValue: "fallback",
+      showLabel: true,
+      surface: "detail",
+    });
+
+    expect(editor).toMatchObject({
+      enum: {
+        clearable: false,
+        kind: "editor",
+        listContent: "icon",
+        style: "rich",
+        triggerContent: "label",
+        valueStatus: { kind: "undeclared", value: "paused" },
+      },
+      labelVisibility: "hidden",
+      options: {
+        enumOptions: [
+          {
+            presentation: {
+              color: { intent: "neutral", known: false, token: "priority.unknown" },
+              iconKnown: false,
+              iconToken: "missing-icon",
+            },
+            status: "declared",
+            value: "fallback",
+          },
+          {
+            presentation: {
+              color: { intent: "warning", known: true, token: "priority.normal" },
+              iconKnown: true,
+              iconToken: "priority-marker",
+            },
+            status: "declared",
+            value: "open",
+          },
         ],
       },
+      rendererKind: "enum-icon",
+    });
+    expect(iconTriggerEditor).toMatchObject({
+      enum: {
+        listContent: "both",
+        style: "rich",
+        triggerContent: "both",
+      },
+    });
+    expect(display).toMatchObject({
+      enum: {
+        content: "icon",
+        kind: "display",
+        valueStatus: { kind: "declared", value: "fallback" },
+      },
+      labelVisibility: "visible",
     });
   });
 
@@ -542,6 +938,7 @@ describe("generated Formless UI projection", () => {
         commit: "submit",
         control: { controlKind: "text", label: "Email" },
         draftInput: { kind: "input", value: "ada@example.com" },
+        input: { format: "email" },
         inputName: "contactEmail",
         mode: "editor",
         pending: { isPending: true, label: "Submitting" },
@@ -566,16 +963,50 @@ describe("generated Formless UI projection", () => {
       },
       {
         control: { controlKind: "select" },
+        enum: {
+          clearable: true,
+          kind: "editor",
+          placeholder: "Select",
+          style: "plain",
+          valueStatus: { kind: "declared", value: "sales" },
+        },
         options: {
           enumOptions: [
-            { label: "Sales", value: "sales" },
-            { label: "Support", value: "support" },
+            { label: "Sales", status: "declared", value: "sales" },
+            { label: "Support", status: "declared", value: "support" },
           ],
-          unknownEnumValue: null,
         },
         value: "sales",
       },
     ]);
+
+    const undeclaredTopicState = nextGeneratedOperationDraftSessionState({
+      inputName: "topic",
+      inputValue: { kind: "input", value: "enterprise" },
+      state: initialGeneratedOperationDraftSessionState({ fields: operationFields }),
+    });
+    const undeclaredTopicSession = selectGeneratedOperationDraftSession({
+      fields: operationFields,
+      state: undeclaredTopicState,
+    });
+    const undeclaredTopic = projectGeneratedOperationFormlessUiFields({
+      session: undeclaredTopicSession,
+      state: undeclaredTopicState,
+    }).find((field) => field.inputName === "topic");
+
+    expect(undeclaredTopic).toMatchObject({
+      enum: {
+        clearable: true,
+        valueStatus: { kind: "undeclared", value: "enterprise" },
+      },
+      errors: [{ message: 'Field "topic" must be a known enum value.' }],
+      options: {
+        enumOptions: [
+          { label: "Sales", status: "declared", value: "sales" },
+          { label: "Support", status: "declared", value: "support" },
+        ],
+      },
+    });
   });
 });
 
@@ -695,6 +1126,7 @@ const fields = {
       hour: { label: "Hour" },
     },
   },
+  dueDate: { type: "date", required: false },
   estimate: { type: "number", required: false },
   image: { type: "text", required: false, format: "href" },
   icon: { type: "text", required: false, format: "icon" },
