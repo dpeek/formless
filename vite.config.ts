@@ -11,6 +11,7 @@ export default defineConfig({
   test: {
     exclude: [...defaultTestExclude, ...ignoredScratchGlobs],
     cache: false,
+    maxWorkers: "50%",
     reporters: ["minimal"],
     server: {
       deps: {
