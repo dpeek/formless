@@ -9,6 +9,7 @@
         "@cloudflare/vite-plugin": "^1.33.2",
         "@dnd-kit/react": "^0.4.0",
         "@dpeek/formless-archive": "^0.1.0",
+        "@dpeek/formless-astryx": "workspace:*",
         "@dpeek/formless-crm-app": "^0.1.0",
         "@dpeek/formless-deploy": "^0.1.0",
         "@dpeek/formless-gateway": "^0.1.0",
@@ -68,6 +69,7 @@
       "dependencies": {
         "@astryxdesign/core": "0.1.4",
         "@astryxdesign/theme-neutral": "0.1.4",
+        "@dpeek/formless-schema": "^0.1.0",
         "@heroicons/react": "latest",
         "@stylexjs/stylex": "0.18.3",
         "@thesvg/react": "^3.0.19",

@@ -291,7 +291,7 @@ export function emitRecordFieldCommit(
     return;
   }
 
-  return onIntent?.({
+  void onIntent?.({
     type: "recordValueCommit",
     fieldName: field.fieldName,
     value: fieldValueFromDraftValue(field, value),

@@ -37,6 +37,7 @@
     "@cloudflare/vite-plugin": "^1.33.2",
     "@dnd-kit/react": "^0.4.0",
     "@dpeek/formless-archive": "^0.1.0",
+    "@dpeek/formless-astryx": "workspace:*",
     "@dpeek/formless-crm-app": "^0.1.0",
     "@dpeek/formless-deploy": "^0.1.0",
     "@dpeek/formless-gateway": "^0.1.0",
