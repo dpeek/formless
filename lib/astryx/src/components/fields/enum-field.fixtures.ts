@@ -186,10 +186,7 @@ function projectCreateEnumField({ facets }: FieldScenarioProjectionContext) {
 }
 
 function enumPresentationCombinationIsValid({ facets }: FieldScenarioProjectionContext) {
-  return (
-    facets.presentation !== "plain" ||
-    (facets.trigger === "label" && facets.list === "label")
-  );
+  return facets.presentation !== "plain" || (facets.trigger === "label" && facets.list === "label");
 }
 
 function projectRecordEnumField({ facets }: FieldScenarioProjectionContext) {
@@ -197,9 +194,7 @@ function projectRecordEnumField({ facets }: FieldScenarioProjectionContext) {
   const required = facets.requiredness === "required";
   const value = enumRecordValue(facets.value, facets.trigger, facets.list);
   const displayValue =
-    facets.mode === "display" &&
-    facets.presentation === "icon-only" &&
-    facets.value === "known"
+    facets.mode === "display" && facets.presentation === "icon-only" && facets.value === "known"
       ? "legacyFallback"
       : value;
 
@@ -242,13 +237,7 @@ function projectOperationEnumField({ facets }: FieldScenarioProjectionContext) {
     required && facets.value === "unset"
       ? [fieldError("topic", 'Field "topic" cannot be empty.')]
       : facets.value === "undeclared"
-        ? [
-            fieldError(
-              "topic",
-              'Field "topic" must be a known enum value.',
-              "enterprise",
-            ),
-          ]
+        ? [fieldError("topic", 'Field "topic" must be a known enum value.', "enterprise")]
         : undefined;
 
   return operationEnumField({ errors, required, value });
@@ -416,9 +405,6 @@ function operationEnumField({
   });
 }
 
-function displayOption(
-  field: typeof statusField | typeof optionalStatusField,
-  value: string,
-) {
+function displayOption(field: typeof statusField | typeof optionalStatusField, value: string) {
   return field.values[value as keyof typeof field.values]?.label ?? value;
 }

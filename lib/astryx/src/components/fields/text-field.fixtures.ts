@@ -315,7 +315,10 @@ function projectExistingTextField(
   });
 }
 
-function textField(kind: Extract<FieldKindKey, "long-text" | "markdown" | "text">, required: boolean) {
+function textField(
+  kind: Extract<FieldKindKey, "long-text" | "markdown" | "text">,
+  required: boolean,
+) {
   if (kind === "long-text") {
     return required ? requiredLongTextField : optionalLongTextField;
   }

@@ -9,11 +9,7 @@ import type {
   FormlessUiMediaAssetOption,
 } from "../../formless-ui-contract.ts";
 import { SourceIcon } from "../field-primitives.tsx";
-import {
-  editorFieldValue,
-  formatInputValue,
-  type FormlessUiEditorField,
-} from "./field-chrome.tsx";
+import { editorFieldValue, formatInputValue, type FormlessUiEditorField } from "./field-chrome.tsx";
 
 export type SelectorVisualOption = {
   color?: string;

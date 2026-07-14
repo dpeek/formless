@@ -31,9 +31,7 @@ export function ReferenceFieldEditor({
   const value = formatInputValue(editorFieldValue(field));
   const referenceFacts = field.reference?.kind === "editor" ? field.reference : undefined;
   const missingValue =
-    referenceFacts?.valueStatus.kind === "missing"
-      ? referenceFacts.valueStatus.value
-      : undefined;
+    referenceFacts?.valueStatus.kind === "missing" ? referenceFacts.valueStatus.value : undefined;
   const options = (field.options?.referenceOptions ?? []).map((option) => ({
     label: option.label,
     value: option.id,

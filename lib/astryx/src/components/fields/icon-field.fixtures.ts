@@ -147,9 +147,7 @@ function iconValue(value: string | undefined) {
   return value === "catalog" ? pageIconSource : value === "custom" ? customIconSource : "";
 }
 
-function iconPickerFacts(
-  value: string,
-): FormlessUiIconPickerFacts {
+function iconPickerFacts(value: string): FormlessUiIconPickerFacts {
   const dialogDraft = value;
   const option = iconOptions.find((candidate) => candidate.source === dialogDraft);
 

@@ -116,9 +116,7 @@ export const stateMachineScenarioGroups = [
     kind: "state-machine-enum",
     surface: "create",
     base: stateMachineCreateBase,
-    axes: [
-      composeScenarioAxis("state", "State", [scenarioOption("initial", "Initial")]),
-    ],
+    axes: [composeScenarioAxis("state", "State", [scenarioOption("initial", "Initial")])],
   }),
   composeScenarioGroup({
     id: "state-machine-record",
@@ -327,10 +325,7 @@ function displayOption(field: Extract<FieldSchema, { type: "enum" }>, value: str
   return field.values[value]?.label ?? value;
 }
 
-function stateValuePresentation(
-  field: Extract<FieldSchema, { type: "enum" }>,
-  value: string,
-) {
+function stateValuePresentation(field: Extract<FieldSchema, { type: "enum" }>, value: string) {
   const iconSource =
     value === "open"
       ? priorityMarkerIconSource

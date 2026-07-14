@@ -275,12 +275,7 @@ function FieldFacetControl({
 
   return (
     <div {...stylex.props(styles.facetControl)}>
-      <SegmentedControl
-        value={value}
-        onChange={onChange}
-        label={facet.label}
-        layout="hug"
-      >
+      <SegmentedControl value={value} onChange={onChange} label={facet.label} layout="hug">
         {options.map((option) => (
           <SegmentedControlItem
             key={option.id}
@@ -551,7 +546,7 @@ function normalizeFacetValues(
     nextValues.surface =
       selectedSurface && surfaceIsAvailable
         ? selectedSurface
-        : group.variants[0]?.facets.surface ?? surfaceFacet.options[0]?.id;
+        : (group.variants[0]?.facets.surface ?? surfaceFacet.options[0]?.id);
   }
 
   for (const facet of activeScenarioFacets(group, nextValues)) {
@@ -636,9 +631,7 @@ function facetOptionExistsForSelectedSurface(
   selectedValues: FieldScenarioFacetValues,
 ) {
   if (facetId === "surface") {
-    return group.variants.some(
-      (variant) => (variant.facets.surface ?? group.surface) === optionId,
-    );
+    return group.variants.some((variant) => (variant.facets.surface ?? group.surface) === optionId);
   }
 
   const selectedSurface = selectedValues.surface ?? group.surface;

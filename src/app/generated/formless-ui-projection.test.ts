@@ -746,10 +746,7 @@ describe("generated Formless UI projection", () => {
         interaction: {
           invocationSource: "menuItem",
           kind: "transitions",
-          transitions: [
-            { availability: { valid: true } },
-            { availability: { valid: true } },
-          ],
+          transitions: [{ availability: { valid: true } }, { availability: { valid: true } }],
         },
       },
       surface: "record",
@@ -761,10 +758,7 @@ describe("generated Formless UI projection", () => {
         interaction: {
           invocationSource: "menuItem",
           kind: "transitions",
-          transitions: [
-            { availability: { valid: true } },
-            { availability: { valid: true } },
-          ],
+          transitions: [{ availability: { valid: true } }, { availability: { valid: true } }],
         },
       },
       surface: "table-cell",

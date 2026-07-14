@@ -406,9 +406,7 @@ export function enumValuePresentation(
   };
 }
 
-export function referenceOptions(
-  options: readonly FormlessUiReferenceOption[],
-) {
+export function referenceOptions(options: readonly FormlessUiReferenceOption[]) {
   return options;
 }
 
@@ -479,8 +477,7 @@ export function stateMachineFacts(input: {
   const transitions = input.transitions ?? input.stateMachine.machine.transitions;
   const currentValue = typeof input.currentValue === "string" ? input.currentValue : "";
   const transitionFacts = Object.entries(transitions).map(([transitionName, transition]) => {
-    const undeclared =
-      currentValue.trim() !== "" && input.field.values[currentValue] === undefined;
+    const undeclared = currentValue.trim() !== "" && input.field.values[currentValue] === undefined;
     const valid =
       transition.from.includes(currentValue) ||
       (undeclared && transition.to === input.stateMachine.initialState);
@@ -850,8 +847,7 @@ function fixtureEnumEditorFacts({
     listContent: style === "rich" ? (presentation?.list ?? "both") : "label",
     ...(placeholder === undefined ? {} : { placeholder }),
     style,
-    triggerContent:
-      style === "rich" && presentation?.trigger !== "label" ? "both" : "label",
+    triggerContent: style === "rich" && presentation?.trigger !== "label" ? "both" : "label",
     valueStatus,
   };
 }
@@ -1058,14 +1054,17 @@ function applyRecordDraftChange(
     return field;
   }
 
-  return withFixtureEnumEditorValue({
-    ...field,
-    drafts: {
-      ...field.drafts,
-      draft: String(fieldValue?.value ?? ""),
-      draftInput: fieldValue,
+  return withFixtureEnumEditorValue(
+    {
+      ...field,
+      drafts: {
+        ...field.drafts,
+        draft: String(fieldValue?.value ?? ""),
+        draftInput: fieldValue,
+      },
     },
-  }, fieldValue?.value);
+    fieldValue?.value,
+  );
 }
 
 function applyMediaAssetSelect(
@@ -1638,10 +1637,7 @@ function validateScenarioFieldValue(
   value: FieldValue | undefined,
   provided: boolean,
   draftValue?: GeneratedFieldDraftInput,
-):
-  | { kind: "error"; message: string }
-  | { kind: "omit" }
-  | { kind: "set"; value: FieldValue } {
+): { kind: "error"; message: string } | { kind: "omit" } | { kind: "set"; value: FieldValue } {
   try {
     const draftResolution =
       draftValue === undefined
@@ -1652,8 +1648,7 @@ function validateScenarioFieldValue(
       return { kind: "error", message: draftResolution.error.message };
     }
 
-    const resolvedValue =
-      draftResolution?.kind === "value" ? draftResolution.value : value;
+    const resolvedValue = draftResolution?.kind === "value" ? draftResolution.value : value;
 
     return validateAuthorityFieldValue(fieldName, field, resolvedValue, provided);
   } catch (error) {

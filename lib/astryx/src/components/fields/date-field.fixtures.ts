@@ -87,9 +87,7 @@ function existingDateGroup(surface: Extract<FormlessUiFieldSurface, "table-cell"
 function datePresentationCombinationIsValid({ facets }: FieldScenarioProjectionContext) {
   return (
     facets.presentation === "default" ||
-    (facets.mode === "editor" &&
-      facets.requiredness === "optional" &&
-      facets.value === "unset")
+    (facets.mode === "editor" && facets.requiredness === "optional" && facets.value === "unset")
   );
 }
 
@@ -100,9 +98,7 @@ function detailDateCombinationIsValid({ facets }: FieldScenarioProjectionContext
 
   if (facets.interaction === "system") {
     return (
-      facets.mode === "display" &&
-      facets.requiredness === "optional" &&
-      facets.value === "known"
+      facets.mode === "display" && facets.requiredness === "optional" && facets.value === "known"
     );
   }
 
@@ -205,7 +201,6 @@ function projectExistingDateField(
           facets.presentation === "value-or-interaction"
             ? { visibility: "valueOrInteraction" }
             : undefined,
-        rendererKind:
-          facets.presentation === "value-or-interaction" ? "quiet-date" : "date",
+        rendererKind: facets.presentation === "value-or-interaction" ? "quiet-date" : "date",
       });
 }

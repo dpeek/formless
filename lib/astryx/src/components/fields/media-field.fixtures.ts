@@ -117,9 +117,7 @@ function existingImageGroup(
   });
 }
 
-function existingMediaGroup(
-  surface: Extract<FormlessUiFieldSurface, "detail" | "table-cell">,
-) {
+function existingMediaGroup(surface: Extract<FormlessUiFieldSurface, "detail" | "table-cell">) {
   return projectScenarioGroup({
     id: `media-${surface}`,
     kind: "media",
@@ -129,10 +127,7 @@ function existingMediaGroup(
 }
 
 function mediaRecordCombinationIsValid({ facets }: FieldScenarioProjectionContext) {
-  return (
-    facets.runtime === "ready" ||
-    (facets.mode === "editor" && facets.value === "selected")
-  );
+  return facets.runtime === "ready" || (facets.mode === "editor" && facets.value === "selected");
 }
 
 function projectCreateMediaField(
@@ -188,8 +183,7 @@ function projectCreateMediaField(
             uploadEnabled: true,
             uploadPatchFields: { mediaAssetFieldName: "heroMediaId" },
           },
-    options:
-      kind === "media" ? { mediaAssetOptions: mediaAssetOptions(mediaOptions) } : undefined,
+    options: kind === "media" ? { mediaAssetOptions: mediaAssetOptions(mediaOptions) } : undefined,
     recordId: `${kind}-create-${facets.requiredness}-${facets.value}`,
     value: value || undefined,
   });
@@ -314,9 +308,7 @@ function projectExistingMediaField(
         },
         options: { mediaAssetOptions: mediaAssetOptions(mediaOptions) },
         pending:
-          facets.runtime === "uploading"
-            ? { isPending: true, label: "Uploading" }
-            : undefined,
+          facets.runtime === "uploading" ? { isPending: true, label: "Uploading" } : undefined,
         rendererKind: "media",
       });
 }

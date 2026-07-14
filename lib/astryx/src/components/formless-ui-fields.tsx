@@ -471,13 +471,7 @@ function recordField({
   Partial<
     Pick<
       FormlessUiRecordField,
-      | "errors"
-      | "media"
-      | "options"
-      | "presentation"
-      | "reference"
-      | "suffix"
-      | "valueUnit"
+      "errors" | "media" | "options" | "presentation" | "reference" | "suffix" | "valueUnit"
     >
   >): FormlessUiRecordField {
   return {
@@ -566,9 +560,7 @@ function baseField({
     fieldName,
     label,
     labelVisibility:
-      surface === "record" || surface === "table-cell"
-        ? ("hidden" as const)
-        : ("visible" as const),
+      surface === "record" || surface === "table-cell" ? ("hidden" as const) : ("visible" as const),
     required: field.required,
     surface,
   };
@@ -976,37 +968,35 @@ function statusStateMachineFacts(currentValue: string): FormlessUiStateMachineFa
     interaction: {
       invocationSource: "menuItem",
       kind: "transitions",
-      transitions: Object.entries(statusMachine.transitions).map(
-        ([transitionName, transition]) => {
-          const valid =
-            transition.from.includes(currentValue) ||
-            (currentValue.trim() !== "" &&
-              !Object.hasOwn(statusField.values, currentValue) &&
-              transition.to === statusStateMachine.initialState);
+      transitions: Object.entries(statusMachine.transitions).map(([transitionName, transition]) => {
+        const valid =
+          transition.from.includes(currentValue) ||
+          (currentValue.trim() !== "" &&
+            !Object.hasOwn(statusField.values, currentValue) &&
+            transition.to === statusStateMachine.initialState);
 
-          return {
-            operationName:
-              statusTransitionOperationNames[
-                transitionName as keyof typeof statusTransitionOperationNames
-              ],
-            label: transition.label,
-            machineName: statusStateMachine.machineName,
-            machine: statusMachine,
-            transitionName,
-            transition,
-            fieldName: "status",
-            field: statusField,
-            availability: valid
-              ? { valid: true }
-              : {
-                  valid: false,
-                  disabledReason: `Requires ${transition.from
-                    .map((value) => displayEnumValue(statusField, value))
-                    .join(", ")}.`,
-                },
-          };
-        },
-      ),
+        return {
+          operationName:
+            statusTransitionOperationNames[
+              transitionName as keyof typeof statusTransitionOperationNames
+            ],
+          label: transition.label,
+          machineName: statusStateMachine.machineName,
+          machine: statusMachine,
+          transitionName,
+          transition,
+          fieldName: "status",
+          field: statusField,
+          availability: valid
+            ? { valid: true }
+            : {
+                valid: false,
+                disabledReason: `Requires ${transition.from
+                  .map((value) => displayEnumValue(statusField, value))
+                  .join(", ")}.`,
+              },
+        };
+      }),
     },
     stateMachine: statusStateMachine,
     terminal: statusStateMachine.terminalStates.includes(currentValue),

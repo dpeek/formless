@@ -1537,9 +1537,7 @@ function validatePublicActionValues(
   return errors;
 }
 
-function validateRecordValues(
-  values: GeneratedRecordValues,
-): FieldErrorMap<GeneratedRecordValues> {
+function validateRecordValues(values: GeneratedRecordValues): FieldErrorMap<GeneratedRecordValues> {
   const errors: FieldErrorMap<GeneratedRecordValues> = {};
 
   if (isBlankText(values.title)) {

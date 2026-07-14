@@ -127,7 +127,10 @@ function existingNumberCombinationIsValid(
 ) {
   const valueUnit = facets.composition === "value-unit";
 
-  if (!valueUnit && (facets["unit-state"] !== "declared" || facets["unit-requiredness"] !== "required")) {
+  if (
+    !valueUnit &&
+    (facets["unit-state"] !== "declared" || facets["unit-requiredness"] !== "required")
+  ) {
     return false;
   }
 
@@ -159,7 +162,11 @@ function existingNumberCombinationIsValid(
     return false;
   }
 
-  if (valueUnit && facets["unit-requiredness"] === "optional" && facets["unit-state"] === "undeclared") {
+  if (
+    valueUnit &&
+    facets["unit-requiredness"] === "optional" &&
+    facets["unit-state"] === "undeclared"
+  ) {
     return false;
   }
 
@@ -325,7 +332,11 @@ function numberFormat(value: string | undefined) {
   return value === "currency" || value === "percent" || value === "number" ? value : "plain";
 }
 
-function numberDraftInput(value: string | undefined, storedValue: number | undefined, draft: string) {
+function numberDraftInput(
+  value: string | undefined,
+  storedValue: number | undefined,
+  draft: string,
+) {
   return value === "invalid" ? draftInput(draft) : draftInput(storedValue);
 }
 
@@ -346,7 +357,8 @@ function valueUnitFacts(
   return {
     clearable: !unitField.required,
     options:
-      currentValue !== "" && unitField.values[currentValue as keyof typeof unitField.values] === undefined
+      currentValue !== "" &&
+      unitField.values[currentValue as keyof typeof unitField.values] === undefined
         ? [
             { label: currentValue, status: "undeclaredCurrent" as const, value: currentValue },
             ...declaredOptions,

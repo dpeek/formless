@@ -6,11 +6,7 @@ import { Grid } from "@astryxdesign/core/Grid";
 import { Popover } from "@astryxdesign/core/Popover";
 import { SelectableCard } from "@astryxdesign/core/SelectableCard";
 import { Thumbnail } from "@astryxdesign/core/Thumbnail";
-import {
-  borderVars,
-  radiusVars,
-  spacingVars,
-} from "@astryxdesign/core/theme/tokens.stylex";
+import { borderVars, radiusVars, spacingVars } from "@astryxdesign/core/theme/tokens.stylex";
 import type { AstryxInputDensity } from "./input-density.ts";
 
 export type MediaInputOption = {
@@ -183,11 +179,7 @@ function MediaLibrary({
   onUpload?: (file: File) => void;
 }) {
   return (
-    <Grid
-      columns={{ minWidth: 72, max: 4, repeat: "fit" }}
-      gap={2}
-      xstyle={styles.libraryGrid}
-    >
+    <Grid columns={{ minWidth: 72, max: 4, repeat: "fit" }} gap={2} xstyle={styles.libraryGrid}>
       {onUpload === undefined ? null : (
         <FileInput
           accept={accept}

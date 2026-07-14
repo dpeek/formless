@@ -3,18 +3,11 @@ import * as stylex from "@stylexjs/stylex";
 import { Grid } from "@astryxdesign/core/Grid";
 import { HStack } from "@astryxdesign/core/HStack";
 import { Popover } from "@astryxdesign/core/Popover";
-import {
-  SegmentedControl,
-  SegmentedControlItem,
-} from "@astryxdesign/core/SegmentedControl";
+import { SegmentedControl, SegmentedControlItem } from "@astryxdesign/core/SegmentedControl";
 import { SelectableCard } from "@astryxdesign/core/SelectableCard";
 import { Text } from "@astryxdesign/core/Text";
 import { VStack } from "@astryxdesign/core/VStack";
-import {
-  borderVars,
-  radiusVars,
-  spacingVars,
-} from "@astryxdesign/core/theme/tokens.stylex";
+import { borderVars, radiusVars, spacingVars } from "@astryxdesign/core/theme/tokens.stylex";
 import type {
   FormlessUiDisplayField,
   FormlessUiFieldIntentHandler,
@@ -53,12 +46,7 @@ export function IconFieldEditor({
     return (
       <FieldChrome field={field} inputId={inputId}>
         <HStack>
-          <IconPreview
-            id={inputId}
-            isDisabled
-            label={`Edit ${field.label}`}
-            source={savedSource}
-          />
+          <IconPreview id={inputId} isDisabled label={`Edit ${field.label}`} source={savedSource} />
         </HStack>
       </FieldChrome>
     );
@@ -207,11 +195,7 @@ function IconPickerPopover({
             width="100%"
           />
           <VStack align="center" height="100%" justify="center" width="100%">
-            <IconPreview
-              label={`${field.label} preview`}
-              size="large"
-              source={icon.dialogDraft}
-            />
+            <IconPreview label={`${field.label} preview`} size="large" source={icon.dialogDraft} />
           </VStack>
         </Grid>
       )}

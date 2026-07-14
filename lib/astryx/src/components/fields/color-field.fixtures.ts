@@ -119,9 +119,5 @@ function projectExistingColorField(
 }
 
 function colorValue(value: string | undefined) {
-  return value === "valid"
-    ? "#2563eb"
-    : value === "invalid"
-      ? "not-a-color"
-      : "";
+  return value === "valid" ? "#2563eb" : value === "invalid" ? "not-a-color" : "";
 }

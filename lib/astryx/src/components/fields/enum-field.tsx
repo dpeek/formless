@@ -72,9 +72,7 @@ export function SelectorFieldEditor({
   const hasEnumOptionVisuals =
     usesEnumOptionVisuals && visualOptions.some((option) => hasSelectorOptionVisual(option));
   const startIcon =
-    usesEnumOptionVisuals &&
-    enumTriggerContent === "both" &&
-    selectedOption
+    usesEnumOptionVisuals && enumTriggerContent === "both" && selectedOption
       ? selectorOptionVisual(selectedOption)
       : undefined;
   const sharedProps = {
@@ -102,9 +100,7 @@ export function SelectorFieldEditor({
     startIcon,
     status:
       fieldStatus(field) ??
-      (undeclaredMessage
-        ? { type: "warning" as const, message: undeclaredMessage }
-        : undefined),
+      (undeclaredMessage ? { type: "warning" as const, message: undeclaredMessage } : undefined),
     width: "100%",
     xstyle:
       usesEnumOptionVisuals && selectedEnumOption
@@ -153,9 +149,7 @@ export function EnumFieldDisplay({ field }: { field: FormlessUiDisplayField }) {
 
   const display = (
     <div
-      aria-label={
-        undeclaredMessage ? `${field.label}: ${label}. ${undeclaredMessage}` : undefined
-      }
+      aria-label={undeclaredMessage ? `${field.label}: ${label}. ${undeclaredMessage}` : undefined}
       data-astryx-field-presentation-mode={field.presentation?.mode}
       data-astryx-field-presentation-trigger={field.presentation?.trigger}
       role={undeclaredMessage ? "status" : undefined}
@@ -228,9 +222,7 @@ function RichSelectorOption({
   );
 }
 
-function enumTriggerIntentStyle(
-  intent: "neutral" | "success" | "warning" | "danger",
-) {
+function enumTriggerIntentStyle(intent: "neutral" | "success" | "warning" | "danger") {
   if (intent === "success") {
     return styles.enumSuccess;
   }

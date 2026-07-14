@@ -2,11 +2,7 @@ import * as stylex from "@stylexjs/stylex";
 import { DateInput } from "@astryxdesign/core/DateInput";
 import { Text } from "@astryxdesign/core/Text";
 import { Timestamp } from "@astryxdesign/core/Timestamp";
-import {
-  durationVars,
-  easeVars,
-  spacingVars,
-} from "@astryxdesign/core/theme/tokens.stylex";
+import { durationVars, easeVars, spacingVars } from "@astryxdesign/core/theme/tokens.stylex";
 import type {
   FormlessUiDisplayField,
   FormlessUiFieldIntentHandler,

@@ -330,7 +330,9 @@ export function projectGeneratedCreateFormlessUiField({
       ? draftInput
       : ({ kind: "input", value: referenceDefault } as const);
   const currentValue =
-    projectedDraftInput?.value ?? value ?? stateMachineCreateValue(fieldConfig, projectedDraftInput);
+    projectedDraftInput?.value ??
+    value ??
+    stateMachineCreateValue(fieldConfig, projectedDraftInput);
   const media = projectCreateMediaAuthoring({
     control,
     fieldName,
@@ -870,10 +872,8 @@ function projectColorFacts(
   const colorValue = toOpaquePickerHexColor(text);
 
   return {
-    picker:
-      colorValue === undefined ? { kind: "unavailable" } : { kind: "hex", value: colorValue },
-    swatch:
-      colorValue === undefined ? { kind: "unavailable" } : { kind: "hex", value: colorValue },
+    picker: colorValue === undefined ? { kind: "unavailable" } : { kind: "hex", value: colorValue },
+    swatch: colorValue === undefined ? { kind: "unavailable" } : { kind: "hex", value: colorValue },
   };
 }
 
@@ -1497,8 +1497,7 @@ function projectEnumEditorFacts({
     listContent: style === "rich" ? (presentation?.list ?? "both") : "label",
     ...(placeholder === undefined ? {} : { placeholder }),
     style,
-    triggerContent:
-      style === "rich" && presentation?.trigger !== "label" ? "both" : "label",
+    triggerContent: style === "rich" && presentation?.trigger !== "label" ? "both" : "label",
     valueStatus,
   };
 }

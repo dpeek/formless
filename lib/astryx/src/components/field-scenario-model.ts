@@ -256,12 +256,10 @@ export function mergeScenarioGroupsByKind(
   }
 
   return Array.from(groupsByKind.entries()).map(([kind, kindGroups]) => {
-    const facets = mergeScenarioFacets(
-      [
-        surfaceScenarioFacet(surfaceOptions, kindGroups),
-        ...kindGroups.flatMap((group) => group.facets),
-      ],
-    );
+    const facets = mergeScenarioFacets([
+      surfaceScenarioFacet(surfaceOptions, kindGroups),
+      ...kindGroups.flatMap((group) => group.facets),
+    ]);
 
     return {
       facets,
@@ -370,7 +368,7 @@ export function closestScenarioVariantForFacet(
   optionId: string,
 ): FieldScenarioVariant | undefined {
   const selectedSurface =
-    facetId === "surface" ? optionId : selectedValues.surface ?? group.surface;
+    facetId === "surface" ? optionId : (selectedValues.surface ?? group.surface);
   let closestVariant: FieldScenarioVariant | undefined;
   let closestScore = -1;
 

@@ -2,10 +2,7 @@ import * as stylex from "@stylexjs/stylex";
 import { spacingVars } from "@astryxdesign/core/theme/tokens.stylex";
 import type { FormlessUiField, FormlessUiFieldIntentHandler } from "../../formless-ui-contract.ts";
 import { StateInput } from "../state-input.tsx";
-import {
-  FieldChrome,
-  formatInputValue,
-} from "./field-chrome.tsx";
+import { FieldChrome, formatInputValue } from "./field-chrome.tsx";
 import { enumOptionForValue } from "./field-options.tsx";
 
 export function StateMachineField({
@@ -39,10 +36,7 @@ export function StateMachineField({
     targetValue: transition.transition.to,
   }));
   const selectedTransitionByName = new Map(
-    transitionOperations.map((transition) => [
-      transition.transitionName,
-      transition,
-    ]),
+    transitionOperations.map((transition) => [transition.transitionName, transition]),
   );
   const isCompact = "density" in field && field.density === "compact";
 

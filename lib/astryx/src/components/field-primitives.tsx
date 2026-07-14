@@ -142,9 +142,9 @@ export type MarkdownInputProps = Omit<TextAreaProps, "htmlName"> & {
 export type MonospaceTextAreaProps = TextAreaProps;
 
 const markdownInputTypography = stylex.createTheme(typographyVars, {
-  "--font-family-body": typographyVars["--font-family-code"] as unknown as (
-    typeof typographyDefaults
-  )["--font-family-body"],
+  "--font-family-body": typographyVars[
+    "--font-family-code"
+  ] as unknown as (typeof typographyDefaults)["--font-family-body"],
 });
 
 const markdownInputTypographyClassName = stylex.props(markdownInputTypography).className;

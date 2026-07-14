@@ -60,8 +60,7 @@ export const referenceScenarioGroups = [
     id: "reference-create",
     kind: "reference",
     axes: [requirednessAxis, createValueAxis],
-    include: ({ facets }) =>
-      facets.requiredness === "optional" || facets.value === "known",
+    include: ({ facets }) => facets.requiredness === "optional" || facets.value === "known",
     projectField: projectCreateReferenceField,
   }),
   projectExistingReferenceGroup("record"),
