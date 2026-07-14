@@ -11,7 +11,6 @@ import type {
   FormlessUiFieldSurface,
   FormlessUiIconPickerFacts,
 } from "../../formless-ui-contract.ts";
-import { listIconCatalogEntries } from "../../../../../src/shared/icon-catalog.ts";
 import {
   createField,
   displayField,
@@ -20,13 +19,8 @@ import {
   recordField,
   textControl,
 } from "./fixture-helpers.ts";
+import { iconOptions, pageIconSource } from "./icon-field.fixture-options.ts";
 
-const pageIconSource = [
-  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor">',
-  '<path d="M4.75 19.25h14.5" />',
-  '<path d="M6.75 19.25V5.75a1 1 0 0 1 1-1h8.5a1 1 0 0 1 1 1v13.5" />',
-  "</svg>",
-].join("");
 const customIconSource = [
   '<svg viewBox="0 0 24 24" fill="currentColor">',
   '<path d="M12 3 21 12 12 21 3 12Z" />',
@@ -40,17 +34,6 @@ const pageIconField = {
   format: "icon",
 } as const;
 const optionalPageIconField = { ...pageIconField, required: false } as const;
-const iconOptions = [
-  { id: "page", label: "Page", group: "Content", source: pageIconSource },
-  ...listIconCatalogEntries()
-    .slice(0, 19)
-    .map((entry) => ({
-      group: entry.group,
-      id: entry.key,
-      label: entry.label,
-      source: entry.source,
-    })),
-];
 
 const requirednessAxis = composeScenarioAxis("requiredness", "Requiredness", [
   scenarioOption("required", "Required"),

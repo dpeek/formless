@@ -329,20 +329,24 @@ export function projectGeneratedCreateFormlessUiField({
     referenceDefault === undefined
       ? draftInput
       : ({ kind: "input", value: referenceDefault } as const);
-  const currentValue =
-    projectedDraftInput?.value ??
+  const typedDraftValue =
+    projectedDraftInput?.kind === "value" ? projectedDraftInput.value : undefined;
+  const resolvedValue =
+    referenceDefault ??
     value ??
+    typedDraftValue ??
     stateMachineCreateValue(fieldConfig, projectedDraftInput);
+  const editorValue = projectedDraftInput?.value ?? resolvedValue;
   const media = projectCreateMediaAuthoring({
     control,
     fieldName,
     mediaAssetOptions,
-    value: currentValue,
+    value: editorValue,
   });
   const icon = selectProjectedIconAuthoring({
     dialogDraft: iconDialogDraft,
     dialogOpen: iconDialogOpen,
-    draft: typeof currentValue === "string" ? currentValue : "",
+    draft: typeof editorValue === "string" ? editorValue : "",
     isIcon: control.controlKind === "icon",
     isPending,
     parseError: iconParseError,
@@ -381,13 +385,13 @@ export function projectGeneratedCreateFormlessUiField({
       pending: projectPending(isPending, pendingLabel),
       recordId,
       stateMachineFacts: projectStateMachineFacts({
-        currentValue,
+        currentValue: resolvedValue,
         field,
         stateMachine: fieldConfig.stateMachine,
       }),
       surface: "create",
     }),
-    color: projectColorFacts(control, currentValue),
+    color: projectColorFacts(control, editorValue),
     commit: "submit",
     density: "default",
     draftInput: projectedDraftInput,
@@ -397,15 +401,15 @@ export function projectGeneratedCreateFormlessUiField({
             field,
             style: "plain",
             surface: "create",
-            value: projectedDraftInput?.value ?? currentValue,
+            value: editorValue,
           })
         : undefined,
     ...(icon === undefined ? {} : { icon }),
     mode: "editor",
     ...(media === undefined ? {} : { media }),
-    reference: projectReferenceEditorFacts(field, currentValue, referenceOptions),
+    reference: projectReferenceEditorFacts(field, editorValue, referenceOptions),
     surface: "create",
-    value: currentValue,
+    value: resolvedValue,
   };
 }
 
