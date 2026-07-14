@@ -379,6 +379,85 @@ The system SHALL render generated field displays and editors from field behavior
 - AND table, collection, shell/navigation, public Site, and tree-builder
   contracts remain future slice-owned contracts until those surfaces migrate
 
+### Requirement: Generated Create Surface Contract
+
+The system SHALL project generated create triggers, dialogs, and forms through a
+controlled Formless UI create-surface contract before selecting the active
+renderer, while generated runtime code owns create policy, draft state,
+validation, and operation execution.
+
+#### Scenario: Project controlled create surface
+
+- GIVEN a generated collection, context selector, list-detail selector, or root
+  navigation group exposes a create operation
+- WHEN generated runtime prepares the create control for the active Formless UI
+  renderer
+- THEN it projects a stable create-surface id, semantic trigger content,
+  accessible trigger label, disabled state and reason, controlled dialog open
+  state, dialog title, projected create field set, form-level errors, cancel
+  control, submit control, and dialog-open and submit intents
+- AND the trigger contract distinguishes visible-label, icon-plus-label, and
+  icon-only controls without carrying React icons, legacy button props, Astryx
+  component props, or renderer classes
+- AND opening the create dialog is a presentation intent and does not execute
+  the declared create operation
+- AND unresolved context defaults or disabled create policy disable the trigger
+  with a display-safe reason before the dialog opens
+- AND generated runtime retains the operation config, query context, create
+  draft session, operation controller, sync feedback, created record selection,
+  and caller-owned success behavior
+
+#### Scenario: Legacy renderer consumes the create surface contract
+
+- GIVEN production generated UI currently uses the legacy renderer for create
+  buttons, dialogs, forms, and fields
+- WHEN generated runtime projects a create surface
+- THEN collection operation rows, context selectors, list-detail selectors,
+  root navigation groups, standalone generated create dialogs, and embedded
+  tree-child create forms render through a legacy adapter that consumes the
+  controlled create-surface and field contracts
+- AND the legacy adapter receives projected display facts and open, field,
+  cancel, and submit intents instead of raw operation configs, query context,
+  draft-session state, operation controllers, records, or storage hooks
+- AND field changes emit controlled field intents and form submission emits a
+  submit intent without treating DOM controls or `FormData` as the source of
+  draft values
+- AND generated runtime marks the draft session submitted, resolves visible
+  union and `visibleWhen` fields plus hidden literal defaults, prevents invalid
+  submission, invokes the declared create operation, and closes the dialog only
+  after a successful create result
+- AND operation failure leaves the dialog and authored draft values available
+  for correction while runtime-owned operation feedback reports the failure
+- AND current create capability coverage includes mutation-policy disabled
+  state, unresolved context defaults, create-view field selection, union
+  variants, `visibleWhen`, hidden literal defaults, required and invalid draft
+  errors, reference options, state-machine initial values, supported specialized
+  fields, pending submission, failure retry, and created-record callbacks
+- AND coverage asserts projected contract and user-visible behavior rather than
+  legacy HTML structure, legacy component slots, or one-to-one visual parity
+- AND production remains on the legacy renderer after this contract migration
+
+#### Scenario: Astryx create surface fixture
+
+- GIVEN the legacy renderer consumes the production create-surface contract
+- WHEN product UX is evaluated in `lib/astryx`
+- THEN an unexported package fixture renders representative create triggers,
+  dialog state, projected create fields, validation, pending submission, and
+  failure state from the same contract shape used by production
+- AND the fixture covers visible-label, icon-plus-label, and icon-only triggers
+  plus disabled and unresolved-default states needed by current call sites
+- AND the Astryx prototype uses a form-purpose dialog with a clear title, a real
+  browser form, a vertical form layout, a secondary cancel action, and one
+  loading primary submit action
+- AND package-local fixture state may simulate intents for UX review but does
+  not import generated runtime, operation execution, browser replica, storage,
+  or sync behavior
+- AND adding the fixture does not export or activate an Astryx production
+  create renderer
+- AND command buttons, collection and table chrome, edit and delete dialogs,
+  the tree-builder presentation contract, public Site forms, and production
+  Astryx renderer activation remain owned by later migration slices
+
 #### Scenario: Formless UI field contract coverage
 
 - GIVEN generated UI projects supported field display and editor kinds to

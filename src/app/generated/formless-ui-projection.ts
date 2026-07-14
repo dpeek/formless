@@ -17,6 +17,8 @@ import type {
   FormlessUiColorFacts,
   FormlessUiCreateDefault,
   FormlessUiCreateField,
+  FormlessUiCreateSurfaceContract,
+  FormlessUiButtonContent,
   FormlessUiDisplayField,
   FormlessUiEnumFacts,
   FormlessUiEnumOption,
@@ -127,6 +129,22 @@ export type ProjectGeneratedCreateFormlessUiFieldsOptions =
     referenceOptionsByFieldName?: Readonly<
       Record<string, readonly GeneratedFormlessUiReferenceOption[]>
     >;
+  };
+
+export type ProjectGeneratedCreateFormlessUiSurfaceOptions =
+  ProjectGeneratedCreateFormlessUiFieldsOptions & {
+    enabled: boolean;
+    entityLabel: string;
+    id: string;
+    isSubmitting: boolean;
+    open: boolean;
+    submitLabel: string;
+    trigger: {
+      content: FormlessUiButtonContent;
+      density: "default" | "compact";
+      prominence: "primary" | "secondary" | "quiet";
+    };
+    triggerLabel: string;
   };
 
 export type ProjectGeneratedCreateFormlessUiFieldOptions = {
@@ -298,6 +316,113 @@ export function projectGeneratedCreateFormlessUiFields({
       value: session.values[fieldConfig.fieldName],
     }),
   );
+}
+
+export function projectGeneratedCreateFormlessUiSurface({
+  enabled,
+  entityLabel,
+  errorsByFieldName,
+  iconDialogDraftByFieldName,
+  iconDialogOpenByFieldName,
+  iconParseErrorByFieldName,
+  id,
+  isSubmitting,
+  mediaAssetOptionsByFieldName,
+  open,
+  pendingByFieldName,
+  pendingLabelByFieldName,
+  referenceOptionsByFieldName,
+  session,
+  state,
+  submitLabel,
+  trigger,
+  triggerLabel,
+}: ProjectGeneratedCreateFormlessUiSurfaceOptions): FormlessUiCreateSurfaceContract {
+  const disabledReason = !enabled
+    ? `Create is disabled for ${entityLabel}.`
+    : !session.defaultsResolved
+      ? `Create ${entityLabel.toLowerCase()} requires a selected context.`
+      : undefined;
+  const fieldsDisabled = disabledReason !== undefined || isSubmitting;
+  const visibleFieldNames = new Set(session.visibleFields.map((field) => field.fieldName));
+  const formErrors = Object.values(session.fieldErrors)
+    .filter((error) => !visibleFieldNames.has(error.fieldName))
+    .map((error) => error.message);
+  const fields = projectGeneratedCreateFormlessUiFields({
+    errorsByFieldName,
+    iconDialogDraftByFieldName,
+    iconDialogOpenByFieldName,
+    iconParseErrorByFieldName,
+    mediaAssetOptionsByFieldName,
+    pendingByFieldName,
+    pendingLabelByFieldName,
+    referenceOptionsByFieldName,
+    session,
+    state,
+  });
+
+  return {
+    dialog: {
+      form: {
+        cancel: {
+          accessibilityLabel: "Cancel",
+          content: { kind: "label", label: "Cancel" },
+          density: "default",
+          id: `${id}:cancel`,
+          kind: "button",
+          prominence: "secondary",
+          type: "button",
+        },
+        errors: formErrors,
+        fieldSet: {
+          disabled: fieldsDisabled,
+          ...(fieldsDisabled
+            ? {
+                disabledReason:
+                  disabledReason ?? `Create ${entityLabel.toLowerCase()} is being submitted.`,
+              }
+            : {}),
+          errors: formErrors,
+          fields,
+          id: `${id}:fields`,
+          kind: "fieldSet",
+        },
+        id: `${id}:form`,
+        kind: "createForm",
+        submit: {
+          accessibilityLabel: submitLabel,
+          content: {
+            kind: "label",
+            label: isSubmitting ? "Saving..." : enabled ? submitLabel : "Create disabled",
+          },
+          density: "default",
+          disabled: !session.canSubmit || isSubmitting,
+          id: `${id}:submit`,
+          kind: "button",
+          pending: isSubmitting ? { isPending: true, label: "Saving" } : undefined,
+          prominence: "primary",
+          type: "submit",
+        },
+      },
+      id: `${id}:dialog`,
+      kind: "createDialog",
+      open,
+      title: submitLabel,
+    },
+    id,
+    kind: "createSurface",
+    trigger: {
+      accessibilityLabel: triggerLabel,
+      content: trigger.content,
+      density: trigger.density,
+      disabled: disabledReason !== undefined,
+      ...(disabledReason === undefined ? {} : { disabledReason }),
+      id: `${id}:trigger`,
+      kind: "button",
+      prominence: trigger.prominence,
+      type: "button",
+    },
+  };
 }
 
 export function projectGeneratedCreateFormlessUiField({

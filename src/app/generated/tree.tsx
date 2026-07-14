@@ -4,7 +4,6 @@ import { isSortableOperation, useSortable } from "@dnd-kit/react/sortable";
 import { Button, buttonStyles } from "@dpeek/formless-ui/button";
 import { AddIcon, MenuIcon, RemoveIcon } from "@dpeek/formless-ui/icons";
 import {
-  ModalBody,
   ModalClose,
   ModalContent,
   ModalDescription,
@@ -38,7 +37,7 @@ import type { QueryEvaluationContext } from "@dpeek/formless-schema";
 import type { FieldValue, RecordValues, StoredRecord } from "@dpeek/formless-storage";
 import type { EntitySchema } from "@dpeek/formless-schema";
 import type { OperationCommandOutput } from "../../shared/operation-invocation.ts";
-import { GeneratedCreateDialogForm, type CreateHomeOperationConfig } from "./create.tsx";
+import { GeneratedCreateDialog, type CreateHomeOperationConfig } from "./create.tsx";
 import {
   ORDERING_DND_TYPE,
   calculateOrderingDragMovePlanForContext,
@@ -559,34 +558,26 @@ function TreeChildAddControls({
         </MenuContent>
       </Menu>
       {activeVariant && createOperation ? (
-        <ModalContent
-          isOpen={true}
+        <GeneratedCreateDialog
           onOpenChange={(open) => {
             if (!open) {
               setActiveVariant(null);
             }
           }}
-        >
-          <ModalHeader>
-            <ModalTitle>{createOperation.label}</ModalTitle>
-          </ModalHeader>
-          <ModalBody>
-            <GeneratedCreateDialogForm
-              operation={createOperation}
-              onSuccess={() => setActiveVariant(null)}
-              submitValues={(values) =>
-                executeTreeChildCreateOperation(
-                  createBinding,
-                  createController,
-                  result,
-                  parentRecord,
-                  values,
-                  activeVariant.placementValues,
-                )
-              }
-            />
-          </ModalBody>
-        </ModalContent>
+          onSuccess={() => setActiveVariant(null)}
+          open={true}
+          operation={createOperation}
+          submitValues={(values) =>
+            executeTreeChildCreateOperation(
+              createBinding,
+              createController,
+              result,
+              parentRecord,
+              values,
+              activeVariant.placementValues,
+            )
+          }
+        />
       ) : null}
     </div>
   );

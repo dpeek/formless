@@ -6,11 +6,19 @@ import { Input } from "@dpeek/formless-ui/input";
 import { NativeSelect, NativeSelectContent } from "@dpeek/formless-ui/native-select";
 import { TextField } from "@dpeek/formless-ui/text-field";
 import { Textarea } from "@dpeek/formless-ui/textarea";
-import { useReferenceOptions, type ReferenceOption } from "../../client/store.ts";
-import { fieldLabel, type CreateFieldConfig } from "../../client/views.ts";
-import type { CreateDraftFieldInput } from "@dpeek/formless-schema";
-import type { FieldVisibilityValue } from "@dpeek/formless-schema";
-import type { FieldSchema } from "@dpeek/formless-schema";
+import type {
+  FormlessUiCreateField,
+  FormlessUiFieldControl,
+  FormlessUiFieldIntentHandler,
+  FormlessUiReferenceOption,
+  FormlessUiStateMachineField,
+} from "@dpeek/formless-astryx/contract";
+import type {
+  FieldSchema,
+  FieldVisibilityValue,
+  GeneratedFieldDraftInput,
+} from "@dpeek/formless-schema";
+import { generatedFieldDraftInput } from "@dpeek/formless-schema";
 import {
   GeneratedColorFieldControl,
   GeneratedIconPickerFieldControl,
@@ -18,45 +26,42 @@ import {
   GeneratedNumberFieldControl,
 } from "./field-control-primitives.tsx";
 import { dateValueToStoredDateValue, storedDateValueToDateValue } from "./date-value.ts";
-import { selectGeneratedFieldControl, type GeneratedFieldControl } from "./field-controls.ts";
 import { completionCheckboxClassName } from "./field-presentation.tsx";
 import { encodeNumberEditorInputValue, numberInputValueToFieldValue } from "./format.ts";
-import {
-  EMPTY_GENERATED_REFERENCE_OPTIONS,
-  shouldUseAppReplicaReferenceOptions,
-} from "./reference-field-options.ts";
+import { EMPTY_GENERATED_REFERENCE_OPTIONS } from "./reference-field-options.ts";
 import { StateMachineStateBadge } from "./state-machine-ui.tsx";
 
 export function GeneratedCreateFieldControl({
-  draftValue,
-  error,
-  fieldConfig,
-  onValueChange,
+  field: projectedField,
+  onIntent,
 }: {
-  draftValue?: CreateDraftFieldInput;
-  error?: string;
-  fieldConfig: CreateFieldConfig;
-  onValueChange?: (value: FieldVisibilityValue) => void;
+  field: FormlessUiCreateField;
+  onIntent: FormlessUiFieldIntentHandler;
 }) {
-  const { field, fieldName, editor } = fieldConfig;
-  const label = fieldLabel(fieldName, field);
-  const fieldControl = selectGeneratedFieldControl({ editor, field, label });
+  const { control: fieldControl, draftInput: draftValue, field, fieldName, label } = projectedField;
+  const error = projectedField.errors?.[0]?.message;
+  const onValueChange = (value: FieldVisibilityValue) =>
+    onIntent({
+      fieldName,
+      fieldValue: generatedFieldDraftInput(value),
+      type: "createDraftChange",
+    });
 
-  if (field.type === "enum" && fieldConfig.stateMachine) {
+  if (field.type === "enum" && projectedField.stateMachine) {
     return (
       <CreateStateMachineField
         field={field}
         fieldName={fieldName}
         label={label}
         onValueChange={onValueChange}
-        stateMachine={fieldConfig.stateMachine}
-        value={draftValueToString(draftValue, fieldConfig.stateMachine.initialState)}
+        stateMachine={projectedField.stateMachine}
+        value={draftValueToString(draftValue, projectedField.stateMachine.initialState)}
       />
     );
   }
 
   if (fieldControl.controlKind === "checkbox") {
-    const completionMode = fieldConfig.presentation?.mode === "completion";
+    const completionMode = projectedField.presentation?.mode === "completion";
 
     return (
       <div className="space-y-1">
@@ -67,7 +72,7 @@ export function GeneratedCreateFieldControl({
           isRequired={fieldControl.required}
           isSelected={draftValueToBoolean(draftValue, fieldControl.createDefaultChecked)}
           name={fieldName}
-          onChange={(selected) => onValueChange?.(selected)}
+          onChange={(selected) => onValueChange(selected)}
         >
           {fieldControl.label}
         </Checkbox>
@@ -134,7 +139,7 @@ export function GeneratedCreateFieldControl({
         isInvalid={error !== undefined}
         isRequired={fieldControl.required}
         name={fieldName}
-        onChange={(value) => onValueChange?.(value)}
+        onChange={(value) => onValueChange(value)}
         type="text"
         value={draftValueToString(draftValue, fieldControl.createDefaultValue ?? "")}
       >
@@ -172,7 +177,7 @@ export function GeneratedCreateFieldControl({
           aria-label={fieldControl.label}
           isInvalid={error !== undefined}
           name={fieldName}
-          onChange={(event) => onValueChange?.(event.currentTarget.value)}
+          onChange={(event) => onValueChange(event.currentTarget.value)}
           required={fieldControl.required}
           value={value}
         >
@@ -190,14 +195,14 @@ export function GeneratedCreateFieldControl({
 
   if (fieldControl.kind === "reference") {
     return (
-      <ReferenceCreateField
+      <ReferenceCreateFieldSelect
         defaultValue={fieldControl.createDefaultValue}
         error={error}
-        field={fieldControl.field}
         fieldName={fieldName}
         hasDraftValue={draftValue !== undefined}
         label={fieldControl.label}
         onValueChange={onValueChange}
+        options={projectedField.options?.referenceOptions ?? EMPTY_GENERATED_REFERENCE_OPTIONS}
         required={fieldControl.required}
         value={draftValueToString(draftValue, fieldControl.createDefaultValue ?? "")}
       />
@@ -210,7 +215,7 @@ export function GeneratedCreateFieldControl({
         isInvalid={error !== undefined}
         isRequired={fieldControl.required}
         name={fieldName}
-        onChange={(value) => onValueChange?.(value)}
+        onChange={(value) => onValueChange(value)}
         value={draftValueToString(draftValue, fieldControl.createDefaultValue ?? "")}
       >
         <Label>{fieldControl.label}</Label>
@@ -225,7 +230,7 @@ export function GeneratedCreateFieldControl({
       isInvalid={error !== undefined}
       isRequired={fieldControl.required}
       name={fieldName}
-      onChange={(value) => onValueChange?.(value)}
+      onChange={(value) => onValueChange(value)}
       type={fieldControl.control.kind === "input" ? fieldControl.control.inputType : "text"}
       value={draftValueToString(draftValue, fieldControl.createDefaultValue ?? "")}
     >
@@ -248,7 +253,7 @@ function CreateStateMachineField({
   fieldName: string;
   label: string;
   onValueChange?: (value: FieldVisibilityValue) => void;
-  stateMachine: NonNullable<CreateFieldConfig["stateMachine"]>;
+  stateMachine: FormlessUiStateMachineField;
   value: string;
 }) {
   return (
@@ -439,7 +444,7 @@ function CreateNumberField({
 }: {
   error?: string;
   fieldName: string;
-  inputAttributes: GeneratedFieldControl["inputAttributes"];
+  inputAttributes: FormlessUiFieldControl["inputAttributes"];
   label: string;
   onValueChange?: (value: FieldVisibilityValue) => void;
   required: boolean;
@@ -471,81 +476,6 @@ function encodeNumberCreateDefaultValue(value: string | undefined) {
     : "";
 }
 
-function ReferenceCreateField({
-  error,
-  field,
-  hasDraftValue,
-  ...props
-}: {
-  defaultValue: string | undefined;
-  error?: string;
-  field: Extract<FieldSchema, { type: "reference" }>;
-  fieldName: string;
-  hasDraftValue: boolean;
-  label: string;
-  onValueChange?: (value: FieldVisibilityValue) => void;
-  required: boolean;
-  value: string;
-}) {
-  if (!shouldUseAppReplicaReferenceOptions(field)) {
-    return (
-      <ReferenceCreateFieldSelect
-        {...props}
-        error={error}
-        hasDraftValue={hasDraftValue}
-        options={EMPTY_GENERATED_REFERENCE_OPTIONS}
-      />
-    );
-  }
-
-  return (
-    <LocalReferenceCreateField
-      {...props}
-      error={error}
-      field={field}
-      hasDraftValue={hasDraftValue}
-    />
-  );
-}
-
-function LocalReferenceCreateField({
-  defaultValue,
-  error,
-  field,
-  fieldName,
-  hasDraftValue,
-  label,
-  onValueChange,
-  required,
-  value,
-}: {
-  defaultValue: string | undefined;
-  error?: string;
-  field: Extract<FieldSchema, { type: "reference" }>;
-  fieldName: string;
-  hasDraftValue: boolean;
-  label: string;
-  onValueChange?: (value: FieldVisibilityValue) => void;
-  required: boolean;
-  value: string;
-}) {
-  const options = useReferenceOptions(field.to, field.displayField);
-
-  return (
-    <ReferenceCreateFieldSelect
-      defaultValue={defaultValue}
-      error={error}
-      fieldName={fieldName}
-      hasDraftValue={hasDraftValue}
-      label={label}
-      onValueChange={onValueChange}
-      options={options}
-      required={required}
-      value={value}
-    />
-  );
-}
-
 function ReferenceCreateFieldSelect({
   defaultValue,
   error,
@@ -563,7 +493,7 @@ function ReferenceCreateFieldSelect({
   hasDraftValue: boolean;
   label: string;
   onValueChange?: (value: FieldVisibilityValue) => void;
-  options: readonly ReferenceOption[];
+  options: readonly FormlessUiReferenceOption[];
   required: boolean;
   value: string;
 }) {
@@ -600,7 +530,7 @@ function ReferenceCreateFieldSelect({
   );
 }
 
-function draftValueToString(draftValue: CreateDraftFieldInput | undefined, fallback: string) {
+function draftValueToString(draftValue: GeneratedFieldDraftInput | undefined, fallback: string) {
   if (draftValue === undefined) {
     return fallback;
   }
@@ -608,7 +538,7 @@ function draftValueToString(draftValue: CreateDraftFieldInput | undefined, fallb
   return String(draftValue.value);
 }
 
-function draftValueToBoolean(draftValue: CreateDraftFieldInput | undefined, fallback: boolean) {
+function draftValueToBoolean(draftValue: GeneratedFieldDraftInput | undefined, fallback: boolean) {
   if (draftValue === undefined) {
     return fallback;
   }

@@ -1,6 +1,4 @@
-import { type ReactNode, useState } from "react";
-import { Button } from "@dpeek/formless-ui/button";
-import { AddIcon } from "@dpeek/formless-ui/icons";
+import type { ReactNode } from "react";
 import {
   Sidebar,
   SidebarContent,
@@ -12,7 +10,7 @@ import {
   SidebarSection,
   SidebarTrigger,
 } from "@dpeek/formless-ui/sidebar";
-import { GeneratedCreateDialog } from "./generated/create.tsx";
+import { GeneratedCreateSurface } from "./generated/create.tsx";
 import { SchemaAppProvider } from "./generated/schema-app-context.tsx";
 import { SourceResetControl } from "./dev-actions.tsx";
 import {
@@ -324,8 +322,6 @@ function AppRootRecordNavigationGroup({
     activeRecordId,
     options,
   });
-  const [createDialogOpen, setCreateDialogOpen] = useState(false);
-
   if (groupFacts.isEmpty && !group.createOperation) {
     return null;
   }
@@ -336,18 +332,16 @@ function AppRootRecordNavigationGroup({
       label={group.label}
       action={
         group.createOperation ? (
-          <Button
-            aria-label={group.createOperation.label}
-            className="ms-auto"
-            data-slot="control"
-            intent="plain"
-            isDisabled={!group.createOperation.enabled}
-            onPress={() => setCreateDialogOpen(true)}
-            size="sq-xs"
-            type="button"
-          >
-            <AddIcon />
-          </Button>
+          <GeneratedCreateSurface
+            onSuccess={onSelectRecord}
+            operation={group.createOperation}
+            surfaceId={`root-navigation:${group.createOperation.operation.canonicalKey}`}
+            trigger={{
+              content: { icon: "add", kind: "iconOnly" },
+              density: "compact",
+              prominence: "quiet",
+            }}
+          />
         ) : null
       }
     >
@@ -362,14 +356,6 @@ function AppRootRecordNavigationGroup({
               option={option}
             />
           ))}
-      {group.createOperation && createDialogOpen ? (
-        <GeneratedCreateDialog
-          operation={group.createOperation}
-          onOpenChange={(open) => setCreateDialogOpen(open)}
-          onSuccess={onSelectRecord}
-          open={true}
-        />
-      ) : null}
     </SidebarSection>
   );
 }

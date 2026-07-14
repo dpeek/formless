@@ -15,6 +15,7 @@ import { applyBootstrapResponse, resetClientStore } from "../../client/store.ts"
 import type { BootstrapResponse } from "../../shared/protocol.ts";
 import { GeneratedCreateFieldControl } from "./create-field-control.tsx";
 import { GeneratedIconPickerEditor } from "./field-control-primitives.tsx";
+import { projectGeneratedCreateFormlessUiField } from "./formless-ui-projection.ts";
 import { RecordFieldDisplay } from "./record-field-display.tsx";
 import { GeneratedRecordFieldControl } from "./record-field-control.tsx";
 
@@ -125,18 +126,12 @@ describe("generated record field presentation rendering", () => {
   });
 
   it("renders create completion presentation through the shared checkbox primitive", () => {
-    const html = renderToStaticMarkup(
-      <GeneratedCreateFieldControl
-        fieldConfig={
-          {
-            fieldName: "done",
-            field: doneField,
-            editor: "boolean",
-            presentation: { mode: "completion" },
-          } satisfies CreateFieldConfig
-        }
-      />,
-    );
+    const html = renderCreateField({
+      fieldName: "done",
+      field: doneField,
+      editor: "boolean",
+      presentation: { mode: "completion" },
+    });
 
     expect(html).toContain('data-formless-field-presentation-mode="completion"');
     expect(html).toContain('name="done"');
@@ -184,17 +179,11 @@ describe("generated record field presentation rendering", () => {
   });
 
   it("submits create icon values through the existing text-backed field name", () => {
-    const html = renderToStaticMarkup(
-      <GeneratedCreateFieldControl
-        fieldConfig={
-          {
-            fieldName: "icon",
-            field: { type: "text", required: false, format: "icon" },
-            editor: "icon",
-          } satisfies CreateFieldConfig
-        }
-      />,
-    );
+    const html = renderCreateField({
+      fieldName: "icon",
+      field: { type: "text", required: false, format: "icon" },
+      editor: "icon",
+    });
 
     expect(html).toContain('name="icon"');
     expect(html).toContain('type="hidden"');
@@ -299,15 +288,21 @@ describe("generated record field presentation rendering", () => {
   it("renders identity reference create editors without active app replica identity options", () => {
     applyBootstrapResponse(identityReferenceBootstrap());
 
-    const html = renderToStaticMarkup(
-      <GeneratedCreateFieldControl fieldConfig={ownerPrincipalCreateFieldConfig} />,
-    );
+    const html = renderCreateField(ownerPrincipalCreateFieldConfig);
 
     expect(html).toContain('name="ownerPrincipal"');
     expect(html).toContain(">Owner</label>");
     expect(html).not.toContain("credential-hash");
   });
 });
+
+function renderCreateField(fieldConfig: CreateFieldConfig) {
+  const field = projectGeneratedCreateFormlessUiField({ fieldConfig });
+
+  return renderToStaticMarkup(
+    <GeneratedCreateFieldControl field={field} onIntent={() => undefined} />,
+  );
+}
 
 function renderRecordControl(
   fieldConfig: RecordFieldConfig,

@@ -21,6 +21,7 @@ import type { OperationInvocationResponse } from "../../shared/operation-invocat
 import type { StoredRecord } from "@dpeek/formless-storage";
 import type { ChangeRow } from "../../shared/protocol.ts";
 import { GeneratedCreateFieldControl } from "./create-field-control.tsx";
+import { projectGeneratedCreateFormlessUiField } from "./formless-ui-projection.ts";
 import { RecordFieldEditor } from "./record-field-editor.tsx";
 import {
   executeTransitionStateOperation,
@@ -168,12 +169,15 @@ describe("generated state-machine UI", () => {
 
     const html = renderToStaticMarkup(
       <GeneratedCreateFieldControl
-        fieldConfig={{
-          fieldName: "status",
-          field,
-          editor: "enum",
-          stateMachine,
-        }}
+        field={projectGeneratedCreateFormlessUiField({
+          fieldConfig: {
+            fieldName: "status",
+            field,
+            editor: "enum",
+            stateMachine,
+          },
+        })}
+        onIntent={() => undefined}
       />,
     );
 

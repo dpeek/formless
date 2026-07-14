@@ -40,6 +40,7 @@ import {
   projectGeneratedCreateFormlessUiFields,
   projectGeneratedCreateFormlessUiField,
   projectGeneratedCreateFormlessUiSession,
+  projectGeneratedCreateFormlessUiSurface,
   projectGeneratedDisplayFormlessUiField,
   projectGeneratedOperationFormlessUiFields,
   projectGeneratedOperationFormlessUiSession,
@@ -194,6 +195,107 @@ describe("generated Formless UI projection", () => {
         value: "new",
       },
     ]);
+  });
+
+  it("projects controlled create trigger, dialog, form, and pending control facts", () => {
+    const createFields = [createField("title", fields.title, "text")];
+    const state = nextGeneratedCreateDraftSessionState({
+      fieldName: "title",
+      fieldValue: { kind: "input", value: "Prepare launch" },
+      state: initialGeneratedCreateDraftSessionState({ fields: createFields }),
+    });
+    const session = selectGeneratedCreateDraftSession({
+      enabled: true,
+      fields: createFields,
+      state,
+    });
+    const surface = projectGeneratedCreateFormlessUiSurface({
+      enabled: true,
+      entityLabel: "Task",
+      id: "task:create",
+      isSubmitting: true,
+      open: true,
+      session,
+      state,
+      submitLabel: "Create Task",
+      trigger: {
+        content: { icon: "add", kind: "iconAndLabel", label: "Create Task" },
+        density: "default",
+        prominence: "primary",
+      },
+      triggerLabel: "Create Task",
+    });
+
+    expect(surface).toMatchObject({
+      dialog: {
+        form: {
+          cancel: { content: { kind: "label", label: "Cancel" } },
+          fieldSet: {
+            disabled: true,
+            fields: [{ fieldName: "title", value: "Prepare launch" }],
+          },
+          submit: {
+            content: { kind: "label", label: "Saving..." },
+            disabled: true,
+            pending: { isPending: true, label: "Saving" },
+            type: "submit",
+          },
+        },
+        open: true,
+        title: "Create Task",
+      },
+      id: "task:create",
+      kind: "createSurface",
+      trigger: {
+        accessibilityLabel: "Create Task",
+        content: { icon: "add", kind: "iconAndLabel", label: "Create Task" },
+        disabled: false,
+      },
+    });
+  });
+
+  it("disables create opening when context defaults are unresolved", () => {
+    const createFields = [createField("owner", fields.owner, "reference")];
+    const defaults = [
+      {
+        fieldName: "owner",
+        field: fields.owner,
+        value: { kind: "context", name: "principal" },
+      },
+    ] satisfies CreateDefaultConfig[];
+    const state = initialGeneratedCreateDraftSessionState({ defaults, fields: createFields });
+    const session = selectGeneratedCreateDraftSession({
+      defaults,
+      enabled: true,
+      fields: createFields,
+      state,
+    });
+    const surface = projectGeneratedCreateFormlessUiSurface({
+      defaults,
+      enabled: true,
+      entityLabel: "Task",
+      id: "task:create:scoped",
+      isSubmitting: false,
+      open: false,
+      session,
+      state,
+      submitLabel: "Create Task",
+      trigger: {
+        content: { icon: "add", kind: "iconOnly" },
+        density: "compact",
+        prominence: "quiet",
+      },
+      triggerLabel: "Create Task",
+    });
+
+    expect(surface.trigger).toMatchObject({
+      disabled: true,
+      disabledReason: "Create task requires a selected context.",
+    });
+    expect(surface.dialog.form.fieldSet).toMatchObject({
+      disabled: true,
+      disabledReason: "Create task requires a selected context.",
+    });
   });
 
   it("projects required reference defaults from loaded options", () => {

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { Badge } from "@dpeek/formless-ui/badge";
 import { Button } from "@dpeek/formless-ui/button";
 import { useEntityRecordCountMatchingQuery } from "../../client/store.ts";
@@ -11,8 +11,8 @@ import {
   type HomeOperationConfig,
 } from "../../client/views.ts";
 import type { SyncStatus } from "../../client/sync-status.ts";
-import { createDefaultsAreResolved, type QueryEvaluationContext } from "@dpeek/formless-schema";
-import { GeneratedCreateDialog } from "./create.tsx";
+import type { QueryEvaluationContext } from "@dpeek/formless-schema";
+import { GeneratedCreateSurface } from "./create.tsx";
 import {
   executeGeneratedOperationControl,
   useGeneratedOperationController,
@@ -20,8 +20,6 @@ import {
 } from "./operation-control-runtime.ts";
 
 type CommandHomeOperationConfig = Extract<HomeOperationConfig, { type: "command" }>;
-type CreateHomeOperationConfig = Extract<HomeOperationConfig, { type: "create" }>;
-
 export function HomeOperationRow({
   ariaLabel,
   operations,
@@ -31,8 +29,6 @@ export function HomeOperationRow({
   operations: HomeOperationConfig[];
   queryContext: QueryEvaluationContext;
 }) {
-  const [createDialogOperation, setCreateDialogOperation] =
-    useState<CreateHomeOperationConfig | null>(null);
   const bindings = useMemo(
     () => projectCollectionOperationControlBindings(operations),
     [operations],
@@ -65,22 +61,21 @@ export function HomeOperationRow({
     <section aria-label={ariaLabel} className="flex flex-wrap gap-2">
       {operations.map((operation) => {
         if (operation.type === "create") {
-          const canOpen =
-            operation.enabled && createDefaultsAreResolved(operation.defaults, queryContext);
-
           return (
-            <Button
-              isDisabled={!canOpen}
+            <GeneratedCreateSurface
               key={`${operation.type}:${operation.entityName}`}
-              onPress={() => {
-                if (canOpen) {
-                  setCreateDialogOperation(operation);
-                }
+              operation={operation}
+              queryContext={queryContext}
+              surfaceId={`home-operation:${operation.operation.canonicalKey}`}
+              trigger={{
+                content: {
+                  kind: "label",
+                  label: operation.enabled ? operation.label : "Create disabled",
+                },
+                density: "default",
+                prominence: "primary",
               }}
-              type="button"
-            >
-              {operation.enabled ? operation.label : "Create disabled"}
-            </Button>
+            />
           );
         }
 
@@ -98,18 +93,6 @@ export function HomeOperationRow({
           />
         );
       })}
-      {createDialogOperation ? (
-        <GeneratedCreateDialog
-          operation={createDialogOperation}
-          onOpenChange={(open) => {
-            if (!open) {
-              setCreateDialogOperation(null);
-            }
-          }}
-          open={true}
-          queryContext={queryContext}
-        />
-      ) : null}
     </section>
   );
 }

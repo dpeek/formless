@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@dpeek/formless-ui/badge";
-import { Button } from "@dpeek/formless-ui/button";
 import {
   ObjectList,
   type ObjectListAction,
@@ -38,7 +37,7 @@ import type { QueryEvaluationContext } from "@dpeek/formless-schema";
 import type { StoredRecord } from "@dpeek/formless-storage";
 import type { EntitySchema } from "@dpeek/formless-schema";
 import { HomeOperationRow } from "./operations.tsx";
-import { GeneratedCreateDialog } from "./create.tsx";
+import { GeneratedCreateSurface } from "./create.tsx";
 import { formatAggregateDisplayValue } from "./format.ts";
 import {
   calculateOrderingDragMovePlanForContext,
@@ -55,7 +54,6 @@ import { RecordTransitionOperationControls } from "./state-machine-ui.tsx";
 import { RecordTable } from "./table.tsx";
 import { RecordTree } from "./tree.tsx";
 import { selectRecordFieldsForActiveUnion } from "./union-presentation.ts";
-import { AddIcon } from "@dpeek/formless-ui/icons";
 import {
   executeGeneratedOrderingMoveOperation,
   useGeneratedOperationController,
@@ -413,23 +411,21 @@ function ContextListDetailSelector({
   options: Array<{ id: string; label: string }>;
   selectedContextRecordId: string | null;
 }) {
-  const [createDialogOpen, setCreateDialogOpen] = useState(false);
-
   return (
     <aside className="min-w-0 space-y-3">
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-sm font-medium text-slate-900">{context.label}</h2>
         {context.createOperation ? (
-          <Button
-            aria-label={context.createOperation.label}
-            isDisabled={!context.createOperation.enabled}
-            onPress={() => setCreateDialogOpen(true)}
-            size="sq-xs"
-            type="button"
-            intent="outline"
-          >
-            +
-          </Button>
+          <GeneratedCreateSurface
+            onSuccess={(recordId) => onSelectContext?.(recordId)}
+            operation={context.createOperation}
+            surfaceId={`context-list-detail:${context.createOperation.operation.canonicalKey}`}
+            trigger={{
+              content: { icon: "add", kind: "iconOnly" },
+              density: "compact",
+              prominence: "secondary",
+            }}
+          />
         ) : null}
       </div>
 
@@ -449,18 +445,6 @@ function ContextListDetailSelector({
           ))}
         </ul>
       )}
-
-      {context.createOperation && createDialogOpen ? (
-        <GeneratedCreateDialog
-          operation={context.createOperation}
-          onOpenChange={(open) => setCreateDialogOpen(open)}
-          onSuccess={(recordId) => {
-            onSelectContext?.(recordId);
-            setCreateDialogOpen(false);
-          }}
-          open={true}
-        />
-      ) : null}
     </aside>
   );
 }
@@ -509,8 +493,6 @@ function ContextSelector({
   options: Array<{ id: string; label: string }>;
   selectedContextRecordId: string | null;
 }) {
-  const [createDialogOpen, setCreateDialogOpen] = useState(false);
-
   return (
     <section className="space-y-3 border-b border-slate-200 pb-4">
       <div className="flex flex-wrap items-center gap-4">
@@ -530,16 +512,16 @@ function ContextSelector({
         </Tabs>
 
         {context.createOperation ? (
-          <Button
-            aria-label={context.createOperation.label}
-            isDisabled={!context.createOperation.enabled}
-            onPress={() => setCreateDialogOpen(true)}
-            size="sq-xs"
-            type="button"
-            intent="plain"
-          >
-            <AddIcon />
-          </Button>
+          <GeneratedCreateSurface
+            onSuccess={(recordId) => onSelectContext?.(recordId)}
+            operation={context.createOperation}
+            surfaceId={`context-selector:${context.createOperation.operation.canonicalKey}`}
+            trigger={{
+              content: { icon: "add", kind: "iconOnly" },
+              density: "compact",
+              prominence: "quiet",
+            }}
+          />
         ) : null}
       </div>
       {options.length === 0 ? (
@@ -550,17 +532,6 @@ function ContextSelector({
         onDeleted={() => onSelectContext?.(null)}
         recordId={selectedContextRecordId}
       />
-      {context.createOperation && createDialogOpen ? (
-        <GeneratedCreateDialog
-          operation={context.createOperation}
-          onOpenChange={(open) => setCreateDialogOpen(open)}
-          onSuccess={(recordId) => {
-            onSelectContext?.(recordId);
-            setCreateDialogOpen(false);
-          }}
-          open={true}
-        />
-      ) : null}
     </section>
   );
 }

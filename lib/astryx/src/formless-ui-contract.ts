@@ -601,8 +601,29 @@ export type FormlessUiActionIntentHandler = (
   intent: FormlessUiActionTriggerIntent,
 ) => Promise<void> | void;
 
-export type FormlessUiButtonContract = FormlessUiActionControlBase & {
+export type FormlessUiButtonContent =
+  | {
+      kind: "label";
+      label: string;
+    }
+  | {
+      icon: FormlessUiSemanticIconId;
+      kind: "iconAndLabel";
+      label: string;
+    }
+  | {
+      icon: FormlessUiSemanticIconId;
+      kind: "iconOnly";
+    };
+
+export type FormlessUiButtonContract = FormlessUiActionControlState & {
+  accessibilityLabel: string;
+  content: FormlessUiButtonContent;
+  density: "default" | "compact";
+  id: string;
   kind: "button";
+  prominence: "primary" | "secondary" | "quiet";
+  type: "button" | "submit";
 };
 
 export type FormlessUiActionTriggerContract = FormlessUiActionControlBase & {
@@ -755,12 +776,13 @@ export type FormlessUiOperationControlContract = {
 };
 
 export type FormlessUiFieldSetContract = {
+  disabled: boolean;
+  disabledReason?: string;
   kind: "fieldSet";
   errors?: readonly string[];
   fields: readonly FormlessUiField[];
-  id?: string;
+  id: string;
   label?: string;
-  submitBoundary?: FormlessUiSubmitBoundaryAdapter;
 };
 
 export type FormlessUiTableContract = {
@@ -769,10 +791,47 @@ export type FormlessUiTableContract = {
   operationControls?: readonly FormlessUiOperationControlContract[];
 };
 
+export type FormlessUiCreateOpenIntent = {
+  open: boolean;
+  surfaceId: string;
+  type: "createOpenChange";
+};
+
+export type FormlessUiCreateSubmitIntent = {
+  surfaceId: string;
+  type: "createSubmit";
+};
+
+export type FormlessUiCreateIntent = FormlessUiCreateOpenIntent | FormlessUiCreateSubmitIntent;
+
+export type FormlessUiCreateIntentHandler = (
+  intent: FormlessUiCreateIntent,
+) => Promise<void> | void;
+
+export type FormlessUiCreateFormContract = {
+  cancel: FormlessUiButtonContract;
+  errors: readonly string[];
+  fieldSet: Omit<FormlessUiFieldSetContract, "fields"> & {
+    fields: readonly FormlessUiCreateField[];
+  };
+  id: string;
+  kind: "createForm";
+  submit: FormlessUiButtonContract;
+};
+
 export type FormlessUiCreateDialogContract = {
+  form: FormlessUiCreateFormContract;
+  id: string;
   kind: "createDialog";
-  fields: readonly FormlessUiCreateField[];
-  fieldSet?: FormlessUiFieldSetContract;
+  open: boolean;
+  title: string;
+};
+
+export type FormlessUiCreateSurfaceContract = {
+  dialog: FormlessUiCreateDialogContract;
+  id: string;
+  kind: "createSurface";
+  trigger: FormlessUiButtonContract;
 };
 
 export type FormlessUiItemDetailContract = {

@@ -1,16 +1,16 @@
-import { useEffect, useMemo, useState } from "react";
-import { Button } from "@dpeek/formless-ui/button";
-import {
-  ModalBody,
-  ModalClose,
-  ModalContent,
-  ModalFooter,
-  ModalHeader,
-  ModalTitle,
-} from "@dpeek/formless-ui/modal";
-import { Fieldset, fieldErrorStyles } from "@dpeek/formless-ui/field";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import type {
+  FormlessUiButtonContent,
+  FormlessUiCreateIntent,
+  FormlessUiCreateSurfaceContract,
+  FormlessUiFieldIntent,
+} from "@dpeek/formless-astryx/contract";
+import type { EntitySchema, QueryEvaluationContext } from "@dpeek/formless-schema";
+import type { RecordValues } from "@dpeek/formless-storage";
 import { setSyncStatus } from "../../client/sync-status.ts";
 import { selectEntityOperationByKind } from "../../client/operation-presentation-model.ts";
+import { createReferenceOptionsSelector } from "../../client/projections.ts";
+import { getClientStoreSnapshot, subscribeToClientStore } from "../../client/store.ts";
 import {
   type CreateDefaultConfig,
   type CreateFieldConfig,
@@ -21,25 +21,51 @@ import {
   type HomeOperationConfig,
   projectCollectionOperationControlBinding,
 } from "../../client/views.ts";
-import type { RecordValues } from "@dpeek/formless-storage";
-import type { QueryEvaluationContext } from "@dpeek/formless-schema";
-import type { EntitySchema } from "@dpeek/formless-schema";
 import {
-  generatedFieldDraftInput,
   initialGeneratedCreateDraftSessionState,
   markGeneratedCreateDraftSessionSubmitted,
-  nextGeneratedCreateDraftSessionState,
   resolveGeneratedCreateValues,
   selectGeneratedCreateDraftSession,
+  type GeneratedCreateDraftSessionState,
 } from "./create-field-authoring.ts";
-import { GeneratedCreateFieldControl } from "./create-field-control.tsx";
+import { adaptGeneratedCreateFormlessUiDraftChange } from "./formless-ui-intents.ts";
+import { projectGeneratedCreateFormlessUiSurface } from "./formless-ui-projection.ts";
+import {
+  LegacyGeneratedCreateForm,
+  LegacyGeneratedCreateSurface,
+} from "./legacy-create-surface.tsx";
 import {
   executeGeneratedOperationControl,
   useGeneratedOperationController,
   useGeneratedOperationControllerVersion,
 } from "./operation-control-runtime.ts";
+import { shouldUseAppReplicaReferenceOptions } from "./reference-field-options.ts";
 
 export type CreateHomeOperationConfig = Extract<HomeOperationConfig, { type: "create" }>;
+
+export type GeneratedCreateTriggerPresentation = {
+  content: FormlessUiButtonContent;
+  density: "default" | "compact";
+  prominence: "primary" | "secondary" | "quiet";
+};
+
+export type GeneratedCreateSubmissionResult =
+  | {
+      recordId: string;
+      state: GeneratedCreateDraftSessionState;
+      type: "created";
+    }
+  | {
+      displayError: string;
+      state: GeneratedCreateDraftSessionState;
+      type: "failed";
+    };
+
+const DEFAULT_CREATE_TRIGGER: GeneratedCreateTriggerPresentation = {
+  content: { kind: "label", label: "Create" },
+  density: "default",
+  prominence: "primary",
+};
 
 export function GeneratedCreateForm({
   createFields,
@@ -54,24 +80,12 @@ export function GeneratedCreateForm({
   entityName: string;
   union?: CreateUnionPresentationConfig;
 }) {
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [draftSessionState, setDraftSessionState] = useState(() =>
-    initialGeneratedCreateDraftSessionState({ defaults, fields: createFields, union }),
-  );
   const createOperation = selectEntityOperationByKind(entityName, entity, "create", "collection");
-  const canCreate = createOperation !== undefined;
-  const draftSession = selectGeneratedCreateDraftSession({
-    defaults,
-    enabled: canCreate,
-    fields: createFields,
-    state: draftSessionState,
-    union,
-  });
-  const operationConfig = useMemo(
+  const operation = useMemo<CreateHomeOperationConfig | undefined>(
     () =>
       createOperation === undefined
         ? undefined
-        : ({
+        : {
             type: "create",
             label: `Create ${entity.label}`,
             entityName,
@@ -82,177 +96,213 @@ export function GeneratedCreateForm({
             defaults,
             ...(union === undefined ? {} : { union }),
             enabled: true,
-          } satisfies CreateHomeOperationConfig),
+          },
     [createFields, createOperation, defaults, entity, entityName, union],
   );
-  const binding = useMemo(
-    () =>
-      operationConfig === undefined
-        ? undefined
-        : projectCreateSubmitBinding(operationConfig, "create-form"),
-    [operationConfig],
-  );
-  const bindings = useMemo(() => (binding === undefined ? [] : [binding]), [binding]);
-  const controller = useGeneratedOperationController(bindings);
-  useGeneratedOperationControllerVersion(controller);
-  const isOperationSubmitting = binding === undefined ? false : controller.isPending(binding.id);
-  const submitDisabled = isSubmitting || isOperationSubmitting;
-  const fieldsDisabled = !canCreate || !draftSession.defaultsResolved || submitDisabled;
 
-  useEffect(() => {
-    setDraftSessionState(
-      initialGeneratedCreateDraftSessionState({ defaults, fields: createFields, union }),
-    );
-  }, [createFields, defaults, union]);
-
-  async function submitForm(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    if (submitDisabled) {
-      return;
-    }
-
-    const submittedState = markGeneratedCreateDraftSessionSubmitted(draftSessionState);
-    const submittedSession = selectGeneratedCreateDraftSession({
-      defaults,
-      enabled: canCreate,
-      fields: createFields,
-      state: submittedState,
-      union,
-    });
-    setDraftSessionState(submittedState);
-
-    if (!submittedSession.canSubmit) {
-      return;
-    }
-
-    const form = event.currentTarget;
-    const values = submittedSession.values;
-
-    setIsSubmitting(true);
-
-    try {
-      if (binding === undefined) {
-        throw new Error(`Create operation is unavailable for ${entity.label}.`);
-      }
-
-      const result = await executeCreateSubmitOperation({
-        binding,
-        controller,
-        progressMessage: `Saving ${entity.label.toLowerCase()}...`,
-        values,
-      });
-
-      if (result.type === "failed") {
-        return;
-      }
-
-      form.reset();
-      setDraftSessionState(
-        initialGeneratedCreateDraftSessionState({ defaults, fields: createFields, union }),
-      );
-    } catch (error) {
-      setSyncStatus({
-        state: "error",
-        message: error instanceof Error ? error.message : "Save failed.",
-      });
-    } finally {
-      setIsSubmitting(false);
-    }
+  if (operation === undefined) {
+    return <p className="text-sm text-slate-600">Create is disabled for {entity.label}.</p>;
   }
 
   return (
-    <form className="space-y-4" noValidate onSubmit={submitForm}>
-      <h2 className="text-lg font-medium">Create {entity.label}</h2>
+    <GeneratedCreateRuntime
+      heading={`Create ${entity.label}`}
+      mode="form"
+      onOpenChange={() => {}}
+      open={true}
+      operation={operation}
+      surfaceId={`create-form:${entityName}`}
+      trigger={{
+        ...DEFAULT_CREATE_TRIGGER,
+        content: { kind: "label", label: operation.label },
+      }}
+    />
+  );
+}
 
-      {!canCreate ? (
-        <p className="text-sm text-slate-600">Create is disabled for {entity.label}.</p>
-      ) : null}
+export function GeneratedCreateSurface({
+  onSuccess,
+  operation,
+  queryContext,
+  surfaceId,
+  trigger,
+}: {
+  onSuccess?: (recordId: string) => void;
+  operation: CreateHomeOperationConfig;
+  queryContext?: QueryEvaluationContext;
+  surfaceId: string;
+  trigger: GeneratedCreateTriggerPresentation;
+}) {
+  const [open, setOpen] = useState(false);
 
-      <Fieldset className="space-y-4" disabled={fieldsDisabled}>
-        {draftSession.visibleFields.map((fieldConfig) => (
-          <GeneratedCreateFieldControl
-            draftValue={draftSessionState.draft.values[fieldConfig.fieldName]}
-            error={draftSession.fieldErrors[fieldConfig.fieldName]?.message}
-            fieldConfig={fieldConfig}
-            key={fieldConfig.fieldName}
-            onValueChange={(value) => {
-              setDraftSessionState((state) =>
-                nextGeneratedCreateDraftSessionState({
-                  fieldName: fieldConfig.fieldName,
-                  fieldValue: generatedFieldDraftInput(value),
-                  state,
-                }),
-              );
-            }}
-          />
-        ))}
-      </Fieldset>
-      <GeneratedCreateDraftErrorList
-        fieldErrors={draftSession.fieldErrors}
-        visibleFields={draftSession.visibleFields}
-      />
-
-      <Button isDisabled={!draftSession.canSubmit || submitDisabled} type="submit">
-        {submitDisabled ? "Saving..." : canCreate ? `Create ${entity.label}` : "Create disabled"}
-      </Button>
-    </form>
+  return (
+    <GeneratedCreateRuntime
+      mode="surface"
+      onOpenChange={setOpen}
+      onSuccess={onSuccess}
+      open={open}
+      operation={operation}
+      queryContext={queryContext}
+      renderTrigger={true}
+      surfaceId={surfaceId}
+      trigger={trigger}
+    />
   );
 }
 
 export function GeneratedCreateDialog({
-  operation,
   onOpenChange,
   onSuccess,
   open,
+  operation,
   queryContext,
+  submitValues,
 }: {
-  operation: CreateHomeOperationConfig;
   onOpenChange: (open: boolean) => void;
   onSuccess?: (recordId: string) => void;
   open: boolean;
+  operation: CreateHomeOperationConfig;
   queryContext?: QueryEvaluationContext;
+  submitValues?: (values: RecordValues) => Promise<{ recordId: string }>;
 }) {
   return (
-    <ModalContent isOpen={open} onOpenChange={onOpenChange}>
-      <ModalHeader>
-        <ModalTitle>{operation.label}</ModalTitle>
-      </ModalHeader>
-      <ModalBody>
-        <GeneratedCreateDialogForm
-          operation={operation}
-          onSuccess={(recordId) => {
-            onSuccess?.(recordId);
-            onOpenChange(false);
-          }}
-          queryContext={queryContext}
-        />
-      </ModalBody>
-    </ModalContent>
+    <GeneratedCreateRuntime
+      mode="surface"
+      onOpenChange={onOpenChange}
+      onSuccess={onSuccess}
+      open={open}
+      operation={operation}
+      queryContext={queryContext}
+      renderTrigger={false}
+      submitValues={submitValues}
+      surfaceId={`create-dialog:${operation.operation.canonicalKey}`}
+      trigger={{
+        ...DEFAULT_CREATE_TRIGGER,
+        content: { kind: "label", label: operation.label },
+      }}
+    />
   );
 }
 
 export function GeneratedCreateDialogForm({
-  operation,
   onSuccess,
+  operation,
   queryContext,
   renderDialogCancel = true,
   submitValues,
 }: {
-  operation: CreateHomeOperationConfig;
   onSuccess?: (recordId: string) => void;
+  operation: CreateHomeOperationConfig;
   queryContext?: QueryEvaluationContext;
   renderDialogCancel?: boolean;
   submitValues?: (values: RecordValues) => Promise<{ recordId: string }>;
 }) {
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [draftSessionState, setDraftSessionState] = useState(() =>
-    initialGeneratedCreateDraftSessionState({
-      defaults: operation.defaults,
-      fields: operation.fields,
-      union: operation.union,
-    }),
+  void renderDialogCancel;
+
+  return (
+    <GeneratedCreateRuntime
+      mode="form"
+      onOpenChange={() => {}}
+      onSuccess={onSuccess}
+      open={true}
+      operation={operation}
+      queryContext={queryContext}
+      submitValues={submitValues}
+      surfaceId={`create-dialog-form:${operation.operation.canonicalKey}`}
+      trigger={{
+        ...DEFAULT_CREATE_TRIGGER,
+        content: { kind: "label", label: operation.label },
+      }}
+    />
   );
+}
+
+function GeneratedCreateRuntime({
+  heading,
+  mode,
+  onOpenChange,
+  onSuccess,
+  open,
+  operation,
+  queryContext,
+  renderTrigger = false,
+  submitValues,
+  surfaceId,
+  trigger,
+}: {
+  heading?: string;
+  mode: "form" | "surface";
+  onOpenChange: (open: boolean) => void;
+  onSuccess?: (recordId: string) => void;
+  open: boolean;
+  operation: CreateHomeOperationConfig;
+  queryContext?: QueryEvaluationContext;
+  renderTrigger?: boolean;
+  submitValues?: (values: RecordValues) => Promise<{ recordId: string }>;
+  surfaceId: string;
+  trigger: GeneratedCreateTriggerPresentation;
+}) {
+  const runtime = useGeneratedCreateRuntime({
+    closeOnSuccess: mode === "surface",
+    onOpenChange,
+    onSuccess,
+    open,
+    operation,
+    queryContext,
+    submitValues,
+    surfaceId,
+    trigger,
+  });
+
+  if (mode === "form") {
+    return (
+      <LegacyGeneratedCreateForm
+        form={runtime.surface.dialog.form}
+        heading={heading}
+        onCreateIntent={runtime.onCreateIntent}
+        onFieldIntent={runtime.onFieldIntent}
+        surfaceId={runtime.surface.id}
+      />
+    );
+  }
+
+  return (
+    <LegacyGeneratedCreateSurface
+      onCreateIntent={runtime.onCreateIntent}
+      onFieldIntent={runtime.onFieldIntent}
+      renderTrigger={renderTrigger}
+      surface={runtime.surface}
+    />
+  );
+}
+
+function useGeneratedCreateRuntime({
+  closeOnSuccess,
+  onOpenChange,
+  onSuccess,
+  open,
+  operation,
+  queryContext,
+  submitValues,
+  surfaceId,
+  trigger,
+}: {
+  closeOnSuccess: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSuccess?: (recordId: string) => void;
+  open: boolean;
+  operation: CreateHomeOperationConfig;
+  queryContext?: QueryEvaluationContext;
+  submitValues?: (values: RecordValues) => Promise<{ recordId: string }>;
+  surfaceId: string;
+  trigger: GeneratedCreateTriggerPresentation;
+}): {
+  onCreateIntent: (intent: FormlessUiCreateIntent) => Promise<void> | void;
+  onFieldIntent: (intent: FormlessUiFieldIntent) => void;
+  surface: FormlessUiCreateSurfaceContract;
+} {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [draftSessionState, setDraftSessionState] = useState(() => initialCreateState(operation));
   const draftSession = selectGeneratedCreateDraftSession({
     defaults: operation.defaults,
     enabled: operation.enabled,
@@ -263,32 +313,52 @@ export function GeneratedCreateDialogForm({
   });
   const binding = useMemo(
     () =>
-      submitValues === undefined
-        ? projectCreateSubmitBinding(operation, "create-dialog")
-        : undefined,
-    [operation, submitValues],
+      submitValues === undefined ? projectCreateSubmitBinding(operation, surfaceId) : undefined,
+    [operation, submitValues, surfaceId],
   );
   const bindings = useMemo(() => (binding === undefined ? [] : [binding]), [binding]);
   const controller = useGeneratedOperationController(bindings);
   useGeneratedOperationControllerVersion(controller);
-  const isOperationSubmitting = binding === undefined ? false : controller.isPending(binding.id);
-  const submitDisabled = isSubmitting || isOperationSubmitting;
-  const fieldsDisabled = !operation.enabled || !draftSession.defaultsResolved || submitDisabled;
+  const operationPending = binding === undefined ? false : controller.isPending(binding.id);
+  const submitPending = isSubmitting || operationPending;
+  const referenceOptionsByFieldName = useCreateReferenceOptionsByFieldName(operation.fields);
+  const surface = projectGeneratedCreateFormlessUiSurface({
+    enabled: operation.enabled,
+    entityLabel: operation.entity.label,
+    id: surfaceId,
+    isSubmitting: submitPending,
+    open,
+    referenceOptionsByFieldName,
+    session: draftSession,
+    state: draftSessionState,
+    submitLabel: operation.label,
+    trigger,
+    triggerLabel: operation.label,
+  });
 
   useEffect(() => {
-    setDraftSessionState(
-      initialGeneratedCreateDraftSessionState({
-        defaults: operation.defaults,
-        fields: operation.fields,
-        union: operation.union,
-      }),
-    );
+    setDraftSessionState(initialCreateState(operation));
   }, [operation.defaults, operation.fields, operation.union]);
 
-  async function submitForm(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  useEffect(() => {
+    if (!open && closeOnSuccess) {
+      setDraftSessionState(initialCreateState(operation));
+    }
+  }, [closeOnSuccess, open, operation.defaults, operation.fields, operation.union]);
 
-    if (submitDisabled) {
+  function onFieldIntent(intent: FormlessUiFieldIntent) {
+    if (intent.type !== "createDraftChange") {
+      return;
+    }
+
+    setDraftSessionState((state) => {
+      const result = adaptGeneratedCreateFormlessUiDraftChange(intent, { state });
+      return result.state ?? state;
+    });
+  }
+
+  async function submit() {
+    if (submitPending) {
       return;
     }
 
@@ -307,134 +377,162 @@ export function GeneratedCreateDialogForm({
       return;
     }
 
-    const form = event.currentTarget;
-    const values = submittedSession.values;
-
     setIsSubmitting(true);
 
     try {
-      let response: { recordId: string };
+      const result = await executeGeneratedCreateSubmission({
+        resetState: initialCreateState(operation),
+        state: submittedState,
+        submitValues: (values) =>
+          submitCreateValues({
+            binding,
+            controller,
+            operation,
+            submitValues,
+            values,
+          }),
+        values: submittedSession.values,
+      });
+      setDraftSessionState(result.state);
 
-      if (submitValues === undefined) {
-        if (binding === undefined) {
-          throw new Error(`Create operation is unavailable for ${operation.entity.label}.`);
-        }
-
-        const result = await executeCreateSubmitOperation({
-          binding,
-          controller,
-          progressMessage: `Saving ${operation.entity.label.toLowerCase()}...`,
-          values,
-        });
-
-        if (result.type === "failed") {
-          return;
-        }
-
-        response = {
-          recordId: selectCreatedOperationRecordId(result),
-        };
-      } else {
-        setSyncStatus({
-          state: "syncing",
-          message: `Saving ${operation.entity.label.toLowerCase()}...`,
-        });
-        response = await submitValues(values);
-        setSyncStatus({ state: "idle", message: "Saved and synced." });
+      if (result.type === "failed") {
+        setSyncStatus({ state: "error", message: result.displayError });
+        return;
       }
 
-      form.reset();
-      setDraftSessionState(
-        initialGeneratedCreateDraftSessionState({
-          defaults: operation.defaults,
-          fields: operation.fields,
-          union: operation.union,
-        }),
-      );
-      onSuccess?.(response.recordId);
-    } catch (error) {
-      setSyncStatus({
-        state: "error",
-        message: error instanceof Error ? error.message : "Save failed.",
-      });
+      onSuccess?.(result.recordId);
+
+      if (closeOnSuccess) {
+        onOpenChange(false);
+      }
     } finally {
       setIsSubmitting(false);
     }
   }
 
-  return (
-    <form className="space-y-4" noValidate onSubmit={submitForm}>
-      {!operation.enabled ? (
-        <p className="text-sm text-slate-600">Create is disabled for {operation.entity.label}.</p>
-      ) : null}
+  function onCreateIntent(intent: FormlessUiCreateIntent) {
+    if (intent.surfaceId !== surface.id) {
+      return;
+    }
 
-      <Fieldset className="space-y-4" disabled={fieldsDisabled}>
-        {draftSession.visibleFields.map((fieldConfig) => (
-          <GeneratedCreateFieldControl
-            draftValue={draftSessionState.draft.values[fieldConfig.fieldName]}
-            error={draftSession.fieldErrors[fieldConfig.fieldName]?.message}
-            fieldConfig={fieldConfig}
-            key={fieldConfig.fieldName}
-            onValueChange={(value) => {
-              setDraftSessionState((state) =>
-                nextGeneratedCreateDraftSessionState({
-                  fieldName: fieldConfig.fieldName,
-                  fieldValue: generatedFieldDraftInput(value),
-                  state,
-                }),
-              );
-            }}
-          />
-        ))}
-      </Fieldset>
-      <GeneratedCreateDraftErrorList
-        fieldErrors={draftSession.fieldErrors}
-        visibleFields={draftSession.visibleFields}
-      />
+    if (intent.type === "createSubmit") {
+      return submit();
+    }
 
-      <ModalFooter>
-        {renderDialogCancel ? (
-          <ModalClose intent="outline" type="button">
-            Cancel
-          </ModalClose>
-        ) : (
-          <Button type="button" intent="outline">
-            Cancel
-          </Button>
-        )}
-        <Button isDisabled={!draftSession.canSubmit || submitDisabled} type="submit">
-          {submitDisabled ? "Saving..." : operation.enabled ? operation.label : "Create disabled"}
-        </Button>
-      </ModalFooter>
-    </form>
+    if (intent.open && surface.trigger.disabled) {
+      return;
+    }
+
+    onOpenChange(intent.open);
+  }
+
+  return { onCreateIntent, onFieldIntent, surface };
+}
+
+function useCreateReferenceOptionsByFieldName(fields: readonly CreateFieldConfig[]) {
+  const snapshot = useSyncExternalStore(
+    subscribeToClientStore,
+    getClientStoreSnapshot,
+    getClientStoreSnapshot,
+  );
+
+  return useMemo(
+    () =>
+      Object.fromEntries(
+        fields.map((fieldConfig) => {
+          const field = fieldConfig.field;
+
+          if (field.type !== "reference" || !shouldUseAppReplicaReferenceOptions(field)) {
+            return [fieldConfig.fieldName, []];
+          }
+
+          return [
+            fieldConfig.fieldName,
+            createReferenceOptionsSelector(field.to, field.displayField)(snapshot),
+          ];
+        }),
+      ),
+    [fields, snapshot],
   );
 }
 
-function GeneratedCreateDraftErrorList({
-  fieldErrors,
-  visibleFields,
-}: {
-  fieldErrors: Record<string, { fieldName: string; message: string }>;
-  visibleFields: CreateFieldConfig[];
-}) {
-  const visibleFieldNames = new Set(visibleFields.map((field) => field.fieldName));
-  const hiddenFieldErrors = Object.values(fieldErrors).filter(
-    (error) => !visibleFieldNames.has(error.fieldName),
-  );
+function initialCreateState(
+  operation: CreateHomeOperationConfig,
+): GeneratedCreateDraftSessionState {
+  return initialGeneratedCreateDraftSessionState({
+    defaults: operation.defaults,
+    fields: operation.fields,
+    union: operation.union,
+  });
+}
 
-  if (hiddenFieldErrors.length === 0) {
-    return null;
+export async function executeGeneratedCreateSubmission({
+  resetState,
+  state,
+  submitValues,
+  values,
+}: {
+  resetState: GeneratedCreateDraftSessionState;
+  state: GeneratedCreateDraftSessionState;
+  submitValues: (values: RecordValues) => Promise<{ recordId: string }>;
+  values: RecordValues;
+}): Promise<GeneratedCreateSubmissionResult> {
+  try {
+    const response = await submitValues(values);
+
+    return {
+      recordId: response.recordId,
+      state: resetState,
+      type: "created",
+    };
+  } catch (error) {
+    return {
+      displayError: error instanceof Error ? error.message : "Save failed.",
+      state,
+      type: "failed",
+    };
+  }
+}
+
+async function submitCreateValues({
+  binding,
+  controller,
+  operation,
+  submitValues,
+  values,
+}: {
+  binding: GeneratedOperationControlBinding | undefined;
+  controller: GeneratedOperationController;
+  operation: CreateHomeOperationConfig;
+  submitValues?: (values: RecordValues) => Promise<{ recordId: string }>;
+  values: RecordValues;
+}): Promise<{ recordId: string }> {
+  if (submitValues !== undefined) {
+    setSyncStatus({
+      state: "syncing",
+      message: `Saving ${operation.entity.label.toLowerCase()}...`,
+    });
+    const response = await submitValues(values);
+    setSyncStatus({ state: "idle", message: "Saved and synced." });
+    return response;
   }
 
-  return (
-    <div className="space-y-1" role="alert">
-      {hiddenFieldErrors.map((error) => (
-        <div className={fieldErrorStyles()} data-slot="field-error" key={error.fieldName}>
-          {error.message}
-        </div>
-      ))}
-    </div>
-  );
+  if (binding === undefined) {
+    throw new Error(`Create operation is unavailable for ${operation.entity.label}.`);
+  }
+
+  const result = await executeCreateSubmitOperation({
+    binding,
+    controller,
+    progressMessage: `Saving ${operation.entity.label.toLowerCase()}...`,
+    values,
+  });
+
+  if (result.type === "failed") {
+    throw new Error(result.displayError);
+  }
+
+  return { recordId: selectCreatedOperationRecordId(result) };
 }
 
 export function resolveCreateValues(
