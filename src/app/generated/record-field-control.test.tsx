@@ -215,8 +215,18 @@ describe("generated record field presentation rendering", () => {
     const { createField, editField } = siteImageMediaFieldConfigs();
     const createHtml = renderToStaticMarkup(
       <GeneratedCreateFieldControl
-        draftValue={{ kind: "value", value: "hero.webp" }}
-        fieldConfig={createField}
+        field={projectGeneratedCreateFormlessUiField({
+          fieldConfig: createField,
+          mediaAssetOptions: [
+            {
+              href: "/api/formless/media/media/images/hero.webp",
+              id: "hero.webp",
+              label: "Hero",
+            },
+          ],
+          value: "hero.webp",
+        })}
+        onIntent={() => undefined}
       />,
     );
     const editHtml = renderRecordControl(editField, {
@@ -234,13 +244,13 @@ describe("generated record field presentation rendering", () => {
       expect(html).toContain(">Media asset</label>");
       expect(html).toContain('accept="image/jpeg,image/png,image/webp,image/gif"');
       expect(html).toContain('aria-label="Media asset"');
-      expect(html).toContain('<option value="">Unset</option>');
       expect(html).not.toContain('name="href"');
       expect(html).not.toContain('type="text"');
       expect(html).not.toContain("URL");
     }
 
-    expect(createHtml).toContain('src="/api/formless/media/media/images/hero.webp"');
+    expect(createHtml).toContain('data-web-media-field-preview="empty"');
+    expect(editHtml).toContain('<option value="">Unset</option>');
     expect(editHtml).toContain(">Hero</option>");
   });
 
