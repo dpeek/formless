@@ -35,12 +35,12 @@ default. On the measured machine that means eight Node child processes. See:
 Measurements were taken on an eight-core, 16 GiB machine. They are individual
 samples, not stable performance guarantees.
 
-| Case | Result |
-| --- | --- |
-| Source suite, four workers, uncached | 1,722 tests passed in 50.75 seconds |
-| Source suite, two workers, uncached | 1,722 tests passed in 77.79 seconds |
-| Script suite, four workers, uncached | 37 tests passed in 0.248 seconds |
-| `public-operations.test.ts`, isolated | 43 tests passed in 13.04 seconds |
+| Case                                  | Result                               |
+| ------------------------------------- | ------------------------------------ |
+| Source suite, four workers, uncached  | 1,722 tests passed in 50.75 seconds  |
+| Source suite, two workers, uncached   | 1,722 tests passed in 77.79 seconds  |
+| Script suite, four workers, uncached  | 37 tests passed in 0.248 seconds     |
+| `public-operations.test.ts`, isolated | 43 tests passed in 13.04 seconds     |
 | Cloudflare pool Tasks bootstrap spike | One test passed in 7.72 seconds cold |
 
 An uncapped full-suite sample became resource-starved, failed to start some
