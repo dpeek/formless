@@ -57,7 +57,7 @@ const iconField = {
   format: "icon",
 } satisfies Extract<FieldSchema, { type: "text" }>;
 
-const imageField = {
+const imageMediaField = {
   type: "text",
   required: false,
   label: "Hero image",
@@ -333,9 +333,11 @@ function createCanonicalFields(): FormlessUiField[] {
     }),
     recordField({
       fieldName: "heroImageId",
-      field: imageField,
-      editor: "image",
-      control: textControl(imageField, "Hero image", "image", "image", { kind: "imageUpload" }),
+      field: imageMediaField,
+      editor: "media",
+      control: textControl(imageMediaField, "Hero image", "media", "media", {
+        kind: "mediaUpload",
+      }),
       commit: "field-commit",
       drafts: {
         draft: "asset-hero",
@@ -345,7 +347,6 @@ function createCanonicalFields(): FormlessUiField[] {
       formatting: { displayValue: "asset-hero" },
       media: {
         fileSelectEnabled: true,
-        mediaEditorMode: "asset",
         mediaPreviewHref: mediaAssetOptions[0]?.href,
         previewHref: mediaAssetOptions[0]?.href,
         selectedAssetId: "asset-hero",
@@ -353,15 +354,19 @@ function createCanonicalFields(): FormlessUiField[] {
         uploadPatchFields: { mediaAssetFieldName: "heroImageId" },
       },
       options: { mediaAssetOptions },
-      rendererKind: "image",
+      rendererKind: "media",
     }),
     recordField({
       fieldName: "heroMediaId",
-      field: { ...imageField, label: "Hero media" },
+      field: { ...imageMediaField, label: "Hero media" },
       editor: "media",
-      control: textControl({ ...imageField, label: "Hero media" }, "Hero media", "media", "media", {
-        kind: "mediaUpload",
-      }),
+      control: textControl(
+        { ...imageMediaField, label: "Hero media" },
+        "Hero media",
+        "media",
+        "media",
+        { kind: "mediaUpload" },
+      ),
       commit: "field-commit",
       drafts: {
         draft: "asset-detail",
@@ -371,7 +376,6 @@ function createCanonicalFields(): FormlessUiField[] {
       formatting: { displayValue: "asset-detail" },
       media: {
         fileSelectEnabled: true,
-        mediaEditorMode: "asset",
         mediaPreviewHref: mediaAssetOptions[1]?.href,
         previewHref: mediaAssetOptions[1]?.href,
         selectedAssetId: "asset-detail",
@@ -569,10 +573,10 @@ function baseField({
 function textControl(
   field: Extract<FieldSchema, { type: "text" }>,
   label: string,
-  editor: Extract<FieldEditor, "text" | "textarea" | "icon" | "image" | "media">,
+  editor: Extract<FieldEditor, "text" | "textarea" | "icon" | "media">,
   controlKind: Extract<
     FormlessUiFieldControl["controlKind"],
-    "text" | "textarea" | "icon" | "image" | "media"
+    "text" | "textarea" | "icon" | "media"
   >,
   control: FieldEditorControl,
 ): Extract<FormlessUiFieldControl, { kind: "text" }> {

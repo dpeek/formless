@@ -464,6 +464,15 @@ The system SHALL use field behavior to define validation, defaults, conversion, 
 - THEN date fields preserve `YYYY-MM-DD` values
 - AND number fields store numbers
 
+#### Scenario: Declare asset-backed media authoring
+
+- GIVEN a text field stores a reference to an owned image media asset
+- WHEN schema field behavior selects editor and control metadata
+- THEN the field uses the `media` editor and asset-backed media control
+- AND the stored field value remains a flat media asset id
+- AND the field editor vocabulary does not define a separate image editor or
+  raw image URL authoring mode
+
 #### Scenario: Validate contact-shaped text formats
 
 - GIVEN a text field or inline text operation input declares `format` `email`

@@ -218,7 +218,6 @@ describe("generated record field authoring", () => {
     });
 
     expect(authoring).toEqual({
-      mediaEditorMode: "asset",
       mediaPreviewHref: "/media/hero.webp",
       uploadEnabled: true,
       uploadPatchFields: {
@@ -254,21 +253,6 @@ describe("generated record field authoring", () => {
       height: 300,
       mediaAsset: "uploaded.webp",
       width: 400,
-    });
-
-    expect(
-      selectGeneratedRecordFieldMediaAuthoring({
-        draft: "/manual.webp",
-        entityName: "block",
-        fieldConfig: hrefMediaFieldConfig,
-        mediaAssetOptions: [],
-        schema: blockSchema,
-      }),
-    ).toEqual({
-      mediaEditorMode: "url",
-      mediaPreviewHref: undefined,
-      uploadEnabled: false,
-      uploadPatchFields: {},
     });
   });
 
@@ -356,19 +340,12 @@ describe("generated record field authoring", () => {
   });
 
   it("resolves specialized text-backed editor drafts through the update patch resolver", () => {
-    const fields = [
-      markdownFieldConfig,
-      colorFieldConfig,
-      iconFieldConfig,
-      imageFieldConfig,
-      mediaAssetFieldConfig,
-    ];
+    const fields = [markdownFieldConfig, colorFieldConfig, iconFieldConfig, mediaAssetFieldConfig];
     const resolution = resolveGeneratedUpdateDraftPatchValues({
       baselineValues: {
         body: "Old body",
         color: "#000000",
         icon: "old-icon",
-        imageHref: "/old.webp",
         mediaAsset: "old.webp",
       },
       draft: {
@@ -376,7 +353,6 @@ describe("generated record field authoring", () => {
           body: { kind: "input", value: "New **body**" },
           color: { kind: "input", value: "#ffffff" },
           icon: { kind: "input", value: "<svg />" },
-          imageHref: { kind: "input", value: "/new.webp" },
           mediaAsset: { kind: "input", value: "new.webp" },
         },
       },
@@ -388,14 +364,12 @@ describe("generated record field authoring", () => {
       true,
       true,
       true,
-      true,
     ]);
     expect(resolution.fieldErrors).toEqual({});
     expect(resolution.patchValues).toEqual({
       body: "New **body**",
       color: "#ffffff",
       icon: "<svg />",
-      imageHref: "/new.webp",
       mediaAsset: "new.webp",
     });
   });
@@ -650,20 +624,6 @@ const iconFieldConfig = {
   fieldName: "icon",
   field: { type: "text", required: false, format: "icon" },
   editor: "icon",
-  commit: "field-commit",
-} satisfies RecordFieldConfig;
-
-const imageFieldConfig = {
-  fieldName: "imageHref",
-  field: imageTextField,
-  editor: "image",
-  commit: "field-commit",
-} satisfies RecordFieldConfig;
-
-const hrefMediaFieldConfig = {
-  fieldName: "href",
-  field: imageTextField,
-  editor: "media",
   commit: "field-commit",
 } satisfies RecordFieldConfig;
 

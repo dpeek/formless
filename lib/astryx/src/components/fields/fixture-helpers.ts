@@ -272,11 +272,11 @@ export function textControl(
   input: {
     controlKind?: Extract<
       FormlessUiFieldControl["controlKind"],
-      "color" | "icon" | "image" | "markdown" | "media" | "text" | "textarea"
+      "color" | "icon" | "markdown" | "media" | "text" | "textarea"
     >;
     editor?: Extract<
       FieldEditor,
-      "color" | "href" | "icon" | "image" | "markdown" | "media" | "slug" | "text" | "textarea"
+      "color" | "href" | "icon" | "markdown" | "media" | "slug" | "text" | "textarea"
     >;
     label?: string;
     control?: FieldEditorControl;
@@ -960,7 +960,7 @@ function textEditorFromField(field: Extract<FieldSchema, { type: "text" }>) {
 function textControlKind(
   editor: Extract<
     FieldEditor,
-    "color" | "href" | "icon" | "image" | "markdown" | "media" | "slug" | "text" | "textarea"
+    "color" | "href" | "icon" | "markdown" | "media" | "slug" | "text" | "textarea"
   >,
 ) {
   if (editor === "href" || editor === "slug") {
@@ -973,10 +973,6 @@ function textControlKind(
 function textEditorControl(editor: FieldEditor): FieldEditorControl {
   if (editor === "icon") {
     return { kind: "icon" };
-  }
-
-  if (editor === "image") {
-    return { kind: "imageUpload" };
   }
 
   if (editor === "media") {
@@ -1106,7 +1102,7 @@ function applyMediaFileSelect(
     file === undefined ||
     field.mode !== "editor" ||
     field.fieldName !== fieldName ||
-    (field.control.controlKind !== "image" && field.control.controlKind !== "media")
+    field.control.controlKind !== "media"
   ) {
     return field;
   }

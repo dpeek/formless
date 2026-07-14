@@ -275,9 +275,7 @@ describe("generated Formless UI intent adapter", () => {
   it("maps media asset and file intents without doing upload work", () => {
     const asset = adaptGeneratedFormlessUiMediaAssetSelect(
       { type: "mediaAssetSelect", fieldName: "hero", assetId: "hero.webp" },
-      recordContext([mediaFieldConfig], { hero: "old.webp" }, undefined, {
-        mediaEditorModeByFieldName: { hero: "asset" },
-      }),
+      recordContext([mediaFieldConfig], { hero: "old.webp" }),
     ) as GeneratedFormlessUiMediaAssetSelectResult;
     const file = { name: "hero.webp" } as File;
     const fileSelect = adaptGeneratedFormlessUiMediaFileSelect({

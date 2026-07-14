@@ -4,7 +4,6 @@ import {
   scenarioOption,
 } from "../field-scenario-model.ts";
 import type {
-  FieldKindKey,
   FieldScenarioGroup,
   FieldScenarioProjectionContext,
 } from "../field-scenario-model.ts";
@@ -20,13 +19,10 @@ import {
 } from "./fixture-helpers.ts";
 
 const mediaPreviewUrl = publicMediaFixtureUrl("01");
-const imageUrl = publicMediaFixtureUrl("02");
 const missingMediaId = "media-missing-hero";
 const mediaAccept = "image/jpeg,image/png,image/webp,image/gif";
 const mediaMaxSize = 5 * 1024 * 1024;
 
-const imageField = { type: "text", required: true, label: "Hero Image" } as const;
-const optionalImageField = { ...imageField, required: false } as const;
 const mediaField = { type: "text", required: true, label: "Hero Media" } as const;
 const optionalMediaField = { ...mediaField, required: false } as const;
 
@@ -58,10 +54,6 @@ const requirednessAxis = composeScenarioAxis("requiredness", "Requiredness", [
   scenarioOption("required", "Required"),
   scenarioOption("optional", "Optional"),
 ]);
-const imageValueAxis = composeScenarioAxis("value", "Value", [
-  scenarioOption("known", "Preview"),
-  scenarioOption("unset", "Unset"),
-]);
 const mediaCreateValueAxis = composeScenarioAxis("value", "Value", [
   scenarioOption("selected", "Selected Asset"),
   scenarioOption("unset", "Unset"),
@@ -81,11 +73,7 @@ const runtimeAxis = composeScenarioAxis("runtime", "Runtime", [
 ]);
 
 export const mediaScenarioGroups = [
-  createMediaGroup("image"),
-  existingImageGroup("record"),
-  existingImageGroup("table-cell"),
-  existingImageGroup("detail"),
-  createMediaGroup("media"),
+  createMediaGroup(),
   projectScenarioGroup({
     id: "media-record",
     kind: "media",
@@ -97,23 +85,12 @@ export const mediaScenarioGroups = [
   existingMediaGroup("detail"),
 ] satisfies readonly FieldScenarioGroup[];
 
-function createMediaGroup(kind: Extract<FieldKindKey, "image" | "media">) {
+function createMediaGroup() {
   return projectScenarioGroup({
-    id: `${kind}-create`,
-    kind,
-    axes: [requirednessAxis, kind === "image" ? imageValueAxis : mediaCreateValueAxis],
-    projectField: (context) => projectCreateMediaField(kind, context),
-  });
-}
-
-function existingImageGroup(
-  surface: Extract<FormlessUiFieldSurface, "detail" | "record" | "table-cell">,
-) {
-  return projectScenarioGroup({
-    id: `image-${surface}`,
-    kind: "image",
-    axes: [modeAxis, requirednessAxis, imageValueAxis],
-    projectField: (context) => projectExistingImageField(surface, context),
+    id: "media-create",
+    kind: "media",
+    axes: [requirednessAxis, mediaCreateValueAxis],
+    projectField: projectCreateMediaField,
   });
 }
 
@@ -130,111 +107,34 @@ function mediaRecordCombinationIsValid({ facets }: FieldScenarioProjectionContex
   return facets.runtime === "ready" || (facets.mode === "editor" && facets.value === "selected");
 }
 
-function projectCreateMediaField(
-  kind: Extract<FieldKindKey, "image" | "media">,
-  { facets }: FieldScenarioProjectionContext,
-) {
+function projectCreateMediaField({ facets }: FieldScenarioProjectionContext) {
   const required = facets.requiredness === "required";
-  const field =
-    kind === "image"
-      ? required
-        ? imageField
-        : optionalImageField
-      : required
-        ? mediaField
-        : optionalMediaField;
-  const value =
-    kind === "image"
-      ? facets.value === "known"
-        ? imageUrl
-        : ""
-      : facets.value === "selected"
-        ? "media-homepage-hero"
-        : "";
-  const editor = kind === "image" ? ("image" as const) : ("media" as const);
+  const field = required ? mediaField : optionalMediaField;
+  const value = facets.value === "selected" ? "media-homepage-hero" : "";
 
   return createField({
-    fieldName: kind === "image" ? "heroImage" : "heroMediaId",
+    fieldName: "heroMediaId",
     field,
-    editor,
+    editor: "media",
     control: textControl(field, {
-      editor,
-      controlKind: kind === "image" ? "image" : "media",
+      editor: "media",
+      controlKind: "media",
     }),
     draftInput: draftInput(value),
     labelVisibility: "visible",
-    media:
-      kind === "image"
-        ? {
-            fileSelectEnabled: false,
-            mediaEditorMode: "url",
-            previewHref: value || undefined,
-            selectedUrl: value || undefined,
-            uploadEnabled: false,
-            uploadPatchFields: { hrefFieldName: "heroImage" },
-          }
-        : {
-            accept: mediaAccept,
-            fileSelectEnabled: true,
-            maxSize: mediaMaxSize,
-            mediaEditorMode: "asset",
-            previewHref: value ? mediaPreviewUrl : undefined,
-            selectedAssetId: value || undefined,
-            uploadEnabled: true,
-            uploadPatchFields: { mediaAssetFieldName: "heroMediaId" },
-          },
-    options: kind === "media" ? { mediaAssetOptions: mediaAssetOptions(mediaOptions) } : undefined,
-    recordId: `${kind}-create-${facets.requiredness}-${facets.value}`,
+    media: {
+      accept: mediaAccept,
+      fileSelectEnabled: true,
+      maxSize: mediaMaxSize,
+      previewHref: value ? mediaPreviewUrl : undefined,
+      selectedAssetId: value || undefined,
+      uploadEnabled: true,
+      uploadPatchFields: { mediaAssetFieldName: "heroMediaId" },
+    },
+    options: { mediaAssetOptions: mediaAssetOptions(mediaOptions) },
+    recordId: `media-create-${facets.requiredness}-${facets.value}`,
     value: value || undefined,
   });
-}
-
-function projectExistingImageField(
-  surface: Extract<FormlessUiFieldSurface, "detail" | "record" | "table-cell">,
-  { facets }: FieldScenarioProjectionContext,
-) {
-  const required = facets.requiredness === "required";
-  const field = required ? imageField : optionalImageField;
-  const value = facets.value === "known" ? imageUrl : "";
-  const editorControl = textControl(field, { editor: "image", controlKind: "image" });
-  const common = {
-    fieldName: "heroImage",
-    field,
-    editor: "image" as const,
-    labelVisibility: surface === "detail" ? ("visible" as const) : ("hidden" as const),
-    recordId: `image-${surface}-${facets.mode}-${facets.requiredness}-${facets.value}`,
-    surface,
-  };
-
-  return facets.mode === "display"
-    ? displayField({
-        ...common,
-        control: textControl(field, { editor: "image", controlKind: "image" }),
-        density: surface === "table-cell" ? "compact" : "default",
-        formatting: { displayValue: value },
-        media: {
-          previewHref: value || undefined,
-          selectedUrl: value || undefined,
-        },
-        value: value || undefined,
-      })
-    : recordField({
-        ...common,
-        control: editorControl,
-        commit: "field-commit",
-        density: surface === "table-cell" ? "compact" : "default",
-        drafts: recordDrafts({ recordValue: value || undefined }),
-        formatting: { displayValue: value },
-        media: {
-          fileSelectEnabled: false,
-          mediaEditorMode: "url",
-          previewHref: value || undefined,
-          selectedUrl: value || undefined,
-          uploadEnabled: false,
-          uploadPatchFields: { hrefFieldName: "heroImage" },
-        },
-        rendererKind: "image",
-      });
 }
 
 function projectExistingMediaField(
@@ -291,7 +191,6 @@ function projectExistingMediaField(
           accept: mediaAccept,
           fileSelectEnabled: true,
           maxSize: mediaMaxSize,
-          mediaEditorMode: "asset",
           mediaPreviewHref: previewHref,
           ...(facets.value === "missing"
             ? {

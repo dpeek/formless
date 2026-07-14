@@ -13,7 +13,6 @@ export type GeneratedRecordFieldRendererKind =
   | "enum"
   | "enum-icon"
   | "icon"
-  | "image"
   | "markdown"
   | "media"
   | "number"
@@ -62,10 +61,6 @@ export function selectGeneratedRecordFieldRendererKind({
 
   if (fieldControl.controlKind === "icon") {
     return "icon";
-  }
-
-  if (fieldControl.controlKind === "image") {
-    return "image";
   }
 
   if (fieldControl.controlKind === "media") {

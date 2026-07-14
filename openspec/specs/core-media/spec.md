@@ -4,7 +4,7 @@
 
 Core media stores first-party media assets for a Formless instance outside app
 record storage. App records keep flat usage metadata and reference core media
-asset ids or delivery hrefs.
+asset ids; delivery hrefs are resolved from those asset ids.
 
 ## Requirements
 
@@ -56,16 +56,11 @@ field editors.
 
 - GIVEN a text field declares the `media` editor
 - WHEN generated authoring renders the field
-- THEN the user can select existing core image media assets or upload a new
-  image through `/api/formless/media/images`
-- AND the field value remains a flat text value
-
-#### Scenario: Image editor fallback
-
-- GIVEN a text field declares the `image` editor
-- WHEN generated authoring renders the field
-- THEN upload with preview is available
-- AND manual URL editing remains available as fallback input
+- THEN the user can browse and select existing core image media assets by
+  display-safe label or upload a new image through `/api/formless/media/images`
+- AND generated authoring provides thumbnail preview and optional removal
+- AND the field value remains a flat media asset id stored as text
+- AND media authoring has no raw image URL mode
 
 ### Requirement: Site Media Usage
 
@@ -77,13 +72,15 @@ Site usage metadata in flat Site records.
 - GIVEN an image block references a valid core media asset id
 - WHEN the public Site tree and renderer process the block
 - THEN public rendering uses the resolved core media delivery href
-- AND the manual `href` field is only fallback input
+- AND image rendering does not use a manual `href` fallback
 
 #### Scenario: Site media fields
 
 - GIVEN Site image authoring edits an image block
-- WHEN the generated edit, tree, or table surface renders
-- THEN `mediaAssetId` is available as the core media field
+- WHEN the generated create, edit, tree, or table surface renders
+- THEN `mediaAssetId` is available through the `media` editor as the core media
+  field
+- AND the shared block `href` field is not exposed for the image variant
 - AND `width` and `height` remain optional flat fields that can be populated
   from upload metadata
 

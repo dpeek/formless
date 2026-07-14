@@ -27,8 +27,6 @@ import {
   fieldValueToInputValue,
 } from "./format.ts";
 
-export type GeneratedRecordFieldMediaEditorMode = "asset" | "url";
-
 export type GeneratedRecordFieldEditability = {
   canEdit: boolean;
   controlDisabled: boolean;
@@ -64,7 +62,6 @@ export type GeneratedUpdateDraftResolution = {
 };
 
 export type GeneratedRecordFieldMediaAuthoring = {
-  mediaEditorMode: GeneratedRecordFieldMediaEditorMode;
   mediaPreviewHref?: string;
   uploadEnabled: boolean;
   uploadPatchFields: GeneratedRecordFieldMediaUploadPatchFields;
@@ -72,7 +69,6 @@ export type GeneratedRecordFieldMediaAuthoring = {
 
 export type GeneratedRecordFieldMediaUploadPatchFields = {
   heightFieldName?: string;
-  hrefFieldName?: string;
   mediaAssetFieldName?: string;
   widthFieldName?: string;
 };
@@ -580,28 +576,17 @@ export function selectGeneratedRecordFieldMediaAuthoring({
   mediaAssetOptions: ImageMediaAssetOption[];
   schema: AppSchema | null;
 }): GeneratedRecordFieldMediaAuthoring {
-  const mediaEditorMode = mediaEditorModeForRecordField(fieldConfig);
   const mediaPreview =
-    mediaEditorMode === "asset" && draft !== ""
+    draft !== ""
       ? (mediaAssetOptions.find((asset) => asset.id === draft) ??
         coreImageMediaAssetOptionForId(draft))
       : undefined;
 
   return {
-    mediaEditorMode,
     mediaPreviewHref: mediaPreview?.href,
-    uploadEnabled: mediaEditorMode === "asset",
-    uploadPatchFields:
-      mediaEditorMode === "asset"
-        ? selectMediaAssetUploadPatchFields(schema, entityName, fieldConfig.fieldName)
-        : {},
+    uploadEnabled: true,
+    uploadPatchFields: selectMediaAssetUploadPatchFields(schema, entityName, fieldConfig.fieldName),
   };
-}
-
-export function mediaEditorModeForRecordField(
-  fieldConfig: RecordFieldConfig,
-): GeneratedRecordFieldMediaEditorMode {
-  return fieldConfig.editor === "media" && fieldConfig.fieldName !== "href" ? "asset" : "url";
 }
 
 export function selectMediaAssetUploadPatchFields(
@@ -683,7 +668,7 @@ function generatedMediaUploadDraftValues(
   upload: UploadedImageMedia,
 ): Record<string, GeneratedUpdateDraftFieldInput> {
   const values: Record<string, GeneratedUpdateDraftFieldInput> = {};
-  const { heightFieldName, hrefFieldName, mediaAssetFieldName, widthFieldName } = uploadPatchFields;
+  const { heightFieldName, mediaAssetFieldName, widthFieldName } = uploadPatchFields;
 
   if (upload.dimensions && widthFieldName && heightFieldName) {
     values[widthFieldName] = { kind: "value", value: upload.dimensions.width };
@@ -694,8 +679,6 @@ function generatedMediaUploadDraftValues(
 
   if (mediaAssetFieldName && mediaAssetId) {
     values[mediaAssetFieldName] = { kind: "input", value: mediaAssetId };
-  } else if (hrefFieldName) {
-    values[hrefFieldName] = { kind: "input", value: upload.href };
   }
 
   return values;
@@ -748,7 +731,6 @@ function appendGeneratedMediaUploadPatchFields({
   }
 
   addField(uploadPatchFields.mediaAssetFieldName);
-  addField(uploadPatchFields.hrefFieldName);
   addField(uploadPatchFields.widthFieldName);
   addField(uploadPatchFields.heightFieldName);
 

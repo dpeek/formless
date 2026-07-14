@@ -55,7 +55,7 @@ Presentation is schema-derived and conditionally applicable:
 - date: default or `valueOrInteraction`;
 - text: normal or heading record presentation;
 - number: plain, formatted, suffixed, or value-unit composition;
-- color, source icon, image, media, and Markdown: specialized editor or display primitives selected from field/editor metadata.
+- color, source icon, media, and Markdown: specialized editor or display primitives selected from field/editor metadata.
 
 Enum icon, label, and icon-plus-label content comes from presentation tokens. Missing icon tokens fall back to text. Missing semantic color tokens fall back to neutral styling. Neither renderer invents a replacement icon, color, or label.
 
@@ -515,55 +515,19 @@ Picker facts are already explicit. The Astryx renderer must consume them instead
 
 - Changes to the picker catalog or custom-source UX are post-migration work.
 
-### Image
-
-#### Legacy support
-
-| Surface     | Mode    | Values                   | Requiredness          | Presentation                                                                       | Label             | Commit                                        | Legacy source                                                                                                                                          |
-| ----------- | ------- | ------------------------ | --------------------- | ---------------------------------------------------------------------------------- | ----------------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Create      | Editor  | URL/text draft and Unset | required and optional | generic text input in the observed create renderer; no create upload control found | visible           | submit                                        | `src/app/generated/create-field-control.tsx` image branch                                                                                              |
-| Record      | Editor  | URL/text draft, Unset    | required and optional | URL input with preview                                                             | hidden by default | field commit on blur or Enter; Escape reverts | `src/app/generated/record-field-control.tsx` `RecordMediaFieldRenderer`; `src/app/generated/record-field-authoring.ts` `mediaEditorModeForRecordField` |
-| Record      | Display | stored text              | required and optional | generic text display; specialized legacy image display not found                   | hidden by default | not applicable                                | `src/app/generated/record-field-display.tsx` generic branch                                                                                            |
-| Table Cell  | Editor  | same as Record           | required and optional | compact URL input with preview                                                     | hidden            | field commit                                  | `src/app/generated/table.tsx`; `src/app/generated/record-field-control.tsx`                                                                            |
-| Table Cell  | Display | stored text              | required and optional | generic compact text; specialized legacy image display not found                   | hidden            | not applicable                                | `src/app/generated/record-field-display.tsx`                                                                                                           |
-| Item Detail | Editor  | same as Record           | required and optional | normal URL input with preview                                                      | visible           | field commit                                  | `src/app/generated/collection.tsx` `RecordDetail`                                                                                                      |
-| Item Detail | Display | stored text              | required and optional | generic text; specialized legacy image display not found                           | visible           | not applicable                                | `src/app/generated/record-field-display.tsx`                                                                                                           |
-
-Operation Image support was not found.
-
-#### Current Astryx coverage
-
-`lib/astryx/src/components/fields/media-field.fixtures.ts` covers Image Create with an asset selection and a representative upload-pending state. `MediaFieldEditor` uses `ImageInput`; `MediaFieldDisplay` uses `ImageValueDisplay`.
-
-#### Required migration parity
-
-- Reconcile the current asset-id Create fixture with the observed legacy URL/text Create path. Do not claim asset selection as Create parity without a source projection that supplies it.
-- Add Record, Table Cell, and writable Item Detail URL preview coverage.
-- Preserve manual URL draft, blur/Enter commit, and Escape revert.
-- Resolve the specification/implementation gap before claiming image upload parity: `generated-ui/spec.md` requires image upload, but `mediaEditorModeForRecordField` selects URL mode for `image` and `selectGeneratedRecordFieldMediaAuthoring` disables upload outside asset mode. `handleImageUpload` rejects non-asset mode.
-- Keep legacy generic Display behavior until a specialized image display is separately specified; Astryx preview display is not evidence of legacy parity.
-
-#### Contract facts to make explicit
-
-`FormlessUiRecordField.media` explicitly carries editor mode, preview, selected asset/URL, upload enablement, and patch fields. Create and Display fields do not carry the same media authoring object. Add projected image preview and authoring facts for those modes only when the source surface supports them; do not infer them from options or value shape.
-
-#### Optional improvements
-
-- Specialized image previews on Display surfaces are a post-migration improvement unless promoted to the generated UI specification and projection.
-
 ### Media
 
 #### Legacy support
 
-| Surface     | Mode    | Values                                                   | Requiredness          | Presentation                                                                           | Label             | Commit                                                                | Legacy source                                                                                                                                    |
-| ----------- | ------- | -------------------------------------------------------- | --------------------- | -------------------------------------------------------------------------------------- | ----------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Create      | Editor  | text draft and Unset                                     | required and optional | generic text-input fallback; specialized asset picker not found in the create renderer | visible           | submit                                                                | `src/app/generated/create-field-control.tsx` final text fallback after control selection                                                         |
-| Record      | Editor  | selected asset id, missing asset id, Unset, upload state | required and optional | core image-media asset picker, upload, and preview                                     | hidden by default | picker/upload patch; URL field commit only when projected in URL mode | `src/app/generated/record-field-control.tsx` `RecordMediaFieldRenderer`; `src/app/generated/record-field-authoring.ts` media authoring selectors |
-| Record      | Display | stored asset id                                          | required and optional | generic text display; specialized legacy media display not found                       | hidden by default | not applicable                                                        | `src/app/generated/record-field-display.tsx` generic branch                                                                                      |
-| Table Cell  | Editor  | same as Record                                           | required and optional | compact media control                                                                  | hidden            | picker/upload patch                                                   | `src/app/generated/table.tsx`; `src/app/generated/record-field-control.tsx`                                                                      |
-| Table Cell  | Display | stored asset id                                          | required and optional | generic compact text                                                                   | hidden            | not applicable                                                        | `src/app/generated/record-field-display.tsx`                                                                                                     |
-| Item Detail | Editor  | same as Record                                           | required and optional | normal media control                                                                   | visible           | picker/upload patch                                                   | `src/app/generated/collection.tsx` `RecordDetail`                                                                                                |
-| Item Detail | Display | stored asset id                                          | required and optional | generic text                                                                           | visible           | not applicable                                                        | `src/app/generated/record-field-display.tsx`                                                                                                     |
+| Surface     | Mode    | Values                                                   | Requiredness          | Presentation                                                     | Label             | Commit                               | Legacy source                                                                                                                                    |
+| ----------- | ------- | -------------------------------------------------------- | --------------------- | ---------------------------------------------------------------- | ----------------- | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Create      | Editor  | selected asset id, missing asset id, Unset, upload state | required and optional | core image-media asset picker, upload, and preview               | visible           | submit flat asset id                 | `src/app/generated/create-field-control.tsx` Media control                                                                                       |
+| Record      | Editor  | selected asset id, missing asset id, Unset, upload state | required and optional | core image-media asset picker, upload, and preview               | hidden by default | picker/upload patch of flat asset id | `src/app/generated/record-field-control.tsx` `RecordMediaFieldRenderer`; `src/app/generated/record-field-authoring.ts` media authoring selectors |
+| Record      | Display | stored asset id                                          | required and optional | generic text display; specialized legacy media display not found | hidden by default | not applicable                       | `src/app/generated/record-field-display.tsx` generic branch                                                                                      |
+| Table Cell  | Editor  | same as Record                                           | required and optional | compact media control                                            | hidden            | picker/upload patch                  | `src/app/generated/table.tsx`; `src/app/generated/record-field-control.tsx`                                                                      |
+| Table Cell  | Display | stored asset id                                          | required and optional | generic compact text                                             | hidden            | not applicable                       | `src/app/generated/record-field-display.tsx`                                                                                                     |
+| Item Detail | Editor  | same as Record                                           | required and optional | normal media control                                             | visible           | picker/upload patch                  | `src/app/generated/collection.tsx` `RecordDetail`                                                                                                |
+| Item Detail | Display | stored asset id                                          | required and optional | generic text                                                     | visible           | not applicable                       | `src/app/generated/record-field-display.tsx`                                                                                                     |
 
 Operation Media support was not found.
 
@@ -598,7 +562,7 @@ Required coverage is the union of the supported combinations above, reduced to r
 5. Enum fixtures must retain Known, Unset, and Undeclared. State-machine fixtures must retain Active, Terminal, Unset, and Undeclared without enabling enum editing.
 6. Writable Record and Item Detail fields must preserve immediate or field-commit behavior. Read-only and system variants must render Display.
 7. Create and supported Operation fields must use submit semantics and flat field/input names.
-8. Presentation coverage must be schema-derived: enum content tokens, completion, quiet date, heading text, number formats/value-unit, color, Markdown, source icon, image, and media.
+8. Presentation coverage must be schema-derived: enum content tokens, completion, quiet date, heading text, number formats/value-unit, color, Markdown, source icon, and media.
 9. Missing icon/color tokens, missing references, invalid number drafts, invalid/alpha color text, missing media assets, and source-icon parse errors must remain visible through projected facts. No renderer may invent a correction.
 10. Pending, disabled, and generic error states remain representative component states, not universal matrix axes.
 
@@ -606,17 +570,17 @@ The following coverage is not supported and must not be added as parity:
 
 - direct editing of an existing state-machine enum;
 - state-machine Operation input;
-- Reference, Markdown, Color, Source Icon, Image, or Media public operation inputs;
+- Reference, Markdown, Color, Source Icon, or Media public operation inputs;
 - a full presentation cross-product when only representative combinations have source paths;
-- specialized legacy Image or Media Display previews; and
+- specialized legacy Media Display previews; and
 - specialized legacy Create media asset selection.
 
 ## 6. Optional post-migration improvements
 
 These are separate from required parity:
 
-- promote specialized Image and Media Display previews into the canonical specification and foundation projection;
-- define specialized asset selection for Create Image or Media fields;
+- promote specialized Media Display previews into the canonical specification and foundation projection;
+- define specialized asset selection for Create Media fields;
 - add explicit option-loading state for references if production UX must distinguish loading from a missing option;
 - refine boolean Display presentation and copy through contract data;
 - add richer compact Markdown authoring; and

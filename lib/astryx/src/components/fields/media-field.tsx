@@ -37,7 +37,7 @@ export function MediaFieldEditor({
       isLoading={Boolean(field.pending?.isPending)}
       isReadOnly={fieldIsReadOnly(field)}
       maxSize={media?.maxSize}
-      options={media?.mediaEditorMode === "asset" ? mediaPickerOptions(field.options) : []}
+      options={mediaPickerOptions(field.options)}
       previewUrl={mediaPreviewHref(field)}
       value={value}
       onSelectOption={(assetId) => emitMediaAssetSelect(field, assetId, onIntent)}

@@ -123,10 +123,11 @@ describe("site page tree projection", () => {
       id: "rec_site_media_avatar",
       type: "image",
       label: "Site owner portrait",
-      href: expect.stringContaining("data:image/svg+xml"),
       width: 1200,
       height: 1200,
     });
+    expect(heroImage).not.toHaveProperty("href");
+    expect(heroImage.media).toBeUndefined();
 
     const recentPosts = childForPlacement(tree.page, "rec_site_place_home_recent_posts");
     expect(recentPosts.type).toBe("group");
@@ -146,7 +147,7 @@ describe("site page tree projection", () => {
     ]);
   });
 
-  it("projects manual image hrefs through the existing block shape", () => {
+  it("omits manual image hrefs from public image nodes", () => {
     const records = baseTreeRecords().map((record) =>
       record.id === "rec_site_media_avatar"
         ? {
@@ -166,7 +167,6 @@ describe("site page tree projection", () => {
       id: "rec_site_media_avatar",
       type: "image",
       label: "Site owner portrait",
-      href: "https://cdn.example.com/avatar.webp",
       width: 1200,
       height: 1200,
       placements: [],
@@ -208,7 +208,7 @@ describe("site page tree projection", () => {
     });
   });
 
-  it("keeps manual image href fallback alongside media asset ids", () => {
+  it("ignores manual image hrefs alongside resolved media asset ids", () => {
     const records = baseTreeRecords().map((record) =>
       record.id === "rec_site_media_avatar"
         ? {
@@ -225,7 +225,7 @@ describe("site page tree projection", () => {
     const hero = childForPlacement(tree.page, "rec_site_place_home_hero");
     const heroImage = childForPlacement(hero, "rec_site_place_home_hero_image");
 
-    expect(heroImage.href).toBe("https://cdn.example.com/manual-avatar.webp");
+    expect(heroImage).not.toHaveProperty("href");
     expect(heroImage.media).toEqual({
       assetId: "avatar.webp",
       href: "/api/formless/media/media/images/avatar.webp",
@@ -815,21 +815,21 @@ describe("site page tree projection", () => {
       blockRecord("rec_site_media_post_first", {
         type: "image",
         label: "Post primary first",
-        href: "https://cdn.example.com/post-first.webp",
+        mediaAssetId: "post-first.webp",
         width: 1600,
         height: 900,
       }),
       blockRecord("rec_site_media_post_second", {
         type: "image",
         label: "Post primary second",
-        href: "data:image/png;base64,cG9zdC1zZWNvbmQ=",
+        mediaAssetId: "post-second.png",
         width: 1600,
         height: 900,
       }),
       blockRecord("rec_site_media_project_first", {
         type: "image",
         label: "Project primary first",
-        href: "/manual/images/project-first.webp",
+        mediaAssetId: "project-first.webp",
         width: 1200,
         height: 900,
       }),
@@ -911,8 +911,8 @@ describe("site page tree projection", () => {
     expect(project?.placements.map((placement) => [placement.id, placement.slot])).toEqual([
       ["rec_site_place_project_primary_first", "primaryImage"],
     ]);
-    expect(project?.placements.map((placement) => placement.block.href)).toEqual([
-      "/manual/images/project-first.webp",
+    expect(project?.placements.map((placement) => placement.block.media?.href)).toEqual([
+      "/api/formless/media/media/images/project-first.webp",
     ]);
   });
 

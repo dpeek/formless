@@ -5187,7 +5187,7 @@ describe("personal site sample schema", () => {
         feature: { label: "Feature", fields: ["label", "body", "alignment"] },
         image: {
           label: "Image",
-          fields: ["label", "mediaAssetId", "href"],
+          fields: ["label", "mediaAssetId"],
           requiredFields: ["label"],
         },
       },
@@ -5377,7 +5377,7 @@ describe("personal site sample schema", () => {
         image: {
           presentation: "fields",
           fields: {
-            href: { editor: "href" },
+            mediaAssetId: { editor: "media" },
           },
         },
       },
@@ -5424,7 +5424,6 @@ describe("personal site sample schema", () => {
           presentation: "fields",
           fields: {
             mediaAssetId: { editor: "media", commit: "field-commit" },
-            href: { editor: "href", commit: "field-commit" },
           },
         },
       },
@@ -5959,7 +5958,6 @@ describe("personal site sample schema", () => {
           presentation: "fields",
           fields: {
             mediaAssetId: { editor: "media", commit: "field-commit" },
-            href: { editor: "href", commit: "field-commit" },
           },
         },
         subscribeForm: {
@@ -5976,10 +5974,15 @@ describe("personal site sample schema", () => {
       },
     });
     const blockRootPage = schema.itemViews.blockRootDetail.variants?.page;
+    const blockRootImage = schema.itemViews.blockRootDetail.variants?.image;
     if (blockRootPage?.presentation !== "fields") {
       throw new Error("Missing Site page root-detail fields presentation.");
     }
+    if (blockRootImage?.presentation !== "fields") {
+      throw new Error("Missing Site image root-detail fields presentation.");
+    }
     expect(schema.itemViews.blockRootDetail.fields).not.toHaveProperty("type");
+    expect(blockRootImage.fields).not.toHaveProperty("href");
     expect(blockRootPage.fields).not.toHaveProperty("body");
     expect(blockRootPage.fields).not.toHaveProperty("templateKey");
     expect(schema.itemViews.blockRootDetail.variants).not.toHaveProperty("group");
@@ -5997,7 +6000,6 @@ describe("personal site sample schema", () => {
           presentation: "fields",
           fields: {
             mediaAssetId: { editor: "media", commit: "field-commit" },
-            href: { editor: "href", commit: "field-commit" },
           },
         },
         section: {
@@ -6041,6 +6043,11 @@ describe("personal site sample schema", () => {
         },
       },
     });
+    const blockTreeImage = schema.itemViews.blockTreeNode.variants?.image;
+    if (blockTreeImage?.presentation !== "fields") {
+      throw new Error("Missing Site image tree-node fields presentation.");
+    }
+    expect(blockTreeImage.fields).not.toHaveProperty("href");
     const blockTreeHero = schema.itemViews.blockTreeNode.variants?.hero;
     if (blockTreeHero?.presentation !== "fields") {
       throw new Error("Missing Site hero tree-node fields presentation.");
@@ -6058,9 +6065,10 @@ describe("personal site sample schema", () => {
     expect(blockCreate.variants?.image).toMatchObject({
       presentation: "fields",
       fields: {
-        href: { editor: "href" },
+        mediaAssetId: { editor: "media" },
       },
     });
+    expect(blockCreate.variants?.image?.fields).not.toHaveProperty("href");
     expect(blockCreate.variants?.feature).toMatchObject({
       presentation: "fields",
       fields: {
@@ -6188,9 +6196,9 @@ describe("personal site sample schema", () => {
       presentation: "fields",
       fields: {
         mediaAssetId: { editor: "media", commit: "field-commit" },
-        href: { editor: "href", commit: "field-commit" },
       },
     });
+    expect(blockEdit.variants?.image?.fields).not.toHaveProperty("href");
     expect(blockEdit.variants?.feature).toMatchObject({
       presentation: "fields",
       fields: {

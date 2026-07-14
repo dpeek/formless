@@ -629,14 +629,17 @@ The system SHALL render header, footer, and links from Site records, resolving i
 
 ### Requirement: Media And Icons
 
-The system SHALL render Site images from core media assets when available, fall back to authored href values, and derive public Site icons from the Site SVG icon.
+The system SHALL render Site images from core media assets and derive public
+Site icons from the Site SVG icon.
 
 #### Scenario: Core media image
 
 - GIVEN an image block references a valid core media asset id
 - WHEN the public Site tree and renderer process the image
 - THEN the image href uses core media delivery
-- AND manual href values are only fallback input
+- AND the public image node does not project or render a manual block href
+- AND an image without resolved core media renders the existing missing-image
+  placeholder
 
 #### Scenario: Root icon routes
 
@@ -664,13 +667,12 @@ keeping Site usage metadata in Site records.
 - WHEN Site runtime resolves public image delivery
 - THEN Site runtime resolves delivery facts through Media package public helpers
   or adapters
-- AND public rendering continues to prefer core media delivery before manual
-  href fallback
+- AND public rendering does not fall back to a Site-authored image href
 
 #### Scenario: Site usage metadata stays outside Media
 
-- GIVEN Site authoring or public rendering uses alt text, caption, crop, slot,
-  focal point, poster override, width, height, or fallback href
+- GIVEN Site authoring or public rendering uses label, alt text, caption, crop,
+  slot, focal point, poster override, width, or height
 - WHEN Site records are stored or rendered
 - THEN those facts remain Site-owned flat record values
 

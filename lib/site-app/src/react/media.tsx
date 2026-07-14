@@ -101,5 +101,5 @@ function imageAspectRatio(block: SiteBlockNode): string {
 }
 
 function imageHref(block: SiteBlockNode): string | undefined {
-  return block.media?.href ?? block.href;
+  return block.media?.href;
 }

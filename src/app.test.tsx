@@ -430,21 +430,21 @@ function recordsWithPrimaryImages(records: StoredRecord[] = testSiteSeedRecords)
     siteBlockRecord("rec_site_media_post_primary_first", {
       type: "image",
       label: "Shipping primary first",
-      href: "https://cdn.example.com/post-primary-first.webp",
+      mediaAssetId: "post-primary-first.webp",
       width: 1600,
       height: 900,
     }),
     siteBlockRecord("rec_site_media_post_primary_second", {
       type: "image",
       label: "Shipping primary second",
-      href: "data:image/png;base64,cG9zdC1wcmltYXJ5LXNlY29uZA==",
+      mediaAssetId: "post-primary-second.png",
       width: 1600,
       height: 900,
     }),
     siteBlockRecord("rec_site_media_project_primary", {
       type: "image",
       label: "OpenSurf primary",
-      href: "/manual/images/project-primary.webp",
+      mediaAssetId: "project-primary.webp",
       width: 1200,
       height: 900,
     }),
@@ -2506,11 +2506,11 @@ describe("public site renderer", () => {
     const projectsHtml = renderSitePage("projects", records);
 
     expect(blogHtml).toContain('data-site-primary-image="summary"');
-    expect(blogHtml).toContain("https://cdn.example.com/post-primary-first.webp");
+    expect(blogHtml).toContain("/api/formless/media/media/images/post-primary-first.webp");
     expect(blogHtml).toContain("Shipping primary first");
-    expect(blogHtml).not.toContain("data:image/png;base64,cG9zdC1wcmltYXJ5LXNlY29uZA==");
+    expect(blogHtml).not.toContain("/api/formless/media/media/images/post-primary-second.png");
     expect(projectsHtml).toContain('data-site-primary-image="summary"');
-    expect(projectsHtml).toContain("/manual/images/project-primary.webp");
+    expect(projectsHtml).toContain("/api/formless/media/media/images/project-primary.webp");
     expect(projectsHtml).toContain("OpenSurf primary");
     expect(projectsHtml).toContain('href="/pages/projects/opensurf"');
   });
@@ -2572,10 +2572,12 @@ describe("public site renderer", () => {
     const html = renderSitePage("blog/shipping-schema-backed-authoring", records);
 
     expect(html).toContain('data-site-primary-image="post-detail"');
-    expect(html).toContain("https://cdn.example.com/post-primary-first.webp");
+    expect(html).toContain("/api/formless/media/media/images/post-primary-first.webp");
     expect(html).toContain("Shipping primary first");
-    expect(countOccurrences(html, 'src="https://cdn.example.com/post-primary-first.webp"')).toBe(1);
-    expect(html).not.toContain("data:image/png;base64,cG9zdC1wcmltYXJ5LXNlY29uZA==");
+    expect(
+      countOccurrences(html, 'src="/api/formless/media/media/images/post-primary-first.webp"'),
+    ).toBe(1);
+    expect(html).not.toContain("/api/formless/media/media/images/post-primary-second.png");
     expect(html).toContain(
       "The first useful content app should keep records flat and move composition into relationships and views.",
     );
@@ -2593,7 +2595,7 @@ describe("public site renderer", () => {
       siteBlockRecord("rec_site_media_feature_right", {
         type: "image",
         label: "Feature media right",
-        href: "https://cdn.example.com/feature-right.webp",
+        mediaAssetId: "feature-right.webp",
         width: 1200,
         height: 800,
       }),
@@ -2622,7 +2624,7 @@ describe("public site renderer", () => {
       siteBlockRecord("rec_site_media_feature_left", {
         type: "image",
         label: "Feature media left",
-        href: "/manual/images/feature-left.webp",
+        mediaAssetId: "feature-left.webp",
         width: 1000,
         height: 750,
       }),
@@ -2689,12 +2691,12 @@ describe("public site renderer", () => {
     expect(html).not.toContain("**slotted media**");
     expect(actionHtml).toContain("Read the guide");
     expect(actionHtml).toContain("underline");
-    expect(html).toContain("https://cdn.example.com/feature-right.webp");
-    expect(html).toContain("/manual/images/feature-left.webp");
+    expect(html).toContain("/api/formless/media/media/images/feature-right.webp");
+    expect(html).toContain("/api/formless/media/media/images/feature-left.webp");
     expect(html.indexOf("Ship composable blocks")).toBeLessThan(
-      html.indexOf('src="https://cdn.example.com/feature-right.webp"'),
+      html.indexOf('src="/api/formless/media/media/images/feature-right.webp"'),
     );
-    expect(html.indexOf('src="/manual/images/feature-left.webp"')).toBeLessThan(
+    expect(html.indexOf('src="/api/formless/media/media/images/feature-left.webp"')).toBeLessThan(
       html.indexOf("Media first feature"),
     );
     expect(html).toContain("Default child copy.");
@@ -2860,7 +2862,7 @@ describe("public site renderer", () => {
     expect(html).toContain("Formless");
   });
 
-  it("renders image media blocks from manual, external, and core-backed references", () => {
+  it("renders missing-image placeholders and core-backed image references", () => {
     const tree = sitePageTree("home");
     const html = renderToStaticMarkup(
       <SitePageRenderer
@@ -2916,10 +2918,10 @@ describe("public site renderer", () => {
     );
 
     expect(html).toContain("Site owner portrait");
-    expect(html).toContain('alt="Site owner portrait"');
-    expect(html).toContain('src="data:image/png;base64,Y292ZXI="');
-    expect(html).toContain('alt="External reference"');
-    expect(html).toContain('src="https://example.com/manual.png"');
+    expect(html).toContain('aria-label="Site owner portrait"');
+    expect(html).not.toContain('src="data:image/png;base64,Y292ZXI="');
+    expect(html).toContain('aria-label="External reference"');
+    expect(html).not.toContain('src="https://example.com/manual.png"');
     expect(html).toContain('alt="Media asset reference"');
     expect(html).toContain('src="/api/formless/media/media/images/asset-backed.webp"');
     expect(html).not.toContain('src="https://cdn.example.com/stale-asset-backed.webp"');
@@ -6280,7 +6282,7 @@ describe("generated forms and records", () => {
     const imageFormData = new FormData();
     imageFormData.set("type", "image");
     imageFormData.set("label", "Cover image");
-    imageFormData.set("href", "https://example.com/cover.png");
+    imageFormData.set("mediaAssetId", "cover.png");
     imageFormData.set("width", "1200");
     imageFormData.set("height", "630");
     const imageWithoutHrefFormData = new FormData();
@@ -6335,12 +6337,12 @@ describe("generated forms and records", () => {
     expect(resolveCreateValues(imageFormData, operation)).toEqual({
       type: "image",
       label: "Cover image",
-      href: "https://example.com/cover.png",
+      mediaAssetId: "cover.png",
     });
     expect(resolveCreateValues(imageWithoutHrefFormData, operation)).toMatchObject({
       type: "image",
       label: "Unuploaded image",
-      href: "",
+      mediaAssetId: "",
     });
     expect(resolveCreateValues(linkFormData, operation)).toEqual({
       type: "link",
@@ -6360,17 +6362,11 @@ describe("generated forms and records", () => {
     expect(editHtml).toContain('data-web-formatted-number-input="true"');
   });
 
-  it("renders the generated Site image asset editor with manual URL fallback", () => {
+  it("renders the generated Site image asset editor without manual URL authoring", () => {
     const mediaAssetField = siteSourceSchema.entities.block.fields.mediaAssetId;
-    const hrefField = siteSourceSchema.entities.block.fields.href;
 
-    if (
-      !mediaAssetField ||
-      mediaAssetField.type !== "text" ||
-      !hrefField ||
-      hrefField.type !== "text"
-    ) {
-      throw new Error("Missing Site block image fields.");
+    if (!mediaAssetField || mediaAssetField.type !== "text") {
+      throw new Error("Missing Site block media asset field.");
     }
 
     const mediaAssetFieldConfig: RecordFieldConfig = {
@@ -6379,13 +6375,6 @@ describe("generated forms and records", () => {
       editor: "media",
       commit: "field-commit",
     };
-    const hrefFieldConfig: RecordFieldConfig = {
-      fieldName: "href",
-      field: hrefField,
-      editor: "href",
-      commit: "field-commit",
-    };
-
     bootstrapSiteEditor([
       siteBlockRecord("block-image", {
         type: "image",
@@ -6412,17 +6401,6 @@ describe("generated forms and records", () => {
         />
       </SchemaAppProvider>,
     );
-    const hrefHtml = renderToStaticMarkup(
-      <SchemaAppProvider schemaKey="site">
-        <RecordFieldEditor
-          entityName="block"
-          fieldConfig={hrefFieldConfig}
-          recordId="block-image"
-          showLabel
-          updateOperation={testUpdateOperation("block")}
-        />
-      </SchemaAppProvider>,
-    );
     const emptyHtml = renderToStaticMarkup(
       <SchemaAppProvider schemaKey="site">
         <RecordFieldEditor
@@ -6436,27 +6414,20 @@ describe("generated forms and records", () => {
     );
 
     expect(imageHtml).toContain('data-web-field-kind="media"');
-    expect(imageHtml).toContain('data-web-media-field-mode="asset"');
     expect(imageHtml).toContain('data-web-media-field-preview="image"');
     expect(imageHtml).toContain('data-web-media-field-upload="trigger"');
-    expect(imageHtml).toContain('data-web-image-field-preview="image"');
-    expect(imageHtml).toContain('data-web-image-field-upload="trigger"');
     expect(imageHtml).toContain('src="/api/formless/media/media/images/cover.webp"');
     expect(imageHtml).not.toContain('src="https://cdn.example.com/manual-cover.webp"');
     expect(imageHtml).toContain('type="file"');
     expect(imageHtml).toContain('accept="image/jpeg,image/png,image/webp,image/gif"');
     expect(imageHtml).toContain('aria-label="Upload Media asset"');
     expect(imageHtml).toContain('aria-label="Media asset"');
-    expect(imageHtml).toMatch(inputWithAriaLabelAndType("Media asset id", "text"));
+    expect(imageHtml).not.toMatch(inputWithAriaLabelAndType("Media asset id", "text"));
+    expect(imageHtml).toContain(">Current image</option>");
     expect(imageHtml).toContain('value="cover.webp"');
-    expect(imageHtml).toMatch(/data-web-image-field-upload="trigger"[\s\S]*type="file"/);
     expect(imageHtml).toMatch(/<input(?=[^>]*type="file")(?=[^>]*class="sr-only")[^>]*>/);
-    expect(hrefHtml).toMatch(inputWithAriaLabelAndType("Link", "text"));
-    expect(hrefHtml).toContain('value="https://cdn.example.com/manual-cover.webp"');
-    expect(hrefHtml).not.toContain('type="file"');
-    expect(emptyHtml).toContain('data-web-image-field-preview="empty"');
+    expect(imageHtml).not.toContain('aria-label="Link"');
     expect(emptyHtml).toContain('data-web-media-field-preview="empty"');
-    expect(emptyHtml).toContain('data-web-image-field-upload="trigger"');
     expect(emptyHtml).toContain('data-web-media-field-upload="trigger"');
     expect(emptyHtml).not.toContain("No image");
   });
@@ -6512,23 +6483,23 @@ describe("generated forms and records", () => {
     );
 
     expect(validHtml).toContain('data-web-field-kind="media"');
-    expect(validHtml).toContain('data-web-media-field-mode="asset"');
     expect(validHtml).toContain('data-web-media-field-preview="image"');
     expect(validHtml).toContain('src="/api/formless/media/media/images/cover.webp"');
     expect(validHtml).toContain('aria-label="Upload Image asset"');
     expect(validHtml).toContain('aria-label="Image asset"');
-    expect(validHtml).toMatch(inputWithAriaLabelAndType("Image asset id", "text"));
+    expect(validHtml).not.toMatch(inputWithAriaLabelAndType("Image asset id", "text"));
+    expect(validHtml).toContain(">Current image</option>");
     expect(validHtml).toContain('value="cover.webp"');
     expect(validHtml).toMatch(/<input(?=[^>]*type="file")(?![^>]*disabled="")[^>]*>/);
     expect(brokenHtml).toContain('data-web-media-field-preview="broken"');
     expect(brokenHtml).toContain("Missing image");
   });
 
-  it("keeps media create controls as URL inputs and upload affordances edit-only", () => {
+  it("keeps media create and edit controls asset-backed", () => {
     const entity: EntitySchema = {
       label: "Media",
       fields: {
-        href: { type: "text", required: false, label: "Image", format: "href" },
+        mediaAssetId: { type: "text", required: false, label: "Image asset" },
       },
     };
     const entityOperation = testCreateOperation("media");
@@ -6539,19 +6510,19 @@ describe("generated forms and records", () => {
       entity,
       operationName: entityOperation.operationName,
       operation: entityOperation,
-      fields: [createFieldConfig(entity, "href", "media")],
+      fields: [createFieldConfig(entity, "mediaAssetId", "media")],
       defaults: [],
       enabled: entityCreateEnabled(entity),
     };
     const record: StoredRecord = {
       id: "media-1",
       entity: "media",
-      values: { href: "https://example.com/cover.webp" },
+      values: { mediaAssetId: "cover.webp" },
       createdAt: "2026-05-05T00:00:51.000Z",
       updatedAt: "2026-05-05T00:00:51.000Z",
     };
     const formData = new FormData();
-    formData.set("href", "https://example.com/create.webp");
+    formData.set("mediaAssetId", "create.webp");
 
     applyBootstrapResponse(bootstrap([record]));
     const createHtml = renderToStaticMarkup(
@@ -6561,7 +6532,7 @@ describe("generated forms and records", () => {
       <SchemaAppProvider schemaKey="tasks">
         <RecordFieldEditor
           entityName="media"
-          fieldConfig={recordFieldConfig(entity, "href", "media", "field-commit")}
+          fieldConfig={recordFieldConfig(entity, "mediaAssetId", "media", "field-commit")}
           recordId="media-1"
           showLabel
           updateOperation={testUpdateOperation("media")}
@@ -6569,19 +6540,18 @@ describe("generated forms and records", () => {
       </SchemaAppProvider>,
     );
 
-    expect(createHtml).toMatch(inputWithNameAndType("href", "text"));
-    expect(createHtml).not.toContain('type="file"');
-    expect(createHtml).not.toContain('data-web-image-field-upload="trigger"');
+    expect(createHtml).toContain('type="file"');
+    expect(createHtml).toContain('data-web-media-field-upload="trigger"');
+    expect(createHtml).toContain('aria-label="Image asset"');
     expect(resolveCreateValues(formData, createOperationConfig)).toEqual({
-      href: "https://example.com/create.webp",
+      mediaAssetId: "create.webp",
     });
     expect(editHtml).toContain('data-web-field-kind="media"');
     expect(editHtml).toContain('data-web-media-field-preview="image"');
-    expect(editHtml).toContain('data-web-image-field-preview="image"');
-    expect(editHtml).toContain('src="https://example.com/cover.webp"');
-    expect(editHtml).toContain('aria-label="Upload Image"');
-    expect(editHtml).toMatch(/<input(?=[^>]*type="file")(?=[^>]*disabled="")[^>]*>/);
-    expect(editHtml).toMatch(inputWithAriaLabelAndType("Image URL", "text"));
+    expect(editHtml).toContain('src="/api/formless/media/media/images/cover.webp"');
+    expect(editHtml).toContain('aria-label="Upload Image asset"');
+    expect(editHtml).toMatch(/<input(?=[^>]*type="file")(?![^>]*disabled="")[^>]*>/);
+    expect(editHtml).not.toMatch(inputWithAriaLabelAndType("Image asset id", "text"));
   });
 
   it("still resolves scoped create defaults for views that use them", () => {

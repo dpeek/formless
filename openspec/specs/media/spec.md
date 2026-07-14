@@ -114,9 +114,12 @@ the future renderer boundary.
 - WHEN the legacy generated UI renderer seam renders media-specific controls
 - THEN the seam may use the Media React adapter internally
 - AND generated UI passes selected asset state, media asset options, preview
-  hrefs, missing selected asset facts, upload availability, and file-select
-  intent availability through the Formless UI field contract instead of
-  importing the Media React adapter directly
+  hrefs, display-safe labels, missing selected asset facts, upload availability,
+  removal availability, and file-select intent availability through the
+  Formless UI field contract instead of importing the Media React adapter
+  directly
+- AND the legacy adapter exposes asset-backed Media behavior without an Image
+  field kind or URL authoring mode
 - AND replacement media controls live with the replacement renderer package, not
   in the Media package
 
@@ -143,8 +146,8 @@ generated form layout, generic UI primitives, or Site usage metadata.
 
 #### Scenario: Site usage metadata remains Site data
 
-- GIVEN Site records store image usage facts such as alt text, caption, crop,
-  slot, focal point, poster override, width, height, or fallback href
+- GIVEN Site records store image usage facts such as label, alt text, caption,
+  crop, slot, focal point, poster override, width, or height
 - WHEN the records are stored or rendered
 - THEN those facts remain flat Site record values outside the Media package
 

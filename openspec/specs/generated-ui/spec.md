@@ -265,13 +265,14 @@ computed, operation-control, and ordering-handle columns.
 
 The system SHALL render generated field displays and editors from field behavior and presentation metadata.
 
-#### Scenario: Rich text-backed editors
+#### Scenario: Specialized text-backed editors
 
-- GIVEN text fields use `icon`, `image`, or `media` editor metadata
+- GIVEN text fields use `icon` or `media` editor metadata
 - WHEN generated editors render
 - THEN icon fields use a catalog-first picker with custom SVG mode
-- AND image fields render projected previews without exposing raw URL input
-- AND media fields select or upload core image media assets
+- AND media fields browse existing core image media assets, select by
+  display-safe label, upload images, preview thumbnails, and remove optional
+  selections without raw image URL authoring
 
 #### Scenario: Markdown source editor
 
@@ -364,7 +365,7 @@ The system SHALL render generated field displays and editors from field behavior
 - GIVEN generated UI prepares renderer-facing contracts for the first migration
   slices
 - WHEN it projects buttons, action triggers, menus, confirmation prompts,
-  compact status, field sets, submit-boundary hidden inputs, media/image picker
+  compact status, field sets, submit-boundary hidden inputs, media picker
   facts, icon picker facts, or semantic control icons
 - THEN those contracts carry stable ids, labels, accessibility labels, selected
   state, disabled state, pending state, display-safe errors, operation
@@ -464,7 +465,7 @@ validation, and operation execution.
   `FormlessUiField`
 - WHEN the active Formless UI renderer renders the projected fields
 - THEN text, long text, number, date, boolean, enum, reference, markdown
-  display, icon display, source SVG icon display, color, image, and media
+  display, icon display, source SVG icon display, color, and media
   fields share field framing, labels, status, density, and keyboard
   behavior
 - AND markdown editing uses a plain text area while markdown display uses the
@@ -507,7 +508,7 @@ validation, and operation execution.
   validation errors, pending state, baseline values, commit, revert, missing
   reference fallback, and submit readiness for the slice
 - AND text, long text, boolean, enum, reference, number, markdown, source SVG
-  icon, color, image-shaped, and media-shaped values are represented without
+  icon, color, and media-shaped values are represented without
   importing Formless storage, browser replica, generated write hooks, operation
   executors, or media clients into the renderer implementation
 - AND field-commit interactions invoke commit and revert intents, immediate
@@ -544,18 +545,13 @@ while delegating media-specific controls to the active Formless UI renderer.
 - AND the active renderer handles asset selection, upload file selection,
   preview, and broken-asset display through projected facts and intent callbacks
 - AND media editors, media libraries, and media displays render image thumbnails
-  without raw asset ids, URLs, or asset labels
+  and display-safe labels without exposing raw asset ids or URLs for authoring
+- AND generated and renderer contracts expose one Media control and renderer
+  kind without an Image field kind or asset-versus-URL mode discriminator
 - AND the legacy `@dpeek/formless-ui` seam may adapt the current Media React
   control while the legacy renderer remains active
-- AND the field value remains a flat text value committed by generated UI
-
-#### Scenario: Image editor does not expose stored URLs
-
-- GIVEN a text field declares the `image` editor
-- WHEN generated UI renders the field
-- THEN generated UI renders the projected preview without raw URL input
-- AND generic field labels, validation placement, layout, and commit policy
-  remain owned by generated UI
+- AND the field value remains a flat media asset id committed as text by
+  generated UI
 
 ### Requirement: Create Edit And Delete Flows
 

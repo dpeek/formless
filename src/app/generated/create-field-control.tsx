@@ -1,4 +1,11 @@
 import { useEffect, useState } from "react";
+import {
+  coreImageMediaAssetOptionForId,
+  listCoreImageMediaAssets,
+  uploadCoreImageMediaFile,
+  type ImageMediaAssetOption,
+} from "@dpeek/formless-media/client";
+import { MediaFieldControl } from "@dpeek/formless-media/react";
 import { Checkbox } from "@dpeek/formless-ui/checkbox";
 import { DatePicker, DatePickerTrigger } from "@dpeek/formless-ui/date-picker";
 import { FieldError, Label, fieldErrorStyles } from "@dpeek/formless-ui/field";
@@ -19,6 +26,7 @@ import type {
   GeneratedFieldDraftInput,
 } from "@dpeek/formless-schema";
 import { generatedFieldDraftInput } from "@dpeek/formless-schema";
+import { setSyncStatus } from "../../client/sync-status.ts";
 import {
   GeneratedColorFieldControl,
   GeneratedIconPickerFieldControl,
@@ -30,6 +38,10 @@ import { completionCheckboxClassName } from "./field-presentation.tsx";
 import { encodeNumberEditorInputValue, numberInputValueToFieldValue } from "./format.ts";
 import { EMPTY_GENERATED_REFERENCE_OPTIONS } from "./reference-field-options.ts";
 import { StateMachineStateBadge } from "./state-machine-ui.tsx";
+import {
+  imageMediaAssetOptionFromUpload,
+  upsertMediaAssetOption,
+} from "./record-field-authoring.ts";
 
 export function GeneratedCreateFieldControl({
   field: projectedField,
@@ -133,20 +145,15 @@ export function GeneratedCreateFieldControl({
     );
   }
 
-  if (fieldControl.controlKind === "image") {
+  if (fieldControl.controlKind === "media") {
     return (
-      <TextField
-        isInvalid={error !== undefined}
-        isRequired={fieldControl.required}
-        name={fieldName}
-        onChange={(value) => onValueChange(value)}
-        type="text"
+      <CreateMediaField
+        error={error}
+        label={fieldControl.label}
+        onValueChange={onValueChange}
+        required={fieldControl.required}
         value={draftValueToString(draftValue, fieldControl.createDefaultValue ?? "")}
-      >
-        <Label>{fieldControl.label}</Label>
-        <Input {...fieldControl.inputAttributes} />
-        {error ? <FieldError>{error}</FieldError> : null}
-      </TextField>
+      />
     );
   }
 
@@ -238,6 +245,104 @@ export function GeneratedCreateFieldControl({
       <Input />
       {error ? <FieldError>{error}</FieldError> : null}
     </TextField>
+  );
+}
+
+function CreateMediaField({
+  error,
+  label,
+  onValueChange,
+  required,
+  value,
+}: {
+  error?: string;
+  label: string;
+  onValueChange: (value: FieldVisibilityValue) => void;
+  required: boolean;
+  value: string;
+}) {
+  const [mediaAssetOptions, setMediaAssetOptions] = useState<ImageMediaAssetOption[]>([]);
+  const [isPending, setIsPending] = useState(false);
+  const [uploadError, setUploadError] = useState<string>();
+  const selectedOption =
+    mediaAssetOptions.find((asset) => asset.id === value) ??
+    (value === "" ? undefined : coreImageMediaAssetOptionForId(value));
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void listCoreImageMediaAssets()
+      .then((assets) => {
+        if (!cancelled) {
+          setMediaAssetOptions(assets);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setMediaAssetOptions([]);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  function selectAsset(assetId: string) {
+    setUploadError(undefined);
+    onValueChange(assetId);
+  }
+
+  async function uploadMedia(file: File | undefined) {
+    if (!file || isPending) {
+      return;
+    }
+
+    setIsPending(true);
+    setUploadError(undefined);
+    setSyncStatus({ state: "syncing", message: "Uploading image..." });
+
+    try {
+      const upload = await uploadCoreImageMediaFile(file);
+      const uploadedOption = imageMediaAssetOptionFromUpload(upload);
+
+      if (!uploadedOption) {
+        throw new Error("Image upload did not return a media asset id.");
+      }
+
+      setMediaAssetOptions((current) => upsertMediaAssetOption(current, uploadedOption));
+      onValueChange(uploadedOption.id);
+      setSyncStatus({ state: "idle", message: "Image uploaded." });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Image upload failed.";
+
+      setUploadError(message);
+      setSyncStatus({ state: "error", message });
+    } finally {
+      setIsPending(false);
+    }
+  }
+
+  const displayedError = uploadError ?? error;
+
+  return (
+    <div className="space-y-1">
+      <Label>{label}</Label>
+      <MediaFieldControl
+        controlDisabled={isPending}
+        density="default"
+        draft={value}
+        invalid={displayedError !== undefined}
+        label={label}
+        mediaAssetOptions={mediaAssetOptions}
+        mediaPreviewHref={selectedOption?.href}
+        onFileSelect={(file) => void uploadMedia(file)}
+        onMediaAssetSelect={selectAsset}
+        required={required}
+        uploadDisabled={isPending}
+      />
+      {displayedError ? <StaticFieldError>{displayedError}</StaticFieldError> : null}
+    </div>
   );
 }
 

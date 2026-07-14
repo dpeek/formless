@@ -12,7 +12,7 @@ import type { FieldEditor, FieldSchema } from "@dpeek/formless-schema";
 
 export type TextFieldEditor = Extract<
   FieldEditor,
-  "text" | "textarea" | "markdown" | "href" | "slug" | "color" | "icon" | "image" | "media"
+  "text" | "textarea" | "markdown" | "href" | "slug" | "color" | "icon" | "media"
 >;
 
 export type GeneratedFieldControlKind =
@@ -20,7 +20,6 @@ export type GeneratedFieldControlKind =
   | "color"
   | "date"
   | "icon"
-  | "image"
   | "markdown"
   | "media"
   | "number"
@@ -160,10 +159,6 @@ function selectGeneratedFieldControlKind(
     return "reference";
   }
 
-  if (editor === "image" || control.kind === "imageUpload") {
-    return "image";
-  }
-
   if (editor === "media" || control.kind === "mediaUpload") {
     return "media";
   }
@@ -196,7 +191,6 @@ function isTextFieldEditor(editor: FieldEditor): editor is TextFieldEditor {
     editor === "slug" ||
     editor === "color" ||
     editor === "icon" ||
-    editor === "image" ||
     editor === "media"
   );
 }

@@ -381,10 +381,12 @@ function projectBlock(record: StoredRecord, context: SiteTreeBuildContext): Site
     ...(type === "contactForm"
       ? optionalStringField("messageLabel", record.values.messageLabel)
       : {}),
-    ...optionalStringField(
-      "href",
-      linkProjection === null ? record.values.href : linkProjection.href,
-    ),
+    ...(type === "image"
+      ? {}
+      : optionalStringField(
+          "href",
+          linkProjection === null ? record.values.href : linkProjection.href,
+        )),
     ...optionalStringField("date", record.values.date),
     ...optionalStringField(
       "icon",

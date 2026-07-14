@@ -501,10 +501,7 @@ export function projectGeneratedCreateFormlessUiField({
       options: projectFieldOptions({
         field,
         includeIconOptions: control.controlKind === "icon",
-        mediaAssetOptions:
-          control.controlKind === "image" || control.controlKind === "media"
-            ? mediaAssetOptions
-            : undefined,
+        mediaAssetOptions: control.controlKind === "media" ? mediaAssetOptions : undefined,
         referenceOptions,
       }),
       pending: projectPending(isPending, pendingLabel),
@@ -797,10 +794,7 @@ export function projectGeneratedDisplayFormlessUiField({
           : "visible",
       options: projectFieldOptions({
         field: fieldConfig.field,
-        mediaAssetOptions:
-          control.controlKind === "image" || control.controlKind === "media"
-            ? mediaAssetOptions
-            : undefined,
+        mediaAssetOptions: control.controlKind === "media" ? mediaAssetOptions : undefined,
         referenceOptions,
       }),
       recordId,
@@ -1204,22 +1198,17 @@ function projectCreateMediaAuthoring({
   mediaAssetOptions: readonly ImageMediaAssetOption[];
   value: FieldValue | undefined;
 }): FormlessUiMediaAuthoring | undefined {
-  if (control.controlKind !== "image" && control.controlKind !== "media") {
+  if (control.controlKind !== "media") {
     return undefined;
   }
-
-  const assetMode = control.controlKind === "media";
 
   return {
     ...projectMediaPresentation({ control, mediaAssetOptions, value }),
     accept: IMAGE_UPLOAD_ACCEPT,
-    fileSelectEnabled: assetMode,
+    fileSelectEnabled: true,
     maxSize: MEDIA_IMAGE_UPLOAD_MAX_BYTES,
-    mediaEditorMode: assetMode ? "asset" : "url",
-    uploadEnabled: assetMode,
-    uploadPatchFields: assetMode
-      ? { mediaAssetFieldName: fieldName }
-      : { hrefFieldName: fieldName },
+    uploadEnabled: true,
+    uploadPatchFields: { mediaAssetFieldName: fieldName },
   };
 }
 
@@ -1232,7 +1221,7 @@ function projectMediaPresentation({
   mediaAssetOptions: readonly ImageMediaAssetOption[];
   value: FieldValue | undefined;
 }): FormlessUiMediaPresentation | undefined {
-  if (control.controlKind !== "image" && control.controlKind !== "media") {
+  if (control.controlKind !== "media") {
     return undefined;
   }
 
@@ -1240,13 +1229,6 @@ function projectMediaPresentation({
 
   if (selectedValue === "") {
     return {};
-  }
-
-  if (control.controlKind === "image") {
-    return {
-      previewHref: selectedValue,
-      selectedUrl: selectedValue,
-    };
   }
 
   const selectedAsset =
@@ -1281,7 +1263,7 @@ function selectProjectedMediaAuthoring({
   rendererKind: FormlessUiRecordFieldRendererKind;
   schema: AppSchema | null;
 }): FormlessUiMediaAuthoring | undefined {
-  if (rendererKind !== "image" && rendererKind !== "media") {
+  if (rendererKind !== "media") {
     return undefined;
   }
 
@@ -1292,10 +1274,8 @@ function selectProjectedMediaAuthoring({
     mediaAssetOptions: Array.from(mediaAssetOptions),
     schema,
   });
-  const selectedAssetId =
-    mediaAuthoring.mediaEditorMode === "asset" && draft !== "" ? draft : undefined;
-  const selectedUrl = mediaAuthoring.mediaEditorMode === "url" && draft !== "" ? draft : undefined;
-  const previewHref = mediaAuthoring.mediaPreviewHref ?? selectedUrl;
+  const selectedAssetId = draft !== "" ? draft : undefined;
+  const previewHref = mediaAuthoring.mediaPreviewHref;
   const missingSelectedAsset =
     selectedAssetId !== undefined && mediaAuthoring.mediaPreviewHref === undefined
       ? {
@@ -1312,7 +1292,6 @@ function selectProjectedMediaAuthoring({
     ...(missingSelectedAsset === undefined ? {} : { missingSelectedAsset }),
     ...(previewHref === undefined ? {} : { previewHref }),
     ...(selectedAssetId === undefined ? {} : { selectedAssetId }),
-    ...(selectedUrl === undefined ? {} : { selectedUrl }),
   };
 }
 

@@ -114,7 +114,6 @@ export type FormlessUiFieldControlKind =
   | "color"
   | "date"
   | "icon"
-  | "image"
   | "markdown"
   | "media"
   | "number"
@@ -125,7 +124,7 @@ export type FormlessUiFieldControlKind =
 
 export type FormlessUiTextFieldEditor = Extract<
   FieldEditor,
-  "color" | "href" | "icon" | "image" | "markdown" | "media" | "slug" | "text" | "textarea"
+  "color" | "href" | "icon" | "markdown" | "media" | "slug" | "text" | "textarea"
 >;
 
 export type FormlessUiFieldControlFacts = {
@@ -175,7 +174,6 @@ export type FormlessUiRecordFieldRendererKind =
   | "enum"
   | "enum-icon"
   | "icon"
-  | "image"
   | "markdown"
   | "media"
   | "number"
@@ -232,11 +230,8 @@ export type FormlessUiMediaAssetOption = {
   width?: number;
 };
 
-export type FormlessUiMediaEditorMode = "asset" | "url";
-
 export type FormlessUiMediaUploadPatchFields = {
   heightFieldName?: string;
-  hrefFieldName?: string;
   mediaAssetFieldName?: string;
   widthFieldName?: string;
 };
@@ -250,7 +245,6 @@ export type FormlessUiMediaPresentation = {
   missingSelectedAsset?: FormlessUiMissingMediaAsset;
   previewHref?: string;
   selectedAssetId?: string;
-  selectedUrl?: string;
 };
 
 export type FormlessUiMediaPickerFacts = FormlessUiMediaPresentation & {
@@ -262,7 +256,6 @@ export type FormlessUiMediaPickerFacts = FormlessUiMediaPresentation & {
 export type FormlessUiMediaAuthoring = FormlessUiMediaPickerFacts & {
   accept?: string;
   maxSize?: number;
-  mediaEditorMode: FormlessUiMediaEditorMode;
   mediaPreviewHref?: string;
 };
 

@@ -11,6 +11,7 @@ import type { AstryxInputDensity } from "./input-density.ts";
 
 export type MediaInputOption = {
   isDisabled?: boolean;
+  label: string;
   previewUrl: string;
   value: string;
 };
@@ -198,9 +199,9 @@ function MediaLibrary({
           }}
         />
       )}
-      {options.map((option, index) => {
+      {options.map((option) => {
         const isSelected = option.value === selectedValue;
-        const accessibilityLabel = `${fieldLabel} media option ${index + 1}`;
+        const accessibilityLabel = option.label;
 
         return (
           <SelectableCard

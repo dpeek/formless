@@ -1,18 +1,19 @@
 import { Children, isValidElement, type ComponentProps, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it } from "vite-plus/test";
-import {
-  MediaFieldControl,
-  type ImageMediaAssetOption,
-  type MediaFieldControlProps,
-} from "@dpeek/formless-media/react";
+import { type ImageMediaAssetOption } from "@dpeek/formless-media/react";
 import { NativeSelectContent } from "@dpeek/formless-ui/native-select";
-import type { CreateFieldConfig, RecordFieldConfig } from "../../client/views.ts";
+import {
+  selectCollectionModels,
+  type CreateFieldConfig,
+  type RecordFieldConfig,
+} from "../../client/views.ts";
 import type { FieldValue, RecordValues } from "@dpeek/formless-storage";
 import { resolveIconCatalogSvg } from "../../shared/icon-catalog.ts";
 import type { AppSchema, FieldSchema } from "@dpeek/formless-schema";
 import { applyBootstrapResponse, resetClientStore } from "../../client/store.ts";
 import type { BootstrapResponse } from "../../shared/protocol.ts";
+import { siteSourceSchema } from "../../test/schema-apps.ts";
 import { GeneratedCreateFieldControl } from "./create-field-control.tsx";
 import { GeneratedIconPickerEditor } from "./field-control-primitives.tsx";
 import { projectGeneratedCreateFormlessUiField } from "./formless-ui-projection.ts";
@@ -197,7 +198,6 @@ describe("generated record field presentation rendering", () => {
       draft: "hero.webp",
       error: "Upload failed.",
       mediaAssetOptions: [{ href: "/media/hero.webp", id: "hero.webp", label: "Hero" }],
-      mediaEditorMode: "asset",
       mediaPreviewHref: "/media/hero.webp",
       recordValue: "hero.webp",
       showLabel: true,
@@ -206,42 +206,42 @@ describe("generated record field presentation rendering", () => {
 
     expect(html).toContain(">Hero image</label>");
     expect(html).toContain("Upload failed.");
-    expect(html).toContain('data-web-media-field-mode="asset"');
     expect(html).toContain('aria-label="Hero image asset"');
+    expect(html).not.toContain('type="text"');
+    expect(html).not.toContain("URL");
   });
 
-  it("commits and reverts media URL edits from generated UI policy", () => {
-    const committed: FieldValue[] = [];
-    let reverted = 0;
-    const fieldCommitControl = recordMediaFieldControlProps({
-      fieldConfig: mediaFieldConfig,
-      onDraftRevert: () => {
-        reverted += 1;
-      },
-      onValueCommit: (value) => {
-        committed.push(value);
-      },
+  it("renders Site image create and edit fields as removable asset-backed media controls", () => {
+    const { createField, editField } = siteImageMediaFieldConfigs();
+    const createHtml = renderToStaticMarkup(
+      <GeneratedCreateFieldControl
+        draftValue={{ kind: "value", value: "hero.webp" }}
+        fieldConfig={createField}
+      />,
+    );
+    const editHtml = renderRecordControl(editField, {
+      draft: "hero.webp",
+      mediaAssetOptions: [
+        { href: "/api/formless/media/media/images/hero.webp", id: "hero.webp", label: "Hero" },
+      ],
+      mediaPreviewHref: "/api/formless/media/media/images/hero.webp",
+      recordValue: "hero.webp",
+      showLabel: true,
+      uploadEnabled: true,
     });
 
-    fieldCommitControl.onUrlBlur("/blur.webp");
-    fieldCommitControl.onUrlEnter("/enter.webp");
-    fieldCommitControl.onUrlEscape();
+    for (const html of [createHtml, editHtml]) {
+      expect(html).toContain(">Media asset</label>");
+      expect(html).toContain('accept="image/jpeg,image/png,image/webp,image/gif"');
+      expect(html).toContain('aria-label="Media asset"');
+      expect(html).toContain('<option value="">Unset</option>');
+      expect(html).not.toContain('name="href"');
+      expect(html).not.toContain('type="text"');
+      expect(html).not.toContain("URL");
+    }
 
-    expect(committed).toEqual(["/blur.webp", "/enter.webp"]);
-    expect(reverted).toBe(1);
-
-    const immediateCommitted: FieldValue[] = [];
-    const immediateControl = recordMediaFieldControlProps({
-      fieldConfig: { ...mediaFieldConfig, commit: "immediate" },
-      onValueCommit: (value) => {
-        immediateCommitted.push(value);
-      },
-    });
-
-    immediateControl.onUrlBlur("/ignored.webp");
-    immediateControl.onUrlEnter("/entered.webp");
-
-    expect(immediateCommitted).toEqual(["/entered.webp"]);
+    expect(createHtml).toContain('src="/api/formless/media/media/images/hero.webp"');
+    expect(editHtml).toContain(">Hero</option>");
   });
 
   it("renders identity reference displays and editors with a stored-id fallback", () => {
@@ -312,7 +312,6 @@ function renderRecordControl(
     iconDialogDraft?: string;
     iconDialogOpen?: boolean;
     mediaAssetOptions?: ImageMediaAssetOption[];
-    mediaEditorMode?: "asset" | "url";
     mediaPreviewHref?: string;
     recordValue: FieldValue | undefined;
     showLabel?: boolean;
@@ -329,7 +328,6 @@ function renderRecordControl(
       iconDialogOpen={options.iconDialogOpen ?? false}
       isPending={false}
       mediaAssetOptions={options.mediaAssetOptions ?? []}
-      mediaEditorMode={options.mediaEditorMode ?? "url"}
       mediaPreviewHref={options.mediaPreviewHref}
       numberFormat="plain"
       onDraftChange={() => undefined}
@@ -339,7 +337,7 @@ function renderRecordControl(
       onIconDraftChange={() => undefined}
       onIconOpenChange={() => undefined}
       onIconSave={() => Promise.resolve()}
-      onImageFileSelect={() => undefined}
+      onMediaFileSelect={() => undefined}
       onMediaAssetSelect={() => undefined}
       onUnitDraftChange={() => undefined}
       onUnitDraftRevert={() => undefined}
@@ -351,53 +349,6 @@ function renderRecordControl(
       uploadEnabled={options.uploadEnabled ?? false}
     />,
   );
-}
-
-function recordMediaFieldControlProps({
-  fieldConfig,
-  onDraftRevert = () => undefined,
-  onValueCommit = () => undefined,
-}: {
-  fieldConfig: RecordFieldConfig;
-  onDraftRevert?: () => void;
-  onValueCommit?: (value: FieldValue) => void;
-}): MediaFieldControlProps {
-  const props = findMediaFieldControlProps(
-    <GeneratedRecordFieldControl
-      canPatch={true}
-      draft="/draft.webp"
-      error={null}
-      fieldConfig={fieldConfig}
-      iconDialogDraft=""
-      iconDialogOpen={false}
-      isPending={false}
-      mediaAssetOptions={[]}
-      mediaEditorMode="url"
-      numberFormat="plain"
-      onDraftChange={() => undefined}
-      onDraftRevert={onDraftRevert}
-      onErrorChange={() => undefined}
-      onIconCancel={() => undefined}
-      onIconDraftChange={() => undefined}
-      onIconOpenChange={() => undefined}
-      onIconSave={() => Promise.resolve()}
-      onImageFileSelect={() => undefined}
-      onMediaAssetSelect={() => undefined}
-      onUnitDraftChange={() => undefined}
-      onUnitDraftRevert={() => undefined}
-      onValueCommit={onValueCommit}
-      onValueUnitCommit={() => undefined}
-      recordValue="/record.webp"
-      unitDraft=""
-      uploadEnabled={true}
-    />,
-  );
-
-  if (!props) {
-    throw new Error("Expected generated media field control props.");
-  }
-
-  return props;
 }
 
 function recordReferenceSelectProps({
@@ -419,7 +370,6 @@ function recordReferenceSelectProps({
       iconDialogOpen={false}
       isPending={false}
       mediaAssetOptions={[]}
-      mediaEditorMode="url"
       numberFormat="plain"
       onDraftChange={onDraftChange}
       onDraftRevert={() => undefined}
@@ -428,7 +378,7 @@ function recordReferenceSelectProps({
       onIconDraftChange={() => undefined}
       onIconOpenChange={() => undefined}
       onIconSave={() => Promise.resolve()}
-      onImageFileSelect={() => undefined}
+      onMediaFileSelect={() => undefined}
       onMediaAssetSelect={() => undefined}
       onUnitDraftChange={() => undefined}
       onUnitDraftRevert={() => undefined}
@@ -445,36 +395,6 @@ function recordReferenceSelectProps({
   }
 
   return props;
-}
-
-function findMediaFieldControlProps(node: ReactNode): MediaFieldControlProps | undefined {
-  for (const child of Children.toArray(node)) {
-    if (!isValidElement(child)) {
-      continue;
-    }
-
-    if (child.type === MediaFieldControl) {
-      return child.props as MediaFieldControlProps;
-    }
-
-    const childProps = child.props as { children?: ReactNode };
-    const nestedProps = findMediaFieldControlProps(childProps.children);
-
-    if (nestedProps) {
-      return nestedProps;
-    }
-
-    if (typeof child.type === "function") {
-      const rendered = (child.type as (props: unknown) => ReactNode)(child.props);
-      const renderedProps = findMediaFieldControlProps(rendered);
-
-      if (renderedProps) {
-        return renderedProps;
-      }
-    }
-  }
-
-  return undefined;
 }
 
 function findNativeSelectContentProps(
@@ -507,6 +427,50 @@ function findNativeSelectContentProps(
   }
 
   return undefined;
+}
+
+function siteImageMediaFieldConfigs(): {
+  createField: CreateFieldConfig;
+  editField: RecordFieldConfig;
+} {
+  const contentModel = selectCollectionModels(siteSourceSchema).find(
+    (model) => model.viewName === "blockHome",
+  );
+  const placementModel = selectCollectionModels(siteSourceSchema).find(
+    (model) => model.viewName === "pageCompositionHome",
+  );
+  const create = contentModel?.operations.find((operation) => operation.type === "create");
+  const createImage =
+    create?.type === "create"
+      ? create.union?.variants.find((variant) => variant.variantValue === "image")
+      : undefined;
+  const createField = createImage?.presentation.fields.find(
+    (field) => field.fieldName === "mediaAssetId",
+  );
+  const editControl =
+    placementModel?.result.type === "table"
+      ? placementModel.result.columns
+          .flatMap((column) => (column.type === "operationControl" ? column.controls : []))
+          .find((control) => control.type === "editRecord")
+      : undefined;
+  const editImage =
+    editControl?.type === "editRecord"
+      ? editControl.editView.union?.variants.find((variant) => variant.variantValue === "image")
+      : undefined;
+
+  if (editImage?.presentation.type !== "fields") {
+    throw new Error("Missing Site image edit field presentation.");
+  }
+
+  const editField = editImage.presentation.fields.find(
+    (field) => field.fieldName === "mediaAssetId",
+  );
+
+  if (!createField || !editField) {
+    throw new Error("Missing Site image media authoring fields.");
+  }
+
+  return { createField, editField };
 }
 
 function requiredCatalogSvg(key: string) {

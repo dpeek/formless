@@ -67,13 +67,16 @@ describe("public Site renderer characterization", () => {
       placements: [
         placement(
           "feature-media",
-          imageNode("feature-image", "Feature media", "https://cdn.example.com/stale.webp", {
-            media: {
+          imageNode(
+            "feature-image",
+            "Feature media",
+            {
               assetId: "feature.webp",
               href: "/api/formless/media/media/images/feature.webp",
               kind: "image",
             },
-          }),
+            { href: "https://cdn.example.com/stale.webp" },
+          ),
           { slot: "media" },
         ),
         placement(
@@ -105,7 +108,9 @@ describe("public Site renderer characterization", () => {
             placements: [
               placement(
                 "hero-media",
-                imageNode("hero-image", "Hero media", "data:image/png;base64,aGVybw=="),
+                imageNode("hero-image", "Hero media", undefined, {
+                  href: "data:image/png;base64,aGVybw==",
+                }),
               ),
             ],
           }),
@@ -119,7 +124,9 @@ describe("public Site renderer characterization", () => {
 
     expect(html).toContain("Hero headline");
     expect(html).toContain("Hero plain text.");
-    expect(html).toContain('src="data:image/png;base64,aGVybw=="');
+    expect(html).not.toContain('src="data:image/png;base64,aGVybw=="');
+    expect(html).toContain('aria-label="Hero media"');
+    expect(html).toContain(">Hero media</span>");
     expect(html).toContain('data-block-type="feature"');
     expect(html).toContain('data-site-feature-alignment="right"');
     expect(html).toContain("md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]");
@@ -519,7 +526,11 @@ describe("public Site renderer characterization", () => {
       placements: [
         placement(
           "post-primary",
-          imageNode("post-primary-image", "Post primary", "https://cdn.example.com/post.webp"),
+          imageNode("post-primary-image", "Post primary", {
+            assetId: "post.webp",
+            href: "/api/formless/media/media/images/post.webp",
+            kind: "image",
+          }),
           { slot: "primaryImage" },
         ),
       ],
@@ -531,7 +542,11 @@ describe("public Site renderer characterization", () => {
       placements: [
         placement(
           "project-primary",
-          imageNode("project-primary-image", "Project primary", "/manual/images/project.webp"),
+          imageNode("project-primary-image", "Project primary", {
+            assetId: "project.webp",
+            href: "/api/formless/media/media/images/project.webp",
+            kind: "image",
+          }),
           { slot: "primaryImage" },
         ),
       ],
@@ -568,11 +583,11 @@ describe("public Site renderer characterization", () => {
     expect(postCard).toContain('href="/blog/shipping-schema-backed-authoring"');
     expect(postCard).toContain('data-site-summary-layout="media-start"');
     expect(postCard).toContain('data-site-primary-image="summary"');
-    expect(postCard).toContain('src="https://cdn.example.com/post.webp"');
+    expect(postCard).toContain('src="/api/formless/media/media/images/post.webp"');
     expect(postCard).toContain("2026-05-13");
     expect(projectCard).toContain('data-site-summary-link="project"');
     expect(projectCard).toContain('href="/projects/opensurf"');
-    expect(projectCard).toContain('src="/manual/images/project.webp"');
+    expect(projectCard).toContain('src="/api/formless/media/media/images/project.webp"');
     expect(projectCard).toContain('data-web-markdown-renderer="shared"');
     expect(projectCard).toContain("<strong");
     expect(projectCard).not.toContain("2026-05-08");
@@ -588,11 +603,11 @@ describe("public Site renderer characterization", () => {
       placements: [
         placement(
           "primary-image",
-          imageNode(
-            "primary-image-block",
-            "Post primary",
-            "data:image/png;base64,cG9zdC1wcmltYXJ5",
-          ),
+          imageNode("primary-image-block", "Post primary", {
+            assetId: "post-primary.png",
+            href: "/api/formless/media/media/images/post-primary.png",
+            kind: "image",
+          }),
           { slot: "primaryImage" },
         ),
         placement(
@@ -609,8 +624,10 @@ describe("public Site renderer characterization", () => {
     expect(main).toContain("<h1");
     expect(main).toContain("Shipping schema-backed authoring");
     expect(main).toContain('data-site-primary-image="post-detail"');
-    expect(main).toContain('src="data:image/png;base64,cG9zdC1wcmltYXJ5"');
-    expect(countOccurrences(main, 'src="data:image/png;base64,cG9zdC1wcmltYXJ5"')).toBe(1);
+    expect(main).toContain('src="/api/formless/media/media/images/post-primary.png"');
+    expect(countOccurrences(main, 'src="/api/formless/media/media/images/post-primary.png"')).toBe(
+      1,
+    );
     expect(main).toContain('data-web-markdown-renderer="shared"');
     expect(main).toContain("<strong");
     expect(main).toContain("Detail ");
@@ -714,11 +731,11 @@ function markdownNode(id: string, label: string, body: string): SiteBlockNode {
 function imageNode(
   id: string,
   label: string,
-  href?: string,
-  options: { media?: SiteBlockNode["media"] } = {},
+  media?: SiteBlockNode["media"],
+  options: { href?: string } = {},
 ): SiteBlockNode {
   return blockNode(id, "image", label, {
-    ...(href ? { href } : {}),
+    ...(media ? { media } : {}),
     ...options,
     width: 1200,
     height: 800,

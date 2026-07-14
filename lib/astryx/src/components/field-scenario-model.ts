@@ -5,7 +5,6 @@ export type FieldKindKey =
   | "color"
   | "date"
   | "enum"
-  | "image"
   | "long-text"
   | "markdown"
   | "media"

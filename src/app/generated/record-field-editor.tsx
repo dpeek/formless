@@ -155,7 +155,6 @@ function EditableRecordFieldEditor({
     mediaAssetOptions,
     schema,
   });
-  const { mediaEditorMode } = mediaAuthoring;
 
   useEffect(() => {
     const nextDraft = generatedRecordFieldEditorDraftFromUpdateDraftInput({
@@ -186,7 +185,7 @@ function EditableRecordFieldEditor({
   useEffect(() => {
     let cancelled = false;
 
-    if (mediaEditorMode !== "asset") {
+    if (fieldConfig.editor !== "media") {
       setMediaAssetOptions([]);
       return;
     }
@@ -206,7 +205,7 @@ function EditableRecordFieldEditor({
     return () => {
       cancelled = true;
     };
-  }, [mediaEditorMode]);
+  }, [fieldConfig.editor]);
 
   async function commitPatch(
     values: Partial<RecordValues>,
@@ -408,16 +407,8 @@ function EditableRecordFieldEditor({
     }
   }
 
-  async function handleImageUpload(file: File | undefined) {
+  async function handleMediaUpload(file: File | undefined) {
     if (!file || updateOperation === undefined || isPending) {
-      return;
-    }
-
-    if (mediaEditorMode !== "asset") {
-      const message = "Image upload is only available for media asset fields.";
-
-      setError(message);
-      setSyncStatus({ state: "error", message });
       return;
     }
 
@@ -427,6 +418,12 @@ function EditableRecordFieldEditor({
 
     try {
       const upload = await uploadCoreImageMediaFile(file);
+      const uploadedOption = imageMediaAssetOptionFromUpload(upload);
+
+      if (!uploadedOption) {
+        throw new Error("Image upload did not return a media asset id.");
+      }
+
       const resolution = resolveGeneratedMediaUploadUpdateDraftPatchValues({
         baselineValues: updateDraftContext?.baselineValues ?? record?.values ?? {},
         draft: { values: { ...updateDraftContext?.draft.values } },
@@ -445,16 +442,9 @@ function EditableRecordFieldEditor({
       });
 
       if (saved) {
-        const uploadedOption = imageMediaAssetOptionFromUpload(upload);
-
-        if (mediaEditorMode === "asset" && uploadedOption) {
-          setDraft(uploadedOption.id);
-          notifyDraftInputChange(generatedUpdateDraftInputFromFieldValue(uploadedOption.id));
-          setMediaAssetOptions((current) => upsertMediaAssetOption(current, uploadedOption));
-        } else {
-          setDraft(upload.href);
-          notifyDraftInputChange(generatedUpdateDraftInputFromFieldValue(upload.href));
-        }
+        setDraft(uploadedOption.id);
+        notifyDraftInputChange(generatedUpdateDraftInputFromFieldValue(uploadedOption.id));
+        setMediaAssetOptions((current) => upsertMediaAssetOption(current, uploadedOption));
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : "Image upload failed.";
@@ -467,10 +457,6 @@ function EditableRecordFieldEditor({
   }
 
   async function handleMediaAssetSelect(assetId: string) {
-    if (mediaEditorMode !== "asset") {
-      return;
-    }
-
     setDraft(assetId);
     await commit(assetId);
   }
@@ -493,7 +479,7 @@ function EditableRecordFieldEditor({
       onIconDraftChange={setIconDialogDraft}
       onIconOpenChange={handleIconOpenChange}
       onIconSave={handleIconSave}
-      onImageFileSelect={(file) => void handleImageUpload(file)}
+      onMediaFileSelect={(file) => void handleMediaUpload(file)}
       onMediaAssetSelect={(assetId) => void handleMediaAssetSelect(assetId)}
       onUnitDraftChange={setUnitDraft}
       onUnitDraftRevert={revertUnitDraftToRecordValue}
@@ -508,7 +494,6 @@ function EditableRecordFieldEditor({
       showLabel={showLabel}
       unitDraft={unitDraft}
       mediaAssetOptions={mediaAssetOptions}
-      mediaEditorMode={mediaEditorMode}
       mediaPreviewHref={mediaAuthoring.mediaPreviewHref}
       uploadEnabled={mediaAuthoring.uploadEnabled}
     />

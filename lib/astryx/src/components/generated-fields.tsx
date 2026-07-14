@@ -723,13 +723,13 @@ function projectCreateFields(fixture: GeneratedFieldFoundationFixture): readonly
       errors: errorsFor(create.errors, "accent"),
     }),
     createEditorField({
-      id: "generated-create-image",
+      id: "generated-create-media-image",
       name: "heroImageId",
       label: "Hero Image",
       surface: "create",
       density: "balanced",
       accessMode: "editable",
-      kind: "image",
+      kind: "media",
       draftValue: create.draftValues.heroImageId,
       committedDisplayValue: "",
       commitPolicy: "submit",
@@ -977,13 +977,13 @@ function projectDetailFields(fixture: GeneratedFieldFoundationFixture): readonly
       displayValue: record.committedValues.accent,
     }),
     createDisplayField({
-      id: "generated-detail-image",
+      id: "generated-detail-media-image",
       name: "heroImageId",
       label: "Hero Image",
       surface: "detail",
       density: "balanced",
       accessMode: "read-only",
-      kind: "image",
+      kind: "media",
       value: record.committedValues.heroImageId,
       displayValue: record.committedValues.heroImageId,
       presentation: {
@@ -1764,7 +1764,6 @@ type GeneratedFieldKind =
   | "boolean"
   | "color"
   | "enum"
-  | "image"
   | "long-text"
   | "markdown"
   | "media"
@@ -2068,14 +2067,10 @@ function generatedTextEditor(
   presentation: GeneratedFieldPresentation | undefined,
 ): Extract<
   FieldEditor,
-  "color" | "href" | "icon" | "image" | "markdown" | "media" | "slug" | "text" | "textarea"
+  "color" | "href" | "icon" | "markdown" | "media" | "slug" | "text" | "textarea"
 > {
   if (kind === "color") {
     return "color";
-  }
-
-  if (kind === "image") {
-    return "image";
   }
 
   if (kind === "long-text") {
@@ -2102,10 +2097,6 @@ function generatedTextEditor(
 }
 
 function generatedTextEditorControl(editor: FieldEditor): FieldEditorControl {
-  if (editor === "image") {
-    return { kind: "imageUpload" };
-  }
-
   if (editor === "media") {
     return { kind: "mediaUpload" };
   }
@@ -2124,11 +2115,11 @@ function generatedTextEditorControl(editor: FieldEditor): FieldEditorControl {
 function generatedTextControlKind(
   editor: Extract<
     FieldEditor,
-    "color" | "href" | "icon" | "image" | "markdown" | "media" | "slug" | "text" | "textarea"
+    "color" | "href" | "icon" | "markdown" | "media" | "slug" | "text" | "textarea"
   >,
 ): Extract<
   FormlessUiFieldControl["controlKind"],
-  "color" | "icon" | "image" | "markdown" | "media" | "text" | "textarea"
+  "color" | "icon" | "markdown" | "media" | "text" | "textarea"
 > {
   if (editor === "href" || editor === "slug") {
     return "text";
@@ -2212,7 +2203,7 @@ function generatedFieldOptions(
     };
   }
 
-  if (input.kind === "image" || input.kind === "media") {
+  if (input.kind === "media") {
     return {
       mediaAssetOptions: generatedMediaAssetOptions(input, selectedValue),
     };
@@ -2328,13 +2319,12 @@ function generatedMediaAssetOptions(
 }
 
 function generatedMediaAuthoring(input: GeneratedEditorFieldInput): FormlessUiRecordField["media"] {
-  if (input.kind !== "image" && input.kind !== "media") {
+  if (input.kind !== "media") {
     return undefined;
   }
 
   return {
     fileSelectEnabled: true,
-    mediaEditorMode: "asset",
     mediaPreviewHref: input.presentation?.mediaPreviewUrl,
     ...(input.presentation?.mediaPreviewUrl === undefined
       ? {}

@@ -28,7 +28,6 @@ describe("generated field controls", () => {
       slug: { kind: "input", inputType: "text" },
       color: { kind: "input", inputType: "text" },
       icon: { kind: "icon" },
-      image: { kind: "imageUpload" },
       media: { kind: "mediaUpload" },
     });
     expect(
@@ -76,21 +75,6 @@ describe("generated field controls", () => {
       controlKind: "icon",
       createDefaultValue: undefined,
       label: "Icon",
-      required: false,
-    });
-    expect(
-      selectGeneratedFieldControl({
-        editor: "image",
-        field: fields.image,
-        label: labels.image,
-      }),
-    ).toMatchObject({
-      kind: "text",
-      editor: "image",
-      control: { kind: "imageUpload" },
-      controlKind: "image",
-      createDefaultValue: undefined,
-      label: "Image",
       required: false,
     });
     expect(
@@ -256,10 +240,6 @@ describe("generated field controls", () => {
       rendererKind: "icon",
       fieldControl: { controlKind: "icon", editor: "icon" },
     });
-    expect(recordAuthoring("image", "image")).toMatchObject({
-      rendererKind: "image",
-      fieldControl: { controlKind: "image", editor: "image" },
-    });
     expect(recordAuthoring("image", "media")).toMatchObject({
       rendererKind: "media",
       fieldControl: { controlKind: "media", editor: "media" },
@@ -344,7 +324,6 @@ const textEditors = [
   "slug",
   "color",
   "icon",
-  "image",
   "media",
 ] as const;
 

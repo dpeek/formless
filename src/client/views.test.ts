@@ -2297,12 +2297,31 @@ describe("home view model collections", () => {
     const contentModel = selectCollectionModels(siteSourceSchema).find(
       (model) => model.viewName === "blockHome",
     );
+    const placementModel = selectCollectionModels(siteSourceSchema).find(
+      (model) => model.viewName === "pageCompositionHome",
+    );
     const create = contentModel?.operations.find((operation) => operation.type === "create");
     const createVariantFields = Object.fromEntries(
       create?.type === "create"
         ? (create.union?.variants.map((variant) => [
             variant.variantValue,
             variant.presentation.fields.map((field) => field.fieldName),
+          ]) ?? [])
+        : [],
+    );
+    const editControl =
+      placementModel?.result.type === "table"
+        ? placementModel.result.columns
+            .flatMap((column) => (column.type === "operationControl" ? column.controls : []))
+            .find((control) => control.type === "editRecord")
+        : undefined;
+    const editVariantFields = Object.fromEntries(
+      editControl?.type === "editRecord"
+        ? (editControl.editView.union?.variants.map((variant) => [
+            variant.variantValue,
+            variant.presentation.type === "fields"
+              ? variant.presentation.fields.map((field) => [field.fieldName, field.editor])
+              : [],
           ]) ?? [])
         : [],
     );
@@ -2368,8 +2387,9 @@ describe("home view model collections", () => {
       link: ["linkTargetMode", "linkTargetBlock", "href", "icon"],
       markdown: ["body"],
       feature: ["body", "alignment"],
-      image: ["href"],
+      image: ["mediaAssetId"],
     });
+    expect(editVariantFields.image).toEqual([["mediaAssetId", "media"]]);
     expect(createVariantFields.subscribeForm).not.toContain("operationKey");
     expect(createVariantFields.subscribeForm).not.toContain("operationNotificationMode");
   });
@@ -2426,6 +2446,9 @@ describe("home view model collections", () => {
       },
       markdown: {
         body: "markdown",
+      },
+      image: {
+        mediaAssetId: "media",
       },
     });
     expect(tableEditors).toMatchObject({

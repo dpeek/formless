@@ -164,7 +164,7 @@ Define common contract shapes for:
 - buttons, action triggers, menus, confirmation prompts, and compact status;
 - form field sets and submit-boundary hidden input adapters;
 - semantic renderer icon identifiers for controls and actions;
-- media and image picker facts;
+- media picker facts;
 - icon picker facts.
 
 Keep these contracts semantic. They should carry labels, ids, disabled and
@@ -174,7 +174,7 @@ callbacks. They should not carry legacy component prop names, Astryx component
 props, storage handles, browser replica hooks, sync functions, Tailwind classes,
 React components, or raw records.
 
-Media/image option facts:
+Media option facts:
 
 - selected asset id;
 - selected URL;
@@ -212,7 +212,7 @@ Media boundary:
   updated for that direction;
 - adapt existing `MediaFieldControl` only inside legacy contract renderer seam
   modules while `@dpeek/formless-ui` is still active;
-- use the existing Astryx `ImageInput` path when the seam implementation swaps
+- use the existing Astryx `MediaInput` path when the seam implementation swaps
   to Astryx;
 - remove the `./react` export or replace it with a renderer-independent shape
   only when no production runtime imports depend on the legacy control.
@@ -431,7 +431,7 @@ renderers should not receive schema parsing, storage, sync, browser replica
 hooks, operation execution, media client calls, or route policy.
 
 The Astryx media renderer should use Astryx-owned components such as
-`ImageInput`, not a moved copy of `@dpeek/formless-media/react`. The Astryx icon
+`MediaInput`, not a moved copy of `@dpeek/formless-media/react`. The Astryx icon
 renderer should render from icon options and semantic icon ids, not from direct
 `@dpeek/formless-ui` icon components or generated picker internals.
 

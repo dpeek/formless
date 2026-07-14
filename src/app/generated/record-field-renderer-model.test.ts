@@ -36,7 +36,6 @@ describe("generated record field renderer model", () => {
     expect(recordRenderer("resource", "reference")).toBe("reference");
     expect(recordRenderer("color", "color")).toBe("color");
     expect(recordRenderer("icon", "icon")).toBe("icon");
-    expect(recordRenderer("image", "image")).toBe("image");
     expect(recordRenderer("image", "media")).toBe("media");
     expect(recordRenderer("href", "href", { showLabel: true })).toBe("text");
   });

@@ -9,7 +9,7 @@ Read this when editing `lib/media/*`.
 - Public media contract declarations and constants in `src/types.ts`.
 - Runtime-neutral media helpers exported from the package root.
 - Browser/client image upload, list, response parsing, asset-option, and image-dimension adapters.
-- Media-specific React picker, upload trigger, preview, missing-image, and URL fallback control behavior.
+- Media-specific React picker, upload trigger, preview, missing-image, and optional removal behavior.
 - Worker/runtime media request routing, image upload/list/restore/delivery orchestration, and provider object-store adapters.
 
 ## Does Not Own

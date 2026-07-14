@@ -326,7 +326,7 @@ describe("authority", () => {
     expect(legacy.records).not.toContainEqual(created.record);
   });
 
-  it("projects installed Site tree media asset ids through core delivery with manual href fallback", async () => {
+  it("projects installed Site tree media asset ids through core delivery without manual hrefs", async () => {
     await postInstalledAppJson<BootstrapResponse>(
       "site",
       "personal",
@@ -365,7 +365,7 @@ describe("authority", () => {
     const body = await getInstalledAppJson<SitePageTreeResponse>("site", "personal", "/tree/home");
 
     expect(JSON.stringify(body)).toContain("/api/formless/media/media/images/installed.webp");
-    expect(JSON.stringify(body)).toContain("https://cdn.example.com/installed-manual.webp");
+    expect(JSON.stringify(body)).not.toContain("https://cdn.example.com/installed-manual.webp");
   });
 
   it("renders duplicate installed Site public slugs from the selected install storage", async () => {

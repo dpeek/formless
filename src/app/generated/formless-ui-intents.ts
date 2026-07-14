@@ -228,7 +228,6 @@ export type AdaptGeneratedRecordFormlessUiIntentOptions = {
   editorDraftByFieldName?: Readonly<Record<string, string | undefined>>;
   fields: readonly RecordFieldConfig[];
   iconDialogDraftByFieldName?: Readonly<Record<string, string | undefined>>;
-  mediaEditorModeByFieldName?: Readonly<Record<string, "asset" | "url" | undefined>>;
   numberFormatByFieldName?: Readonly<Record<string, TableColumnFormat | undefined>>;
   recordDraftByFieldName?: Readonly<Record<string, string | undefined>>;
   state: GeneratedUpdateDraftSessionState;
@@ -596,17 +595,6 @@ export function adaptGeneratedFormlessUiMediaAssetSelect(
 
   if (fieldConfig === undefined) {
     return unsupportedIntent(intent, `Record field "${intent.fieldName}" is not available.`);
-  }
-
-  const mediaEditorMode = options.mediaEditorModeByFieldName?.[intent.fieldName] ?? "asset";
-
-  if (mediaEditorMode !== "asset") {
-    return {
-      kind: "mediaAssetSelect",
-      commit: undefined,
-      editorDraftChange: undefined,
-      reason: "Media asset selection is ignored for URL-mode media fields.",
-    };
   }
 
   return {

@@ -52,7 +52,6 @@ import type { GeneratedFieldControl } from "./field-controls.ts";
 import { selectGeneratedRecordFieldAuthoringAdapter } from "./field-ui-adapters.ts";
 import {
   type GeneratedRecordValueUnitDraftCommit,
-  type GeneratedRecordFieldMediaEditorMode,
   selectGeneratedRecordFieldEditability,
 } from "./record-field-authoring.ts";
 import {
@@ -95,7 +94,7 @@ export function GeneratedRecordFieldControl({
   onIconDraftChange,
   onIconOpenChange,
   onIconSave,
-  onImageFileSelect,
+  onMediaFileSelect,
   onMediaAssetSelect,
   onUnitDraftChange,
   onUnitDraftRevert,
@@ -106,7 +105,6 @@ export function GeneratedRecordFieldControl({
   showLabel = false,
   unitDraft,
   mediaAssetOptions,
-  mediaEditorMode,
   mediaPreviewHref,
   uploadEnabled,
 }: {
@@ -126,7 +124,7 @@ export function GeneratedRecordFieldControl({
   onIconDraftChange: (value: string) => void;
   onIconOpenChange: (open: boolean) => void;
   onIconSave: () => Promise<void>;
-  onImageFileSelect: (file: File | undefined) => void;
+  onMediaFileSelect: (file: File | undefined) => void;
   onMediaAssetSelect: (assetId: string) => void;
   onUnitDraftChange: (value: string) => void;
   onUnitDraftRevert: () => void;
@@ -137,7 +135,6 @@ export function GeneratedRecordFieldControl({
   showLabel?: boolean;
   unitDraft: string;
   mediaAssetOptions: ImageMediaAssetOption[];
-  mediaEditorMode: GeneratedRecordFieldMediaEditorMode;
   mediaPreviewHref?: string;
   uploadEnabled: boolean;
 }) {
@@ -364,27 +361,20 @@ export function GeneratedRecordFieldControl({
     );
   }
 
-  if (rendererKind === "image" || rendererKind === "media") {
+  if (rendererKind === "media") {
     return (
       <RecordMediaFieldRenderer
         canPatch={canPatch}
-        commitPolicy={commitPolicy}
         density={controlDensity}
         draft={draft}
         error={error}
-        field={field}
         fieldControl={fieldControl}
-        fieldKind={rendererKind}
         mediaAssetOptions={mediaAssetOptions}
-        mediaEditorMode={mediaEditorMode}
         mediaPreviewHref={mediaPreviewHref}
         isPending={isPending}
         labelClass={labelClass}
-        onDraftChange={onDraftChange}
-        onDraftRevert={onDraftRevert}
-        onImageFileSelect={onImageFileSelect}
+        onMediaFileSelect={onMediaFileSelect}
         onMediaAssetSelect={onMediaAssetSelect}
-        onValueCommit={onValueCommit}
         uploadEnabled={uploadEnabled}
       />
     );
@@ -1406,49 +1396,35 @@ function RecordIconFieldRenderer({
 
 function RecordMediaFieldRenderer({
   canPatch,
-  commitPolicy,
   density,
   draft,
   error,
-  field,
   fieldControl,
-  fieldKind,
   mediaAssetOptions,
-  mediaEditorMode,
   mediaPreviewHref,
   isPending,
   labelClass,
-  onDraftChange,
-  onDraftRevert,
-  onImageFileSelect,
+  onMediaFileSelect,
   onMediaAssetSelect,
-  onValueCommit,
   uploadEnabled,
 }: {
   canPatch: boolean;
-  commitPolicy: RecordFieldConfig["commit"];
   density: GeneratedRecordFieldControlDensity;
   draft: string;
   error: string | null;
-  field: FieldSchema;
   fieldControl: GeneratedFieldControl;
-  fieldKind: "image" | "media";
   mediaAssetOptions: ImageMediaAssetOption[];
-  mediaEditorMode: "asset" | "url";
   mediaPreviewHref?: string;
   isPending: boolean;
   labelClass: string;
-  onDraftChange: (value: string) => void;
-  onDraftRevert: () => void;
-  onImageFileSelect: (file: File | undefined) => void;
+  onMediaFileSelect: (file: File | undefined) => void;
   onMediaAssetSelect: (assetId: string) => void;
-  onValueCommit: (value: FieldValue) => void;
   uploadEnabled: boolean;
 }) {
   const editability = selectGeneratedRecordFieldEditability({ canPatch, isPending, uploadEnabled });
 
   return (
-    <div className={recordSpecializedFieldContainerClassName(density, fieldKind)}>
+    <div className={recordSpecializedFieldContainerClassName(density, "media")}>
       <TextField
         isDisabled={editability.controlDisabled}
         isInvalid={error !== null}
@@ -1459,24 +1435,12 @@ function RecordMediaFieldRenderer({
           controlDisabled={editability.controlDisabled}
           density={density}
           draft={draft}
-          fieldKind={fieldKind}
           invalid={error !== null}
           mediaAssetOptions={mediaAssetOptions}
-          mediaEditorMode={mediaEditorMode}
           mediaPreviewHref={mediaPreviewHref}
           label={fieldControl.label}
-          onDraftChange={onDraftChange}
-          onFileSelect={onImageFileSelect}
+          onFileSelect={onMediaFileSelect}
           onMediaAssetSelect={onMediaAssetSelect}
-          onUrlBlur={(value) => {
-            if (commitPolicy === "field-commit") {
-              onValueCommit(inputValueToFieldValue(field, value));
-            }
-          }}
-          onUrlEnter={(value) => {
-            onValueCommit(inputValueToFieldValue(field, value));
-          }}
-          onUrlEscape={onDraftRevert}
           required={fieldControl.required}
           uploadDisabled={editability.uploadDisabled}
         />

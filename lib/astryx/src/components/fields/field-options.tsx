@@ -62,6 +62,7 @@ export function mediaPickerOptions(options: FormlessUiFieldOptions | undefined) 
   return (options?.mediaAssetOptions ?? [])
     .filter((option) => option.missing !== true && option.href.trim() !== "")
     .map((option) => ({
+      label: option.label,
       previewUrl: option.href,
       value: option.id,
     }));
@@ -92,7 +93,7 @@ export function mediaPreviewHref(field: FormlessUiField) {
     return selectedAsset.href;
   }
 
-  if (field.media?.selectedAssetId === value || field.media?.selectedUrl === value) {
+  if (field.media?.selectedAssetId === value) {
     return field.media.previewHref;
   }
 

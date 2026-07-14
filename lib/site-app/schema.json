@@ -1399,7 +1399,7 @@
         },
         "image": {
           "label": "Image",
-          "fields": ["label", "mediaAssetId", "href"],
+          "fields": ["label", "mediaAssetId"],
           "requiredFields": ["label"]
         }
       },
@@ -1990,10 +1990,6 @@
             "mediaAssetId": {
               "editor": "media",
               "commit": "field-commit"
-            },
-            "href": {
-              "editor": "href",
-              "commit": "field-commit"
             }
           }
         }
@@ -2314,10 +2310,6 @@
           "fields": {
             "mediaAssetId": {
               "editor": "media",
-              "commit": "field-commit"
-            },
-            "href": {
-              "editor": "href",
               "commit": "field-commit"
             }
           }
@@ -3272,8 +3264,8 @@
         "image": {
           "presentation": "fields",
           "fields": {
-            "href": {
-              "editor": "href"
+            "mediaAssetId": {
+              "editor": "media"
             }
           }
         }
@@ -3675,10 +3667,6 @@
           "fields": {
             "mediaAssetId": {
               "editor": "media",
-              "commit": "field-commit"
-            },
-            "href": {
-              "editor": "href",
               "commit": "field-commit"
             }
           }

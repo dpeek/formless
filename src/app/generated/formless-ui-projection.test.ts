@@ -503,7 +503,6 @@ describe("generated Formless UI projection", () => {
         accept: "image/jpeg,image/png,image/webp,image/gif",
         fileSelectEnabled: true,
         maxSize: 5 * 1024 * 1024,
-        mediaEditorMode: "asset",
         previewHref: "/media/hero.webp",
         selectedAssetId: "hero.webp",
         mediaPreviewHref: "/media/hero.webp",
@@ -678,7 +677,6 @@ describe("generated Formless UI projection", () => {
       control: { controlKind: "media" },
       media: {
         fileSelectEnabled: true,
-        mediaEditorMode: "asset",
         previewHref: "/media/hero.webp",
         selectedAssetId: "hero.webp",
         uploadEnabled: true,
@@ -709,7 +707,6 @@ describe("generated Formless UI projection", () => {
 
     expect(missingMediaField.media).toMatchObject({
       fileSelectEnabled: true,
-      mediaEditorMode: "asset",
       missingSelectedAsset: {
         assetId: "not/a-core-asset",
         reason: "Selected media asset is unavailable.",

@@ -8,11 +8,9 @@ describe("Media React field control", () => {
     const html = renderMediaFieldControl({
       draft: "hero.webp",
       mediaAssetOptions: [{ href: "/media/hero.webp", id: "hero.webp", label: "Hero" }],
-      mediaEditorMode: "asset",
       mediaPreviewHref: "/media/hero.webp",
     });
 
-    expect(html).toContain('data-web-media-field-mode="asset"');
     expect(html).toContain('data-web-media-field-preview="image"');
     expect(html).toContain('accept="image/jpeg,image/png,image/webp,image/gif"');
     expect(html).toContain('aria-label="Image asset"');
@@ -25,69 +23,40 @@ describe("Media React field control", () => {
     const html = renderMediaFieldControl({
       draft: "missing.webp",
       mediaAssetOptions: [],
-      mediaEditorMode: "asset",
       mediaPreviewHref: undefined,
     });
 
     expect(html).toContain('data-web-media-field-preview="broken"');
     expect(html).toContain("Missing image");
-    expect(html).toContain("Current asset: missing.webp");
+    expect(html).not.toContain("missing.webp</option>");
   });
 
-  it("renders manual URL fallback without the asset picker", () => {
+  it("renders optional removal without a raw URL or asset-id input", () => {
     const html = renderMediaFieldControl({
-      draft: "/manual.webp",
-      fieldKind: "image",
-      mediaEditorMode: "url",
-      uploadDisabled: true,
+      draft: "",
+      mediaAssetOptions: [],
     });
 
-    expect(html).toContain('data-web-image-field-preview="image"');
-    expect(html).toContain('aria-label="Image URL"');
-    expect(html).toContain('disabled=""');
-    expect(html).not.toContain("Current asset:");
-  });
-
-  it("keeps generic generated labels and validation placement outside the adapter output", () => {
-    const html = renderMediaFieldControl({
-      draft: "/manual.webp",
-      fieldKind: "image",
-      invalid: true,
-      label: "Hero image",
-      mediaEditorMode: "url",
-    });
-
-    expect(html).toContain('aria-label="Hero image URL"');
-    expect(html).toContain('aria-invalid="true"');
-    expect(html).toContain('title="Upload Hero image"');
-    expect(html).not.toContain('data-slot="label"');
-    expect(html).not.toContain(">Hero image</label>");
+    expect(html).toContain('<option value="" selected="">Unset</option>');
+    expect(html).not.toContain('type="text"');
+    expect(html).not.toContain("URL");
   });
 });
 
 function renderMediaFieldControl(
-  props: Partial<Parameters<typeof MediaFieldControl>[0]> & {
-    draft: string;
-    mediaEditorMode: "asset" | "url";
-  },
+  props: Partial<Parameters<typeof MediaFieldControl>[0]> & { draft: string },
 ) {
   return renderToStaticMarkup(
     <MediaFieldControl
       controlDisabled={props.controlDisabled ?? false}
       density={props.density ?? "default"}
       draft={props.draft}
-      fieldKind={props.fieldKind ?? "media"}
       invalid={props.invalid ?? false}
       label={props.label ?? "Image"}
       mediaAssetOptions={props.mediaAssetOptions ?? []}
-      mediaEditorMode={props.mediaEditorMode}
       mediaPreviewHref={props.mediaPreviewHref}
-      onDraftChange={props.onDraftChange ?? noop}
       onFileSelect={props.onFileSelect ?? noopFile}
       onMediaAssetSelect={props.onMediaAssetSelect ?? noop}
-      onUrlBlur={props.onUrlBlur ?? noop}
-      onUrlEnter={props.onUrlEnter ?? noop}
-      onUrlEscape={props.onUrlEscape ?? noopVoid}
       required={props.required ?? false}
       uploadDisabled={props.uploadDisabled ?? false}
     />,
@@ -97,5 +66,3 @@ function renderMediaFieldControl(
 function noop(_value: string) {}
 
 function noopFile(_file: File | undefined) {}
-
-function noopVoid() {}

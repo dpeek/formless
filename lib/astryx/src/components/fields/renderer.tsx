@@ -109,7 +109,7 @@ function FieldEditor({
     return <ColorFieldEditor field={field} inputId={inputId} onIntent={onIntent} />;
   }
 
-  if (route === "image" || route === "media") {
+  if (route === "media") {
     return <MediaFieldEditor field={field} inputId={inputId} onIntent={onIntent} />;
   }
 
@@ -167,7 +167,7 @@ function FieldDisplay({ field }: { field: FormlessUiDisplayField }) {
     return <ColorFieldDisplay field={field} />;
   }
 
-  if (field.control.controlKind === "image" || field.control.controlKind === "media") {
+  if (field.control.controlKind === "media") {
     return <MediaFieldDisplay field={field} />;
   }
 
