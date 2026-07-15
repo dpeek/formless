@@ -120,10 +120,7 @@ export function TextFieldDisplay({ field }: { field: FormlessUiDisplayField }) {
 
   return (
     <div {...stylex.props(fieldChromeStyles.displayValue, styles.displayValue)}>
-      <Text
-        type="body"
-        maxLines={field.control.controlKind === "textarea" ? undefined : 2}
-      >
+      <Text type="body" maxLines={field.control.controlKind === "textarea" ? undefined : 2}>
         {field.formatting.displayValue}
       </Text>
       {suffix && field.formatting.displayValue ? (
@@ -136,9 +133,7 @@ export function TextFieldDisplay({ field }: { field: FormlessUiDisplayField }) {
 }
 
 export function MarkdownFieldDisplayValue({ field }: { field: FormlessUiDisplayField }) {
-  return (
-    <MarkdownFieldDisplay value={field.formatting.displayValue} />
-  );
+  return <MarkdownFieldDisplay value={field.formatting.displayValue} />;
 }
 
 const styles = stylex.create({

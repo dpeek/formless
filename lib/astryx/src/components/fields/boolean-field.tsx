@@ -69,11 +69,7 @@ export function BooleanFieldEditor({
 
 export function BooleanFieldDisplay({ field }: { field: FormlessUiDisplayField }) {
   return (
-    <Text
-      display="block"
-      type="body"
-      xstyle={fieldChromeStyles.displayValue}
-    >
+    <Text display="block" type="body" xstyle={fieldChromeStyles.displayValue}>
       {field.formatting.displayValue}
     </Text>
   );

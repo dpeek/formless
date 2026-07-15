@@ -129,11 +129,7 @@ function RecordReferenceDisplay({
   }
 
   return (
-    <LocalRecordReferenceDisplay
-      column={column}
-      recordId={recordId}
-      recordValue={recordValue}
-    />
+    <LocalRecordReferenceDisplay column={column} recordId={recordId} recordValue={recordValue} />
   );
 }
 

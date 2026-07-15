@@ -5,10 +5,7 @@ import { SegmentedControl, SegmentedControlItem } from "@astryxdesign/core/Segme
 import { Heading } from "@astryxdesign/core/Text";
 import { VStack } from "@astryxdesign/core/VStack";
 import type { FormlessUiFieldIntentHandler } from "../formless-ui-contract.ts";
-import {
-  applyScenarioFieldIntent,
-  scenarioFieldKey,
-} from "./fields/fixture-helpers.ts";
+import { applyScenarioFieldIntent, scenarioFieldKey } from "./fields/fixture-helpers.ts";
 import {
   createRecordFieldSurfaceFixtures,
   type RecordFieldSurfaceFixture,
@@ -17,12 +14,12 @@ import { FormlessUiFieldRenderer } from "./fields/renderer.tsx";
 
 export function FormlessGeneratedFieldsLayout() {
   const [surfaceFixtures, setSurfaceFixtures] = useState(createRecordFieldSurfaceFixtures);
-  const [selectedSurfaceId, setSelectedSurfaceId] = useState<RecordFieldSurfaceFixture["id"]>(
-    "record",
-  );
+  const [selectedSurfaceId, setSelectedSurfaceId] =
+    useState<RecordFieldSurfaceFixture["id"]>("record");
   const selectedSurface =
     surfaceFixtures.find((surface) => surface.id === selectedSurfaceId) ?? surfaceFixtures[0];
-  const handleIntent = (recordId: string): FormlessUiFieldIntentHandler =>
+  const handleIntent =
+    (recordId: string): FormlessUiFieldIntentHandler =>
     (intent) => {
       setSurfaceFixtures((currentFixtures) =>
         currentFixtures.map((surface) =>
@@ -58,11 +55,7 @@ export function FormlessGeneratedFieldsLayout() {
             onChange={(value) => setSelectedSurfaceId(value as RecordFieldSurfaceFixture["id"])}
           >
             {surfaceFixtures.map((surface) => (
-              <SegmentedControlItem
-                key={surface.id}
-                label={surface.label}
-                value={surface.id}
-              />
+              <SegmentedControlItem key={surface.id} label={surface.label} value={surface.id} />
             ))}
           </SegmentedControl>
 

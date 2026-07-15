@@ -80,11 +80,7 @@ export function ReferenceFieldDisplay({ field }: { field: FormlessUiDisplayField
       ? field.reference.valueStatus.value
       : undefined;
   const value = (
-    <Text
-      display="block"
-      maxLines={2}
-      type="body"
-    >
+    <Text display="block" maxLines={2} type="body">
       {field.formatting.displayValue}
     </Text>
   );
