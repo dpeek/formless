@@ -8,8 +8,12 @@ import {
   schemaKeyStorageIdentity,
   type AppStorageIdentity,
 } from "../shared/app-storage-identity.ts";
+import type { EmailDeliveryScheduleRequest } from "../shared/email-runtime.ts";
 import type { OperationInvocationResponse } from "../shared/operation-invocation.ts";
-import { scheduleSiteOperationInputNotificationAfterPublicOperation } from "./site-operation-input-notifications.ts";
+import {
+  scheduleSiteOperationInputNotificationAfterPublicOperation,
+  type SiteOperationInputNotificationAdapters,
+} from "./site-operation-input-notifications.ts";
 
 type OperationFormTarget =
   | {
@@ -24,10 +28,10 @@ type OperationFormTarget =
 
 describe("Site operation input notification scheduling", () => {
   it("schedules structured operation input email from a committed public operation form", async () => {
-    const scheduled: unknown[] = [];
+    const scheduled: EmailDeliveryScheduleRequest[] = [];
 
     await scheduleSiteOperationInputNotificationAfterPublicOperation({
-      env: fakeNotificationEnv(notificationControlPlaneRecords(), scheduled),
+      adapters: notificationAdapters(notificationControlPlaneRecords(), scheduled),
       identity: schemaKeyStorageIdentity("site"),
       records: operationFormSourceRecords({ replyToField: "email" }),
       requestUrl: "https://www.example.com/api/site/public/operations/request/submit",
@@ -92,10 +96,10 @@ describe("Site operation input notification scheduling", () => {
   });
 
   it("omits invalid reply-to values without skipping the notification", async () => {
-    const scheduled: unknown[] = [];
+    const scheduled: EmailDeliveryScheduleRequest[] = [];
 
     await scheduleSiteOperationInputNotificationAfterPublicOperation({
-      env: fakeNotificationEnv(notificationControlPlaneRecords(), scheduled),
+      adapters: notificationAdapters(notificationControlPlaneRecords(), scheduled),
       identity: schemaKeyStorageIdentity("site"),
       records: operationFormSourceRecords({ replyToField: "email" }),
       requestUrl: "https://www.example.com/api/site/public/operations/request/submit",
@@ -115,11 +119,11 @@ describe("Site operation input notification scheduling", () => {
   });
 
   it("schedules command handler operation input email from the public command wrapper", async () => {
-    const scheduled: unknown[] = [];
+    const scheduled: EmailDeliveryScheduleRequest[] = [];
     const operation = requestSubmitCommandHandlerOperation();
 
     await scheduleSiteOperationInputNotificationAfterPublicOperation({
-      env: fakeNotificationEnv(notificationControlPlaneRecords(), scheduled),
+      adapters: notificationAdapters(notificationControlPlaneRecords(), scheduled),
       identity: schemaKeyStorageIdentity("site"),
       records: operationFormSourceRecords({ replyToField: "email" }),
       requestUrl: "https://www.example.com/api/site/public/operations/request/submit",
@@ -151,7 +155,7 @@ describe("Site operation input notification scheduling", () => {
   });
 
   it("renders exposed command output fields in operation input email", async () => {
-    const scheduled: unknown[] = [];
+    const scheduled: EmailDeliveryScheduleRequest[] = [];
     const operation = {
       ...recordPlanRequestOperation(),
       policy: {
@@ -161,7 +165,7 @@ describe("Site operation input notification scheduling", () => {
     } satisfies EntityOperationSchema;
 
     await scheduleSiteOperationInputNotificationAfterPublicOperation({
-      env: fakeNotificationEnv(notificationControlPlaneRecords(), scheduled),
+      adapters: notificationAdapters(notificationControlPlaneRecords(), scheduled),
       identity: schemaKeyStorageIdentity("site"),
       records: operationFormSourceRecords(),
       requestUrl: "https://www.example.com/api/site/public/operations/request/submit",
@@ -189,11 +193,11 @@ describe("Site operation input notification scheduling", () => {
   });
 
   it("skips scheduling when form or email configuration is incomplete", async () => {
-    const scheduled: unknown[] = [];
+    const scheduled: EmailDeliveryScheduleRequest[] = [];
     const response = operationInputResponse();
 
     await scheduleSiteOperationInputNotificationAfterPublicOperation({
-      env: fakeNotificationEnv(notificationControlPlaneRecords(), scheduled),
+      adapters: notificationAdapters(notificationControlPlaneRecords(), scheduled),
       identity: schemaKeyStorageIdentity("site"),
       records: operationFormSourceRecords({ mode: "none" }),
       requestUrl: "https://www.example.com/api/site/public/operations/request/submit",
@@ -201,7 +205,7 @@ describe("Site operation input notification scheduling", () => {
       schema: operationInputSchema(),
     });
     await scheduleSiteOperationInputNotificationAfterPublicOperation({
-      env: fakeNotificationEnv([], scheduled),
+      adapters: notificationAdapters([], scheduled),
       identity: schemaKeyStorageIdentity("site"),
       records: operationFormSourceRecords(),
       requestUrl: "https://www.example.com/api/site/public/operations/request/submit",
@@ -212,8 +216,55 @@ describe("Site operation input notification scheduling", () => {
     expect(scheduled).toEqual([]);
   });
 
+  it("skips replayed and non-public operation responses", async () => {
+    const scheduled: EmailDeliveryScheduleRequest[] = [];
+    const replayed = operationInputResponse();
+    const nonPublic = operationInputResponse();
+
+    replayed.status = "replayed";
+    nonPublic.invocation.source.protocol = "cli";
+
+    for (const response of [replayed, nonPublic]) {
+      await scheduleSiteOperationInputNotificationAfterPublicOperation({
+        adapters: notificationAdapters(notificationControlPlaneRecords(), scheduled),
+        identity: schemaKeyStorageIdentity("site"),
+        records: operationFormSourceRecords(),
+        requestUrl: "https://www.example.com/api/site/public/operations/request/submit",
+        response,
+        schema: operationInputSchema(),
+      });
+    }
+
+    expect(scheduled).toEqual([]);
+  });
+
+  it("contains platform scheduling failures without adding private delivery facts", async () => {
+    const scheduled: EmailDeliveryScheduleRequest[] = [];
+    const response = operationInputResponse();
+    const responseBeforeScheduling = JSON.stringify(response);
+
+    await scheduleSiteOperationInputNotificationAfterPublicOperation({
+      adapters: notificationAdapters(
+        notificationControlPlaneRecords(),
+        scheduled,
+        new Error("Email delivery queue or provider failed for owner@example.com."),
+      ),
+      identity: schemaKeyStorageIdentity("site"),
+      records: operationFormSourceRecords({ replyToField: "email" }),
+      requestUrl: "https://www.example.com/api/site/public/operations/request/submit",
+      response,
+      schema: operationInputSchema(),
+    });
+
+    expect(scheduled).toHaveLength(1);
+    expect(JSON.stringify(response)).toBe(responseBeforeScheduling);
+    expect(JSON.stringify(response)).not.toContain("queue or provider failed");
+    expect(JSON.stringify(response)).not.toContain("owner@example.com");
+    expect(JSON.stringify(response)).not.toContain("email_delivery_");
+  });
+
   it("requires declared public operation form targets to match the committed operation target", async () => {
-    const scheduled: unknown[] = [];
+    const scheduled: EmailDeliveryScheduleRequest[] = [];
     const identity = installedAppStorageIdentity({ installId: "requests", packageAppKey: "tasks" });
 
     if (!identity) {
@@ -239,7 +290,7 @@ describe("Site operation input notification scheduling", () => {
     expect(mismatchedRecords[0]?.values.operationTargetInstallId).toBe("other");
 
     await scheduleSiteOperationInputNotificationAfterPublicOperation({
-      env: fakeNotificationEnv(notificationControlPlaneRecords(), scheduled),
+      adapters: notificationAdapters(notificationControlPlaneRecords(), scheduled),
       identity,
       records: matchingRecords,
       requestUrl:
@@ -248,7 +299,7 @@ describe("Site operation input notification scheduling", () => {
       schema: operationInputSchema(),
     });
     await scheduleSiteOperationInputNotificationAfterPublicOperation({
-      env: fakeNotificationEnv(notificationControlPlaneRecords(), scheduled),
+      adapters: notificationAdapters(notificationControlPlaneRecords(), scheduled),
       identity,
       records: mismatchedRecords,
       requestUrl:
@@ -261,12 +312,12 @@ describe("Site operation input notification scheduling", () => {
   });
 
   it("uses stable operation input notification idempotency for the same operation retry", async () => {
-    const scheduled: unknown[] = [];
-    const env = fakeNotificationEnv(notificationControlPlaneRecords(), scheduled);
+    const scheduled: EmailDeliveryScheduleRequest[] = [];
+    const adapters = notificationAdapters(notificationControlPlaneRecords(), scheduled);
     const response = operationInputResponse();
 
     await scheduleSiteOperationInputNotificationAfterPublicOperation({
-      env,
+      adapters,
       identity: schemaKeyStorageIdentity("site"),
       records: operationFormSourceRecords(),
       requestUrl: "https://www.example.com/api/site/public/operations/request/submit",
@@ -274,7 +325,7 @@ describe("Site operation input notification scheduling", () => {
       schema: operationInputSchema(),
     });
     await scheduleSiteOperationInputNotificationAfterPublicOperation({
-      env,
+      adapters,
       identity: schemaKeyStorageIdentity("site"),
       records: operationFormSourceRecords(),
       requestUrl: "https://www.example.com/api/site/public/operations/request/submit",
@@ -289,35 +340,24 @@ describe("Site operation input notification scheduling", () => {
   });
 });
 
-function fakeNotificationEnv(records: StoredRecord[], scheduled: unknown[]) {
+function notificationAdapters(
+  records: readonly StoredRecord[],
+  scheduled: EmailDeliveryScheduleRequest[],
+  schedulingError?: Error,
+): SiteOperationInputNotificationAdapters {
   return {
-    FORMLESS_AUTHORITY: {
-      idFromName(name: string) {
-        return { name };
+    configuration: {
+      read: () => records,
+    },
+    emailScheduling: {
+      schedule({ request }) {
+        scheduled.push(request);
+
+        if (schedulingError) {
+          throw schedulingError;
+        }
       },
-      get(_id: unknown) {
-        return {
-          async fetch(request: Request) {
-            const url = new URL(request.url);
-
-            if (url.pathname === "/api/formless/control-plane/_internal/read-records") {
-              return Response.json({ records });
-            }
-
-            if (url.pathname === "/_internal/email/deliveries/schedule") {
-              scheduled.push(await request.json());
-
-              return Response.json({
-                delivery: { id: "delivery-1" },
-                replayed: false,
-              });
-            }
-
-            return Response.json({ error: "Not found." }, { status: 404 });
-          },
-        };
-      },
-    } as unknown as DurableObjectNamespace,
+    },
   };
 }
 

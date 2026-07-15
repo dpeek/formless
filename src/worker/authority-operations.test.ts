@@ -14,6 +14,7 @@ import type {
   OperationInvocationEnvelope,
   OperationInvocationResponse,
 } from "../shared/operation-invocation.ts";
+import { installedAppStorageIdentity } from "../shared/app-storage-identity.ts";
 import type { SchemaKey } from "../shared/schema-apps.ts";
 import type {
   AppSchema,
@@ -33,8 +34,20 @@ type ExecuteOperationInput = {
   appKey?: SchemaKey;
   body?: unknown;
   headers?: Record<string, string>;
+  identity?: OperationInvocationEnvelope["appStorageIdentity"];
   method: string;
   path: string;
+  publicOperation?: {
+    beforeReplayError?: string;
+    idempotencyKey: string;
+    input: unknown;
+    source: {
+      host: string;
+      path: string;
+      siteBlockId?: string;
+    };
+    turnstileToken?: string;
+  };
   search?: string;
 };
 
@@ -648,6 +661,194 @@ describe("authority operation execution", () => {
     expect(JSON.stringify(snapshot.body.result.body)).not.toContain("operation-row-create-task");
   });
 
+  it("stores public lifecycle rows with safe schema-key audit facts and retries failed keys", async () => {
+    const before = await executeOperation<BootstrapResponse>({
+      appKey: "site",
+      method: "GET",
+      path: "/bootstrap",
+    });
+    const rejected = await executeOperationFailure({
+      appKey: "site",
+      method: "POST",
+      path: "/operations/block/create",
+      publicOperation: {
+        idempotencyKey: "public-authority-policy-rejected",
+        input: {
+          type: "content",
+          label: "Private block",
+          turnstileSecret: "provider-secret-value",
+        },
+        source: {
+          host: "example.com",
+          path: "/api/site/public/operations/block/create",
+          siteBlockId: "rec_site_private_form",
+        },
+        turnstileToken: "policy-proof-token",
+      },
+    });
+    const failed = await executeOperationFailure({
+      appKey: "site",
+      method: "POST",
+      path: "/operations/contact-message/submit",
+      publicOperation: {
+        beforeReplayError: "Public operation challenge failed.",
+        idempotencyKey: "public-authority-failed-retry",
+        input: {
+          name: "Ada Lovelace",
+          email: "ada@example.com",
+          message: "Please send details.",
+        },
+        source: {
+          host: "example.com",
+          path: "/api/site/public/operations/contact-message/submit",
+          siteBlockId: "rec_site_contact_form",
+        },
+        turnstileToken: "failed-proof-token",
+      },
+    });
+    const failedRows = await readOperationInvocations();
+    const committed = await executeOperation<OperationInvocationResponse>({
+      appKey: "site",
+      method: "POST",
+      path: "/operations/contact-message/submit",
+      publicOperation: {
+        idempotencyKey: "public-authority-failed-retry",
+        input: {
+          name: "Ada Lovelace",
+          email: "ada@example.com",
+          message: "Please send details.",
+        },
+        source: {
+          host: "example.com",
+          path: "/api/site/public/operations/contact-message/submit",
+          siteBlockId: "rec_site_contact_form",
+        },
+        turnstileToken: "committed-proof-token",
+      },
+    });
+    const replayed = await executeOperation<OperationInvocationResponse>({
+      appKey: "site",
+      method: "POST",
+      path: "/operations/contact-message/submit",
+      publicOperation: {
+        idempotencyKey: "public-authority-failed-retry",
+        input: {
+          name: "Ada Lovelace",
+          email: "ada@example.com",
+          message: "Please send details.",
+        },
+        source: {
+          host: "example.com",
+          path: "/api/site/public/operations/contact-message/submit",
+          siteBlockId: "rec_site_contact_form",
+        },
+        turnstileToken: "replayed-proof-token",
+      },
+    });
+    const after = await executeOperation<BootstrapResponse>({
+      appKey: "site",
+      method: "GET",
+      path: "/bootstrap",
+    });
+    const rows = await readOperationInvocations();
+    const rejectedRow = failedRows.find(
+      (row) => row.invocationId === "operation:block.create:public-authority-policy-rejected",
+    );
+    const failedRow = failedRows.find(
+      (row) =>
+        row.invocationId === "operation:contact-message.submit:public-authority-failed-retry",
+    );
+    const committedRow = rows.find(
+      (row) =>
+        row.invocationId === "operation:contact-message.submit:public-authority-failed-retry",
+    );
+
+    expect(rejected.response.status).toBe(400);
+    expect(rejected.body.writes).toEqual([]);
+    expect(failed.response.status).toBe(400);
+    expect(failed.body).toEqual({
+      error: "Public operation challenge failed.",
+      writes: [],
+    });
+    expect(rejectedRow).toMatchObject({
+      actorKind: "anonymous",
+      affectedChangeIds: [],
+      appStorageIdentity: {
+        kind: "schemaKey",
+        packageAppKey: "site",
+        sourceSchemaKey: "site",
+        apiRoutePrefix: "/api/site",
+      },
+      auditInput: {
+        kind: "summary",
+        summary: {
+          fieldNames: ["label", "type"],
+          type: "create",
+          valuesType: "object",
+        },
+      },
+      authDecision: "denied",
+      operationKey: "block.create",
+      operationKind: "create",
+      source: {
+        host: "example.com",
+        path: "/api/site/public/operations/block/create",
+        protocol: "public",
+        siteBlockId: "rec_site_private_form",
+      },
+      status: "rejected",
+    });
+    expect(rejectedRow?.statusHistory.map((entry) => entry.status)).toEqual(["rejected"]);
+    expect(failedRow).toMatchObject({
+      actorKind: "anonymous",
+      affectedChangeIds: [],
+      auditInput: {
+        kind: "summary",
+        summary: {
+          fieldNames: ["email", "message", "name"],
+          type: "create",
+          valuesType: "object",
+        },
+      },
+      authDecision: "allowed",
+      errorMessage: "Public operation challenge failed.",
+      operationKey: "contact-message.submit",
+      status: "failed",
+    });
+    expect(failedRow?.statusHistory.map((entry) => entry.status)).toEqual(["accepted", "failed"]);
+    expect(committed.response.status).toBe(200);
+    expect(committed.body.writes.map((write) => write.kind)).toEqual(["committed"]);
+    expect(replayed.response.status).toBe(200);
+    expect(replayed.body.writes).toEqual([]);
+    expect(replayed.body.result.body.status).toBe("replayed");
+    expect(replayed.body.result.body.output).toEqual(committed.body.result.body.output);
+    expect(committedRow).toMatchObject({
+      authDecision: "allowed",
+      operationKey: "contact-message.submit",
+      status: "replayed",
+      output: committed.body.result.body.output,
+    });
+    expect(committedRow?.statusHistory.map((entry) => entry.status)).toEqual([
+      "accepted",
+      "failed",
+      "resumed",
+      "committed",
+      "replayed",
+    ]);
+    expect(
+      after.body.result.body.records.filter((record) => record.entity === "contact-message"),
+    ).toHaveLength(
+      before.body.result.body.records.filter((record) => record.entity === "contact-message")
+        .length + 1,
+    );
+    expect(JSON.stringify(rows)).not.toContain("provider-secret-value");
+    expect(JSON.stringify(rows)).not.toContain("policy-proof-token");
+    expect(JSON.stringify(rows)).not.toContain("failed-proof-token");
+    expect(JSON.stringify(rows)).not.toContain("committed-proof-token");
+    expect(JSON.stringify(rows)).not.toContain("replayed-proof-token");
+    expect(JSON.stringify(rows)).not.toContain("turnstileToken");
+  });
+
   it("stores rejected operation invocations without materializing records", async () => {
     const bootstrap = await executeOperation<BootstrapResponse>({
       method: "GET",
@@ -786,6 +987,222 @@ describe("authority operation execution", () => {
     });
     expect(rows[0]?.statusHistory.map((entry) => entry.status)).toEqual(["accepted", "failed"]);
     expect(rows[0]?.output).toBeUndefined();
+  });
+
+  it("executes installed public subscribe handlers with normalized membership uniqueness", async () => {
+    const identity = installedAppStorageIdentity({
+      installId: "authority-crm",
+      packageAppKey: "crm",
+    });
+
+    if (!identity) {
+      throw new Error("Expected installed CRM app storage identity.");
+    }
+
+    const route = `${identity.apiRoutePrefix}/public/operations/subscription/subscribe`;
+    const invalid = await executeOperationFailure({
+      appKey: "crm",
+      identity,
+      method: "POST",
+      path: "/operations/subscription/subscribe",
+      publicOperation: {
+        idempotencyKey: "public-subscribe-invalid-email",
+        input: { email: "not an email address" },
+        source: {
+          host: "crm.example.com",
+          path: route,
+          siteBlockId: "rec_site_subscribe_invalid",
+        },
+        turnstileToken: "invalid-email-proof-token",
+      },
+    });
+    const first = await executeOperation<OperationInvocationResponse>({
+      appKey: "crm",
+      identity,
+      method: "POST",
+      path: "/operations/subscription/subscribe",
+      publicOperation: {
+        idempotencyKey: "public-subscribe-first",
+        input: { email: "Ada@Example.com" },
+        source: {
+          host: "crm.example.com",
+          path: route,
+          siteBlockId: "rec_site_subscribe_first",
+        },
+        turnstileToken: "first-subscribe-proof-token",
+      },
+    });
+    const duplicate = await executeOperation<OperationInvocationResponse>({
+      appKey: "crm",
+      identity,
+      method: "POST",
+      path: "/operations/subscription/subscribe",
+      publicOperation: {
+        idempotencyKey: "public-subscribe-duplicate",
+        input: { email: "ada@example.com" },
+        source: {
+          host: "crm.example.com",
+          path: route,
+          siteBlockId: "rec_site_subscribe_duplicate",
+        },
+        turnstileToken: "duplicate-subscribe-proof-token",
+      },
+    });
+    const afterDuplicate = await executeOperation<BootstrapResponse>({
+      appKey: "crm",
+      identity,
+      method: "GET",
+      path: "/bootstrap",
+    });
+    const duplicateEmailAddresses = afterDuplicate.body.result.body.records.filter(
+      (record) =>
+        record.entity === "email-address" && record.values.normalizedAddress === "ada@example.com",
+    );
+    const duplicateSubscriptions = afterDuplicate.body.result.body.records.filter(
+      (record) =>
+        record.entity === "subscription" &&
+        record.values.emailAddress === duplicateEmailAddresses[0]?.id,
+    );
+    const subscription = duplicateSubscriptions[0];
+
+    if (!subscription) {
+      throw new Error("Expected installed CRM subscription.");
+    }
+
+    await executeOperation<OperationInvocationResponse>({
+      appKey: "crm",
+      body: {
+        idempotencyKey: "public-subscribe-unsubscribe",
+        recordId: subscription.id,
+        input: { status: "unsubscribed" },
+      },
+      identity,
+      method: "POST",
+      path: "/operations/subscription/update",
+    });
+
+    const resubscribed = await executeOperation<OperationInvocationResponse>({
+      appKey: "crm",
+      identity,
+      method: "POST",
+      path: "/operations/subscription/subscribe",
+      publicOperation: {
+        idempotencyKey: "public-subscribe-resubscribe",
+        input: { email: "ada@example.com" },
+        source: {
+          host: "crm.example.com",
+          path: route,
+          siteBlockId: "rec_site_subscribe_resubscribe",
+        },
+        turnstileToken: "resubscribe-proof-token",
+      },
+    });
+    const afterResubscribe = await executeOperation<BootstrapResponse>({
+      appKey: "crm",
+      identity,
+      method: "GET",
+      path: "/bootstrap",
+    });
+    const rows = (await readOperationInvocations()).filter(
+      (row) => row.source.protocol === "public",
+    );
+    const emailAddresses = afterResubscribe.body.result.body.records.filter(
+      (record) =>
+        record.entity === "email-address" && record.values.normalizedAddress === "ada@example.com",
+    );
+    const subscriptions = afterResubscribe.body.result.body.records.filter(
+      (record) =>
+        record.entity === "subscription" && record.values.emailAddress === emailAddresses[0]?.id,
+    );
+    const invalidRow = rows.find(
+      (row) =>
+        row.invocationId === "operation:subscription.subscribe:public-subscribe-invalid-email",
+    );
+    const resubscribedRow = rows.find(
+      (row) => row.invocationId === "operation:subscription.subscribe:public-subscribe-resubscribe",
+    );
+
+    expect(invalid.response.status).toBe(400);
+    expect(invalid.body).toEqual({
+      error: 'Subscribe operation public input "email" must be an email address.',
+      writes: [],
+    });
+    expect(invalidRow).toMatchObject({
+      actorKind: "anonymous",
+      affectedChangeIds: [],
+      appStorageIdentity: {
+        kind: "appInstall",
+        packageAppKey: "crm",
+        sourceSchemaKey: "crm",
+        installId: "authority-crm",
+        apiRoutePrefix: "/api/app-installs/crm/authority-crm",
+      },
+      auditInput: {
+        kind: "summary",
+        summary: {
+          inputFields: ["email"],
+          inputType: "object",
+          type: "command",
+        },
+      },
+      authDecision: "allowed",
+      operationKey: "subscription.subscribe",
+      operationKind: "command",
+      source: {
+        host: "crm.example.com",
+        path: route,
+        protocol: "public",
+        siteBlockId: "rec_site_subscribe_invalid",
+      },
+      status: "failed",
+    });
+    expect(invalidRow?.statusHistory.map((entry) => entry.status)).toEqual(["accepted", "failed"]);
+    expect(first.body.writes.map((write) => write.kind)).toEqual(["committed"]);
+    expect(duplicate.body.writes.map((write) => write.kind)).toEqual(["committed"]);
+    expect(resubscribed.body.writes.map((write) => write.kind)).toEqual(["committed"]);
+    expect(emailAddresses).toHaveLength(1);
+    expect(emailAddresses[0]?.values).toMatchObject({
+      address: "Ada@Example.com",
+      normalizedAddress: "ada@example.com",
+    });
+    expect(subscriptions).toHaveLength(1);
+    expect(subscriptions[0]?.id).toBe(subscription.id);
+    expect(subscriptions[0]?.values).toMatchObject({
+      status: "subscribed",
+      sourceKind: "publicOperation",
+      sourceTargetKind: "appInstall",
+      sourcePackageAppKey: "crm",
+      sourceSchemaKey: "crm",
+      sourceInstallId: "authority-crm",
+      sourceApiRoutePrefix: "/api/app-installs/crm/authority-crm",
+      sourceOperationKey: "subscription.subscribe",
+      sourceHost: "crm.example.com",
+      sourcePath: route,
+      sourceSiteBlockId: "rec_site_subscribe_resubscribe",
+    });
+    expect(resubscribedRow).toMatchObject({
+      appStorageIdentity: identity,
+      auditInput: {
+        kind: "summary",
+        summary: {
+          inputFields: ["email"],
+          inputType: "object",
+          type: "command",
+        },
+      },
+      source: {
+        host: "crm.example.com",
+        path: route,
+        protocol: "public",
+        siteBlockId: "rec_site_subscribe_resubscribe",
+      },
+      status: "committed",
+    });
+    expect(rows).toHaveLength(4);
+    expect(JSON.stringify(rows)).not.toContain("Ada@Example.com");
+    expect(JSON.stringify(rows)).not.toContain("ada@example.com");
+    expect(JSON.stringify(rows)).not.toContain("proof-token");
+    expect(JSON.stringify(rows)).not.toContain("turnstileToken");
   });
 
   it("redacts explicitly snapshotted audit input for command operations", async () => {
@@ -1193,24 +1610,35 @@ describe("authority operation execution", () => {
       path: "/schema",
       body: { schema },
     });
+    const baseline = await executeOperation<BootstrapResponse>({
+      method: "GET",
+      path: "/bootstrap",
+    });
 
     const committed = await executeOperation<OperationInvocationResponse>({
       method: "POST",
       path: "/operations/task/submitPlan",
-      body: {
+      publicOperation: {
         idempotencyKey: "record-plan-success",
         input: {
           title: "Record-plan task",
           note: "Created by plan",
         },
         source: {
-          protocol: "generated-ui",
-          path: "/intake",
+          host: "tasks.example.com",
+          path: "/api/tasks/public/operations/task/submitPlan",
+          siteBlockId: "rec_site_public_plan",
         },
+        turnstileToken: "record-plan-proof-token",
       },
     });
     const output = committed.body.result.body.output;
     const rows = await readOperationInvocations();
+    const sync = await executeOperation<SyncResponse>({
+      method: "GET",
+      path: "/sync",
+      search: `after=${baseline.body.result.body.cursor}&schemaUpdatedAt=${encodeURIComponent(baseline.body.result.body.schemaUpdatedAt)}`,
+    });
 
     if (output.type !== "command") {
       throw new Error("Expected command operation output.");
@@ -1218,8 +1646,15 @@ describe("authority operation execution", () => {
 
     expect(committed.response.status).toBe(200);
     expect(committed.body.writes.map((write) => write.kind)).toEqual(["committed"]);
-    expect(output.affectedChangeIds).toEqual(output.changes.map((change) => String(change.seq)));
-    expect(output.changes.map((change) => change.entity)).toEqual(["task", "task-log", "task"]);
+    expect(output.affectedChangeIds).toEqual(
+      sync.body.result.body.changes.map((change) => String(change.seq)),
+    );
+    expect(output.changes).toEqual([]);
+    expect(sync.body.result.body.changes.map((change) => change.entity)).toEqual([
+      "task",
+      "task-log",
+      "task",
+    ]);
     expect(output).not.toHaveProperty("actionId");
     expect(output).not.toHaveProperty("response");
     expect(output).toMatchObject({
@@ -1233,17 +1668,17 @@ describe("authority operation execution", () => {
     });
 
     const taskId = output.recordPlan?.steps[0]?.recordId;
-    const log = output.changes[1]?.payload;
+    const log = sync.body.result.body.changes[1]?.payload;
     const receivedAt = committed.body.result.body.invocation.receivedAt;
 
     expect(taskId).toMatch(/^task_/);
-    expect(output.changes.map((change) => change.createdAt)).toEqual([
+    expect(sync.body.result.body.changes.map((change) => change.createdAt)).toEqual([
       receivedAt,
       receivedAt,
       receivedAt,
     ]);
     expect(output.recordPlan?.steps.map((step) => step.changeId)).toEqual(output.affectedChangeIds);
-    expect(output.changes[0]?.payload).toMatchObject({
+    expect(sync.body.result.body.changes[0]?.payload).toMatchObject({
       id: taskId,
       entity: "task",
       createdAt: receivedAt,
@@ -1259,12 +1694,12 @@ describe("authority operation execution", () => {
       values: {
         task: taskId,
         label: "Created by plan",
-        actorMode: "owner",
+        actorMode: "anonymous",
         occurredAt: receivedAt,
-        sourcePath: "/intake",
+        sourcePath: "/api/tasks/public/operations/task/submitPlan",
       },
     });
-    expect(output.changes[2]?.payload).toMatchObject({
+    expect(sync.body.result.body.changes[2]?.payload).toMatchObject({
       id: taskId,
       entity: "task",
       updatedAt: receivedAt,
@@ -1278,9 +1713,16 @@ describe("authority operation execution", () => {
         operationKey: "task.submitPlan",
         operationKind: "command",
         output,
+        source: {
+          host: "tasks.example.com",
+          path: "/api/tasks/public/operations/task/submitPlan",
+          protocol: "public",
+          siteBlockId: "rec_site_public_plan",
+        },
         status: "committed",
       }),
     );
+    expect(JSON.stringify(rows)).not.toContain("record-plan-proof-token");
   });
 
   it("rejects record-plan validation failures without partial writes", async () => {
@@ -1305,12 +1747,17 @@ describe("authority operation execution", () => {
     const failed = await executeOperationFailure({
       method: "POST",
       path: "/operations/task/submitBrokenPlan",
-      body: {
+      publicOperation: {
         idempotencyKey: "record-plan-broken",
         input: {
           title: "Should roll back",
           note: "Invalid reference",
         },
+        source: {
+          host: "tasks.example.com",
+          path: "/api/tasks/public/operations/task/submitBrokenPlan",
+        },
+        turnstileToken: "broken-record-plan-proof-token",
       },
     });
     const sync = await executeOperation<SyncResponse>({
@@ -1340,8 +1787,14 @@ describe("authority operation execution", () => {
       affectedChangeIds: [],
       errorMessage: 'Field "task" references unknown task record "missing-task".',
       operationKey: "task.submitBrokenPlan",
+      source: {
+        host: "tasks.example.com",
+        path: "/api/tasks/public/operations/task/submitBrokenPlan",
+        protocol: "public",
+      },
       status: "failed",
     });
+    expect(JSON.stringify(rows)).not.toContain("broken-record-plan-proof-token");
   });
 
   it("rejects identity reference writes when target lookup is unavailable", async () => {
@@ -1388,12 +1841,17 @@ describe("authority operation execution", () => {
     );
     const beforeCursor = bootstrap.body.result.body.cursor;
     const schemaUpdatedAt = bootstrap.body.result.body.schemaUpdatedAt;
-    const body = {
+    const publicOperation = {
       idempotencyKey: "record-plan-replay",
       input: {
         title: "Replay record-plan task",
         note: "Replay note",
       },
+      source: {
+        host: "tasks.example.com",
+        path: "/api/tasks/public/operations/task/submitReplayPlan",
+      },
+      turnstileToken: "record-plan-replay-proof-token",
     };
 
     await executeOperation({
@@ -1405,12 +1863,15 @@ describe("authority operation execution", () => {
     const first = await executeOperation<OperationInvocationResponse>({
       method: "POST",
       path: "/operations/task/submitReplayPlan",
-      body,
+      publicOperation,
     });
     const replay = await executeOperation<OperationInvocationResponse>({
       method: "POST",
       path: "/operations/task/submitReplayPlan",
-      body,
+      publicOperation: {
+        ...publicOperation,
+        turnstileToken: "record-plan-replay-second-proof-token",
+      },
     });
     const rows = await readOperationInvocations();
     const sync = await executeOperation<SyncResponse>({
@@ -1420,7 +1881,7 @@ describe("authority operation execution", () => {
     });
 
     expect(first.body.writes.map((write) => write.kind)).toEqual(["committed"]);
-    expect(replay.body.writes.map((write) => write.kind)).toEqual(["replay"]);
+    expect(replay.body.writes).toEqual([]);
     expect(replay.body.result.body.status).toBe("replayed");
     expect(replay.body.result.body.output).toEqual(first.body.result.body.output);
     expect(rows).toHaveLength(1);
@@ -1434,7 +1895,12 @@ describe("authority operation execution", () => {
       throw new Error("Expected command operation output.");
     }
 
-    expect(sync.body.result.body.changes).toEqual(first.body.result.body.output.changes);
+    expect(first.body.result.body.output.changes).toEqual([]);
+    expect(sync.body.result.body.changes.map((change) => String(change.seq))).toEqual(
+      first.body.result.body.output.affectedChangeIds,
+    );
+    expect(JSON.stringify(rows)).not.toContain("record-plan-replay-proof-token");
+    expect(JSON.stringify(rows)).not.toContain("record-plan-replay-second-proof-token");
   });
 
   it("preserves list and get operation reads without idempotency", async () => {
@@ -1933,6 +2399,14 @@ function recordPlanOperation(steps: RecordPlanStepSchema[]): EntityOperationSche
       steps,
     },
     output: { type: "command" },
+    policy: {
+      actors: ["anonymous"],
+      access: {
+        actor: "anonymous",
+        challenge: { kind: "turnstile" },
+        origin: { kind: "same-origin" },
+      },
+    },
     idempotency: { required: true },
     audit: { input: "summary" },
   };
@@ -2205,12 +2679,22 @@ async function writeAuthorityOperationHarness() {
         selectAuthorityOperation,
       } from "${process.cwd()}/src/worker/authority-operations.ts";
       import {
+        assertOperationInvocationAuthorized,
+        executeWriteOperationInvocation,
+      } from "${process.cwd()}/src/worker/entity-operations.ts";
+      import {
         BadRequestError,
         ReloadRequiredError,
       } from "${process.cwd()}/src/worker/errors.ts";
+      import {
+        buildUnverifiedPublicOperationInvocationEnvelope,
+        buildVerifiedPublicOperationInvocationEnvelope,
+      } from "${process.cwd()}/src/worker/operation-invocation-envelopes.ts";
+      import { executePublicOperationInvocationLifecycle } from "${process.cwd()}/src/worker/operation-invocation-lifecycle.ts";
       import { workerSchemaAppDefinitions } from "${process.cwd()}/src/worker/schema-apps.ts";
       import {
         ensureStorageTables,
+        initializeStorageFromSource,
         readOperationInvocations,
       } from "${process.cwd()}/src/worker/storage.ts";
 
@@ -2240,6 +2724,12 @@ async function writeAuthorityOperationHarness() {
             return Response.json({ error: "Unsupported operation.", writes: [] }, { status: 404 });
           }
 
+          const identity = input.identity ?? schemaKeyStorageIdentity(appKey);
+          const source = {
+            schema: app.sourceSchema,
+            records: app.seedRecords,
+            changeWritePrefix: app.seedChangeWritePrefix,
+          };
           const writes = [];
           const writeNotifier = {
             apply(write) {
@@ -2250,19 +2740,73 @@ async function writeAuthorityOperationHarness() {
           };
 
           try {
+            if (input.publicOperation) {
+              if (operation.kind !== "entityOperation") {
+                return Response.json(
+                  { error: "Unsupported public operation.", writes: [] },
+                  { status: 404 },
+                );
+              }
+
+              const stored = initializeStorageFromSource(this.ctx.storage, source);
+              const envelopeInput = {
+                identity,
+                idempotencyKey: input.publicOperation.idempotencyKey,
+                publicInput: input.publicOperation.input,
+                route: {
+                  entityName: operation.entityName,
+                  operationName: operation.operationName,
+                },
+                schema: stored.schema,
+                source: input.publicOperation.source,
+              };
+              const unverifiedEnvelope = buildUnverifiedPublicOperationInvocationEnvelope(
+                envelopeInput,
+              );
+              const body = await executePublicOperationInvocationLifecycle({
+                assertAllowed: () => assertOperationInvocationAuthorized(unverifiedEnvelope),
+                beforeReplay: () => {
+                  if (input.publicOperation.beforeReplayError) {
+                    throw new BadRequestError(input.publicOperation.beforeReplayError);
+                  }
+                },
+                envelope: unverifiedEnvelope,
+                execute: (envelope) =>
+                  executeWriteOperationInvocation({
+                    envelope,
+                    schema: stored.schema,
+                    storage: this.ctx.storage,
+                    writes: writeNotifier,
+                  }),
+                prepareExecutionEnvelope: () =>
+                  buildVerifiedPublicOperationInvocationEnvelope({
+                    ...envelopeInput,
+                    proof: {
+                      turnstileToken:
+                        input.publicOperation.turnstileToken ?? "authority-proof-token",
+                      verification: {
+                        kind: "turnstile",
+                        success: true,
+                        verifiedAt: "2026-07-15T00:00:00.000Z",
+                        hostname: input.publicOperation.source.host,
+                      },
+                    },
+                  }),
+                storage: this.ctx.storage,
+              });
+
+              return Response.json({ result: { body }, writes });
+            }
+
             const result = await executeAuthorityOperation({
               actor: input.actor,
               actorKind: input.actorKind,
               app,
               body: input.body,
-              identity: schemaKeyStorageIdentity(appKey),
+              identity,
               operation,
               requestHeaders: new Headers(input.headers ?? {}),
-              source: {
-                schema: app.sourceSchema,
-                records: app.seedRecords,
-                changeWritePrefix: app.seedChangeWritePrefix,
-              },
+              source,
               storage: this.ctx.storage,
               writes: writeNotifier,
             });

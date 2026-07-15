@@ -87,8 +87,14 @@ import {
   PublicOperationError,
   selectPublicOperationRoute,
 } from "./public-operations.ts";
-import { scheduleSiteContactNotificationAfterPublicOperation } from "./site-contact-notifications.ts";
-import { scheduleSiteOperationInputNotificationAfterPublicOperation } from "./site-operation-input-notifications.ts";
+import {
+  createSiteContactNotificationAdapters,
+  scheduleSiteContactNotificationAfterPublicOperation,
+} from "./site-contact-notifications.ts";
+import {
+  createSiteOperationInputNotificationAdapters,
+  scheduleSiteOperationInputNotificationAfterPublicOperation,
+} from "./site-operation-input-notifications.ts";
 import { turnstileSiteKeyFromEnv } from "../shared/turnstile-config.ts";
 import {
   handleAppStorageUpgradeStatusDurableObjectRequest,
@@ -421,13 +427,13 @@ export class FormlessAuthority extends DurableObject<Env> {
 
             await Promise.allSettled([
               scheduleSiteContactNotificationAfterPublicOperation({
-                env: this.bindings,
+                adapters: createSiteContactNotificationAdapters(this.bindings),
                 identity: route.identity,
                 requestUrl: request.url,
                 response,
               }),
               scheduleSiteOperationInputNotificationAfterPublicOperation({
-                env: this.bindings,
+                adapters: createSiteOperationInputNotificationAdapters(this.bindings),
                 identity: route.identity,
                 requestUrl: request.url,
                 response,

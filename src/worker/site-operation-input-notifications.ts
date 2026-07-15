@@ -5,7 +5,11 @@ import {
 import type { AppSchema } from "@dpeek/formless-schema";
 import type { StoredRecord } from "@dpeek/formless-storage";
 import type { AppStorageIdentity } from "../shared/app-storage-identity.ts";
-import { parseEmailDeliveryAddress, type EmailDeliveryAddress } from "../shared/email-runtime.ts";
+import {
+  parseEmailDeliveryAddress,
+  type EmailDeliveryAddress,
+  type EmailDeliveryScheduleRequest,
+} from "../shared/email-runtime.ts";
 import type { OperationInvocationResponse } from "../shared/operation-invocation.ts";
 import type { DeploymentControlPlaneClientEnv } from "./deployment-control-plane-client.ts";
 import { readControlPlaneRecords } from "./deployment-control-plane-client.ts";
@@ -27,8 +31,49 @@ export type SiteOperationInputNotificationEnv = DeploymentControlPlaneClientEnv 
   FORMLESS_AUTHORITY?: DurableObjectNamespace;
 };
 
+export type SiteOperationInputNotificationConfigurationAdapter = {
+  read(input: {
+    requestUrl: string;
+  }): Promise<readonly StoredRecord[] | undefined> | readonly StoredRecord[] | undefined;
+};
+
+export type SiteOperationInputNotificationEmailSchedulingAdapter = {
+  schedule(input: {
+    request: EmailDeliveryScheduleRequest;
+    requestUrl: string;
+  }): Promise<void> | void;
+};
+
+export type SiteOperationInputNotificationAdapters = {
+  configuration: SiteOperationInputNotificationConfigurationAdapter;
+  emailScheduling: SiteOperationInputNotificationEmailSchedulingAdapter;
+};
+
+export function createSiteOperationInputNotificationAdapters(
+  env: SiteOperationInputNotificationEnv,
+): SiteOperationInputNotificationAdapters {
+  return {
+    configuration: {
+      read: ({ requestUrl }) => readControlPlaneRecords({ env, requestUrl }),
+    },
+    emailScheduling: {
+      schedule: async ({ request, requestUrl }) => {
+        if (!env.FORMLESS_AUTHORITY) {
+          return;
+        }
+
+        await schedulePlatformEmailDelivery({
+          env: { FORMLESS_AUTHORITY: env.FORMLESS_AUTHORITY },
+          request,
+          requestUrl,
+        });
+      },
+    },
+  };
+}
+
 export async function scheduleSiteOperationInputNotificationAfterPublicOperation(input: {
-  env: SiteOperationInputNotificationEnv;
+  adapters: SiteOperationInputNotificationAdapters;
   identity: AppStorageIdentity;
   records?: readonly StoredRecord[];
   requestUrl: string;
@@ -53,13 +98,12 @@ export async function scheduleSiteOperationInputNotificationAfterPublicOperation
     }
 
     const controlPlaneRecords =
-      (await readControlPlaneRecords({ env: input.env, requestUrl: input.requestUrl })) ?? [];
+      (await input.adapters.configuration.read({ requestUrl: input.requestUrl })) ?? [];
     const settings = operationInputNotificationSettings(controlPlaneRecords);
     const canonicalOrigin =
       instanceControlPlaneProductionIdentityFromRecords(controlPlaneRecords)?.canonicalOrigin;
-    const authority = input.env.FORMLESS_AUTHORITY;
 
-    if (!settings || !canonicalOrigin || !authority) {
+    if (!settings || !canonicalOrigin) {
       return;
     }
 
@@ -77,8 +121,7 @@ export async function scheduleSiteOperationInputNotificationAfterPublicOperation
       return;
     }
 
-    await schedulePlatformEmailDelivery({
-      env: { FORMLESS_AUTHORITY: authority },
+    await input.adapters.emailScheduling.schedule({
       requestUrl: input.requestUrl,
       request: {
         canonicalOrigin,

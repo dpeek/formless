@@ -3,15 +3,19 @@ import type { StoredRecord } from "@dpeek/formless-storage";
 import { describe, expect, it } from "vite-plus/test";
 
 import { schemaKeyStorageIdentity } from "../shared/app-storage-identity.ts";
+import type { EmailDeliveryScheduleRequest } from "../shared/email-runtime.ts";
 import type { OperationInvocationResponse } from "../shared/operation-invocation.ts";
-import { scheduleSiteContactNotificationAfterPublicOperation } from "./site-contact-notifications.ts";
+import {
+  scheduleSiteContactNotificationAfterPublicOperation,
+  type SiteContactNotificationAdapters,
+} from "./site-contact-notifications.ts";
 
 describe("Site contact notification scheduling", () => {
   it("schedules contact notification email from committed public contact message output", async () => {
-    const scheduled: unknown[] = [];
+    const scheduled: EmailDeliveryScheduleRequest[] = [];
 
     await scheduleSiteContactNotificationAfterPublicOperation({
-      env: fakeNotificationEnv(contactNotificationControlPlaneRecords(), scheduled),
+      adapters: notificationAdapters(contactNotificationControlPlaneRecords(), scheduled),
       identity: schemaKeyStorageIdentity("site"),
       requestUrl: "https://www.example.com/api/site/public/operations/contact-message/submit",
       response: contactMessageResponse(),
@@ -57,10 +61,10 @@ describe("Site contact notification scheduling", () => {
   });
 
   it("skips contact notification scheduling when email settings are incomplete", async () => {
-    const scheduled: unknown[] = [];
+    const scheduled: EmailDeliveryScheduleRequest[] = [];
 
     await scheduleSiteContactNotificationAfterPublicOperation({
-      env: fakeNotificationEnv([], scheduled),
+      adapters: notificationAdapters([], scheduled),
       identity: schemaKeyStorageIdentity("site"),
       requestUrl: "https://www.example.com/api/site/public/operations/contact-message/submit",
       response: contactMessageResponse(),
@@ -69,19 +73,61 @@ describe("Site contact notification scheduling", () => {
     expect(scheduled).toEqual([]);
   });
 
+  it("skips replayed and non-contact public operation outputs", async () => {
+    const scheduled: EmailDeliveryScheduleRequest[] = [];
+    const replayed = contactMessageResponse();
+    const otherOperation = contactMessageResponse();
+
+    replayed.status = "replayed";
+    otherOperation.invocation.operation.operationName = "create";
+
+    for (const response of [replayed, otherOperation]) {
+      await scheduleSiteContactNotificationAfterPublicOperation({
+        adapters: notificationAdapters(contactNotificationControlPlaneRecords(), scheduled),
+        identity: schemaKeyStorageIdentity("site"),
+        requestUrl: "https://www.example.com/api/site/public/operations/contact-message/submit",
+        response,
+      });
+    }
+
+    expect(scheduled).toEqual([]);
+  });
+
+  it("contains platform scheduling failures without adding private delivery facts", async () => {
+    const scheduled: EmailDeliveryScheduleRequest[] = [];
+    const response = contactMessageResponse();
+    const responseBeforeScheduling = JSON.stringify(response);
+
+    await scheduleSiteContactNotificationAfterPublicOperation({
+      adapters: notificationAdapters(
+        contactNotificationControlPlaneRecords(),
+        scheduled,
+        new Error("Email delivery queue or provider failed for owner@example.com."),
+      ),
+      identity: schemaKeyStorageIdentity("site"),
+      requestUrl: "https://www.example.com/api/site/public/operations/contact-message/submit",
+      response,
+    });
+
+    expect(scheduled).toHaveLength(1);
+    expect(JSON.stringify(response)).toBe(responseBeforeScheduling);
+    expect(JSON.stringify(response)).not.toContain("queue or provider failed");
+    expect(JSON.stringify(response)).not.toContain("email_delivery_");
+  });
+
   it("uses stable notification idempotency for the same public operation output", async () => {
-    const scheduled: unknown[] = [];
-    const env = fakeNotificationEnv(contactNotificationControlPlaneRecords(), scheduled);
+    const scheduled: EmailDeliveryScheduleRequest[] = [];
+    const adapters = notificationAdapters(contactNotificationControlPlaneRecords(), scheduled);
     const response = contactMessageResponse();
 
     await scheduleSiteContactNotificationAfterPublicOperation({
-      env,
+      adapters,
       identity: schemaKeyStorageIdentity("site"),
       requestUrl: "https://www.example.com/api/site/public/operations/contact-message/submit",
       response,
     });
     await scheduleSiteContactNotificationAfterPublicOperation({
-      env,
+      adapters,
       identity: schemaKeyStorageIdentity("site"),
       requestUrl: "https://www.example.com/api/site/public/operations/contact-message/submit",
       response,
@@ -93,35 +139,24 @@ describe("Site contact notification scheduling", () => {
   });
 });
 
-function fakeNotificationEnv(records: StoredRecord[], scheduled: unknown[]) {
+function notificationAdapters(
+  records: readonly StoredRecord[],
+  scheduled: EmailDeliveryScheduleRequest[],
+  schedulingError?: Error,
+): SiteContactNotificationAdapters {
   return {
-    FORMLESS_AUTHORITY: {
-      idFromName(name: string) {
-        return { name };
+    configuration: {
+      read: () => records,
+    },
+    emailScheduling: {
+      schedule({ request }) {
+        scheduled.push(request);
+
+        if (schedulingError) {
+          throw schedulingError;
+        }
       },
-      get(_id: unknown) {
-        return {
-          async fetch(request: Request) {
-            const url = new URL(request.url);
-
-            if (url.pathname === "/api/formless/control-plane/_internal/read-records") {
-              return Response.json({ records });
-            }
-
-            if (url.pathname === "/_internal/email/deliveries/schedule") {
-              scheduled.push(await request.json());
-
-              return Response.json({
-                delivery: { id: "delivery-1" },
-                replayed: false,
-              });
-            }
-
-            return Response.json({ error: "Not found." }, { status: 404 });
-          },
-        };
-      },
-    } as unknown as DurableObjectNamespace,
+    },
   };
 }
 

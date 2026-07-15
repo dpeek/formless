@@ -4,6 +4,7 @@ import {
 } from "@dpeek/formless-instance-control-plane";
 import type { StoredRecord } from "@dpeek/formless-storage";
 import type { AppStorageIdentity } from "../shared/app-storage-identity.ts";
+import type { EmailDeliveryScheduleRequest } from "../shared/email-runtime.ts";
 import type { OperationInvocationResponse } from "../shared/operation-invocation.ts";
 import type { DeploymentControlPlaneClientEnv } from "./deployment-control-plane-client.ts";
 import { readControlPlaneRecords } from "./deployment-control-plane-client.ts";
@@ -18,8 +19,49 @@ export type SiteContactNotificationEnv = DeploymentControlPlaneClientEnv & {
   FORMLESS_AUTHORITY?: DurableObjectNamespace;
 };
 
+export type SiteContactNotificationConfigurationAdapter = {
+  read(input: {
+    requestUrl: string;
+  }): Promise<readonly StoredRecord[] | undefined> | readonly StoredRecord[] | undefined;
+};
+
+export type SiteContactNotificationEmailSchedulingAdapter = {
+  schedule(input: {
+    request: EmailDeliveryScheduleRequest;
+    requestUrl: string;
+  }): Promise<void> | void;
+};
+
+export type SiteContactNotificationAdapters = {
+  configuration: SiteContactNotificationConfigurationAdapter;
+  emailScheduling: SiteContactNotificationEmailSchedulingAdapter;
+};
+
+export function createSiteContactNotificationAdapters(
+  env: SiteContactNotificationEnv,
+): SiteContactNotificationAdapters {
+  return {
+    configuration: {
+      read: ({ requestUrl }) => readControlPlaneRecords({ env, requestUrl }),
+    },
+    emailScheduling: {
+      schedule: async ({ request, requestUrl }) => {
+        if (!env.FORMLESS_AUTHORITY) {
+          return;
+        }
+
+        await schedulePlatformEmailDelivery({
+          env: { FORMLESS_AUTHORITY: env.FORMLESS_AUTHORITY },
+          request,
+          requestUrl,
+        });
+      },
+    },
+  };
+}
+
 export async function scheduleSiteContactNotificationAfterPublicOperation(input: {
-  env: SiteContactNotificationEnv;
+  adapters: SiteContactNotificationAdapters;
   identity: AppStorageIdentity;
   requestUrl: string;
   response: OperationInvocationResponse;
@@ -29,13 +71,12 @@ export async function scheduleSiteContactNotificationAfterPublicOperation(input:
   }
 
   const controlPlaneRecords =
-    (await readControlPlaneRecords({ env: input.env, requestUrl: input.requestUrl })) ?? [];
+    (await input.adapters.configuration.read({ requestUrl: input.requestUrl })) ?? [];
   const settings = contactNotificationSettings(controlPlaneRecords);
   const canonicalOrigin =
     instanceControlPlaneProductionIdentityFromRecords(controlPlaneRecords)?.canonicalOrigin;
-  const authority = input.env.FORMLESS_AUTHORITY;
 
-  if (!settings || !canonicalOrigin || !authority) {
+  if (!settings || !canonicalOrigin) {
     return;
   }
 
@@ -49,8 +90,7 @@ export async function scheduleSiteContactNotificationAfterPublicOperation(input:
   }
 
   try {
-    await schedulePlatformEmailDelivery({
-      env: { FORMLESS_AUTHORITY: authority },
+    await input.adapters.emailScheduling.schedule({
       requestUrl: input.requestUrl,
       request: {
         canonicalOrigin,

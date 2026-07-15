@@ -10,6 +10,10 @@ export type PublicOperationTurnstileChallengeEnv = TurnstileRuntimeEnv & {
   FORMLESS_TURNSTILE_SITEVERIFY?: Fetcher;
 };
 
+export type PublicOperationTurnstileSiteverifyProvider = {
+  send(request: Request): Promise<Response> | Response;
+};
+
 type TurnstileSiteverifyResponse = {
   success?: unknown;
   challenge_ts?: unknown;
@@ -21,6 +25,7 @@ const turnstileSiteverifyUrl = "https://challenges.cloudflare.com/turnstile/v0/s
 export async function verifyPublicOperationTurnstileChallenge(input: {
   env: PublicOperationTurnstileChallengeEnv;
   idempotencyKey: string;
+  provider: PublicOperationTurnstileSiteverifyProvider;
   token: string;
 }): Promise<PublicOperationChallengeVerification> {
   const secret = turnstileSecretKeyFromEnv(input.env);
@@ -32,8 +37,7 @@ export async function verifyPublicOperationTurnstileChallenge(input: {
   let response: Response;
 
   try {
-    response = await turnstileFetch(
-      input.env,
+    response = await input.provider.send(
       new Request(turnstileSiteverifyUrl, {
         body: JSON.stringify({
           secret,
@@ -70,6 +74,17 @@ export async function verifyPublicOperationTurnstileChallenge(input: {
     verifiedAt: nowIsoString(),
     ...(typeof body.challenge_ts === "string" ? { challengeTs: body.challenge_ts } : {}),
     ...(typeof body.hostname === "string" ? { hostname: body.hostname } : {}),
+  };
+}
+
+export function createPublicOperationTurnstileSiteverifyProvider(
+  env: PublicOperationTurnstileChallengeEnv,
+): PublicOperationTurnstileSiteverifyProvider {
+  return {
+    send: (request) =>
+      env.FORMLESS_TURNSTILE_SITEVERIFY
+        ? env.FORMLESS_TURNSTILE_SITEVERIFY.fetch(request)
+        : fetch(request),
   };
 }
 
@@ -112,13 +127,4 @@ function uuidFromBytes(bytes: Uint8Array) {
   return `${hex.slice(0, 4).join("")}-${hex.slice(4, 6).join("")}-${hex
     .slice(6, 8)
     .join("")}-${hex.slice(8, 10).join("")}-${hex.slice(10, 16).join("")}`;
-}
-
-function turnstileFetch(
-  env: PublicOperationTurnstileChallengeEnv,
-  request: Request,
-): Promise<Response> {
-  return env.FORMLESS_TURNSTILE_SITEVERIFY
-    ? env.FORMLESS_TURNSTILE_SITEVERIFY.fetch(request)
-    : fetch(request);
 }

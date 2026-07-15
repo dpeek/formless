@@ -330,6 +330,55 @@ invocation envelope before validating input or committing effects.
 - AND failed origin, input, proof, challenge, or execution stages preserve the
   existing public-safe error, audit, replay, and no-partial-write behavior
 
+### Requirement: Public Operation Module Contract
+
+The system SHALL concentrate Formless-owned public operation behavior behind
+the Module interfaces that own it while keeping Cloudflare runtime semantics in
+a small real-workerd contract portfolio.
+
+#### Scenario: Executor is the primary fast behavior surface
+
+- GIVEN public operation selection, request parsing, idempotency derivation,
+  source fact construction, origin evaluation, stage ordering, replay gating,
+  response shaping, or after-commit gating is evaluated
+- WHEN focused public operation behavior is exercised
+- THEN the public operation executor Interface is the primary test surface for
+  the orchestration it owns
+- AND deterministic validation, challenge, lifecycle, Authority execution,
+  response, after-commit, clock, or generated-identifier Adapters may supply
+  owned outcomes without starting a Worker runtime
+- AND direct Module coverage preserves the same public-safe errors, ordering,
+  envelope facts, response filtering, and committed-versus-replayed behavior as
+  production execution
+
+#### Scenario: Concrete owned adapter behavior stays local
+
+- GIVEN Turnstile verification, public response shaping, contact notification,
+  or public operation input notification behavior is evaluated
+- WHEN provider responses, missing configuration, delivery outcomes, filtering,
+  or failure containment are exercised
+- THEN the concrete owning Module exposes a Formless-owned Adapter boundary for
+  deterministic focused coverage
+- AND focused tests fake owned Adapters rather than Durable Object, queue,
+  service-binding, or other Cloudflare runtime interfaces
+- AND the public operation executor remains responsible only for invoking those
+  concrete Adapters in the declared execution order
+
+#### Scenario: Real-workerd contract portfolio stays narrow
+
+- GIVEN public operation behavior is covered through its owning Module
+- WHEN real-workerd contract coverage is selected
+- THEN each retained contract verifies Worker routing, Wrangler binding wiring,
+  app storage identity selection, Durable Object persistence, replay and audit
+  rows, transaction behavior, mapped-host routing, one real Turnstile
+  service-binding path, one real queue or post-commit notification path, or
+  Worker-specific request and response semantics
+- AND Durable Object storage, SQLite transactions or migrations, R2,
+  WebSockets, Worker routing, workerd lifecycle, and storage isolation are not
+  replaced by broad fakes
+- AND the full repository check continues to require the retained real-workerd
+  contract portfolio
+
 ### Requirement: Public Input Validation
 
 The system MUST validate public operation input against the operation's public

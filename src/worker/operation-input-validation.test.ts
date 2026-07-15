@@ -427,6 +427,30 @@ describe("operation input validation", () => {
         }),
       ),
     ).toEqual(rawInput);
+    expect(() =>
+      validatePublicOperationInputValues({
+        ...publicOperationInputRequest({
+          operation: createTaskOperation(input),
+          rawInput: {
+            ...rawInput,
+            admin: true,
+          },
+        }),
+        context: "Public operation input",
+      }),
+    ).toThrow('Public operation input includes undeclared field "admin".');
+    expect(() =>
+      validatePublicOperationInputValues({
+        ...publicOperationInputRequest({
+          operation: createTaskOperation(input),
+          rawInput: {
+            taskTitle: "",
+            taskDone: false,
+          },
+        }),
+        context: "Public operation input",
+      }),
+    ).toThrow('Field "title" cannot be empty.');
   });
 
   it("maps entity-backed create and update input to stored entity field names", () => {
