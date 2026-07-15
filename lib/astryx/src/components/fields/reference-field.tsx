@@ -8,7 +8,6 @@ import type {
   FormlessUiFieldIntentHandler,
 } from "../../formless-ui-contract.ts";
 import {
-  astryxDensity,
   editorFieldValue,
   emitFieldDraftChange,
   emitImmediateRecordFieldCommit,
@@ -84,7 +83,7 @@ export function ReferenceFieldDisplay({ field }: { field: FormlessUiDisplayField
     <Text
       display="block"
       maxLines={2}
-      type={astryxDensity(field) === "compact" ? "supporting" : "body"}
+      type="body"
     >
       {field.formatting.displayValue}
     </Text>

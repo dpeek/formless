@@ -16,7 +16,15 @@ import type { BootstrapResponse } from "../../shared/protocol.ts";
 import { siteSourceSchema } from "../../test/schema-apps.ts";
 import { GeneratedCreateFieldControl } from "./create-field-control.tsx";
 import { GeneratedIconPickerEditor } from "./field-control-primitives.tsx";
-import { projectGeneratedCreateFormlessUiField } from "./formless-ui-projection.ts";
+import {
+  projectGeneratedCreateFormlessUiField,
+  projectGeneratedDisplayFormlessUiField,
+  projectGeneratedRecordFormlessUiField,
+} from "./formless-ui-projection.ts";
+import {
+  LegacyDisplayFieldAdapter,
+  LegacyRecordFieldAdapter,
+} from "./legacy-record-field-adapter.tsx";
 import { RecordFieldDisplay } from "./record-field-display.tsx";
 import { GeneratedRecordFieldControl } from "./record-field-control.tsx";
 
@@ -25,6 +33,59 @@ beforeEach(() => {
 });
 
 describe("generated record field presentation rendering", () => {
+  it("dispatches ordinary legacy editor interactions as record field intents", () => {
+    const intents: unknown[] = [];
+    const field = projectGeneratedRecordFormlessUiField({
+      canPatch: true,
+      editorDraft: "Draft title",
+      fieldConfig: {
+        commit: "field-commit",
+        editor: "text",
+        field: { required: true, type: "text" },
+        fieldName: "title",
+        label: "Title",
+      },
+      recordId: "task-1",
+      recordValue: "Saved title",
+    });
+
+    if (field.mode !== "editor") {
+      throw new Error("Expected editable projected field.");
+    }
+
+    const adapter = LegacyRecordFieldAdapter({
+      field,
+      onIntent: (intent) => {
+        intents.push(intent);
+      },
+    });
+
+    adapter.props.onDraftChange("Next title");
+    adapter.props.onValueCommit("Next title");
+    adapter.props.onDraftRevert();
+
+    expect(intents).toEqual([
+      { fieldName: "title", type: "recordEditorDraftChange", value: "Next title" },
+      { fieldName: "title", type: "recordValueCommit", value: "Next title" },
+      { fieldName: "title", type: "recordDraftRevert" },
+    ]);
+  });
+
+  it("keeps enum option icons out of label-mode displays", () => {
+    const html = renderToStaticMarkup(
+      <LegacyDisplayFieldAdapter
+        field={projectGeneratedDisplayFormlessUiField({
+          fieldConfig: { ...priorityFieldConfig, presentation: undefined },
+          recordId: "task-1",
+          recordValue: "high",
+        })}
+      />,
+    );
+
+    expect(html).toContain(">High</span>");
+    expect(html).not.toContain('data-web-svg-icon="svg"');
+  });
+
   it("renders enum icon presentation as a select with resolved icon, color, and accessible value label", () => {
     const html = renderRecordControl(priorityFieldConfig, {
       draft: "high",

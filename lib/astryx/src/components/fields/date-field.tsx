@@ -8,7 +8,6 @@ import type {
   FormlessUiFieldIntentHandler,
 } from "../../formless-ui-contract.ts";
 import {
-  astryxDensity,
   dateInputValue,
   editorFieldValue,
   emitFieldDraftChange,
@@ -67,21 +66,19 @@ export function DateFieldEditor({
 export function DateFieldDisplay({ field }: { field: FormlessUiDisplayField }) {
   const temporal = field.formatting.temporal;
   const suffix = field.formatting.suffix ?? field.suffix;
-  const textType = astryxDensity(field) === "compact" ? "supporting" : "body";
-
   return (
     <div {...stylex.props(fieldChromeStyles.displayValue, styles.displayValue)}>
       {temporal ? (
         <Timestamp
           format={temporal.kind === "date" ? "date" : "date_time"}
-          type={textType}
+          type="body"
           value={temporal.kind === "date" ? `${temporal.value}T00:00:00` : temporal.value}
         />
       ) : (
-        <Text type={textType}>{field.formatting.displayValue}</Text>
+        <Text type="body">{field.formatting.displayValue}</Text>
       )}
       {suffix ? (
-        <Text color="secondary" type={textType}>
+        <Text color="secondary" type="body">
           {suffix}
         </Text>
       ) : null}

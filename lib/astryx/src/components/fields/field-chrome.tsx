@@ -1,10 +1,8 @@
 import * as stylex from "@stylexjs/stylex";
 import type { KeyboardEvent, ReactNode } from "react";
 import { Field, type FieldStatusInput } from "@astryxdesign/core/Field";
-import { spacingVars } from "@astryxdesign/core/theme/tokens.stylex";
 import type { FieldValue, GeneratedFieldDraftInput } from "@dpeek/formless-schema";
 import type {
-  FormlessUiDisplayField,
   FormlessUiField,
   FormlessUiFieldIntentHandler,
   FormlessUiRecordField,
@@ -394,12 +392,6 @@ export function fieldValueFromDraftValue(
   return String(value);
 }
 
-export function displayTextWithSuffix(field: FormlessUiDisplayField) {
-  const suffix = field.formatting.suffix ?? field.suffix;
-
-  return suffix ? `${field.formatting.displayValue} ${suffix}` : field.formatting.displayValue;
-}
-
 export function numberDraftIsInvalid(field: FormlessUiEditorField) {
   if (field.control.controlKind !== "number") {
     return false;
@@ -441,7 +433,6 @@ export const fieldChromeStyles = stylex.create({
     boxSizing: "border-box",
     display: "flex",
     alignItems: "center",
-    minHeight: spacingVars["--spacing-9"],
     minWidth: 0,
   },
 });

@@ -235,6 +235,7 @@ export function recordField<TControl extends FormlessUiFieldControl>({
     presentationMode,
     rendererKind,
     surface,
+    value: drafts.recordValue,
     valueUnit,
   };
 }

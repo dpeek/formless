@@ -509,6 +509,7 @@ export type FormlessUiRecordField = FormlessUiBaseField & {
   media?: FormlessUiMediaAuthoring;
   presentationMode: FormlessUiRecordFieldPresentation;
   rendererKind: FormlessUiRecordFieldRendererKind;
+  value: FieldValue | undefined;
 };
 
 export type FormlessUiField =

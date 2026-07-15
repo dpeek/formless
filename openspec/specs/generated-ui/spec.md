@@ -459,6 +459,69 @@ validation, and operation execution.
   the tree-builder presentation contract, public Site forms, and production
   Astryx renderer activation remain owned by later migration slices
 
+### Requirement: Generated Record Field Renderer Contract
+
+The system SHALL project ordinary existing-record field editors and read-only
+field displays through the Formless UI field contract before selecting the
+active renderer, while generated runtime code owns record reads, draft state,
+field visibility, update resolution, and operation execution.
+
+#### Scenario: Project ordinary record editor and display fields
+
+- GIVEN a generated record, list, table, detail, or tree surface renders an
+  ordinary writable or read-only field
+- WHEN generated runtime prepares that field for the active Formless UI renderer
+- THEN it projects a `FormlessUiRecordField` or `FormlessUiDisplayField` with a
+  stable field id, record id, access mode, committed value, controlled draft,
+  display formatting, density, label visibility, pending state, display-safe
+  errors, projected options, commit policy, and field intents
+- AND ordinary fields include text, long text, number, value-unit, date,
+  datetime, boolean, non-state-machine enum, reference, markdown, and color
+  fields whose authoring does not require media upload or icon-picker effects
+- AND generated runtime retains browser replica reads, record and system-field
+  value resolution, reference option loading, active union and `visibleWhen`
+  selection, draft sessions, patch resolution, operation execution, sync
+  feedback, and local auto-save behavior
+- AND missing reference ids, invalid number drafts, unknown or alpha color text,
+  read-only and system fields, compact fields, heading fields, and visible-label
+  detail fields remain explicit projected facts instead of renderer inference
+
+#### Scenario: Legacy renderer consumes record field contracts
+
+- GIVEN production generated UI currently renders ordinary record editors and
+  displays with direct legacy components and Tailwind classes
+- WHEN generated runtime projects an ordinary record field
+- THEN a dedicated legacy adapter renders only the projected field contract and
+  dispatches field intents without reading records, loading options, resolving
+  patches, invoking operations, or updating sync state
+- AND record, list, table, detail, referenced-record, and tree call sites that
+  reuse the ordinary record-field leaf renderer retain their current editing,
+  read-only display, commit, failure, and missing-reference behavior
+- AND focused coverage asserts projected contracts, intent dispatch, successful
+  commits, failed-commit draft behavior, and user-visible display fallbacks
+  rather than legacy HTML structure or one-to-one visual parity
+- AND media and icon authoring, state-machine transitions, operation controls,
+  table and collection chrome, referenced-record dialog chrome, delete dialogs,
+  item-detail composition, and tree-builder composition remain on their existing
+  paths until their own renderer contracts are formalised
+- AND production remains on the legacy renderer after this contract migration
+
+#### Scenario: Astryx record field data fixtures
+
+- GIVEN the legacy renderer consumes ordinary production record field contracts
+- WHEN replacement-renderer UX is evaluated in `lib/astryx`
+- THEN unexported package-local data-only fixtures provide representative
+  `FormlessUiRecordField` and `FormlessUiDisplayField` values using the same
+  contract shapes as production
+- AND fixture coverage includes editable, read-only, dirty, invalid, pending,
+  compact, default, heading, visible-label detail, missing-reference, and
+  display-fallback states
+- AND the fixtures contain no React components, generated runtime imports,
+  browser replica reads, storage records, operation execution, media clients,
+  sync behavior, or Tailwind classes
+- AND adding the fixtures does not export or activate an Astryx production
+  record field renderer
+
 #### Scenario: Formless UI field contract coverage
 
 - GIVEN generated UI projects supported field display and editor kinds to

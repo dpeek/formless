@@ -1,5 +1,7 @@
+import * as stylex from "@stylexjs/stylex";
 import { Text } from "@astryxdesign/core/Text";
 import { VStack } from "@astryxdesign/core/VStack";
+import { sizeVars } from "@astryxdesign/core/theme/tokens.stylex";
 import type {
   FormlessUiDisplayField,
   FormlessUiField,
@@ -43,15 +45,21 @@ export function FormlessUiFieldRenderer({
   inputId = defaultFormlessUiFieldInputId(field),
   onIntent,
 }: FormlessUiFieldRendererProps) {
+  let renderer;
+
   if (field.stateMachineFacts !== undefined) {
-    return <StateMachineField field={field} inputId={inputId} onIntent={onIntent} />;
+    renderer = <StateMachineField field={field} inputId={inputId} onIntent={onIntent} />;
+  } else if (field.mode === "display") {
+    renderer = <DisplayField field={field} />;
+  } else {
+    renderer = <FieldEditor field={field} inputId={inputId} onIntent={onIntent} />;
   }
 
-  if (field.mode === "display") {
-    return <DisplayField field={field} />;
-  }
-
-  return <FieldEditor field={field} inputId={inputId} onIntent={onIntent} />;
+  return field.surface === "table-cell" ? (
+    <div {...stylex.props(styles.tableCellFrame)}>{renderer}</div>
+  ) : (
+    renderer
+  );
 }
 
 export function FormlessUiFieldSubmitFormAdapter({ field }: { field: FormlessUiField }) {
@@ -73,7 +81,12 @@ function DisplayField({ field }: { field: FormlessUiDisplayField }) {
   return (
     <VStack gap={fieldLabelIsHidden(field) ? 0 : 1} width="100%">
       {fieldLabelIsHidden(field) ? null : (
-        <Text display="block" type="label">
+        <Text
+          color={field.surface === "detail" ? "secondary" : undefined}
+          display="block"
+          type={field.surface === "detail" ? "supporting" : "label"}
+          weight={field.surface === "detail" ? "medium" : undefined}
+        >
           {field.label}
         </Text>
       )}
@@ -181,6 +194,18 @@ function FieldDisplay({ field }: { field: FormlessUiDisplayField }) {
 
   return <TextFieldDisplay field={field} />;
 }
+
+const styles = stylex.create({
+  tableCellFrame: {
+    alignItems: "center",
+    alignSelf: "start",
+    boxSizing: "border-box",
+    display: "flex",
+    minHeight: sizeVars["--size-element-sm"],
+    minWidth: 0,
+    width: "100%",
+  },
+});
 
 function editorRoute(
   field: FormlessUiEditorField,

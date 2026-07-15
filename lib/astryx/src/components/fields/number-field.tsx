@@ -9,7 +9,6 @@ import type {
   FormlessUiFieldIntentHandler,
 } from "../../formless-ui-contract.ts";
 import {
-  astryxDensity,
   draftInputFromValue,
   editorFieldValue,
   emitFieldDraftChange,
@@ -174,15 +173,13 @@ function ValueUnitSelector({
 
 export function NumberFieldDisplay({ field }: { field: FormlessUiDisplayField }) {
   const suffix = field.formatting.suffix ?? field.suffix;
-  const textType = astryxDensity(field) === "compact" ? "supporting" : "body";
-
   return (
     <div {...stylex.props(fieldChromeStyles.displayValue, styles.displayValue)}>
-      <Text type={textType} maxLines={2}>
+      <Text type="body" maxLines={2}>
         {field.formatting.displayValue}
       </Text>
       {suffix && field.formatting.displayValue ? (
-        <Text type="supporting" color="secondary">
+        <Text type="body" color="secondary">
           {suffix}
         </Text>
       ) : null}

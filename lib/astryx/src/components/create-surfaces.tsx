@@ -585,9 +585,7 @@ function setCreateSurfaceFailed(
 ): FormlessUiCreateSurfaceContract {
   const currentSurface = setCreateSurfacePending(surface, false);
   const errors = [
-    ...currentSurface.dialog.form.errors.filter(
-      (message) => message !== submissionFailureMessage,
-    ),
+    ...currentSurface.dialog.form.errors.filter((message) => message !== submissionFailureMessage),
     submissionFailureMessage,
   ];
 

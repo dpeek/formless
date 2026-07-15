@@ -11,7 +11,6 @@ import type {
   FormlessUiFieldIntentHandler,
 } from "../../formless-ui-contract.ts";
 import {
-  astryxDensity,
   editorFieldValue,
   emitFieldDraftChange,
   emitImmediateRecordFieldCommit,
@@ -164,7 +163,7 @@ export function EnumFieldDisplay({ field }: { field: FormlessUiDisplayField }) {
       {showVisual ? <VisuallyHidden>{`${field.label}: ${label}`}</VisuallyHidden> : null}
       {showVisual ? selectorOptionVisual(option) : null}
       {showLabel ? (
-        <Text type={astryxDensity(field) === "compact" ? "supporting" : "body"} maxLines={2}>
+        <Text type="body" maxLines={2}>
           {label}
         </Text>
       ) : null}

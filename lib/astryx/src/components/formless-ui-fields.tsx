@@ -502,6 +502,7 @@ function recordField({
     rendererKind,
     suffix,
     surface: "record",
+    value: drafts.recordValue,
     valueUnit,
   };
 }

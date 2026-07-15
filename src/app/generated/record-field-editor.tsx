@@ -17,6 +17,8 @@ import {
 import type { FieldValue, RecordValues } from "@dpeek/formless-storage";
 import { GeneratedRecordFieldControl } from "./record-field-control.tsx";
 import { RecordFieldDisplay } from "./record-field-display.tsx";
+import { LegacyRecordFieldAdapter } from "./legacy-record-field-adapter.tsx";
+import { projectGeneratedRecordFormlessUiField } from "./formless-ui-projection.ts";
 import {
   fieldValueToRecordFieldEditorInputValue,
   generatedRecordFieldEditorDraftFromUpdateDraftInput,
@@ -459,6 +461,64 @@ function EditableRecordFieldEditor({
   async function handleMediaAssetSelect(assetId: string) {
     setDraft(assetId);
     await commit(assetId);
+  }
+
+  if (fieldConfig.editor !== "media" && fieldConfig.editor !== "icon") {
+    const projectedField = projectGeneratedRecordFormlessUiField({
+      canPatch: updateOperation !== undefined,
+      density,
+      draftInput,
+      editorDraft: draft,
+      entityName,
+      error,
+      fieldConfig,
+      isPending,
+      presentation,
+      recordId,
+      recordValue,
+      schema,
+      showLabel,
+      unitDraft,
+      unitRecordValue,
+    });
+
+    if (projectedField.mode === "editor") {
+      return (
+        <LegacyRecordFieldAdapter
+          field={projectedField}
+          onIntent={(intent) => {
+            switch (intent.type) {
+              case "recordEditorDraftChange":
+                handleDraftChange(intent.value);
+                return;
+              case "recordDraftRevert":
+                if (intent.fieldName === valueUnitConfig?.unitFieldName) {
+                  revertUnitDraftToRecordValue();
+                } else {
+                  revertDraftToRecordValue();
+                }
+                return;
+              case "recordDraftChange":
+                if (intent.fieldName === valueUnitConfig?.unitFieldName) {
+                  setUnitDraft(String(intent.fieldValue?.value ?? ""));
+                }
+                return;
+              case "recordValueCommit":
+                void commit(intent.value);
+                return;
+              case "recordValueUnitCommit":
+                void commitGeneratedValueUnitDraft(intent.commit);
+                return;
+              case "fieldErrorChange":
+                setError(intent.message);
+                return;
+              default:
+                return;
+            }
+          }}
+        />
+      );
+    }
   }
 
   return (

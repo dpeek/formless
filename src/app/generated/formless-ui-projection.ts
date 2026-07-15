@@ -754,6 +754,7 @@ export function projectGeneratedRecordFormlessUiField({
     reference: projectReferenceEditorFacts(field, draft, referenceOptions),
     rendererKind,
     surface,
+    value: recordValue,
     valueUnit: projectValueUnitField(fieldConfig.valueUnit, projectedUnitDraft.unitDraft),
   };
 }

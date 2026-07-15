@@ -460,6 +460,7 @@ describe("generated Formless UI projection", () => {
       mode: "editor",
       rendererKind: "text",
       surface: "table-cell",
+      value: "Committed title",
     });
     expect(cost).toMatchObject({
       control: { controlKind: "number" },
@@ -590,6 +591,51 @@ describe("generated Formless UI projection", () => {
       formatting: { displayValue: "Locked" },
       mode: "display",
       value: "Locked",
+    });
+  });
+
+  it("keeps invalid record drafts separate from committed heading display facts", () => {
+    const field = asRecordField(
+      projectGeneratedRecordFormlessUiField({
+        canPatch: false,
+        density: "compact",
+        disabledReason: "Finish syncing before editing.",
+        draftInput: { kind: "input", value: "many" },
+        editorDraft: "many",
+        error: {
+          draftValue: { kind: "input", value: "many" },
+          fieldName: "estimate",
+          message: "Enter a finite number.",
+        },
+        fieldConfig: recordField("estimate", fields.estimate, "number"),
+        presentation: "heading",
+        recordId: "task-1",
+        recordValue: 2,
+        showLabel: true,
+        surface: "detail",
+      }),
+    );
+
+    expect(field).toMatchObject({
+      access: {
+        canPatch: false,
+        disabledReason: "Finish syncing before editing.",
+        kind: "disabled",
+        writable: true,
+      },
+      commit: "field-commit",
+      density: "compact",
+      drafts: {
+        draft: "many",
+        draftInput: { kind: "input", value: "many" },
+        recordValue: 2,
+      },
+      errors: [{ fieldName: "estimate", message: "Enter a finite number." }],
+      formatting: { displayValue: "2" },
+      labelVisibility: "visible",
+      presentationMode: "heading",
+      recordId: "task-1",
+      value: 2,
     });
   });
 

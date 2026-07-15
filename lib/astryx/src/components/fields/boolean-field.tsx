@@ -71,7 +71,7 @@ export function BooleanFieldDisplay({ field }: { field: FormlessUiDisplayField }
   return (
     <Text
       display="block"
-      type={astryxDensity(field) === "compact" ? "supporting" : "body"}
+      type="body"
       xstyle={fieldChromeStyles.displayValue}
     >
       {field.formatting.displayValue}

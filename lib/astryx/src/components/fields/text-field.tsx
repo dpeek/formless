@@ -8,8 +8,6 @@ import type {
   FormlessUiFieldIntentHandler,
 } from "../../formless-ui-contract.ts";
 import {
-  astryxDensity,
-  displayTextWithSuffix,
   editorFieldValue,
   emitFieldDraftChange,
   emitRecordFieldCommit,
@@ -118,20 +116,33 @@ export function MarkdownFieldEditor({
 }
 
 export function TextFieldDisplay({ field }: { field: FormlessUiDisplayField }) {
+  const suffix = field.formatting.suffix ?? field.suffix;
+
   return (
-    <div {...stylex.props(fieldChromeStyles.displayValue)}>
+    <div {...stylex.props(fieldChromeStyles.displayValue, styles.displayValue)}>
       <Text
-        type={astryxDensity(field) === "compact" ? "supporting" : "body"}
+        type="body"
         maxLines={field.control.controlKind === "textarea" ? undefined : 2}
       >
-        {displayTextWithSuffix(field)}
+        {field.formatting.displayValue}
       </Text>
+      {suffix && field.formatting.displayValue ? (
+        <Text color="secondary" type="body">
+          {suffix}
+        </Text>
+      ) : null}
     </div>
   );
 }
 
 export function MarkdownFieldDisplayValue({ field }: { field: FormlessUiDisplayField }) {
   return (
-    <MarkdownFieldDisplay value={field.formatting.displayValue} density={astryxDensity(field)} />
+    <MarkdownFieldDisplay value={field.formatting.displayValue} />
   );
 }
+
+const styles = stylex.create({
+  displayValue: {
+    gap: 4,
+  },
+});
