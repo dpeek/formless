@@ -14,6 +14,7 @@ import type {
   OperationCommandOutput,
   OperationInvocationEnvelope,
 } from "../shared/operation-invocation.ts";
+import { authorityStorageRecordValidationReader } from "./authority-record-validation-reader.ts";
 import {
   validateRecordWriteRequest,
   validateRecordWriteRequestAsync,
@@ -432,11 +433,16 @@ function validateRecordPlanStepWrite(
   state: RecordPlanPlanningState,
   recordWrite: CreateRecordWriteRequest | PatchRecordWriteRequest | DeleteRecordWriteRequest,
 ) {
-  const result = validateRecordWriteRequest(recordWrite, state.schema, state.storage, {
-    additionalRecords: [...state.plannedRecordsById.values()],
-    enforceGenericRecordWritePolicy: false,
-    packageResolver: state.packageResolver,
-  });
+  const result = validateRecordWriteRequest(
+    recordWrite,
+    state.schema,
+    authorityStorageRecordValidationReader(state.storage),
+    {
+      additionalRecords: [...state.plannedRecordsById.values()],
+      enforceGenericRecordWritePolicy: false,
+      packageResolver: state.packageResolver,
+    },
+  );
 
   if ("outcome" in result) {
     throw new BadRequestError(
@@ -485,12 +491,17 @@ async function validateRecordPlanStepWriteAsync(
   recordWrite: CreateRecordWriteRequest | PatchRecordWriteRequest | DeleteRecordWriteRequest,
   options: { identityReferenceResolver?: IdentityReferenceTargetResolver },
 ) {
-  const result = await validateRecordWriteRequestAsync(recordWrite, state.schema, state.storage, {
-    additionalRecords: [...state.plannedRecordsById.values()],
-    enforceGenericRecordWritePolicy: false,
-    identityReferenceResolver: options.identityReferenceResolver,
-    packageResolver: state.packageResolver,
-  });
+  const result = await validateRecordWriteRequestAsync(
+    recordWrite,
+    state.schema,
+    authorityStorageRecordValidationReader(state.storage),
+    {
+      additionalRecords: [...state.plannedRecordsById.values()],
+      enforceGenericRecordWritePolicy: false,
+      identityReferenceResolver: options.identityReferenceResolver,
+      packageResolver: state.packageResolver,
+    },
+  );
 
   if ("outcome" in result) {
     throw new BadRequestError(

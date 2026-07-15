@@ -25,20 +25,18 @@ import type {
   RecordWriteKind,
   RecordWriteRequest,
 } from "./record-write-requests.ts";
-import { assertExistingRecordsSatisfyUniqueConstraints } from "./constraints.ts";
+import {
+  assertExistingRecordsSatisfyUniqueConstraints,
+  assertUniqueConstraintsForActiveRecords,
+} from "./constraints.ts";
 import { BadRequestError } from "./errors.ts";
 import type {
   IdentityReferenceTargetResolution,
   IdentityReferenceTargetResolver,
 } from "./identity-reference-targets.ts";
-import {
-  getBootstrapRecords,
-  getRecordWriteResponseById,
-  getStoredRecord,
-  replayedWrite,
-  type RecordWriteResponse,
-  type WriteOutcome,
-} from "./storage.ts";
+import type { AuthorityRecordValidationReader } from "./authority-record-validation-reader.ts";
+import type { WriteOutcome } from "./storage.ts";
+import type { RecordWriteResponse } from "./storage-write-log.ts";
 
 export type ValidatedRecordWrite =
   | {
@@ -59,171 +57,90 @@ type RecordWriteValidationOptions = {
 export function validateRecordWriteRequest(
   value: unknown,
   schema: AppSchema,
-  storage: DurableObjectStorage,
+  reader: AuthorityRecordValidationReader,
   options: RecordWriteValidationOptions = {},
 ): ValidatedRecordWrite {
-  if (!isRecord(value)) {
-    throw new BadRequestError("Record write request must be an object.");
+  const prepared = prepareRecordWriteValidation(value, schema, reader, options);
+
+  if (prepared.kind === "complete") {
+    return prepared.result;
   }
 
-  if (typeof value.writeId !== "string" || value.writeId.trim() === "") {
-    throw new BadRequestError("Record write request must include a non-empty writeId.");
-  }
+  const recordValues = validateRecordValues(
+    prepared.values,
+    prepared.entitySchema,
+    reader,
+    recordValueValidationOptions(prepared, schema, options),
+  );
+  assertRecordWriteUniqueConstraints(prepared, recordValues, schema, reader, options);
 
-  if (value.kind !== "create" && value.kind !== "patch" && value.kind !== "delete") {
-    throw new BadRequestError('Only "create", "patch", and "delete" record writes are supported.');
-  }
-
-  if (typeof value.entity !== "string") {
-    throw new BadRequestError("Record write request must include an entity.");
-  }
-
-  const entity = schema.entities[value.entity];
-  if (!entity) {
-    throw new BadRequestError(`Unknown entity "${value.entity}".`);
-  }
-
-  if (options.allowStoredReplay !== false) {
-    const replay = getRecordWriteResponseById(storage, value.writeId);
-    if (replay) {
-      return { outcome: replayedWrite(replay) };
-    }
-  }
-
-  if (options.enforceGenericRecordWritePolicy !== false) {
-    assertRuntimeHistoryAllowsGenericRecordWrite(schema, value.entity, value.kind);
-
-    if (value.kind === "create" && !entityHasOperationKind(entity, "create")) {
-      throw new BadRequestError(`Create record writes are disabled for entity "${value.entity}".`);
-    }
-
-    if (value.kind === "patch" && !entityHasOperationKind(entity, "update")) {
-      throw new BadRequestError(`Patch record writes are disabled for entity "${value.entity}".`);
-    }
-
-    if (value.kind === "delete" && !entityHasOperationKind(entity, "delete")) {
-      throw new BadRequestError(`Delete record writes are disabled for entity "${value.entity}".`);
-    }
-  }
-
-  if (value.kind === "delete") {
-    if ("values" in value) {
-      throw new BadRequestError("Delete record write must not include values.");
-    }
-
-    if (typeof value.recordId !== "string" || value.recordId.trim() === "") {
-      throw new BadRequestError("Delete record write must include a recordId.");
-    }
-
-    const existingRecord = getStoredRecordForValidation(
-      storage,
-      value.recordId,
-      options.additionalRecords,
-    );
-    if (!existingRecord) {
-      throw new BadRequestError(`Unknown record "${value.recordId}".`);
-    }
-
-    if (existingRecord.entity !== value.entity) {
-      throw new BadRequestError("Delete entity must match the stored record entity.");
-    }
-
-    if (existingRecord.deletedAt) {
-      throw new BadRequestError(`Cannot delete tombstoned record "${value.recordId}".`);
-    }
-
-    assertNoActiveInboundReferences(existingRecord, schema, storage, options.additionalRecords);
-
-    return {
-      recordWrite: {
-        writeId: value.writeId,
-        entity: value.entity,
-        kind: "delete",
-        recordId: value.recordId,
-      } satisfies DeleteRecordWriteRequest,
-    };
-  }
-
-  if (!isRecord(value.values)) {
-    throw new BadRequestError("Record write request values must be an object.");
-  }
-
-  if (value.kind === "patch") {
-    if (typeof value.recordId !== "string" || value.recordId.trim() === "") {
-      throw new BadRequestError("Patch record write must include a recordId.");
-    }
-
-    const existingRecord = getStoredRecordForValidation(
-      storage,
-      value.recordId,
-      options.additionalRecords,
-    );
-    if (!existingRecord) {
-      throw new BadRequestError(`Unknown record "${value.recordId}".`);
-    }
-
-    if (existingRecord.entity !== value.entity) {
-      throw new BadRequestError("Patch entity must match the stored record entity.");
-    }
-
-    if (existingRecord.deletedAt) {
-      throw new BadRequestError(`Cannot patch tombstoned record "${value.recordId}".`);
-    }
-
-    const patchValues = validatePatchValues(value.values, entity);
-    assertImmutableFieldsNotPatched(schema, value.entity, patchValues);
-    assertStateMachineFieldsNotPatched(value.entity, entity, existingRecord, patchValues);
-    const recordValues = validateRecordValues(
-      { ...existingRecord.values, ...patchValues },
-      entity,
-      storage,
-      {
-        additionalRecords: options.additionalRecords,
-        entityName: value.entity,
-        existingRecordId: value.recordId,
-        packageResolver: options.packageResolver,
-        schema,
-      },
-    );
-
-    return {
-      recordWrite: {
-        writeId: value.writeId,
-        entity: value.entity,
-        kind: "patch",
-        recordId: value.recordId,
-        values: patchValues,
-        recordValues,
-      },
-    };
-  }
-
-  return {
-    recordWrite: {
-      writeId: value.writeId,
-      entity: value.entity,
-      kind: "create",
-      values: validateRecordValues(
-        normalizeStateMachineCreateValues(value.entity, entity, value.values),
-        entity,
-        storage,
-        {
-          additionalRecords: options.additionalRecords,
-          entityName: value.entity,
-          packageResolver: options.packageResolver,
-          schema,
-        },
-      ),
-    } satisfies CreateRecordWriteRequest,
-  };
+  return buildValidatedRecordWrite(prepared, recordValues);
 }
 
 export async function validateRecordWriteRequestAsync(
   value: unknown,
   schema: AppSchema,
-  storage: DurableObjectStorage,
+  reader: AuthorityRecordValidationReader,
   options: RecordWriteValidationOptions = {},
 ): Promise<ValidatedRecordWrite> {
+  const prepared = prepareRecordWriteValidation(value, schema, reader, options);
+
+  if (prepared.kind === "complete") {
+    return prepared.result;
+  }
+
+  const recordValues = await validateRecordValuesAsync(
+    prepared.values,
+    prepared.entitySchema,
+    reader,
+    recordValueValidationOptions(prepared, schema, options),
+  );
+  assertRecordWriteUniqueConstraints(prepared, recordValues, schema, reader, options);
+
+  return buildValidatedRecordWrite(prepared, recordValues);
+}
+
+function assertRecordWriteUniqueConstraints(
+  prepared: Exclude<PreparedRecordWriteValidation, { kind: "complete" }>,
+  recordValues: RecordValues,
+  schema: AppSchema,
+  reader: AuthorityRecordValidationReader,
+  options: RecordWriteValidationOptions,
+) {
+  assertUniqueConstraintsForActiveRecords(
+    schema,
+    prepared.entityName,
+    recordValues,
+    getActiveRecordsForValidation(reader, options.additionalRecords),
+    prepared.kind === "patch" ? { ignoreRecordId: prepared.recordId } : {},
+  );
+}
+
+type PreparedRecordWriteValidation =
+  | { kind: "complete"; result: ValidatedRecordWrite }
+  | {
+      entityName: string;
+      entitySchema: EntitySchema;
+      kind: "create";
+      values: Record<string, unknown>;
+      writeId: string;
+    }
+  | {
+      entityName: string;
+      entitySchema: EntitySchema;
+      kind: "patch";
+      patchValues: Partial<RecordValues>;
+      recordId: string;
+      values: Record<string, unknown>;
+      writeId: string;
+    };
+
+function prepareRecordWriteValidation(
+  value: unknown,
+  schema: AppSchema,
+  reader: AuthorityRecordValidationReader,
+  options: RecordWriteValidationOptions,
+): PreparedRecordWriteValidation {
   if (!isRecord(value)) {
     throw new BadRequestError("Record write request must be an object.");
   }
@@ -246,9 +163,9 @@ export async function validateRecordWriteRequestAsync(
   }
 
   if (options.allowStoredReplay !== false) {
-    const replay = getRecordWriteResponseById(storage, value.writeId);
+    const replay = reader.readStoredReplay(value.writeId);
     if (replay) {
-      return { outcome: replayedWrite(replay) };
+      return { kind: "complete", result: { outcome: { kind: "replay", response: replay } } };
     }
   }
 
@@ -278,7 +195,7 @@ export async function validateRecordWriteRequestAsync(
     }
 
     const existingRecord = getStoredRecordForValidation(
-      storage,
+      reader,
       value.recordId,
       options.additionalRecords,
     );
@@ -294,15 +211,18 @@ export async function validateRecordWriteRequestAsync(
       throw new BadRequestError(`Cannot delete tombstoned record "${value.recordId}".`);
     }
 
-    assertNoActiveInboundReferences(existingRecord, schema, storage, options.additionalRecords);
+    assertNoActiveInboundReferences(existingRecord, schema, reader, options.additionalRecords);
 
     return {
-      recordWrite: {
-        writeId: value.writeId,
-        entity: value.entity,
-        kind: "delete",
-        recordId: value.recordId,
-      } satisfies DeleteRecordWriteRequest,
+      kind: "complete",
+      result: {
+        recordWrite: {
+          writeId: value.writeId,
+          entity: value.entity,
+          kind: "delete",
+          recordId: value.recordId,
+        } satisfies DeleteRecordWriteRequest,
+      },
     };
   }
 
@@ -316,7 +236,7 @@ export async function validateRecordWriteRequestAsync(
     }
 
     const existingRecord = getStoredRecordForValidation(
-      storage,
+      reader,
       value.recordId,
       options.additionalRecords,
     );
@@ -335,27 +255,54 @@ export async function validateRecordWriteRequestAsync(
     const patchValues = validatePatchValues(value.values, entity);
     assertImmutableFieldsNotPatched(schema, value.entity, patchValues);
     assertStateMachineFieldsNotPatched(value.entity, entity, existingRecord, patchValues);
-    const recordValues = await validateRecordValuesAsync(
-      { ...existingRecord.values, ...patchValues },
-      entity,
-      storage,
-      {
-        additionalRecords: options.additionalRecords,
-        entityName: value.entity,
-        existingRecordId: value.recordId,
-        identityReferenceResolver: options.identityReferenceResolver,
-        packageResolver: options.packageResolver,
-        schema,
-      },
-    );
 
     return {
+      kind: "patch",
+      entityName: value.entity,
+      entitySchema: entity,
+      patchValues,
+      recordId: value.recordId,
+      values: { ...existingRecord.values, ...patchValues },
+      writeId: value.writeId,
+    };
+  }
+
+  return {
+    kind: "create",
+    entityName: value.entity,
+    entitySchema: entity,
+    values: normalizeStateMachineCreateValues(value.entity, entity, value.values),
+    writeId: value.writeId,
+  };
+}
+
+function recordValueValidationOptions(
+  prepared: Exclude<PreparedRecordWriteValidation, { kind: "complete" }>,
+  schema: AppSchema,
+  options: RecordWriteValidationOptions,
+): RuntimeRecordValueValidationOptions {
+  return {
+    additionalRecords: options.additionalRecords,
+    entityName: prepared.entityName,
+    ...(prepared.kind === "patch" ? { existingRecordId: prepared.recordId } : {}),
+    identityReferenceResolver: options.identityReferenceResolver,
+    packageResolver: options.packageResolver,
+    schema,
+  };
+}
+
+function buildValidatedRecordWrite(
+  prepared: Exclude<PreparedRecordWriteValidation, { kind: "complete" }>,
+  recordValues: RecordValues,
+): ValidatedRecordWrite {
+  if (prepared.kind === "patch") {
+    return {
       recordWrite: {
-        writeId: value.writeId,
-        entity: value.entity,
+        writeId: prepared.writeId,
+        entity: prepared.entityName,
         kind: "patch",
-        recordId: value.recordId,
-        values: patchValues,
+        recordId: prepared.recordId,
+        values: prepared.patchValues,
         recordValues,
       },
     };
@@ -363,21 +310,10 @@ export async function validateRecordWriteRequestAsync(
 
   return {
     recordWrite: {
-      writeId: value.writeId,
-      entity: value.entity,
+      writeId: prepared.writeId,
+      entity: prepared.entityName,
       kind: "create",
-      values: await validateRecordValuesAsync(
-        normalizeStateMachineCreateValues(value.entity, entity, value.values),
-        entity,
-        storage,
-        {
-          additionalRecords: options.additionalRecords,
-          entityName: value.entity,
-          identityReferenceResolver: options.identityReferenceResolver,
-          packageResolver: options.packageResolver,
-          schema,
-        },
-      ),
+      values: recordValues,
     } satisfies CreateRecordWriteRequest,
   };
 }
@@ -625,16 +561,16 @@ function validatePatchValues(values: Record<string, unknown>, entity: EntitySche
 export function validateRecordValues(
   values: Record<string, unknown>,
   entity: EntitySchema,
-  storage: DurableObjectStorage,
+  reader: AuthorityRecordValidationReader,
   runtimeOptions?: RuntimeRecordValueValidationOptions,
 ): RecordValues {
   const { references, validated } = validateRecordValuesBase(values, entity);
 
   for (const reference of references) {
-    validateLocalReferenceFieldValue(reference, storage, runtimeOptions?.additionalRecords);
+    validateLocalReferenceFieldValue(reference, reader, runtimeOptions?.additionalRecords);
   }
 
-  validateRuntimeRecordValues(validated, storage, runtimeOptions);
+  validateRuntimeRecordValues(validated, reader, runtimeOptions);
 
   return validated;
 }
@@ -642,16 +578,16 @@ export function validateRecordValues(
 async function validateRecordValuesAsync(
   values: Record<string, unknown>,
   entity: EntitySchema,
-  storage: DurableObjectStorage,
+  reader: AuthorityRecordValidationReader,
   runtimeOptions: RuntimeRecordValueValidationOptions,
 ): Promise<RecordValues> {
   const { references, validated } = validateRecordValuesBase(values, entity);
 
   for (const reference of references) {
-    await validateReferenceFieldValueAsync(reference, storage, runtimeOptions);
+    await validateReferenceFieldValueAsync(reference, reader, runtimeOptions);
   }
 
-  validateRuntimeRecordValues(validated, storage, runtimeOptions);
+  validateRuntimeRecordValues(validated, reader, runtimeOptions);
 
   return validated;
 }
@@ -719,10 +655,10 @@ function validateRecordValuesBase(
 
 function validateLocalReferenceFieldValue(
   reference: ReferenceFieldValidation,
-  storage: DurableObjectStorage,
+  reader: AuthorityRecordValidationReader,
   additionalRecords: StoredRecord[] | undefined,
 ) {
-  const targetRecord = getStoredRecordForValidation(storage, reference.value, additionalRecords);
+  const targetRecord = getStoredRecordForValidation(reader, reference.value, additionalRecords);
   if (!targetRecord) {
     throw new BadRequestError(
       `Field "${reference.fieldName}" references unknown ${reference.target} record "${reference.value}".`,
@@ -744,7 +680,7 @@ function validateLocalReferenceFieldValue(
 
 async function validateReferenceFieldValueAsync(
   reference: ReferenceFieldValidation,
-  storage: DurableObjectStorage,
+  reader: AuthorityRecordValidationReader,
   runtimeOptions: RuntimeRecordValueValidationOptions,
 ) {
   if (isSupportedIdentityReferenceTarget(reference.target)) {
@@ -764,7 +700,7 @@ async function validateReferenceFieldValueAsync(
     return;
   }
 
-  validateLocalReferenceFieldValue(reference, storage, runtimeOptions.additionalRecords);
+  validateLocalReferenceFieldValue(reference, reader, runtimeOptions.additionalRecords);
 }
 
 function assertIdentityReferenceTargetResolution(
@@ -806,7 +742,7 @@ function assertIdentityReferenceTargetResolution(
 
 function validateRuntimeRecordValues(
   validated: RecordValues,
-  storage: DurableObjectStorage,
+  reader: AuthorityRecordValidationReader,
   runtimeOptions: RuntimeRecordValueValidationOptions | undefined,
 ) {
   if (runtimeOptions) {
@@ -819,7 +755,7 @@ function validateRuntimeRecordValues(
       validated,
       runtimeOptions.schema,
       runtimeOptions.entityName,
-      storage,
+      reader,
       runtimeOptions.existingRecordId,
       runtimeOptions.additionalRecords,
       runtimeOptions.packageResolver,
@@ -840,23 +776,27 @@ function assertNoSystemRecordValues(
 }
 
 function getStoredRecordForValidation(
-  storage: DurableObjectStorage,
+  reader: AuthorityRecordValidationReader,
   recordId: string,
   additionalRecords: StoredRecord[] | undefined,
 ) {
   const additionalRecord = additionalRecords?.find((record) => record.id === recordId);
 
-  return additionalRecord ?? getStoredRecord(storage, recordId);
+  return additionalRecord ?? reader.readStoredRecord(recordId);
 }
 
-function getBootstrapRecordsForValidation(
-  storage: DurableObjectStorage,
+function getActiveRecordsForValidation(
+  reader: AuthorityRecordValidationReader,
   additionalRecords: StoredRecord[] | undefined,
 ) {
-  const recordsById = new Map(getBootstrapRecords(storage).map((record) => [record.id, record]));
+  const recordsById = new Map(reader.readActiveRecords().map((record) => [record.id, record]));
 
   for (const record of additionalRecords ?? []) {
-    recordsById.set(record.id, record);
+    if (record.deletedAt) {
+      recordsById.delete(record.id);
+    } else {
+      recordsById.set(record.id, record);
+    }
   }
 
   return [...recordsById.values()];
@@ -1086,7 +1026,7 @@ function validateRuntimeControlPlaneValues(
   values: RecordValues,
   schema: AppSchema,
   entityName: string,
-  storage: DurableObjectStorage,
+  reader: AuthorityRecordValidationReader,
   existingRecordId: string | undefined,
   additionalRecords: StoredRecord[] | undefined,
   packageResolver: AppPackageResolver | undefined,
@@ -1099,7 +1039,7 @@ function validateRuntimeControlPlaneValues(
       values,
       routeValidation,
       entityName,
-      storage,
+      reader,
       existingRecordId,
       additionalRecords,
     );
@@ -1108,7 +1048,7 @@ function validateRuntimeControlPlaneValues(
   if (isInstanceControlPlaneRouteValidationEntity(schema, entityName)) {
     validateInstanceControlPlaneRouteValues(
       values,
-      storage,
+      reader,
       existingRecordId,
       additionalRecords,
       packageResolver,
@@ -1120,7 +1060,7 @@ function validateRuntimeRouteValues(
   values: RecordValues,
   routeValidation: RuntimeSchemaRouteValidationSchema,
   entityName: string,
-  storage: DurableObjectStorage,
+  reader: AuthorityRecordValidationReader,
   existingRecordId: string | undefined,
   additionalRecords: StoredRecord[] | undefined,
 ) {
@@ -1152,7 +1092,7 @@ function validateRuntimeRouteValues(
 
   if (values[routeValidation.enabledField] === true) {
     assertEnabledRouteIsUnique(
-      storage,
+      reader,
       entityName,
       values,
       routeValidation.pathField,
@@ -1165,7 +1105,7 @@ function validateRuntimeRouteValues(
 }
 
 function assertEnabledRouteIsUnique(
-  storage: DurableObjectStorage,
+  reader: AuthorityRecordValidationReader,
   entityName: string,
   values: RecordValues,
   pathField: string,
@@ -1177,7 +1117,7 @@ function assertEnabledRouteIsUnique(
   const path = values[pathField];
   const prefix = prefixField === undefined ? undefined : values[prefixField];
 
-  for (const record of getBootstrapRecordsForValidation(storage, additionalRecords)) {
+  for (const record of getActiveRecordsForValidation(reader, additionalRecords)) {
     if (
       record.id === existingRecordId ||
       record.entity !== entityName ||
@@ -1227,7 +1167,7 @@ function isInstanceControlPlaneRouteValidationEntity(schema: AppSchema, entityNa
 
 function validateInstanceControlPlaneRouteValues(
   values: RecordValues,
-  storage: DurableObjectStorage,
+  reader: AuthorityRecordValidationReader,
   existingRecordId: string | undefined,
   additionalRecords: StoredRecord[] | undefined,
   packageResolver: AppPackageResolver | undefined,
@@ -1257,7 +1197,7 @@ function validateInstanceControlPlaneRouteValues(
   if (kind === "mount") {
     validateInstanceControlPlaneMountRoute(
       values,
-      storage,
+      reader,
       matchHost,
       matchPath,
       matchPrefix,
@@ -1273,7 +1213,7 @@ function validateInstanceControlPlaneRouteValues(
   if (values.enabled === true) {
     assertEnabledInstanceControlPlaneRouteIsUnique(
       values,
-      storage,
+      reader,
       existingRecordId,
       additionalRecords,
     );
@@ -1282,7 +1222,7 @@ function validateInstanceControlPlaneRouteValues(
 
 function validateInstanceControlPlaneMountRoute(
   values: RecordValues,
-  storage: DurableObjectStorage,
+  reader: AuthorityRecordValidationReader,
   matchHost: string | undefined,
   matchPath: string,
   matchPrefix: string | undefined,
@@ -1329,7 +1269,7 @@ function validateInstanceControlPlaneMountRoute(
     throw new BadRequestError(`Field "appInstall" is required for ${targetProfile} mount routes.`);
   }
 
-  const install = getStoredRecordForValidation(storage, appInstall, additionalRecords);
+  const install = getStoredRecordForValidation(reader, appInstall, additionalRecords);
 
   if (!install || install.entity !== "app-install" || install.deletedAt) {
     throw new BadRequestError(
@@ -1512,13 +1452,13 @@ function isNormalizedAbsoluteRoutePath(value: string) {
 
 function assertEnabledInstanceControlPlaneRouteIsUnique(
   values: RecordValues,
-  storage: DurableObjectStorage,
+  reader: AuthorityRecordValidationReader,
   existingRecordId: string | undefined,
   additionalRecords: StoredRecord[] | undefined,
 ) {
   const candidate = instanceRouteMatch(values);
 
-  for (const record of getBootstrapRecordsForValidation(storage, additionalRecords)) {
+  for (const record of getActiveRecordsForValidation(reader, additionalRecords)) {
     if (
       record.id === existingRecordId ||
       record.entity !== "route" ||
@@ -1625,10 +1565,10 @@ function isRuntimeRouteSafePrefix(prefix: string, reservedPaths: readonly string
 function assertNoActiveInboundReferences(
   targetRecord: StoredRecord,
   schema: AppSchema,
-  storage: DurableObjectStorage,
+  reader: AuthorityRecordValidationReader,
   additionalRecords: StoredRecord[] | undefined,
 ) {
-  for (const record of getBootstrapRecordsForValidation(storage, additionalRecords)) {
+  for (const record of getActiveRecordsForValidation(reader, additionalRecords)) {
     if (record.deletedAt) {
       continue;
     }

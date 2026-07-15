@@ -354,6 +354,52 @@ materialization.
   classification checks
 - AND storage-backed facts remain Authority-owned
 
+### Requirement: Authority Validation Module Boundary
+
+The system SHALL concentrate deterministic Authority validation behind
+Authority-owned Module interfaces while keeping durable storage and Worker
+runtime semantics at explicit adapters.
+
+#### Scenario: Validate schema and snapshot requests from explicit facts
+
+- GIVEN Authority evaluates a schema update, source schema reset, or storage
+  snapshot restore request
+- WHEN parsing, compatibility, stored-value, timestamp, reference, or unique
+  constraint validation runs
+- THEN the validation Module consumes the request plus explicit current schema,
+  stored record, expected storage identity, and identity-reference resolution
+  facts
+- AND it returns the validated schema or snapshot without committing storage
+- AND schema-language parsing remains owned by the reusable schema package
+- AND current Authority-safe validation errors remain unchanged
+
+#### Scenario: Resolve record validation through Authority-owned readers
+
+- GIVEN Authority validates create, patch, or delete record materialization
+- WHEN validation needs replay, target-record, active-record, inbound-reference,
+  runtime control-plane, or identity-reference facts
+- THEN the validation Module consumes those facts through Authority-owned record
+  and identity-reference reader interfaces
+- AND production readers obtain the facts from the target Authority storage and
+  identity control-plane boundary
+- AND deterministic validation does not require callers to emulate
+  `DurableObjectStorage`, SQLite, or Worker runtime interfaces
+- AND synchronous local-reference and asynchronous identity-reference paths
+  share one record-write validation model rather than duplicating field,
+  policy, patch, delete, or state-machine rules
+
+#### Scenario: Keep durable behavior at the Authority runtime boundary
+
+- GIVEN validation succeeds or fails through the Authority validation Module
+- WHEN runtime behavior is exercised
+- THEN real Authority storage remains responsible for commit, rollback, replay,
+  operation invocation rows, write-log changes, cursor advancement, reset,
+  snapshot materialization, and storage identity isolation
+- AND real Worker contracts remain responsible for HTTP request parsing,
+  response headers, broadcasts, hibernatable WebSockets, and runtime bindings
+- AND focused validation coverage does not replace representative real-workerd
+  contracts for those durable and Worker-owned behaviors
+
 ### Requirement: Operation Record Plan Materialization
 
 The system SHALL materialize declarative command record plans through the same

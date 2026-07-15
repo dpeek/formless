@@ -15,6 +15,22 @@ export function assertUniqueConstraints(
   values: RecordValues,
   options: ConstraintCheckOptions = {},
 ) {
+  assertUniqueConstraintsForActiveRecords(
+    schema,
+    entityName,
+    values,
+    activeConstraintCandidateRecords(storage, entityName, options.additionalRecords),
+    options,
+  );
+}
+
+export function assertUniqueConstraintsForActiveRecords(
+  schema: AppSchema,
+  entityName: string,
+  values: RecordValues,
+  activeRecords: readonly StoredRecord[],
+  options: Pick<ConstraintCheckOptions, "ignoreRecordId"> = {},
+) {
   const entity = schema.entities[entityName];
   if (!entity) {
     throw new Error(`Missing entity "${entityName}".`);
@@ -25,12 +41,10 @@ export function assertUniqueConstraints(
       continue;
     }
 
-    const duplicate = activeConstraintCandidateRecords(
-      storage,
-      entityName,
-      options.additionalRecords,
-    ).find((record) => {
+    const duplicate = activeRecords.find((record) => {
       return (
+        record.entity === entityName &&
+        !record.deletedAt &&
         record.id !== options.ignoreRecordId &&
         uniqueConstraintValuesEqual(record.values, values, constraint)
       );

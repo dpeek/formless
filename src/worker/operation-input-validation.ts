@@ -9,6 +9,7 @@ import {
 } from "@dpeek/formless-schema";
 import type { RecordValues } from "@dpeek/formless-storage";
 import type { OperationInvocationEnvelope } from "../shared/operation-invocation.ts";
+import { authorityStorageRecordValidationReader } from "./authority-record-validation-reader.ts";
 import { validateRecordValues } from "./authority-validation.ts";
 import { BadRequestError } from "./errors.ts";
 
@@ -217,7 +218,7 @@ function assertStorageBackedOperationInputValues(
           },
         },
       },
-      request.storage,
+      authorityStorageRecordValidationReader(request.storage),
     );
   }
 }

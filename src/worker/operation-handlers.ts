@@ -17,6 +17,7 @@ import type {
   OperationInvocationEnvelope,
 } from "../shared/operation-invocation.ts";
 import type { CreateRecordWriteRequest } from "./record-write-requests.ts";
+import { authorityStorageRecordValidationReader } from "./authority-record-validation-reader.ts";
 import { validateRecordValues } from "./authority-validation.ts";
 import { assertUniqueConstraints } from "./constraints.ts";
 import { BadRequestError } from "./errors.ts";
@@ -202,6 +203,7 @@ function executeSubscribeHandler(context: OperationHandlerExecutionContext) {
   const emailAddressEntity = requireSubscribeEntity(context.schema, "email-address");
   const audienceEntity = requireSubscribeEntity(context.schema, "audience");
   const subscriptionEntity = requireSubscribeEntity(context.schema, "subscription");
+  const validationReader = authorityStorageRecordValidationReader(context.storage);
   const email = parseSubscribeEmail(input.email);
   const existingEmailAddress = findActiveRecordByField(
     context.storage,
@@ -228,7 +230,7 @@ function executeSubscribeHandler(context: OperationHandlerExecutionContext) {
         kind: "create",
         entity: "contact",
         values: () =>
-          validateRecordValues({ label: email.normalizedAddress }, contactEntity, context.storage),
+          validateRecordValues({ label: email.normalizedAddress }, contactEntity, validationReader),
       });
   const emailAddressRecordIndex = existingEmailAddress
     ? undefined
@@ -244,7 +246,7 @@ function executeSubscribeHandler(context: OperationHandlerExecutionContext) {
               normalizedAddress: email.normalizedAddress,
             },
             emailAddressEntity,
-            context.storage,
+            validationReader,
           ),
       });
 
@@ -259,7 +261,7 @@ function executeSubscribeHandler(context: OperationHandlerExecutionContext) {
             contact: requireWrittenRecord(writtenRecords, contactRecordIndex).id,
           },
           emailAddressEntity,
-          context.storage,
+          validationReader,
         ),
     });
   }
@@ -273,7 +275,7 @@ function executeSubscribeHandler(context: OperationHandlerExecutionContext) {
           validateRecordValues(
             { key: defaultAudienceKey, label: "Default audience" },
             audienceEntity,
-            context.storage,
+            validationReader,
           ),
       });
   const subscriptionValues = (writtenRecords: StoredRecord[]) =>
@@ -290,7 +292,7 @@ function executeSubscribeHandler(context: OperationHandlerExecutionContext) {
         ...sourceValues,
       },
       subscriptionEntity,
-      context.storage,
+      validationReader,
     );
 
   if (existingSubscription) {
@@ -637,13 +639,14 @@ function selectTreeChildCreatePlans(
   }
 
   const input = requireCreateTreeChildInput(context);
+  const validationReader = authorityStorageRecordValidationReader(storage);
   const parentRecord = requireActiveEndpointRecord(
     storage,
     context,
     relationship.from.entity,
     input.parentRecordId,
   );
-  const childValues = validateRecordValues(input.childValues, childEntity, storage);
+  const childValues = validateRecordValues(input.childValues, childEntity, validationReader);
 
   return [
     {
@@ -676,7 +679,7 @@ function selectTreeChildCreatePlans(
             input.placementValues ?? {},
           ),
           placementEntity,
-          storage,
+          validationReader,
         );
       },
     },
@@ -833,6 +836,7 @@ function selectTransitionStateWritePlans(
   }
 
   const record = requireActiveTransitionTargetRecord(storage, context, input.recordId);
+  const validationReader = authorityStorageRecordValidationReader(storage);
   const previousState = record.values[machine.field];
 
   if (typeof previousState !== "string") {
@@ -853,7 +857,7 @@ function selectTransitionStateWritePlans(
       [machine.field]: transition.to,
     },
     entity,
-    storage,
+    validationReader,
     {
       entityName,
       existingRecordId: record.id,
@@ -887,7 +891,7 @@ function selectTransitionStateWritePlans(
       kind: "create",
       entity: event.entity,
       values: () =>
-        validateRecordValues(eventValues, eventEntity, storage, {
+        validateRecordValues(eventValues, eventEntity, validationReader, {
           entityName: event.entity,
           schema: context.schema,
         }),

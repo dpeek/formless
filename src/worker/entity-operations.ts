@@ -20,6 +20,7 @@ import {
   executeOperationHandlerCreateTriggers,
   executeOperationHandlerOutcome,
 } from "./operation-handlers.ts";
+import { authorityStorageRecordValidationReader } from "./authority-record-validation-reader.ts";
 import { validateRecordWriteRequestAsync } from "./authority-validation.ts";
 import type { IdentityReferenceTargetResolver } from "./identity-reference-targets.ts";
 import {
@@ -470,12 +471,17 @@ function validateOperationRecordWriteRequest(
     packageResolver?: AppPackageResolver;
   } = {},
 ) {
-  return validateRecordWriteRequestAsync(recordWrite, schema, storage, {
-    allowStoredReplay: false,
-    enforceGenericRecordWritePolicy: false,
-    identityReferenceResolver: options.identityReferenceResolver,
-    packageResolver: options.packageResolver,
-  });
+  return validateRecordWriteRequestAsync(
+    recordWrite,
+    schema,
+    authorityStorageRecordValidationReader(storage),
+    {
+      allowStoredReplay: false,
+      enforceGenericRecordWritePolicy: false,
+      identityReferenceResolver: options.identityReferenceResolver,
+      packageResolver: options.packageResolver,
+    },
+  );
 }
 
 async function prepareCommandOperationInvocationOutcome(

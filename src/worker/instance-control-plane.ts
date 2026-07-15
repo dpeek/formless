@@ -48,6 +48,7 @@ import {
   authorizeOperationalManagement,
   type AuthorityAdminGuardEnv,
 } from "./authority-admin-guard.ts";
+import { authorityStorageRecordValidationReader } from "./authority-record-validation-reader.ts";
 import {
   executeAuthorityOperation,
   selectAuthorityOperation,
@@ -777,13 +778,18 @@ function validateControlPlaneRecordWrite(
       throw new BadRequestError(`Unknown entity "${entityName}".`);
     }
 
-    const validated = validateRecordValues(values, entity, storage, {
-      additionalRecords: options.additionalRecords,
-      entityName,
-      schema,
-      existingRecordId: recordOptions?.ignoreRecordId,
-      packageResolver: options.packageResolver,
-    });
+    const validated = validateRecordValues(
+      values,
+      entity,
+      authorityStorageRecordValidationReader(storage),
+      {
+        additionalRecords: options.additionalRecords,
+        entityName,
+        schema,
+        existingRecordId: recordOptions?.ignoreRecordId,
+        packageResolver: options.packageResolver,
+      },
+    );
 
     validateControlPlanePackageBoundary(
       storage,

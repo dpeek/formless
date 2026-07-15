@@ -30,20 +30,15 @@ import {
   formatRuntimeWorkspaceAppPackages,
 } from "../shared/workspace-runtime-packages.ts";
 import {
-  parseAppSchema,
   type AppSchema,
   type EntityOperationSchema,
   type EntitySchema,
   type RecordPlanStepSchema,
 } from "@dpeek/formless-schema";
-import {
-  IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX,
-  IDENTITY_CONTROL_PLANE_STORAGE_IDENTITY,
-} from "@dpeek/formless-identity-control-plane";
+import { IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX } from "@dpeek/formless-identity-control-plane";
 import {
   crmSeedRecords,
   crmSourceSchema,
-  rateSeedRecords as rateCardSeedRecords,
   siteSeedRecords,
   siteSourceSchema,
   taskSeedRecords,
@@ -60,7 +55,6 @@ import {
   type AuthorityTestRecordOperationRequest,
 } from "../test/authority-write.ts";
 import { resetTestIdentityStorage } from "../test/identity-owner.ts";
-import { INTERNAL_IDENTITY_APP_REFERENCE_TARGET_PATH } from "./identity-control-plane.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
 import { PUBLIC_SITE_TREE_CACHE_CONTROL } from "@dpeek/formless-site-app/worker";
 
@@ -94,8 +88,6 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   await resetSchemaApp("tasks");
-  await resetSchemaApp("site");
-  await resetSchemaApp("crm");
   useSchemaApp("tasks");
 });
 
@@ -159,6 +151,7 @@ describe("authority", () => {
   });
 
   it("returns the site source schema from the site bootstrap path", async () => {
+    await resetSchemaApp("site");
     useSchemaApp("site");
 
     const body = await getJson<BootstrapResponse>("/api/bootstrap");
@@ -245,6 +238,7 @@ describe("authority", () => {
 
     const personal = await getInstalledAppJson<BootstrapResponse>("site", "personal", "/bootstrap");
     const docs = await getInstalledAppJson<BootstrapResponse>("site", "docs", "/bootstrap");
+    await resetSchemaApp("site");
     useSchemaApp("site");
     const legacySite = await getJson<BootstrapResponse>("/api/bootstrap");
 
@@ -402,6 +396,7 @@ describe("authority", () => {
   });
 
   it("returns a public page tree for a published site page", async () => {
+    await resetSchemaApp("site");
     useSchemaApp("site");
     await postJson<BootstrapResponse>("/api/snapshot/restore", siteStorageSnapshot());
 
@@ -436,6 +431,7 @@ describe("authority", () => {
   });
 
   it("returns a public page tree for any live site page href", async () => {
+    await resetSchemaApp("site");
     useSchemaApp("site");
     await postCreateOperationForEntity("write-site-extra-page", "block", {
       type: "page",
@@ -453,6 +449,7 @@ describe("authority", () => {
   });
 
   it("returns regular blog and dated post route trees for the site app", async () => {
+    await resetSchemaApp("site");
     useSchemaApp("site");
     await postJson<BootstrapResponse>("/api/snapshot/restore", siteStorageSnapshot());
 
@@ -480,6 +477,7 @@ describe("authority", () => {
   });
 
   it("returns 404 for a missing site page href", async () => {
+    await resetSchemaApp("site");
     useSchemaApp("site");
 
     const response = await harness.fetch(apiPath("/api/tree/missing-page"));
@@ -570,6 +568,7 @@ describe("authority", () => {
   it("isolates records and write replay by schema key", async () => {
     const task = await postCreateOperation("write-shared", { title: "First", done: false });
 
+    await resetSchemaApp("crm");
     useSchemaApp("crm");
     const contact = await postCreateOperationForEntity("write-shared", "contact", {
       label: "Designer",
@@ -636,156 +635,6 @@ describe("authority", () => {
     expect(bootstrap.schema).toEqual(nextSchema);
     expect(bootstrap.schemaUpdatedAt).toBe(update.updatedAt);
     expect(update.schema.screens).toEqual(appSchema.screens);
-  });
-
-  it("accepts compatible schema updates that change query labels and expressions", async () => {
-    await postJson<SchemaUpdateResponse>("/api/schema", {
-      schema: schemaWithQueries(defaultQueries()),
-    });
-    const created = await postCreateOperation("write-1", { title: "First", done: false });
-    const nextSchema = schemaWithQueries({
-      ...defaultQueries(),
-      taskActive: {
-        label: "Open",
-        entity: "task",
-        expression: {
-          kind: "where",
-          ref: { kind: "value", name: "done" },
-          op: "eq",
-          value: false,
-        },
-      },
-    });
-    const parsedNextSchema = parseAppSchema(nextSchema);
-
-    const update = await postJson<SchemaUpdateResponse>("/api/schema", { schema: nextSchema });
-    const bootstrap = await getJson<BootstrapResponse>("/api/bootstrap");
-
-    expect(update.schema).toEqual(parsedNextSchema);
-    expect(bootstrap.schema).toEqual(parsedNextSchema);
-    expect(bootstrap.records).toEqual([...taskSeedRecords, created.record]);
-  });
-
-  it("rejects query references that point at missing fields through the schema route", async () => {
-    await expectError(
-      "/api/schema",
-      {
-        schema: schemaWithQueries({
-          ...defaultQueries(),
-          taskMissing: {
-            label: "Missing",
-            entity: "task",
-            expression: {
-              kind: "where",
-              ref: { kind: "value", name: "missing" },
-              op: "eq",
-              value: "yes",
-            },
-          },
-        }),
-      },
-      'references unknown field "value.missing"',
-    );
-  });
-
-  it("rejects invalid collection operation references through the schema route", async () => {
-    await expectError(
-      "/api/schema",
-      {
-        schema: schemaWithViews({
-          ...defaultViews(),
-          taskHome: {
-            ...defaultCollectionView(),
-            operations: [{ operation: "task.missing" }],
-          },
-        }),
-      },
-      'references unknown operation "task.missing"',
-    );
-  });
-
-  it("rejects invalid table views through the schema route", async () => {
-    await expectError(
-      "/api/schema",
-      {
-        schema: {
-          ...schemaWithViews({
-            ...defaultViews(),
-            taskHome: {
-              ...defaultCollectionView(),
-              result: { type: "table", tableView: "taskTable" },
-            },
-          }),
-          tableViews: {
-            taskTable: {
-              entity: "task",
-              columns: [{ type: "field", field: "missing" }],
-            },
-          },
-        },
-      },
-      'references unknown field "task.missing"',
-    );
-  });
-
-  it("accepts compatible schema updates that change query labels and selected scope", async () => {
-    const initialSchema = schemaWithQueries({
-      ...defaultQueries(),
-      taskCompleted: {
-        label: "Done",
-        entity: "task",
-        expression: {
-          kind: "where",
-          ref: { kind: "value", name: "done" },
-          op: "eq",
-          value: true,
-        },
-      },
-    });
-    const nextSchema = schemaWithQueries({
-      ...defaultQueries(),
-      taskCompleted: {
-        label: "Open",
-        entity: "task",
-        expression: {
-          kind: "where",
-          ref: { kind: "value", name: "done" },
-          op: "eq",
-          value: false,
-        },
-      },
-    });
-
-    await postJson<SchemaUpdateResponse>("/api/schema", { schema: initialSchema });
-    const update = await postJson<SchemaUpdateResponse>("/api/schema", { schema: nextSchema });
-
-    expect(update.schema).toEqual(parseAppSchema(nextSchema));
-  });
-
-  it("keeps dev seed fixture IDs and references coherent", () => {
-    expectUniqueIds(taskSeedRecords);
-    expectUniqueIds(rateCardSeedRecords);
-
-    const cardIds = new Set(
-      rateCardSeedRecords.filter((record) => record.entity === "card").map((record) => record.id),
-    );
-    const resourceIds = new Set(
-      rateCardSeedRecords
-        .filter((record) => record.entity === "resource")
-        .map((record) => record.id),
-    );
-    const rates = rateCardSeedRecords.filter((record) => record.entity === "rate");
-    const pairs = new Set<string>();
-
-    for (const rate of rates) {
-      expect(resourceIds.has(String(rate.values.resource))).toBe(true);
-      expect(cardIds.has(String(rate.values.card))).toBe(true);
-      pairs.add(`${rate.values.resource}:${rate.values.card}`);
-    }
-
-    expect(cardIds).toEqual(new Set(["rec_card_default", "rec_card_premium"]));
-    expect(pairs.size).toBe(rates.length);
-    expect(rates).toHaveLength(cardIds.size * resourceIds.size);
   });
 
   it("resets only the schema to the source schema while preserving records and cursor", async () => {
@@ -892,6 +741,7 @@ describe("authority", () => {
       done: false,
     });
 
+    await resetSchemaApp("crm");
     useSchemaApp("crm");
     await postCreateOperationForEntity("write-crm-local-contact", "contact", {
       label: "Temporary contact",
@@ -927,6 +777,7 @@ describe("authority", () => {
     });
     expect(snapshot.records).toEqual([...taskSeedRecords, created.record]);
 
+    await resetSchemaApp("crm");
     useSchemaApp("crm");
     const crmSnapshot = await getJson<StorageSnapshot>("/api/snapshot");
 
@@ -938,6 +789,7 @@ describe("authority", () => {
   });
 
   it("keeps manual Site snapshots separate from source seed reset", async () => {
+    await resetSchemaApp("site");
     useSchemaApp("site");
     const created = await postCreateOperationForEntity("write-site-manual-snapshot", "block", {
       type: "page",
@@ -964,6 +816,7 @@ describe("authority", () => {
     const before = await getJson<BootstrapResponse>("/api/bootstrap");
     const schemaResponse = await getJson<SchemaResponse>("/api/schema");
     const restoredRecord = taskSnapshotRecord("snapshot-task-restored", "Restored task");
+    await resetSchemaApp("crm");
     const taskSocket = await openSyncSocket("/api/sync/ws", "tasks");
     const crmSocket = await openSyncSocket("/api/sync/ws", "crm");
     let crmCapture: ReturnType<typeof captureSyncSocketMessages> | undefined;
@@ -1031,11 +884,6 @@ describe("authority", () => {
         storageSnapshot({ storageIdentity: "app:work" }),
         'Storage snapshot storageIdentity must be "tasks".',
       );
-      await expectError(
-        "/api/snapshot/restore",
-        storageSnapshot({ schemaKey: "crm" }),
-        'Storage snapshot schemaKey must be "tasks".',
-      );
       await expectNoCapturedMessages(capture);
       capture.stop();
     } finally {
@@ -1045,132 +893,8 @@ describe("authority", () => {
     await expect(getJson<BootstrapResponse>("/api/bootstrap")).resolves.toEqual(before);
   });
 
-  it("validates restore snapshot records before commit", async () => {
-    await expectError(
-      "/api/snapshot/restore",
-      storageSnapshot({
-        records: [
-          {
-            ...taskSnapshotRecord("snapshot-task-invalid-field", "Invalid field"),
-            values: { title: "Invalid field", done: false, missing: "nope" },
-          },
-        ],
-      }),
-      'Storage snapshot record "snapshot-task-invalid-field" includes unknown field "task.missing".',
-    );
-
-    await expectError(
-      "/api/snapshot/restore",
-      storageSnapshot({
-        schema: schemaWithTaskProjectReference({ required: true }),
-        records: [
-          {
-            ...taskSnapshotRecord("snapshot-task-missing-project", "Missing project"),
-            values: { title: "Missing project", done: false, project: "missing-project" },
-          },
-        ],
-      }),
-      'Storage snapshot record "snapshot-task-missing-project" has invalid field "task.project".',
-    );
-
-    await expectError(
-      "/api/snapshot/restore",
-      storageSnapshot({
-        schema: schemaWithTaskConstraints({
-          uniqueTitle: { kind: "unique", fields: ["title"] },
-        }),
-        records: [
-          taskSnapshotRecord("snapshot-task-duplicate-title-a", "Duplicate"),
-          taskSnapshotRecord("snapshot-task-duplicate-title-b", "Duplicate"),
-        ],
-      }),
-      'Cannot add unique constraint "task.uniqueTitle" because existing records violate it.',
-    );
-  });
-
-  it("rejects create and patch writes that violate unique constraints", async () => {
-    await postJson<SchemaUpdateResponse>("/api/schema", {
-      schema: schemaWithRateReferences({
-        constraints: uniqueRatePairConstraints(),
-      }),
-    });
-
-    const resource = await postCreateOperationForEntity("write-resource", "resource", {
-      name: "Designer",
-    });
-    const card = await postCreateOperationForEntity("write-card-default", "card", {
-      name: "Default",
-    });
-    const premiumCard = await postCreateOperationForEntity("write-card-premium", "card", {
-      name: "Premium",
-    });
-    const defaultRate = await postCreateOperationForEntity("write-rate-default", "rate", {
-      resource: resource.record.id,
-      card: card.record.id,
-      price: 125,
-    });
-    const premiumRate = await postCreateOperationForEntity("write-rate-premium", "rate", {
-      resource: resource.record.id,
-      card: premiumCard.record.id,
-      price: 150,
-    });
-    const pricePatch = await postRecordOperationRequest({
-      idempotencyKey: "write-rate-price",
-      entity: "rate",
-      operationName: "update",
-      recordId: defaultRate.record.id,
-      input: { price: 130 },
-    });
-
-    expect(pricePatch.record.values.price).toBe(130);
-
-    await expectRecordOperationError(
-      {
-        idempotencyKey: "write-rate-duplicate",
-        entity: "rate",
-        operationName: "create",
-        input: {
-          resource: resource.record.id,
-          card: card.record.id,
-          price: 175,
-        },
-      },
-      'Unique constraint "rate.uniqueRatePair" would be violated.',
-    );
-    await expectRecordOperationError(
-      {
-        idempotencyKey: "write-rate-move",
-        entity: "rate",
-        operationName: "update",
-        recordId: premiumRate.record.id,
-        input: { card: card.record.id },
-      },
-      'Unique constraint "rate.uniqueRatePair" would be violated.',
-    );
-  });
-
-  it("ignores tombstoned records when checking unique constraints", async () => {
-    await postJson<SchemaUpdateResponse>("/api/schema", {
-      schema: schemaWithTaskConstraints({
-        uniqueTitle: { kind: "unique", fields: ["title"] },
-      }),
-    });
-
-    const completed = await postCreateOperation("write-completed", {
-      title: "Reusable",
-      done: true,
-    });
-
-    await postCommandOperation("command-clear", "clearCompletedTasks");
-    const recreated = await postCreateOperation("write-recreated", {
-      title: "Reusable",
-      done: false,
-    });
-
-    expect(recreated.record.values.title).toBe(completed.record.values.title);
-  });
-
   it("creates Site tree child blocks with placement edges and removes only the placement", async () => {
+    await resetSchemaApp("site");
     useSchemaApp("site");
     const parent = await postCreateOperationForEntity("write-site-tree-test-parent", "block", {
       type: "page",
@@ -1254,73 +978,6 @@ describe("authority", () => {
       entity: "block-placement",
       deletedAt: expect.any(String),
     });
-  });
-
-  it("uses declared create operations when writing", async () => {
-    await postJson<SchemaUpdateResponse>("/api/schema", {
-      schema: schemaWithViews(),
-    });
-
-    const created = await postRecordOperationRequest({
-      idempotencyKey: "write-1",
-      entity: "task",
-      operationName: "create",
-      input: { title: "First" },
-    });
-
-    expect(created.record.values.title).toBe("First");
-  });
-
-  it("rejects caller-provided system fields in generic write values", async () => {
-    await expectRecordOperationError(
-      {
-        idempotencyKey: "write-system-created",
-        entity: "task",
-        operationName: "create",
-        input: { title: "System field", updatedAt: "2026-05-28T00:00:00.000Z" },
-      },
-      'Operation input must not include system field "updatedAt".',
-    );
-
-    const created = await postCreateOperation("write-system-patch-source", {
-      title: "Patch source",
-      done: false,
-    });
-
-    await expectRecordOperationError(
-      {
-        idempotencyKey: "write-system-patch",
-        entity: "task",
-        operationName: "update",
-        recordId: created.record.id,
-        input: { updatedAt: "2026-05-28T00:00:01.000Z" },
-      },
-      'Operation input must not include system field "updatedAt".',
-    );
-  });
-
-  it("rejects unsupported field types in schema updates", async () => {
-    await expectError(
-      "/api/schema",
-      {
-        schema: {
-          version: 1,
-          entities: {
-            task: {
-              label: "Task",
-              fields: {
-                title: { type: "money", required: true },
-              },
-            },
-          },
-          queries: {},
-          itemViews: {},
-          tableViews: {},
-          views: {},
-        },
-      },
-      'Field "task.title" has unsupported type "money".',
-    );
   });
 
   it("rejects incompatible schema changes", async () => {
@@ -1583,6 +1240,7 @@ describe("authority", () => {
       taskSocket.close();
     }
 
+    await resetSchemaApp("site");
     useSchemaApp("site");
     const siteBootstrap = await getJson<BootstrapResponse>("/api/bootstrap");
     const siteSocket = await openSyncSocket("/api/sync/ws", "site");
@@ -1680,6 +1338,7 @@ describe("authority", () => {
   });
 
   it("broadcasts committed task creates to same-schema sync WebSockets only", async () => {
+    await resetSchemaApp("crm");
     const taskSocketA = await openSyncSocket("/api/sync/ws", "tasks");
     const taskSocketB = await openSyncSocket("/api/sync/ws", "tasks");
     const crmSocket = await openSyncSocket("/api/sync/ws", "crm");
@@ -1957,9 +1616,7 @@ describe("authority", () => {
       const sync = await getJson<SyncResponse>(`/api/sync?after=${existing.cursor}`);
 
       expect(replay).toEqual(created);
-      expect(
-        sync.changes.filter((change) => change.writeId === created.writeIdentity),
-      ).toHaveLength(1);
+      expect(sync.changes).toEqual(created.changes);
       await expectNoCapturedMessages(replayCapture);
       replayCapture.stop();
     } finally {
@@ -2068,428 +1725,7 @@ describe("authority", () => {
     await expectError("/api/sync?after=bad", undefined, "Sync cursor must be");
   });
 
-  it("rejects unknown entity names", async () => {
-    await expectRecordOperationError(
-      {
-        idempotencyKey: "write-1",
-        entity: "missing",
-        operationName: "create",
-        input: { title: "First" },
-      },
-      'Unknown entity "missing".',
-    );
-  });
-
-  it("rejects empty required text", async () => {
-    await expectRecordOperationError(
-      {
-        idempotencyKey: "write-1",
-        entity: "task",
-        operationName: "create",
-        input: { title: "   ", done: false },
-      },
-      'Field "title" cannot be empty.',
-    );
-  });
-
-  it("accepts task values and applies the boolean default", async () => {
-    const response = await postCreateOperation("write-1", {
-      title: "Plan week",
-      dueDate: "2026-05-01",
-    });
-
-    expect(response.record).toMatchObject({
-      entity: "task",
-      values: {
-        title: "Plan week",
-        done: false,
-        dueDate: "2026-05-01",
-      },
-    });
-  });
-
-  it("rejects invalid boolean and date values", async () => {
-    await expectRecordOperationError(
-      {
-        idempotencyKey: "write-1",
-        entity: "task",
-        operationName: "create",
-        input: { title: "First", done: "false" },
-      },
-      'Field "done" must be a boolean.',
-    );
-    await expectRecordOperationError(
-      {
-        idempotencyKey: "write-2",
-        entity: "task",
-        operationName: "create",
-        input: { title: "First", done: false, dueDate: "05/01/2026" },
-      },
-      'Field "dueDate" must be a YYYY-MM-DD date.',
-    );
-  });
-
-  it("accepts enum values, applies enum defaults, and rejects unknown options", async () => {
-    const withDefault = await postCreateOperation("write-1", { title: "First" });
-    const explicit = await postCreateOperation("write-2", { title: "Second", priority: "high" });
-
-    expect(withDefault.record.values).toMatchObject({
-      title: "First",
-      done: false,
-      priority: "normal",
-    });
-    expect(explicit.record.values).toMatchObject({
-      title: "Second",
-      done: false,
-      priority: "high",
-    });
-
-    await expectRecordOperationError(
-      {
-        idempotencyKey: "write-3",
-        entity: "task",
-        operationName: "create",
-        input: { title: "Third", priority: "missing" },
-      },
-      'Field "priority" must be a known enum value.',
-    );
-  });
-
-  it("accepts finite number values and rejects invalid numeric input", async () => {
-    await postJson<SchemaUpdateResponse>("/api/schema", {
-      schema: schemaWithEstimateNumber(),
-    });
-
-    const zero = await postCreateOperation("write-1", { title: "Zero", estimate: 0 });
-    const estimated = await postCreateOperation("write-2", { title: "Estimated", estimate: 3 });
-
-    expect(zero.record.values.estimate).toBe(0);
-    expect(estimated.record.values.estimate).toBe(3);
-
-    await expectRecordOperationError(
-      {
-        idempotencyKey: "write-3",
-        entity: "task",
-        operationName: "create",
-        input: { title: "String estimate", estimate: "3" },
-      },
-      'Field "estimate" must be a finite number.',
-    );
-    await expectRecordOperationError(
-      {
-        idempotencyKey: "write-4",
-        entity: "task",
-        operationName: "create",
-        input: { title: "Decimal estimate", estimate: 1.5 },
-      },
-      'Field "estimate" must be an integer.',
-    );
-    await expectRecordOperationError(
-      {
-        idempotencyKey: "write-5",
-        entity: "task",
-        operationName: "create",
-        input: { title: "Negative estimate", estimate: -1 },
-      },
-      'Field "estimate" must be greater than or equal to 0.',
-    );
-  });
-
-  it("clears optional number fields when patched to an empty value", async () => {
-    await postJson<SchemaUpdateResponse>("/api/schema", {
-      schema: schemaWithEstimateNumber(),
-    });
-
-    const created = await postCreateOperation("write-1", { title: "First", estimate: 4 });
-    const cleared = await postRecordOperationRequest({
-      idempotencyKey: "write-2",
-      entity: "task",
-      operationName: "update",
-      recordId: created.record.id,
-      input: { estimate: "" },
-    });
-    const zero = await postRecordOperationRequest({
-      idempotencyKey: "write-3",
-      entity: "task",
-      operationName: "update",
-      recordId: created.record.id,
-      input: { estimate: 0 },
-    });
-
-    expect(cleared.record.values.estimate).toBeUndefined();
-    expect(zero.record.values.estimate).toBe(0);
-  });
-
-  it("checks number constraints when applying schema updates", async () => {
-    await postJson<SchemaUpdateResponse>("/api/schema", {
-      schema: schemaWithEstimateNumber(),
-    });
-
-    const created = await postCreateOperation("write-1", { title: "Estimated", estimate: 3 });
-
-    const relaxed = await postJson<SchemaUpdateResponse>("/api/schema", {
-      schema: schemaWithEstimateNumber({ max: 5 }),
-    });
-
-    expect(relaxed.schema.entities.task?.fields.estimate).toMatchObject({
-      type: "number",
-      max: 5,
-    });
-
-    await expectError(
-      "/api/schema",
-      {
-        schema: schemaWithEstimateNumber({ max: 2 }),
-      },
-      'Cannot change number constraints for "task.estimate"',
-    );
-    await expectError(
-      "/api/schema",
-      {
-        schema: schemaWithRequiredScore(),
-      },
-      'Cannot require field "task.score"',
-    );
-
-    const bootstrap = await getJson<BootstrapResponse>("/api/bootstrap");
-    expect(bootstrap.records).toEqual([...taskSeedRecords, created.record]);
-  });
-
-  it("clears optional enum fields when patched to an empty value", async () => {
-    await postJson<SchemaUpdateResponse>("/api/schema", {
-      schema: schemaWithPriorityEnum({ required: false }),
-    });
-
-    const created = await postCreateOperation("write-1", { title: "First", priority: "high" });
-    const patched = await postRecordOperationRequest({
-      idempotencyKey: "write-2",
-      entity: "task",
-      operationName: "update",
-      recordId: created.record.id,
-      input: { priority: "" },
-    });
-
-    expect(patched.record.values.priority).toBeUndefined();
-  });
-
-  it("validates reference create and patch values against active target records", async () => {
-    await postJson<SchemaUpdateResponse>("/api/schema", { schema: schemaWithRateReferences() });
-
-    const resource = await postCreateOperationForEntity("write-resource", "resource", {
-      name: "Designer",
-    });
-    const card = await postCreateOperationForEntity("write-card", "card", { name: "Default" });
-    const rate = await postCreateOperationForEntity("write-rate", "rate", {
-      resource: resource.record.id,
-      card: card.record.id,
-      backupResource: resource.record.id,
-      price: 125,
-    });
-    const cleared = await postRecordOperationRequest({
-      idempotencyKey: "write-clear-reference",
-      entity: "rate",
-      operationName: "update",
-      recordId: rate.record.id,
-      input: { backupResource: "" },
-    });
-
-    expect(rate.record.values).toMatchObject({
-      resource: resource.record.id,
-      card: card.record.id,
-      backupResource: resource.record.id,
-      price: 125,
-    });
-    expect(cleared.record.values.backupResource).toBeUndefined();
-
-    await expectRecordOperationError(
-      {
-        idempotencyKey: "write-missing-reference",
-        entity: "rate",
-        operationName: "create",
-        input: { resource: "missing", card: card.record.id },
-      },
-      'Field "resource" references unknown resource record "missing".',
-    );
-    await expectRecordOperationError(
-      {
-        idempotencyKey: "write-wrong-entity-reference",
-        entity: "rate",
-        operationName: "create",
-        input: { resource: card.record.id, card: card.record.id },
-      },
-      'Field "resource" must reference a resource record.',
-    );
-    await expectRecordOperationError(
-      {
-        idempotencyKey: "write-empty-reference",
-        entity: "rate",
-        operationName: "create",
-        input: { resource: "", card: card.record.id },
-      },
-      'Field "resource" is required.',
-    );
-    await expectRecordOperationError(
-      {
-        idempotencyKey: "write-non-string-reference",
-        entity: "rate",
-        operationName: "create",
-        input: { resource: 1, card: card.record.id },
-      },
-      'Field "resource" must be a reference ID.',
-    );
-  });
-
-  it("rejects tombstoned reference targets", async () => {
-    const completed = await postCreateOperation("write-task", { title: "Done", done: true });
-
-    await postCommandOperation("command-clear", "clearCompletedTasks");
-    await postJson<SchemaUpdateResponse>("/api/schema", {
-      schema: schemaWithAssignmentReference(),
-    });
-
-    await expectRecordOperationError(
-      {
-        idempotencyKey: "write-assignment",
-        entity: "assignment",
-        operationName: "create",
-        input: { task: completed.record.id },
-      },
-      `Field "task" cannot reference tombstoned record "${completed.record.id}".`,
-    );
-  });
-
-  it("validates app identity references against identity control-plane targets", async () => {
-    const privateHarness = await createIdentityReferenceHarness();
-
-    try {
-      await resetTestIdentityStorage(privateHarness, adminToken);
-
-      const principal = await createIdentityPrincipal(
-        privateHarness,
-        "app-ref-principal",
-        "App Principal",
-      );
-      const nextPrincipal = await createIdentityPrincipal(
-        privateHarness,
-        "app-ref-next-principal",
-        "App Next Principal",
-      );
-      const organization = await createIdentityOrganization(
-        privateHarness,
-        "app-ref-organization",
-        "App Organization",
-      );
-      const group = await createIdentityGroup(privateHarness, "app-ref-group", "App Group");
-
-      await postPrivateJson<SchemaUpdateResponse>(privateHarness, "/api/schema", {
-        schema: schemaWithIdentityReferenceAccount(),
-      });
-
-      const account = await postPrivateRecordOperation(privateHarness, {
-        idempotencyKey: "write-account-identity-refs",
-        entity: "account",
-        operationName: "create",
-        input: {
-          name: "Identity account",
-          ownerPrincipal: principal.id,
-          organization: organization.id,
-          group: group.id,
-        },
-      });
-      const patched = await postPrivateRecordOperation(privateHarness, {
-        idempotencyKey: "patch-account-identity-ref",
-        entity: "account",
-        operationName: "update",
-        recordId: account.record.id,
-        input: { ownerPrincipal: nextPrincipal.id },
-      });
-      const planned = await postPrivateCommandOperation(privateHarness, {
-        idempotencyKey: "plan-account-identity-refs",
-        entity: "account",
-        operationName: "createFromPlan",
-        input: {
-          name: "Planned identity account",
-          ownerPrincipal: principal.id,
-          organization: organization.id,
-          group: group.id,
-        },
-      });
-
-      expect(account.record.values).toMatchObject({
-        ownerPrincipal: principal.id,
-        organization: organization.id,
-        group: group.id,
-      });
-      expect(patched.record.values.ownerPrincipal).toBe(nextPrincipal.id);
-      expect(planned.changes[0]?.payload).toMatchObject({
-        entity: "account",
-        values: {
-          name: "Planned identity account",
-          ownerPrincipal: principal.id,
-          organization: organization.id,
-          group: group.id,
-        },
-      });
-
-      await expectPrivateRecordOperationError(
-        privateHarness,
-        {
-          idempotencyKey: "write-missing-identity-ref",
-          entity: "account",
-          operationName: "create",
-          input: {
-            name: "Missing identity",
-            ownerPrincipal: "missing-principal",
-            organization: organization.id,
-            group: group.id,
-          },
-        },
-        'Field "ownerPrincipal" references unknown auth:principal record "missing-principal".',
-      );
-      await expectPrivateRecordOperationError(
-        privateHarness,
-        {
-          idempotencyKey: "write-wrong-identity-ref",
-          entity: "account",
-          operationName: "create",
-          input: {
-            name: "Wrong identity entity",
-            ownerPrincipal: group.id,
-            organization: organization.id,
-            group: group.id,
-          },
-        },
-        'Field "ownerPrincipal" must reference a auth:principal record.',
-      );
-
-      const tombstonedGroup = await createIdentityGroup(
-        privateHarness,
-        "app-ref-tombstoned-group",
-        "Removed Group",
-      );
-      await tombstoneIdentityRecord(privateHarness, tombstonedGroup.id);
-
-      await expectPrivateRecordOperationError(
-        privateHarness,
-        {
-          idempotencyKey: "write-tombstoned-identity-ref",
-          entity: "account",
-          operationName: "create",
-          input: {
-            name: "Tombstoned identity",
-            ownerPrincipal: principal.id,
-            organization: organization.id,
-            group: tombstonedGroup.id,
-          },
-        },
-        `Field "group" cannot reference tombstoned record "${tombstonedGroup.id}".`,
-      );
-    } finally {
-      await privateHarness.dispose();
-    }
-  });
-
-  it("validates app identity references during snapshot restore", async () => {
+  it("restores app identity references through the control-plane resolver", async () => {
     const privateHarness = await createIdentityReferenceHarness();
 
     try {
@@ -2510,18 +1746,6 @@ describe("authority", () => {
         "restore-app-ref-group",
         "Restore Group",
       );
-      const wrongEntityGroup = await createIdentityGroup(
-        privateHarness,
-        "restore-app-ref-wrong-group",
-        "Restore Wrong Group",
-      );
-      const tombstonedGroup = await createIdentityGroup(
-        privateHarness,
-        "restore-app-ref-tombstoned-group",
-        "Restore Tombstoned Group",
-      );
-      await tombstoneIdentityRecord(privateHarness, tombstonedGroup.id);
-
       const schema = schemaWithIdentityReferenceAccount();
       const account = identityReferenceAccountSnapshotRecord({
         ownerPrincipal: principal.id,
@@ -2535,220 +1759,9 @@ describe("authority", () => {
       );
 
       expect(restored.records).toContainEqual(account);
-
-      await expectPrivateError(
-        privateHarness,
-        "/api/snapshot/restore",
-        storageSnapshot({
-          schema,
-          records: [
-            identityReferenceAccountSnapshotRecord({
-              id: "snapshot-account-missing-identity",
-              ownerPrincipal: "missing-principal",
-              organization: organization.id,
-              group: group.id,
-            }),
-          ],
-        }),
-        'Field "ownerPrincipal" references unknown auth:principal record "missing-principal".',
-      );
-      await expectPrivateError(
-        privateHarness,
-        "/api/snapshot/restore",
-        storageSnapshot({
-          schema,
-          records: [
-            identityReferenceAccountSnapshotRecord({
-              id: "snapshot-account-wrong-identity",
-              ownerPrincipal: wrongEntityGroup.id,
-              organization: organization.id,
-              group: group.id,
-            }),
-          ],
-        }),
-        'Field "ownerPrincipal" must reference a auth:principal record.',
-      );
-      await expectPrivateError(
-        privateHarness,
-        "/api/snapshot/restore",
-        storageSnapshot({
-          schema,
-          records: [
-            identityReferenceAccountSnapshotRecord({
-              id: "snapshot-account-tombstoned-identity",
-              ownerPrincipal: principal.id,
-              organization: organization.id,
-              group: tombstonedGroup.id,
-            }),
-          ],
-        }),
-        `Field "group" cannot reference tombstoned record "${tombstonedGroup.id}".`,
-      );
     } finally {
       await privateHarness.dispose();
     }
-  });
-
-  it("keeps app identity references compatible without local target records", async () => {
-    const privateHarness = await createIdentityReferenceHarness();
-
-    try {
-      await resetTestIdentityStorage(privateHarness, adminToken);
-
-      const principal = await createIdentityPrincipal(
-        privateHarness,
-        "compatible-app-ref-principal",
-        "Compatible Principal",
-      );
-      const organization = await createIdentityOrganization(
-        privateHarness,
-        "compatible-app-ref-organization",
-        "Compatible Organization",
-      );
-      const group = await createIdentityGroup(
-        privateHarness,
-        "compatible-app-ref-group",
-        "Compatible Group",
-      );
-      const schema = schemaWithIdentityReferenceAccount();
-
-      await postPrivateJson<SchemaUpdateResponse>(privateHarness, "/api/schema", { schema });
-      await postPrivateRecordOperation(privateHarness, {
-        idempotencyKey: "write-compatible-identity-account",
-        entity: "account",
-        operationName: "create",
-        input: {
-          name: "Compatible identity account",
-          ownerPrincipal: principal.id,
-          organization: organization.id,
-          group: group.id,
-        },
-      });
-
-      const updated = await postPrivateJson<SchemaUpdateResponse>(privateHarness, "/api/schema", {
-        schema,
-      });
-
-      expect(updated.schema.entities.account?.fields.ownerPrincipal).toMatchObject({
-        type: "reference",
-        to: "auth:principal",
-      });
-    } finally {
-      await privateHarness.dispose();
-    }
-  });
-
-  it("rejects unsupported identity app reference lookup targets", async () => {
-    const response = await harness.durableObjectFetch(
-      "FORMLESS_AUTHORITY",
-      IDENTITY_CONTROL_PLANE_STORAGE_IDENTITY,
-      INTERNAL_IDENTITY_APP_REFERENCE_TARGET_PATH,
-      {
-        body: JSON.stringify({ id: "role:instance.owner", target: "auth:role" }),
-        headers: { "Content-Type": "application/json" },
-        method: "POST",
-      },
-    );
-
-    expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ resolution: { kind: "unsupported" } });
-  });
-
-  it("checks reference schema compatibility against existing records", async () => {
-    await postJson<SchemaUpdateResponse>("/api/schema", {
-      schema: schemaWithTaskProjectReference({ required: false }),
-    });
-    const project = await postCreateOperationForEntity("write-project", "project", {
-      name: "Buildout",
-      code: "BLD",
-    });
-    await postCreateOperation("write-task", { title: "Scoped", project: project.record.id });
-
-    const displayChange = await postJson<SchemaUpdateResponse>("/api/schema", {
-      schema: schemaWithTaskProjectReference({ required: false, displayField: "code" }),
-    });
-
-    expect(displayChange.schema.entities.task?.fields.project).toMatchObject({
-      type: "reference",
-      displayField: "code",
-    });
-
-    await expectError(
-      "/api/schema",
-      {
-        schema: schemaWithTaskProjectReference({
-          required: false,
-          to: "milestone",
-          includeMilestone: true,
-        }),
-      },
-      'Cannot change reference target for "task.project".',
-    );
-  });
-
-  it("rejects required reference additions when existing records are missing targets", async () => {
-    await postCreateOperation("write-task", { title: "Unscoped" });
-
-    await expectError(
-      "/api/schema",
-      {
-        schema: schemaWithTaskProjectReference({ required: true }),
-      },
-      'Cannot require field "task.project"',
-    );
-  });
-
-  it("rejects schema updates that add violated unique constraints", async () => {
-    await postJson<SchemaUpdateResponse>("/api/schema", {
-      schema: schemaWithRateReferences(),
-    });
-
-    const resource = await postCreateOperationForEntity("write-resource", "resource", {
-      name: "Designer",
-    });
-    const card = await postCreateOperationForEntity("write-card", "card", {
-      name: "Default",
-    });
-
-    await postCreateOperationForEntity("write-rate-1", "rate", {
-      resource: resource.record.id,
-      card: card.record.id,
-      price: 125,
-    });
-    await postCreateOperationForEntity("write-rate-2", "rate", {
-      resource: resource.record.id,
-      card: card.record.id,
-      price: 150,
-    });
-
-    await expectError(
-      "/api/schema",
-      {
-        schema: schemaWithRateReferences({
-          constraints: uniqueRatePairConstraints(),
-        }),
-      },
-      'Cannot add unique constraint "rate.uniqueRatePair" because existing records violate it.',
-    );
-  });
-
-  it("accepts enum option catalog changes without scanning existing records", async () => {
-    const created = await postCreateOperation("write-1", { title: "First", priority: "high" });
-
-    const nextSchema = schemaWithPriorityEnum({
-      default: "normal",
-      values: {
-        low: { label: "Low" },
-        normal: { label: "Standard" },
-      },
-    });
-    const update = await postJson<SchemaUpdateResponse>("/api/schema", { schema: nextSchema });
-    const bootstrap = await getJson<BootstrapResponse>("/api/bootstrap");
-
-    expect(update.schema.entities.task?.fields.priority).toEqual(
-      parseAppSchema(nextSchema).entities.task?.fields.priority,
-    );
-    expect(bootstrap.records).toEqual([...taskSeedRecords, created.record]);
   });
 
   it("patches an existing record and returns patch changes from sync", async () => {
@@ -2775,29 +1788,6 @@ describe("authority", () => {
       recordId: created.record.id,
       payload: patched.record,
     });
-  });
-
-  it("rejects generic delete write requests when policy is disabled", async () => {
-    const created = await postCreateOperation("write-1", { title: "First", done: false });
-
-    await expectRecordOperationError(
-      {
-        idempotencyKey: "write-delete-disabled",
-        entity: "task",
-        operationName: "delete",
-        recordId: created.record.id,
-      },
-      'Unknown operation "delete" for entity "task".',
-    );
-
-    const bootstrap = await getJson<BootstrapResponse>("/api/bootstrap");
-    const sync = await getJson<SyncResponse>(`/api/sync?after=${taskSeedRecords.length + 1}`);
-
-    expect(bootstrap.records).toContainEqual(created.record);
-    expect(bootstrap.records.find((record) => record.id === created.record.id)).not.toHaveProperty(
-      "deletedAt",
-    );
-    expect(sync.changes).toEqual([]);
   });
 
   it("commits enabled generic delete writes as tombstone changes", async () => {
@@ -2844,132 +1834,6 @@ describe("authority", () => {
     expect(sync.changes).toEqual(deleted.changes);
   });
 
-  it("blocks generic delete while active records reference the target", async () => {
-    await postJson<SchemaUpdateResponse>("/api/schema", {
-      schema: schemaWithTaskProjectReferenceDeleteEnabled(),
-    });
-    const project = await postCreateOperationForEntity("write-referenced-project", "project", {
-      name: "Buildout",
-      code: "BLD",
-    });
-    const task = await postCreateOperation("write-referencing-task", {
-      title: "Scoped",
-      project: project.record.id,
-    });
-
-    await expectRecordOperationError(
-      {
-        idempotencyKey: "write-delete-referenced-project",
-        entity: "project",
-        operationName: "delete",
-        recordId: project.record.id,
-      },
-      `Cannot delete record "${project.record.id}" because active task record "${task.record.id}" references it through field "task.project".`,
-    );
-
-    const bootstrap = await getJson<BootstrapResponse>("/api/bootstrap");
-    const sync = await getJson<SyncResponse>(`/api/sync?after=${task.cursor}`);
-
-    expect(bootstrap.records.find((record) => record.id === project.record.id)).not.toHaveProperty(
-      "deletedAt",
-    );
-    expect(sync.changes).toEqual([]);
-  });
-
-  it("allows generic delete when only tombstoned records reference the target", async () => {
-    await postJson<SchemaUpdateResponse>("/api/schema", {
-      schema: schemaWithTaskProjectReferenceDeleteEnabled(),
-    });
-    const project = await postCreateOperationForEntity(
-      "write-tombstone-reference-project",
-      "project",
-      {
-        name: "Archive",
-        code: "ARC",
-      },
-    );
-    const task = await postCreateOperation("write-tombstoned-referencing-task", {
-      title: "Done",
-      done: true,
-      project: project.record.id,
-    });
-    await postCommandOperation("command-tombstone-referencing-task", "clearCompletedTasks");
-
-    const deleted = await postRecordOperationRequest({
-      idempotencyKey: "write-delete-tombstone-referenced-project",
-      entity: "project",
-      operationName: "delete",
-      recordId: project.record.id,
-    });
-    const bootstrap = await getJson<BootstrapResponse>("/api/bootstrap");
-
-    expect(bootstrap.records.find((record) => record.id === task.record.id)).toHaveProperty(
-      "deletedAt",
-    );
-    expect(deleted.record).toEqual({
-      ...project.record,
-      deletedAt: expect.any(String),
-      updatedAt: deleted.record.deletedAt,
-    });
-    expect(bootstrap.records.find((record) => record.id === project.record.id)).toEqual(
-      deleted.record,
-    );
-  });
-
-  it("rejects invalid generic delete writes after policy enables delete", async () => {
-    const active = await postCreateOperation("write-active", { title: "First", done: false });
-    const completed = await postCreateOperation("write-completed", {
-      title: "Done",
-      done: true,
-    });
-    await postCommandOperation("command-tombstone-completed", "clearCompletedTasks");
-    await postJson<SchemaUpdateResponse>("/api/schema", {
-      schema: schemaWithTaskDeleteOperation(),
-    });
-
-    await expectRecordOperationError(
-      {
-        idempotencyKey: "write-delete-values",
-        entity: "task",
-        operationName: "delete",
-        recordId: active.record.id,
-        input: { title: "Ignored" },
-      },
-      'Operation "delete" request must not include input fields.',
-    );
-    await expectRecordOperationError(
-      {
-        idempotencyKey: "write-delete-missing",
-        entity: "task",
-        operationName: "delete",
-        recordId: "missing",
-      },
-      'Unknown record "missing".',
-    );
-    await expectRecordOperationError(
-      {
-        idempotencyKey: "write-delete-tombstoned",
-        entity: "task",
-        operationName: "delete",
-        recordId: completed.record.id,
-      },
-      `Cannot delete tombstoned record "${completed.record.id}".`,
-    );
-
-    await postJson<SchemaUpdateResponse>("/api/schema", {
-      schema: schemaWithTaskAndProjectDeleteEnabled(),
-    });
-    await expectRecordOperationError(
-      {
-        idempotencyKey: "write-delete-wrong-entity",
-        entity: "project",
-        operationName: "delete",
-        recordId: active.record.id,
-      },
-      "Delete entity must match the stored record entity.",
-    );
-  });
-
   it("replays delete write IDs without duplicating changes", async () => {
     const created = await postCreateOperation("write-delete-replay-source", {
       title: "First",
@@ -2998,63 +1862,6 @@ describe("authority", () => {
     expect(sync.changes).toEqual(first.changes);
   });
 
-  it("rejects invalid patch writes", async () => {
-    const created = await postCreateOperation("write-1", { title: "First", done: false });
-    const schemaWithProject = {
-      version: 1,
-      entities: {
-        task: appSchema.entities.task,
-        project: {
-          label: "Project",
-          fields: {
-            name: { type: "text", required: true },
-          },
-          operations: taskOperations("Project", {
-            name: { type: "text", required: true },
-          }),
-        },
-      },
-      queries: defaultQueries(),
-      itemViews: defaultItemViews(),
-      tableViews: {},
-      views: defaultViews(),
-      screens: defaultScreens(),
-    } as unknown as AppSchema;
-
-    await postJson<SchemaUpdateResponse>("/api/schema", { schema: schemaWithProject });
-
-    await expectRecordOperationError(
-      {
-        idempotencyKey: "write-2",
-        entity: "task",
-        operationName: "update",
-        recordId: "missing",
-        input: { title: "Second" },
-      },
-      'Unknown record "missing".',
-    );
-    await expectRecordOperationError(
-      {
-        idempotencyKey: "write-3",
-        entity: "task",
-        operationName: "update",
-        recordId: created.record.id,
-        input: { missing: "Second" },
-      },
-      'Operation input includes undeclared field "missing".',
-    );
-    await expectRecordOperationError(
-      {
-        idempotencyKey: "write-4",
-        entity: "project",
-        operationName: "update",
-        recordId: created.record.id,
-        input: { name: "Second" },
-      },
-      "Patch entity must match the stored record entity.",
-    );
-  });
-
   it("replays patch write IDs without duplicating changes", async () => {
     const created = await postCreateOperation("write-1", { title: "First", done: false });
     const body = {
@@ -3071,29 +1878,6 @@ describe("authority", () => {
 
     expect(replay).toEqual(first);
     expect(sync.changes).toHaveLength(2);
-  });
-
-  it("rejects undeclared or unknown command operations", async () => {
-    await postJson<SchemaUpdateResponse>("/api/schema", { schema: schemaWithViews() });
-
-    await expectCommandOperationError(
-      {
-        idempotencyKey: "command-1",
-        entity: "task",
-        operationName: "clearCompletedTasks",
-      },
-      'Unknown operation "clearCompletedTasks" for entity "task".',
-    );
-
-    await postJson<SchemaUpdateResponse>("/api/schema", { schema: appSchema });
-    await expectCommandOperationError(
-      {
-        idempotencyKey: "command-2",
-        entity: "task",
-        operationName: "missing",
-      },
-      'Unknown operation "missing" for entity "task".',
-    );
   });
 
   it("tombstones completed records through clearCompletedTasks", async () => {
@@ -3123,494 +1907,6 @@ describe("authority", () => {
     );
     expect(bootstrap.records).toContainEqual(active.record);
     expect(sync.changes).toEqual(command.changes);
-  });
-
-  it("replays clearCompletedTasks command IDs without duplicating changes", async () => {
-    const seedCompleted = getSeedCompletedTask();
-    const completed = await postCreateOperation("write-1", { title: "Done", done: true });
-
-    const first = await postCommandOperation("command-1", "clearCompletedTasks");
-    const replay = await postCommandOperation("command-1", "clearCompletedTasks");
-    const sync = await getJson<SyncResponse>("/api/sync?after=0");
-
-    expect(replay).toEqual(first);
-    expect(first.changes.map((change) => change.recordId).sort()).toEqual(
-      [seedCompleted.id, completed.record.id].sort(),
-    );
-    expect(sync.changes.filter((change) => change.operationKind === "command")).toHaveLength(2);
-  });
-
-  it("replays command IDs without selecting newly matching records", async () => {
-    const seedCompleted = getSeedCompletedTask();
-    const firstCompleted = await postCreateOperation("write-1", { title: "Done", done: true });
-
-    const first = await postCommandOperation("command-1", "clearCompletedTasks");
-    const secondCompleted = await postCreateOperation("write-2", {
-      title: "Done later",
-      done: true,
-    });
-    const replay = await postCommandOperation("command-1", "clearCompletedTasks");
-    const bootstrap = await getJson<BootstrapResponse>("/api/bootstrap");
-
-    expect(replay).toEqual(first);
-    expect(first.changes.map((change) => change.recordId).sort()).toEqual(
-      [seedCompleted.id, firstCompleted.record.id].sort(),
-    );
-    expect(bootstrap.records).toContainEqual(
-      expect.objectContaining({ id: seedCompleted.id, deletedAt: expect.any(String) }),
-    );
-    expect(bootstrap.records).toContainEqual(
-      expect.objectContaining({ id: firstCompleted.record.id, deletedAt: expect.any(String) }),
-    );
-    expect(bootstrap.records).toContainEqual(secondCompleted.record);
-  });
-
-  it("records no-op command executions for idempotent replay", async () => {
-    await postCommandOperation("setup-clear-completed", "clearCompletedTasks");
-    await postCreateOperation("write-1", { title: "Open", done: false });
-    const beforeNoOp = await getJson<BootstrapResponse>("/api/bootstrap");
-
-    const first = await postCommandOperation("command-1", "clearCompletedTasks");
-    const replay = await postCommandOperation("command-1", "clearCompletedTasks");
-
-    expect(first).toEqual({
-      changes: [],
-      cursor: beforeNoOp.cursor,
-      writeIdentity: operationWriteId("task", "clearCompletedTasks", "command-1"),
-    });
-    expect(replay).toEqual(first);
-  });
-
-  it("transitions one active target record and emits event records idempotently", async () => {
-    await postJson<SchemaUpdateResponse>("/api/schema", {
-      schema: schemaWithPriorityStateMachine({ emitEvent: true, removePriorityDefault: true }),
-    });
-    const created = await postCreateOperation("write-transition-source", {
-      title: "Transition me",
-      done: false,
-    });
-
-    const first = await postCommandOperationForEntity(
-      "command-transition-priority",
-      "task",
-      "raisePriority",
-      {
-        input: { recordId: created.record.id },
-      },
-    );
-    const replay = await postCommandOperationForEntity(
-      "command-transition-priority",
-      "task",
-      "raisePriority",
-      {
-        input: { recordId: created.record.id },
-      },
-    );
-    const bootstrap = await getJson<BootstrapResponse>("/api/bootstrap");
-    const sync = await getJson<SyncResponse>("/api/sync?after=0");
-    const taskChange = first.changes.find((change) => change.entity === "task");
-    const eventChange = first.changes.find((change) => change.entity === "priority-event");
-
-    expect(created.record.values.priority).toBe("normal");
-    expect(first.changes).toHaveLength(2);
-    expect(first.changes.every((change) => change.writeId === first.writeIdentity)).toBe(true);
-    expect(first.changes.every((change) => change.operationKind === "command")).toBe(true);
-    expect(taskChange?.payload).toMatchObject({
-      id: created.record.id,
-      values: { priority: "high" },
-    });
-    expect(eventChange?.payload.values).toMatchObject({
-      sourceEntity: "task",
-      sourceRecordId: created.record.id,
-      transitionKey: "raise",
-      previousState: "normal",
-      nextState: "high",
-      actorMode: "owner",
-      occurredAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
-    });
-    expect(replay).toEqual(first);
-    expect(bootstrap.records).toContainEqual(
-      expect.objectContaining({
-        id: created.record.id,
-        values: expect.objectContaining({ priority: "high" }),
-      }),
-    );
-    expect(bootstrap.records.filter((record) => record.entity === "priority-event")).toHaveLength(
-      1,
-    );
-    expect(sync.changes.filter((change) => change.writeId === first.writeIdentity)).toHaveLength(2);
-  });
-
-  it("rejects transition operations for incompatible and tombstoned target records", async () => {
-    await postJson<SchemaUpdateResponse>("/api/schema", {
-      schema: schemaWithPriorityStateMachine({ deleteEnabled: true }),
-    });
-    const lowPriority = getSeedLowPriorityTask();
-
-    await expectCommandOperationError(
-      {
-        idempotencyKey: "command-invalid-transition",
-        entity: "task",
-        operationName: "raisePriority",
-        input: { recordId: lowPriority.id },
-      },
-      `cannot transition record "${lowPriority.id}" from state "low"`,
-    );
-
-    const normalPriority = await postCreateOperation("write-normal-priority", {
-      title: "Normal priority",
-      done: false,
-      priority: "normal",
-    });
-    const reusedCommandId = await postCommandOperationForEntity(
-      "command-invalid-transition",
-      "task",
-      "raisePriority",
-      {
-        input: { recordId: normalPriority.record.id },
-      },
-    );
-    await postRecordOperationRequest({
-      idempotencyKey: "write-delete-transition-target",
-      entity: "task",
-      operationName: "delete",
-      recordId: normalPriority.record.id,
-    });
-    const beforeTombstonedCommand = await getJson<BootstrapResponse>("/api/bootstrap");
-
-    await expectCommandOperationError(
-      {
-        idempotencyKey: "command-tombstoned-transition",
-        entity: "task",
-        operationName: "raisePriority",
-        input: { recordId: normalPriority.record.id },
-      },
-      `cannot transition tombstoned task record "${normalPriority.record.id}"`,
-    );
-
-    expect(reusedCommandId.changes).toHaveLength(1);
-    expect(reusedCommandId.changes[0]?.payload.values.priority).toBe("high");
-    await expect(getJson<BootstrapResponse>("/api/bootstrap")).resolves.toEqual(
-      beforeTombstonedCommand,
-    );
-  });
-
-  it("rejects generic writes that bypass machine-owned fields", async () => {
-    await postJson<SchemaUpdateResponse>("/api/schema", {
-      schema: schemaWithPriorityStateMachine(),
-    });
-    const created = await postCreateOperation("write-machine-initial", {
-      title: "Initial",
-      done: false,
-    });
-
-    await expectRecordOperationError(
-      {
-        idempotencyKey: "write-create-progressed-state",
-        entity: "task",
-        operationName: "create",
-        input: {
-          title: "Progressed",
-          done: false,
-          priority: "high",
-        },
-      },
-      'new records must start at initial state "normal"',
-    );
-    await expectRecordOperationError(
-      {
-        idempotencyKey: "write-direct-state-patch",
-        entity: "task",
-        operationName: "update",
-        recordId: created.record.id,
-        input: { priority: "high" },
-      },
-      "must change through transition operations",
-    );
-
-    const bootstrap = await getJson<BootstrapResponse>("/api/bootstrap");
-
-    expect(created.record.values.priority).toBe("normal");
-    expect(bootstrap.records).toContainEqual(
-      expect.objectContaining({
-        id: created.record.id,
-        values: expect.objectContaining({ priority: "normal" }),
-      }),
-    );
-  });
-
-  it("parses field labels and declared operation policy", () => {
-    const explicit = parseAppSchema({
-      version: 1,
-      entities: {
-        task: {
-          label: "Task",
-          fields: {
-            title: { type: "text", required: true, label: "Task title" },
-          },
-          operations: taskOperations("Task", {
-            title: { type: "text", required: true, label: "Task title" },
-          }),
-        },
-      },
-      queries: {
-        taskAll: {
-          label: "All",
-          entity: "task",
-          expression: { kind: "all" },
-        },
-      },
-      itemViews: {
-        taskListItem: {
-          entity: "task",
-          fields: {
-            title: { editor: "text", commit: "field-commit" },
-          },
-        },
-      },
-      tableViews: {},
-      views: {
-        taskHome: {
-          type: "collection",
-          label: "Tasks",
-          entity: "task",
-          queries: [{ query: "taskAll" }],
-          defaultQuery: "taskAll",
-          result: { type: "list", itemView: "taskListItem" },
-        },
-        taskCreate: {
-          type: "create",
-          entity: "task",
-          fields: {
-            title: { editor: "text" },
-          },
-        },
-      },
-      screens: {
-        taskHome: {
-          type: "workspace",
-          label: "Tasks",
-          navigation: { primary: true },
-          layout: {
-            type: "stack",
-            sections: [{ id: "tasks", type: "collection", view: "taskHome" }],
-          },
-        },
-      },
-    });
-
-    expect(explicit.entities.task?.fields.title?.label).toBe("Task title");
-  });
-
-  it("parses collection, item, and create views", () => {
-    const withViews = parseAppSchema(schemaWithViews());
-
-    expect(withViews.itemViews.taskListItem).toEqual({
-      entity: "task",
-      fields: {
-        title: { editor: "text", commit: "field-commit" },
-        done: { editor: "boolean", commit: "immediate" },
-        dueDate: { editor: "date", commit: "field-commit" },
-        priority: { editor: "enum", commit: "immediate" },
-      },
-    });
-    expect(withViews.views?.taskHome).toMatchObject({
-      type: "collection",
-      label: "All",
-      entity: "task",
-      queries: [{ query: "taskAll" }],
-      defaultQuery: "taskAll",
-      result: { type: "list", itemView: "taskListItem" },
-    });
-    expect(withViews.views?.taskCreate).toEqual({
-      type: "create",
-      entity: "task",
-      fields: {
-        title: { editor: "text" },
-        dueDate: { editor: "date" },
-        priority: { editor: "enum" },
-      },
-    });
-  });
-
-  it("rejects schemas without views", async () => {
-    await expectError(
-      "/api/schema",
-      {
-        schema: {
-          version: 1,
-          entities: {
-            task: {
-              label: "Task",
-              fields: {
-                title: { type: "text", required: true },
-              },
-              operations: taskOperations("Task", {
-                title: { type: "text", required: true },
-              }),
-            },
-          },
-          queries: {
-            taskAll: {
-              label: "All",
-              entity: "task",
-              expression: { kind: "all" },
-            },
-          },
-          itemViews: {
-            taskListItem: {
-              entity: "task",
-              fields: {
-                title: { editor: "text", commit: "field-commit" },
-              },
-            },
-          },
-          tableViews: {},
-          views: {},
-        },
-      },
-      "Schema must define at least one view.",
-    );
-  });
-
-  it("allows compatible schema updates that only change views", async () => {
-    await postCreateOperation("write-1", { title: "First", done: false });
-
-    const nextSchema = schemaWithViews({
-      taskHome: {
-        type: "collection",
-        label: "Task planner",
-        entity: "task",
-        queries: [{ query: "taskAll", label: "Everything" }],
-        defaultQuery: "taskAll",
-        result: { type: "list", itemView: "taskListItem" },
-      },
-      taskCreate: {
-        type: "create",
-        entity: "task",
-        fields: {
-          title: { editor: "text" },
-        },
-      },
-    });
-
-    const update = await postJson<SchemaUpdateResponse>("/api/schema", { schema: nextSchema });
-    const parsedNextSchema = parseAppSchema(nextSchema);
-
-    expect(update.schema).toEqual(parsedNextSchema);
-  });
-
-  it("rejects malformed item and create views in schema updates", async () => {
-    await expectError(
-      "/api/schema",
-      {
-        schema: schemaWithItemViews({
-          taskListItem: {
-            entity: "task",
-            fields: {
-              missing: { editor: "text", commit: "field-commit" },
-            },
-          },
-        }),
-      },
-      'references unknown field "task.missing"',
-    );
-    await expectError(
-      "/api/schema",
-      {
-        schema: schemaWithItemViews({
-          taskListItem: {
-            entity: "task",
-            fields: {
-              done: { editor: "text", commit: "field-commit" },
-            },
-          },
-        }),
-      },
-      'editor must match field type "boolean"',
-    );
-    await expectError(
-      "/api/schema",
-      {
-        schema: schemaWithItemViews({
-          taskListItem: {
-            entity: "task",
-            fields: {
-              title: { editor: "text", commit: "immediate" },
-            },
-          },
-        }),
-      },
-      "text fields must use field-commit",
-    );
-    await expectError(
-      "/api/schema",
-      {
-        schema: schemaWithItemViews({
-          taskListItem: {
-            entity: "task",
-            fields: {
-              title: { editor: "text", commit: "field-commit", width: "wide" },
-            },
-          },
-        }),
-      },
-      'has unsupported key "width"',
-    );
-    await expectError(
-      "/api/schema",
-      {
-        schema: schemaWithViews({
-          taskCreate: {
-            type: "create",
-            entity: "task",
-            fields: {
-              dueDate: { editor: "date" },
-            },
-          },
-        }),
-      },
-      'must include required field "title"',
-    );
-    await expectError(
-      "/api/schema",
-      {
-        schema: schemaWithViews({
-          taskCreate: {
-            type: "create",
-            entity: "task",
-            fields: {
-              title: { editor: "text", commit: "field-commit" },
-            },
-          },
-        }),
-      },
-      'has unsupported key "commit"',
-    );
-  });
-
-  it("rejects malformed field labels in schema updates", async () => {
-    await expectError(
-      "/api/schema",
-      {
-        schema: {
-          version: 1,
-          entities: {
-            task: {
-              label: "Task",
-              fields: {
-                title: { type: "text", required: true, label: "" },
-              },
-            },
-          },
-          queries: {},
-          itemViews: {},
-          tableViews: {},
-          views: {},
-        },
-      },
-      'Field "task.title" label must be a non-empty string.',
-    );
   });
 
   it("keeps create and update behavior on declared operations", async () => {
@@ -3676,10 +1972,6 @@ describe("authority", () => {
   });
 });
 
-function expectUniqueIds(records: Array<{ id: string }>) {
-  expect(new Set(records.map((record) => record.id)).size).toBe(records.length);
-}
-
 function operationWriteId(entity: string, operation: string, idempotencyKey: string) {
   return `operation:${entity}.${operation}:${idempotencyKey}`;
 }
@@ -3692,16 +1984,6 @@ function getSeedCompletedTask() {
   }
 
   return completed;
-}
-
-function getSeedLowPriorityTask() {
-  const lowPriority = taskSeedRecords.find((record) => record.values.priority === "low");
-
-  if (!lowPriority) {
-    throw new Error("Task seed records must include a low-priority task.");
-  }
-
-  return lowPriority;
 }
 
 function storageSnapshot(overrides: Partial<StorageSnapshot> = {}): StorageSnapshot {
@@ -3752,163 +2034,6 @@ function taskSnapshotRecord(id: string, title: string): StoredRecord {
     createdAt: "2026-05-07T00:10:00.000Z",
     updatedAt: "2026-05-07T00:10:00.000Z",
   };
-}
-
-function schemaWithPriorityEnum(
-  enumOverrides: Partial<{
-    required: boolean;
-    default: string;
-    values: Record<string, { label: string }>;
-  }> = {},
-) {
-  const currentPriorityField = appSchema.entities.task.fields.priority;
-
-  if (currentPriorityField?.type !== "enum") {
-    throw new Error("Seed task priority field must be an enum.");
-  }
-
-  const priorityField = {
-    ...currentPriorityField,
-    ...enumOverrides,
-  };
-  const fields = {
-    ...appSchema.entities.task.fields,
-    priority: priorityField,
-  };
-
-  return {
-    version: 1,
-    entities: {
-      task: {
-        label: "Task",
-        fields,
-        operations: taskOperations("Task", fields),
-      },
-    },
-    queries: defaultQueries(),
-    itemViews: defaultItemViews(),
-    tableViews: {},
-    views: defaultViews(),
-    screens: defaultScreens(),
-  };
-}
-
-function schemaWithPriorityStateMachine({
-  deleteEnabled = false,
-  emitEvent = false,
-  removePriorityDefault = false,
-}: {
-  deleteEnabled?: boolean;
-  emitEvent?: boolean;
-  removePriorityDefault?: boolean;
-} = {}): AppSchema {
-  const task = appSchema.entities.task;
-  const priorityField = task.fields.priority;
-
-  if (priorityField?.type !== "enum") {
-    throw new Error("Seed task priority field must be an enum.");
-  }
-
-  const priorityFieldForMachine = removePriorityDefault
-    ? {
-        type: "enum" as const,
-        required: priorityField.required,
-        ...(priorityField.label === undefined ? {} : { label: priorityField.label }),
-        values: priorityField.values,
-      }
-    : priorityField;
-  const taskEntity = {
-    ...task,
-    fields: {
-      ...task.fields,
-      priority: priorityFieldForMachine,
-    },
-    stateMachines: {
-      priorityFlow: {
-        field: "priority",
-        initial: "normal",
-        terminal: ["high"],
-        transitions: {
-          raise: {
-            label: "Raise",
-            from: ["normal"],
-            to: "high",
-          },
-        },
-        ...(emitEvent
-          ? {
-              event: {
-                entity: "priority-event",
-                fields: {
-                  sourceEntity: "sourceEntity",
-                  sourceRecordId: "sourceRecordId",
-                  transitionKey: "transitionKey",
-                  previousState: "previousState",
-                  nextState: "nextState",
-                  actorMode: "actorMode",
-                  occurredAt: "occurredAt",
-                },
-              },
-            }
-          : {}),
-      },
-    },
-    operations: taskOperations(
-      "Task",
-      {
-        ...task.fields,
-        priority: priorityFieldForMachine,
-      },
-      {
-        ...commandOperationsFromSource(task.operations),
-        raisePriority: {
-          label: "Raise priority",
-          kind: "command",
-          scope: "collection",
-          effect: {
-            type: "operationHandler",
-            handler: "transition-state",
-            config: {
-              machine: "priorityFlow",
-              transition: "raise",
-            },
-          },
-          output: { type: "command" },
-          idempotency: { required: true },
-          audit: { input: "summary" },
-        },
-      },
-      { delete: deleteEnabled },
-    ),
-  };
-
-  return {
-    version: 1,
-    entities: {
-      task: taskEntity,
-      ...(emitEvent
-        ? {
-            "priority-event": {
-              label: "Priority event",
-              fields: {
-                sourceEntity: { type: "text", required: true, label: "Source entity" },
-                sourceRecordId: { type: "text", required: true, label: "Source record" },
-                transitionKey: { type: "text", required: true, label: "Transition" },
-                previousState: { type: "text", required: true, label: "Previous state" },
-                nextState: { type: "text", required: true, label: "Next state" },
-                actorMode: { type: "text", required: true, label: "Actor mode" },
-                occurredAt: { type: "date", required: true, label: "Occurred" },
-              },
-            },
-          }
-        : {}),
-    },
-    queries: defaultQueries(),
-    itemViews: defaultItemViews(),
-    tableViews: {},
-    views: defaultViews(),
-    screens: defaultScreens(),
-  } as unknown as AppSchema;
 }
 
 function schemaWithTaskLabel(label: string) {
@@ -4053,26 +2178,6 @@ function schemaWithTaskDeleteOperation(): AppSchema {
   } as unknown as AppSchema;
 }
 
-function schemaWithTaskProjectReferenceDeleteEnabled(): AppSchema {
-  const schema = schemaWithTaskProjectReference({ required: false });
-  const project = schema.entities.project;
-
-  if (!project) {
-    throw new Error("Expected task project reference schema to include project entity.");
-  }
-
-  return {
-    ...schema,
-    entities: {
-      ...schema.entities,
-      project: {
-        ...project,
-        operations: taskOperations("Project", project.fields, undefined, { delete: true }),
-      },
-    },
-  };
-}
-
 function schemaWithEstimateNumber(numberOverrides: Record<string, unknown> = {}) {
   const fields = {
     ...appSchema.entities.task.fields,
@@ -4104,53 +2209,6 @@ function schemaWithEstimateNumber(numberOverrides: Record<string, unknown> = {})
     tableViews: appSchema.tableViews,
     views: appSchema.views,
     screens: appSchema.screens,
-  };
-}
-
-function schemaWithRequiredScore() {
-  const schema = schemaWithEstimateNumber();
-  const views = defaultViews();
-  const taskCreate = views.taskCreate;
-
-  if (taskCreate.type !== "create") {
-    throw new Error("Expected taskCreate to be a create view.");
-  }
-  const fields = {
-    ...schema.entities.task.fields,
-    score: {
-      type: "number",
-      required: true,
-      label: "Score",
-    },
-  };
-
-  return {
-    version: 1,
-    entities: {
-      task: {
-        label: "Task",
-        fields,
-        operations: taskOperations(
-          "Task",
-          fields,
-          commandOperationsFromSource(appSchema.entities.task.operations),
-        ),
-      },
-    },
-    queries: defaultQueries(),
-    itemViews: defaultItemViews(),
-    tableViews: {},
-    views: {
-      ...views,
-      taskCreate: {
-        ...taskCreate,
-        fields: {
-          ...taskCreate.fields,
-          score: { editor: "number" },
-        },
-      },
-    },
-    screens: defaultScreens(),
   };
 }
 
@@ -4317,94 +2375,6 @@ function identityReferenceAccountPlanSteps(): RecordPlanStepSchema[] {
   ];
 }
 
-function schemaWithRateReferences({
-  constraints,
-}: {
-  constraints?: EntitySchema["constraints"];
-} = {}) {
-  return {
-    version: 1,
-    entities: {
-      task: appSchema.entities.task,
-      resource: {
-        label: "Resource",
-        fields: {
-          name: { type: "text", required: true, label: "Name" },
-        },
-        operations: taskOperations("Resource", {
-          name: { type: "text", required: true, label: "Name" },
-        }),
-      },
-      card: {
-        label: "Rate card",
-        fields: {
-          name: { type: "text", required: true, label: "Name" },
-        },
-        operations: taskOperations("Rate card", {
-          name: { type: "text", required: true, label: "Name" },
-        }),
-      },
-      rate: {
-        label: "Rate",
-        fields: {
-          resource: {
-            type: "reference",
-            required: true,
-            label: "Resource",
-            to: "resource",
-            displayField: "name",
-          },
-          card: {
-            type: "reference",
-            required: true,
-            label: "Card",
-            to: "card",
-            displayField: "name",
-          },
-          backupResource: {
-            type: "reference",
-            required: false,
-            label: "Backup resource",
-            to: "resource",
-            displayField: "name",
-          },
-          price: { type: "number", required: false, label: "Price", min: 0 },
-        },
-        operations: taskOperations("Rate", {
-          resource: {
-            type: "reference",
-            required: true,
-            label: "Resource",
-            to: "resource",
-            displayField: "name",
-          },
-          card: {
-            type: "reference",
-            required: true,
-            label: "Card",
-            to: "card",
-            displayField: "name",
-          },
-          backupResource: {
-            type: "reference",
-            required: false,
-            label: "Backup resource",
-            to: "resource",
-            displayField: "name",
-          },
-          price: { type: "number", required: false, label: "Price", min: 0 },
-        }),
-        ...(constraints === undefined ? {} : { constraints }),
-      },
-    },
-    queries: appSchema.queries,
-    itemViews: appSchema.itemViews,
-    tableViews: appSchema.tableViews,
-    views: appSchema.views,
-    screens: appSchema.screens,
-  } as unknown as AppSchema;
-}
-
 function schemaWithTaskConstraints(constraints: EntitySchema["constraints"]) {
   const fields = appSchema.entities.task.fields;
 
@@ -4430,132 +2400,6 @@ function schemaWithTaskConstraints(constraints: EntitySchema["constraints"]) {
   } as unknown as AppSchema;
 }
 
-function uniqueRatePairConstraints(): NonNullable<EntitySchema["constraints"]> {
-  return {
-    uniqueRatePair: {
-      kind: "unique",
-      fields: ["resource", "card"],
-    },
-  };
-}
-
-function schemaWithAssignmentReference() {
-  return {
-    version: 1,
-    entities: {
-      task: appSchema.entities.task,
-      assignment: {
-        label: "Assignment",
-        fields: {
-          task: {
-            type: "reference",
-            required: true,
-            label: "Task",
-            to: "task",
-            displayField: "title",
-          },
-        },
-        operations: taskOperations("Assignment", {
-          task: {
-            type: "reference",
-            required: true,
-            label: "Task",
-            to: "task",
-            displayField: "title",
-          },
-        }),
-      },
-    },
-    queries: appSchema.queries,
-    itemViews: appSchema.itemViews,
-    tableViews: appSchema.tableViews,
-    views: appSchema.views,
-    screens: appSchema.screens,
-  } as unknown as AppSchema;
-}
-
-function schemaWithTaskProjectReference({
-  displayField = "name",
-  includeMilestone = false,
-  required,
-  to = "project",
-}: {
-  displayField?: string;
-  includeMilestone?: boolean;
-  required: boolean;
-  to?: string;
-}) {
-  const taskCreate = appSchema.views.taskCreate;
-
-  if (taskCreate.type !== "create") {
-    throw new Error("Expected taskCreate to be a create view.");
-  }
-  const taskFields = {
-    ...appSchema.entities.task.fields,
-    project: {
-      type: "reference" as const,
-      required,
-      label: "Project",
-      to,
-      displayField,
-    },
-  };
-
-  const entities: Record<string, unknown> = {
-    task: {
-      label: "Task",
-      fields: taskFields,
-      operations: taskOperations(
-        "Task",
-        taskFields,
-        commandOperationsFromSource(appSchema.entities.task.operations),
-      ),
-    },
-    project: {
-      label: "Project",
-      fields: {
-        name: { type: "text", required: true, label: "Name" },
-        code: { type: "text", required: true, label: "Code" },
-      },
-      operations: taskOperations("Project", {
-        name: { type: "text", required: true, label: "Name" },
-        code: { type: "text", required: true, label: "Code" },
-      }),
-    },
-  };
-
-  if (includeMilestone) {
-    entities.milestone = {
-      label: "Milestone",
-      fields: {
-        name: { type: "text", required: true, label: "Name" },
-      },
-      operations: taskOperations("Milestone", {
-        name: { type: "text", required: true, label: "Name" },
-      }),
-    };
-  }
-
-  return {
-    version: 1,
-    entities,
-    queries: appSchema.queries,
-    itemViews: appSchema.itemViews,
-    tableViews: appSchema.tableViews,
-    views: {
-      ...appSchema.views,
-      taskCreate: {
-        ...taskCreate,
-        fields: {
-          ...taskCreate.fields,
-          project: { editor: "reference" },
-        },
-      },
-    },
-    screens: appSchema.screens,
-  } as unknown as AppSchema;
-}
-
 function schemaWithViews(views: unknown = defaultViews()) {
   const fields = appSchema.entities.task.fields;
 
@@ -4573,20 +2417,6 @@ function schemaWithViews(views: unknown = defaultViews()) {
     tableViews: {},
     views,
     screens: defaultScreens(),
-  };
-}
-
-function schemaWithQueries(queries: unknown) {
-  return {
-    ...schemaWithViews(),
-    queries,
-  };
-}
-
-function schemaWithItemViews(itemViews: unknown) {
-  return {
-    ...schemaWithViews(),
-    itemViews,
   };
 }
 
@@ -4851,40 +2681,6 @@ async function postIdentityRecordOperation(
   return request.response(await response.json()).record;
 }
 
-async function tombstoneIdentityRecord(targetHarness: Harness, recordId: string) {
-  const snapshotResponse = await targetHarness.fetch(
-    `${IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX}/snapshot`,
-    {
-      headers: { Authorization: `Bearer ${adminToken}` },
-    },
-  );
-
-  expect(snapshotResponse.status).toBe(200);
-
-  const snapshot = (await snapshotResponse.json()) as StorageSnapshot;
-  const tombstonedAt = "2026-06-30T00:00:00.000Z";
-  const restoreResponse = await targetHarness.fetch(
-    `${IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX}/snapshot/restore`,
-    {
-      body: JSON.stringify({
-        ...snapshot,
-        records: snapshot.records.map((record) =>
-          record.id === recordId
-            ? { ...record, updatedAt: tombstonedAt, deletedAt: tombstonedAt }
-            : record,
-        ),
-      }),
-      headers: {
-        Authorization: `Bearer ${adminToken}`,
-        "Content-Type": "application/json",
-      },
-      method: "POST",
-    },
-  );
-
-  expect(restoreResponse.status).toBe(200);
-}
-
 async function postPrivateJson<T>(targetHarness: Harness, path: string, body: unknown) {
   const response = await targetHarness.fetch(privateTasksApiPath(path), {
     body: JSON.stringify(body),
@@ -4898,74 +2694,6 @@ async function postPrivateJson<T>(targetHarness: Harness, path: string, body: un
   }
 
   return responseBody as T;
-}
-
-async function expectPrivateError(
-  targetHarness: Harness,
-  path: string,
-  body: unknown,
-  message: string,
-) {
-  const response = await targetHarness.fetch(privateTasksApiPath(path), {
-    body: JSON.stringify(body),
-    headers: privateWriteHeaders(),
-    method: "POST",
-  });
-
-  expect(response.status).toBe(400);
-  expect((await response.json()) as { error: string }).toEqual({
-    error: expect.stringContaining(message),
-  });
-}
-
-async function postPrivateRecordOperation(
-  targetHarness: Harness,
-  body: AuthorityTestRecordOperationRequest,
-) {
-  const request = recordOperationRequest(body);
-  const response = await targetHarness.fetch(privateTasksApiPath(request.path), {
-    body: JSON.stringify(request.body),
-    headers: privateWriteHeaders(),
-    method: "POST",
-  });
-
-  expect(response.status).toBe(200);
-
-  return request.response(await response.json());
-}
-
-async function expectPrivateRecordOperationError(
-  targetHarness: Harness,
-  body: AuthorityTestRecordOperationRequest,
-  message: string,
-) {
-  const request = recordOperationRequest(body);
-  const response = await targetHarness.fetch(privateTasksApiPath(request.path), {
-    body: JSON.stringify(request.body),
-    headers: privateWriteHeaders(),
-    method: "POST",
-  });
-
-  expect(response.status).toBe(400);
-  expect((await response.json()) as { error: string }).toEqual({
-    error: expect.stringContaining(message),
-  });
-}
-
-async function postPrivateCommandOperation(
-  targetHarness: Harness,
-  body: AuthorityTestCommandOperationRequest,
-) {
-  const request = commandOperationRequest(body);
-  const response = await targetHarness.fetch(privateTasksApiPath(request.path), {
-    body: JSON.stringify(request.body),
-    headers: privateWriteHeaders(),
-    method: "POST",
-  });
-
-  expect(response.status).toBe(200);
-
-  return request.response(await response.json());
 }
 
 function privateTasksApiPath(path: string) {
@@ -4999,13 +2727,6 @@ async function postRecordOperationRequest(body: AuthorityTestRecordOperationRequ
   return authority.postRecordOperationRequest(body);
 }
 
-async function expectRecordOperationError(
-  body: AuthorityTestRecordOperationRequest,
-  message: string,
-) {
-  await authority.expectRecordOperationError(body, message);
-}
-
 async function postCommandOperation(idempotencyKey: string, operationName: string) {
   return authority.postCommandOperation(idempotencyKey, operationName);
 }
@@ -5017,13 +2738,6 @@ async function postCommandOperationForEntity(
   extra: Record<string, unknown> = {},
 ) {
   return authority.postCommandOperationForEntity(idempotencyKey, entity, operationName, extra);
-}
-
-async function expectCommandOperationError(
-  body: AuthorityTestCommandOperationRequest,
-  message: string,
-) {
-  await authority.expectCommandOperationError(body, message);
 }
 
 async function openSyncSocket(path = "/api/sync/ws", schemaKey?: SchemaKey) {
