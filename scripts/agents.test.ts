@@ -2480,8 +2480,7 @@ describe("local agent worker launch defaults", () => {
     expect(args).toContain('model_reasoning_effort="xhigh"');
     expect(args).toContain('service_tier="fast"');
     expect(args).toContain("features.fast_mode=true");
-    expect(args).toContain("--ask-for-approval");
-    expect(args).toContain("never");
+    expect(args.slice(0, 3)).toEqual(["--ask-for-approval", "never", "exec"]);
     expect(args).toContain('default_permissions="formless-worker"');
     expect(args.join(" ")).toContain('"/repo" = "read"');
     expect(args.join(" ")).toContain('"/repo/tmp/worktree/grug" = "write"');
@@ -2557,7 +2556,7 @@ describe("local agent worker dry-run", () => {
       expect(stdout).toContain("changes/local-agent-pull-workers create");
       expect(stdout).toContain(`${root}/tmp/worktree/igor`);
       expect(stdout).toContain('"state":"dry-run"');
-      expect(stdout).toContain("codex exec");
+      expect(stdout).toContain("codex --ask-for-approval never exec");
       expect(stdout).toContain("State: ready");
       expect(stdout).toContain("1.1: Add parser.");
       expect(stdout).toContain("bun agents change local-agent-pull-workers --json");

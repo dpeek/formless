@@ -2491,6 +2491,7 @@ export function codexArgs(
   workspaceRoot: string,
   gitCommonDir: string,
 ): string[] {
+  const approvalArgs = dangerous ? [] : ["--ask-for-approval", "never"];
   const modelArgs = [
     "--model",
     workerCodexModel,
@@ -2504,8 +2505,6 @@ export function codexArgs(
   const modeArgs = dangerous
     ? ["--dangerously-bypass-approvals-and-sandbox"]
     : [
-        "--ask-for-approval",
-        "never",
         "--config",
         `default_permissions=${tomlString(workerCodexPermissionProfile)}`,
         "--config",
@@ -2519,6 +2518,7 @@ export function codexArgs(
       ];
 
   return [
+    ...approvalArgs,
     "exec",
     "-C",
     workspaceRoot,
