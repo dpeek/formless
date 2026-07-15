@@ -1,25 +1,16 @@
 import type { AuthorityOperation } from "./authority-operations.ts";
 import {
-  validateCentralAuthSessionAuthority,
-  validateCentralAuthSessionManagementAuthority,
-  validateHostAuthSessionAuthority,
-  validateHostAuthSessionManagementAuthority,
+  validateInstanceAuthAccessSession,
   type HostAuthSession,
 } from "./instance-auth-handoff.ts";
 import type { CentralAuthSession } from "./central-auth-session.ts";
 import type { InstanceAuthSessionTargetBinding } from "./instance-auth-state.ts";
+import type { ActiveIdentityAuthority } from "./identity-owner-internal.ts";
 import {
-  readInternalIdentityAuthorityForPrincipal,
-  type ActiveIdentityAuthority,
-} from "./identity-owner-internal.ts";
-import {
-  validateOwnerSessionCookie,
-  validateOwnerSessionAuthority,
   type OwnerSession,
   type OwnerSessionAuthorityResolver,
   type OwnerSessionEnv,
 } from "./owner-session.ts";
-import { isLocalOwnerSessionRuntime } from "./local-session-bootstrap.ts";
 
 export type AuthorityAdminGuardEnv = OwnerSessionEnv & {
   FORMLESS_ADMIN_TOKEN?: string;
@@ -138,34 +129,6 @@ export async function authorizeOperationalManagement(
   });
 }
 
-async function validateCentralOwnerSession(
-  request: Request,
-  env: AuthorityAdminGuardEnv,
-): Promise<Awaited<ReturnType<typeof validateCentralAuthSessionAuthority>>> {
-  if (env.FORMLESS_AUTHORITY === undefined) {
-    return { ok: false, ownerSessionFallbackAllowed: false, reason: "missing-auth-origin" };
-  }
-
-  return validateCentralAuthSessionAuthority(request, {
-    ...env,
-    FORMLESS_AUTHORITY: env.FORMLESS_AUTHORITY,
-  });
-}
-
-async function validateCentralManagementSession(
-  request: Request,
-  env: AuthorityAdminGuardEnv,
-): Promise<Awaited<ReturnType<typeof validateCentralAuthSessionManagementAuthority>>> {
-  if (env.FORMLESS_AUTHORITY === undefined) {
-    return { ok: false, ownerSessionFallbackAllowed: false, reason: "missing-auth-origin" };
-  }
-
-  return validateCentralAuthSessionManagementAuthority(request, {
-    ...env,
-    FORMLESS_AUTHORITY: env.FORMLESS_AUTHORITY,
-  });
-}
-
 async function authorizeOwnerSessionOrAdmin(
   request: Request,
   env: AuthorityAdminGuardEnv,
@@ -187,36 +150,21 @@ async function authorizeOwnerSessionOrAdmin(
     return { authorized: true, via: "admin-bearer" };
   }
 
-  const centralSession = await validateCentralOwnerSession(request, env);
+  const session = await validateInstanceAuthAccessSession(request, env, {
+    ...(options.resolveOwnerSession === undefined
+      ? {}
+      : {
+          readers: {
+            readOwnerAuthority: (candidate) =>
+              options.resolveOwnerSession?.(candidate as OwnerSession) ?? Promise.resolve(null),
+          },
+        }),
+    requiredAuthority: "owner",
+    target: options.hostSessionTarget,
+  });
 
-  if (centralSession.ok) {
-    return { authorized: true, session: centralSession.session, via: "central-session" };
-  }
-
-  const ownerSession =
-    centralSession.ownerSessionFallbackAllowed || isLocalOwnerSessionRuntime(request, env)
-      ? await validateOwnerSessionAuthority(request, env, {
-          resolveOwnerSession: options.resolveOwnerSession,
-        })
-      : undefined;
-
-  if (ownerSession?.ok) {
-    return { authorized: true, session: ownerSession.session, via: "owner-session" };
-  }
-
-  const hostSessionEnv =
-    env.FORMLESS_AUTHORITY === undefined
-      ? undefined
-      : { ...env, FORMLESS_AUTHORITY: env.FORMLESS_AUTHORITY };
-  const hostSession =
-    options.hostSessionTarget === undefined || hostSessionEnv === undefined
-      ? undefined
-      : await validateHostAuthSessionAuthority(request, hostSessionEnv, {
-          target: options.hostSessionTarget,
-        });
-
-  if (hostSession?.ok) {
-    return { authorized: true, session: hostSession.session, via: "host-session" };
+  if (session.ok) {
+    return { authorized: true, session: session.session, via: session.via };
   }
 
   return {
@@ -250,40 +198,22 @@ async function authorizeManagementSessionOrAdmin(
     return { authorized: true, via: "admin-bearer" };
   }
 
-  const centralSession = await validateCentralManagementSession(request, env);
+  const session = await validateInstanceAuthAccessSession(request, env, {
+    ...(options.resolveManagementAuthority === undefined
+      ? {}
+      : {
+          readers: {
+            readManagementAuthority: (candidate) =>
+              options.resolveManagementAuthority?.(candidate as OwnerSession) ??
+              Promise.resolve(null),
+          },
+        }),
+    requiredAuthority: "management",
+    target: options.hostSessionTarget,
+  });
 
-  if (centralSession.ok) {
-    return { authorized: true, session: centralSession.session, via: "central-session" };
-  }
-
-  const ownerSession =
-    centralSession.ownerSessionFallbackAllowed || isLocalOwnerSessionRuntime(request, env)
-      ? await validateOwnerSessionCookie(request, env)
-      : undefined;
-
-  if (ownerSession?.ok) {
-    const authority = options.resolveManagementAuthority
-      ? await options.resolveManagementAuthority(ownerSession.session)
-      : await readInternalIdentityAuthorityForPrincipal(env, ownerSession.session.principalId);
-
-    if (hasOperationalManagementAuthority(authority, ownerSession.session.principalId)) {
-      return { authorized: true, session: ownerSession.session, via: "owner-session" };
-    }
-  }
-
-  const hostSessionEnv =
-    env.FORMLESS_AUTHORITY === undefined
-      ? undefined
-      : { ...env, FORMLESS_AUTHORITY: env.FORMLESS_AUTHORITY };
-  const hostSession =
-    options.hostSessionTarget === undefined || hostSessionEnv === undefined
-      ? undefined
-      : await validateHostAuthSessionManagementAuthority(request, hostSessionEnv, {
-          target: options.hostSessionTarget,
-        });
-
-  if (hostSession?.ok) {
-    return { authorized: true, session: hostSession.session, via: "host-session" };
+  if (session.ok) {
+    return { authorized: true, session: session.session, via: session.via };
   }
 
   return {
@@ -294,16 +224,6 @@ async function authorizeManagementSessionOrAdmin(
     },
     status: 401,
   };
-}
-
-function hasOperationalManagementAuthority(
-  authority: ActiveIdentityAuthority | null,
-  principalId: string,
-): boolean {
-  return (
-    authority?.id === principalId &&
-    (authority.instanceAdmin === true || authority.instanceOwner === true)
-  );
 }
 
 function normalizedAdminToken(value: string | undefined) {

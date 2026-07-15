@@ -471,6 +471,38 @@ source for hostless mounts, exact-host mounts, and redirects.
 - **AND** the runtime returns no route for normal not-found handling unless
   another exact-host route matches
 
+### Requirement: Runtime Route Decision Module Boundary
+
+The system SHALL resolve deterministic route-record selection and route-access
+facts through runtime-topology Module interfaces before Worker adapters perform
+host-specific request handling.
+
+#### Scenario: Resolve route records from explicit runtime facts
+
+- **GIVEN** active route records, installed app records, package facts, and a
+  request host, path, and query are available
+- **WHEN** runtime topology selects an exact-host mount, hostless mount,
+  redirect, or captured-host not-found result
+- **THEN** the route Module consumes those facts directly and returns the
+  selected route, target storage identity, effective access, redirect, or
+  not-found result
+- **AND** deterministic route selection does not require Durable Object,
+  SQLite, service-binding, asset, or Worker interfaces
+- **AND** exact-host precedence, path specificity, redirect preservation,
+  disabled-route exclusion, and app-install target resolution remain unchanged
+
+#### Scenario: Keep mounted surface behavior at the Worker boundary
+
+- **GIVEN** runtime topology has selected a route result
+- **WHEN** the request is served through an exact-host or hostless runtime route
+- **THEN** the real Worker remains responsible for fetching current control-plane
+  records, reserved callback ownership, HTTP redirects, public Site adapters,
+  document rendering, indexing, icons, media, installed app APIs, static assets,
+  and response headers
+- **AND** Module-owned route decision coverage does not replace representative
+  complete mapped Site, mapped app, mapped instance, redirect, adapter failure,
+  and desired-route disablement contracts
+
 ### Requirement: Local Workspace Gateway Route Policy
 
 The system SHALL expose workspace gateway API routes only for local workspace

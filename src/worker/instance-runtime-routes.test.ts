@@ -69,6 +69,55 @@ describe("instance runtime route resolution", () => {
     });
   });
 
+  it("keeps exact-host precedence while selecting the most specific matching path", () => {
+    const records = [
+      routeRecord("hostless-exact", {
+        enabled: true,
+        matchPath: "/docs/api",
+        kind: "mount",
+        targetProfile: "instance",
+      }),
+      routeRecord("host-prefix", {
+        enabled: true,
+        matchHost: "docs.example.com",
+        matchPath: "/",
+        matchPrefix: "/docs/",
+        kind: "mount",
+        targetProfile: "instance",
+      }),
+      routeRecord("host-longer-prefix", {
+        enabled: true,
+        matchHost: "docs.example.com",
+        matchPath: "/",
+        matchPrefix: "/docs/api/",
+        kind: "mount",
+        targetProfile: "instance",
+      }),
+    ];
+
+    expect(
+      resolveInstanceRuntimeRouteFromRecords({
+        appInstalls: [],
+        records,
+        request: { host: "docs.example.com", pathname: "/docs/api/reference" },
+      }),
+    ).toMatchObject({ id: "host-longer-prefix", matchPrefix: "/docs/api/" });
+    expect(
+      resolveInstanceRuntimeRouteFromRecords({
+        appInstalls: [],
+        records,
+        request: { host: "docs.example.com", pathname: "/docs/api" },
+      }),
+    ).toMatchObject({ id: "host-prefix", matchHost: "docs.example.com" });
+    expect(
+      resolveInstanceRuntimeRouteFromRecords({
+        appInstalls: [],
+        records,
+        request: { host: "other.example.com", pathname: "/docs/api" },
+      }),
+    ).toMatchObject({ id: "hostless-exact", matchPath: "/docs/api" });
+  });
+
   it("builds redirect responses from schema-owned route target fields", () => {
     expect(
       resolveInstanceRuntimeRouteFromRecords({
@@ -375,6 +424,74 @@ describe("instance runtime route resolution", () => {
         appInstalls,
         records,
         request: { host: "formless.local", pathname: "/disabled" },
+      }),
+    ).toBeUndefined();
+  });
+
+  it("derives default access and rejects app routes without an installed storage target", () => {
+    const appInstalls = [appInstall("tasks", "tasks"), appInstall("site", "site")];
+    const records = [
+      routeRecord("tasks-default-owner", {
+        enabled: true,
+        matchPath: "/apps/tasks",
+        kind: "mount",
+        targetProfile: "app",
+        appInstall: "tasks",
+        surface: "admin",
+      }),
+      routeRecord("site-default-anonymous", {
+        enabled: true,
+        matchPath: "/sites/site",
+        kind: "mount",
+        targetProfile: "public-site",
+        appInstall: "site",
+        surface: "public-site",
+      }),
+      routeRecord("missing-install", {
+        enabled: true,
+        matchPath: "/apps/missing",
+        kind: "mount",
+        targetProfile: "app",
+        appInstall: "missing",
+        surface: "admin",
+      }),
+    ];
+
+    expect(
+      resolveInstanceRuntimeRouteFromRecords({
+        appInstalls,
+        records,
+        request: { host: "formless.local", pathname: "/apps/tasks" },
+      }),
+    ).toMatchObject({
+      access: "owner",
+      target: {
+        authorityName: "app:tasks",
+        installId: "tasks",
+        kind: "appInstall",
+        packageAppKey: "tasks",
+      },
+    });
+    expect(
+      resolveInstanceRuntimeRouteFromRecords({
+        appInstalls,
+        records,
+        request: { host: "formless.local", pathname: "/sites/site" },
+      }),
+    ).toMatchObject({
+      access: "anonymous",
+      target: {
+        authorityName: "app:site",
+        installId: "site",
+        kind: "appInstall",
+        packageAppKey: "site",
+      },
+    });
+    expect(
+      resolveInstanceRuntimeRouteFromRecords({
+        appInstalls,
+        records,
+        request: { host: "formless.local", pathname: "/apps/missing" },
       }),
     ).toBeUndefined();
   });

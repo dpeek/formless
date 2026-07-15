@@ -9,7 +9,10 @@ import {
   areSchemaKeyApiRoutesEnabledForRequest,
   isClientShellRoute,
   isDynamicSiteIconPath,
+  mappedAuthOriginRouteDecisionFromFacts,
+  mappedRuntimeRoutePolicyFromFacts,
   ownerBrowserRouteAccessForRequest,
+  protectedBrowserRouteDecisionFromFacts,
   publishedSiteRedirectForRequest,
   resolveWorkerRuntimeRequestTopology,
   shouldDeferToStaticAssets,
@@ -77,6 +80,200 @@ describe("Worker document routing", () => {
     expect(shouldHandlePublishedSiteDocument(document, documentTopology)).toBe(true);
     expect(shouldDeferToStaticAssets(document, documentTopology)).toBe(false);
     expect(shouldServeMappedAppHostClientShell(mappedAppShell, mappedAppTopology)).toBe(true);
+  });
+
+  it("derives mapped-host runtime and auth-route eligibility from explicit route facts", () => {
+    const mappedAppRoute = {
+      access: "owner",
+      id: "route:host:app:tasks.example.com",
+      kind: "mount",
+      matchHost: "tasks.example.com",
+      matchPath: "/",
+      matchPrefix: "/",
+      targetProfile: "app",
+    } as const;
+    const mappedSiteRoute = {
+      ...mappedAppRoute,
+      access: "anonymous",
+      id: "route:host:site:www.example.com",
+      matchHost: "www.example.com",
+      targetProfile: "public-site",
+    } as const;
+    const mappedInstanceRoute = {
+      ...mappedAppRoute,
+      id: "route:host:instance:admin.example.com",
+      matchHost: "admin.example.com",
+      targetProfile: "instance",
+    } as const;
+    const hostlessAppRoute = {
+      ...mappedAppRoute,
+      id: "route:app:tasks",
+      matchHost: undefined,
+      matchPath: "/apps/tasks",
+      matchPrefix: undefined,
+    } as const;
+
+    expect(
+      mappedRuntimeRoutePolicyFromFacts({
+        configuredRuntimeProfile: "publishedSite",
+        runtimeRoute: mappedAppRoute,
+      }),
+    ).toEqual({
+      blocksAuthOriginRoutes: true,
+      blocksSchemaKeyApiRoutes: true,
+      mappedTargetProfile: "app",
+      runtimeProfile: "app",
+    });
+    expect(
+      mappedRuntimeRoutePolicyFromFacts({
+        configuredRuntimeProfile: "instance",
+        runtimeRoute: mappedSiteRoute,
+      }),
+    ).toEqual({
+      blocksAuthOriginRoutes: true,
+      blocksSchemaKeyApiRoutes: true,
+      mappedTargetProfile: "public-site",
+      runtimeProfile: "instance",
+    });
+    expect(
+      mappedRuntimeRoutePolicyFromFacts({
+        configuredRuntimeProfile: "publishedSite",
+        runtimeRoute: mappedInstanceRoute,
+      }),
+    ).toEqual({
+      blocksAuthOriginRoutes: false,
+      blocksSchemaKeyApiRoutes: false,
+      mappedTargetProfile: "instance",
+      runtimeProfile: "instance",
+    });
+    expect(
+      mappedRuntimeRoutePolicyFromFacts({
+        configuredRuntimeProfile: "dev",
+        runtimeRoute: hostlessAppRoute,
+      }),
+    ).toEqual({
+      blocksAuthOriginRoutes: false,
+      blocksSchemaKeyApiRoutes: false,
+      runtimeProfile: "dev",
+    });
+
+    const signInTopology = resolveWorkerRuntimeRequestTopology(
+      documentRequest("https://tasks.example.com/formless/auth/sign-in?returnTo=%2Fschema"),
+      { profile: "app" },
+    );
+    const mappedAppPolicy = mappedRuntimeRoutePolicyFromFacts({ runtimeRoute: mappedAppRoute });
+
+    expect(
+      mappedAuthOriginRouteDecisionFromFacts({
+        authOriginRead: false,
+        mappedRoutePolicy: mappedAppPolicy,
+        requestOrigin: "https://tasks.example.com",
+        reservedAuthOriginRoute: true,
+        topology: signInTopology,
+      }),
+    ).toEqual({ kind: "read-auth-origin" });
+    expect(
+      mappedAuthOriginRouteDecisionFromFacts({
+        authOrigin: "https://auth.example.com",
+        authOriginRead: true,
+        mappedRoutePolicy: mappedAppPolicy,
+        requestOrigin: "https://tasks.example.com",
+        reservedAuthOriginRoute: true,
+        topology: signInTopology,
+      }),
+    ).toEqual({
+      kind: "redirect",
+      location: "https://auth.example.com/formless/auth/sign-in?returnTo=%2Fschema",
+    });
+    expect(
+      mappedAuthOriginRouteDecisionFromFacts({
+        authOriginRead: true,
+        mappedRoutePolicy: mappedAppPolicy,
+        requestOrigin: "https://tasks.example.com",
+        reservedAuthOriginRoute: true,
+        topology: resolveWorkerRuntimeRequestTopology(
+          documentRequest("https://tasks.example.com/formless/auth/profile-completion"),
+          { profile: "app" },
+        ),
+      }),
+    ).toEqual({ kind: "not-found" });
+    expect(
+      mappedAuthOriginRouteDecisionFromFacts({
+        authOriginRead: false,
+        mappedRoutePolicy: mappedRuntimeRoutePolicyFromFacts({
+          runtimeRoute: mappedInstanceRoute,
+        }),
+        requestOrigin: "https://admin.example.com",
+        reservedAuthOriginRoute: true,
+        topology: signInTopology,
+      }),
+    ).toEqual({ kind: "continue" });
+  });
+
+  it("plans protected browser access from topology, route, and session-result facts", () => {
+    const mappedRoute = {
+      access: "authenticated",
+      id: "route:host:app:tasks.example.com",
+      kind: "mount",
+      matchHost: "tasks.example.com",
+      matchPath: "/",
+      matchPrefix: "/",
+      targetProfile: "app",
+    } as const;
+    const topology = resolveWorkerRuntimeRequestTopology(
+      documentRequest("https://tasks.example.com/schema?view=board"),
+      { profile: "app" },
+    );
+
+    expect(
+      protectedBrowserRouteDecisionFromFacts({
+        runtimeRoute: mappedRoute,
+        session: "unread",
+        topology,
+      }),
+    ).toEqual({ kind: "validate-session", requiredAccess: "authenticated" });
+    expect(
+      protectedBrowserRouteDecisionFromFacts({
+        runtimeRoute: mappedRoute,
+        session: "allowed",
+        topology,
+      }),
+    ).toEqual({ kind: "continue" });
+    expect(
+      protectedBrowserRouteDecisionFromFacts({
+        runtimeRoute: mappedRoute,
+        session: "account-completion-required",
+        topology,
+      }),
+    ).toEqual({ kind: "account-completion", requiredAccess: "authenticated" });
+    expect(
+      protectedBrowserRouteDecisionFromFacts({
+        runtimeRoute: { ...mappedRoute, access: "owner" },
+        session: "rejected",
+        topology,
+      }),
+    ).toEqual({ kind: "authenticate", requiredAccess: "owner" });
+    expect(
+      protectedBrowserRouteDecisionFromFacts({
+        runtimeRoute: mappedRoute,
+        session: "unread",
+        topology: resolveWorkerRuntimeRequestTopology(
+          new Request("https://tasks.example.com/schema", {
+            headers: { Accept: "application/json" },
+          }),
+          { profile: "app" },
+        ),
+      }),
+    ).toEqual({ kind: "continue" });
+    expect(
+      protectedBrowserRouteDecisionFromFacts({
+        session: "unread",
+        topology: resolveWorkerRuntimeRequestTopology(
+          documentRequest("https://admin.example.com/access"),
+          { profile: "instance" },
+        ),
+      }),
+    ).toEqual({ kind: "validate-session", requiredAccess: "owner" });
   });
 
   it("routes published Site documents to the Worker SSR path only in the published profile", () => {

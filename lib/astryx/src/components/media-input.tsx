@@ -1,7 +1,7 @@
 import { useId, useState } from "react";
 import * as stylex from "@stylexjs/stylex";
+import { FileInput } from "@astryxdesign/core";
 import { Field, type FieldStatusInput } from "@astryxdesign/core/Field";
-import { FileInput } from "@astryxdesign/core/FileInput";
 import { Grid } from "@astryxdesign/core/Grid";
 import { Popover } from "@astryxdesign/core/Popover";
 import { SelectableCard } from "@astryxdesign/core/SelectableCard";

@@ -56,6 +56,31 @@ export type WorkerRuntimeRequestTopology = {
 
 export type WorkerRuntimeRouteInput = WorkerRuntimeProfileInput | WorkerRuntimeRequestTopology;
 
+export type MappedRuntimeRoutePolicy = {
+  blocksAuthOriginRoutes: boolean;
+  blocksSchemaKeyApiRoutes: boolean;
+  mappedTargetProfile?: "app" | "instance" | "public-site";
+  runtimeProfile?: string;
+};
+
+export type ProtectedBrowserRouteSessionFact =
+  | "account-completion-required"
+  | "allowed"
+  | "rejected"
+  | "unread";
+
+export type ProtectedBrowserRouteDecision =
+  | { kind: "account-completion"; requiredAccess: Exclude<RuntimeRouteAccess, "anonymous"> }
+  | { kind: "authenticate"; requiredAccess: Exclude<RuntimeRouteAccess, "anonymous"> }
+  | { kind: "continue" }
+  | { kind: "validate-session"; requiredAccess: Exclude<RuntimeRouteAccess, "anonymous"> };
+
+export type MappedAuthOriginRouteDecision =
+  | { kind: "continue" }
+  | { kind: "not-found" }
+  | { kind: "read-auth-origin" }
+  | { kind: "redirect"; location: string };
+
 export function workerRuntimeProfileInput(profile: string | undefined): WorkerRuntimeProfileInput {
   return {
     profile: stringRuntimeConfigValue(profile),
@@ -95,6 +120,100 @@ export function resolveWorkerRuntimeRequestTopology(
     staticAssetPath,
     url,
   };
+}
+
+export function mappedRuntimeRoutePolicyFromFacts(input: {
+  configuredRuntimeProfile?: string;
+  runtimeRoute?: InstanceRuntimeRouteResolution;
+}): MappedRuntimeRoutePolicy {
+  const mappedRoute =
+    input.runtimeRoute?.kind === "mount" && input.runtimeRoute.matchHost !== undefined
+      ? input.runtimeRoute
+      : undefined;
+  const mappedTargetProfile = mappedRoute?.targetProfile;
+  const blocksAuthOriginRoutes =
+    mappedTargetProfile === "app" || mappedTargetProfile === "public-site";
+
+  return {
+    blocksAuthOriginRoutes,
+    blocksSchemaKeyApiRoutes: blocksAuthOriginRoutes,
+    ...(mappedTargetProfile === undefined ? {} : { mappedTargetProfile }),
+    ...(mappedTargetProfile === "instance"
+      ? { runtimeProfile: "instance" }
+      : mappedTargetProfile === "app"
+        ? { runtimeProfile: "app" }
+        : input.configuredRuntimeProfile === undefined
+          ? {}
+          : { runtimeProfile: input.configuredRuntimeProfile }),
+  };
+}
+
+export function mappedAuthOriginRouteDecisionFromFacts(input: {
+  authOrigin?: string;
+  authOriginRead: boolean;
+  mappedRoutePolicy: MappedRuntimeRoutePolicy;
+  requestOrigin: string;
+  reservedAuthOriginRoute: boolean;
+  topology: WorkerRuntimeRequestTopology;
+}): MappedAuthOriginRouteDecision {
+  if (!input.mappedRoutePolicy.blocksAuthOriginRoutes || !input.reservedAuthOriginRoute) {
+    return { kind: "continue" };
+  }
+
+  const credentialGate =
+    (input.topology.pathname === runtimeTopologyRoutes.authAccountSignInRoute ||
+      input.topology.pathname === runtimeTopologyRoutes.authAccountSetupRoute) &&
+    input.topology.readMethod &&
+    input.topology.acceptsHtml &&
+    !input.topology.apiPath &&
+    !input.topology.staticAssetPath;
+
+  if (credentialGate && !input.authOriginRead) {
+    return { kind: "read-auth-origin" };
+  }
+
+  if (credentialGate && input.authOrigin && input.authOrigin !== input.requestOrigin) {
+    const location = new URL(input.authOrigin);
+
+    location.pathname = input.topology.url.pathname;
+    location.search = input.topology.url.search;
+
+    return { kind: "redirect", location: location.toString() };
+  }
+
+  return { kind: "not-found" };
+}
+
+export function protectedBrowserRouteDecisionFromFacts(input: {
+  runtimeRoute?: InstanceRuntimeRouteResolution;
+  session: ProtectedBrowserRouteSessionFact;
+  topology: WorkerRuntimeRequestTopology;
+}): ProtectedBrowserRouteDecision {
+  if (!protectedBrowserRouteCandidateFromFacts(input.topology)) {
+    return { kind: "continue" };
+  }
+
+  const routeAccess = ownerBrowserRouteAccessFromFacts(input.topology, input.runtimeRoute);
+
+  if (routeAccess === "anonymous" || input.session === "allowed") {
+    return { kind: "continue" };
+  }
+
+  const requiredAccess = input.runtimeRoute?.kind === "mount" ? input.runtimeRoute.access : "owner";
+
+  if (requiredAccess === "anonymous") {
+    return { kind: "continue" };
+  }
+
+  if (input.session === "unread") {
+    return { kind: "validate-session", requiredAccess };
+  }
+
+  if (input.session === "account-completion-required") {
+    return { kind: "account-completion", requiredAccess };
+  }
+
+  return { kind: "authenticate", requiredAccess };
 }
 
 export function workerRuntimeRoutePolicy(
@@ -275,6 +394,12 @@ function protectedBrowserRouteCandidate(
 ): boolean {
   const topology = resolveWorkerRuntimeRequestTopology(request, input);
 
+  return protectedBrowserRouteCandidateFromFacts(topology);
+}
+
+export function protectedBrowserRouteCandidateFromFacts(
+  topology: WorkerRuntimeRequestTopology,
+): boolean {
   if (
     !topology.readMethod ||
     !topology.acceptsHtml ||
@@ -298,6 +423,14 @@ export function ownerBrowserRouteAccessForRequest(
   runtimeRoute?: InstanceRuntimeRouteResolution,
 ): RuntimeRouteAccess {
   const topology = resolveWorkerRuntimeRequestTopology(request, input);
+
+  return ownerBrowserRouteAccessFromFacts(topology, runtimeRoute);
+}
+
+export function ownerBrowserRouteAccessFromFacts(
+  topology: WorkerRuntimeRequestTopology,
+  runtimeRoute?: InstanceRuntimeRouteResolution,
+): RuntimeRouteAccess {
   const mountRoute = runtimeRoute?.kind === "mount" ? runtimeRoute : undefined;
 
   if (mountRoute?.matchHost !== undefined) {

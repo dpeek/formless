@@ -166,6 +166,29 @@ export async function validateCentralAuthSessionCookie(
     resolveActivePrincipal?: (principalId: string) => Promise<ActiveIdentityPrincipal | null>;
   } = {},
 ): Promise<CentralAuthSessionValidationResult> {
+  const validated = await validateCentralAuthSessionState(request, storage, env, options);
+
+  if (!validated.ok) {
+    return validated;
+  }
+
+  const principal = options.resolveActivePrincipal
+    ? await options.resolveActivePrincipal(validated.session.principalId)
+    : await readInternalActiveIdentityPrincipal(env, validated.session.principalId);
+
+  if (!principal || principal.id !== validated.session.principalId) {
+    return { ok: false, reason: "missing-principal" };
+  }
+
+  return validated;
+}
+
+export async function validateCentralAuthSessionState(
+  request: Request,
+  storage: DurableObjectStorage,
+  env: CentralAuthSessionEnv,
+  options: { now?: string } = {},
+): Promise<CentralAuthSessionValidationResult> {
   const decoded = await decodeCentralAuthSessionCookie(request, storage, env);
 
   if (!decoded.ok) {
@@ -186,14 +209,6 @@ export async function validateCentralAuthSessionCookie(
 
   if (decoded.session.revokedAt !== undefined) {
     return { ok: false, reason: "revoked-session" };
-  }
-
-  const principal = options.resolveActivePrincipal
-    ? await options.resolveActivePrincipal(decoded.session.principalId)
-    : await readInternalActiveIdentityPrincipal(env, decoded.session.principalId);
-
-  if (!principal || principal.id !== decoded.session.principalId) {
-    return { ok: false, reason: "missing-principal" };
   }
 
   return {

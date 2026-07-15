@@ -38,6 +38,8 @@ import {
   handleAuthAccountHandoffBrowserContinuation,
   handleInstanceAuthHandoffRequest,
   hostAuthSessionTargetForRuntimeRoute,
+  installedAppApiRouteAccessFromFacts,
+  mappedInstanceManagementTargetFromFacts,
   requestOriginForAuth,
   resolveAuthAccountHandoffContinuation,
   setHostAuthSessionTargetHeaders,
@@ -67,12 +69,14 @@ import {
 } from "../shared/runtime-topology.ts";
 import {
   areSchemaKeyApiRoutesEnabledForRequest,
+  mappedAuthOriginRouteDecisionFromFacts,
+  mappedRuntimeRoutePolicyFromFacts,
   mappedSiteHostRedirectForRequest,
   ownerBrowserRouteAccessForRequest,
+  protectedBrowserRouteDecisionFromFacts,
   publishedSiteRedirectForRequest,
   resolveWorkerRuntimeRequestTopology,
   shouldDeferToStaticAssets,
-  shouldRedirectAnonymousProtectedBrowserRoute,
   workerRuntimeProfileInput,
   type WorkerRuntimeRequestTopology,
 } from "./routing.ts";
@@ -97,7 +101,6 @@ import { validateOwnerSessionCookie } from "./owner-session.ts";
 import type { TurnstileRuntimeEnv } from "../shared/turnstile-config.ts";
 import { activeAppPackageResolver } from "./runtime-app-packages.ts";
 import { WORKSPACE_OPERATION_CAPABILITIES } from "@dpeek/formless-workspace";
-import { INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY } from "@dpeek/formless-instance-control-plane";
 
 export { FormlessAuthority } from "./authority.ts";
 
@@ -190,18 +193,11 @@ export default {
 
     const mappedAppHost = mappedAppHostFromRuntimeRoute(runtimeRoute);
     const mappedSiteHost = mappedPublicSiteHostFromRuntimeRoute(runtimeRoute);
-    const mappedRouteTargetProfile =
-      runtimeRoute?.kind === "mount" ? runtimeRoute.targetProfile : undefined;
-    const isMappedAppProfileHost = mappedRouteTargetProfile === "app";
-    const isMappedAuthBlockedProfileHost =
-      mappedRouteTargetProfile === "app" || mappedRouteTargetProfile === "public-site";
-    const effectiveRuntimeProfile = workerRuntimeProfileInput(
-      mappedRouteTargetProfile === "instance"
-        ? "instance"
-        : isMappedAppProfileHost
-          ? "app"
-          : env.FORMLESS_RUNTIME_PROFILE,
-    );
+    const mappedRoutePolicy = mappedRuntimeRoutePolicyFromFacts({
+      configuredRuntimeProfile: env.FORMLESS_RUNTIME_PROFILE,
+      runtimeRoute,
+    });
+    const effectiveRuntimeProfile = workerRuntimeProfileInput(mappedRoutePolicy.runtimeProfile);
     const requestTopology = resolveWorkerRuntimeRequestTopology(request, effectiveRuntimeProfile);
     const workspaceGatewayRouteAvailable = workerWorkspaceGatewayRouteAvailable(
       requestTopology,
@@ -275,16 +271,30 @@ export default {
       return instanceAuthHandoffResponse;
     }
 
-    const mappedAuthBlockedAccountGateResponse =
-      isMappedAuthBlockedProfileHost && isAuthAccountCredentialGateBrowserRequest(requestTopology)
-        ? await handleNonAuthOriginAccountGateBrowserRequest(request, env)
-        : undefined;
+    let mappedAuthRouteDecision = mappedAuthOriginRouteDecisionFromFacts({
+      authOriginRead: false,
+      mappedRoutePolicy,
+      requestOrigin: requestOriginForAuth(request),
+      reservedAuthOriginRoute: isReservedAuthOriginRoute(requestTopology.pathname),
+      topology: requestTopology,
+    });
 
-    if (mappedAuthBlockedAccountGateResponse) {
-      return mappedAuthBlockedAccountGateResponse;
+    if (mappedAuthRouteDecision.kind === "read-auth-origin") {
+      mappedAuthRouteDecision = mappedAuthOriginRouteDecisionFromFacts({
+        authOrigin: await configuredInstanceAuthOrigin(request, env),
+        authOriginRead: true,
+        mappedRoutePolicy,
+        requestOrigin: requestOriginForAuth(request),
+        reservedAuthOriginRoute: true,
+        topology: requestTopology,
+      });
     }
 
-    if (isMappedAuthBlockedProfileHost && isReservedAuthOriginRoute(requestTopology.pathname)) {
+    if (mappedAuthRouteDecision.kind === "redirect") {
+      return redirectResponse(mappedAuthRouteDecision.location, 302);
+    }
+
+    if (mappedAuthRouteDecision.kind === "not-found") {
       return notFoundResponse(requestTopology.apiPath);
     }
 
@@ -376,10 +386,10 @@ export default {
     const instanceAppInstallsResponse = isInstanceAppInstallsApiPath(requestUrl.pathname)
       ? await handleInstanceAppInstallsApiRequest(
           authorityRequestWithOriginalUrlFacts(request, {
-            hostSessionTarget: hostAuthSessionTargetForInstanceControlPlaneRoute(
-              request,
+            hostSessionTarget: mappedInstanceManagementTargetFromFacts({
+              requestOrigin: requestOriginForAuth(request),
               runtimeRoute,
-            ),
+            }),
           }),
           env,
         )
@@ -392,10 +402,10 @@ export default {
     const instanceControlPlaneResponse = instanceControlPlaneRoute
       ? await handleInstanceControlPlaneApiRequest(
           authorityRequestWithOriginalUrlFacts(instanceControlPlaneForwardRequest ?? request, {
-            hostSessionTarget: hostAuthSessionTargetForInstanceControlPlaneRoute(
-              request,
+            hostSessionTarget: mappedInstanceManagementTargetFromFacts({
+              requestOrigin: requestOriginForAuth(request),
               runtimeRoute,
-            ),
+            }),
           }),
           env,
         )
@@ -408,10 +418,10 @@ export default {
     const identityControlPlaneResponse = identityControlPlaneRoute
       ? await handleIdentityControlPlaneApiRequest(
           authorityRequestWithOriginalUrlFacts(identityControlPlaneForwardRequest ?? request, {
-            hostSessionTarget: hostAuthSessionTargetForInstanceControlPlaneRoute(
-              request,
+            hostSessionTarget: mappedInstanceManagementTargetFromFacts({
+              requestOrigin: requestOriginForAuth(request),
               runtimeRoute,
-            ),
+            }),
           }),
           env,
         )
@@ -455,15 +465,16 @@ export default {
     }
 
     if (authorityRoute) {
-      const hostSessionTarget = hostAuthSessionTargetForInstalledAppAuthorityRoute(
-        request,
+      const installedAppRouteAccess = installedAppApiRouteAccessFromFacts({
+        requestOrigin: requestOriginForAuth(request),
         runtimeRoute,
-        authorityRoute.identity.authorityName,
-      );
+        storageIdentity: authorityRoute.identity.authorityName,
+      });
+      const hostSessionTarget = installedAppRouteAccess.target;
 
       if (
         authorityRoute.identity.kind === "schemaKey" &&
-        (isMappedAuthBlockedProfileHost ||
+        (mappedRoutePolicy.blocksSchemaKeyApiRoutes ||
           !areSchemaKeyApiRoutesEnabledForRequest(request, requestTopology))
       ) {
         return Response.json({ error: "Not found." }, { status: 404 });
@@ -472,8 +483,7 @@ export default {
       const routeAccessAuthorization = await authorizeInstalledAppRouteAccess(
         request,
         env,
-        runtimeRoute,
-        authorityRoute.identity.authorityName,
+        installedAppRouteAccess.access,
         hostSessionTarget,
       );
 
@@ -481,10 +491,7 @@ export default {
         return routeAccessAuthorization;
       }
 
-      const routeAccess = runtimeRouteAccessForInstalledAppAuthorityRoute(
-        runtimeRoute,
-        authorityRoute.identity.authorityName,
-      );
+      const routeAccess = installedAppRouteAccess.access;
 
       if (
         authorityRoute.identity.kind === "appInstall" &&
@@ -493,7 +500,10 @@ export default {
       ) {
         const managementHostSessionTarget =
           hostSessionTarget ??
-          hostAuthSessionTargetForInstanceControlPlaneRoute(request, runtimeRoute);
+          mappedInstanceManagementTargetFromFacts({
+            requestOrigin: requestOriginForAuth(request),
+            runtimeRoute,
+          });
         const authorization = await authorizeOwnerManagementRead(request, env, {
           hostSessionTarget: managementHostSessionTarget,
         });
@@ -847,10 +857,10 @@ async function handleNonAuthOriginOwnerAuthRoute(
   }
 
   if (isMappedInstanceHostSessionApiRequest(requestTopology, request)) {
-    const hostSessionTarget = hostAuthSessionTargetForInstanceControlPlaneRoute(
-      request,
+    const hostSessionTarget = mappedInstanceManagementTargetFromFacts({
+      requestOrigin: requestOriginForAuth(request),
       runtimeRoute,
-    );
+    });
 
     if (hostSessionTarget) {
       return await handleOwnerSetupApiRequest(
@@ -863,19 +873,6 @@ async function handleNonAuthOriginOwnerAuthRoute(
   return notFoundResponse(requestTopology.apiPath);
 }
 
-async function handleNonAuthOriginAccountGateBrowserRequest(
-  request: Request,
-  env: Env,
-): Promise<Response | undefined> {
-  const authOrigin = await configuredInstanceAuthOrigin(request, env);
-
-  if (!authOrigin || authOrigin === requestOriginForAuth(request)) {
-    return undefined;
-  }
-
-  return redirectResponse(authOriginLocationForRequest(authOrigin, request), 302);
-}
-
 function isMappedInstanceHostSessionApiRequest(
   requestTopology: WorkerRuntimeRequestTopology,
   request: Request,
@@ -884,19 +881,6 @@ function isMappedInstanceHostSessionApiRequest(
     (requestTopology.pathname === OWNER_SESSION_API_PATH ||
       requestTopology.pathname === OWNER_SESSION_LOGOUT_API_PATH) &&
     requestHasCookie(request, HOST_AUTH_SESSION_COOKIE_NAME)
-  );
-}
-
-function isAuthAccountCredentialGateBrowserRequest(
-  requestTopology: WorkerRuntimeRequestTopology,
-): boolean {
-  return (
-    (requestTopology.pathname === runtimeTopologyRoutes.authAccountSignInRoute ||
-      requestTopology.pathname === runtimeTopologyRoutes.authAccountSetupRoute) &&
-    requestTopology.readMethod &&
-    requestTopology.acceptsHtml &&
-    !requestTopology.apiPath &&
-    !requestTopology.staticAssetPath
   );
 }
 
@@ -924,51 +908,12 @@ function isInstalledAppManagementApiRead(request: Request, path: `/${string}`): 
   return request.method === "GET" && path === "/sync/ws";
 }
 
-function hostAuthSessionTargetForInstalledAppAuthorityRoute(
-  request: Request,
-  runtimeRoute: Awaited<ReturnType<typeof resolveInstanceRuntimeRouteForRequest>>,
-  storageIdentity: string,
-) {
-  const target = hostAuthSessionTargetForRuntimeRoute(request, runtimeRoute, {
-    minimumAccess: "authenticated",
-  });
-
-  if (!target || target.storageIdentity !== storageIdentity) {
-    return undefined;
-  }
-
-  return target;
-}
-
-function hostAuthSessionTargetForInstanceControlPlaneRoute(
-  request: Request,
-  runtimeRoute: Awaited<ReturnType<typeof resolveInstanceRuntimeRouteForRequest>>,
-) {
-  const target = hostAuthSessionTargetForRuntimeRoute(request, runtimeRoute, {
-    minimumAccess: "owner",
-  });
-
-  if (
-    !target ||
-    target.appInstallId !== undefined ||
-    target.targetProfile !== "instance" ||
-    target.storageIdentity !== INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY
-  ) {
-    return undefined;
-  }
-
-  return target;
-}
-
 async function authorizeInstalledAppRouteAccess(
   request: Request,
   env: Env,
-  runtimeRoute: Awaited<ReturnType<typeof resolveInstanceRuntimeRouteForRequest>>,
-  storageIdentity: string,
+  access: ReturnType<typeof installedAppApiRouteAccessFromFacts>["access"],
   hostSessionTarget: ReturnType<typeof hostAuthSessionTargetForRuntimeRoute>,
 ): Promise<Response | undefined> {
-  const access = runtimeRouteAccessForInstalledAppAuthorityRoute(runtimeRoute, storageIdentity);
-
   if (access === undefined || access === "anonymous") {
     return undefined;
   }
@@ -1000,15 +945,6 @@ async function authorizeInstalledAppRouteAccess(
   );
 }
 
-function runtimeRouteAccessForInstalledAppAuthorityRoute(
-  runtimeRoute: Awaited<ReturnType<typeof resolveInstanceRuntimeRouteForRequest>>,
-  storageIdentity: string,
-) {
-  return runtimeRoute?.kind === "mount" && runtimeRoute.target?.authorityName === storageIdentity
-    ? runtimeRoute.access
-    : undefined;
-}
-
 function workerWorkspaceGatewayRouteAvailable(
   requestTopology: WorkerRuntimeRequestTopology,
   runtimeRoute: Awaited<ReturnType<typeof resolveInstanceRuntimeRouteForRequest>>,
@@ -1025,9 +961,13 @@ async function redirectAnonymousProtectedBrowserRoute(
   requestTopology: WorkerRuntimeRequestTopology,
   exactHostRuntimeRoute: Awaited<ReturnType<typeof resolveInstanceRuntimeRouteForRequest>>,
 ): Promise<Response | undefined> {
-  if (
-    !shouldRedirectAnonymousProtectedBrowserRoute(request, requestTopology, exactHostRuntimeRoute)
-  ) {
+  let decision = protectedBrowserRouteDecisionFromFacts({
+    runtimeRoute: exactHostRuntimeRoute,
+    session: "unread",
+    topology: requestTopology,
+  });
+
+  if (decision.kind !== "validate-session") {
     return undefined;
   }
 
@@ -1036,33 +976,49 @@ async function redirectAnonymousProtectedBrowserRoute(
       ? exactHostRuntimeRoute
       : await resolveInstanceRuntimeRouteForRequest(request, env);
 
-  if (!shouldRedirectAnonymousProtectedBrowserRoute(request, requestTopology, runtimeRoute)) {
-    return undefined;
-  }
+  decision = protectedBrowserRouteDecisionFromFacts({
+    runtimeRoute,
+    session: "unread",
+    topology: requestTopology,
+  });
 
-  const requiredAccess = runtimeRoute?.kind === "mount" ? runtimeRoute.access : "owner";
-
-  if (requiredAccess === "anonymous") {
+  if (decision.kind !== "validate-session") {
     return undefined;
   }
 
   const session = await validateRouteAccessSession(request, env, {
-    requiredAccess,
+    requiredAccess: decision.requiredAccess,
     ...(runtimeRoute?.kind === "mount" ? { runtimeRoute } : {}),
   });
+  const requiredAccess = decision.requiredAccess;
 
-  if (session.ok) {
+  decision = protectedBrowserRouteDecisionFromFacts({
+    runtimeRoute,
+    session: session.ok
+      ? "allowed"
+      : session.reason === "account-completion-required" && session.accountCompletion !== undefined
+        ? "account-completion-required"
+        : "rejected",
+    topology: requestTopology,
+  });
+
+  if (decision.kind === "continue") {
     return undefined;
   }
 
-  if (session.reason === "account-completion-required" && session.accountCompletion !== undefined) {
+  if (decision.kind === "account-completion" && !session.ok && session.accountCompletion) {
     return (
-      (await startProtectedRouteAuthAccount(request, env, runtimeRoute)) ??
+      (await startProtectedRouteAuthAccount(request, env, runtimeRoute, requiredAccess)) ??
       accountCompletionBlockedResponse(session.accountCompletion)
     );
   }
 
-  const accountRedirect = await startProtectedRouteAuthAccount(request, env, runtimeRoute);
+  const accountRedirect = await startProtectedRouteAuthAccount(
+    request,
+    env,
+    runtimeRoute,
+    requiredAccess,
+  );
 
   if (accountRedirect) {
     return accountRedirect;

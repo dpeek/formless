@@ -8,19 +8,37 @@ import { nowIsoString } from "../shared/clock.ts";
 import {
   FORMLESS_INSTANCE_AUTH_ORIGIN_ENV_NAME,
   ownerLoginRedirectLocationForRoute,
-  parseAccountCompletionGateTarget,
   parseAccountCompletionGateResolutionResult,
   parseInstanceAuthCanonicalOrigin,
   parseOwnerLoginRedirectTarget,
   type AccountCompletionGateResolutionResult,
   type AccountCompletionGateTarget,
+  type OwnerLoginRedirectTarget,
 } from "../shared/instance-auth.ts";
-import { acceptsRuntimeHtml, runtimeTopologyRoutes } from "../shared/runtime-topology.ts";
+import {
+  acceptsRuntimeHtml,
+  runtimeTopologyRoutes,
+  type RuntimeRouteAccess,
+} from "../shared/runtime-topology.ts";
 import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
 import {
   INSTANCE_AUTH_ACCOUNT_COMPLETION_RESOLVE_PATH,
   resolveAccountCompletionGate,
 } from "./instance-auth-account-completion.ts";
+import {
+  authenticatedOperationActorForAccess,
+  resolveInstanceAuthAccess,
+  validateHostSessionScope,
+  validateCentralInstanceAuthAccess,
+  validateHostInstanceAuthAccess,
+  type HostAuthSession,
+  type HostAuthSessionValidationFailureReason,
+  type InstanceAuthAccessReaders,
+  type InstanceAuthAccessFailureReason,
+  type InstanceAuthAccessResult,
+  type InstanceAuthAuthorityRequirement,
+  type InstanceAuthSession,
+} from "./instance-auth-access.ts";
 import {
   consumeHandoffGrant,
   createHandoffGrant,
@@ -39,13 +57,12 @@ import {
 } from "./identity-owner-internal.ts";
 import {
   ownerSessionSigningSecret,
-  validateOwnerSessionAuthority,
-  validateOwnerSessionPrincipal,
+  validateOwnerSessionCookie,
   type OwnerSession,
   type OwnerSessionEnv,
 } from "./owner-session.ts";
 import {
-  validateCentralAuthSessionCookie,
+  validateCentralAuthSessionState,
   type CentralAuthSession,
   type CentralAuthSessionValidationFailureReason,
 } from "./central-auth-session.ts";
@@ -58,8 +75,12 @@ import {
   activeAppPackageResolver,
   type ActiveRuntimeAppPackageEnv,
 } from "./runtime-app-packages.ts";
-import type { OperationInvocationActor } from "../shared/operation-invocation.ts";
 import { isLocalOwnerSessionRuntime } from "./local-session-bootstrap.ts";
+
+export type {
+  HostAuthSession,
+  HostAuthSessionValidationFailureReason,
+} from "./instance-auth-access.ts";
 
 export const INSTANCE_AUTH_HANDOFF_START_PATH = "/formless/auth/handoff";
 export const INSTANCE_AUTH_HANDOFF_CALLBACK_PATH = "/formless/auth/callback";
@@ -89,30 +110,9 @@ export type InstanceAuthHandoffEnv = OwnerSessionEnv & {
   FORMLESS_RUNTIME_PROFILE?: string;
 } & ActiveRuntimeAppPackageEnv;
 
-export type HostAuthSession = InstanceAuthSessionTargetBinding & {
-  expiresAt: string;
-  instanceId: string;
-  issuedAt: string;
-  principalId: string;
-  sessionVersion: number;
+export type InstanceAuthAccessEnv = Omit<InstanceAuthHandoffEnv, "FORMLESS_AUTHORITY"> & {
+  FORMLESS_AUTHORITY?: DurableObjectNamespace;
 };
-
-export type HostAuthSessionValidationFailureReason =
-  | "account-completion-required"
-  | "expired"
-  | "malformed-cookie"
-  | "malformed-payload"
-  | "missing-cookie"
-  | "missing-management-authority"
-  | "missing-owner-authority"
-  | "missing-principal"
-  | "missing-secret"
-  | "missing-target"
-  | "revoked-session"
-  | "tampered-cookie"
-  | "wrong-instance"
-  | "wrong-purpose"
-  | "wrong-target";
 
 export type HostAuthSessionAuthorityValidationResult =
   | {
@@ -130,7 +130,7 @@ type HostAuthSessionPayload = HostAuthSession & {
   version: typeof hostSessionVersion;
 };
 
-type ProtectedRouteAccess = "authenticated" | "owner";
+export type ProtectedRouteAccess = "authenticated" | "owner";
 type HostSessionAuthorityRequirement = ProtectedRouteAccess | "management";
 type CentralSessionAuthorityRequirement = ProtectedRouteAccess | "management";
 type CentralAuthSessionAuthorityValidationFailureReason =
@@ -152,32 +152,98 @@ type CentralAuthSessionAuthorityValidationResult =
       reason: CentralAuthSessionAuthorityValidationFailureReason;
     };
 
-export type RouteAccessSessionValidationResult =
+export type RouteAccessSessionValidationResult = InstanceAuthAccessResult;
+
+export type InstanceAuthCallbackReservation =
+  | { kind: "not-callback" }
+  | { kind: "reserved"; target?: InstanceAuthSessionTargetBinding };
+
+export type InstalledAppApiRouteAccess = {
+  access?: RuntimeRouteAccess;
+  target?: InstanceAuthSessionTargetBinding;
+};
+
+export type ProtectedRouteAuthRedirectPlan =
   | {
-      ok: true;
-      ownerAuthorized: boolean;
-      principalId: string;
-      session: CentralAuthSession | HostAuthSession | OwnerSession;
-      target?: InstanceAuthSessionTargetBinding;
-      via: "central-session" | "host-session" | "owner-session";
+      kind: "account";
+      location: string;
+      returnTo: OwnerLoginRedirectTarget;
     }
   | {
-      ok: false;
-      accountCompletion?: AccountCompletionGateResolutionResult;
-      reason:
-        | HostAuthSessionValidationFailureReason
-        | "missing-owner-authority"
-        | "missing-principal";
+      authOrigin: string;
+      entryPath: string;
+      kind: "handoff";
+      returnTo: OwnerLoginRedirectTarget;
+      target: InstanceAuthSessionTargetBinding;
+    }
+  | { error: "Handoff return target must be path-only."; kind: "invalid-return-target" }
+  | { kind: "unavailable" };
+
+export function planProtectedRouteAuthRedirect(input: {
+  authOrigin?: string;
+  entry: "account" | "handoff";
+  requestOrigin: string;
+  requiredAccess: ProtectedRouteAccess;
+  runtimeRoute: InstanceRuntimeRouteResolution | undefined;
+  safeReturnTo: OwnerLoginRedirectTarget | undefined;
+}): ProtectedRouteAuthRedirectPlan {
+  if (!input.authOrigin) {
+    return { kind: "unavailable" };
+  }
+
+  if (!input.safeReturnTo) {
+    return {
+      error: "Handoff return target must be path-only.",
+      kind: "invalid-return-target",
     };
+  }
+
+  const target = hostAuthSessionTargetForRuntimeRouteFacts({
+    minimumAccess: input.requiredAccess,
+    requestOrigin: input.requestOrigin,
+    runtimeRoute: input.runtimeRoute,
+  });
+
+  if (!target || input.authOrigin === input.requestOrigin) {
+    if (input.entry === "handoff") {
+      return { kind: "unavailable" };
+    }
+
+    const location = new URL(runtimeTopologyRoutes.authAccountRoute, input.authOrigin);
+
+    location.searchParams.set("returnTo", input.safeReturnTo);
+
+    return {
+      kind: "account",
+      location:
+        input.authOrigin === input.requestOrigin
+          ? `${location.pathname}${location.search}`
+          : location.toString(),
+      returnTo: input.safeReturnTo,
+    };
+  }
+
+  return {
+    authOrigin: input.authOrigin,
+    entryPath:
+      input.entry === "handoff"
+        ? INSTANCE_AUTH_HANDOFF_START_PATH
+        : runtimeTopologyRoutes.authAccountRoute,
+    kind: "handoff",
+    returnTo: input.safeReturnTo,
+    target,
+  };
+}
 
 export async function startProtectedRouteAuthHandoff(
   request: Request,
   env: InstanceAuthHandoffEnv,
   runtimeRoute: InstanceRuntimeRouteResolution | undefined,
+  requiredAccess: ProtectedRouteAccess,
 ): Promise<Response | undefined> {
   return startProtectedRouteAuthRedirect(request, env, runtimeRoute, {
-    entryPath: INSTANCE_AUTH_HANDOFF_START_PATH,
-    requireCrossOrigin: true,
+    entry: "handoff",
+    requiredAccess,
   });
 }
 
@@ -185,10 +251,11 @@ export async function startProtectedRouteAuthAccount(
   request: Request,
   env: InstanceAuthHandoffEnv,
   runtimeRoute: InstanceRuntimeRouteResolution | undefined,
+  requiredAccess: ProtectedRouteAccess,
 ): Promise<Response | undefined> {
   return startProtectedRouteAuthRedirect(request, env, runtimeRoute, {
-    entryPath: runtimeTopologyRoutes.authAccountRoute,
-    requireCrossOrigin: false,
+    entry: "account",
+    requiredAccess,
   });
 }
 
@@ -196,62 +263,51 @@ async function startProtectedRouteAuthRedirect(
   request: Request,
   env: InstanceAuthHandoffEnv,
   runtimeRoute: InstanceRuntimeRouteResolution | undefined,
-  options: { entryPath: string; requireCrossOrigin: boolean },
+  options: { entry: "account" | "handoff"; requiredAccess: ProtectedRouteAccess },
 ): Promise<Response | undefined> {
-  const target = hostAuthSessionTargetForRuntimeRoute(request, runtimeRoute, {
-    minimumAccess: "authenticated",
+  const authOrigin = await configuredInstanceAuthOrigin(request, env);
+  const url = new URL(request.url);
+  const plan = planProtectedRouteAuthRedirect({
+    authOrigin,
+    entry: options.entry,
+    requestOrigin: requestOriginForAuth(request),
+    requiredAccess: options.requiredAccess,
+    runtimeRoute,
+    safeReturnTo: parseOwnerLoginRedirectTarget(`${url.pathname}${url.search}`),
   });
 
-  const authOrigin = await configuredInstanceAuthOrigin(request, env);
-
-  if (!authOrigin) {
+  if (plan.kind === "unavailable") {
     return undefined;
   }
 
-  const url = new URL(request.url);
-  const returnTo = parseOwnerLoginRedirectTarget(`${url.pathname}${url.search}`);
-
-  if (!returnTo) {
-    return jsonResponse({ error: "Handoff return target must be path-only." }, 400);
+  if (plan.kind === "invalid-return-target") {
+    return jsonResponse({ error: plan.error }, 400);
   }
 
-  const requestOrigin = requestOriginForAuth(request);
-
-  if (!target || authOrigin === requestOrigin) {
-    if (options.requireCrossOrigin) {
-      return undefined;
-    }
-
-    const location = new URL(runtimeTopologyRoutes.authAccountRoute, authOrigin);
-
-    location.searchParams.set("returnTo", returnTo);
-
-    return redirectResponse(
-      authOrigin === requestOrigin ? `${location.pathname}${location.search}` : location.toString(),
-      302,
-    );
+  if (plan.kind === "account") {
+    return redirectResponse(plan.location, 302);
   }
 
   const nonce = randomBase64Url(32);
   const nonceHash = await sha256Base64Url(nonce);
   const state = randomBase64Url(32);
-  const location = new URL(options.entryPath, authOrigin);
+  const location = new URL(plan.entryPath, plan.authOrigin);
 
-  location.searchParams.set("targetOrigin", target.targetOrigin);
-  location.searchParams.set("routeId", target.routeId);
-  location.searchParams.set("targetProfile", target.targetProfile);
-  if (target.appInstallId !== undefined) {
-    location.searchParams.set("appInstallId", target.appInstallId);
+  location.searchParams.set("targetOrigin", plan.target.targetOrigin);
+  location.searchParams.set("routeId", plan.target.routeId);
+  location.searchParams.set("targetProfile", plan.target.targetProfile);
+  if (plan.target.appInstallId !== undefined) {
+    location.searchParams.set("appInstallId", plan.target.appInstallId);
   }
-  if (target.storageIdentity !== undefined) {
-    location.searchParams.set("storageIdentity", target.storageIdentity);
+  if (plan.target.storageIdentity !== undefined) {
+    location.searchParams.set("storageIdentity", plan.target.storageIdentity);
   }
-  location.searchParams.set("returnTo", returnTo);
+  location.searchParams.set("returnTo", plan.returnTo);
   location.searchParams.set("nonceHash", nonceHash);
   location.searchParams.set("state", state);
 
   return redirectResponse(location.toString(), 302, {
-    "Set-Cookie": serializeHostAuthNonceCookie(target.targetOrigin, nonce),
+    "Set-Cookie": serializeHostAuthNonceCookie(plan.target.targetOrigin, nonce),
   });
 }
 
@@ -260,7 +316,7 @@ export async function startOwnerRouteAuthHandoff(
   env: InstanceAuthHandoffEnv,
   runtimeRoute: InstanceRuntimeRouteResolution | undefined,
 ): Promise<Response | undefined> {
-  return startProtectedRouteAuthHandoff(request, env, runtimeRoute);
+  return startProtectedRouteAuthHandoff(request, env, runtimeRoute, "owner");
 }
 
 export async function handleInstanceAuthHandoffRequest(
@@ -269,11 +325,14 @@ export async function handleInstanceAuthHandoffRequest(
   runtimeRoute?: InstanceRuntimeRouteResolution,
 ): Promise<Response | undefined> {
   const url = new URL(request.url);
+  const callback = instanceAuthCallbackReservationFromFacts({
+    pathname: url.pathname,
+    requestOrigin: requestOriginForAuth(request),
+    runtimeRoute,
+  });
 
-  if (url.pathname === INSTANCE_AUTH_HANDOFF_CALLBACK_PATH) {
-    const target = hostAuthSessionTargetForRuntimeRoute(request, runtimeRoute);
-
-    if (!target) {
+  if (callback.kind === "reserved") {
+    if (!callback.target) {
       return new Response(null, { status: 404 });
     }
 
@@ -283,7 +342,9 @@ export async function handleInstanceAuthHandoffRequest(
 
     const id = env.FORMLESS_AUTHORITY.idFromName(FORMLESS_INSTANCE_AUTHORITY_NAME);
 
-    return env.FORMLESS_AUTHORITY.get(id).fetch(requestWithHandoffTargetHeaders(request, target));
+    return env.FORMLESS_AUTHORITY.get(id).fetch(
+      requestWithHandoffTargetHeaders(request, callback.target),
+    );
   }
 
   if (url.pathname !== INSTANCE_AUTH_HANDOFF_START_PATH) {
@@ -485,14 +546,23 @@ export async function configuredInstanceAuthOrigin(
   const explicitOrigin = stringEnvValue(env[FORMLESS_INSTANCE_AUTH_ORIGIN_ENV_NAME]);
 
   if (explicitOrigin !== undefined) {
-    return parseInstanceAuthCanonicalOrigin(explicitOrigin);
+    return configuredInstanceAuthOriginFromFacts({ explicitOrigin });
   }
 
   const identity = instanceControlPlaneProductionIdentityFromRecords(
     (await readControlPlaneRecords({ env, requestUrl: request.url })) ?? [],
   );
 
-  return identity?.authOrigin;
+  return configuredInstanceAuthOriginFromFacts({ productionOrigin: identity?.authOrigin });
+}
+
+export function configuredInstanceAuthOriginFromFacts(input: {
+  explicitOrigin?: string;
+  productionOrigin?: string;
+}): string | undefined {
+  return input.explicitOrigin === undefined
+    ? input.productionOrigin
+    : parseInstanceAuthCanonicalOrigin(input.explicitOrigin);
 }
 
 export function hostAuthSessionTargetForRuntimeRoute(
@@ -500,33 +570,111 @@ export function hostAuthSessionTargetForRuntimeRoute(
   runtimeRoute: InstanceRuntimeRouteResolution | undefined,
   options: { minimumAccess?: ProtectedRouteAccess } = {},
 ): InstanceAuthSessionTargetBinding | undefined {
+  return hostAuthSessionTargetForRuntimeRouteFacts({
+    minimumAccess: options.minimumAccess,
+    requestOrigin: requestOriginForAuth(request),
+    runtimeRoute,
+  });
+}
+
+export function hostAuthSessionTargetForRuntimeRouteFacts(input: {
+  minimumAccess?: ProtectedRouteAccess;
+  requestOrigin: string;
+  runtimeRoute: InstanceRuntimeRouteResolution | undefined;
+}): InstanceAuthSessionTargetBinding | undefined {
   if (
-    runtimeRoute?.kind !== "mount" ||
-    runtimeRoute.matchHost === undefined ||
-    (options.minimumAccess !== undefined &&
-      !runtimeRouteAccessSatisfies(runtimeRoute.access, options.minimumAccess))
+    input.runtimeRoute?.kind !== "mount" ||
+    input.runtimeRoute.matchHost === undefined ||
+    (input.minimumAccess !== undefined &&
+      !runtimeRouteAccessSatisfies(input.runtimeRoute.access, input.minimumAccess))
   ) {
     return undefined;
   }
 
-  const targetOrigin = requestOriginForAuth(request);
+  const targetOrigin = input.requestOrigin;
 
-  if (runtimeRoute.target !== undefined) {
+  if (input.runtimeRoute.target !== undefined) {
     return {
-      appInstallId: runtimeRoute.target.installId,
-      routeId: runtimeRoute.id,
-      storageIdentity: runtimeRoute.target.authorityName,
+      appInstallId: input.runtimeRoute.target.installId,
+      routeId: input.runtimeRoute.id,
+      storageIdentity: input.runtimeRoute.target.authorityName,
       targetOrigin,
-      targetProfile: runtimeRoute.targetProfile,
+      targetProfile: input.runtimeRoute.targetProfile,
     };
   }
 
+  if (input.runtimeRoute.targetProfile !== "instance") {
+    return undefined;
+  }
+
   return {
-    routeId: runtimeRoute.id,
+    routeId: input.runtimeRoute.id,
     storageIdentity: INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
     targetOrigin,
-    targetProfile: runtimeRoute.targetProfile,
+    targetProfile: input.runtimeRoute.targetProfile,
   };
+}
+
+export function instanceAuthCallbackReservationFromFacts(input: {
+  pathname: string;
+  requestOrigin: string;
+  runtimeRoute?: InstanceRuntimeRouteResolution;
+}): InstanceAuthCallbackReservation {
+  if (input.pathname !== INSTANCE_AUTH_HANDOFF_CALLBACK_PATH) {
+    return { kind: "not-callback" };
+  }
+
+  const target = hostAuthSessionTargetForRuntimeRouteFacts({
+    requestOrigin: input.requestOrigin,
+    runtimeRoute: input.runtimeRoute,
+  });
+
+  return target === undefined ? { kind: "reserved" } : { kind: "reserved", target };
+}
+
+export function installedAppApiRouteAccessFromFacts(input: {
+  requestOrigin: string;
+  runtimeRoute?: InstanceRuntimeRouteResolution;
+  storageIdentity: string;
+}): InstalledAppApiRouteAccess {
+  const route = input.runtimeRoute?.kind === "mount" ? input.runtimeRoute : undefined;
+
+  if (route?.target?.authorityName !== input.storageIdentity) {
+    return {};
+  }
+
+  const target = hostAuthSessionTargetForRuntimeRouteFacts({
+    minimumAccess: "authenticated",
+    requestOrigin: input.requestOrigin,
+    runtimeRoute: route,
+  });
+
+  return {
+    access: route.access,
+    ...(target === undefined ? {} : { target }),
+  };
+}
+
+export function mappedInstanceManagementTargetFromFacts(input: {
+  requestOrigin: string;
+  runtimeRoute?: InstanceRuntimeRouteResolution;
+}): InstanceAuthSessionTargetBinding | undefined {
+  const target = hostAuthSessionTargetForRuntimeRouteFacts({
+    minimumAccess: "owner",
+    requestOrigin: input.requestOrigin,
+    runtimeRoute: input.runtimeRoute,
+  });
+
+  if (
+    !target ||
+    target.appInstallId !== undefined ||
+    target.targetProfile !== "instance" ||
+    target.storageIdentity !== INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY
+  ) {
+    return undefined;
+  }
+
+  return target;
 }
 
 export function hostAuthSessionTargetFromRequestHeaders(
@@ -601,9 +749,10 @@ export async function validateHostAuthSessionAuthorityInStorage(
     target?: InstanceAuthSessionTargetBinding | undefined;
   } = {},
 ): Promise<HostAuthSessionAuthorityValidationResult> {
-  return validateHostAuthSessionRequirementInStorage(request, storage, env, {
+  return validateHostAuthSessionRequirement(request, env, {
     now: options.now,
     requiredAccess: "owner",
+    storage,
     target: options.target,
   });
 }
@@ -680,47 +829,24 @@ async function validateCentralAuthSessionRequirement(
     requiredAccess: CentralSessionAuthorityRequirement;
   },
 ): Promise<CentralAuthSessionAuthorityValidationResult> {
-  const id = env.FORMLESS_AUTHORITY.idFromName(FORMLESS_INSTANCE_AUTHORITY_NAME);
-  const response = await env.FORMLESS_AUTHORITY.get(id).fetch(
-    new Request(new URL(instanceAuthCentralSessionValidatePath, request.url), {
-      body: JSON.stringify({
-        requiredAccess: options.requiredAccess,
-        ...(options.accountCompletionTarget === undefined
-          ? {}
-          : { accountCompletionTarget: options.accountCompletionTarget }),
-        ...(options.now === undefined ? {} : { now: options.now }),
-      }),
-      headers: request.headers,
-      method: "POST",
-    }),
-  );
-  const body = (await response.json()) as {
-    accountCompletion?: AccountCompletionGateResolutionResult;
-    authorized?: boolean;
-    ownerSessionFallbackAllowed?: boolean;
-    reason?: CentralAuthSessionAuthorityValidationFailureReason;
-    session?: CentralAuthSession;
-  };
-  const ownerSessionFallbackAllowed = body.ownerSessionFallbackAllowed === true;
-
-  if (!response.ok || body.authorized !== true || body.session === undefined) {
-    return {
-      ok: false,
-      ...(body.accountCompletion === undefined
+  const result = await validateCentralInstanceAuthAccess(
+    {
+      ...(options.accountCompletionTarget === undefined
         ? {}
-        : {
-            accountCompletion: parseAccountCompletionGateResolutionResult(body.accountCompletion),
-          }),
-      ownerSessionFallbackAllowed,
-      reason: body.reason ?? missingCentralAuthorityReason(options.requiredAccess),
+        : { accountCompletionTarget: options.accountCompletionTarget }),
+      requiredAuthority: options.requiredAccess,
+    },
+    instanceAuthAccessReaders(request, env, { now: options.now }),
+  );
+
+  if (!result.ok) {
+    return {
+      ...result,
+      reason: result.reason as CentralAuthSessionAuthorityValidationFailureReason,
     };
   }
 
-  return {
-    ok: true,
-    ownerSessionFallbackAllowed,
-    session: parseCentralAuthSessionBody(body.session),
-  };
+  return result;
 }
 
 async function validateAuthOriginSession(
@@ -732,38 +858,20 @@ async function validateAuthOriginSession(
   | { ok: true; session: CentralAuthSession | OwnerSession }
   | {
       ok: false;
-      reason: CentralAuthSessionAuthorityValidationFailureReason | "missing-principal";
+      reason: InstanceAuthAccessFailureReason;
     }
 > {
-  const centralSession =
-    requiredAccess === "owner"
-      ? await validateCentralAuthSessionAuthority(request, env, { now: options.now })
-      : await validateCentralAuthSessionPrincipal(request, env, { now: options.now });
+  const result = await resolveInstanceAuthAccess(
+    {
+      localOwnerSessionFallbackAllowed: isLocalOwnerSessionRuntime(request, env),
+      requiredAuthority: requiredAccess,
+    },
+    instanceAuthAccessReaders(request, env, { now: options.now }),
+  );
 
-  if (centralSession.ok) {
-    return { ok: true, session: centralSession.session };
-  }
-
-  if (!centralSession.ownerSessionFallbackAllowed && !isLocalOwnerSessionRuntime(request, env)) {
-    return { ok: false, reason: centralSession.reason };
-  }
-
-  const ownerSession =
-    requiredAccess === "owner"
-      ? await validateOwnerSessionAuthority(request, env, { now: options.now })
-      : await validateOwnerSessionPrincipal(request, env, { now: options.now });
-
-  if (ownerSession.ok) {
-    return { ok: true, session: ownerSession.session };
-  }
-
-  return {
-    ok: false,
-    reason:
-      ownerSession.reason === "missing-owner-authority"
-        ? "missing-owner-authority"
-        : "missing-principal",
-  };
+  return result.ok
+    ? { ok: true, session: result.session as CentralAuthSession | OwnerSession }
+    : { ok: false, reason: result.reason };
 }
 
 async function validateHostAuthSessionRequirement(
@@ -772,6 +880,7 @@ async function validateHostAuthSessionRequirement(
   options: {
     now?: string;
     requiredAccess: HostSessionAuthorityRequirement;
+    storage?: DurableObjectStorage;
     target?: InstanceAuthSessionTargetBinding | undefined;
   },
 ): Promise<HostAuthSessionAuthorityValidationResult> {
@@ -781,50 +890,64 @@ async function validateHostAuthSessionRequirement(
     return { ok: false, reason: "missing-target" };
   }
 
-  const validated = await validateHostAuthSessionCookie(request, env, {
-    now: options.now,
-    target,
-  });
-
-  if (!validated.ok) {
-    return validated;
-  }
-
-  const id = env.FORMLESS_AUTHORITY.idFromName(FORMLESS_INSTANCE_AUTHORITY_NAME);
-  const response = await env.FORMLESS_AUTHORITY.get(id).fetch(
-    new Request(new URL(instanceAuthHostSessionValidatePath, request.url), {
-      body: JSON.stringify({
-        requiredAccess,
-        session: validated.session,
-        ...(requiredAccess === "authenticated"
-          ? {
-              target: accountCompletionTargetForRouteRequest(request, target),
-            }
-          : {}),
-      }),
-      headers: { "Content-Type": "application/json" },
-      method: "POST",
+  const result = await validateHostInstanceAuthAccess(
+    {
+      ...(requiredAccess === "authenticated"
+        ? { accountCompletionTarget: accountCompletionTargetForRouteRequest(request, target) }
+        : {}),
+      requiredAuthority: requiredAccess,
+      target,
+    },
+    instanceAuthAccessReaders(request, env, {
+      now: options.now,
+      storage: options.storage,
     }),
   );
-  const body = (await response.json()) as {
-    accountCompletion?: AccountCompletionGateResolutionResult;
-    authorized?: boolean;
-    reason?: HostAuthSessionValidationFailureReason;
-  };
 
-  if (!response.ok || body.authorized !== true) {
+  if (!result.ok) {
     return {
-      ok: false,
-      ...(body.accountCompletion === undefined
-        ? {}
-        : {
-            accountCompletion: parseAccountCompletionGateResolutionResult(body.accountCompletion),
-          }),
-      reason: body.reason ?? missingAuthorityReason(requiredAccess),
+      ...result,
+      reason: result.reason as HostAuthSessionValidationFailureReason,
     };
   }
 
-  return validated;
+  return result;
+}
+
+export type InstanceAuthAccessReaderOverrides = Partial<
+  Pick<
+    InstanceAuthAccessReaders,
+    "readActivePrincipal" | "readManagementAuthority" | "readOwnerAuthority"
+  >
+>;
+
+export async function validateInstanceAuthAccessSession(
+  request: Request,
+  env: InstanceAuthAccessEnv,
+  options: {
+    accountCompletionTarget?: AccountCompletionGateTarget;
+    now?: string;
+    readers?: InstanceAuthAccessReaderOverrides;
+    requiredAuthority: InstanceAuthAuthorityRequirement;
+    storage?: DurableObjectStorage;
+    target?: InstanceAuthSessionTargetBinding | undefined;
+  },
+): Promise<RouteAccessSessionValidationResult> {
+  return resolveInstanceAuthAccess(
+    {
+      ...(options.accountCompletionTarget === undefined
+        ? {}
+        : { accountCompletionTarget: options.accountCompletionTarget }),
+      localOwnerSessionFallbackAllowed: isLocalOwnerSessionRuntime(request, env),
+      requiredAuthority: options.requiredAuthority,
+      ...(options.target === undefined ? {} : { target: options.target }),
+    },
+    instanceAuthAccessReaders(request, env, {
+      now: options.now,
+      readers: options.readers,
+      storage: options.storage,
+    }),
+  );
 }
 
 export async function validateRouteAccessSession(
@@ -844,95 +967,14 @@ export async function validateRouteAccessSession(
       : hostAuthSessionTargetForRuntimeRoute(request, options.runtimeRoute, {
           minimumAccess: options.requiredAccess,
         }));
-  const centralSession =
-    options.requiredAccess === "owner"
-      ? await validateCentralAuthSessionAuthority(request, env, { now: options.now })
-      : await validateCentralAuthSessionPrincipal(request, env, {
-          ...(target === undefined
-            ? {}
-            : { accountCompletionTarget: accountCompletionTargetForRouteRequest(request, target) }),
-          now: options.now,
-        });
-
-  if (centralSession.ok) {
-    return {
-      ok: true,
-      ownerAuthorized: options.requiredAccess === "owner",
-      principalId: centralSession.session.principalId,
-      session: centralSession.session,
-      ...(target === undefined ? {} : { target }),
-      via: "central-session",
-    };
-  }
-
-  const ownerSession =
-    centralSession.ownerSessionFallbackAllowed || isLocalOwnerSessionRuntime(request, env)
-      ? options.requiredAccess === "owner"
-        ? await validateOwnerSessionAuthority(request, env, { now: options.now })
-        : await validateOwnerSessionPrincipal(request, env, { now: options.now })
-      : undefined;
-
-  if (ownerSession?.ok) {
-    const accountCompletion = await resolveRouteAccessAccountCompletion(
-      request,
-      env,
-      options.requiredAccess,
-      ownerSession.session.principalId,
-      target,
-    );
-
-    if (accountCompletion?.status === "blocked") {
-      return {
-        ok: false,
-        accountCompletion,
-        reason: "account-completion-required",
-      };
-    }
-
-    return {
-      ok: true,
-      ownerAuthorized: options.requiredAccess === "owner",
-      principalId: ownerSession.session.principalId,
-      session: ownerSession.session,
-      ...(target === undefined ? {} : { target }),
-      via: "owner-session",
-    };
-  }
-
-  const hostSession =
-    target === undefined
-      ? undefined
-      : await validateHostAuthSessionAuthority(request, env, {
-          now: options.now,
-          requiredAccess: options.requiredAccess,
-          target,
-        });
-
-  if (hostSession?.ok) {
-    return {
-      ok: true,
-      ownerAuthorized: options.requiredAccess === "owner",
-      principalId: hostSession.session.principalId,
-      session: hostSession.session,
-      target,
-      via: "host-session",
-    };
-  }
-
-  const accountCompletion = hostSession?.accountCompletion ?? centralSession.accountCompletion;
-
-  return {
-    ok: false,
-    ...(accountCompletion === undefined ? {} : { accountCompletion }),
-    reason:
-      hostSession?.reason ??
-      (centralSession.reason === "account-completion-required"
-        ? "account-completion-required"
-        : ownerSession?.reason === "missing-owner-authority" ||
-            centralSession.reason === "missing-owner-authority"
-          ? "missing-owner-authority"
-          : "missing-principal"),
-  };
+  return validateInstanceAuthAccessSession(request, env, {
+    ...(options.requiredAccess === "authenticated" && target !== undefined
+      ? { accountCompletionTarget: accountCompletionTargetForRouteRequest(request, target) }
+      : {}),
+    now: options.now,
+    requiredAuthority: options.requiredAccess,
+    target,
+  });
 }
 
 export function accountCompletionBlockedResponse(
@@ -945,59 +987,143 @@ export function authenticatedOperationActorForSession(session: {
   principalId: string;
   session: Pick<CentralAuthSession | HostAuthSession | OwnerSession, "instanceId">;
   target?: InstanceAuthSessionTargetBinding;
-}): OperationInvocationActor | undefined {
-  if (session.target === undefined) {
-    return undefined;
+}) {
+  return authenticatedOperationActorForAccess({
+    principalId: session.principalId,
+    session: session.session as InstanceAuthSession,
+    target: session.target,
+  });
+}
+
+function instanceAuthAccessReaders(
+  request: Request,
+  env: InstanceAuthAccessEnv,
+  options: {
+    now?: string;
+    readers?: InstanceAuthAccessReaderOverrides;
+    storage?: DurableObjectStorage;
+  } = {},
+): InstanceAuthAccessReaders {
+  const readers: InstanceAuthAccessReaders = {
+    readAccountCompletion: async (session, target) =>
+      options.storage !== undefined
+        ? resolveAccountCompletionGate({
+            env,
+            input: {
+              actorKind: "authenticated",
+              principalId: session.principalId,
+              target,
+            },
+            storage: options.storage,
+          })
+        : env.FORMLESS_AUTHORITY === undefined
+          ? Promise.reject(new Error("Instance auth storage is unavailable."))
+          : resolveAccountCompletionForTarget(
+              request,
+              env as InstanceAuthHandoffEnv,
+              session.principalId,
+              target,
+            ),
+    readActivePrincipal: (session) => readInternalActiveIdentityPrincipal(env, session.principalId),
+    readCentralSession: async () => {
+      if (options.storage === undefined) {
+        return env.FORMLESS_AUTHORITY === undefined
+          ? {
+              ok: false,
+              ownerSessionFallbackAllowed: false,
+              reason: "missing-auth-origin",
+            }
+          : readCentralSessionFromRuntime(request, env as InstanceAuthHandoffEnv, options.now);
+      }
+
+      const ownerSessionFallbackAllowed = readInstanceAuthConfig(options.storage) === undefined;
+      const session = await validateCentralAuthSessionState(request, options.storage, env, {
+        now: options.now,
+      });
+
+      return { ...session, ownerSessionFallbackAllowed };
+    },
+    readHostSession: (target) =>
+      env.FORMLESS_AUTHORITY === undefined
+        ? Promise.resolve({ ok: false as const, reason: "missing-principal" as const })
+        : validateHostAuthSessionCookie(request, env as InstanceAuthHandoffEnv, {
+            now: options.now,
+            target,
+          }),
+    readHostSessionVersion: (session) =>
+      options.storage !== undefined
+        ? Promise.resolve(
+            readHostSessionRevocationVersion(options.storage, session)?.sessionVersion ?? 0,
+          )
+        : env.FORMLESS_AUTHORITY === undefined
+          ? Promise.reject(new Error("Instance auth storage is unavailable."))
+          : readHostSessionVersionFromRuntime(request, env as InstanceAuthHandoffEnv, session),
+    readLocalOwnerSession: () => validateOwnerSessionCookie(request, env, { now: options.now }),
+    readManagementAuthority: (session) =>
+      readInternalIdentityAuthorityForPrincipal(env, session.principalId),
+    readOwnerAuthority: (session) =>
+      readInternalIdentityOwnerForPrincipal(env, session.principalId),
+  };
+
+  return { ...readers, ...options.readers };
+}
+
+async function readCentralSessionFromRuntime(
+  request: Request,
+  env: InstanceAuthHandoffEnv,
+  now?: string,
+): ReturnType<InstanceAuthAccessReaders["readCentralSession"]> {
+  const id = env.FORMLESS_AUTHORITY.idFromName(FORMLESS_INSTANCE_AUTHORITY_NAME);
+  const response = await env.FORMLESS_AUTHORITY.get(id).fetch(
+    new Request(new URL(instanceAuthCentralSessionValidatePath, request.url), {
+      body: JSON.stringify(now === undefined ? {} : { now }),
+      headers: request.headers,
+      method: "POST",
+    }),
+  );
+  const body = (await response.json()) as {
+    ownerSessionFallbackAllowed?: boolean;
+    reason?: CentralAuthSessionValidationFailureReason;
+    session?: CentralAuthSession;
+    validated?: boolean;
+  };
+  const ownerSessionFallbackAllowed = body.ownerSessionFallbackAllowed === true;
+
+  if (!response.ok || body.validated !== true || body.session === undefined) {
+    return {
+      ok: false,
+      ownerSessionFallbackAllowed,
+      reason: body.reason ?? "missing-session",
+    };
   }
 
   return {
-    kind: "authenticated",
-    principalId: session.principalId,
-    sessionTarget: {
-      instanceId: session.session.instanceId,
-      routeId: session.target.routeId,
-      targetOrigin: session.target.targetOrigin,
-      targetProfile: session.target.targetProfile,
-      ...(session.target.appInstallId === undefined
-        ? {}
-        : { appInstallId: session.target.appInstallId }),
-      ...(session.target.storageIdentity === undefined
-        ? {}
-        : { storageIdentity: session.target.storageIdentity }),
-    },
+    ok: true,
+    ownerSessionFallbackAllowed,
+    session: parseCentralAuthSessionBody(body.session),
   };
 }
 
-async function resolveRouteAccessAccountCompletion(
+async function readHostSessionVersionFromRuntime(
   request: Request,
   env: InstanceAuthHandoffEnv,
-  requiredAccess: ProtectedRouteAccess,
-  principalId: string,
-  target: InstanceAuthSessionTargetBinding | undefined,
-): Promise<AccountCompletionGateResolutionResult | undefined> {
-  if (requiredAccess !== "authenticated" || target === undefined) {
-    return undefined;
-  }
-
+  session: HostAuthSession,
+): Promise<number> {
   const id = env.FORMLESS_AUTHORITY.idFromName(FORMLESS_INSTANCE_AUTHORITY_NAME);
   const response = await env.FORMLESS_AUTHORITY.get(id).fetch(
-    new Request(new URL(INSTANCE_AUTH_ACCOUNT_COMPLETION_RESOLVE_PATH, request.url), {
-      body: JSON.stringify({
-        actorKind: "authenticated",
-        principalId,
-        target: accountCompletionTargetForRouteRequest(request, target),
-      }),
+    new Request(new URL(instanceAuthHostSessionValidatePath, request.url), {
+      body: JSON.stringify({ session }),
       headers: { "Content-Type": "application/json" },
       method: "POST",
     }),
   );
-  const body = await response.json();
+  const body = (await response.json()) as { sessionVersion?: unknown };
 
-  if (!response.ok) {
-    throw new Error(accountCompletionResolutionErrorMessage(body));
+  if (!response.ok || !Number.isInteger(body.sessionVersion) || Number(body.sessionVersion) < 0) {
+    throw new Error("Host session revocation version lookup failed.");
   }
 
-  return parseAccountCompletionGateResolutionResult(body);
+  return Number(body.sessionVersion);
 }
 
 async function resolveAccountCompletionForTarget(
@@ -1080,10 +1206,6 @@ function completeAccountContinuationResult(
   };
 }
 
-function parseAccountCompletionTargetPayload(value: unknown): AccountCompletionGateTarget {
-  return parseAccountCompletionGateTarget(value);
-}
-
 function authAccountRedirectTargetForRequest(request: Request) {
   const url = new URL(request.url);
 
@@ -1162,67 +1284,25 @@ async function handleHandoffCallbackDurableObjectRequest(
 async function handleHostAuthSessionValidationDurableObjectRequest(
   request: Request,
   storage: DurableObjectStorage,
-  env: InstanceAuthHandoffEnv,
+  _env: InstanceAuthHandoffEnv,
 ): Promise<Response> {
   if (request.method !== "POST") {
     return jsonResponse({ error: "Method not allowed." }, 405, { Allow: "POST" });
   }
 
   try {
-    const body = (await request.json()) as {
-      requiredAccess?: unknown;
-      session?: unknown;
-      target?: unknown;
-    };
-    const requiredAccess = parseHostSessionAuthorityRequirement(body.requiredAccess) ?? "owner";
+    const body = (await request.json()) as { session?: unknown };
     const session = parseHostAuthSession(body.session);
 
     if (!session) {
-      return jsonResponse({ authorized: false, reason: "malformed-payload" }, 400);
-    }
-
-    if (!(await hostSessionPrincipalSatisfiesAuthority(env, session, requiredAccess))) {
-      return jsonResponse(
-        {
-          authorized: false,
-          reason: missingAuthorityReason(requiredAccess),
-        },
-        401,
-      );
+      return jsonResponse({ error: "Host session payload is malformed." }, 400);
     }
 
     const currentVersion = readHostSessionRevocationVersion(storage, session);
 
-    if ((currentVersion?.sessionVersion ?? 0) !== session.sessionVersion) {
-      return jsonResponse({ authorized: false, reason: "revoked-session" }, 401);
-    }
-
-    if (requiredAccess === "authenticated") {
-      const accountCompletion = await resolveAccountCompletionGate({
-        env,
-        input: {
-          actorKind: "authenticated",
-          principalId: session.principalId,
-          target: parseAccountCompletionTargetPayload(body.target),
-        },
-        storage,
-      });
-
-      if (accountCompletion.status === "blocked") {
-        return jsonResponse(
-          {
-            accountCompletion: parseAccountCompletionGateResolutionResult(accountCompletion),
-            authorized: false,
-            reason: "account-completion-required",
-          },
-          409,
-        );
-      }
-    }
-
-    return jsonResponse({ authorized: true });
+    return jsonResponse({ sessionVersion: currentVersion?.sessionVersion ?? 0 });
   } catch {
-    return jsonResponse({ authorized: false, reason: "malformed-payload" }, 400);
+    return jsonResponse({ error: "Host session payload is malformed." }, 400);
   }
 }
 
@@ -1238,20 +1318,14 @@ async function handleCentralAuthSessionValidationDurableObjectRequest(
   const ownerSessionFallbackAllowed = readInstanceAuthConfig(storage) === undefined;
 
   try {
-    const body = (await request.json()) as {
-      accountCompletionTarget?: unknown;
-      now?: unknown;
-      requiredAccess?: unknown;
-    };
-    const requiredAccess = parseCentralSessionAuthorityRequirement(body.requiredAccess) ?? "owner";
-    const session = await validateCentralAuthSessionCookie(request, storage, env, {
+    const body = (await request.json()) as { now?: unknown };
+    const session = await validateCentralAuthSessionState(request, storage, env, {
       now: typeof body.now === "string" ? body.now : undefined,
     });
 
     if (!session.ok) {
       return jsonResponse(
         {
-          authorized: false,
           ownerSessionFallbackAllowed,
           reason: session.reason,
         },
@@ -1259,98 +1333,20 @@ async function handleCentralAuthSessionValidationDurableObjectRequest(
       );
     }
 
-    if (!(await centralSessionPrincipalSatisfiesAuthority(env, session.session, requiredAccess))) {
-      return jsonResponse(
-        {
-          authorized: false,
-          ownerSessionFallbackAllowed,
-          reason: missingAuthorityReason(requiredAccess),
-        },
-        401,
-      );
-    }
-
-    if (requiredAccess === "authenticated" && body.accountCompletionTarget !== undefined) {
-      const accountCompletion = await resolveAccountCompletionGate({
-        env,
-        input: {
-          actorKind: "authenticated",
-          principalId: session.session.principalId,
-          target: parseAccountCompletionTargetPayload(body.accountCompletionTarget),
-        },
-        storage,
-      });
-
-      if (accountCompletion.status === "blocked") {
-        return jsonResponse(
-          {
-            accountCompletion: parseAccountCompletionGateResolutionResult(accountCompletion),
-            authorized: false,
-            ownerSessionFallbackAllowed,
-            reason: "account-completion-required",
-          },
-          409,
-        );
-      }
-    }
-
     return jsonResponse({
-      authorized: true,
       ownerSessionFallbackAllowed,
       session: session.session,
+      validated: true,
     });
   } catch {
     return jsonResponse(
       {
-        authorized: false,
         ownerSessionFallbackAllowed,
         reason: "malformed-payload",
       },
       400,
     );
   }
-}
-
-async function centralSessionPrincipalSatisfiesAuthority(
-  env: InstanceAuthHandoffEnv,
-  session: CentralAuthSession,
-  requiredAccess: CentralSessionAuthorityRequirement,
-): Promise<boolean> {
-  if (requiredAccess === "management") {
-    const authority = await readInternalIdentityAuthorityForPrincipal(env, session.principalId);
-
-    return (
-      authority?.id === session.principalId && (authority.instanceAdmin || authority.instanceOwner)
-    );
-  }
-
-  const principal =
-    requiredAccess === "owner"
-      ? await readInternalIdentityOwnerForPrincipal(env, session.principalId)
-      : await readInternalActiveIdentityPrincipal(env, session.principalId);
-
-  return principal?.id === session.principalId;
-}
-
-async function hostSessionPrincipalSatisfiesAuthority(
-  env: InstanceAuthHandoffEnv,
-  session: HostAuthSession,
-  requiredAccess: HostSessionAuthorityRequirement,
-): Promise<boolean> {
-  if (requiredAccess === "management") {
-    const authority = await readInternalIdentityAuthorityForPrincipal(env, session.principalId);
-
-    return (
-      authority?.id === session.principalId && (authority.instanceAdmin || authority.instanceOwner)
-    );
-  }
-
-  const principal =
-    requiredAccess === "owner"
-      ? await readInternalIdentityOwnerForPrincipal(env, session.principalId)
-      : await readInternalActiveIdentityPrincipal(env, session.principalId);
-
-  return principal?.id === session.principalId;
 }
 
 async function validateHostAuthSessionCookie(
@@ -1395,10 +1391,6 @@ async function validateHostAuthSessionCookie(
 
   const instanceId = await hostAuthSessionInstanceId(request, env);
 
-  if (!instanceId || payload.instanceId !== instanceId) {
-    return { ok: false, reason: "wrong-instance" };
-  }
-
   if (
     parseTimestampMs("Host auth session expiresAt", payload.expiresAt) <=
     parseTimestampMs("Host auth session validation time", options.now ?? nowIsoString())
@@ -1406,11 +1398,14 @@ async function validateHostAuthSessionCookie(
     return { ok: false, reason: "expired" };
   }
 
-  if (
-    payload.targetOrigin !== requestOriginForAuth(request) ||
-    !hostAuthSessionTargetBindingsEqual(payload, options.target)
-  ) {
-    return { ok: false, reason: "wrong-target" };
+  const scopeFailure = validateHostSessionScope(payload, {
+    instanceId,
+    requestOrigin: requestOriginForAuth(request),
+    target: options.target,
+  });
+
+  if (scopeFailure !== undefined) {
+    return { ok: false, reason: scopeFailure };
   }
 
   return {
@@ -1430,64 +1425,6 @@ async function validateHostAuthSessionCookie(
         : { storageIdentity: payload.storageIdentity }),
     },
   };
-}
-
-async function validateHostAuthSessionRequirementInStorage(
-  request: Request,
-  storage: DurableObjectStorage,
-  env: InstanceAuthHandoffEnv,
-  options: {
-    now?: string;
-    requiredAccess: HostSessionAuthorityRequirement;
-    target?: InstanceAuthSessionTargetBinding | undefined;
-  },
-): Promise<HostAuthSessionAuthorityValidationResult> {
-  const { requiredAccess, target } = options;
-
-  if (!target) {
-    return { ok: false, reason: "missing-target" };
-  }
-
-  const validated = await validateHostAuthSessionCookie(request, env, {
-    now: options.now,
-    target,
-  });
-
-  if (!validated.ok) {
-    return validated;
-  }
-
-  if (!(await hostSessionPrincipalSatisfiesAuthority(env, validated.session, requiredAccess))) {
-    return { ok: false, reason: missingAuthorityReason(requiredAccess) };
-  }
-
-  const currentVersion = readHostSessionRevocationVersion(storage, validated.session);
-
-  if ((currentVersion?.sessionVersion ?? 0) !== validated.session.sessionVersion) {
-    return { ok: false, reason: "revoked-session" };
-  }
-
-  if (requiredAccess === "authenticated") {
-    const accountCompletion = await resolveAccountCompletionGate({
-      env,
-      input: {
-        actorKind: "authenticated",
-        principalId: validated.session.principalId,
-        target: accountCompletionTargetForRouteRequest(request, target),
-      },
-      storage,
-    });
-
-    if (accountCompletion.status === "blocked") {
-      return {
-        ok: false,
-        accountCompletion,
-        reason: "account-completion-required",
-      };
-    }
-  }
-
-  return validated;
 }
 
 function handoffStartTargetFromSearch(
@@ -1898,48 +1835,6 @@ function runtimeRouteAccessRank(access: ProtectedRouteAccess | "anonymous"): num
       return 1;
     case "owner":
       return 2;
-  }
-}
-
-function parseProtectedRouteAccess(value: unknown): ProtectedRouteAccess | undefined {
-  return value === "authenticated" || value === "owner" ? value : undefined;
-}
-
-function parseHostSessionAuthorityRequirement(
-  value: unknown,
-): HostSessionAuthorityRequirement | undefined {
-  return value === "management" ? value : parseProtectedRouteAccess(value);
-}
-
-function parseCentralSessionAuthorityRequirement(
-  value: unknown,
-): CentralSessionAuthorityRequirement | undefined {
-  return value === "management" ? value : parseProtectedRouteAccess(value);
-}
-
-function missingCentralAuthorityReason(
-  requiredAccess: CentralSessionAuthorityRequirement,
-): CentralAuthSessionAuthorityValidationFailureReason {
-  switch (requiredAccess) {
-    case "authenticated":
-      return "missing-principal";
-    case "management":
-      return "missing-management-authority";
-    case "owner":
-      return "missing-owner-authority";
-  }
-}
-
-function missingAuthorityReason(
-  requiredAccess: HostSessionAuthorityRequirement,
-): HostAuthSessionValidationFailureReason {
-  switch (requiredAccess) {
-    case "authenticated":
-      return "missing-principal";
-    case "management":
-      return "missing-management-authority";
-    case "owner":
-      return "missing-owner-authority";
   }
 }
 

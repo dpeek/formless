@@ -5,10 +5,17 @@ import {
   parseInstanceAuthConfigInput,
   type InstanceAuthConfigInput,
 } from "../shared/instance-auth.ts";
-import { instanceControlPlaneProductionIdentityFromRecords } from "@dpeek/formless-instance-control-plane";
-import { resolveRuntimeProfileKind } from "../shared/runtime-topology.ts";
+import {
+  instanceControlPlaneProductionIdentityFromRecords,
+  type InstanceControlPlaneProductionIdentity,
+} from "@dpeek/formless-instance-control-plane";
+import { resolveRuntimeProfileKind, type RuntimeProfileKind } from "../shared/runtime-topology.ts";
 import { readControlPlaneRecords } from "./deployment-control-plane-client.ts";
-import { readInstanceAuthConfig, writeInstanceAuthConfig } from "./instance-auth-state.ts";
+import {
+  readInstanceAuthConfig,
+  writeInstanceAuthConfig,
+  type StoredInstanceAuthConfig,
+} from "./instance-auth-state.ts";
 import { readIdentityOwner } from "./identity-control-plane.ts";
 
 export type InstanceAuthRuntimeEnv = {
@@ -21,6 +28,25 @@ export type InstanceAuthRuntimeEnv = {
 
 const defaultRelyingPartyName = "Formless";
 
+export type RuntimeInstanceAuthConfigPlan =
+  | { kind: "check-owner"; config: InstanceAuthConfigInput }
+  | { kind: "keep" }
+  | { kind: "write"; config: InstanceAuthConfigInput };
+
+export type RuntimeInstanceAuthConfigFacts = {
+  existing?: Pick<
+    StoredInstanceAuthConfig,
+    "canonicalOrigin" | "relyingPartyId" | "relyingPartyName"
+  >;
+  explicitCanonicalOrigin?: string;
+  explicitRelyingPartyId?: string;
+  explicitRelyingPartyName?: string;
+  ownerPresent?: boolean;
+  productionIdentity?: InstanceControlPlaneProductionIdentity;
+  requestOrigin: string;
+  runtimeProfile: RuntimeProfileKind;
+};
+
 export function ensureRuntimeInstanceAuthConfig(
   storage: DurableObjectStorage,
   request: Request,
@@ -28,32 +54,47 @@ export function ensureRuntimeInstanceAuthConfig(
 ): Promise<void> {
   const existing = readInstanceAuthConfig(storage);
 
-  return runtimeInstanceAuthConfigForRequest(request, env).then(async (config) => {
-    if (!config) {
-      return;
+  return runtimeInstanceAuthConfigFactsForRequest(request, env, existing).then(async (facts) => {
+    let plan = planRuntimeInstanceAuthConfig(facts);
+
+    if (plan.kind === "check-owner") {
+      if (!env.FORMLESS_AUTHORITY) {
+        return;
+      }
+
+      const owner = await readIdentityOwner({ FORMLESS_AUTHORITY: env.FORMLESS_AUTHORITY });
+
+      plan = planRuntimeInstanceAuthConfig({ ...facts, ownerPresent: owner !== null });
     }
 
-    if (!existing) {
-      writeInstanceAuthConfig(storage, config);
-      return;
+    if (plan.kind === "write") {
+      writeInstanceAuthConfig(storage, plan.config);
     }
-
-    if (instanceAuthConfigMatches(existing, config)) {
-      return;
-    }
-
-    if (!env.FORMLESS_AUTHORITY) {
-      return;
-    }
-
-    const owner = await readIdentityOwner({ FORMLESS_AUTHORITY: env.FORMLESS_AUTHORITY });
-
-    if (owner) {
-      return;
-    }
-
-    writeInstanceAuthConfig(storage, config);
   });
+}
+
+export function planRuntimeInstanceAuthConfig(
+  facts: RuntimeInstanceAuthConfigFacts,
+): RuntimeInstanceAuthConfigPlan {
+  const config = runtimeInstanceAuthConfigFromFacts(facts);
+
+  if (!config) {
+    return { kind: "keep" };
+  }
+
+  if (!facts.existing) {
+    return { config, kind: "write" };
+  }
+
+  if (instanceAuthConfigMatches(facts.existing, config)) {
+    return { kind: "keep" };
+  }
+
+  if (facts.ownerPresent === undefined) {
+    return { config, kind: "check-owner" };
+  }
+
+  return facts.ownerPresent ? { kind: "keep" } : { config, kind: "write" };
 }
 
 function instanceAuthConfigMatches(
@@ -71,60 +112,90 @@ function instanceAuthConfigMatches(
   );
 }
 
-async function runtimeInstanceAuthConfigForRequest(
+async function runtimeInstanceAuthConfigFactsForRequest(
   request: Request,
   env: InstanceAuthRuntimeEnv,
-): Promise<InstanceAuthConfigInput | undefined> {
+  existing: RuntimeInstanceAuthConfigFacts["existing"],
+): Promise<RuntimeInstanceAuthConfigFacts> {
   const requestUrl = new URL(request.url);
   const profileKind = resolveRuntimeProfileKind({
     hostname: requestUrl.hostname,
     profile: env.FORMLESS_RUNTIME_PROFILE,
   });
-
-  if (profileKind !== "instance" && profileKind !== "dev" && profileKind !== "publishedSite") {
-    return undefined;
-  }
-
-  const relyingPartyName =
-    stringRuntimeEnvValue(env[FORMLESS_INSTANCE_AUTH_RELYING_PARTY_NAME_ENV_NAME]) ??
-    defaultRelyingPartyName;
   const explicitCanonicalOrigin = stringRuntimeEnvValue(
     env[FORMLESS_INSTANCE_AUTH_ORIGIN_ENV_NAME],
   );
+  const productionIdentity =
+    explicitCanonicalOrigin === undefined &&
+    (profileKind === "instance" || profileKind === "publishedSite")
+      ? instanceControlPlaneProductionIdentityFromRecords(
+          (await readControlPlaneRecords({
+            env,
+            requestUrl: request.url,
+          })) ?? [],
+        )
+      : undefined;
 
-  if (explicitCanonicalOrigin !== undefined) {
+  return {
+    ...(existing === undefined ? {} : { existing }),
+    ...(explicitCanonicalOrigin === undefined ? {} : { explicitCanonicalOrigin }),
+    ...(stringRuntimeEnvValue(env[FORMLESS_INSTANCE_AUTH_RELYING_PARTY_ID_ENV_NAME]) === undefined
+      ? {}
+      : {
+          explicitRelyingPartyId: stringRuntimeEnvValue(
+            env[FORMLESS_INSTANCE_AUTH_RELYING_PARTY_ID_ENV_NAME],
+          ),
+        }),
+    ...(stringRuntimeEnvValue(env[FORMLESS_INSTANCE_AUTH_RELYING_PARTY_NAME_ENV_NAME]) === undefined
+      ? {}
+      : {
+          explicitRelyingPartyName: stringRuntimeEnvValue(
+            env[FORMLESS_INSTANCE_AUTH_RELYING_PARTY_NAME_ENV_NAME],
+          ),
+        }),
+    ...(productionIdentity === undefined ? {} : { productionIdentity }),
+    requestOrigin: requestUrl.origin,
+    runtimeProfile: profileKind,
+  };
+}
+
+function runtimeInstanceAuthConfigFromFacts(
+  facts: RuntimeInstanceAuthConfigFacts,
+): InstanceAuthConfigInput | undefined {
+  if (
+    facts.runtimeProfile !== "instance" &&
+    facts.runtimeProfile !== "dev" &&
+    facts.runtimeProfile !== "publishedSite"
+  ) {
+    return undefined;
+  }
+
+  const relyingPartyName = facts.explicitRelyingPartyName ?? defaultRelyingPartyName;
+
+  if (facts.explicitCanonicalOrigin !== undefined) {
     return parseRuntimeAuthConfig({
-      canonicalOrigin: explicitCanonicalOrigin,
-      relyingPartyId: stringRuntimeEnvValue(env[FORMLESS_INSTANCE_AUTH_RELYING_PARTY_ID_ENV_NAME]),
+      canonicalOrigin: facts.explicitCanonicalOrigin,
+      relyingPartyId: facts.explicitRelyingPartyId,
       relyingPartyName,
     });
   }
 
-  if (profileKind === "dev") {
+  if (facts.runtimeProfile === "dev") {
     return parseRuntimeAuthConfig({
-      canonicalOrigin: requestUrl.origin,
-      relyingPartyId: stringRuntimeEnvValue(env[FORMLESS_INSTANCE_AUTH_RELYING_PARTY_ID_ENV_NAME]),
+      canonicalOrigin: facts.requestOrigin,
+      relyingPartyId: facts.explicitRelyingPartyId,
       relyingPartyName,
     });
   }
 
-  const identity = instanceControlPlaneProductionIdentityFromRecords(
-    (await readControlPlaneRecords({
-      env,
-      requestUrl: request.url,
-    })) ?? [],
-  );
-
-  if (!identity) {
+  if (!facts.productionIdentity) {
     return undefined;
   }
 
   return parseRuntimeAuthConfig({
-    canonicalOrigin: identity.authOrigin,
-    relyingPartyId:
-      stringRuntimeEnvValue(env[FORMLESS_INSTANCE_AUTH_RELYING_PARTY_ID_ENV_NAME]) ??
-      identity.relyingPartyId,
-    relyingPartyName: identity.relyingPartyName ?? relyingPartyName,
+    canonicalOrigin: facts.productionIdentity.authOrigin,
+    relyingPartyId: facts.explicitRelyingPartyId ?? facts.productionIdentity.relyingPartyId,
+    relyingPartyName: facts.productionIdentity.relyingPartyName ?? relyingPartyName,
   });
 }
 

@@ -598,6 +598,56 @@ one-time grants.
 - AND host sessions are not accepted on a different host, route, app install,
   storage identity, target profile, or instance
 
+### Requirement: Authentication Decision Module Boundary
+
+The system SHALL concentrate deterministic auth-origin, route-access, handoff,
+and browser-session decisions behind instance-auth Module interfaces while
+keeping durable auth state and Worker request handling at explicit adapters.
+
+#### Scenario: Resolve auth origin and protected-route handoff from explicit facts
+
+- GIVEN runtime routing has selected an authenticated or owner-only route
+- WHEN instance auth decides whether to continue locally, enter the auth account
+  orchestrator, or start cross-origin handoff
+- THEN the decision Module consumes the request, configured auth origin, route
+  access, route target, and safe return-target facts explicitly
+- AND it returns the selected continuation or handoff target without reading
+  Durable Object storage or dispatching a Worker request
+- AND target origin, route id, target profile, app install or storage identity,
+  path-only return target, and access requirements remain bound exactly as they
+  are at the runtime boundary
+
+#### Scenario: Validate route access through instance-auth readers
+
+- GIVEN a protected browser route or management request carries a central,
+  local owner, or host-local session
+- WHEN route access, owner authority, operational management authority, host
+  session revocation, or account completion is evaluated
+- THEN the decision Module consumes current session, principal, authority,
+  session-version, target, and account-completion facts through instance-auth
+  reader interfaces
+- AND production readers obtain those facts from private auth state, the
+  identity control plane, the instance control plane, and target app storage
+- AND deterministic access decisions do not require callers to emulate
+  `DurableObjectStorage`, SQLite, service bindings, or Worker routing
+- AND central auth, local owner, and host-local sessions remain distinct session
+  kinds with their existing origin, fallback, target, and authority rules
+- AND current rejection reasons, safe errors, session precedence, and operation
+  actor facts remain unchanged
+
+#### Scenario: Keep durable handoff and HTTP behavior at runtime boundaries
+
+- GIVEN a deterministic auth or route-access decision succeeds or fails
+- WHEN the runtime creates, consumes, revokes, or validates durable auth state
+- THEN real private auth storage remains responsible for central sessions,
+  one-time grants, passkey credentials, host-session revocation versions, and
+  account-completion state
+- AND the real Worker remains responsible for host routing, reserved callback
+  handling, Durable Object forwarding, redirects, response headers, and cookie
+  delivery
+- AND Module-owned decision coverage does not replace representative complete
+  auth-origin, mapped-host, grant-consumption, callback, and cookie journeys
+
 ### Requirement: Auth Origin Account Orchestrator
 
 The system SHALL expose `/formless/auth` on the configured auth origin as the
