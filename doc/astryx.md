@@ -285,9 +285,13 @@ legacy controls in place until their adapter is designed.
 - Data stays flat. Astryx receives projections, not stored records.
 - Runtime hooks do not enter `lib/astryx`.
 - `lib/astryx` does not import from `src/*`.
-- `lib/astryx` does not import `@dpeek/formless-schema`,
-  `@dpeek/formless-storage`, browser replica modules, `submitOperation`, sync
-  status hooks, app target selectors, or media client modules.
+- `lib/astryx` may import `@dpeek/formless-schema` and receive readonly
+  schema-shaped facts needed for presentation.
+- Schema parsing, model or field selection, query or aggregate evaluation,
+  policy inference, and schema-driven effects stay outside `lib/astryx`.
+- `lib/astryx` does not import `@dpeek/formless-storage`, browser replica
+  modules, `submitOperation`, sync status hooks, app target selectors, or media
+  client modules.
 - `src/app/generated` should not import `@astryxdesign/core` directly once the
   matching Astryx package primitive exists.
 - Field authoring state stays controlled by generated draft sessions.
