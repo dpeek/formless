@@ -849,6 +849,89 @@ entity operations and view operation bindings.
 - AND foundation code does not render renderer components or decide page, table,
   row, tree, dialog, menu, or toast layout
 
+#### Scenario: Project operation buttons and execution feedback
+
+- GIVEN generated UI prepares a collection command, record-delete control,
+  compact operation status, or operation progress presentation
+- WHEN it projects the control for a Formless UI renderer
+- THEN the renderer contract carries a stable control id, explicit button
+  content, semantic prominence, density, accessibility label, availability,
+  disabled reason, pending state, optional count badge, optional controlled
+  destructive confirmation, and projected execution feedback
+- AND projected execution feedback can carry a stable event identity, status,
+  title, detail, semantic intent, active progress summary, and ordered progress
+  steps derived from generic operation execution state
+- AND controls that share an execution key receive the same pending and result
+  state without exposing the execution key as permission to execute an
+  operation
+- AND confirmation open state is controlled through presentation intents while
+  generated runtime closes the confirmation after committed or replayed
+  execution, retains the current controlled state after failure, and permits
+  user dismissal during pending execution without cancelling the operation
+- AND generated runtime retains target counts, record-label resolution,
+  operation input adapters, caller input, operation controllers, sync feedback,
+  result handling, and post-success callbacks
+- AND the renderer contract does not expose raw
+  `GeneratedOperationControlBinding` values, generated input adapters, caller
+  input payloads, records, app targets, sync setters, or controller methods
+- AND renderers use only explicitly projected labels, icons, count facts,
+  disabled reasons, status copy, and feedback copy rather than inferring them
+  from operation kinds
+
+#### Scenario: Legacy renderer consumes operation button contracts
+
+- GIVEN production collection commands, record deletion, compact status, and
+  progress output use legacy `@dpeek/formless-ui` components and Tailwind
+  classes
+- WHEN those leaf surfaces migrate to the Formless UI operation contract
+- THEN dedicated legacy adapters render the projected controls, confirmations,
+  status, and progress while dispatching only presentation and invocation
+  intents
+- AND collection queries and counts, record reads and labels, operation
+  execution, sync feedback, successful-delete callbacks, and execution-state
+  subscriptions remain in generated runtime
+- AND focused coverage asserts projected facts, intent dispatch, pending
+  deduplication, confirmation lifecycle, committed, replayed, and failed
+  behavior, and user-visible feedback rather than legacy HTML structure or
+  one-to-one visual parity
+- AND production remains on the legacy renderer after this contract migration
+
+#### Scenario: Astryx operation control renderer
+
+- GIVEN production operation leaves consume the renderer-neutral operation
+  contract through the legacy seam
+- WHEN the replacement renderer implements the same contract in `lib/astryx`
+- THEN it uses Astryx action, badge, destructive confirmation, loading, status,
+  progress, and toast primitives without importing generated runtime
+- AND it presents one primary action per action group, uses loading state for
+  asynchronous controls, exposes disabled reasons, uses dedicated icon-only
+  controls when projected, and pairs semantic status indicators with visible
+  text
+- AND destructive confirmations use explicit consequence copy and specific
+  action labels, while committed and replayed feedback is concise and repeated
+  feedback events are deduplicated by projected identity
+- AND replacement-renderer behavior follows Astryx interaction and hierarchy
+  conventions without recreating legacy markup or styling
+- AND adding the Astryx renderer does not export or activate it in production
+
+#### Scenario: Astryx operation control fixtures
+
+- GIVEN the legacy renderer consumes production operation button and feedback
+  contracts
+- WHEN operation UX is evaluated in the package-local Astryx Operations layout
+- THEN data-only fixtures use the same contract shapes to cover collection
+  command buttons, a target-count badge, disabled and pending controls,
+  destructive confirmation, committed, replayed, and failed results, shared
+  execution state, compact status, and ordered progress
+- AND package-local fixture state may simulate open-state, invocation, result,
+  and feedback intents for UX review but does not import operation controllers,
+  generated runtime, storage, browser replica, sync, or app target modules
+- AND the fixture renderer contains no Tailwind classes and does not activate
+  Astryx in production
+- AND table operation cells, edit dialogs, ordering controls, state-transition
+  controls, tree controls, create and public operation forms, workspace shell
+  controls, and public Site rendering remain owned by later slices
+
 #### Scenario: Specialized controls use adapters
 
 - GIVEN create dialogs, edit dialogs, delete confirmations, table row menus,

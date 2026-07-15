@@ -1,13 +1,5 @@
 import { useMemo, useState } from "react";
-import { Button } from "@dpeek/formless-ui/button";
-import {
-  ModalClose,
-  ModalContent,
-  ModalDescription,
-  ModalFooter,
-  ModalHeader,
-  ModalTitle,
-} from "@dpeek/formless-ui/modal";
+import type { FormlessUiOperationPresentationIntent } from "@dpeek/formless-astryx/contract";
 import { useRecord } from "../../client/store.ts";
 import type { EntityOperationPresentationConfig } from "../../client/operation-presentation-model.ts";
 import {
@@ -21,9 +13,15 @@ import type { StoredRecord } from "@dpeek/formless-storage";
 import type { FieldSchema } from "@dpeek/formless-schema";
 import {
   executeGeneratedOperationControl,
+  handleGeneratedOperationFormlessUiIntent,
   useGeneratedOperationController,
   useGeneratedOperationControllerVersion,
 } from "./operation-control-runtime.ts";
+import { projectGeneratedOperationFormlessUiControl } from "./formless-ui-operation-projection.ts";
+import {
+  LegacyGeneratedOperationButton,
+  LegacyGeneratedOperationDestructiveConfirmation,
+} from "./legacy-operation-controls.tsx";
 
 export type RecordLabelFieldConfig = {
   fieldName: string;
@@ -70,69 +68,65 @@ export function DeleteRecordButton({
   const bindings = useMemo(() => (binding === undefined ? [] : [binding]), [binding]);
   const controller = useGeneratedOperationController(bindings);
   useGeneratedOperationControllerVersion(controller);
-  const isDeleting = binding === undefined ? false : controller.isPending(binding.id);
+  const state =
+    binding === undefined ? undefined : controller.getStateByExecutionKey(binding.executionKey);
 
-  async function deleteRecord() {
-    if (binding === undefined || isDeleting) {
+  async function onIntent(intent: FormlessUiOperationPresentationIntent) {
+    if (binding === undefined) {
       return;
     }
 
-    const result = await executeRecordDeleteOperation({
+    await handleGeneratedOperationFormlessUiIntent({
       binding,
+      confirmationOpen: open,
       controller,
-      recordId,
-      recordLabel,
+      intent,
+      invoke: (invokeIntent) =>
+        executeRecordDeleteOperation({
+          binding,
+          controller,
+          recordId,
+          recordLabel,
+          source: invokeIntent.invocationSource,
+        }),
+      onConfirmationOpenChange: setOpen,
+      onSuccess: () => onDeleted?.(),
     });
-
-    if (result.type !== "failed") {
-      setOpen(false);
-      onDeleted?.();
-    }
   }
+
+  if (binding === undefined || state === undefined) {
+    return null;
+  }
+
+  const control = projectGeneratedOperationFormlessUiControl({
+    binding,
+    confirmationOpen: open,
+    presentation: {
+      accessibilityLabel: ariaLabel ?? `Delete ${recordLabel}`,
+      content:
+        size === "sq-xs"
+          ? { icon: "delete", kind: "iconOnly" }
+          : { kind: "label", label: buttonLabel },
+      density: "compact",
+      pendingLabel: "Deleting...",
+      prominence: "destructive",
+    },
+    state,
+  });
 
   return (
     <>
-      <Button
-        aria-label={ariaLabel ?? `Delete ${recordLabel}`}
-        className={className}
-        isDisabled={isDeleting}
-        onPress={() => setOpen(true)}
-        size={size}
-        type="button"
-        intent="danger"
-        {...triggerData}
-      >
-        {isDeleting ? "Deleting..." : buttonLabel}
-      </Button>
-      <ModalContent
-        closeButton={false}
-        isOpen={open}
-        onOpenChange={(nextOpen) => {
-          if (!isDeleting) {
-            setOpen(nextOpen);
-          }
-        }}
-        role="alertdialog"
-      >
-        <ModalHeader>
-          <ModalTitle>{binding?.confirmation?.title ?? `Delete ${recordLabel}?`}</ModalTitle>
-          <ModalDescription>
-            {binding?.confirmation?.description ??
-              "The record will be hidden from active views. Active references can block deletion."}
-          </ModalDescription>
-        </ModalHeader>
-        <ModalFooter>
-          <ModalClose intent="outline">Cancel</ModalClose>
-          <Button
-            isDisabled={isDeleting}
-            onPress={() => void deleteRecord()}
-            type="button"
-            intent="danger"
-          >
-            {isDeleting ? "Deleting..." : (binding?.confirmation?.actionLabel ?? "Delete")}
-          </Button>
-        </ModalFooter>
-      </ModalContent>
+      <span className={className} {...triggerData}>
+        <LegacyGeneratedOperationButton button={control.trigger} onIntent={onIntent} />
+      </span>
+      {control.confirmation ? (
+        <LegacyGeneratedOperationDestructiveConfirmation
+          confirmation={control.confirmation}
+          feedback={control.feedback}
+          onIntent={onIntent}
+          progress={control.progress}
+        />
+      ) : null}
     </>
   );
 }
@@ -165,19 +159,21 @@ export async function executeRecordDeleteOperation({
   recordId,
   recordLabel,
   setStatus,
+  source = "confirmationDialog",
 }: {
   binding: GeneratedOperationControlBinding;
   controller: GeneratedOperationController;
   recordId: string;
   recordLabel: string;
   setStatus?: (status: SyncStatus) => void;
+  source?: "button" | "confirmationDialog";
 }): Promise<GeneratedOperationExecutionResult> {
   return executeGeneratedOperationControl({
     binding,
     callerInput: {
       bindingId: binding.id,
       recordId,
-      source: "confirmationDialog",
+      source,
     },
     controller,
     feedback: {

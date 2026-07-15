@@ -977,6 +977,7 @@ function WorkspaceGatewayManagementSection({
         </h2>
         {operationState ? (
           <GeneratedOperationCompactStatus
+            controlId="workspace-push"
             displayText={displaySafeText}
             operationLabel="Push"
             state={operationState}

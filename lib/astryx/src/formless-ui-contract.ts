@@ -652,13 +652,106 @@ export type FormlessUiConfirmationPromptContract = {
 
 export type FormlessUiCompactStatusIntent = "neutral" | "success" | "warning" | "danger" | "info";
 
+export type FormlessUiOperationExecutionStatus =
+  | "committed"
+  | "failed"
+  | "idle"
+  | "pending"
+  | "replayed";
+
 export type FormlessUiCompactStatusContract = {
-  accessibilityLabel?: string;
+  accessibilityLabel: string;
+  detail: string;
+  id: string;
+  intent: FormlessUiCompactStatusIntent;
+  kind: "compactStatus";
+  label: string;
+  pending?: FormlessUiFieldPending;
+  status: FormlessUiOperationExecutionStatus;
+};
+
+export type FormlessUiOperationCountBadgeContract = {
+  accessibilityLabel: string;
+  count: number;
+  id: string;
+  kind: "countBadge";
+};
+
+export type FormlessUiOperationInvokeIntent = {
+  controlId: string;
+  invocationSource: Extract<FormlessUiOperationInvocationSource, "button" | "confirmationDialog">;
+  type: "operationInvoke";
+};
+
+export type FormlessUiOperationConfirmationOpenChangeIntent = {
+  controlId: string;
+  open: boolean;
+  type: "operationConfirmationOpenChange";
+};
+
+export type FormlessUiOperationPresentationIntent =
+  | FormlessUiOperationConfirmationOpenChangeIntent
+  | FormlessUiOperationInvokeIntent;
+
+export type FormlessUiOperationPresentationIntentHandler = (
+  intent: FormlessUiOperationPresentationIntent,
+) => Promise<void> | void;
+
+export type FormlessUiOperationButtonContract = Omit<FormlessUiButtonContract, "prominence"> & {
+  countBadge?: FormlessUiOperationCountBadgeContract;
+  intent: FormlessUiOperationPresentationIntent;
+  prominence: "destructive" | "primary" | "quiet" | "secondary";
+};
+
+export type FormlessUiOperationDestructiveConfirmationContract = {
+  action: FormlessUiOperationButtonContract;
+  cancel: FormlessUiOperationButtonContract;
+  closeIntent: FormlessUiOperationConfirmationOpenChangeIntent;
+  description: string;
+  id: string;
+  kind: "destructiveConfirmation";
+  open: boolean;
+  title: string;
+};
+
+export type FormlessUiOperationProgressStepStatus =
+  | "failed"
+  | "pending"
+  | "running"
+  | "skipped"
+  | "succeeded";
+
+export type FormlessUiOperationProgressStepContract = {
+  detail?: string;
+  id: string;
+  label: string;
+  status: FormlessUiOperationProgressStepStatus;
+};
+
+export type FormlessUiOperationProgressContract = {
+  detail?: string;
+  id: string;
+  kind: "operationProgress";
+  steps: readonly FormlessUiOperationProgressStepContract[];
+  title: string;
+  updatedAt: number;
+};
+
+export type FormlessUiOperationActiveProgressContract = {
+  detail?: string;
+  label: string;
+  stepId?: string;
+};
+
+export type FormlessUiOperationFeedbackEventContract = {
+  activeProgress?: FormlessUiOperationActiveProgressContract;
   detail?: string;
   id: string;
   intent: FormlessUiCompactStatusIntent;
-  label: string;
-  pending?: FormlessUiFieldPending;
+  kind: "operationFeedbackEvent";
+  progress?: FormlessUiOperationProgressContract;
+  status: Exclude<FormlessUiOperationExecutionStatus, "idle">;
+  title: string;
 };
 
 export type FormlessUiSubmitHiddenInput = {
@@ -759,14 +852,13 @@ export type FormlessUiFieldIntent =
 export type FormlessUiFieldIntentHandler = (intent: FormlessUiFieldIntent) => Promise<void> | void;
 
 export type FormlessUiOperationControlContract = {
-  kind: "operationControl";
-  confirmation?: FormlessUiConfirmationPromptContract;
+  confirmation?: FormlessUiOperationDestructiveConfirmationContract;
+  feedback?: FormlessUiOperationFeedbackEventContract;
   id: string;
-  menu?: FormlessUiMenuContract;
-  onInvoke?: FormlessUiActionIntentHandler;
-  operationName?: string;
-  status?: FormlessUiCompactStatusContract;
-  trigger: FormlessUiActionTriggerContract;
+  kind: "operationControl";
+  progress?: FormlessUiOperationProgressContract;
+  status: FormlessUiCompactStatusContract;
+  trigger: FormlessUiOperationButtonContract;
 };
 
 export type FormlessUiFieldSetContract = {

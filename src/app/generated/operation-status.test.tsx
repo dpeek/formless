@@ -7,9 +7,11 @@ import type {
 import {
   GeneratedOperationCompactStatus,
   GeneratedOperationProgressSteps,
-  compactGeneratedOperationStatusText,
-  selectActiveGeneratedOperationProgressStep,
 } from "./operation-status.tsx";
+import {
+  projectGeneratedOperationProgressFormlessUiContract,
+  projectGeneratedOperationStateFormlessUiCompactStatus,
+} from "./formless-ui-operation-projection.ts";
 
 describe("generated operation status", () => {
   it("uses the active progress step for compact pending feedback", () => {
@@ -21,32 +23,50 @@ describe("generated operation status", () => {
       status: "pending",
     };
 
-    expect(selectActiveGeneratedOperationProgressStep(progress)?.id).toBe("provider");
-    expect(compactGeneratedOperationStatusText("Push", state)).toEqual({
-      title: "Pushing workspace",
+    expect(
+      projectGeneratedOperationStateFormlessUiCompactStatus(
+        { id: "workspace-push", label: "Push" },
+        state,
+      ),
+    ).toMatchObject({
+      label: "Pushing workspace",
       detail: "Provider reconciliation",
     });
 
     const html = renderToStaticMarkup(
-      <GeneratedOperationCompactStatus operationLabel="Push" state={state} />,
+      <GeneratedOperationCompactStatus
+        controlId="workspace-push"
+        operationLabel="Push"
+        state={state}
+      />,
     );
 
-    expect(html).toContain('data-formless-generated-operation-status="pending"');
     expect(html).toContain("Pushing workspace");
     expect(html).toContain("Provider reconciliation");
-    expect(html).toContain("animate-spin");
   });
 
   it("renders richer step output from the same generic progress state", () => {
     const html = renderToStaticMarkup(
-      <GeneratedOperationProgressSteps progress={generatedProgress()} />,
+      <GeneratedOperationProgressSteps controlId="workspace-push" progress={generatedProgress()} />,
     );
 
-    expect(html).toContain('data-formless-generated-operation-progress-steps="true"');
-    expect(html).toContain('data-formless-generated-operation-progress-step="provider"');
-    expect(html).toContain('data-formless-generated-operation-progress-step-status="running"');
     expect(html).toContain("Provider reconciliation");
     expect(html).toContain("Updating provider state");
+    expect(
+      projectGeneratedOperationProgressFormlessUiContract({
+        id: "workspace-push:progress",
+        progress: generatedProgress(),
+      }).steps,
+    ).toEqual([
+      { id: "sync", label: "Plan workspace source", status: "succeeded" },
+      {
+        detail: "Updating provider state",
+        id: "provider",
+        label: "Provider reconciliation",
+        status: "running",
+      },
+      { id: "plan", label: "Health check", status: "pending" },
+    ]);
   });
 });
 

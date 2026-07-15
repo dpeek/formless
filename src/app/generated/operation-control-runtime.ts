@@ -1,4 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
+import type {
+  FormlessUiOperationInvokeIntent,
+  FormlessUiOperationPresentationIntent,
+} from "@dpeek/formless-astryx/contract";
 import {
   createGeneratedOperationController,
   type GeneratedOperationCallerInput,
@@ -30,6 +34,16 @@ export type GeneratedOperationControlTriggerDecision =
   | { type: "confirm" }
   | { type: "execute" }
   | { type: "ignore" };
+
+export type HandleGeneratedOperationFormlessUiIntentOptions = {
+  binding: GeneratedOperationControlBinding;
+  confirmationOpen?: boolean;
+  controller: GeneratedOperationController;
+  intent: FormlessUiOperationPresentationIntent;
+  invoke: (intent: FormlessUiOperationInvokeIntent) => Promise<GeneratedOperationExecutionResult>;
+  onConfirmationOpenChange?: (open: boolean) => void;
+  onSuccess?: (result: Exclude<GeneratedOperationExecutionResult, { type: "failed" }>) => void;
+};
 
 export function useGeneratedOperationController(
   bindings: readonly GeneratedOperationControlBinding[],
@@ -82,6 +96,56 @@ export function selectGeneratedOperationControlTriggerDecision({
   }
 
   return { type: "execute" };
+}
+
+export async function handleGeneratedOperationFormlessUiIntent({
+  binding,
+  confirmationOpen = false,
+  controller,
+  intent,
+  invoke,
+  onConfirmationOpenChange,
+  onSuccess,
+}: HandleGeneratedOperationFormlessUiIntentOptions): Promise<
+  GeneratedOperationExecutionResult | undefined
+> {
+  if (intent.controlId !== binding.id) {
+    return undefined;
+  }
+
+  if (intent.type === "operationConfirmationOpenChange") {
+    if (binding.confirmation !== undefined) {
+      onConfirmationOpenChange?.(intent.open);
+    }
+    return undefined;
+  }
+
+  if (controller.isPending(binding.id)) {
+    return undefined;
+  }
+
+  if (binding.availability.state === "disabled") {
+    return undefined;
+  }
+
+  if (
+    (binding.confirmation !== undefined &&
+      (!confirmationOpen || intent.invocationSource !== "confirmationDialog")) ||
+    (binding.confirmation === undefined && intent.invocationSource === "confirmationDialog")
+  ) {
+    return undefined;
+  }
+
+  const result = await invoke(intent);
+
+  if (result.type !== "failed") {
+    if (binding.confirmation !== undefined) {
+      onConfirmationOpenChange?.(false);
+    }
+    onSuccess?.(result);
+  }
+
+  return result;
 }
 
 export async function executeGeneratedOperationControl({

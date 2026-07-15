@@ -1,6 +1,5 @@
 import { useMemo } from "react";
-import { Badge } from "@dpeek/formless-ui/badge";
-import { Button } from "@dpeek/formless-ui/button";
+import type { FormlessUiOperationPresentationIntent } from "@dpeek/formless-astryx/contract";
 import { useEntityRecordCountMatchingQuery } from "../../client/store.ts";
 import {
   projectCollectionOperationControlBindings,
@@ -15,9 +14,12 @@ import type { QueryEvaluationContext } from "@dpeek/formless-schema";
 import { GeneratedCreateSurface } from "./create.tsx";
 import {
   executeGeneratedOperationControl,
+  handleGeneratedOperationFormlessUiIntent,
   useGeneratedOperationController,
   useGeneratedOperationControllerVersion,
 } from "./operation-control-runtime.ts";
+import { projectGeneratedOperationFormlessUiControl } from "./formless-ui-operation-projection.ts";
+import { LegacyGeneratedOperationButton } from "./legacy-operation-controls.tsx";
 
 type CommandHomeOperationConfig = Extract<HomeOperationConfig, { type: "command" }>;
 export function HomeOperationRow({
@@ -42,20 +44,6 @@ export function HomeOperationRow({
   const commandPending = bindings.some(
     (binding) => binding.kind === "command" && controller.isPending(binding.id),
   );
-
-  async function runCommandOperation(operation: CommandHomeOperationConfig) {
-    const binding = bindingsByCanonicalKey.get(operation.operation.canonicalKey);
-
-    if (binding === undefined || commandPending) {
-      return;
-    }
-
-    await executeHomeCommandOperation({
-      binding,
-      controller,
-      operation,
-    });
-  }
 
   return (
     <section aria-label={ariaLabel} className="flex flex-wrap gap-2">
@@ -84,11 +72,10 @@ export function HomeOperationRow({
         return (
           <HomeCommandOperationButton
             binding={binding}
-            disabled={commandPending}
+            commandPending={commandPending}
+            controller={controller}
             key={`${operation.type}:${operation.operationName}`}
-            onRun={runCommandOperation}
             operation={operation}
-            pending={binding === undefined ? false : controller.isPending(binding.id)}
             queryContext={queryContext}
           />
         );
@@ -99,40 +86,38 @@ export function HomeOperationRow({
 
 function HomeCommandOperationButton({
   binding,
-  disabled,
-  onRun,
+  commandPending,
+  controller,
   operation,
-  pending,
   queryContext,
 }: {
   binding?: GeneratedOperationControlBinding;
-  disabled: boolean;
-  onRun: (operation: CommandHomeOperationConfig) => Promise<void>;
+  commandPending: boolean;
+  controller: GeneratedOperationController;
   operation: CommandHomeOperationConfig;
-  pending: boolean;
   queryContext: QueryEvaluationContext;
 }) {
-  const controlDisabled = disabled || binding?.availability.state === "disabled";
+  if (binding === undefined) {
+    return null;
+  }
 
   if (!operation.ui.targetCount) {
     return (
-      <Button
-        isDisabled={controlDisabled}
-        onPress={() => void onRun(operation)}
-        type="button"
-        intent="outline"
-      >
-        {pending ? `${operation.label}...` : operation.label}
-      </Button>
+      <HomeCommandOperationControl
+        binding={binding}
+        commandPending={commandPending}
+        controller={controller}
+        operation={operation}
+      />
     );
   }
 
   return (
     <CountedHomeCommandOperationButton
-      disabled={controlDisabled}
-      onRun={onRun}
+      binding={binding}
+      commandPending={commandPending}
+      controller={controller}
       operation={operation}
-      pending={pending}
       queryContext={queryContext}
       targetCount={operation.ui.targetCount}
     />
@@ -140,17 +125,17 @@ function HomeCommandOperationButton({
 }
 
 function CountedHomeCommandOperationButton({
-  disabled,
-  onRun,
+  binding,
+  commandPending,
+  controller,
   operation,
-  pending,
   queryContext,
   targetCount,
 }: {
-  disabled: boolean;
-  onRun: (operation: CommandHomeOperationConfig) => Promise<void>;
+  binding: GeneratedOperationControlBinding;
+  commandPending: boolean;
+  controller: GeneratedOperationController;
   operation: CommandHomeOperationConfig;
-  pending: boolean;
   queryContext: QueryEvaluationContext;
   targetCount: CommandOperationTargetCountConfig;
 }) {
@@ -161,18 +146,65 @@ function CountedHomeCommandOperationButton({
   );
 
   return (
-    <Button
-      isDisabled={disabled}
-      onPress={() => void onRun(operation)}
-      type="button"
-      intent="outline"
-    >
-      <span>{pending ? `${operation.label}...` : operation.label}</span>
-      <Badge aria-label={targetCount.ariaLabel} className="ml-2 h-4 px-1.5" intent="outline">
-        {count}
-      </Badge>
-    </Button>
+    <HomeCommandOperationControl
+      binding={binding}
+      commandPending={commandPending}
+      controller={controller}
+      operation={operation}
+      targetCount={{
+        accessibilityLabel: targetCount.ariaLabel,
+        count,
+      }}
+    />
   );
+}
+
+function HomeCommandOperationControl({
+  binding,
+  commandPending,
+  controller,
+  operation,
+  targetCount,
+}: {
+  binding: GeneratedOperationControlBinding;
+  commandPending: boolean;
+  controller: GeneratedOperationController;
+  operation: CommandHomeOperationConfig;
+  targetCount?: { accessibilityLabel: string; count: number };
+}) {
+  const state = controller.getStateByExecutionKey(binding.executionKey);
+  const control = projectGeneratedOperationFormlessUiControl({
+    binding,
+    presentation: {
+      accessibilityLabel: operation.label,
+      content: { kind: "label", label: operation.label },
+      density: "default",
+      ...(commandPending && state.status !== "pending"
+        ? { disabledReason: "Another command is running." }
+        : {}),
+      pendingLabel: `${operation.label}...`,
+      prominence: "secondary",
+    },
+    state,
+    ...(targetCount === undefined ? {} : { targetCount }),
+  });
+
+  async function onIntent(intent: FormlessUiOperationPresentationIntent) {
+    await handleGeneratedOperationFormlessUiIntent({
+      binding,
+      controller,
+      intent,
+      invoke: (invokeIntent) =>
+        executeHomeCommandOperation({
+          binding,
+          controller,
+          operation,
+          source: invokeIntent.invocationSource,
+        }),
+    });
+  }
+
+  return <LegacyGeneratedOperationButton button={control.trigger} onIntent={onIntent} />;
 }
 
 export async function executeHomeCommandOperation({
@@ -180,17 +212,19 @@ export async function executeHomeCommandOperation({
   controller,
   operation,
   setStatus,
+  source = "button",
 }: {
   binding: GeneratedOperationControlBinding;
   controller: GeneratedOperationController;
   operation: CommandHomeOperationConfig;
   setStatus?: (status: SyncStatus) => void;
+  source?: "button" | "confirmationDialog";
 }): Promise<GeneratedOperationExecutionResult> {
   return executeGeneratedOperationControl({
     binding,
     callerInput: {
       bindingId: binding.id,
-      source: "button",
+      source,
     },
     controller,
     feedback: {

@@ -28,8 +28,10 @@ import type { StoredRecord } from "@dpeek/formless-storage";
 import {
   executeGeneratedOperationControl,
   executeGeneratedOrderingMoveOperation,
+  handleGeneratedOperationFormlessUiIntent,
   selectGeneratedOperationControlTriggerDecision,
 } from "./operation-control-runtime.ts";
+import { projectGeneratedOperationFormlessUiControl } from "./formless-ui-operation-projection.ts";
 import {
   executeHomeCommandOperation,
   homeCommandOperationCommittedMessage,
@@ -77,6 +79,22 @@ describe("generated operation controls", () => {
       { state: "syncing", message: "Clear completed..." },
       { state: "idle", message: "Clear completed synced. 2 affected." },
     ]);
+    expect(
+      projectGeneratedOperationFormlessUiControl({
+        binding,
+        presentation: {
+          accessibilityLabel: operation.label,
+          content: { kind: "label", label: operation.label },
+          density: "default",
+          prominence: "secondary",
+        },
+        state: controller.getStateByExecutionKey(binding.executionKey),
+      }).feedback,
+    ).toMatchObject({
+      detail: "2 affected.",
+      status: "committed",
+      title: "Clear completed synced.",
+    });
   });
 
   it("reports collection command replay and failure feedback from normalized results", async () => {
@@ -128,6 +146,59 @@ describe("generated operation controls", () => {
       { state: "syncing", message: "Clear completed..." },
       { state: "error", message: "Operation endpoint unavailable." },
     ]);
+    expect(
+      projectGeneratedOperationFormlessUiControl({
+        binding,
+        presentation: {
+          accessibilityLabel: operation.label,
+          content: { kind: "label", label: operation.label },
+          density: "default",
+          prominence: "secondary",
+        },
+        state: failureController.getStateByExecutionKey(binding.executionKey),
+      }).feedback,
+    ).toMatchObject({
+      detail: "Operation endpoint unavailable.",
+      status: "failed",
+      title: "Clear completed failed.",
+    });
+  });
+
+  it("deduplicates pending invocation intents before runtime feedback repeats", async () => {
+    const operation = requiredClearCompletedOperation();
+    const binding = projectCollectionOperationControlBinding(operation);
+    let resolveSubmission: ((response: OperationInvocationResponse) => void) | undefined;
+    const submission = new Promise<OperationInvocationResponse>((resolve) => {
+      resolveSubmission = resolve;
+    });
+    const controller = createGeneratedOperationController({
+      bindings: [binding],
+      submitAuthorityOperation: async () => submission,
+      target: "tasks",
+    });
+    const pendingExecution = controller.execute({ bindingId: binding.id, source: "button" });
+    let invokeCount = 0;
+
+    expect(controller.isPending(binding.id)).toBe(true);
+    await expect(
+      handleGeneratedOperationFormlessUiIntent({
+        binding,
+        controller,
+        intent: {
+          controlId: binding.id,
+          invocationSource: "button",
+          type: "operationInvoke",
+        },
+        invoke: async () => {
+          invokeCount += 1;
+          return { type: "committed" };
+        },
+      }),
+    ).resolves.toBeUndefined();
+    expect(invokeCount).toBe(0);
+
+    resolveSubmission?.(operationResponse(commandOutput(["write-pending"])));
+    await expect(pendingExecution).resolves.toMatchObject({ type: "committed" });
   });
 
   it("keeps destructive delete confirmation labels while executing through controller state", async () => {
@@ -207,6 +278,141 @@ describe("generated operation controls", () => {
       { state: "syncing", message: "Deleting Hero block..." },
       { state: "idle", message: "Deleted Hero block." },
     ]);
+  });
+
+  it("retains failed confirmations and closes with callbacks only after committed or replayed results", async () => {
+    const deleteOperation = selectEntityOperationByKind(
+      "block",
+      siteSourceSchema.entities.block,
+      "delete",
+      "record",
+    );
+
+    if (deleteOperation === undefined) {
+      throw new Error("Missing block delete operation.");
+    }
+
+    const binding = projectDeleteRecordButtonBinding({
+      deleteOperation,
+      entityLabel: "Block",
+      recordId: "block-1",
+      recordLabel: "Hero block",
+    });
+
+    if (binding === undefined) {
+      throw new Error("Missing delete binding.");
+    }
+
+    const controller = createGeneratedOperationController({ bindings: [binding] });
+    const control = projectGeneratedOperationFormlessUiControl({
+      binding,
+      confirmationOpen: true,
+      presentation: {
+        accessibilityLabel: "Delete Hero block",
+        content: { kind: "label", label: "Delete" },
+        density: "compact",
+        prominence: "destructive",
+      },
+      state: controller.getStateByExecutionKey(binding.executionKey),
+    });
+    const confirmation = control.confirmation;
+
+    if (confirmation === undefined) {
+      throw new Error("Missing projected delete confirmation.");
+    }
+
+    const openChanges: boolean[] = [];
+    const successes: string[] = [];
+    const dispatch = (
+      result: { type: "committed" | "replayed" } | { type: "failed"; displayError: string },
+    ) =>
+      handleGeneratedOperationFormlessUiIntent({
+        binding,
+        confirmationOpen: true,
+        controller,
+        intent: confirmation.action.intent,
+        invoke: async () => result,
+        onConfirmationOpenChange: (open) => openChanges.push(open),
+        onSuccess: (success) => successes.push(success.type),
+      });
+
+    await expect(
+      handleGeneratedOperationFormlessUiIntent({
+        binding,
+        controller,
+        intent: control.trigger.intent,
+        invoke: async () => ({ type: "committed" }),
+        onConfirmationOpenChange: (open) => openChanges.push(open),
+      }),
+    ).resolves.toBeUndefined();
+    expect(openChanges).toEqual([true]);
+
+    const pendingCloseChanges: boolean[] = [];
+    await expect(
+      handleGeneratedOperationFormlessUiIntent({
+        binding,
+        controller: {
+          ...controller,
+          isPending: () => true,
+        },
+        intent: confirmation.closeIntent,
+        invoke: async () => ({ type: "committed" }),
+        onConfirmationOpenChange: (open) => pendingCloseChanges.push(open),
+      }),
+    ).resolves.toBeUndefined();
+    expect(pendingCloseChanges).toEqual([false]);
+
+    let rejectedInvokeCount = 0;
+    await expect(
+      handleGeneratedOperationFormlessUiIntent({
+        binding,
+        confirmationOpen: true,
+        controller,
+        intent: {
+          controlId: binding.id,
+          invocationSource: "button",
+          type: "operationInvoke",
+        },
+        invoke: async () => {
+          rejectedInvokeCount += 1;
+          return { type: "committed" };
+        },
+      }),
+    ).resolves.toBeUndefined();
+    await expect(
+      handleGeneratedOperationFormlessUiIntent({
+        binding,
+        confirmationOpen: false,
+        controller,
+        intent: confirmation.action.intent,
+        invoke: async () => {
+          rejectedInvokeCount += 1;
+          return { type: "committed" };
+        },
+      }),
+    ).resolves.toBeUndefined();
+    expect(rejectedInvokeCount).toBe(0);
+
+    await expect(
+      dispatch({ type: "failed", displayError: "Active references block deletion." }),
+    ).resolves.toMatchObject({ type: "failed" });
+    expect(openChanges).toEqual([true]);
+    expect(successes).toEqual([]);
+
+    await expect(dispatch({ type: "committed" })).resolves.toEqual({ type: "committed" });
+    expect(openChanges).toEqual([true, false]);
+    expect(successes).toEqual(["committed"]);
+
+    await handleGeneratedOperationFormlessUiIntent({
+      binding,
+      controller,
+      intent: control.trigger.intent,
+      invoke: async () => ({ type: "replayed" }),
+      onConfirmationOpenChange: (open) => openChanges.push(open),
+    });
+    await expect(dispatch({ type: "replayed" })).resolves.toEqual({ type: "replayed" });
+    expect(openChanges).toEqual([true, false, true, false]);
+    expect(successes).toEqual(["committed", "replayed"]);
   });
 
   it("executes table static row controls through projected bindings", async () => {
