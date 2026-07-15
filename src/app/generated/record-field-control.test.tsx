@@ -59,10 +59,15 @@ describe("generated record field presentation rendering", () => {
         intents.push(intent);
       },
     });
+    const [control] = Children.toArray(adapter.props.children);
 
-    adapter.props.onDraftChange("Next title");
-    adapter.props.onValueCommit("Next title");
-    adapter.props.onDraftRevert();
+    if (!isValidElement<ComponentProps<typeof GeneratedRecordFieldControl>>(control)) {
+      throw new Error("Expected generated record field control.");
+    }
+
+    control.props.onDraftChange("Next title");
+    control.props.onValueCommit("Next title");
+    control.props.onDraftRevert();
 
     expect(intents).toEqual([
       { fieldName: "title", type: "recordEditorDraftChange", value: "Next title" },

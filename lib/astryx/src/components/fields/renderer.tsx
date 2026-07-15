@@ -1,5 +1,6 @@
 import * as stylex from "@stylexjs/stylex";
 import { Text } from "@astryxdesign/core/Text";
+import { Tooltip } from "@astryxdesign/core/Tooltip";
 import { VStack } from "@astryxdesign/core/VStack";
 import { sizeVars } from "@astryxdesign/core/theme/tokens.stylex";
 import type {
@@ -55,10 +56,19 @@ export function FormlessUiFieldRenderer({
     renderer = <FieldEditor field={field} inputId={inputId} onIntent={onIntent} />;
   }
 
-  return field.surface === "table-cell" ? (
-    <div {...stylex.props(styles.tableCellFrame)}>{renderer}</div>
+  if (field.surface !== "table-cell") {
+    return renderer;
+  }
+
+  const frame = <div {...stylex.props(styles.tableCellFrame)}>{renderer}</div>;
+  const errorMessage = field.errors?.map((error) => error.message).join(" ");
+
+  return errorMessage ? (
+    <Tooltip content={errorMessage} focusTrigger="always" hasHoverIndication={false}>
+      {frame}
+    </Tooltip>
   ) : (
-    renderer
+    frame
   );
 }
 

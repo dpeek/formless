@@ -10,6 +10,7 @@ import { FormlessGeneratedFieldsLayout } from "./components/generated-fields.tsx
 import { FormlessOperationsLayout } from "./components/operations.tsx";
 import { FormlessSiteLayout } from "./components/site.tsx";
 import { FormlessAppShell } from "./components/shell.tsx";
+import { FormlessTablesLayout } from "./components/tables.tsx";
 import { FormlessThemeProvider } from "./theme.tsx";
 
 type FormlessPrototypeLayout = {
@@ -32,6 +33,7 @@ const formlessPrototypeLayouts: FormlessPrototypeLayout[] = [
   createFormlessPrototypeLayout("Fields", () => <FormlessFieldsLayout />),
   createFormlessPrototypeLayout("Canonical Fields", () => <FormlessCanonicalFieldsLayout />),
   createFormlessPrototypeLayout("Generated Fields", () => <FormlessGeneratedFieldsLayout />),
+  createFormlessPrototypeLayout("Tables", () => <FormlessTablesLayout />),
 ];
 
 const defaultLayout = formlessPrototypeLayouts[0];

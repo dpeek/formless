@@ -261,6 +261,131 @@ computed, operation-control, and ordering-handle columns.
 - THEN aggregate footers display read-model values
 - AND move menus or drag drops patch sparse numeric ranks
 
+### Requirement: Generated Table Renderer Contract
+
+The system SHALL project complete generated table results through a controlled
+renderer-neutral Formless UI table contract before selecting the active
+renderer, while generated runtime code owns record reads, authoring state,
+operation execution, and ordering effects.
+
+#### Scenario: Project complete table result
+
+- GIVEN generated UI selects a table result model
+- WHEN generated runtime prepares the table for the active Formless UI renderer
+- THEN it projects a stable table id, accessible label, density, semantic column
+  definitions, ordered rows, cells, empty state, editing availability, readiness
+  warnings, and aggregate footer values
+- AND each column carries a stable id, visible and accessible header labels,
+  semantic width, alignment, row-header status, and content role without legacy
+  table props, Astryx props, renderer classes, or React components
+- AND cell content composes projected field contracts, display-safe computed or
+  referenced values, operation action groups, state transitions, delete
+  controls, and ordering controls as applicable
+- AND ordinary and specialized table fields cross their applicable Formless UI
+  field contract boundaries instead of entering the table renderer as legacy
+  field components or renderer callbacks
+- AND generated runtime retains query evaluation, record and system-field
+  reads, reference resolution, computed and aggregate evaluation, readiness
+  selection, draft sessions, media effects, operation controllers, ordering
+  plans, sync feedback, and local auto-save behavior
+- AND the table contract does not expose `StoredRecord`, `TableColumnConfig`,
+  `GeneratedOperationControlBinding`, ordering patch plans, drag events, browser
+  replica hooks, app targets, sync setters, Tailwind classes, React nodes, or
+  renderer-specific component props
+
+#### Scenario: Project table actions dialogs and ordering intents
+
+- GIVEN a table row exposes edit, command, destructive, transition, delete, or
+  ordering controls
+- WHEN generated runtime prepares row interaction data
+- THEN the table contract carries explicit primary and secondary action groups,
+  availability and disabled reasons, controlled confirmation or edit-dialog
+  state, projected edit fields, empty or unavailable target state, and semantic
+  invocation and open-change intents
+- AND referenced-record and row-record edit dialogs use the same projected
+  record-field and operation-control contracts as other existing-record surfaces
+- AND ordering data carries display-safe move labels, availability, pending
+  state, semantic ordering affordances, and reorder intents without exposing
+  sparse-rank calculations or DnD library events
+- AND generated runtime resolves row and reference targets, selects active union
+  fields, resolves patch input, calculates ordering moves, invokes operations,
+  and closes controlled dialogs only according to operation results
+- AND renderers may choose an accessible action-menu or direct-control
+  interaction that preserves the projected capability without recreating the
+  legacy drag gesture, menu structure, or dialog markup one-for-one
+
+#### Scenario: Legacy renderer consumes the table contract
+
+- GIVEN production generated tables currently render legacy Formless UI table,
+  field, menu, dialog, and ordering components
+- WHEN generated runtime projects a complete table result
+- THEN a dedicated legacy table adapter renders only the projected table,
+  nested field, operation, dialog, warning, and footer contracts and dispatches
+  their intents
+- AND production table paths for field, reference-field, computed,
+  operation-control, state-transition, ordering-handle, delete, edit-dialog,
+  readiness-warning, empty-state, and aggregate-footer behavior cross that
+  adapter boundary
+- AND the legacy adapter does not read records, resolve references, evaluate
+  computed values, own draft sessions, build operation input, calculate rank
+  patches, execute operations, or update sync state
+- AND production table rendering does not use raw model callbacks or legacy
+  React-node slots to bypass the renderer-neutral table contract
+- AND focused coverage asserts projected facts, intent dispatch, controlled
+  dialog lifecycle, successful and failed edits, ordering behavior, and visible
+  fallbacks instead of legacy HTML structure or one-to-one visual parity
+- AND production remains on the legacy renderer after this contract migration
+
+#### Scenario: Astryx table renderer
+
+- GIVEN the legacy renderer consumes the complete production table contract
+- WHEN the replacement renderer implements the same contract in `lib/astryx`
+- THEN it uses Astryx table, field, action, menu, dialog, empty-state, status, and
+  feedback primitives without importing generated runtime
+- AND table columns use explicit renderer-owned widths, spacious default table
+  density, top-aligned cells, wrapping content appropriate for mixed display
+  and controlled editor cells, and non-wrapping value and suffix pairs
+- AND primary row actions stay visible where projected while secondary and
+  ordering actions use an accessible overflow interaction
+- AND secondary-action overflow triggers retain their projected accessible name
+  while their visible tooltip reads `More options`
+- AND ordering menus omit structurally disabled boundary actions such as moves
+  above the first row or below the last row while retaining pending actions
+- AND row warnings use trailing icon-button triggers whose tooltip contains the
+  projected warning item messages
+- AND edit dialogs use a focused form-purpose composition, controlled projected
+  form fields with visible labels, start-aligned content, and explicit close
+  behavior without recreating legacy modal structure
+- AND empty states use only projected title, description, and optional action
+  facts rather than inventing unavailable create behavior
+- AND replacement-renderer behavior follows Astryx hierarchy and interaction
+  conventions rather than recreating legacy table markup, Tailwind sizing,
+  drag visuals, or test-only attributes
+- AND the Astryx table renderer contains no Tailwind classes, legacy Formless UI
+  components, storage reads, operation execution, sync effects, or runtime data
+  imports
+- AND adding the renderer does not export or activate Astryx in production
+
+#### Scenario: Astryx table contract fixtures
+
+- GIVEN the legacy renderer consumes complete production table contracts
+- WHEN table UX is evaluated in the package-local Astryx prototype
+- THEN data-only fixtures use the same contract shapes to cover editable and
+  read-only fields, references, computed values, state transitions, row actions,
+  destructive confirmation, record editing, ordering, readiness warnings,
+  aggregate footers, empty state, editing-disabled state, and pending or invalid
+  cells
+- AND a dedicated table layout renders a real Astryx table instead of extending
+  the generated field-type explorer with simulated table chrome
+- AND package-local fixture state may simulate field, action, dialog, and
+  reorder intents for UX review but does not import generated runtime, storage,
+  browser replica, operation controllers, ordering plans, sync, or app targets
+- AND the fixtures contain no Tailwind classes and do not export or activate the
+  Astryx table renderer in production
+- AND collection tabs, context selection, summaries, collection toolbars, list,
+  record, and tree results, public Site rendering, shell navigation, and the
+  production renderer switch remain owned by later slices
+
 ### Requirement: Field Editing And Presentation
 
 The system SHALL render generated field displays and editors from field behavior and presentation metadata.
@@ -928,9 +1053,8 @@ entity operations and view operation bindings.
   generated runtime, storage, browser replica, sync, or app target modules
 - AND the fixture renderer contains no Tailwind classes and does not activate
   Astryx in production
-- AND table operation cells, edit dialogs, ordering controls, state-transition
-  controls, tree controls, create and public operation forms, workspace shell
-  controls, and public Site rendering remain owned by later slices
+- AND tree controls, create and public operation forms, workspace shell controls,
+  and public Site rendering remain owned by later slices
 
 #### Scenario: Specialized controls use adapters
 

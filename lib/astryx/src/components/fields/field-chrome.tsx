@@ -60,7 +60,7 @@ export function fieldStatus(field: FormlessUiField): FieldStatusInput | undefine
 
   return {
     type: "error",
-    message: error.message,
+    ...(field.surface === "table-cell" ? {} : { message: error.message }),
   };
 }
 

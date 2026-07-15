@@ -7,7 +7,7 @@ export type RecordReadinessWarning = {
 
 export function getRecordReadinessWarnings(
   record: StoredRecord,
-  recordsById: Record<string, StoredRecord> = {},
+  recordsById: Readonly<Record<string, StoredRecord>> = {},
 ): RecordReadinessWarning[] {
   if (record.deletedAt) {
     return [];
@@ -54,7 +54,7 @@ function getBlockWarnings(record: StoredRecord): RecordReadinessWarning[] {
 
 function getBlockPlacementWarnings(
   record: StoredRecord,
-  recordsById: Record<string, StoredRecord>,
+  recordsById: Readonly<Record<string, StoredRecord>>,
 ): RecordReadinessWarning[] {
   const warnings: RecordReadinessWarning[] = [];
 
@@ -69,7 +69,7 @@ function getBlockPlacementWarnings(
 function warnWhenMissingReference(
   warnings: RecordReadinessWarning[],
   record: StoredRecord,
-  recordsById: Record<string, StoredRecord>,
+  recordsById: Readonly<Record<string, StoredRecord>>,
   fieldName: string,
   entityName: string,
   warning: RecordReadinessWarning,
@@ -82,7 +82,7 @@ function warnWhenMissingReference(
 function hasLiveReference(
   record: StoredRecord,
   fieldName: string,
-  recordsById: Record<string, StoredRecord>,
+  recordsById: Readonly<Record<string, StoredRecord>>,
   entityName: string,
 ) {
   const recordId = stringValue(record, fieldName);

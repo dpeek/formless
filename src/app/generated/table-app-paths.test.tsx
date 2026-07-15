@@ -45,9 +45,9 @@ describe("generated table app paths", () => {
     expect(html).toContain('aria-label="Price"');
     expect(html).toContain("Margin");
     expect(html).toContain('data-slot="table-footer"');
-    expect(html).toContain('aria-label="Average cost"');
-    expect(html).toContain('aria-label="Average price"');
-    expect(html).toContain('aria-label="Average margin"');
+    expect(html).toContain('aria-label="Average cost:');
+    expect(html).toContain('aria-label="Average price:');
+    expect(html).toContain('aria-label="Average margin:');
     expect(html).toContain("Create Resource");
     expect(html).not.toContain("USD");
   });
@@ -104,12 +104,12 @@ describe("generated table app paths", () => {
     expect(html).toContain('aria-label="Placement records"');
     expect(html).toContain('role="grid"');
     expect(html).toContain('aria-label="Reorder"');
-    expect(html).toContain('data-formless-ordering-handle="true"');
-    expect(html).toContain("data-formless-sortable-row=");
     expect(html).toContain('aria-label="Actions"');
-    expect(html).toContain("Edit block");
-    expect(html).toContain("Move up");
-    expect(html).toContain("Move to bottom");
+    expect(html).toContain(
+      'data-formless-legacy-table="block-placement:placementsForSelectedBlock"',
+    );
+    expect(html).not.toContain('data-formless-ordering-handle="true"');
+    expect(html).not.toContain("data-formless-sortable-row=");
     expect(html).not.toContain('data-formless-delete-record="rec_site_place_home_hero"');
   });
 });

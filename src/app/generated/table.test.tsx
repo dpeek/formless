@@ -17,7 +17,7 @@ describe("RecordTable", () => {
     resetClientStore();
   });
 
-  it("reserves wider cells for compact value/unit editors", () => {
+  it("renders compact value/unit fields through the legacy contract seam", () => {
     const html = renderTableViewHtml({
       records: rateSeedRecords,
       schema: rateSourceSchema,
@@ -26,9 +26,9 @@ describe("RecordTable", () => {
 
     expect(html).toContain('value="$825.00"');
     expect(html).toContain('role="grid"');
-    expect(html).toContain('data-slot="table-column"');
-    expect(html).not.toContain('data-slot="table-head"');
-    expect(html).toContain("w-52 min-w-52 max-w-60");
+    expect(html).toContain('data-formless-legacy-table="rate:table"');
+    expect(html).toContain('data-web-value-unit-input="true"');
+    expect(html).toContain("/ day");
   });
 
   it("renders aggregate footer slots as generated React Aria table rows", () => {
@@ -39,9 +39,9 @@ describe("RecordTable", () => {
     });
 
     expect(html).toContain('data-formless-table-footer="true"');
-    expect(html).toContain('aria-label="Average cost"');
-    expect(html).toContain('aria-label="Average price"');
-    expect(html).toContain('aria-label="Average margin"');
+    expect(html).toContain('aria-label="Average cost:');
+    expect(html).toContain('aria-label="Average price:');
+    expect(html).toContain('aria-label="Average margin:');
   });
 
   it("renders read-only enum icon and color presentation in table display cells", () => {
@@ -177,18 +177,72 @@ describe("RecordTable", () => {
     });
 
     expect(html).toContain('aria-label="Rate operations"');
-    expect(html).toContain(
-      'data-formless-table-operation-labels="Inspect rate|Blocked rate|Delete rate"',
-    );
-    expect(html).toContain(
-      'data-formless-table-disabled-operation-labels="Blocked rate: No selected card"',
-    );
-    expect(html).toContain('data-formless-table-danger-operation-labels="Delete rate"');
-    expect(html).toContain("Move up");
-    expect(html).toContain("Move to bottom");
+    expect(html).toContain('data-formless-legacy-table="rate:table"');
+    expect(html).not.toContain("data-formless-table-operation-labels");
+    expect(html).not.toContain("data-formless-table-danger-operation-labels");
   });
 
-  it("renders visible state-machine table fields as valid transition menus", () => {
+  it("keeps disabled edit-record controls unavailable across the table contract seam", () => {
+    const table = requiredTableModel(rateSourceSchema, "rateHome");
+    const updateOperation = table.result.updateOperation;
+    const costColumn = table.columns.find(
+      (column): column is Extract<TableColumnConfig, { type: "field" }> =>
+        column.type === "field" && column.fieldName === "cost",
+    );
+
+    if (!updateOperation || !costColumn) {
+      throw new Error("Rate table update facts are required.");
+    }
+
+    const operationColumn = {
+      type: "operationControl",
+      key: "operationControl:rate.update",
+      label: "Edit rate",
+      headerLabel: "Rate operations",
+      controls: [
+        {
+          type: "editRecord",
+          bindingName: updateOperation.canonicalKey,
+          operation: updateOperation,
+          label: "Edit rate",
+          variant: "default",
+          disabled: true,
+          disabledReason: "Locked by publish",
+          target: {
+            kind: "row",
+            entityName: table.entityName,
+            entity: table.entity,
+          },
+          editView: {
+            viewName: "rateEdit",
+            entityName: table.entityName,
+            entity: table.entity,
+            updateOperation,
+            fields: [costColumn],
+            transitionOperations: [],
+          },
+        },
+      ],
+      presentation: "button",
+      includeOrdering: false,
+      align: "end",
+      width: "xs",
+      display: "readOnly",
+      format: "plain",
+    } satisfies TableColumnConfig;
+    const html = renderRecordTableHtml({
+      entity: table.entity,
+      entityName: table.entityName,
+      records: rateSeedRecords,
+      result: { ...table.result, columns: [operationColumn] },
+      schema: rateSourceSchema,
+    });
+
+    expect(html).toContain('aria-label="Edit rate: Locked by publish"');
+    expect(html).toContain('data-disabled="true"');
+  });
+
+  it("renders paired transitions only through the visible state-machine field menu", () => {
     const schema = tableLifecycleSchema();
     const html = renderTableViewHtml({
       records: [taskLifecycleRecord("task-1", "todo")],
@@ -196,16 +250,14 @@ describe("RecordTable", () => {
       viewName: "taskTableHome",
     });
 
-    expect(html).toContain('data-formless-state-transition-menu="task-1"');
     expect(html).toContain('aria-label="Status: Todo. Change state."');
     expect(html).toContain('data-formless-state-machine="statusFlow"');
     expect(html).toContain('data-formless-state-machine-field="status"');
     expect(html).toContain('data-formless-state-value="todo"');
-    expect(html).toContain('data-formless-state-transition-operation-labels="Start"');
+    expect(html).toContain('data-formless-state-transition-menu="task-1"');
     expect(html).toContain('data-formless-state-transition-operations="startTask"');
-    expect(html).toContain('data-formless-state-transition-target-states="doing"');
-    expect(html).not.toContain("completeTask");
-    expect(html).not.toContain('data-formless-transition-controls="task-1"');
+    expect(html).not.toContain('aria-label="Status transitions"');
+    expect(html).not.toContain('data-formless-generated-operation-control="task-1:field:status');
   });
 
   it("keeps separate lifecycle transition controls when the state field is hidden or absent", () => {
@@ -221,12 +273,13 @@ describe("RecordTable", () => {
       viewName: "taskAbsentStatusTableHome",
     });
 
-    expect(hiddenHtml).not.toContain('data-formless-state-transition-menu="task-1"');
-    expect(hiddenHtml).toContain('data-formless-transition-controls="task-1"');
-    expect(hiddenHtml).toContain('data-formless-transition-operation="startTask"');
-    expect(hiddenHtml).toContain('data-formless-transition-operation="completeTask"');
-    expect(absentHtml).not.toContain('data-formless-state-transition-menu="task-1"');
-    expect(absentHtml).toContain('data-formless-transition-controls="task-1"');
+    expect(hiddenHtml).toContain('aria-label="Start"');
+    expect(hiddenHtml).toContain('aria-label="Complete"');
+    expect(hiddenHtml).toContain(
+      'data-formless-generated-operation-control="row:task-1:task.startTask"',
+    );
+    expect(absentHtml).toContain('aria-label="Start"');
+    expect(absentHtml).toContain('aria-label="Complete"');
   });
 });
 

@@ -871,10 +871,253 @@ export type FormlessUiFieldSetContract = {
   label?: string;
 };
 
+export type FormlessUiTableDensity = "compact" | "default";
+
+export type FormlessUiTableColumnAlignment = "center" | "end" | "start";
+
+export type FormlessUiTableColumnWidth = "auto" | "lg" | "md" | "sm" | "xs";
+
+export type FormlessUiTableColumnContentRole =
+  | "actions"
+  | "computed"
+  | "delete"
+  | "field"
+  | "ordering"
+  | "reference";
+
+export type FormlessUiTableColumnContract = {
+  accessibilityLabel: string;
+  alignment: FormlessUiTableColumnAlignment;
+  contentRole: FormlessUiTableColumnContentRole;
+  id: string;
+  isRowHeader: boolean;
+  kind: "tableColumn";
+  label: string;
+  labelVisibility: "hidden" | "visible";
+  width: FormlessUiTableColumnWidth;
+};
+
+export type FormlessUiTableValueStatus =
+  | {
+      kind: "ready";
+    }
+  | {
+      kind: "pending";
+      label?: string;
+    }
+  | {
+      kind: "invalid" | "unavailable";
+      message: string;
+    };
+
+export type FormlessUiTableDisplayValueContract = {
+  accessibilityLabel: string;
+  displayValue: string;
+  kind: "displayValue";
+  status: FormlessUiTableValueStatus;
+  suffix?: string;
+  valueKind: "computed" | "reference" | "text";
+};
+
+export type FormlessUiTableFieldContentContract = {
+  field: FormlessUiField;
+  kind: "field";
+  source: "record" | "referencedRecord";
+};
+
+export type FormlessUiTableUnavailableContentContract = {
+  accessibilityLabel: string;
+  kind: "unavailable";
+  message: string;
+};
+
+export type FormlessUiTableActionInvokeIntent = {
+  actionId: string;
+  invocationSource: Extract<FormlessUiOperationInvocationSource, "button" | "menuItem">;
+  operationName?: string;
+  rowId: string;
+  tableId: string;
+  type: "tableActionInvoke";
+};
+
+export type FormlessUiTableEditDialogOpenChangeIntent = {
+  dialogId: string;
+  open: boolean;
+  rowId: string;
+  tableId: string;
+  type: "tableEditDialogOpenChange";
+};
+
+export type FormlessUiTableReorderIntent = {
+  actionId: string;
+  direction: "bottom" | "down" | "top" | "up";
+  rowId: string;
+  tableId: string;
+  type: "tableReorder";
+};
+
+export type FormlessUiTableIntent =
+  | FormlessUiTableActionInvokeIntent
+  | FormlessUiTableEditDialogOpenChangeIntent
+  | FormlessUiTableReorderIntent;
+
+export type FormlessUiTableIntentHandler = (intent: FormlessUiTableIntent) => Promise<void> | void;
+
+export type FormlessUiTableInvokeActionContract = {
+  intent: FormlessUiTableActionInvokeIntent;
+  kind: "invokeAction";
+  role: "command" | "transition";
+  trigger: FormlessUiButtonContract;
+};
+
+export type FormlessUiTableOperationActionContract = {
+  control: FormlessUiOperationControlContract;
+  kind: "operationAction";
+  role: "command" | "delete" | "transition";
+};
+
+export type FormlessUiTableEditDialogAvailableTargetContract = {
+  actionGroup?: FormlessUiTableActionGroupContract;
+  fieldSet: FormlessUiFieldSetContract;
+  kind: "available";
+};
+
+export type FormlessUiTableEditDialogUnavailableTargetContract = {
+  kind: "unavailable";
+  message: string;
+};
+
+export type FormlessUiTableEditDialogContract = {
+  close: FormlessUiButtonContract;
+  description?: string;
+  id: string;
+  kind: "tableEditDialog";
+  open: boolean;
+  openChangeIntent: FormlessUiTableEditDialogOpenChangeIntent;
+  target:
+    | FormlessUiTableEditDialogAvailableTargetContract
+    | FormlessUiTableEditDialogUnavailableTargetContract;
+  targetKind: "reference" | "row";
+  title: string;
+};
+
+export type FormlessUiTableEditActionContract = {
+  dialog: FormlessUiTableEditDialogContract;
+  kind: "editAction";
+  openIntent: FormlessUiTableEditDialogOpenChangeIntent;
+  trigger: FormlessUiButtonContract;
+};
+
+export type FormlessUiTableActionContract =
+  | FormlessUiTableEditActionContract
+  | FormlessUiTableInvokeActionContract
+  | FormlessUiTableOperationActionContract;
+
+export type FormlessUiTableActionGroupContract = {
+  id: string;
+  kind: "actionGroup";
+  primary: readonly FormlessUiTableActionContract[];
+  secondary: readonly FormlessUiTableActionContract[];
+  secondaryAccessibilityLabel: string;
+};
+
+export type FormlessUiTableOrderingActionContract = FormlessUiActionControlState & {
+  direction: FormlessUiTableReorderIntent["direction"];
+  id: string;
+  intent: FormlessUiTableReorderIntent;
+  label: string;
+};
+
+export type FormlessUiTableOrderingContract = {
+  accessibilityLabel: string;
+  actions: readonly FormlessUiTableOrderingActionContract[];
+  affordance: "reorder";
+  kind: "ordering";
+  pending: boolean;
+};
+
+export type FormlessUiTableCellContentContract =
+  | FormlessUiTableActionGroupContract
+  | FormlessUiTableDisplayValueContract
+  | FormlessUiTableFieldContentContract
+  | FormlessUiTableOrderingContract
+  | FormlessUiTableUnavailableContentContract;
+
+export type FormlessUiTableCellContract = {
+  columnId: string;
+  contents: readonly FormlessUiTableCellContentContract[];
+  id: string;
+  kind: "tableCell";
+};
+
+export type FormlessUiTableWarningContract = {
+  id: string;
+  items: readonly {
+    code: string;
+    message: string;
+  }[];
+  kind: "tableWarning";
+  title: string;
+};
+
+export type FormlessUiTableRowContract = {
+  accessibilityLabel: string;
+  cells: readonly FormlessUiTableCellContract[];
+  id: string;
+  kind: "tableRow";
+  warnings: readonly FormlessUiTableWarningContract[];
+};
+
+export type FormlessUiTableFooterCellContract =
+  | {
+      columnId: string;
+      id: string;
+      kind: "emptyFooterCell";
+    }
+  | {
+      accessibilityLabel: string;
+      columnId: string;
+      displayValue: string;
+      id: string;
+      kind: "aggregateFooterCell";
+      status: FormlessUiTableValueStatus;
+      suffix?: string;
+    };
+
+export type FormlessUiTableFooterContract = {
+  accessibilityLabel: string;
+  cells: readonly FormlessUiTableFooterCellContract[];
+  id: string;
+  kind: "tableFooter";
+};
+
+export type FormlessUiTableEmptyStateContract = {
+  action?: FormlessUiTableActionContract;
+  description?: string;
+  id: string;
+  kind: "tableEmptyState";
+  title: string;
+};
+
+export type FormlessUiTableEditingAvailability =
+  | {
+      enabled: true;
+    }
+  | {
+      disabledReason: string;
+      enabled: false;
+    };
+
 export type FormlessUiTableContract = {
+  accessibilityLabel: string;
+  columns: readonly FormlessUiTableColumnContract[];
+  density: FormlessUiTableDensity;
+  editing: FormlessUiTableEditingAvailability;
+  emptyState?: FormlessUiTableEmptyStateContract;
+  footer?: FormlessUiTableFooterContract;
+  id: string;
   kind: "table";
-  fields: readonly FormlessUiField[];
-  operationControls?: readonly FormlessUiOperationControlContract[];
+  rows: readonly FormlessUiTableRowContract[];
 };
 
 export type FormlessUiCreateOpenIntent = {

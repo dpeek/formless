@@ -256,6 +256,7 @@ export function AstryxOperationDestructiveConfirmation({
       onAction={facts.onAction}
       onOpenChange={facts.onOpenChange}
       title={facts.title}
+      xstyle={styles.confirmationDialog}
     />
   );
 }
@@ -466,7 +467,7 @@ function operationProgressStepStatusLabel(status: FormlessUiOperationProgressSte
   return labels[status];
 }
 
-function operationIcon(icon: FormlessUiSemanticIconId) {
+export function operationIcon(icon: FormlessUiSemanticIconId) {
   return <Icon color="inherit" icon={operationIconComponents[icon]} size="sm" />;
 }
 
@@ -498,6 +499,9 @@ const operationIconComponents = {
 } satisfies Record<FormlessUiSemanticIconId, IconType>;
 
 const styles = stylex.create({
+  confirmationDialog: {
+    textAlign: "start",
+  },
   copy: {
     minWidth: 0,
   },

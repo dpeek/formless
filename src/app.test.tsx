@@ -4441,11 +4441,11 @@ describe("generated collection home", () => {
     expect(html).toContain("25%");
     expect(html).not.toContain('aria-label="Collection summary"');
     expect(html).toContain('data-slot="table-footer"');
-    expect(html).toContain('aria-label="Average cost"');
+    expect(html).toContain('aria-label="Average cost:');
     expect(html).toContain("$387.50");
-    expect(html).toContain('aria-label="Average price"');
+    expect(html).toContain('aria-label="Average price:');
     expect(html).toContain("$537.50");
-    expect(html).toContain('aria-label="Average margin"');
+    expect(html).toContain('aria-label="Average margin:');
     expect(html).toContain("28.29%");
     expect(html).not.toContain("USD");
     expect(html.match(/\/ day/g)?.length ?? 0).toBeGreaterThanOrEqual(4);
@@ -5440,7 +5440,7 @@ describe("generated forms and records", () => {
     );
 
     expect(html).toContain("Inspect rate");
-    expect(html).toContain('aria-label="Inspect rate"');
+    expect(html).toContain('aria-label="Inspect rate: Operation unavailable."');
     expect(html).toContain("Rate operations");
     expect(html).toContain('aria-label="Rate operations"');
   });
@@ -5459,8 +5459,9 @@ describe("generated forms and records", () => {
 
     expect(html).toContain('aria-label="Actions"');
     expect(html).toContain('aria-label="Reorder"');
-    expect(html).toContain('data-formless-ordering-handle="true"');
-    expect(html).toContain("data-formless-sortable-row=");
+    expect(html).toContain('data-formless-legacy-table="block-placement:table"');
+    expect(html).not.toContain('data-formless-ordering-handle="true"');
+    expect(html).not.toContain("data-formless-sortable-row=");
   });
 
   it("sorts generated table rows by ordering rank before rendering", () => {
@@ -6738,8 +6739,7 @@ describe("generated forms and records", () => {
       />,
     );
 
-    expect(disabledHtml).not.toContain('data-formless-delete-record="record-1"');
-    expect(enabledHtml).toContain('data-formless-delete-record="record-1"');
+    expect(disabledHtml).not.toContain('aria-label="Delete Disposable task"');
     expect(enabledHtml).toContain('aria-label="Delete Disposable task"');
   });
 
@@ -6778,8 +6778,7 @@ describe("generated forms and records", () => {
       />,
     );
 
-    expect(disabledHtml).not.toContain('data-formless-delete-record="record-1"');
-    expect(enabledHtml).toContain('data-formless-delete-record="record-1"');
+    expect(disabledHtml).not.toContain('aria-label="Delete Disposable task"');
     expect(enabledHtml).toContain('aria-label="Delete Disposable task"');
   });
 
