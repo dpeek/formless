@@ -7,6 +7,7 @@ import { FormlessCreateSurfacesLayout } from "./components/create-surfaces.tsx";
 import { FormlessCanonicalFieldsLayout } from "./components/formless-ui-fields.tsx";
 import { FormlessFieldsLayout } from "./components/fields.tsx";
 import { FormlessGeneratedFieldsLayout } from "./components/generated-fields.tsx";
+import { FormlessListsLayout } from "./components/lists.tsx";
 import { FormlessOperationsLayout } from "./components/operations.tsx";
 import { FormlessSiteLayout } from "./components/site.tsx";
 import { FormlessAppShell } from "./components/shell.tsx";
@@ -33,6 +34,7 @@ const formlessPrototypeLayouts: FormlessPrototypeLayout[] = [
   createFormlessPrototypeLayout("Fields", () => <FormlessFieldsLayout />),
   createFormlessPrototypeLayout("Canonical Fields", () => <FormlessCanonicalFieldsLayout />),
   createFormlessPrototypeLayout("Generated Fields", () => <FormlessGeneratedFieldsLayout />),
+  createFormlessPrototypeLayout("Lists", () => <FormlessListsLayout />),
   createFormlessPrototypeLayout("Tables", () => <FormlessTablesLayout />),
 ];
 

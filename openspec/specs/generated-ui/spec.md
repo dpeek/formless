@@ -237,10 +237,130 @@ summary slots, operation controls, and schema-declared result types.
 
 #### Scenario: Ordered list result
 
-- GIVEN a list result declares ordering and generated drag handles
-- WHEN the user reorders records
+- GIVEN a list result declares ordering
+- WHEN the user selects an available list-item move action
 - THEN generated UI patches the declared rank field
 - AND field editors, delete controls, readiness warnings, visible union fields, and ordering behavior remain available in the list
+- AND list ordering does not require a drag-handle gesture when equivalent
+  projected move actions preserve the declared ordering capability
+
+### Requirement: Generated List Renderer Contract
+
+The system SHALL project complete generated list results through a controlled
+renderer-neutral Formless UI list contract before selecting the active
+renderer, while generated runtime code owns record reads, authoring state,
+operation execution, and ordering effects.
+
+#### Scenario: Project complete list result
+
+- GIVEN generated UI selects a list result model
+- WHEN generated runtime prepares the list for the active Formless UI renderer
+- THEN it projects a stable list id, accessible label, density, ordered items,
+  empty state, and editing availability
+- AND each list item carries a stable id, accessible label, projected record
+  fields, explicit primary and secondary actions, optional ordering actions,
+  and display-safe readiness warnings
+- AND ordinary and specialized list fields cross their applicable Formless UI
+  field contract boundaries instead of entering the list renderer as legacy
+  field components or renderer callbacks
+- AND state transitions, delete controls, destructive confirmations, pending
+  state, and execution feedback compose existing operation-control contracts
+  where applicable
+- AND generated runtime retains query evaluation, record and system-field
+  reads, active union and `visibleWhen` selection, draft sessions, reference and
+  media option loading, media effects, operation controllers, ordering plans,
+  sync feedback, and local auto-save behavior
+- AND the list contract does not expose `StoredRecord`, `ListResultModel`,
+  `GeneratedOperationControlBinding`, ordering patch plans, DnD library events,
+  browser replica hooks, app targets, sync setters, Tailwind classes, React
+  nodes, or renderer-specific component props
+
+#### Scenario: Project list actions and ordering intents
+
+- GIVEN a generated list item exposes transition, delete, or ordering controls
+- WHEN generated runtime prepares list-item interaction data
+- THEN the list contract carries explicit action hierarchy, availability,
+  disabled reasons, pending state, controlled destructive confirmation, and
+  semantic invocation and confirmation-open intents
+- AND ordering data carries display-safe top, up, down, and bottom move labels,
+  structural availability, pending state, and semantic reorder intents without
+  exposing sparse-rank calculations or drag event payloads
+- AND generated runtime selects visible fields, resolves record labels, builds
+  operation caller input, calculates ordering moves, invokes operations, and
+  closes controlled confirmation only according to operation results
+- AND renderers keep list items non-interactive when the item contains nested
+  field editors or actions instead of creating nested interactive targets
+- AND renderers may choose accessible menus or direct controls that preserve
+  projected list-item capabilities without recreating legacy drag gestures,
+  action placement, or row markup one-for-one
+
+#### Scenario: Legacy renderer consumes the list contract
+
+- GIVEN production generated lists currently render legacy Formless UI object
+  list, field, menu, warning, ordering, transition, and delete components
+- WHEN generated runtime projects a complete list result
+- THEN a dedicated legacy list adapter renders only the projected list, item,
+  field, operation, warning, empty-state, and ordering contracts and dispatches
+  their intents
+- AND production list paths for ordered records, visible union fields, ordinary
+  and specialized editors, state transitions, delete confirmation, readiness
+  warnings, editing-disabled state, and empty state cross that adapter boundary
+- AND the legacy adapter does not query records, select union fields, own draft
+  sessions, load reference or media options, build operation input, calculate
+  rank patches, execute operations, or update sync state
+- AND production list rendering does not use raw model callbacks, legacy
+  React-node slots, or DnD event types to bypass the renderer-neutral contract
+- AND focused coverage asserts projected facts, intent dispatch, successful and
+  failed field edits, transition and delete behavior, ordering behavior,
+  warnings, empty state, and visible fallbacks instead of legacy HTML structure
+  or one-to-one visual parity
+- AND production remains on the legacy renderer after this contract migration
+
+#### Scenario: Astryx list renderer
+
+- GIVEN the legacy renderer consumes the complete production list contract
+- WHEN the replacement renderer implements the same contract in `lib/astryx`
+- THEN it uses Astryx list, field, action, menu, empty-state, status, tooltip,
+  and feedback primitives without importing generated runtime
+- AND the list uses a visible or assistive heading, consistent density, optional
+  dividers, and non-interactive list items that compose nested controlled fields
+  and actions without turning the whole item into a click target
+- AND projected primary actions remain visible where applicable while secondary,
+  destructive, and ordering actions use accessible overflow interactions
+- AND ordering menus omit structurally unavailable boundary moves while
+  retaining pending moves and their projected status
+- AND readiness warnings use a compact accessible indicator whose tooltip or
+  status presentation contains only projected warning messages
+- AND empty states use only projected title, description, and optional action
+  facts rather than inventing unavailable create behavior
+- AND replacement-renderer behavior follows Astryx list and action hierarchy
+  conventions rather than recreating legacy object-list markup, Tailwind
+  spacing, drag handles, or test-only attributes
+- AND the Astryx list renderer contains no Tailwind classes, legacy Formless UI
+  components, storage reads, operation execution, sync effects, or runtime data
+  imports
+- AND adding the renderer does not export or activate Astryx in production or
+  introduce Astryx theme and global CSS into runtime entrypoints
+
+#### Scenario: Astryx list contract fixtures
+
+- GIVEN the legacy renderer consumes complete production list contracts
+- WHEN list UX is evaluated in the package-local Astryx prototype
+- THEN data-only fixtures use the same contract shapes to cover editable and
+  read-only fields, active union variants, state transitions, destructive
+  confirmation, ordering boundaries, readiness warnings, editing-disabled
+  state, empty state, and pending or invalid items
+- AND a dedicated Lists layout renders a real Astryx list instead of extending
+  the generated field-type explorer with simulated list chrome
+- AND package-local fixture state may simulate field, operation, confirmation,
+  and reorder intents for UX review but does not import generated runtime,
+  storage, browser replica, operation controllers, ordering plans, sync, or app
+  targets
+- AND the fixtures contain no Tailwind classes and do not export or activate the
+  Astryx list renderer in production
+- AND collection tabs, context selection, summaries, collection toolbars,
+  record and tree results, public Site rendering, shell navigation, and the
+  production renderer switch remain owned by later slices
 
 ### Requirement: Table Surfaces
 

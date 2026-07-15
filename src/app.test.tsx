@@ -3806,13 +3806,12 @@ describe("generated collection home", () => {
     );
     const html = renderRoute("/tasks");
 
-    expect(countOccurrences(html, 'data-slot="object-list"')).toBe(1);
-    expect(countOccurrences(html, 'data-slot="object-list-grid"')).toBe(1);
+    expect(countOccurrences(html, 'data-formless-legacy-list="task:taskListItem"')).toBe(1);
     expect(html).toContain('aria-label="Task records"');
-    expect(html).toContain('role="grid"');
-    expect(html).toContain('data-key="record-1"');
-    expect(html).toContain('data-key="record-2"');
-    expect(html).toContain('data-key="record-3"');
+    expect(html).toContain('role="list"');
+    expect(html).toContain('data-formless-list-item="record-1"');
+    expect(html).toContain('data-formless-list-item="record-2"');
+    expect(html).toContain('data-formless-list-item="record-3"');
     expect(html).toMatch(/aria-label="All count"[^>]*>3</);
     expect(html).toMatch(/aria-label="Active count"[^>]*>2</);
     expect(html).toMatch(/aria-label="Completed count"[^>]*>1</);
@@ -3842,9 +3841,9 @@ describe("generated collection home", () => {
       />,
     );
 
-    expect(html).toContain('data-slot="object-list"');
+    expect(html).toContain('data-formless-legacy-list="task:taskListItem"');
     expect(html).toContain('aria-label="Task records"');
-    expect(html).toContain('role="grid"');
+    expect(html).toContain('role="list"');
     expect(html).toContain("First");
     expect(html).toContain('type="text"');
     expect(html).toContain('type="checkbox"');
@@ -3863,7 +3862,7 @@ describe("generated collection home", () => {
     expect(html).not.toContain(record.createdAt);
   });
 
-  it("sorts generated list rows by result ordering and renders drag handles", () => {
+  it("sorts generated list items and projects directional ordering actions without drag handles", () => {
     const schema = taskListOrderingSchema();
     const model = requiredCollectionModel(schema, "taskHome");
 
@@ -3885,16 +3884,12 @@ describe("generated collection home", () => {
     expect(firstIndex).toBeGreaterThan(-1);
     expect(firstIndex).toBeLessThan(secondIndex);
     expect(secondIndex).toBeLessThan(thirdIndex);
-    expect(html).toContain('data-slot="object-list"');
-    expect(html).toContain(
-      'data-object-list-action-labels="Move to top|Move up|Move down|Move to bottom"',
-    );
-    expect(html).toContain(
-      'data-object-list-disabled-action-labels="Move to top: Already first|Move up: Already first"',
-    );
-    expect(html).toContain("Move to bottom");
-    expect(html).toContain('data-formless-sortable-list-item="record-1"');
-    expect(html.match(/data-formless-ordering-handle="true"/g) ?? []).toHaveLength(3);
+    expect(html).toContain('data-formless-legacy-list="task:taskListItem"');
+    expect(html).toContain('aria-label="Reorder First"');
+    expect(html).toContain('aria-label="Reorder Second"');
+    expect(html).toContain('aria-label="Reorder Third"');
+    expect(html).not.toContain("data-formless-sortable-list-item");
+    expect(html).not.toContain('data-formless-ordering-handle="true"');
   });
 
   it("renders clear-completed target count and keeps the button enabled at zero", () => {
@@ -6739,8 +6734,8 @@ describe("generated forms and records", () => {
       />,
     );
 
-    expect(disabledHtml).not.toContain('aria-label="Delete Disposable task"');
-    expect(enabledHtml).toContain('aria-label="Delete Disposable task"');
+    expect(disabledHtml).not.toContain('aria-label="More actions for Disposable task"');
+    expect(enabledHtml).toContain('aria-label="More actions for Disposable task"');
   });
 
   it("renders generated table delete controls only when entity policy enables them", () => {

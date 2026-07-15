@@ -1,10 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect } from "react";
 import { Badge } from "@dpeek/formless-ui/badge";
-import {
-  ObjectList,
-  type ObjectListAction,
-  type ObjectListReorderIntent,
-} from "@dpeek/formless-ui/object-list";
 import { Tab, TabList, Tabs } from "@dpeek/formless-ui/tabs";
 import {
   useAggregateValueMatchingQuery,
@@ -13,10 +8,8 @@ import {
   useEntityRecordIdsMatchingQuery,
   useEntityRecordOptionsMatchingQuery,
   useRecord,
-  useRecordsById,
   useRecordReadinessWarnings,
 } from "../../client/store.ts";
-import { setSyncStatus } from "../../client/sync-status.ts";
 import {
   selectGeneratedContextSelectionFacts,
   type GeneratedContextSelectionFacts,
@@ -28,25 +21,14 @@ import type {
   HomeSummarySlotConfig,
   RecordFieldConfig,
   RelatedCollectionConfig,
-  RecordUnionPresentationConfig,
 } from "../../client/views.ts";
-import { projectOrderingMoveOperationControlBinding } from "../../client/views.ts";
 import type { CollectionResultModel } from "../../client/collection-result-model.ts";
-import type { ListResultModel, RecordResultModel } from "../../client/list-result-model.ts";
+import type { RecordResultModel } from "../../client/list-result-model.ts";
 import type { QueryEvaluationContext } from "@dpeek/formless-schema";
-import type { StoredRecord } from "@dpeek/formless-storage";
 import type { EntitySchema } from "@dpeek/formless-schema";
 import { HomeOperationRow } from "./operations.tsx";
 import { GeneratedCreateSurface } from "./create.tsx";
 import { formatAggregateDisplayValue } from "./format.ts";
-import {
-  calculateOrderingDragMovePlanForContext,
-  selectOrderingDragFacts,
-  selectOrderingMoveMenuItems,
-  selectResultOrderingContext,
-  type OrderingMoveDirection,
-  type OrderingMoveMenuItem,
-} from "./ordering-ui.ts";
 import { RecordReadinessWarnings } from "./readiness-warnings.tsx";
 import { DeleteRecordButton } from "./record-delete.tsx";
 import { RecordFieldEditor } from "./record-field-editor.tsx";
@@ -54,11 +36,7 @@ import { RecordTransitionOperationControls } from "./state-machine-ui.tsx";
 import { RecordTable } from "./table.tsx";
 import { RecordTree } from "./tree.tsx";
 import { selectRecordFieldsForActiveUnion } from "./union-presentation.ts";
-import {
-  executeGeneratedOrderingMoveOperation,
-  useGeneratedOperationController,
-  useGeneratedOperationControllerVersion,
-} from "./operation-control-runtime.ts";
+import { GeneratedRecordListFoundation } from "./generated-list-runtime.tsx";
 
 export function HomeCollection({
   collection,
@@ -838,7 +816,7 @@ function CollectionResult({
   }
 
   return (
-    <RecordList
+    <GeneratedRecordListFoundation
       entity={entity}
       entityName={entityName}
       query={query}
@@ -919,383 +897,4 @@ function RecordDetail({
   );
 }
 
-type RecordListItem = {
-  recordId: string;
-};
-
-export function RecordList({
-  entity,
-  entityName,
-  query,
-  queryContext,
-  result,
-}: {
-  entity: EntitySchema;
-  entityName: string;
-  query: HomeQueryTabConfig["query"];
-  queryContext?: QueryEvaluationContext;
-  result: ListResultModel;
-}) {
-  const { ordering, recordFields, recordUnion } = result;
-  const [pendingOrderingRecordId, setPendingOrderingRecordId] = useState<string | null>(null);
-  const recordIds = useEntityRecordIdsMatchingQuery(entityName, query, queryContext);
-  const recordsById = useRecordsById();
-  const orderingContext = selectResultOrderingContext({
-    entityName,
-    ordering,
-    recordIds,
-    recordsById,
-    updateOperation: result.updateOperation,
-  });
-  const orderedRecordIds = orderingContext?.orderedRecordIds ?? recordIds;
-  const orderingDragFacts = selectOrderingDragFacts(orderingContext);
-  const listItems = orderedRecordIds.map((recordId) => ({ recordId }));
-  const hasDragOrdering = orderingContext !== undefined && orderingDragFacts !== undefined;
-  const hasMoveMenuOrdering = orderingContext?.ordering.presentations.includes("moveMenu") === true;
-  const orderingBindings = useMemo(
-    () =>
-      orderingContext?.updateOperation === undefined
-        ? []
-        : orderingMoveBindingDirections.map(({ direction, label }) =>
-            projectOrderingMoveOperationControlBinding({
-              direction,
-              label,
-              ordering: orderingContext.ordering,
-              updateOperation: orderingContext.updateOperation,
-            }),
-          ),
-    [orderingContext],
-  );
-  const definedOrderingBindings = useMemo(
-    () => orderingBindings.filter((binding) => binding !== undefined),
-    [orderingBindings],
-  );
-  const orderingController = useGeneratedOperationController(definedOrderingBindings);
-  useGeneratedOperationControllerVersion(orderingController);
-  const orderingBindingsByDirection = useMemo(
-    () =>
-      new Map(
-        orderingMoveBindingDirections.flatMap(({ direction }, index) => {
-          const binding = orderingBindings[index];
-
-          return binding === undefined ? [] : [[direction, binding]];
-        }),
-      ),
-    [orderingBindings],
-  );
-
-  async function submitOrderingPlan({
-    binding,
-    failureMessage,
-    plan,
-    recordId,
-    successMessage,
-    syncingMessage,
-  }: {
-    binding: ReturnType<typeof projectOrderingMoveOperationControlBinding>;
-    failureMessage: string;
-    plan: OrderingMoveMenuItem["plan"];
-    recordId: string;
-    successMessage: string;
-    syncingMessage: string;
-  }) {
-    if (!orderingContext || plan.kind !== "patch") {
-      if (plan.kind === "rebalance") {
-        setSyncStatus({ state: "error", message: "Rebalance required before reorder." });
-      }
-      return;
-    }
-
-    if (binding === undefined) {
-      setSyncStatus({ state: "error", message: failureMessage });
-      return;
-    }
-
-    setPendingOrderingRecordId(recordId);
-
-    try {
-      await executeGeneratedOrderingMoveOperation({
-        binding,
-        controller: orderingController,
-        failedMessage: failureMessage,
-        orderingContext,
-        plan,
-        source: "button",
-        successMessage,
-        syncingMessage,
-      });
-    } finally {
-      setPendingOrderingRecordId(null);
-    }
-  }
-
-  async function handleOrderingReorder(intent: ObjectListReorderIntent) {
-    if (!orderingContext || !orderingDragFacts) {
-      return;
-    }
-
-    const recordId = firstRecordIdFromKeys(intent.keys);
-    const targetRecordId = String(intent.targetKey);
-
-    if (!recordId || recordId === targetRecordId) {
-      return;
-    }
-
-    const sourceFact = orderingDragFacts.get(recordId);
-    const targetFact = orderingDragFacts.get(targetRecordId);
-
-    if (!sourceFact || !targetFact || !orderingContext.updateOperation) {
-      return;
-    }
-
-    if (sourceFact.scopeKey !== targetFact.scopeKey) {
-      setSyncStatus({ state: "idle", message: "Cross-scope list item move ignored." });
-      return;
-    }
-
-    const plan = calculateOrderingDragMovePlanForContext({
-      orderingContext,
-      recordId,
-      targetIndex: objectListReorderTargetIndex({
-        currentIndex: sourceFact.index,
-        position: intent.position,
-        targetIndex: targetFact.index,
-      }),
-    });
-
-    await submitOrderingPlan({
-      binding: orderingBindingsByDirection.get("drag"),
-      failureMessage: "Drag reorder failed.",
-      plan,
-      recordId,
-      successMessage: "List item moved and synced.",
-      syncingMessage: "Moving list item...",
-    });
-  }
-
-  async function invokeOrderingMove(recordId: string, item: OrderingMoveMenuItem) {
-    if (item.disabled || pendingOrderingRecordId !== null) {
-      return;
-    }
-
-    await submitOrderingPlan({
-      binding: orderingBindingsByDirection.get(item.direction),
-      failureMessage: "Move failed.",
-      plan: item.plan,
-      recordId,
-      successMessage: "List item moved and synced.",
-      syncingMessage: `${item.label}...`,
-    });
-  }
-
-  function recordActions(item: RecordListItem): ObjectListAction<RecordListItem>[] {
-    const orderingItems = selectOrderingMoveMenuItems({
-      includeOrdering: hasMoveMenuOrdering,
-      orderingContext,
-      sourceRecordId: item.recordId,
-    });
-
-    return orderingItems.map((orderingItem) => ({
-      id: `ordering:${orderingItem.direction}`,
-      label: orderingItem.label,
-      disabled: orderingItem.disabled || pendingOrderingRecordId !== null,
-      disabledReason:
-        pendingOrderingRecordId !== null ? "Move already pending" : orderingItem.disabledReason,
-      onAction: () => {
-        void invokeOrderingMove(item.recordId, orderingItem);
-      },
-    }));
-  }
-
-  return (
-    <section className="space-y-3">
-      {!result.updateOperation && recordIds.length > 0 ? (
-        <p className="text-sm text-slate-600">Editing is disabled for {entity.label}.</p>
-      ) : null}
-
-      <ObjectList
-        emptyState="No records yet."
-        getItemActions={recordActions}
-        getKey={(item) => item.recordId}
-        getTextValue={(item) =>
-          recordListTextValue({
-            entity,
-            record: recordsById[item.recordId],
-            recordFields,
-            recordId: item.recordId,
-            recordUnion,
-          })
-        }
-        gridClassName="gap-0 divide-y divide-slate-200 rounded border-slate-200 bg-bg p-0"
-        hideLabel={true}
-        itemClassName="rounded-none px-0 py-0 hover:bg-secondary/50"
-        items={listItems}
-        label={`${entity.label} records`}
-        renderItem={({ item }) => (
-          <RecordRow
-            deleteOperation={result.deleteOperation}
-            entity={entity}
-            entityName={entityName}
-            recordFields={recordFields}
-            recordUnion={recordUnion}
-            recordId={item.recordId}
-            showOrderingHandle={hasDragOrdering}
-            transitionOperations={result.transitionOperations}
-            updateOperation={result.updateOperation}
-          />
-        )}
-        reorder={
-          orderingContext && orderingDragFacts
-            ? {
-                label: "Drag record",
-                disabled: !orderingContext.updateOperation || pendingOrderingRecordId !== null,
-                disabledReason:
-                  pendingOrderingRecordId !== null
-                    ? "Move already pending"
-                    : !orderingContext.updateOperation
-                      ? "Editing is disabled"
-                      : undefined,
-                dragHandleDataAttributes: { "data-formless-ordering-handle": "true" },
-                onReorder: (intent) => {
-                  void handleOrderingReorder(intent);
-                },
-              }
-            : undefined
-        }
-      />
-    </section>
-  );
-}
-
-const orderingMoveBindingDirections: Array<{
-  direction: OrderingMoveDirection | "drag";
-  label: string;
-}> = [
-  { direction: "drag", label: "Move list item" },
-  { direction: "top", label: "Move to top" },
-  { direction: "up", label: "Move up" },
-  { direction: "down", label: "Move down" },
-  { direction: "bottom", label: "Move to bottom" },
-];
-
-function firstRecordIdFromKeys(keys: ObjectListReorderIntent["keys"]) {
-  const key = keys.values().next().value;
-
-  if (key === undefined) {
-    return undefined;
-  }
-
-  return String(key);
-}
-
-function objectListReorderTargetIndex({
-  currentIndex,
-  position,
-  targetIndex,
-}: {
-  currentIndex: number;
-  position: ObjectListReorderIntent["position"];
-  targetIndex: number;
-}) {
-  const rawTargetIndex = targetIndex + (position === "after" ? 1 : 0);
-
-  return Math.max(0, currentIndex < rawTargetIndex ? rawTargetIndex - 1 : rawTargetIndex);
-}
-
-function recordListTextValue({
-  entity,
-  record,
-  recordFields,
-  recordId,
-  recordUnion,
-}: {
-  entity: EntitySchema;
-  record: StoredRecord | undefined;
-  recordFields: RecordFieldConfig[];
-  recordId: string;
-  recordUnion?: RecordUnionPresentationConfig;
-}) {
-  const visibleFields = selectRecordFieldsForActiveUnion(recordFields, recordUnion, record);
-
-  for (const field of visibleFields) {
-    const value = record?.values[field.fieldName];
-
-    if (typeof value === "string" && value.trim() !== "") {
-      return value;
-    }
-  }
-
-  return `${entity.label} ${record?.id ?? recordId}`;
-}
-
-function RecordRow({
-  deleteOperation,
-  entity,
-  entityName,
-  recordFields,
-  recordUnion,
-  recordId,
-  showOrderingHandle = false,
-  transitionOperations,
-  updateOperation,
-}: {
-  deleteOperation?: ListResultModel["deleteOperation"];
-  entity: EntitySchema;
-  entityName: string;
-  recordFields: RecordFieldConfig[];
-  recordUnion?: RecordUnionPresentationConfig;
-  recordId: string;
-  showOrderingHandle?: boolean;
-  transitionOperations: ListResultModel["transitionOperations"];
-  updateOperation?: ListResultModel["updateOperation"];
-}) {
-  const record = useRecord(recordId);
-  const warnings = useRecordReadinessWarnings(recordId);
-  const visibleFields = selectRecordFieldsForActiveUnion(recordFields, recordUnion, record);
-
-  return (
-    <div
-      className="group/record-row p-3"
-      data-formless-sortable-list-item={showOrderingHandle ? recordId : undefined}
-    >
-      <div className="flex items-center gap-2">
-        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-          {visibleFields.map((fieldConfig) => (
-            <RecordFieldEditor
-              entityName={entityName}
-              fieldConfig={fieldConfig}
-              key={recordFieldEditorKey(entityName, recordId, fieldConfig.fieldName)}
-              recordId={recordId}
-              updateOperation={updateOperation}
-            />
-          ))}
-        </div>
-        {transitionOperations.length > 0 ? (
-          <RecordTransitionOperationControls
-            operations={transitionOperations}
-            className="shrink-0"
-            entityName={entityName}
-            recordId={recordId}
-            values={record?.values}
-          />
-        ) : null}
-        {deleteOperation ? (
-          <DeleteRecordButton
-            className="shrink-0"
-            deleteOperation={deleteOperation}
-            entityLabel={entity.label}
-            entityName={entityName}
-            labelFields={visibleFields}
-            recordId={recordId}
-            triggerData={{ "data-formless-delete-record": recordId }}
-          />
-        ) : null}
-      </div>
-      {warnings.length > 0 ? (
-        <div className="mt-3">
-          <RecordReadinessWarnings warnings={warnings} />
-        </div>
-      ) : null}
-    </div>
-  );
-}
+export { GeneratedRecordListFoundation as RecordList };

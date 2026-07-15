@@ -871,6 +871,109 @@ export type FormlessUiFieldSetContract = {
   label?: string;
 };
 
+export type FormlessUiListDensity = "compact" | "default";
+
+export type FormlessUiListReorderIntent = {
+  actionId: string;
+  direction: "bottom" | "down" | "top" | "up";
+  itemId: string;
+  listId: string;
+  type: "listReorder";
+};
+
+export type FormlessUiListIntent = FormlessUiListReorderIntent;
+
+export type FormlessUiListIntentHandler = (intent: FormlessUiListIntent) => Promise<void> | void;
+
+export type FormlessUiListOperationActionContract = {
+  control: FormlessUiOperationControlContract;
+  kind: "operationAction";
+  role: "command" | "delete" | "transition";
+};
+
+export type FormlessUiListActionContract = FormlessUiListOperationActionContract;
+
+export type FormlessUiListActionGroupContract = {
+  id: string;
+  kind: "actionGroup";
+  primary: readonly FormlessUiListActionContract[];
+  secondary: readonly FormlessUiListActionContract[];
+  secondaryAccessibilityLabel: string;
+};
+
+export type FormlessUiListOrderingActionContract = FormlessUiActionControlState & {
+  direction: FormlessUiListReorderIntent["direction"];
+  id: string;
+  intent: FormlessUiListReorderIntent;
+  label: string;
+  structurallyAvailable: boolean;
+};
+
+export type FormlessUiListOrderingContract = {
+  accessibilityLabel: string;
+  actions: readonly FormlessUiListOrderingActionContract[];
+  affordance: "reorder";
+  kind: "ordering";
+  pending: boolean;
+};
+
+export type FormlessUiListWarningContract = {
+  id: string;
+  items: readonly {
+    code: string;
+    message: string;
+  }[];
+  kind: "listWarning";
+  title: string;
+};
+
+export type FormlessUiListItemAvailability =
+  | {
+      available: true;
+    }
+  | {
+      available: false;
+      message: string;
+    };
+
+export type FormlessUiListItemContract = {
+  accessibilityLabel: string;
+  actions: FormlessUiListActionGroupContract;
+  availability: FormlessUiListItemAvailability;
+  fields: readonly FormlessUiField[];
+  id: string;
+  kind: "listItem";
+  ordering?: FormlessUiListOrderingContract;
+  warnings: readonly FormlessUiListWarningContract[];
+};
+
+export type FormlessUiListEmptyStateContract = {
+  action?: FormlessUiListActionContract;
+  description?: string;
+  id: string;
+  kind: "listEmptyState";
+  title: string;
+};
+
+export type FormlessUiListEditingAvailability =
+  | {
+      enabled: true;
+    }
+  | {
+      disabledReason: string;
+      enabled: false;
+    };
+
+export type FormlessUiListContract = {
+  accessibilityLabel: string;
+  density: FormlessUiListDensity;
+  editing: FormlessUiListEditingAvailability;
+  emptyState?: FormlessUiListEmptyStateContract;
+  id: string;
+  items: readonly FormlessUiListItemContract[];
+  kind: "list";
+};
+
 export type FormlessUiTableDensity = "compact" | "default";
 
 export type FormlessUiTableColumnAlignment = "center" | "end" | "start";
