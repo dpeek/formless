@@ -221,11 +221,16 @@ summary slots, operation controls, and schema-declared result types.
 
 - GIVEN the generated collection renderer in `src/app/generated/collection.tsx`
 - WHEN it renders selected `list`, `record`, `table`, or `tree` result models
-- THEN it passes selected result models to `RecordList`, record detail, `RecordTable`, or `RecordTree`
-- AND `RecordList` consumes list result facts from `src/client/list-result-model.ts`
-- AND record detail consumes record result facts from `src/client/list-result-model.ts`
-- AND `RecordTable` consumes table result facts selected through `src/client/collection-result-model.ts`
+- THEN list, record, and table result models pass through generated foundations
+  that project their canonical renderer contracts before the active legacy
+  adapters render them
+- AND list and record foundations consume result facts from
+  `src/client/list-result-model.ts`
+- AND the table foundation consumes table result facts selected through
+  `src/client/collection-result-model.ts`
 - AND `RecordTree` consumes tree result facts from `src/client/tree-result-model.ts`
+- AND record-result fields, actions, warnings, empty state, and availability are
+  not composed directly in the collection renderer
 - AND generated ordering UI consumes result ordering facts from `src/client/result-ordering-model.ts`
 
 #### Scenario: List-detail context
@@ -361,6 +366,111 @@ operation execution, and ordering effects.
 - AND collection tabs, context selection, summaries, collection toolbars,
   record and tree results, public Site rendering, shell navigation, and the
   production renderer switch remain owned by later slices
+
+### Requirement: Generated Record Result Renderer Contract
+
+The system SHALL project complete generated record results through a controlled
+renderer-neutral Formless UI record-result contract before selecting the active
+renderer, while generated runtime code owns record selection, authoring state,
+operation execution, and effects.
+
+#### Scenario: Project complete record result
+
+- GIVEN generated UI selects a record result model
+- WHEN generated runtime prepares the result for the active Formless UI renderer
+- THEN it projects a stable result id, accessible label, density, ready, empty,
+  or unavailable state, selected record identity, editing availability, ordered
+  fields, explicit action hierarchy, display-safe readiness warnings, and
+  operation feedback
+- AND ordinary, read-only, icon, media, color, value-unit, quiet-date, Markdown,
+  rich-enum, and state-machine fields cross their applicable Formless UI field
+  contract boundaries instead of entering the result renderer as legacy field
+  components or renderer callbacks
+- AND state-machine fields carry display-safe lifecycle presentation while valid
+  transition and delete actions compose operation-control contracts with
+  availability, pending, confirmation, and feedback facts
+- AND generated runtime retains query evaluation, first-record selection, record
+  and system-field reads, active union and `visibleWhen` selection, draft
+  sessions, reference and media option loading, icon dialog state, media upload
+  effects, operation controllers, warning selection, sync feedback, and local
+  auto-save behavior
+- AND the record-result contract does not expose `StoredRecord`,
+  `RecordResultModel`, query expressions, operation bindings, browser replica
+  hooks, app targets, sync setters, Tailwind classes, React nodes, runtime
+  callbacks, or renderer-specific component props
+
+#### Scenario: Project record-result intents
+
+- GIVEN a ready record result contains editable fields, state transitions, or a
+  delete action
+- WHEN generated runtime prepares controlled interaction data
+- THEN field changes, commit, revert, icon dialog, media selection, media upload,
+  operation invocation, and confirmation-open behavior dispatch canonical field
+  and operation intents with stable result, record, field, and control identity
+- AND generated runtime resolves field patches, uploads media, builds operation
+  caller input, invokes transition or delete operations, reports sync state, and
+  closes controlled confirmation only according to successful operation results
+- AND renderers do not infer write availability, select transition handlers,
+  parse schema, read icon catalogs, upload media, patch records, or execute
+  operations
+
+#### Scenario: Legacy renderer consumes the record-result contract
+
+- GIVEN production generated record results currently compose record reads,
+  fields, transition controls, delete controls, warnings, and empty state in
+  React
+- WHEN generated runtime projects a complete record result
+- THEN a dedicated legacy record-result adapter renders only the projected
+  result, field, operation, confirmation, warning, empty, unavailable, and
+  editing-availability contracts and dispatches their intents
+- AND the production collection `record` result path for ordinary and
+  specialized editors, read-only displays, active unions, state transitions,
+  delete confirmation, warnings, editing-disabled state, unavailable records,
+  and empty state crosses that adapter boundary
+- AND the legacy adapter does not query records, select fields, own draft or icon
+  dialog state, load reference or media options, upload media, build operation
+  input, execute operations, or update sync state
+- AND focused coverage asserts projected facts, nested intent dispatch,
+  successful and failed field edits, transition and delete behavior, warnings,
+  empty and unavailable states, and visible fallbacks instead of legacy HTML
+  structure or one-to-one visual parity
+- AND collection context detail, remaining referenced-record leaf paths, and
+  tree-builder composition remain on their existing production paths
+- AND production remains on the legacy renderer after this contract migration
+
+#### Scenario: Astryx record-result renderer
+
+- GIVEN the legacy renderer consumes the complete production record-result
+  contract
+- WHEN the replacement renderer implements the same contract in `lib/astryx`
+- THEN it composes Astryx field, operation, confirmation, status, warning, and
+  empty-state primitives for ready, empty, unavailable, editing-disabled,
+  warning, confirmation, and pending states
+- AND replacement-renderer layout and action hierarchy follow Astryx component
+  behavior rather than recreating the legacy detail grid, spacing, or markup
+- AND the Astryx renderer dispatches only canonical nested intents and contains
+  no generated runtime, storage, browser replica, media client, operation
+  execution, sync effect, Tailwind, or legacy Formless UI imports
+- AND adding the renderer does not export or activate Astryx in production or
+  introduce Astryx theme and global CSS into runtime entrypoints
+
+#### Scenario: Astryx record-result contract fixtures
+
+- GIVEN the legacy renderer consumes complete production record-result contracts
+- WHEN record-result UX is evaluated in the package-local Astryx prototype
+- THEN data-only fixtures use the same contract shapes to cover editable and
+  read-only detail, active unions, visible-field changes, specialized fields,
+  state transitions, destructive confirmation, readiness warnings,
+  editing-disabled state, unavailable state, empty state, and pending or invalid
+  fields
+- AND a focused Record Results layout renders the real Astryx record-result
+  renderer with minimal local field, operation, and confirmation intent
+  simulation
+- AND package-local fixtures do not import generated runtime, storage, browser
+  replica, media clients, operation controllers, sync, app targets, collection
+  tabs, context selection, summaries, or tree composition
+- AND the fixtures contain no Tailwind classes and do not export or activate the
+  Astryx record-result renderer in production
 
 ### Requirement: Table Surfaces
 
@@ -706,15 +816,16 @@ validation, and operation execution.
 
 ### Requirement: Generated Record Field Renderer Contract
 
-The system SHALL project ordinary existing-record field editors and read-only
-field displays through the Formless UI field contract before selecting the
-active renderer, while generated runtime code owns record reads, draft state,
-field visibility, update resolution, and operation execution.
+The system SHALL project supported existing-record field editors and read-only
+field displays on migrated surfaces through the Formless UI field contract
+before selecting the active renderer, while generated runtime code owns record
+reads, draft state, field visibility, update resolution, and operation
+execution.
 
 #### Scenario: Project ordinary record editor and display fields
 
-- GIVEN a generated record, list, table, detail, or tree surface renders an
-  ordinary writable or read-only field
+- GIVEN a generated record-result, list, or table surface renders an ordinary
+  writable or read-only field
 - WHEN generated runtime prepares that field for the active Formless UI renderer
 - THEN it projects a `FormlessUiRecordField` or `FormlessUiDisplayField` with a
   stable field id, record id, access mode, committed value, controlled draft,
@@ -731,24 +842,42 @@ field visibility, update resolution, and operation execution.
   read-only and system fields, compact fields, heading fields, and visible-label
   detail fields remain explicit projected facts instead of renderer inference
 
+#### Scenario: Project specialized record-result fields
+
+- GIVEN a generated record result renders icon, media, color, value-unit,
+  quiet-date, Markdown, rich-enum, or state-machine fields
+- WHEN generated runtime prepares those fields for the active Formless UI
+  renderer
+- THEN source-backed icon options and dialog state, media presentation and
+  upload facts, color drafts and fallbacks, formatted values and units, temporal
+  display, enum presentation, label visibility, density, and state-machine
+  lifecycle facts remain explicit field contract data
+- AND state-machine-owned values remain read-only while transition actions use
+  projected operation controls outside the field editor
+- AND invalid or alpha colors, missing media ids, custom SVG drafts, undeclared
+  enum and state values, pending operations, and hidden accessible labels remain
+  visible without renderer inference or coercion
+- AND generated runtime retains icon catalog resolution, SVG validation, media
+  asset loading and upload, grouped patch resolution, transition binding,
+  writes, sync feedback, and auto-save effects
+
 #### Scenario: Legacy renderer consumes record field contracts
 
-- GIVEN production generated UI currently renders ordinary record editors and
-  displays with direct legacy components and Tailwind classes
-- WHEN generated runtime projects an ordinary record field
+- GIVEN production generated UI renders existing-record fields with legacy
+  components and Tailwind classes
+- WHEN generated runtime projects a supported record field on a migrated
+  surface
 - THEN a dedicated legacy adapter renders only the projected field contract and
   dispatches field intents without reading records, loading options, resolving
   patches, invoking operations, or updating sync state
-- AND record, list, table, detail, referenced-record, and tree call sites that
-  reuse the ordinary record-field leaf renderer retain their current editing,
-  read-only display, commit, failure, and missing-reference behavior
+- AND list, table, and record-result call sites retain their editing, read-only
+  display, commit, failure, specialized-field, and missing-reference behavior
 - AND focused coverage asserts projected contracts, intent dispatch, successful
   commits, failed-commit draft behavior, and user-visible display fallbacks
   rather than legacy HTML structure or one-to-one visual parity
-- AND media and icon authoring, state-machine transitions, operation controls,
-  table and collection chrome, referenced-record dialog chrome, delete dialogs,
-  item-detail composition, and tree-builder composition remain on their existing
-  paths until their own renderer contracts are formalised
+- AND collection context detail, remaining referenced-record leaf paths, and
+  tree-builder field composition may remain on their existing paths until their
+  owning renderer contracts are formalised
 - AND production remains on the legacy renderer after this contract migration
 
 #### Scenario: Astryx record field data fixtures

@@ -1,0 +1,712 @@
+import { describe, expect, it } from "vite-plus/test";
+import type {
+  AppSchema,
+  EntityOperationSchema,
+  EntitySchema,
+  FieldSchema,
+} from "@dpeek/formless-schema";
+import type { StoredRecord } from "@dpeek/formless-storage";
+import type { EntityOperationPresentationConfig } from "../../client/operation-presentation-model.ts";
+import type { RecordResultModel } from "../../client/list-result-model.ts";
+import type {
+  RecordFieldConfig,
+  RecordUnionPresentationConfig,
+  TransitionStateOperationConfig,
+} from "../../client/views.ts";
+import { resolveIconCatalogSvg } from "../../shared/icon-catalog.ts";
+import { nextGeneratedUpdateDraftSessionState } from "./record-field-authoring.ts";
+import {
+  createGeneratedRecordResultFieldAuthoringState,
+  selectGeneratedRecordResultFoundation,
+  selectGeneratedRecordResultRuntimeForIntent,
+} from "./generated-record-result-foundation.ts";
+
+describe("generated Formless UI record-result projection", () => {
+  it("projects a complete ready result with specialized fields, actions, warnings, and safe feedback", () => {
+    const result = completeRecordResult();
+    const record = blockRecord("block-1", {
+      accent: "not-a-color",
+      cost: 12.5,
+      costUnit: "day",
+      dueDate: "2026-07-20",
+      hero: "missing-hero",
+      icon: requiredIconSource("add"),
+      priority: "urgent",
+      status: "draft",
+      title: "Launch post",
+      type: "post",
+    });
+    const fieldState = {
+      ...createGeneratedRecordResultFieldAuthoringState(record, result),
+      iconDialogDraftByFieldName: { icon: "<svg>broken" },
+      iconDialogOpenByFieldName: { icon: true },
+      iconParseErrorByFieldName: { icon: "Enter valid SVG." },
+      pendingByFieldName: { hero: true },
+      pendingLabelByFieldName: { hero: "Uploading media" },
+    };
+    const base = selectGeneratedRecordResultFoundation({
+      entity: blockEntity,
+      entityName: "block",
+      fieldState,
+      id: "blocks:featured",
+      mediaAssetOptionsByFieldName: { hero: [] },
+      recordIds: [record.id],
+      recordsById: { [record.id]: record },
+      result,
+      schema: mediaSchema,
+    });
+    const transition = requiredOperation(base, "transition");
+    const deletion = requiredOperation(base, "delete");
+    const projected = selectGeneratedRecordResultFoundation({
+      confirmationOpenByControlId: { [deletion.binding.id]: true },
+      entity: blockEntity,
+      entityName: "block",
+      fieldState,
+      id: "blocks:featured",
+      mediaAssetOptionsByFieldName: { hero: [] },
+      operationStateByExecutionKey: {
+        [deletion.binding.executionKey]: {
+          completedAt: 10,
+          executionKey: deletion.binding.executionKey,
+          result: { displayError: "Deletion blocked by an active reference.", type: "failed" },
+          status: "failed",
+        },
+        [transition.binding.executionKey]: {
+          executionKey: transition.binding.executionKey,
+          startedAt: 9,
+          status: "pending",
+        },
+      },
+      recordIds: [record.id],
+      recordsById: { [record.id]: record },
+      result,
+      schema: mediaSchema,
+    });
+    const fields = Object.fromEntries(
+      projected.recordResult.fields.map(({ field }) => [field.fieldName, field]),
+    );
+
+    expect(projected.recordResult).toMatchObject({
+      accessibilityLabel: "Block record",
+      actions: {
+        kind: "actionGroup",
+        primary: [
+          {
+            control: {
+              status: { status: "pending" },
+              trigger: { pending: { isPending: true }, prominence: "primary" },
+            },
+            role: "transition",
+          },
+        ],
+        secondary: [
+          {
+            control: {
+              confirmation: { open: true },
+              feedback: {
+                detail: "Deletion blocked by an active reference.",
+                status: "failed",
+              },
+            },
+            role: "delete",
+          },
+        ],
+      },
+      availability: { state: "ready" },
+      editing: { enabled: true },
+      kind: "recordResult",
+      selectedRecord: {
+        accessibilityLabel: "Launch post",
+        id: "block-1",
+        kind: "recordResultRecord",
+      },
+      warnings: [
+        {
+          items: [
+            { code: "block-route", message: "Post block should have a link." },
+            { code: "post-body", message: "Post block should include body content." },
+          ],
+          kind: "recordResultWarning",
+        },
+      ],
+    });
+    expect(projected.recordResult.fields.map(({ field }) => field.fieldName)).toEqual([
+      "type",
+      "title",
+      "body",
+      "icon",
+      "hero",
+      "accent",
+      "cost",
+      "dueDate",
+      "priority",
+      "status",
+      "updatedAt",
+    ]);
+    expect(fields.title).toMatchObject({
+      access: { kind: "readOnly" },
+      labelVisibility: "visible",
+      mode: "display",
+    });
+    expect(fields.body).toMatchObject({ rendererKind: "markdown" });
+    expect(fields.icon).toMatchObject({
+      icon: {
+        canSave: false,
+        customParseError: "Enter valid SVG.",
+        dialogOpen: true,
+      },
+      rendererKind: "icon",
+    });
+    expect(fields.hero).toMatchObject({
+      media: {
+        missingSelectedAsset: { assetId: "missing-hero" },
+        uploadPatchFields: {
+          heightFieldName: "height",
+          mediaAssetFieldName: "hero",
+          widthFieldName: "width",
+        },
+      },
+      pending: { isPending: true, label: "Uploading media" },
+      rendererKind: "media",
+    });
+    expect(fields.accent).toMatchObject({
+      color: { picker: { kind: "unavailable" }, swatch: { kind: "unavailable" } },
+      rendererKind: "color",
+    });
+    expect(fields.cost).toMatchObject({
+      rendererKind: "value-unit",
+      valueUnit: { unitFieldName: "costUnit" },
+    });
+    expect(fields.dueDate).toMatchObject({ rendererKind: "quiet-date" });
+    expect(fields.priority).toMatchObject({
+      enum: { style: "rich", valueStatus: { kind: "undeclared", value: "urgent" } },
+      rendererKind: "enum-icon",
+    });
+    expect(fields.status).toMatchObject({
+      access: { kind: "stateMachine" },
+      mode: "display",
+      stateMachineFacts: {
+        interaction: { kind: "display" },
+        valueStatus: { kind: "declared", value: "draft" },
+      },
+    });
+    expect(fields.updatedAt).toMatchObject({
+      access: { fieldRef: { kind: "system", name: "updatedAt" }, kind: "system" },
+      formatting: { displayValue: "2026-07-15T00:00:00.000Z" },
+      mode: "display",
+    });
+    expect(JSON.stringify(projected.recordResult)).not.toContain("executionKey");
+    expect(JSON.stringify(projected.recordResult)).not.toContain("canonicalOperationKey");
+    expect(JSON.stringify(projected.recordResult)).not.toContain(
+      '"createdAt":"2026-07-15T00:00:00.000Z"',
+    );
+    expect(JSON.stringify(projected.recordResult)).not.toContain(
+      '"updatedAt":"2026-07-15T00:00:00.000Z"',
+    );
+  });
+
+  it("selects the first record and draft-active union and visibleWhen fields", () => {
+    const result = unionRecordResult();
+    const first = blockRecord("article-1", {
+      articleIcon: requiredIconSource("add"),
+      kind: "article",
+      summary: "Article summary",
+      title: "Article",
+    });
+    const second = blockRecord("link-1", {
+      kind: "link",
+      title: "Link",
+      url: "https://example.com",
+    });
+    const state = createGeneratedRecordResultFieldAuthoringState(first, result);
+    const drafted = {
+      ...state,
+      session: nextGeneratedUpdateDraftSessionState({
+        fieldName: "kind",
+        fieldValue: { kind: "value", value: "link" },
+        state: state.session,
+      }),
+    };
+    const projected = selectGeneratedRecordResultFoundation({
+      entity: unionEntity,
+      entityName: "block",
+      fieldState: drafted,
+      id: "blocks:selected",
+      recordIds: [first.id, second.id],
+      recordsById: { [first.id]: first, [second.id]: second },
+      result,
+    });
+
+    expect(projected.recordResult.selectedRecord?.id).toBe("article-1");
+    expect(projected.recordResult.fields.map(({ field }) => field.fieldName)).toEqual([
+      "kind",
+      "title",
+      "url",
+    ]);
+    expect(projected.runtimePlan.fields.map(({ fieldConfig }) => fieldConfig.fieldName)).toEqual([
+      "kind",
+      "title",
+      "url",
+    ]);
+  });
+
+  it("projects editing-disabled fields without changing read-only or lifecycle access", () => {
+    const result = { ...completeRecordResult(), updateOperation: undefined };
+    const record = blockRecord("block-1", {
+      body: "Body",
+      status: "draft",
+      title: "Read only",
+      type: "page",
+    });
+    const projected = selectGeneratedRecordResultFoundation({
+      editingDisabledReason: "Updates are temporarily unavailable.",
+      entity: blockEntity,
+      entityName: "block",
+      id: "blocks:readonly",
+      recordIds: [record.id],
+      recordsById: { [record.id]: record },
+      result,
+    });
+    const fields = Object.fromEntries(
+      projected.recordResult.fields.map(({ field }) => [field.fieldName, field]),
+    );
+
+    expect(projected.recordResult.editing).toEqual({
+      disabledReason: "Updates are temporarily unavailable.",
+      enabled: false,
+    });
+    expect(fields.body).toMatchObject({
+      access: {
+        canPatch: false,
+        disabledReason: "Updates are temporarily unavailable.",
+        kind: "disabled",
+      },
+      mode: "editor",
+    });
+    expect(fields.title).toMatchObject({ access: { kind: "readOnly" }, mode: "display" });
+    expect(fields.status).toMatchObject({ access: { kind: "stateMachine" }, mode: "display" });
+  });
+
+  it("resolves only matching record field, operation, and confirmation intents", () => {
+    const result = completeRecordResult();
+    const record = blockRecord("block-1", {
+      body: "Body",
+      status: "draft",
+      title: "Launch post",
+      type: "post",
+    });
+    const projected = selectGeneratedRecordResultFoundation({
+      entity: blockEntity,
+      entityName: "block",
+      id: "blocks:featured",
+      recordIds: [record.id],
+      recordsById: { [record.id]: record },
+      result,
+    });
+    const body = requiredProjectedField(projected, "body");
+    const deletion = requiredOperation(projected, "delete");
+
+    expect(
+      selectGeneratedRecordResultRuntimeForIntent(projected.runtimePlan, {
+        fieldId: body.id,
+        intent: { fieldName: "body", type: "recordEditorDraftChange", value: "Next" },
+        recordId: record.id,
+        resultId: "blocks:featured",
+        type: "recordResultFieldIntent",
+      }),
+    ).toMatchObject({ fieldConfig: { fieldName: "body" }, kind: "field" });
+    expect(
+      selectGeneratedRecordResultRuntimeForIntent(projected.runtimePlan, {
+        fieldId: body.id,
+        intent: {
+          fieldName: "body",
+          operationName: "archive",
+          recordId: record.id,
+          source: "menuItem",
+          transitionName: "archive",
+          type: "stateTransitionInvoke",
+        },
+        recordId: record.id,
+        resultId: "blocks:featured",
+        type: "recordResultFieldIntent",
+      }),
+    ).toBeUndefined();
+    expect(
+      selectGeneratedRecordResultRuntimeForIntent(projected.runtimePlan, {
+        fieldId: body.id,
+        intent: { fieldName: "title", type: "recordDraftRevert" },
+        recordId: record.id,
+        resultId: "blocks:featured",
+        type: "recordResultFieldIntent",
+      }),
+    ).toBeUndefined();
+    expect(
+      selectGeneratedRecordResultRuntimeForIntent(projected.runtimePlan, {
+        controlId: deletion.binding.id,
+        intent: {
+          controlId: deletion.binding.id,
+          open: true,
+          type: "operationConfirmationOpenChange",
+        },
+        recordId: record.id,
+        resultId: "blocks:featured",
+        type: "recordResultOperationIntent",
+      }),
+    ).toMatchObject({ kind: "delete" });
+    expect(
+      selectGeneratedRecordResultRuntimeForIntent(projected.runtimePlan, {
+        controlId: deletion.binding.id,
+        intent: {
+          controlId: deletion.binding.id,
+          invocationSource: "confirmationDialog",
+          type: "operationInvoke",
+        },
+        recordId: "other-record",
+        resultId: "blocks:featured",
+        type: "recordResultOperationIntent",
+      }),
+    ).toBeUndefined();
+  });
+
+  it("projects display-safe empty and unavailable states", () => {
+    const result = completeRecordResult();
+    const empty = selectGeneratedRecordResultFoundation({
+      emptyStateDescription: "Create a block to get started.",
+      entity: blockEntity,
+      entityName: "block",
+      id: "blocks:empty",
+      recordIds: [],
+      recordsById: {},
+      result,
+    });
+    const unavailable = selectGeneratedRecordResultFoundation({
+      entity: blockEntity,
+      entityName: "block",
+      id: "blocks:missing",
+      recordIds: ["missing"],
+      recordsById: {},
+      result,
+    });
+
+    expect(empty.recordResult).toMatchObject({
+      actions: { primary: [], secondary: [] },
+      availability: { state: "empty" },
+      emptyState: {
+        description: "Create a block to get started.",
+        kind: "recordResultEmptyState",
+        title: "No block record found.",
+      },
+      fields: [],
+      warnings: [],
+    });
+    expect(empty.recordResult.selectedRecord).toBeUndefined();
+    expect(unavailable.recordResult).toMatchObject({
+      actions: { primary: [], secondary: [] },
+      availability: { message: "Record unavailable.", state: "unavailable" },
+      fields: [],
+      selectedRecord: {
+        accessibilityLabel: "Block missing",
+        id: "missing",
+      },
+      warnings: [],
+    });
+    expect(unavailable.runtimePlan.operations).toEqual([]);
+  });
+});
+
+function requiredProjectedField(
+  foundation: ReturnType<typeof selectGeneratedRecordResultFoundation>,
+  fieldName: string,
+) {
+  const field = foundation.recordResult.fields.find(({ field }) => field.fieldName === fieldName);
+
+  if (!field) {
+    throw new Error(`Missing projected field ${fieldName}.`);
+  }
+
+  return field;
+}
+
+function requiredOperation(
+  foundation: ReturnType<typeof selectGeneratedRecordResultFoundation>,
+  kind: "delete" | "transition",
+) {
+  const operation = foundation.runtimePlan.operations.find((candidate) => candidate.kind === kind);
+
+  if (!operation) {
+    throw new Error(`Missing ${kind} operation.`);
+  }
+
+  return operation;
+}
+
+function completeRecordResult(): RecordResultModel {
+  return {
+    deleteOperation: operationPresentation("delete", "Delete", "delete"),
+    itemViewName: "blockDetail",
+    recordFields: completeFields,
+    transitionOperations: [transitionOperation()],
+    type: "record",
+    updateOperation: operationPresentation("update", "Update", "update"),
+  };
+}
+
+function unionRecordResult(): RecordResultModel {
+  return {
+    itemViewName: "blockDetail",
+    recordFields: unionBaseFields,
+    recordUnion: contentUnion,
+    transitionOperations: [],
+    type: "record",
+    updateOperation: operationPresentation("update", "Update", "update"),
+  };
+}
+
+function operationPresentation(
+  operationName: "delete" | "update",
+  label: string,
+  kind: "delete" | "update",
+): EntityOperationPresentationConfig {
+  return {
+    canonicalKey: `block.${operationName}`,
+    entityName: "block",
+    label,
+    operation: {
+      audit: { input: "summary" },
+      effect: kind === "delete" ? { type: "deleteRecord" } : { type: "patchRecord" },
+      idempotency: { required: true },
+      input: { fields: {} },
+      kind,
+      output: { type: kind },
+      scope: "record",
+    },
+    operationName,
+  };
+}
+
+function transitionOperation(): TransitionStateOperationConfig {
+  const transitionName = "publish";
+  const transition = statusMachine.machine.transitions[transitionName];
+  const operation = {
+    audit: { input: "none" },
+    effect: {
+      config: { machine: statusMachine.machineName, transition: transitionName },
+      handler: "transition-state",
+      type: "operationHandler",
+    },
+    idempotency: { required: true },
+    kind: "command",
+    output: { type: "command" },
+    scope: "record",
+  } satisfies EntityOperationSchema;
+
+  return {
+    field: fieldSchemas.status,
+    fieldName: "status",
+    label: "Publish",
+    machine: statusMachine.machine,
+    machineName: statusMachine.machineName,
+    operation: {
+      canonicalKey: "block.publish",
+      entityName: "block",
+      label: "Publish",
+      operation,
+      operationName: "publish",
+    },
+    operationName: "publish",
+    transition,
+    transitionName,
+  };
+}
+
+function blockRecord(id: string, values: StoredRecord["values"]): StoredRecord {
+  return {
+    createdAt: "2026-07-15T00:00:00.000Z",
+    entity: "block",
+    id,
+    updatedAt: "2026-07-15T00:00:00.000Z",
+    values,
+  };
+}
+
+function recordField(
+  fieldName: string,
+  field: FieldSchema,
+  editor: RecordFieldConfig["editor"],
+  options: Partial<
+    Pick<
+      RecordFieldConfig,
+      "fieldRef" | "presentation" | "stateMachine" | "valueUnit" | "visibleWhen" | "writable"
+    >
+  > = {},
+): RecordFieldConfig {
+  return {
+    commit: "field-commit",
+    editor,
+    field,
+    fieldName,
+    ...options,
+  };
+}
+
+const fieldSchemas = {
+  accent: { format: "color", required: false, type: "text" },
+  body: { required: false, type: "text" },
+  cost: { required: false, type: "number" },
+  costUnit: {
+    required: false,
+    type: "enum",
+    values: { day: { label: "Day" }, hour: { label: "Hour" } },
+  },
+  dueDate: { required: false, type: "date" },
+  hero: { format: "href", required: false, type: "text" },
+  icon: { format: "icon", required: false, type: "text" },
+  kind: {
+    required: true,
+    type: "enum",
+    values: { article: { label: "Article" }, link: { label: "Link" } },
+  },
+  priority: {
+    required: false,
+    type: "enum",
+    values: {
+      high: { label: "High", presentation: { color: "danger", icon: "warning" } },
+      normal: { label: "Normal", presentation: { color: "neutral" } },
+    },
+  },
+  status: {
+    required: true,
+    type: "enum",
+    values: {
+      draft: { label: "Draft", presentation: { color: "warning" } },
+      published: { label: "Published", presentation: { color: "success" } },
+    },
+  },
+  text: { required: false, type: "text" },
+  title: { label: "Title", required: true, type: "text" },
+  type: {
+    required: true,
+    type: "enum",
+    values: { page: { label: "Page" }, post: { label: "Post" } },
+  },
+} satisfies Record<string, FieldSchema>;
+
+const statusMachine = {
+  fieldName: "status",
+  initialState: "draft",
+  machine: {
+    field: "status",
+    initial: "draft",
+    terminal: ["published"],
+    transitions: {
+      publish: { from: ["draft"], label: "Publish", to: "published" },
+    },
+  },
+  machineName: "publication",
+  terminalStates: ["published"],
+} satisfies NonNullable<RecordFieldConfig["stateMachine"]>;
+
+const completeFields = [
+  recordField("type", fieldSchemas.type, "enum"),
+  recordField("title", fieldSchemas.title, "text", { writable: false }),
+  recordField("body", fieldSchemas.body, "markdown"),
+  recordField("icon", fieldSchemas.icon, "icon"),
+  recordField("hero", fieldSchemas.hero, "media"),
+  recordField("accent", fieldSchemas.accent, "color"),
+  recordField("cost", fieldSchemas.cost, "number", {
+    valueUnit: { unitField: fieldSchemas.costUnit, unitFieldName: "costUnit" },
+  }),
+  recordField("dueDate", fieldSchemas.dueDate, "date", {
+    presentation: { visibility: "valueOrInteraction" },
+  }),
+  recordField("priority", fieldSchemas.priority, "enum", {
+    presentation: { list: "icon" },
+  }),
+  recordField("status", fieldSchemas.status, "enum", { stateMachine: statusMachine }),
+  recordField("updatedAt", fieldSchemas.text, "text", {
+    fieldRef: { kind: "system", name: "updatedAt" },
+    writable: false,
+  }),
+] satisfies RecordFieldConfig[];
+
+const unionBaseFields = [
+  recordField("kind", fieldSchemas.kind, "enum"),
+  recordField("title", fieldSchemas.title, "text"),
+  recordField("summary", fieldSchemas.text, "text", {
+    visibleWhen: { field: "kind", values: ["article"] },
+  }),
+] satisfies RecordFieldConfig[];
+
+const contentUnion = {
+  discriminatorField: fieldSchemas.kind,
+  discriminatorFieldName: "kind",
+  union: {
+    discriminator: "kind",
+    entity: "block",
+    variants: {
+      article: { fields: ["articleIcon"], label: "Article" },
+      link: { fields: ["url"], label: "Link" },
+    },
+  },
+  unionName: "blockByKind",
+  variants: [
+    {
+      label: "Article",
+      presentation: {
+        fields: [recordField("articleIcon", fieldSchemas.icon, "icon")],
+        type: "fields",
+      },
+      unionVariant: { fields: ["articleIcon"], label: "Article" },
+      variantValue: "article",
+    },
+    {
+      label: "Link",
+      presentation: {
+        fields: [recordField("url", fieldSchemas.text, "href")],
+        type: "fields",
+      },
+      unionVariant: { fields: ["url"], label: "Link" },
+      variantValue: "link",
+    },
+  ],
+} satisfies RecordUnionPresentationConfig;
+
+const blockEntity = {
+  fields: {
+    ...fieldSchemas,
+    height: { required: false, type: "number" },
+    width: { required: false, type: "number" },
+  },
+  label: "Block",
+  stateMachines: { publication: statusMachine.machine },
+} as EntitySchema;
+
+const unionEntity = {
+  fields: {
+    articleIcon: fieldSchemas.icon,
+    kind: fieldSchemas.kind,
+    summary: fieldSchemas.text,
+    title: fieldSchemas.title,
+    url: fieldSchemas.text,
+  },
+  label: "Block",
+} as EntitySchema;
+
+const mediaSchema = {
+  entities: { block: blockEntity },
+  itemViews: {},
+  queries: {},
+  tableViews: {},
+  version: 1,
+  views: {},
+} as unknown as AppSchema;
+
+function requiredIconSource(id: string): string {
+  const source = resolveIconCatalogSvg(id);
+
+  if (!source) {
+    throw new Error(`Missing icon ${id}.`);
+  }
+
+  return source;
+}

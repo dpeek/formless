@@ -82,7 +82,7 @@ describe("generated table app paths", () => {
     });
 
     expect(html).toContain('aria-label="Site record"');
-    expect(html).toContain('data-formless-record-result="true"');
+    expect(html).toContain('data-formless-legacy-record-result="site:siteSettingsForm"');
     expect(html).not.toContain('role="grid"');
     expect(html).toContain('aria-label="Label"');
     expect(html).toContain('aria-label="Description"');

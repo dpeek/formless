@@ -974,6 +974,113 @@ export type FormlessUiListContract = {
   kind: "list";
 };
 
+export type FormlessUiRecordResultDensity = "compact" | "default";
+
+export type FormlessUiRecordResultAvailability =
+  | {
+      state: "ready";
+    }
+  | {
+      state: "empty";
+    }
+  | {
+      message: string;
+      state: "unavailable";
+    };
+
+export type FormlessUiRecordResultEditingAvailability =
+  | {
+      enabled: true;
+    }
+  | {
+      disabledReason: string;
+      enabled: false;
+    };
+
+export type FormlessUiRecordResultSelectedRecordContract = {
+  accessibilityLabel: string;
+  id: string;
+  kind: "recordResultRecord";
+};
+
+export type FormlessUiRecordResultFieldContract = {
+  field: FormlessUiField;
+  id: string;
+  kind: "recordResultField";
+};
+
+export type FormlessUiRecordResultOperationActionContract = {
+  control: FormlessUiOperationControlContract;
+  kind: "operationAction";
+  role: "command" | "delete" | "transition";
+};
+
+export type FormlessUiRecordResultActionContract = FormlessUiRecordResultOperationActionContract;
+
+export type FormlessUiRecordResultActionGroupContract = {
+  id: string;
+  kind: "actionGroup";
+  primary: readonly FormlessUiRecordResultActionContract[];
+  secondary: readonly FormlessUiRecordResultActionContract[];
+  secondaryAccessibilityLabel: string;
+};
+
+export type FormlessUiRecordResultWarningContract = {
+  id: string;
+  items: readonly {
+    code: string;
+    message: string;
+  }[];
+  kind: "recordResultWarning";
+  title: string;
+};
+
+export type FormlessUiRecordResultEmptyStateContract = {
+  action?: FormlessUiRecordResultActionContract;
+  description?: string;
+  id: string;
+  kind: "recordResultEmptyState";
+  title: string;
+};
+
+export type FormlessUiRecordResultFieldIntent = {
+  fieldId: string;
+  intent: FormlessUiFieldIntent;
+  recordId: string;
+  resultId: string;
+  type: "recordResultFieldIntent";
+};
+
+export type FormlessUiRecordResultOperationIntent = {
+  controlId: string;
+  intent: FormlessUiOperationPresentationIntent;
+  recordId: string;
+  resultId: string;
+  type: "recordResultOperationIntent";
+};
+
+export type FormlessUiRecordResultIntent =
+  | FormlessUiRecordResultFieldIntent
+  | FormlessUiRecordResultOperationIntent;
+
+export type FormlessUiRecordResultIntentHandler = (
+  intent: FormlessUiRecordResultIntent,
+) => Promise<void> | void;
+
+export type FormlessUiRecordResultContract = {
+  accessibilityLabel: string;
+  actions: FormlessUiRecordResultActionGroupContract;
+  availability: FormlessUiRecordResultAvailability;
+  density: FormlessUiRecordResultDensity;
+  editing: FormlessUiRecordResultEditingAvailability;
+  emptyState?: FormlessUiRecordResultEmptyStateContract;
+  fields: readonly FormlessUiRecordResultFieldContract[];
+  id: string;
+  kind: "recordResult";
+  selectedRecord?: FormlessUiRecordResultSelectedRecordContract;
+  warnings: readonly FormlessUiRecordResultWarningContract[];
+};
+
 export type FormlessUiTableDensity = "compact" | "default";
 
 export type FormlessUiTableColumnAlignment = "center" | "end" | "start";

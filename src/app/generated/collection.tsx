@@ -5,10 +5,8 @@ import {
   useAggregateValueMatchingQuery,
   useEntityRecordCountMatchingQuery,
   useEntityRecordCountReferencingField,
-  useEntityRecordIdsMatchingQuery,
   useEntityRecordOptionsMatchingQuery,
   useRecord,
-  useRecordReadinessWarnings,
 } from "../../client/store.ts";
 import {
   selectGeneratedContextSelectionFacts,
@@ -23,13 +21,11 @@ import type {
   RelatedCollectionConfig,
 } from "../../client/views.ts";
 import type { CollectionResultModel } from "../../client/collection-result-model.ts";
-import type { RecordResultModel } from "../../client/list-result-model.ts";
 import type { QueryEvaluationContext } from "@dpeek/formless-schema";
 import type { EntitySchema } from "@dpeek/formless-schema";
 import { HomeOperationRow } from "./operations.tsx";
 import { GeneratedCreateSurface } from "./create.tsx";
 import { formatAggregateDisplayValue } from "./format.ts";
-import { RecordReadinessWarnings } from "./readiness-warnings.tsx";
 import { DeleteRecordButton } from "./record-delete.tsx";
 import { RecordFieldEditor } from "./record-field-editor.tsx";
 import { RecordTransitionOperationControls } from "./state-machine-ui.tsx";
@@ -37,6 +33,7 @@ import { RecordTable } from "./table.tsx";
 import { RecordTree } from "./tree.tsx";
 import { selectRecordFieldsForActiveUnion } from "./union-presentation.ts";
 import { GeneratedRecordListFoundation } from "./generated-list-runtime.tsx";
+import { GeneratedRecordResultRuntime } from "./generated-record-result-runtime.tsx";
 
 export function HomeCollection({
   collection,
@@ -791,7 +788,7 @@ function CollectionResult({
 
   if (result.type === "record") {
     return (
-      <RecordDetail
+      <GeneratedRecordResultRuntime
         entity={entity}
         entityName={entityName}
         query={query}
@@ -823,77 +820,6 @@ function CollectionResult({
       queryContext={queryContext}
       result={result}
     />
-  );
-}
-
-function RecordDetail({
-  entity,
-  entityName,
-  query,
-  queryContext,
-  result,
-}: {
-  entity: EntitySchema;
-  entityName: string;
-  query: HomeQueryTabConfig["query"];
-  queryContext?: QueryEvaluationContext;
-  result: RecordResultModel;
-}) {
-  const recordIds = useEntityRecordIdsMatchingQuery(entityName, query, queryContext);
-  const recordId = recordIds[0] ?? null;
-  const record = useRecord(recordId ?? "");
-  const warnings = useRecordReadinessWarnings(recordId ?? "");
-
-  if (!recordId) {
-    return <p className="text-sm text-slate-600">No {entity.label.toLowerCase()} record found.</p>;
-  }
-
-  const visibleFields = selectRecordFieldsForActiveUnion(
-    result.recordFields,
-    result.recordUnion,
-    record,
-  );
-
-  return (
-    <section
-      aria-label={`${entity.label} record`}
-      className="max-w-3xl space-y-4"
-      data-formless-record-result="true"
-    >
-      <div className="grid min-w-0 gap-4">
-        {visibleFields.map((fieldConfig) => (
-          <RecordFieldEditor
-            entityName={entityName}
-            fieldConfig={fieldConfig}
-            key={recordFieldEditorKey(entityName, recordId, fieldConfig.fieldName)}
-            recordId={recordId}
-            showLabel={true}
-            updateOperation={result.updateOperation}
-          />
-        ))}
-        {result.transitionOperations.length > 0 ? (
-          <RecordTransitionOperationControls
-            operations={result.transitionOperations}
-            entityName={entityName}
-            recordId={recordId}
-            values={record?.values}
-          />
-        ) : null}
-        {result.deleteOperation ? (
-          <div>
-            <DeleteRecordButton
-              deleteOperation={result.deleteOperation}
-              entityLabel={entity.label}
-              entityName={entityName}
-              labelFields={visibleFields}
-              recordId={recordId}
-              triggerData={{ "data-formless-delete-record": recordId }}
-            />
-          </div>
-        ) : null}
-      </div>
-      {warnings.length > 0 ? <RecordReadinessWarnings warnings={warnings} /> : null}
-    </section>
   );
 }
 

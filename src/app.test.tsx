@@ -3290,7 +3290,7 @@ describe("generated collection home", () => {
     expect(html).toContain('aria-label="Accent color"');
     expect(html).toContain('aria-label="Background color"');
     expect(html).toContain('aria-label="Site record"');
-    expect(html).toContain('data-formless-record-result="true"');
+    expect(html).toContain('data-formless-legacy-record-result="site:siteSettingsForm"');
     expect(html).not.toContain('data-slot="table"');
     expect(html).not.toContain('role="grid"');
     expect(html).toContain("Example Site");
@@ -3316,7 +3316,7 @@ describe("generated collection home", () => {
     expect(html).toContain('aria-label="Accent color"');
     expect(html).toContain('aria-label="Background color"');
     expect(html).toContain('aria-label="Site record"');
-    expect(html).toContain('data-formless-record-result="true"');
+    expect(html).toContain('data-formless-legacy-record-result="site:siteSettingsForm"');
     expect(html).toContain("Example Site");
     expect(html).toContain("A public test site.");
     expect(html).toContain('value="#C98A2E"');
