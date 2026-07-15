@@ -192,6 +192,19 @@ The system SHALL use `changes/<change-id>` as the stable review branch and queue
 
 The system SHALL use `./tmp/worktree/<worker-name>` as the default local worktree path for a worker and `agents/<worker-name>` as the checked-out worker branch.
 
+#### Scenario: Watcher chooses an available caveman name
+
+- **WHEN** a watcher runs `bun agents watch` without a worker name
+- **THEN** the supervisor atomically reserves one available name from `grug`, `thag`, `ooga`, and `barg`
+- **AND** it does not select a name reserved by another live watcher
+- **AND** it recovers a reservation whose recorded process is no longer alive
+- **AND** an explicit worker name remains supported
+
+#### Scenario: Watcher uses the short idle cycle
+
+- **WHEN** a watcher runs without an interval override
+- **THEN** the supervisor checks for work every 10 seconds
+
 #### Scenario: Worker prepares a claimed change
 
 - **WHEN** `igor` claims `add-thing` without a worktree override
@@ -211,6 +224,31 @@ The system SHALL use `./tmp/worktree/<worker-name>` as the default local worktre
 - **WHEN** `igor` later works on `other-thing`
 - **THEN** the supervisor reuses `./tmp/worktree/igor`
 - **AND** resets `agents/igor` to `changes/other-thing`
+
+### Requirement: Scoped worker Codex sessions
+
+The system SHALL launch worker Codex sessions with repo-owned model and permission defaults that do not alter interactive Codex application settings.
+
+#### Scenario: Worker uses the pinned model configuration
+
+- **WHEN** the supervisor launches a worker Codex session
+- **THEN** the invocation selects `gpt-5.6-sol`
+- **AND** it selects extra-high reasoning and Fast mode through invocation-scoped configuration
+- **AND** the settings do not require a project `.codex/config.toml` file
+
+#### Scenario: Worker uses scoped filesystem access
+
+- **WHEN** the supervisor launches a worker without `--dangerous`
+- **THEN** Codex can write the claimed worktree and the clone's shared Git directory
+- **AND** command network access remains disabled
+- **AND** paths outside those worker requirements remain outside the writable profile
+- **AND** the non-interactive session rejects requests beyond the profile instead of waiting for approval
+
+#### Scenario: Dangerous mode stays explicit
+
+- **WHEN** a watcher runs with `--dangerous`
+- **THEN** the child Codex invocation explicitly bypasses approvals and sandboxing
+- **AND** omission of `--dangerous` does not select that mode
 
 ### Requirement: Worker identity stays separate from review branch identity
 

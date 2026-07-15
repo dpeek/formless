@@ -7,6 +7,7 @@ import {
   mkdirSync,
   readFileSync,
   readdirSync,
+  renameSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -172,6 +173,7 @@ export type BranchPlan = {
 };
 
 type WatchOptions = {
+  automaticWorkerName: boolean;
   baseRef: string;
   command: "watch";
   dangerous: boolean;
@@ -306,8 +308,12 @@ const gitBackedPromptTemplatePaths = {
   ),
 } as const;
 const leaseFileName = "lease.json";
+const watcherReservationFileSuffix = ".watch.json";
 const defaultBaseRef = "main";
-const defaultIntervalSeconds = 60;
+const defaultIntervalSeconds = 10;
+const workerCodexModel = "gpt-5.6-sol";
+const workerCodexPermissionProfile = "formless-worker";
+export const cavemanWorkerNames = ["grug", "thag", "ooga", "barg"] as const;
 export const defaultStaleLeaseHeartbeatMs = 6 * 60 * 60 * 1000;
 
 class UsageError extends Error {}
@@ -1033,6 +1039,137 @@ export function ensureAgentStateDirs(paths: AgentStatePaths): void {
   mkdirSync(paths.leases, { recursive: true });
   mkdirSync(paths.logs, { recursive: true });
   mkdirSync(paths.workers, { recursive: true });
+}
+
+export type WorkerNameReservation = {
+  owner: string;
+  path: string;
+  pid: number;
+  reservationId: string;
+};
+
+type StoredWorkerNameReservation = Omit<WorkerNameReservation, "path"> & {
+  startedAt: string;
+};
+
+function watcherReservationPath(stateRoot: string, workerName: string): string {
+  return path.join(
+    stateRoot,
+    "workers",
+    `${validateWorkerName(workerName)}${watcherReservationFileSuffix}`,
+  );
+}
+
+function readWatcherReservation(filePath: string): StoredWorkerNameReservation | null {
+  try {
+    const reservation = readJsonFile<StoredWorkerNameReservation>(filePath);
+    if (
+      !reservation ||
+      typeof reservation.owner !== "string" ||
+      typeof reservation.pid !== "number" ||
+      typeof reservation.reservationId !== "string"
+    ) {
+      return null;
+    }
+    return reservation;
+  } catch {
+    return null;
+  }
+}
+
+function isFileExistsError(error: unknown): boolean {
+  return typeof error === "object" && error !== null && "code" in error && error.code === "EEXIST";
+}
+
+function isFileMissingError(error: unknown): boolean {
+  return typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT";
+}
+
+export function availableCavemanWorkerName(
+  stateRoot: string,
+  isProcessAlive: (pid: number) => boolean = defaultIsProcessAlive,
+): string {
+  for (const workerName of cavemanWorkerNames) {
+    const reservation = readWatcherReservation(watcherReservationPath(stateRoot, workerName));
+    if (!reservation || !isProcessAlive(reservation.pid)) {
+      return workerName;
+    }
+  }
+
+  throw new UsageError(`all caveman worker names are running: ${cavemanWorkerNames.join(", ")}`);
+}
+
+export function reserveWorkerName(
+  stateRoot: string,
+  requestedWorkerName: string | null,
+  options: {
+    isProcessAlive?: (pid: number) => boolean;
+    now?: () => Date;
+    pid?: number;
+  } = {},
+): WorkerNameReservation {
+  const candidates = requestedWorkerName
+    ? [validateWorkerName(requestedWorkerName)]
+    : [...cavemanWorkerNames];
+  const isProcessAlive = options.isProcessAlive ?? defaultIsProcessAlive;
+  const now = options.now ?? (() => new Date());
+  const pid = options.pid ?? process.pid;
+
+  for (const workerName of candidates) {
+    const filePath = watcherReservationPath(stateRoot, workerName);
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      const startedAt = nowIso(now);
+      const reservationId = `${pid}:${startedAt}:${workerName}`;
+      const stored: StoredWorkerNameReservation = {
+        owner: workerName,
+        pid,
+        reservationId,
+        startedAt,
+      };
+
+      try {
+        writeFileSync(filePath, `${JSON.stringify(stored, null, 2)}\n`, {
+          encoding: "utf8",
+          flag: "wx",
+        });
+        return { owner: workerName, path: filePath, pid, reservationId };
+      } catch (error) {
+        if (!isFileExistsError(error)) {
+          throw error;
+        }
+      }
+
+      const existing = readWatcherReservation(filePath);
+      if (existing && isProcessAlive(existing.pid)) {
+        break;
+      }
+
+      const stalePath = `${filePath}.stale-${pid}-${attempt}`;
+      try {
+        renameSync(filePath, stalePath);
+        rmSync(stalePath, { force: true });
+      } catch (error) {
+        if (!isFileMissingError(error)) {
+          throw error;
+        }
+      }
+    }
+  }
+
+  const label = requestedWorkerName
+    ? `worker ${requestedWorkerName} is already running`
+    : `all caveman worker names are running: ${cavemanWorkerNames.join(", ")}`;
+  throw new UsageError(label);
+}
+
+export function releaseWorkerName(reservation: WorkerNameReservation): boolean {
+  const existing = readWatcherReservation(reservation.path);
+  if (!existing || existing.reservationId !== reservation.reservationId) {
+    return false;
+  }
+
+  rmSync(reservation.path, { force: true });
+  return true;
 }
 
 export function resolveGitCommonDir(cwd: string, runCommand = defaultCommandRunner): string {
@@ -2343,15 +2480,56 @@ function shellQuote(value: string): string {
   return `'${value.replaceAll("'", "'\\''")}'`;
 }
 
-function codexArgs(
+function tomlString(value: string): string {
+  return JSON.stringify(value);
+}
+
+export function codexArgs(
   dangerous: boolean,
   outputPath: string,
   prompt: string,
   workspaceRoot: string,
+  gitCommonDir: string,
 ): string[] {
-  const modeArgs = dangerous ? ["--dangerously-bypass-approvals-and-sandbox"] : ["--full-auto"];
+  const modelArgs = [
+    "--model",
+    workerCodexModel,
+    "--config",
+    'model_reasoning_effort="xhigh"',
+    "--config",
+    'service_tier="fast"',
+    "--config",
+    "features.fast_mode=true",
+  ];
+  const modeArgs = dangerous
+    ? ["--dangerously-bypass-approvals-and-sandbox"]
+    : [
+        "--ask-for-approval",
+        "never",
+        "--config",
+        `default_permissions=${tomlString(workerCodexPermissionProfile)}`,
+        "--config",
+        `permissions.${workerCodexPermissionProfile}.filesystem={ ":minimal" = "read", ":tmpdir" = "write", ":slash_tmp" = "write", ${tomlString(
+          path.dirname(path.resolve(gitCommonDir)),
+        )} = "read", ${tomlString(path.resolve(workspaceRoot))} = "write", ${tomlString(
+          path.resolve(gitCommonDir),
+        )} = "write" }`,
+        "--config",
+        `permissions.${workerCodexPermissionProfile}.network={ enabled = false }`,
+      ];
 
-  return ["exec", "-C", workspaceRoot, "--color", "never", "-o", outputPath, ...modeArgs, prompt];
+  return [
+    "exec",
+    "-C",
+    workspaceRoot,
+    "--color",
+    "never",
+    "-o",
+    outputPath,
+    ...modelArgs,
+    ...modeArgs,
+    prompt,
+  ];
 }
 
 async function runWithTee(
@@ -2452,7 +2630,13 @@ async function runCodexSession(input: {
   const promptPath = path.join(runDir, `${input.mode}-prompt.md`);
   writeFileSync(promptPath, `${prompt}\n`);
 
-  const args = codexArgs(input.dangerous, outputPath, prompt, input.worktreeDir);
+  const args = codexArgs(
+    input.dangerous,
+    outputPath,
+    prompt,
+    input.worktreeDir,
+    path.dirname(input.paths.root),
+  );
   writeLine(input.stdout, `[agents] ${input.mode} ${input.changeId}`);
   writeLine(input.stdout, `[agents] prompt ${promptPath}`);
 
@@ -2467,7 +2651,7 @@ async function runCodexSession(input: {
 
 function usage(): string {
   return [
-    "Usage: bun agents watch <worker-name> [options]",
+    "Usage: bun agents watch [worker-name] [options]",
     "       bun agents changes [--json]",
     "       bun agents change <change-id> [--json]",
     "       bun agents status [worker-name]",
@@ -2481,7 +2665,7 @@ function usage(): string {
     "  --base <ref>           Queue and branch base ref. Default: local main.",
     "  --change <change-id>   Restrict watch to one changes/<change-id> branch.",
     "  --worktree-dir <dir>   Override claimed change worktree path.",
-    "  --interval <seconds>   Watch interval. Default: 60.",
+    "  --interval <seconds>   Watch interval. Default: 10.",
     "  --dangerous            Use Codex's no-approval, no-sandbox mode.",
     "  -h, --help             Show this help.",
   ].join("\n");
@@ -2494,12 +2678,11 @@ export function parseAgentsArgs(args: string[]): AgentsOptions | "help" {
 
   const command = args[0];
   if (command === "watch") {
-    const workerName = args[1];
-    if (!workerName || workerName.startsWith("-")) {
-      throw new UsageError("watch requires <worker-name>.");
-    }
+    const workerNameArgument = args[1] && !args[1]?.startsWith("-") ? args[1] : null;
+    const optionStartIndex = workerNameArgument ? 2 : 1;
 
     const options: WatchOptions = {
+      automaticWorkerName: workerNameArgument === null,
       baseRef: defaultBaseRef,
       command: "watch",
       dangerous: false,
@@ -2507,11 +2690,13 @@ export function parseAgentsArgs(args: string[]): AgentsOptions | "help" {
       intervalSeconds: defaultIntervalSeconds,
       once: false,
       targetChangeId: null,
-      workerName: validateWorkerName(workerName),
+      workerName: workerNameArgument
+        ? validateWorkerName(workerNameArgument)
+        : cavemanWorkerNames[0],
       worktreeDir: null,
     };
 
-    for (let index = 2; index < args.length; index += 1) {
+    for (let index = optionStartIndex; index < args.length; index += 1) {
       const arg = args[index];
 
       if (arg === "--once") {
@@ -2652,6 +2837,7 @@ function dryRunCodexCommand(input: {
   changeMetadata?: FormlessChangeCommitMetadata | null;
   changeId: string;
   dangerous: boolean;
+  gitCommonDir: string;
   mode: WorkerSessionMode;
   workerName: string;
   worktreeDir: string;
@@ -2666,7 +2852,10 @@ function dryRunCodexCommand(input: {
           baseRef: input.baseRef,
           changeMetadata: input.changeMetadata,
         });
-  return ["codex", ...codexArgs(input.dangerous, "<output>", prompt, input.worktreeDir)]
+  return [
+    "codex",
+    ...codexArgs(input.dangerous, "<output>", prompt, input.worktreeDir, input.gitCommonDir),
+  ]
     .map(shellQuote)
     .join(" ");
 }
@@ -2676,6 +2865,7 @@ function showDryRunClaim(input: {
   change: CommittedOpenSpecChange;
   now: () => Date;
   options: WatchOptions;
+  paths: AgentStatePaths;
   stdout: Pick<NodeJS.WriteStream, "write">;
 }): void {
   const evidence: AgentEvidence = {
@@ -2705,6 +2895,7 @@ function showDryRunClaim(input: {
       changeMetadata: input.change.metadata,
       changeId: input.change.changeId,
       dangerous: input.options.dangerous,
+      gitCommonDir: path.dirname(input.paths.root),
       mode:
         input.change.metadata && remainingFormlessChangeTasks(input.change.metadata) === 0
           ? "finalize"
@@ -3337,6 +3528,7 @@ async function runWatchOnce(input: {
       change,
       now: input.now,
       options: input.options,
+      paths,
       stdout: input.stdout,
     });
     return 0;
@@ -3576,7 +3768,34 @@ export async function runAgentsCli(args: string[], deps: WorkerDeps = {}): Promi
     }
 
     if (options.command === "watch") {
-      return await runWatch(options, resolvedDeps);
+      const paths = resolveAgentStatePaths(resolvedDeps.cwd, resolvedDeps.runCommand);
+      if (options.dryRun) {
+        const workerName = options.automaticWorkerName
+          ? availableCavemanWorkerName(paths.root)
+          : options.workerName;
+        if (options.automaticWorkerName) {
+          writeLine(resolvedDeps.stdout, `[agents] assigned worker ${workerName}`);
+        }
+        return await runWatch({ ...options, automaticWorkerName: false, workerName }, resolvedDeps);
+      }
+
+      ensureAgentStateDirs(paths);
+      const reservation = reserveWorkerName(
+        paths.root,
+        options.automaticWorkerName ? null : options.workerName,
+        { now: resolvedDeps.now },
+      );
+      if (options.automaticWorkerName) {
+        writeLine(resolvedDeps.stdout, `[agents] assigned worker ${reservation.owner}`);
+      }
+      try {
+        return await runWatch(
+          { ...options, automaticWorkerName: false, workerName: reservation.owner },
+          resolvedDeps,
+        );
+      } finally {
+        releaseWorkerName(reservation);
+      }
     }
 
     if (options.command === "changes") {

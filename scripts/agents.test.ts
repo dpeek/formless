@@ -8,7 +8,9 @@ import {
   branchNameForChange,
   buildLocalOpenSpecFinalizationPrompt,
   buildLocalOpenSpecImplementationPrompt,
+  cavemanWorkerNames,
   classifyChangeLease,
+  codexArgs,
   createChangeLease,
   discoverClaimableOpenSpecChanges,
   ensureAgentStateDirs,
@@ -16,6 +18,7 @@ import {
   findWorkerActiveLease,
   formatFormlessChangeCommitMessage,
   makeWorkerStatus,
+  parseAgentsArgs,
   parseFormlessChangeCommitMessage,
   planChangeBranch,
   publishWorkerBranchToChangeBranch,
@@ -23,6 +26,8 @@ import {
   readChangeLease,
   readWorkerStatus,
   releaseChangeLease,
+  releaseWorkerName,
+  reserveWorkerName,
   resolveAgentStatePaths,
   runAgentsCli,
   workerBranchName,
@@ -501,6 +506,63 @@ describe("local agent worker state", () => {
       expect(releaseChangeLease(paths.root, "add-thing", "olga")).toBe(false);
       expect(releaseChangeLease(paths.root, "add-thing", "igor")).toBe(true);
       expect(readChangeLease(paths.root, "add-thing")).toBeNull();
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  it("reserves the first available caveman name and skips live watchers", () => {
+    const root = tempDir();
+    const paths = agentStatePaths(root);
+    ensureAgentStateDirs(paths);
+
+    try {
+      const grug = reserveWorkerName(paths.root, null, {
+        isProcessAlive: () => true,
+        now: () => new Date("2026-07-15T00:00:00.000Z"),
+        pid: 101,
+      });
+      const thag = reserveWorkerName(paths.root, null, {
+        isProcessAlive: (pid) => pid === 101 || pid === 202,
+        now: () => new Date("2026-07-15T00:00:01.000Z"),
+        pid: 202,
+      });
+
+      expect(cavemanWorkerNames).toEqual(["grug", "thag", "ooga", "barg"]);
+      expect(grug.owner).toBe("grug");
+      expect(thag.owner).toBe("thag");
+      expect(() =>
+        reserveWorkerName(paths.root, "grug", {
+          isProcessAlive: () => true,
+          pid: 303,
+        }),
+      ).toThrow("worker grug is already running");
+      expect(releaseWorkerName(grug)).toBe(true);
+      expect(releaseWorkerName(thag)).toBe(true);
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  it("recovers a caveman name reserved by a dead watcher", () => {
+    const root = tempDir();
+    const paths = agentStatePaths(root);
+    ensureAgentStateDirs(paths);
+
+    try {
+      const stale = reserveWorkerName(paths.root, "grug", {
+        now: () => new Date("2026-07-15T00:00:00.000Z"),
+        pid: 101,
+      });
+      const recovered = reserveWorkerName(paths.root, null, {
+        isProcessAlive: (pid) => pid === 202,
+        now: () => new Date("2026-07-15T00:01:00.000Z"),
+        pid: 202,
+      });
+
+      expect(recovered.owner).toBe("grug");
+      expect(releaseWorkerName(stale)).toBe(false);
+      expect(releaseWorkerName(recovered)).toBe(true);
     } finally {
       rmSync(root, { force: true, recursive: true });
     }
@@ -2387,6 +2449,60 @@ describe("local agent worker review branches", () => {
         rmSync(root, { force: true, recursive: true });
       }
     }
+  });
+});
+
+describe("local agent worker launch defaults", () => {
+  it("accepts an omitted worker name and defaults to a 10-second cycle", () => {
+    expect(parseAgentsArgs(["watch", "--once"])).toMatchObject({
+      automaticWorkerName: true,
+      intervalSeconds: 10,
+      once: true,
+      workerName: "grug",
+    });
+    expect(parseAgentsArgs(["watch", "thag", "--interval", "25"])).toMatchObject({
+      automaticWorkerName: false,
+      intervalSeconds: 25,
+      workerName: "thag",
+    });
+  });
+
+  it("pins Sol extra-high Fast mode with scoped worker permissions", () => {
+    const args = codexArgs(
+      false,
+      "/tmp/final.md",
+      "do work",
+      "/repo/tmp/worktree/grug",
+      "/repo/.git",
+    );
+
+    expect(args).toContain("gpt-5.6-sol");
+    expect(args).toContain('model_reasoning_effort="xhigh"');
+    expect(args).toContain('service_tier="fast"');
+    expect(args).toContain("features.fast_mode=true");
+    expect(args).toContain("--ask-for-approval");
+    expect(args).toContain("never");
+    expect(args).toContain('default_permissions="formless-worker"');
+    expect(args.join(" ")).toContain('"/repo" = "read"');
+    expect(args.join(" ")).toContain('"/repo/tmp/worktree/grug" = "write"');
+    expect(args.join(" ")).toContain('"/repo/.git" = "write"');
+    expect(args.join(" ")).toContain("network={ enabled = false }");
+    expect(args).not.toContain("--full-auto");
+    expect(args).not.toContain("--dangerously-bypass-approvals-and-sandbox");
+  });
+
+  it("keeps dangerous mode explicit while preserving pinned model settings", () => {
+    const args = codexArgs(
+      true,
+      "/tmp/final.md",
+      "do work",
+      "/repo/tmp/worktree/grug",
+      "/repo/.git",
+    );
+
+    expect(args).toContain("gpt-5.6-sol");
+    expect(args).toContain("--dangerously-bypass-approvals-and-sandbox");
+    expect(args.join(" ")).not.toContain("default_permissions");
   });
 });
 
