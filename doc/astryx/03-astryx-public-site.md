@@ -36,6 +36,10 @@ sticky footer, card treatments, spacing, or exact markup.
 - `@dpeek/formless-astryx` is an explicit workspace package with import
   boundaries and build support for browser and Worker consumers. This change
   owns the public Site renderer export, public CSS, and provider integration.
+- The application `FormlessUiContractHost` remains the reactive boundary for
+  generated admin, shell, management, auth, and access presentation. It does not
+  replace the Site-owned public renderer contract or become a dependency of
+  `lib/site-app`.
 - Canonical generated field and operation-control contracts remain available
   for reuse inside the Astryx package where their semantics fit public forms.
 - `@dpeek/formless-site-app` remains the owner of the public Site projection and
@@ -174,6 +178,13 @@ input. It should carry only:
 page or post content, ordered placements, query output, public media facts,
 public operation facts, route facts, and display-safe warnings.
 
+This successful-page boundary deliberately remains component-shaped rather
+than becoming a `FormlessUiContractHost` node. Public browser and Worker SSR
+already share `SitePublicRendererProps`, initial-tree hydration, and workspace
+renderer precedence owned by `lib/site-app`. Do not import the application
+contract host into `lib/site-app`, wrap `SitePageTree` in an admin workspace
+reference, or duplicate the public renderer input in `lib/astryx`.
+
 Do not add raw storage records, schema objects, app targets, fetch clients,
 request objects, browser location objects, private challenge facts, or runtime
 route state. Add a contract fact only when both renderers need it and it cannot
@@ -226,6 +237,11 @@ renderers look alike.
 
 Public form renderer contracts should expose display-safe controlled state and
 intents while Site-owned foundations retain execution.
+
+Public form sessions may use Site-owned local subscription or reducer mechanics
+when needed, but they remain nested Site renderer state. Do not extend the
+application contract-host reference union merely to move public form drafts
+between the Site package and its renderer.
 
 The form presentation facts may include:
 
@@ -283,6 +299,8 @@ The public renderer must work in both React browser and Worker SSR builds.
 - Keep behavior tests for projection input, link resolution, public form
   safety, form state, SSR, hydration, route bases, extension precedence, asset
   boundaries, and public-only data.
+- Keep the application contract host out of the public Site client and Worker
+  renderer graphs.
 - When Astryx component behavior is sufficient, use it directly. Add StyleX
   only for Site-specific composition that cannot be expressed by component
   props, using Astryx tokens.
@@ -302,6 +320,8 @@ section when current code makes the boundary materially different.
   `lib/astryx` or `src`.
 - Record and guard the dependency rule that Astryx may import Site public
   exports while Site must not import Astryx.
+- Guard that `lib/site-app` and its public client graph do not import
+  `@dpeek/formless-astryx/contract-host` or its React provider.
 - Keep the successful page renderer extension component-shaped and
   projection-only.
 - Add focused type and boundary coverage for canonical imports and forbidden
@@ -571,6 +591,8 @@ The proposed change should collect evidence for:
 - workspace renderer precedence over the built-in renderer;
 - public stylesheet and client asset delivery;
 - public client import-boundary exclusion of admin and private modules;
+- no application contract-host dependency in `lib/site-app`, the public client,
+  or Worker renderer graph;
 - no production block-level renderer switching;
 - no public Tailwind/Formless UI dependency after activation; and
 - current devstate and browser smoke results.
@@ -609,6 +631,8 @@ The change is complete when:
 - SSR, hydration, theme, client assets, metadata, indexing, icons, cache, and
   public operation behavior remain current;
 - the public browser import graph remains public-only;
+- `lib/site-app` and the public renderer graph do not import the application
+  contract host;
 - legacy public Site presentation and its Tailwind/Formless UI dependencies are
   deleted rather than retained as fallbacks; and
 - the final switch is a mechanical renderer and CSS selection change made only

@@ -8,7 +8,7 @@ The completed change should:
 
 - prove that every production app, shell, auth, management, access, generated
   workspace, and Site tree-builder surface has a complete renderer-neutral
-  contract and complete Astryx renderer;
+  contract-host reference path and complete subscribed Astryx renderer;
 - close small residual presentation gaps that were not naturally owned by the
   earlier contract changes;
 - expose only production-ready package subpaths from
@@ -37,7 +37,10 @@ second public Site migration.
   public renderer and stylesheet switch.
 - `astryx-site-tree-builder` is complete and landed on `main`.
 - Production app surfaces select legacy renderers only through explicit seams.
-- Astryx renderers support the complete contracts used by those seams.
+- Runtime presentation roots own stable contract hosts and publish complete
+  immutable node sets through typed references.
+- Legacy and Astryx subscribed renderers support the same references and pure
+  complete-snapshot renderers remain available for focused tests.
 - No renderer contract contains records, schema models, browser replica hooks,
   storage clients, sync setters, operation controllers, route authorities,
   secrets, Tailwind classes, React nodes, or renderer-specific props.
@@ -51,8 +54,13 @@ fallback.
 
 The baseline observed while writing this plan is:
 
-- `@dpeek/formless-astryx` currently exports only `./contract`; its prototype
-  source and theme are not yet a production package surface.
+- `@dpeek/formless-astryx` currently exports `./contract`, `./contract-host`,
+  and `./contract-host/react`; its prototype renderers and theme are not yet a
+  production package surface.
+- Production non-tree generated workspaces already use one stable runtime-owned
+  host, atomic manifest/section/result publication, and the subscribed legacy
+  renderer. The shell/auth and tree-builder changes are expected to extend that
+  path to their application surfaces before cutover.
 - `lib/astryx/vite.config.ts` applies `astryxStylex()`, while the root runtime
   Vite config applies React, Tailwind, Cloudflare, and runtime-extension
   plugins but not the Astryx StyleX build plugin.
@@ -103,6 +111,8 @@ subtraction list, not guaranteed remaining work.
 - Production Astryx package exports for contracts, renderers, layout,
   navigation, dialogs, operations, auth, theme, Markdown, source icons, and
   global CSS actually required by the landed runtime.
+- Production contract-host exports, typed references, subscribed renderers, and
+  provider hooks required by the complete application assembly.
 - Root runtime integration for Astryx StyleX compilation and emitted CSS.
 - Root ThemeProvider, router/navigation bridge, toast, portal, dialog, and
   other global presentation hosts required by the complete Astryx app.
@@ -142,8 +152,9 @@ The cutover gate is all-or-nothing. Before production selection changes:
 
 - every production presentation surface is named in a cutover inventory;
 - each surface points to a renderer-neutral contract, runtime projection and
-  intent adapter, legacy renderer seam, complete Astryx renderer, and fixture
-  or focused evidence;
+  host publication adapter, canonical intent dispatch, subscribed legacy seam,
+  complete subscribed Astryx renderer, and memory-host fixture or focused
+  evidence;
 - all direct `@dpeek/formless-ui` imports are either inside dormant legacy
   renderer modules scheduled for deletion or are explicitly assigned to a
   preparation task;
@@ -173,13 +184,35 @@ The assembly should compose the landed Astryx implementations for:
 - application loading, empty, missing, status, readiness, and failure states.
 
 Runtime modules continue to own route matching, state reads, projection,
-effects, and navigation. The presentation assembly receives only contract data
-and intent callbacks.
+effects, and navigation. Each mounted presentation root keeps one stable host,
+publishes its complete next node set in the commit phase, and passes only the
+host plus stable root references to the subscribed application assembly.
+Canonical intents dispatch through the host; runtime callbacks, selectors, and
+changing complete snapshots do not cross the renderer boundary.
 
 Before activation, production selects the complete legacy assembly and tests
 may select the complete Astryx assembly. The final task changes that single
 selection and deletes the legacy alternative. It does not leave a permanent
 renderer selector behind.
+
+### Contract-host continuity
+
+The renderer switch must not replace the runtime host or introduce an
+Astryx-specific state path.
+
+- React Context carries the same stable host before and after activation.
+- The legacy and Astryx assemblies start from the same shell, management, auth,
+  access, workspace, and tree root references.
+- Runtime adapters keep atomic publication, semantic identity reuse, removal,
+  server snapshots, hydration, and scoped notification behavior unchanged.
+- The selected route outlet remains separate React composition rather than a
+  host snapshot or `ReactNode` field.
+- The public Site stays on its Site-owned `SitePublicRendererProps` boundary and
+  public-only graph; it does not join the application contract host.
+
+Activation changes subscribed presentation and root styling only. It does not
+reproject data, translate host nodes, pass complete snapshots through Context,
+or add an application-wide rerendering wrapper.
 
 ### Residual surface ownership
 
@@ -188,7 +221,7 @@ Earlier change boundaries take precedence. At exploration time:
 - fold sync and reset presentation into the shell or management contracts if
   `astryx-shell-auth` already owns those facts;
 - fold readiness, loading, empty, and result warnings into generated workspace
-  contracts if `astryx-generated-workspace` or
+  host nodes if `astryx-generated-workspace` or
   `astryx-site-tree-builder` already owns them;
 - remove `@dpeek/formless-media/react` visual usage when the canonical
   `FormlessUiField` media contract and Astryx field renderer already replace
@@ -258,6 +291,9 @@ After activation:
   UX parity.
 - Keep StyleX styling in `lib/astryx` and use Astryx tokens.
 - Keep runtime data, effects, and authority outside presentation.
+- Keep the stable host, reference identities, atomic publication, server
+  snapshots, hydration, and canonical dispatch behavior unchanged during
+  renderer activation.
 - Preserve invalid drafts, missing references, pending state, display-safe
   failures, and semantic intent behavior through the existing contracts.
 - Delete obsolete tests with the implementation they constrain; replace only
@@ -278,7 +314,9 @@ and split only when the atomic activation invariant remains intact.
   application presentation surface, public renderer path, renderer selector,
   CSS entrypoint, build plugin, and global provider.
 - Map each application surface to its canonical contract, runtime projection,
-  intent adapter, legacy seam, Astryx renderer, fixtures, and focused tests.
+  host reference and node, publication adapter, canonical intent dispatch,
+  subscribed legacy seam, subscribed Astryx renderer, memory-host fixtures, and
+  focused tests.
 - Enumerate every remaining `@dpeek/formless-ui`, `lib/ui`, Tailwind,
   `@tailwindcss/vite`, direct `@astryxdesign/*`, deep Astryx source, and legacy
   CSS reference across source, tests, manifests, declarations, scripts, and
@@ -294,7 +332,7 @@ and split only when the atomic activation invariant remains intact.
   confirmation, local-session, and developer reset states left after the four
   prerequisite changes.
 - Reuse and extend the landed shell, management, auth, generated workspace, or
-  tree contracts where they already own the facts.
+  tree references and nodes where they already own the facts.
 - Add only missing display-safe data, availability, action, and status intents;
   keep replica reads, sync effects, reset effects, route transitions, and
   retry behavior in runtime modules.
@@ -305,8 +343,8 @@ and split only when the atomic activation invariant remains intact.
 
 ### 3. Move residual legacy application states behind their owned seams
 
-- Make the production legacy shell, management, auth, workspace, and tree
-  renderers consume the reconciled residual contracts.
+- Make the production subscribed legacy shell, management, auth, workspace,
+  and tree renderers consume the reconciled residual host references.
 - Move any remaining direct Tailwind markup for those states into the dormant
   legacy renderer modules scheduled for atomic deletion.
 - Remove duplicated status, warning, fallback, and action composition from
@@ -325,6 +363,8 @@ and split only when the atomic activation invariant remains intact.
   markup.
 - Add package-local data-only fixtures for representative pending, success,
   disabled, empty, missing, blocked, warning, and failure states.
+- Publish those fixture snapshots through the reusable memory host and exercise
+  the subscribed Astryx entrypoints.
 - Verify accessibility names, live status, focus, dialog, retry, and disabled
   behavior where applicable.
 
@@ -358,8 +398,9 @@ and split only when the atomic activation invariant remains intact.
 ### 7. Publish the production Astryx package surface
 
 - Reconcile the landed package exports with actual runtime needs and expose
-  explicit subpaths for contracts, renderers, layout, navigation, dialogs,
-  operations, auth, theme, Markdown, source icons, and global CSS as needed.
+  explicit subpaths for contracts, the contract host and React provider,
+  subscribed renderers, layout, navigation, dialogs, operations, auth, theme,
+  Markdown, source icons, and global CSS as needed.
 - Keep prototype roots, fixture controls, scenario switchers, and exploratory
   layouts unexported.
 - Move or rename prototype modules only where needed to establish a clear
@@ -385,8 +426,9 @@ and split only when the atomic activation invariant remains intact.
 ### 9. Prepare the Astryx root provider and CSS assembly
 
 - Export and compose the Formless Astryx ThemeProvider, theme mode policy,
-  navigation bridge, toast viewport, portal roots, dialog host, and any other
-  complete-app presentation providers required by landed renderers.
+  stable contract-host provider, navigation bridge, toast viewport, portal
+  roots, dialog host, and any other complete-app presentation providers required
+  by landed renderers.
 - Keep route navigation in the runtime bridge and pass only navigation intents
   through presentation contracts.
 - Provide separate package-owned app and public CSS entrypoints only if the
@@ -398,9 +440,9 @@ and split only when the atomic activation invariant remains intact.
 ### 10. Centralize complete application renderer assembly
 
 - Compose the full legacy application presentation behind one temporary
-  application-level assembly used by production.
+  application-level subscribed assembly used by production.
 - Compose the full Astryx application presentation behind the same canonical
-  runtime inputs for tests and cutover preparation.
+  host and stable root references for tests and cutover preparation.
 - Remove lower-level renderer selection from fields, records, collections,
   workspaces, tree results, routes, dialogs, and shell modules.
 - Reject per-surface fallbacks and ensure a missing renderer is a preparation
@@ -414,7 +456,9 @@ and split only when the atomic activation invariant remains intact.
   invitation, access management, Site tree authoring, missing routes, local
   session, and public Site isolation.
 - Exercise the complete legacy and Astryx application assemblies against the
-  same canonical contracts where dual-renderer behavior still matters.
+  same stable host references where dual-renderer behavior still matters.
+- Assert atomic publication, unchanged-node identity, scoped notification,
+  removal, server snapshots, and hydration across the complete node union.
 - Assert semantic intent dispatch, controlled state, accessibility, secret
   exclusion, and display-safe failure behavior rather than exact DOM parity.
 - Add static guards for direct legacy imports, deep Astryx imports, direct
@@ -431,6 +475,8 @@ and split only when the atomic activation invariant remains intact.
 - Verify nested generated workspaces, tree workspaces, shell navigation,
   management, auth, access, global dialogs, toasts, theme switching, media,
   Markdown, icons, loading, and failures coexist under one provider tree.
+- Verify a result-only publication does not rerender unrelated shell,
+  management, auth, access, section, or sibling result subtrees.
 - Build production client and SSR assets to expose StyleX, chunking, CSS,
   hydration, portal, and package-export faults before production selection
   changes.
@@ -454,6 +500,8 @@ and split only when the atomic activation invariant remains intact.
 ### 14. Activate Astryx and delete the legacy stack atomically
 
 - Switch the single application presentation assembly from legacy to Astryx.
+- Keep the existing stable runtime hosts and root references; switch only the
+  subscribed renderer assembly.
 - Switch `src/main.tsx` to the Astryx root provider, navigation bridge, global
   hosts, and app CSS.
 - Delete all dormant legacy generated, tree, shell, management, auth, access,
@@ -477,6 +525,9 @@ and split only when the atomic activation invariant remains intact.
 
 - Re-run import, dependency, package export, client boundary, build asset,
   contract, route, auth security, SSR, hydration, and current devstate checks.
+- Re-run contract-host publication, identity, scoped notification, removal,
+  dispatch, server snapshot, and hydration checks against the Astryx-only
+  assembly.
 - Browser smoke dev workbench and product instance profiles across generated
   list, table, record, create, operation, non-tree workspace, Site tree,
   management, auth, account, invitation, access, loading, empty, missing,
@@ -495,6 +546,8 @@ and split only when the atomic activation invariant remains intact.
 The proposed change should collect evidence for:
 
 - a complete surface-to-contract-to-renderer cutover inventory;
+- stable contract-host continuity and scoped render evidence across the
+  renderer switch;
 - zero material contract or Astryx renderer gaps before activation;
 - residual application states projected without runtime data entering Astryx;
 - Media upload and asset behavior remaining outside presentation;
@@ -523,8 +576,9 @@ start another dev server, and rely on the user for prototype visual feedback.
 `change-propose` should reconcile the smallest applicable canonical specs:
 
 - `openspec/specs/generated-ui/spec.md` for Astryx as the current application
-  presentation assembly, root provider behavior, complete renderer selection,
-  residual application states, and deletion of legacy/deferred-switch facts;
+  subscribed presentation assembly, stable contract-host continuity, root
+  provider behavior, complete renderer selection, residual application states,
+  and deletion of legacy/deferred-switch facts;
 - `openspec/specs/site-runtime/spec.md` only to describe the already-landed
   Astryx public renderer and verify its isolated asset boundary remains
   current;
@@ -547,11 +601,15 @@ presentation implementation changed.
 
 The Astryx contract migration is complete when:
 
-- every production browser surface consumes renderer-neutral data and intents;
+- every production application surface consumes stable renderer-neutral host
+  references and dispatches canonical intents through the host;
 - one complete Astryx application assembly renders all supported app, shell,
   management, auth, access, generated workspace, and tree states;
 - production entrypoints use the Formless Astryx ThemeProvider, global hosts,
   navigation bridge, CSS, and StyleX build path;
+- renderer activation preserves host identity, reference keys, atomic
+  publication, semantic identity reuse, scoped notification, removal, server
+  snapshots, and hydration;
 - the public Site remains on its Astryx renderer and public-only client graph;
 - runtime storage, projection, route policy, auth, sync, operation, and media
   behavior remain outside `lib/astryx`;

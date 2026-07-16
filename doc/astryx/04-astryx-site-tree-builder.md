@@ -11,6 +11,9 @@ The completed change should:
 
 - extend the canonical generated workspace result contract with a complete
   tree-builder result instead of an opaque React slot or separate runtime path;
+- extend the landed contract host with a typed tree-result reference and node so
+  tree-backed sections use the same subscribed workspace path as list, table,
+  and record results;
 - project flat placement and child records into a nested presentation tree
   before rendering while keeping storage flat;
 - keep replica reads, tree model selection, relationship traversal, branch
@@ -22,8 +25,8 @@ The completed change should:
   rebuilding DnD in Astryx;
 - preserve create-child, remove-placement, nested editing, context navigation,
   readiness, missing-child, cycle, and maximum-depth behavior;
-- make the production legacy renderer consume only the canonical tree-builder
-  contract;
+- make the production subscribed legacy renderer consume only the canonical
+  tree-result reference and snapshot;
 - implement an Astryx hierarchy outline and focused node editor using Astryx
   tree, layout, form, menu, dialog, status, and action components;
 - add data-only Site composition fixtures and a focused prototype layout; and
@@ -40,6 +43,9 @@ structure, or exact test markup.
 - `astryx-generated-workspace` is complete and the canonical workspace contract
   supports list, table, record, context, and list-detail results while
   explicitly deferring tree results.
+- The stable generated workspace contract host publishes workspace manifests,
+  section shells, and scoped list, table, and record-result nodes atomically;
+  tree result references and nodes are the missing host member.
 - Canonical create-surface, record-field, display-field, field-set,
   operation-control, destructive-confirmation, warning, empty-state, and
   semantic ordering contracts are available for composition.
@@ -91,6 +97,9 @@ The baseline observed while writing this plan is:
   fixture currently exists.
 - the planned generated workspace contract leaves tree-backed sections on their
   existing production path until this change can add them completely.
+- non-tree production workspaces already render through the stable host and
+  subscribed legacy workspace entrypoint; any tree section currently makes the
+  generated workspace ineligible and retains the direct tree path.
 
 Future exploration must treat these as observations, not guaranteed facts.
 
@@ -102,6 +111,9 @@ Future exploration must treat these as observations, not guaranteed facts.
   composition as the first production consumer.
 - A canonical tree result member in generated screen, collection, context, and
   list-detail workspace composition.
+- A typed main tree-result reference, host node, snapshot mapping, validation,
+  subscription hook, production publication adapter, and memory-host fixture
+  support.
 - Projection of selected root, ordered placement edges, child records, branch
   state, stable item identity, labels, variant display facts, slots, and nested
   children.
@@ -175,6 +187,20 @@ It must not carry `TreeResultModel`, `HomeContextConfig`, `QueryEvaluationContex
 `StoredRecord`, schema types, relationships, record maps, operation configs,
 controllers, DnD events, rank plans, sync functions, React components,
 renderer props, or Tailwind classes.
+
+The complete tree contract is the snapshot behind one scoped main-result
+reference. Extend the existing result-reference and host-node unions rather
+than putting the nested tree inside a section shell or adding a tree-specific
+Context. The workspace manifest continues to own section order, the section
+shell continues to own collection chrome, and the tree-result node owns the
+complete projected hierarchy and focused editor.
+
+Runtime may still reproject the complete tree on a relevant transition. The
+host reuses semantically unchanged workspace and section snapshots, publishes
+the complete next node set atomically, and notifies only the tree-result
+subscriber when shell structure and collection chrome did not change. Do not
+normalize every tree item, field, warning, or operation until profiling shows a
+hot boundary.
 
 ### Tree items and flat-data boundaries
 
@@ -320,12 +346,15 @@ intents.
 ## Migration Rules
 
 - Formalize the complete tree contract before routing production through it.
+- Extend the landed host reference, snapshot, node, validation, React hook, and
+  memory implementation with the complete tree result before removing the tree
+  workspace fallback.
 - Prove the outline-plus-editor direction with canonical-shaped data before
   deleting the current tree component.
 - Reuse canonical field, create, operation, confirmation, warning, empty-state,
   and ordering contracts rather than creating tree-only copies.
-- Move production to a dedicated legacy renderer that consumes the same tree
-  contract before completing the Astryx renderer.
+- Move production to a subscribed legacy renderer that reads the tree result
+  from the same stable host before completing the Astryx renderer.
 - Keep direct `@dpeek/formless-ui` imports for tree-backed workspace surfaces
   inside the owned legacy seam modules identified by the change. Foundation,
   projection, runtime, and canonical contract modules contain none.
@@ -334,6 +363,8 @@ intents.
 - Keep tree-backed generated workspace sections on one complete path. Do not
   add an opaque tree slot, direct React renderer handoff, or partial tree
   placeholder.
+- Publish tree, section, and workspace changes in one commit-phase transaction;
+  do not publish or notify during render.
 - Preserve operation capability and display-safe failure behavior, not legacy
   sync messages, class names, DOM order, or drag tests.
 - Leave production renderer selection unchanged after both renderers support
@@ -358,6 +389,9 @@ section when landed contracts make the boundary materially different.
   selected editor.
 - Add a complete tree member to the canonical generated workspace result union
   without adding React nodes or renderer callbacks.
+- Add a typed main tree-result reference and host node, extend snapshot typing,
+  reference keys, complete-set validation, subscription hooks, and memory-host
+  publication, and preserve current server snapshot and hydration semantics.
 - Add focused type and serialization coverage excluding raw runtime and
   renderer-specific values.
 
@@ -372,6 +406,9 @@ section when landed contracts make the boundary materially different.
   ordering fields, and schema-rich tree models outside the returned contract.
 - Project unavailable and empty states explicitly, including root-level child
   creation availability.
+- Flatten each complete workspace projection into the existing manifest and
+  section-shell nodes plus one tree-result node and publish it through the
+  stable runtime-owned host.
 - Add focused foundation coverage for flat, nested, empty, missing, cyclic,
   leaf, and depth-stopped trees.
 
@@ -473,15 +510,20 @@ section when landed contracts make the boundary materially different.
   or placing every field inside a tree row.
 - Keep the prototype free of records, schemas, generated runtime, operation
   controllers, DnD, storage, sync, and proof-oriented UI.
+- Wrap fixture snapshots in the reusable memory host and render through the
+  subscribed Astryx workspace entrypoint while retaining direct pure renderer
+  tests.
 
 ### 10. Move production tree results behind the legacy renderer seam
 
-- Add a dedicated legacy tree-builder renderer that consumes only the complete
-  canonical tree contract and nested contracts.
+- Add pure and subscribed legacy tree-builder renderers; the subscribed wrapper
+  reads only the scoped tree-result reference and delegates presentation to the
+  pure complete-snapshot renderer.
 - Route production tree-result sections through the generated tree foundation,
   controlled state, intent runtime, and legacy adapter.
 - Extend the canonical generated workspace foundation and legacy workspace
-  renderer so tree sections no longer bypass workspace result composition.
+  host publication so tree sections no longer bypass workspace result
+  composition.
 - Remove direct replica and readiness hooks, operation controllers, create
   orchestration, ordering plans, and context resolution from legacy
   presentation code.
@@ -549,9 +591,11 @@ section when landed contracts make the boundary materially different.
   allowed child policy, slot scopes, nested fields, specialized fields,
   context links, creation, ordering, removal, warnings, and async states.
 - Add minimal fixture reducers for selection, field, create, operation,
-  confirmation, and reorder intents without simulating runtime plans.
+  confirmation, and reorder intents behind the reusable memory host without
+  simulating runtime plans.
 - Compose the complete Astryx tree-builder renderer into the canonical Astryx
-  generated workspace renderer for tree-result sections.
+  subscribed generated workspace renderer for tree-result references while
+  retaining the direct snapshot entrypoint.
 - Verify list-detail root selection, root record detail, tree outline, selected
   node editor, and tree actions form one coherent workspace without an opaque
   tree slot.
@@ -580,6 +624,8 @@ The proposed change should collect evidence for:
   warning, and intent contracts;
 - generated workspace tree-result composition without React-node escape
   hatches;
+- atomic host publication, stable unchanged workspace and section identities,
+  tree-result-only notification, removal, server snapshots, and hydration;
 - flat records remaining runtime input rather than renderer input;
 - nested structure, leaf policy, missing children, cycles, and maximum depth;
 - separate placement-edge and child-record field projection;
@@ -590,7 +636,7 @@ The proposed change should collect evidence for:
 - parent-and-slot-scoped semantic ordering and no tree DnD contract;
 - selection retention and fallback after create, remove, and refresh;
 - readiness and structural diagnostics with private data excluded;
-- legacy renderer consumption of the complete contract;
+- subscribed legacy renderer consumption of the scoped complete tree snapshot;
 - import-confinement evidence that tree-backed production surfaces have no
   direct `@dpeek/formless-ui` imports outside their owned legacy seam modules;
 - Astryx hierarchy, editor, create, action, warning, and responsive behavior;
@@ -603,8 +649,9 @@ The proposed change should collect evidence for:
 `change-propose` should reconcile at least:
 
 - `openspec/specs/generated-ui/spec.md` for the canonical tree-builder contract,
-  generated workspace tree-result composition, legacy adapter, semantic
-  ordering, Astryx renderer, fixtures, and deferred production activation; and
+  tree-result host reference and node, generated workspace subscribed
+  composition, legacy adapter, semantic ordering, Astryx renderer, fixtures,
+  and deferred production activation; and
 - `openspec/specs/site-runtime/spec.md` for current Site authoring behavior,
   allowed child policy, flat placement composition, remove-placement semantics,
   and renderer-neutral tree authoring where those facts are Site-specific.
@@ -619,6 +666,8 @@ The change is complete when:
 
 - tree results are a complete member of the canonical generated workspace
   contract;
+- tree results publish through the existing stable contract host and unchanged
+  workspace or section nodes retain identity without notification;
 - production Site composition projects flat records into renderer-neutral tree
   data and intents before rendering;
 - the legacy renderer receives no records, schema models, relationship models,
@@ -633,7 +682,7 @@ The change is complete when:
 - canonical data-only fixtures cover real Site composition states without
   runtime imports;
 - legacy and Astryx generated workspace renderers both compose tree results
-  without an opaque slot;
+  by scoped reference without an opaque slot;
 - all direct `@dpeek/formless-ui` imports for tree-backed workspace surfaces are
   confined to the owned legacy seam modules identified by the change;
 - obsolete monolithic tree and drag code is deleted rather than retained as a
