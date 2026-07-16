@@ -1,14 +1,19 @@
 import type {
+  FormlessUiContractIntent,
+  FormlessUiContractIntentHandler,
   FormlessUiContractReference,
   FormlessUiListContract,
   FormlessUiListResultReference,
   FormlessUiRecordResultContract,
   FormlessUiRecordResultReference,
   FormlessUiResultReferenceRole,
+  FormlessUiShellManifestContract,
+  FormlessUiShellManifestReference,
+  FormlessUiShellNavigationSectionContract,
+  FormlessUiShellNavigationSectionReference,
   FormlessUiTableContract,
   FormlessUiTableResultReference,
   FormlessUiWorkspaceIntent,
-  FormlessUiWorkspaceIntentHandler,
   FormlessUiWorkspaceManifestContract,
   FormlessUiWorkspaceManifestReference,
   FormlessUiWorkspaceSectionShellContract,
@@ -20,18 +25,22 @@ export type FormlessUiContractSnapshot<Reference extends FormlessUiContractRefer
     ? FormlessUiWorkspaceManifestContract
     : Reference extends FormlessUiWorkspaceSectionShellReference
       ? FormlessUiWorkspaceSectionShellContract
-      : Reference extends FormlessUiListResultReference
-        ? FormlessUiListContract
-        : Reference extends FormlessUiTableResultReference
-          ? FormlessUiTableContract
-          : Reference extends FormlessUiRecordResultReference
-            ? FormlessUiRecordResultContract
-            : never;
+      : Reference extends FormlessUiShellManifestReference
+        ? FormlessUiShellManifestContract
+        : Reference extends FormlessUiShellNavigationSectionReference
+          ? FormlessUiShellNavigationSectionContract
+          : Reference extends FormlessUiListResultReference
+            ? FormlessUiListContract
+            : Reference extends FormlessUiTableResultReference
+              ? FormlessUiTableContract
+              : Reference extends FormlessUiRecordResultReference
+                ? FormlessUiRecordResultContract
+                : never;
 
 export type FormlessUiContractHostListener = () => void;
 
 export type FormlessUiContractHost = {
-  dispatch(intent: FormlessUiWorkspaceIntent): ReturnType<FormlessUiWorkspaceIntentHandler>;
+  dispatch(intent: FormlessUiContractIntent): ReturnType<FormlessUiContractIntentHandler>;
   getServerSnapshot<Reference extends FormlessUiContractReference>(
     reference: Reference,
   ): FormlessUiContractSnapshot<Reference> | undefined;
@@ -54,6 +63,16 @@ export type FormlessUiWorkspaceSectionShellNode = {
   snapshot: FormlessUiWorkspaceSectionShellContract;
 };
 
+export type FormlessUiShellManifestNode = {
+  reference: FormlessUiShellManifestReference;
+  snapshot: FormlessUiShellManifestContract;
+};
+
+export type FormlessUiShellNavigationSectionNode = {
+  reference: FormlessUiShellNavigationSectionReference;
+  snapshot: FormlessUiShellNavigationSectionContract;
+};
+
 export type FormlessUiListResultNode = {
   reference: FormlessUiListResultReference;
   snapshot: FormlessUiListContract;
@@ -72,6 +91,8 @@ export type FormlessUiRecordResultNode = {
 export type FormlessUiContractHostNode =
   | FormlessUiListResultNode
   | FormlessUiRecordResultNode
+  | FormlessUiShellManifestNode
+  | FormlessUiShellNavigationSectionNode
   | FormlessUiTableResultNode
   | FormlessUiWorkspaceManifestNode
   | FormlessUiWorkspaceSectionShellNode;
@@ -83,7 +104,7 @@ export type FormlessUiMutableContractHost = FormlessUiContractHost & {
 };
 
 export type FormlessUiMemoryContractHostOptions = {
-  dispatch?: FormlessUiWorkspaceIntentHandler;
+  dispatch?: FormlessUiContractIntentHandler;
   nodes?: FormlessUiContractHostNodeSet;
   serverNodes?: FormlessUiContractHostNodeSet;
 };
@@ -178,6 +199,28 @@ export function formlessUiWorkspaceSectionShellReference(
   };
 }
 
+export function formlessUiShellManifestReference(
+  shellId: string,
+): FormlessUiShellManifestReference {
+  return {
+    kind: "shellManifestReference",
+    role: "shell",
+    shellId,
+  };
+}
+
+export function formlessUiShellNavigationSectionReference(
+  shellId: string,
+  sectionId: string,
+): FormlessUiShellNavigationSectionReference {
+  return {
+    kind: "shellNavigationSectionReference",
+    role: "shellNavigationSection",
+    sectionId,
+    shellId,
+  };
+}
+
 export function formlessUiListResultReference({
   resultId,
   role,
@@ -225,6 +268,10 @@ export function formlessUiRecordResultReference<Role extends FormlessUiResultRef
 
 export function formlessUiContractReferenceKey(reference: FormlessUiContractReference): string {
   switch (reference.kind) {
+    case "shellManifestReference":
+      return JSON.stringify([reference.role, reference.shellId]);
+    case "shellNavigationSectionReference":
+      return JSON.stringify([reference.role, reference.shellId, reference.sectionId]);
     case "workspaceManifestReference":
       return JSON.stringify([reference.role, reference.workspaceId]);
     case "workspaceSectionShellReference":
@@ -239,6 +286,20 @@ export function formlessUiContractReferenceKey(reference: FormlessUiContractRefe
         reference.kind,
         reference.resultId,
       ]);
+  }
+}
+
+export function isFormlessUiWorkspaceIntent(
+  intent: FormlessUiContractIntent,
+): intent is FormlessUiWorkspaceIntent {
+  switch (intent.type) {
+    case "shellCreate":
+    case "shellLogout":
+    case "shellReset":
+    case "shellRootRecordSelection":
+      return false;
+    default:
+      return true;
   }
 }
 
@@ -283,6 +344,20 @@ function assertNodeMatchesReference(node: FormlessUiContractHostNode) {
   const { reference, snapshot } = node;
 
   switch (reference.kind) {
+    case "shellManifestReference":
+      if (snapshot.kind !== "shellManifest" || snapshot.id !== reference.shellId) {
+        throw mismatchedNodeError(reference);
+      }
+      return;
+    case "shellNavigationSectionReference":
+      if (
+        snapshot.kind !== "shellNavigationSection" ||
+        snapshot.id !== reference.sectionId ||
+        snapshot.shellId !== reference.shellId
+      ) {
+        throw mismatchedNodeError(reference);
+      }
+      return;
     case "workspaceManifestReference":
       if (snapshot.kind !== "workspaceManifest" || snapshot.id !== reference.workspaceId) {
         throw mismatchedNodeError(reference);
@@ -318,8 +393,40 @@ function mismatchedNodeError(reference: FormlessUiContractReference) {
 
 function assertReferencesResolve(nodes: StoredContractNodes) {
   for (const node of nodes.values()) {
+    if (node.snapshot.kind === "shellManifest") {
+      const manifest = node.snapshot;
+      for (const sectionReference of manifest.navigationSections) {
+        if (sectionReference.shellId !== manifest.id) {
+          throw invalidScopedReferenceError(sectionReference);
+        }
+        assertReferenceResolves(nodes, sectionReference);
+      }
+
+      const activeDestination = manifest.activeDestination;
+      if (activeDestination) {
+        const sectionReference = manifest.navigationSections.find(
+          ({ sectionId }) => sectionId === activeDestination.sectionId,
+        );
+        const section = sectionReference
+          ? snapshotForReference(nodes, sectionReference)
+          : undefined;
+        if (
+          !section ||
+          !section.destinations.some(({ id }) => id === activeDestination.destinationId)
+        ) {
+          throw new Error(
+            `Formless UI shell active destination ${JSON.stringify(activeDestination)} has no snapshot.`,
+          );
+        }
+      }
+      continue;
+    }
+
     if (node.snapshot.kind === "workspaceManifest") {
       for (const sectionReference of node.snapshot.sections) {
+        if (sectionReference.workspaceId !== node.snapshot.id) {
+          throw invalidScopedReferenceError(sectionReference);
+        }
         assertReferenceResolves(nodes, sectionReference);
       }
       continue;
@@ -327,12 +434,37 @@ function assertReferencesResolve(nodes: StoredContractNodes) {
 
     if (node.snapshot.kind === "workspaceSectionShell") {
       const { presentation } = node.snapshot.collection;
+      const sectionNode = node as StoredContractNode & {
+        reference: FormlessUiWorkspaceSectionShellReference;
+      };
+      assertWorkspaceResultScope(sectionNode.reference, presentation.result);
       assertReferenceResolves(nodes, presentation.result);
       if (presentation.contextDetail) {
+        assertWorkspaceResultScope(sectionNode.reference, presentation.contextDetail);
         assertReferenceResolves(nodes, presentation.contextDetail);
       }
     }
   }
+}
+
+function assertWorkspaceResultScope(
+  sectionReference: FormlessUiWorkspaceSectionShellReference,
+  resultReference: FormlessUiContractReference,
+) {
+  if (
+    !("workspaceId" in resultReference) ||
+    !("sectionId" in resultReference) ||
+    resultReference.workspaceId !== sectionReference.workspaceId ||
+    resultReference.sectionId !== sectionReference.sectionId
+  ) {
+    throw invalidScopedReferenceError(resultReference);
+  }
+}
+
+function invalidScopedReferenceError(reference: FormlessUiContractReference) {
+  return new Error(
+    `Formless UI contract reference ${formlessUiContractReferenceKey(reference)} has an invalid parent scope.`,
+  );
 }
 
 function assertReferenceResolves(

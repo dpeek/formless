@@ -16,6 +16,7 @@ import {
   formlessUiTableResultReference,
   formlessUiWorkspaceManifestReference,
   formlessUiWorkspaceSectionShellReference,
+  isFormlessUiWorkspaceIntent,
   type FormlessUiContractHostNode,
   type FormlessUiContractHostNodeSet,
   type FormlessUiMutableContractHost,
@@ -69,7 +70,12 @@ export function useGeneratedWorkspaceContractHost({
   const dispatchRef = useRef(dispatch);
   const [host] = useState(() =>
     createFormlessUiMemoryContractHost({
-      dispatch: (intent) => dispatchRef.current(intent),
+      dispatch: (intent) => {
+        if (!isFormlessUiWorkspaceIntent(intent)) {
+          throw new Error("Generated workspace contract host received a shell intent.");
+        }
+        return dispatchRef.current(intent);
+      },
       ...(publication === undefined ? {} : { nodes: publication.nodes }),
     }),
   );

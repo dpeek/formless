@@ -9,7 +9,10 @@ import type { EntitySchema, QueryEvaluationContext } from "@dpeek/formless-schem
 import type { RecordValues } from "@dpeek/formless-storage";
 import { setSyncStatus } from "../../client/sync-status.ts";
 import { selectEntityOperationByKind } from "../../client/operation-presentation-model.ts";
-import { createReferenceOptionsSelector } from "../../client/projections.ts";
+import {
+  createReferenceOptionsSelector,
+  type BrowserReplicaProjectionSnapshot,
+} from "../../client/projections.ts";
 import { getClientStoreSnapshot, subscribeToClientStore } from "../../client/store.ts";
 import {
   type CreateDefaultConfig,
@@ -65,6 +68,27 @@ const DEFAULT_CREATE_TRIGGER: GeneratedCreateTriggerPresentation = {
   content: { kind: "label", label: "Create" },
   density: "default",
   prominence: "primary",
+};
+
+const GENERATED_CREATE_FAILURE_MESSAGE = "Create failed. Try again.";
+
+export type GeneratedCreateRuntimeOptions = {
+  closeOnSuccess: boolean;
+  displaySafeErrors?: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSuccess?: (recordId: string) => void;
+  open: boolean;
+  operation: CreateHomeOperationConfig;
+  queryContext?: QueryEvaluationContext;
+  submitValues?: (values: RecordValues) => Promise<{ recordId: string }>;
+  surfaceId: string;
+  trigger: GeneratedCreateTriggerPresentation;
+};
+
+export type GeneratedCreateRuntime = {
+  onCreateIntent: (intent: FormlessUiCreateIntent) => Promise<void> | void;
+  onFieldIntent: (intent: FormlessUiFieldIntent) => void;
+  surface: FormlessUiCreateSurfaceContract;
 };
 
 export function GeneratedCreateForm({
@@ -276,8 +300,9 @@ function GeneratedCreateRuntime({
   );
 }
 
-function useGeneratedCreateRuntime({
+export function useGeneratedCreateRuntime({
   closeOnSuccess,
+  displaySafeErrors = false,
   onOpenChange,
   onSuccess,
   open,
@@ -286,22 +311,9 @@ function useGeneratedCreateRuntime({
   submitValues,
   surfaceId,
   trigger,
-}: {
-  closeOnSuccess: boolean;
-  onOpenChange: (open: boolean) => void;
-  onSuccess?: (recordId: string) => void;
-  open: boolean;
-  operation: CreateHomeOperationConfig;
-  queryContext?: QueryEvaluationContext;
-  submitValues?: (values: RecordValues) => Promise<{ recordId: string }>;
-  surfaceId: string;
-  trigger: GeneratedCreateTriggerPresentation;
-}): {
-  onCreateIntent: (intent: FormlessUiCreateIntent) => Promise<void> | void;
-  onFieldIntent: (intent: FormlessUiFieldIntent) => void;
-  surface: FormlessUiCreateSurfaceContract;
-} {
+}: GeneratedCreateRuntimeOptions): GeneratedCreateRuntime {
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submissionError, setSubmissionError] = useState<string | undefined>();
   const [draftSessionState, setDraftSessionState] = useState(() => initialCreateState(operation));
   const draftSession = selectGeneratedCreateDraftSession({
     defaults: operation.defaults,
@@ -325,6 +337,7 @@ function useGeneratedCreateRuntime({
   const surface = projectGeneratedCreateFormlessUiSurface({
     enabled: operation.enabled,
     entityLabel: operation.entity.label,
+    ...(submissionError === undefined ? {} : { formErrors: [submissionError] }),
     id: surfaceId,
     isSubmitting: submitPending,
     open,
@@ -338,6 +351,7 @@ function useGeneratedCreateRuntime({
 
   useEffect(() => {
     setDraftSessionState(initialCreateState(operation));
+    setSubmissionError(undefined);
   }, [operation.defaults, operation.fields, operation.union]);
 
   useEffect(() => {
@@ -351,6 +365,7 @@ function useGeneratedCreateRuntime({
       return;
     }
 
+    setSubmissionError(undefined);
     setDraftSessionState((state) => {
       const result = adaptGeneratedCreateFormlessUiDraftChange(intent, { state });
       return result.state ?? state;
@@ -372,6 +387,7 @@ function useGeneratedCreateRuntime({
       union: operation.union,
     });
     setDraftSessionState(submittedState);
+    setSubmissionError(undefined);
 
     if (!submittedSession.canSubmit) {
       return;
@@ -396,7 +412,13 @@ function useGeneratedCreateRuntime({
       setDraftSessionState(result.state);
 
       if (result.type === "failed") {
-        setSyncStatus({ state: "error", message: result.displayError });
+        if (displaySafeErrors) {
+          setSubmissionError(GENERATED_CREATE_FAILURE_MESSAGE);
+        }
+        setSyncStatus({
+          state: "error",
+          message: displaySafeErrors ? GENERATED_CREATE_FAILURE_MESSAGE : result.displayError,
+        });
         return;
       }
 
@@ -429,6 +451,47 @@ function useGeneratedCreateRuntime({
   return { onCreateIntent, onFieldIntent, surface };
 }
 
+export function projectInitialGeneratedCreateRuntimeSurface({
+  operation,
+  queryContext,
+  snapshot,
+  surfaceId,
+  trigger,
+}: {
+  operation: CreateHomeOperationConfig;
+  queryContext?: QueryEvaluationContext;
+  snapshot: BrowserReplicaProjectionSnapshot;
+  surfaceId: string;
+  trigger: GeneratedCreateTriggerPresentation;
+}): FormlessUiCreateSurfaceContract {
+  const state = initialCreateState(operation);
+  const session = selectGeneratedCreateDraftSession({
+    defaults: operation.defaults,
+    enabled: operation.enabled,
+    fields: operation.fields,
+    queryContext,
+    state,
+    union: operation.union,
+  });
+
+  return projectGeneratedCreateFormlessUiSurface({
+    enabled: operation.enabled,
+    entityLabel: operation.entity.label,
+    id: surfaceId,
+    isSubmitting: false,
+    open: false,
+    referenceOptionsByFieldName: selectCreateReferenceOptionsByFieldName(
+      operation.fields,
+      snapshot,
+    ),
+    session,
+    state,
+    submitLabel: operation.label,
+    trigger,
+    triggerLabel: operation.label,
+  });
+}
+
 function useCreateReferenceOptionsByFieldName(fields: readonly CreateFieldConfig[]) {
   const snapshot = useSyncExternalStore(
     subscribeToClientStore,
@@ -437,22 +500,28 @@ function useCreateReferenceOptionsByFieldName(fields: readonly CreateFieldConfig
   );
 
   return useMemo(
-    () =>
-      Object.fromEntries(
-        fields.map((fieldConfig) => {
-          const field = fieldConfig.field;
-
-          if (field.type !== "reference" || !shouldUseAppReplicaReferenceOptions(field)) {
-            return [fieldConfig.fieldName, []];
-          }
-
-          return [
-            fieldConfig.fieldName,
-            createReferenceOptionsSelector(field.to, field.displayField)(snapshot),
-          ];
-        }),
-      ),
+    () => selectCreateReferenceOptionsByFieldName(fields, snapshot),
     [fields, snapshot],
+  );
+}
+
+export function selectCreateReferenceOptionsByFieldName(
+  fields: readonly CreateFieldConfig[],
+  snapshot: BrowserReplicaProjectionSnapshot,
+) {
+  return Object.fromEntries(
+    fields.map((fieldConfig) => {
+      const field = fieldConfig.field;
+
+      if (field.type !== "reference" || !shouldUseAppReplicaReferenceOptions(field)) {
+        return [fieldConfig.fieldName, []];
+      }
+
+      return [
+        fieldConfig.fieldName,
+        createReferenceOptionsSelector(field.to, field.displayField)(snapshot),
+      ];
+    }),
   );
 }
 

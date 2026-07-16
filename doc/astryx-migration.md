@@ -48,8 +48,9 @@ runtime semantic migration.
   `record-field-control.tsx`, `table.tsx`, and `collection.tsx`: current
   generated surfaces that still render largely through direct
   `@dpeek/formless-ui` imports.
-- `src/app/routes/instance-shell.tsx` and `src/app/instance-rail.tsx`: current
-  runtime shell and instance rail.
+- `src/app/application-shell-runtime.tsx` and
+  `src/app/generated/legacy-application-shell-renderer.tsx`: current runtime
+  shell projection boundary and production legacy renderer seam.
 - `lib/astryx/src/components/shell.tsx` and `side-nav.tsx`: directional Astryx
   shell/navigation prototype.
 - `lib/media/src/react.tsx`: current media React control. It lives in the media

@@ -1573,6 +1573,158 @@ export type FormlessUiWorkspaceContract = {
   sections: readonly FormlessUiWorkspaceSectionContract[];
 };
 
+export type FormlessUiShellScope = "appOnly" | "multiApp";
+
+export type FormlessUiShellNavigationSectionRole =
+  | "appSettings"
+  | "appSwitcher"
+  | "instance"
+  | "rootRecords"
+  | "screens"
+  | "session";
+
+export type FormlessUiShellDestinationAvailability =
+  | {
+      available: true;
+    }
+  | {
+      available: false;
+      message: string;
+    };
+
+export type FormlessUiShellDestinationBaseContract = {
+  accessibilityLabel: string;
+  availability: FormlessUiShellDestinationAvailability;
+  countText?: string;
+  description?: string;
+  icon?: string;
+  id: string;
+  label: string;
+  selected: boolean;
+};
+
+export type FormlessUiShellLinkDestinationContract = FormlessUiShellDestinationBaseContract & {
+  href: string;
+  kind: "shellLinkDestination";
+};
+
+export type FormlessUiShellRootRecordSelectionIntent = {
+  destinationId: string;
+  recordId: string;
+  sectionId: string;
+  shellId: string;
+  type: "shellRootRecordSelection";
+};
+
+export type FormlessUiShellRootRecordDestinationContract =
+  FormlessUiShellDestinationBaseContract & {
+    kind: "shellRootRecordDestination";
+    recordId: string;
+    selectionIntent: FormlessUiShellRootRecordSelectionIntent;
+  };
+
+export type FormlessUiShellDestinationContract =
+  | FormlessUiShellLinkDestinationContract
+  | FormlessUiShellRootRecordDestinationContract;
+
+export type FormlessUiShellSyncStatusContract = {
+  details?: readonly {
+    label: string;
+    value: string;
+  }[];
+  id: string;
+  kind: "shellSyncStatus";
+  label: string;
+  message: string;
+  state: "error" | "idle" | "syncing";
+};
+
+export type FormlessUiShellWorkspaceSaveStatusContract = {
+  id: string;
+  kind: "shellWorkspaceSaveStatus";
+  label: string;
+  message: string;
+  state: "clean" | "dirty" | "failed" | "queued" | "saved" | "saving";
+};
+
+export type FormlessUiShellResetStatusContract = {
+  message?: string;
+  state: "error" | "idle" | "pending" | "success";
+};
+
+export type FormlessUiShellResetConfirmationContract = {
+  cancel: FormlessUiButtonContract;
+  confirm: FormlessUiButtonContract;
+  description: string;
+  id: string;
+  kind: "shellResetConfirmation";
+  open: boolean;
+  title: string;
+};
+
+export type FormlessUiShellResetContract = {
+  confirmation: FormlessUiShellResetConfirmationContract;
+  id: string;
+  kind: "shellReset";
+  status: FormlessUiShellResetStatusContract;
+  trigger: FormlessUiButtonContract;
+};
+
+export type FormlessUiShellSettingsContract = {
+  id: string;
+  kind: "shellSettings";
+  reset?: FormlessUiShellResetContract;
+  sync?: FormlessUiShellSyncStatusContract;
+  workspaceSave?: FormlessUiShellWorkspaceSaveStatusContract;
+};
+
+export type FormlessUiShellSessionIdentityContract = {
+  displayName: string;
+  secondaryLabel?: string;
+};
+
+export type FormlessUiShellSessionContract =
+  | {
+      id: string;
+      kind: "shellSession";
+      state: "anonymous";
+    }
+  | {
+      id: string;
+      identity: FormlessUiShellSessionIdentityContract;
+      kind: "shellSession";
+      logout: FormlessUiButtonContract;
+      state: "authenticated";
+    };
+
+export type FormlessUiShellNavigationSectionContract = {
+  accessibilityLabel: string;
+  createSurface?: FormlessUiCreateSurfaceContract;
+  destinations: readonly FormlessUiShellDestinationContract[];
+  id: string;
+  kind: "shellNavigationSection";
+  label?: string;
+  role: FormlessUiShellNavigationSectionRole;
+  session?: FormlessUiShellSessionContract;
+  settings?: FormlessUiShellSettingsContract;
+  shellId: string;
+};
+
+export type FormlessUiShellDestinationIdentity = {
+  destinationId: string;
+  sectionId: string;
+};
+
+export type FormlessUiShellManifestContract = {
+  accessibilityLabel: string;
+  activeDestination: FormlessUiShellDestinationIdentity | null;
+  id: string;
+  kind: "shellManifest";
+  navigationSections: readonly FormlessUiShellNavigationSectionReference[];
+  scope: FormlessUiShellScope;
+  title: string;
+};
+
 export type FormlessUiWorkspaceManifestReference = {
   kind: "workspaceManifestReference";
   role: "workspace";
@@ -1584,6 +1736,19 @@ export type FormlessUiWorkspaceSectionShellReference = {
   role: "section";
   sectionId: string;
   workspaceId: string;
+};
+
+export type FormlessUiShellManifestReference = {
+  kind: "shellManifestReference";
+  role: "shell";
+  shellId: string;
+};
+
+export type FormlessUiShellNavigationSectionReference = {
+  kind: "shellNavigationSectionReference";
+  role: "shellNavigationSection";
+  sectionId: string;
+  shellId: string;
 };
 
 export type FormlessUiResultReferenceRole = "contextResult" | "mainResult";
@@ -1669,9 +1834,50 @@ export type FormlessUiWorkspaceSectionShellContract = Omit<
 export type FormlessUiContractReference =
   | FormlessUiListResultReference
   | FormlessUiRecordResultReference
+  | FormlessUiShellManifestReference
+  | FormlessUiShellNavigationSectionReference
   | FormlessUiTableResultReference
   | FormlessUiWorkspaceManifestReference
   | FormlessUiWorkspaceSectionShellReference;
+
+export type FormlessUiShellCreateIntent = {
+  destinationId?: string;
+  intent: FormlessUiCreateIntent | FormlessUiFieldIntent;
+  sectionId: string;
+  shellId: string;
+  surfaceId: string;
+  type: "shellCreate";
+};
+
+export type FormlessUiShellResetIntent = {
+  controlId: string;
+  intent:
+    | {
+        open: boolean;
+        type: "resetOpenChange";
+      }
+    | {
+        type: "resetConfirm";
+      };
+  sectionId: string;
+  shellId: string;
+  type: "shellReset";
+};
+
+export type FormlessUiShellLogoutIntent = {
+  controlId: string;
+  sectionId: string;
+  shellId: string;
+  type: "shellLogout";
+};
+
+export type FormlessUiShellIntent =
+  | FormlessUiShellCreateIntent
+  | FormlessUiShellLogoutIntent
+  | FormlessUiShellResetIntent
+  | FormlessUiShellRootRecordSelectionIntent;
+
+export type FormlessUiShellIntentHandler = (intent: FormlessUiShellIntent) => Promise<void> | void;
 
 export type FormlessUiWorkspaceIntentScope = {
   collectionId: string;
@@ -1744,4 +1950,10 @@ export type FormlessUiWorkspaceIntent =
 
 export type FormlessUiWorkspaceIntentHandler = (
   intent: FormlessUiWorkspaceIntent,
+) => Promise<void> | void;
+
+export type FormlessUiContractIntent = FormlessUiShellIntent | FormlessUiWorkspaceIntent;
+
+export type FormlessUiContractIntentHandler = (
+  intent: FormlessUiContractIntent,
 ) => Promise<void> | void;

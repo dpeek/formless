@@ -5,7 +5,6 @@ import {
   useState,
   type Dispatch,
   type ElementType,
-  type ReactNode,
   type SetStateAction,
 } from "react";
 import { useLocation } from "wouter";
@@ -99,7 +98,6 @@ import type { AppInstallsResponse } from "../../shared/protocol.ts";
 import { runtimeTopologyRoutes } from "../../shared/runtime-topology.ts";
 import { GeneratedOperationCompactStatus } from "../generated/operation-status.tsx";
 import type { GeneratedWorkspaceSectionExternalAction } from "../generated/generated-workspace-runtime.tsx";
-import { InstanceRail } from "../instance-rail.tsx";
 
 export type InstanceShellHomeRouteProps = {
   activePackageResolver?: AppPackageResolver | undefined;
@@ -862,45 +860,39 @@ export function InstanceShellRouteView({
   workspaceGatewayState?: WorkspaceGatewayRouteState;
 }) {
   const [installDialogOpen, setInstallDialogOpen] = useState(false);
-  const frame = (children: ReactNode, installs: readonly AppInstall[] = []) => (
-    <InstanceShellFrame currentPath={currentPath} installs={installs}>
-      {children}
-    </InstanceShellFrame>
-  );
 
   if (state.status === "loading") {
-    return frame(
+    return (
       <section className="mx-auto w-full max-w-6xl space-y-4 p-4 sm:p-6">
         <ShellHeader currentPath={currentPath} />
         <p className="text-sm text-muted-fg">Loading installed apps...</p>
-      </section>,
+      </section>
     );
   }
 
   if (state.status === "failed") {
-    return frame(
+    return (
       <section className="mx-auto w-full max-w-6xl space-y-4 p-4 sm:p-6">
         <ShellHeader currentPath={currentPath} />
         <p className="text-sm text-red-700" role="alert">
           {state.message}
         </p>
-      </section>,
+      </section>
     );
   }
 
   if (isInstanceAccessRoutePath(currentPath)) {
-    return frame(
+    return (
       <AccessManagementRouteView
         installs={installs.length > 0 ? installs : state.installs}
         onCreateInvitation={onCreateAccessInvitation}
         onRevokeInvitation={onRevokeAccessInvitation}
         state={accessState}
-      />,
-      state.installs,
+      />
     );
   }
 
-  return frame(
+  return (
     <section className="mx-auto w-full max-w-6xl space-y-6 p-4 sm:p-6">
       <ShellHeader currentPath={currentPath} />
       <WorkspaceGatewayManagementSection
@@ -922,25 +914,7 @@ export function InstanceShellRouteView({
         open={installDialogOpen}
         state={state}
       />
-    </section>,
-    state.installs,
-  );
-}
-
-function InstanceShellFrame({
-  children,
-  currentPath,
-  installs,
-}: {
-  children: ReactNode;
-  currentPath: string;
-  installs: readonly AppInstall[];
-}) {
-  return (
-    <div className="flex min-h-dvh bg-bg text-fg" data-frame="instance-owner-shell">
-      <InstanceRail currentPath={currentPath} installs={installs} />
-      <div className="min-w-0 flex-1">{children}</div>
-    </div>
+    </section>
   );
 }
 

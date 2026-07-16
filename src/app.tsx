@@ -1,14 +1,13 @@
 import {
   lazy,
   Suspense,
-  type CSSProperties,
   type ElementType,
   type ReactNode,
   useEffect,
   useMemo,
   useState,
 } from "react";
-import { Link, Redirect, Route, Switch, useLocation } from "wouter";
+import { Redirect, Route, Switch, useLocation } from "wouter";
 import { NotFoundRoute } from "./app/routes/not-found.tsx";
 import { normalizeSitePageSlug } from "@dpeek/formless-site-app/react";
 import {
@@ -17,13 +16,13 @@ import {
   type PublicSiteReactAdapterRegistry,
   type PublicSiteRouteProps,
 } from "./app/public-site-runtime.tsx";
-import type { GeneratedAppFrameProps } from "./app/generated-app-frame.tsx";
+import type { ApplicationShellRuntimeBoundaryProps } from "./app/application-shell-runtime.tsx";
+import { selectGeneratedShellScope } from "./app/generated/formless-ui-shell-projection.ts";
 import type { GeneratedWorkspaceSectionExternalAction } from "./app/generated/generated-workspace-runtime.tsx";
 import { sitePublicRenderer as workspaceSitePublicRenderer } from "virtual:formless/site-public-renderer/browser";
 import {
   findRuntimeWorldMountByRoute,
   hasGeneratedRoutes,
-  installedAppWorldMountFromInstall,
   installedAppWorldMountFromInstallId,
   installedSitePublicSurfaceFromRoute,
   normalizeRuntimeBrowserPath,
@@ -33,7 +32,6 @@ import {
   runtimeInstalledSitePublicPath,
   runtimeProfileNeedsInstalledAppRouteInstalls,
   runtimeProfileWithActivePackageResolver,
-  shouldRenderRuntimeRouteOutsideGeneratedAppFrame,
   type RuntimeProfile,
   type RuntimeInstalledAppRouteContext,
   type RuntimeWorldMount,
@@ -48,7 +46,6 @@ import type {
   AppInstall,
   AppPackageResolver,
   InstallableAppPackage,
-  PackageAppKey,
 } from "@dpeek/formless-installed-apps";
 import {
   COLLABORATOR_INVITATION_ACCEPT_PATH,
@@ -80,9 +77,9 @@ export type RuntimeInstalledAppRouteRegistry = {
 };
 
 export type AppRouteComponents = {
+  ApplicationShellRuntimeBoundary: ElementType<ApplicationShellRuntimeBoundaryProps>;
   AuthAccountRoute: ElementType;
   CollaboratorInvitationAcceptanceRoute: ElementType;
-  GeneratedAppFrame: ElementType<GeneratedAppFrameProps>;
   HomeRoute: ElementType<HomeRouteProps>;
   InstanceShellRoute: ElementType<InstanceShellRouteProps>;
   LocalSessionRoute: ElementType;
@@ -98,6 +95,11 @@ const defaultPublicSiteReactAdapters = createPublicSiteReactAdapterRegistry(
 );
 
 const defaultRouteComponents: AppRouteComponents = {
+  ApplicationShellRuntimeBoundary: lazy(() =>
+    import("./app/application-shell-runtime.tsx").then((module) => ({
+      default: module.ApplicationShellRuntimeBoundary,
+    })),
+  ),
   AuthAccountRoute: lazy(() =>
     import("./app/routes/auth-account.tsx").then((module) => ({
       default: module.AuthAccountRoute,
@@ -106,11 +108,6 @@ const defaultRouteComponents: AppRouteComponents = {
   CollaboratorInvitationAcceptanceRoute: lazy(() =>
     import("./app/routes/collaborator-invitation-acceptance.tsx").then((module) => ({
       default: module.CollaboratorInvitationAcceptanceRoute,
-    })),
-  ),
-  GeneratedAppFrame: lazy(() =>
-    import("./app/generated-app-frame.tsx").then((module) => ({
-      default: module.GeneratedAppFrame,
     })),
   ),
   HomeRoute: lazy(() =>
@@ -199,7 +196,6 @@ export function App({
     [installedAppRouteContext, localWorkspaceGatewayAvailable],
   );
   const routeWorld = findRuntimeWorldMountByRoute(activeRuntimeProfile, location, routeContext);
-  const isInstanceShellRoute = normalizedLocation === browserRoutes.instanceShellRoute;
   const routeRegistryLoading =
     runtimeProfile.appProfileTarget !== undefined &&
     runtimeProfile.worlds.length === 0 &&
@@ -213,14 +209,14 @@ export function App({
     );
   }
 
-  if (
-    shouldRenderRuntimeRouteOutsideGeneratedAppFrame(
-      activeRuntimeProfile,
-      location,
-      routeWorld,
-      routeContext,
-    )
-  ) {
+  const shellScope = selectGeneratedShellScope({
+    currentPath: location,
+    routeContext,
+    routeWorld,
+    runtimeProfile: activeRuntimeProfile,
+  });
+
+  if (!shellScope) {
     return (
       <main className="min-h-dvh">
         <AppRoutes
@@ -233,10 +229,11 @@ export function App({
     );
   }
 
-  const GeneratedAppFrame = routeComponents.GeneratedAppFrame;
-  const generatedAppFrame = (
+  const ApplicationShellRuntimeBoundary = routeComponents.ApplicationShellRuntimeBoundary;
+
+  return (
     <Suspense fallback={<RouteLoading />}>
-      <GeneratedAppFrame
+      <ApplicationShellRuntimeBoundary
         activePackageResolver={installedAppRouteContext.activePackageResolver}
         currentPath={location}
         installedAppRouteInstalls={installedAppRouteInstalls}
@@ -249,42 +246,8 @@ export function App({
           routeComponents={routeComponents}
           runtimeProfile={activeRuntimeProfile}
         />
-      </GeneratedAppFrame>
+      </ApplicationShellRuntimeBoundary>
     </Suspense>
-  );
-
-  return activeRuntimeProfile.shell === "dev" ? (
-    <WorkbenchFrame
-      activePackageResolver={installedAppRouteRegistry?.activePackageResolver}
-      currentPath={location}
-      installedAppRouteInstalls={installedAppRouteInstalls}
-      routeWorld={routeWorld}
-      runtimeProfile={activeRuntimeProfile}
-    >
-      {isInstanceShellRoute ? (
-        <main className="bg-bg" data-frame="instance-shell">
-          <AppRoutes
-            installedAppRouteContext={installedAppRouteContext}
-            localWorkspaceGatewayAvailable={localWorkspaceGatewayAvailable}
-            routeComponents={routeComponents}
-            runtimeProfile={activeRuntimeProfile}
-          />
-        </main>
-      ) : routeWorld === undefined ? (
-        <main className="bg-bg">
-          <AppRoutes
-            installedAppRouteContext={installedAppRouteContext}
-            localWorkspaceGatewayAvailable={localWorkspaceGatewayAvailable}
-            routeComponents={routeComponents}
-            runtimeProfile={activeRuntimeProfile}
-          />
-        </main>
-      ) : (
-        generatedAppFrame
-      )}
-    </WorkbenchFrame>
-  ) : (
-    generatedAppFrame
   );
 }
 
@@ -473,176 +436,6 @@ function installedRouteRootPath(
   const installId = path.slice(routePrefix.length).split("/")[0];
 
   return installId ? `${routePrefix}${installId}` : undefined;
-}
-
-function WorkbenchFrame({
-  activePackageResolver,
-  children,
-  currentPath,
-  installedAppRouteInstalls,
-  routeWorld,
-  runtimeProfile,
-}: {
-  activePackageResolver?: AppPackageResolver | undefined;
-  children: ReactNode;
-  currentPath: string;
-  installedAppRouteInstalls: readonly AppInstall[] | undefined;
-  routeWorld: RuntimeWorldMount | undefined;
-  runtimeProfile: RuntimeProfile;
-}) {
-  const installedAppLinks = useRuntimeShellInstalledAppLinks(
-    runtimeProfile,
-    routeWorld,
-    installedAppRouteInstalls,
-    activePackageResolver,
-  );
-  const appManagementIsCurrent = normalizeRuntimeBrowserPath(currentPath) === "/";
-
-  return (
-    <div
-      className="min-h-dvh bg-slate-950"
-      data-frame="workbench"
-      style={{ "--runtime-shell-height": "3.5rem" } as CSSProperties}
-    >
-      <header
-        aria-label="Runtime shell"
-        className="fixed inset-x-0 top-0 z-[60] overflow-x-auto border-b border-slate-800 bg-slate-950 text-slate-100 shadow-lg shadow-black/25"
-        data-frame="runtime-shell"
-      >
-        <div className="flex h-14 min-w-max items-center justify-between gap-4 px-3 sm:px-4">
-          <nav aria-label="Runtime apps" className="flex items-center gap-1">
-            <Link
-              aria-current={appManagementIsCurrent ? "page" : undefined}
-              className={workbenchAppLinkClassName(appManagementIsCurrent)}
-              href="/"
-            >
-              App management
-            </Link>
-            {runtimeProfile.worlds.map(({ app, route }) => (
-              <Link
-                aria-current={routeWorld?.route === route ? "page" : undefined}
-                className={workbenchAppLinkClassName(routeWorld?.route === route)}
-                href={route}
-                key={app.key}
-              >
-                {app.label}
-              </Link>
-            ))}
-            {installedAppLinks.length > 0 ? (
-              <span aria-hidden="true" className="mx-1 h-4 w-px bg-slate-700" />
-            ) : null}
-            {installedAppLinks.map((link) => (
-              <Link
-                aria-current={link.isCurrent ? "page" : undefined}
-                className={workbenchAppLinkClassName(link.isCurrent)}
-                href={link.href}
-                key={link.key}
-              >
-                {link.label}
-              </Link>
-            ))}
-          </nav>
-        </div>
-      </header>
-      <div
-        className="min-h-dvh bg-bg pt-[var(--runtime-shell-height)] text-fg"
-        data-frame="workbench-content"
-      >
-        {children}
-      </div>
-    </div>
-  );
-}
-
-function workbenchAppLinkClassName(isActive: boolean) {
-  const base = "flex h-7 items-center rounded px-2 text-xs font-medium transition-colors";
-
-  return isActive
-    ? `${base} bg-slate-100 text-slate-950`
-    : `${base} text-slate-300 hover:bg-slate-800 hover:text-white`;
-}
-
-export type RuntimeShellInstalledAppLink = {
-  href: `/apps/${string}`;
-  installId: string;
-  isCurrent: boolean;
-  key: string;
-  label: string;
-  packageAppKey: PackageAppKey;
-};
-
-export function selectRuntimeShellInstalledAppLinks({
-  activePackageResolver,
-  installs,
-  routeWorld,
-  runtimeProfile,
-}: {
-  activePackageResolver?: AppPackageResolver | undefined;
-  installs: readonly AppInstall[];
-  routeWorld: RuntimeWorldMount | undefined;
-  runtimeProfile: RuntimeProfile;
-}): RuntimeShellInstalledAppLink[] {
-  if (
-    runtimeProfile.shell !== "dev" ||
-    !runtimeBrowserRoutePatterns(runtimeProfile).installedAppHomeRoutePattern
-  ) {
-    return [];
-  }
-
-  const currentInstall =
-    routeWorld?.target?.kind === "appInstall"
-      ? {
-          href: routeWorld.route as `/apps/${string}`,
-          installId: routeWorld.target.installId,
-          label: `${routeWorld.app.label} ${routeWorld.target.installId}`,
-          packageAppKey: routeWorld.app.key,
-        }
-      : undefined;
-  const links = installs.flatMap((install) => {
-    const world = installedAppWorldMountFromInstall(runtimeProfile, install, {
-      activePackageResolver,
-    });
-
-    return world
-      ? [
-          {
-            href: world.route as `/apps/${string}`,
-            installId: install.installId,
-            label: install.label,
-            packageAppKey: install.packageAppKey,
-          },
-        ]
-      : [];
-  });
-
-  if (currentInstall && !links.some((link) => link.installId === currentInstall.installId)) {
-    links.push(currentInstall);
-  }
-
-  return links.map((link) => ({
-    ...link,
-    isCurrent:
-      routeWorld?.target?.kind === "appInstall" && routeWorld.target.installId === link.installId,
-    key: `${link.packageAppKey}:${link.installId}`,
-  }));
-}
-
-function useRuntimeShellInstalledAppLinks(
-  runtimeProfile: RuntimeProfile,
-  routeWorld: RuntimeWorldMount | undefined,
-  installs: readonly AppInstall[] | undefined,
-  activePackageResolver: AppPackageResolver | undefined,
-): RuntimeShellInstalledAppLink[] {
-  return useMemo(
-    () =>
-      selectRuntimeShellInstalledAppLinks({
-        activePackageResolver,
-        installs: installs ?? [],
-        routeWorld,
-        runtimeProfile,
-      }),
-    [activePackageResolver, installs, routeWorld, runtimeProfile],
-  );
 }
 
 function AppRoutes({

@@ -79,12 +79,7 @@ describe("instance shell route view", () => {
     );
 
     expect(html).toContain("Instance Settings");
-    expect(html).toContain('aria-label="Instance navigation"');
-    expect(html).toContain('aria-label="Open Instance Settings"');
-    expect(html).toContain('aria-label="Open Access"');
-    expect(html).toContain('href="/access"');
-    expect(html).toContain('aria-label="Open Personal Site admin"');
-    expect(html).toContain('aria-label="Open Personal Site public Site"');
+    expect(html).not.toContain('aria-label="Instance navigation"');
     expect(html).toContain('data-formless-control-plane-screen="apps"');
     expect(html).toContain('data-formless-control-plane-screen="routes"');
     expect(html).toContain("Loading Instance control plane");
@@ -145,8 +140,7 @@ describe("instance shell route view", () => {
       expect(html).toContain('data-formless-access-management="true"');
       expect(html).toContain("Access");
       expect(html).toContain(expectedText);
-      expect(html).toContain('aria-label="Open Access"');
-      expect(html).toContain('data-current="true"');
+      expect(html).not.toContain('aria-label="Instance navigation"');
       expect(html).not.toContain('data-formless-control-plane-screen="apps"');
       expect(html).not.toContain('data-formless-control-plane-screen="routes"');
       expect(html).not.toContain("identity-control-plane");

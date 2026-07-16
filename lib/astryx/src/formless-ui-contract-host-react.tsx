@@ -9,6 +9,9 @@ import {
 import type {
   FormlessUiContractReference,
   FormlessUiResultReference,
+  FormlessUiShellIntentHandler,
+  FormlessUiShellManifestReference,
+  FormlessUiShellNavigationSectionReference,
   FormlessUiWorkspaceIntentHandler,
   FormlessUiWorkspaceManifestReference,
   FormlessUiWorkspaceSectionShellReference,
@@ -49,6 +52,11 @@ export function useFormlessUiWorkspaceIntentHandler(): FormlessUiWorkspaceIntent
   return useCallback((intent) => host.dispatch(intent), [host]);
 }
 
+export function useFormlessUiShellIntentHandler(): FormlessUiShellIntentHandler {
+  const host = useFormlessUiContractHost();
+  return useCallback((intent) => host.dispatch(intent), [host]);
+}
+
 export function useFormlessUiContract<Reference extends FormlessUiContractReference>(
   reference: Reference,
 ): FormlessUiContractSnapshot<Reference> | undefined {
@@ -70,6 +78,16 @@ export function useFormlessUiContract<Reference extends FormlessUiContractRefere
 }
 
 export function useFormlessUiWorkspaceManifest(reference: FormlessUiWorkspaceManifestReference) {
+  return useFormlessUiContract(reference);
+}
+
+export function useFormlessUiShellManifest(reference: FormlessUiShellManifestReference) {
+  return useFormlessUiContract(reference);
+}
+
+export function useFormlessUiShellNavigationSection(
+  reference: FormlessUiShellNavigationSectionReference,
+) {
   return useFormlessUiContract(reference);
 }
 

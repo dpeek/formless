@@ -4,8 +4,12 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vite-plus/test";
 import packageJson from "../package.json";
 import type {
+  FormlessUiContractIntent,
   FormlessUiListContract,
   FormlessUiRecordResultContract,
+  FormlessUiShellIntent,
+  FormlessUiShellManifestContract,
+  FormlessUiShellNavigationSectionContract,
   FormlessUiTableContract,
   FormlessUiWorkspaceIntent,
   FormlessUiWorkspaceManifestContract,
@@ -15,6 +19,8 @@ import {
   createFormlessUiMemoryContractHost,
   formlessUiListResultReference,
   formlessUiRecordResultReference,
+  formlessUiShellManifestReference,
+  formlessUiShellNavigationSectionReference,
   formlessUiTableResultReference,
   formlessUiWorkspaceManifestReference,
   formlessUiWorkspaceSectionShellReference,
@@ -22,6 +28,7 @@ import {
 } from "./formless-ui-contract-host.ts";
 import {
   FormlessUiContractHostProvider,
+  useFormlessUiShellManifest,
   useFormlessUiWorkspaceManifest,
 } from "./formless-ui-contract-host-react.tsx";
 
@@ -58,12 +65,26 @@ const contextResultReference = formlessUiRecordResultReference({
   sectionId: "section:tasks",
   workspaceId: "workspace:tasks",
 });
+const shellReference = formlessUiShellManifestReference("shell:tasks");
+const appSectionReference = formlessUiShellNavigationSectionReference(
+  "shell:tasks",
+  "shell-section:app",
+);
+const settingsSectionReference = formlessUiShellNavigationSectionReference(
+  "shell:tasks",
+  "shell-section:settings",
+);
+const sessionSectionReference = formlessUiShellNavigationSectionReference(
+  "shell:tasks",
+  "shell-section:session",
+);
 
 describe("Formless UI memory contract host", () => {
   it("provides typed reads through stable scoped references", () => {
     const host = createFormlessUiMemoryContractHost({
       nodes: [
         ...workspaceNodes(),
+        ...shellNodes(),
         { reference: tableResultReference, snapshot: tableResult("table:tasks") },
         { reference: contextResultReference, snapshot: recordResult("record:task") },
       ],
@@ -77,11 +98,77 @@ describe("Formless UI memory contract host", () => {
     const record: FormlessUiRecordResultContract | undefined = host.read({
       ...contextResultReference,
     });
+    const shell: FormlessUiShellManifestContract | undefined = host.read({
+      ...shellReference,
+    });
+    const shellSection: FormlessUiShellNavigationSectionContract | undefined = host.read({
+      ...appSectionReference,
+    });
 
     expect(workspace?.label).toBe("Work");
     expect(list?.accessibilityLabel).toBe("Tasks");
     expect(table?.kind).toBe("table");
     expect(record?.kind).toBe("recordResult");
+    expect(shell?.scope).toBe("multiApp");
+    expect(shellSection?.destinations[0]?.label).toBe("Tasks");
+  });
+
+  it("validates parent scopes, shell references, and active destinations", () => {
+    const crossShellSectionReference = formlessUiShellNavigationSectionReference(
+      "shell:crm",
+      "shell-section:app",
+    );
+    const invalidScopeNodes: FormlessUiContractHostNodeSet = [
+      {
+        reference: shellReference,
+        snapshot: {
+          accessibilityLabel: "Tasks application shell",
+          activeDestination: null,
+          id: shellReference.shellId,
+          kind: "shellManifest",
+          navigationSections: [crossShellSectionReference],
+          scope: "multiApp",
+          title: "Tasks",
+        },
+      },
+      {
+        reference: crossShellSectionReference,
+        snapshot: shellSection({
+          id: crossShellSectionReference.sectionId,
+          shellId: crossShellSectionReference.shellId,
+        }),
+      },
+    ];
+
+    expect(() => createFormlessUiMemoryContractHost({ nodes: invalidScopeNodes })).toThrow(
+      "invalid parent scope",
+    );
+
+    const invalidDestinationNodes = shellNodes().map((node) =>
+      node.reference.kind === "shellManifestReference"
+        ? {
+            ...node,
+            snapshot: {
+              ...node.snapshot,
+              activeDestination: {
+                destinationId: "destination:missing",
+                sectionId: appSectionReference.sectionId,
+              },
+            },
+          }
+        : node,
+    ) as FormlessUiContractHostNodeSet;
+
+    expect(() => createFormlessUiMemoryContractHost({ nodes: invalidDestinationNodes })).toThrow(
+      "active destination",
+    );
+    expect(() =>
+      createFormlessUiMemoryContractHost({
+        nodes: shellNodes().filter(
+          ({ reference }) => reference.kind !== "shellNavigationSectionReference",
+        ),
+      }),
+    ).toThrow("has no snapshot");
   });
 
   it("publishes complete node sets transactionally and notifies only changed scopes", () => {
@@ -120,6 +207,45 @@ describe("Formless UI memory contract host", () => {
     expect(host.read(taskSectionReference)).toBe(initialTaskSection);
   });
 
+  it("publishes shell and workspace nodes atomically with identity reuse and scoped notification", () => {
+    const host = createFormlessUiMemoryContractHost({
+      nodes: [...workspaceNodes(), ...shellNodes()],
+    });
+    const initialShell = host.read(shellReference);
+    const initialAppSection = host.read(appSectionReference);
+    const initialSettingsSection = host.read(settingsSectionReference);
+    const initialWorkspace = host.read(workspaceReference);
+    const calls: string[] = [];
+    let syncMessageSeenFromAppNotification: string | undefined;
+
+    host.subscribe(shellReference, () => calls.push("shell"));
+    host.subscribe(appSectionReference, () => {
+      calls.push("app-section");
+      syncMessageSeenFromAppNotification =
+        host.read(settingsSectionReference)?.settings?.sync?.message;
+    });
+    host.subscribe(settingsSectionReference, () => calls.push("settings-section"));
+    host.subscribe(workspaceReference, () => calls.push("workspace"));
+
+    host.publish([...workspaceNodes(), ...shellNodes()]);
+
+    expect(calls).toEqual([]);
+    expect(host.read(shellReference)).toBe(initialShell);
+    expect(host.read(appSectionReference)).toBe(initialAppSection);
+    expect(host.read(settingsSectionReference)).toBe(initialSettingsSection);
+    expect(host.read(workspaceReference)).toBe(initialWorkspace);
+
+    host.publish([
+      ...workspaceNodes(),
+      ...shellNodes({ appLabel: "Tasks updated", syncMessage: "Sync caught up." }),
+    ]);
+
+    expect(calls).toEqual(["app-section", "settings-section"]);
+    expect(syncMessageSeenFromAppNotification).toBe("Sync caught up.");
+    expect(host.read(shellReference)).toBe(initialShell);
+    expect(host.read(workspaceReference)).toBe(initialWorkspace);
+  });
+
   it("removes references atomically with their parent references", () => {
     const host = createFormlessUiMemoryContractHost({ nodes: workspaceNodes() });
     const calls: string[] = [];
@@ -139,6 +265,25 @@ describe("Formless UI memory contract host", () => {
     expect(removedResultVisibleFromWorkspaceNotification).toBe(false);
     expect(host.read(companySectionReference)).toBeUndefined();
     expect(host.read(companyResultReference)).toBeUndefined();
+  });
+
+  it("removes a shell section in the same publication as its manifest reference", () => {
+    const host = createFormlessUiMemoryContractHost({ nodes: shellNodes() });
+    const calls: string[] = [];
+    let removedSectionVisibleFromManifestNotification = true;
+
+    host.subscribe(shellReference, () => {
+      calls.push("shell");
+      removedSectionVisibleFromManifestNotification =
+        host.read(settingsSectionReference) !== undefined;
+    });
+    host.subscribe(settingsSectionReference, () => calls.push("settings-section"));
+
+    host.publish(shellNodes({ includeSettings: false }));
+
+    expect(calls).toEqual(["shell", "settings-section"]);
+    expect(removedSectionVisibleFromManifestNotification).toBe(false);
+    expect(host.read(settingsSectionReference)).toBeUndefined();
   });
 
   it("rejects an incomplete next node set before replacing current reads", () => {
@@ -175,8 +320,31 @@ describe("Formless UI memory contract host", () => {
     ).toContain("Work");
   });
 
+  it("caches shell server snapshots for server rendering and hydration", () => {
+    const serverNodes = shellNodes();
+    const host = createFormlessUiMemoryContractHost({
+      nodes: shellNodes(),
+      serverNodes,
+    });
+    const serverSnapshot = host.getServerSnapshot(shellReference);
+
+    expect(host.read(shellReference)).toBe(serverSnapshot);
+
+    host.publish(shellNodes({ title: "Client tasks" }));
+
+    expect(host.read(shellReference)?.title).toBe("Client tasks");
+    expect(host.getServerSnapshot(shellReference)).toBe(serverSnapshot);
+    expect(
+      renderToStaticMarkup(
+        <FormlessUiContractHostProvider host={host}>
+          <ShellTitle />
+        </FormlessUiContractHostProvider>,
+      ),
+    ).toContain("Tasks");
+  });
+
   it("dispatches the canonical workspace intent union", async () => {
-    const calls: FormlessUiWorkspaceIntent[] = [];
+    const calls: FormlessUiContractIntent[] = [];
     const host = createFormlessUiMemoryContractHost({
       dispatch: (intent) => {
         calls.push(intent);
@@ -189,6 +357,26 @@ describe("Formless UI memory contract host", () => {
       screenId: "workspace:tasks",
       sectionId: "section:tasks",
       type: "workspaceQuerySelection",
+    };
+
+    await host.dispatch(intent);
+
+    expect(calls).toEqual([intent]);
+  });
+
+  it("dispatches the canonical shell intent union", async () => {
+    const calls: FormlessUiContractIntent[] = [];
+    const host = createFormlessUiMemoryContractHost({
+      dispatch: (intent) => {
+        calls.push(intent);
+      },
+      nodes: shellNodes(),
+    });
+    const intent: FormlessUiShellIntent = {
+      controlId: "control:logout",
+      sectionId: sessionSectionReference.sectionId,
+      shellId: shellReference.shellId,
+      type: "shellLogout",
     };
 
     await host.dispatch(intent);
@@ -231,6 +419,168 @@ describe("Formless UI contract host package boundary", () => {
 function WorkspaceLabel() {
   const workspace = useFormlessUiWorkspaceManifest(workspaceReference);
   return <span>{workspace?.label}</span>;
+}
+
+function ShellTitle() {
+  const shell = useFormlessUiShellManifest(shellReference);
+  return <span>{shell?.title}</span>;
+}
+
+function shellNodes({
+  appLabel = "Tasks",
+  includeSettings = true,
+  syncMessage = "Local cache ready.",
+  title = "Tasks",
+}: {
+  appLabel?: string;
+  includeSettings?: boolean;
+  syncMessage?: string;
+  title?: string;
+} = {}): FormlessUiContractHostNodeSet {
+  const navigationSections = includeSettings
+    ? [appSectionReference, settingsSectionReference, sessionSectionReference]
+    : [appSectionReference, sessionSectionReference];
+  const nodes: FormlessUiContractHostNodeSet = [
+    {
+      reference: shellReference,
+      snapshot: {
+        accessibilityLabel: "Tasks application shell",
+        activeDestination: {
+          destinationId: "destination:tasks",
+          sectionId: appSectionReference.sectionId,
+        },
+        id: shellReference.shellId,
+        kind: "shellManifest",
+        navigationSections,
+        scope: "multiApp",
+        title,
+      },
+    },
+    {
+      reference: appSectionReference,
+      snapshot: shellSection({
+        destinations: [
+          {
+            accessibilityLabel: `${appLabel} app`,
+            availability: { available: true },
+            href: "/apps/tasks",
+            id: "destination:tasks",
+            kind: "shellLinkDestination",
+            label: appLabel,
+            selected: true,
+          },
+        ],
+        id: appSectionReference.sectionId,
+        shellId: shellReference.shellId,
+      }),
+    },
+    {
+      reference: sessionSectionReference,
+      snapshot: shellSection({
+        id: sessionSectionReference.sectionId,
+        role: "session",
+        session: {
+          id: "session:owner",
+          identity: { displayName: "Ada Owner", secondaryLabel: "Owner" },
+          kind: "shellSession",
+          logout: shellButton("control:logout", "Log out"),
+          state: "authenticated",
+        },
+        shellId: shellReference.shellId,
+      }),
+    },
+  ];
+
+  return includeSettings
+    ? [
+        ...nodes.slice(0, 2),
+        {
+          reference: settingsSectionReference,
+          snapshot: shellSection({
+            id: settingsSectionReference.sectionId,
+            role: "appSettings",
+            settings: {
+              id: "settings:tasks",
+              kind: "shellSettings",
+              reset: {
+                confirmation: {
+                  cancel: shellButton("control:reset-cancel", "Cancel"),
+                  confirm: shellButton("control:reset-confirm", "Reset", "primary"),
+                  description: "Replace current records with source seed records.",
+                  id: "confirmation:reset",
+                  kind: "shellResetConfirmation",
+                  open: false,
+                  title: "Reset Tasks source seed data?",
+                },
+                id: "reset:tasks",
+                kind: "shellReset",
+                status: { state: "idle" },
+                trigger: shellButton("control:reset-open", "Reset source seed data"),
+              },
+              sync: {
+                id: "sync:tasks",
+                kind: "shellSyncStatus",
+                label: "Synced",
+                message: syncMessage,
+                state: "idle",
+              },
+              workspaceSave: {
+                id: "workspace-save:tasks",
+                kind: "shellWorkspaceSaveStatus",
+                label: "Saved",
+                message: "Workspace source is saved.",
+                state: "saved",
+              },
+            },
+            shellId: shellReference.shellId,
+          }),
+        },
+        nodes[2]!,
+      ]
+    : nodes;
+}
+
+function shellSection({
+  destinations = [],
+  id,
+  role = "appSwitcher",
+  session,
+  settings,
+  shellId,
+}: {
+  destinations?: FormlessUiShellNavigationSectionContract["destinations"];
+  id: string;
+  role?: FormlessUiShellNavigationSectionContract["role"];
+  session?: FormlessUiShellNavigationSectionContract["session"];
+  settings?: FormlessUiShellNavigationSectionContract["settings"];
+  shellId: string;
+}): FormlessUiShellNavigationSectionContract {
+  return {
+    accessibilityLabel: `${id} navigation`,
+    destinations,
+    id,
+    kind: "shellNavigationSection",
+    role,
+    ...(session === undefined ? {} : { session }),
+    ...(settings === undefined ? {} : { settings }),
+    shellId,
+  };
+}
+
+function shellButton(
+  id: string,
+  label: string,
+  prominence: "primary" | "secondary" | "quiet" = "secondary",
+) {
+  return {
+    accessibilityLabel: label,
+    content: { kind: "label" as const, label },
+    density: "default" as const,
+    id,
+    kind: "button" as const,
+    prominence,
+    type: "button" as const,
+  };
 }
 
 function workspaceNodes({

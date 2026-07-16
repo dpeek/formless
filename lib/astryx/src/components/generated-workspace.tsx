@@ -32,6 +32,7 @@ import {
   formlessUiTableResultReference,
   formlessUiWorkspaceManifestReference,
   formlessUiWorkspaceSectionShellReference,
+  isFormlessUiWorkspaceIntent,
   type FormlessUiContractHostNode,
   type FormlessUiContractHostNodeSet,
   type FormlessUiMutableContractHost,
@@ -88,7 +89,9 @@ export function FormlessGeneratedWorkspaceLayout() {
 
 export type FormlessGeneratedWorkspaceFixtureHost = {
   getWorkspace(): FormlessGeneratedWorkspaceFixture["workspace"];
-  host: FormlessUiMutableContractHost;
+  host: Omit<FormlessUiMutableContractHost, "dispatch"> & {
+    dispatch(intent: FormlessUiWorkspaceIntent): void;
+  };
   workspaceReference: FormlessUiWorkspaceManifestReference;
 };
 
@@ -101,6 +104,9 @@ export function createFormlessGeneratedWorkspaceFixtureHost(
 
   host = createFormlessUiMemoryContractHost({
     dispatch: (intent) => {
+      if (!isFormlessUiWorkspaceIntent(intent)) {
+        throw new Error("Generated workspace fixture host received a shell intent.");
+      }
       const nextWorkspace = applyGeneratedWorkspaceIntent(workspace, intent);
       if (nextWorkspace === workspace) {
         return;
@@ -114,7 +120,7 @@ export function createFormlessGeneratedWorkspaceFixtureHost(
 
   return {
     getWorkspace: () => workspace,
-    host,
+    host: host as FormlessGeneratedWorkspaceFixtureHost["host"],
     workspaceReference: initialPublication.workspaceReference,
   };
 }

@@ -17,6 +17,7 @@ import {
   formlessUiRecordResultReference,
   formlessUiWorkspaceManifestReference,
   formlessUiWorkspaceSectionShellReference,
+  isFormlessUiWorkspaceIntent,
   type FormlessUiContractHostNodeSet,
   type FormlessUiMutableContractHost,
 } from "../formless-ui-contract-host.ts";
@@ -381,6 +382,9 @@ function createTrackedHost(nodes: FormlessUiContractHostNodeSet) {
   const intents: FormlessUiWorkspaceIntent[] = [];
   const memoryHost = createFormlessUiMemoryContractHost({
     dispatch: (intent) => {
+      if (!isFormlessUiWorkspaceIntent(intent)) {
+        throw new Error("Tracked workspace host received a shell intent.");
+      }
       intents.push(intent);
     },
     nodes,

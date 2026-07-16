@@ -299,8 +299,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 const forbiddenPublicSiteClientFilePaths = new Set([
-  "src/app/app-surface.tsx",
-  "src/app/generated-app-frame.tsx",
+  "src/app/application-shell-runtime.tsx",
+  "src/app/generated/legacy-application-shell-renderer.tsx",
   "src/app/routes/home.tsx",
   "src/app/routes/instance-shell.tsx",
   "src/app/routes/local-session.tsx",

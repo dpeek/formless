@@ -1,111 +1,551 @@
-import { Avatar } from "@astryxdesign/core/Avatar";
-import { DropdownMenu } from "@astryxdesign/core/DropdownMenu";
-import { Icon } from "@astryxdesign/core/Icon";
-import { IconButton } from "@astryxdesign/core/IconButton";
-import { NavIcon } from "@astryxdesign/core/NavIcon";
+import { AlertDialog } from "@astryxdesign/core/AlertDialog";
+import { Badge, type BadgeVariant } from "@astryxdesign/core/Badge";
+import { Button, type ButtonVariant } from "@astryxdesign/core/Button";
+import { HStack } from "@astryxdesign/core/HStack";
 import { NavHeadingMenu, NavHeadingMenuItem } from "@astryxdesign/core/NavMenu";
 import { SideNav, SideNavHeading, SideNavItem, SideNavSection } from "@astryxdesign/core/SideNav";
+import { Text } from "@astryxdesign/core/Text";
+import { VStack } from "@astryxdesign/core/VStack";
+import { memo, type ReactNode, useState } from "react";
+import type {
+  FormlessUiButtonContract,
+  FormlessUiCreateIntent,
+  FormlessUiFieldIntent,
+  FormlessUiShellDestinationContract,
+  FormlessUiShellIntent,
+  FormlessUiShellIntentHandler,
+  FormlessUiShellManifestContract,
+  FormlessUiShellNavigationSectionContract,
+  FormlessUiShellNavigationSectionReference,
+  FormlessUiShellResetContract,
+  FormlessUiShellSessionContract,
+  FormlessUiShellSettingsContract,
+} from "../formless-ui-contract.ts";
 import {
-  ArchiveBoxIcon,
-  CalendarDaysIcon,
-  CheckCircleIcon,
-  ClockIcon,
-  Cog6ToothIcon,
-  InboxIcon,
-  MapIcon,
-  Squares2X2Icon,
-  SquaresPlusIcon,
-  UserGroupIcon,
-  WrenchScrewdriverIcon,
-} from "@heroicons/react/24/outline";
-import { FormlessThemeToggle } from "./theme.tsx";
+  useFormlessUiShellIntentHandler,
+  useFormlessUiShellNavigationSection,
+} from "../formless-ui-contract-host-react.tsx";
+import { AstryxCreateSurfaceRenderer } from "./create-surfaces.tsx";
+import { operationIcon } from "./operation-controls.tsx";
 
-export function FormlessSideNav() {
+type AstryxShellSectionSlot = "appSwitcher" | "navigation" | "session";
+
+export function AstryxApplicationSideNav({
+  manifest,
+  onIntent,
+  sections,
+}: {
+  manifest: FormlessUiShellManifestContract;
+  onIntent: FormlessUiShellIntentHandler;
+  sections: readonly FormlessUiShellNavigationSectionContract[];
+}) {
+  return (
+    <AstryxApplicationSideNavFrame
+      appSwitcher={sections.map((section) => (
+        <AstryxApplicationShellSectionSlot
+          key={section.id}
+          onIntent={onIntent}
+          section={section}
+          slot="appSwitcher"
+        />
+      ))}
+      manifest={manifest}
+      navigation={sections.map((section) => (
+        <AstryxApplicationShellSectionSlot
+          key={section.id}
+          onIntent={onIntent}
+          section={section}
+          slot="navigation"
+        />
+      ))}
+      session={sections.map((section) => (
+        <AstryxApplicationShellSectionSlot
+          key={section.id}
+          onIntent={onIntent}
+          section={section}
+          slot="session"
+        />
+      ))}
+    />
+  );
+}
+
+export function AstryxSubscribedApplicationSideNav({
+  manifest,
+  references,
+}: {
+  manifest: FormlessUiShellManifestContract;
+  references: readonly FormlessUiShellNavigationSectionReference[];
+}) {
+  const onIntent = useFormlessUiShellIntentHandler();
+
+  return (
+    <AstryxApplicationSideNavFrame
+      appSwitcher={references.map((reference) => (
+        <AstryxSubscribedApplicationShellSectionSlot
+          key={`${reference.shellId}:${reference.sectionId}`}
+          onIntent={onIntent}
+          reference={reference}
+          slot="appSwitcher"
+        />
+      ))}
+      manifest={manifest}
+      navigation={references.map((reference) => (
+        <AstryxSubscribedApplicationShellSectionSlot
+          key={`${reference.shellId}:${reference.sectionId}`}
+          onIntent={onIntent}
+          reference={reference}
+          slot="navigation"
+        />
+      ))}
+      session={references.map((reference) => (
+        <AstryxSubscribedApplicationShellSectionSlot
+          key={`${reference.shellId}:${reference.sectionId}`}
+          onIntent={onIntent}
+          reference={reference}
+          slot="session"
+        />
+      ))}
+    />
+  );
+}
+
+function AstryxApplicationSideNavFrame({
+  appSwitcher,
+  manifest,
+  navigation,
+  session,
+}: {
+  appSwitcher: ReactNode;
+  manifest: FormlessUiShellManifestContract;
+  navigation: ReactNode;
+  session: ReactNode;
+}) {
+  const [isCollapsed, setIsCollapsed] = useState(false);
+
   return (
     <SideNav
-      collapsible
+      collapsible={{
+        buttonLabel: `Collapse ${manifest.title} navigation`,
+        isCollapsed,
+        onCollapsedChange: setIsCollapsed,
+      }}
+      footer={session}
       header={
         <SideNavHeading
-          icon={<NavIcon icon={<Icon icon={CheckCircleIcon} color="inherit" size="sm" />} />}
-          superheading="Acme Studio"
-          heading="Tasks"
-          headingHref="#app-shell"
-          menu={<FormlessAppSwitcher />}
+          heading={manifest.title}
+          menu={
+            manifest.scope === "multiApp" ? (
+              <NavHeadingMenu size="lg">{appSwitcher}</NavHeadingMenu>
+            ) : undefined
+          }
         />
       }
-      footerIcons={
-        <>
-          <IconButton
-            label="Instance settings"
-            tooltip="Instance settings"
-            variant="ghost"
-            icon={<Icon icon={Cog6ToothIcon} color="inherit" size="sm" />}
-          />
-          <FormlessUserMenu />
-          <FormlessThemeToggle />
-        </>
-      }
     >
-      <SideNavSection title="Tasks" isHeaderHidden>
-        <SideNavItem label="Inbox" href="#app-shell" icon={InboxIcon} />
-        <SideNavItem label="Today" href="#app-shell" icon={CalendarDaysIcon} isSelected />
-        <SideNavItem label="Upcoming" href="#app-shell" icon={ClockIcon} />
-        <SideNavItem label="Completed" href="#app-shell" icon={ArchiveBoxIcon} />
-      </SideNavSection>
-      <SideNavSection title="Manage">
-        <SideNavItem label="Projects" href="#app-shell" icon={Squares2X2Icon} />
-        <SideNavItem label="Automations" href="#app-shell" icon={WrenchScrewdriverIcon} />
-        <SideNavItem label="App settings" href="#app-shell" icon={Cog6ToothIcon} />
-      </SideNavSection>
+      {navigation}
     </SideNav>
   );
 }
 
-function FormlessAppSwitcher() {
+const AstryxSubscribedApplicationShellSectionSlot = memo(
+  function AstryxSubscribedApplicationShellSectionSlot({
+    onIntent,
+    reference,
+    slot,
+  }: {
+    onIntent: FormlessUiShellIntentHandler;
+    reference: FormlessUiShellNavigationSectionReference;
+    slot: AstryxShellSectionSlot;
+  }) {
+    const section = useFormlessUiShellNavigationSection(reference);
+
+    return section ? (
+      <AstryxApplicationShellSectionSlot onIntent={onIntent} section={section} slot={slot} />
+    ) : null;
+  },
+  (previous, next) =>
+    previous.reference.shellId === next.reference.shellId &&
+    previous.reference.sectionId === next.reference.sectionId &&
+    previous.slot === next.slot &&
+    previous.onIntent === next.onIntent,
+);
+
+function AstryxApplicationShellSectionSlot({
+  onIntent,
+  section,
+  slot,
+}: {
+  onIntent: FormlessUiShellIntentHandler;
+  section: FormlessUiShellNavigationSectionContract;
+  slot: AstryxShellSectionSlot;
+}) {
+  if (slot === "appSwitcher") {
+    return section.role === "appSwitcher" ? (
+      <AstryxApplicationSwitcherSection section={section} />
+    ) : null;
+  }
+
+  if (slot === "session") {
+    return section.role === "session" && section.session ? (
+      <AstryxShellSession onIntent={onIntent} section={section} session={section.session} />
+    ) : null;
+  }
+
+  if (section.role === "appSwitcher" || section.role === "session") {
+    return null;
+  }
+
+  return <AstryxShellNavigationSection onIntent={onIntent} section={section} />;
+}
+
+function AstryxApplicationSwitcherSection({
+  section,
+}: {
+  section: FormlessUiShellNavigationSectionContract;
+}) {
+  return section.destinations.map((destination) => (
+    <NavHeadingMenuItem
+      description={destinationSupportingText(destination)}
+      href={destination.kind === "shellLinkDestination" ? destination.href : undefined}
+      isDisabled={!destination.availability.available}
+      key={destination.id}
+      label={
+        <HStack align="center" gap={2} justify="between" width="100%">
+          <Text type="label" weight={destination.selected ? "semibold" : undefined}>
+            {destination.label}
+          </Text>
+          {destination.countText ? (
+            <Badge
+              aria-label={`${destination.accessibilityLabel} count`}
+              label={destination.countText}
+              variant="neutral"
+            />
+          ) : null}
+        </HStack>
+      }
+    />
+  ));
+}
+
+function AstryxShellNavigationSection({
+  onIntent,
+  section,
+}: {
+  onIntent: FormlessUiShellIntentHandler;
+  section: FormlessUiShellNavigationSectionContract;
+}) {
   return (
-    <NavHeadingMenu size="lg">
-      <NavHeadingMenuItem
-        label="Tasks"
-        description="Project work"
-        href="#app-shell"
-        icon={CheckCircleIcon}
-      />
-      <NavHeadingMenuItem
-        label="CRM"
-        description="Customers and pipeline"
-        href="#app-shell"
-        icon={UserGroupIcon}
-      />
-      <NavHeadingMenuItem
-        label="Site"
-        description="Public pages"
-        href="#app-shell"
-        icon={Squares2X2Icon}
-      />
-      <NavHeadingMenuItem label="Apps" href="#app-shell" icon={SquaresPlusIcon} />
-      <NavHeadingMenuItem label="Routes" href="#app-shell" icon={MapIcon} />
-    </NavHeadingMenu>
+    <SideNavSection
+      endContent={
+        section.createSurface ? (
+          <AstryxCreateSurfaceRenderer
+            onFieldIntent={(intent) =>
+              onIntent(astryxApplicationShellCreateIntent(section, intent))
+            }
+            onIntent={(intent) => onIntent(astryxApplicationShellCreateIntent(section, intent))}
+            surface={section.createSurface}
+          />
+        ) : undefined
+      }
+      isHeaderHidden={section.label === undefined}
+      title={section.label ?? section.accessibilityLabel}
+    >
+      {section.destinations.map((destination) => (
+        <AstryxShellDestination
+          destination={destination}
+          key={destination.id}
+          onIntent={onIntent}
+        />
+      ))}
+      {section.settings ? (
+        <AstryxShellSettings onIntent={onIntent} section={section} settings={section.settings} />
+      ) : null}
+    </SideNavSection>
   );
 }
 
-function FormlessUserMenu() {
+function AstryxShellDestination({
+  destination,
+  onIntent,
+}: {
+  destination: FormlessUiShellDestinationContract;
+  onIntent: FormlessUiShellIntentHandler;
+}) {
+  const supportingText = destinationSupportingText(destination);
+
   return (
-    <DropdownMenu
-      button={{
-        label: "User settings",
-        tooltip: "User settings",
-        variant: "ghost",
-        size: "md",
-        children: <Avatar name="Drew Peek" size="tiny" />,
-      }}
-      hasChevron={false}
-      placement="above"
-      items={[
-        {
-          type: "section",
-          items: [{ label: "Profile" }, { label: "Account settings" }, { label: "Sign out" }],
-        },
-      ]}
-    />
+    <VStack gap={supportingText ? 0.5 : 0} width="100%">
+      <SideNavItem
+        endContent={
+          destination.countText ? (
+            <Badge
+              aria-label={`${destination.accessibilityLabel} count`}
+              label={destination.countText}
+              variant="neutral"
+            />
+          ) : undefined
+        }
+        href={destination.kind === "shellLinkDestination" ? destination.href : undefined}
+        isDisabled={!destination.availability.available}
+        isSelected={destination.selected}
+        label={destination.label}
+        onClick={
+          destination.kind === "shellRootRecordDestination"
+            ? () => {
+                if (destination.availability.available) {
+                  void onIntent(destination.selectionIntent);
+                }
+              }
+            : undefined
+        }
+      />
+      {supportingText ? (
+        <Text color="secondary" display="block" type="supporting">
+          {supportingText}
+        </Text>
+      ) : null}
+    </VStack>
   );
+}
+
+function AstryxShellSettings({
+  onIntent,
+  section,
+  settings,
+}: {
+  onIntent: FormlessUiShellIntentHandler;
+  section: FormlessUiShellNavigationSectionContract;
+  settings: FormlessUiShellSettingsContract;
+}) {
+  return (
+    <VStack gap={3} width="100%">
+      {settings.sync ? (
+        <VStack aria-label={settings.sync.label} gap={1} role="status" width="100%">
+          <HStack align="center" gap={2} justify="between" width="100%">
+            <Text type="supporting" weight="medium">
+              {settings.sync.message}
+            </Text>
+            <Badge label={settings.sync.label} variant={syncStatusVariant(settings.sync.state)} />
+          </HStack>
+          {settings.sync.details ? (
+            <dl>
+              {settings.sync.details.map((detail) => (
+                <div key={detail.label}>
+                  <dt>{detail.label}</dt>
+                  <dd>{detail.value}</dd>
+                </div>
+              ))}
+            </dl>
+          ) : null}
+        </VStack>
+      ) : null}
+      {settings.workspaceSave ? (
+        <HStack align="center" gap={2} justify="between" role="status" width="100%">
+          <Text type="supporting">{settings.workspaceSave.message}</Text>
+          <Badge
+            label={settings.workspaceSave.label}
+            variant={workspaceSaveStatusVariant(settings.workspaceSave.state)}
+          />
+        </HStack>
+      ) : null}
+      {settings.reset ? (
+        <AstryxShellReset onIntent={onIntent} reset={settings.reset} section={section} />
+      ) : null}
+    </VStack>
+  );
+}
+
+function AstryxShellReset({
+  onIntent,
+  reset,
+  section,
+}: {
+  onIntent: FormlessUiShellIntentHandler;
+  reset: FormlessUiShellResetContract;
+  section: FormlessUiShellNavigationSectionContract;
+}) {
+  const dispatchOpenChange = (open: boolean) =>
+    onIntent(astryxApplicationShellResetIntent(section, reset, { open, type: "resetOpenChange" }));
+
+  return (
+    <VStack gap={1} width="100%">
+      <AstryxShellButton button={reset.trigger} onClick={() => dispatchOpenChange(true)} />
+      {reset.status.message ? (
+        <HStack align="center" gap={2} role={reset.status.state === "error" ? "alert" : "status"}>
+          <Badge label={reset.status.state} variant={resetStatusVariant(reset.status.state)} />
+          <Text type="supporting">{reset.status.message}</Text>
+        </HStack>
+      ) : null}
+      <AlertDialog
+        actionLabel={shellButtonLabel(reset.confirmation.confirm)}
+        actionVariant={shellButtonVariant(reset.confirmation.confirm)}
+        cancelLabel={shellButtonLabel(reset.confirmation.cancel)}
+        description={reset.confirmation.description}
+        isActionLoading={Boolean(reset.confirmation.confirm.pending?.isPending)}
+        isOpen={reset.confirmation.open}
+        onAction={() =>
+          onIntent(astryxApplicationShellResetIntent(section, reset, { type: "resetConfirm" }))
+        }
+        onOpenChange={(open) => void dispatchOpenChange(open)}
+        title={reset.confirmation.title}
+      />
+    </VStack>
+  );
+}
+
+function AstryxShellSession({
+  onIntent,
+  section,
+  session,
+}: {
+  onIntent: FormlessUiShellIntentHandler;
+  section: FormlessUiShellNavigationSectionContract;
+  session: FormlessUiShellSessionContract;
+}) {
+  if (session.state === "anonymous") {
+    return null;
+  }
+
+  return (
+    <VStack gap={2} width="100%">
+      <VStack gap={0.5} width="100%">
+        <Text display="block" maxLines={1} type="label">
+          {session.identity.displayName}
+        </Text>
+        {session.identity.secondaryLabel ? (
+          <Text color="secondary" display="block" maxLines={1} type="supporting">
+            {session.identity.secondaryLabel}
+          </Text>
+        ) : null}
+      </VStack>
+      <AstryxShellButton
+        button={session.logout}
+        onClick={() => onIntent(astryxApplicationShellLogoutIntent(section, session))}
+      />
+      {session.logout.errors?.map((error) => (
+        <Text color="secondary" display="block" key={error} role="alert" type="supporting">
+          {error}
+        </Text>
+      ))}
+    </VStack>
+  );
+}
+
+function AstryxShellButton({
+  button,
+  onClick,
+}: {
+  button: FormlessUiButtonContract;
+  onClick: () => Promise<void> | void;
+}) {
+  const isLoading = Boolean(button.pending?.isPending);
+  const isDisabled = Boolean(button.disabled || isLoading);
+  const icon = button.content.kind === "label" ? undefined : operationIcon(button.content.icon);
+
+  return (
+    <Button
+      icon={icon}
+      isDisabled={isDisabled}
+      isIconOnly={button.content.kind === "iconOnly"}
+      isLoading={isLoading}
+      label={button.accessibilityLabel}
+      onClick={() => {
+        if (!isDisabled) {
+          void onClick();
+        }
+      }}
+      size={button.density === "compact" ? "sm" : "md"}
+      tooltip={
+        button.disabledReason ??
+        (button.content.kind === "iconOnly" ? button.accessibilityLabel : undefined)
+      }
+      type={button.type}
+      variant={shellButtonVariant(button)}
+    >
+      {button.content.kind === "iconOnly" ? undefined : button.content.label}
+    </Button>
+  );
+}
+
+function destinationSupportingText(destination: FormlessUiShellDestinationContract) {
+  return destination.availability.available
+    ? destination.description
+    : destination.availability.message;
+}
+
+function shellButtonLabel(button: FormlessUiButtonContract) {
+  return button.content.kind === "iconOnly" ? button.accessibilityLabel : button.content.label;
+}
+
+function shellButtonVariant(button: FormlessUiButtonContract): ButtonVariant {
+  return button.prominence === "primary"
+    ? "primary"
+    : button.prominence === "secondary"
+      ? "secondary"
+      : "ghost";
+}
+
+function syncStatusVariant(
+  state: NonNullable<FormlessUiShellSettingsContract["sync"]>["state"],
+): BadgeVariant {
+  return state === "error" ? "error" : state === "syncing" ? "info" : "success";
+}
+
+function workspaceSaveStatusVariant(
+  state: NonNullable<FormlessUiShellSettingsContract["workspaceSave"]>["state"],
+): BadgeVariant {
+  return state === "failed"
+    ? "error"
+    : state === "clean" || state === "saved"
+      ? "success"
+      : state === "dirty"
+        ? "warning"
+        : "info";
+}
+
+function resetStatusVariant(state: FormlessUiShellResetContract["status"]["state"]): BadgeVariant {
+  return state === "error" ? "error" : state === "success" ? "success" : "info";
+}
+
+export function astryxApplicationShellCreateIntent(
+  section: FormlessUiShellNavigationSectionContract,
+  intent: FormlessUiCreateIntent | FormlessUiFieldIntent,
+): FormlessUiShellIntent {
+  if (!section.createSurface) {
+    throw new Error(`Shell section "${section.id}" has no create surface.`);
+  }
+
+  return {
+    intent,
+    sectionId: section.id,
+    shellId: section.shellId,
+    surfaceId: section.createSurface.id,
+    type: "shellCreate",
+  };
+}
+
+export function astryxApplicationShellResetIntent(
+  section: FormlessUiShellNavigationSectionContract,
+  reset: FormlessUiShellResetContract,
+  intent: Extract<FormlessUiShellIntent, { type: "shellReset" }>["intent"],
+): FormlessUiShellIntent {
+  return {
+    controlId: reset.id,
+    intent,
+    sectionId: section.id,
+    shellId: section.shellId,
+    type: "shellReset",
+  };
+}
+
+export function astryxApplicationShellLogoutIntent(
+  section: FormlessUiShellNavigationSectionContract,
+  session: Extract<FormlessUiShellSessionContract, { state: "authenticated" }>,
+): FormlessUiShellIntent {
+  return {
+    controlId: session.logout.id,
+    sectionId: section.id,
+    shellId: section.shellId,
+    type: "shellLogout",
+  };
 }

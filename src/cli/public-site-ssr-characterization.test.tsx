@@ -5,7 +5,7 @@ import { Router } from "wouter";
 import { describe, expect, it } from "vite-plus/test";
 
 import { App, type AppRouteComponents } from "../app.tsx";
-import { GeneratedAppFrame } from "../app/generated-app-frame.tsx";
+import { ApplicationShellRuntimeBoundary } from "../app/application-shell-runtime.tsx";
 import { createPublishedSiteRuntimeProfile } from "../app/runtime-profile.ts";
 import {
   SitePageRoute,
@@ -95,8 +95,7 @@ describe("public Site SSR characterization", () => {
     expect(homeHtml).toContain("Loading home.");
     expect(nestedHtml).toContain("Loading site page...");
     expect(nestedHtml).toContain("Loading projects/pricinglab.");
-    expect(homeHtml).not.toContain('data-frame="workbench"');
-    expect(homeHtml).not.toContain('data-frame="generated-app"');
+    expect(homeHtml).not.toContain('data-frame="application-shell"');
     expect(homeHtml).not.toContain("data-site-header");
     expect(nestedHtml).not.toContain('href="/site/schema"');
   });
@@ -166,9 +165,9 @@ function renderPublishedRoute(path: string): string {
 
 function appRouteComponents(): AppRouteComponents {
   return {
+    ApplicationShellRuntimeBoundary,
     AuthAccountRoute,
     CollaboratorInvitationAcceptanceRoute,
-    GeneratedAppFrame,
     HomeRoute,
     InstanceShellRoute,
     LocalSessionRoute,

@@ -14,7 +14,6 @@ import {
   installedAppWorldMountFromInstallId,
   installedSitePublicSurfaceFromRoute,
   isRuntimePublicSiteRoute,
-  runtimeAppManagementHref,
   runtimeBrowserRoutePatterns,
   runtimeInstalledSitePublicPath,
   runtimeProfileNeedsInstalledAppRouteInstalls,
@@ -26,7 +25,6 @@ import {
   runtimeScreenPathFromRoute,
   runtimeScreenRoute,
   selectBrowserRuntimeProfileHint,
-  shouldRenderRuntimeRouteOutsideGeneratedAppFrame,
 } from "./runtime-profile.ts";
 import type {
   AppInstall,
@@ -343,13 +341,6 @@ describe("runtime profile resolver", () => {
     expect(
       findRuntimeWorldMountByRoute(profile, "/apps/task-workspace/schema", { appInstalls }),
     ).toEqual(world);
-    expect(shouldRenderRuntimeRouteOutsideGeneratedAppFrame(profile, "/", undefined)).toBe(true);
-    expect(
-      shouldRenderRuntimeRouteOutsideGeneratedAppFrame(profile, "/apps/task-workspace", world, {
-        appInstalls,
-      }),
-    ).toBe(false);
-    expect(runtimeAppManagementHref(profile, world)).toBe("/");
   });
 
   it("resolves installed app browser routes from enabled appRoute records", () => {
@@ -429,11 +420,6 @@ describe("runtime profile resolver", () => {
     expect(runtimeInstalledSitePublicPath(profile, "personal", "blog/post")).toBe(
       "/sites/personal/blog/post",
     );
-    expect(
-      shouldRenderRuntimeRouteOutsideGeneratedAppFrame(profile, "/sites/personal", undefined, {
-        appInstalls,
-      }),
-    ).toBe(true);
   });
 
   it("resolves installed Site public surfaces from enabled public appRoute records", () => {
@@ -609,9 +595,6 @@ describe("runtime profile resolver", () => {
       authAccountSetupRoute: "/formless/auth/setup",
       authAccountSignInRoute: "/formless/auth/sign-in",
     });
-    expect(shouldRenderRuntimeRouteOutsideGeneratedAppFrame(profile, "/projects", undefined)).toBe(
-      true,
-    );
   });
 
   it("uses explicit config first and host config only as a deterministic fallback", () => {

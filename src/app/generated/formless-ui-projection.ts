@@ -135,6 +135,7 @@ export type ProjectGeneratedCreateFormlessUiSurfaceOptions =
   ProjectGeneratedCreateFormlessUiFieldsOptions & {
     enabled: boolean;
     entityLabel: string;
+    formErrors?: readonly string[];
     id: string;
     isSubmitting: boolean;
     open: boolean;
@@ -327,6 +328,7 @@ export function projectGeneratedCreateFormlessUiSurface({
   enabled,
   entityLabel,
   errorsByFieldName,
+  formErrors: runtimeFormErrors = [],
   iconDialogDraftByFieldName,
   iconDialogOpenByFieldName,
   iconParseErrorByFieldName,
@@ -350,9 +352,12 @@ export function projectGeneratedCreateFormlessUiSurface({
       : undefined;
   const fieldsDisabled = disabledReason !== undefined || isSubmitting;
   const visibleFieldNames = new Set(session.visibleFields.map((field) => field.fieldName));
-  const formErrors = Object.values(session.fieldErrors)
-    .filter((error) => !visibleFieldNames.has(error.fieldName))
-    .map((error) => error.message);
+  const formErrors = [
+    ...runtimeFormErrors,
+    ...Object.values(session.fieldErrors)
+      .filter((error) => !visibleFieldNames.has(error.fieldName))
+      .map((error) => error.message),
+  ];
   const fields = projectGeneratedCreateFormlessUiFields({
     errorsByFieldName,
     iconDialogDraftByFieldName,

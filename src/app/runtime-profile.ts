@@ -22,7 +22,6 @@ import {
   FORMLESS_RUNTIME_APP_INSTALL_ID_META_NAME,
   FORMLESS_RUNTIME_PACKAGE_APP_KEY_META_NAME,
   FORMLESS_RUNTIME_PROFILE_META_NAME,
-  isRuntimeAuthAccountRoutePath,
   matchRuntimeRouteBase,
   resolveRuntimeProfileKind,
   runtimeRouteFromBase,
@@ -32,7 +31,6 @@ import {
   type RuntimeRouteAccess,
   type RuntimeProfileKind,
 } from "../shared/runtime-topology.ts";
-import { COLLABORATOR_INVITATION_ACCEPT_PATH } from "../shared/instance-auth.ts";
 
 export type { RuntimeProfileKind };
 
@@ -313,35 +311,6 @@ export function runtimeProfileWithActivePackageResolver(
   });
 
   return resolved?.worlds.length ? resolved : profile;
-}
-
-export function shouldRenderRuntimeRouteOutsideGeneratedAppFrame(
-  profile: RuntimeProfile,
-  pathname: string,
-  routeWorld: RuntimeWorldMount | undefined,
-  context: RuntimeInstalledAppRouteContext = {},
-): boolean {
-  const path = normalizeRuntimeBrowserPath(pathname);
-  const routes = runtimeBrowserRoutePatterns(profile);
-
-  return (
-    isRuntimeAuthAccountRoutePath(path) ||
-    path === COLLABORATOR_INVITATION_ACCEPT_PATH ||
-    path === routes.localSessionRoute ||
-    isRuntimePublicSiteRoute(profile, path, context) ||
-    isInstalledSitePublicRoutePath(profile, path) ||
-    profile.shell === "publishedSite" ||
-    (profile.shell === "instance" && (path === routes.instanceShellRoute || !routeWorld))
-  );
-}
-
-export function runtimeAppManagementHref(
-  profile: RuntimeProfile,
-  routeWorld: RuntimeWorldMount | undefined,
-): "/" | undefined {
-  return profile.shell === "instance" && routeWorld?.target
-    ? runtimeTopologyRoutes.instanceRootRoute
-    : undefined;
 }
 
 export function runtimeInstalledSitePublicHomeSlug(profile: RuntimeProfile): string | undefined {

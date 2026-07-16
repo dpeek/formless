@@ -3,6 +3,7 @@ import { CommandPalette } from "@astryxdesign/core/CommandPalette";
 import { ToastViewport } from "@astryxdesign/core/Toast";
 import { createStaticSource, type SearchableItem } from "@astryxdesign/core/Typeahead";
 import { FormlessAuthLayout } from "./components/auth.tsx";
+import { FormlessApplicationShellLayout } from "./components/application-shell.tsx";
 import { FormlessCreateSurfacesLayout } from "./components/create-surfaces.tsx";
 import { FormlessCanonicalFieldsLayout } from "./components/formless-ui-fields.tsx";
 import { FormlessFieldsLayout } from "./components/fields.tsx";
@@ -12,7 +13,6 @@ import { FormlessListsLayout } from "./components/lists.tsx";
 import { FormlessOperationsLayout } from "./components/operations.tsx";
 import { FormlessRecordResultsLayout } from "./components/record-results.tsx";
 import { FormlessSiteLayout } from "./components/site.tsx";
-import { FormlessAppShell } from "./components/shell.tsx";
 import { FormlessTablesLayout } from "./components/tables.tsx";
 import { FormlessThemeProvider } from "./theme.tsx";
 
@@ -28,7 +28,6 @@ type LayoutCommandItem = SearchableItem<{
 }>;
 
 const formlessPrototypeLayouts: FormlessPrototypeLayout[] = [
-  createFormlessPrototypeLayout("App Shell", () => <FormlessAppShell />),
   createFormlessPrototypeLayout("Public Site", () => <FormlessSiteLayout />),
   createFormlessPrototypeLayout("Auth", () => <FormlessAuthLayout />),
   createFormlessPrototypeLayout("Operations", () => <FormlessOperationsLayout />),
@@ -37,6 +36,7 @@ const formlessPrototypeLayouts: FormlessPrototypeLayout[] = [
   createFormlessPrototypeLayout("Canonical Fields", () => <FormlessCanonicalFieldsLayout />),
   createFormlessPrototypeLayout("Generated Fields", () => <FormlessGeneratedFieldsLayout />),
   createFormlessPrototypeLayout("Generated Workspace", () => <FormlessGeneratedWorkspaceLayout />),
+  createFormlessPrototypeLayout("Application Shell", () => <FormlessApplicationShellLayout />),
   createFormlessPrototypeLayout("Record Results", () => <FormlessRecordResultsLayout />),
   createFormlessPrototypeLayout("Lists", () => <FormlessListsLayout />),
   createFormlessPrototypeLayout("Tables", () => <FormlessTablesLayout />),

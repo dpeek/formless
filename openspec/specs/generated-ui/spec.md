@@ -72,17 +72,29 @@ The system SHALL select generated surfaces from the active runtime profile and r
   component, configured public renderer, read-only markdown display, and public
   form behavior needed by the rendered tree
 
-### Requirement: App Frame And Settings
+### Requirement: Unified Application Shell And Settings
 
-The system SHALL render app chrome according to profile and SHALL expose app-local controls through the app settings surface.
+The system SHALL project eligible application and instance chrome through one
+renderer-neutral shell model and SHALL expose app-local controls through that
+shell.
 
-#### Scenario: Profile-specific chrome
+#### Scenario: Profile and route select shell scope
 
-- **GIVEN** a generated app is opened in the dev workbench profile
-- **WHEN** the app renders
-- **THEN** workbench chrome wraps the generated app
-- **AND** the workbench runtime shell can switch between App management, bundled source apps, and supported installed apps
-- **AND** the app profile renders generated app chrome without the workbench runtime shell
+- **GIVEN** React routing selects a generated admin, management, auth, or public
+  surface
+- **WHEN** the runtime selects application chrome
+- **THEN** the dev workbench profile uses one multi-app shell for instance
+  settings, instance access, bundled source apps, supported installed app admin
+  routes, and unknown dev routes
+- **AND** the product instance profile uses the multi-app shell for instance
+  settings, instance access, and supported installed app admin routes
+- **AND** app profiles, mapped app hosts, and Site authoring admin profiles use
+  the same shell in app-only scope
+- **AND** unknown product instance routes, owner setup and login routes,
+  invitation routes, local session routes, mapped public Site hosts, published
+  Site profiles, and installed public Site routes do not render the shell
+- **AND** shell selection does not change route matching, access policy, or the
+  selected route workspace
 
 #### Scenario: Instance management shell
 
@@ -99,27 +111,54 @@ The system SHALL render app chrome according to profile and SHALL expose app-loc
 - **AND** Cloudflare API tokens and Alchemy secret values are not exposed to the
   browser
 
-#### Scenario: Minimal instance rail navigation
+#### Scenario: Unified shell navigation
 
-- **GIVEN** an owner is using the product instance shell on the instance or dev
-  workbench profile
-- **WHEN** installed app navigation links are available
-- **THEN** the shell renders a persistent narrow rail before the generated app
-  sidebar
-- **AND** the rail contains one rounded-square instance settings tile
-- **AND** each installed app admin link is a rounded-square tile displaying the
-  first display letter from the app install label
-- **AND** each installed public Site link is a rounded-square tile displaying a
-  public Site icon rather than a repeated app initial
-- **AND** every tile has an accessible name that includes the destination label
-  and surface such as admin or public Site
-- **AND** the current tile is selected from the active browser path without
-  changing generated app screen selection
+- **GIVEN** an eligible multi-app or app-only shell is selected
+- **WHEN** runtime profile, route, app registry, app schema, sync, and session
+  facts are available
+- **THEN** runtime projects one shell manifest with stable identity, title,
+  scope, active destination, and ordered navigation-section references
+- **AND** navigation sections can contain instance settings and access,
+  available app admin and public destinations, generated app screens, root
+  record navigation, app settings, and display-safe session controls
+- **AND** disabled install routes are omitted, destination hrefs derive from
+  active route data, and selected state derives from the current path
 - **AND** app install and route configuration tables remain available through
-  instance settings rather than being the primary launch surface
-- **AND** mapped app hosts, mapped public Site hosts, published Site profiles,
-  anonymous owner-login routes, and anonymous owner-setup routes do not render
-  the instance rail
+  instance settings rather than becoming shell-owned management UI
+- **AND** the selected route workspace remains a React child of the shell
+  renderer rather than contract data
+- **AND** the shell contract does not expose runtime profiles, route policy,
+  schemas, queries, raw records, browser replica APIs, React nodes, Tailwind
+  classes, or renderer-specific component props
+
+#### Scenario: Root record navigation
+
+- **GIVEN** an app exposes root-record navigation and a root-record create
+  operation
+- **WHEN** generated runtime projects the application shell
+- **THEN** runtime resolves ordered root options, selected record, formatted
+  counts, availability, and one complete controlled create-surface contract
+- **AND** selection and create interactions dispatch canonical shell intent
+  envelopes with stable section, destination, record, and create-surface
+  identity
+- **AND** generated runtime retains query evaluation, record reads, route or
+  selection state, create drafts, validation, operation execution, sync
+  feedback, and post-create selection
+- **AND** renderer-local responsive and collapsed presentation state does not
+  become canonical runtime state
+
+#### Scenario: Shell settings and session state
+
+- **GIVEN** shell-eligible app settings or owner session state is available
+- **WHEN** runtime projects shell controls
+- **THEN** app sync status, supported source seed reset confirmation and status,
+  display-safe authenticated identity, and logout availability are explicit
+  presentation facts
+- **AND** reset and logout interactions dispatch canonical shell intents while
+  runtime owns reset, session, navigation, and error effects
+- **AND** the shell does not expose session tokens, challenge material, provider
+  credentials, raw runtime errors, profile or account settings destinations,
+  a synthesized sign-in destination, or a theme control
 
 #### Scenario: Local workspace save status
 
@@ -137,6 +176,8 @@ The system SHALL render app chrome according to profile and SHALL expose app-loc
 - **GIVEN** app settings are opened for the active app
 - **WHEN** settings render
 - **THEN** sync status and source seed reset are available where supported
+- **AND** schema-declared app screen navigation remains available through the
+  shell
 - **AND** frontend Schema links and schema editor controls are not shown
 - **AND** portable archive backup, restore, or import controls are not shown
 
@@ -494,9 +535,111 @@ entrypoints.
   operation controllers, or sync behavior
 - AND interactive fixtures use the reusable memory host or its reducer rather
   than production generated runtime
-- AND introducing the host does not activate Astryx in production, change
-  renderer selection, add tree support, replace the client store, or pull
-  shell, auth, public Site, or cutover behavior into scope
+- AND workspace subscription boundaries remain independent from application
+  shell contract nodes
+- AND introducing the host does not activate Astryx in production, add tree
+  support, replace the client store, or change auth-route, public Site, or
+  renderer-cutover behavior
+
+### Requirement: Reactive Application Shell Contract Host
+
+The system SHALL expose eligible application shell presentation through the
+stable renderer-neutral reactive host while runtime code owns route selection,
+data reads, session behavior, operations, and effects.
+
+#### Scenario: Expose shell contract nodes
+
+- **GIVEN** runtime selects an eligible multi-app or app-only shell
+- **WHEN** it projects shell presentation for a renderer
+- **THEN** the host exposes typed references for one shell manifest and its
+  ordered navigation-section nodes through the same generic contract-node
+  boundary used by generated workspace contracts
+- **AND** shell nodes carry complete renderer-neutral destinations, selection,
+  counts, statuses, controlled create surfaces, reset confirmation, and session
+  presentation needed by the shell
+- **AND** workspace references retain their existing roles and contract shapes
+- **AND** shell references and snapshots are serializable data without route
+  objects, schemas, records, queries, runtime callbacks, React nodes, storage
+  clients, or renderer imports
+
+#### Scenario: Publish shell state transactionally
+
+- **GIVEN** route, app registry, root-record, create, sync, reset, or session
+  state changes one or more shell nodes
+- **WHEN** runtime publishes the next shell projection
+- **THEN** the complete immutable node set is committed before subscribers are
+  notified
+- **AND** unchanged shell and navigation-section snapshots retain object
+  identity and do not notify their scoped subscribers
+- **AND** changed sections notify only their subscribers unless manifest
+  structure or ordered references also change
+- **AND** removed references become unavailable in the same atomic publication
+  that removes them from the manifest
+- **AND** typed reads, cached server snapshots, client subscription, and
+  hydration retain the host's existing `useSyncExternalStore` semantics
+
+#### Scenario: Dispatch shell intents
+
+- **GIVEN** a shell renderer receives projected links and controlled controls
+- **WHEN** the user follows a destination, selects or creates a root record,
+  opens or confirms reset, or logs out
+- **THEN** ordinary destinations use their projected hrefs
+- **AND** controlled interactions dispatch canonical shell intent envelopes
+  through the host using stable manifest, section, destination, record,
+  create-surface, or control identity as applicable
+- **AND** runtime resolves intents against its latest route, selection, create,
+  reset, and session state before performing navigation, writes, operations, or
+  logout effects
+- **AND** renderers do not mutate canonical route, record, operation, reset, or
+  session state locally
+
+#### Scenario: Legacy renderer consumes the shell contract
+
+- **GIVEN** production currently composes separate workbench, app-frame,
+  instance-rail, app-sidebar, and instance-shell chrome
+- **WHEN** runtime publishes an eligible unified shell
+- **THEN** one subscribed legacy renderer reads only shell references and
+  snapshots, renders the selected route workspace as its child, and dispatches
+  canonical shell intents
+- **AND** production dev workbench, instance management, installed app admin,
+  app-profile, mapped-app, and Site authoring admin routes use that renderer at
+  their specified shell scope
+- **AND** no-shell routes remain outside the shell host and renderer
+- **AND** direct legacy `@dpeek/formless-ui` imports for migrated shell chrome
+  remain confined to dedicated legacy seam modules
+- **AND** production remains on the legacy renderer after the shell contract
+  migration
+
+#### Scenario: Astryx shell renderer
+
+- **GIVEN** the legacy renderer consumes complete production shell contracts
+- **WHEN** the replacement renderer implements the same contracts in
+  `lib/astryx`
+- **THEN** pure and subscribed Astryx entrypoints render app switching,
+  generated screens, root records and create controls, instance management,
+  app settings, sync and reset state, session identity, logout, and the route
+  child without importing generated runtime
+- **AND** responsive and collapsed presentation state remains renderer-owned
+- **AND** the Astryx renderer contains no legacy Formless UI components,
+  storage reads, route policy, query evaluation, operation execution, session
+  effects, or runtime data imports
+- **AND** adding the renderer does not export or activate Astryx in production
+  or introduce Astryx theme and global CSS into runtime entrypoints
+
+#### Scenario: Astryx shell contract fixtures
+
+- **GIVEN** the legacy renderer consumes complete production shell contracts
+- **WHEN** shell UX is evaluated in the package-local Astryx prototype
+- **THEN** data-only memory-host fixtures cover dev workbench, product instance,
+  multiple installed admin and public destinations, app-only and mapped-app
+  profiles, Site authoring admin, generated screens, root records and counts,
+  controlled create, sync and reset state, authenticated session state, and
+  no-shell selection
+- **AND** fixture reducers may simulate root selection, create, reset, and
+  logout intents without importing generated runtime, schemas, routing, browser
+  replica, storage, operation controllers, or session clients
+- **AND** fixtures contain no theme controls and do not export or activate the
+  Astryx shell renderer in production
 
 ### Requirement: Generated List Renderer Contract
 
