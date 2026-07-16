@@ -3192,7 +3192,7 @@ describe("generated collection home", () => {
     expect(html).toContain("Active");
     expect(html).toContain("Completed");
     expect(html).toContain("Overdue");
-    expect(html).toContain('aria-label="Task operations"');
+    expect(html).toContain('aria-label="More Task actions"');
     expect(html).toContain("Create Task");
     expect(html).toContain("Clear completed");
     expect(html).not.toContain('aria-label="Collection summary"');
@@ -3208,7 +3208,7 @@ describe("generated collection home", () => {
     expect(html).toContain("Active");
     expect(html).toContain("Completed");
     expect(html).toContain("Overdue");
-    expect(html).toContain('aria-label="Task operations"');
+    expect(html).toContain('aria-label="More Task actions"');
     expect(html).toContain("Create Task");
     expect(html).toContain("Clear completed");
     expect(html).not.toContain('aria-label="Screens"');
@@ -3229,7 +3229,7 @@ describe("generated collection home", () => {
     expect(html).toContain("Create Task");
   });
 
-  it("renders one-section screens with the same markup as the collection renderer", () => {
+  it("renders one-section screens through the canonical legacy workspace seam", () => {
     const screen = requiredScreenModel(appSchema, "taskHome");
     const collection = selectPrimaryCollectionModels(appSchema)[0];
 
@@ -3239,9 +3239,13 @@ describe("generated collection home", () => {
 
     applyBootstrapResponse(bootstrap(taskSeedRecords, appSchema));
 
-    expect(renderGeneratedHomeScreen(screen, { today: "2026-05-02" })).toBe(
-      renderGeneratedHomeCollection(collection, { today: "2026-05-02" }),
-    );
+    const screenHtml = renderGeneratedHomeScreen(screen, { today: "2026-05-02" });
+    const collectionHtml = renderGeneratedHomeCollection(collection, { today: "2026-05-02" });
+
+    expect(screenHtml).toContain('data-formless-legacy-workspace="workspace:taskHome"');
+    expect(screenHtml).toContain("data-formless-legacy-workspace-collection=");
+    expect(screenHtml).toContain("data-formless-legacy-list=");
+    expect(collectionHtml).not.toContain("data-formless-legacy-workspace=");
   });
 
   it("renders generated Site workspace with root sidebar nav and tree layout", () => {
@@ -3271,6 +3275,7 @@ describe("generated collection home", () => {
     expect(html).toContain('aria-label="Drag placement"');
     expect(html).toContain('data-formless-ordering-handle="true"');
     expect(html).toContain("data-formless-sortable-tree-placement=");
+    expect(html).not.toContain("data-formless-legacy-workspace=");
     expect(html).not.toContain("Move placement up");
     expect(html).not.toContain("Move placement down");
   });
@@ -3290,7 +3295,7 @@ describe("generated collection home", () => {
     expect(html).toContain('aria-label="Accent color"');
     expect(html).toContain('aria-label="Background color"');
     expect(html).toContain('aria-label="Site record"');
-    expect(html).toContain('data-formless-legacy-record-result="site:siteSettingsForm"');
+    expect(html).toContain("data-formless-legacy-record-result=");
     expect(html).not.toContain('data-slot="table"');
     expect(html).not.toContain('role="grid"');
     expect(html).toContain("Example Site");
@@ -3806,7 +3811,7 @@ describe("generated collection home", () => {
     );
     const html = renderRoute("/tasks");
 
-    expect(countOccurrences(html, 'data-formless-legacy-list="task:taskListItem"')).toBe(1);
+    expect(countOccurrences(html, "data-formless-legacy-list=")).toBe(1);
     expect(html).toContain('aria-label="Task records"');
     expect(html).toContain('role="list"');
     expect(html).toContain('data-formless-list-item="record-1"');

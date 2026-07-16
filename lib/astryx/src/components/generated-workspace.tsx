@@ -1,0 +1,595 @@
+import { useState } from "react";
+import { HStack } from "@astryxdesign/core/HStack";
+import { SegmentedControl, SegmentedControlItem } from "@astryxdesign/core/SegmentedControl";
+import { Heading } from "@astryxdesign/core/Text";
+import { VStack } from "@astryxdesign/core/VStack";
+import type {
+  FormlessUiCreateSurfaceContract,
+  FormlessUiCreateField,
+  FormlessUiField,
+  FormlessUiListContract,
+  FormlessUiOperationControlContract,
+  FormlessUiOperationPresentationIntent,
+  FormlessUiRecordResultContract,
+  FormlessUiTableActionGroupContract,
+  FormlessUiTableContract,
+  FormlessUiWorkspaceCollectionActionGroupContract,
+  FormlessUiWorkspaceCollectionContract,
+  FormlessUiWorkspaceCollectionPresentationContract,
+  FormlessUiWorkspaceContextContract,
+  FormlessUiWorkspaceIntent,
+  FormlessUiWorkspaceResultContract,
+} from "../formless-ui-contract.ts";
+import { applyScenarioFieldIntent } from "./fields/fixture-helpers.ts";
+import { AstryxWorkspaceScreenRenderer } from "./formless-ui-workspace-screen-renderer.tsx";
+import {
+  createFormlessGeneratedWorkspaceFixtures,
+  type FormlessGeneratedWorkspaceFixture,
+  type FormlessGeneratedWorkspaceFixtureId,
+} from "./generated-workspace.fixtures.ts";
+import { applyListFieldIntent, applyListIntent } from "./lists.tsx";
+import { applyTableFieldIntent, applyTableIntent } from "./tables.tsx";
+
+export function FormlessGeneratedWorkspaceLayout() {
+  const [fixtures, setFixtures] = useState(createFormlessGeneratedWorkspaceFixtures);
+  const [selectedFixtureId, setSelectedFixtureId] =
+    useState<FormlessGeneratedWorkspaceFixtureId>("tasks");
+  const selectedFixture = selectedGeneratedWorkspaceFixture(fixtures, selectedFixtureId);
+
+  const handleIntent = (intent: FormlessUiWorkspaceIntent) => {
+    setFixtures((currentFixtures) =>
+      currentFixtures.map((fixture) =>
+        fixture.id === selectedFixtureId
+          ? { ...fixture, workspace: applyGeneratedWorkspaceIntent(fixture.workspace, intent) }
+          : fixture,
+      ),
+    );
+  };
+
+  return (
+    <main>
+      <VStack hAlign="center" paddingBlock={6} paddingInline={4} width="100%">
+        <VStack gap={5} maxWidth={1200} width="100%">
+          <HStack align="center" justify="between" wrap="wrap">
+            <Heading level={1}>Generated Workspace</Heading>
+            <SegmentedControl
+              label="Workspace state"
+              layout="hug"
+              onChange={(value) =>
+                setSelectedFixtureId(value as FormlessGeneratedWorkspaceFixtureId)
+              }
+              value={selectedFixtureId}
+            >
+              {fixtures.map((fixture) => (
+                <SegmentedControlItem key={fixture.id} label={fixture.label} value={fixture.id} />
+              ))}
+            </SegmentedControl>
+          </HStack>
+
+          {selectedFixture ? (
+            <AstryxWorkspaceScreenRenderer
+              onIntent={handleIntent}
+              workspace={selectedFixture.workspace}
+            />
+          ) : null}
+        </VStack>
+      </VStack>
+    </main>
+  );
+}
+
+export function applyGeneratedWorkspaceIntent(
+  workspace: FormlessGeneratedWorkspaceFixture["workspace"],
+  intent: FormlessUiWorkspaceIntent,
+): FormlessGeneratedWorkspaceFixture["workspace"] {
+  if (intent.screenId !== workspace.id) {
+    return workspace;
+  }
+
+  let matched = false;
+  const sections = workspace.sections.map((section) => {
+    if (section.id !== intent.sectionId || section.collection.id !== intent.collectionId) {
+      return section;
+    }
+
+    matched = true;
+    if (intent.type === "workspaceExternalAction") {
+      return {
+        ...section,
+        actions: section.actions.map((externalAction) =>
+          externalAction.id === intent.actionId &&
+          externalAction.action.id === intent.controlId &&
+          intent.intent.controlId === intent.controlId
+            ? {
+                ...externalAction,
+                action: { ...externalAction.action, selected: true },
+              }
+            : externalAction,
+        ),
+      };
+    }
+
+    return {
+      ...section,
+      collection: applyCollectionIntent(section.collection, intent),
+    };
+  });
+
+  return matched ? { ...workspace, sections } : workspace;
+}
+
+export function selectedGeneratedWorkspaceFixture(
+  fixtures: readonly FormlessGeneratedWorkspaceFixture[],
+  id: FormlessGeneratedWorkspaceFixtureId,
+) {
+  return fixtures.find((fixture) => fixture.id === id);
+}
+
+function applyCollectionIntent(
+  collection: FormlessUiWorkspaceCollectionContract,
+  intent: Exclude<FormlessUiWorkspaceIntent, { type: "workspaceExternalAction" }>,
+): FormlessUiWorkspaceCollectionContract {
+  if (intent.type === "workspaceQuerySelection") {
+    const navigation = collection.presentation.queryNavigation;
+    if (!navigation?.items.some((item) => item.id === intent.queryId)) {
+      return collection;
+    }
+
+    return {
+      ...collection,
+      presentation: withQueryNavigation(collection.presentation, {
+        ...navigation,
+        items: navigation.items.map((item) => ({
+          ...item,
+          selected: item.id === intent.queryId,
+        })),
+      }),
+      selectedQueryId: intent.queryId,
+    };
+  }
+
+  if (intent.type === "workspaceContextSelection") {
+    return {
+      ...collection,
+      presentation: withSelectedContext(
+        collection.presentation,
+        intent.contextId,
+        intent.contextOptionId,
+      ),
+    };
+  }
+
+  if (intent.type === "workspaceCreate") {
+    return {
+      ...collection,
+      presentation: mapCreateSurfaces(collection.presentation, intent.surfaceId, (surface) => {
+        if (intent.intent.surfaceId !== surface.id) {
+          return surface;
+        }
+
+        return {
+          ...surface,
+          dialog: {
+            ...surface.dialog,
+            open: intent.intent.type === "createOpenChange" ? intent.intent.open : false,
+          },
+        };
+      }),
+    };
+  }
+
+  if (intent.type === "workspaceField") {
+    if (intent.surfaceId !== undefined) {
+      return {
+        ...collection,
+        presentation: mapCreateSurfaces(collection.presentation, intent.surfaceId, (surface) => ({
+          ...surface,
+          dialog: {
+            ...surface.dialog,
+            form: {
+              ...surface.dialog.form,
+              fieldSet: {
+                ...surface.dialog.form.fieldSet,
+                fields: surface.dialog.form.fieldSet.fields.map((field) =>
+                  field.fieldName === intent.fieldId
+                    ? (applyScenarioFieldIntent(field, intent.intent) as FormlessUiCreateField)
+                    : field,
+                ),
+              },
+            },
+          },
+        })),
+      };
+    }
+
+    return {
+      ...collection,
+      presentation: mapWorkspaceResults(collection.presentation, intent.resultId, (result) =>
+        applyWorkspaceResultFieldIntent(result, intent.recordId, intent.intent),
+      ),
+    };
+  }
+
+  if (intent.type === "workspaceOperation") {
+    const presentation = {
+      ...collection.presentation,
+      actions: mapCollectionOperation(
+        collection.presentation.actions,
+        intent.controlId,
+        intent.intent,
+      ),
+    } as FormlessUiWorkspaceCollectionPresentationContract;
+
+    return {
+      ...collection,
+      presentation: mapWorkspaceResults(presentation, intent.resultId, (result) =>
+        mapResultOperation(result, intent.controlId, intent.intent),
+      ),
+    };
+  }
+
+  if (intent.type === "workspaceList") {
+    return {
+      ...collection,
+      presentation: mapWorkspaceResults(collection.presentation, intent.resultId, (result) =>
+        result.kind === "list" ? applyListIntent(result, intent.intent) : result,
+      ),
+    };
+  }
+
+  if (intent.type === "workspaceTable") {
+    return {
+      ...collection,
+      presentation: mapWorkspaceResults(collection.presentation, intent.resultId, (result) =>
+        result.kind === "table" ? applyTableIntent(result, intent.intent) : result,
+      ),
+    };
+  }
+
+  return {
+    ...collection,
+    presentation: mapWorkspaceResults(collection.presentation, intent.resultId, (result) =>
+      result.kind === "recordResult" ? applyRecordResultIntent(result, intent.intent) : result,
+    ),
+  };
+}
+
+function withQueryNavigation(
+  presentation: FormlessUiWorkspaceCollectionPresentationContract,
+  queryNavigation: NonNullable<
+    FormlessUiWorkspaceCollectionPresentationContract["queryNavigation"]
+  >,
+): FormlessUiWorkspaceCollectionPresentationContract {
+  return { ...presentation, queryNavigation };
+}
+
+function withSelectedContext(
+  presentation: FormlessUiWorkspaceCollectionPresentationContract,
+  contextId: string,
+  optionId: string,
+): FormlessUiWorkspaceCollectionPresentationContract {
+  if (presentation.kind === "listDetail") {
+    return {
+      ...presentation,
+      selector: selectContextOption(presentation.selector, contextId, optionId),
+    };
+  }
+
+  return presentation.context
+    ? {
+        ...presentation,
+        context: selectContextOption(presentation.context, contextId, optionId),
+      }
+    : presentation;
+}
+
+function selectContextOption<P extends FormlessUiWorkspaceContextContract["presentation"]>(
+  context: FormlessUiWorkspaceContextContract & { presentation: P },
+  contextId: string,
+  optionId: string,
+): FormlessUiWorkspaceContextContract & { presentation: P } {
+  if (
+    context.id !== contextId ||
+    !context.options.some((option) => option.id === optionId && option.availability.available)
+  ) {
+    return context;
+  }
+
+  return {
+    ...context,
+    options: context.options.map((option) => ({ ...option, selected: option.id === optionId })),
+    selectedOptionId: optionId,
+  };
+}
+
+function mapCreateSurfaces(
+  presentation: FormlessUiWorkspaceCollectionPresentationContract,
+  surfaceId: string,
+  update: (surface: FormlessUiCreateSurfaceContract) => FormlessUiCreateSurfaceContract,
+): FormlessUiWorkspaceCollectionPresentationContract {
+  const actions = mapCollectionCreateSurface(presentation.actions, surfaceId, update);
+
+  if (presentation.kind === "listDetail") {
+    return {
+      ...presentation,
+      actions,
+      selector: mapContextCreateSurface(presentation.selector, surfaceId, update),
+    };
+  }
+
+  return {
+    ...presentation,
+    actions,
+    ...(presentation.context === undefined
+      ? {}
+      : { context: mapContextCreateSurface(presentation.context, surfaceId, update) }),
+  };
+}
+
+function mapCollectionCreateSurface(
+  actions: FormlessUiWorkspaceCollectionActionGroupContract,
+  surfaceId: string,
+  update: (surface: FormlessUiCreateSurfaceContract) => FormlessUiCreateSurfaceContract,
+): FormlessUiWorkspaceCollectionActionGroupContract {
+  const mapAction = (action: FormlessUiWorkspaceCollectionActionGroupContract["primary"][number]) =>
+    action.kind === "createAction" && action.surface.id === surfaceId
+      ? { ...action, surface: update(action.surface) }
+      : action;
+
+  return {
+    ...actions,
+    primary: actions.primary.map(mapAction),
+    secondary: actions.secondary.map(mapAction),
+  };
+}
+
+function mapContextCreateSurface<P extends FormlessUiWorkspaceContextContract["presentation"]>(
+  context: FormlessUiWorkspaceContextContract & { presentation: P },
+  surfaceId: string,
+  update: (surface: FormlessUiCreateSurfaceContract) => FormlessUiCreateSurfaceContract,
+): FormlessUiWorkspaceContextContract & { presentation: P } {
+  return context.createAction?.surface.id === surfaceId
+    ? {
+        ...context,
+        createAction: { ...context.createAction, surface: update(context.createAction.surface) },
+      }
+    : context;
+}
+
+function mapWorkspaceResults(
+  presentation: FormlessUiWorkspaceCollectionPresentationContract,
+  resultId: string | undefined,
+  update: (result: FormlessUiWorkspaceResultContract) => FormlessUiWorkspaceResultContract,
+): FormlessUiWorkspaceCollectionPresentationContract {
+  if (resultId === undefined) {
+    return presentation;
+  }
+
+  const result =
+    presentation.result.id === resultId ? update(presentation.result) : presentation.result;
+  const contextDetail =
+    presentation.contextDetail?.id === resultId
+      ? (update(presentation.contextDetail) as FormlessUiRecordResultContract)
+      : presentation.contextDetail;
+
+  return {
+    ...presentation,
+    ...(contextDetail === undefined ? {} : { contextDetail }),
+    result,
+  };
+}
+
+function applyWorkspaceResultFieldIntent(
+  result: FormlessUiWorkspaceResultContract,
+  recordId: string | undefined,
+  intent: Extract<FormlessUiWorkspaceIntent, { type: "workspaceField" }>["intent"],
+): FormlessUiWorkspaceResultContract {
+  if (result.kind === "list") {
+    const sourceField = result.items
+      .find((item) => item.id === recordId)
+      ?.fields.find((field) => field.fieldName === workspaceFieldName(intent));
+
+    return sourceField ? applyListFieldIntent(result, recordId ?? "", sourceField, intent) : result;
+  }
+
+  if (result.kind === "table") {
+    const sourceField = findTableField(result, recordId, workspaceFieldName(intent));
+    return sourceField ? applyTableFieldIntent(result, sourceField, intent) : result;
+  }
+
+  return result;
+}
+
+function workspaceFieldName(
+  intent: Extract<FormlessUiWorkspaceIntent, { type: "workspaceField" }>["intent"],
+) {
+  return "fieldName" in intent ? intent.fieldName : "inputName" in intent ? intent.inputName : "";
+}
+
+function findTableField(
+  table: FormlessUiTableContract,
+  recordId: string | undefined,
+  fieldName: string,
+): FormlessUiField | undefined {
+  const row = table.rows.find((candidate) => candidate.id === recordId);
+  const content = row?.cells
+    .flatMap((cell) => cell.contents)
+    .find((candidate) => candidate.kind === "field" && candidate.field.fieldName === fieldName);
+
+  return content?.kind === "field" ? content.field : undefined;
+}
+
+function mapCollectionOperation(
+  actions: FormlessUiWorkspaceCollectionActionGroupContract,
+  controlId: string,
+  intent: FormlessUiOperationPresentationIntent,
+): FormlessUiWorkspaceCollectionActionGroupContract {
+  const mapAction = (action: FormlessUiWorkspaceCollectionActionGroupContract["primary"][number]) =>
+    action.kind === "operationAction" && action.control.id === controlId
+      ? { ...action, control: applyFixtureOperationIntent(action.control, intent) }
+      : action;
+
+  return {
+    ...actions,
+    primary: actions.primary.map(mapAction),
+    secondary: actions.secondary.map(mapAction),
+  };
+}
+
+function mapResultOperation(
+  result: FormlessUiWorkspaceResultContract,
+  controlId: string,
+  intent: FormlessUiOperationPresentationIntent,
+): FormlessUiWorkspaceResultContract {
+  if (result.kind === "list") {
+    return {
+      ...result,
+      items: result.items.map((item) => ({
+        ...item,
+        actions: mapListActionGroup(item.actions, controlId, intent),
+      })),
+    };
+  }
+
+  if (result.kind === "table") {
+    return {
+      ...result,
+      rows: result.rows.map((row) => ({
+        ...row,
+        cells: row.cells.map((cell) => ({
+          ...cell,
+          contents: cell.contents.map((content) =>
+            content.kind === "actionGroup"
+              ? mapTableActionGroup(content, controlId, intent)
+              : content,
+          ),
+        })),
+      })),
+    };
+  }
+
+  return mapRecordResultOperation(result, controlId, intent);
+}
+
+function mapListActionGroup(
+  actions: FormlessUiListContract["items"][number]["actions"],
+  controlId: string,
+  intent: FormlessUiOperationPresentationIntent,
+) {
+  const mapAction = (action: (typeof actions.primary)[number]) =>
+    action.control.id === controlId
+      ? { ...action, control: applyFixtureOperationIntent(action.control, intent) }
+      : action;
+
+  return {
+    ...actions,
+    primary: actions.primary.map(mapAction),
+    secondary: actions.secondary.map(mapAction),
+  };
+}
+
+function mapTableActionGroup(
+  actions: FormlessUiTableActionGroupContract,
+  controlId: string,
+  intent: FormlessUiOperationPresentationIntent,
+) {
+  const mapAction = (action: (typeof actions.primary)[number]) =>
+    action.kind === "operationAction" && action.control.id === controlId
+      ? { ...action, control: applyFixtureOperationIntent(action.control, intent) }
+      : action;
+
+  return {
+    ...actions,
+    primary: actions.primary.map(mapAction),
+    secondary: actions.secondary.map(mapAction),
+  };
+}
+
+function mapRecordResultOperation(
+  result: FormlessUiRecordResultContract,
+  controlId: string,
+  intent: FormlessUiOperationPresentationIntent,
+): FormlessUiRecordResultContract {
+  const mapAction = (action: FormlessUiRecordResultContract["actions"]["primary"][number]) =>
+    action.control.id === controlId
+      ? { ...action, control: applyFixtureOperationIntent(action.control, intent) }
+      : action;
+
+  return {
+    ...result,
+    actions: {
+      ...result.actions,
+      primary: result.actions.primary.map(mapAction),
+      secondary: result.actions.secondary.map(mapAction),
+    },
+  };
+}
+
+function applyRecordResultIntent(
+  result: FormlessUiRecordResultContract,
+  intent: Extract<FormlessUiWorkspaceIntent, { type: "workspaceRecordResult" }>["intent"],
+): FormlessUiRecordResultContract {
+  if (intent.resultId !== result.id || intent.recordId !== result.selectedRecord?.id) {
+    return result;
+  }
+
+  if (intent.type === "recordResultFieldIntent") {
+    return {
+      ...result,
+      fields: result.fields.map((field) =>
+        field.id === intent.fieldId
+          ? { ...field, field: applyScenarioFieldIntent(field.field, intent.intent) }
+          : field,
+      ),
+    };
+  }
+
+  return mapRecordResultOperation(result, intent.controlId, intent.intent);
+}
+
+function applyFixtureOperationIntent(
+  control: FormlessUiOperationControlContract,
+  intent: FormlessUiOperationPresentationIntent,
+): FormlessUiOperationControlContract {
+  if (intent.controlId !== control.id) {
+    return control;
+  }
+
+  if (intent.type === "operationConfirmationOpenChange") {
+    return control.confirmation
+      ? {
+          ...control,
+          confirmation: { ...control.confirmation, open: intent.open },
+        }
+      : control;
+  }
+
+  const label =
+    control.trigger.content.kind === "iconOnly"
+      ? control.trigger.accessibilityLabel
+      : control.trigger.content.label;
+  const completion = `${label} complete`;
+
+  return {
+    ...control,
+    ...(control.confirmation === undefined
+      ? {}
+      : { confirmation: { ...control.confirmation, open: false } }),
+    feedback: {
+      detail: "Prototype intent handled.",
+      id: `${control.id}:fixture:committed`,
+      intent: "success",
+      kind: "operationFeedbackEvent",
+      status: "committed",
+      title: completion,
+    },
+    status: {
+      ...control.status,
+      accessibilityLabel: completion,
+      detail: "Prototype intent handled.",
+      intent: "success",
+      label: completion,
+      status: "committed",
+    },
+  };
+}

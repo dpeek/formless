@@ -364,7 +364,7 @@ describe("instance shell route view", () => {
     expect(html).toContain("Routes");
     expect(html).toContain("Create Route");
     expect(html).toContain('aria-label="Route operations"');
-    expect(html).toContain('data-formless-legacy-table="route:routeAll"');
+    expect(html).toContain("data-formless-legacy-table=");
     expect(html).not.toContain("Routes by deployment config");
     expect(html).not.toContain("Deployment config");
     expect(html).not.toContain("Primary deployment target");

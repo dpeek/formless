@@ -18,6 +18,7 @@ import {
   type PublicSiteRouteProps,
 } from "./app/public-site-runtime.tsx";
 import type { GeneratedAppFrameProps } from "./app/generated-app-frame.tsx";
+import type { GeneratedWorkspaceSectionExternalAction } from "./app/generated/generated-workspace-runtime.tsx";
 import { sitePublicRenderer as workspaceSitePublicRenderer } from "virtual:formless/site-public-renderer/browser";
 import {
   findRuntimeWorldMountByRoute,
@@ -59,7 +60,9 @@ import type { AppInstallsResponse } from "./shared/protocol.ts";
 
 type HomeRouteProps = {
   activePackageResolver?: AppPackageResolver | undefined;
-  sectionOperationControls?: Record<string, ReactNode>;
+  sectionExternalActions?: Readonly<
+    Record<string, readonly GeneratedWorkspaceSectionExternalAction[] | undefined>
+  >;
   target?: ClientAppTarget;
   schemaKey: ClientAppSchemaKey;
   screenPath: string;

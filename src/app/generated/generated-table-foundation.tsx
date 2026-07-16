@@ -14,6 +14,7 @@ import type {
 import {
   evaluateNumericExpression,
   resolveRecordFieldValue,
+  type AppSchema,
   type EntitySchema,
   type QueryEvaluationContext,
   type RecordValues,
@@ -113,7 +114,7 @@ import {
   type GeneratedTablePresentation,
 } from "./table-presentation.ts";
 
-type GeneratedTableFieldContext = {
+export type GeneratedTableFieldContext = {
   entityName: string;
   fields: RecordFieldConfig[];
   id: string;
@@ -123,7 +124,7 @@ type GeneratedTableFieldContext = {
   updateOperation?: TableCollectionResultModel["updateOperation"];
 };
 
-type GeneratedTableFieldContextState = {
+export type GeneratedTableFieldContextState = {
   baselineUpdatedAt: string;
   editorDraftByFieldName: Record<string, string | undefined>;
   errorsByFieldName: Record<string, string | undefined>;
@@ -133,7 +134,7 @@ type GeneratedTableFieldContextState = {
   session: GeneratedUpdateDraftSessionState;
 };
 
-type GeneratedTableOperationRuntime =
+export type GeneratedTableOperationRuntime =
   | {
       binding: GeneratedOperationControlBinding;
       kind: "control";
@@ -165,13 +166,96 @@ type GeneratedTableTransitionRuntime = Extract<
   { kind: "transition" }
 >;
 
-type GeneratedTableRuntimePlan = {
+export type GeneratedTableRuntimePlan = {
   operationById: ReadonlyMap<string, GeneratedTableOperationRuntime>;
   operations: readonly GeneratedTableOperationRuntime[];
   orderingByCellId: ReadonlyMap<string, readonly GeneratedTableOperationRuntime[]>;
   orderingItemsByCellId: ReadonlyMap<string, readonly OrderingMoveMenuItem[]>;
   transitionsByContextId: ReadonlyMap<string, readonly GeneratedTableTransitionRuntime[]>;
 };
+
+export type SelectGeneratedWorkspaceTableFoundationOptions = {
+  confirmationOpenById?: Readonly<Record<string, boolean | undefined>>;
+  controller: GeneratedOperationController;
+  dialogOpenById?: Readonly<Record<string, boolean | undefined>>;
+  entity: EntitySchema;
+  entityName: string;
+  fieldStateByContextId?: Readonly<Record<string, GeneratedTableFieldContextState | undefined>>;
+  id: string;
+  mediaAssetOptions?: readonly ImageMediaAssetOption[];
+  query: HomeQueryTabConfig["query"];
+  queryContext?: QueryEvaluationContext;
+  queryName: string;
+  recordIds: readonly string[];
+  recordsById: Readonly<Record<string, StoredRecord>>;
+  result: TableCollectionResultModel;
+  schema?: AppSchema | null;
+};
+
+export function selectGeneratedWorkspaceTableFoundation({
+  confirmationOpenById = {},
+  controller,
+  dialogOpenById = {},
+  entity,
+  entityName,
+  fieldStateByContextId = {},
+  id,
+  mediaAssetOptions = [],
+  query,
+  queryContext,
+  queryName,
+  recordIds,
+  recordsById,
+  result,
+  schema = null,
+}: SelectGeneratedWorkspaceTableFoundationOptions) {
+  const orderingContext = selectResultOrderingContext({
+    entityName,
+    ordering: result.ordering,
+    recordIds: [...recordIds],
+    recordsById,
+    updateOperation: result.updateOperation,
+  });
+  const orderedRecordIds = orderingContext?.orderedRecordIds ?? [...recordIds];
+  const presentation = selectGeneratedTablePresentation({
+    canDelete: result.deleteOperation !== undefined,
+    canPatch: result.updateOperation !== undefined,
+    columns: result.columns,
+    footer: result.footer ?? [],
+    orderedRecordIds,
+    orderingDragPatchEnabled: false,
+    query,
+    queryName,
+    transitionOperations: result.transitionOperations,
+  });
+  const runtimePlan = selectGeneratedTableRuntimePlan({
+    entity,
+    orderingContext,
+    presentation,
+    recordsById,
+    result,
+    tableId: id,
+  });
+  const projected = projectGeneratedRecordTable({
+    confirmationOpenById,
+    controller,
+    dialogOpenById,
+    entity,
+    entityName,
+    fieldStateByContextId,
+    mediaAssetOptions: [...mediaAssetOptions],
+    presentation,
+    query,
+    queryContext,
+    recordsById,
+    result,
+    runtimePlan,
+    schema,
+    tableId: id,
+  });
+
+  return { ...projected, runtimePlan };
+}
 
 export function GeneratedRecordTableFoundation({
   entity,
@@ -289,7 +373,7 @@ export function GeneratedRecordTableFoundation({
           continue;
         }
 
-        next[context.id] = initialFieldContextState(context);
+        next[context.id] = createGeneratedTableFieldContextState(context);
         changed = true;
       }
 
@@ -394,7 +478,7 @@ export function GeneratedRecordTableFoundation({
     update: (state: GeneratedTableFieldContextState) => GeneratedTableFieldContextState,
   ) {
     setFieldStateByContextId((current) => {
-      const state = current[context.id] ?? initialFieldContextState(context);
+      const state = current[context.id] ?? createGeneratedTableFieldContextState(context);
       return { ...current, [context.id]: update(state) };
     });
   }
@@ -424,7 +508,8 @@ export function GeneratedRecordTableFoundation({
         throw new Error("Image upload did not return a media asset id.");
       }
 
-      const state = fieldStateRef.current[context.id] ?? initialFieldContextState(context);
+      const state =
+        fieldStateRef.current[context.id] ?? createGeneratedTableFieldContextState(context);
       const mediaAuthoring = selectGeneratedRecordFieldMediaAuthoring({
         draft: state.editorDraftByFieldName[fieldName] ?? "",
         entityName: context.entityName,
@@ -602,12 +687,13 @@ export function GeneratedRecordTableFoundation({
       const runtime = selectFieldTransitionRuntime(contextId, intent, runtimePlan);
 
       if (runtime) {
-        await executeRuntimeOperation(runtime, controller, intent.source);
+        await executeGeneratedTableRuntimeOperation(runtime, controller, intent.source);
       }
       return;
     }
 
-    const state = fieldStateRef.current[contextId] ?? initialFieldContextState(context);
+    const state =
+      fieldStateRef.current[contextId] ?? createGeneratedTableFieldContextState(context);
     const result = adaptGeneratedFormlessUiFieldIntent(intent, {
       record: {
         editorDraftByFieldName: state.editorDraftByFieldName,
@@ -635,7 +721,7 @@ export function GeneratedRecordTableFoundation({
       controller,
       intent,
       invoke: (invokeIntent) =>
-        executeRuntimeOperation(runtime, controller, invokeIntent.invocationSource),
+        executeGeneratedTableRuntimeOperation(runtime, controller, invokeIntent.invocationSource),
       onConfirmationOpenChange: (open) =>
         setConfirmationOpenById((current) => ({ ...current, [runtime.binding.id]: open })),
     });
@@ -656,14 +742,14 @@ export function GeneratedRecordTableFoundation({
       );
 
       if (runtime?.kind === "ordering") {
-        await executeRuntimeOperation(runtime, controller, "menuItem");
+        await executeGeneratedTableRuntimeOperation(runtime, controller, "menuItem");
       }
       return;
     }
 
     const runtime = runtimePlan.operationById.get(intent.actionId);
     if (runtime) {
-      await executeRuntimeOperation(runtime, controller, intent.invocationSource);
+      await executeGeneratedTableRuntimeOperation(runtime, controller, intent.invocationSource);
     }
   }
 
@@ -1292,7 +1378,7 @@ function projectFieldContext(
     transitionRuntimes: readonly GeneratedTableTransitionRuntime[];
   },
 ): readonly FormlessUiField[] {
-  const state = currentState ?? initialFieldContextState(context);
+  const state = currentState ?? createGeneratedTableFieldContextState(context);
   const session = selectGeneratedUpdateDraftSession({
     fields: context.fields,
     state: state.session,
@@ -1401,6 +1487,7 @@ function selectGeneratedTableRuntimePlan({
       const binding = projectDeleteRecordButtonBinding({
         deleteOperation: result.deleteOperation,
         entityLabel: entity.label,
+        idPrefix: `${tableId}:${record.id}`,
         recordId: record.id,
         recordLabel,
       });
@@ -1702,7 +1789,7 @@ function orderingContents(
   ];
 }
 
-async function executeRuntimeOperation(
+export async function executeGeneratedTableRuntimeOperation(
   runtime: GeneratedTableOperationRuntime,
   controller: GeneratedOperationController,
   source: "button" | "confirmationDialog" | "menuItem",
@@ -1774,7 +1861,7 @@ function registerFieldContext({
   };
 }
 
-function initialFieldContextState(
+export function createGeneratedTableFieldContextState(
   context: GeneratedTableFieldContext,
 ): GeneratedTableFieldContextState {
   return {

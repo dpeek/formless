@@ -1,6 +1,10 @@
-import type { ReactNode } from "react";
 import type { HomeScreenCollectionSectionModel, HomeScreenModel } from "../../client/views.ts";
 import { HomeCollection } from "./collection.tsx";
+import {
+  GeneratedWorkspaceRuntime,
+  type GeneratedWorkspaceSectionExternalAction,
+} from "./generated-workspace-runtime.tsx";
+import { generatedWorkspaceScreenIsEligible } from "./generated-workspace-foundation.ts";
 
 export type HomeScreenSectionSelection = {
   selectedContextRecordId?: string | null;
@@ -12,16 +16,31 @@ export function HomeScreen({
   onSelectContext,
   onSelectQuery,
   screen,
-  sectionOperationControls = {},
+  sectionExternalActions = {},
   today,
 }: {
   getSectionSelection: (section: HomeScreenCollectionSectionModel) => HomeScreenSectionSelection;
   onSelectContext: (section: HomeScreenCollectionSectionModel, recordId: string | null) => void;
   onSelectQuery: (section: HomeScreenCollectionSectionModel, queryName: string) => void;
   screen: HomeScreenModel;
-  sectionOperationControls?: Record<string, ReactNode>;
+  sectionExternalActions?: Readonly<
+    Record<string, readonly GeneratedWorkspaceSectionExternalAction[] | undefined>
+  >;
   today: string;
 }) {
+  if (generatedWorkspaceScreenIsEligible(screen)) {
+    return (
+      <GeneratedWorkspaceRuntime
+        getSectionSelection={getSectionSelection}
+        onSelectContext={onSelectContext}
+        onSelectQuery={onSelectQuery}
+        screen={screen}
+        sectionExternalActions={sectionExternalActions}
+        today={today}
+      />
+    );
+  }
+
   const sections = screen.layout.sections;
   const firstSection = sections[0];
 
@@ -30,26 +49,6 @@ export function HomeScreen({
   }
 
   if (sections.length === 1) {
-    const sectionOperationControl = sectionOperationControls[firstSection.id];
-
-    if (sectionOperationControl) {
-      return (
-        <section aria-label={firstSection.label} className="space-y-4">
-          <HomeScreenSectionHeader
-            operationControls={sectionOperationControl}
-            label={firstSection.label}
-          />
-          <HomeScreenCollectionSection
-            getSectionSelection={getSectionSelection}
-            onSelectContext={onSelectContext}
-            onSelectQuery={onSelectQuery}
-            section={firstSection}
-            today={today}
-          />
-        </section>
-      );
-    }
-
     return (
       <HomeScreenCollectionSection
         getSectionSelection={getSectionSelection}
@@ -64,14 +63,9 @@ export function HomeScreen({
   return (
     <div className="space-y-8">
       {sections.map((section) => {
-        const sectionOperationControl = sectionOperationControls[section.id];
-
         return (
           <section aria-label={section.label} className="space-y-4" key={section.id}>
-            <HomeScreenSectionHeader
-              operationControls={sectionOperationControl}
-              label={section.label}
-            />
+            <HomeScreenSectionHeader label={section.label} />
             <HomeScreenCollectionSection
               getSectionSelection={getSectionSelection}
               onSelectContext={onSelectContext}
@@ -86,23 +80,8 @@ export function HomeScreen({
   );
 }
 
-function HomeScreenSectionHeader({
-  operationControls,
-  label,
-}: {
-  operationControls?: ReactNode;
-  label: string;
-}) {
-  if (!operationControls) {
-    return <h2 className="text-lg font-semibold">{label}</h2>;
-  }
-
-  return (
-    <div className="flex flex-wrap items-center justify-between gap-3">
-      <h2 className="text-lg font-semibold">{label}</h2>
-      {operationControls}
-    </div>
-  );
+function HomeScreenSectionHeader({ label }: { label: string }) {
+  return <h2 className="text-lg font-semibold">{label}</h2>;
 }
 
 function HomeScreenCollectionSection({

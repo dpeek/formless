@@ -171,6 +171,7 @@ export type ProjectGeneratedRecordFormlessUiFieldsOptions =
   ProjectGeneratedRecordFormlessUiSessionOptions & {
     canPatch: boolean;
     density?: FormlessUiFieldDensity;
+    densityByFieldName?: Readonly<Record<string, FormlessUiFieldDensity | undefined>>;
     disabledReasonByFieldName?: Readonly<Record<string, string | undefined>>;
     editorDraftByFieldName?: Readonly<Record<string, string | undefined>>;
     entityName?: string;
@@ -182,12 +183,16 @@ export type ProjectGeneratedRecordFormlessUiFieldsOptions =
     pendingByFieldName?: Readonly<Record<string, boolean>>;
     pendingLabelByFieldName?: Readonly<Record<string, string | undefined>>;
     presentation?: FormlessUiRecordFieldPresentation;
+    presentationByFieldName?: Readonly<
+      Record<string, FormlessUiRecordFieldPresentation | undefined>
+    >;
     recordId?: string;
     referenceOptionsByFieldName?: Readonly<
       Record<string, readonly GeneratedFormlessUiReferenceOption[]>
     >;
     schema?: AppSchema | null;
     showLabel?: boolean;
+    showLabelByFieldName?: Readonly<Record<string, boolean | undefined>>;
     surface?: Extract<FormlessUiFieldSurface, "detail" | "record" | "table-cell">;
     transitionOperationsByFieldName?: Readonly<
       Record<string, readonly TransitionStateOperationConfig[]>
@@ -550,6 +555,7 @@ export function projectGeneratedRecordFormlessUiSession({
 export function projectGeneratedRecordFormlessUiFields({
   canPatch,
   density = "default",
+  densityByFieldName,
   disabledReasonByFieldName,
   editorDraftByFieldName,
   entityName,
@@ -561,11 +567,13 @@ export function projectGeneratedRecordFormlessUiFields({
   pendingByFieldName,
   pendingLabelByFieldName,
   presentation = "default",
+  presentationByFieldName,
   recordId,
   referenceOptionsByFieldName,
   schema = null,
   session,
   showLabel = false,
+  showLabelByFieldName,
   state,
   surface = "record",
   transitionOperationsByFieldName,
@@ -578,7 +586,7 @@ export function projectGeneratedRecordFormlessUiFields({
 
     return projectGeneratedRecordFormlessUiField({
       canPatch,
-      density,
+      density: densityByFieldName?.[fieldConfig.fieldName] ?? density,
       disabledReason: disabledReasonByFieldName?.[fieldConfig.fieldName],
       draftInput: state.draft.values[fieldConfig.fieldName],
       editorDraft: editorDraftByFieldName?.[fieldConfig.fieldName],
@@ -592,12 +600,12 @@ export function projectGeneratedRecordFormlessUiFields({
       isPending: pendingByFieldName?.[fieldConfig.fieldName],
       mediaAssetOptions: mediaAssetOptionsByFieldName?.[fieldConfig.fieldName],
       pendingLabel: pendingLabelByFieldName?.[fieldConfig.fieldName],
-      presentation,
+      presentation: presentationByFieldName?.[fieldConfig.fieldName] ?? presentation,
       recordId,
       recordValue: state.baselineValues[fieldConfig.fieldName],
       referenceOptions: referenceOptionsByFieldName?.[fieldConfig.fieldName],
       schema,
-      showLabel,
+      showLabel: showLabelByFieldName?.[fieldConfig.fieldName] ?? showLabel,
       surface,
       transitionOperations: transitionOperationsByFieldName?.[fieldConfig.fieldName],
       unitDraft: unitDraftByFieldName?.[fieldConfig.fieldName],

@@ -17,6 +17,7 @@ import { resolveIconCatalogSvg } from "../../shared/icon-catalog.ts";
 import { nextGeneratedUpdateDraftSessionState } from "./record-field-authoring.ts";
 import {
   createGeneratedRecordResultFieldAuthoringState,
+  rebaseGeneratedRecordResultRecordState,
   selectGeneratedRecordResultFoundation,
   selectGeneratedRecordResultRuntimeForIntent,
 } from "./generated-record-result-foundation.ts";
@@ -248,6 +249,71 @@ describe("generated Formless UI record-result projection", () => {
       "title",
       "url",
     ]);
+  });
+
+  it("selects explicit context records and synchronously rebases context presentation state", () => {
+    const result = completeRecordResult();
+    const first = blockRecord("block-1", {
+      body: "First body",
+      status: "draft",
+      title: "First",
+      type: "page",
+    });
+    const second = blockRecord("block-2", {
+      body: "Second body",
+      status: "draft",
+      title: "Second",
+      type: "page",
+    });
+    const stale = {
+      ...createGeneratedRecordResultFieldAuthoringState(first, result),
+      baselineRecordId: first.id,
+      baselineUpdatedAt: first.updatedAt,
+      confirmationOpenByControlId: { stale: true },
+      errorsByFieldName: { body: "Stale error" },
+      iconDialogOpenByFieldName: { icon: true },
+      pendingByFieldName: { body: true },
+    };
+    const state = rebaseGeneratedRecordResultRecordState({
+      current: stale,
+      record: second,
+      result,
+    });
+    const projected = selectGeneratedRecordResultFoundation({
+      accessibilityLabel: "Second detail",
+      confirmationOpenByControlId: state?.confirmationOpenByControlId,
+      density: "compact",
+      entity: blockEntity,
+      entityName: "block",
+      fieldPresentation: "contextDetail",
+      fieldState: state,
+      id: "workspace:blocks:result:detail",
+      recordIds: [first.id, second.id],
+      recordsById: { [first.id]: first, [second.id]: second },
+      result,
+      selectedRecordId: second.id,
+    });
+    const fields = Object.fromEntries(
+      projected.recordResult.fields.map(({ field }) => [field.fieldName, field]),
+    );
+
+    expect(state).toMatchObject({
+      baselineRecordId: second.id,
+      confirmationOpenByControlId: {},
+      errorsByFieldName: {},
+      iconDialogOpenByFieldName: {},
+      pendingByFieldName: {},
+    });
+    expect(projected.recordResult).toMatchObject({
+      accessibilityLabel: "Second detail",
+      density: "compact",
+      id: "workspace:blocks:result:detail",
+      selectedRecord: { id: second.id },
+    });
+    expect(fields.title).toMatchObject({ density: "default", labelVisibility: "hidden" });
+    expect(fields.body).toMatchObject({ density: "compact", labelVisibility: "visible" });
+    expect(fields.body?.errors).toBeUndefined();
+    expect(fields.body?.pending).toBeUndefined();
   });
 
   it("projects editing-disabled fields without changing read-only or lifecycle access", () => {

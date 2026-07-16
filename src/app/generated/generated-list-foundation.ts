@@ -412,6 +412,7 @@ function selectGeneratedListRuntimePlan({
       const binding = projectDeleteRecordButtonBinding({
         deleteOperation: result.deleteOperation,
         entityLabel: entity.label,
+        idPrefix: `${id}:${recordId}`,
         recordId,
         recordLabel,
       });

@@ -98,11 +98,14 @@ import type {
 import type { AppInstallsResponse } from "../../shared/protocol.ts";
 import { runtimeTopologyRoutes } from "../../shared/runtime-topology.ts";
 import { GeneratedOperationCompactStatus } from "../generated/operation-status.tsx";
+import type { GeneratedWorkspaceSectionExternalAction } from "../generated/generated-workspace-runtime.tsx";
 import { InstanceRail } from "../instance-rail.tsx";
 
 export type InstanceShellHomeRouteProps = {
   activePackageResolver?: AppPackageResolver | undefined;
-  sectionOperationControls?: Record<string, ReactNode>;
+  sectionExternalActions?: Readonly<
+    Record<string, readonly GeneratedWorkspaceSectionExternalAction[] | undefined>
+  >;
   target?: ClientAppTarget;
   schemaKey: ClientAppSchemaKey;
   screenPath: string;
@@ -2395,19 +2398,21 @@ function GeneratedInstanceAppsSection({
       <div data-formless-control-plane-screen="apps">
         <HomeRouteComponent
           schemaKey={INSTANCE_CONTROL_PLANE_SCHEMA_KEY}
-          sectionOperationControls={{
-            "app-installs": (
-              <Button
-                aria-haspopup="dialog"
-                isDisabled={installDisabled}
-                onPress={onInstall}
-                size="sm"
-                type="button"
-              >
-                <AddIcon />
-                Install
-              </Button>
-            ),
+          sectionExternalActions={{
+            "app-installs": [
+              {
+                action: {
+                  disabled: installDisabled,
+                  id: "install",
+                  icon: "add",
+                  invocationSource: "button",
+                  invoke: { controlId: "install", invocationSource: "button" },
+                  kind: "actionTrigger",
+                  label: "Install",
+                },
+                onIntent: onInstall,
+              },
+            ],
           }}
           screenPath="/"
           target={controlPlaneTarget}

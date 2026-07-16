@@ -219,7 +219,7 @@ function CreateTriggerGroup({
         <Heading level={2}>{title}</Heading>
         <HStack gap={2} wrap="wrap">
           {surfaces.map((surface) => (
-            <FormlessCreateSurface
+            <AstryxCreateSurfaceRenderer
               key={surface.id}
               surface={surface}
               onFieldIntent={(intent) => onFieldIntent(surface.id, intent)}
@@ -232,7 +232,7 @@ function CreateTriggerGroup({
   );
 }
 
-function FormlessCreateSurface({
+export function AstryxCreateSurfaceRenderer({
   onFieldIntent,
   onIntent,
   surface,

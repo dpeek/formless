@@ -7,6 +7,7 @@ import { FormlessCreateSurfacesLayout } from "./components/create-surfaces.tsx";
 import { FormlessCanonicalFieldsLayout } from "./components/formless-ui-fields.tsx";
 import { FormlessFieldsLayout } from "./components/fields.tsx";
 import { FormlessGeneratedFieldsLayout } from "./components/generated-fields.tsx";
+import { FormlessGeneratedWorkspaceLayout } from "./components/generated-workspace.tsx";
 import { FormlessListsLayout } from "./components/lists.tsx";
 import { FormlessOperationsLayout } from "./components/operations.tsx";
 import { FormlessRecordResultsLayout } from "./components/record-results.tsx";
@@ -35,6 +36,7 @@ const formlessPrototypeLayouts: FormlessPrototypeLayout[] = [
   createFormlessPrototypeLayout("Fields", () => <FormlessFieldsLayout />),
   createFormlessPrototypeLayout("Canonical Fields", () => <FormlessCanonicalFieldsLayout />),
   createFormlessPrototypeLayout("Generated Fields", () => <FormlessGeneratedFieldsLayout />),
+  createFormlessPrototypeLayout("Generated Workspace", () => <FormlessGeneratedWorkspaceLayout />),
   createFormlessPrototypeLayout("Record Results", () => <FormlessRecordResultsLayout />),
   createFormlessPrototypeLayout("Lists", () => <FormlessListsLayout />),
   createFormlessPrototypeLayout("Tables", () => <FormlessTablesLayout />),

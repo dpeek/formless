@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   connectBroadcastToClientStore,
   hydrateClientStore,
@@ -21,6 +21,7 @@ import { selectScreenModelByPath } from "../../client/views.ts";
 import { todayDateString } from "../../shared/date.ts";
 import { SchemaAppProvider } from "../generated/schema-app-context.tsx";
 import { HomeScreen } from "../generated/screen.tsx";
+import type { GeneratedWorkspaceSectionExternalAction } from "../generated/generated-workspace-runtime.tsx";
 import { NotFoundRoute } from "./not-found.tsx";
 import type { AppPackageResolver } from "@dpeek/formless-installed-apps";
 import {
@@ -46,13 +47,15 @@ export function HomeRoute({
   activePackageResolver,
   target,
   schemaKey,
-  sectionOperationControls,
+  sectionExternalActions,
   screenPath,
 }: {
   activePackageResolver?: AppPackageResolver | undefined;
   target?: ClientAppTarget;
   schemaKey: ClientAppSchemaKey;
-  sectionOperationControls?: Record<string, ReactNode>;
+  sectionExternalActions?: Readonly<
+    Record<string, readonly GeneratedWorkspaceSectionExternalAction[] | undefined>
+  >;
   screenPath: string;
 }) {
   const appTarget = target ?? clientTargetForSchemaKey(schemaKey);
@@ -189,7 +192,7 @@ export function HomeRoute({
             )
           }
           screen={homeScreen}
-          sectionOperationControls={sectionOperationControls}
+          sectionExternalActions={sectionExternalActions}
           today={today}
         />
       </SchemaAppProvider>

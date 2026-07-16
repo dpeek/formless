@@ -134,11 +134,13 @@ export function DeleteRecordButton({
 export function projectDeleteRecordButtonBinding({
   deleteOperation,
   entityLabel,
+  idPrefix,
   recordId,
   recordLabel,
 }: {
   deleteOperation: EntityOperationPresentationConfig;
   entityLabel: string;
+  idPrefix?: string;
   recordId: string;
   recordLabel: string;
 }): GeneratedOperationControlBinding | undefined {
@@ -149,6 +151,7 @@ export function projectDeleteRecordButtonBinding({
     recordLabel,
     options: {
       executionTargetKey: recordId,
+      ...(idPrefix === undefined ? {} : { idPrefix }),
     },
   });
 }

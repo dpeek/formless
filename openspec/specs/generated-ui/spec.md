@@ -219,16 +219,18 @@ summary slots, operation controls, and schema-declared result types.
 
 #### Scenario: Selected result renderer handoff
 
-- GIVEN the generated collection renderer in `src/app/generated/collection.tsx`
-- WHEN it renders selected `list`, `record`, `table`, or `tree` result models
-- THEN list, record, and table result models pass through generated foundations
-  that project their canonical renderer contracts before the active legacy
-  adapters render them
+- GIVEN generated UI renders a collection result inside a screen workspace
+- WHEN it selects a `list`, `record`, `table`, or `tree` result model
+- THEN eligible non-tree workspace foundations compose canonical list, record,
+  or table result contracts under the projected collection contract before the
+  active workspace renderer renders them
 - AND list and record foundations consume result facts from
   `src/client/list-result-model.ts`
 - AND the table foundation consumes table result facts selected through
   `src/client/collection-result-model.ts`
-- AND `RecordTree` consumes tree result facts from `src/client/tree-result-model.ts`
+- AND a screen containing a tree result remains wholly on the current tree
+  workspace path where `RecordTree` consumes tree result facts from
+  `src/client/tree-result-model.ts`
 - AND record-result fields, actions, warnings, empty state, and availability are
   not composed directly in the collection renderer
 - AND generated ordering UI consumes result ordering facts from `src/client/result-ordering-model.ts`
@@ -237,8 +239,10 @@ summary slots, operation controls, and schema-declared result types.
 
 - GIVEN a collection context uses `listDetail` presentation
 - WHEN a context record is selected
-- THEN the selected context fields render above related results
-- AND related context counts derive from local records
+- THEN the selected context detail composes a canonical record-result contract
+  with the related collection result
+- AND related context counts derive from local records and cross the renderer
+  boundary as display text
 
 #### Scenario: Ordered list result
 
@@ -248,6 +252,165 @@ summary slots, operation controls, and schema-declared result types.
 - AND field editors, delete controls, readiness warnings, visible union fields, and ordering behavior remain available in the list
 - AND list ordering does not require a drag-handle gesture when equivalent
   projected move actions preserve the declared ordering capability
+
+### Requirement: Generated Non-Tree Workspace Renderer Contract
+
+The system SHALL project complete generated screens whose collection sections
+use list, table, or record results through a controlled renderer-neutral
+Formless UI workspace contract before selecting the active renderer, while
+generated runtime code owns model selection, reads, evaluation, operation
+execution, and effects.
+
+#### Scenario: Select complete non-tree workspace eligibility
+
+- GIVEN generated UI selects a workspace screen
+- WHEN every collection section uses a list, table, or record result
+- THEN the complete screen and all ordered sections are eligible for the
+  renderer-neutral workspace boundary
+- AND when any section uses a tree result the complete screen remains on its
+  current production path
+- AND generated UI does not split one screen between contract and non-contract
+  renderers or add a temporary tree member, opaque slot, React-node escape
+  hatch, placeholder, or compatibility wrapper to the workspace contract
+- AND a later tree-builder change may extend the final workspace result union
+  before tree-backed screens cross the same boundary
+
+#### Scenario: Project complete screen and collection presentation
+
+- GIVEN an eligible non-tree workspace screen is selected
+- WHEN generated runtime prepares it for the active Formless UI renderer
+- THEN the workspace contract carries stable screen identity, an accessible
+  label, ordered section identity and labels, section actions, and one complete
+  collection contract per section
+- AND each collection carries stable identity, an accessible label, selected
+  query identity, optional query navigation, optional context presentation,
+  summaries, collection actions, explicit empty or unavailable presentation,
+  and exactly one canonical list, table, or record-result contract
+- AND nested create surfaces, operation controls, fields, lists, tables, and
+  record results retain their canonical contract shapes and receive
+  screen-and-section-scoped identities when composed into a workspace
+- AND single-section and multi-section screens preserve schema order without
+  repeating the active screen heading in the screen body
+- AND the workspace contract does not expose `HomeScreenModel`,
+  `HomeCollectionConfig`, query expressions, query contexts, raw records,
+  aggregate or computed-value definitions, operation bindings, browser replica
+  hooks, app targets, sync setters, Tailwind classes, React nodes, runtime
+  callbacks, or renderer-specific component props
+
+#### Scenario: Project query context and summary facts
+
+- GIVEN an eligible collection has query tabs, context selection, related
+  counts, summaries, or list-detail presentation
+- WHEN generated runtime prepares collection presentation
+- THEN visible query navigation carries ordered tab identity, labels, selected
+  state, optional formatted count text, availability, and semantic selection
+  intents
+- AND context presentation explicitly selects local tabs, a local list-detail
+  selector, singleton detail, or externally-owned navigation without requiring
+  the renderer to inspect schema or option counts
+- AND locally rendered context options carry stable identity, labels, selected
+  state, optional related-count text, availability, and semantic selection
+  intents
+- AND an invalid or absent selected context falls back to the first available
+  context option in runtime before projection, while no available options
+  produce an explicit empty context state rather than an unreachable unselected
+  state
+- AND selected context detail uses a canonical record-result contract with
+  explicit compact or default density, label presentation, fields, actions,
+  warnings, and availability
+- AND list-detail composition carries the selector, selected detail, query
+  navigation, summaries, related result, and collection actions as ordered
+  presentation data
+- AND summary slots carry stable identity, labels, formatted display values,
+  optional suffixes, and availability without exposing raw aggregate or
+  computed-value inputs
+
+#### Scenario: Project workspace actions and nested intents
+
+- GIVEN a workspace exposes section actions, context create controls,
+  collection create or command controls, selections, or nested result
+  interactions
+- WHEN generated runtime prepares controlled interaction data
+- THEN external section actions compose canonical action-trigger contracts,
+  create controls compose canonical create-surface contracts, and commands
+  compose canonical operation-control contracts
+- AND workspace intent envelopes carry stable screen, section, collection,
+  context, result, field, surface, and control identity as applicable while
+  preserving canonical nested field, create, operation, list, table, and
+  record-result intents
+- AND generated runtime resolves selected route state, automatic context
+  fallback, query contexts, result dispatch, record-keyed field state,
+  operation controllers, writes, uploads, sync feedback, and local auto-save
+  outside the renderer
+- AND changing selected context does not project draft, error, pending, icon
+  dialog, or confirmation state from the previously selected record
+- AND nested result and control ids remain unique when one screen repeats the
+  same view, item view, entity, or query in multiple sections
+- AND renderers do not evaluate queries or aggregates, select context fallback,
+  own operation state, upload media, patch records, execute operations, or
+  update route state locally
+
+#### Scenario: Legacy renderer consumes the workspace contract
+
+- GIVEN production generated screens currently compose headings, React-node
+  section controls, tabs, badges, context selectors, summaries, list-detail
+  layout, collection actions, and result dispatch directly in React
+- WHEN generated runtime projects an eligible non-tree workspace
+- THEN dedicated legacy screen and collection adapters render only the
+  canonical workspace and nested contracts and dispatch canonical intents
+- AND production single-section and multi-section list-, table-, and
+  record-backed screens, ordinary and list-detail contexts, counts, summaries,
+  context detail, create controls, command controls, empty states, and
+  unavailable states cross that adapter boundary
+- AND callers that provide a non-schema section action supply canonical action
+  facts and an intent handler instead of a React node; the owning shell retains
+  its dialog state and effect execution
+- AND the legacy adapters do not select models, read records, evaluate queries,
+  counts, aggregates, or computed values, own route or authoring state, build
+  operation input, execute operations, or update sync state
+- AND direct legacy Formless UI imports for migrated screen and collection
+  chrome remain confined to the dedicated legacy seam modules
+- AND focused coverage asserts projected facts, nested intent dispatch,
+  selection fallback, context changes, counts, summaries, actions, result
+  composition, and visible empty or unavailable behavior instead of legacy HTML
+  structure or one-to-one visual parity
+- AND production remains on the legacy renderer after this contract migration
+
+#### Scenario: Astryx non-tree workspace renderer
+
+- GIVEN the legacy renderer consumes complete production workspace contracts
+- WHEN the replacement renderer implements the same contracts in `lib/astryx`
+- THEN it composes Astryx section, stack, grid, card, navigation, tabs or
+  selector, badge, status, empty-state, action, create, operation, list, table,
+  field, and record-result primitives without importing generated runtime
+- AND selected query and context state remains controlled by the contract while
+  the renderer emits canonical intents without changing runtime state locally
+- AND ordinary context and list-detail layouts follow Astryx hierarchy and
+  action placement instead of recreating legacy Tailwind markup or spacing
+- AND the Astryx workspace renderer contains no Tailwind classes, legacy
+  Formless UI components, storage reads, query or aggregate evaluation,
+  operation execution, media clients, sync effects, or runtime data imports
+- AND adding the renderer does not export or activate Astryx in production or
+  introduce Astryx theme and global CSS into runtime entrypoints
+
+#### Scenario: Astryx workspace contract fixtures
+
+- GIVEN the legacy renderer consumes complete production non-tree workspace
+  contracts
+- WHEN workspace UX is evaluated in the package-local Astryx prototype
+- THEN data-only fixtures use the same contract shapes for an unscoped
+  collection, query navigation, ordinary context, list-detail context,
+  singleton and empty context, summaries, section and collection actions,
+  single- and multi-section screens, unavailable collections, and list, table,
+  and record results
+- AND a focused Generated Workspace layout renders the real Astryx screen and
+  collection renderers with minimal local selection, field, create, operation,
+  and confirmation intent simulation
+- AND package-local fixtures do not import generated runtime, storage, browser
+  replica, query or aggregate evaluators, media clients, operation controllers,
+  sync, app targets, tree composition, or shell behavior
+- AND the fixtures contain no Tailwind classes and do not export or activate the
+  Astryx workspace renderer in production
 
 ### Requirement: Generated List Renderer Contract
 

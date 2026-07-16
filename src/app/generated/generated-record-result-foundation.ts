@@ -95,6 +95,7 @@ export type GeneratedRecordResultFoundation = {
 };
 
 export type SelectGeneratedRecordResultFoundationOptions = {
+  accessibilityLabel?: string;
   confirmationOpenByControlId?: Readonly<Record<string, boolean | undefined>>;
   density?: FormlessUiRecordResultContract["density"];
   editingDisabledReason?: string;
@@ -103,6 +104,7 @@ export type SelectGeneratedRecordResultFoundationOptions = {
   entity: EntitySchema;
   entityName: string;
   fieldState?: GeneratedRecordResultFieldAuthoringState;
+  fieldPresentation?: "contextDetail" | "recordResult";
   id: string;
   mediaAssetOptionsByFieldName?: Readonly<Record<string, readonly ImageMediaAssetOption[]>>;
   operationStateByExecutionKey?: Readonly<
@@ -115,9 +117,11 @@ export type SelectGeneratedRecordResultFoundationOptions = {
   >;
   result: RecordResultModel;
   schema?: AppSchema | null;
+  selectedRecordId?: string | null;
 };
 
 export function selectGeneratedRecordResultFoundation({
+  accessibilityLabel,
   confirmationOpenByControlId = {},
   density = "default",
   editingDisabledReason,
@@ -126,6 +130,7 @@ export function selectGeneratedRecordResultFoundation({
   entity,
   entityName,
   fieldState,
+  fieldPresentation = "recordResult",
   id,
   mediaAssetOptionsByFieldName,
   operationStateByExecutionKey = {},
@@ -134,16 +139,18 @@ export function selectGeneratedRecordResultFoundation({
   referenceOptionsByFieldName,
   result,
   schema = null,
+  selectedRecordId,
 }: SelectGeneratedRecordResultFoundationOptions): GeneratedRecordResultFoundation {
-  const recordId = recordIds[0];
+  const recordId = selectedRecordId === undefined ? recordIds[0] : (selectedRecordId ?? undefined);
   const record = recordId === undefined ? undefined : recordsById[recordId];
+  const resolvedAccessibilityLabel = accessibilityLabel ?? `${entity.label} record`;
   const resolvedEditingDisabledReason =
     editingDisabledReason ?? `Editing is disabled for ${entity.label}.`;
 
   if (recordId === undefined) {
     return {
       recordResult: projectGeneratedRecordResultFormlessUiContract({
-        accessibilityLabel: `${entity.label} record`,
+        accessibilityLabel: resolvedAccessibilityLabel,
         density,
         editingDisabledReason: resolvedEditingDisabledReason,
         editingEnabled: result.updateOperation !== undefined,
@@ -161,7 +168,7 @@ export function selectGeneratedRecordResultFoundation({
   if (record === undefined) {
     return {
       recordResult: projectGeneratedRecordResultFormlessUiContract({
-        accessibilityLabel: `${entity.label} record`,
+        accessibilityLabel: resolvedAccessibilityLabel,
         density,
         editingDisabledReason: resolvedEditingDisabledReason,
         editingEnabled: result.updateOperation !== undefined,
@@ -195,6 +202,15 @@ export function selectGeneratedRecordResultFoundation({
   const fields = projectGeneratedRecordFormlessUiFields({
     canPatch: result.updateOperation !== undefined,
     density,
+    densityByFieldName:
+      fieldPresentation === "contextDetail"
+        ? Object.fromEntries(
+            session.visibleFields.map((field) => [
+              field.fieldName,
+              isGeneratedRecordResultHeadingField(field) ? "default" : density,
+            ]),
+          )
+        : undefined,
     disabledReasonByFieldName: fieldDisabledReasons,
     editorDraftByFieldName: nextFieldState.editorDraftByFieldName,
     entityName,
@@ -205,11 +221,29 @@ export function selectGeneratedRecordResultFoundation({
     mediaAssetOptionsByFieldName,
     pendingByFieldName: nextFieldState.pendingByFieldName as Readonly<Record<string, boolean>>,
     pendingLabelByFieldName: nextFieldState.pendingLabelByFieldName,
+    presentationByFieldName:
+      fieldPresentation === "contextDetail"
+        ? Object.fromEntries(
+            session.visibleFields.map((field) => [
+              field.fieldName,
+              isGeneratedRecordResultHeadingField(field) ? "heading" : "default",
+            ]),
+          )
+        : undefined,
     recordId,
     referenceOptionsByFieldName,
     schema,
     session,
     showLabel: true,
+    showLabelByFieldName:
+      fieldPresentation === "contextDetail"
+        ? Object.fromEntries(
+            session.visibleFields.map((field) => [
+              field.fieldName,
+              !isGeneratedRecordResultHeadingField(field),
+            ]),
+          )
+        : undefined,
     state: nextFieldState.session,
     surface: "record",
     unitDraftByFieldName: nextFieldState.unitDraftByFieldName,
@@ -234,7 +268,7 @@ export function selectGeneratedRecordResultFoundation({
   return {
     fieldState: nextFieldState,
     recordResult: projectGeneratedRecordResultFormlessUiContract({
-      accessibilityLabel: `${entity.label} record`,
+      accessibilityLabel: resolvedAccessibilityLabel,
       density,
       editingDisabledReason: resolvedEditingDisabledReason,
       editingEnabled: result.updateOperation !== undefined,
@@ -249,6 +283,37 @@ export function selectGeneratedRecordResultFoundation({
       },
     }),
     runtimePlan,
+  };
+}
+
+export type GeneratedRecordResultRecordState = GeneratedRecordResultFieldAuthoringState & {
+  baselineRecordId: string;
+  baselineUpdatedAt: string;
+  confirmationOpenByControlId: Readonly<Record<string, boolean | undefined>>;
+};
+
+export function rebaseGeneratedRecordResultRecordState({
+  current,
+  record,
+  result,
+}: {
+  current?: GeneratedRecordResultRecordState;
+  record: StoredRecord | undefined;
+  result: Pick<RecordResultModel, "recordFields" | "recordUnion">;
+}): GeneratedRecordResultRecordState | undefined {
+  if (record === undefined) {
+    return undefined;
+  }
+
+  if (current?.baselineRecordId === record.id && current.baselineUpdatedAt === record.updatedAt) {
+    return current;
+  }
+
+  return {
+    ...createGeneratedRecordResultFieldAuthoringState(record, result),
+    baselineRecordId: record.id,
+    baselineUpdatedAt: record.updatedAt,
+    confirmationOpenByControlId: {},
   };
 }
 
@@ -340,6 +405,7 @@ function selectGeneratedRecordResultRuntimePlan({
     const binding = projectDeleteRecordButtonBinding({
       deleteOperation: result.deleteOperation,
       entityLabel: entity.label,
+      idPrefix: `${id}:${record.id}`,
       recordId: record.id,
       recordLabel,
     });
@@ -466,4 +532,14 @@ function recordResultFieldIntentFieldName(intent: FormlessUiFieldIntent): string
     case "stateTransitionInvoke":
       return undefined;
   }
+}
+
+function isGeneratedRecordResultHeadingField(fieldConfig: RecordFieldConfig): boolean {
+  return (
+    fieldConfig.field.type === "text" &&
+    fieldConfig.editor === "text" &&
+    (fieldConfig.fieldName === "label" ||
+      fieldConfig.fieldName === "name" ||
+      fieldConfig.fieldName === "title")
+  );
 }

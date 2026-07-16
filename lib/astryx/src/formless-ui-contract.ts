@@ -1383,3 +1383,265 @@ export type FormlessUiActionFormContract = {
   kind: "actionForm";
   fields: readonly FormlessUiOperationInputField[];
 };
+
+export type FormlessUiWorkspaceItemAvailability =
+  | {
+      available: true;
+    }
+  | {
+      available: false;
+      message: string;
+    };
+
+export type FormlessUiWorkspaceEmptyStateContract = {
+  description?: string;
+  id: string;
+  kind: "workspaceEmptyState";
+  title: string;
+};
+
+export type FormlessUiWorkspaceAvailability =
+  | {
+      state: "ready";
+    }
+  | {
+      emptyState: FormlessUiWorkspaceEmptyStateContract;
+      state: "empty";
+    }
+  | {
+      message: string;
+      state: "unavailable";
+    };
+
+export type FormlessUiWorkspaceQuerySelectionIntent = {
+  collectionId: string;
+  queryId: string;
+  screenId: string;
+  sectionId: string;
+  type: "workspaceQuerySelection";
+};
+
+export type FormlessUiWorkspaceQueryContract = {
+  availability: FormlessUiWorkspaceItemAvailability;
+  countText?: string;
+  id: string;
+  kind: "workspaceQuery";
+  label: string;
+  selected: boolean;
+  selectionIntent: FormlessUiWorkspaceQuerySelectionIntent;
+};
+
+export type FormlessUiWorkspaceQueryNavigationContract = {
+  accessibilityLabel: string;
+  id: string;
+  items: readonly FormlessUiWorkspaceQueryContract[];
+  kind: "workspaceQueryNavigation";
+};
+
+export type FormlessUiWorkspaceContextSelectionIntent = {
+  collectionId: string;
+  contextId: string;
+  contextOptionId: string;
+  screenId: string;
+  sectionId: string;
+  type: "workspaceContextSelection";
+};
+
+export type FormlessUiWorkspaceContextOptionContract = {
+  availability: FormlessUiWorkspaceItemAvailability;
+  countText?: string;
+  id: string;
+  kind: "workspaceContextOption";
+  label: string;
+  selected: boolean;
+  selectionIntent: FormlessUiWorkspaceContextSelectionIntent;
+};
+
+export type FormlessUiWorkspaceCreateActionContract = {
+  kind: "createAction";
+  surface: FormlessUiCreateSurfaceContract;
+};
+
+export type FormlessUiWorkspaceOperationActionContract = {
+  control: FormlessUiOperationControlContract;
+  kind: "operationAction";
+};
+
+export type FormlessUiWorkspaceCollectionActionContract =
+  | FormlessUiWorkspaceCreateActionContract
+  | FormlessUiWorkspaceOperationActionContract;
+
+export type FormlessUiWorkspaceCollectionActionGroupContract = {
+  id: string;
+  kind: "workspaceCollectionActions";
+  primary: readonly FormlessUiWorkspaceCollectionActionContract[];
+  secondary: readonly FormlessUiWorkspaceCollectionActionContract[];
+  secondaryAccessibilityLabel: string;
+};
+
+export type FormlessUiWorkspaceContextPresentation =
+  | "externalNavigation"
+  | "localListDetail"
+  | "localTabs"
+  | "singletonDetail";
+
+export type FormlessUiWorkspaceContextContract = {
+  accessibilityLabel: string;
+  availability: FormlessUiWorkspaceAvailability;
+  createAction?: FormlessUiWorkspaceCreateActionContract;
+  id: string;
+  kind: "workspaceContext";
+  label: string;
+  options: readonly FormlessUiWorkspaceContextOptionContract[];
+  presentation: FormlessUiWorkspaceContextPresentation;
+  selectedOptionId?: string;
+};
+
+export type FormlessUiWorkspaceSummaryContract = {
+  availability: FormlessUiWorkspaceItemAvailability;
+  displayValue: string;
+  id: string;
+  kind: "workspaceSummary";
+  label: string;
+  suffix?: string;
+};
+
+export type FormlessUiWorkspaceResultContract =
+  | FormlessUiListContract
+  | FormlessUiRecordResultContract
+  | FormlessUiTableContract;
+
+export type FormlessUiWorkspaceOrdinaryCollectionContract = {
+  actions: FormlessUiWorkspaceCollectionActionGroupContract;
+  context?: FormlessUiWorkspaceContextContract;
+  contextDetail?: FormlessUiRecordResultContract;
+  kind: "ordinary";
+  queryNavigation?: FormlessUiWorkspaceQueryNavigationContract;
+  result: FormlessUiWorkspaceResultContract;
+  summaries: readonly FormlessUiWorkspaceSummaryContract[];
+};
+
+export type FormlessUiWorkspaceListDetailContract = {
+  accessibilityLabel: string;
+  actions: FormlessUiWorkspaceCollectionActionGroupContract;
+  contextDetail?: FormlessUiRecordResultContract;
+  id: string;
+  kind: "listDetail";
+  queryNavigation?: FormlessUiWorkspaceQueryNavigationContract;
+  result: FormlessUiWorkspaceResultContract;
+  selector: FormlessUiWorkspaceContextContract & {
+    presentation: "localListDetail";
+  };
+  summaries: readonly FormlessUiWorkspaceSummaryContract[];
+};
+
+export type FormlessUiWorkspaceCollectionPresentationContract =
+  | FormlessUiWorkspaceListDetailContract
+  | FormlessUiWorkspaceOrdinaryCollectionContract;
+
+export type FormlessUiWorkspaceCollectionContract = {
+  accessibilityLabel: string;
+  availability: FormlessUiWorkspaceAvailability;
+  id: string;
+  kind: "workspaceCollection";
+  label: string;
+  presentation: FormlessUiWorkspaceCollectionPresentationContract;
+  selectedQueryId: string | null;
+};
+
+export type FormlessUiWorkspaceExternalActionContract = {
+  action: FormlessUiActionTriggerContract;
+  id: string;
+  kind: "workspaceExternalAction";
+};
+
+export type FormlessUiWorkspaceSectionContract = {
+  accessibilityLabel: string;
+  actions: readonly FormlessUiWorkspaceExternalActionContract[];
+  collection: FormlessUiWorkspaceCollectionContract;
+  headingVisibility: "hidden" | "visible";
+  id: string;
+  kind: "workspaceSection";
+  label: string;
+};
+
+export type FormlessUiWorkspaceContract = {
+  accessibilityLabel: string;
+  id: string;
+  kind: "workspace";
+  label: string;
+  sections: readonly FormlessUiWorkspaceSectionContract[];
+};
+
+export type FormlessUiWorkspaceIntentScope = {
+  collectionId: string;
+  screenId: string;
+  sectionId: string;
+};
+
+export type FormlessUiWorkspaceExternalActionIntent = FormlessUiWorkspaceIntentScope & {
+  actionId: string;
+  controlId: string;
+  intent: FormlessUiActionTriggerIntent;
+  type: "workspaceExternalAction";
+};
+
+export type FormlessUiWorkspaceCreateIntent = FormlessUiWorkspaceIntentScope & {
+  contextId?: string;
+  intent: FormlessUiCreateIntent;
+  surfaceId: string;
+  type: "workspaceCreate";
+};
+
+export type FormlessUiWorkspaceOperationIntent = FormlessUiWorkspaceIntentScope & {
+  contextId?: string;
+  controlId: string;
+  intent: FormlessUiOperationPresentationIntent;
+  recordId?: string;
+  resultId?: string;
+  type: "workspaceOperation";
+};
+
+export type FormlessUiWorkspaceFieldIntent = FormlessUiWorkspaceIntentScope & {
+  contextId?: string;
+  fieldId: string;
+  intent: FormlessUiFieldIntent;
+  recordId?: string;
+  resultId?: string;
+  surfaceId?: string;
+  type: "workspaceField";
+};
+
+export type FormlessUiWorkspaceListIntent = FormlessUiWorkspaceIntentScope & {
+  intent: FormlessUiListIntent;
+  resultId: string;
+  type: "workspaceList";
+};
+
+export type FormlessUiWorkspaceTableIntent = FormlessUiWorkspaceIntentScope & {
+  intent: FormlessUiTableIntent;
+  resultId: string;
+  type: "workspaceTable";
+};
+
+export type FormlessUiWorkspaceRecordResultIntent = FormlessUiWorkspaceIntentScope & {
+  contextId?: string;
+  intent: FormlessUiRecordResultIntent;
+  resultId: string;
+  type: "workspaceRecordResult";
+};
+
+export type FormlessUiWorkspaceIntent =
+  | FormlessUiWorkspaceContextSelectionIntent
+  | FormlessUiWorkspaceCreateIntent
+  | FormlessUiWorkspaceExternalActionIntent
+  | FormlessUiWorkspaceFieldIntent
+  | FormlessUiWorkspaceListIntent
+  | FormlessUiWorkspaceOperationIntent
+  | FormlessUiWorkspaceQuerySelectionIntent
+  | FormlessUiWorkspaceRecordResultIntent
+  | FormlessUiWorkspaceTableIntent;
+
+export type FormlessUiWorkspaceIntentHandler = (
+  intent: FormlessUiWorkspaceIntent,
+) => Promise<void> | void;

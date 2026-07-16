@@ -6,7 +6,7 @@ import { parseAppSchema } from "@dpeek/formless-schema";
 import { HomeScreen } from "./screen.tsx";
 
 describe("generated home screen", () => {
-  it("renders injected section operation controls beside collection headings", () => {
+  it("routes an eligible production screen through the legacy workspace seam", () => {
     const screen = selectScreenModelByPath(parseAppSchema(instanceControlPlaneSchema), "/");
 
     if (!screen) {
@@ -19,14 +19,28 @@ describe("generated home screen", () => {
         onSelectContext={() => {}}
         onSelectQuery={() => {}}
         screen={screen}
-        sectionOperationControls={{
-          "app-installs": <button type="button">Install</button>,
+        sectionExternalActions={{
+          "app-installs": [
+            {
+              action: {
+                id: "install",
+                icon: "add",
+                invocationSource: "button",
+                invoke: { controlId: "install", invocationSource: "button" },
+                kind: "actionTrigger",
+                label: "Install",
+              },
+              onIntent: () => {},
+            },
+          ],
         }}
         today="2026-06-01"
       />,
     );
 
-    expect(html).toContain(">App installs<");
-    expect(html).toContain('<button type="button">Install</button>');
+    expect(html).toContain('data-formless-legacy-workspace="workspace:apps"');
+    expect(html).toContain("data-formless-legacy-workspace-collection=");
+    expect(html).toContain("Install");
+    expect(html).toContain("data-formless-legacy-table=");
   });
 });

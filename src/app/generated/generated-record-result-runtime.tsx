@@ -24,10 +24,11 @@ import {
 } from "./formless-ui-intents.ts";
 import {
   createGeneratedRecordResultFieldAuthoringState,
+  rebaseGeneratedRecordResultRecordState,
   selectGeneratedRecordResultFoundation,
   selectGeneratedRecordResultRuntimeForIntent,
-  type GeneratedRecordResultFieldAuthoringState,
   type GeneratedRecordResultOperationRuntime,
+  type GeneratedRecordResultRecordState,
 } from "./generated-record-result-foundation.ts";
 import { LegacyRecordResultRenderer } from "./legacy-record-result-renderer.tsx";
 import {
@@ -48,11 +49,6 @@ import {
 import { shouldUseAppReplicaReferenceOptions } from "./reference-field-options.ts";
 import { useSchemaAppTarget, useSchemaAppWriteOptions } from "./schema-app-context.tsx";
 import { executeTransitionStateOperation } from "./state-machine-ui.tsx";
-
-type GeneratedRecordResultFieldRuntimeState = GeneratedRecordResultFieldAuthoringState & {
-  baselineRecordId: string;
-  baselineUpdatedAt: string;
-};
 
 export function GeneratedRecordResultRuntime({
   entity,
@@ -75,25 +71,26 @@ export function GeneratedRecordResultRuntime({
   const recordId = recordIds[0];
   const record = recordId === undefined ? undefined : recordsById[recordId];
   const resultId = `${entityName}:${result.itemViewName}`;
-  const [confirmationOpenByControlId, setConfirmationOpenByControlId] = useState<
-    Record<string, boolean | undefined>
-  >({});
-  const [fieldState, setFieldState] = useState<
-    GeneratedRecordResultFieldRuntimeState | undefined
-  >();
+  const [fieldState, setFieldState] = useState<GeneratedRecordResultRecordState | undefined>();
+  const recordState = rebaseGeneratedRecordResultRecordState({
+    current: fieldState,
+    record,
+    result,
+  });
+  const confirmationOpenByControlId = recordState?.confirmationOpenByControlId ?? {};
   const [mediaAssetOptions, setMediaAssetOptions] = useState<ImageMediaAssetOption[]>([]);
   const runtimePlan = useMemo(
     () =>
       selectGeneratedRecordResultFoundation({
         entity,
         entityName,
-        fieldState,
+        fieldState: recordState,
         id: resultId,
         recordIds,
         recordsById,
         result,
       }).runtimePlan,
-    [entity, entityName, fieldState, recordIds, recordsById, result, resultId],
+    [entity, entityName, recordIds, recordState, recordsById, result, resultId],
   );
   const bindings = useMemo(
     () => runtimePlan.operations.map((operation) => operation.binding),
@@ -119,7 +116,7 @@ export function GeneratedRecordResultRuntime({
     confirmationOpenByControlId,
     entity,
     entityName,
-    fieldState,
+    fieldState: recordState,
     id: resultId,
     mediaAssetOptionsByFieldName,
     operationStateByExecutionKey,
@@ -129,25 +126,12 @@ export function GeneratedRecordResultRuntime({
     result,
     schema,
   });
-  const fieldStateRef = useRef(fieldState);
-  fieldStateRef.current = fieldState;
+  const fieldStateRef = useRef(recordState);
+  fieldStateRef.current = recordState;
   const recordVersionKey = `${recordId ?? "empty"}:${record?.updatedAt ?? "unavailable"}`;
 
   useEffect(() => {
-    setFieldState((current) => {
-      if (!record) {
-        return current === undefined ? current : undefined;
-      }
-
-      if (
-        current?.baselineRecordId === record.id &&
-        current.baselineUpdatedAt === record.updatedAt
-      ) {
-        return current;
-      }
-
-      return initialFieldRuntimeState(record, result);
-    });
+    setFieldState((current) => rebaseGeneratedRecordResultRecordState({ current, record, result }));
   }, [record, recordVersionKey, result]);
 
   useEffect(() => {
@@ -172,15 +156,19 @@ export function GeneratedRecordResultRuntime({
 
   function updateFieldState(
     selectedRecord: StoredRecord,
-    update: (
-      state: GeneratedRecordResultFieldRuntimeState,
-    ) => GeneratedRecordResultFieldRuntimeState,
+    update: (state: GeneratedRecordResultRecordState) => GeneratedRecordResultRecordState,
   ) {
     setFieldState((current) => {
-      const state =
-        current?.baselineRecordId === selectedRecord.id
-          ? current
-          : initialFieldRuntimeState(selectedRecord, result);
+      const state = rebaseGeneratedRecordResultRecordState({
+        current,
+        record: selectedRecord,
+        result,
+      });
+
+      if (state === undefined) {
+        return current;
+      }
+
       return update(state);
     });
   }
@@ -512,10 +500,23 @@ export function GeneratedRecordResultRuntime({
       invoke: (invokeIntent) =>
         executeRecordResultOperationRuntime(runtime, controller, invokeIntent.invocationSource),
       onConfirmationOpenChange: (open) =>
-        setConfirmationOpenByControlId((current) => ({
-          ...current,
-          [runtime.binding.id]: open,
-        })),
+        setFieldState((current) => {
+          const state = rebaseGeneratedRecordResultRecordState({
+            current,
+            record: selectedRecord,
+            result,
+          });
+
+          return state === undefined
+            ? current
+            : {
+                ...state,
+                confirmationOpenByControlId: {
+                  ...state.confirmationOpenByControlId,
+                  [runtime.binding.id]: open,
+                },
+              };
+        }),
     });
   }
 
@@ -549,11 +550,12 @@ async function executeRecordResultOperationRuntime(
 function initialFieldRuntimeState(
   record: StoredRecord,
   result: Pick<RecordResultModel, "recordFields" | "recordUnion">,
-): GeneratedRecordResultFieldRuntimeState {
+): GeneratedRecordResultRecordState {
   return {
     ...createGeneratedRecordResultFieldAuthoringState(record, result),
     baselineRecordId: record.id,
     baselineUpdatedAt: record.updatedAt,
+    confirmationOpenByControlId: {},
   };
 }
 
