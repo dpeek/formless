@@ -79,6 +79,10 @@ function projectCreateColorField({ facets }: FieldScenarioProjectionContext) {
     control: textControl(field, { editor: "color", controlKind: "color" }),
     draftInput: draftInput(value),
     labelVisibility: "visible",
+    occurrence: {
+      ownerId: `color-create-${facets.requiredness}-${facets.value}`,
+      placementId: "accent",
+    },
     recordId: `color-create-${facets.requiredness}-${facets.value}`,
     value,
   });
@@ -97,6 +101,10 @@ function projectExistingColorField(
     editor: "color" as const,
     control: textControl(field, { editor: "color", controlKind: "color" }),
     labelVisibility: surface === "detail" ? ("visible" as const) : ("hidden" as const),
+    occurrence: {
+      ownerId: `color-${surface}-${facets.mode}-${facets.requiredness}-${facets.value}`,
+      placementId: "accent",
+    },
     recordId: `color-${surface}-${facets.mode}-${facets.requiredness}-${facets.value}`,
     surface,
   };

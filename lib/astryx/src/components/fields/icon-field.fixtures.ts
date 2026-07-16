@@ -84,6 +84,10 @@ function projectCreateIconField({ facets }: FieldScenarioProjectionContext) {
     draftInput: draftInput(value),
     icon: iconPickerFacts(value),
     labelVisibility: "visible",
+    occurrence: {
+      ownerId: `source-icon-create-${facets.requiredness}-${facets.value}`,
+      placementId: "pageIcon",
+    },
     options: { iconOptions },
     recordId: `source-icon-create-${facets.requiredness}-${facets.value}`,
     value,
@@ -103,6 +107,10 @@ function projectExistingIconField(
     editor: "icon" as const,
     control: textControl(field, { editor: "icon", controlKind: "icon" }),
     labelVisibility: surface === "detail" ? ("visible" as const) : ("hidden" as const),
+    occurrence: {
+      ownerId: `source-icon-${surface}-${facets.mode}-${facets.requiredness}-${facets.value}`,
+      placementId: "pageIcon",
+    },
     options: { iconOptions },
     recordId: `source-icon-${surface}-${facets.mode}-${facets.requiredness}-${facets.value}`,
     surface,

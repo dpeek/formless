@@ -117,6 +117,10 @@ function projectCreateDateField({ facets }: FieldScenarioProjectionContext) {
     control: dateControl(field),
     draftInput: draftInput(value),
     labelVisibility: "visible",
+    occurrence: {
+      ownerId: `date-create-${facets.requiredness}-${facets.value}`,
+      placementId: "dueDate",
+    },
     recordId: `date-create-${facets.requiredness}-${facets.value}`,
     value,
   });
@@ -135,6 +139,10 @@ function projectOperationDateField({ facets }: FieldScenarioProjectionContext) {
     control: dateControl(field),
     draftInput: draftInput(value),
     labelVisibility: "visible",
+    occurrence: {
+      ownerId: `date-operation-${facets.requiredness}-${facets.value}`,
+      placementId: "dueDate",
+    },
     recordId: `date-operation-${facets.requiredness}-${facets.value}`,
     value: value || undefined,
   });
@@ -158,6 +166,7 @@ function projectDetailDateField(context: FieldScenarioProjectionContext) {
       temporal: { kind: "dateTime", value: "2026-07-06T09:30:00.000Z" },
     },
     labelVisibility: "visible",
+    occurrence: { ownerId: "date-detail-system", placementId: "updatedAt" },
     recordId: "date-detail-system",
     surface: "detail",
     value: "2026-07-06T09:30:00.000Z",
@@ -177,6 +186,10 @@ function projectExistingDateField(
     editor: "date" as const,
     control: dateControl(field),
     labelVisibility: surface === "detail" ? ("visible" as const) : ("hidden" as const),
+    occurrence: {
+      ownerId: `date-${surface}-${facets.mode}-${facets.requiredness}-${facets.value}-${facets.presentation ?? "default"}`,
+      placementId: "dueDate",
+    },
     recordId: `date-${surface}-${facets.mode}-${facets.requiredness}-${facets.value}-${facets.presentation ?? "default"}`,
     surface,
   };

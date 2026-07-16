@@ -6,10 +6,14 @@ import type {
   FormlessUiFieldIntent,
   FormlessUiRecordResultActionContract,
   FormlessUiRecordResultContract,
-  FormlessUiRecordResultFieldContract,
 } from "../formless-ui-contract.ts";
 import { fieldScenarioGroups } from "./fields/fixtures.ts";
-import { recordDrafts, recordField, textControl } from "./fields/fixture-helpers.ts";
+import {
+  recordDrafts,
+  recordField,
+  textControl,
+  withFixtureFieldOccurrence,
+} from "./fields/fixture-helpers.ts";
 import {
   AstryxRecordResultRenderer,
   astryxRecordResultSecondaryItems,
@@ -35,6 +39,7 @@ const editableTitle = recordField({
   field: titleSchema,
   fieldName: "title",
   labelVisibility: "visible",
+  occurrence: { ownerId: "tasks:detail:task-1", placementId: "title" },
   recordId: "task-1",
   rendererKind: "text",
 });
@@ -54,7 +59,7 @@ describe("Astryx record-result renderer", () => {
     expect(html).toContain("Task updates are unavailable.");
 
     for (const field of recordResult.fields) {
-      expect(html).toContain(field.field.label);
+      expect(html).toContain(field.label);
     }
 
     expect(html).toContain("Edit Page Icon");
@@ -122,14 +127,14 @@ describe("Astryx record-result renderer", () => {
 
     expect(calls).toEqual([
       {
-        fieldId: title.id,
+        fieldId: title.fieldId,
         intent: titleIntent,
         recordId: "task-1",
         resultId: "tasks:detail",
         type: "recordResultFieldIntent",
       },
       {
-        fieldId: icon.id,
+        fieldId: icon.fieldId,
         intent: iconIntent,
         recordId: "task-1",
         resultId: "tasks:detail",
@@ -217,7 +222,12 @@ function readyRecordResult({
     editing: editingEnabled
       ? { enabled: true }
       : { disabledReason: "Task updates are unavailable.", enabled: false },
-    fields: [editableTitle, ...specialized].map(recordResultField),
+    fields: [editableTitle, ...specialized].map((field) =>
+      withFixtureFieldOccurrence(field, {
+        ownerId: "tasks:detail:task-1",
+        placementId: field.fieldName,
+      }),
+    ),
     id: "tasks:detail",
     kind: "recordResult",
     selectedRecord: {
@@ -313,17 +323,6 @@ function scenarioRecordField(
   return variant.field;
 }
 
-function recordResultField(
-  field: FormlessUiField,
-  index: number,
-): FormlessUiRecordResultFieldContract {
-  return {
-    field,
-    id: `tasks:detail:task-1:field:${index}:${field.fieldName}`,
-    kind: "recordResultField",
-  };
-}
-
 function operationAction(
   control: FormlessUiRecordResultActionContract["control"],
   role: FormlessUiRecordResultActionContract["role"],
@@ -332,7 +331,7 @@ function operationAction(
 }
 
 function requiredField(recordResult: FormlessUiRecordResultContract, fieldName: string) {
-  const field = recordResult.fields.find((candidate) => candidate.field.fieldName === fieldName);
+  const field = recordResult.fields.find((candidate) => candidate.fieldName === fieldName);
 
   if (!field) {
     throw new Error(`Missing field ${fieldName}.`);

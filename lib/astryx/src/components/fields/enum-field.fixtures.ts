@@ -300,6 +300,10 @@ function createEnumField({ required, value }: { required: boolean; value: string
     control: enumControl(field),
     draftInput: { kind: "value", value },
     labelVisibility: "visible",
+    occurrence: {
+      ownerId: `create-status-${required ? "required" : "optional"}-${value || "unset"}`,
+      placementId: "status",
+    },
     options: { enumOptions: required ? statusOptions : optionalStatusOptions },
     recordId: `create-status-${required ? "required" : "optional"}-${value || "unset"}`,
     value,
@@ -338,6 +342,10 @@ function recordEnumField({
     },
     labelVisibility: surface === "detail" ? "visible" : "hidden",
     options: { enumOptions: options },
+    occurrence: {
+      ownerId: `${surface}-status-${value || "unset"}-${presentation?.trigger ?? "plain"}-${presentation?.list ?? "label"}`,
+      placementId: "status",
+    },
     presentation,
     recordId: `${surface}-status-${value || "unset"}-${presentation?.trigger ?? "plain"}-${presentation?.list ?? "label"}`,
     rendererKind: presentation === undefined ? "enum" : "enum-icon",
@@ -371,6 +379,10 @@ function displayEnumField({
     density: surface === "table-cell" ? "compact" : "default",
     labelVisibility: surface === "detail" ? "visible" : "hidden",
     options: { enumOptions: options },
+    occurrence: {
+      ownerId: `${surface}-status-${value || "unset"}-${presentation?.mode ?? "label"}`,
+      placementId: "status",
+    },
     presentation,
     recordId: `${surface}-status-${value || "unset"}-${presentation?.mode ?? "label"}`,
     surface,
@@ -399,6 +411,10 @@ function operationEnumField({
     draftInput: { kind: "input", value },
     errors,
     labelVisibility: "visible",
+    occurrence: {
+      ownerId: `operation-topic-${required ? "required" : "optional"}-${value || "unset"}`,
+      placementId: "topic",
+    },
     options: { enumOptions: options },
     recordId: `operation-topic-${required ? "required" : "optional"}-${value || "unset"}`,
     value: value === "" ? undefined : value,

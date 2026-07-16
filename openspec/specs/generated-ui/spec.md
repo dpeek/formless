@@ -394,6 +394,13 @@ execution, and effects.
   context, result, field, surface, and control identity as applicable while
   preserving canonical nested field, create, operation, list, table, and
   record-result intents
+- AND a workspace field envelope carries the exact projected field occurrence
+  id rather than deriving identity from its schema field name, operation input
+  name, record id, table context id, or another containing contract id
+- AND generated runtime selects the current typed surface or result field index
+  by that occurrence id and verifies its field or input name, record identity,
+  and owning surface, result, or context identity before applying the nested
+  intent
 - AND generated runtime resolves selected route state, automatic context
   fallback, query contexts, result dispatch, record-keyed field state,
   operation controllers, writes, uploads, sync feedback, and local auto-save
@@ -606,6 +613,9 @@ data reads, session behavior, operations, and effects.
 - **AND** runtime resolves intents against its latest route, selection, create,
   reset, and session state before performing navigation, writes, operations, or
   logout effects
+- **AND** shell create-field intents carry the exact projected field occurrence
+  id and resolve it against the latest identified create surface before changing
+  its runtime-owned draft
 - **AND** renderers do not mutate canonical route, record, operation, reset, or
   session state locally
 
@@ -682,6 +692,9 @@ operation execution, and ordering effects.
 - AND each list item carries a stable id, accessible label, projected record
   fields, explicit primary and secondary actions, optional ordering actions,
   and display-safe readiness warnings
+- AND each projected list field carries a stable occurrence id scoped by the
+  list result, item record, and field placement, so the same schema field in a
+  different item or result has a different identity
 - AND ordinary and specialized list fields cross their applicable Formless UI
   field contract boundaries instead of entering the list renderer as legacy
   field components or renderer callbacks
@@ -824,6 +837,8 @@ operation execution, and effects.
 - THEN field changes, commit, revert, icon dialog, media selection, media upload,
   operation invocation, and confirmation-open behavior dispatch canonical field
   and operation intents with stable result, record, field, and control identity
+- AND each record-result field owns its occurrence id directly without a
+  second field-placement wrapper id
 - AND generated runtime resolves field patches, uploads media, builds operation
   caller input, invokes transition or delete operations, reports sync state, and
   closes controlled confirmation only according to successful operation results
@@ -928,6 +943,9 @@ operation execution, and ordering effects.
 - AND cell content composes projected field contracts, display-safe computed or
   referenced values, operation action groups, state transitions, delete
   controls, and ordering controls as applicable
+- AND an inline field occurrence is scoped by its table cell while a dialog
+  field occurrence is scoped by its edit field set, and table draft context ids
+  remain separate from field occurrence ids
 - AND ordinary and specialized table fields cross their applicable Formless UI
   field contract boundaries instead of entering the table renderer as legacy
   field components or renderer callbacks
@@ -1132,6 +1150,35 @@ The system SHALL render generated field displays and editors from field behavior
 - AND foundation code does not render renderer components or decide field group,
   form, table, detail, picker, popover, or compact cell layout
 
+#### Scenario: Resolve exact field occurrence identity
+
+- GIVEN the same schema field or operation input can be rendered for different
+  records, results, surfaces, cells, dialogs, forms, or other placements
+- WHEN generated runtime projects those fields through `FormlessUiField`
+- THEN every projected field carries a required opaque `fieldId` identifying
+  exactly one occurrence within its published root contract graph
+- AND `fieldName` remains the schema and stored-data key while `inputName`
+  remains the declared operation-input key; neither is an occurrence identity
+- AND the projection boundary derives `fieldId` from stable owner and placement
+  identity, including a stable placement discriminator when one owner can
+  contain the same semantic field more than once
+- AND unchanged logical placements retain their `fieldId` across draft, value,
+  pending, error, ordering, and reactive contract publication changes
+- AND occurrences in different records, results, surfaces, table cells, edit
+  field sets, or operation forms have different ids even when their field or
+  input names match
+- AND array indexes, mutable values, draft state, pending state, and renderer
+  order do not contribute to field occurrence identity
+- AND renderers and intent adapters consume and forward the projected
+  `fieldId` without generating, parsing, or replacing it
+- AND runtime resolves field intents through a typed occurrence index, rejects
+  duplicate ids when constructing that index, and verifies the resolved field
+  or input name plus applicable record, result, surface, and context identity
+- AND a stale, mismatched, cross-owner, or unknown occurrence id has no effect
+- AND runtime does not accept a field or input name, table context id,
+  record-result placement id, arbitrary nested object id, or recursive contract
+  match as a field occurrence id
+
 #### Scenario: Minimal common Formless UI contract foundation
 
 - GIVEN generated UI prepares renderer-facing contracts for the first migration
@@ -1169,6 +1216,9 @@ validation, and operation execution.
   accessible trigger label, disabled state and reason, controlled dialog open
   state, dialog title, projected create field set, form-level errors, cancel
   control, submit control, and dialog-open and submit intents
+- AND each projected create field carries an occurrence id scoped by the create
+  surface and stable field placement, and its field intent forwards that exact
+  id to runtime
 - AND the trigger contract distinguishes visible-label, icon-plus-label, and
   icon-only controls without carrying React icons, legacy button props, Astryx
   component props, or renderer classes
@@ -1759,6 +1809,8 @@ entity operations and view operation bindings.
 - AND the public form reuses generated field projection, editor selection,
   display-safe validation, and Formless UI field data for supported text,
   long text, boolean, date, number, and enum input fields
+- AND each projected operation input field carries an occurrence id scoped by
+  its hosting block, form, or control and declared input name
 - AND generated validation owns required, type, enum, text format, and invalid
   number errors before submission while the public operation executor remains
   authoritative for server-side validation

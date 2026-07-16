@@ -68,6 +68,13 @@ describe("generated workspace contract host adapter", () => {
     const mainReference = listSection.collection.presentation.result;
     const tableSection = required(host.read(required(tableSectionReference)));
     const tableReference = tableSection.collection.presentation.result;
+    const initialList = required(host.read(mainReference));
+    if (initialList.kind !== "list") {
+      throw new Error("Expected list result.");
+    }
+    const initialFieldIds = Object.fromEntries(
+      initialList.items.map((item) => [item.id, item.fields.map((field) => field.fieldId)]),
+    );
     const notifications = {
       context: 0,
       main: 0,
@@ -109,6 +116,15 @@ describe("generated workspace contract host adapter", () => {
         },
       ],
     });
+    const republishedList = required(host.read(mainReference));
+    if (republishedList.kind !== "list") {
+      throw new Error("Expected republished list result.");
+    }
+    expect(
+      Object.fromEntries(
+        republishedList.items.map((item) => [item.id, item.fields.map((field) => field.fieldId)]),
+      ),
+    ).toEqual(initialFieldIds);
 
     const sectionOptions: WorkspaceFixtureOptions = {
       ...resultOptions,
@@ -323,6 +339,10 @@ function listResult(options: WorkspaceFixtureOptions): FormlessUiListContract {
           fieldName: "title",
         },
         isPending: id === "task-1" && options.fieldPending,
+        occurrence: {
+          owner: { kind: "listItem", listId: "list:tasks", recordId: id },
+          placementId: "title",
+        },
         recordId: id,
         recordValue: id === "task-1" ? "Initial title" : "Second task",
       });

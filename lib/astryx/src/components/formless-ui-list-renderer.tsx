@@ -150,7 +150,7 @@ function AstryxListItem({
             {item.fields.map((field) => (
               <FormlessUiFieldRenderer
                 field={field}
-                key={`${field.recordId ?? item.id}:${field.fieldName}`}
+                key={field.fieldId}
                 onIntent={(intent) =>
                   dispatchAstryxListFieldIntent(onFieldIntent, item.id, field, intent)
                 }

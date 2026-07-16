@@ -244,8 +244,8 @@ function AstryxShellNavigationSection({
       endContent={
         section.createSurface ? (
           <AstryxCreateSurfaceRenderer
-            onFieldIntent={(intent) =>
-              onIntent(astryxApplicationShellCreateIntent(section, intent))
+            onFieldIntent={(fieldId, intent) =>
+              onIntent(astryxApplicationShellCreateIntent(section, intent, fieldId))
             }
             onIntent={(intent) => onIntent(astryxApplicationShellCreateIntent(section, intent))}
             surface={section.createSurface}
@@ -532,18 +532,41 @@ function resetStatusVariant(state: FormlessUiShellResetContract["status"]["state
 
 export function astryxApplicationShellCreateIntent(
   section: FormlessUiShellNavigationSectionContract,
+  intent: FormlessUiCreateIntent,
+): FormlessUiShellIntent;
+export function astryxApplicationShellCreateIntent(
+  section: FormlessUiShellNavigationSectionContract,
+  intent: FormlessUiFieldIntent,
+  fieldId: string,
+): FormlessUiShellIntent;
+export function astryxApplicationShellCreateIntent(
+  section: FormlessUiShellNavigationSectionContract,
   intent: FormlessUiCreateIntent | FormlessUiFieldIntent,
+  fieldId?: string,
 ): FormlessUiShellIntent {
   if (!section.createSurface) {
     throw new Error(`Shell section "${section.id}" has no create surface.`);
   }
 
-  return {
-    intent,
+  const scope = {
     sectionId: section.id,
     shellId: section.shellId,
     surfaceId: section.createSurface.id,
-    type: "shellCreate",
+    type: "shellCreate" as const,
+  };
+
+  if ("surfaceId" in intent) {
+    return { ...scope, intent };
+  }
+
+  if (fieldId === undefined) {
+    throw new Error("Shell create field intents require a projected field occurrence id.");
+  }
+
+  return {
+    ...scope,
+    fieldId,
+    intent,
   };
 }
 

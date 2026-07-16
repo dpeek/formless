@@ -215,6 +215,7 @@ function stateMachineCreateField() {
     access: { kind: "stateMachine", writable: false },
     labelVisibility: "visible",
     options: { enumOptions: stateStatusOptions },
+    occurrence: { ownerId: "state-status-create", placementId: "status" },
     recordId: "state-status-create",
     stateMachine,
     stateMachineFacts: stateMachineFacts({
@@ -252,6 +253,7 @@ function stateMachineDisplayField(input: {
     },
     labelVisibility: input.surface === "detail" ? "visible" : "hidden",
     options: { enumOptions: stateStatusOptions },
+    occurrence: { ownerId: input.recordId, placementId: "status" },
     recordId: input.recordId,
     stateMachine,
     stateMachineFacts: stateMachineFacts({

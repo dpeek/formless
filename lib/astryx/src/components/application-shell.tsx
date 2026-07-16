@@ -263,6 +263,21 @@ function applyCreate(
     return shell;
   }
 
+  if ("fieldId" in intent) {
+    if (intent.intent.type !== "createDraftChange") {
+      return shell;
+    }
+    const nextSurface = applyCreateDraft(
+      createSurface,
+      intent.fieldId,
+      intent.intent.fieldName,
+      intent.intent.fieldValue,
+    );
+    return nextSurface === createSurface
+      ? shell
+      : replaceShellSection(shell, withCreateSurface(section, nextSurface));
+  }
+
   if (intent.intent.type === "createOpenChange") {
     const nextSection = withCreateSurface(section, {
       ...createSurface,
@@ -271,29 +286,24 @@ function applyCreate(
     return replaceShellSection(shell, nextSection);
   }
 
-  if (intent.intent.type === "createDraftChange") {
-    const nextSurface = applyCreateDraft(
-      createSurface,
-      intent.intent.fieldName,
-      intent.intent.fieldValue,
-    );
-    return replaceShellSection(shell, withCreateSurface(section, nextSurface));
-  }
-
-  if (intent.intent.type !== "createSubmit") {
-    return shell;
-  }
-
   return submitCreate(shell, section, createSurface);
 }
 
 function applyCreateDraft(
   surface: FormlessUiCreateSurfaceContract,
+  fieldId: string,
   fieldName: string,
   draftInput: NonNullable<FormlessUiCreateField["draftInput"]>,
 ): FormlessUiCreateSurfaceContract {
+  const target = surface.dialog.form.fieldSet.fields.find(
+    (field) => field.fieldId === fieldId && field.fieldName === fieldName,
+  );
+  if (!target) {
+    return surface;
+  }
+
   const fields = surface.dialog.form.fieldSet.fields.map((field) =>
-    field.fieldName === fieldName
+    field.fieldId === target.fieldId
       ? {
           ...field,
           draftInput,
@@ -326,7 +336,13 @@ function submitCreate(
   const title = createTitle(createSurface.dialog.form.fieldSet.fields);
 
   if (!title) {
-    const nextSurface = applyCreateDraft(createSurface, "title", {
+    const titleField = createSurface.dialog.form.fieldSet.fields.find(
+      (field) => field.fieldName === "title",
+    );
+    if (!titleField) {
+      return shell;
+    }
+    const nextSurface = applyCreateDraft(createSurface, titleField.fieldId, "title", {
       kind: "input",
       value: "",
     });

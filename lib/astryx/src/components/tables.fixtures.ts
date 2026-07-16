@@ -364,6 +364,7 @@ function taskTitleField(input: Pick<TaskRowInput, "rowId" | "title" | "titleMode
     field: titleSchema,
     fieldName: "title",
     labelVisibility: "hidden" as const,
+    occurrence: { ownerId: `table:${input.rowId}`, placementId: "title" },
     recordId: input.rowId,
     surface: "table-cell" as const,
   };
@@ -404,6 +405,7 @@ function taskStatusField(input: Pick<TaskRowInput, "canEdit" | "rowId" | "status
     },
     labelVisibility: "hidden",
     options: { enumOptions: enumOptions(statusSchema) },
+    occurrence: { ownerId: `table:${input.rowId}`, placementId: "status" },
     recordId: input.rowId,
     stateMachine: machine,
     stateMachineFacts: stateMachineFacts({

@@ -1,6 +1,7 @@
 import type { ImageMediaAssetOption } from "@dpeek/formless-media/client";
 import type {
   FormlessUiField,
+  FormlessUiFieldIntent,
   FormlessUiListContract,
   FormlessUiListIntent,
 } from "@dpeek/formless-astryx/contract";
@@ -72,7 +73,20 @@ export type GeneratedListOperationRuntime =
       recordId: string;
     };
 
+export type GeneratedListFieldRuntime = {
+  field: FormlessUiField;
+  fieldConfig: RecordFieldConfig;
+  fieldId: string;
+  kind: "field";
+  record: StoredRecord;
+  recordId: string;
+  result: ListResultModel;
+  resultId: string;
+};
+
 export type GeneratedListRuntimePlan = {
+  fieldById: ReadonlyMap<string, GeneratedListFieldRuntime>;
+  fields: readonly GeneratedListFieldRuntime[];
   operationByControlId: ReadonlyMap<string, GeneratedListOperationRuntime>;
   operations: readonly GeneratedListOperationRuntime[];
   orderingByRecordId: ReadonlyMap<
@@ -80,7 +94,13 @@ export type GeneratedListRuntimePlan = {
     readonly Extract<GeneratedListOperationRuntime, { kind: "ordering" }>[]
   >;
   orderingContext?: ResultOrderingContext;
+  resultId: string;
 };
+
+type GeneratedListOperationRuntimePlan = Omit<
+  GeneratedListRuntimePlan,
+  "fieldById" | "fields" | "resultId"
+>;
 
 export type GeneratedListFoundation = {
   fieldStateByRecordId: Readonly<Record<string, GeneratedListFieldAuthoringState | undefined>>;
@@ -143,7 +163,7 @@ export function selectGeneratedListFoundation({
   const nextFieldStateByRecordId: Record<string, GeneratedListFieldAuthoringState | undefined> = {
     ...fieldStateByRecordId,
   };
-  const runtimePlan = selectGeneratedListRuntimePlan({
+  const operationRuntimePlan = selectGeneratedListRuntimePlan({
     entity,
     id,
     orderedRecordIds,
@@ -151,6 +171,8 @@ export function selectGeneratedListFoundation({
     recordsById,
     result,
   });
+  const fieldById = new Map<string, GeneratedListFieldRuntime>();
+  const fields: GeneratedListFieldRuntime[] = [];
   const itemsByRecordId: Record<string, GeneratedListItemProjectionFacts> = {};
 
   for (const recordId of orderedRecordIds) {
@@ -167,22 +189,33 @@ export function selectGeneratedListFoundation({
 
     const fieldState =
       fieldStateByRecordId[recordId] ?? createGeneratedListFieldAuthoringState(record, result);
-    const fields = projectGeneratedListFields({
+    const projected = projectGeneratedListFields({
       entityName,
       fieldState,
+      listId: id,
       mediaAssetOptionsByFieldName: mediaAssetOptionsByRecordId[recordId],
       record,
       referenceOptionsByFieldName: referenceOptionsByRecordId[recordId],
       result,
       schema,
     });
+    indexGeneratedListFields({
+      fieldById,
+      fields,
+      fieldConfigs: projected.fieldConfigs,
+      listId: id,
+      projectedFields: projected.fields,
+      record,
+      recordId,
+      result,
+    });
     const accessibilityLabel = selectGeneratedListRecordLabel(
       record,
-      visibleLabelFields(result.recordFields, fieldState, result),
+      projected.fieldConfigs,
       entity.label,
       recordId,
     );
-    const itemOperations = runtimePlan.operations.filter(
+    const itemOperations = operationRuntimePlan.operations.filter(
       (operation): operation is Exclude<GeneratedListOperationRuntime, { kind: "ordering" }> =>
         operation.recordId === recordId && operation.kind !== "ordering",
     );
@@ -205,7 +238,7 @@ export function selectGeneratedListFoundation({
         placement: operation.kind === "delete" ? "secondary" : "primary",
       };
     });
-    const orderingOperations = runtimePlan.orderingByRecordId.get(recordId) ?? [];
+    const orderingOperations = operationRuntimePlan.orderingByRecordId.get(recordId) ?? [];
     const orderingItems = selectOrderingMoveMenuItems({
       includeOrdering: orderingContext !== undefined,
       orderingContext,
@@ -216,7 +249,7 @@ export function selectGeneratedListFoundation({
     itemsByRecordId[recordId] = {
       accessibilityLabel,
       actions,
-      fields,
+      fields: projected.fields,
       ...(orderingContext === undefined
         ? {}
         : {
@@ -233,6 +266,13 @@ export function selectGeneratedListFoundation({
       readinessWarnings: getRecordReadinessWarnings(record, recordsById),
     };
   }
+
+  const runtimePlan: GeneratedListRuntimePlan = {
+    ...operationRuntimePlan,
+    fieldById,
+    fields,
+    resultId: id,
+  };
 
   return {
     fieldStateByRecordId: nextFieldStateByRecordId,
@@ -276,9 +316,41 @@ export function selectGeneratedListRuntimeForIntent(
   );
 }
 
+export function resolveGeneratedListFieldIntent(
+  runtimePlan: GeneratedListRuntimePlan,
+  {
+    fieldId,
+    intent,
+    recordId,
+    resultId,
+  }: {
+    fieldId: string;
+    intent: FormlessUiFieldIntent;
+    recordId?: string;
+    resultId?: string;
+  },
+): GeneratedListFieldRuntime | undefined {
+  if (resultId !== runtimePlan.resultId || recordId === undefined) {
+    return undefined;
+  }
+
+  const runtime = runtimePlan.fieldById.get(fieldId);
+  const fieldName = listFieldIntentFieldName(intent);
+  const intentRecordId = intent.type === "stateTransitionInvoke" ? intent.recordId : recordId;
+
+  return runtime !== undefined &&
+    runtime.recordId === recordId &&
+    runtime.field.recordId === recordId &&
+    intentRecordId === recordId &&
+    runtime.fieldConfig.fieldName === fieldName
+    ? runtime
+    : undefined;
+}
+
 function projectGeneratedListFields({
   entityName,
   fieldState,
+  listId,
   mediaAssetOptionsByFieldName,
   record,
   referenceOptionsByFieldName,
@@ -287,6 +359,7 @@ function projectGeneratedListFields({
 }: {
   entityName: string;
   fieldState: GeneratedListFieldAuthoringState;
+  listId: string;
   mediaAssetOptionsByFieldName?: Readonly<Record<string, readonly ImageMediaAssetOption[]>>;
   record: StoredRecord;
   referenceOptionsByFieldName?: Readonly<
@@ -294,43 +367,95 @@ function projectGeneratedListFields({
   >;
   result: ListResultModel;
   schema: AppSchema | null;
-}): readonly FormlessUiField[] {
+}): {
+  fieldConfigs: readonly RecordFieldConfig[];
+  fields: readonly FormlessUiField[];
+} {
   const session = selectGeneratedUpdateDraftSession({
     fields: result.recordFields,
     state: fieldState.session,
     union: result.recordUnion,
   });
 
-  return projectGeneratedRecordFormlessUiFields({
-    canPatch: result.updateOperation !== undefined,
-    density: "default",
-    editorDraftByFieldName: fieldState.editorDraftByFieldName,
-    entityName,
-    errorsByFieldName: fieldState.errorsByFieldName,
-    iconDialogDraftByFieldName: fieldState.iconDialogDraftByFieldName,
-    iconDialogOpenByFieldName: fieldState.iconDialogOpenByFieldName,
-    mediaAssetOptionsByFieldName,
-    pendingByFieldName: fieldState.pendingByFieldName as Record<string, boolean>,
-    recordId: record.id,
-    referenceOptionsByFieldName,
-    schema,
-    session,
-    showLabel: false,
-    state: fieldState.session,
-    surface: "record",
-  });
+  return {
+    fieldConfigs: session.visibleFields,
+    fields: projectGeneratedRecordFormlessUiFields({
+      canPatch: result.updateOperation !== undefined,
+      density: "default",
+      editorDraftByFieldName: fieldState.editorDraftByFieldName,
+      entityName,
+      errorsByFieldName: fieldState.errorsByFieldName,
+      iconDialogDraftByFieldName: fieldState.iconDialogDraftByFieldName,
+      iconDialogOpenByFieldName: fieldState.iconDialogOpenByFieldName,
+      mediaAssetOptionsByFieldName,
+      owner: { kind: "listItem", listId, recordId: record.id },
+      pendingByFieldName: fieldState.pendingByFieldName as Record<string, boolean>,
+      recordId: record.id,
+      referenceOptionsByFieldName,
+      schema,
+      session,
+      showLabel: false,
+      state: fieldState.session,
+      surface: "record",
+    }),
+  };
 }
 
-function visibleLabelFields(
-  fields: readonly RecordFieldConfig[],
-  fieldState: GeneratedListFieldAuthoringState,
-  result: Pick<ListResultModel, "recordUnion">,
-): RecordFieldConfig[] {
-  return selectGeneratedUpdateDraftSession({
-    fields: [...fields],
-    state: fieldState.session,
-    union: result.recordUnion,
-  }).visibleFields;
+function indexGeneratedListFields({
+  fieldById,
+  fields,
+  fieldConfigs,
+  listId,
+  projectedFields,
+  record,
+  recordId,
+  result,
+}: {
+  fieldById: Map<string, GeneratedListFieldRuntime>;
+  fields: GeneratedListFieldRuntime[];
+  fieldConfigs: readonly RecordFieldConfig[];
+  listId: string;
+  projectedFields: readonly FormlessUiField[];
+  record: StoredRecord;
+  recordId: string;
+  result: ListResultModel;
+}) {
+  if (projectedFields.length !== fieldConfigs.length) {
+    throw new Error(`Generated list "${listId}" projected incomplete field runtime facts.`);
+  }
+
+  for (const [index, field] of projectedFields.entries()) {
+    const fieldConfig = fieldConfigs[index];
+    if (
+      fieldConfig === undefined ||
+      field.fieldName !== fieldConfig.fieldName ||
+      field.recordId !== recordId
+    ) {
+      throw new Error(`Generated list "${listId}" projected mismatched field runtime facts.`);
+    }
+    if (fieldById.has(field.fieldId)) {
+      throw new Error(
+        `Generated list "${listId}" contains duplicate field occurrence "${field.fieldId}".`,
+      );
+    }
+
+    const runtime: GeneratedListFieldRuntime = {
+      field,
+      fieldConfig,
+      fieldId: field.fieldId,
+      kind: "field",
+      record,
+      recordId,
+      result,
+      resultId: listId,
+    };
+    fieldById.set(field.fieldId, runtime);
+    fields.push(runtime);
+  }
+}
+
+function listFieldIntentFieldName(intent: FormlessUiFieldIntent): string | undefined {
+  return "fieldName" in intent ? intent.fieldName : undefined;
 }
 
 function selectGeneratedListRecordLabel(
@@ -378,7 +503,7 @@ function selectGeneratedListRuntimePlan({
   orderingContext?: ResultOrderingContext;
   recordsById: Readonly<Record<string, StoredRecord>>;
   result: ListResultModel;
-}): GeneratedListRuntimePlan {
+}): GeneratedListOperationRuntimePlan {
   const operations: GeneratedListOperationRuntime[] = [];
   const orderingByRecordId = new Map<
     string,

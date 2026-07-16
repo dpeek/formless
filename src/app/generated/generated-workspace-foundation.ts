@@ -1,6 +1,7 @@
 import type {
   FormlessUiActionTriggerContract,
   FormlessUiCreateSurfaceContract,
+  FormlessUiField,
   FormlessUiOperationControlContract,
   FormlessUiTableContract,
   FormlessUiWorkspaceCollectionActionContract,
@@ -30,6 +31,11 @@ import type {
 } from "../../client/views.ts";
 import { formatAggregateDisplayValue } from "./format.ts";
 import {
+  indexGeneratedCreateSurfaceFields,
+  resolveGeneratedCreateFieldIntent,
+  type GeneratedCreateFieldIndex,
+} from "./generated-create-field-index.ts";
+import {
   generatedWorkspaceCollectionId,
   generatedWorkspaceScopedId,
   generatedWorkspaceScreenId,
@@ -40,6 +46,7 @@ import {
   type GeneratedWorkspaceSectionProjectionFacts,
 } from "./formless-ui-workspace-projection.ts";
 import {
+  resolveGeneratedListFieldIntent,
   selectGeneratedListFoundation,
   selectGeneratedListRuntimeForIntent,
   type GeneratedListFoundation,
@@ -47,12 +54,17 @@ import {
 } from "./generated-list-foundation.ts";
 import {
   rebaseGeneratedRecordResultRecordState,
+  resolveGeneratedRecordResultFieldIntent,
   selectGeneratedRecordResultFoundation,
   selectGeneratedRecordResultRuntimeForIntent,
   type GeneratedRecordResultFoundation,
   type GeneratedRecordResultRecordState,
   type SelectGeneratedRecordResultFoundationOptions,
 } from "./generated-record-result-foundation.ts";
+import {
+  resolveGeneratedTableFieldIntent,
+  type GeneratedTableFieldIndex,
+} from "./generated-table-foundation.tsx";
 
 export type GeneratedWorkspaceSectionSelection = {
   selectedContextRecordId?: string | null;
@@ -77,6 +89,7 @@ export type GeneratedWorkspaceContextCreateFoundation = {
 };
 
 export type GeneratedWorkspaceTableFoundation = {
+  fieldsById: GeneratedTableFieldIndex;
   runtime: unknown;
   table: FormlessUiTableContract;
 };
@@ -159,19 +172,32 @@ type GeneratedWorkspaceNestedResultRuntime =
     }
   | {
       contract: FormlessUiTableContract;
+      fieldsById: GeneratedTableFieldIndex;
       kind: "table";
       runtime: unknown;
     };
 
-type GeneratedWorkspaceControlRuntime = {
+type GeneratedWorkspaceCreateControlRuntime = {
   contextId?: string;
-  contract:
-    | FormlessUiActionTriggerContract
-    | FormlessUiCreateSurfaceContract
-    | FormlessUiOperationControlContract;
-  kind: "create" | "externalAction" | "operation";
+  contract: FormlessUiCreateSurfaceContract;
+  fieldsById: GeneratedCreateFieldIndex;
+  kind: "create";
   runtime: unknown;
 };
+
+type GeneratedWorkspaceControlRuntime =
+  | GeneratedWorkspaceCreateControlRuntime
+  | {
+      contract: FormlessUiActionTriggerContract;
+      kind: "externalAction";
+      runtime: unknown;
+    }
+  | {
+      contextId?: string;
+      contract: FormlessUiOperationControlContract;
+      kind: "operation";
+      runtime: unknown;
+    };
 
 export type GeneratedWorkspaceSectionRuntimePlan = {
   actionQueryContext: QueryEvaluationContext;
@@ -215,6 +241,7 @@ export type GeneratedWorkspaceResolvedIntent =
       section: GeneratedWorkspaceSectionRuntimePlan;
     }
   | {
+      field?: FormlessUiField;
       kind: "field";
       result?: GeneratedWorkspaceNestedResultRuntime;
       runtime?: GeneratedWorkspaceControlRuntime;
@@ -464,21 +491,53 @@ export function resolveGeneratedWorkspaceIntent(
   if (intent.type === "workspaceField") {
     const controlRuntime =
       intent.surfaceId === undefined ? undefined : section.controlsById.get(intent.surfaceId);
+    const createField =
+      controlRuntime?.kind === "create"
+        ? resolveGeneratedCreateFieldIntent(
+            controlRuntime.fieldsById,
+            intent.fieldId,
+            intent.intent,
+          )
+        : undefined;
     if (
       controlRuntime?.kind === "create" &&
+      createField !== undefined &&
       intent.resultId === undefined &&
-      intent.contextId === controlRuntime.contextId &&
-      contractContainsField(controlRuntime.contract, intent.fieldId, fieldIntentName(intent.intent))
+      intent.contextId === controlRuntime.contextId
     ) {
-      return { kind: "field", runtime: controlRuntime, section };
+      return { field: createField, kind: "field", runtime: controlRuntime, section };
     }
 
-    const result = selectGeneratedWorkspaceIntentResult(section, intent.resultId, intent.contextId);
-    return result !== undefined &&
-      contractContainsField(result.contract, intent.fieldId, fieldIntentName(intent.intent)) &&
-      (intent.recordId === undefined || contractContainsId(result.contract, intent.recordId))
-      ? { kind: "field", result, section }
-      : undefined;
+    const result =
+      section.result.kind === "table" && section.result.contract.id === intent.resultId
+        ? section.result
+        : selectGeneratedWorkspaceIntentResult(section, intent.resultId, intent.contextId);
+    if (result?.kind === "list") {
+      const field = resolveGeneratedListFieldIntent(result.foundation.runtimePlan, intent);
+      return field === undefined
+        ? undefined
+        : { field: field.field, kind: "field", result, section };
+    }
+    if (result?.kind === "recordResult") {
+      const field = resolveGeneratedRecordResultFieldIntent(result.foundation.runtimePlan, intent);
+      return field === undefined
+        ? undefined
+        : { field: field.field, kind: "field", result, section };
+    }
+    if (result?.kind === "table" && intent.contextId !== undefined) {
+      const field = resolveGeneratedTableFieldIntent(result.fieldsById, {
+        contextId: intent.contextId,
+        fieldId: intent.fieldId,
+        intent: intent.intent,
+        recordId: intent.recordId,
+        tableId: result.contract.id,
+      });
+      return field === undefined
+        ? undefined
+        : { field: field.field, kind: "field", result, section };
+    }
+
+    return undefined;
   }
 
   const result = selectGeneratedWorkspaceIntentResult(
@@ -641,7 +700,12 @@ function selectGeneratedWorkspaceResult(
     throw new Error("Workspace table foundations must use the scoped result id.");
   }
 
-  return { contract: input.table.table, kind: "table", runtime: input.table.runtime };
+  return {
+    contract: input.table.table,
+    fieldsById: input.table.fieldsById,
+    kind: "table",
+    runtime: input.table.runtime,
+  };
 }
 
 function projectGeneratedWorkspaceContextFacts(
@@ -813,6 +877,7 @@ function selectGeneratedWorkspaceControlRuntimePlan(
     if (contract.kind === "createAction") {
       controls.set(contract.surface.id, {
         contract: contract.surface,
+        fieldsById: indexGeneratedCreateSurfaceFields(contract.surface),
         kind: "create",
         runtime: action.runtime,
       });
@@ -829,6 +894,7 @@ function selectGeneratedWorkspaceControlRuntimePlan(
     controls.set(input.contextCreate.action.surface.id, {
       contextId,
       contract: input.contextCreate.action.surface,
+      fieldsById: indexGeneratedCreateSurfaceFields(input.contextCreate.action.surface),
       kind: "create",
       runtime: input.contextCreate.runtime,
     });
@@ -853,35 +919,6 @@ function selectGeneratedWorkspaceIntentResult(
   return section.contextResult?.contract.id === resultId && contextId === section.contextId
     ? section.contextResult
     : undefined;
-}
-
-function fieldIntentName(
-  intent: Extract<FormlessUiWorkspaceIntent, { type: "workspaceField" }>["intent"],
-): string | undefined {
-  return intent.type === "operationDraftChange"
-    ? intent.inputName
-    : "fieldName" in intent
-      ? intent.fieldName
-      : undefined;
-}
-
-function contractContainsField(contract: unknown, fieldId: string, fieldName: string | undefined) {
-  const objects = contractObjects(contract);
-  const containsIdentity = objects.some(
-    (value) => value.id === fieldId || value.fieldId === fieldId,
-  );
-  const containsField = objects.some((value) => {
-    const nestedField =
-      value.field !== null && typeof value.field === "object"
-        ? (value.field as Record<string, unknown>)
-        : undefined;
-    return (
-      fieldName === undefined ||
-      value.fieldName === fieldName ||
-      nestedField?.fieldName === fieldName
-    );
-  });
-  return containsIdentity && containsField;
 }
 
 function contractContainsId(contract: unknown, id: string): boolean {

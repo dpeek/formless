@@ -186,6 +186,10 @@ function projectCreateNumberField({ facets }: FieldScenarioProjectionContext) {
     draftInput: draftInput(draft),
     errors: numberErrors(facets.value),
     labelVisibility: "visible",
+    occurrence: {
+      ownerId: `number-create-${facets.requiredness}-${facets.value}`,
+      placementId: "estimateHours",
+    },
     recordId: `number-create-${facets.requiredness}-${facets.value}`,
     value: typeof draft === "number" ? draft : undefined,
   });
@@ -209,6 +213,10 @@ function projectOperationNumberField({ facets }: FieldScenarioProjectionContext)
     draftInput: draftInput(draft),
     errors,
     labelVisibility: "visible",
+    occurrence: {
+      ownerId: `number-operation-${facets.requiredness}-${facets.value}`,
+      placementId: "estimateHours",
+    },
     recordId: `number-operation-${facets.requiredness}-${facets.value}`,
     value: typeof draft === "number" ? draft : undefined,
   });
@@ -235,6 +243,21 @@ function projectExistingNumberField(
     editor: "number" as const,
     control: numberControl(field),
     labelVisibility: surface === "detail" ? ("visible" as const) : ("hidden" as const),
+    occurrence: {
+      ownerId: [
+        "number",
+        surface,
+        facets.mode,
+        facets.requiredness,
+        facets.value,
+        facets.format,
+        facets.suffix,
+        facets.composition,
+        facets["unit-state"],
+        facets["unit-requiredness"],
+      ].join("-"),
+      placementId: "estimateHours",
+    },
     recordId: [
       "number",
       surface,

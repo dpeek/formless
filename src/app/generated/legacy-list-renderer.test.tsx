@@ -125,6 +125,10 @@ function listContract(): FormlessUiListContract {
       field: { label: "Title", required: true, type: "text" },
       fieldName: "title",
     },
+    occurrence: {
+      owner: { kind: "listItem", listId: "legacy-list-test", recordId: "task-1" },
+      placementId: "title",
+    },
     recordId: "task-1",
     recordValue: "Review launch",
   });

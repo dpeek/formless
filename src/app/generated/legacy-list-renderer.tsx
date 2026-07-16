@@ -83,7 +83,7 @@ export function LegacyListRenderer({
                       <LegacyListField
                         field={field}
                         itemId={item.id}
-                        key={`${field.recordId ?? item.id}:${field.fieldName}`}
+                        key={field.fieldId}
                         onFieldIntent={onFieldIntent}
                       />
                     ))

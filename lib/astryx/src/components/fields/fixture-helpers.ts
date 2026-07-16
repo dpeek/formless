@@ -45,6 +45,11 @@ import type {
 import { sourceIconIsRenderable } from "../field-primitives.tsx";
 import type { FormlessUiEditorField } from "./field-chrome.tsx";
 
+export type FormlessUiFixtureFieldOccurrence = {
+  ownerId: string;
+  placementId: string;
+};
+
 type CommonFieldInput<TControl extends FormlessUiFieldControl> = {
   access?: FormlessUiFieldAccess;
   color?: FormlessUiColorFacts;
@@ -60,6 +65,7 @@ type CommonFieldInput<TControl extends FormlessUiFieldControl> = {
   labelVisibility: "hidden" | "visible";
   media?: FormlessUiMediaPresentation;
   options?: FormlessUiFieldOptions;
+  occurrence: FormlessUiFixtureFieldOccurrence;
   pending?: FormlessUiFieldPending;
   presentation?: FormlessUiField["presentation"];
   reference?: FormlessUiReferenceFacts;
@@ -112,6 +118,7 @@ type BaseFieldFacts = {
   enum?: FormlessUiEnumFacts;
   errors?: readonly FormlessUiFieldError[];
   field: FieldSchema;
+  fieldId: string;
   fieldName: string;
   fieldRef?: FieldRef;
   icon?: FormlessUiField["icon"];
@@ -158,6 +165,20 @@ export function createField<TControl extends FormlessUiFieldControl>({
     surface: "create",
     value,
   };
+}
+
+export function fixtureFormlessUiFieldId({
+  ownerId,
+  placementId,
+}: FormlessUiFixtureFieldOccurrence): string {
+  return ["fixture-field", ownerId, placementId].map((part) => encodeURIComponent(part)).join(":");
+}
+
+export function withFixtureFieldOccurrence<TField extends FormlessUiField>(
+  field: TField,
+  occurrence: FormlessUiFixtureFieldOccurrence,
+): TField {
+  return { ...field, fieldId: fixtureFormlessUiFieldId(occurrence) };
 }
 
 export function operationField<TControl extends FormlessUiFieldControl>({
@@ -793,6 +814,7 @@ function baseField<TControl extends FormlessUiFieldControl>(
     enum: input.enum,
     errors: input.errors,
     field: input.field,
+    fieldId: fixtureFormlessUiFieldId(input.occurrence),
     fieldName: input.fieldName,
     fieldRef: input.fieldRef,
     icon: input.icon,

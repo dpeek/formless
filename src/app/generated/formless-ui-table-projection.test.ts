@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vite-plus/test";
 import type { EntitySchema, FieldSchema } from "@dpeek/formless-schema";
 import type {
+  FormlessUiTableContract,
   FormlessUiOperationControlContract,
   FormlessUiTableActionGroupContract,
 } from "@dpeek/formless-astryx/contract";
+import type { StoredRecord } from "@dpeek/formless-storage";
 import type {
   GeneratedOperationControlBinding,
+  RecordFieldConfig,
   TableColumnConfig,
   TableFooterSlotConfig,
 } from "../../client/views.ts";
@@ -21,9 +24,187 @@ import {
   projectGeneratedTableOperationAction,
   projectGeneratedTableOrdering,
 } from "./formless-ui-table-projection.ts";
+import {
+  indexGeneratedTableFieldOccurrences,
+  resolveGeneratedTableFieldIntent,
+} from "./generated-table-foundation.tsx";
 import { selectGeneratedTablePresentation } from "./table-presentation.ts";
 
 describe("generated Formless UI table projection", () => {
+  it("indexes cell and dialog occurrences separately and rejects mismatches and collisions", () => {
+    const tableId = "table-test";
+    const cellId = "task-1:title";
+    const fieldSetId = "task-1:edit-dialog:fields";
+    const record = {
+      createdAt: "2026-07-16T00:00:00.000Z",
+      entity: "task",
+      id: "task-1",
+      updatedAt: "2026-07-16T00:00:00.000Z",
+      values: { title: "Prepare launch" },
+    } satisfies StoredRecord;
+    const fieldConfig = {
+      commit: "field-commit",
+      editor: "text",
+      field: textField(),
+      fieldName: "title",
+    } satisfies RecordFieldConfig;
+    const inlineField = recordField("title", textField(), "text", "Prepare launch", record.id);
+    const dialogField = projectGeneratedRecordFormlessUiField({
+      canPatch: true,
+      fieldConfig,
+      occurrence: {
+        owner: { fieldSetId, kind: "tableEditFieldSet", tableId },
+        placementId: fieldConfig.fieldName,
+      },
+      recordId: record.id,
+      recordValue: record.values.title,
+      surface: "table-cell",
+    });
+    const editAction = projectGeneratedTableEditAction({
+      actionId: "task-1:edit",
+      dialogId: "task-1:edit-dialog",
+      fields: [dialogField],
+      label: "Edit task",
+      open: true,
+      rowId: record.id,
+      tableId,
+      target: { editingEnabled: true, kind: "available" },
+      targetKind: "row",
+      title: "Edit task",
+    });
+    const table: FormlessUiTableContract = {
+      accessibilityLabel: "Tasks",
+      columns: [
+        {
+          accessibilityLabel: "Title",
+          alignment: "start",
+          contentRole: "field",
+          id: "title",
+          isRowHeader: true,
+          kind: "tableColumn",
+          label: "Title",
+          labelVisibility: "visible",
+          width: "lg",
+        },
+        {
+          accessibilityLabel: "Actions",
+          alignment: "end",
+          contentRole: "actions",
+          id: "actions",
+          isRowHeader: false,
+          kind: "tableColumn",
+          label: "Actions",
+          labelVisibility: "visible",
+          width: "sm",
+        },
+      ],
+      density: "compact",
+      editing: { enabled: true },
+      id: tableId,
+      kind: "table",
+      rows: [
+        {
+          accessibilityLabel: "Prepare launch",
+          cells: [
+            {
+              columnId: "title",
+              contents: [projectGeneratedTableFieldContent(inlineField)],
+              id: cellId,
+              kind: "tableCell",
+            },
+            {
+              columnId: "actions",
+              contents: [
+                actionGroup("task-1:actions", [{ action: editAction, placement: "primary" }]),
+              ],
+              id: "task-1:actions-cell",
+              kind: "tableCell",
+            },
+          ],
+          id: record.id,
+          kind: "tableRow",
+          warnings: [],
+        },
+      ],
+    };
+    const contexts = new Map([
+      [
+        cellId,
+        {
+          entityName: record.entity,
+          fields: [fieldConfig],
+          id: cellId,
+          record,
+          recordId: record.id,
+        },
+      ],
+      [
+        fieldSetId,
+        {
+          entityName: record.entity,
+          fields: [fieldConfig],
+          id: fieldSetId,
+          record,
+          recordId: record.id,
+        },
+      ],
+    ]);
+    const index = indexGeneratedTableFieldOccurrences(table, contexts);
+    const intent = { fieldName: "title", type: "recordDraftRevert" } as const;
+
+    expect(index.get(inlineField.fieldId)).toMatchObject({ contextId: cellId, placement: "cell" });
+    expect(index.get(dialogField.fieldId)).toMatchObject({
+      contextId: fieldSetId,
+      placement: "dialog",
+    });
+    expect(
+      resolveGeneratedTableFieldIntent(index, {
+        contextId: cellId,
+        fieldId: inlineField.fieldId,
+        intent,
+        recordId: record.id,
+        tableId,
+      }),
+    ).toMatchObject({ fieldId: inlineField.fieldId });
+    expect(
+      resolveGeneratedTableFieldIntent(index, {
+        contextId: fieldSetId,
+        fieldId: inlineField.fieldId,
+        intent,
+        recordId: record.id,
+        tableId,
+      }),
+    ).toBeUndefined();
+    expect(
+      resolveGeneratedTableFieldIntent(index, {
+        contextId: cellId,
+        fieldId: inlineField.fieldId,
+        intent: { fieldName: "other", type: "recordDraftRevert" },
+        recordId: record.id,
+        tableId,
+      }),
+    ).toBeUndefined();
+    expect(() =>
+      indexGeneratedTableFieldOccurrences(
+        {
+          ...table,
+          rows: table.rows.map((row) => ({
+            ...row,
+            cells: row.cells.map((cell) =>
+              cell.id === cellId
+                ? {
+                    ...cell,
+                    contents: [...cell.contents, projectGeneratedTableFieldContent(inlineField)],
+                  }
+                : cell,
+            ),
+          })),
+        },
+        contexts,
+      ),
+    ).toThrow(`duplicate field occurrence "${inlineField.fieldId}"`);
+  });
+
   it("projects semantic columns and ordered ordinary, specialized, reference, and computed cells", () => {
     const presentation = tablePresentation({ canDelete: false, canPatch: true });
     const title = recordField("title", textField(), "text", "Prepare launch");
@@ -514,6 +695,10 @@ function recordField(
       field,
       fieldName,
       label: fieldName === "name" ? "Owner" : undefined,
+    },
+    occurrence: {
+      owner: { cellId: `${recordId}:${fieldName}`, kind: "tableCell", tableId: "table-test" },
+      placementId: fieldName,
     },
     recordId,
     recordValue: value,

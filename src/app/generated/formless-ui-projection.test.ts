@@ -42,6 +42,7 @@ import {
   projectGeneratedCreateFormlessUiSession,
   projectGeneratedCreateFormlessUiSurface,
   projectGeneratedDisplayFormlessUiField,
+  projectGeneratedFormlessUiFieldId,
   projectGeneratedOperationFormlessUiFields,
   projectGeneratedOperationFormlessUiSession,
   projectGeneratedRecordFormlessUiField,
@@ -50,7 +51,67 @@ import {
   selectFormlessUiValueUnitCommit,
 } from "./formless-ui-projection.ts";
 
+function createOccurrence(placementId: string, surfaceId = "projection-test:create") {
+  return { owner: { kind: "createSurface" as const, surfaceId }, placementId };
+}
+
+function recordOccurrence(placementId: string, ownerId = "projection-test:record") {
+  return { owner: { kind: "standalone" as const, ownerId }, placementId };
+}
+
 describe("generated Formless UI projection", () => {
+  it("keeps occurrence ids stable across value changes and distinct across owners", () => {
+    const fieldConfig = createField("title", fields.title, "text");
+    const occurrence = createOccurrence("title", "create-a");
+    const first = projectGeneratedCreateFormlessUiField({
+      fieldConfig,
+      occurrence,
+      value: "First",
+    });
+    const updated = projectGeneratedCreateFormlessUiField({
+      fieldConfig,
+      occurrence,
+      value: "Updated",
+    });
+    const otherSurface = projectGeneratedCreateFormlessUiField({
+      fieldConfig,
+      occurrence: createOccurrence("title", "create-b"),
+      value: "First",
+    });
+
+    expect(first).not.toBe(updated);
+    expect(first.fieldId).toBe(updated.fieldId);
+    expect(otherSurface.fieldId).not.toBe(first.fieldId);
+  });
+
+  it("distinguishes the same semantic field across projected owner and placement scopes", () => {
+    const occurrences = [
+      createOccurrence("title", "create-a"),
+      {
+        owner: { kind: "listItem" as const, listId: "list-a", recordId: "record-a" },
+        placementId: "title",
+      },
+      {
+        owner: { kind: "recordResult" as const, resultId: "result-a", recordId: "record-a" },
+        placementId: "title",
+      },
+      {
+        owner: { kind: "tableCell" as const, tableId: "table-a", cellId: "cell-a" },
+        placementId: "title",
+      },
+      {
+        owner: { kind: "tableEditFieldSet" as const, tableId: "table-a", fieldSetId: "dialog-a" },
+        placementId: "title",
+      },
+      { owner: { kind: "operationForm" as const, formId: "form-a" }, placementId: "title" },
+      recordOccurrence("title", "standalone-a"),
+      recordOccurrence("secondary-title", "standalone-a"),
+    ];
+    const ids = occurrences.map(projectGeneratedFormlessUiFieldId);
+
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
   it("projects opaque picker and swatch facts for color fields", () => {
     const colorField = {
       type: "text",
@@ -60,14 +121,17 @@ describe("generated Formless UI projection", () => {
     } satisfies FieldSchema;
     const createColor = projectGeneratedCreateFormlessUiField({
       fieldConfig: createField("accent", colorField, "color"),
+      occurrence: createOccurrence("accent"),
       value: "#abc",
     });
     const unsupportedAlphaDisplay = projectGeneratedDisplayFormlessUiField({
       fieldConfig: recordField("accent", colorField, "color"),
+      occurrence: recordOccurrence("accent", "unsupported-alpha"),
       recordValue: "#2563eb80",
     });
     const invalidDisplay = projectGeneratedDisplayFormlessUiField({
       fieldConfig: recordField("accent", colorField, "color"),
+      occurrence: recordOccurrence("accent", "invalid-color"),
       recordValue: "not-a-color",
     });
 
@@ -123,6 +187,7 @@ describe("generated Formless UI projection", () => {
       state,
     });
     const projected = projectGeneratedCreateFormlessUiFields({
+      owner: { kind: "createSurface", surfaceId: "create-reference-test" },
       pendingByFieldName: { owner: true },
       pendingLabelByFieldName: { owner: "Loading people" },
       referenceOptionsByFieldName: {
@@ -307,6 +372,7 @@ describe("generated Formless UI projection", () => {
     const requiredState = initialGeneratedCreateDraftSessionState({ fields: [requiredField] });
     const projectedDefault = projectGeneratedCreateFormlessUiField({
       fieldConfig: requiredField,
+      occurrence: createOccurrence("owner", "required-with-options"),
       referenceOptions: [
         { id: "principal-1", label: "Dana" },
         { id: "principal-2", label: "Jordan" },
@@ -315,12 +381,14 @@ describe("generated Formless UI projection", () => {
     });
     const projectedWithoutOptions = projectGeneratedCreateFormlessUiField({
       fieldConfig: requiredField,
+      occurrence: createOccurrence("owner", "required-without-options"),
       state: requiredState,
     });
     const optionalField = createField("owner", fields.owner, "reference");
     const optionalState = initialGeneratedCreateDraftSessionState({ fields: [optionalField] });
     const projectedOptional = projectGeneratedCreateFormlessUiField({
       fieldConfig: optionalField,
+      occurrence: createOccurrence("owner", "optional"),
       referenceOptions: [{ id: "principal-1", label: "Dana" }],
       state: optionalState,
     });
@@ -407,6 +475,7 @@ describe("generated Formless UI projection", () => {
           { height: 360, href: "/media/hero.webp", id: "hero.webp", label: "Hero", width: 640 },
         ],
       },
+      owner: { kind: "tableCell", tableId: "projection-test", cellId: "task-1" },
       pendingByFieldName: { hero: true },
       pendingLabelByFieldName: { hero: "Uploading" },
       recordId: "task-1",
@@ -608,6 +677,7 @@ describe("generated Formless UI projection", () => {
           message: "Enter a finite number.",
         },
         fieldConfig: recordField("estimate", fields.estimate, "number"),
+        occurrence: recordOccurrence("estimate", "invalid-heading"),
         presentation: "heading",
         recordId: "task-1",
         recordValue: 2,
@@ -648,6 +718,7 @@ describe("generated Formless UI projection", () => {
         fieldConfig: recordField("icon", fields.icon, "icon", { commit: "immediate" }),
         iconDialogDraft: addIconSource,
         iconDialogOpen: true,
+        occurrence: recordOccurrence("icon", "catalog"),
         recordValue: customIconSource,
       }),
     );
@@ -658,6 +729,7 @@ describe("generated Formless UI projection", () => {
         iconDialogDraft: customIconSource,
         iconDialogOpen: true,
         iconParseError: "Enter valid SVG.",
+        occurrence: recordOccurrence("icon", "custom"),
         recordValue: addIconSource,
       }),
     );
@@ -665,6 +737,7 @@ describe("generated Formless UI projection", () => {
       fieldConfig: createField("icon", fields.icon, "icon"),
       iconDialogDraft: addIconSource,
       iconDialogOpen: true,
+      occurrence: createOccurrence("icon", "icon-picker"),
       value: customIconSource,
     });
 
@@ -711,11 +784,13 @@ describe("generated Formless UI projection", () => {
     const createMediaField = projectGeneratedCreateFormlessUiField({
       fieldConfig: createField("hero", fields.image, "media"),
       mediaAssetOptions,
+      occurrence: createOccurrence("hero", "media"),
       value: "hero.webp",
     });
     const displayMediaField = projectGeneratedDisplayFormlessUiField({
       fieldConfig: recordField("hero", fields.image, "media"),
       mediaAssetOptions,
+      occurrence: recordOccurrence("hero", "media-display"),
       recordValue: "hero.webp",
     });
 
@@ -746,6 +821,7 @@ describe("generated Formless UI projection", () => {
         entityName: "task",
         fieldConfig: recordField("hero", fields.image, "media"),
         mediaAssetOptions: [],
+        occurrence: recordOccurrence("hero", "missing-media"),
         recordValue: "not/a-core-asset",
         schema: blockSchema,
       }),
@@ -769,11 +845,13 @@ describe("generated Formless UI projection", () => {
         ...recordField("owner", fields.owner, "reference"),
         suffix: "assigned",
       },
+      occurrence: recordOccurrence("owner", "reference"),
       recordValue: "principal-1",
       referenceOptions: [{ id: "principal-1", label: "Dana" }],
     });
     const missingReferenceDisplay = projectGeneratedDisplayFormlessUiField({
       fieldConfig: recordField("owner", fields.owner, "reference"),
+      occurrence: recordOccurrence("owner", "missing-reference"),
       recordValue: "principal-missing",
       referenceOptions: [{ id: "principal-1", label: "Dana" }],
     });
@@ -783,6 +861,7 @@ describe("generated Formless UI projection", () => {
         stateMachine,
         suffix: "current",
       },
+      occurrence: recordOccurrence("status", "state-empty"),
       recordValue: "",
       transitionOperations,
     });
@@ -791,6 +870,7 @@ describe("generated Formless UI projection", () => {
         ...recordField("status", fields.status, "enum"),
         stateMachine,
       },
+      occurrence: recordOccurrence("status", "state-unknown"),
       recordValue: "paused",
       transitionOperations,
     });
@@ -799,6 +879,7 @@ describe("generated Formless UI projection", () => {
         ...recordField("status", fields.status, "enum"),
         stateMachine,
       },
+      occurrence: recordOccurrence("status", "state-record"),
       recordValue: "new",
       showLabel: false,
       surface: "record",
@@ -810,12 +891,14 @@ describe("generated Formless UI projection", () => {
         ...recordField("status", fields.status, "enum"),
         stateMachine,
       },
+      occurrence: recordOccurrence("status", "state-table"),
       recordValue: "new",
       surface: "table-cell",
       transitionOperations,
     });
     const dateDisplay = projectGeneratedDisplayFormlessUiField({
       fieldConfig: recordField("dueDate", fields.dueDate, "date"),
+      occurrence: recordOccurrence("dueDate", "date"),
       recordValue: "2026-07-08",
       surface: "detail",
     });
@@ -824,6 +907,7 @@ describe("generated Formless UI projection", () => {
         fieldRef: { kind: "system", name: "updatedAt" },
         writable: false,
       }),
+      occurrence: recordOccurrence("updatedAt", "timestamp"),
       recordValue: "2026-07-09T00:00:00.000Z",
       surface: "detail",
     });
@@ -934,6 +1018,7 @@ describe("generated Formless UI projection", () => {
       canPatch: true,
       draftInput: { kind: "input", value: "paused" },
       fieldConfig,
+      occurrence: recordOccurrence("status", "enum-editor"),
       recordValue: "paused",
       showLabel: false,
       surface: "record",
@@ -944,11 +1029,13 @@ describe("generated Formless UI projection", () => {
         ...fieldConfig,
         presentation: { mode: "iconOnly", trigger: "icon", list: "both" },
       },
+      occurrence: recordOccurrence("status", "enum-icon-trigger"),
       recordValue: "open",
       surface: "record",
     });
     const display = projectGeneratedDisplayFormlessUiField({
       fieldConfig,
+      occurrence: recordOccurrence("status", "enum-display"),
       recordValue: "fallback",
       showLabel: true,
       surface: "detail",
@@ -1041,6 +1128,7 @@ describe("generated Formless UI projection", () => {
     });
     const projectedSession = projectGeneratedOperationFormlessUiSession({ session, state });
     const projected = projectGeneratedOperationFormlessUiFields({
+      owner: { formId: "public-operation-test", kind: "operationForm" },
       pendingByFieldName: { contactEmail: true },
       pendingLabelByFieldName: { contactEmail: "Submitting" },
       session,
@@ -1118,6 +1206,27 @@ describe("generated Formless UI projection", () => {
         value: "sales",
       },
     ]);
+    expect(projected.map((field) => field.fieldId)).toEqual([
+      "field:operationForm:public-operation-test:contactEmail",
+      "field:operationForm:public-operation-test:message",
+      "field:operationForm:public-operation-test:acceptedTerms",
+      "field:operationForm:public-operation-test:teamSize",
+      "field:operationForm:public-operation-test:topic",
+    ]);
+    expect(
+      projectGeneratedOperationFormlessUiFields({
+        owner: { formId: "public-operation-test", kind: "operationForm" },
+        session,
+        state,
+      }).map((field) => field.fieldId),
+    ).toEqual(projected.map((field) => field.fieldId));
+    expect(
+      projectGeneratedOperationFormlessUiFields({
+        owner: { formId: "public-operation-other-block", kind: "operationForm" },
+        session,
+        state,
+      }).map((field) => field.fieldId),
+    ).not.toEqual(projected.map((field) => field.fieldId));
 
     const undeclaredTopicState = nextGeneratedOperationDraftSessionState({
       inputName: "topic",
@@ -1129,6 +1238,7 @@ describe("generated Formless UI projection", () => {
       state: undeclaredTopicState,
     });
     const undeclaredTopic = projectGeneratedOperationFormlessUiFields({
+      owner: { formId: "public-operation-undeclared-test", kind: "operationForm" },
       session: undeclaredTopicSession,
       state: undeclaredTopicState,
     }).find((field) => field.inputName === "topic");

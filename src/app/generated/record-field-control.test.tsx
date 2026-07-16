@@ -32,6 +32,14 @@ beforeEach(() => {
   resetClientStore();
 });
 
+function createOccurrence(placementId: string, surfaceId: string) {
+  return { owner: { kind: "createSurface" as const, surfaceId }, placementId };
+}
+
+function recordOccurrence(placementId: string, ownerId: string) {
+  return { owner: { kind: "standalone" as const, ownerId }, placementId };
+}
+
 describe("generated record field presentation rendering", () => {
   it("dispatches ordinary legacy editor interactions as record field intents", () => {
     const intents: unknown[] = [];
@@ -45,6 +53,7 @@ describe("generated record field presentation rendering", () => {
         fieldName: "title",
         label: "Title",
       },
+      occurrence: recordOccurrence("title", "legacy-editor"),
       recordId: "task-1",
       recordValue: "Saved title",
     });
@@ -81,6 +90,7 @@ describe("generated record field presentation rendering", () => {
       <LegacyDisplayFieldAdapter
         field={projectGeneratedDisplayFormlessUiField({
           fieldConfig: { ...priorityFieldConfig, presentation: undefined },
+          occurrence: recordOccurrence("priority", "enum-display"),
           recordId: "task-1",
           recordValue: "high",
         })}
@@ -290,6 +300,7 @@ describe("generated record field presentation rendering", () => {
               label: "Hero",
             },
           ],
+          occurrence: createOccurrence(createField.fieldName, "site-image"),
           value: "hero.webp",
         })}
         onIntent={() => undefined}
@@ -324,7 +335,11 @@ describe("generated record field presentation rendering", () => {
     applyBootstrapResponse(identityReferenceBootstrap());
 
     const displayHtml = renderToStaticMarkup(
-      <RecordFieldDisplay column={ownerPrincipalFieldConfig} recordId="account-1" />,
+      <RecordFieldDisplay
+        column={ownerPrincipalFieldConfig}
+        fieldOwner={{ kind: "standalone", ownerId: "owner-principal-test" }}
+        recordId="account-1"
+      />,
     );
     const editorHtml = renderRecordControl(ownerPrincipalFieldConfig, {
       draft: "principal-1",
@@ -373,7 +388,10 @@ describe("generated record field presentation rendering", () => {
 });
 
 function renderCreateField(fieldConfig: CreateFieldConfig) {
-  const field = projectGeneratedCreateFormlessUiField({ fieldConfig });
+  const field = projectGeneratedCreateFormlessUiField({
+    fieldConfig,
+    occurrence: createOccurrence(fieldConfig.fieldName, "render-create-field"),
+  });
 
   return renderToStaticMarkup(
     <GeneratedCreateFieldControl field={field} onIntent={() => undefined} />,

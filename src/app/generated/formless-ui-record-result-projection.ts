@@ -80,12 +80,7 @@ export function projectGeneratedRecordResultFormlessUiContract({
           },
         }
       : {}),
-    fields:
-      ready?.fields.map((field) => ({
-        field,
-        id: generatedRecordResultFieldId(id, ready.recordId, field.fieldName),
-        kind: "recordResultField" as const,
-      })) ?? [],
+    fields: ready?.fields ?? [],
     id,
     kind: "recordResult",
     ...(selected === undefined
@@ -143,12 +138,4 @@ export function projectGeneratedRecordResultOperationAction(
     kind: "operationAction",
     role,
   };
-}
-
-export function generatedRecordResultFieldId(
-  resultId: string,
-  recordId: string,
-  fieldName: string,
-): string {
-  return `${resultId}:${recordId}:field:${fieldName}`;
 }

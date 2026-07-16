@@ -432,14 +432,11 @@ function AstryxWorkspaceContextCreate({
 
   return (
     <AstryxCreateSurfaceRenderer
-      onFieldIntent={(intent) =>
-        dispatchAstryxWorkspaceFieldIntent(
-          onIntent,
-          scope,
-          workspaceCreateFieldId(intent),
-          intent,
-          { contextId: context.id, surfaceId: action.surface.id },
-        )
+      onFieldIntent={(fieldId, intent) =>
+        dispatchAstryxWorkspaceFieldIntent(onIntent, scope, fieldId, intent, {
+          contextId: context.id,
+          surfaceId: action.surface.id,
+        })
       }
       onIntent={(intent) =>
         dispatchAstryxWorkspaceCreateIntent(onIntent, scope, action.surface.id, intent, context.id)
@@ -524,14 +521,10 @@ function AstryxWorkspaceCollectionAction({
   if (action.kind === "createAction") {
     return (
       <AstryxCreateSurfaceRenderer
-        onFieldIntent={(intent) =>
-          dispatchAstryxWorkspaceFieldIntent(
-            onIntent,
-            scope,
-            workspaceCreateFieldId(intent),
-            intent,
-            { surfaceId: action.surface.id },
-          )
+        onFieldIntent={(fieldId, intent) =>
+          dispatchAstryxWorkspaceFieldIntent(onIntent, scope, fieldId, intent, {
+            surfaceId: action.surface.id,
+          })
         }
         onIntent={(intent) =>
           dispatchAstryxWorkspaceCreateIntent(onIntent, scope, action.surface.id, intent)
@@ -671,7 +664,7 @@ function AstryxWorkspaceResult({
       <AstryxListRenderer
         list={result}
         onFieldIntent={(itemId, field, intent) =>
-          dispatchAstryxWorkspaceFieldIntent(onIntent, scope, field.fieldName, intent, {
+          dispatchAstryxWorkspaceFieldIntent(onIntent, scope, field.fieldId, intent, {
             recordId: field.recordId ?? itemId,
             resultId: result.id,
           })
@@ -692,9 +685,10 @@ function AstryxWorkspaceResult({
   if (result.kind === "table") {
     return (
       <AstryxTableRenderer
-        onFieldIntent={(fieldId, field, intent) =>
+        onFieldIntent={(contextId, fieldId, recordId, intent) =>
           dispatchAstryxWorkspaceFieldIntent(onIntent, scope, fieldId, intent, {
-            ...(field.recordId === undefined ? {} : { recordId: field.recordId }),
+            contextId,
+            ...(recordId === undefined ? {} : { recordId }),
             resultId: result.id,
           })
         }
@@ -851,14 +845,6 @@ function astryxWorkspaceContextSelectorOption(
     label: option.label,
     value: option.id,
   };
-}
-
-function workspaceCreateFieldId(intent: FormlessUiFieldIntent): string {
-  return "fieldName" in intent
-    ? intent.fieldName
-    : intent.type === "operationDraftChange"
-      ? intent.inputName
-      : "field";
 }
 
 function workspaceCollectionActionId(action: FormlessUiWorkspaceCollectionActionContract) {

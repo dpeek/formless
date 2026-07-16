@@ -22,6 +22,7 @@ import {
 } from "./formless-ui-list-projection.ts";
 import {
   createGeneratedListFieldAuthoringState,
+  resolveGeneratedListFieldIntent,
   selectGeneratedListFoundation,
   selectGeneratedListRuntimeForIntent,
 } from "./generated-list-foundation.ts";
@@ -243,6 +244,48 @@ describe("generated Formless UI list projection", () => {
     });
     expect(projected.list.items[1]?.ordering?.pending).toBe(true);
 
+    const titleField = projected.list.items[1]?.fields.find((field) => field.fieldName === "title");
+    expect(titleField).toBeDefined();
+    if (titleField === undefined) {
+      throw new Error("Missing projected title field.");
+    }
+    const fieldIntent = {
+      fieldName: "title",
+      type: "recordEditorDraftChange" as const,
+      value: "Next article",
+    };
+    expect(
+      resolveGeneratedListFieldIntent(projected.runtimePlan, {
+        fieldId: titleField.fieldId,
+        intent: fieldIntent,
+        recordId: "article-1",
+        resultId: projected.list.id,
+      }),
+    ).toMatchObject({
+      field: { fieldId: titleField.fieldId },
+      fieldConfig: { fieldName: "title" },
+      record: { id: "article-1" },
+      recordId: "article-1",
+      result: { type: "list" },
+      resultId: projected.list.id,
+    });
+    for (const mismatch of [
+      { fieldId: `${titleField.fieldId}:stale` },
+      { intent: { ...fieldIntent, fieldName: "url" } },
+      { recordId: "link-1" },
+      { resultId: "tasks:other" },
+    ]) {
+      expect(
+        resolveGeneratedListFieldIntent(projected.runtimePlan, {
+          fieldId: titleField.fieldId,
+          intent: fieldIntent,
+          recordId: "article-1",
+          resultId: projected.list.id,
+          ...mismatch,
+        }),
+      ).toBeUndefined();
+    }
+
     const downAction = projected.list.items[1]?.ordering?.actions.find(
       (action) => action.direction === "down",
     );
@@ -254,6 +297,27 @@ describe("generated Formless UI list projection", () => {
     expect(JSON.stringify(projected.list)).not.toContain("updatedAt");
     expect(JSON.stringify(projected.list)).not.toContain('"plan"');
     expect(JSON.stringify(projected.list)).not.toContain("executionKey");
+  });
+
+  it("rejects duplicate projected list field occurrences", () => {
+    const result = listResult();
+    const record = taskRecord("article-1", {
+      kind: "article",
+      order: 1_000,
+      title: "Article",
+    });
+    const duplicate = result.recordFields[0]!;
+
+    expect(() =>
+      selectGeneratedListFoundation({
+        entity: taskEntity,
+        entityName: "task",
+        id: "tasks:duplicate",
+        recordIds: [record.id],
+        recordsById: { [record.id]: record },
+        result: { ...result, recordFields: [duplicate, duplicate] },
+      }),
+    ).toThrow('Generated list "tasks:duplicate" contains duplicate field occurrence');
   });
 
   it("keeps the active specialized union field when the authoring discriminator is unchanged", () => {
@@ -296,6 +360,10 @@ function recordField(
     canPatch: true,
     density: "compact",
     fieldConfig: { commit: "field-commit", editor, field, fieldName },
+    occurrence: {
+      owner: { kind: "listItem", listId: "list-test", recordId: "task-1" },
+      placementId: fieldName,
+    },
     recordId: "task-1",
     recordValue: value,
     surface: "record",

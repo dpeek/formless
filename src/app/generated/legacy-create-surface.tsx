@@ -11,10 +11,10 @@ import {
 import type {
   FormlessUiButtonContent,
   FormlessUiButtonContract,
+  FormlessUiCreateFieldIntentHandler,
   FormlessUiCreateFormContract,
   FormlessUiCreateIntentHandler,
   FormlessUiCreateSurfaceContract,
-  FormlessUiFieldIntentHandler,
   FormlessUiSemanticIconId,
 } from "@dpeek/formless-astryx/contract";
 import { GeneratedCreateFieldControl } from "./create-field-control.tsx";
@@ -27,7 +27,7 @@ export function LegacyGeneratedCreateSurface({
   surface,
 }: {
   onCreateIntent: FormlessUiCreateIntentHandler;
-  onFieldIntent: FormlessUiFieldIntentHandler;
+  onFieldIntent: FormlessUiCreateFieldIntentHandler;
   renderDialog?: boolean;
   renderTrigger?: boolean;
   surface: FormlessUiCreateSurfaceContract;
@@ -99,7 +99,7 @@ export function LegacyGeneratedCreateForm({
   form: FormlessUiCreateFormContract;
   heading?: string;
   onCreateIntent: FormlessUiCreateIntentHandler;
-  onFieldIntent: FormlessUiFieldIntentHandler;
+  onFieldIntent: FormlessUiCreateFieldIntentHandler;
   surfaceId: string;
 }) {
   return (
@@ -120,8 +120,8 @@ export function LegacyGeneratedCreateForm({
         {form.fieldSet.fields.map((field) => (
           <GeneratedCreateFieldControl
             field={field}
-            key={field.fieldName}
-            onIntent={onFieldIntent}
+            key={field.fieldId}
+            onIntent={(intent) => onFieldIntent(field.fieldId, intent)}
           />
         ))}
       </Fieldset>

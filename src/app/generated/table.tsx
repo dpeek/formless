@@ -60,6 +60,10 @@ export function ReferencedRecordEditorFields({
           draftInput={session.draft.values[fieldConfig.fieldName]}
           entityName={referenceItem.entityName}
           fieldConfig={fieldConfig}
+          fieldOwner={{
+            kind: "standalone",
+            ownerId: `referenced-record-editor:${referenceItem.entityName}:${referenceRecordId}`,
+          }}
           key={`${referenceItem.entityName}:${referenceRecordId}:${fieldConfig.fieldName}`}
           onDraftInputChange={updateSessionDraft}
           recordId={referenceRecordId}

@@ -591,6 +591,10 @@ function ContextRecordEditor({
             density={isHeading || isRichMarkdownRecordField(fieldConfig) ? "default" : density}
             entityName={context.entityName}
             fieldConfig={fieldConfig}
+            fieldOwner={{
+              kind: "standalone",
+              ownerId: `context-record:${context.name}:${recordId}`,
+            }}
             key={recordFieldEditorKey(context.entityName, recordId, fieldConfig.fieldName)}
             presentation={isHeading ? "heading" : "default"}
             recordId={recordId}

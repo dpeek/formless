@@ -107,6 +107,60 @@ export type GeneratedFormlessUiRecordFieldConfig = RecordFieldConfig & {
   suffix?: string;
 };
 
+export type GeneratedFormlessUiFieldOwner =
+  | {
+      kind: "createSurface";
+      surfaceId: string;
+    }
+  | {
+      kind: "listItem";
+      listId: string;
+      recordId: string;
+    }
+  | {
+      formId: string;
+      kind: "operationForm";
+    }
+  | {
+      kind: "recordResult";
+      recordId: string;
+      resultId: string;
+    }
+  | {
+      kind: "standalone";
+      ownerId: string;
+    }
+  | {
+      cellId: string;
+      kind: "tableCell";
+      tableId: string;
+    }
+  | {
+      fieldSetId: string;
+      kind: "tableEditFieldSet";
+      tableId: string;
+    };
+
+export type GeneratedFormlessUiFieldOccurrence = {
+  owner: GeneratedFormlessUiFieldOwner;
+  placementId: string;
+};
+
+type GeneratedFormlessUiCreateFieldOwner = Extract<
+  GeneratedFormlessUiFieldOwner,
+  { kind: "createSurface" }
+>;
+
+type GeneratedFormlessUiOperationFieldOwner = Extract<
+  GeneratedFormlessUiFieldOwner,
+  { kind: "operationForm" }
+>;
+
+export type GeneratedFormlessUiRecordFieldOwner = Exclude<
+  GeneratedFormlessUiFieldOwner,
+  GeneratedFormlessUiCreateFieldOwner | GeneratedFormlessUiOperationFieldOwner
+>;
+
 export type ProjectGeneratedCreateFormlessUiSessionOptions = {
   defaults?: readonly CreateDefaultConfig[];
   queryContext?: QueryEvaluationContext;
@@ -129,24 +183,27 @@ export type ProjectGeneratedCreateFormlessUiFieldsOptions =
     referenceOptionsByFieldName?: Readonly<
       Record<string, readonly GeneratedFormlessUiReferenceOption[]>
     >;
+    owner: GeneratedFormlessUiCreateFieldOwner;
   };
 
-export type ProjectGeneratedCreateFormlessUiSurfaceOptions =
-  ProjectGeneratedCreateFormlessUiFieldsOptions & {
-    enabled: boolean;
-    entityLabel: string;
-    formErrors?: readonly string[];
-    id: string;
-    isSubmitting: boolean;
-    open: boolean;
-    submitLabel: string;
-    trigger: {
-      content: FormlessUiButtonContent;
-      density: "default" | "compact";
-      prominence: "primary" | "secondary" | "quiet";
-    };
-    triggerLabel: string;
+export type ProjectGeneratedCreateFormlessUiSurfaceOptions = Omit<
+  ProjectGeneratedCreateFormlessUiFieldsOptions,
+  "owner"
+> & {
+  enabled: boolean;
+  entityLabel: string;
+  formErrors?: readonly string[];
+  id: string;
+  isSubmitting: boolean;
+  open: boolean;
+  submitLabel: string;
+  trigger: {
+    content: FormlessUiButtonContent;
+    density: "default" | "compact";
+    prominence: "primary" | "secondary" | "quiet";
   };
+  triggerLabel: string;
+};
 
 export type ProjectGeneratedCreateFormlessUiFieldOptions = {
   error?: GeneratedFormlessUiFieldErrorInput;
@@ -156,6 +213,9 @@ export type ProjectGeneratedCreateFormlessUiFieldOptions = {
   iconParseError?: string;
   isPending?: boolean;
   mediaAssetOptions?: readonly ImageMediaAssetOption[];
+  occurrence: GeneratedFormlessUiFieldOccurrence & {
+    owner: GeneratedFormlessUiCreateFieldOwner;
+  };
   pendingLabel?: string;
   recordId?: string;
   referenceOptions?: readonly GeneratedFormlessUiReferenceOption[];
@@ -181,6 +241,7 @@ export type ProjectGeneratedRecordFormlessUiFieldsOptions =
     iconDialogOpenByFieldName?: Readonly<Record<string, boolean | undefined>>;
     iconParseErrorByFieldName?: Readonly<Record<string, string | undefined>>;
     mediaAssetOptionsByFieldName?: Readonly<Record<string, readonly ImageMediaAssetOption[]>>;
+    owner: GeneratedFormlessUiRecordFieldOwner;
     pendingByFieldName?: Readonly<Record<string, boolean>>;
     pendingLabelByFieldName?: Readonly<Record<string, string | undefined>>;
     presentation?: FormlessUiRecordFieldPresentation;
@@ -216,6 +277,9 @@ export type ProjectGeneratedRecordFormlessUiFieldOptions = {
   iconParseError?: string;
   isPending?: boolean;
   mediaAssetOptions?: readonly ImageMediaAssetOption[];
+  occurrence: GeneratedFormlessUiFieldOccurrence & {
+    owner: GeneratedFormlessUiRecordFieldOwner;
+  };
   pendingLabel?: string;
   presentation?: FormlessUiRecordFieldPresentation;
   recordId?: string;
@@ -234,6 +298,9 @@ export type ProjectGeneratedDisplayFormlessUiFieldOptions = {
   density?: FormlessUiFieldDensity;
   fieldConfig: GeneratedFormlessUiRecordFieldConfig;
   mediaAssetOptions?: readonly ImageMediaAssetOption[];
+  occurrence: GeneratedFormlessUiFieldOccurrence & {
+    owner: GeneratedFormlessUiRecordFieldOwner;
+  };
   recordId?: string;
   recordValue: FieldValue | undefined;
   referenceOptions?: readonly GeneratedFormlessUiReferenceOption[];
@@ -255,16 +322,48 @@ export type ProjectGeneratedOperationFormlessUiFieldsOptions =
     errorsByFieldName?: Readonly<Record<string, GeneratedFormlessUiFieldErrorInput>>;
     pendingByFieldName?: Readonly<Record<string, boolean>>;
     pendingLabelByFieldName?: Readonly<Record<string, string | undefined>>;
+    owner: GeneratedFormlessUiOperationFieldOwner;
   };
 
 export type ProjectGeneratedOperationFormlessUiFieldOptions = {
   error?: GeneratedFormlessUiFieldErrorInput;
   fieldConfig: GeneratedOperationInputFieldConfig;
   isPending?: boolean;
+  occurrence: GeneratedFormlessUiFieldOccurrence & {
+    owner: GeneratedFormlessUiOperationFieldOwner;
+  };
   pendingLabel?: string;
   state?: GeneratedOperationDraftSessionState;
   value?: FieldValue;
 };
+
+export function projectGeneratedFormlessUiFieldId({
+  owner,
+  placementId,
+}: GeneratedFormlessUiFieldOccurrence): string {
+  const ownerParts = (() => {
+    switch (owner.kind) {
+      case "createSurface":
+        return [owner.surfaceId];
+      case "listItem":
+        return [owner.listId, owner.recordId];
+      case "operationForm":
+        return [owner.formId];
+      case "recordResult":
+        return [owner.resultId, owner.recordId];
+      case "standalone":
+        return [owner.ownerId];
+      case "tableCell":
+        return [owner.tableId, owner.cellId];
+      case "tableEditFieldSet":
+        return [owner.tableId, owner.fieldSetId];
+    }
+  })();
+
+  return ["field", owner.kind, ...ownerParts, placementId]
+    .map((part) => encodeURIComponent(part))
+    .join(":");
+}
 
 export function projectGeneratedCreateFormlessUiSession({
   defaults = [],
@@ -303,6 +402,7 @@ export function projectGeneratedCreateFormlessUiFields({
   pendingByFieldName,
   pendingLabelByFieldName,
   referenceOptionsByFieldName,
+  owner,
   session,
   state,
 }: ProjectGeneratedCreateFormlessUiFieldsOptions): FormlessUiCreateField[] {
@@ -316,6 +416,7 @@ export function projectGeneratedCreateFormlessUiFields({
       iconParseError: iconParseErrorByFieldName?.[fieldConfig.fieldName],
       isPending: pendingByFieldName?.[fieldConfig.fieldName],
       mediaAssetOptions: mediaAssetOptionsByFieldName?.[fieldConfig.fieldName],
+      occurrence: { owner, placementId: fieldConfig.fieldName },
       pendingLabel: pendingLabelByFieldName?.[fieldConfig.fieldName],
       referenceOptions: referenceOptionsByFieldName?.[fieldConfig.fieldName],
       state,
@@ -364,6 +465,7 @@ export function projectGeneratedCreateFormlessUiSurface({
     iconDialogOpenByFieldName,
     iconParseErrorByFieldName,
     mediaAssetOptionsByFieldName,
+    owner: { kind: "createSurface", surfaceId: id },
     pendingByFieldName,
     pendingLabelByFieldName,
     referenceOptionsByFieldName,
@@ -443,6 +545,7 @@ export function projectGeneratedCreateFormlessUiField({
   iconParseError,
   isPending = false,
   mediaAssetOptions = [],
+  occurrence,
   pendingLabel,
   recordId,
   referenceOptions = [],
@@ -506,6 +609,7 @@ export function projectGeneratedCreateFormlessUiField({
           : { stateMachine: fieldConfig.stateMachine }),
         ...(fieldConfig.visibleWhen === undefined ? {} : { visibleWhen: fieldConfig.visibleWhen }),
       },
+      fieldId: projectGeneratedFormlessUiFieldId(occurrence),
       label,
       labelVisibility: "visible",
       options: projectFieldOptions({
@@ -569,6 +673,7 @@ export function projectGeneratedRecordFormlessUiFields({
   iconDialogOpenByFieldName,
   iconParseErrorByFieldName,
   mediaAssetOptionsByFieldName,
+  owner,
   pendingByFieldName,
   pendingLabelByFieldName,
   presentation = "default",
@@ -604,6 +709,7 @@ export function projectGeneratedRecordFormlessUiFields({
       iconParseError: iconParseErrorByFieldName?.[fieldConfig.fieldName],
       isPending: pendingByFieldName?.[fieldConfig.fieldName],
       mediaAssetOptions: mediaAssetOptionsByFieldName?.[fieldConfig.fieldName],
+      occurrence: { owner, placementId: fieldConfig.fieldName },
       pendingLabel: pendingLabelByFieldName?.[fieldConfig.fieldName],
       presentation: presentationByFieldName?.[fieldConfig.fieldName] ?? presentation,
       recordId,
@@ -637,6 +743,7 @@ export function projectGeneratedRecordFormlessUiField({
   iconParseError,
   isPending = false,
   mediaAssetOptions = [],
+  occurrence,
   pendingLabel,
   presentation = "default",
   recordId,
@@ -658,6 +765,7 @@ export function projectGeneratedRecordFormlessUiField({
     density,
     fieldConfig,
     mediaAssetOptions,
+    occurrence,
     recordId,
     recordValue,
     referenceOptions,
@@ -723,6 +831,7 @@ export function projectGeneratedRecordFormlessUiField({
       control,
       error,
       fieldConfig,
+      fieldId: projectGeneratedFormlessUiFieldId(occurrence),
       label,
       labelVisibility: showLabel && surface !== "table-cell" ? "visible" : "hidden",
       options: projectFieldOptions({
@@ -776,6 +885,7 @@ export function projectGeneratedDisplayFormlessUiField({
   density = "default",
   fieldConfig,
   mediaAssetOptions = [],
+  occurrence,
   recordId,
   recordValue,
   referenceOptions = [],
@@ -801,6 +911,7 @@ export function projectGeneratedDisplayFormlessUiField({
       commit: "submit",
       control,
       fieldConfig,
+      fieldId: projectGeneratedFormlessUiFieldId(occurrence),
       label,
       labelVisibility:
         surface === "table-cell" || (surface === "record" && showLabel !== true)
@@ -853,6 +964,7 @@ export function projectGeneratedOperationFormlessUiFields({
   errorsByFieldName,
   pendingByFieldName,
   pendingLabelByFieldName,
+  owner,
   session,
   state,
 }: ProjectGeneratedOperationFormlessUiFieldsOptions): FormlessUiOperationInputField[] {
@@ -862,6 +974,7 @@ export function projectGeneratedOperationFormlessUiFields({
         errorsByFieldName?.[fieldConfig.inputName] ?? session.fieldErrors[fieldConfig.inputName],
       fieldConfig,
       isPending: pendingByFieldName?.[fieldConfig.inputName],
+      occurrence: { owner, placementId: fieldConfig.inputName },
       pendingLabel: pendingLabelByFieldName?.[fieldConfig.inputName],
       state,
       value: session.input[fieldConfig.inputName],
@@ -873,6 +986,7 @@ export function projectGeneratedOperationFormlessUiField({
   error,
   fieldConfig,
   isPending = false,
+  occurrence,
   pendingLabel,
   state,
   value,
@@ -888,6 +1002,7 @@ export function projectGeneratedOperationFormlessUiField({
       control,
       error,
       fieldConfig,
+      fieldId: projectGeneratedFormlessUiFieldId(occurrence),
       inputName,
       label,
       labelVisibility: "visible",
@@ -941,6 +1056,7 @@ function projectBaseField({
   control,
   error,
   fieldConfig,
+  fieldId,
   inputName,
   label,
   labelVisibility,
@@ -958,6 +1074,7 @@ function projectBaseField({
     | CreateFieldConfig
     | GeneratedFormlessUiRecordFieldConfig
     | GeneratedOperationInputFieldConfig;
+  fieldId: string;
   inputName?: string;
   label: string;
   labelVisibility: FormlessUiBaseField["labelVisibility"];
@@ -974,6 +1091,7 @@ function projectBaseField({
     editor: fieldConfig.editor,
     errors: projectFieldErrors(fieldConfig.fieldName, error),
     field: fieldConfig.field,
+    fieldId,
     fieldName: fieldConfig.fieldName,
     ...(recordFieldConfigHasFieldRef(fieldConfig) && fieldConfig.fieldRef !== undefined
       ? { fieldRef: fieldConfig.fieldRef }

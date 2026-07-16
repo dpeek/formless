@@ -5,7 +5,6 @@ import type {
   FormlessUiRecordField,
   FormlessUiRecordResultActionContract,
   FormlessUiRecordResultContract,
-  FormlessUiRecordResultFieldContract,
 } from "../formless-ui-contract.ts";
 import {
   displayField,
@@ -15,6 +14,7 @@ import {
   recordDrafts,
   recordField,
   textControl,
+  withFixtureFieldOccurrence,
 } from "./fields/fixture-helpers.ts";
 import { fieldScenarioGroups } from "./fields/fixtures.ts";
 import { operationControlFixtures } from "./operation-controls.fixtures.ts";
@@ -265,6 +265,7 @@ function readOnlyRecordField(field: FormlessUiField): FormlessUiField {
         }
       : undefined,
     options: field.options,
+    occurrence: recordResultFieldOccurrence(field.fieldName),
     presentation: field.presentation,
     recordId: field.recordId,
     reference:
@@ -355,7 +356,7 @@ function readyRecordResult({
     availability: { state: "ready" },
     density: "default",
     editing,
-    fields: fields.map(recordResultField),
+    fields,
     id: resultId,
     kind: "recordResult",
     selectedRecord: {
@@ -376,6 +377,7 @@ function editableTitleField() {
     field: titleSchema,
     fieldName: "title",
     labelVisibility: "visible",
+    occurrence: recordResultFieldOccurrence("title"),
     pending: { isPending: true, label: "Saving task" },
     recordId: taskId,
     rendererKind: "text",
@@ -392,6 +394,7 @@ function readOnlySlugField() {
     fieldName: "slug",
     formatting: { displayValue: "prepare-launch-checklist" },
     labelVisibility: "visible",
+    occurrence: recordResultFieldOccurrence("slug"),
     recordId: taskId,
     surface: "record",
     value: "prepare-launch-checklist",
@@ -410,6 +413,7 @@ function kindField(kind: "article" | "link") {
     fieldName: "kind",
     labelVisibility: "visible",
     options: { enumOptions: enumOptions(kindSchema) },
+    occurrence: recordResultFieldOccurrence("kind"),
     recordId: taskId,
     rendererKind: "enum",
   });
@@ -426,6 +430,7 @@ function summaryField() {
     field: summarySchema,
     fieldName: "summary",
     labelVisibility: "visible",
+    occurrence: recordResultFieldOccurrence("summary"),
     recordId: taskId,
     rendererKind: "textarea",
     visibleWhen: { field: "kind", values: ["article"] },
@@ -443,6 +448,7 @@ function urlField() {
     field: urlSchema,
     fieldName: "url",
     labelVisibility: "visible",
+    occurrence: recordResultFieldOccurrence("url"),
     recordId: taskId,
     rendererKind: "text",
     visibleWhen: { field: "kind", values: ["link"] },
@@ -461,6 +467,7 @@ function invalidOwnerEmailField() {
     field: ownerEmailSchema,
     fieldName: "ownerEmail",
     labelVisibility: "visible",
+    occurrence: recordResultFieldOccurrence("ownerEmail"),
     recordId: taskId,
     rendererKind: "text",
   });
@@ -498,19 +505,18 @@ function scenarioRecordField(
 }
 
 function withRecordIdentity(field: FormlessUiField): FormlessUiField {
-  return {
-    ...field,
-    labelVisibility: "visible",
-    recordId: taskId,
-  };
+  return withFixtureFieldOccurrence(
+    {
+      ...field,
+      labelVisibility: "visible",
+      recordId: taskId,
+    },
+    recordResultFieldOccurrence(field.fieldName),
+  );
 }
 
-function recordResultField(field: FormlessUiField): FormlessUiRecordResultFieldContract {
-  return {
-    field,
-    id: `${resultId}:${taskId}:field:${field.fieldName}`,
-    kind: "recordResultField",
-  };
+function recordResultFieldOccurrence(fieldName: string) {
+  return { ownerId: `${resultId}:${taskId}`, placementId: fieldName };
 }
 
 function initialCompleteTaskControl(): FormlessUiOperationControlContract {

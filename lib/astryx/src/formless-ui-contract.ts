@@ -56,6 +56,7 @@ export type FormlessUiFieldAccess =
 export type FormlessUiFieldCommitPolicy = FieldCommitPolicy | "submit";
 
 export type FormlessUiFieldIdentity = {
+  fieldId: string;
   fieldName: string;
   fieldRef?: FieldRef;
   inputName?: string;
@@ -851,6 +852,11 @@ export type FormlessUiFieldIntent =
 
 export type FormlessUiFieldIntentHandler = (intent: FormlessUiFieldIntent) => Promise<void> | void;
 
+export type FormlessUiCreateFieldIntentHandler = (
+  fieldId: string,
+  intent: FormlessUiFieldIntent,
+) => Promise<void> | void;
+
 export type FormlessUiOperationControlContract = {
   confirmation?: FormlessUiOperationDestructiveConfirmationContract;
   feedback?: FormlessUiOperationFeedbackEventContract;
@@ -1003,12 +1009,6 @@ export type FormlessUiRecordResultSelectedRecordContract = {
   kind: "recordResultRecord";
 };
 
-export type FormlessUiRecordResultFieldContract = {
-  field: FormlessUiField;
-  id: string;
-  kind: "recordResultField";
-};
-
 export type FormlessUiRecordResultOperationActionContract = {
   control: FormlessUiOperationControlContract;
   kind: "operationAction";
@@ -1074,7 +1074,7 @@ export type FormlessUiRecordResultContract = {
   density: FormlessUiRecordResultDensity;
   editing: FormlessUiRecordResultEditingAvailability;
   emptyState?: FormlessUiRecordResultEmptyStateContract;
-  fields: readonly FormlessUiRecordResultFieldContract[];
+  fields: readonly FormlessUiField[];
   id: string;
   kind: "recordResult";
   selectedRecord?: FormlessUiRecordResultSelectedRecordContract;
@@ -1377,11 +1377,6 @@ export type FormlessUiItemDetailContract = {
   kind: "itemDetail";
   fields: readonly FormlessUiField[];
   operationControls?: readonly FormlessUiOperationControlContract[];
-};
-
-export type FormlessUiActionFormContract = {
-  kind: "actionForm";
-  fields: readonly FormlessUiOperationInputField[];
 };
 
 export type FormlessUiWorkspaceItemAvailability =
@@ -1910,14 +1905,24 @@ export type FormlessUiContractReference =
   | FormlessUiWorkspaceManifestReference
   | FormlessUiWorkspaceSectionShellReference;
 
-export type FormlessUiShellCreateIntent = {
+type FormlessUiShellCreateIntentScope = {
   destinationId?: string;
-  intent: FormlessUiCreateIntent | FormlessUiFieldIntent;
   sectionId: string;
   shellId: string;
   surfaceId: string;
   type: "shellCreate";
 };
+
+export type FormlessUiShellCreateIntent = FormlessUiShellCreateIntentScope &
+  (
+    | {
+        intent: FormlessUiCreateIntent;
+      }
+    | {
+        fieldId: string;
+        intent: FormlessUiFieldIntent;
+      }
+  );
 
 export type FormlessUiShellResetIntent = {
   controlId: string;

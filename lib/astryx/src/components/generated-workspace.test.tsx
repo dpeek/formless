@@ -155,13 +155,21 @@ describe("Generated Workspace prototype layout", () => {
     );
     const externalAction = section.actions[0];
     const moveDown = item.ordering?.actions.find((action) => action.direction === "down");
-    if (!title || !createAction || !operationAction || !externalAction || !moveDown) {
+    const createField = createAction?.surface.dialog.form.fieldSet.fields[0];
+    if (
+      !title ||
+      !createAction ||
+      !createField ||
+      !operationAction ||
+      !externalAction ||
+      !moveDown
+    ) {
       throw new Error("Missing interactive task workspace fixtures.");
     }
 
     fixtureHost.host.dispatch({
       ...scope(section),
-      fieldId: title.fieldName,
+      fieldId: title.fieldId,
       intent: { fieldName: "title", type: "recordEditorDraftChange", value: "Ship release" },
       recordId: item.id,
       resultId: list.id,
@@ -181,6 +189,23 @@ describe("Generated Workspace prototype layout", () => {
     });
     const opened = fixtureHost.getWorkspace();
     expect(requiredCreateSurface(opened).dialog.open).toBe(true);
+
+    fixtureHost.host.dispatch({
+      ...scope(section),
+      fieldId: createField.fieldId,
+      intent: {
+        fieldName: createField.fieldName,
+        fieldValue: { kind: "input", value: "Created task" },
+        type: "createDraftChange",
+      },
+      surfaceId: createAction.surface.id,
+      type: "workspaceField",
+    });
+    expect(
+      requiredCreateSurface(fixtureHost.getWorkspace()).dialog.form.fieldSet.fields.find(
+        (field) => field.fieldId === createField.fieldId,
+      ),
+    ).toMatchObject({ value: "Created task" });
 
     fixtureHost.host.dispatch({
       ...scope(section),
@@ -222,7 +247,7 @@ describe("Generated Workspace prototype layout", () => {
     const fixtureHost = createFormlessGeneratedWorkspaceFixtureHost(crm);
     const section = crm.sections[1]!;
     const result = requiredRecordResult(requiredOrdinary(section.collection).result);
-    const title = result.fields.find((field) => field.field.fieldName === "title");
+    const title = result.fields.find((field) => field.fieldName === "title");
     const deletion = result.actions.secondary.find((action) => action.role === "delete");
     const recordId = result.selectedRecord?.id;
     if (!title || !deletion || !recordId) {
@@ -232,7 +257,7 @@ describe("Generated Workspace prototype layout", () => {
     fixtureHost.host.dispatch({
       ...scope(section),
       intent: {
-        fieldId: title.id,
+        fieldId: title.fieldId,
         intent: {
           fieldName: "title",
           type: "recordEditorDraftChange",
@@ -249,7 +274,7 @@ describe("Generated Workspace prototype layout", () => {
     const editedResult = requiredRecordResult(
       requiredOrdinary(edited.sections[1]!.collection).result,
     );
-    expect(recordDraft(editedResult.fields.find((field) => field.id === title.id)?.field)).toBe(
+    expect(recordDraft(editedResult.fields.find((field) => field.fieldId === title.fieldId))).toBe(
       "Sam Rivera updated",
     );
 
@@ -282,7 +307,7 @@ describe("Generated Workspace prototype layout", () => {
     const company = crm.sections[0]!;
     const companyPresentation = requiredOrdinary(company.collection);
     const contextResult = requiredRecordResult(companyPresentation.contextDetail!);
-    const title = contextResult.fields.find((field) => field.field.fieldName === "title");
+    const title = contextResult.fields.find((field) => field.fieldName === "title");
     const recordId = contextResult.selectedRecord?.id;
     const companySectionReference = requiredReference(
       publication.nodes.map(({ reference }) => reference),
@@ -311,7 +336,7 @@ describe("Generated Workspace prototype layout", () => {
     fixtureHost.host.dispatch({
       ...scope(company),
       intent: {
-        fieldId: title.id,
+        fieldId: title.fieldId,
         intent: {
           fieldName: "title",
           type: "recordEditorDraftChange",

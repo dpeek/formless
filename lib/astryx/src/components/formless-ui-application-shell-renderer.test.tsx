@@ -390,11 +390,14 @@ vi.mock("./create-surfaces.tsx", () => ({
     onIntent,
     surface,
   }: {
-    onFieldIntent: (intent: {
-      fieldName: string;
-      fieldValue: { kind: "input"; value: string };
-      type: "createDraftChange";
-    }) => void;
+    onFieldIntent: (
+      fieldId: string,
+      intent: {
+        fieldName: string;
+        fieldValue: { kind: "input"; value: string };
+        type: "createDraftChange";
+      },
+    ) => void;
     onIntent: (intent: { open: boolean; surfaceId: string; type: "createOpenChange" }) => void;
     surface: FormlessUiCreateSurfaceContract;
   }) =>
@@ -422,7 +425,7 @@ vi.mock("./create-surfaces.tsx", () => ({
         {
           "data-action": "change-create-field",
           onClick: () =>
-            onFieldIntent({
+            onFieldIntent("field:create:page:label", {
               fieldName: "label",
               fieldValue: { kind: "input", value: "New page" },
               type: "createDraftChange",
@@ -591,6 +594,7 @@ describe("Astryx application shell renderer", () => {
         type: "shellCreate",
       },
       {
+        fieldId: "field:create:page:label",
         intent: {
           fieldName: "label",
           fieldValue: { kind: "input", value: "New page" },

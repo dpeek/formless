@@ -5,10 +5,7 @@ import type {
   FormlessUiRecordResultContract,
 } from "@dpeek/formless-astryx/contract";
 import type { GeneratedOperationControlBinding } from "../../client/views.ts";
-import {
-  generatedRecordResultFieldId,
-  projectGeneratedRecordResultOperationAction,
-} from "./formless-ui-record-result-projection.ts";
+import { projectGeneratedRecordResultOperationAction } from "./formless-ui-record-result-projection.ts";
 import { projectGeneratedOperationFormlessUiControl } from "./formless-ui-operation-projection.ts";
 import { projectGeneratedRecordFormlessUiField } from "./formless-ui-projection.ts";
 import {
@@ -101,18 +98,18 @@ describe("legacy record-result renderer", () => {
     expect(calls.slice(0, 7)).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          fieldId: "tasks:detail:task-1:field:title",
+          fieldId: requiredField(recordResult, "title").fieldId,
           intent: { fieldName: "title", type: "recordValueCommit", value: "Next title" },
           recordId: "task-1",
           resultId: "tasks:detail",
           type: "recordResultFieldIntent",
         }),
         expect.objectContaining({
-          fieldId: "tasks:detail:task-1:field:icon",
+          fieldId: requiredField(recordResult, "icon").fieldId,
           intent: { fieldName: "icon", type: "iconDialogSave" },
         }),
         expect.objectContaining({
-          fieldId: "tasks:detail:task-1:field:hero",
+          fieldId: requiredField(recordResult, "hero").fieldId,
           intent: { assetId: "media-2", fieldName: "hero", type: "mediaAssetSelect" },
         }),
       ]),
@@ -160,6 +157,13 @@ describe("legacy record-result renderer", () => {
   });
 });
 
+function recordResultOccurrence(placementId: string) {
+  return {
+    owner: { kind: "recordResult" as const, recordId: "task-1", resultId: "tasks:detail" },
+    placementId,
+  };
+}
+
 function readyRecordResult({
   editingEnabled = true,
 }: { editingEnabled?: boolean } = {}): FormlessUiRecordResultContract {
@@ -175,6 +179,7 @@ function readyRecordResult({
       fieldName: "title",
       label: "Title",
     },
+    occurrence: recordResultOccurrence("title"),
     recordId: "task-1",
     recordValue: "Review launch",
     showLabel: true,
@@ -190,6 +195,7 @@ function readyRecordResult({
       label: "Icon",
     },
     iconDialogOpen: true,
+    occurrence: recordResultOccurrence("icon"),
     recordId: "task-1",
     recordValue: "",
     showLabel: true,
@@ -205,6 +211,7 @@ function readyRecordResult({
       label: "Hero",
     },
     mediaAssetOptions: [{ href: "/media/one", id: "media-1", label: "Hero image" }],
+    occurrence: recordResultOccurrence("hero"),
     recordId: "task-1",
     recordValue: "media-1",
     showLabel: true,
@@ -258,11 +265,7 @@ function readyRecordResult({
     editing: editingEnabled
       ? { enabled: true }
       : { disabledReason: "Task updates are unavailable.", enabled: false },
-    fields: [title, icon, hero].map((field) => ({
-      field,
-      id: generatedRecordResultFieldId("tasks:detail", "task-1", field.fieldName),
-      kind: "recordResultField" as const,
-    })),
+    fields: [title, icon, hero],
     id: "tasks:detail",
     kind: "recordResult",
     selectedRecord: {
@@ -317,7 +320,7 @@ function stateRecordResult(state: "empty" | "unavailable"): FormlessUiRecordResu
 }
 
 function requiredField(recordResult: FormlessUiRecordResultContract, fieldName: string) {
-  const field = recordResult.fields.find((candidate) => candidate.field.fieldName === fieldName);
+  const field = recordResult.fields.find((candidate) => candidate.fieldName === fieldName);
 
   if (!field) {
     throw new Error(`Missing field ${fieldName}.`);

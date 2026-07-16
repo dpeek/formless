@@ -7,14 +7,12 @@ import type {
   FormlessUiContextResultReference,
   FormlessUiCreateSurfaceContract,
   FormlessUiCreateField,
-  FormlessUiField,
   FormlessUiListContract,
   FormlessUiMainResultReference,
   FormlessUiOperationControlContract,
   FormlessUiOperationPresentationIntent,
   FormlessUiRecordResultContract,
   FormlessUiTableActionGroupContract,
-  FormlessUiTableContract,
   FormlessUiWorkspaceCollectionActionGroupContract,
   FormlessUiWorkspaceCollectionContract,
   FormlessUiWorkspaceCollectionPresentationContract,
@@ -374,7 +372,7 @@ function applyCollectionIntent(
               fieldSet: {
                 ...surface.dialog.form.fieldSet,
                 fields: surface.dialog.form.fieldSet.fields.map((field) =>
-                  field.fieldName === intent.fieldId
+                  field.fieldId === intent.fieldId
                     ? (applyScenarioFieldIntent(field, intent.intent) as FormlessUiCreateField)
                     : field,
                 ),
@@ -388,7 +386,7 @@ function applyCollectionIntent(
     return {
       ...collection,
       presentation: mapWorkspaceResults(collection.presentation, intent.resultId, (result) =>
-        applyWorkspaceResultFieldIntent(result, intent.recordId, intent.intent),
+        applyWorkspaceResultFieldIntent(result, intent.fieldId, intent.recordId, intent.intent),
       ),
     };
   }
@@ -564,42 +562,23 @@ function mapWorkspaceResults(
 
 function applyWorkspaceResultFieldIntent(
   result: FormlessUiWorkspaceResultContract,
+  fieldId: string,
   recordId: string | undefined,
   intent: Extract<FormlessUiWorkspaceIntent, { type: "workspaceField" }>["intent"],
 ): FormlessUiWorkspaceResultContract {
   if (result.kind === "list") {
     const sourceField = result.items
       .find((item) => item.id === recordId)
-      ?.fields.find((field) => field.fieldName === workspaceFieldName(intent));
+      ?.fields.find((field) => field.fieldId === fieldId);
 
     return sourceField ? applyListFieldIntent(result, recordId ?? "", sourceField, intent) : result;
   }
 
   if (result.kind === "table") {
-    const sourceField = findTableField(result, recordId, workspaceFieldName(intent));
-    return sourceField ? applyTableFieldIntent(result, sourceField, intent) : result;
+    return applyTableFieldIntent(result, fieldId, intent);
   }
 
   return result;
-}
-
-function workspaceFieldName(
-  intent: Extract<FormlessUiWorkspaceIntent, { type: "workspaceField" }>["intent"],
-) {
-  return "fieldName" in intent ? intent.fieldName : "inputName" in intent ? intent.inputName : "";
-}
-
-function findTableField(
-  table: FormlessUiTableContract,
-  recordId: string | undefined,
-  fieldName: string,
-): FormlessUiField | undefined {
-  const row = table.rows.find((candidate) => candidate.id === recordId);
-  const content = row?.cells
-    .flatMap((cell) => cell.contents)
-    .find((candidate) => candidate.kind === "field" && candidate.field.fieldName === fieldName);
-
-  return content?.kind === "field" ? content.field : undefined;
 }
 
 function mapCollectionOperation(
@@ -720,9 +699,7 @@ function applyRecordResultIntent(
     return {
       ...result,
       fields: result.fields.map((field) =>
-        field.id === intent.fieldId
-          ? { ...field, field: applyScenarioFieldIntent(field.field, intent.intent) }
-          : field,
+        field.fieldId === intent.fieldId ? applyScenarioFieldIntent(field, intent.intent) : field,
       ),
     };
   }

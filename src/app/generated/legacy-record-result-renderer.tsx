@@ -1,9 +1,9 @@
 import type {
   FormlessUiFieldIntent,
+  FormlessUiField,
   FormlessUiOperationPresentationIntent,
   FormlessUiRecordResultActionContract,
   FormlessUiRecordResultContract,
-  FormlessUiRecordResultFieldContract,
   FormlessUiRecordResultIntentHandler,
 } from "@dpeek/formless-astryx/contract";
 import {
@@ -59,7 +59,7 @@ export function LegacyRecordResultRenderer({
             {recordResult.fields.map((field) => (
               <LegacyRecordResultField
                 field={field}
-                key={field.id}
+                key={field.fieldId}
                 onIntent={onIntent}
                 recordId={recordId}
                 recordResult={recordResult}
@@ -133,32 +133,32 @@ function LegacyRecordResultField({
   recordId,
   recordResult,
 }: {
-  field: FormlessUiRecordResultFieldContract;
+  field: FormlessUiField;
   onIntent: FormlessUiRecordResultIntentHandler;
   recordId: string;
   recordResult: FormlessUiRecordResultContract;
 }) {
-  if (field.field.mode === "display") {
+  if (field.mode === "display") {
     return (
-      <div className="grid min-w-0 gap-1" data-formless-record-result-field={field.id}>
-        {field.field.labelVisibility === "visible" ? (
-          <span className="text-sm font-medium text-slate-700">{field.field.label}</span>
+      <div className="grid min-w-0 gap-1" data-formless-record-result-field={field.fieldId}>
+        {field.labelVisibility === "visible" ? (
+          <span className="text-sm font-medium text-slate-700">{field.label}</span>
         ) : null}
         <div className="flex min-w-0 items-center gap-1 text-sm text-slate-900">
-          <LegacyDisplayFieldAdapter field={field.field} />
+          <LegacyDisplayFieldAdapter field={field} />
         </div>
       </div>
     );
   }
 
-  if (field.field.surface !== "record") {
+  if (field.surface !== "record") {
     return null;
   }
 
   return (
-    <div data-formless-record-result-field={field.id}>
+    <div data-formless-record-result-field={field.fieldId}>
       <LegacyRecordFieldAdapter
-        field={field.field}
+        field={field}
         onIntent={(intent) =>
           dispatchLegacyRecordResultFieldIntent(onIntent, recordResult, recordId, field, intent)
         }
@@ -206,11 +206,11 @@ export function dispatchLegacyRecordResultFieldIntent(
   handler: FormlessUiRecordResultIntentHandler,
   recordResult: FormlessUiRecordResultContract,
   recordId: string,
-  field: FormlessUiRecordResultFieldContract,
+  field: FormlessUiField,
   intent: FormlessUiFieldIntent,
 ) {
   return handler({
-    fieldId: field.id,
+    fieldId: field.fieldId,
     intent,
     recordId,
     resultId: recordResult.id,

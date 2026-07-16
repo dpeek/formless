@@ -39,7 +39,6 @@ import {
 } from "@astryxdesign/core/theme/tokens.stylex";
 import type {
   FormlessUiButtonContract,
-  FormlessUiField,
   FormlessUiFieldIntent,
   FormlessUiOperationButtonContract,
   FormlessUiOperationPresentationIntent,
@@ -68,7 +67,8 @@ import {
 
 export type AstryxTableFieldIntentHandler = (
   contextId: string,
-  field: FormlessUiField,
+  fieldId: string,
+  recordId: string | undefined,
   intent: FormlessUiFieldIntent,
 ) => Promise<void> | void;
 
@@ -332,7 +332,9 @@ function AstryxTableCellContent({
     return (
       <FormlessUiFieldRenderer
         field={content.field}
-        onIntent={(intent) => onFieldIntent(contextId, content.field, intent)}
+        onIntent={(intent) =>
+          onFieldIntent(contextId, content.field.fieldId, content.field.recordId, intent)
+        }
       />
     );
   }
@@ -638,8 +640,10 @@ function AstryxTableEditDialog({
                     {target.fieldSet.fields.map((field) => (
                       <FormlessUiFieldRenderer
                         field={field}
-                        key={`${field.recordId ?? "record"}:${field.fieldName}`}
-                        onIntent={(intent) => onFieldIntent(target.fieldSet.id, field, intent)}
+                        key={field.fieldId}
+                        onIntent={(intent) =>
+                          onFieldIntent(target.fieldSet.id, field.fieldId, field.recordId, intent)
+                        }
                       />
                     ))}
                   </FormLayout>
@@ -909,7 +913,7 @@ function astryxTableActionId(action: FormlessUiTableActionContract) {
 
 function astryxTableContentKey(content: FormlessUiTableCellContentContract, index: number) {
   if (content.kind === "field") {
-    return `${content.field.recordId ?? "record"}:${content.field.fieldName}:${index}`;
+    return content.field.fieldId;
   }
 
   if (content.kind === "actionGroup") {

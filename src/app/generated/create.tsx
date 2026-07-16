@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import type {
   FormlessUiButtonContent,
+  FormlessUiCreateFieldIntentHandler,
   FormlessUiCreateIntent,
   FormlessUiCreateSurfaceContract,
-  FormlessUiFieldIntent,
 } from "@dpeek/formless-astryx/contract";
 import type { EntitySchema, QueryEvaluationContext } from "@dpeek/formless-schema";
 import type { RecordValues } from "@dpeek/formless-storage";
@@ -33,6 +33,10 @@ import {
 } from "./create-field-authoring.ts";
 import { adaptGeneratedCreateFormlessUiDraftChange } from "./formless-ui-intents.ts";
 import { projectGeneratedCreateFormlessUiSurface } from "./formless-ui-projection.ts";
+import {
+  indexGeneratedCreateSurfaceFields,
+  resolveGeneratedCreateFieldIntent,
+} from "./generated-create-field-index.ts";
 import {
   LegacyGeneratedCreateForm,
   LegacyGeneratedCreateSurface,
@@ -87,7 +91,7 @@ export type GeneratedCreateRuntimeOptions = {
 
 export type GeneratedCreateRuntime = {
   onCreateIntent: (intent: FormlessUiCreateIntent) => Promise<void> | void;
-  onFieldIntent: (intent: FormlessUiFieldIntent) => void;
+  onFieldIntent: FormlessUiCreateFieldIntentHandler;
   surface: FormlessUiCreateSurfaceContract;
 };
 
@@ -348,6 +352,7 @@ export function useGeneratedCreateRuntime({
     trigger,
     triggerLabel: operation.label,
   });
+  const fieldsById = indexGeneratedCreateSurfaceFields(surface);
 
   useEffect(() => {
     setDraftSessionState(initialCreateState(operation));
@@ -360,8 +365,14 @@ export function useGeneratedCreateRuntime({
     }
   }, [closeOnSuccess, open, operation.defaults, operation.fields, operation.union]);
 
-  function onFieldIntent(intent: FormlessUiFieldIntent) {
-    if (intent.type !== "createDraftChange") {
+  function onFieldIntent(
+    fieldId: string,
+    intent: Parameters<FormlessUiCreateFieldIntentHandler>[1],
+  ) {
+    if (
+      intent.type !== "createDraftChange" ||
+      resolveGeneratedCreateFieldIntent(fieldsById, fieldId, intent) === undefined
+    ) {
       return;
     }
 

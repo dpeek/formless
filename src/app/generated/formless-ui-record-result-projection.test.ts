@@ -18,6 +18,7 @@ import { nextGeneratedUpdateDraftSessionState } from "./record-field-authoring.t
 import {
   createGeneratedRecordResultFieldAuthoringState,
   rebaseGeneratedRecordResultRecordState,
+  resolveGeneratedRecordResultFieldIntent,
   selectGeneratedRecordResultFoundation,
   selectGeneratedRecordResultRuntimeForIntent,
 } from "./generated-record-result-foundation.ts";
@@ -84,7 +85,7 @@ describe("generated Formless UI record-result projection", () => {
       schema: mediaSchema,
     });
     const fields = Object.fromEntries(
-      projected.recordResult.fields.map(({ field }) => [field.fieldName, field]),
+      projected.recordResult.fields.map((field) => [field.fieldName, field]),
     );
 
     expect(projected.recordResult).toMatchObject({
@@ -131,7 +132,7 @@ describe("generated Formless UI record-result projection", () => {
         },
       ],
     });
-    expect(projected.recordResult.fields.map(({ field }) => field.fieldName)).toEqual([
+    expect(projected.recordResult.fields.map((field) => field.fieldName)).toEqual([
       "type",
       "title",
       "body",
@@ -239,7 +240,7 @@ describe("generated Formless UI record-result projection", () => {
     });
 
     expect(projected.recordResult.selectedRecord?.id).toBe("article-1");
-    expect(projected.recordResult.fields.map(({ field }) => field.fieldName)).toEqual([
+    expect(projected.recordResult.fields.map((field) => field.fieldName)).toEqual([
       "kind",
       "title",
       "url",
@@ -294,7 +295,7 @@ describe("generated Formless UI record-result projection", () => {
       selectedRecordId: second.id,
     });
     const fields = Object.fromEntries(
-      projected.recordResult.fields.map(({ field }) => [field.fieldName, field]),
+      projected.recordResult.fields.map((field) => [field.fieldName, field]),
     );
 
     expect(state).toMatchObject({
@@ -334,7 +335,7 @@ describe("generated Formless UI record-result projection", () => {
       result,
     });
     const fields = Object.fromEntries(
-      projected.recordResult.fields.map(({ field }) => [field.fieldName, field]),
+      projected.recordResult.fields.map((field) => [field.fieldName, field]),
     );
 
     expect(projected.recordResult.editing).toEqual({
@@ -374,16 +375,37 @@ describe("generated Formless UI record-result projection", () => {
 
     expect(
       selectGeneratedRecordResultRuntimeForIntent(projected.runtimePlan, {
-        fieldId: body.id,
+        fieldId: body.fieldId,
         intent: { fieldName: "body", type: "recordEditorDraftChange", value: "Next" },
         recordId: record.id,
         resultId: "blocks:featured",
         type: "recordResultFieldIntent",
       }),
-    ).toMatchObject({ fieldConfig: { fieldName: "body" }, kind: "field" });
+    ).toMatchObject({
+      field: { fieldId: body.fieldId },
+      fieldConfig: { fieldName: "body" },
+      kind: "field",
+      resultId: "blocks:featured",
+    });
+    for (const mismatch of [
+      { fieldId: `${body.fieldId}:stale` },
+      { intent: { fieldName: "title", type: "recordDraftRevert" as const } },
+      { recordId: "other-record" },
+      { resultId: "blocks:other" },
+    ]) {
+      expect(
+        resolveGeneratedRecordResultFieldIntent(projected.runtimePlan, {
+          fieldId: body.fieldId,
+          intent: { fieldName: "body", type: "recordDraftRevert" },
+          recordId: record.id,
+          resultId: "blocks:featured",
+          ...mismatch,
+        }),
+      ).toBeUndefined();
+    }
     expect(
       selectGeneratedRecordResultRuntimeForIntent(projected.runtimePlan, {
-        fieldId: body.id,
+        fieldId: body.fieldId,
         intent: {
           fieldName: "body",
           operationName: "archive",
@@ -399,7 +421,7 @@ describe("generated Formless UI record-result projection", () => {
     ).toBeUndefined();
     expect(
       selectGeneratedRecordResultRuntimeForIntent(projected.runtimePlan, {
-        fieldId: body.id,
+        fieldId: body.fieldId,
         intent: { fieldName: "title", type: "recordDraftRevert" },
         recordId: record.id,
         resultId: "blocks:featured",
@@ -478,13 +500,34 @@ describe("generated Formless UI record-result projection", () => {
     });
     expect(unavailable.runtimePlan.operations).toEqual([]);
   });
+
+  it("rejects duplicate projected record-result field occurrences", () => {
+    const result = completeRecordResult();
+    const record = blockRecord("block-1", {
+      status: "draft",
+      title: "Launch post",
+      type: "post",
+    });
+    const duplicate = result.recordFields[0]!;
+
+    expect(() =>
+      selectGeneratedRecordResultFoundation({
+        entity: blockEntity,
+        entityName: "block",
+        id: "blocks:duplicate",
+        recordIds: [record.id],
+        recordsById: { [record.id]: record },
+        result: { ...result, recordFields: [duplicate, duplicate] },
+      }),
+    ).toThrow('Generated record result "blocks:duplicate" contains duplicate field occurrence');
+  });
 });
 
 function requiredProjectedField(
   foundation: ReturnType<typeof selectGeneratedRecordResultFoundation>,
   fieldName: string,
 ) {
-  const field = foundation.recordResult.fields.find(({ field }) => field.fieldName === fieldName);
+  const field = foundation.recordResult.fields.find((field) => field.fieldName === fieldName);
 
   if (!field) {
     throw new Error(`Missing projected field ${fieldName}.`);

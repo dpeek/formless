@@ -3,8 +3,6 @@ import { Tab, TabList, Tabs } from "@dpeek/formless-ui/tabs";
 import { memo, type ReactNode } from "react";
 import type {
   FormlessUiContextResultReference,
-  FormlessUiField,
-  FormlessUiFieldIntent,
   FormlessUiListOperationActionContract,
   FormlessUiMainResultReference,
   FormlessUiOperationPresentationIntent,
@@ -409,9 +407,9 @@ function LegacyWorkspaceContextCreate({
           projectGeneratedWorkspaceCreateIntent(scope, action.surface.id, intent, context.id),
         )
       }
-      onFieldIntent={(intent) =>
+      onFieldIntent={(fieldId, intent) =>
         onIntent(
-          projectGeneratedWorkspaceFieldIntent(scope, workspaceCreateFieldId(intent), intent, {
+          projectGeneratedWorkspaceFieldIntent(scope, fieldId, intent, {
             contextId: context.id,
             surfaceId: action.surface.id,
           }),
@@ -498,9 +496,9 @@ function LegacyWorkspaceCollectionAction({
         onCreateIntent={(intent) =>
           onIntent(projectGeneratedWorkspaceCreateIntent(scope, action.surface.id, intent))
         }
-        onFieldIntent={(intent) =>
+        onFieldIntent={(fieldId, intent) =>
           onIntent(
-            projectGeneratedWorkspaceFieldIntent(scope, workspaceCreateFieldId(intent), intent, {
+            projectGeneratedWorkspaceFieldIntent(scope, fieldId, intent, {
               surfaceId: action.surface.id,
             }),
           )
@@ -631,12 +629,10 @@ function LegacyWorkspaceResult({
         list={result}
         onFieldIntent={(itemId, field, intent) =>
           onIntent(
-            projectGeneratedWorkspaceFieldIntent(
-              scope,
-              workspaceListFieldId(result, itemId, field),
-              intent,
-              { recordId: field.recordId ?? itemId, resultId: result.id },
-            ),
+            projectGeneratedWorkspaceFieldIntent(scope, field.fieldId, intent, {
+              recordId: field.recordId ?? itemId,
+              resultId: result.id,
+            }),
           )
         }
         onListIntent={(intent) =>
@@ -657,10 +653,11 @@ function LegacyWorkspaceResult({
   if (result.kind === "table") {
     return (
       <LegacyTableRenderer
-        onFieldIntent={(contextId, field, intent) =>
+        onFieldIntent={(contextId, fieldId, recordId, intent) =>
           onIntent(
-            projectGeneratedWorkspaceFieldIntent(scope, contextId, intent, {
-              ...(field.recordId === undefined ? {} : { recordId: field.recordId }),
+            projectGeneratedWorkspaceFieldIntent(scope, fieldId, intent, {
+              contextId,
+              ...(recordId === undefined ? {} : { recordId }),
               resultId: result.id,
             }),
           )
@@ -707,26 +704,8 @@ function LegacyWorkspaceRecordResult({
   );
 }
 
-function workspaceCreateFieldId(intent: FormlessUiFieldIntent): string {
-  return "fieldName" in intent
-    ? intent.fieldName
-    : intent.type === "operationDraftChange"
-      ? intent.inputName
-      : "field";
-}
-
 function workspaceCollectionActionId(action: FormlessUiWorkspaceCollectionActionContract) {
   return action.kind === "createAction" ? action.surface.id : action.control.id;
-}
-
-function workspaceListFieldId(
-  list: Extract<FormlessUiWorkspaceResultContract, { kind: "list" }>,
-  itemId: string,
-  field: FormlessUiField,
-) {
-  void list;
-  void itemId;
-  return field.fieldName;
 }
 
 function workspaceListActionRecordId(

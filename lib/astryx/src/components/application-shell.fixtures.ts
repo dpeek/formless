@@ -455,7 +455,7 @@ function createSurface(appKey: string, label: string): FormlessUiCreateSurfaceCo
         errors: [],
         fieldSet: {
           disabled: false,
-          fields: [createTitleField(label)],
+          fields: [createTitleField(id, label)],
           id: `${id}:fields`,
           kind: "fieldSet",
           label: `${label} details`,
@@ -482,7 +482,7 @@ function createSurface(appKey: string, label: string): FormlessUiCreateSurfaceCo
   };
 }
 
-function createTitleField(label: string): FormlessUiCreateField {
+function createTitleField(surfaceId: string, label: string): FormlessUiCreateField {
   const field = {
     label: `${label} name`,
     required: true,
@@ -509,6 +509,7 @@ function createTitleField(label: string): FormlessUiCreateField {
     draftInput: { kind: "input", value: "" },
     editor: "text",
     field,
+    fieldId: `fixture-field:${encodeURIComponent(surfaceId)}:title`,
     fieldName: "title",
     label: field.label,
     labelVisibility: "visible",

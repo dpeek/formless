@@ -259,6 +259,7 @@ describe("generated application shell host and intents", () => {
     const createSection = required(
       projection.sections.find((section) => section.createSurface !== undefined),
     );
+    const createField = required(createSection.createSurface?.dialog.form.fieldSet.fields[0]);
     const settingsSection = required(
       projection.sections.find((section) => section.settings?.reset !== undefined),
     );
@@ -281,6 +282,7 @@ describe("generated application shell host and intents", () => {
     ).toMatchObject({ kind: "rootSelection" });
     expect(
       resolveGeneratedApplicationShellIntent(projection, {
+        fieldId: createField.fieldId,
         intent: {
           fieldName: "label",
           fieldValue: { kind: "input", value: "New page" },
@@ -292,6 +294,34 @@ describe("generated application shell host and intents", () => {
         type: "shellCreate",
       }),
     ).toMatchObject({ kind: "create" });
+    expect(
+      resolveGeneratedApplicationShellIntent(projection, {
+        fieldId: `${createField.fieldId}:stale`,
+        intent: {
+          fieldName: createField.fieldName,
+          fieldValue: { kind: "input", value: "Stale page" },
+          type: "createDraftChange",
+        },
+        sectionId: createSection.id,
+        shellId: projection.manifest.id,
+        surfaceId: required(createSection.createSurface).id,
+        type: "shellCreate",
+      }),
+    ).toEqual({ kind: "ignored" });
+    expect(
+      resolveGeneratedApplicationShellIntent(projection, {
+        fieldId: createField.fieldId,
+        intent: {
+          fieldName: `${createField.fieldName}-other`,
+          fieldValue: { kind: "input", value: "Wrong field" },
+          type: "createDraftChange",
+        },
+        sectionId: createSection.id,
+        shellId: projection.manifest.id,
+        surfaceId: required(createSection.createSurface).id,
+        type: "shellCreate",
+      }),
+    ).toEqual({ kind: "ignored" });
     expect(
       resolveGeneratedApplicationShellIntent(projection, {
         controlId: required(settingsSection.settings?.reset).id,

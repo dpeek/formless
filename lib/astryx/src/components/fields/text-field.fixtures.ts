@@ -186,6 +186,10 @@ function projectCreateTextField(
     control,
     draftInput: draftInput(value),
     labelVisibility: "visible",
+    occurrence: {
+      ownerId: `${kind}-create-${facets.requiredness}-${facets.value}`,
+      placementId: textFieldName(kind),
+    },
     recordId: `${kind}-create-${facets.requiredness}-${facets.value}`,
     value,
   });
@@ -222,6 +226,10 @@ function projectOperationTextField(
       ...(format === "plain" ? {} : { format }),
     },
     labelVisibility: "visible",
+    occurrence: {
+      ownerId: `${kind}-operation-${facets.requiredness}-${format}-${facets.value}`,
+      placementId: fieldName,
+    },
     recordId: `${kind}-operation-${facets.requiredness}-${format}-${facets.value}`,
     value: value || undefined,
   });
@@ -290,6 +298,10 @@ function projectExistingTextField(
     editor: control.editor,
     control,
     labelVisibility,
+    occurrence: {
+      ownerId: `${kind}-${surface}-${facets.mode}-${facets.requiredness}-${facets.value}-${presentation}`,
+      placementId: textFieldName(kind),
+    },
     recordId: `${kind}-${surface}-${facets.mode}-${facets.requiredness}-${facets.value}-${presentation}`,
     surface,
   };

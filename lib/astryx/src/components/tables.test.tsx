@@ -96,7 +96,7 @@ describe("Tables prototype layout", () => {
   it("simulates inline and dialog field edits through canonical field intents", () => {
     const active = activeTable();
     const titleField = requiredField(active, "task-1", "title");
-    const updated = applyTableFieldIntent(active, titleField, {
+    const updated = applyTableFieldIntent(active, titleField.fieldId, {
       fieldName: "title",
       type: "recordEditorDraftChange",
       value: "Prepare launch plan",
@@ -116,8 +116,22 @@ describe("Tables prototype layout", () => {
     const dialogTitle = editAction.dialog.target.fieldSet.fields[0];
     expect(dialogTitle?.mode).toBe("editor");
     expect(dialogTitle && "drafts" in dialogTitle ? dialogTitle.drafts.draft : undefined).toBe(
-      "Prepare launch plan",
+      "Prepare launch",
     );
+    const updatedDialog = dialogTitle
+      ? applyTableFieldIntent(updated, dialogTitle.fieldId, {
+          fieldName: "title",
+          type: "recordEditorDraftChange",
+          value: "Prepare launch dialog",
+        })
+      : updated;
+    const updatedDialogAction = requiredEditAction(requiredActionGroup(updatedDialog, "task-1"));
+    expect(
+      updatedDialogAction.dialog.target.kind === "available" &&
+        "drafts" in updatedDialogAction.dialog.target.fieldSet.fields[0]!
+        ? updatedDialogAction.dialog.target.fieldSet.fields[0]!.drafts.draft
+        : undefined,
+    ).toBe("Prepare launch dialog");
   });
 
   it("simulates controlled dialogs, state-field transitions, and ordering intents", () => {
@@ -141,7 +155,7 @@ describe("Tables prototype layout", () => {
     const dialogOpen = applyTableIntent(active, editAction.openIntent);
     expect(requiredEditAction(requiredActionGroup(dialogOpen, "task-1")).dialog.open).toBe(true);
 
-    const completed = applyTableFieldIntent(active, status, {
+    const completed = applyTableFieldIntent(active, status.fieldId, {
       fieldName: status.fieldName,
       operationName: completeTransition.operationName,
       recordId: "task-1",

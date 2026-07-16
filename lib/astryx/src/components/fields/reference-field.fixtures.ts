@@ -91,6 +91,10 @@ function projectCreateReferenceField({ facets }: FieldScenarioProjectionContext)
     control: referenceControl(field),
     draftInput: required ? undefined : draftInput(value),
     labelVisibility: "visible",
+    occurrence: {
+      ownerId: `create-owner-${required ? "required" : "optional"}-${value || "unset"}`,
+      placementId: "ownerId",
+    },
     options: { referenceOptions: referenceOptions(ownerOptions) },
     reference: referenceEditorFacts(field, value, ownerOptions),
     recordId: `create-owner-${required ? "required" : "optional"}-${value || "unset"}`,
@@ -121,6 +125,10 @@ function projectExistingReferenceField(
     control: referenceControl(field),
     labelVisibility: surface === "detail" ? ("visible" as const) : ("hidden" as const),
     options,
+    occurrence: {
+      ownerId: `${surface}-owner-${facets.mode}-${required ? "required" : "optional"}-${facets.value}`,
+      placementId: "ownerId",
+    },
     recordId: `${surface}-owner-${facets.mode}-${required ? "required" : "optional"}-${facets.value}`,
     surface,
   };

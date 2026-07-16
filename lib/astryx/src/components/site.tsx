@@ -1005,7 +1005,7 @@ function ProjectedPublicOperationFormFields({
 
         return (
           <ProjectedPublicOperationField
-            key={fieldData.inputName}
+            key={fieldData.fieldId}
             field={fieldData}
             clearDraftValue={clearDraftValue}
             setDraftValue={setDraftValue}
@@ -1405,6 +1405,7 @@ function toPublicOperationFieldData(
     draftInput,
     editor: control.editor,
     field: fieldSchema,
+    fieldId: field.fieldId,
     fieldName: field.name,
     input: toPublicOperationInput(field),
     inputName: field.name,

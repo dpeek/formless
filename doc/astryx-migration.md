@@ -86,6 +86,15 @@ Runtime field projection and intent adapter modules already exist in
 `src/app/generated`. Their tests cover generated create, record, display, and
 operation field projection and intent adaptation.
 
+Every canonical field occurrence has one required projection-owned `fieldId`.
+`src/app/generated/formless-ui-projection.ts` derives production ids from typed
+owner and stable placement identity. Create, list, table, and record-result
+foundations index those occurrences, reject duplicate registration, and resolve
+field intents by the projected id plus applicable semantic field, record,
+result, surface, and draft-context identity. Renderers and adapters forward the
+projected id; `fieldName`, `inputName`, table context ids, and containing object
+ids are not field occurrence identities.
+
 Generated production surfaces still largely render directly with
 `@dpeek/formless-ui`. Create forms, create fields, record fields, record display,
 tables, collections, operation controls, state-machine controls, delete dialogs,

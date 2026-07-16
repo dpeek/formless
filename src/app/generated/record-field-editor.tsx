@@ -18,7 +18,10 @@ import type { FieldValue, RecordValues } from "@dpeek/formless-storage";
 import { GeneratedRecordFieldControl } from "./record-field-control.tsx";
 import { RecordFieldDisplay } from "./record-field-display.tsx";
 import { LegacyRecordFieldAdapter } from "./legacy-record-field-adapter.tsx";
-import { projectGeneratedRecordFormlessUiField } from "./formless-ui-projection.ts";
+import {
+  projectGeneratedRecordFormlessUiField,
+  type GeneratedFormlessUiRecordFieldOwner,
+} from "./formless-ui-projection.ts";
 import {
   fieldValueToRecordFieldEditorInputValue,
   generatedRecordFieldEditorDraftFromUpdateDraftInput,
@@ -48,6 +51,7 @@ type RecordFieldEditorProps = {
   draftInput?: GeneratedUpdateDraftFieldInput;
   entityName: string;
   fieldConfig: RecordFieldConfig;
+  fieldOwner: GeneratedFormlessUiRecordFieldOwner;
   onDraftInputChange?: (
     fieldName: string,
     draftInput: GeneratedUpdateDraftFieldInput | undefined,
@@ -87,6 +91,7 @@ export function RecordFieldEditor(props: RecordFieldEditorProps) {
 function ReadOnlyRecordFieldDisplay({
   density = "default",
   fieldConfig,
+  fieldOwner,
   recordId,
   showLabel = false,
 }: RecordFieldEditorProps) {
@@ -103,7 +108,7 @@ function ReadOnlyRecordFieldDisplay({
     >
       {showLabel ? <div className="text-xs font-medium text-slate-500">{label}</div> : null}
       <div className="flex min-h-6 items-center gap-1">
-        <RecordFieldDisplay column={fieldConfig} recordId={recordId} />
+        <RecordFieldDisplay column={fieldConfig} fieldOwner={fieldOwner} recordId={recordId} />
       </div>
     </div>
   );
@@ -114,6 +119,7 @@ function EditableRecordFieldEditor({
   draftInput,
   entityName,
   fieldConfig,
+  fieldOwner,
   onDraftInputChange,
   presentation = "default",
   recordId,
@@ -473,6 +479,10 @@ function EditableRecordFieldEditor({
       error,
       fieldConfig,
       isPending,
+      occurrence: {
+        owner: fieldOwner,
+        placementId: fieldConfig.fieldName,
+      },
       presentation,
       recordId,
       recordValue,

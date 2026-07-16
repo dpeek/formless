@@ -201,7 +201,9 @@ function LegacyApplicationShellSectionRenderer({
       {section.createSurface ? (
         <LegacyGeneratedCreateSurface
           onCreateIntent={(intent) => onIntent(legacyApplicationShellCreateIntent(section, intent))}
-          onFieldIntent={(intent) => onIntent(legacyApplicationShellCreateIntent(section, intent))}
+          onFieldIntent={(fieldId, intent) =>
+            onIntent(legacyApplicationShellCreateIntent(section, intent, fieldId))
+          }
           surface={section.createSurface}
         />
       ) : null}
@@ -427,18 +429,41 @@ function shellButtonLabel(button: FormlessUiButtonContract) {
 
 export function legacyApplicationShellCreateIntent(
   section: FormlessUiShellNavigationSectionContract,
+  intent: FormlessUiCreateIntent,
+): FormlessUiShellIntent;
+export function legacyApplicationShellCreateIntent(
+  section: FormlessUiShellNavigationSectionContract,
+  intent: FormlessUiFieldIntent,
+  fieldId: string,
+): FormlessUiShellIntent;
+export function legacyApplicationShellCreateIntent(
+  section: FormlessUiShellNavigationSectionContract,
   intent: FormlessUiCreateIntent | FormlessUiFieldIntent,
+  fieldId?: string,
 ): FormlessUiShellIntent {
   if (!section.createSurface) {
     throw new Error(`Shell section "${section.id}" has no create surface.`);
   }
 
-  return {
-    intent,
+  const scope = {
     sectionId: section.id,
     shellId: section.shellId,
     surfaceId: section.createSurface.id,
-    type: "shellCreate",
+    type: "shellCreate" as const,
+  };
+
+  if ("surfaceId" in intent) {
+    return { ...scope, intent };
+  }
+
+  if (fieldId === undefined) {
+    throw new Error("Shell create field intents require a projected field occurrence id.");
+  }
+
+  return {
+    ...scope,
+    fieldId,
+    intent,
   };
 }
 

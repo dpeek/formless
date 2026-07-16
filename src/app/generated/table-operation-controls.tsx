@@ -563,6 +563,7 @@ function RecordEditDialog({
           <>
             <EditViewFields
               editView={control.editView}
+              fieldOwnerId={`table-edit-control:${control.bindingName}:${targetRecordId}`}
               targetRecord={targetRecord}
               targetRecordId={targetRecordId}
             />
@@ -597,10 +598,12 @@ function RecordEditDialog({
 
 export function EditViewFields({
   editView,
+  fieldOwnerId,
   targetRecord,
   targetRecordId,
 }: {
   editView: EditViewConfig;
+  fieldOwnerId: string;
   targetRecord: StoredRecord;
   targetRecordId: string;
 }) {
@@ -652,6 +655,7 @@ export function EditViewFields({
             draftInput={session.draft.values[fieldConfig.fieldName]}
             entityName={editView.entityName}
             fieldConfig={fieldConfig}
+            fieldOwner={{ kind: "standalone", ownerId: fieldOwnerId }}
             onDraftInputChange={updateSessionDraft}
             recordId={targetRecordId}
             showLabel={true}

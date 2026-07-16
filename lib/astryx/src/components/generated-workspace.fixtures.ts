@@ -15,7 +15,7 @@ import type {
   FormlessUiWorkspaceResultContract,
   FormlessUiWorkspaceSectionContract,
 } from "../formless-ui-contract.ts";
-import { createField, textControl } from "./fields/fixture-helpers.ts";
+import { createField, textControl, withFixtureFieldOccurrence } from "./fields/fixture-helpers.ts";
 import { createFormlessUiListFixtures } from "./lists.fixtures.ts";
 import { operationControlFixtures } from "./operation-controls.fixtures.ts";
 import { createFormlessUiRecordResultFixtures } from "./record-results.fixtures.ts";
@@ -512,6 +512,7 @@ function createSurface(id: string, title: string): FormlessUiCreateSurfaceContra
               field: createTitleSchema,
               fieldName: "title",
               labelVisibility: "visible",
+              occurrence: { ownerId: id, placementId: "title" },
               recordId: id,
               value: "",
             }),
@@ -616,10 +617,12 @@ function recordResult(
       secondaryAccessibilityLabel: `More actions for ${recordLabel}`,
     },
     density: "compact",
-    fields: result.fields.map((field) => ({
-      ...field,
-      id: `${id}:${field.id}`,
-    })),
+    fields: result.fields.map((field) =>
+      withFixtureFieldOccurrence(field, {
+        ownerId: `${id}:${result.selectedRecord?.id ?? "record"}`,
+        placementId: field.fieldName,
+      }),
+    ),
     id,
     ...(result.selectedRecord === undefined
       ? {}

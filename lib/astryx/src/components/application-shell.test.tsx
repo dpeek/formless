@@ -156,6 +156,7 @@ describe("canonical application-shell fixtures", () => {
       type: "shellCreate",
     });
     fixtureHost.host.dispatch({
+      fieldId: roots.createSurface.dialog.form.fieldSet.fields[0]!.fieldId,
       intent: {
         fieldName: "title",
         fieldValue: { kind: "input", value: "Research" },
@@ -261,6 +262,7 @@ describe("canonical application-shell fixtures", () => {
 
     notifications.clear();
     fixtureHost.host.dispatch({
+      fieldId: roots.createSurface.dialog.form.fieldSet.fields[0]!.fieldId,
       intent: {
         fieldName: "title",
         fieldValue: { kind: "input", value: "Research" },

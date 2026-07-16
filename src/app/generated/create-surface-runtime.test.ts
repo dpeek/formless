@@ -7,6 +7,11 @@ import {
   selectGeneratedCreateDraftSession,
 } from "./create-field-authoring.ts";
 import { executeGeneratedCreateSubmission } from "./create.tsx";
+import { projectGeneratedCreateFormlessUiSurface } from "./formless-ui-projection.ts";
+import {
+  indexGeneratedCreateSurfaceFields,
+  resolveGeneratedCreateFieldIntent,
+} from "./generated-create-field-index.ts";
 
 const fields = [
   {
@@ -17,6 +22,58 @@ const fields = [
 ] satisfies CreateFieldConfig[];
 
 describe("generated create surface submission", () => {
+  it("indexes exact create occurrences and rejects duplicate, stale, and mismatched identity", () => {
+    const state = initialGeneratedCreateDraftSessionState({ fields });
+    const session = selectGeneratedCreateDraftSession({ enabled: true, fields, state });
+    const surface = projectGeneratedCreateFormlessUiSurface({
+      enabled: true,
+      entityLabel: "Task",
+      id: "create:task",
+      isSubmitting: false,
+      open: true,
+      referenceOptionsByFieldName: {},
+      session,
+      state,
+      submitLabel: "Create task",
+      trigger: {
+        content: { kind: "label", label: "Create task" },
+        density: "default",
+        prominence: "primary",
+      },
+      triggerLabel: "Create task",
+    });
+    const field = surface.dialog.form.fieldSet.fields[0]!;
+    const intent = {
+      fieldName: field.fieldName,
+      fieldValue: { kind: "input", value: "Prepare launch" },
+      type: "createDraftChange",
+    } as const;
+    const index = indexGeneratedCreateSurfaceFields(surface);
+
+    expect(resolveGeneratedCreateFieldIntent(index, field.fieldId, intent)).toBe(field);
+    expect(
+      resolveGeneratedCreateFieldIntent(index, `${field.fieldId}:stale`, intent),
+    ).toBeUndefined();
+    expect(
+      resolveGeneratedCreateFieldIntent(index, field.fieldId, {
+        ...intent,
+        fieldName: "other",
+      }),
+    ).toBeUndefined();
+    expect(() =>
+      indexGeneratedCreateSurfaceFields({
+        ...surface,
+        dialog: {
+          ...surface.dialog,
+          form: {
+            ...surface.dialog.form,
+            fieldSet: { ...surface.dialog.form.fieldSet, fields: [field, { ...field }] },
+          },
+        },
+      }),
+    ).toThrow(`duplicate field occurrence "${field.fieldId}"`);
+  });
+
   it("returns the created record id and resets the controlled draft after success", async () => {
     const resetState = initialGeneratedCreateDraftSessionState({ fields });
     const state = markGeneratedCreateDraftSessionSubmitted(

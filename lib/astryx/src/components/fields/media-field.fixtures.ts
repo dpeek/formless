@@ -132,6 +132,10 @@ function projectCreateMediaField({ facets }: FieldScenarioProjectionContext) {
       uploadPatchFields: { mediaAssetFieldName: "heroMediaId" },
     },
     options: { mediaAssetOptions: mediaAssetOptions(mediaOptions) },
+    occurrence: {
+      ownerId: `media-create-${facets.requiredness}-${facets.value}`,
+      placementId: "heroMediaId",
+    },
     recordId: `media-create-${facets.requiredness}-${facets.value}`,
     value: value || undefined,
   });
@@ -155,6 +159,10 @@ function projectExistingMediaField(
     field,
     editor: "media" as const,
     labelVisibility: surface === "detail" ? ("visible" as const) : ("hidden" as const),
+    occurrence: {
+      ownerId: `media-${surface}-${facets.mode}-${facets.requiredness}-${facets.value}-${facets.runtime ?? "ready"}`,
+      placementId: "heroMediaId",
+    },
     recordId: `media-${surface}-${facets.mode}-${facets.requiredness}-${facets.value}-${facets.runtime ?? "ready"}`,
     surface,
   };

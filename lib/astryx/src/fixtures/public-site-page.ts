@@ -58,6 +58,7 @@ export type AstryxProjectedSitePublicOperationInputFieldOptionNode = {
 export type AstryxProjectedSitePublicOperationTextFormatNode = "email" | "phone";
 
 export type AstryxProjectedSitePublicOperationInputFieldNode = {
+  fieldId: string;
   name: string;
   label: string;
   required: boolean;
@@ -543,12 +544,14 @@ export const publicSitePageFixture = {
                     challenge: publicChallenge,
                     fields: [
                       {
+                        fieldId: "field:operationForm:projected_form_public_operation:name",
                         name: "name",
                         label: "Name",
                         required: true,
                         control: "text",
                       },
                       {
+                        fieldId: "field:operationForm:projected_form_public_operation:email",
                         name: "email",
                         label: "Email",
                         required: true,
@@ -556,6 +559,7 @@ export const publicSitePageFixture = {
                         format: "email",
                       },
                       {
+                        fieldId: "field:operationForm:projected_form_public_operation:phone",
                         name: "phone",
                         label: "Phone",
                         required: false,
@@ -563,30 +567,37 @@ export const publicSitePageFixture = {
                         format: "phone",
                       },
                       {
+                        fieldId: "field:operationForm:projected_form_public_operation:summary",
                         name: "summary",
                         label: "Project summary",
                         required: true,
                         control: "longText",
                       },
                       {
+                        fieldId:
+                          "field:operationForm:projected_form_public_operation:hasExistingSite",
                         name: "hasExistingSite",
                         label: "Existing public site",
                         required: false,
                         control: "boolean",
                       },
                       {
+                        fieldId:
+                          "field:operationForm:projected_form_public_operation:preferredDate",
                         name: "preferredDate",
                         label: "Preferred review date",
                         required: false,
                         control: "date",
                       },
                       {
+                        fieldId: "field:operationForm:projected_form_public_operation:budget",
                         name: "budget",
                         label: "Monthly budget",
                         required: false,
                         control: "number",
                       },
                       {
+                        fieldId: "field:operationForm:projected_form_public_operation:timeline",
                         name: "timeline",
                         label: "Launch timeline",
                         required: true,
@@ -598,6 +609,7 @@ export const publicSitePageFixture = {
                         ],
                       },
                       {
+                        fieldId: "field:operationForm:projected_form_public_operation:referral",
                         name: "referral",
                         label: "How did you hear about us?",
                         required: false,

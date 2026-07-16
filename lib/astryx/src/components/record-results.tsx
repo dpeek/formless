@@ -5,13 +5,13 @@ import { Heading } from "@astryxdesign/core/Text";
 import { VStack } from "@astryxdesign/core/VStack";
 import type {
   FormlessUiFieldIntent,
+  FormlessUiField,
   FormlessUiOperationControlContract,
   FormlessUiRecordResultActionContract,
   FormlessUiRecordResultContract,
-  FormlessUiRecordResultFieldContract,
   FormlessUiRecordResultIntent,
 } from "../formless-ui-contract.ts";
-import { applyScenarioFieldIntent } from "./fields/fixture-helpers.ts";
+import { applyScenarioFieldIntent, withFixtureFieldOccurrence } from "./fields/fixture-helpers.ts";
 import { AstryxRecordResultRenderer } from "./formless-ui-record-result-renderer.tsx";
 import { operationControlFixtures } from "./operation-controls.fixtures.ts";
 import {
@@ -102,15 +102,13 @@ function applyRecordResultFieldIntent(
   fieldId: string,
   intent: FormlessUiFieldIntent,
 ): FormlessUiRecordResultContract {
-  const sourceField = recordResult.fields.find((field) => field.id === fieldId);
+  const sourceField = recordResult.fields.find((field) => field.fieldId === fieldId);
   if (!sourceField) {
     return recordResult;
   }
 
   const fields = recordResult.fields.map((field) =>
-    field.id === fieldId
-      ? { ...field, field: applyScenarioFieldIntent(field.field, intent) }
-      : field,
+    field.fieldId === fieldId ? applyScenarioFieldIntent(field, intent) : field,
   );
   const unionKind = unionKindFromIntent(sourceField, intent);
 
@@ -158,7 +156,7 @@ function applyRecordResultOperationIntent(
   return {
     ...updatedResult,
     fields: updatedResult.fields.map((field) =>
-      field.field.fieldName === "status" ? { ...field, field: taskStatusField("done") } : field,
+      field.fieldName === "status" ? { ...taskStatusField("done"), fieldId: field.fieldId } : field,
     ),
   };
 }
@@ -178,10 +176,10 @@ function fixtureOperationResult(
 }
 
 function unionKindFromIntent(
-  sourceField: FormlessUiRecordResultFieldContract,
+  sourceField: FormlessUiField,
   intent: FormlessUiFieldIntent,
 ): "article" | "link" | undefined {
-  if (sourceField.field.fieldName !== "kind") {
+  if (sourceField.fieldName !== "kind") {
     return undefined;
   }
 
@@ -197,14 +195,14 @@ function unionKindFromIntent(
 
 function withVisibleUnionField(
   recordResult: FormlessUiRecordResultContract,
-  fields: readonly FormlessUiRecordResultFieldContract[],
+  fields: readonly FormlessUiField[],
   kind: "article" | "link",
 ) {
   const visibleFields = fields.filter(
-    (field) => field.field.fieldName !== "summary" && field.field.fieldName !== "url",
+    (field) => field.fieldName !== "summary" && field.fieldName !== "url",
   );
-  const kindIndex = visibleFields.findIndex((field) => field.field.fieldName === "kind");
-  const unionField = recordResultField(
+  const kindIndex = visibleFields.findIndex((field) => field.fieldName === "kind");
+  const unionField = withRecordResultFieldIdentity(
     recordResult,
     recordResult.selectedRecord?.id ?? "record",
     recordResultUnionField(kind),
@@ -214,16 +212,15 @@ function withVisibleUnionField(
   return visibleFields;
 }
 
-function recordResultField(
+function withRecordResultFieldIdentity(
   recordResult: FormlessUiRecordResultContract,
   recordId: string,
-  field: FormlessUiRecordResultFieldContract["field"],
-): FormlessUiRecordResultFieldContract {
-  return {
-    field,
-    id: `${recordResult.id}:${recordId}:field:${field.fieldName}`,
-    kind: "recordResultField",
-  };
+  field: FormlessUiField,
+): FormlessUiField {
+  return withFixtureFieldOccurrence(field, {
+    ownerId: `${recordResult.id}:${recordId}`,
+    placementId: field.fieldName,
+  });
 }
 
 function mapRecordResultAction(

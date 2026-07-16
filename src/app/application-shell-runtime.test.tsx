@@ -101,6 +101,7 @@ describe("application shell runtime boundary", () => {
       readSections(initialHost).find((section) => section.createSurface !== undefined),
     );
     const createSurface = required(createSection.createSurface);
+    const createField = required(createSurface.dialog.form.fieldSet.fields[0]);
 
     await act(async () => {
       await initialHost.dispatch({
@@ -117,6 +118,7 @@ describe("application shell runtime boundary", () => {
 
     await act(async () => {
       await initialHost.dispatch({
+        fieldId: createField.fieldId,
         intent: {
           fieldName: "label",
           fieldValue: { kind: "input", value: "Created project" },
@@ -159,6 +161,7 @@ describe("application shell runtime boundary", () => {
         type: "shellCreate",
       });
       await initialHost.dispatch({
+        fieldId: createField.fieldId,
         intent: {
           fieldName: "label",
           fieldValue: { kind: "input", value: "Retry project" },

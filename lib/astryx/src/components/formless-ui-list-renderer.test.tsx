@@ -35,6 +35,7 @@ const editableTitle = recordField({
   field: titleSchema,
   fieldName: "title",
   labelVisibility: "hidden",
+  occurrence: { ownerId: "list:task-1", placementId: "title" },
   recordId: "task-1",
   rendererKind: "text",
 });
@@ -46,6 +47,7 @@ const displayTitle = displayField({
   fieldName: "title",
   formatting: { displayValue: "Prepare launch" },
   labelVisibility: "hidden",
+  occurrence: { ownerId: "list:task-1", placementId: "title" },
   recordId: "task-1",
   surface: "record",
   value: "Prepare launch",

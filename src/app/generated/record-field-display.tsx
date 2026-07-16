@@ -18,7 +18,10 @@ import {
 } from "./reference-field-options.ts";
 import { StateMachineStateBadge } from "./state-machine-ui.tsx";
 import { LegacyDisplayFieldAdapter } from "./legacy-record-field-adapter.tsx";
-import { projectGeneratedDisplayFormlessUiField } from "./formless-ui-projection.ts";
+import {
+  projectGeneratedDisplayFormlessUiField,
+  type GeneratedFormlessUiRecordFieldOwner,
+} from "./formless-ui-projection.ts";
 
 type DisplayTableColumnConfig =
   | FieldTableColumnConfig
@@ -27,9 +30,11 @@ type DisplayTableColumnConfig =
 
 export function RecordFieldDisplay({
   column,
+  fieldOwner,
   recordId,
 }: {
   column: DisplayTableColumnConfig;
+  fieldOwner: GeneratedFormlessUiRecordFieldOwner;
   recordId: string;
 }) {
   const recordValue = useRecordFieldValue(recordId, recordFieldRef(column));
@@ -38,6 +43,7 @@ export function RecordFieldDisplay({
     return (
       <RecordReferenceDisplay
         column={{ ...column, field: column.field }}
+        fieldOwner={fieldOwner}
         recordId={recordId}
         recordValue={recordValue}
       />
@@ -63,18 +69,25 @@ export function RecordFieldDisplay({
   }
 
   return (
-    <LegacyDisplayFieldAdapter field={projectLegacyDisplayField(column, recordId, recordValue)} />
+    <LegacyDisplayFieldAdapter
+      field={projectLegacyDisplayField(column, fieldOwner, recordId, recordValue)}
+    />
   );
 }
 
 function projectLegacyDisplayField(
   column: DisplayTableColumnConfig,
+  fieldOwner: GeneratedFormlessUiRecordFieldOwner,
   recordId: string,
   recordValue: FieldValue | undefined,
   referenceOptions: readonly ReferenceOption[] = [],
 ) {
   return projectGeneratedDisplayFormlessUiField({
     fieldConfig: column,
+    occurrence: {
+      owner: fieldOwner,
+      placementId: column.fieldName,
+    },
     recordId,
     recordValue,
     referenceOptions,
@@ -107,10 +120,12 @@ function isIconDisplayColumn(column: DisplayTableColumnConfig) {
 
 function RecordReferenceDisplay({
   column,
+  fieldOwner,
   recordId,
   recordValue,
 }: {
   column: DisplayTableColumnConfig & { field: Extract<FieldSchema, { type: "reference" }> };
+  fieldOwner: GeneratedFormlessUiRecordFieldOwner;
   recordId: string;
   recordValue: FieldValue | undefined;
 }) {
@@ -120,6 +135,7 @@ function RecordReferenceDisplay({
       <LegacyDisplayFieldAdapter
         field={projectLegacyDisplayField(
           column,
+          fieldOwner,
           recordId,
           recordValue,
           EMPTY_GENERATED_REFERENCE_OPTIONS,
@@ -129,16 +145,23 @@ function RecordReferenceDisplay({
   }
 
   return (
-    <LocalRecordReferenceDisplay column={column} recordId={recordId} recordValue={recordValue} />
+    <LocalRecordReferenceDisplay
+      column={column}
+      fieldOwner={fieldOwner}
+      recordId={recordId}
+      recordValue={recordValue}
+    />
   );
 }
 
 function LocalRecordReferenceDisplay({
   column,
+  fieldOwner,
   recordId,
   recordValue,
 }: {
   column: DisplayTableColumnConfig & { field: Extract<FieldSchema, { type: "reference" }> };
+  fieldOwner: GeneratedFormlessUiRecordFieldOwner;
   recordId: string;
   recordValue: FieldValue | undefined;
 }) {
@@ -147,7 +170,7 @@ function LocalRecordReferenceDisplay({
 
   return (
     <LegacyDisplayFieldAdapter
-      field={projectLegacyDisplayField(column, recordId, recordValue, options)}
+      field={projectLegacyDisplayField(column, fieldOwner, recordId, recordValue, options)}
     />
   );
 }

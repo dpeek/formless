@@ -1,5 +1,6 @@
 import type { ImageMediaAssetOption } from "@dpeek/formless-media/client";
 import type {
+  FormlessUiField,
   FormlessUiFieldIntent,
   FormlessUiRecordResultContract,
   FormlessUiRecordResultIntent,
@@ -24,7 +25,6 @@ import {
   recordFieldRef,
 } from "../../client/views.ts";
 import {
-  generatedRecordResultFieldId,
   projectGeneratedRecordResultFormlessUiContract,
   projectGeneratedRecordResultOperationAction,
   type GeneratedRecordResultPlacedAction,
@@ -55,10 +55,12 @@ export type GeneratedRecordResultFieldAuthoringState = {
 };
 
 export type GeneratedRecordResultFieldRuntime = {
+  field: FormlessUiField;
   fieldConfig: RecordFieldConfig;
   fieldId: string;
   kind: "field";
   recordId: string;
+  resultId: string;
 };
 
 export type GeneratedRecordResultOperationRuntime =
@@ -219,6 +221,7 @@ export function selectGeneratedRecordResultFoundation({
     iconDialogOpenByFieldName: nextFieldState.iconDialogOpenByFieldName,
     iconParseErrorByFieldName: nextFieldState.iconParseErrorByFieldName,
     mediaAssetOptionsByFieldName,
+    owner: { kind: "recordResult", recordId, resultId: id },
     pendingByFieldName: nextFieldState.pendingByFieldName as Readonly<Record<string, boolean>>,
     pendingLabelByFieldName: nextFieldState.pendingLabelByFieldName,
     presentationByFieldName:
@@ -253,6 +256,7 @@ export function selectGeneratedRecordResultFoundation({
   const runtimePlan = selectGeneratedRecordResultRuntimePlan({
     entity,
     id,
+    projectedFields: fields,
     record,
     recordLabel,
     result,
@@ -355,15 +359,45 @@ export function selectGeneratedRecordResultRuntimeForIntent(
     return runtimePlan.operationByControlId.get(intent.controlId);
   }
 
-  const runtime = runtimePlan.fieldById.get(intent.fieldId);
-  const fieldName = recordResultFieldIntentFieldName(intent.intent);
+  return resolveGeneratedRecordResultFieldIntent(runtimePlan, intent);
+}
 
-  return runtime?.fieldConfig.fieldName === fieldName ? runtime : undefined;
+export function resolveGeneratedRecordResultFieldIntent(
+  runtimePlan: GeneratedRecordResultRuntimePlan,
+  {
+    fieldId,
+    intent,
+    recordId,
+    resultId,
+  }: {
+    fieldId: string;
+    intent: FormlessUiFieldIntent;
+    recordId?: string;
+    resultId?: string;
+  },
+): GeneratedRecordResultFieldRuntime | undefined {
+  if (resultId !== runtimePlan.resultId || recordId !== runtimePlan.recordId) {
+    return undefined;
+  }
+
+  const runtime = runtimePlan.fieldById.get(fieldId);
+  const fieldName = recordResultFieldIntentFieldName(intent);
+  const intentRecordId = intent.type === "stateTransitionInvoke" ? intent.recordId : recordId;
+
+  return runtime !== undefined &&
+    runtime.recordId === recordId &&
+    runtime.resultId === resultId &&
+    runtime.field.recordId === recordId &&
+    intentRecordId === recordId &&
+    runtime.fieldConfig.fieldName === fieldName
+    ? runtime
+    : undefined;
 }
 
 function selectGeneratedRecordResultRuntimePlan({
   entity,
   id,
+  projectedFields,
   record,
   recordLabel,
   result,
@@ -371,19 +405,39 @@ function selectGeneratedRecordResultRuntimePlan({
 }: {
   entity: EntitySchema;
   id: string;
+  projectedFields: FormlessUiRecordResultContract["fields"];
   record: StoredRecord;
   recordLabel: string;
   result: RecordResultModel;
   visibleFields: readonly RecordFieldConfig[];
 }): GeneratedRecordResultRuntimePlan {
-  const fields = visibleFields.map(
-    (fieldConfig): GeneratedRecordResultFieldRuntime => ({
+  const fields: GeneratedRecordResultFieldRuntime[] = [];
+  const fieldById = new Map<string, GeneratedRecordResultFieldRuntime>();
+
+  for (const field of projectedFields) {
+    const fieldConfig = visibleFields.find((candidate) => candidate.fieldName === field.fieldName);
+
+    if (fieldConfig === undefined) {
+      throw new Error(`Missing record-result runtime field config for ${field.fieldId}.`);
+    }
+
+    if (fieldById.has(field.fieldId)) {
+      throw new Error(
+        `Generated record result "${id}" contains duplicate field occurrence "${field.fieldId}".`,
+      );
+    }
+
+    const runtime: GeneratedRecordResultFieldRuntime = {
+      field,
       fieldConfig,
-      fieldId: generatedRecordResultFieldId(id, record.id, fieldConfig.fieldName),
+      fieldId: field.fieldId,
       kind: "field",
       recordId: record.id,
-    }),
-  );
+      resultId: id,
+    };
+    fieldById.set(field.fieldId, runtime);
+    fields.push(runtime);
+  }
   const operations: GeneratedRecordResultOperationRuntime[] = [];
 
   for (const operation of result.transitionOperations) {
@@ -416,7 +470,7 @@ function selectGeneratedRecordResultRuntimePlan({
   }
 
   return {
-    fieldById: new Map(fields.map((field) => [field.fieldId, field])),
+    fieldById,
     fields,
     operationByControlId: new Map(operations.map((operation) => [operation.binding.id, operation])),
     operations,

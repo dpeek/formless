@@ -2,17 +2,23 @@ import { describe, expect, it } from "vite-plus/test";
 import type {
   FormlessUiActionTriggerContract,
   FormlessUiButtonContract,
+  FormlessUiCreateField,
   FormlessUiCreateSurfaceContract,
   FormlessUiOperationControlContract,
   FormlessUiTableContract,
 } from "@dpeek/formless-astryx/contract";
 import type { StoredRecord } from "@dpeek/formless-storage";
-import type { GeneratedOperationControlBinding, HomeScreenModel } from "../../client/views.ts";
+import type {
+  GeneratedOperationControlBinding,
+  HomeScreenModel,
+  RecordFieldConfig,
+} from "../../client/views.ts";
 import type { EntityOperationPresentationConfig } from "../../client/operation-presentation-model.ts";
 import { selectScreenModels } from "../../client/views.ts";
 import type { RecordResultModel } from "../../client/list-result-model.ts";
 import { rateSeedRecords, rateSourceSchema } from "../../test/schema-apps.ts";
 import { projectGeneratedOperationFormlessUiControl } from "./formless-ui-operation-projection.ts";
+import { projectGeneratedRecordFormlessUiField } from "./formless-ui-projection.ts";
 import {
   generatedWorkspaceScopedId,
   projectGeneratedWorkspaceCreateIntent,
@@ -27,6 +33,7 @@ import {
   createGeneratedRecordResultFieldAuthoringState,
   type GeneratedRecordResultRecordState,
 } from "./generated-record-result-foundation.ts";
+import { indexGeneratedTableFieldOccurrences } from "./generated-table-foundation.tsx";
 import {
   generatedWorkspaceScreenIsEligible,
   resolveGeneratedWorkspaceIntent,
@@ -91,8 +98,8 @@ describe("generated workspace foundation", () => {
     expect(JSON.stringify(foundation.workspace)).not.toContain("runtime");
 
     const detail = presentation.contextDetail;
-    const name = detail?.fields.find(({ field }) => field.fieldName === "name")?.field;
-    const margin = detail?.fields.find(({ field }) => field.fieldName === "marginMin")?.field;
+    const name = detail?.fields.find((field) => field.fieldName === "name");
+    const margin = detail?.fields.find((field) => field.fieldName === "marginMin");
     expect(name).toMatchObject({ density: "default", labelVisibility: "hidden" });
     expect(margin).toMatchObject({ density: "compact", labelVisibility: "visible" });
   });
@@ -158,6 +165,47 @@ describe("generated workspace foundation", () => {
         ),
       ),
     ).toMatchObject({ kind: "control", runtime: { runtime: "context-create" } });
+    const createField = required(create.surface.dialog.form.fieldSet.fields[0]);
+    const createFieldIntent = projectGeneratedWorkspaceFieldIntent(
+      plan.scope,
+      createField.fieldId,
+      {
+        fieldName: createField.fieldName,
+        fieldValue: { kind: "input", value: "Weekend rate" },
+        type: "createDraftChange",
+      },
+      { surfaceId: create.surface.id },
+    );
+    expect(
+      resolveGeneratedWorkspaceIntent(foundation.runtimePlan, createFieldIntent),
+    ).toMatchObject({
+      field: { fieldId: createField.fieldId, fieldName: createField.fieldName },
+      kind: "field",
+      runtime: { runtime: "collection-create" },
+    });
+    expect(
+      resolveGeneratedWorkspaceIntent(foundation.runtimePlan, {
+        ...createFieldIntent,
+        fieldId: `${createField.fieldId}:stale`,
+      }),
+    ).toBeUndefined();
+    expect(
+      resolveGeneratedWorkspaceIntent(foundation.runtimePlan, {
+        ...createFieldIntent,
+        intent: {
+          fieldName: `${createField.fieldName}:other`,
+          fieldValue: { kind: "input", value: "Wrong field" },
+          type: "createDraftChange",
+        },
+      }),
+    ).toBeUndefined();
+    expect(
+      resolveGeneratedWorkspaceIntent(foundation.runtimePlan, {
+        ...createFieldIntent,
+        contextId: context.id,
+        surfaceId: contextCreate.surface.id,
+      }),
+    ).toBeUndefined();
     expect(
       resolveGeneratedWorkspaceIntent(
         foundation.runtimePlan,
@@ -181,11 +229,67 @@ describe("generated workspace foundation", () => {
       ),
     ).toMatchObject({ kind: "result", result: { kind: "table" } });
 
+    const tableFieldContent = required(
+      fixture.table.rows[0]?.cells
+        .flatMap((cell) => cell.contents)
+        .find((content) => content.kind === "field"),
+    );
+    if (tableFieldContent.kind !== "field") {
+      throw new Error("Missing table field.");
+    }
+    const tableField = tableFieldContent.field;
+    const tableFieldContextId = required(
+      fixture.table.rows[0]?.cells.find((cell) =>
+        cell.contents.some((content) => content.kind === "field"),
+      ),
+    ).id;
+    const tableFieldIntent = projectGeneratedWorkspaceFieldIntent(
+      plan.scope,
+      tableField.fieldId,
+      { fieldName: tableField.fieldName, type: "recordDraftRevert" },
+      {
+        contextId: tableFieldContextId,
+        recordId: tableField.recordId,
+        resultId: fixture.table.id,
+      },
+    );
+    expect(resolveGeneratedWorkspaceIntent(foundation.runtimePlan, tableFieldIntent)).toMatchObject(
+      {
+        field: { fieldId: tableField.fieldId },
+        kind: "field",
+        result: { kind: "table" },
+      },
+    );
+    expect(
+      resolveGeneratedWorkspaceIntent(foundation.runtimePlan, {
+        ...tableFieldIntent,
+        fieldId: `${tableField.fieldId}:stale`,
+      }),
+    ).toBeUndefined();
+    expect(
+      resolveGeneratedWorkspaceIntent(foundation.runtimePlan, {
+        ...tableFieldIntent,
+        contextId: `${tableFieldContextId}:other`,
+      }),
+    ).toBeUndefined();
+    expect(
+      resolveGeneratedWorkspaceIntent(foundation.runtimePlan, {
+        ...tableFieldIntent,
+        intent: { fieldName: `${tableField.fieldName}:other`, type: "recordDraftRevert" },
+      }),
+    ).toBeUndefined();
+    expect(
+      resolveGeneratedWorkspaceIntent(foundation.runtimePlan, {
+        ...tableFieldIntent,
+        recordId: `${tableField.recordId}:other`,
+      }),
+    ).toBeUndefined();
+
     const detail = required(listDetail?.contextDetail);
-    const field = required(detail.fields.find(({ field }) => field.fieldName === "marginMin"));
+    const field = required(detail.fields.find((field) => field.fieldName === "marginMin"));
     const fieldIntent = projectGeneratedWorkspaceFieldIntent(
       plan.scope,
-      field.id,
+      field.fieldId,
       { fieldName: "marginMin", type: "recordEditorDraftChange", value: "0.45" },
       {
         contextId: context.id,
@@ -225,7 +329,7 @@ describe("generated workspace foundation", () => {
     expect(
       resolveGeneratedWorkspaceIntent(foundation.runtimePlan, {
         ...fieldIntent,
-        fieldId: `${field.id}:stale`,
+        fieldId: `${field.fieldId}:stale`,
       }),
     ).toBeUndefined();
     expect(
@@ -291,6 +395,7 @@ describe("generated workspace foundation", () => {
       throw new Error("Missing list result.");
     }
     const item = required(firstResult.contract.items[0]);
+    const field = required(item.fields[0]);
     const action = required(item.ordering?.actions.find((candidate) => !candidate.disabled));
     const intent = projectGeneratedWorkspaceListIntent(
       required(first).scope,
@@ -305,6 +410,44 @@ describe("generated workspace foundation", () => {
       resolveGeneratedWorkspaceIntent(selected.runtimePlan, {
         ...intent,
         collectionId: required(second).scope.collectionId,
+        sectionId: required(second).scope.sectionId,
+      }),
+    ).toBeUndefined();
+
+    const fieldIntent = projectGeneratedWorkspaceFieldIntent(
+      required(first).scope,
+      field.fieldId,
+      { fieldName: field.fieldName, type: "recordDraftRevert" },
+      { recordId: item.id, resultId: firstResult.contract.id },
+    );
+    expect(resolveGeneratedWorkspaceIntent(selected.runtimePlan, fieldIntent)).toMatchObject({
+      field: { fieldId: field.fieldId },
+      kind: "field",
+      result: { kind: "list" },
+    });
+    expect(
+      resolveGeneratedWorkspaceIntent(selected.runtimePlan, {
+        ...fieldIntent,
+        fieldId: `${field.fieldId}:stale`,
+      }),
+    ).toBeUndefined();
+    expect(
+      resolveGeneratedWorkspaceIntent(selected.runtimePlan, {
+        ...fieldIntent,
+        intent: { fieldName: `${field.fieldName}:other`, type: "recordDraftRevert" },
+      }),
+    ).toBeUndefined();
+    expect(
+      resolveGeneratedWorkspaceIntent(selected.runtimePlan, {
+        ...fieldIntent,
+        recordId: `${item.id}:other`,
+      }),
+    ).toBeUndefined();
+    expect(
+      resolveGeneratedWorkspaceIntent(selected.runtimePlan, {
+        ...fieldIntent,
+        collectionId: required(second).scope.collectionId,
+        resultId: secondResult.contract.id,
         sectionId: required(second).scope.sectionId,
       }),
     ).toBeUndefined();
@@ -446,7 +589,7 @@ function selectRateSectionFoundation(
   );
   const contextSurfaceId = generatedWorkspaceScopedId(facts.scope, "surface", "context-create");
   const commandId = generatedWorkspaceScopedId(facts.scope, "control", "collection-command");
-  const table = tableContract(facts.resultId, facts.recordIds);
+  const table = tableFoundation(facts.resultId, facts.recordIds);
 
   return {
     collectionActions: [
@@ -476,15 +619,36 @@ function selectRateSectionFoundation(
         runtime: "external",
       },
     ],
-    table: { runtime: "table", table },
+    table,
   };
 }
 
-function tableContract(id: string, recordIds: readonly string[]): FormlessUiTableContract {
+function tableFoundation(id: string, recordIds: readonly string[]) {
   const rowId = recordIds[0] ?? "empty";
+  const record = required(rateSeedRecords.find((candidate) => candidate.id === rowId));
   const actionId = `${id}:${rowId}:move-down`;
   const columnId = `${id}:ordering-column`;
-  return {
+  const fieldColumnId = `${id}:cost-column`;
+  const fieldCellId = `${id}:${rowId}:cost-cell`;
+  const fieldConfig = {
+    commit: "field-commit",
+    editor: "number",
+    field: { required: false, type: "number" },
+    fieldName: "cost",
+    label: "Cost",
+  } satisfies RecordFieldConfig;
+  const field = projectGeneratedRecordFormlessUiField({
+    canPatch: false,
+    fieldConfig,
+    occurrence: {
+      owner: { cellId: fieldCellId, kind: "tableCell", tableId: id },
+      placementId: fieldConfig.fieldName,
+    },
+    recordId: rowId,
+    recordValue: record.values.cost,
+    surface: "table-cell",
+  });
+  const table: FormlessUiTableContract = {
     accessibilityLabel: "Rate records",
     columns: [
       {
@@ -497,6 +661,17 @@ function tableContract(id: string, recordIds: readonly string[]): FormlessUiTabl
         label: "Order",
         labelVisibility: "hidden",
         width: "xs",
+      },
+      {
+        accessibilityLabel: "Cost",
+        alignment: "end",
+        contentRole: "field",
+        id: fieldColumnId,
+        isRowHeader: false,
+        kind: "tableColumn",
+        label: "Cost",
+        labelVisibility: "visible",
+        width: "sm",
       },
     ],
     density: "default",
@@ -534,12 +709,36 @@ function tableContract(id: string, recordIds: readonly string[]): FormlessUiTabl
             id: `${id}:${rowId}:ordering-cell`,
             kind: "tableCell",
           },
+          {
+            columnId: fieldColumnId,
+            contents: [{ field, kind: "field", source: "record" }],
+            id: fieldCellId,
+            kind: "tableCell",
+          },
         ],
         id: rowId,
         kind: "tableRow",
         warnings: [],
       },
     ],
+  };
+  const fieldContexts = new Map([
+    [
+      fieldCellId,
+      {
+        entityName: record.entity,
+        fields: [fieldConfig],
+        id: fieldCellId,
+        record,
+        recordId: record.id,
+      },
+    ],
+  ]);
+
+  return {
+    fieldsById: indexGeneratedTableFieldOccurrences(table, fieldContexts),
+    runtime: "table",
+    table,
   };
 }
 
@@ -589,7 +788,12 @@ function createSurface(id: string, label: string): FormlessUiCreateSurfaceContra
       form: {
         cancel: button(`${id}:cancel`, "Cancel"),
         errors: [],
-        fieldSet: { disabled: false, fields: [], id: `${id}:fields`, kind: "fieldSet" },
+        fieldSet: {
+          disabled: false,
+          fields: [createSurfaceField(id)],
+          id: `${id}:fields`,
+          kind: "fieldSet",
+        },
         id: `${id}:form`,
         kind: "createForm",
         submit: { ...button(`${id}:submit`, label), type: "submit" },
@@ -602,6 +806,39 @@ function createSurface(id: string, label: string): FormlessUiCreateSurfaceContra
     id,
     kind: "createSurface",
     trigger: button(`${id}:trigger`, label),
+  };
+}
+
+function createSurfaceField(surfaceId: string): FormlessUiCreateField {
+  const field = { label: "Name", required: true, type: "text" } as const;
+
+  return {
+    access: { canPatch: true, kind: "editable", writable: true },
+    commit: "submit",
+    control: {
+      control: { inputType: "text", kind: "input" },
+      controlKind: "text",
+      createDefaultChecked: false,
+      createDefaultValue: undefined,
+      editor: "text",
+      field,
+      inputAttributes: {},
+      kind: "text",
+      label: field.label,
+      required: true,
+    },
+    density: "default",
+    draftInput: { kind: "input", value: "" },
+    editor: "text",
+    field,
+    fieldId: `${surfaceId}:field:name`,
+    fieldName: "name",
+    label: field.label,
+    labelVisibility: "visible",
+    mode: "editor",
+    required: true,
+    surface: "create",
+    value: "",
   };
 }
 

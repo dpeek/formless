@@ -4975,7 +4975,12 @@ describe("generated forms and records", () => {
 
     applyBootstrapResponse(bootstrap([streamRecord], schema));
     const html = renderToStaticMarkup(
-      <EditViewFields editView={editView} targetRecord={streamRecord} targetRecordId="record-1" />,
+      <EditViewFields
+        editView={editView}
+        fieldOwnerId="app-test:edit-view:record-1"
+        targetRecord={streamRecord}
+        targetRecordId="record-1"
+      />,
     );
 
     expect(html).toContain('aria-label="Kind"');
@@ -5858,6 +5863,7 @@ describe("generated forms and records", () => {
             density="compact"
             entityName="editorCase"
             fieldConfig={recordFieldConfig(entity, fieldName, editor, commit)}
+            fieldOwner={{ kind: "standalone", ownerId: "app-test:compact-editor" }}
             recordId="record-editor-case-1"
             showLabel={showLabel}
             updateOperation={testUpdateOperation("editorCase")}
@@ -6266,6 +6272,7 @@ describe("generated forms and records", () => {
         <RecordFieldEditor
           entityName="block"
           fieldConfig={mediaAssetFieldConfig}
+          fieldOwner={{ kind: "standalone", ownerId: "app-test:block-image" }}
           recordId="block-image"
           showLabel
           updateOperation={testUpdateOperation("block")}
@@ -6277,6 +6284,7 @@ describe("generated forms and records", () => {
         <RecordFieldEditor
           entityName="block"
           fieldConfig={mediaAssetFieldConfig}
+          fieldOwner={{ kind: "standalone", ownerId: "app-test:block-empty-image" }}
           recordId="block-empty-image"
           showLabel
           updateOperation={testUpdateOperation("block")}
@@ -6335,6 +6343,7 @@ describe("generated forms and records", () => {
         <RecordFieldEditor
           entityName="mediaAssetCase"
           fieldConfig={recordFieldConfig(entity, "mediaAssetId", "media", "field-commit")}
+          fieldOwner={{ kind: "standalone", ownerId: "app-test:media-asset-case-1" }}
           recordId="media-asset-case-1"
           showLabel
           updateOperation={testUpdateOperation("mediaAssetCase")}
@@ -6346,6 +6355,7 @@ describe("generated forms and records", () => {
         <RecordFieldEditor
           entityName="mediaAssetCase"
           fieldConfig={recordFieldConfig(entity, "mediaAssetId", "media", "field-commit")}
+          fieldOwner={{ kind: "standalone", ownerId: "app-test:media-asset-case-2" }}
           recordId="media-asset-case-2"
           showLabel
           updateOperation={testUpdateOperation("mediaAssetCase")}
@@ -6404,6 +6414,7 @@ describe("generated forms and records", () => {
         <RecordFieldEditor
           entityName="media"
           fieldConfig={recordFieldConfig(entity, "mediaAssetId", "media", "field-commit")}
+          fieldOwner={{ kind: "standalone", ownerId: "app-test:media-1" }}
           recordId="media-1"
           showLabel
           updateOperation={testUpdateOperation("media")}

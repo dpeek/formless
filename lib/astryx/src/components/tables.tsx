@@ -59,8 +59,8 @@ export function FormlessTablesLayout() {
 
           {selectedFixture ? (
             <AstryxTableRenderer
-              onFieldIntent={(_contextId, field, intent) =>
-                updateSelectedTable((table) => applyTableFieldIntent(table, field, intent))
+              onFieldIntent={(_contextId, fieldId, _recordId, intent) =>
+                updateSelectedTable((table) => applyTableFieldIntent(table, fieldId, intent))
               }
               onOperationIntent={(action, intent) =>
                 updateSelectedTable((table) => applyTableOperationIntent(table, action, intent))
@@ -79,14 +79,14 @@ export function FormlessTablesLayout() {
 
 export function applyTableFieldIntent(
   table: FormlessUiTableContract,
-  sourceField: FormlessUiField,
+  fieldId: string,
   intent: FormlessUiFieldIntent,
 ): FormlessUiTableContract {
   return {
     ...table,
     rows: table.rows.map((row) =>
       mapRowFields(row, (field) =>
-        sameFixtureField(field, sourceField) ? applyScenarioFieldIntent(field, intent) : field,
+        field.fieldId === fieldId ? applyScenarioFieldIntent(field, intent) : field,
       ),
     ),
   };
@@ -334,15 +334,6 @@ function mapActionTree(
     : action;
 
   return update(actionWithChildren);
-}
-
-function sameFixtureField(left: FormlessUiField, right: FormlessUiField) {
-  return (
-    left.fieldName === right.fieldName &&
-    left.inputName === right.inputName &&
-    left.recordId === right.recordId &&
-    left.surface === right.surface
-  );
 }
 
 export function selectedTableFixture(

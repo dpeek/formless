@@ -46,7 +46,8 @@ import { StateMachineStateBadge } from "./state-machine-ui.tsx";
 
 export type LegacyTableFieldIntentHandler = (
   contextId: string,
-  field: FormlessUiField,
+  fieldId: string,
+  recordId: string | undefined,
   intent: FormlessUiFieldIntent,
 ) => Promise<void> | void;
 
@@ -281,7 +282,7 @@ function LegacyTableField({
   return (
     <LegacyRecordFieldAdapter
       field={field}
-      onIntent={(intent) => onFieldIntent(contextId, field, intent)}
+      onIntent={(intent) => onFieldIntent(contextId, field.fieldId, field.recordId, intent)}
     />
   );
 }
@@ -365,7 +366,7 @@ function LegacyTableStateMachineField({
                   return;
                 }
 
-                void onFieldIntent(contextId, field, {
+                void onFieldIntent(contextId, field.fieldId, field.recordId, {
                   fieldName: field.fieldName,
                   operationName: transition.operationName,
                   recordId: field.recordId,
@@ -582,7 +583,7 @@ function LegacyTableEditDialog({
                 <LegacyTableField
                   contextId={availableTarget.fieldSet.id}
                   field={field}
-                  key={`${field.recordId ?? "record"}:${field.fieldName}`}
+                  key={field.fieldId}
                   onFieldIntent={onFieldIntent}
                 />
               ))}
@@ -721,7 +722,7 @@ function legacyTableButtonIntent(button: FormlessUiButtonContract) {
 
 function legacyTableContentKey(content: FormlessUiTableCellContentContract, index: number) {
   if (content.kind === "field") {
-    return `${content.field.recordId ?? "record"}:${content.field.fieldName}:${index}`;
+    return content.field.fieldId;
   }
 
   if (content.kind === "actionGroup" || content.kind === "ordering") {

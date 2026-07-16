@@ -8,10 +8,10 @@ import { VStack } from "@astryxdesign/core/VStack";
 import type { DropdownMenuOption } from "@astryxdesign/core/DropdownMenu";
 import type {
   FormlessUiFieldIntent,
+  FormlessUiField,
   FormlessUiOperationPresentationIntent,
   FormlessUiRecordResultActionContract,
   FormlessUiRecordResultContract,
-  FormlessUiRecordResultFieldContract,
   FormlessUiRecordResultIntentHandler,
 } from "../formless-ui-contract.ts";
 import { FormlessUiFieldRenderer } from "./fields/renderer.tsx";
@@ -136,8 +136,8 @@ function AstryxRecordResultContent({
         <VStack gap={spacing.fieldGap} width="100%">
           {recordResult.fields.map((field) => (
             <FormlessUiFieldRenderer
-              field={astryxRecordResultFieldPresentation(field.field, recordResult)}
-              key={field.id}
+              field={astryxRecordResultFieldPresentation(field, recordResult)}
+              key={field.fieldId}
               onIntent={(intent) =>
                 dispatchAstryxRecordResultFieldIntent(
                   onIntent,
@@ -161,7 +161,7 @@ function AstryxRecordResultContent({
 }
 
 function astryxRecordResultFieldPresentation(
-  field: FormlessUiRecordResultFieldContract["field"],
+  field: FormlessUiField,
   recordResult: FormlessUiRecordResultContract,
 ) {
   if (
@@ -328,11 +328,11 @@ export function dispatchAstryxRecordResultFieldIntent(
   handler: FormlessUiRecordResultIntentHandler,
   recordResult: FormlessUiRecordResultContract,
   recordId: string,
-  field: FormlessUiRecordResultFieldContract,
+  field: FormlessUiField,
   intent: FormlessUiFieldIntent,
 ) {
   return handler({
-    fieldId: field.id,
+    fieldId: field.fieldId,
     intent,
     recordId,
     resultId: recordResult.id,

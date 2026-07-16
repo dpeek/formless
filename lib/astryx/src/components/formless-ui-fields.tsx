@@ -25,6 +25,7 @@ import type {
   FormlessUiStateMachineFacts,
   FormlessUiStateMachineField,
 } from "../formless-ui-contract.ts";
+import { fixtureFormlessUiFieldId } from "./fields/fixture-helpers.ts";
 import { FormlessUiFieldRenderer, FormlessUiFieldSubmitFormAdapter } from "./fields/renderer.tsx";
 
 const pageIconSource = [
@@ -441,7 +442,15 @@ function createField({
   value: FieldValue;
 }): FormlessUiField {
   return {
-    ...baseField({ control, editor, field, fieldName, label: control.label, surface: "create" }),
+    ...baseField({
+      control,
+      editor,
+      field,
+      fieldName,
+      label: control.label,
+      ownerId: "formless-ui-fields:create",
+      surface: "create",
+    }),
     access: { kind: "editable", canPatch: true, writable: true },
     commit: "submit",
     density: "default",
@@ -485,6 +494,7 @@ function recordField({
       field,
       fieldName,
       label: control.label,
+      ownerId: "formless-ui-fields:record",
       surface: "record",
     }),
     access: { kind: "editable", canPatch: true, writable: true },
@@ -529,7 +539,15 @@ function displayField({
     access?: FormlessUiFieldAccess;
   }): FormlessUiDisplayField {
   return {
-    ...baseField({ control, editor, field, fieldName, label: control.label, surface: "detail" }),
+    ...baseField({
+      control,
+      editor,
+      field,
+      fieldName,
+      label: control.label,
+      ownerId: `formless-ui-fields:detail:${recordId ?? "standalone"}`,
+      surface: "detail",
+    }),
     access,
     commit: "submit",
     density: "default",
@@ -549,6 +567,7 @@ function baseField({
   field,
   fieldName,
   label,
+  ownerId,
   surface,
 }: {
   control: FormlessUiFieldControl;
@@ -556,12 +575,14 @@ function baseField({
   field: FieldSchema;
   fieldName: string;
   label: string;
+  ownerId: string;
   surface: FormlessUiField["surface"];
 }) {
   return {
     control,
     editor,
     field,
+    fieldId: fixtureFormlessUiFieldId({ ownerId, placementId: fieldName }),
     fieldName,
     label,
     labelVisibility:

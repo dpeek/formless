@@ -7,7 +7,10 @@ import {
 import type {
   FormlessUiField,
   FormlessUiFieldIntent,
+  FormlessUiTableActionContract,
+  FormlessUiTableActionGroupContract,
   FormlessUiTableCellContentContract,
+  FormlessUiTableContract,
   FormlessUiTableIntent,
   FormlessUiTableOperationActionContract,
 } from "@dpeek/formless-astryx/contract";
@@ -59,6 +62,7 @@ import { projectGeneratedOperationFormlessUiControl } from "./formless-ui-operat
 import {
   projectGeneratedDisplayFormlessUiField,
   projectGeneratedRecordFormlessUiFields,
+  type GeneratedFormlessUiRecordFieldOwner,
 } from "./formless-ui-projection.ts";
 import {
   projectGeneratedTableActionGroup,
@@ -133,6 +137,20 @@ export type GeneratedTableFieldContextState = {
   pendingByFieldName: Record<string, boolean | undefined>;
   session: GeneratedUpdateDraftSessionState;
 };
+
+export type GeneratedTableFieldRuntime = {
+  context: GeneratedTableFieldContext;
+  contextId: string;
+  field: FormlessUiField;
+  fieldConfig: RecordFieldConfig;
+  fieldId: string;
+  kind: "field";
+  placement: "cell" | "dialog";
+  recordId: string;
+  tableId: string;
+};
+
+export type GeneratedTableFieldIndex = ReadonlyMap<string, GeneratedTableFieldRuntime>;
 
 export type GeneratedTableOperationRuntime =
   | {
@@ -676,15 +694,28 @@ export function GeneratedRecordTableFoundation({
     }
   }
 
-  const onFieldIntent: LegacyTableFieldIntentHandler = async (contextId, _field, intent) => {
-    const context = fieldContextsRef.current.get(contextId);
+  const onFieldIntent: LegacyTableFieldIntentHandler = async (
+    contextId,
+    fieldId,
+    recordId,
+    intent,
+  ) => {
+    const fieldRuntime = resolveGeneratedTableFieldIntent(projected.fieldsById, {
+      contextId,
+      fieldId,
+      intent,
+      recordId,
+      tableId: projected.table.id,
+    });
 
-    if (!context) {
+    if (!fieldRuntime) {
       return;
     }
 
+    const { context } = fieldRuntime;
+
     if (intent.type === "stateTransitionInvoke") {
-      const runtime = selectFieldTransitionRuntime(contextId, intent, runtimePlan);
+      const runtime = selectFieldTransitionRuntime(context.id, intent, runtimePlan);
 
       if (runtime) {
         await executeGeneratedTableRuntimeOperation(runtime, controller, intent.source);
@@ -867,17 +898,153 @@ function projectGeneratedRecordTable({
     }),
   );
 
+  const table = projectGeneratedTableFormlessUiContract({
+    accessibilityLabel: `${entity.label} records`,
+    editingDisabledReason: `Editing is disabled for ${entity.label}.`,
+    footerValuesByColumnId,
+    id: tableId,
+    presentation,
+    rowsByRecordId,
+  });
+
   return {
     fieldContexts,
-    table: projectGeneratedTableFormlessUiContract({
-      accessibilityLabel: `${entity.label} records`,
-      editingDisabledReason: `Editing is disabled for ${entity.label}.`,
-      footerValuesByColumnId,
-      id: tableId,
-      presentation,
-      rowsByRecordId,
-    }),
+    fieldsById: indexGeneratedTableFieldOccurrences(table, fieldContexts, fieldStateByContextId),
+    table,
   };
+}
+
+export function indexGeneratedTableFieldOccurrences(
+  table: FormlessUiTableContract,
+  fieldContexts: ReadonlyMap<string, GeneratedTableFieldContext>,
+  fieldStateByContextId: Readonly<Record<string, GeneratedTableFieldContextState | undefined>> = {},
+): GeneratedTableFieldIndex {
+  const fieldsById = new Map<string, GeneratedTableFieldRuntime>();
+  const visibleFieldsByContextId = new Map<string, readonly RecordFieldConfig[]>();
+
+  const registerFields = (
+    contextId: string,
+    fields: readonly FormlessUiField[],
+    placement: GeneratedTableFieldRuntime["placement"],
+  ) => {
+    const context = fieldContexts.get(contextId);
+
+    if (context === undefined) {
+      throw new Error(`Generated table "${table.id}" is missing field context "${contextId}".`);
+    }
+
+    let visibleFields = visibleFieldsByContextId.get(contextId);
+    if (visibleFields === undefined) {
+      const state =
+        fieldStateByContextId[contextId] ?? createGeneratedTableFieldContextState(context);
+      visibleFields = selectGeneratedUpdateDraftSession({
+        fields: context.fields,
+        state: state.session,
+        union: context.union,
+      }).visibleFields;
+      visibleFieldsByContextId.set(contextId, visibleFields);
+    }
+
+    for (const field of fields) {
+      const fieldConfig = visibleFields.find(
+        (candidate) => candidate.fieldName === field.fieldName,
+      );
+
+      if (fieldConfig === undefined || field.recordId !== context.recordId) {
+        throw new Error(
+          `Generated table "${table.id}" projected mismatched runtime facts for field occurrence "${field.fieldId}".`,
+        );
+      }
+      if (fieldsById.has(field.fieldId)) {
+        throw new Error(
+          `Generated table "${table.id}" contains duplicate field occurrence "${field.fieldId}".`,
+        );
+      }
+
+      fieldsById.set(field.fieldId, {
+        context,
+        contextId,
+        field,
+        fieldConfig,
+        fieldId: field.fieldId,
+        kind: "field",
+        placement,
+        recordId: context.recordId,
+        tableId: table.id,
+      });
+    }
+  };
+
+  const indexAction = (action: FormlessUiTableActionContract) => {
+    if (action.kind !== "editAction" || action.dialog.target.kind !== "available") {
+      return;
+    }
+
+    const { target } = action.dialog;
+    registerFields(target.fieldSet.id, target.fieldSet.fields, "dialog");
+    if (target.actionGroup !== undefined) {
+      indexActionGroup(target.actionGroup);
+    }
+  };
+
+  const indexActionGroup = (group: FormlessUiTableActionGroupContract) => {
+    for (const action of [...group.primary, ...group.secondary]) {
+      indexAction(action);
+    }
+  };
+
+  for (const row of table.rows) {
+    for (const cell of row.cells) {
+      for (const content of cell.contents) {
+        if (content.kind === "field") {
+          registerFields(cell.id, [content.field], "cell");
+        } else if (content.kind === "actionGroup") {
+          indexActionGroup(content);
+        }
+      }
+    }
+  }
+
+  if (table.emptyState?.action !== undefined) {
+    indexAction(table.emptyState.action);
+  }
+
+  return fieldsById;
+}
+
+export function resolveGeneratedTableFieldIntent(
+  fieldsById: GeneratedTableFieldIndex,
+  {
+    contextId,
+    fieldId,
+    intent,
+    recordId,
+    tableId,
+  }: {
+    contextId: string;
+    fieldId: string;
+    intent: FormlessUiFieldIntent;
+    recordId?: string;
+    tableId: string;
+  },
+): GeneratedTableFieldRuntime | undefined {
+  if (recordId === undefined) {
+    return undefined;
+  }
+
+  const runtime = fieldsById.get(fieldId);
+  const fieldName = "fieldName" in intent ? intent.fieldName : undefined;
+  const intentRecordId = intent.type === "stateTransitionInvoke" ? intent.recordId : recordId;
+
+  return runtime !== undefined &&
+    runtime.tableId === tableId &&
+    runtime.contextId === contextId &&
+    runtime.recordId === recordId &&
+    runtime.field.recordId === recordId &&
+    runtime.fieldConfig.fieldName === fieldName &&
+    intentRecordId === recordId
+    ? runtime
+    : undefined;
 }
 
 function projectGeneratedTableCell({
@@ -1087,6 +1254,7 @@ function projectGeneratedTableCell({
         recordsById,
         schema,
         source: "referencedRecord",
+        tableId,
         transitionRuntimes: runtimePlan.transitionsByContextId.get(cell.id),
         updateOperation: column.referencedUpdateOperation,
       }),
@@ -1106,6 +1274,7 @@ function projectGeneratedTableCell({
       recordsById,
       schema,
       source: "record",
+      tableId,
       updateOperation: result.updateOperation,
       transitionOperations: column.stateTransitionOperations,
       transitionRuntimes: runtimePlan.transitionsByContextId.get(cell.id),
@@ -1130,6 +1299,7 @@ function projectGeneratedTableCell({
       fieldContexts.set(context.id, context);
       const fields = projectFieldContext(
         context,
+        { fieldSetId: context.id, kind: "tableEditFieldSet", tableId },
         fieldStateByContextId[context.id],
         mediaAssetOptions,
         recordsById,
@@ -1180,6 +1350,7 @@ function projectTableRecordField({
   recordsById,
   schema,
   source,
+  tableId,
   updateOperation,
   transitionOperations,
   transitionRuntimes,
@@ -1195,6 +1366,7 @@ function projectTableRecordField({
   recordsById: Readonly<Record<string, StoredRecord>>;
   schema: ReturnType<typeof useSchema>;
   source: "record" | "referencedRecord";
+  tableId: string;
   updateOperation?: TableCollectionResultModel["updateOperation"];
   transitionOperations?: readonly TransitionStateOperationConfig[];
   transitionRuntimes?: readonly GeneratedTableTransitionRuntime[];
@@ -1215,6 +1387,10 @@ function projectTableRecordField({
           density: "compact",
           fieldConfig,
           mediaAssetOptions,
+          occurrence: {
+            owner: { cellId: contextId, kind: "tableCell", tableId },
+            placementId: fieldConfig.fieldName,
+          },
           recordId: record.id,
           recordValue,
           referenceOptions,
@@ -1223,6 +1399,7 @@ function projectTableRecordField({
         })
       : projectFieldContext(
           context,
+          { cellId: contextId, kind: "tableCell", tableId },
           fieldStateByContextId[context.id],
           mediaAssetOptions,
           recordsById,
@@ -1305,6 +1482,7 @@ function projectTableEditAction({
   fieldContexts.set(context.id, context);
   const fields = projectFieldContext(
     context,
+    { fieldSetId: context.id, kind: "tableEditFieldSet", tableId },
     fieldStateByContextId[context.id],
     mediaAssetOptions,
     recordsById,
@@ -1368,6 +1546,7 @@ function projectTableEditAction({
 
 function projectFieldContext(
   context: GeneratedTableFieldContext,
+  owner: GeneratedFormlessUiRecordFieldOwner,
   currentState: GeneratedTableFieldContextState | undefined,
   mediaAssetOptions: readonly ImageMediaAssetOption[],
   recordsById: Readonly<Record<string, StoredRecord>>,
@@ -1405,6 +1584,7 @@ function projectFieldContext(
     iconDialogDraftByFieldName: state.iconDialogDraftByFieldName,
     iconDialogOpenByFieldName: state.iconDialogOpenByFieldName,
     mediaAssetOptionsByFieldName,
+    owner,
     pendingByFieldName: state.pendingByFieldName as Record<string, boolean>,
     recordId: context.recordId,
     referenceOptionsByFieldName,

@@ -1,9 +1,9 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vite-plus/test";
 import type {
+  FormlessUiField,
   FormlessUiRecordResultActionContract,
   FormlessUiRecordResultContract,
-  FormlessUiRecordResultFieldContract,
   FormlessUiRecordResultIntent,
 } from "../formless-ui-contract.ts";
 import { AstryxRecordResultRenderer } from "./formless-ui-record-result-renderer.tsx";
@@ -22,30 +22,32 @@ describe("canonical record-result fixtures", () => {
     const editingDisabled = requiredFixture(fixtures, "editing-disabled").recordResult;
     const empty = requiredFixture(fixtures, "empty").recordResult;
     const unavailable = requiredFixture(fixtures, "unavailable").recordResult;
-    const fields = editable.fields.map(({ field }) => field);
-    const title = requiredField(editable, "title").field;
-    const ownerEmail = requiredField(editable, "ownerEmail").field;
-    const readOnlyEstimate = requiredField(readOnly, "estimateHours").field;
-    const status = requiredField(editable, "status").field;
+    const fields = editable.fields;
+    const title = requiredField(editable, "title");
+    const ownerEmail = requiredField(editable, "ownerEmail");
+    const readOnlyEstimate = requiredField(readOnly, "estimateHours");
+    const status = requiredField(editable, "status");
     const transition = requiredAction(editable, "transition");
     const deletion = requiredAction(editable, "delete");
 
     expect(structuredClone(fixtures)).toEqual(fixtures);
     expect(editable.availability.state).toBe("ready");
-    expect(new Set(editable.fields.map((field) => field.id)).size).toBe(editable.fields.length);
-    expect(readOnly.fields.map(({ field }) => field.fieldName)).toEqual(
-      editable.fields.map(({ field }) => field.fieldName),
+    expect(new Set(editable.fields.map((field) => field.fieldId)).size).toBe(
+      editable.fields.length,
     );
-    expect(editingDisabled.fields.map(({ field }) => field.fieldName)).toEqual(
-      editable.fields.map(({ field }) => field.fieldName),
+    expect(readOnly.fields.map((field) => field.fieldName)).toEqual(
+      editable.fields.map((field) => field.fieldName),
+    );
+    expect(editingDisabled.fields.map((field) => field.fieldName)).toEqual(
+      editable.fields.map((field) => field.fieldName),
     );
     expect(title.mode).toBe("editor");
     expect(title.pending).toEqual({ isPending: true, label: "Saving task" });
     expect(ownerEmail.errors?.[0]?.message).toBe("Owner email is required.");
-    expect(requiredField(editable, "slug").field.mode).toBe("display");
+    expect(requiredField(editable, "slug").mode).toBe("display");
     expect(fields.map((field) => field.fieldName)).toContain("summary");
     expect(fields.map((field) => field.fieldName)).not.toContain("url");
-    expect(requiredField(editable, "summary").field.visibleWhen).toEqual({
+    expect(requiredField(editable, "summary").visibleWhen).toEqual({
       field: "kind",
       values: ["article"],
     });
@@ -63,7 +65,7 @@ describe("canonical record-result fixtures", () => {
     expect(transition.control.trigger.content).toMatchObject({ label: "Complete" });
     expect(deletion.control.confirmation?.kind).toBe("destructiveConfirmation");
     expect(editable.warnings[0]?.items[0]?.message).toBe("Owner email is missing.");
-    expect(readOnly.fields.every(({ field }) => field.mode === "display")).toBe(true);
+    expect(readOnly.fields.every((field) => field.mode === "display")).toBe(true);
     expect(readOnlyEstimate.mode).toBe("display");
     if (readOnlyEstimate.mode !== "display") {
       throw new Error("Expected the read-only Estimate fixture to use display mode.");
@@ -71,11 +73,11 @@ describe("canonical record-result fixtures", () => {
     expect(readOnlyEstimate.formatting.suffix).toBe("h");
     expect(
       editingDisabled.fields
-        .filter(({ field }) => field.mode === "editor")
-        .every(({ field }) => field.access.kind === "disabled"),
+        .filter((field) => field.mode === "editor")
+        .every((field) => field.access.kind === "disabled"),
     ).toBe(true);
-    expect(requiredField(editingDisabled, "slug").field.access.kind).toBe("readOnly");
-    expect(requiredField(editingDisabled, "status").field.access.kind).toBe("stateMachine");
+    expect(requiredField(editingDisabled, "slug").access.kind).toBe("readOnly");
+    expect(requiredField(editingDisabled, "status").access.kind).toBe("stateMachine");
     expect(editingDisabled.editing).toEqual({
       disabledReason: "Editing requires an owner session.",
       enabled: false,
@@ -129,7 +131,7 @@ describe("Record Results prototype layout", () => {
         value: "Prepare release checklist",
       }),
     );
-    const editedTitle = requiredField(edited, "title").field;
+    const editedTitle = requiredField(edited, "title");
 
     expect(editedTitle.mode).toBe("editor");
     if (editedTitle.mode !== "editor" || !("drafts" in editedTitle)) {
@@ -146,9 +148,9 @@ describe("Record Results prototype layout", () => {
       }),
     );
 
-    expect(linked.fields.map(({ field }) => field.fieldName)).toContain("url");
-    expect(linked.fields.map(({ field }) => field.fieldName)).not.toContain("summary");
-    expect(requiredField(linked, "url").field.visibleWhen).toEqual({
+    expect(linked.fields.map((field) => field.fieldName)).toContain("url");
+    expect(linked.fields.map((field) => field.fieldName)).not.toContain("summary");
+    expect(requiredField(linked, "url").visibleWhen).toEqual({
       field: "kind",
       values: ["link"],
     });
@@ -162,7 +164,7 @@ describe("Record Results prototype layout", () => {
       operationIntent(editable, transition, transition.control.trigger.intent),
     );
     const completedTransition = requiredAction(completed, "transition");
-    const status = requiredField(completed, "status").field;
+    const status = requiredField(completed, "status");
 
     expect(completedTransition.control.status.status).toBe("committed");
     expect(completedTransition.control.feedback?.title).toBe("Task completed");
@@ -229,7 +231,7 @@ function requiredFixture(
 }
 
 function requiredField(recordResult: FormlessUiRecordResultContract, fieldName: string) {
-  const field = recordResult.fields.find((candidate) => candidate.field.fieldName === fieldName);
+  const field = recordResult.fields.find((candidate) => candidate.fieldName === fieldName);
 
   if (!field) {
     throw new Error(`Missing ${fieldName} record-result field.`);
@@ -255,11 +257,11 @@ function requiredAction(
 
 function fieldIntent(
   recordResult: FormlessUiRecordResultContract,
-  field: FormlessUiRecordResultFieldContract,
+  field: FormlessUiField,
   intent: Extract<FormlessUiRecordResultIntent, { type: "recordResultFieldIntent" }>["intent"],
 ): FormlessUiRecordResultIntent {
   return {
-    fieldId: field.id,
+    fieldId: field.fieldId,
     intent,
     recordId: requiredRecordId(recordResult),
     resultId: recordResult.id,

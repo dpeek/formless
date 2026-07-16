@@ -249,12 +249,7 @@ function mapListActions(
 }
 
 function sameFixtureField(left: FormlessUiField, right: FormlessUiField) {
-  return (
-    left.fieldName === right.fieldName &&
-    left.inputName === right.inputName &&
-    left.recordId === right.recordId &&
-    left.surface === right.surface
-  );
+  return left.fieldId === right.fieldId;
 }
 
 export function selectedListFixture(

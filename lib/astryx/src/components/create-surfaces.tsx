@@ -16,11 +16,11 @@ import type { FieldSchema } from "@dpeek/formless-schema";
 import type {
   FormlessUiButtonContract,
   FormlessUiCreateField,
+  FormlessUiCreateFieldIntentHandler,
   FormlessUiCreateIntent,
   FormlessUiCreateIntentHandler,
   FormlessUiCreateSurfaceContract,
   FormlessUiFieldIntent,
-  FormlessUiFieldIntentHandler,
   FormlessUiSemanticIconId,
 } from "../formless-ui-contract.ts";
 import { FormlessUiFieldRenderer } from "./fields/renderer.tsx";
@@ -105,10 +105,10 @@ export function FormlessCreateSurfacesLayout() {
     () => new Set(initiallyFailedSurfaceIds),
   );
 
-  function handleFieldIntent(surfaceId: string, intent: FormlessUiFieldIntent) {
+  function handleFieldIntent(surfaceId: string, fieldId: string, intent: FormlessUiFieldIntent) {
     setSurfaces((currentSurfaces) =>
       currentSurfaces.map((surface) =>
-        surface.id === surfaceId ? applyCreateFieldIntent(surface, intent) : surface,
+        surface.id === surfaceId ? applyCreateFieldIntent(surface, fieldId, intent) : surface,
       ),
     );
   }
@@ -209,7 +209,7 @@ function CreateTriggerGroup({
   surfaces,
   title,
 }: {
-  onFieldIntent: (surfaceId: string, intent: FormlessUiFieldIntent) => void;
+  onFieldIntent: (surfaceId: string, fieldId: string, intent: FormlessUiFieldIntent) => void;
   onIntent: FormlessUiCreateIntentHandler;
   surfaces: readonly FormlessUiCreateSurfaceContract[];
   title: string;
@@ -223,7 +223,7 @@ function CreateTriggerGroup({
             <AstryxCreateSurfaceRenderer
               key={surface.id}
               surface={surface}
-              onFieldIntent={(intent) => onFieldIntent(surface.id, intent)}
+              onFieldIntent={(fieldId, intent) => onFieldIntent(surface.id, fieldId, intent)}
               onIntent={onIntent}
             />
           ))}
@@ -238,7 +238,7 @@ export function AstryxCreateSurfaceRenderer({
   onIntent,
   surface,
 }: {
-  onFieldIntent: FormlessUiFieldIntentHandler;
+  onFieldIntent: FormlessUiCreateFieldIntentHandler;
   onIntent: FormlessUiCreateIntentHandler;
   surface: FormlessUiCreateSurfaceContract;
 }) {
@@ -275,9 +275,9 @@ export function AstryxCreateSurfaceRenderer({
                     <FormLayout direction="vertical">
                       {surface.dialog.form.fieldSet.fields.map((field) => (
                         <FormlessUiFieldRenderer
-                          key={field.fieldName}
+                          key={field.fieldId}
                           field={field}
-                          onIntent={onFieldIntent}
+                          onIntent={(intent) => onFieldIntent(field.fieldId, intent)}
                         />
                       ))}
                     </FormLayout>
@@ -447,6 +447,7 @@ function createFixtureFields(id: string, task: string): readonly FormlessUiCreat
       field: taskFieldSchema,
       fieldName: "task",
       labelVisibility: "visible",
+      occurrence: { ownerId: id, placementId: "task" },
       recordId: id,
       value: task,
     }),
@@ -457,6 +458,7 @@ function createFixtureFields(id: string, task: string): readonly FormlessUiCreat
       field: summaryFieldSchema,
       fieldName: "summary",
       labelVisibility: "visible",
+      occurrence: { ownerId: id, placementId: "summary" },
       recordId: id,
       value: "Confirm scope and owner before launch.",
     }),
@@ -482,9 +484,13 @@ function createButtonContract(
 
 function applyCreateFieldIntent(
   surface: FormlessUiCreateSurfaceContract,
+  fieldId: string,
   intent: FormlessUiFieldIntent,
 ): FormlessUiCreateSurfaceContract {
   const fields = surface.dialog.form.fieldSet.fields.map((field) => {
+    if (field.fieldId !== fieldId) {
+      return field;
+    }
     const nextField = applyFixtureFieldIntent(field, intent);
     return nextField === field ? field : validateFixtureField(nextField);
   });

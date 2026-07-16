@@ -146,6 +146,7 @@ describe("generated state-machine UI", () => {
           label: "Status",
           stateMachine,
         }}
+        fieldOwner={{ kind: "standalone", ownerId: "state-machine-test" }}
         recordId="task-1"
         showLabel={true}
       />,
@@ -175,6 +176,10 @@ describe("generated state-machine UI", () => {
             field,
             editor: "enum",
             stateMachine,
+          },
+          occurrence: {
+            owner: { kind: "createSurface", surfaceId: "state-machine-create-test" },
+            placementId: "status",
           },
         })}
         onIntent={() => undefined}

@@ -16,6 +16,10 @@ import {
   GENERATED_APPLICATION_SHELL_ID,
   type GeneratedApplicationShellProjection,
 } from "./formless-ui-shell-projection.ts";
+import {
+  indexGeneratedCreateSurfaceFields,
+  resolveGeneratedCreateFieldIntent,
+} from "./generated-create-field-index.ts";
 
 export type GeneratedApplicationShellContractHostPublication = {
   nodes: FormlessUiContractHostNodeSet;
@@ -84,15 +88,24 @@ export function resolveGeneratedApplicationShellIntent(
       return destination ? { intent, kind: "rootSelection" } : { kind: "ignored" };
     }
     case "shellCreate": {
-      if (section.createSurface?.id !== intent.surfaceId) {
+      const surface = section.createSurface;
+      if (surface?.id !== intent.surfaceId) {
         return { kind: "ignored" };
       }
 
-      if ("surfaceId" in intent.intent && intent.intent.surfaceId !== intent.surfaceId) {
-        return { kind: "ignored" };
+      if ("fieldId" in intent) {
+        return resolveGeneratedCreateFieldIntent(
+          indexGeneratedCreateSurfaceFields(surface),
+          intent.fieldId,
+          intent.intent,
+        ) === undefined
+          ? { kind: "ignored" }
+          : { intent, kind: "create" };
       }
 
-      return { intent, kind: "create" };
+      return intent.intent.surfaceId === intent.surfaceId
+        ? { intent, kind: "create" }
+        : { kind: "ignored" };
     }
     case "shellReset": {
       const reset = section.settings?.reset;

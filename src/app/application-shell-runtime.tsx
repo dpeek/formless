@@ -11,7 +11,6 @@ import {
 } from "react";
 import type {
   FormlessUiDocumentThemeReference,
-  FormlessUiFieldIntent,
   FormlessUiShellIntent,
   FormlessUiShellManifestReference,
 } from "@dpeek/formless-astryx/contract";
@@ -316,9 +315,7 @@ function ApplicationShellRuntime({
           );
           return;
         case "create":
-          return registeredCreateRuntimes[resolved.intent.sectionId]?.dispatch(
-            resolved.intent.intent,
-          );
+          return registeredCreateRuntimes[resolved.intent.sectionId]?.dispatch(resolved.intent);
         case "reset":
           if (resolved.intent.intent.type === "resetOpenChange") {
             const open = resolved.intent.intent.open;
@@ -477,15 +474,12 @@ type RootCreateDescriptor = {
 };
 
 type RegisteredGeneratedCreateRuntime = {
-  dispatch: (intent: FormlessUiShellCreateNestedIntent) => Promise<void> | void;
+  dispatch: (intent: FormlessUiShellCreateIntent) => Promise<void> | void;
   runtime: GeneratedCreateRuntime;
   surfaceKey: string;
 };
 
-type FormlessUiShellCreateNestedIntent = Extract<
-  FormlessUiShellIntent,
-  { type: "shellCreate" }
->["intent"];
+type FormlessUiShellCreateIntent = Extract<FormlessUiShellIntent, { type: "shellCreate" }>;
 
 function RegisteredRootCreateRuntime({
   descriptor,
@@ -512,12 +506,12 @@ function RegisteredRootCreateRuntime({
   });
   const runtimeRef = useRef(runtime);
   runtimeRef.current = runtime;
-  const dispatch = useCallback((intent: FormlessUiShellCreateNestedIntent) => {
-    if (isCreateSurfaceIntent(intent)) {
-      return runtimeRef.current.onCreateIntent(intent);
+  const dispatch = useCallback((intent: FormlessUiShellCreateIntent) => {
+    if ("fieldId" in intent) {
+      return runtimeRef.current.onFieldIntent(intent.fieldId, intent.intent);
     }
 
-    return runtimeRef.current.onFieldIntent(intent);
+    return runtimeRef.current.onCreateIntent(intent.intent);
   }, []);
   const surfaceKey = JSON.stringify(runtime.surface);
 
@@ -533,12 +527,6 @@ function RegisteredRootCreateRuntime({
   );
 
   return null;
-}
-
-function isCreateSurfaceIntent(
-  intent: FormlessUiShellCreateNestedIntent,
-): intent is Exclude<FormlessUiShellCreateNestedIntent, FormlessUiFieldIntent> {
-  return intent.type === "createOpenChange" || intent.type === "createSubmit";
 }
 
 function runtimeWorldClientTarget(world: RuntimeWorldMount): ClientAppTarget {

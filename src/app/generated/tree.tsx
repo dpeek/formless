@@ -439,6 +439,7 @@ function PlacementTreeItem({
                   childRecord={childRecord}
                   context={context}
                   onSelectContext={onSelectContext}
+                  placementId={placement.id}
                   result={result}
                   selectableContextRecordIds={selectableContextRecordIds}
                 />
@@ -898,6 +899,7 @@ function PlacementRecordFields({
           density="compact"
           entityName={result.relationship.to.entity}
           fieldConfig={fieldConfig}
+          fieldOwner={{ kind: "standalone", ownerId: `tree-placement:${placement.id}` }}
           key={recordFieldEditorKey(
             result.relationship.to.entity,
             placement.id,
@@ -915,12 +917,14 @@ function ChildRecordEditor({
   childRecord,
   context,
   onSelectContext,
+  placementId,
   result,
   selectableContextRecordIds,
 }: {
   childRecord: StoredRecord;
   context: HomeContextConfig | undefined;
   onSelectContext?: (recordId: string | null) => void;
+  placementId: string;
   result: TreeResultConfig;
   selectableContextRecordIds?: Set<string>;
 }) {
@@ -960,6 +964,10 @@ function ChildRecordEditor({
             }
             entityName={result.childEntityName}
             fieldConfig={fieldConfig}
+            fieldOwner={{
+              kind: "standalone",
+              ownerId: `tree-child:${placementId}:${childRecord.id}`,
+            }}
             key={recordFieldEditorKey(
               result.childEntityName,
               childRecord.id,

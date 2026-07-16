@@ -84,6 +84,10 @@ function projectCreateBooleanField({ facets }: FieldScenarioProjectionContext) {
     control: booleanControl(field),
     draftInput: draftInput(value),
     labelVisibility: "visible",
+    occurrence: {
+      ownerId: `boolean-create-${facets.requiredness}-${facets.value}`,
+      placementId: "completed",
+    },
     recordId: `boolean-create-${facets.requiredness}-${facets.value}`,
     value,
   });
@@ -102,6 +106,10 @@ function projectOperationBooleanField({ facets }: FieldScenarioProjectionContext
     control: booleanControl(field),
     draftInput: draftInput(value),
     labelVisibility: "visible",
+    occurrence: {
+      ownerId: `boolean-operation-${facets.requiredness}-${facets.value}`,
+      placementId: "completed",
+    },
     recordId: `boolean-operation-${facets.requiredness}-${facets.value}`,
     value,
   });
@@ -120,6 +128,10 @@ function projectExistingBooleanField(
     editor: "boolean" as const,
     control: booleanControl(field),
     labelVisibility: surface === "detail" ? ("visible" as const) : ("hidden" as const),
+    occurrence: {
+      ownerId: `boolean-${surface}-${facets.mode}-${facets.requiredness}-${facets.value}`,
+      placementId: "completed",
+    },
     recordId: `boolean-${surface}-${facets.mode}-${facets.requiredness}-${facets.value}`,
     surface,
   };

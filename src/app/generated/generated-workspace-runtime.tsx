@@ -64,7 +64,6 @@ import {
   createGeneratedTableFieldContextState,
   executeGeneratedTableRuntimeOperation,
   selectGeneratedWorkspaceTableFoundation,
-  type GeneratedTableFieldContext,
   type GeneratedTableFieldContextState,
   type GeneratedTableRuntimePlan,
 } from "./generated-table-foundation.tsx";
@@ -115,7 +114,6 @@ type GeneratedWorkspaceCommandRuntime = {
 };
 
 type GeneratedWorkspaceTableRuntime = {
-  fieldContexts: ReadonlyMap<string, GeneratedTableFieldContext>;
   kind: "table";
   runtimePlan: GeneratedTableRuntimePlan;
 };
@@ -307,7 +305,11 @@ export function GeneratedWorkspaceRuntime({
     if (resolved.kind === "field") {
       if (resolved.runtime?.runtime) {
         const runtime = resolved.runtime.runtime as GeneratedWorkspaceKnownControlRuntime;
-        if (runtime.kind === "create" && intent.type === "workspaceField") {
+        if (
+          runtime.kind === "create" &&
+          intent.type === "workspaceField" &&
+          resolved.field !== undefined
+        ) {
           const current =
             createStateBySurfaceId[runtime.surfaceId] ?? initialCreateState(runtime.operation);
           const next = adaptGeneratedCreateFormlessUiDraftChange(
@@ -767,10 +769,11 @@ export function GeneratedWorkspaceRuntime({
     intent: Extract<FormlessUiWorkspaceIntent, { type: "workspaceField" }>,
   ) {
     const runtime = result.runtime as GeneratedWorkspaceTableRuntime;
-    const context = runtime.fieldContexts.get(intent.fieldId);
-    if (!context) {
+    const fieldRuntime = result.fieldsById.get(intent.fieldId);
+    if (!fieldRuntime) {
       return;
     }
+    const { context } = fieldRuntime;
     if (intent.intent.type === "stateTransitionInvoke") {
       const transitionIntent = intent.intent;
       const transition = (runtime.runtimePlan.transitionsByContextId.get(context.id) ?? []).find(
@@ -1201,8 +1204,8 @@ function selectWorkspaceSectionRuntimeInput({
       schema,
     });
     input.table = {
+      fieldsById: table.fieldsById,
       runtime: {
-        fieldContexts: table.fieldContexts,
         kind: "table",
         runtimePlan: table.runtimePlan,
       } satisfies GeneratedWorkspaceTableRuntime,
