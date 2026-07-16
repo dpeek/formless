@@ -1,13 +1,27 @@
 import { Button } from "@dpeek/formless-ui/button";
 import { AddIcon } from "@dpeek/formless-ui/icons";
+import { memo, type ReactNode, useMemo } from "react";
 import type {
   FormlessUiActionTriggerContract,
   FormlessUiWorkspaceContract,
   FormlessUiWorkspaceIntentHandler,
+  FormlessUiWorkspaceIntentScope,
+  FormlessUiWorkspaceManifestContract,
+  FormlessUiWorkspaceManifestReference,
   FormlessUiWorkspaceSectionContract,
+  FormlessUiWorkspaceSectionShellContract,
+  FormlessUiWorkspaceSectionShellReference,
 } from "@dpeek/formless-astryx/contract";
+import {
+  useFormlessUiWorkspaceIntentHandler,
+  useFormlessUiWorkspaceManifest,
+  useFormlessUiWorkspaceSectionShell,
+} from "@dpeek/formless-astryx/contract-host/react";
 import { projectGeneratedWorkspaceExternalActionIntent } from "./formless-ui-workspace-projection.ts";
-import { LegacyWorkspaceCollectionRenderer } from "./legacy-workspace-collection-renderer.tsx";
+import {
+  LegacySubscribedWorkspaceCollectionRenderer,
+  LegacyWorkspaceCollectionRenderer,
+} from "./legacy-workspace-collection-renderer.tsx";
 
 export function LegacyWorkspaceScreenRenderer({
   onIntent,
@@ -21,10 +35,7 @@ export function LegacyWorkspaceScreenRenderer({
   }
 
   return (
-    <div
-      className={workspace.sections.length === 1 ? undefined : "space-y-8"}
-      data-formless-legacy-workspace={workspace.id}
-    >
+    <LegacyWorkspaceFrame workspace={workspace}>
       {workspace.sections.map((section) => (
         <LegacyWorkspaceSection
           key={section.id}
@@ -33,6 +44,49 @@ export function LegacyWorkspaceScreenRenderer({
           section={section}
         />
       ))}
+    </LegacyWorkspaceFrame>
+  );
+}
+
+export const LegacySubscribedWorkspaceScreenRenderer = memo(
+  function LegacySubscribedWorkspaceScreenRenderer({
+    reference,
+  }: {
+    reference: FormlessUiWorkspaceManifestReference;
+  }) {
+    const workspace = useFormlessUiWorkspaceManifest(reference);
+
+    if (!workspace || workspace.sections.length === 0) {
+      return null;
+    }
+
+    return (
+      <LegacyWorkspaceFrame workspace={workspace}>
+        {workspace.sections.map((sectionReference) => (
+          <LegacySubscribedWorkspaceSection
+            key={`${sectionReference.workspaceId}:${sectionReference.sectionId}`}
+            reference={sectionReference}
+          />
+        ))}
+      </LegacyWorkspaceFrame>
+    );
+  },
+  (previous, next) => previous.reference.workspaceId === next.reference.workspaceId,
+);
+
+function LegacyWorkspaceFrame({
+  children,
+  workspace,
+}: {
+  children: ReactNode;
+  workspace: FormlessUiWorkspaceContract | FormlessUiWorkspaceManifestContract;
+}) {
+  return (
+    <div
+      className={workspace.sections.length === 1 ? undefined : "space-y-8"}
+      data-formless-legacy-workspace={workspace.id}
+    >
+      {children}
     </div>
   );
 }
@@ -51,6 +105,67 @@ function LegacyWorkspaceSection({
     screenId,
     sectionId: section.id,
   };
+
+  return (
+    <LegacyWorkspaceSectionFrame onIntent={onIntent} scope={scope} section={section}>
+      <LegacyWorkspaceCollectionRenderer
+        collection={section.collection}
+        onIntent={onIntent}
+        scope={scope}
+      />
+    </LegacyWorkspaceSectionFrame>
+  );
+}
+
+const LegacySubscribedWorkspaceSection = memo(
+  function LegacySubscribedWorkspaceSection({
+    reference,
+  }: {
+    reference: FormlessUiWorkspaceSectionShellReference;
+  }) {
+    const onIntent = useFormlessUiWorkspaceIntentHandler();
+    const section = useFormlessUiWorkspaceSectionShell(reference);
+    const scope = useMemo(
+      () =>
+        section
+          ? {
+              collectionId: section.collection.id,
+              screenId: reference.workspaceId,
+              sectionId: reference.sectionId,
+            }
+          : undefined,
+      [reference.sectionId, reference.workspaceId, section?.collection.id],
+    );
+
+    if (!section || !scope) {
+      return null;
+    }
+
+    return (
+      <LegacyWorkspaceSectionFrame onIntent={onIntent} scope={scope} section={section}>
+        <LegacySubscribedWorkspaceCollectionRenderer
+          collection={section.collection}
+          scope={scope}
+        />
+      </LegacyWorkspaceSectionFrame>
+    );
+  },
+  (previous, next) =>
+    previous.reference.workspaceId === next.reference.workspaceId &&
+    previous.reference.sectionId === next.reference.sectionId,
+);
+
+function LegacyWorkspaceSectionFrame({
+  children,
+  onIntent,
+  scope,
+  section,
+}: {
+  children: ReactNode;
+  onIntent: FormlessUiWorkspaceIntentHandler;
+  scope: FormlessUiWorkspaceIntentScope;
+  section: FormlessUiWorkspaceSectionContract | FormlessUiWorkspaceSectionShellContract;
+}) {
   const renderHeader = section.headingVisibility === "visible" || section.actions.length > 0;
 
   return (
@@ -82,11 +197,7 @@ function LegacyWorkspaceSection({
           ) : null}
         </div>
       ) : null}
-      <LegacyWorkspaceCollectionRenderer
-        collection={section.collection}
-        onIntent={onIntent}
-        scope={scope}
-      />
+      {children}
     </section>
   );
 }

@@ -4,10 +4,12 @@ import { SegmentedControl, SegmentedControlItem } from "@astryxdesign/core/Segme
 import { Heading } from "@astryxdesign/core/Text";
 import { VStack } from "@astryxdesign/core/VStack";
 import type {
+  FormlessUiContextResultReference,
   FormlessUiCreateSurfaceContract,
   FormlessUiCreateField,
   FormlessUiField,
   FormlessUiListContract,
+  FormlessUiMainResultReference,
   FormlessUiOperationControlContract,
   FormlessUiOperationPresentationIntent,
   FormlessUiRecordResultContract,
@@ -18,10 +20,25 @@ import type {
   FormlessUiWorkspaceCollectionPresentationContract,
   FormlessUiWorkspaceContextContract,
   FormlessUiWorkspaceIntent,
+  FormlessUiWorkspaceManifestReference,
   FormlessUiWorkspaceResultContract,
+  FormlessUiWorkspaceSectionContract,
+  FormlessUiWorkspaceSectionShellReference,
 } from "../formless-ui-contract.ts";
+import {
+  createFormlessUiMemoryContractHost,
+  formlessUiListResultReference,
+  formlessUiRecordResultReference,
+  formlessUiTableResultReference,
+  formlessUiWorkspaceManifestReference,
+  formlessUiWorkspaceSectionShellReference,
+  type FormlessUiContractHostNode,
+  type FormlessUiContractHostNodeSet,
+  type FormlessUiMutableContractHost,
+} from "../formless-ui-contract-host.ts";
+import { FormlessUiContractHostProvider } from "../formless-ui-contract-host-react.tsx";
 import { applyScenarioFieldIntent } from "./fields/fixture-helpers.ts";
-import { AstryxWorkspaceScreenRenderer } from "./formless-ui-workspace-screen-renderer.tsx";
+import { AstryxSubscribedWorkspaceScreenRenderer } from "./formless-ui-workspace-screen-renderer.tsx";
 import {
   createFormlessGeneratedWorkspaceFixtures,
   type FormlessGeneratedWorkspaceFixture,
@@ -31,20 +48,10 @@ import { applyListFieldIntent, applyListIntent } from "./lists.tsx";
 import { applyTableFieldIntent, applyTableIntent } from "./tables.tsx";
 
 export function FormlessGeneratedWorkspaceLayout() {
-  const [fixtures, setFixtures] = useState(createFormlessGeneratedWorkspaceFixtures);
+  const [fixtures] = useState(createFormlessGeneratedWorkspaceHosts);
   const [selectedFixtureId, setSelectedFixtureId] =
     useState<FormlessGeneratedWorkspaceFixtureId>("tasks");
-  const selectedFixture = selectedGeneratedWorkspaceFixture(fixtures, selectedFixtureId);
-
-  const handleIntent = (intent: FormlessUiWorkspaceIntent) => {
-    setFixtures((currentFixtures) =>
-      currentFixtures.map((fixture) =>
-        fixture.id === selectedFixtureId
-          ? { ...fixture, workspace: applyGeneratedWorkspaceIntent(fixture.workspace, intent) }
-          : fixture,
-      ),
-    );
-  };
+  const selectedFixture = fixtures.find((fixture) => fixture.id === selectedFixtureId);
 
   return (
     <main>
@@ -67,15 +74,184 @@ export function FormlessGeneratedWorkspaceLayout() {
           </HStack>
 
           {selectedFixture ? (
-            <AstryxWorkspaceScreenRenderer
-              onIntent={handleIntent}
-              workspace={selectedFixture.workspace}
-            />
+            <FormlessUiContractHostProvider host={selectedFixture.host}>
+              <AstryxSubscribedWorkspaceScreenRenderer
+                reference={selectedFixture.workspaceReference}
+              />
+            </FormlessUiContractHostProvider>
           ) : null}
         </VStack>
       </VStack>
     </main>
   );
+}
+
+export type FormlessGeneratedWorkspaceFixtureHost = {
+  getWorkspace(): FormlessGeneratedWorkspaceFixture["workspace"];
+  host: FormlessUiMutableContractHost;
+  workspaceReference: FormlessUiWorkspaceManifestReference;
+};
+
+export function createFormlessGeneratedWorkspaceFixtureHost(
+  initialWorkspace: FormlessGeneratedWorkspaceFixture["workspace"],
+): FormlessGeneratedWorkspaceFixtureHost {
+  let workspace = initialWorkspace;
+  const initialPublication = projectGeneratedWorkspaceFixturePublication(workspace);
+  let host: FormlessUiMutableContractHost;
+
+  host = createFormlessUiMemoryContractHost({
+    dispatch: (intent) => {
+      const nextWorkspace = applyGeneratedWorkspaceIntent(workspace, intent);
+      if (nextWorkspace === workspace) {
+        return;
+      }
+
+      workspace = nextWorkspace;
+      host.publish(projectGeneratedWorkspaceFixturePublication(workspace).nodes);
+    },
+    nodes: initialPublication.nodes,
+  });
+
+  return {
+    getWorkspace: () => workspace,
+    host,
+    workspaceReference: initialPublication.workspaceReference,
+  };
+}
+
+export function projectGeneratedWorkspaceFixturePublication(
+  workspace: FormlessGeneratedWorkspaceFixture["workspace"],
+): {
+  nodes: FormlessUiContractHostNodeSet;
+  workspaceReference: FormlessUiWorkspaceManifestReference;
+} {
+  const workspaceReference = formlessUiWorkspaceManifestReference(workspace.id);
+  const sections = workspace.sections.map((section) =>
+    projectGeneratedWorkspaceFixtureSection(workspaceReference.workspaceId, section),
+  );
+
+  return {
+    nodes: [
+      {
+        reference: workspaceReference,
+        snapshot: {
+          accessibilityLabel: workspace.accessibilityLabel,
+          id: workspace.id,
+          kind: "workspaceManifest",
+          label: workspace.label,
+          sections: sections.map(({ reference }) => reference),
+        },
+      },
+      ...sections.flatMap(({ nodes }) => nodes),
+    ],
+    workspaceReference,
+  };
+}
+
+function createFormlessGeneratedWorkspaceHosts() {
+  return createFormlessGeneratedWorkspaceFixtures().map(({ id, label, workspace }) => ({
+    id,
+    label,
+    ...createFormlessGeneratedWorkspaceFixtureHost(workspace),
+  }));
+}
+
+function projectGeneratedWorkspaceFixtureSection(
+  workspaceId: string,
+  section: FormlessUiWorkspaceSectionContract,
+): {
+  nodes: FormlessUiContractHostNodeSet;
+  reference: FormlessUiWorkspaceSectionShellReference;
+} {
+  const reference = formlessUiWorkspaceSectionShellReference(workspaceId, section.id);
+  const { contextDetail, result, ...presentation } = section.collection.presentation;
+  const mainResult = projectGeneratedWorkspaceFixtureMainResult(workspaceId, section.id, result);
+  const contextResult = contextDetail
+    ? projectGeneratedWorkspaceFixtureContextResult(workspaceId, section.id, contextDetail)
+    : undefined;
+
+  return {
+    nodes: [
+      {
+        reference,
+        snapshot: {
+          accessibilityLabel: section.accessibilityLabel,
+          actions: section.actions,
+          collection: {
+            ...section.collection,
+            presentation: {
+              ...presentation,
+              ...(contextResult === undefined ? {} : { contextDetail: contextResult.reference }),
+              result: mainResult.reference,
+            },
+          },
+          headingVisibility: section.headingVisibility,
+          id: section.id,
+          kind: "workspaceSectionShell",
+          label: section.label,
+        },
+      },
+      mainResult.node,
+      ...(contextResult === undefined ? [] : [contextResult.node]),
+    ],
+    reference,
+  };
+}
+
+function projectGeneratedWorkspaceFixtureMainResult(
+  workspaceId: string,
+  sectionId: string,
+  result: FormlessUiWorkspaceResultContract,
+): {
+  node: FormlessUiContractHostNode;
+  reference: FormlessUiMainResultReference;
+} {
+  switch (result.kind) {
+    case "list": {
+      const reference = formlessUiListResultReference({
+        resultId: result.id,
+        role: "mainResult",
+        sectionId,
+        workspaceId,
+      });
+      return { node: { reference, snapshot: result }, reference };
+    }
+    case "recordResult": {
+      const reference = formlessUiRecordResultReference({
+        resultId: result.id,
+        role: "mainResult",
+        sectionId,
+        workspaceId,
+      });
+      return { node: { reference, snapshot: result }, reference };
+    }
+    case "table": {
+      const reference = formlessUiTableResultReference({
+        resultId: result.id,
+        role: "mainResult",
+        sectionId,
+        workspaceId,
+      });
+      return { node: { reference, snapshot: result }, reference };
+    }
+  }
+}
+
+function projectGeneratedWorkspaceFixtureContextResult(
+  workspaceId: string,
+  sectionId: string,
+  result: FormlessUiRecordResultContract,
+): {
+  node: FormlessUiContractHostNode;
+  reference: FormlessUiContextResultReference;
+} {
+  const reference = formlessUiRecordResultReference({
+    resultId: result.id,
+    role: "contextResult",
+    sectionId,
+    workspaceId,
+  });
+  return { node: { reference, snapshot: result }, reference };
 }
 
 export function applyGeneratedWorkspaceIntent(

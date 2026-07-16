@@ -1,0 +1,429 @@
+import { describe, expect, it } from "vite-plus/test";
+import type {
+  FormlessUiListContract,
+  FormlessUiRecordResultContract,
+  FormlessUiTableContract,
+  FormlessUiWorkspaceContract,
+} from "@dpeek/formless-astryx/contract";
+import { createFormlessUiMemoryContractHost } from "@dpeek/formless-astryx/contract-host";
+import type { GeneratedOperationControlBinding } from "../../client/views.ts";
+import { projectGeneratedListOperationAction } from "./formless-ui-list-projection.ts";
+import { projectGeneratedOperationFormlessUiControl } from "./formless-ui-operation-projection.ts";
+import { projectGeneratedRecordFormlessUiField } from "./formless-ui-projection.ts";
+import { projectGeneratedWorkspaceContractHostPublication } from "./generated-workspace-contract-host.ts";
+
+describe("generated workspace contract host adapter", () => {
+  it("flattens complete list, table, and context projections into scoped host nodes", () => {
+    const publication = projectGeneratedWorkspaceContractHostPublication(workspaceFixture());
+    const host = createFormlessUiMemoryContractHost({ nodes: publication.nodes });
+    const workspace = required(host.read(publication.workspaceReference));
+    const [listSectionReference, tableSectionReference] = workspace.sections;
+    const listSection = required(host.read(required(listSectionReference)));
+    const tableSection = required(host.read(required(tableSectionReference)));
+    const list = host.read(listSection.collection.presentation.result);
+    const contextReference = listSection.collection.presentation.contextDetail;
+    const context = contextReference ? host.read(contextReference) : undefined;
+    const table = host.read(tableSection.collection.presentation.result);
+
+    expect(workspace).toMatchObject({
+      id: "workspace:tasks",
+      kind: "workspaceManifest",
+      sections: [
+        { role: "section", sectionId: "section:tasks" },
+        { role: "section", sectionId: "section:archive" },
+      ],
+    });
+    expect(listSection).toMatchObject({
+      collection: {
+        presentation: {
+          contextDetail: { role: "contextResult" },
+          result: { kind: "listResultReference", role: "mainResult" },
+        },
+      },
+      kind: "workspaceSectionShell",
+    });
+    expect(tableSection.collection.presentation.result).toMatchObject({
+      kind: "tableResultReference",
+      role: "mainResult",
+    });
+    expect(list).toMatchObject({ id: "list:tasks", kind: "list" });
+    expect(context).toMatchObject({ id: "record:task-context", kind: "recordResult" });
+    expect(table).toMatchObject({ id: "table:archive", kind: "table" });
+  });
+
+  it("isolates unrelated complete reprojections and changes at result, section, and workspace boundaries", () => {
+    const initial = projectGeneratedWorkspaceContractHostPublication(workspaceFixture());
+    const host = createFormlessUiMemoryContractHost({ nodes: initial.nodes });
+    const manifest = required(host.read(initial.workspaceReference));
+    const [listSectionReference, tableSectionReference] = manifest.sections;
+    const listSection = required(host.read(required(listSectionReference)));
+    const contextReference = required(listSection.collection.presentation.contextDetail);
+    const mainReference = listSection.collection.presentation.result;
+    const tableSection = required(host.read(required(tableSectionReference)));
+    const tableReference = tableSection.collection.presentation.result;
+    const notifications = {
+      context: 0,
+      main: 0,
+      section: 0,
+      table: 0,
+      workspace: 0,
+    };
+
+    host.subscribe(initial.workspaceReference, () => notifications.workspace++);
+    host.subscribe(required(listSectionReference), () => notifications.section++);
+    host.subscribe(mainReference, () => notifications.main++);
+    host.subscribe(contextReference, () => notifications.context++);
+    host.subscribe(tableReference, () => notifications.table++);
+
+    host.publish(projectGeneratedWorkspaceContractHostPublication(workspaceFixture()).nodes);
+    expect(notifications).toEqual({ context: 0, main: 0, section: 0, table: 0, workspace: 0 });
+
+    const resultOptions: WorkspaceFixtureOptions = {
+      fieldDraft: "Draft title",
+      fieldPending: true,
+      itemIds: ["task-2", "task-1"],
+      operationPending: true,
+      orderingPending: true,
+      warning: "Owner email is missing.",
+    };
+    host.publish(
+      projectGeneratedWorkspaceContractHostPublication(workspaceFixture(resultOptions)).nodes,
+    );
+    expect(notifications).toEqual({ context: 0, main: 1, section: 0, table: 0, workspace: 0 });
+    expect(host.read(mainReference)).toMatchObject({
+      items: [
+        { id: "task-2" },
+        {
+          actions: { primary: [{ control: { status: { status: "pending" } } }] },
+          fields: [{ drafts: { draft: "Draft title" }, pending: { isPending: true } }],
+          id: "task-1",
+          ordering: { pending: true },
+          warnings: [{ items: [{ message: "Owner email is missing." }] }],
+        },
+      ],
+    });
+
+    const sectionOptions: WorkspaceFixtureOptions = {
+      ...resultOptions,
+      activeCount: "3",
+      contextCount: "2",
+      selectedContextId: "context:project-2",
+      selectedQueryId: "query:all",
+      summaryValue: "3 open",
+    };
+    host.publish(
+      projectGeneratedWorkspaceContractHostPublication(workspaceFixture(sectionOptions)).nodes,
+    );
+    expect(notifications).toEqual({ context: 0, main: 1, section: 1, table: 0, workspace: 0 });
+    expect(host.read(required(listSectionReference))).toMatchObject({
+      collection: {
+        presentation: {
+          context: {
+            options: [
+              { countText: "2", selected: false },
+              { countText: "2", selected: true },
+            ],
+            selectedOptionId: "context:project-2",
+          },
+          queryNavigation: {
+            items: [{ countText: "3", selected: false }, { selected: true }],
+          },
+          summaries: [{ displayValue: "3 open" }],
+        },
+        selectedQueryId: "query:all",
+      },
+    });
+
+    host.publish(
+      projectGeneratedWorkspaceContractHostPublication(
+        workspaceFixture({ ...sectionOptions, sectionOrder: ["archive", "tasks"] }),
+      ).nodes,
+    );
+    expect(notifications).toEqual({ context: 0, main: 1, section: 1, table: 0, workspace: 1 });
+    expect(
+      host.read(initial.workspaceReference)?.sections.map(({ sectionId }) => sectionId),
+    ).toEqual(["section:archive", "section:tasks"]);
+  });
+});
+
+type WorkspaceFixtureOptions = {
+  activeCount?: string;
+  contextCount?: string;
+  fieldDraft?: string;
+  fieldPending?: boolean;
+  itemIds?: readonly string[];
+  operationPending?: boolean;
+  orderingPending?: boolean;
+  sectionOrder?: readonly ("archive" | "tasks")[];
+  selectedContextId?: string;
+  selectedQueryId?: string;
+  summaryValue?: string;
+  warning?: string;
+};
+
+function workspaceFixture(options: WorkspaceFixtureOptions = {}): FormlessUiWorkspaceContract {
+  const sections = {
+    archive: archiveSection(),
+    tasks: tasksSection(options),
+  };
+
+  return {
+    accessibilityLabel: "Tasks workspace",
+    id: "workspace:tasks",
+    kind: "workspace",
+    label: "Tasks",
+    sections: (options.sectionOrder ?? ["tasks", "archive"]).map((key) => sections[key]),
+  };
+}
+
+function tasksSection(options: WorkspaceFixtureOptions) {
+  const screenId = "workspace:tasks";
+  const sectionId = "section:tasks";
+  const collectionId = "collection:tasks";
+  const selectedQueryId = options.selectedQueryId ?? "query:active";
+  const selectedContextId = options.selectedContextId ?? "context:project-1";
+
+  return {
+    accessibilityLabel: "Tasks section",
+    actions: [],
+    collection: {
+      accessibilityLabel: "Tasks collection",
+      availability: { state: "ready" as const },
+      id: collectionId,
+      kind: "workspaceCollection" as const,
+      label: "Tasks",
+      presentation: {
+        actions: workspaceActions(collectionId),
+        context: {
+          accessibilityLabel: "Project context",
+          availability: { state: "ready" as const },
+          id: "context:project",
+          kind: "workspaceContext" as const,
+          label: "Project",
+          options: ["context:project-1", "context:project-2"].map((id) => ({
+            availability: { available: true as const },
+            countText: options.contextCount ?? "1",
+            id,
+            kind: "workspaceContextOption" as const,
+            label: id.endsWith("1") ? "Project one" : "Project two",
+            selected: id === selectedContextId,
+            selectionIntent: {
+              collectionId,
+              contextId: "context:project",
+              contextOptionId: id,
+              screenId,
+              sectionId,
+              type: "workspaceContextSelection" as const,
+            },
+          })),
+          presentation: "singletonDetail" as const,
+          selectedOptionId: selectedContextId,
+        },
+        contextDetail: contextResult(),
+        kind: "ordinary" as const,
+        queryNavigation: {
+          accessibilityLabel: "Task queries",
+          id: "query:navigation",
+          items: ["query:active", "query:all"].map((id) => ({
+            availability: { available: true as const },
+            ...(id === "query:active" ? { countText: options.activeCount ?? "1" } : {}),
+            id,
+            kind: "workspaceQuery" as const,
+            label: id === "query:active" ? "Active" : "All",
+            selected: id === selectedQueryId,
+            selectionIntent: {
+              collectionId,
+              queryId: id,
+              screenId,
+              sectionId,
+              type: "workspaceQuerySelection" as const,
+            },
+          })),
+          kind: "workspaceQueryNavigation" as const,
+        },
+        result: listResult(options),
+        summaries: [
+          {
+            availability: { available: true as const },
+            displayValue: options.summaryValue ?? "1 open",
+            id: "summary:open",
+            kind: "workspaceSummary" as const,
+            label: "Open",
+          },
+        ],
+      },
+      selectedQueryId,
+    },
+    headingVisibility: "visible" as const,
+    id: sectionId,
+    kind: "workspaceSection" as const,
+    label: "Tasks section",
+  };
+}
+
+function archiveSection() {
+  return {
+    accessibilityLabel: "Archive section",
+    actions: [],
+    collection: {
+      accessibilityLabel: "Archive collection",
+      availability: { state: "ready" as const },
+      id: "collection:archive",
+      kind: "workspaceCollection" as const,
+      label: "Archive",
+      presentation: {
+        actions: workspaceActions("collection:archive"),
+        kind: "ordinary" as const,
+        result: tableResult(),
+        summaries: [],
+      },
+      selectedQueryId: null,
+    },
+    headingVisibility: "visible" as const,
+    id: "section:archive",
+    kind: "workspaceSection" as const,
+    label: "Archive section",
+  };
+}
+
+function listResult(options: WorkspaceFixtureOptions): FormlessUiListContract {
+  const ids = options.itemIds ?? ["task-1", "task-2"];
+
+  return {
+    accessibilityLabel: "Task records",
+    density: "compact",
+    editing: { enabled: true },
+    id: "list:tasks",
+    items: ids.map((id) => {
+      const field = projectGeneratedRecordFormlessUiField({
+        canPatch: true,
+        editorDraft: id === "task-1" ? options.fieldDraft : undefined,
+        fieldConfig: {
+          commit: "field-commit",
+          editor: "text",
+          field: { label: "Title", required: true, type: "text" },
+          fieldName: "title",
+        },
+        isPending: id === "task-1" && options.fieldPending,
+        recordId: id,
+        recordValue: id === "task-1" ? "Initial title" : "Second task",
+      });
+      const operation = projectGeneratedListOperationAction(
+        projectGeneratedOperationFormlessUiControl({
+          binding: operationBinding(id),
+          presentation: {
+            accessibilityLabel: `Run ${id}`,
+            content: { kind: "label", label: "Run" },
+            density: "compact",
+            prominence: "secondary",
+          },
+          state: {
+            executionKey: `task.run:${id}`,
+            status: id === "task-1" && options.operationPending ? "pending" : "idle",
+          },
+        }),
+        "command",
+      );
+
+      return {
+        accessibilityLabel: id,
+        actions: {
+          id: `${id}:actions`,
+          kind: "actionGroup",
+          primary: [operation],
+          secondary: [],
+          secondaryAccessibilityLabel: `More actions for ${id}`,
+        },
+        availability: { available: true },
+        fields: [field],
+        id,
+        kind: "listItem",
+        ordering: {
+          accessibilityLabel: `Reorder ${id}`,
+          actions: [],
+          affordance: "reorder",
+          kind: "ordering",
+          pending: id === "task-1" && (options.orderingPending ?? false),
+        },
+        warnings:
+          id === "task-1" && options.warning
+            ? [
+                {
+                  id: `${id}:warnings`,
+                  items: [{ code: "owner-email", message: options.warning }],
+                  kind: "listWarning" as const,
+                  title: "Readiness warnings",
+                },
+              ]
+            : [],
+      };
+    }),
+    kind: "list",
+  };
+}
+
+function contextResult(): FormlessUiRecordResultContract {
+  return {
+    accessibilityLabel: "Selected task context",
+    actions: {
+      id: "record:task-context:actions",
+      kind: "actionGroup",
+      primary: [],
+      secondary: [],
+      secondaryAccessibilityLabel: "More context actions",
+    },
+    availability: { state: "ready" },
+    density: "compact",
+    editing: { enabled: true },
+    fields: [],
+    id: "record:task-context",
+    kind: "recordResult",
+    warnings: [],
+  };
+}
+
+function tableResult(): FormlessUiTableContract {
+  return {
+    accessibilityLabel: "Archived tasks",
+    columns: [],
+    density: "compact",
+    editing: { enabled: true },
+    id: "table:archive",
+    kind: "table",
+    rows: [],
+  };
+}
+
+function workspaceActions(id: string) {
+  return {
+    id: `${id}:actions`,
+    kind: "workspaceCollectionActions" as const,
+    primary: [],
+    secondary: [],
+    secondaryAccessibilityLabel: `More actions for ${id}`,
+  };
+}
+
+function operationBinding(recordId: string): GeneratedOperationControlBinding {
+  return {
+    availability: { state: "enabled" },
+    canonicalOperationKey: "task.run",
+    entityName: "task",
+    executionKey: `task.run:${recordId}`,
+    id: `task.run:${recordId}`,
+    input: { kind: "collectionCommand", ui: { showAffectedCountOnSuccess: false } },
+    kind: "command",
+    label: "Run",
+    operationKind: "command",
+    operationName: "run",
+    scope: "collection",
+    visualIntent: "default",
+  };
+}
+
+function required<T>(value: T | null | undefined): T {
+  if (value === undefined || value === null) {
+    throw new Error("Missing required fixture value.");
+  }
+  return value;
+}

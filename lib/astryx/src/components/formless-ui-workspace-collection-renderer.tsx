@@ -9,6 +9,7 @@ import { Selector, type SelectorOptionData } from "@astryxdesign/core/Selector";
 import { Tab, TabList } from "@astryxdesign/core/TabList";
 import { Heading, Text } from "@astryxdesign/core/Text";
 import { VStack } from "@astryxdesign/core/VStack";
+import { memo, type ReactNode } from "react";
 import type {
   FormlessUiCreateIntent,
   FormlessUiFieldIntent,
@@ -16,11 +17,14 @@ import type {
   FormlessUiListOperationActionContract,
   FormlessUiOperationPresentationIntent,
   FormlessUiRecordResultIntent,
+  FormlessUiContextResultReference,
+  FormlessUiMainResultReference,
   FormlessUiTableOperationActionContract,
   FormlessUiTableIntent,
   FormlessUiWorkspaceCollectionActionContract,
   FormlessUiWorkspaceCollectionActionGroupContract,
   FormlessUiWorkspaceCollectionContract,
+  FormlessUiWorkspaceCollectionShellContract,
   FormlessUiWorkspaceContextContract,
   FormlessUiWorkspaceContextOptionContract,
   FormlessUiWorkspaceIntentHandler,
@@ -30,6 +34,11 @@ import type {
   FormlessUiWorkspaceResultContract,
   FormlessUiWorkspaceSummaryContract,
 } from "../formless-ui-contract.ts";
+import { formlessUiContractReferenceKey } from "../formless-ui-contract-host.ts";
+import {
+  useFormlessUiResult,
+  useFormlessUiWorkspaceIntentHandler,
+} from "../formless-ui-contract-host-react.tsx";
 import { AstryxCreateSurfaceRenderer } from "./create-surfaces.tsx";
 import { AstryxListRenderer } from "./formless-ui-list-renderer.tsx";
 import { AstryxRecordResultRenderer } from "./formless-ui-record-result-renderer.tsx";
@@ -48,6 +57,82 @@ export function AstryxWorkspaceCollectionRenderer({
   scope,
 }: {
   collection: FormlessUiWorkspaceCollectionContract;
+  onIntent: FormlessUiWorkspaceIntentHandler;
+  scope: FormlessUiWorkspaceIntentScope;
+}) {
+  const presentation = collection.presentation;
+
+  return (
+    <AstryxWorkspaceCollectionFrame
+      collection={collection}
+      contextResult={
+        presentation.contextDetail ? (
+          <AstryxWorkspaceRecordResult
+            contextId={
+              presentation.kind === "listDetail"
+                ? presentation.selector.id
+                : presentation.context?.id
+            }
+            onIntent={onIntent}
+            recordResult={presentation.contextDetail}
+            scope={scope}
+          />
+        ) : undefined
+      }
+      mainResult={
+        <AstryxWorkspaceResult onIntent={onIntent} result={presentation.result} scope={scope} />
+      }
+      onIntent={onIntent}
+      scope={scope}
+    />
+  );
+}
+
+export function AstryxSubscribedWorkspaceCollectionRenderer({
+  collection,
+  scope,
+}: {
+  collection: FormlessUiWorkspaceCollectionShellContract;
+  scope: FormlessUiWorkspaceIntentScope;
+}) {
+  const onIntent = useFormlessUiWorkspaceIntentHandler();
+  const presentation = collection.presentation;
+
+  return (
+    <AstryxWorkspaceCollectionFrame
+      collection={collection}
+      contextResult={
+        presentation.contextDetail ? (
+          <AstryxSubscribedWorkspaceContextResult
+            contextId={
+              presentation.kind === "listDetail"
+                ? presentation.selector.id
+                : presentation.context?.id
+            }
+            reference={presentation.contextDetail}
+            scope={scope}
+          />
+        ) : undefined
+      }
+      mainResult={
+        <AstryxSubscribedWorkspaceMainResult reference={presentation.result} scope={scope} />
+      }
+      onIntent={onIntent}
+      scope={scope}
+    />
+  );
+}
+
+function AstryxWorkspaceCollectionFrame({
+  collection,
+  contextResult,
+  mainResult,
+  onIntent,
+  scope,
+}: {
+  collection: FormlessUiWorkspaceCollectionContract | FormlessUiWorkspaceCollectionShellContract;
+  contextResult?: ReactNode;
+  mainResult: ReactNode;
   onIntent: FormlessUiWorkspaceIntentHandler;
   scope: FormlessUiWorkspaceIntentScope;
 }) {
@@ -97,20 +182,13 @@ export function AstryxWorkspaceCollectionRenderer({
             scope={scope}
           />
           <VStack gap={6} width="100%">
-            {presentation.contextDetail ? (
-              <AstryxWorkspaceRecordResult
-                contextId={presentation.selector.id}
-                onIntent={onIntent}
-                recordResult={presentation.contextDetail}
-                scope={scope}
-              />
-            ) : null}
+            {contextResult}
             <AstryxWorkspaceQueryNavigation
               navigation={presentation.queryNavigation}
               onIntent={onIntent}
             />
             <AstryxWorkspaceSummaries summaries={presentation.summaries} />
-            <AstryxWorkspaceResult onIntent={onIntent} result={presentation.result} scope={scope} />
+            {mainResult}
             <AstryxWorkspaceCollectionActions
               actions={presentation.actions}
               onIntent={onIntent}
@@ -123,7 +201,7 @@ export function AstryxWorkspaceCollectionRenderer({
           {presentation.context ? (
             <AstryxWorkspaceOrdinaryContext
               context={presentation.context}
-              detail={presentation.contextDetail}
+              detail={contextResult}
               onIntent={onIntent}
               scope={scope}
             />
@@ -133,7 +211,7 @@ export function AstryxWorkspaceCollectionRenderer({
             onIntent={onIntent}
           />
           <AstryxWorkspaceSummaries summaries={presentation.summaries} />
-          <AstryxWorkspaceResult onIntent={onIntent} result={presentation.result} scope={scope} />
+          {mainResult}
           <AstryxWorkspaceCollectionActions
             actions={presentation.actions}
             onIntent={onIntent}
@@ -194,19 +272,12 @@ function AstryxWorkspaceOrdinaryContext({
   scope,
 }: {
   context: FormlessUiWorkspaceContextContract;
-  detail?: Extract<FormlessUiWorkspaceResultContract, { kind: "recordResult" }>;
+  detail?: ReactNode;
   onIntent: FormlessUiWorkspaceIntentHandler;
   scope: FormlessUiWorkspaceIntentScope;
 }) {
   if (context.presentation === "externalNavigation") {
-    return detail ? (
-      <AstryxWorkspaceRecordResult
-        contextId={context.id}
-        onIntent={onIntent}
-        recordResult={detail}
-        scope={scope}
-      />
-    ) : null;
+    return detail ?? null;
   }
 
   return (
@@ -219,14 +290,7 @@ function AstryxWorkspaceOrdinaryContext({
           </HStack>
         ) : null}
         <AstryxWorkspaceContextAvailability context={context} />
-        {detail ? (
-          <AstryxWorkspaceRecordResult
-            contextId={context.id}
-            onIntent={onIntent}
-            recordResult={detail}
-            scope={scope}
-          />
-        ) : null}
+        {detail}
       </VStack>
     </Section>
   );
@@ -502,6 +566,94 @@ function AstryxWorkspaceCollectionAction({
       )}
       <AstryxOperationFeedback feedback={action.control.feedback} />
     </VStack>
+  );
+}
+
+const AstryxSubscribedWorkspaceMainResult = memo(function AstryxSubscribedWorkspaceMainResult({
+  reference,
+  scope,
+}: {
+  reference: FormlessUiMainResultReference;
+  scope: FormlessUiWorkspaceIntentScope;
+}) {
+  const onIntent = useFormlessUiWorkspaceIntentHandler();
+  const result = useFormlessUiResult(reference);
+
+  return result ? (
+    <AstryxWorkspaceResult onIntent={onIntent} result={result} scope={scope} />
+  ) : null;
+}, subscribedMainResultPropsEqual);
+
+const AstryxSubscribedWorkspaceContextResult = memo(
+  function AstryxSubscribedWorkspaceContextResult({
+    contextId,
+    reference,
+    scope,
+  }: {
+    contextId?: string;
+    reference: FormlessUiContextResultReference;
+    scope: FormlessUiWorkspaceIntentScope;
+  }) {
+    const onIntent = useFormlessUiWorkspaceIntentHandler();
+    const result = useFormlessUiResult(reference);
+
+    return result ? (
+      <AstryxWorkspaceRecordResult
+        contextId={contextId}
+        onIntent={onIntent}
+        recordResult={result}
+        scope={scope}
+      />
+    ) : null;
+  },
+  subscribedContextResultPropsEqual,
+);
+
+function subscribedMainResultPropsEqual(
+  previous: {
+    reference: FormlessUiMainResultReference;
+    scope: FormlessUiWorkspaceIntentScope;
+  },
+  next: {
+    reference: FormlessUiMainResultReference;
+    scope: FormlessUiWorkspaceIntentScope;
+  },
+) {
+  return (
+    formlessUiContractReferenceKey(previous.reference) ===
+      formlessUiContractReferenceKey(next.reference) &&
+    workspaceScopesEqual(previous.scope, next.scope)
+  );
+}
+
+function subscribedContextResultPropsEqual(
+  previous: {
+    contextId?: string;
+    reference: FormlessUiContextResultReference;
+    scope: FormlessUiWorkspaceIntentScope;
+  },
+  next: {
+    contextId?: string;
+    reference: FormlessUiContextResultReference;
+    scope: FormlessUiWorkspaceIntentScope;
+  },
+) {
+  return (
+    previous.contextId === next.contextId &&
+    formlessUiContractReferenceKey(previous.reference) ===
+      formlessUiContractReferenceKey(next.reference) &&
+    workspaceScopesEqual(previous.scope, next.scope)
+  );
+}
+
+function workspaceScopesEqual(
+  previous: FormlessUiWorkspaceIntentScope,
+  next: FormlessUiWorkspaceIntentScope,
+) {
+  return (
+    previous.collectionId === next.collectionId &&
+    previous.screenId === next.screenId &&
+    previous.sectionId === next.sectionId
   );
 }
 

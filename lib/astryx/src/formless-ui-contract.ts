@@ -1573,6 +1573,106 @@ export type FormlessUiWorkspaceContract = {
   sections: readonly FormlessUiWorkspaceSectionContract[];
 };
 
+export type FormlessUiWorkspaceManifestReference = {
+  kind: "workspaceManifestReference";
+  role: "workspace";
+  workspaceId: string;
+};
+
+export type FormlessUiWorkspaceSectionShellReference = {
+  kind: "workspaceSectionShellReference";
+  role: "section";
+  sectionId: string;
+  workspaceId: string;
+};
+
+export type FormlessUiResultReferenceRole = "contextResult" | "mainResult";
+
+export type FormlessUiListResultReference = {
+  kind: "listResultReference";
+  resultId: string;
+  role: "mainResult";
+  sectionId: string;
+  workspaceId: string;
+};
+
+export type FormlessUiTableResultReference = {
+  kind: "tableResultReference";
+  resultId: string;
+  role: "mainResult";
+  sectionId: string;
+  workspaceId: string;
+};
+
+export type FormlessUiRecordResultReference<
+  Role extends FormlessUiResultReferenceRole = FormlessUiResultReferenceRole,
+> = {
+  kind: "recordResultReference";
+  resultId: string;
+  role: Role;
+  sectionId: string;
+  workspaceId: string;
+};
+
+export type FormlessUiMainResultReference =
+  | FormlessUiListResultReference
+  | FormlessUiRecordResultReference<"mainResult">
+  | FormlessUiTableResultReference;
+
+export type FormlessUiContextResultReference = FormlessUiRecordResultReference<"contextResult">;
+
+export type FormlessUiResultReference =
+  | FormlessUiMainResultReference
+  | FormlessUiContextResultReference;
+
+export type FormlessUiWorkspaceManifestContract = Omit<
+  FormlessUiWorkspaceContract,
+  "kind" | "sections"
+> & {
+  kind: "workspaceManifest";
+  sections: readonly FormlessUiWorkspaceSectionShellReference[];
+};
+
+export type FormlessUiWorkspaceOrdinaryCollectionShellContract = Omit<
+  FormlessUiWorkspaceOrdinaryCollectionContract,
+  "contextDetail" | "result"
+> & {
+  contextDetail?: FormlessUiContextResultReference;
+  result: FormlessUiMainResultReference;
+};
+
+export type FormlessUiWorkspaceListDetailShellContract = Omit<
+  FormlessUiWorkspaceListDetailContract,
+  "contextDetail" | "result"
+> & {
+  contextDetail?: FormlessUiContextResultReference;
+  result: FormlessUiMainResultReference;
+};
+
+export type FormlessUiWorkspaceCollectionShellContract = Omit<
+  FormlessUiWorkspaceCollectionContract,
+  "presentation"
+> & {
+  presentation:
+    | FormlessUiWorkspaceListDetailShellContract
+    | FormlessUiWorkspaceOrdinaryCollectionShellContract;
+};
+
+export type FormlessUiWorkspaceSectionShellContract = Omit<
+  FormlessUiWorkspaceSectionContract,
+  "collection" | "kind"
+> & {
+  collection: FormlessUiWorkspaceCollectionShellContract;
+  kind: "workspaceSectionShell";
+};
+
+export type FormlessUiContractReference =
+  | FormlessUiListResultReference
+  | FormlessUiRecordResultReference
+  | FormlessUiTableResultReference
+  | FormlessUiWorkspaceManifestReference
+  | FormlessUiWorkspaceSectionShellReference;
+
 export type FormlessUiWorkspaceIntentScope = {
   collectionId: string;
   screenId: string;

@@ -4,10 +4,13 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./contract": "./src/formless-ui-contract.ts"
+    "./contract": "./src/formless-ui-contract.ts",
+    "./contract-host": "./src/formless-ui-contract-host.ts",
+    "./contract-host/react": "./src/formless-ui-contract-host-react.tsx"
   },
   "scripts": {
-    "dev": "vite"
+    "dev": "vite",
+    "test": "vp test src/formless-ui-contract-host.test.tsx src/components/formless-ui-workspace-renderer.test.tsx src/components/formless-ui-subscribed-workspace-renderer.test.tsx src/components/generated-workspace.test.tsx --config ../../vite.config.ts"
   },
   "dependencies": {
     "@astryxdesign/core": "0.1.4",
@@ -24,7 +27,9 @@
     "@stylexjs/unplugin": "0.18.3",
     "@types/react": "19.2.15",
     "@types/react-dom": "19.2.3",
+    "@types/react-test-renderer": "^19.1.0",
     "@vitejs/plugin-react": "latest",
+    "react-test-renderer": "19.2.6",
     "typescript": "~6.0.2",
     "vite": "latest"
   },

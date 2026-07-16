@@ -1,11 +1,14 @@
+import { readFile } from "node:fs/promises";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vite-plus/test";
+import { describe, expect, it, vi } from "vite-plus/test";
 import type {
+  FormlessUiContractReference,
   FormlessUiListContract,
   FormlessUiWorkspaceCollectionContract,
   FormlessUiWorkspaceContract,
   FormlessUiWorkspaceSectionContract,
 } from "../formless-ui-contract.ts";
+import { formlessUiContractReferenceKey } from "../formless-ui-contract-host.ts";
 import { AstryxWorkspaceCollectionRenderer } from "./formless-ui-workspace-collection-renderer.tsx";
 import { AstryxWorkspaceScreenRenderer } from "./formless-ui-workspace-screen-renderer.tsx";
 import {
@@ -14,9 +17,16 @@ import {
 } from "./generated-workspace.fixtures.ts";
 import {
   FormlessGeneratedWorkspaceLayout,
-  applyGeneratedWorkspaceIntent,
+  createFormlessGeneratedWorkspaceFixtureHost,
+  projectGeneratedWorkspaceFixturePublication,
   selectedGeneratedWorkspaceFixture,
 } from "./generated-workspace.tsx";
+
+vi.mock("@stylexjs/stylex", () => ({
+  create: <Styles,>(styles: Styles) => styles,
+  createTheme: () => ({}),
+  props: () => ({}),
+}));
 
 describe("canonical generated-workspace fixtures", () => {
   it("cover production workspace contract states with serializable data", () => {
@@ -98,13 +108,15 @@ describe("Generated Workspace prototype layout", () => {
   it("keeps query and context selection controlled by canonical intents", () => {
     const fixtures = requiredWorkspaceFixtures();
     const tasks = requiredWorkspace(fixtures, "tasks");
+    const tasksHost = createFormlessGeneratedWorkspaceFixtureHost(tasks);
     const taskPresentation = requiredOrdinary(tasks.sections[0]!.collection);
     const completed = taskPresentation.queryNavigation?.items[1];
     if (!completed) {
       throw new Error("Missing completed query fixture.");
     }
 
-    const selectedTasks = applyGeneratedWorkspaceIntent(tasks, completed.selectionIntent);
+    tasksHost.host.dispatch(completed.selectionIntent);
+    const selectedTasks = tasksHost.getWorkspace();
     const selectedTaskCollection = selectedTasks.sections[0]!.collection;
     const selectedTaskPresentation = requiredOrdinary(selectedTaskCollection);
     expect(selectedTaskCollection.selectedQueryId).toBe(completed.id);
@@ -113,20 +125,23 @@ describe("Generated Workspace prototype layout", () => {
     ).toBe("Completed");
 
     const crm = requiredWorkspace(fixtures, "multi-section");
+    const crmHost = createFormlessGeneratedWorkspaceFixtureHost(crm);
     const companyContext = requiredOrdinary(crm.sections[0]!.collection).context;
     const documentation = companyContext?.options[1];
     if (!companyContext || !documentation) {
       throw new Error("Missing ordinary context fixture.");
     }
 
-    const selectedCrm = applyGeneratedWorkspaceIntent(crm, documentation.selectionIntent);
+    crmHost.host.dispatch(documentation.selectionIntent);
+    const selectedCrm = crmHost.getWorkspace();
     const selectedContext = requiredOrdinary(selectedCrm.sections[0]!.collection).context;
     expect(selectedContext?.selectedOptionId).toBe(documentation.id);
     expect(selectedContext?.options.find((option) => option.selected)?.label).toBe("Documentation");
   });
 
-  it("simulates field, create, operation, external action, and list intents locally", () => {
+  it("simulates field, create, operation, external action, and ordering through host dispatch", () => {
     const tasks = requiredWorkspace(requiredWorkspaceFixtures(), "tasks");
+    const fixtureHost = createFormlessGeneratedWorkspaceFixtureHost(tasks);
     const section = tasks.sections[0]!;
     const presentation = requiredOrdinary(section.collection);
     const list = requiredList(presentation.result);
@@ -144,7 +159,7 @@ describe("Generated Workspace prototype layout", () => {
       throw new Error("Missing interactive task workspace fixtures.");
     }
 
-    const edited = applyGeneratedWorkspaceIntent(tasks, {
+    fixtureHost.host.dispatch({
       ...scope(section),
       fieldId: title.fieldName,
       intent: { fieldName: "title", type: "recordEditorDraftChange", value: "Ship release" },
@@ -152,20 +167,22 @@ describe("Generated Workspace prototype layout", () => {
       resultId: list.id,
       type: "workspaceField",
     });
+    const edited = fixtureHost.getWorkspace();
     const editedTitle = requiredList(
       requiredOrdinary(edited.sections[0]!.collection).result,
     ).items[0]!.fields.find((field) => field.fieldName === "title");
     expect(recordDraft(editedTitle)).toBe("Ship release");
 
-    const opened = applyGeneratedWorkspaceIntent(edited, {
+    fixtureHost.host.dispatch({
       ...scope(section),
       intent: { open: true, surfaceId: createAction.surface.id, type: "createOpenChange" },
       surfaceId: createAction.surface.id,
       type: "workspaceCreate",
     });
+    const opened = fixtureHost.getWorkspace();
     expect(requiredCreateSurface(opened).dialog.open).toBe(true);
 
-    const invoked = applyGeneratedWorkspaceIntent(opened, {
+    fixtureHost.host.dispatch({
       ...scope(section),
       controlId: operationAction.control.id,
       intent: {
@@ -175,23 +192,26 @@ describe("Generated Workspace prototype layout", () => {
       },
       type: "workspaceOperation",
     });
+    const invoked = fixtureHost.getWorkspace();
     expect(requiredCollectionOperation(invoked).status.status).toBe("committed");
 
-    const external = applyGeneratedWorkspaceIntent(invoked, {
+    fixtureHost.host.dispatch({
       ...scope(section),
       actionId: externalAction.id,
       controlId: externalAction.action.id,
       intent: externalAction.action.invoke,
       type: "workspaceExternalAction",
     });
+    const external = fixtureHost.getWorkspace();
     expect(external.sections[0]?.actions[0]?.action.selected).toBe(true);
 
-    const reordered = applyGeneratedWorkspaceIntent(external, {
+    fixtureHost.host.dispatch({
       ...scope(section),
       intent: moveDown.intent,
       resultId: list.id,
       type: "workspaceList",
     });
+    const reordered = fixtureHost.getWorkspace();
     expect(
       requiredList(requiredOrdinary(reordered.sections[0]!.collection).result).items[0]?.id,
     ).toBe("task-2");
@@ -199,6 +219,7 @@ describe("Generated Workspace prototype layout", () => {
 
   it("simulates nested record field and destructive confirmation intents", () => {
     const crm = requiredWorkspace(requiredWorkspaceFixtures(), "multi-section");
+    const fixtureHost = createFormlessGeneratedWorkspaceFixtureHost(crm);
     const section = crm.sections[1]!;
     const result = requiredRecordResult(requiredOrdinary(section.collection).result);
     const title = result.fields.find((field) => field.field.fieldName === "title");
@@ -208,7 +229,7 @@ describe("Generated Workspace prototype layout", () => {
       throw new Error("Missing record-result intent fixtures.");
     }
 
-    const edited = applyGeneratedWorkspaceIntent(crm, {
+    fixtureHost.host.dispatch({
       ...scope(section),
       intent: {
         fieldId: title.id,
@@ -224,6 +245,7 @@ describe("Generated Workspace prototype layout", () => {
       resultId: result.id,
       type: "workspaceRecordResult",
     });
+    const edited = fixtureHost.getWorkspace();
     const editedResult = requiredRecordResult(
       requiredOrdinary(edited.sections[1]!.collection).result,
     );
@@ -231,7 +253,7 @@ describe("Generated Workspace prototype layout", () => {
       "Sam Rivera updated",
     );
 
-    const confirmation = applyGeneratedWorkspaceIntent(edited, {
+    fixtureHost.host.dispatch({
       ...scope(section),
       intent: {
         controlId: deletion.control.id,
@@ -243,6 +265,7 @@ describe("Generated Workspace prototype layout", () => {
       resultId: result.id,
       type: "workspaceRecordResult",
     });
+    const confirmation = fixtureHost.getWorkspace();
     const confirmedResult = requiredRecordResult(
       requiredOrdinary(confirmation.sections[1]!.collection).result,
     );
@@ -250,6 +273,98 @@ describe("Generated Workspace prototype layout", () => {
       confirmedResult.actions.secondary.find((action) => action.role === "delete")?.control
         .confirmation?.open,
     ).toBe(true);
+  });
+
+  it("publishes only changed fixture references for result and section intents", () => {
+    const crm = requiredWorkspace(requiredWorkspaceFixtures(), "multi-section");
+    const fixtureHost = createFormlessGeneratedWorkspaceFixtureHost(crm);
+    const publication = projectGeneratedWorkspaceFixturePublication(crm);
+    const company = crm.sections[0]!;
+    const companyPresentation = requiredOrdinary(company.collection);
+    const contextResult = requiredRecordResult(companyPresentation.contextDetail!);
+    const title = contextResult.fields.find((field) => field.field.fieldName === "title");
+    const recordId = contextResult.selectedRecord?.id;
+    const companySectionReference = requiredReference(
+      publication.nodes.map(({ reference }) => reference),
+      (reference) =>
+        reference.kind === "workspaceSectionShellReference" && reference.sectionId === company.id,
+    );
+    const contextResultReference = requiredReference(
+      publication.nodes.map(({ reference }) => reference),
+      (reference) =>
+        reference.kind === "recordResultReference" &&
+        reference.role === "contextResult" &&
+        reference.sectionId === company.id,
+    );
+    const notifications = new Map<string, number>();
+    const unsubscribe = publication.nodes.map(({ reference }) =>
+      fixtureHost.host.subscribe(reference, () => {
+        const key = formlessUiContractReferenceKey(reference);
+        notifications.set(key, (notifications.get(key) ?? 0) + 1);
+      }),
+    );
+
+    if (!title || !recordId) {
+      throw new Error("Missing context result field fixture.");
+    }
+
+    fixtureHost.host.dispatch({
+      ...scope(company),
+      intent: {
+        fieldId: title.id,
+        intent: {
+          fieldName: "title",
+          type: "recordEditorDraftChange",
+          value: "Acme Company updated",
+        },
+        recordId,
+        resultId: contextResult.id,
+        type: "recordResultFieldIntent",
+      },
+      resultId: contextResult.id,
+      type: "workspaceRecordResult",
+    });
+
+    expect(Array.from(notifications.keys())).toEqual([
+      formlessUiContractReferenceKey(contextResultReference),
+    ]);
+
+    notifications.clear();
+    const documentation = companyPresentation.context?.options[1];
+    if (!documentation) {
+      throw new Error("Missing context selection fixture.");
+    }
+
+    fixtureHost.host.dispatch(documentation.selectionIntent);
+
+    expect(Array.from(notifications.keys())).toEqual([
+      formlessUiContractReferenceKey(companySectionReference),
+    ]);
+
+    for (const stopListening of unsubscribe) {
+      stopListening();
+    }
+  });
+
+  it("keeps fixture snapshots and their interactive host free of runtime dependencies", async () => {
+    const fixtureSource = await readFile(
+      new URL("./generated-workspace.fixtures.ts", import.meta.url),
+      "utf8",
+    );
+    const hostSource = await readFile(
+      new URL("./generated-workspace.tsx", import.meta.url),
+      "utf8",
+    );
+    const imports = [fixtureSource, hostSource].flatMap(importSpecifiers);
+    const forbiddenImports = imports.filter((specifier) =>
+      /generated-workspace-runtime|operation-controller|(?:^|\/)(?:src\/app\/generated|src\/client|storage|replica|media|sync)(?:\/|$)/.test(
+        specifier,
+      ),
+    );
+
+    expect(hostSource).toContain("createFormlessUiMemoryContractHost");
+    expect(hostSource).toContain("AstryxSubscribedWorkspaceScreenRenderer");
+    expect(forbiddenImports).toEqual([]);
   });
 
   it("renders empty context, empty collection, and unavailable collection presentation", () => {
@@ -359,4 +474,19 @@ function renderCollection(section: FormlessUiWorkspaceSectionContract) {
       scope={scope(section)}
     />,
   );
+}
+
+function requiredReference(
+  references: readonly FormlessUiContractReference[],
+  matches: (reference: FormlessUiContractReference) => boolean,
+) {
+  const reference = references.find(matches);
+  if (!reference) {
+    throw new Error("Missing fixture contract reference.");
+  }
+  return reference;
+}
+
+function importSpecifiers(source: string) {
+  return Array.from(source.matchAll(/\bfrom\s+["']([^"']+)["']/g), (match) => match[1]!);
 }

@@ -4,16 +4,29 @@ import { HStack } from "@astryxdesign/core/HStack";
 import { Section } from "@astryxdesign/core/Section";
 import { Heading } from "@astryxdesign/core/Text";
 import { VStack } from "@astryxdesign/core/VStack";
+import { memo, type ReactNode, useMemo } from "react";
 import type {
   FormlessUiActionTriggerContract,
   FormlessUiWorkspaceContract,
   FormlessUiWorkspaceExternalActionContract,
   FormlessUiWorkspaceIntentHandler,
+  FormlessUiWorkspaceManifestContract,
+  FormlessUiWorkspaceManifestReference,
   FormlessUiWorkspaceIntentScope,
   FormlessUiWorkspaceSectionContract,
+  FormlessUiWorkspaceSectionShellContract,
+  FormlessUiWorkspaceSectionShellReference,
 } from "../formless-ui-contract.ts";
+import {
+  useFormlessUiWorkspaceIntentHandler,
+  useFormlessUiWorkspaceManifest,
+  useFormlessUiWorkspaceSectionShell,
+} from "../formless-ui-contract-host-react.tsx";
 import { operationIcon } from "./operation-controls.tsx";
-import { AstryxWorkspaceCollectionRenderer } from "./formless-ui-workspace-collection-renderer.tsx";
+import {
+  AstryxSubscribedWorkspaceCollectionRenderer,
+  AstryxWorkspaceCollectionRenderer,
+} from "./formless-ui-workspace-collection-renderer.tsx";
 
 export function AstryxWorkspaceScreenRenderer({
   onIntent,
@@ -27,13 +40,7 @@ export function AstryxWorkspaceScreenRenderer({
   }
 
   return (
-    <VStack
-      aria-label={workspace.accessibilityLabel}
-      data-formless-astryx-workspace={workspace.id}
-      gap={workspace.sections.length === 1 ? 4 : 8}
-      role="region"
-      width="100%"
-    >
+    <AstryxWorkspaceFrame workspace={workspace}>
       {workspace.sections.map((section) => (
         <AstryxWorkspaceSection
           key={section.id}
@@ -42,6 +49,52 @@ export function AstryxWorkspaceScreenRenderer({
           section={section}
         />
       ))}
+    </AstryxWorkspaceFrame>
+  );
+}
+
+export const AstryxSubscribedWorkspaceScreenRenderer = memo(
+  function AstryxSubscribedWorkspaceScreenRenderer({
+    reference,
+  }: {
+    reference: FormlessUiWorkspaceManifestReference;
+  }) {
+    const workspace = useFormlessUiWorkspaceManifest(reference);
+
+    if (!workspace || workspace.sections.length === 0) {
+      return null;
+    }
+
+    return (
+      <AstryxWorkspaceFrame workspace={workspace}>
+        {workspace.sections.map((sectionReference) => (
+          <AstryxSubscribedWorkspaceSection
+            key={`${sectionReference.workspaceId}:${sectionReference.sectionId}`}
+            reference={sectionReference}
+          />
+        ))}
+      </AstryxWorkspaceFrame>
+    );
+  },
+  (previous, next) => previous.reference.workspaceId === next.reference.workspaceId,
+);
+
+function AstryxWorkspaceFrame({
+  children,
+  workspace,
+}: {
+  children: ReactNode;
+  workspace: FormlessUiWorkspaceContract | FormlessUiWorkspaceManifestContract;
+}) {
+  return (
+    <VStack
+      aria-label={workspace.accessibilityLabel}
+      data-formless-astryx-workspace={workspace.id}
+      gap={workspace.sections.length === 1 ? 4 : 8}
+      role="region"
+      width="100%"
+    >
+      {children}
     </VStack>
   );
 }
@@ -60,6 +113,67 @@ function AstryxWorkspaceSection({
     screenId,
     sectionId: section.id,
   };
+
+  return (
+    <AstryxWorkspaceSectionFrame onIntent={onIntent} scope={scope} section={section}>
+      <AstryxWorkspaceCollectionRenderer
+        collection={section.collection}
+        onIntent={onIntent}
+        scope={scope}
+      />
+    </AstryxWorkspaceSectionFrame>
+  );
+}
+
+const AstryxSubscribedWorkspaceSection = memo(
+  function AstryxSubscribedWorkspaceSection({
+    reference,
+  }: {
+    reference: FormlessUiWorkspaceSectionShellReference;
+  }) {
+    const onIntent = useFormlessUiWorkspaceIntentHandler();
+    const section = useFormlessUiWorkspaceSectionShell(reference);
+    const scope = useMemo(
+      () =>
+        section
+          ? {
+              collectionId: section.collection.id,
+              screenId: reference.workspaceId,
+              sectionId: reference.sectionId,
+            }
+          : undefined,
+      [reference.sectionId, reference.workspaceId, section?.collection.id],
+    );
+
+    if (!section || !scope) {
+      return null;
+    }
+
+    return (
+      <AstryxWorkspaceSectionFrame onIntent={onIntent} scope={scope} section={section}>
+        <AstryxSubscribedWorkspaceCollectionRenderer
+          collection={section.collection}
+          scope={scope}
+        />
+      </AstryxWorkspaceSectionFrame>
+    );
+  },
+  (previous, next) =>
+    previous.reference.workspaceId === next.reference.workspaceId &&
+    previous.reference.sectionId === next.reference.sectionId,
+);
+
+function AstryxWorkspaceSectionFrame({
+  children,
+  onIntent,
+  scope,
+  section,
+}: {
+  children: ReactNode;
+  onIntent: FormlessUiWorkspaceIntentHandler;
+  scope: FormlessUiWorkspaceIntentScope;
+  section: FormlessUiWorkspaceSectionContract | FormlessUiWorkspaceSectionShellContract;
+}) {
   const renderHeader = section.headingVisibility === "visible" || section.actions.length > 0;
 
   return (
@@ -93,11 +207,7 @@ function AstryxWorkspaceSection({
             ) : null}
           </HStack>
         ) : null}
-        <AstryxWorkspaceCollectionRenderer
-          collection={section.collection}
-          onIntent={onIntent}
-          scope={scope}
-        />
+        {children}
       </VStack>
     </Section>
   );

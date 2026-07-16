@@ -1,5 +1,5 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vite-plus/test";
+import { describe, expect, it, vi } from "vite-plus/test";
 import type {
   FormlessUiActionTriggerContract,
   FormlessUiCreateSurfaceContract,
@@ -33,6 +33,12 @@ import {
   AstryxWorkspaceScreenRenderer,
   dispatchAstryxWorkspaceExternalAction,
 } from "./formless-ui-workspace-screen-renderer.tsx";
+
+vi.mock("@stylexjs/stylex", () => ({
+  create: <Styles,>(styles: Styles) => styles,
+  createTheme: () => ({}),
+  props: () => ({}),
+}));
 
 describe("Astryx workspace renderer", () => {
   it("renders ordered sections, controlled navigation, actions, summaries, and an ordinary list", () => {

@@ -1,14 +1,18 @@
 import { Badge } from "@dpeek/formless-ui/badge";
 import { Tab, TabList, Tabs } from "@dpeek/formless-ui/tabs";
+import { memo, type ReactNode } from "react";
 import type {
+  FormlessUiContextResultReference,
   FormlessUiField,
   FormlessUiFieldIntent,
   FormlessUiListOperationActionContract,
+  FormlessUiMainResultReference,
   FormlessUiOperationPresentationIntent,
   FormlessUiTableOperationActionContract,
   FormlessUiWorkspaceCollectionActionContract,
   FormlessUiWorkspaceCollectionActionGroupContract,
   FormlessUiWorkspaceCollectionContract,
+  FormlessUiWorkspaceCollectionShellContract,
   FormlessUiWorkspaceContextContract,
   FormlessUiWorkspaceIntentHandler,
   FormlessUiWorkspaceIntentScope,
@@ -16,6 +20,11 @@ import type {
   FormlessUiWorkspaceResultContract,
   FormlessUiWorkspaceSummaryContract,
 } from "@dpeek/formless-astryx/contract";
+import { formlessUiContractReferenceKey } from "@dpeek/formless-astryx/contract-host";
+import {
+  useFormlessUiResult,
+  useFormlessUiWorkspaceIntentHandler,
+} from "@dpeek/formless-astryx/contract-host/react";
 import {
   projectGeneratedWorkspaceCreateIntent,
   projectGeneratedWorkspaceFieldIntent,
@@ -39,6 +48,82 @@ export function LegacyWorkspaceCollectionRenderer({
   scope,
 }: {
   collection: FormlessUiWorkspaceCollectionContract;
+  onIntent: FormlessUiWorkspaceIntentHandler;
+  scope: FormlessUiWorkspaceIntentScope;
+}) {
+  const presentation = collection.presentation;
+
+  return (
+    <LegacyWorkspaceCollectionFrame
+      collection={collection}
+      contextResult={
+        presentation.contextDetail ? (
+          <LegacyWorkspaceRecordResult
+            contextId={
+              presentation.kind === "listDetail"
+                ? presentation.selector.id
+                : presentation.context?.id
+            }
+            onIntent={onIntent}
+            recordResult={presentation.contextDetail}
+            scope={scope}
+          />
+        ) : undefined
+      }
+      mainResult={
+        <LegacyWorkspaceResult onIntent={onIntent} result={presentation.result} scope={scope} />
+      }
+      onIntent={onIntent}
+      scope={scope}
+    />
+  );
+}
+
+export function LegacySubscribedWorkspaceCollectionRenderer({
+  collection,
+  scope,
+}: {
+  collection: FormlessUiWorkspaceCollectionShellContract;
+  scope: FormlessUiWorkspaceIntentScope;
+}) {
+  const onIntent = useFormlessUiWorkspaceIntentHandler();
+  const presentation = collection.presentation;
+
+  return (
+    <LegacyWorkspaceCollectionFrame
+      collection={collection}
+      contextResult={
+        presentation.contextDetail ? (
+          <LegacySubscribedWorkspaceContextResult
+            contextId={
+              presentation.kind === "listDetail"
+                ? presentation.selector.id
+                : presentation.context?.id
+            }
+            reference={presentation.contextDetail}
+            scope={scope}
+          />
+        ) : undefined
+      }
+      mainResult={
+        <LegacySubscribedWorkspaceMainResult reference={presentation.result} scope={scope} />
+      }
+      onIntent={onIntent}
+      scope={scope}
+    />
+  );
+}
+
+function LegacyWorkspaceCollectionFrame({
+  collection,
+  contextResult,
+  mainResult,
+  onIntent,
+  scope,
+}: {
+  collection: FormlessUiWorkspaceCollectionContract | FormlessUiWorkspaceCollectionShellContract;
+  contextResult?: ReactNode;
+  mainResult: ReactNode;
   onIntent: FormlessUiWorkspaceIntentHandler;
   scope: FormlessUiWorkspaceIntentScope;
 }) {
@@ -80,22 +165,15 @@ export function LegacyWorkspaceCollectionRenderer({
           scope={scope}
         />
         <div className="min-w-0 space-y-6">
-          {presentation.contextDetail ? (
-            <div className="border-b border-slate-200 pb-4">
-              <LegacyWorkspaceRecordResult
-                contextId={presentation.selector.id}
-                onIntent={onIntent}
-                recordResult={presentation.contextDetail}
-                scope={scope}
-              />
-            </div>
+          {contextResult ? (
+            <div className="border-b border-slate-200 pb-4">{contextResult}</div>
           ) : null}
           <LegacyWorkspaceQueryNavigation
             navigation={presentation.queryNavigation}
             onIntent={onIntent}
           />
           <LegacyWorkspaceSummaries summaries={presentation.summaries} />
-          <LegacyWorkspaceResult onIntent={onIntent} result={presentation.result} scope={scope} />
+          {mainResult}
           <LegacyWorkspaceCollectionActions
             actions={presentation.actions}
             onIntent={onIntent}
@@ -111,7 +189,7 @@ export function LegacyWorkspaceCollectionRenderer({
       {presentation.context ? (
         <LegacyWorkspaceOrdinaryContext
           context={presentation.context}
-          detail={presentation.contextDetail}
+          detail={contextResult}
           onIntent={onIntent}
           scope={scope}
         />
@@ -121,7 +199,7 @@ export function LegacyWorkspaceCollectionRenderer({
         onIntent={onIntent}
       />
       <LegacyWorkspaceSummaries summaries={presentation.summaries} />
-      <LegacyWorkspaceResult onIntent={onIntent} result={presentation.result} scope={scope} />
+      {mainResult}
       <LegacyWorkspaceCollectionActions
         actions={presentation.actions}
         onIntent={onIntent}
@@ -180,21 +258,12 @@ function LegacyWorkspaceOrdinaryContext({
   scope,
 }: {
   context: FormlessUiWorkspaceContextContract;
-  detail?: Extract<FormlessUiWorkspaceResultContract, { kind: "recordResult" }>;
+  detail?: ReactNode;
   onIntent: FormlessUiWorkspaceIntentHandler;
   scope: FormlessUiWorkspaceIntentScope;
 }) {
   if (context.presentation === "externalNavigation") {
-    return detail ? (
-      <div className="border-b border-slate-200 pb-4">
-        <LegacyWorkspaceRecordResult
-          contextId={context.id}
-          onIntent={onIntent}
-          recordResult={detail}
-          scope={scope}
-        />
-      </div>
-    ) : null;
+    return detail ? <div className="border-b border-slate-200 pb-4">{detail}</div> : null;
   }
 
   return (
@@ -206,14 +275,7 @@ function LegacyWorkspaceOrdinaryContext({
         </div>
       ) : null}
       <LegacyWorkspaceContextAvailability context={context} />
-      {detail ? (
-        <LegacyWorkspaceRecordResult
-          contextId={context.id}
-          onIntent={onIntent}
-          recordResult={detail}
-          scope={scope}
-        />
-      ) : null}
+      {detail}
     </section>
   );
 }
@@ -463,6 +525,94 @@ function LegacyWorkspaceCollectionAction({
         />
       ) : null}
     </>
+  );
+}
+
+const LegacySubscribedWorkspaceMainResult = memo(function LegacySubscribedWorkspaceMainResult({
+  reference,
+  scope,
+}: {
+  reference: FormlessUiMainResultReference;
+  scope: FormlessUiWorkspaceIntentScope;
+}) {
+  const onIntent = useFormlessUiWorkspaceIntentHandler();
+  const result = useFormlessUiResult(reference);
+
+  return result ? (
+    <LegacyWorkspaceResult onIntent={onIntent} result={result} scope={scope} />
+  ) : null;
+}, subscribedMainResultPropsEqual);
+
+const LegacySubscribedWorkspaceContextResult = memo(
+  function LegacySubscribedWorkspaceContextResult({
+    contextId,
+    reference,
+    scope,
+  }: {
+    contextId?: string;
+    reference: FormlessUiContextResultReference;
+    scope: FormlessUiWorkspaceIntentScope;
+  }) {
+    const onIntent = useFormlessUiWorkspaceIntentHandler();
+    const result = useFormlessUiResult(reference);
+
+    return result ? (
+      <LegacyWorkspaceRecordResult
+        contextId={contextId}
+        onIntent={onIntent}
+        recordResult={result}
+        scope={scope}
+      />
+    ) : null;
+  },
+  subscribedContextResultPropsEqual,
+);
+
+function subscribedMainResultPropsEqual(
+  previous: {
+    reference: FormlessUiMainResultReference;
+    scope: FormlessUiWorkspaceIntentScope;
+  },
+  next: {
+    reference: FormlessUiMainResultReference;
+    scope: FormlessUiWorkspaceIntentScope;
+  },
+) {
+  return (
+    formlessUiContractReferenceKey(previous.reference) ===
+      formlessUiContractReferenceKey(next.reference) &&
+    workspaceScopesEqual(previous.scope, next.scope)
+  );
+}
+
+function subscribedContextResultPropsEqual(
+  previous: {
+    contextId?: string;
+    reference: FormlessUiContextResultReference;
+    scope: FormlessUiWorkspaceIntentScope;
+  },
+  next: {
+    contextId?: string;
+    reference: FormlessUiContextResultReference;
+    scope: FormlessUiWorkspaceIntentScope;
+  },
+) {
+  return (
+    previous.contextId === next.contextId &&
+    formlessUiContractReferenceKey(previous.reference) ===
+      formlessUiContractReferenceKey(next.reference) &&
+    workspaceScopesEqual(previous.scope, next.scope)
+  );
+}
+
+function workspaceScopesEqual(
+  previous: FormlessUiWorkspaceIntentScope,
+  next: FormlessUiWorkspaceIntentScope,
+) {
+  return (
+    previous.collectionId === next.collectionId &&
+    previous.screenId === next.screenId &&
+    previous.sectionId === next.sectionId
   );
 }
 

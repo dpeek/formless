@@ -36,7 +36,7 @@ import {
 } from "./generated-workspace-foundation.ts";
 
 describe("generated workspace foundation", () => {
-  it("selects complete eligible models, fallback, evaluated facts, controls, and scoped results", () => {
+  it("selects complete eligible models, selection fallback, evaluated facts, controls, and scoped results", () => {
     const fixture = rateWorkspaceFixture();
     const foundation = fixture.foundation;
     const section = required(foundation.workspace.sections[0]);

@@ -412,6 +412,92 @@ execution, and effects.
 - AND the fixtures contain no Tailwind classes and do not export or activate the
   Astryx workspace renderer in production
 
+### Requirement: Reactive Generated UI Contract Host
+
+The system SHALL expose eligible generated workspace contracts through a
+stable renderer-neutral reactive host that supports concurrency-safe scoped
+subscriptions while preserving complete data-only snapshots and pure renderer
+entrypoints.
+
+#### Scenario: Provide a stable renderer-neutral host
+
+- GIVEN generated runtime owns replica reads, local interaction state,
+  operation execution, media effects, sync feedback, and route selection
+- WHEN it exposes an eligible non-tree workspace to a renderer
+- THEN a stable host supports typed contract-reference reads, cached server
+  snapshots, scoped subscriptions, and dispatch of canonical workspace intents
+- AND contract references use stable workspace, section, and result identities
+  plus an explicit contract role rather than selector functions or runtime
+  records as public subscription keys
+- AND React Context carries the stable host rather than a changing workspace
+  snapshot
+- AND renderer-neutral host types, provider and subscription hooks, and a
+  reusable memory implementation live in `lib/astryx` without importing
+  generated runtime, `src/*`, browser replica, storage, query evaluation,
+  operation execution, media clients, or sync behavior
+- AND the production adapter that reads client-store and runtime state,
+  projects contracts, resolves effects, and dispatches intents remains outside
+  `lib/astryx`
+
+#### Scenario: Publish contract snapshots transactionally
+
+- GIVEN one runtime transition changes one or more projected contract nodes
+- WHEN the production or memory host publishes the next projection
+- THEN it commits the complete next immutable node set before notifying any
+  subscriber
+- AND reads during one publication observe either the complete previous set or
+  the complete next set without tearing
+- AND semantically unchanged snapshots retain object identity and do not notify
+  their scoped subscribers
+- AND reads and cached server snapshots remain referentially stable until their
+  referenced node changes
+- AND removed references become unavailable in the same atomic publication
+  that removes their parent reference
+- AND React consumers use `useSyncExternalStore` semantics for client
+  subscription, server rendering, and hydration
+
+#### Scenario: Subscribe at workspace, section, and result boundaries
+
+- GIVEN an eligible workspace contains ordered collection sections and each
+  section contains one main list, table, or record result plus optional context
+  detail
+- WHEN generated runtime publishes its projected contracts
+- THEN the workspace subscription exposes screen presentation and ordered
+  section references
+- AND each section subscription exposes collection chrome, actions, query and
+  context selection, counts, summaries, availability, and main and context
+  result references
+- AND each main or context result subscription exposes its existing complete
+  canonical list, table, or record-result snapshot
+- AND a field draft or nested operation-state change can notify only its result
+  subtree, a count, summary, query, context, or availability change can notify
+  only its section subtree, and screen structure or section ordering can notify
+  the workspace subtree
+- AND row membership or ordering changes notify their complete result subtree
+  without requiring per-row, per-cell, per-field, per-operation, per-warning,
+  per-tab, or per-summary normalization
+- AND the initial host may retain complete workspace projection work while
+  bounding React renderer fanout at these subscription boundaries
+
+#### Scenario: Preserve pure renderers and data-only fixtures
+
+- GIVEN legacy and Astryx renderers already accept complete workspace, list,
+  table, and record-result contract snapshots
+- WHEN subscribed renderer entrypoints consume contract references from the
+  host
+- THEN subscribed wrappers read scoped snapshots and delegate presentation to
+  the existing pure snapshot renderers
+- AND pure renderer tests may continue passing complete contract snapshots
+  directly without a host
+- AND package-local fixtures remain serializable contract data with no
+  callbacks, React nodes, runtime records, replica APIs, media clients,
+  operation controllers, or sync behavior
+- AND interactive fixtures use the reusable memory host or its reducer rather
+  than production generated runtime
+- AND introducing the host does not activate Astryx in production, change
+  renderer selection, add tree support, replace the client store, or pull
+  shell, auth, public Site, or cutover behavior into scope
+
 ### Requirement: Generated List Renderer Contract
 
 The system SHALL project complete generated list results through a controlled

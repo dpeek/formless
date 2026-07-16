@@ -162,6 +162,12 @@ const allowedTasksPackageImports = new Set([
   "@dpeek/formless-tasks-app/seed-records.json",
 ]);
 
+const allowedFormlessAstryxPackageImports = new Set([
+  "@dpeek/formless-astryx/contract",
+  "@dpeek/formless-astryx/contract-host",
+  "@dpeek/formless-astryx/contract-host/react",
+]);
+
 async function boundarySourceFiles(): Promise<string[]> {
   const nestedFiles = await Promise.all([
     sourceFiles(resolve(repoRoot, "src")),
@@ -283,7 +289,7 @@ function forbiddenRootTasksSourceImport(specifier: string): boolean {
 }
 
 function forbiddenFormlessAstryxImport(importerPath: string, specifier: string): boolean {
-  if (specifier === "@dpeek/formless-astryx/contract") {
+  if (allowedFormlessAstryxPackageImports.has(specifier)) {
     return false;
   }
 

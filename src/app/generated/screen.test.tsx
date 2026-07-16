@@ -6,7 +6,7 @@ import { parseAppSchema } from "@dpeek/formless-schema";
 import { HomeScreen } from "./screen.tsx";
 
 describe("generated home screen", () => {
-  it("routes an eligible production screen through the legacy workspace seam", () => {
+  it("routes an eligible production screen through the subscribed legacy workspace seam only", () => {
     const screen = selectScreenModelByPath(parseAppSchema(instanceControlPlaneSchema), "/");
 
     if (!screen) {
@@ -42,5 +42,6 @@ describe("generated home screen", () => {
     expect(html).toContain("data-formless-legacy-workspace-collection=");
     expect(html).toContain("Install");
     expect(html).toContain("data-formless-legacy-table=");
+    expect(html).not.toContain("data-formless-astryx-workspace=");
   });
 });

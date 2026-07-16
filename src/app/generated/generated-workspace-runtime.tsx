@@ -7,6 +7,7 @@ import type {
   FormlessUiOperationPresentationIntent,
   FormlessUiWorkspaceIntent,
 } from "@dpeek/formless-astryx/contract";
+import { FormlessUiContractHostProvider } from "@dpeek/formless-astryx/contract-host/react";
 import type { QueryEvaluationContext, RecordValues } from "@dpeek/formless-schema";
 import {
   createEntityRecordCountMatchingQuerySelector,
@@ -73,7 +74,8 @@ import {
   type GeneratedWorkspaceSectionSelection,
   type GeneratedWorkspaceSectionSelectionFacts,
 } from "./generated-workspace-foundation.ts";
-import { LegacyWorkspaceScreenRenderer } from "./legacy-workspace-screen-renderer.tsx";
+import { useGeneratedWorkspaceContractHost } from "./generated-workspace-contract-host.ts";
+import { LegacySubscribedWorkspaceScreenRenderer } from "./legacy-workspace-screen-renderer.tsx";
 import {
   executeGeneratedOperationControl,
   executeGeneratedOrderingMoveOperation,
@@ -220,6 +222,10 @@ export function GeneratedWorkspaceRuntime({
   });
   const appTarget = useSchemaAppTarget();
   const writeOptions = useSchemaAppWriteOptions();
+  const { host, workspaceReference } = useGeneratedWorkspaceContractHost({
+    dispatch: onIntent,
+    workspace: selected.foundation?.workspace,
+  });
 
   useEffect(() => {
     for (const section of selected.foundation?.runtimePlan.sections ?? []) {
@@ -233,7 +239,7 @@ export function GeneratedWorkspaceRuntime({
     }
   }, [onSelectContext, sectionSelection, selected.foundation]);
 
-  if (!selected.foundation) {
+  if (!selected.foundation || !workspaceReference) {
     return null;
   }
 
@@ -890,7 +896,9 @@ export function GeneratedWorkspaceRuntime({
   }
 
   return (
-    <LegacyWorkspaceScreenRenderer onIntent={onIntent} workspace={selected.foundation.workspace} />
+    <FormlessUiContractHostProvider host={host}>
+      <LegacySubscribedWorkspaceScreenRenderer reference={workspaceReference} />
+    </FormlessUiContractHostProvider>
   );
 }
 
