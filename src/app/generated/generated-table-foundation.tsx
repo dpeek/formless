@@ -935,8 +935,10 @@ export function indexGeneratedTableFieldOccurrences(
 
     let visibleFields = visibleFieldsByContextId.get(contextId);
     if (visibleFields === undefined) {
-      const state =
-        fieldStateByContextId[contextId] ?? createGeneratedTableFieldContextState(context);
+      const state = rebaseGeneratedTableFieldContextState(
+        context,
+        fieldStateByContextId[contextId],
+      );
       visibleFields = selectGeneratedUpdateDraftSession({
         fields: context.fields,
         state: state.session,
@@ -1557,7 +1559,7 @@ function projectFieldContext(
     transitionRuntimes: readonly GeneratedTableTransitionRuntime[];
   },
 ): readonly FormlessUiField[] {
-  const state = currentState ?? createGeneratedTableFieldContextState(context);
+  const state = rebaseGeneratedTableFieldContextState(context, currentState);
   const session = selectGeneratedUpdateDraftSession({
     fields: context.fields,
     state: state.session,
@@ -2057,6 +2059,15 @@ export function createGeneratedTableFieldContextState(
       union: context.union,
     }),
   };
+}
+
+export function rebaseGeneratedTableFieldContextState(
+  context: GeneratedTableFieldContext,
+  current?: GeneratedTableFieldContextState,
+): GeneratedTableFieldContextState {
+  return current?.baselineUpdatedAt === context.record.updatedAt
+    ? current
+    : createGeneratedTableFieldContextState(context);
 }
 
 function resetFailedFieldContextSession(

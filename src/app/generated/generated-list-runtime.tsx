@@ -54,9 +54,7 @@ import { shouldUseAppReplicaReferenceOptions } from "./reference-field-options.t
 import { useSchemaAppTarget, useSchemaAppWriteOptions } from "./schema-app-context.tsx";
 import { executeTransitionStateOperation } from "./state-machine-ui.tsx";
 
-type GeneratedListFieldRuntimeState = GeneratedListFieldAuthoringState & {
-  baselineUpdatedAt: string;
-};
+type GeneratedListFieldRuntimeState = GeneratedListFieldAuthoringState;
 
 export function GeneratedRecordListFoundation({
   entity,
@@ -571,10 +569,7 @@ function initialFieldRuntimeState(
   record: StoredRecord,
   result: Pick<ListResultModel, "recordFields" | "recordUnion">,
 ): GeneratedListFieldRuntimeState {
-  return {
-    ...createGeneratedListFieldAuthoringState(record, result),
-    baselineUpdatedAt: record.updatedAt,
-  };
+  return createGeneratedListFieldAuthoringState(record, result);
 }
 
 function resetFailedFieldSession(

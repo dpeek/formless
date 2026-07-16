@@ -22,6 +22,7 @@ import {
 } from "./formless-ui-list-projection.ts";
 import {
   createGeneratedListFieldAuthoringState,
+  rebaseGeneratedListFieldAuthoringState,
   resolveGeneratedListFieldIntent,
   selectGeneratedListFoundation,
   selectGeneratedListRuntimeForIntent,
@@ -297,6 +298,22 @@ describe("generated Formless UI list projection", () => {
     expect(JSON.stringify(projected.list)).not.toContain("updatedAt");
     expect(JSON.stringify(projected.list)).not.toContain('"plan"');
     expect(JSON.stringify(projected.list)).not.toContain("executionKey");
+  });
+
+  it("rebases stale list authoring state from the latest replica record", () => {
+    const result = listResult();
+    const original = taskRecord("article-1", { kind: "article", title: "Article" });
+    const stale = createGeneratedListFieldAuthoringState(original, result);
+    const updated = {
+      ...original,
+      updatedAt: "2026-07-16T00:00:00.000Z",
+      values: { kind: "link", title: "Link", url: "https://example.com" },
+    };
+    const rebased = rebaseGeneratedListFieldAuthoringState(updated, result, stale);
+
+    expect(rebased).not.toBe(stale);
+    expect(rebased.baselineUpdatedAt).toBe(updated.updatedAt);
+    expect(rebased.session.baselineValues).toEqual(updated.values);
   });
 
   it("rejects duplicate projected list field occurrences", () => {

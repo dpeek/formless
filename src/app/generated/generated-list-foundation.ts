@@ -44,6 +44,7 @@ import {
 } from "./record-field-authoring.ts";
 
 export type GeneratedListFieldAuthoringState = {
+  baselineUpdatedAt: string;
   editorDraftByFieldName: Readonly<Record<string, string | undefined>>;
   errorsByFieldName: Readonly<Record<string, string | undefined>>;
   iconDialogDraftByFieldName: Readonly<Record<string, string | undefined>>;
@@ -187,8 +188,11 @@ export function selectGeneratedListFoundation({
       continue;
     }
 
-    const fieldState =
-      fieldStateByRecordId[recordId] ?? createGeneratedListFieldAuthoringState(record, result);
+    const fieldState = rebaseGeneratedListFieldAuthoringState(
+      record,
+      result,
+      fieldStateByRecordId[recordId],
+    );
     const projected = projectGeneratedListFields({
       entityName,
       fieldState,
@@ -294,6 +298,7 @@ export function createGeneratedListFieldAuthoringState(
   result: Pick<ListResultModel, "recordFields" | "recordUnion">,
 ): GeneratedListFieldAuthoringState {
   return {
+    baselineUpdatedAt: record.updatedAt,
     editorDraftByFieldName: {},
     errorsByFieldName: {},
     iconDialogDraftByFieldName: {},
@@ -305,6 +310,16 @@ export function createGeneratedListFieldAuthoringState(
       union: result.recordUnion,
     }),
   };
+}
+
+export function rebaseGeneratedListFieldAuthoringState(
+  record: StoredRecord,
+  result: Pick<ListResultModel, "recordFields" | "recordUnion">,
+  current?: GeneratedListFieldAuthoringState,
+): GeneratedListFieldAuthoringState {
+  return current?.baselineUpdatedAt === record.updatedAt
+    ? current
+    : createGeneratedListFieldAuthoringState(record, result);
 }
 
 export function selectGeneratedListRuntimeForIntent(

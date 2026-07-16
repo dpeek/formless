@@ -61,12 +61,13 @@ import {
   selectGeneratedRecordResultRuntimeForIntent,
 } from "./generated-record-result-foundation.ts";
 import {
-  createGeneratedTableFieldContextState,
   executeGeneratedTableRuntimeOperation,
+  rebaseGeneratedTableFieldContextState,
   selectGeneratedWorkspaceTableFoundation,
   type GeneratedTableFieldContextState,
   type GeneratedTableRuntimePlan,
 } from "./generated-table-foundation.tsx";
+import { mergeGeneratedWorkspaceRecordFieldState } from "./generated-workspace-field-state.ts";
 import {
   resolveGeneratedWorkspaceIntent,
   selectGeneratedWorkspaceFoundation,
@@ -594,7 +595,12 @@ export function GeneratedWorkspaceRuntime({
         }
       },
     });
-    setRecordStateByResultId((states) => ({ ...states, [resultId]: next }));
+    setRecordStateByResultId((states) => {
+      const queued = states[resultId] ?? current;
+      const merged = mergeGeneratedWorkspaceRecordFieldState(queued, current, next);
+
+      return merged === queued ? states : { ...states, [resultId]: merged };
+    });
 
     const updateOperation = model.updateOperation;
     if (!patch || !updateOperation || Object.keys(patch.patchValues).length === 0) {
@@ -663,9 +669,7 @@ export function GeneratedWorkspaceRuntime({
       return;
     }
     const record = snapshot.recordsById[recordId];
-    const current =
-      listStateByResultId[result.contract.id]?.[recordId] ??
-      result.foundation.fieldStateByRecordId[recordId];
+    const current = result.foundation.fieldStateByRecordId[recordId];
     if (!record || !current) {
       return;
     }
@@ -694,13 +698,20 @@ export function GeneratedWorkspaceRuntime({
       model.recordUnion,
       intent.intent,
     );
-    setListStateByResultId((states) => ({
-      ...states,
-      [result.contract.id]: {
-        ...states[result.contract.id],
-        [recordId]: applied.state,
-      },
-    }));
+    setListStateByResultId((states) => {
+      const queued = states[result.contract.id]?.[recordId] ?? current;
+      const merged = mergeGeneratedWorkspaceRecordFieldState(queued, current, applied.state);
+
+      return merged === queued
+        ? states
+        : {
+            ...states,
+            [result.contract.id]: {
+              ...states[result.contract.id],
+              [recordId]: merged,
+            },
+          };
+    });
     if (!applied.patch || !model.updateOperation) {
       return;
     }
@@ -790,22 +801,30 @@ export function GeneratedWorkspaceRuntime({
       }
       return;
     }
-    const current =
-      tableStateByResultId[result.contract.id]?.[context.id] ??
-      createGeneratedTableFieldContextState(context);
+    const current = rebaseGeneratedTableFieldContextState(
+      context,
+      tableStateByResultId[result.contract.id]?.[context.id],
+    );
     const applied = applyWorkspaceRecordFieldIntent(
       current,
       context.fields,
       context.union,
       intent.intent,
     );
-    setTableStateByResultId((states) => ({
-      ...states,
-      [result.contract.id]: {
-        ...states[result.contract.id],
-        [context.id]: applied.state,
-      },
-    }));
+    setTableStateByResultId((states) => {
+      const queued = states[result.contract.id]?.[context.id] ?? current;
+      const merged = mergeGeneratedWorkspaceRecordFieldState(queued, current, applied.state);
+
+      return merged === queued
+        ? states
+        : {
+            ...states,
+            [result.contract.id]: {
+              ...states[result.contract.id],
+              [context.id]: merged,
+            },
+          };
+    });
     if (!applied.patch || !context.updateOperation) {
       return;
     }
