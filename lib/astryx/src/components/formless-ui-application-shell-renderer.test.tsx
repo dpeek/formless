@@ -490,9 +490,12 @@ describe("Astryx application shell renderer", () => {
       "data-selected": "true",
       disabled: false,
     });
-    expect(requiredByProps(mountedRenderer.root, { "data-label": "Instance" }).props.href).toBe(
-      "/",
-    );
+    expect(
+      requiredByProps(mountedRenderer.root, {
+        "data-component": "NavHeadingMenuItem",
+        href: "/",
+      }).props.href,
+    ).toBe("/");
     expect(requiredByProps(mountedRenderer.root, { "data-label": "Settings" }).props).toEqual(
       expect.objectContaining({ "data-component": "SideNavItem" }),
     );

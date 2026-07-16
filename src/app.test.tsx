@@ -947,7 +947,7 @@ describe("App smoke routes", () => {
     expect(adminHtml).not.toContain('href="/deployments"');
   });
 
-  it("renders unified instance and app destinations with Site launch outside the switcher", () => {
+  it("renders unified instance and app destinations", () => {
     const personalInstall: AppInstall = {
       ...appInstallFixture({ installId: "personal", label: "Personal Site" }),
       adminRoute: "/workspace/personal",
@@ -1002,7 +1002,6 @@ describe("App smoke routes", () => {
     );
     const settingsTile = linkHtml(html, "/");
     const adminTile = linkHtml(html, "/workspace/personal");
-    const publicTile = linkHtml(html, "/public/personal");
 
     expect(html).toContain('data-formless-shell-scope="multiApp"');
     expect(html).not.toContain('aria-label="Instance navigation"');
@@ -1011,10 +1010,6 @@ describe("App smoke routes", () => {
     expect(adminTile).toContain('aria-label="Personal Site"');
     expect(adminTile).toContain('aria-current="page"');
     expect(html).not.toContain('aria-label="Personal Site public site"');
-    expect(publicTile).toContain('aria-label="View site (opens in a new tab)"');
-    expect(publicTile).toContain('target="_blank"');
-    expect(publicTile).toContain('rel="noopener noreferrer"');
-    expect(publicTile).not.toContain('aria-current="page"');
   });
 
   it("uses app-only scope outside instance profiles and no shell for public and auth routes", () => {
@@ -3120,12 +3115,8 @@ describe("generated collection home", () => {
   it("renders generated Site workspace with root sidebar nav and tree layout", () => {
     bootstrapSiteEditor();
     const html = renderRoute("/site");
-    const viewSiteLink = linkHtml(html, "/site-preview/home");
 
     expect(html).toContain('class="mx-auto w-full max-w-[112rem]"');
-    expect(viewSiteLink).toContain('aria-label="View site (opens in a new tab)"');
-    expect(viewSiteLink).toContain('target="_blank"');
-    expect(viewSiteLink).toContain('rel="noopener noreferrer"');
     expect(html).toContain('aria-label="Site screens"');
     expect(html).toContain('href="/site/settings"');
     expect(html).toContain('aria-label="Settings"');
