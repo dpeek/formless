@@ -1,4 +1,4 @@
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useLayoutEffect, useMemo } from "react";
 import type {
   FormlessUiContractIntent,
   FormlessUiShellIntent,
@@ -6,12 +6,17 @@ import type {
   FormlessUiShellManifestReference,
 } from "@dpeek/formless-astryx/contract";
 import {
-  createFormlessUiMemoryContractHost,
   formlessUiShellManifestReference,
   formlessUiShellNavigationSectionReference,
+  isFormlessUiShellIntent,
   type FormlessUiContractHostNodeSet,
-  type FormlessUiMutableContractHost,
 } from "@dpeek/formless-astryx/contract-host";
+import {
+  type ApplicationRuntimeContractContribution,
+  type ApplicationRuntimeContractPublication,
+  type ApplicationRuntimePublicationCoordinator,
+  useApplicationRuntimePublicationCoordinator,
+} from "./application-runtime-contract-host.tsx";
 import {
   GENERATED_APPLICATION_SHELL_ID,
   type GeneratedApplicationShellProjection,
@@ -25,6 +30,8 @@ export type GeneratedApplicationShellContractHostPublication = {
   nodes: FormlessUiContractHostNodeSet;
   shellReference: FormlessUiShellManifestReference;
 };
+
+const APPLICATION_SHELL_CONTRIBUTOR_ID = "application-shell";
 
 export type ResolvedGeneratedShellIntent =
   | {
@@ -123,51 +130,68 @@ export function resolveGeneratedApplicationShellIntent(
 
 export function useGeneratedApplicationShellContractHost({
   dispatch,
+  initialRouteContributions = [],
   projection,
 }: {
   dispatch: FormlessUiShellIntentHandler;
+  initialRouteContributions?: readonly ApplicationRuntimeContractContribution[];
   projection: GeneratedApplicationShellProjection | undefined;
 }): {
-  host: FormlessUiMutableContractHost;
+  coordinator: ApplicationRuntimePublicationCoordinator;
+  host: ApplicationRuntimePublicationCoordinator["host"];
   shellReference: FormlessUiShellManifestReference | undefined;
 } {
   const publication = projection
     ? projectGeneratedApplicationShellContractHostPublication(projection)
     : undefined;
-  const dispatchRef = useRef(dispatch);
-  const [host] = useState(() =>
-    createFormlessUiMemoryContractHost({
-      dispatch: (intent) => dispatchShellIntent(intent, dispatchRef),
-      ...(publication ? { nodes: publication.nodes } : {}),
-    }),
-  );
+  const runtimePublication =
+    projection && publication
+      ? prepareGeneratedApplicationShellRuntimePublication(projection, publication, dispatch)
+      : undefined;
+  const initialShellContributions: readonly ApplicationRuntimeContractContribution[] =
+    runtimePublication ? [[APPLICATION_SHELL_CONTRIBUTOR_ID, runtimePublication]] : [];
+  const coordinator = useApplicationRuntimePublicationCoordinator([
+    ...initialShellContributions,
+    ...initialRouteContributions,
+  ]);
   const shellReference = useMemo(
     () => formlessUiShellManifestReference(GENERATED_APPLICATION_SHELL_ID),
     [],
   );
 
   useLayoutEffect(() => {
-    dispatchRef.current = dispatch;
-    host.publish(publication?.nodes ?? []);
-  }, [dispatch, host, publication]);
+    if (runtimePublication) {
+      coordinator.publish(APPLICATION_SHELL_CONTRIBUTOR_ID, runtimePublication);
+    } else {
+      coordinator.remove(APPLICATION_SHELL_CONTRIBUTOR_ID);
+    }
+  }, [coordinator, runtimePublication]);
 
   return {
-    host,
+    coordinator,
+    host: coordinator.host,
     shellReference: projection ? shellReference : undefined,
   };
 }
 
-function dispatchShellIntent(
-  intent: FormlessUiContractIntent,
-  dispatchRef: { current: FormlessUiShellIntentHandler },
-) {
-  switch (intent.type) {
-    case "shellCreate":
-    case "shellLogout":
-    case "shellReset":
-    case "shellRootRecordSelection":
-      return dispatchRef.current(intent);
-    default:
-      throw new Error("Generated application shell host received a workspace intent.");
-  }
+export function prepareGeneratedApplicationShellRuntimePublication(
+  projection: GeneratedApplicationShellProjection,
+  publication: GeneratedApplicationShellContractHostPublication,
+  dispatch: FormlessUiShellIntentHandler,
+): ApplicationRuntimeContractPublication {
+  return {
+    intentHandlers: [
+      {
+        dispatch: (intent: FormlessUiContractIntent) => {
+          if (!isFormlessUiShellIntent(intent)) {
+            return;
+          }
+          return dispatch(intent);
+        },
+        matches: (intent) =>
+          isFormlessUiShellIntent(intent) && intent.shellId === projection.manifest.id,
+      },
+    ],
+    nodes: publication.nodes,
+  };
 }

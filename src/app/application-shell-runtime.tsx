@@ -14,7 +14,6 @@ import type {
   FormlessUiShellIntent,
   FormlessUiShellManifestReference,
 } from "@dpeek/formless-astryx/contract";
-import { FormlessUiContractHostProvider } from "@dpeek/formless-astryx/contract-host/react";
 import type { AppInstall, AppPackageResolver } from "@dpeek/formless-installed-apps";
 import {
   appStorageIdentityForClientTarget,
@@ -41,6 +40,10 @@ import {
   resolveGeneratedApplicationShellIntent,
   useGeneratedApplicationShellContractHost,
 } from "./generated/generated-application-shell-contract-host.ts";
+import {
+  ApplicationRuntimeContractHostProvider,
+  type ApplicationRuntimeContractContribution,
+} from "./generated/application-runtime-contract-host.tsx";
 import {
   generatedShellRootSectionId,
   projectGeneratedApplicationShell,
@@ -92,6 +95,7 @@ export type ApplicationShellRuntimeBoundaryProps = {
   currentPath: string;
   dependencies?: ApplicationShellRuntimeDependencies;
   installedAppRouteInstalls?: readonly AppInstall[] | undefined;
+  initialRouteContractContributions?: readonly ApplicationRuntimeContractContribution[];
   ownerSession?: OwnerSessionStatusResponse | undefined;
   renderer?: ElementType<ApplicationShellRuntimeRendererProps> | undefined;
   routeWorld: RuntimeWorldMount | undefined;
@@ -127,6 +131,7 @@ function ApplicationShellRuntime({
   children,
   currentPath,
   dependencies = {},
+  initialRouteContractContributions,
   installedAppRouteInstalls = [],
   ownerSession: ownerSessionProp,
   renderer: Renderer = LegacySubscribedApplicationShellRenderer,
@@ -340,8 +345,9 @@ function ApplicationShellRuntime({
       selectionStore,
     ],
   );
-  const { host, shellReference } = useGeneratedApplicationShellContractHost({
+  const { coordinator, shellReference } = useGeneratedApplicationShellContractHost({
     dispatch,
+    initialRouteContributions: initialRouteContractContributions,
     projection,
   });
 
@@ -434,7 +440,7 @@ function ApplicationShellRuntime({
     );
 
   return (
-    <FormlessUiContractHostProvider host={host}>
+    <ApplicationRuntimeContractHostProvider coordinator={coordinator}>
       {createDescriptors.map((descriptor) => (
         <RegisteredRootCreateRuntime
           descriptor={descriptor}
@@ -462,7 +468,7 @@ function ApplicationShellRuntime({
         />
       ))}
       {routeWorkspace}
-    </FormlessUiContractHostProvider>
+    </ApplicationRuntimeContractHostProvider>
   );
 }
 

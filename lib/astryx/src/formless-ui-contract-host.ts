@@ -7,6 +7,11 @@ import type {
   FormlessUiDocumentThemeReference,
   FormlessUiListContract,
   FormlessUiListResultReference,
+  FormlessUiManagementInstallDialogContract,
+  FormlessUiManagementInstallDialogReference,
+  FormlessUiManagementIntent,
+  FormlessUiManagementManifestContract,
+  FormlessUiManagementManifestReference,
   FormlessUiRecordResultContract,
   FormlessUiRecordResultReference,
   FormlessUiResultReferenceRole,
@@ -27,21 +32,25 @@ import type {
 export type FormlessUiContractSnapshot<Reference extends FormlessUiContractReference> =
   Reference extends FormlessUiDocumentThemeReference
     ? FormlessUiDocumentThemeContract
-    : Reference extends FormlessUiWorkspaceManifestReference
-      ? FormlessUiWorkspaceManifestContract
-      : Reference extends FormlessUiWorkspaceSectionShellReference
-        ? FormlessUiWorkspaceSectionShellContract
-        : Reference extends FormlessUiShellManifestReference
-          ? FormlessUiShellManifestContract
-          : Reference extends FormlessUiShellNavigationSectionReference
-            ? FormlessUiShellNavigationSectionContract
-            : Reference extends FormlessUiListResultReference
-              ? FormlessUiListContract
-              : Reference extends FormlessUiTableResultReference
-                ? FormlessUiTableContract
-                : Reference extends FormlessUiRecordResultReference
-                  ? FormlessUiRecordResultContract
-                  : never;
+    : Reference extends FormlessUiManagementManifestReference
+      ? FormlessUiManagementManifestContract
+      : Reference extends FormlessUiManagementInstallDialogReference
+        ? FormlessUiManagementInstallDialogContract
+        : Reference extends FormlessUiWorkspaceManifestReference
+          ? FormlessUiWorkspaceManifestContract
+          : Reference extends FormlessUiWorkspaceSectionShellReference
+            ? FormlessUiWorkspaceSectionShellContract
+            : Reference extends FormlessUiShellManifestReference
+              ? FormlessUiShellManifestContract
+              : Reference extends FormlessUiShellNavigationSectionReference
+                ? FormlessUiShellNavigationSectionContract
+                : Reference extends FormlessUiListResultReference
+                  ? FormlessUiListContract
+                  : Reference extends FormlessUiTableResultReference
+                    ? FormlessUiTableContract
+                    : Reference extends FormlessUiRecordResultReference
+                      ? FormlessUiRecordResultContract
+                      : never;
 
 export type FormlessUiContractHostListener = () => void;
 
@@ -99,9 +108,21 @@ export type FormlessUiRecordResultNode = {
   snapshot: FormlessUiRecordResultContract;
 };
 
+export type FormlessUiManagementManifestNode = {
+  reference: FormlessUiManagementManifestReference;
+  snapshot: FormlessUiManagementManifestContract;
+};
+
+export type FormlessUiManagementInstallDialogNode = {
+  reference: FormlessUiManagementInstallDialogReference;
+  snapshot: FormlessUiManagementInstallDialogContract;
+};
+
 export type FormlessUiContractHostNode =
   | FormlessUiDocumentThemeNode
   | FormlessUiListResultNode
+  | FormlessUiManagementInstallDialogNode
+  | FormlessUiManagementManifestNode
   | FormlessUiRecordResultNode
   | FormlessUiShellManifestNode
   | FormlessUiShellNavigationSectionNode
@@ -199,6 +220,28 @@ export function formlessUiWorkspaceManifestReference(
   };
 }
 
+export function formlessUiManagementManifestReference(
+  managementId: string,
+): FormlessUiManagementManifestReference {
+  return {
+    kind: "managementManifestReference",
+    managementId,
+    role: "management",
+  };
+}
+
+export function formlessUiManagementInstallDialogReference(
+  managementId: string,
+  dialogId: string,
+): FormlessUiManagementInstallDialogReference {
+  return {
+    dialogId,
+    kind: "managementInstallDialogReference",
+    managementId,
+    role: "managementInstallDialog",
+  };
+}
+
 export function formlessUiDocumentThemeReference(
   themeId: string,
 ): FormlessUiDocumentThemeReference {
@@ -292,6 +335,10 @@ export function formlessUiContractReferenceKey(reference: FormlessUiContractRefe
   switch (reference.kind) {
     case "documentThemeReference":
       return JSON.stringify([reference.role, reference.themeId]);
+    case "managementManifestReference":
+      return JSON.stringify([reference.role, reference.managementId]);
+    case "managementInstallDialogReference":
+      return JSON.stringify([reference.role, reference.managementId, reference.dialogId]);
     case "shellManifestReference":
       return JSON.stringify([reference.role, reference.shellId]);
     case "shellNavigationSectionReference":
@@ -318,6 +365,12 @@ export function isFormlessUiWorkspaceIntent(
 ): intent is FormlessUiWorkspaceIntent {
   switch (intent.type) {
     case "documentThemeModeSelection":
+    case "managementAuthorizationOpen":
+    case "managementInstallDialogOpenChange":
+    case "managementInstallField":
+    case "managementInstallPackageSelection":
+    case "managementInstallSubmit":
+    case "managementWorkspaceOperation":
     case "shellCreate":
     case "shellLogout":
     case "shellReset":
@@ -325,6 +378,22 @@ export function isFormlessUiWorkspaceIntent(
       return false;
     default:
       return true;
+  }
+}
+
+export function isFormlessUiManagementIntent(
+  intent: FormlessUiContractIntent,
+): intent is FormlessUiManagementIntent {
+  switch (intent.type) {
+    case "managementAuthorizationOpen":
+    case "managementInstallDialogOpenChange":
+    case "managementInstallField":
+    case "managementInstallPackageSelection":
+    case "managementInstallSubmit":
+    case "managementWorkspaceOperation":
+      return true;
+    default:
+      return false;
   }
 }
 
@@ -395,6 +464,21 @@ function assertNodeMatchesReference(node: FormlessUiContractHostNode) {
       }
       assertDocumentThemeContract(snapshot);
       return;
+    case "managementManifestReference":
+      if (snapshot.kind !== "managementManifest" || snapshot.id !== reference.managementId) {
+        throw mismatchedNodeError(reference);
+      }
+      return;
+    case "managementInstallDialogReference":
+      if (
+        snapshot.kind !== "managementInstallDialog" ||
+        snapshot.id !== reference.dialogId ||
+        snapshot.managementId !== reference.managementId
+      ) {
+        throw mismatchedNodeError(reference);
+      }
+      assertManagementInstallDialogContract(snapshot);
+      return;
     case "shellManifestReference":
       if (snapshot.kind !== "shellManifest" || snapshot.id !== reference.shellId) {
         throw mismatchedNodeError(reference);
@@ -433,6 +517,75 @@ function assertNodeMatchesReference(node: FormlessUiContractHostNode) {
       if (snapshot.kind !== "table" || snapshot.id !== reference.resultId) {
         throw mismatchedNodeError(reference);
       }
+  }
+}
+
+function assertManagementInstallDialogContract(
+  snapshot: FormlessUiManagementInstallDialogContract,
+) {
+  const { closeIntent, fields, packageOptions, selectedPackageOptionId, submitIntent } = snapshot;
+
+  if (
+    closeIntent.managementId !== snapshot.managementId ||
+    closeIntent.dialogId !== snapshot.id ||
+    closeIntent.open
+  ) {
+    throw new Error(
+      `Formless UI management install dialog ${JSON.stringify(snapshot.id)} has an invalid close intent.`,
+    );
+  }
+
+  if (
+    submitIntent.managementId !== snapshot.managementId ||
+    submitIntent.dialogId !== snapshot.id ||
+    submitIntent.controlId !== snapshot.submit.id
+  ) {
+    throw new Error(
+      `Formless UI management install dialog ${JSON.stringify(snapshot.id)} has an invalid submit intent.`,
+    );
+  }
+
+  const fieldIds = new Set(Object.values(fields).map(({ fieldId }) => fieldId));
+  if (fieldIds.size !== 3) {
+    throw new Error(
+      `Formless UI management install dialog ${JSON.stringify(snapshot.id)} requires distinct field identities.`,
+    );
+  }
+
+  const optionIds = new Set<string>();
+  for (const option of packageOptions) {
+    if (optionIds.has(option.id)) {
+      throw new Error(
+        `Formless UI management install dialog ${JSON.stringify(snapshot.id)} has duplicate package options.`,
+      );
+    }
+    optionIds.add(option.id);
+
+    const intent = option.selectionIntent;
+    if (
+      intent.managementId !== snapshot.managementId ||
+      intent.dialogId !== snapshot.id ||
+      intent.fieldId !== fields.package.fieldId ||
+      intent.optionId !== option.id
+    ) {
+      throw new Error(
+        `Formless UI management install dialog ${JSON.stringify(snapshot.id)} has an invalid package-selection intent.`,
+      );
+    }
+  }
+
+  if (!optionIds.has(selectedPackageOptionId)) {
+    throw new Error(
+      `Formless UI management install dialog ${JSON.stringify(snapshot.id)} has no selected package option.`,
+    );
+  }
+
+  for (const option of packageOptions) {
+    if (option.selected !== (option.id === selectedPackageOptionId)) {
+      throw new Error(
+        `Formless UI management install dialog ${JSON.stringify(snapshot.id)} has inconsistent package selection.`,
+      );
+    }
   }
 }
 
@@ -487,6 +640,44 @@ function mismatchedNodeError(reference: FormlessUiContractReference) {
 
 function assertReferencesResolve(nodes: StoredContractNodes) {
   for (const node of nodes.values()) {
+    if (node.snapshot.kind === "managementManifest") {
+      if (node.snapshot.state !== "ready") {
+        continue;
+      }
+
+      const manifest = node.snapshot;
+      if (manifest.installDialog.managementId !== manifest.id) {
+        throw invalidScopedReferenceError(manifest.installDialog);
+      }
+      assertReferenceResolves(nodes, manifest.installDialog);
+
+      const expectedRoles = ["apps", "routes"] as const;
+      manifest.workspaces.forEach((workspace, index) => {
+        if (workspace.role !== expectedRoles[index]) {
+          throw new Error(
+            `Formless UI management manifest ${JSON.stringify(manifest.id)} has invalid workspace order.`,
+          );
+        }
+        assertReferenceResolves(nodes, workspace.reference);
+      });
+
+      const authorizationPrompt = manifest.workspaceOperation?.authorizationPrompt;
+      if (authorizationPrompt) {
+        const intent = authorizationPrompt.intent;
+        if (
+          intent.managementId !== manifest.id ||
+          intent.operationId !== manifest.workspaceOperation?.id ||
+          intent.promptId !== authorizationPrompt.id ||
+          intent.controlId !== authorizationPrompt.action.id
+        ) {
+          throw new Error(
+            `Formless UI management manifest ${JSON.stringify(manifest.id)} has an invalid authorization intent.`,
+          );
+        }
+      }
+      continue;
+    }
+
     if (node.snapshot.kind === "shellManifest") {
       const manifest = node.snapshot;
       for (const sectionReference of manifest.navigationSections) {

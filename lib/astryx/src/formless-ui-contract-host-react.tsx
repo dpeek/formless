@@ -10,6 +10,9 @@ import type {
   FormlessUiContractReference,
   FormlessUiDocumentThemeIntentHandler,
   FormlessUiDocumentThemeReference,
+  FormlessUiManagementInstallDialogReference,
+  FormlessUiManagementIntentHandler,
+  FormlessUiManagementManifestReference,
   FormlessUiResultReference,
   FormlessUiShellIntentHandler,
   FormlessUiShellManifestReference,
@@ -64,6 +67,11 @@ export function useFormlessUiDocumentThemeIntentHandler(): FormlessUiDocumentThe
   return useCallback((intent) => host.dispatch(intent), [host]);
 }
 
+export function useFormlessUiManagementIntentHandler(): FormlessUiManagementIntentHandler {
+  const host = useFormlessUiContractHost();
+  return useCallback((intent) => host.dispatch(intent), [host]);
+}
+
 export function useFormlessUiContract<Reference extends FormlessUiContractReference>(
   reference: Reference,
 ): FormlessUiContractSnapshot<Reference> | undefined {
@@ -89,6 +97,16 @@ export function useFormlessUiWorkspaceManifest(reference: FormlessUiWorkspaceMan
 }
 
 export function useFormlessUiDocumentTheme(reference: FormlessUiDocumentThemeReference) {
+  return useFormlessUiContract(reference);
+}
+
+export function useFormlessUiManagementManifest(reference: FormlessUiManagementManifestReference) {
+  return useFormlessUiContract(reference);
+}
+
+export function useFormlessUiManagementInstallDialog(
+  reference: FormlessUiManagementInstallDialogReference,
+) {
   return useFormlessUiContract(reference);
 }
 

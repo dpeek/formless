@@ -1783,6 +1783,179 @@ export type FormlessUiDocumentThemeContract = FormlessUiDocumentThemeContractBas
       }
   );
 
+export type FormlessUiManagementFeedbackContract = {
+  detail?: string;
+  id: string;
+  intent: FormlessUiCompactStatusIntent;
+  kind: "managementFeedback";
+  title: string;
+};
+
+export type FormlessUiManagementInstallDialogOpenChangeIntent = {
+  dialogId: string;
+  managementId: string;
+  open: boolean;
+  type: "managementInstallDialogOpenChange";
+};
+
+export type FormlessUiManagementInstallFieldIntent = {
+  dialogId: string;
+  fieldId: string;
+  intent: FormlessUiFieldIntent;
+  managementId: string;
+  type: "managementInstallField";
+};
+
+export type FormlessUiManagementInstallPackageSelectionIntent = {
+  dialogId: string;
+  fieldId: string;
+  managementId: string;
+  optionId: string;
+  type: "managementInstallPackageSelection";
+};
+
+export type FormlessUiManagementInstallSubmitIntent = {
+  controlId: string;
+  dialogId: string;
+  managementId: string;
+  type: "managementInstallSubmit";
+};
+
+export type FormlessUiManagementWorkspaceOperationIntent = {
+  controlId: string;
+  intent: FormlessUiOperationPresentationIntent;
+  managementId: string;
+  operationId: string;
+  type: "managementWorkspaceOperation";
+};
+
+export type FormlessUiManagementAuthorizationOpenIntent = {
+  controlId: string;
+  managementId: string;
+  operationId: string;
+  promptId: string;
+  type: "managementAuthorizationOpen";
+};
+
+export type FormlessUiManagementIntent =
+  | FormlessUiManagementAuthorizationOpenIntent
+  | FormlessUiManagementInstallDialogOpenChangeIntent
+  | FormlessUiManagementInstallFieldIntent
+  | FormlessUiManagementInstallPackageSelectionIntent
+  | FormlessUiManagementInstallSubmitIntent
+  | FormlessUiManagementWorkspaceOperationIntent;
+
+export type FormlessUiManagementIntentHandler = (
+  intent: FormlessUiManagementIntent,
+) => Promise<void> | void;
+
+export type FormlessUiManagementPackageOptionContract = {
+  description: string;
+  id: string;
+  kind: "managementPackageOption";
+  label: string;
+  packageAppKey: string;
+  selected: boolean;
+  selectionIntent: FormlessUiManagementInstallPackageSelectionIntent;
+};
+
+export type FormlessUiManagementInstallFieldsContract = {
+  installId: FormlessUiCreateField;
+  label: FormlessUiCreateField;
+  package: FormlessUiCreateField;
+};
+
+export type FormlessUiManagementAuthorizationPromptContract = {
+  action: FormlessUiButtonContract;
+  detail?: string;
+  id: string;
+  intent: FormlessUiManagementAuthorizationOpenIntent;
+  kind: "managementAuthorizationPrompt";
+  title: string;
+};
+
+export type FormlessUiManagementWorkspaceOperationContract = {
+  authorizationPrompt?: FormlessUiManagementAuthorizationPromptContract;
+  control: FormlessUiOperationControlContract;
+  id: string;
+  kind: "managementWorkspaceOperation";
+};
+
+export type FormlessUiManagementManifestReference = {
+  kind: "managementManifestReference";
+  managementId: string;
+  role: "management";
+};
+
+export type FormlessUiManagementInstallDialogReference = {
+  dialogId: string;
+  kind: "managementInstallDialogReference";
+  managementId: string;
+  role: "managementInstallDialog";
+};
+
+export type FormlessUiManagementInstallDialogContract = {
+  cancel: FormlessUiButtonContract;
+  closeIntent: FormlessUiManagementInstallDialogOpenChangeIntent;
+  description: string;
+  errors: readonly string[];
+  feedback?: FormlessUiManagementFeedbackContract;
+  fields: FormlessUiManagementInstallFieldsContract;
+  id: string;
+  kind: "managementInstallDialog";
+  managementId: string;
+  open: boolean;
+  packageOptions: readonly FormlessUiManagementPackageOptionContract[];
+  pending?: FormlessUiFieldPending;
+  selectedPackageOptionId: string;
+  submit: FormlessUiButtonContract;
+  submitIntent: FormlessUiManagementInstallSubmitIntent;
+  title: string;
+};
+
+export type FormlessUiManagementWorkspaceReferenceContract =
+  | {
+      reference: FormlessUiWorkspaceManifestReference;
+      role: "apps";
+    }
+  | {
+      reference: FormlessUiWorkspaceManifestReference;
+      role: "routes";
+    };
+
+type FormlessUiManagementManifestBaseContract = {
+  accessibilityLabel: string;
+  id: string;
+  kind: "managementManifest";
+  title: string;
+};
+
+export type FormlessUiManagementLoadingContract = FormlessUiManagementManifestBaseContract & {
+  message: string;
+  state: "loading";
+};
+
+export type FormlessUiManagementFailureContract = FormlessUiManagementManifestBaseContract & {
+  feedback: FormlessUiManagementFeedbackContract;
+  state: "failed";
+};
+
+export type FormlessUiManagementReadyContract = FormlessUiManagementManifestBaseContract & {
+  installDialog: FormlessUiManagementInstallDialogReference;
+  state: "ready";
+  workspaceFeedback?: FormlessUiManagementFeedbackContract;
+  workspaceOperation?: FormlessUiManagementWorkspaceOperationContract;
+  workspaces: readonly [
+    Extract<FormlessUiManagementWorkspaceReferenceContract, { role: "apps" }>,
+    Extract<FormlessUiManagementWorkspaceReferenceContract, { role: "routes" }>,
+  ];
+};
+
+export type FormlessUiManagementManifestContract =
+  | FormlessUiManagementFailureContract
+  | FormlessUiManagementLoadingContract
+  | FormlessUiManagementReadyContract;
+
 export type FormlessUiDocumentThemeReference = {
   kind: "documentThemeReference";
   role: "documentTheme";
@@ -1898,6 +2071,8 @@ export type FormlessUiWorkspaceSectionShellContract = Omit<
 export type FormlessUiContractReference =
   | FormlessUiDocumentThemeReference
   | FormlessUiListResultReference
+  | FormlessUiManagementInstallDialogReference
+  | FormlessUiManagementManifestReference
   | FormlessUiRecordResultReference
   | FormlessUiShellManifestReference
   | FormlessUiShellNavigationSectionReference
@@ -2035,6 +2210,7 @@ export type FormlessUiWorkspaceIntentHandler = (
 
 export type FormlessUiContractIntent =
   | FormlessUiDocumentThemeIntent
+  | FormlessUiManagementIntent
   | FormlessUiShellIntent
   | FormlessUiWorkspaceIntent;
 

@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import type {
+  FormlessUiContractIntent,
   FormlessUiContextResultReference,
   FormlessUiMainResultReference,
   FormlessUiRecordResultContract,
@@ -21,11 +22,15 @@ import {
   type FormlessUiContractHostNodeSet,
   type FormlessUiMutableContractHost,
 } from "@dpeek/formless-astryx/contract-host";
+import type { ApplicationRuntimeContractPublication } from "./application-runtime-contract-host.tsx";
 
 export type GeneratedWorkspaceContractHostPublication = {
   nodes: FormlessUiContractHostNodeSet;
   workspaceReference: FormlessUiWorkspaceManifestReference;
 };
+
+export type GeneratedWorkspaceRuntimePublication = GeneratedWorkspaceContractHostPublication &
+  ApplicationRuntimeContractPublication;
 
 export function projectGeneratedWorkspaceContractHostPublication(
   workspace: FormlessUiWorkspaceContract,
@@ -55,19 +60,39 @@ export function projectGeneratedWorkspaceContractHostPublication(
   };
 }
 
+export function prepareGeneratedWorkspaceRuntimePublication(
+  workspace: FormlessUiWorkspaceContract,
+  dispatch: FormlessUiWorkspaceIntentHandler,
+): GeneratedWorkspaceRuntimePublication {
+  const publication = projectGeneratedWorkspaceContractHostPublication(workspace);
+
+  return {
+    ...publication,
+    intentHandlers: [
+      {
+        dispatch: (intent: FormlessUiContractIntent) => {
+          if (!isFormlessUiWorkspaceIntent(intent)) {
+            return;
+          }
+          return dispatch(intent);
+        },
+        matches: (intent) =>
+          isFormlessUiWorkspaceIntent(intent) && intent.screenId === workspace.id,
+      },
+    ],
+  };
+}
+
 export function useGeneratedWorkspaceContractHost({
   dispatch,
-  workspace,
+  publication,
 }: {
   dispatch: FormlessUiWorkspaceIntentHandler;
-  workspace: FormlessUiWorkspaceContract | undefined;
+  publication: GeneratedWorkspaceRuntimePublication | undefined;
 }): {
   host: FormlessUiMutableContractHost;
   workspaceReference: FormlessUiWorkspaceManifestReference | undefined;
 } {
-  const publication = workspace
-    ? projectGeneratedWorkspaceContractHostPublication(workspace)
-    : undefined;
   const dispatchRef = useRef(dispatch);
   const [host] = useState(() =>
     createFormlessUiMemoryContractHost({

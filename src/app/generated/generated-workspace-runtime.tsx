@@ -5,7 +5,9 @@ import type {
   FormlessUiCreateSurfaceContract,
   FormlessUiFieldIntent,
   FormlessUiOperationPresentationIntent,
+  FormlessUiWorkspaceContract,
   FormlessUiWorkspaceIntent,
+  FormlessUiWorkspaceIntentHandler,
   FormlessUiWorkspaceLinkActionContract,
 } from "@dpeek/formless-astryx/contract";
 import { FormlessUiContractHostProvider } from "@dpeek/formless-astryx/contract-host/react";
@@ -75,7 +77,11 @@ import {
   type GeneratedWorkspaceSectionSelection,
   type GeneratedWorkspaceSectionSelectionFacts,
 } from "./generated-workspace-foundation.ts";
-import { useGeneratedWorkspaceContractHost } from "./generated-workspace-contract-host.ts";
+import {
+  prepareGeneratedWorkspaceRuntimePublication,
+  useGeneratedWorkspaceContractHost,
+  type GeneratedWorkspaceRuntimePublication,
+} from "./generated-workspace-contract-host.ts";
 import { LegacySubscribedWorkspaceScreenRenderer } from "./legacy-workspace-screen-renderer.tsx";
 import {
   executeGeneratedOperationControl,
@@ -92,6 +98,26 @@ import { executeTransitionStateOperation } from "./state-machine-ui.tsx";
 export type GeneratedWorkspaceSectionExternalAction = {
   action: FormlessUiActionTriggerContract;
   onIntent: FormlessUiActionIntentHandler;
+};
+
+export type GeneratedWorkspaceRuntimeProps = {
+  getSectionSelection: (
+    section: HomeScreenCollectionSectionModel,
+  ) => GeneratedWorkspaceSectionSelection;
+  onSelectContext: (section: HomeScreenCollectionSectionModel, recordId: string | null) => void;
+  onSelectQuery: (section: HomeScreenCollectionSectionModel, queryName: string) => void;
+  screen: HomeScreenModel;
+  sectionExternalActions?: Readonly<
+    Record<string, readonly GeneratedWorkspaceSectionExternalAction[] | undefined>
+  >;
+  today: string;
+  workspaceActions?: readonly FormlessUiWorkspaceLinkActionContract[];
+};
+
+export type GeneratedWorkspaceRuntimeController = {
+  dispatch: FormlessUiWorkspaceIntentHandler;
+  publication: GeneratedWorkspaceRuntimePublication | undefined;
+  workspace: FormlessUiWorkspaceContract | undefined;
 };
 
 type GeneratedWorkspaceExternalActionRuntime = {
@@ -129,7 +155,12 @@ type GeneratedWorkspaceResolvedField = Extract<
   { kind: "field" }
 >;
 
-export function GeneratedWorkspaceRuntime({
+export function GeneratedWorkspaceRuntime(props: GeneratedWorkspaceRuntimeProps) {
+  const controller = useGeneratedWorkspaceRuntimeController(props);
+  return <GeneratedWorkspaceStandaloneBoundary controller={controller} />;
+}
+
+export function useGeneratedWorkspaceRuntimeController({
   getSectionSelection,
   onSelectContext,
   onSelectQuery,
@@ -137,19 +168,7 @@ export function GeneratedWorkspaceRuntime({
   sectionExternalActions = {},
   today,
   workspaceActions = [],
-}: {
-  getSectionSelection: (
-    section: HomeScreenCollectionSectionModel,
-  ) => GeneratedWorkspaceSectionSelection;
-  onSelectContext: (section: HomeScreenCollectionSectionModel, recordId: string | null) => void;
-  onSelectQuery: (section: HomeScreenCollectionSectionModel, queryName: string) => void;
-  screen: HomeScreenModel;
-  sectionExternalActions?: Readonly<
-    Record<string, readonly GeneratedWorkspaceSectionExternalAction[] | undefined>
-  >;
-  today: string;
-  workspaceActions?: readonly FormlessUiWorkspaceLinkActionContract[];
-}) {
+}: GeneratedWorkspaceRuntimeProps): GeneratedWorkspaceRuntimeController {
   const snapshot = useSyncExternalStore(
     subscribeToClientStore,
     getClientStoreSnapshot,
@@ -226,10 +245,6 @@ export function GeneratedWorkspaceRuntime({
   });
   const appTarget = useSchemaAppTarget();
   const writeOptions = useSchemaAppWriteOptions();
-  const { host, workspaceReference } = useGeneratedWorkspaceContractHost({
-    dispatch: onIntent,
-    workspace: selected.foundation?.workspace,
-  });
 
   useEffect(() => {
     for (const section of selected.foundation?.runtimePlan.sections ?? []) {
@@ -242,10 +257,6 @@ export function GeneratedWorkspaceRuntime({
       }
     }
   }, [onSelectContext, sectionSelection, selected.foundation]);
-
-  if (!selected.foundation || !workspaceReference) {
-    return null;
-  }
 
   async function onIntent(intent: FormlessUiWorkspaceIntent) {
     if (!selected.foundation) {
@@ -920,6 +931,31 @@ export function GeneratedWorkspaceRuntime({
           [runtime.binding.id]: open,
         })),
     });
+  }
+
+  const workspace = selected.foundation?.workspace;
+
+  return {
+    dispatch: onIntent,
+    publication: workspace
+      ? prepareGeneratedWorkspaceRuntimePublication(workspace, onIntent)
+      : undefined,
+    workspace,
+  };
+}
+
+export function GeneratedWorkspaceStandaloneBoundary({
+  controller,
+}: {
+  controller: GeneratedWorkspaceRuntimeController;
+}) {
+  const { host, workspaceReference } = useGeneratedWorkspaceContractHost({
+    dispatch: controller.dispatch,
+    publication: controller.publication,
+  });
+
+  if (!workspaceReference) {
+    return null;
   }
 
   return (

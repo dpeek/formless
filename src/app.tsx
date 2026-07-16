@@ -18,7 +18,11 @@ import {
 } from "./app/public-site-runtime.tsx";
 import type { ApplicationShellRuntimeBoundaryProps } from "./app/application-shell-runtime.tsx";
 import { selectGeneratedShellScope } from "./app/generated/formless-ui-shell-projection.ts";
-import type { GeneratedWorkspaceSectionExternalAction } from "./app/generated/generated-workspace-runtime.tsx";
+import type {
+  GeneratedWorkspaceRuntimeController,
+  GeneratedWorkspaceSectionExternalAction,
+} from "./app/generated/generated-workspace-runtime.tsx";
+import type { HomeRouteClientLoadState } from "./app/routes/home.tsx";
 import { sitePublicRenderer as workspaceSitePublicRenderer } from "virtual:formless/site-public-renderer/browser";
 import {
   findRuntimeWorldMountByRoute,
@@ -55,9 +59,15 @@ import {
 import { runtimeTopologyRoutes, type RuntimeRouteAccess } from "./shared/runtime-topology.ts";
 import type { AppInstallsResponse } from "./shared/protocol.ts";
 import type { FormlessUiWorkspaceLinkActionContract } from "@dpeek/formless-astryx/contract";
+import { initialInstanceManagementRuntimeContribution } from "./app/routes/instance-management-contract.ts";
 
 type HomeRouteProps = {
   activePackageResolver?: AppPackageResolver | undefined;
+  clientSync?: boolean | undefined;
+  onClientLoadStateChange?: ((state: HomeRouteClientLoadState) => void) | undefined;
+  onGeneratedWorkspaceController?: (
+    controller: GeneratedWorkspaceRuntimeController | undefined,
+  ) => void;
   sectionExternalActions?: Readonly<
     Record<string, readonly GeneratedWorkspaceSectionExternalAction[] | undefined>
   >;
@@ -68,7 +78,6 @@ type HomeRouteProps = {
 };
 
 type InstanceShellRouteProps = {
-  homeRouteComponent: ElementType<HomeRouteProps>;
   localWorkspaceGatewayAvailable?: boolean | undefined;
 };
 
@@ -189,6 +198,13 @@ export function App({
     [activeRuntimeProfile],
   );
   const normalizedLocation = normalizeRuntimeBrowserPath(location);
+  const initialRouteContractContributions = useMemo(
+    () =>
+      browserRoutes.instanceShellRoute === normalizedLocation
+        ? [initialInstanceManagementRuntimeContribution]
+        : [],
+    [browserRoutes.instanceShellRoute, normalizedLocation],
+  );
   const localWorkspaceGatewayAvailable = useLocalWorkspaceGatewayAvailable(
     localWorkspaceGatewayAvailableProp,
     routeMayNeedLocalWorkspaceGateway(browserRoutes, normalizedLocation),
@@ -238,6 +254,7 @@ export function App({
       <ApplicationShellRuntimeBoundary
         activePackageResolver={installedAppRouteContext.activePackageResolver}
         currentPath={location}
+        initialRouteContractContributions={initialRouteContractContributions}
         installedAppRouteInstalls={installedAppRouteInstalls}
         routeWorld={routeWorld}
         runtimeProfile={activeRuntimeProfile}
@@ -501,20 +518,14 @@ function AppRoutes({
       {browserRoutes.instanceShellRoute ? (
         <Route path={browserRoutes.instanceShellRoute}>
           <OwnerRouteGuard access="owner">
-            <InstanceShellRoute
-              homeRouteComponent={HomeRoute}
-              localWorkspaceGatewayAvailable={localWorkspaceGatewayAvailable}
-            />
+            <InstanceShellRoute localWorkspaceGatewayAvailable={localWorkspaceGatewayAvailable} />
           </OwnerRouteGuard>
         </Route>
       ) : null}
       {browserRoutes.instanceAccessRoute ? (
         <Route path={browserRoutes.instanceAccessRoute}>
           <OwnerRouteGuard access="authenticated">
-            <InstanceShellRoute
-              homeRouteComponent={HomeRoute}
-              localWorkspaceGatewayAvailable={localWorkspaceGatewayAvailable}
-            />
+            <InstanceShellRoute localWorkspaceGatewayAvailable={localWorkspaceGatewayAvailable} />
           </OwnerRouteGuard>
         </Route>
       ) : null}

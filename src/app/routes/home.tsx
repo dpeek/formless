@@ -21,7 +21,10 @@ import { selectScreenModelByPath } from "../../client/views.ts";
 import { todayDateString } from "../../shared/date.ts";
 import { SchemaAppProvider } from "../generated/schema-app-context.tsx";
 import { HomeScreen } from "../generated/screen.tsx";
-import type { GeneratedWorkspaceSectionExternalAction } from "../generated/generated-workspace-runtime.tsx";
+import type {
+  GeneratedWorkspaceRuntimeController,
+  GeneratedWorkspaceSectionExternalAction,
+} from "../generated/generated-workspace-runtime.tsx";
 import { NotFoundRoute } from "./not-found.tsx";
 import type { AppPackageResolver } from "@dpeek/formless-installed-apps";
 import type { FormlessUiWorkspaceLinkActionContract } from "@dpeek/formless-astryx/contract";
@@ -44,8 +47,16 @@ export {
   withHomeRouteSelectedSectionQueryName,
 } from "./home-selection.tsx";
 
+export type HomeRouteClientLoadState =
+  | { state: "failed"; message: string }
+  | { state: "loading" }
+  | { state: "ready" };
+
 export function HomeRoute({
   activePackageResolver,
+  clientSync = true,
+  onClientLoadStateChange,
+  onGeneratedWorkspaceController,
   target,
   schemaKey,
   sectionExternalActions,
@@ -53,6 +64,11 @@ export function HomeRoute({
   workspaceActions,
 }: {
   activePackageResolver?: AppPackageResolver | undefined;
+  clientSync?: boolean | undefined;
+  onClientLoadStateChange?: ((state: HomeRouteClientLoadState) => void) | undefined;
+  onGeneratedWorkspaceController?: (
+    controller: GeneratedWorkspaceRuntimeController | undefined,
+  ) => void;
   target?: ClientAppTarget;
   schemaKey: ClientAppSchemaKey;
   sectionExternalActions?: Readonly<
@@ -89,12 +105,17 @@ export function HomeRoute({
   }, [appTargetIdentity.browserDatabaseName, setSelectionState]);
 
   useEffect(() => {
+    if (!clientSync) {
+      return;
+    }
+
     selectClientStoreTarget(appTarget);
     const stopBroadcast = connectBroadcastToClientStore(appTarget);
     let stopPushSync = () => {};
     let cancelled = false;
 
     async function startSync() {
+      onClientLoadStateChange?.({ state: "loading" });
       setSyncStatus({ state: "syncing", message: `Syncing ${appLabel}...` });
 
       try {
@@ -106,6 +127,7 @@ export function HomeRoute({
         }
 
         setSyncStatus({ state: "idle", message: "Synced." });
+        onClientLoadStateChange?.({ state: "ready" });
         if (appTargetIdentity.kind !== "instanceControlPlane") {
           stopPushSync = startPushSync(appTarget);
         }
@@ -114,10 +136,9 @@ export function HomeRoute({
           return;
         }
 
-        setSyncStatus({
-          state: "error",
-          message: error instanceof Error ? error.message : "Sync failed.",
-        });
+        const message = error instanceof Error ? error.message : "Sync failed.";
+        setSyncStatus({ state: "error", message });
+        onClientLoadStateChange?.({ message, state: "failed" });
       }
     }
 
@@ -128,9 +149,19 @@ export function HomeRoute({
       stopBroadcast();
       stopPushSync();
     };
-  }, [appLabel, appTargetIdentity.browserDatabaseName, appTargetIdentity.kind]);
+  }, [
+    appLabel,
+    appTargetIdentity.browserDatabaseName,
+    appTargetIdentity.kind,
+    clientSync,
+    onClientLoadStateChange,
+  ]);
 
   if (!schema) {
+    if (onGeneratedWorkspaceController) {
+      return null;
+    }
+
     return (
       <section className="mx-auto max-w-3xl space-y-4">
         <h1 className="text-2xl font-semibold">Formless</h1>
@@ -142,6 +173,10 @@ export function HomeRoute({
   }
 
   if (!homeScreen) {
+    if (onGeneratedWorkspaceController) {
+      return null;
+    }
+
     if (screenPath !== "/") {
       return <NotFoundRoute />;
     }
@@ -154,53 +189,58 @@ export function HomeRoute({
     );
   }
 
-  return (
-    <section className="mx-auto w-full max-w-[112rem]">
-      <SchemaAppProvider
-        activePackageResolver={activePackageResolver}
-        schemaKey={schemaKey}
-        target={appTarget}
-      >
-        <HomeScreen
-          getSectionSelection={(section) => ({
-            selectedContextRecordId: selectHomeRouteSectionContextRecordId(
-              selectionState,
+  const workspace = (
+    <SchemaAppProvider
+      activePackageResolver={activePackageResolver}
+      schemaKey={schemaKey}
+      target={appTarget}
+    >
+      <HomeScreen
+        getSectionSelection={(section) => ({
+          selectedContextRecordId: selectHomeRouteSectionContextRecordId(
+            selectionState,
+            homeScreen.screenName,
+            section.id,
+          ),
+          selectedQueryName: selectHomeRouteSectionQueryName(
+            selectionState,
+            homeScreen.screenName,
+            section.id,
+          ),
+        })}
+        onSelectContext={(section, recordId) =>
+          setSelectionState((current) =>
+            withHomeRouteSelectedSectionContextRecordId(
+              current,
               homeScreen.screenName,
               section.id,
+              recordId,
             ),
-            selectedQueryName: selectHomeRouteSectionQueryName(
-              selectionState,
+          )
+        }
+        onSelectQuery={(section, queryName) =>
+          setSelectionState((current) =>
+            withHomeRouteSelectedSectionQueryName(
+              current,
               homeScreen.screenName,
               section.id,
+              queryName,
             ),
-          })}
-          onSelectContext={(section, recordId) =>
-            setSelectionState((current) =>
-              withHomeRouteSelectedSectionContextRecordId(
-                current,
-                homeScreen.screenName,
-                section.id,
-                recordId,
-              ),
-            )
-          }
-          onSelectQuery={(section, queryName) =>
-            setSelectionState((current) =>
-              withHomeRouteSelectedSectionQueryName(
-                current,
-                homeScreen.screenName,
-                section.id,
-                queryName,
-              ),
-            )
-          }
-          screen={homeScreen}
-          sectionExternalActions={sectionExternalActions}
-          today={today}
-          workspaceActions={workspaceActions}
-        />
-      </SchemaAppProvider>
-    </section>
+          )
+        }
+        onGeneratedWorkspaceController={onGeneratedWorkspaceController}
+        screen={homeScreen}
+        sectionExternalActions={sectionExternalActions}
+        today={today}
+        workspaceActions={workspaceActions}
+      />
+    </SchemaAppProvider>
+  );
+
+  return onGeneratedWorkspaceController ? (
+    workspace
+  ) : (
+    <section className="mx-auto w-full max-w-[112rem]">{workspace}</section>
   );
 }
 

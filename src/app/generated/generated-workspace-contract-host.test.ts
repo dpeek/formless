@@ -10,7 +10,11 @@ import type { GeneratedOperationControlBinding } from "../../client/views.ts";
 import { projectGeneratedListOperationAction } from "./formless-ui-list-projection.ts";
 import { projectGeneratedOperationFormlessUiControl } from "./formless-ui-operation-projection.ts";
 import { projectGeneratedRecordFormlessUiField } from "./formless-ui-projection.ts";
-import { projectGeneratedWorkspaceContractHostPublication } from "./generated-workspace-contract-host.ts";
+import { createApplicationRuntimePublicationCoordinator } from "./application-runtime-contract-host.tsx";
+import {
+  prepareGeneratedWorkspaceRuntimePublication,
+  projectGeneratedWorkspaceContractHostPublication,
+} from "./generated-workspace-contract-host.ts";
 
 describe("generated workspace contract host adapter", () => {
   it("flattens complete list, table, and context projections into scoped host nodes", () => {
@@ -166,6 +170,38 @@ describe("generated workspace contract host adapter", () => {
     expect(
       host.read(initial.workspaceReference)?.sections.map(({ sectionId }) => sectionId),
     ).toEqual(["section:archive", "section:tasks"]);
+  });
+
+  it("prepares reusable workspace nodes and current scoped intent handling", async () => {
+    const calls: string[] = [];
+    const workspace = workspaceFixture();
+    const initial = prepareGeneratedWorkspaceRuntimePublication(workspace, () => {
+      calls.push("initial");
+    });
+    const coordinator = createApplicationRuntimePublicationCoordinator([
+      ["workspace:tasks", initial],
+    ]);
+    const manifest = required(coordinator.host.read(initial.workspaceReference));
+    const section = required(coordinator.host.read(required(manifest.sections[0])));
+    const queryNavigation = section.collection.presentation.queryNavigation;
+    const intent = required(queryNavigation?.items[0]).selectionIntent;
+
+    expect(initial.workspaceReference).toEqual({
+      kind: "workspaceManifestReference",
+      role: "workspace",
+      workspaceId: workspace.id,
+    });
+
+    await coordinator.host.dispatch(intent);
+    coordinator.publish(
+      "workspace:tasks",
+      prepareGeneratedWorkspaceRuntimePublication(workspace, () => {
+        calls.push("current");
+      }),
+    );
+    await coordinator.host.dispatch(intent);
+
+    expect(calls).toEqual(["initial", "current"]);
   });
 });
 

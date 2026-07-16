@@ -697,14 +697,18 @@ describe("App smoke routes", () => {
     expectRuntimeShell(html);
     expect(linkHtml(runtimeShellHtml(html), "/")).toContain('aria-current="page"');
     expect(linkHtml(runtimeShellHtml(html), "/")).toContain('aria-label="Instance"');
-    expect(html).toContain("Instance Settings");
     expect(html).toContain('aria-label="Instance navigation"');
     expect(html).toContain('aria-label="Settings"');
     expect(html).toContain('aria-label="Access"');
     expect(html).toContain('href="/access"');
+    expect(html).toContain('data-formless-management="instance-management"');
+    expect(html).toContain('data-formless-management-state="loading"');
+    expect(html).toContain("Instance Settings");
+    expect(html).toContain("Loading installed apps...");
     expect(html).not.toContain("Overview");
     expect(html).not.toContain('href="/deployments"');
-    expect(html).toContain("Loading installed apps...");
+    expect(html).not.toContain('data-formless-control-plane-screen="apps"');
+    expect(html).not.toContain('data-formless-control-plane-screen="routes"');
     expect(html).toContain('href="/tasks"');
     expect(html).toContain('href="/site"');
     expect(html).not.toContain("Loading Tasks...");
@@ -877,7 +881,7 @@ describe("App smoke routes", () => {
     const legacySetupHtml = renderRoute("/setup", instanceProfile);
     const legacyLoginHtml = renderRoute("/login", instanceProfile);
 
-    expect(shellHtml).toContain("Loading installed apps...");
+    expect(shellHtml).toContain('data-frame="application-shell"');
     expect(shellHtml).not.toContain("Owner setup");
     expect(shellHtml).not.toContain("Owner sign in");
     expect(setupHtml).toContain("Checking setup link");
@@ -912,7 +916,7 @@ describe("App smoke routes", () => {
     );
 
     expect(shellHtml).toContain("Instance");
-    expect(shellHtml).toContain("Loading installed apps...");
+    expect(shellHtml).toContain('data-frame="application-shell"');
     expect(accessHtml).toContain("Access");
     expect(accessHtml).toContain("Loading installed apps...");
     expect(accessHtml).toContain('aria-label="Access"');

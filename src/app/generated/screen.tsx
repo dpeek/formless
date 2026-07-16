@@ -2,11 +2,15 @@ import type { HomeScreenCollectionSectionModel, HomeScreenModel } from "../../cl
 import { HomeCollection } from "./collection.tsx";
 import {
   GeneratedWorkspaceRuntime,
+  useGeneratedWorkspaceRuntimeController,
+  type GeneratedWorkspaceRuntimeController,
+  type GeneratedWorkspaceRuntimeProps,
   type GeneratedWorkspaceSectionExternalAction,
 } from "./generated-workspace-runtime.tsx";
 import { generatedWorkspaceScreenIsEligible } from "./generated-workspace-foundation.ts";
 import type { FormlessUiWorkspaceLinkActionContract } from "@dpeek/formless-astryx/contract";
 import { LegacyWorkspaceLinkActions } from "./legacy-workspace-screen-renderer.tsx";
+import { useLayoutEffect } from "react";
 
 export type HomeScreenSectionSelection = {
   selectedContextRecordId?: string | null;
@@ -17,6 +21,7 @@ export function HomeScreen({
   getSectionSelection,
   onSelectContext,
   onSelectQuery,
+  onGeneratedWorkspaceController,
   screen,
   sectionExternalActions = {},
   today,
@@ -25,6 +30,9 @@ export function HomeScreen({
   getSectionSelection: (section: HomeScreenCollectionSectionModel) => HomeScreenSectionSelection;
   onSelectContext: (section: HomeScreenCollectionSectionModel, recordId: string | null) => void;
   onSelectQuery: (section: HomeScreenCollectionSectionModel, queryName: string) => void;
+  onGeneratedWorkspaceController?: (
+    controller: GeneratedWorkspaceRuntimeController | undefined,
+  ) => void;
   screen: HomeScreenModel;
   sectionExternalActions?: Readonly<
     Record<string, readonly GeneratedWorkspaceSectionExternalAction[] | undefined>
@@ -33,16 +41,23 @@ export function HomeScreen({
   workspaceActions?: readonly FormlessUiWorkspaceLinkActionContract[];
 }) {
   if (generatedWorkspaceScreenIsEligible(screen)) {
-    return (
-      <GeneratedWorkspaceRuntime
-        getSectionSelection={getSectionSelection}
-        onSelectContext={onSelectContext}
-        onSelectQuery={onSelectQuery}
-        screen={screen}
-        sectionExternalActions={sectionExternalActions}
-        today={today}
-        workspaceActions={workspaceActions}
+    const props = {
+      getSectionSelection,
+      onSelectContext,
+      onSelectQuery,
+      screen,
+      sectionExternalActions,
+      today,
+      workspaceActions,
+    } satisfies GeneratedWorkspaceRuntimeProps;
+
+    return onGeneratedWorkspaceController ? (
+      <GeneratedWorkspaceRuntimeRegistration
+        {...props}
+        onController={onGeneratedWorkspaceController}
       />
+    ) : (
+      <GeneratedWorkspaceRuntime {...props} />
     );
   }
 
@@ -87,6 +102,23 @@ export function HomeScreen({
       })}
     </div>
   );
+}
+
+function GeneratedWorkspaceRuntimeRegistration({
+  onController,
+  ...props
+}: GeneratedWorkspaceRuntimeProps & {
+  onController: (controller: GeneratedWorkspaceRuntimeController | undefined) => void;
+}) {
+  const controller = useGeneratedWorkspaceRuntimeController(props);
+
+  useLayoutEffect(() => {
+    onController(controller);
+  }, [controller, onController]);
+
+  useLayoutEffect(() => () => onController(undefined), [onController]);
+
+  return null;
 }
 
 function HomeScreenSectionHeader({ label }: { label: string }) {

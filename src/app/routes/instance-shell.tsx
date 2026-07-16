@@ -2,26 +2,17 @@ import {
   useEffect,
   useId,
   useMemo,
+  useRef,
   useState,
   type Dispatch,
-  type ElementType,
   type SetStateAction,
 } from "react";
 import { useLocation } from "wouter";
 import { Button } from "@dpeek/formless-ui/button";
 import { Checkbox } from "@dpeek/formless-ui/checkbox";
-import { Description, FieldGroup, Label, fieldErrorStyles } from "@dpeek/formless-ui/field";
+import { FieldGroup, Label, fieldErrorStyles } from "@dpeek/formless-ui/field";
 import { Input } from "@dpeek/formless-ui/input";
 import { NativeSelect, NativeSelectContent } from "@dpeek/formless-ui/native-select";
-import {
-  ModalBody,
-  ModalClose,
-  ModalContent,
-  ModalDescription,
-  ModalFooter,
-  ModalHeader,
-  ModalTitle,
-} from "@dpeek/formless-ui/modal";
 import { TextField } from "@dpeek/formless-ui/text-field";
 import { AddIcon, RemoveIcon } from "@dpeek/formless-ui/icons";
 import {
@@ -38,18 +29,6 @@ import {
   type RevokeIdentityAccessManagementInvitationInput,
 } from "../../client/identity-access-management.ts";
 import {
-  instanceControlPlaneClientTarget,
-  type ClientAppSchemaKey,
-  type ClientAppTarget,
-} from "../../client/app-target.ts";
-import {
-  normalizeGeneratedOperationRuntimeAdapterResponse,
-  workspaceGatewayOperationGeneratedProgress,
-  workspaceGatewayOperationGeneratedRuntimeAdapterResponse,
-  type GeneratedOperationExecutionState,
-} from "../../client/views.ts";
-import {
-  type AppPackageResolver,
   type AppInstall,
   type InstallableAppPackage,
   type PackageAppKey,
@@ -63,19 +42,14 @@ import {
   startWorkspaceGatewayOperation,
   type WorkspaceGatewayAutoSaveState,
   type WorkspaceGatewayConfig,
-  type WorkspaceGatewayDisplayObject,
-  type WorkspaceGatewayDisplayValue,
   type WorkspaceGatewayOperation,
   type WorkspaceGatewayOperationKind,
-  type WorkspaceGatewayOperationLog,
-  type WorkspaceGatewayOperationStep,
   type WorkspaceGatewayResponse,
   type WorkspaceGatewayStartInput,
 } from "@dpeek/formless-gateway/client";
 import {
   workspaceBrowserOperationControlMetadata,
   workspaceOperationActorAllowed,
-  workspaceOperationDefinitionForKind,
   workspaceOperationInputFieldDefinition,
   type WorkspaceBrowserOperationControlMetadata,
   type WorkspaceOperationActor,
@@ -83,7 +57,6 @@ import {
   type WorkspaceOperationMode,
   type WorkspaceOperationRequiredCapability,
 } from "@dpeek/formless-workspace";
-import { INSTANCE_CONTROL_PLANE_SCHEMA_KEY } from "@dpeek/formless-instance-control-plane";
 import type {
   IdentityAccessInvitationGrantOptions,
   IdentityAccessInvitationMembershipGrantOption,
@@ -96,18 +69,8 @@ import type {
 } from "@dpeek/formless-identity-control-plane";
 import type { AppInstallsResponse } from "../../shared/protocol.ts";
 import { runtimeTopologyRoutes } from "../../shared/runtime-topology.ts";
-import { GeneratedOperationCompactStatus } from "../generated/operation-status.tsx";
-import type { GeneratedWorkspaceSectionExternalAction } from "../generated/generated-workspace-runtime.tsx";
-
-export type InstanceShellHomeRouteProps = {
-  activePackageResolver?: AppPackageResolver | undefined;
-  sectionExternalActions?: Readonly<
-    Record<string, readonly GeneratedWorkspaceSectionExternalAction[] | undefined>
-  >;
-  target?: ClientAppTarget;
-  schemaKey: ClientAppSchemaKey;
-  screenPath: string;
-};
+import { InstanceManagementRuntime } from "./instance-management-runtime.tsx";
+import { displaySafeText, fieldKeyLabel } from "./instance-management-display-safety.ts";
 
 export type PackageInstallDraft = {
   installId: string;
@@ -132,6 +95,7 @@ export type InstanceShellRouteState =
 export type WorkspaceGatewayRouteState =
   | { status: "unavailable" }
   | { status: "loading" }
+  | { status: "failed"; message: string }
   | {
       activeOperationId?: string;
       autoSave?: WorkspaceGatewayAutoSaveState;
@@ -271,15 +235,17 @@ function workspaceGatewayControlDefaultValue(
 }
 
 export function InstanceShellRoute({
-  homeRouteComponent,
   localWorkspaceGatewayAvailable: localWorkspaceGatewayAvailableProp,
 }: {
-  homeRouteComponent: ElementType<InstanceShellHomeRouteProps>;
   localWorkspaceGatewayAvailable?: boolean | undefined;
 }) {
   const [location, setLocation] = useLocation();
   const [state, setState] = useState<InstanceShellRouteState>({ status: "loading" });
   const [installDrafts, setInstallDrafts] = useState<PackageInstallDrafts>({});
+  const [installDialogOpen, setInstallDialogOpen] = useState(false);
+  const [selectedPackageAppKey, setSelectedPackageAppKey] = useState<PackageAppKey>();
+  const installRequestPending = useRef(false);
+  const workspaceOperationStartPending = useRef(false);
   const workspaceGatewayConfig = useMemo(() => workspaceGatewayBrowserConfig(), []);
   const localWorkspaceGatewayAvailable =
     localWorkspaceGatewayAvailableProp ?? workspaceGatewayConfig !== undefined;
@@ -295,8 +261,34 @@ export function InstanceShellRoute({
     let stopped = false;
 
     async function loadInstalls() {
+      let workspaceGatewayFailed = false;
+      let workspaceGatewayResponse: WorkspaceGatewayResponse | undefined;
+
       try {
-        const workspaceGatewayResponse = await loadInitialWorkspaceGatewayStatus({
+        workspaceGatewayResponse = await loadInitialWorkspaceGatewayStatus({
+          config: workspaceGatewayConfig,
+          signal: controller.signal,
+        });
+      } catch (error) {
+        if (stopped || controller.signal.aborted) {
+          return;
+        }
+
+        workspaceGatewayFailed = true;
+        setWorkspaceGatewayState({
+          message: displaySafeText(
+            error instanceof Error ? error.message : "Workspace gateway status could not load.",
+          ),
+          status: "failed",
+        });
+      }
+
+      if (stopped || controller.signal.aborted) {
+        return;
+      }
+
+      if (workspaceGatewayResponse) {
+        const autoSaveUpdate = await loadWorkspaceGatewayAutoSaveState({
           config: workspaceGatewayConfig,
           signal: controller.signal,
         });
@@ -305,47 +297,14 @@ export function InstanceShellRoute({
           return;
         }
 
-        if (workspaceGatewayResponse) {
-          const autoSaveUpdate = await loadWorkspaceGatewayAutoSaveState({
-            config: workspaceGatewayConfig,
-            signal: controller.signal,
-          });
+        setWorkspaceGatewayState((current) =>
+          workspaceGatewayReadyStateFromResponse(workspaceGatewayResponse, current, autoSaveUpdate),
+        );
+      } else if (!workspaceGatewayFailed) {
+        setWorkspaceGatewayState({ status: "unavailable" });
+      }
 
-          if (stopped) {
-            return;
-          }
-
-          setWorkspaceGatewayState((current) =>
-            workspaceGatewayReadyStateFromResponse(
-              workspaceGatewayResponse,
-              current,
-              autoSaveUpdate,
-            ),
-          );
-
-          if (workspaceInitialized(workspaceGatewayResponse.operation) === false) {
-            const appResponse = await fetchInstanceAppInstalls({ signal: controller.signal });
-
-            if (stopped) {
-              return;
-            }
-
-            const uninitialized = instanceShellUninitializedWorkspaceInstallState(appResponse);
-
-            setState(uninitialized.state);
-            setInstallDrafts((current) =>
-              initializePackageInstallDrafts({
-                currentDrafts: current,
-                installs: uninitialized.state.installs,
-                packages: uninitialized.state.packages,
-              }),
-            );
-            return;
-          }
-        } else {
-          setWorkspaceGatewayState({ status: "unavailable" });
-        }
-
+      try {
         const appResponse = await fetchInstanceAppInstalls({ signal: controller.signal });
 
         if (stopped) {
@@ -477,13 +436,8 @@ export function InstanceShellRoute({
     return () => window.clearInterval(intervalId);
   }, [autoSaveDisplayState, workspaceGatewayConfig]);
 
-  async function submitInstall(
-    packageAppKey: PackageAppKey,
-    event: React.FormEvent<HTMLFormElement>,
-  ) {
-    event.preventDefault();
-
-    if (state.status !== "ready" || state.installing) {
+  async function installPackage(packageAppKey: PackageAppKey) {
+    if (state.status !== "ready" || state.installing || installRequestPending.current) {
       return;
     }
 
@@ -496,6 +450,7 @@ export function InstanceShellRoute({
       return;
     }
 
+    installRequestPending.current = true;
     setState({
       ...state,
       installing: true,
@@ -527,6 +482,7 @@ export function InstanceShellRoute({
           packages: state.packages,
         }),
       );
+      setInstallDialogOpen(false);
       setLocation(response.install.adminRoute);
     } catch (error) {
       const message =
@@ -541,6 +497,8 @@ export function InstanceShellRoute({
         installError: message,
         installErrorPackageAppKey: packageAppKey,
       });
+    } finally {
+      installRequestPending.current = false;
     }
   }
 
@@ -561,10 +519,15 @@ export function InstanceShellRoute({
   }
 
   async function startWorkspaceOperation(input: WorkspaceGatewayStartInput) {
-    if (workspaceGatewayState.status !== "ready" || !workspaceGatewayConfig) {
+    if (
+      workspaceGatewayState.status !== "ready" ||
+      !workspaceGatewayConfig ||
+      workspaceOperationStartPending.current
+    ) {
       return;
     }
 
+    workspaceOperationStartPending.current = true;
     setWorkspaceGatewayState({
       ...workspaceGatewayState,
       error: undefined,
@@ -603,6 +566,8 @@ export function InstanceShellRoute({
         ...workspaceGatewayState,
         error: displaySafeText(message),
       });
+    } finally {
+      workspaceOperationStartPending.current = false;
     }
   }
 
@@ -618,24 +583,44 @@ export function InstanceShellRoute({
     });
   }
 
+  function changeInstallDraft(packageAppKey: PackageAppKey, draft: PackageInstallDraft) {
+    setInstallDrafts((current) => ({ ...current, [packageAppKey]: draft }));
+  }
+
+  async function startWorkspacePush() {
+    const push = selectWorkspaceGatewayOperationControls({ operationGroup: "workspace" }).find(
+      ({ kind }) => kind === "push",
+    );
+    if (push) {
+      await startWorkspaceOperation(push.input);
+    }
+  }
+
+  if (isInstanceAccessRoutePath(location)) {
+    return (
+      <InstanceShellRouteView
+        accessState={accessState}
+        currentPath={location}
+        installs={state.status === "ready" ? state.installs : []}
+        onCreateAccessInvitation={submitAccessInvitation}
+        onRevokeAccessInvitation={submitAccessInvitationRevoke}
+        state={state}
+      />
+    );
+  }
+
   return (
-    <InstanceShellRouteView
-      accessState={accessState}
-      currentPath={location}
-      installs={state.status === "ready" ? state.installs : []}
+    <InstanceManagementRuntime
+      installDialogOpen={installDialogOpen}
       installDrafts={installDrafts}
+      onInstallDialogOpenChange={setInstallDialogOpen}
+      onInstallDraftChange={changeInstallDraft}
+      onInstallPackageSelection={setSelectedPackageAppKey}
+      onInstallSubmit={installPackage}
+      onOpenWorkspaceAuthorization={(url) => window.open(url, "_blank", "noopener,noreferrer")}
       onPollWorkspaceOperation={pollWorkspaceOperation}
-      onCreateAccessInvitation={submitAccessInvitation}
-      onRevokeAccessInvitation={submitAccessInvitationRevoke}
-      onInstallDraftChange={(packageAppKey, draft) =>
-        setInstallDrafts((current) => ({
-          ...current,
-          [packageAppKey]: draft,
-        }))
-      }
-      onSubmitInstall={submitInstall}
-      onStartWorkspaceOperation={startWorkspaceOperation}
-      homeRouteComponent={homeRouteComponent}
+      onStartWorkspacePush={startWorkspacePush}
+      selectedPackageAppKey={selectedPackageAppKey}
       state={state}
       workspaceGatewayState={workspaceGatewayState}
     />
@@ -812,55 +797,29 @@ function workspaceGatewayReadyStateFromResponse(
   };
 }
 
-function workspaceInitialized(operation?: WorkspaceGatewayOperation): boolean | undefined {
-  const initialized =
-    operation?.result?.summary.fields.initialized ?? operation?.summary.fields.initialized;
-
-  return typeof initialized === "boolean" ? initialized : undefined;
-}
-
 export function operationPollsAutomatically(operation: WorkspaceGatewayOperation): boolean {
   return operation.status === "queued" || operation.status === "running";
 }
 
 export function InstanceShellRouteView({
   accessState = { status: "loading" },
-  currentPath = runtimeTopologyRoutes.instanceRootRoute,
-  homeRouteComponent,
+  currentPath = runtimeTopologyRoutes.accessRoute,
   installs = [],
-  installDrafts = {},
   onCreateAccessInvitation,
   onRevokeAccessInvitation,
-  onPollWorkspaceOperation,
-  onInstallDraftChange,
-  onSubmitInstall,
-  onStartWorkspaceOperation,
   state,
-  workspaceGatewayState = { status: "unavailable" },
 }: {
   accessState?: AccessManagementRouteState;
   currentPath?: string;
-  homeRouteComponent: ElementType<InstanceShellHomeRouteProps>;
   installs?: readonly AppInstall[];
-  installDrafts?: PackageInstallDrafts;
   onCreateAccessInvitation?: (
     input: CreateIdentityAccessManagementInvitationInput,
   ) => Promise<void>;
   onRevokeAccessInvitation?: (
     input: RevokeIdentityAccessManagementInvitationInput,
   ) => Promise<void>;
-  onPollWorkspaceOperation?: (
-    operationId: string,
-    operationKind?: WorkspaceGatewayOperationKind,
-  ) => void;
-  onInstallDraftChange?: (packageAppKey: PackageAppKey, draft: PackageInstallDraft) => void;
-  onSubmitInstall?: (packageAppKey: PackageAppKey, event: React.FormEvent<HTMLFormElement>) => void;
-  onStartWorkspaceOperation?: (input: WorkspaceGatewayStartInput) => void;
   state: InstanceShellRouteState;
-  workspaceGatewayState?: WorkspaceGatewayRouteState;
 }) {
-  const [installDialogOpen, setInstallDialogOpen] = useState(false);
-
   if (state.status === "loading") {
     return (
       <section className="mx-auto w-full max-w-6xl space-y-4 p-4 sm:p-6">
@@ -881,598 +840,14 @@ export function InstanceShellRouteView({
     );
   }
 
-  if (isInstanceAccessRoutePath(currentPath)) {
-    return (
-      <AccessManagementRouteView
-        installs={installs.length > 0 ? installs : state.installs}
-        onCreateInvitation={onCreateAccessInvitation}
-        onRevokeInvitation={onRevokeAccessInvitation}
-        state={accessState}
-      />
-    );
-  }
-
   return (
-    <section className="mx-auto w-full max-w-6xl space-y-6 p-4 sm:p-6">
-      <ShellHeader currentPath={currentPath} />
-      <WorkspaceGatewayManagementSection
-        onPollOperation={onPollWorkspaceOperation}
-        onStartOperation={onStartWorkspaceOperation}
-        state={workspaceGatewayState}
-      />
-      <GeneratedInstanceAppsSection
-        homeRouteComponent={homeRouteComponent}
-        installDisabled={state.installing || state.packages.length === 0}
-        onInstall={() => setInstallDialogOpen(true)}
-      />
-      <GeneratedInstanceRoutesSection homeRouteComponent={homeRouteComponent} />
-      <InstallAppDialog
-        installDrafts={installDrafts}
-        onDraftChange={onInstallDraftChange}
-        onOpenChange={setInstallDialogOpen}
-        onSubmitInstall={onSubmitInstall}
-        open={installDialogOpen}
-        state={state}
-      />
-    </section>
-  );
-}
-
-function WorkspaceGatewayManagementSection({
-  onPollOperation,
-  onStartOperation,
-  state,
-}: {
-  onPollOperation?: (operationId: string, operationKind?: WorkspaceGatewayOperationKind) => void;
-  onStartOperation?: (input: WorkspaceGatewayStartInput) => void;
-  state: WorkspaceGatewayRouteState;
-}) {
-  if (state.status === "unavailable") {
-    return null;
-  }
-
-  const progressOperation =
-    state.status === "ready" ? workspaceManagementOperation(state) : undefined;
-  const progressError = state.status === "ready" ? state.error : undefined;
-  const operationState =
-    state.status === "ready"
-      ? workspacePushOperationExecutionState({
-          error: progressError,
-          operation: progressOperation,
-        })
-      : undefined;
-
-  return (
-    <section
-      aria-labelledby="workspace-gateway-heading"
-      className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-2"
-      data-formless-workspace-gateway="local"
-    >
-      <div className="min-w-0">
-        <h2 id="workspace-gateway-heading" className="sr-only">
-          Workspace
-        </h2>
-        {operationState ? (
-          <GeneratedOperationCompactStatus
-            controlId="workspace-push"
-            displayText={displaySafeText}
-            operationLabel="Push"
-            state={operationState}
-          />
-        ) : null}
-      </div>
-      <WorkspaceGatewayOperationControls
-        onStartOperation={onStartOperation}
-        operationGroup="workspace"
-        state={state}
-      />
-      {state.status === "ready" ? (
-        <WorkspaceOperationAuthorizationEvents
-          onPollOperation={onPollOperation}
-          operation={progressOperation}
-        />
-      ) : null}
-    </section>
-  );
-}
-
-function WorkspaceGatewayOperationControls({
-  onStartOperation,
-  operationGroup = "all",
-  state,
-}: {
-  onStartOperation?: (input: WorkspaceGatewayStartInput) => void;
-  operationGroup?: WorkspaceGatewayOperationControlGroup;
-  state: WorkspaceGatewayRouteState;
-}) {
-  const busy =
-    state.status === "loading" ||
-    (state.status === "ready" &&
-      state.currentOperation !== undefined &&
-      operationPollsAutomatically(state.currentOperation));
-  const canStart = state.status === "ready" && !busy && onStartOperation !== undefined;
-  const controls = selectWorkspaceGatewayOperationControls({ operationGroup });
-
-  return (
-    <div
-      className="flex flex-wrap items-center gap-2"
-      data-formless-workspace-operation-controls="true"
-    >
-      {controls.map((control) => {
-        const canRunControl =
-          canStart &&
-          (control.mode === "read" || Boolean(state.status === "ready" && state.csrfToken));
-
-        return (
-          <Button
-            data-formless-workspace-operation-bootstrap-allowed={String(control.bootstrapAllowed)}
-            data-formless-workspace-operation-control={control.kind}
-            data-formless-workspace-operation-input-fields={control.inputFields.join(" ")}
-            data-formless-workspace-operation-mode={control.mode}
-            data-formless-workspace-operation-required-capability={control.requiredCapability}
-            intent={control.style === "secondary" ? "outline" : undefined}
-            isDisabled={!canRunControl}
-            key={control.kind}
-            onPress={() => onStartOperation?.(control.input)}
-            size="sm"
-            type="button"
-          >
-            {control.label}
-          </Button>
-        );
-      })}
-    </div>
-  );
-}
-
-export function WorkspaceOperationProgress({
-  error,
-  onPollOperation,
-  operation,
-}: {
-  error?: string;
-  onPollOperation?: (operationId: string, operationKind?: WorkspaceGatewayOperationKind) => void;
-  operation?: WorkspaceGatewayOperation;
-}) {
-  if (!operation && !error) {
-    return null;
-  }
-
-  return (
-    <div
-      className="grid gap-3 rounded-md border border-border bg-overlay p-4"
-      data-formless-workspace-operation-progress="true"
-    >
-      {operation ? (
-        <>
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="min-w-0">
-              <h3 className="text-sm font-semibold">{operation.summary.title}</h3>
-              <p className="text-xs text-muted-fg">
-                {workspaceOperationKindLabel(operation.operation)} ·{" "}
-                {workspaceOperationStatusLabel(operation.status)}
-              </p>
-            </div>
-            <span className="text-xs text-muted-fg">
-              <code>{displaySafeText(operation.id)}</code>
-            </span>
-          </div>
-          <DisplaySafeObject fields={operation.summary.fields} />
-          {operation.result?.deployment ? (
-            <DisplaySafeObject fields={operation.result.deployment} heading="Provider details" />
-          ) : null}
-          {operation.result?.details ? (
-            <DisplaySafeObject fields={operation.result.details} heading="Details" />
-          ) : null}
-          <WorkspaceOperationSteps steps={operation.steps ?? operation.result?.steps ?? []} />
-          <WorkspaceOperationEvents
-            events={operation.events}
-            onPollOperation={(operationId) => onPollOperation?.(operationId, operation.operation)}
-            operationId={operation.id}
-          />
-          <WorkspaceOperationLogs logs={operation.logs} />
-          <WorkspaceOperationErrors errors={operation.errors} />
-        </>
-      ) : null}
-      {error ? (
-        <p className={fieldErrorStyles()} data-slot="field-error" role="alert">
-          {displaySafeText(error)}
-        </p>
-      ) : null}
-    </div>
-  );
-}
-
-function WorkspaceOperationSteps({ steps }: { steps: readonly WorkspaceGatewayOperationStep[] }) {
-  if (steps.length === 0) {
-    return null;
-  }
-
-  return (
-    <ol className="grid gap-2 text-xs" data-formless-workspace-operation-steps="true">
-      {steps.map((step) => (
-        <li
-          className="min-w-0 rounded border border-border px-3 py-2"
-          data-formless-workspace-operation-step={step.id}
-          data-formless-workspace-operation-step-status={step.status}
-          key={step.id}
-        >
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <span className="font-medium text-fg">{displaySafeText(step.label)}</span>
-            <span className="text-muted-fg">{workspaceOperationStepStatusLabel(step.status)}</span>
-          </div>
-          {step.detail ? (
-            <p className="mt-1 text-muted-fg">{displaySafeText(step.detail)}</p>
-          ) : null}
-          {step.fields ? (
-            <div className="mt-2">
-              <DisplaySafeObject fields={step.fields} />
-            </div>
-          ) : null}
-          {step.error ? (
-            <p className={fieldErrorStyles()} data-slot="field-error" role="alert">
-              {displaySafeText(step.error)}
-            </p>
-          ) : null}
-        </li>
-      ))}
-    </ol>
-  );
-}
-
-function DisplaySafeObject({
-  fields,
-  heading,
-}: {
-  fields: WorkspaceGatewayDisplayObject;
-  heading?: string;
-}) {
-  const entries = displaySafeEntries(fields);
-
-  if (entries.length === 0) {
-    return null;
-  }
-
-  return (
-    <div className="min-w-0 space-y-2">
-      {heading ? <h4 className="text-xs font-semibold">{heading}</h4> : null}
-      <dl className="grid gap-2 text-xs text-muted-fg sm:grid-cols-2">
-        {entries.map((entry) => (
-          <div className="min-w-0" key={entry.key}>
-            <dt className="font-medium text-fg">{entry.label}</dt>
-            <dd className="break-words">{entry.value}</dd>
-          </div>
-        ))}
-      </dl>
-    </div>
-  );
-}
-
-function WorkspaceOperationEvents({
-  events,
-  onPollOperation,
-  operationId,
-}: {
-  events: WorkspaceGatewayOperation["events"];
-  onPollOperation: (operationId: string) => void;
-  operationId: string;
-}) {
-  const authorizationEvents = events
-    .map((event) =>
-      event.type === "externalAuthorizationUrl"
-        ? {
-            ...event,
-            url: displaySafeAuthorizationUrl(event.url, event.provider),
-          }
-        : undefined,
-    )
-    .filter((event): event is NonNullable<typeof event> => event !== undefined && event.url !== "");
-
-  if (authorizationEvents.length === 0) {
-    return null;
-  }
-
-  return (
-    <div className="space-y-2" data-formless-workspace-auth-url-events="true">
-      {authorizationEvents.map((event) => (
-        <div
-          className="flex flex-wrap items-center justify-between gap-2 rounded border border-dashed border-border px-3 py-2 text-xs"
-          key={event.id}
-        >
-          <span>
-            {workspaceProviderLabel(event.provider)} authorization ·{" "}
-            {displaySafeText(event.profileLabel)}
-          </span>
-          <Button
-            intent="outline"
-            onPress={() => {
-              window.open(event.url, "_blank", "noopener,noreferrer");
-              onPollOperation(operationId);
-            }}
-            size="sm"
-            type="button"
-          >
-            Open authorization
-          </Button>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function WorkspaceOperationAuthorizationEvents({
-  onPollOperation,
-  operation,
-}: {
-  onPollOperation?: (operationId: string, operationKind?: WorkspaceGatewayOperationKind) => void;
-  operation?: WorkspaceGatewayOperation;
-}) {
-  if (!operation) {
-    return null;
-  }
-
-  return (
-    <WorkspaceOperationEvents
-      events={operation.events}
-      onPollOperation={(operationId) => onPollOperation?.(operationId, operation.operation)}
-      operationId={operation.id}
+    <AccessManagementRouteView
+      installs={installs.length > 0 ? installs : state.installs}
+      onCreateInvitation={onCreateAccessInvitation}
+      onRevokeInvitation={onRevokeAccessInvitation}
+      state={accessState}
     />
   );
-}
-
-function WorkspaceOperationLogs({ logs }: { logs: WorkspaceGatewayOperation["logs"] }) {
-  if (logs.length === 0) {
-    return null;
-  }
-
-  return (
-    <ol className="space-y-1 text-xs text-muted-fg">
-      {logs.map((log) => (
-        <li key={log.id}>
-          {workspaceOperationLogLevelLabel(log.level)} · {displaySafeText(log.message)}
-        </li>
-      ))}
-    </ol>
-  );
-}
-
-function WorkspaceOperationErrors({ errors }: { errors: WorkspaceGatewayOperation["errors"] }) {
-  if (errors.length === 0) {
-    return null;
-  }
-
-  return (
-    <div className="space-y-1">
-      {errors.map((operationError) => (
-        <p
-          className={fieldErrorStyles()}
-          data-slot="field-error"
-          key={`${operationError.at}:${operationError.message}`}
-          role="alert"
-        >
-          {displaySafeText(operationError.message)}
-        </p>
-      ))}
-    </div>
-  );
-}
-
-export function displaySafeEntries(fields: WorkspaceGatewayDisplayObject): Array<{
-  key: string;
-  label: string;
-  value: string;
-}> {
-  return Object.entries(fields).map(([key, value]) => ({
-    key,
-    label: fieldKeyLabel(key),
-    value: displaySafeValue(key, value),
-  }));
-}
-
-function displaySafeValue(key: string, value: WorkspaceGatewayDisplayValue): string {
-  if (isForbiddenDisplayKey(key)) {
-    return "[redacted]";
-  }
-
-  if (typeof value === "string") {
-    return displaySafeText(value);
-  }
-
-  if (typeof value === "number" || typeof value === "boolean" || value === null) {
-    return String(value);
-  }
-
-  if (Array.isArray(value)) {
-    return value.map((item) => displaySafeValue(key, item)).join(", ");
-  }
-
-  const entries = Object.entries(value).map(([childKey, childValue]) => [
-    childKey,
-    displaySafeValue(childKey, childValue),
-  ]);
-
-  return entries
-    .map(([childKey, childValue]) => `${fieldKeyLabel(childKey)} ${childValue}`)
-    .join(", ");
-}
-
-export function displaySafeText(value: string): string {
-  return value
-    .replace(
-      /([A-Z0-9_]*(?:TOKEN|PASSWORD|SECRET|API_KEY|APIKEY)[A-Z0-9_]*=)(?:"[^"]*"|'[^']*'|[^\s,;]+)/gi,
-      "$1[redacted]",
-    )
-    .replace(/(owner[-_\s]?setup[-_\s]?token[:=]?\s*)[A-Za-z0-9._~+/-]+=*/gi, "$1[redacted]")
-    .replace(/(Bearer\s+)[A-Za-z0-9._~+/-]+=*/gi, "$1[redacted]")
-    .replace(/lease:[A-Za-z0-9._:-]+/gi, "[redacted]")
-    .replace(/CF_API_TOKEN[_A-Za-z0-9-]*/g, "[redacted]")
-    .replace(/\/Users\/[^\s,;'"<>)]+/g, "<path>")
-    .replace(/\/(?:tmp|var|etc|home)\/[^\s,;'"<>)]+/g, "<path>")
-    .replace(/[A-Za-z]:\\[^\s,;'"<>)]+/g, "<path>");
-}
-
-function displaySafeAuthorizationUrl(value: string, provider: "alchemy" | "cloudflare"): string {
-  let url: URL;
-
-  try {
-    url = new URL(value);
-  } catch {
-    return "";
-  }
-
-  if (url.protocol !== "https:") {
-    return "";
-  }
-
-  for (const key of url.searchParams.keys()) {
-    if (isForbiddenDisplayKey(key)) {
-      return "";
-    }
-  }
-
-  const host = url.hostname.toLowerCase();
-
-  if (provider === "cloudflare" && host === "dash.cloudflare.com") {
-    return url.toString();
-  }
-
-  if (
-    provider === "alchemy" &&
-    (host === "alchemy.com" ||
-      host.endsWith(".alchemy.com") ||
-      host === "alchemy.run" ||
-      host.endsWith(".alchemy.run"))
-  ) {
-    return url.toString();
-  }
-
-  return "";
-}
-
-function isForbiddenDisplayKey(key: string): boolean {
-  const normalized = key.toLowerCase().replaceAll(/[-_]/g, "");
-
-  return (
-    normalized === "secret" ||
-    normalized === "secrets" ||
-    normalized.endsWith("token") ||
-    normalized.endsWith("password") ||
-    normalized.includes("apikey") ||
-    normalized.includes("credential") ||
-    normalized === "leasetoken" ||
-    normalized.includes("providerstate") ||
-    normalized.startsWith("raw")
-  );
-}
-
-function fieldKeyLabel(key: string): string {
-  return key
-    .replaceAll(/([a-z0-9])([A-Z])/g, "$1 $2")
-    .replaceAll(/[-_]/g, " ")
-    .replace(/^\w/, (match) => match.toUpperCase());
-}
-
-function workspaceOperationKindLabel(kind: WorkspaceGatewayOperationKind): string {
-  return workspaceOperationDefinitionForKind(kind).label;
-}
-
-function workspaceOperationStatusLabel(status: WorkspaceGatewayOperation["status"]): string {
-  return fieldKeyLabel(status);
-}
-
-function workspaceOperationLogLevelLabel(level: WorkspaceGatewayOperationLog["level"]): string {
-  return fieldKeyLabel(level);
-}
-
-function workspaceOperationStepStatusLabel(
-  status: WorkspaceGatewayOperationStep["status"],
-): string {
-  return fieldKeyLabel(status);
-}
-
-function workspaceProviderLabel(provider: "alchemy" | "cloudflare"): string {
-  return provider === "cloudflare" ? "Cloudflare" : "Alchemy";
-}
-
-function workspaceManagementOperation(
-  state: WorkspaceGatewayRouteState,
-): WorkspaceGatewayOperation | undefined {
-  if (state.status !== "ready") {
-    return undefined;
-  }
-
-  const operation = state.currentOperation;
-
-  if (!operation || operation.operation !== "push") {
-    return undefined;
-  }
-
-  return operation;
-}
-
-function workspacePushOperationExecutionState({
-  error,
-  operation,
-}: {
-  error?: string;
-  operation?: WorkspaceGatewayOperation;
-}): GeneratedOperationExecutionState | undefined {
-  if (!operation && !error) {
-    return undefined;
-  }
-
-  const progress = operation ? workspaceGatewayOperationGeneratedProgress(operation) : undefined;
-  const startedAt = workspaceOperationTimestamp(operation?.createdAt);
-  const completedAt = workspaceOperationTimestamp(operation?.updatedAt);
-  const base = {
-    executionKey: "workspace:push",
-    ...(startedAt === undefined ? {} : { startedAt }),
-    ...(progress === undefined ? {} : { progress }),
-  };
-
-  if (error) {
-    return {
-      ...base,
-      status: "failed",
-      result: {
-        type: "failed",
-        displayError: error,
-      },
-      ...(completedAt === undefined ? {} : { completedAt }),
-    };
-  }
-
-  if (!operation) {
-    return undefined;
-  }
-
-  if (operationPollsAutomatically(operation)) {
-    return {
-      ...base,
-      status: "pending",
-    };
-  }
-
-  const result = normalizeGeneratedOperationRuntimeAdapterResponse(
-    workspaceGatewayOperationGeneratedRuntimeAdapterResponse(operation),
-  );
-
-  return {
-    ...base,
-    status: result.type,
-    result,
-    ...(completedAt === undefined ? {} : { completedAt }),
-  };
-}
-
-function workspaceOperationTimestamp(value: string | undefined): number | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-
-  const timestamp = Date.parse(value);
-
-  return Number.isFinite(timestamp) ? timestamp : undefined;
 }
 
 export function AccessManagementRouteView({
@@ -2356,66 +1731,6 @@ function padDatePart(value: number): string {
   return String(value).padStart(2, "0");
 }
 
-function GeneratedInstanceAppsSection({
-  homeRouteComponent: HomeRouteComponent,
-  installDisabled,
-  onInstall,
-}: {
-  homeRouteComponent: ElementType<InstanceShellHomeRouteProps>;
-  installDisabled: boolean;
-  onInstall: () => void;
-}) {
-  const controlPlaneTarget = useMemo(() => instanceControlPlaneClientTarget(), []);
-
-  return (
-    <section aria-label="Apps" className="space-y-3">
-      <div data-formless-control-plane-screen="apps">
-        <HomeRouteComponent
-          schemaKey={INSTANCE_CONTROL_PLANE_SCHEMA_KEY}
-          sectionExternalActions={{
-            "app-installs": [
-              {
-                action: {
-                  disabled: installDisabled,
-                  id: "install",
-                  icon: "add",
-                  invocationSource: "button",
-                  invoke: { controlId: "install", invocationSource: "button" },
-                  kind: "actionTrigger",
-                  label: "Install",
-                },
-                onIntent: onInstall,
-              },
-            ],
-          }}
-          screenPath="/"
-          target={controlPlaneTarget}
-        />
-      </div>
-    </section>
-  );
-}
-
-function GeneratedInstanceRoutesSection({
-  homeRouteComponent: HomeRouteComponent,
-}: {
-  homeRouteComponent: ElementType<InstanceShellHomeRouteProps>;
-}) {
-  const controlPlaneTarget = useMemo(() => instanceControlPlaneClientTarget(), []);
-
-  return (
-    <section aria-label="Routes" className="space-y-3">
-      <div data-formless-control-plane-screen="routes">
-        <HomeRouteComponent
-          schemaKey={INSTANCE_CONTROL_PLANE_SCHEMA_KEY}
-          screenPath="/routes"
-          target={controlPlaneTarget}
-        />
-      </div>
-    </section>
-  );
-}
-
 function ShellHeader({ currentPath }: { currentPath: string }) {
   const accessRoute = isInstanceAccessRoutePath(currentPath);
 
@@ -2439,237 +1754,6 @@ function normalizeInstanceShellPath(path: string): string {
   const normalized = path.split(/[?#]/)[0] || "/";
 
   return normalized.endsWith("/") && normalized !== "/" ? normalized.slice(0, -1) : normalized;
-}
-
-export function InstallAppDialog({
-  installDrafts = {},
-  onDraftChange,
-  onOpenChange,
-  onSubmitInstall,
-  open,
-  state,
-}: {
-  installDrafts?: PackageInstallDrafts;
-  onDraftChange?: (packageAppKey: PackageAppKey, draft: PackageInstallDraft) => void;
-  onOpenChange: (open: boolean) => void;
-  onSubmitInstall?: (packageAppKey: PackageAppKey, event: React.FormEvent<HTMLFormElement>) => void;
-  open: boolean;
-  state: Extract<InstanceShellRouteState, { status: "ready" }>;
-}) {
-  return (
-    <ModalContent isOpen={open} onOpenChange={onOpenChange} size="lg">
-      <InstallAppDialogForm
-        installDrafts={installDrafts}
-        onDraftChange={onDraftChange}
-        onSubmitInstall={onSubmitInstall}
-        state={state}
-      />
-    </ModalContent>
-  );
-}
-
-export function InstallAppDialogForm({
-  installDrafts = {},
-  onDraftChange,
-  onSubmitInstall,
-  state,
-}: {
-  installDrafts?: PackageInstallDrafts;
-  onDraftChange?: (packageAppKey: PackageAppKey, draft: PackageInstallDraft) => void;
-  onSubmitInstall?: (packageAppKey: PackageAppKey, event: React.FormEvent<HTMLFormElement>) => void;
-  state: Extract<InstanceShellRouteState, { status: "ready" }>;
-}) {
-  const [selectedPackageAppKey, setSelectedPackageAppKey] = useState<PackageAppKey | null>(
-    state.packages[0]?.packageAppKey ?? null,
-  );
-
-  useEffect(() => {
-    if (
-      state.installErrorPackageAppKey &&
-      state.packages.some(
-        (appPackage) => appPackage.packageAppKey === state.installErrorPackageAppKey,
-      )
-    ) {
-      if (selectedPackageAppKey !== state.installErrorPackageAppKey) {
-        setSelectedPackageAppKey(state.installErrorPackageAppKey);
-      }
-      return;
-    }
-
-    if (
-      selectedPackageAppKey &&
-      state.packages.some((appPackage) => appPackage.packageAppKey === selectedPackageAppKey)
-    ) {
-      return;
-    }
-
-    setSelectedPackageAppKey(state.packages[0]?.packageAppKey ?? null);
-  }, [selectedPackageAppKey, state.installErrorPackageAppKey, state.packages]);
-
-  const selectedPackage =
-    state.packages.find((appPackage) => appPackage.packageAppKey === selectedPackageAppKey) ??
-    state.packages[0];
-
-  if (!selectedPackage) {
-    return null;
-  }
-
-  const selectedDraft = installDrafts[selectedPackage.packageAppKey] ?? {
-    installId: selectedPackage.defaultInstallId,
-    label: selectedPackage.label,
-  };
-  const selectedInstallError =
-    state.installErrorPackageAppKey === selectedPackage.packageAppKey
-      ? state.installError
-      : undefined;
-  const selectedInstalling =
-    state.installing && state.installingPackageAppKey === selectedPackage.packageAppKey;
-
-  return (
-    <form
-      onSubmit={(event) => onSubmitInstall?.(selectedPackage.packageAppKey, event)}
-      className="contents"
-    >
-      <ModalHeader>
-        <ModalTitle>Install app</ModalTitle>
-        <ModalDescription>
-          Choose an app type, then set its instance label and install id.
-        </ModalDescription>
-      </ModalHeader>
-      <ModalBody>
-        <div className="space-y-5">
-          <PackageTypeSwitcher
-            isDisabled={state.installing}
-            onSelect={setSelectedPackageAppKey}
-            packages={state.packages}
-            selectedPackageAppKey={selectedPackage.packageAppKey}
-          />
-          <PackageInstallFields
-            appPackage={selectedPackage}
-            draft={selectedDraft}
-            installError={selectedInstallError}
-            isDisabled={state.installing}
-            onDraftChange={(draft) => onDraftChange?.(selectedPackage.packageAppKey, draft)}
-          />
-        </div>
-      </ModalBody>
-      <ModalFooter>
-        <ModalClose intent="outline" isDisabled={state.installing} type="button">
-          Cancel
-        </ModalClose>
-        <Button isDisabled={state.installing} type="submit">
-          <AddIcon />
-          {selectedInstalling ? "Installing..." : `Install ${selectedPackage.label}`}
-        </Button>
-      </ModalFooter>
-    </form>
-  );
-}
-
-function PackageTypeSwitcher({
-  isDisabled,
-  onSelect,
-  packages,
-  selectedPackageAppKey,
-}: {
-  isDisabled: boolean;
-  onSelect: (packageAppKey: PackageAppKey) => void;
-  packages: readonly InstallableAppPackage[];
-  selectedPackageAppKey: PackageAppKey;
-}) {
-  return (
-    <div
-      aria-label="Install app type"
-      className="grid grid-cols-2 gap-1 rounded-md border border-border bg-muted p-1 sm:grid-cols-4"
-      role="tablist"
-    >
-      {packages.map((appPackage) => {
-        const isSelected = appPackage.packageAppKey === selectedPackageAppKey;
-
-        return (
-          <button
-            aria-controls="install-app-type-panel"
-            aria-selected={isSelected}
-            className={packageTypeButtonClassName(isSelected)}
-            disabled={isDisabled}
-            key={appPackage.packageAppKey}
-            onClick={() => onSelect(appPackage.packageAppKey)}
-            role="tab"
-            type="button"
-          >
-            {appPackage.label}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-function PackageInstallFields({
-  appPackage,
-  draft,
-  installError,
-  isDisabled,
-  onDraftChange,
-}: {
-  appPackage: InstallableAppPackage;
-  draft: PackageInstallDraft;
-  installError: string | undefined;
-  isDisabled: boolean;
-  onDraftChange?: (draft: PackageInstallDraft) => void;
-}) {
-  const labelInputId = useMemo(
-    () => `${appPackage.packageAppKey}-install-dialog-label`,
-    [appPackage.packageAppKey],
-  );
-  const installIdInputId = useMemo(
-    () => `${appPackage.packageAppKey}-install-dialog-id`,
-    [appPackage.packageAppKey],
-  );
-
-  return (
-    <div className="space-y-4" id="install-app-type-panel" role="tabpanel">
-      <header className="space-y-1">
-        <h3 className="text-sm font-semibold">{appPackage.label}</h3>
-        <p className="text-xs text-muted-fg">{appPackage.description}</p>
-      </header>
-      <FieldGroup>
-        <TextField
-          isDisabled={isDisabled}
-          isRequired
-          onChange={(value) => onDraftChange?.({ ...draft, label: value })}
-          value={draft.label}
-        >
-          <Label htmlFor={labelInputId}>Label</Label>
-          <Input id={labelInputId} />
-        </TextField>
-        <TextField
-          isDisabled={isDisabled}
-          isRequired
-          onChange={(value) => onDraftChange?.({ ...draft, installId: value })}
-          value={draft.installId}
-        >
-          <Label htmlFor={installIdInputId}>Install id</Label>
-          <Input id={installIdInputId} />
-          <Description>Lowercase letters, numbers, and hyphens</Description>
-        </TextField>
-      </FieldGroup>
-      {installError ? (
-        <p className={fieldErrorStyles()} data-slot="field-error" role="alert">
-          {installError}
-        </p>
-      ) : null}
-    </div>
-  );
-}
-
-function packageTypeButtonClassName(isSelected: boolean) {
-  const base =
-    "min-h-8 rounded px-3 py-1.5 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50";
-
-  return isSelected
-    ? `${base} bg-overlay text-fg shadow-xs`
-    : `${base} text-muted-fg hover:bg-overlay/70 hover:text-fg`;
 }
 
 function initializePackageInstallDrafts({

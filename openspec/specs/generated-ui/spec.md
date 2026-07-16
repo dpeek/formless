@@ -1928,6 +1928,118 @@ status fields.
 - THEN generated UI treats the field as read-only outside transition controls
 - AND create forms allow the initial state behavior declared by the schema
 
+### Requirement: Reactive Instance Management Contract Host
+
+The system SHALL expose the product instance overview through complete
+renderer-neutral management contracts on the stable application host while
+runtime code owns control-plane reads, workspace gateway behavior, mutations,
+navigation, and external effects.
+
+#### Scenario: Project complete instance management presentation
+
+- GIVEN an owner opens `/` on an eligible product instance shell
+- WHEN generated runtime projects instance management presentation
+- THEN a typed management manifest reference resolves one loading, failed, or
+  ready management snapshot
+- AND a ready snapshot carries the `Instance Settings` title, ordered Apps and
+  Routes generated-workspace manifest references, an optional local Push
+  operation presentation, and one controlled install-dialog reference
+- AND the install dialog carries stable identity, open state, ordered
+  installable package options, package, install-id, and label field
+  presentations, display-safe validation, pending state, and operation feedback
+- AND Push presentation composes canonical operation control, progress, status,
+  feedback, and optional external-authorization prompt facts
+- AND Apps and Routes retain their existing workspace, section, result, field,
+  create, and operation contract shapes rather than defining management-specific
+  table contracts
+- AND management snapshots contain no control-plane records, gateway clients,
+  operation handlers, browser replica APIs, route objects, React nodes, runtime
+  callbacks, raw logs, filesystem paths, provider credentials, or secrets
+
+#### Scenario: Compose management and workspaces on the application host
+
+- GIVEN an application shell host is active and the selected React route child
+  renders instance management
+- WHEN shell, management, install-dialog, Apps workspace, or Routes workspace
+  presentation changes
+- THEN one application-host publication coordinator commits the complete next
+  set of shell, management, dialog, and generated-workspace contract nodes
+- AND each participating runtime contributes renderer-neutral nodes and current
+  intent handlers without creating a nested host or replacing the stable host
+  context
+- AND server rendering seeds the selected instance route with its loading
+  management snapshot before route-child effects run, and hydration replaces
+  that same contribution atomically with current runtime state
+- AND the combined publication retains identity for semantically unchanged
+  nodes, notifies only changed reference scopes, and removes child references
+  atomically with their parent references
+- AND management composition does not move the selected React route child into
+  shell contract data or change existing generated-workspace reference roles
+
+#### Scenario: Dispatch management and nested workspace intents
+
+- GIVEN a subscribed management renderer reads the management manifest and its
+  referenced nodes from the application host
+- WHEN the user opens or edits the install dialog, submits an install, starts
+  Push, opens an external authorization URL, or interacts with Apps or Routes
+- THEN controlled management interactions dispatch canonical intent envelopes
+  carrying stable manifest, dialog, field occurrence, control, or prompt
+  identity as applicable
+- AND nested Apps and Routes interactions continue to dispatch their existing
+  canonical generated-workspace intents through the same host
+- AND runtime resolves every intent against its latest contributed state before
+  changing drafts, invoking operations, opening a browser URL, polling gateway
+  state, refreshing records, or navigating
+- AND renderers do not call control-plane, gateway, browser, operation, or
+  navigation effects directly
+
+#### Scenario: Legacy renderer consumes management contracts
+
+- GIVEN production instance management currently mixes runtime state, direct
+  legacy components, generated workspaces, and workspace gateway controls
+- WHEN runtime publishes the complete management contract graph
+- THEN one subscribed legacy management renderer reads only contract references
+  and snapshots, renders the referenced Apps and Routes workspaces and install
+  dialog, and dispatches canonical intents
+- AND direct legacy `@dpeek/formless-ui` imports for the migrated overview remain
+  confined to dedicated legacy seam modules
+- AND focused coverage asserts loading, failure, workspace availability,
+  install-dialog behavior, Push behavior, external authorization, display-safe
+  feedback, and intent dispatch rather than legacy HTML structure
+- AND production remains on the legacy renderer and `/access` presentation is
+  unchanged after this contract migration
+
+#### Scenario: Astryx management renderer
+
+- GIVEN the legacy renderer consumes complete production management contracts
+- WHEN the replacement renderer implements the same contract in `lib/astryx`
+- THEN pure and subscribed Astryx entrypoints compose existing workspace,
+  operation, progress, status, dialog, field, feedback, and empty-state
+  primitives without importing generated runtime
+- AND the Astryx renderer contains no legacy Formless UI components, Tailwind
+  classes, control-plane reads, gateway clients, operation execution, browser
+  effects, or runtime data imports
+- AND adding the renderer does not export or activate it in production,
+  introduce Astryx theme or global CSS into runtime entrypoints, or change
+  access and authentication presentation
+
+#### Scenario: Instance management contract fixtures
+
+- GIVEN the legacy renderer consumes complete production management contracts
+- WHEN instance management UX is evaluated in the package-local Astryx
+  prototype
+- THEN data-only memory-host fixtures cover loading, failed, empty, installed
+  Apps and Routes, install-dialog idle, validation, pending, and failure states,
+  gateway unavailable, and Push idle, pending, success, failure, and
+  authorization-required states
+- AND an integrated fixture composes the management renderer as the route child
+  of the application shell renderer through one memory host
+- AND fixture reducers may simulate management and nested workspace intents
+  without importing generated runtime, control-plane clients, gateway clients,
+  storage, browser replica, operation controllers, routing, or browser effects
+- AND fixtures contain no secrets, Tailwind classes, production renderer
+  activation, or behavior that bypasses the canonical contract host
+
 ### Requirement: Schema-Driven Instance Management UI
 
 The system SHALL render instance management in the instance shell from
@@ -1971,6 +2083,19 @@ cache, provider evidence, view, screen, read model, and operation models.
   standalone provider evidence cleanup panels
 - **AND** deployment and provider runtime reads are not required to render the
   overview
+
+#### Scenario: Workspace gateway state does not gate instance editors
+
+- **GIVEN** app install and route management data is ready
+- **WHEN** local workspace gateway status is loading, unavailable, or failed
+- **THEN** the Apps and Routes generated workspaces remain available
+- **AND** gateway availability governs only the Push control and associated
+  display-safe progress, feedback, and external authorization prompt
+- **AND** an unavailable gateway omits or disables Push without presenting a
+  management-level failure
+- **AND** a failed gateway may present concise display-safe operation feedback
+  without exposing raw gateway output, provider state, filesystem paths,
+  credentials, or secrets
 
 #### Scenario: Browser secret boundary
 
