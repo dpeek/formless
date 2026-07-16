@@ -1,30 +1,82 @@
-import { Icon } from "@astryxdesign/core/Icon";
-import { IconButton } from "@astryxdesign/core/IconButton";
-import { useTheme } from "@astryxdesign/core/theme";
-import { MoonIcon, SunIcon } from "@heroicons/react/24/outline";
-import { useFormlessThemeModeActions } from "../theme.tsx";
+import { SegmentedControl, SegmentedControlItem } from "@astryxdesign/core/SegmentedControl";
+import { memo, type ReactNode } from "react";
+import type {
+  FormlessUiDocumentThemeContract,
+  FormlessUiDocumentThemeIntentHandler,
+  FormlessUiDocumentThemeReference,
+  FormlessUiDocumentThemeSelectionControlContract,
+} from "../formless-ui-contract.ts";
+import {
+  useFormlessUiDocumentTheme,
+  useFormlessUiDocumentThemeIntentHandler,
+} from "../formless-ui-contract-host-react.tsx";
+import { FormlessThemeProvider } from "../theme.tsx";
 
-const LightModeIcon = SunIcon;
-const DarkModeIcon = MoonIcon;
-
-export function FormlessThemeToggle() {
-  const { mode } = useTheme();
-  const { canSetThemeMode, setThemeMode } = useFormlessThemeModeActions();
-  const nextThemeMode = mode === "dark" ? "light" : "dark";
-  const label = nextThemeMode === "dark" ? "Dark mode" : "Light mode";
-  const ThemeIcon = mode === "dark" ? LightModeIcon : DarkModeIcon;
-
-  if (!canSetThemeMode) {
-    return null;
-  }
-
+export function FormlessThemeToggle({
+  control,
+  onIntent,
+}: {
+  control: FormlessUiDocumentThemeSelectionControlContract;
+  onIntent: FormlessUiDocumentThemeIntentHandler;
+}) {
   return (
-    <IconButton
-      label={label}
-      tooltip={label}
-      variant="ghost"
-      icon={<Icon icon={ThemeIcon} color="inherit" size="sm" />}
-      onClick={() => setThemeMode(nextThemeMode)}
-    />
+    <SegmentedControl
+      label={control.accessibilityLabel}
+      layout="hug"
+      onChange={(mode) => {
+        const option = control.options.find((candidate) => candidate.mode === mode);
+        if (option) {
+          void onIntent(option.selectionIntent);
+        }
+      }}
+      value={control.selectedMode}
+    >
+      {control.options.map((option) => (
+        <SegmentedControlItem key={option.mode} label={option.label} value={option.mode} />
+      ))}
+    </SegmentedControl>
   );
 }
+
+export function AstryxDocumentThemeRenderer({
+  children,
+  onIntent,
+  theme,
+}: {
+  children: ReactNode;
+  onIntent: FormlessUiDocumentThemeIntentHandler;
+  theme: FormlessUiDocumentThemeContract;
+}) {
+  return (
+    <FormlessThemeProvider theme={theme}>
+      {theme.selectionControl ? (
+        <FormlessThemeToggle control={theme.selectionControl} onIntent={onIntent} />
+      ) : null}
+      {children}
+    </FormlessThemeProvider>
+  );
+}
+
+export const AstryxSubscribedDocumentThemeRenderer = memo(
+  function AstryxSubscribedDocumentThemeRenderer({
+    children,
+    themeReference,
+  }: {
+    children: ReactNode;
+    themeReference: FormlessUiDocumentThemeReference;
+  }) {
+    const onIntent = useFormlessUiDocumentThemeIntentHandler();
+    const theme = useFormlessUiDocumentTheme(themeReference);
+
+    return theme ? (
+      <AstryxDocumentThemeRenderer onIntent={onIntent} theme={theme}>
+        {children}
+      </AstryxDocumentThemeRenderer>
+    ) : (
+      children
+    );
+  },
+  (previous, next) =>
+    previous.themeReference.themeId === next.themeReference.themeId &&
+    previous.children === next.children,
+);

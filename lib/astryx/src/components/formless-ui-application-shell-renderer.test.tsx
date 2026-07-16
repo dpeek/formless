@@ -1,15 +1,18 @@
-import { createElement, type ReactNode } from "react";
+import { Children, createElement, isValidElement, type ReactNode } from "react";
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from "react-test-renderer";
 import { describe, expect, it, vi } from "vite-plus/test";
 import type {
   FormlessUiButtonContract,
   FormlessUiCreateSurfaceContract,
+  FormlessUiDocumentThemeContract,
+  FormlessUiDocumentThemeIntent,
   FormlessUiShellIntent,
   FormlessUiShellManifestContract,
   FormlessUiShellNavigationSectionContract,
 } from "../formless-ui-contract.ts";
 import {
   createFormlessUiMemoryContractHost,
+  formlessUiDocumentThemeReference,
   formlessUiShellManifestReference,
   formlessUiShellNavigationSectionReference,
   type FormlessUiContractHostNodeSet,
@@ -19,6 +22,44 @@ import {
   AstryxApplicationShellRenderer,
   AstryxSubscribedApplicationShellRenderer,
 } from "./shell.tsx";
+
+vi.mock("@astryxdesign/core", () => ({
+  Theme: ({ children, mode }: { children: ReactNode; mode: string }) =>
+    createElement("div", { "data-component": "Theme", "data-mode": mode }, children),
+}));
+
+vi.mock("@astryxdesign/core/SegmentedControl", () => ({
+  SegmentedControl: ({
+    children,
+    label,
+    onChange,
+    value,
+  }: {
+    children: ReactNode;
+    label: string;
+    onChange: (value: string) => void;
+    value: string;
+  }) =>
+    createElement(
+      "div",
+      { "aria-label": label, role: "radiogroup" },
+      Children.map(children, (child) =>
+        isValidElement<{ label: string; value: string }>(child)
+          ? createElement(
+              "button",
+              {
+                "aria-checked": child.props.value === value,
+                "aria-label": child.props.label,
+                onClick: () => onChange(child.props.value),
+                role: "radio",
+              },
+              child.props.label,
+            )
+          : child,
+      ),
+    ),
+  SegmentedControlItem: () => null,
+}));
 
 vi.mock("@astryxdesign/core/AppShell", () => ({
   AppShell: ({
@@ -399,6 +440,7 @@ vi.mock("./operation-controls.tsx", () => ({
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const shellReference = formlessUiShellManifestReference("shell:application");
+const themeReference = formlessUiDocumentThemeReference("theme:application");
 const sectionReferences = {
   instance: formlessUiShellNavigationSectionReference(shellReference.shellId, "section:instance"),
   apps: formlessUiShellNavigationSectionReference(shellReference.shellId, "section:apps"),
@@ -420,7 +462,9 @@ describe("Astryx application shell renderer", () => {
           onIntent={(intent) => {
             intents.push(intent);
           }}
+          onThemeIntent={() => undefined}
           sections={[...shellSections()].reverse()}
+          theme={fixedTheme("dark")}
         >
           <article data-route-child="settings">Route workspace</article>
         </AstryxApplicationShellRenderer>,
@@ -470,7 +514,10 @@ describe("Astryx application shell renderer", () => {
     expect(rendererText(mountedRenderer)).toContain("Ada Lovelace");
     expect(rendererText(mountedRenderer)).toContain("ada@example.com");
     expect(rendererText(mountedRenderer)).toContain("Route workspace");
-    expect(rendererText(mountedRenderer)).not.toContain("Theme");
+    expect(
+      requiredByProps(mountedRenderer.root, { "data-component": "Theme" }).props["data-mode"],
+    ).toBe("dark");
+    expect(mountedRenderer.root.findAllByProps({ role: "radiogroup" })).toHaveLength(0);
 
     const createSurface = requiredByProps(mountedRenderer.root, {
       "data-component": "AstryxCreateSurfaceRenderer",
@@ -639,6 +686,68 @@ describe("Astryx application shell renderer", () => {
     });
 
     expect(rendererText(mountedRenderer)).toContain("Updated screens");
+
+    await act(async () => {
+      mountedRenderer.unmount();
+    });
+  });
+
+  it("composes the separate subscribed theme node without changing shell sections", async () => {
+    const intents: FormlessUiDocumentThemeIntent[] = [];
+    const sections = shellSections();
+    const host = createFormlessUiMemoryContractHost({
+      dispatch: (intent) => {
+        if (intent.type === "documentThemeModeSelection") {
+          intents.push(intent);
+        }
+      },
+      nodes: [...shellNodes(sections), { reference: themeReference, snapshot: userTheme() }],
+    });
+    let renderer: ReactTestRenderer | undefined;
+
+    await act(async () => {
+      renderer = create(
+        <FormlessUiContractHostProvider host={host}>
+          <AstryxSubscribedApplicationShellRenderer
+            shellReference={shellReference}
+            themeReference={themeReference}
+          >
+            <article>Theme workspace</article>
+          </AstryxSubscribedApplicationShellRenderer>
+        </FormlessUiContractHostProvider>,
+      );
+    });
+
+    if (!renderer) {
+      throw new Error("Expected themed Astryx shell renderer to mount.");
+    }
+
+    const mountedRenderer = renderer;
+    expect(
+      requiredByProps(mountedRenderer.root, { "data-component": "Theme" }).props["data-mode"],
+    ).toBe("dark");
+    expect(
+      requiredByProps(mountedRenderer.root, { "aria-label": "Theme mode", role: "radiogroup" }),
+    ).toBeDefined();
+    expect(rendererText(mountedRenderer)).toContain("Theme workspace");
+    expect(rendererText(mountedRenderer)).toContain("Tasks");
+    expect(JSON.stringify(sections).toLowerCase()).not.toContain("theme");
+
+    await act(async () => {
+      requiredByProps(mountedRenderer.root, {
+        "aria-label": "Light",
+        role: "radio",
+      }).props.onClick();
+    });
+
+    expect(intents).toEqual([
+      {
+        controlId: "control:theme-mode",
+        mode: "light",
+        themeId: themeReference.themeId,
+        type: "documentThemeModeSelection",
+      },
+    ]);
 
     await act(async () => {
       mountedRenderer.unmount();
@@ -856,6 +965,43 @@ function shellNodes(
       snapshot: section,
     })),
   ];
+}
+
+function userTheme(): FormlessUiDocumentThemeContract {
+  const controlId = "control:theme-mode";
+  const option = (mode: "system" | "light" | "dark", label: string) => ({
+    label,
+    mode,
+    selectionIntent: {
+      controlId,
+      mode,
+      themeId: themeReference.themeId,
+      type: "documentThemeModeSelection" as const,
+    },
+  });
+
+  return {
+    activeMode: "dark",
+    id: themeReference.themeId,
+    kind: "documentTheme",
+    policy: { kind: "userControlled" },
+    selectionControl: {
+      accessibilityLabel: "Theme mode",
+      id: controlId,
+      kind: "documentThemeSelectionControl",
+      options: [option("system", "System"), option("light", "Light"), option("dark", "Dark")],
+      selectedMode: "system",
+    },
+  };
+}
+
+function fixedTheme(mode: "light" | "dark"): FormlessUiDocumentThemeContract {
+  return {
+    activeMode: mode,
+    id: themeReference.themeId,
+    kind: "documentTheme",
+    policy: { kind: "fixed", mode },
+  };
 }
 
 function requiredByProps(root: ReactTestInstance, props: Record<string, unknown>) {

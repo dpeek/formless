@@ -10,6 +10,7 @@ import {
   type ReactNode,
 } from "react";
 import type {
+  FormlessUiDocumentThemeReference,
   FormlessUiFieldIntent,
   FormlessUiShellIntent,
   FormlessUiShellManifestReference,
@@ -71,6 +72,7 @@ const ROOT_CREATE_TRIGGER: GeneratedCreateTriggerPresentation = {
 export type ApplicationShellRuntimeRendererProps = {
   children: ReactNode;
   shellReference: FormlessUiShellManifestReference;
+  themeReference?: FormlessUiDocumentThemeReference | undefined;
 };
 
 export type ApplicationShellRuntimeDependencies = {

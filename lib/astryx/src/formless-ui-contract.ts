@@ -1736,6 +1736,64 @@ export type FormlessUiShellManifestContract = {
   title: string;
 };
 
+export type FormlessUiDocumentThemeMode = "system" | "light" | "dark";
+
+export type FormlessUiDocumentThemeActiveMode = Exclude<FormlessUiDocumentThemeMode, "system">;
+
+export type FormlessUiDocumentThemePolicy =
+  | {
+      kind: "fixed";
+      mode: FormlessUiDocumentThemeActiveMode;
+    }
+  | {
+      kind: "userControlled";
+    };
+
+export type FormlessUiDocumentThemeModeSelectionIntent = {
+  controlId: string;
+  mode: FormlessUiDocumentThemeMode;
+  themeId: string;
+  type: "documentThemeModeSelection";
+};
+
+export type FormlessUiDocumentThemeModeOptionContract = {
+  label: string;
+  mode: FormlessUiDocumentThemeMode;
+  selectionIntent: FormlessUiDocumentThemeModeSelectionIntent;
+};
+
+export type FormlessUiDocumentThemeSelectionControlContract = {
+  accessibilityLabel: string;
+  id: string;
+  kind: "documentThemeSelectionControl";
+  options: readonly FormlessUiDocumentThemeModeOptionContract[];
+  selectedMode: FormlessUiDocumentThemeMode;
+};
+
+type FormlessUiDocumentThemeContractBase = {
+  activeMode: FormlessUiDocumentThemeActiveMode;
+  id: string;
+  kind: "documentTheme";
+};
+
+export type FormlessUiDocumentThemeContract = FormlessUiDocumentThemeContractBase &
+  (
+    | {
+        policy: Extract<FormlessUiDocumentThemePolicy, { kind: "fixed" }>;
+        selectionControl?: never;
+      }
+    | {
+        policy: Extract<FormlessUiDocumentThemePolicy, { kind: "userControlled" }>;
+        selectionControl: FormlessUiDocumentThemeSelectionControlContract;
+      }
+  );
+
+export type FormlessUiDocumentThemeReference = {
+  kind: "documentThemeReference";
+  role: "documentTheme";
+  themeId: string;
+};
+
 export type FormlessUiWorkspaceManifestReference = {
   kind: "workspaceManifestReference";
   role: "workspace";
@@ -1843,6 +1901,7 @@ export type FormlessUiWorkspaceSectionShellContract = Omit<
 };
 
 export type FormlessUiContractReference =
+  | FormlessUiDocumentThemeReference
   | FormlessUiListResultReference
   | FormlessUiRecordResultReference
   | FormlessUiShellManifestReference
@@ -1889,6 +1948,12 @@ export type FormlessUiShellIntent =
   | FormlessUiShellRootRecordSelectionIntent;
 
 export type FormlessUiShellIntentHandler = (intent: FormlessUiShellIntent) => Promise<void> | void;
+
+export type FormlessUiDocumentThemeIntent = FormlessUiDocumentThemeModeSelectionIntent;
+
+export type FormlessUiDocumentThemeIntentHandler = (
+  intent: FormlessUiDocumentThemeIntent,
+) => Promise<void> | void;
 
 export type FormlessUiWorkspaceIntentScope = {
   collectionId: string;
@@ -1963,7 +2028,10 @@ export type FormlessUiWorkspaceIntentHandler = (
   intent: FormlessUiWorkspaceIntent,
 ) => Promise<void> | void;
 
-export type FormlessUiContractIntent = FormlessUiShellIntent | FormlessUiWorkspaceIntent;
+export type FormlessUiContractIntent =
+  | FormlessUiDocumentThemeIntent
+  | FormlessUiShellIntent
+  | FormlessUiWorkspaceIntent;
 
 export type FormlessUiContractIntentHandler = (
   intent: FormlessUiContractIntent,

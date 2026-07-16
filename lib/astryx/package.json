@@ -10,7 +10,7 @@
   },
   "scripts": {
     "dev": "vite",
-    "test": "vp test src/formless-ui-contract-host.test.tsx src/components/formless-ui-workspace-renderer.test.tsx src/components/formless-ui-subscribed-workspace-renderer.test.tsx src/components/formless-ui-application-shell-renderer.test.tsx src/components/application-shell.test.tsx src/components/generated-workspace.test.tsx --config ../../vite.config.ts"
+    "test": "vp test src/formless-ui-contract-host.test.tsx src/components/formless-ui-workspace-renderer.test.tsx src/components/formless-ui-subscribed-workspace-renderer.test.tsx src/components/formless-ui-application-shell-renderer.test.tsx src/components/formless-ui-document-theme-renderer.test.tsx src/components/application-shell.test.tsx src/components/generated-workspace.test.tsx --config ../../vite.config.ts"
   },
   "dependencies": {
     "@astryxdesign/core": "0.1.4",

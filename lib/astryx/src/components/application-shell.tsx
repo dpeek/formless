@@ -5,15 +5,20 @@ import { useState } from "react";
 import type {
   FormlessUiCreateField,
   FormlessUiCreateSurfaceContract,
+  FormlessUiDocumentThemeContract,
+  FormlessUiDocumentThemeIntent,
+  FormlessUiDocumentThemeReference,
   FormlessUiShellIntent,
   FormlessUiShellManifestReference,
   FormlessUiShellNavigationSectionContract,
 } from "../formless-ui-contract.ts";
 import {
   createFormlessUiMemoryContractHost,
+  formlessUiDocumentThemeReference,
   formlessUiShellManifestReference,
   formlessUiShellNavigationSectionReference,
-  isFormlessUiWorkspaceIntent,
+  isFormlessUiDocumentThemeIntent,
+  isFormlessUiShellIntent,
   type FormlessUiContractHostNodeSet,
   type FormlessUiMutableContractHost,
 } from "../formless-ui-contract-host.ts";
@@ -60,7 +65,10 @@ export function FormlessApplicationShellLayout() {
   return (
     <FormlessUiContractHostProvider host={selectedFixture.host}>
       {selectedFixture.shellReference ? (
-        <AstryxSubscribedApplicationShellRenderer shellReference={selectedFixture.shellReference}>
+        <AstryxSubscribedApplicationShellRenderer
+          shellReference={selectedFixture.shellReference}
+          themeReference={selectedFixture.themeReference ?? undefined}
+        >
           {routeChild}
         </AstryxSubscribedApplicationShellRenderer>
       ) : (
@@ -71,66 +79,115 @@ export function FormlessApplicationShellLayout() {
 }
 
 export type FormlessApplicationShellFixtureHost = FormlessApplicationShellFixture & {
+  getDocumentTheme(): FormlessUiDocumentThemeContract | null;
   getShell(): FormlessApplicationShellFixtureState | null;
   host: Omit<FormlessUiMutableContractHost, "dispatch"> & {
-    dispatch(intent: FormlessUiShellIntent): void;
+    dispatch(intent: FormlessUiDocumentThemeIntent | FormlessUiShellIntent): void;
   };
   shellReference: FormlessUiShellManifestReference | null;
+  themeReference: FormlessUiDocumentThemeReference | null;
 };
 
 export function createFormlessApplicationShellFixtureHost(
   fixture: FormlessApplicationShellFixture,
 ): FormlessApplicationShellFixtureHost {
+  let documentTheme = fixture.documentTheme;
   let shell = fixture.shell;
-  const initialPublication = projectFormlessApplicationShellFixturePublication(shell);
+  const initialPublication = projectFormlessApplicationShellFixturePublication(
+    shell,
+    documentTheme,
+  );
   let host: FormlessUiMutableContractHost;
 
   host = createFormlessUiMemoryContractHost({
     dispatch: (intent) => {
-      if (isFormlessUiWorkspaceIntent(intent)) {
-        throw new Error("Application shell fixture host received a workspace intent.");
+      if (isFormlessUiDocumentThemeIntent(intent)) {
+        const nextDocumentTheme = applyFormlessApplicationShellFixtureThemeIntent(
+          documentTheme,
+          intent,
+        );
+        if (nextDocumentTheme === documentTheme) {
+          return;
+        }
+
+        documentTheme = nextDocumentTheme;
+      } else if (isFormlessUiShellIntent(intent)) {
+        const nextShell = applyFormlessApplicationShellFixtureIntent(shell, intent);
+        if (nextShell === shell) {
+          return;
+        }
+
+        shell = nextShell;
+      } else {
+        throw new Error("Application shell fixture host received an unsupported intent.");
       }
 
-      const nextShell = applyFormlessApplicationShellFixtureIntent(shell, intent);
-      if (nextShell === shell) {
-        return;
-      }
-
-      shell = nextShell;
-      host.publish(projectFormlessApplicationShellFixturePublication(shell).nodes);
+      host.publish(projectFormlessApplicationShellFixturePublication(shell, documentTheme).nodes);
     },
     nodes: initialPublication.nodes,
   });
 
   return {
     ...fixture,
+    getDocumentTheme: () => documentTheme,
     getShell: () => shell,
     host: host as FormlessApplicationShellFixtureHost["host"],
     shellReference: initialPublication.shellReference,
+    themeReference: initialPublication.themeReference,
   };
 }
 
 export function projectFormlessApplicationShellFixturePublication(
   shell: FormlessApplicationShellFixtureState | null,
+  documentTheme: FormlessUiDocumentThemeContract | null = null,
 ): {
   nodes: FormlessUiContractHostNodeSet;
   shellReference: FormlessUiShellManifestReference | null;
+  themeReference: FormlessUiDocumentThemeReference | null;
 } {
-  if (!shell) {
-    return { nodes: [], shellReference: null };
-  }
-
-  const shellReference = formlessUiShellManifestReference(shell.manifest.id);
+  const shellReference = shell ? formlessUiShellManifestReference(shell.manifest.id) : null;
+  const themeReference = documentTheme ? formlessUiDocumentThemeReference(documentTheme.id) : null;
 
   return {
     nodes: [
-      { reference: shellReference, snapshot: shell.manifest },
-      ...shell.sections.map((section) => ({
-        reference: formlessUiShellNavigationSectionReference(shell.manifest.id, section.id),
-        snapshot: section,
-      })),
+      ...(shellReference && shell
+        ? [
+            { reference: shellReference, snapshot: shell.manifest },
+            ...shell.sections.map((section) => ({
+              reference: formlessUiShellNavigationSectionReference(shell.manifest.id, section.id),
+              snapshot: section,
+            })),
+          ]
+        : []),
+      ...(themeReference && documentTheme
+        ? [{ reference: themeReference, snapshot: documentTheme }]
+        : []),
     ],
     shellReference,
+    themeReference,
+  };
+}
+
+export function applyFormlessApplicationShellFixtureThemeIntent(
+  documentTheme: FormlessUiDocumentThemeContract | null,
+  intent: FormlessUiDocumentThemeIntent,
+): FormlessUiDocumentThemeContract | null {
+  const control = documentTheme?.selectionControl;
+  const option = control?.options.find(
+    (candidate) =>
+      candidate.mode === intent.mode &&
+      candidate.selectionIntent.controlId === intent.controlId &&
+      candidate.selectionIntent.themeId === intent.themeId,
+  );
+
+  if (!documentTheme || documentTheme.id !== intent.themeId || !control || !option) {
+    return documentTheme;
+  }
+
+  return {
+    ...documentTheme,
+    activeMode: option.mode === "system" ? "dark" : option.mode,
+    selectionControl: { ...control, selectedMode: option.mode },
   };
 }
 

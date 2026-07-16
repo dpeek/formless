@@ -2,12 +2,14 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vite-plus/test";
 import type {
   FormlessUiButtonContract,
+  FormlessUiDocumentThemeContract,
   FormlessUiShellIntent,
   FormlessUiShellManifestContract,
   FormlessUiShellNavigationSectionContract,
 } from "@dpeek/formless-astryx/contract";
 import {
   createFormlessUiMemoryContractHost,
+  formlessUiDocumentThemeReference,
   formlessUiShellManifestReference,
   formlessUiShellNavigationSectionReference,
 } from "@dpeek/formless-astryx/contract-host";
@@ -121,8 +123,70 @@ describe("legacy application shell renderer", () => {
     expect(html).toContain('aria-label="Tasks"');
     expect(html).toContain('data-formless-shell-destination="root:project-1"');
     expect(html).toContain("Subscribed workspace");
+    expect(html).not.toContain('aria-label="Theme mode"');
+  });
+
+  it("composes a separate subscribed theme node with shell presentation", () => {
+    const { manifest, sections } = shellFixture();
+    const shellReference = formlessUiShellManifestReference(manifest.id);
+    const themeReference = formlessUiDocumentThemeReference("theme:application");
+    const host = createFormlessUiMemoryContractHost({
+      nodes: [
+        { reference: shellReference, snapshot: manifest },
+        ...sections.map((section) => ({
+          reference: formlessUiShellNavigationSectionReference(manifest.id, section.id),
+          snapshot: section,
+        })),
+        { reference: themeReference, snapshot: userThemeFixture(themeReference.themeId) },
+      ],
+    });
+    const html = renderToStaticMarkup(
+      <FormlessUiContractHostProvider host={host}>
+        <LegacySubscribedApplicationShellRenderer
+          shellReference={shellReference}
+          themeReference={themeReference}
+        >
+          <article>Theme workspace</article>
+        </LegacySubscribedApplicationShellRenderer>
+      </FormlessUiContractHostProvider>,
+    );
+
+    expect(html).toContain('data-formless-document-theme-active-mode="dark"');
+    expect(html).toContain('aria-label="Theme mode"');
+    expect(html).toContain('data-formless-application-shell="shell"');
+    expect(html).toContain('aria-label="Tasks"');
+    expect(html).toContain("Theme workspace");
+    expect(JSON.stringify(sections).toLowerCase()).not.toContain("theme");
   });
 });
+
+function userThemeFixture(themeId: string): FormlessUiDocumentThemeContract {
+  const controlId = "control:theme-mode";
+  const option = (mode: "system" | "light" | "dark", label: string) => ({
+    label,
+    mode,
+    selectionIntent: {
+      controlId,
+      mode,
+      themeId,
+      type: "documentThemeModeSelection" as const,
+    },
+  });
+
+  return {
+    activeMode: "dark",
+    id: themeId,
+    kind: "documentTheme",
+    policy: { kind: "userControlled" },
+    selectionControl: {
+      accessibilityLabel: "Theme mode",
+      id: controlId,
+      kind: "documentThemeSelectionControl",
+      options: [option("system", "System"), option("light", "Light"), option("dark", "Dark")],
+      selectedMode: "system",
+    },
+  };
+}
 
 function shellFixture(): {
   manifest: FormlessUiShellManifestContract;

@@ -21,6 +21,7 @@ import { memo, type ReactNode } from "react";
 import type {
   FormlessUiButtonContract,
   FormlessUiCreateIntent,
+  FormlessUiDocumentThemeReference,
   FormlessUiFieldIntent,
   FormlessUiShellDestinationContract,
   FormlessUiShellIntent,
@@ -39,6 +40,7 @@ import {
   useFormlessUiShellNavigationSection,
 } from "@dpeek/formless-astryx/contract-host/react";
 import { LegacyGeneratedCreateSurface } from "./legacy-create-surface.tsx";
+import { LegacySubscribedDocumentThemeRenderer } from "./legacy-document-theme-renderer.tsx";
 
 export function LegacyApplicationShellRenderer({
   children,
@@ -72,9 +74,11 @@ export const LegacySubscribedApplicationShellRenderer = memo(
   function LegacySubscribedApplicationShellRenderer({
     children,
     shellReference,
+    themeReference,
   }: {
     children: ReactNode;
     shellReference: FormlessUiShellManifestReference;
+    themeReference?: FormlessUiDocumentThemeReference | undefined;
   }) {
     const manifest = useFormlessUiShellManifest(shellReference);
 
@@ -82,7 +86,7 @@ export const LegacySubscribedApplicationShellRenderer = memo(
       return children;
     }
 
-    return (
+    const shell = (
       <LegacyApplicationShellFrame
         manifest={manifest}
         navigation={manifest.navigationSections.map((reference) => (
@@ -96,9 +100,18 @@ export const LegacySubscribedApplicationShellRenderer = memo(
         {children}
       </LegacyApplicationShellFrame>
     );
+
+    return themeReference ? (
+      <LegacySubscribedDocumentThemeRenderer themeReference={themeReference}>
+        {shell}
+      </LegacySubscribedDocumentThemeRenderer>
+    ) : (
+      shell
+    );
   },
   (previous, next) =>
     previous.shellReference.shellId === next.shellReference.shellId &&
+    previous.themeReference?.themeId === next.themeReference?.themeId &&
     previous.children === next.children,
 );
 

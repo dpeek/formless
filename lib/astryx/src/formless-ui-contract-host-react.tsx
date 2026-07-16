@@ -8,6 +8,8 @@ import {
 } from "react";
 import type {
   FormlessUiContractReference,
+  FormlessUiDocumentThemeIntentHandler,
+  FormlessUiDocumentThemeReference,
   FormlessUiResultReference,
   FormlessUiShellIntentHandler,
   FormlessUiShellManifestReference,
@@ -57,6 +59,11 @@ export function useFormlessUiShellIntentHandler(): FormlessUiShellIntentHandler 
   return useCallback((intent) => host.dispatch(intent), [host]);
 }
 
+export function useFormlessUiDocumentThemeIntentHandler(): FormlessUiDocumentThemeIntentHandler {
+  const host = useFormlessUiContractHost();
+  return useCallback((intent) => host.dispatch(intent), [host]);
+}
+
 export function useFormlessUiContract<Reference extends FormlessUiContractReference>(
   reference: Reference,
 ): FormlessUiContractSnapshot<Reference> | undefined {
@@ -78,6 +85,10 @@ export function useFormlessUiContract<Reference extends FormlessUiContractRefere
 }
 
 export function useFormlessUiWorkspaceManifest(reference: FormlessUiWorkspaceManifestReference) {
+  return useFormlessUiContract(reference);
+}
+
+export function useFormlessUiDocumentTheme(reference: FormlessUiDocumentThemeReference) {
   return useFormlessUiContract(reference);
 }
 

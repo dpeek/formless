@@ -2,12 +2,16 @@ import type {
   FormlessUiContractIntent,
   FormlessUiContractIntentHandler,
   FormlessUiContractReference,
+  FormlessUiDocumentThemeContract,
+  FormlessUiDocumentThemeIntent,
+  FormlessUiDocumentThemeReference,
   FormlessUiListContract,
   FormlessUiListResultReference,
   FormlessUiRecordResultContract,
   FormlessUiRecordResultReference,
   FormlessUiResultReferenceRole,
   FormlessUiShellManifestContract,
+  FormlessUiShellIntent,
   FormlessUiShellManifestReference,
   FormlessUiShellNavigationSectionContract,
   FormlessUiShellNavigationSectionReference,
@@ -21,21 +25,23 @@ import type {
 } from "./formless-ui-contract.ts";
 
 export type FormlessUiContractSnapshot<Reference extends FormlessUiContractReference> =
-  Reference extends FormlessUiWorkspaceManifestReference
-    ? FormlessUiWorkspaceManifestContract
-    : Reference extends FormlessUiWorkspaceSectionShellReference
-      ? FormlessUiWorkspaceSectionShellContract
-      : Reference extends FormlessUiShellManifestReference
-        ? FormlessUiShellManifestContract
-        : Reference extends FormlessUiShellNavigationSectionReference
-          ? FormlessUiShellNavigationSectionContract
-          : Reference extends FormlessUiListResultReference
-            ? FormlessUiListContract
-            : Reference extends FormlessUiTableResultReference
-              ? FormlessUiTableContract
-              : Reference extends FormlessUiRecordResultReference
-                ? FormlessUiRecordResultContract
-                : never;
+  Reference extends FormlessUiDocumentThemeReference
+    ? FormlessUiDocumentThemeContract
+    : Reference extends FormlessUiWorkspaceManifestReference
+      ? FormlessUiWorkspaceManifestContract
+      : Reference extends FormlessUiWorkspaceSectionShellReference
+        ? FormlessUiWorkspaceSectionShellContract
+        : Reference extends FormlessUiShellManifestReference
+          ? FormlessUiShellManifestContract
+          : Reference extends FormlessUiShellNavigationSectionReference
+            ? FormlessUiShellNavigationSectionContract
+            : Reference extends FormlessUiListResultReference
+              ? FormlessUiListContract
+              : Reference extends FormlessUiTableResultReference
+                ? FormlessUiTableContract
+                : Reference extends FormlessUiRecordResultReference
+                  ? FormlessUiRecordResultContract
+                  : never;
 
 export type FormlessUiContractHostListener = () => void;
 
@@ -56,6 +62,11 @@ export type FormlessUiContractHost = {
 export type FormlessUiWorkspaceManifestNode = {
   reference: FormlessUiWorkspaceManifestReference;
   snapshot: FormlessUiWorkspaceManifestContract;
+};
+
+export type FormlessUiDocumentThemeNode = {
+  reference: FormlessUiDocumentThemeReference;
+  snapshot: FormlessUiDocumentThemeContract;
 };
 
 export type FormlessUiWorkspaceSectionShellNode = {
@@ -89,6 +100,7 @@ export type FormlessUiRecordResultNode = {
 };
 
 export type FormlessUiContractHostNode =
+  | FormlessUiDocumentThemeNode
   | FormlessUiListResultNode
   | FormlessUiRecordResultNode
   | FormlessUiShellManifestNode
@@ -187,6 +199,16 @@ export function formlessUiWorkspaceManifestReference(
   };
 }
 
+export function formlessUiDocumentThemeReference(
+  themeId: string,
+): FormlessUiDocumentThemeReference {
+  return {
+    kind: "documentThemeReference",
+    role: "documentTheme",
+    themeId,
+  };
+}
+
 export function formlessUiWorkspaceSectionShellReference(
   workspaceId: string,
   sectionId: string,
@@ -268,6 +290,8 @@ export function formlessUiRecordResultReference<Role extends FormlessUiResultRef
 
 export function formlessUiContractReferenceKey(reference: FormlessUiContractReference): string {
   switch (reference.kind) {
+    case "documentThemeReference":
+      return JSON.stringify([reference.role, reference.themeId]);
     case "shellManifestReference":
       return JSON.stringify([reference.role, reference.shellId]);
     case "shellNavigationSectionReference":
@@ -293,6 +317,7 @@ export function isFormlessUiWorkspaceIntent(
   intent: FormlessUiContractIntent,
 ): intent is FormlessUiWorkspaceIntent {
   switch (intent.type) {
+    case "documentThemeModeSelection":
     case "shellCreate":
     case "shellLogout":
     case "shellReset":
@@ -300,6 +325,26 @@ export function isFormlessUiWorkspaceIntent(
       return false;
     default:
       return true;
+  }
+}
+
+export function isFormlessUiDocumentThemeIntent(
+  intent: FormlessUiContractIntent,
+): intent is FormlessUiDocumentThemeIntent {
+  return intent.type === "documentThemeModeSelection";
+}
+
+export function isFormlessUiShellIntent(
+  intent: FormlessUiContractIntent,
+): intent is FormlessUiShellIntent {
+  switch (intent.type) {
+    case "shellCreate":
+    case "shellLogout":
+    case "shellReset":
+    case "shellRootRecordSelection":
+      return true;
+    default:
+      return false;
   }
 }
 
@@ -344,6 +389,12 @@ function assertNodeMatchesReference(node: FormlessUiContractHostNode) {
   const { reference, snapshot } = node;
 
   switch (reference.kind) {
+    case "documentThemeReference":
+      if (snapshot.kind !== "documentTheme" || snapshot.id !== reference.themeId) {
+        throw mismatchedNodeError(reference);
+      }
+      assertDocumentThemeContract(snapshot);
+      return;
     case "shellManifestReference":
       if (snapshot.kind !== "shellManifest" || snapshot.id !== reference.shellId) {
         throw mismatchedNodeError(reference);
@@ -382,6 +433,49 @@ function assertNodeMatchesReference(node: FormlessUiContractHostNode) {
       if (snapshot.kind !== "table" || snapshot.id !== reference.resultId) {
         throw mismatchedNodeError(reference);
       }
+  }
+}
+
+function assertDocumentThemeContract(snapshot: FormlessUiDocumentThemeContract) {
+  if (snapshot.policy.kind === "fixed") {
+    if (snapshot.activeMode !== snapshot.policy.mode || snapshot.selectionControl !== undefined) {
+      throw new Error(
+        `Fixed Formless UI document theme ${JSON.stringify(snapshot.id)} must use its policy mode and omit selection control.`,
+      );
+    }
+    return;
+  }
+
+  const control = snapshot.selectionControl;
+  if (!control) {
+    throw new Error(
+      `User-controlled Formless UI document theme ${JSON.stringify(snapshot.id)} requires a selection control.`,
+    );
+  }
+  if (!control.options.some(({ mode }) => mode === control.selectedMode)) {
+    throw new Error(
+      `Formless UI document theme ${JSON.stringify(snapshot.id)} selection has no matching option.`,
+    );
+  }
+
+  const modes = new Set<string>();
+  for (const option of control.options) {
+    if (modes.has(option.mode)) {
+      throw new Error(
+        `Formless UI document theme ${JSON.stringify(snapshot.id)} has duplicate mode options.`,
+      );
+    }
+    modes.add(option.mode);
+
+    if (
+      option.selectionIntent.themeId !== snapshot.id ||
+      option.selectionIntent.controlId !== control.id ||
+      option.selectionIntent.mode !== option.mode
+    ) {
+      throw new Error(
+        `Formless UI document theme ${JSON.stringify(snapshot.id)} has an invalid mode-selection intent.`,
+      );
+    }
   }
 }
 

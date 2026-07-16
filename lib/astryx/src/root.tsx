@@ -15,6 +15,7 @@ import { FormlessRecordResultsLayout } from "./components/record-results.tsx";
 import { FormlessSiteLayout } from "./components/site.tsx";
 import { FormlessTablesLayout } from "./components/tables.tsx";
 import { FormlessThemeProvider } from "./theme.tsx";
+import type { FormlessUiDocumentThemeContract } from "./formless-ui-contract.ts";
 
 type FormlessPrototypeLayout = {
   name: string;
@@ -56,12 +57,19 @@ const layoutSearchSource = createStaticSource(layoutCommandItems, {
   keywords: (item) => [item.auxiliaryData?.anchor ?? item.id],
 });
 
+const prototypeTheme: FormlessUiDocumentThemeContract = {
+  activeMode: "light",
+  id: "theme:prototype",
+  kind: "documentTheme",
+  policy: { kind: "fixed", mode: "light" },
+};
+
 export function FormlessRoot() {
   const currentLayoutAnchor = useCurrentLayoutAnchor(defaultLayout.anchor);
   const currentLayout = layoutByAnchor.get(currentLayoutAnchor) ?? defaultLayout;
 
   return (
-    <FormlessThemeProvider>
+    <FormlessThemeProvider theme={prototypeTheme}>
       <ToastViewport position="bottomEnd" maxVisible={5}>
         {currentLayout.render()}
         <FormlessLayoutCommandPalette currentLayoutAnchor={currentLayout.anchor} />

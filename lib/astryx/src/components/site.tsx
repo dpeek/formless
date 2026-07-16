@@ -34,7 +34,6 @@ import {
   type TopNavProps,
 } from "@astryxdesign/core/TopNav";
 import { VStack } from "@astryxdesign/core/VStack";
-import { FormlessThemeToggle } from "./theme.tsx";
 import { CubeIcon } from "@heroicons/react/24/outline";
 import { Markdown } from "@astryxdesign/core/Markdown";
 import { NavIcon } from "@astryxdesign/core/NavIcon";
@@ -314,7 +313,6 @@ type FormlessSiteHeaderActionsProps = {
 function FormlessSiteHeaderActions({ isMobile, onOpenMobileNav }: FormlessSiteHeaderActionsProps) {
   return (
     <HStack gap={2} vAlign="center" wrap="wrap">
-      <FormlessThemeToggle />
       {isMobile ? (
         <IconButton
           label="Open navigation"

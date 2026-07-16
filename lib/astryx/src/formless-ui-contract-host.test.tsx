@@ -5,6 +5,8 @@ import { describe, expect, it } from "vite-plus/test";
 import packageJson from "../package.json";
 import type {
   FormlessUiContractIntent,
+  FormlessUiDocumentThemeContract,
+  FormlessUiDocumentThemeIntent,
   FormlessUiListContract,
   FormlessUiRecordResultContract,
   FormlessUiShellIntent,
@@ -17,6 +19,7 @@ import type {
 } from "./formless-ui-contract.ts";
 import {
   createFormlessUiMemoryContractHost,
+  formlessUiDocumentThemeReference,
   formlessUiListResultReference,
   formlessUiRecordResultReference,
   formlessUiShellManifestReference,
@@ -25,9 +28,11 @@ import {
   formlessUiWorkspaceManifestReference,
   formlessUiWorkspaceSectionShellReference,
   type FormlessUiContractHostNodeSet,
+  type FormlessUiDocumentThemeNode,
 } from "./formless-ui-contract-host.ts";
 import {
   FormlessUiContractHostProvider,
+  useFormlessUiDocumentTheme,
   useFormlessUiShellManifest,
   useFormlessUiWorkspaceManifest,
 } from "./formless-ui-contract-host-react.tsx";
@@ -66,6 +71,7 @@ const contextResultReference = formlessUiRecordResultReference({
   workspaceId: "workspace:tasks",
 });
 const shellReference = formlessUiShellManifestReference("shell:tasks");
+const themeReference = formlessUiDocumentThemeReference("theme:application");
 const appSectionReference = formlessUiShellNavigationSectionReference(
   "shell:tasks",
   "shell-section:app",
@@ -111,6 +117,118 @@ describe("Formless UI memory contract host", () => {
     expect(record?.kind).toBe("recordResult");
     expect(shell?.scope).toBe("multiApp");
     expect(shellSection?.destinations[0]?.label).toBe("Tasks");
+  });
+
+  it("hosts fixed and user-controlled theme snapshots beside shell nodes", () => {
+    const host = createFormlessUiMemoryContractHost({
+      nodes: [...shellNodes(), fixedThemeNodes("dark")],
+    });
+    const fixedTheme: FormlessUiDocumentThemeContract | undefined = host.read({
+      ...themeReference,
+    });
+
+    expect(fixedTheme).toEqual({
+      activeMode: "dark",
+      id: themeReference.themeId,
+      kind: "documentTheme",
+      policy: { kind: "fixed", mode: "dark" },
+    });
+    expect(host.read(shellReference)?.title).toBe("Tasks");
+
+    host.publish([...shellNodes(), userThemeNodes("system", "light")]);
+
+    expect(host.read(themeReference)).toMatchObject({
+      activeMode: "light",
+      policy: { kind: "userControlled" },
+      selectionControl: {
+        selectedMode: "system",
+      },
+    });
+  });
+
+  it("reuses theme identity, scopes notifications, and removes themes independently", () => {
+    const host = createFormlessUiMemoryContractHost({
+      nodes: [...shellNodes(), userThemeNodes("system", "light")],
+    });
+    const initialTheme = host.read(themeReference);
+    const initialShell = host.read(shellReference);
+    const calls: string[] = [];
+
+    host.subscribe(themeReference, () => calls.push("theme"));
+    host.subscribe(shellReference, () => calls.push("shell"));
+
+    host.publish([...shellNodes(), userThemeNodes("system", "light")]);
+
+    expect(calls).toEqual([]);
+    expect(host.read(themeReference)).toBe(initialTheme);
+    expect(host.read(shellReference)).toBe(initialShell);
+
+    host.publish([...shellNodes(), userThemeNodes("dark", "dark")]);
+
+    expect(calls).toEqual(["theme"]);
+    expect(host.read(shellReference)).toBe(initialShell);
+
+    host.publish(shellNodes());
+
+    expect(calls).toEqual(["theme", "theme"]);
+    expect(host.read(themeReference)).toBeUndefined();
+    expect(host.read(shellReference)).toBe(initialShell);
+  });
+
+  it("validates document-theme identity, fixed policy, and selection intents", () => {
+    expect(() =>
+      createFormlessUiMemoryContractHost({
+        nodes: [
+          {
+            reference: themeReference,
+            snapshot: {
+              ...fixedThemeNodes("light").snapshot,
+              id: "theme:other",
+            },
+          } as FormlessUiDocumentThemeNode,
+        ],
+      }),
+    ).toThrow("does not match reference");
+
+    expect(() =>
+      createFormlessUiMemoryContractHost({
+        nodes: [
+          {
+            reference: themeReference,
+            snapshot: {
+              ...fixedThemeNodes("light").snapshot,
+              activeMode: "dark",
+            },
+          },
+        ],
+      }),
+    ).toThrow("must use its policy mode");
+
+    const userTheme = userThemeNodes("system", "light");
+    const userSnapshot = userTheme.snapshot;
+    const selectionControl = userSnapshot.selectionControl;
+    if (userSnapshot.policy.kind !== "userControlled" || !selectionControl) {
+      throw new Error("Expected user-controlled document-theme selection control.");
+    }
+    expect(() =>
+      createFormlessUiMemoryContractHost({
+        nodes: [
+          {
+            ...userTheme,
+            snapshot: {
+              ...userSnapshot,
+              selectionControl: {
+                ...selectionControl,
+                options: selectionControl.options.map((option) => ({
+                  ...option,
+                  selectionIntent: { ...option.selectionIntent, themeId: "theme:other" },
+                })),
+              },
+            },
+          },
+        ],
+      }),
+    ).toThrow("invalid mode-selection intent");
   });
 
   it("validates parent scopes, shell references, and active destinations", () => {
@@ -343,6 +461,29 @@ describe("Formless UI memory contract host", () => {
     ).toContain("Tasks");
   });
 
+  it("caches document-theme server snapshots for server rendering and hydration", () => {
+    const serverNodes = [fixedThemeNodes("light")];
+    const host = createFormlessUiMemoryContractHost({
+      nodes: serverNodes,
+      serverNodes,
+    });
+    const serverSnapshot = host.getServerSnapshot(themeReference);
+
+    expect(host.read(themeReference)).toBe(serverSnapshot);
+
+    host.publish([userThemeNodes("dark", "dark")]);
+
+    expect(host.read(themeReference)?.activeMode).toBe("dark");
+    expect(host.getServerSnapshot(themeReference)).toBe(serverSnapshot);
+    expect(
+      renderToStaticMarkup(
+        <FormlessUiContractHostProvider host={host}>
+          <ThemeActiveMode />
+        </FormlessUiContractHostProvider>,
+      ),
+    ).toContain("light");
+  });
+
   it("dispatches the canonical workspace intent union", async () => {
     const calls: FormlessUiContractIntent[] = [];
     const host = createFormlessUiMemoryContractHost({
@@ -377,6 +518,26 @@ describe("Formless UI memory contract host", () => {
       sectionId: sessionSectionReference.sectionId,
       shellId: shellReference.shellId,
       type: "shellLogout",
+    };
+
+    await host.dispatch(intent);
+
+    expect(calls).toEqual([intent]);
+  });
+
+  it("dispatches the canonical document-theme intent union", async () => {
+    const calls: FormlessUiContractIntent[] = [];
+    const host = createFormlessUiMemoryContractHost({
+      dispatch: (intent) => {
+        calls.push(intent);
+      },
+      nodes: [userThemeNodes("system", "light")],
+    });
+    const intent: FormlessUiDocumentThemeIntent = {
+      controlId: "control:theme-mode",
+      mode: "dark",
+      themeId: themeReference.themeId,
+      type: "documentThemeModeSelection",
     };
 
     await host.dispatch(intent);
@@ -424,6 +585,57 @@ function WorkspaceLabel() {
 function ShellTitle() {
   const shell = useFormlessUiShellManifest(shellReference);
   return <span>{shell?.title}</span>;
+}
+
+function ThemeActiveMode() {
+  const theme = useFormlessUiDocumentTheme(themeReference);
+  return <span>{theme?.activeMode}</span>;
+}
+
+function fixedThemeNodes(mode: "light" | "dark"): FormlessUiDocumentThemeNode {
+  return {
+    reference: themeReference,
+    snapshot: {
+      activeMode: mode,
+      id: themeReference.themeId,
+      kind: "documentTheme",
+      policy: { kind: "fixed", mode },
+    },
+  };
+}
+
+function userThemeNodes(
+  selectedMode: "system" | "light" | "dark",
+  activeMode: "light" | "dark",
+): FormlessUiDocumentThemeNode {
+  const controlId = "control:theme-mode";
+  const option = (mode: "system" | "light" | "dark", label: string) => ({
+    label,
+    mode,
+    selectionIntent: {
+      controlId,
+      mode,
+      themeId: themeReference.themeId,
+      type: "documentThemeModeSelection" as const,
+    },
+  });
+
+  return {
+    reference: themeReference,
+    snapshot: {
+      activeMode,
+      id: themeReference.themeId,
+      kind: "documentTheme",
+      policy: { kind: "userControlled" },
+      selectionControl: {
+        accessibilityLabel: "Theme mode",
+        id: controlId,
+        kind: "documentThemeSelectionControl",
+        options: [option("system", "System"), option("light", "Light"), option("dark", "Dark")],
+        selectedMode,
+      },
+    },
+  };
 }
 
 function shellNodes({

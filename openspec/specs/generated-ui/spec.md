@@ -164,7 +164,10 @@ shell.
   runtime owns reset, session, navigation, and error effects
 - **AND** the shell does not expose session tokens, challenge material, provider
   credentials, raw runtime errors, profile or account settings destinations,
-  a synthesized sign-in destination, or a theme control
+  or a synthesized sign-in destination
+- **AND** any theme control is supplied only through the separate
+  document-theme contract rather than inferred from shell settings or session
+  state
 
 #### Scenario: Local workspace save status
 
@@ -658,8 +661,10 @@ data reads, session behavior, operations, and effects.
 - **AND** fixture reducers may simulate root selection, create, reset, and
   logout intents without importing generated runtime, schemas, routing, browser
   replica, storage, operation controllers, or session clients
-- **AND** fixtures contain no theme controls and do not export or activate the
-  Astryx shell renderer in production
+- **AND** shell fixtures do not synthesize theme controls, while document-theme
+  fixtures may compose a separate theme node through the same memory host
+- **AND** fixtures do not export or activate the Astryx shell renderer in
+  production
 
 ### Requirement: Generated List Renderer Contract
 
@@ -2214,3 +2219,81 @@ behavior for onboarding steps that write schema records.
   separate from generated field rendering and operation submission
 - **AND** this change does not add a schema-declared onboarding or setup-flow
   language
+
+### Requirement: Document Theme Renderer Contract
+
+The system SHALL present document theme policy and mode through a controlled
+renderer-neutral Formless UI contract before selecting the active renderer,
+while the owning runtime retains preference storage, system-mode resolution,
+SSR bootstrap, document effects, and renderer activation.
+
+#### Scenario: Project controlled document theme
+
+- **GIVEN** a top-level application surface has a fixed or user-controlled
+  theme policy
+- **WHEN** the application runtime prepares theme presentation for a renderer
+- **THEN** it projects a stable document-theme identity, policy, active mode,
+  and optional mode-selection control through contract types owned by
+  `lib/astryx`
+- **AND** theme modes are `system`, `light`, or `dark`, while a fixed policy
+  selects only `light` or `dark`
+- **AND** a user-controlled theme control carries its selected mode, ordered
+  display-safe mode options, and canonical mode-selection intents
+- **AND** a fixed policy omits the selection control and does not invite the
+  renderer to synthesize one
+- **AND** theme selection is a presentation intent rather than an app-schema
+  operation, mutation, action execution, or Authority write
+- **AND** the top-level workspace package imports the contract through an
+  explicit `@dpeek/formless-astryx` contract subpath rather than defining a
+  parallel runtime contract or deep-importing package source
+
+#### Scenario: Runtime behavior stays outside the contract renderer
+
+- **GIVEN** a renderer receives a document-theme snapshot and selection intent
+- **WHEN** it renders or dispatches the control
+- **THEN** the snapshot contains no cookie names, storage adapters, browser
+  media-query APIs, document mutation callbacks, React nodes, Tailwind classes,
+  Astryx component props, or renderer-specific state
+- **AND** runtime or later activation work owns preference persistence,
+  preference scope, system-mode resolution, SSR document markers, hydration,
+  cache behavior, and document-root side effects
+- **AND** a fixed surface can override the active mode without requiring the
+  renderer contract to erase or replace any separately owned user preference
+
+#### Scenario: Legacy renderer consumes the theme contract
+
+- **GIVEN** production remains on the legacy application renderer
+- **WHEN** the top-level workspace supplies a document-theme contract
+- **THEN** a dedicated legacy theme adapter renders only the projected active
+  mode and optional control and dispatches canonical mode-selection intents
+- **AND** the legacy adapter does not own policy selection, preference storage,
+  system-mode resolution, SSR bootstrap, or document initialization
+- **AND** absence of a user-controlled theme control preserves surfaces that do
+  not expose a theme action
+- **AND** focused coverage asserts fixed and user-controlled presentation,
+  mode selection, and intent dispatch instead of legacy DOM structure
+- **AND** this contract migration does not select the replacement renderer,
+  activate Astryx theme or global CSS, or change production persistence and SSR
+  behavior
+
+#### Scenario: Formless Astryx theme renderer
+
+- **GIVEN** the legacy renderer consumes the complete production document-theme
+  contract
+- **WHEN** the Formless replacement renderer implements the same contract in
+  `lib/astryx`
+- **THEN** pure and subscribed Astryx adapters apply the projected active mode,
+  render the optional mode-selection control, and dispatch only canonical theme
+  intents
+- **AND** the subscribed Astryx application-shell renderer can consume the
+  separate document-theme reference without adding theme state to shell
+  navigation sections
+- **AND** the renderer uses Astryx theme and control primitives without reading
+  local storage, cookies, runtime profiles, route state, generated records, or
+  browser replica state
+- **AND** fixed light, fixed dark, user system, user light, and user dark data-only
+  fixtures exercise the same contract shapes through the reusable memory host
+- **AND** adding the replacement renderer does not export or activate it in
+  production, introduce Astryx global CSS into runtime entrypoints, or settle
+  cookie, SSR, public Site, account preference, or per-surface preference
+  behavior

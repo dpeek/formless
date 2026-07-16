@@ -2,6 +2,9 @@ import type {
   FormlessUiButtonContract,
   FormlessUiCreateField,
   FormlessUiCreateSurfaceContract,
+  FormlessUiDocumentThemeActiveMode,
+  FormlessUiDocumentThemeContract,
+  FormlessUiDocumentThemeMode,
   FormlessUiShellManifestContract,
   FormlessUiShellNavigationSectionContract,
   FormlessUiShellScope,
@@ -21,6 +24,7 @@ export type FormlessApplicationShellFixtureState = {
 };
 
 export type FormlessApplicationShellFixture = {
+  documentTheme: FormlessUiDocumentThemeContract | null;
   id: FormlessApplicationShellFixtureId;
   label: string;
   routeLabel: string;
@@ -32,36 +36,84 @@ const shellId = "shell:application";
 export function createFormlessApplicationShellFixtures(): FormlessApplicationShellFixture[] {
   return [
     {
+      documentTheme: fixedDocumentTheme("light"),
       id: "product-instance",
       label: "Instance",
       routeLabel: "Settings",
       shell: productInstanceShell(),
     },
     {
+      documentTheme: userDocumentTheme("system", "dark"),
       id: "dev-workbench",
       label: "App",
       routeLabel: "Tasks workspace",
       shell: devWorkbenchShell(),
     },
     {
+      documentTheme: fixedDocumentTheme("dark"),
       id: "app-only",
       label: "App only",
       routeLabel: "Tasks workspace",
       shell: appOnlyShell(),
     },
     {
+      documentTheme: userDocumentTheme("dark", "dark"),
       id: "site-authoring",
       label: "Site authoring",
       routeLabel: "Site authoring workspace",
       shell: siteAuthoringShell(),
     },
     {
+      documentTheme: null,
       id: "no-shell",
       label: "No shell",
       routeLabel: "Public Site",
       shell: null,
     },
   ];
+}
+
+function fixedDocumentTheme(
+  mode: FormlessUiDocumentThemeActiveMode,
+): FormlessUiDocumentThemeContract {
+  return {
+    activeMode: mode,
+    id: "theme:application",
+    kind: "documentTheme",
+    policy: { kind: "fixed", mode },
+  };
+}
+
+function userDocumentTheme(
+  selectedMode: FormlessUiDocumentThemeMode,
+  activeMode: FormlessUiDocumentThemeActiveMode,
+): FormlessUiDocumentThemeContract {
+  const themeId = "theme:application";
+  const controlId = "control:theme-mode";
+  const option = (mode: FormlessUiDocumentThemeMode, label: string) => ({
+    label,
+    mode,
+    selectionIntent: {
+      controlId,
+      mode,
+      themeId,
+      type: "documentThemeModeSelection" as const,
+    },
+  });
+
+  return {
+    activeMode,
+    id: themeId,
+    kind: "documentTheme",
+    policy: { kind: "userControlled" },
+    selectionControl: {
+      accessibilityLabel: "Theme mode",
+      id: controlId,
+      kind: "documentThemeSelectionControl",
+      options: [option("system", "System"), option("light", "Light"), option("dark", "Dark")],
+      selectedMode,
+    },
+  };
 }
 
 function devWorkbenchShell(): FormlessApplicationShellFixtureState {

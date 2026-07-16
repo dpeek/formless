@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vite-plus/test";
 import type {
   FormlessUiContractReference,
+  FormlessUiDocumentThemeIntent,
   FormlessUiShellNavigationSectionContract,
 } from "../formless-ui-contract.ts";
 import { formlessUiContractReferenceKey } from "../formless-ui-contract-host.ts";
@@ -37,7 +38,7 @@ describe("canonical application-shell fixtures", () => {
     const devSettings = requiredSection(devWorkbench, "appSettings");
     const devSession = requiredSection(devWorkbench, "session");
     const siteRoots = requiredSection(siteAuthoring, "rootRecords");
-    const serialized = JSON.stringify(fixtures);
+    const serializedShells = JSON.stringify(fixtures.map((fixture) => fixture.shell));
 
     expect(structuredClone(fixtures)).toEqual(fixtures);
     expect(fixtures.slice(0, 2).map(({ id, label }) => ({ id, label }))).toEqual([
@@ -97,8 +98,31 @@ describe("canonical application-shell fixtures", () => {
       state: "authenticated",
     });
     expect(requiredFixture(fixtures, "no-shell").shell).toBeNull();
-    expect(serialized).not.toContain("className");
-    expect(serialized.toLowerCase()).not.toContain("theme");
+    expect(serializedShells).not.toContain("className");
+    expect(serializedShells.toLowerCase()).not.toContain("theme");
+  });
+
+  it("covers fixed and user document-theme snapshots outside shell state", () => {
+    const fixtures = createFormlessApplicationShellFixtures();
+
+    expect(requiredFixture(fixtures, "product-instance").documentTheme).toMatchObject({
+      activeMode: "light",
+      policy: { kind: "fixed", mode: "light" },
+    });
+    expect(requiredFixture(fixtures, "app-only").documentTheme).toMatchObject({
+      activeMode: "dark",
+      policy: { kind: "fixed", mode: "dark" },
+    });
+    expect(requiredFixture(fixtures, "dev-workbench").documentTheme).toMatchObject({
+      activeMode: "dark",
+      policy: { kind: "userControlled" },
+      selectionControl: { selectedMode: "system" },
+    });
+    expect(requiredFixture(fixtures, "site-authoring").documentTheme).toMatchObject({
+      activeMode: "dark",
+      selectionControl: { selectedMode: "dark" },
+    });
+    expect(requiredFixture(fixtures, "no-shell").documentTheme).toBeNull();
   });
 
   it("reduces root selection, controlled create, reset, and logout through the memory host", () => {
@@ -273,6 +297,52 @@ describe("canonical application-shell fixtures", () => {
     }
   });
 
+  it("reduces theme selection through its separate memory-host node", () => {
+    const fixture = requiredFixture(createFormlessApplicationShellFixtures(), "dev-workbench");
+    const fixtureHost = createFormlessApplicationShellFixtureHost(fixture);
+    const shellBefore = fixtureHost.getShell();
+    const themeBefore = fixtureHost.getDocumentTheme();
+    const control = themeBefore?.selectionControl;
+    const light = control?.options.find((option) => option.mode === "light");
+    const themeReference = fixtureHost.themeReference;
+
+    if (!light || !themeReference) {
+      throw new Error("Missing controlled document-theme fixture.");
+    }
+
+    const notifications: string[] = [];
+    const stopListening = fixtureHost.host.subscribe(themeReference, () => {
+      notifications.push(formlessUiContractReferenceKey(themeReference));
+    });
+
+    fixtureHost.host.dispatch(light.selectionIntent);
+
+    expect(fixtureHost.getDocumentTheme()).toMatchObject({
+      activeMode: "light",
+      selectionControl: { selectedMode: "light" },
+    });
+    expect(fixtureHost.getShell()).toBe(shellBefore);
+    expect(notifications).toEqual([formlessUiContractReferenceKey(themeReference)]);
+
+    const fixedFixture = requiredFixture(
+      createFormlessApplicationShellFixtures(),
+      "product-instance",
+    );
+    if (!fixedFixture.documentTheme) {
+      throw new Error("Missing fixed document-theme fixture.");
+    }
+    const unsupportedFixedIntent: FormlessUiDocumentThemeIntent = {
+      ...light.selectionIntent,
+      themeId: fixedFixture.documentTheme.id,
+    };
+    const fixedHost = createFormlessApplicationShellFixtureHost(fixedFixture);
+    const fixedBefore = fixedHost.getDocumentTheme();
+    fixedHost.host.dispatch(unsupportedFixedIntent);
+    expect(fixedHost.getDocumentTheme()).toBe(fixedBefore);
+
+    stopListening();
+  });
+
   it("projects an empty host graph for no-shell selection", () => {
     const fixture = requiredFixture(createFormlessApplicationShellFixtures(), "no-shell");
     const fixtureHost = createFormlessApplicationShellFixtureHost(fixture);
@@ -280,7 +350,7 @@ describe("canonical application-shell fixtures", () => {
 
     expect(fixtureHost.shellReference).toBeNull();
     expect(fixtureHost.getShell()).toBeNull();
-    expect(publication).toEqual({ nodes: [], shellReference: null });
+    expect(publication).toEqual({ nodes: [], shellReference: null, themeReference: null });
   });
 });
 
@@ -293,6 +363,7 @@ describe("Application Shell prototype layout", () => {
     expect(html).toContain("Settings");
     expect(html).not.toContain("Personal Site public site");
     expect(html).toContain("Ada Lovelace");
+    expect(html).not.toContain('aria-label="Theme mode"');
     expect(html).not.toContain("Dev workbench");
     expect(html).not.toContain("Product instance");
     expect(html).toContain("No shell");
@@ -319,12 +390,12 @@ describe("Application Shell prototype layout", () => {
         specifier,
       ),
     );
-    const rendererSources = [fixtureSource, hostSource, shellSource, sideNavSource].join("\n");
-
     expect(hostSource).toContain("createFormlessUiMemoryContractHost");
     expect(hostSource).toContain("AstryxSubscribedApplicationShellRenderer");
+    expect(shellSource).toContain("AstryxSubscribedDocumentThemeRenderer");
     expect(forbiddenImports).toEqual([]);
-    expect(rendererSources.toLowerCase()).not.toContain("theme control");
+    expect(fixtureSource).toContain("documentTheme");
+    expect(sideNavSource).not.toContain("FormlessUiDocumentTheme");
     expect(Object.keys(packageJson.exports ?? {})).toEqual([
       "./contract",
       "./contract-host",
