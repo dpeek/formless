@@ -91,12 +91,7 @@ function DisplayField({ field }: { field: FormlessUiDisplayField }) {
   return (
     <VStack gap={fieldLabelIsHidden(field) ? 0 : 1} width="100%">
       {fieldLabelIsHidden(field) ? null : (
-        <Text
-          color={field.surface === "detail" ? "secondary" : undefined}
-          display="block"
-          type={field.surface === "detail" ? "supporting" : "label"}
-          weight={field.surface === "detail" ? "medium" : undefined}
-        >
+        <Text color="secondary" display="block" type="label" weight="medium">
           {field.label}
         </Text>
       )}
@@ -166,6 +161,14 @@ function FieldEditor({
 }
 
 function FieldDisplay({ field }: { field: FormlessUiDisplayField }) {
+  if (!fieldHasDisplayValue(field)) {
+    return (
+      <Text color="secondary" type="body">
+        —
+      </Text>
+    );
+  }
+
   if (field.control.kind === "date" || field.formatting.temporal !== undefined) {
     return <DateFieldDisplay field={field} />;
   }
@@ -203,6 +206,14 @@ function FieldDisplay({ field }: { field: FormlessUiDisplayField }) {
   }
 
   return <TextFieldDisplay field={field} />;
+}
+
+function fieldHasDisplayValue(field: FormlessUiDisplayField) {
+  if (field.value !== undefined && (typeof field.value !== "string" || field.value.trim() !== "")) {
+    return true;
+  }
+
+  return field.formatting.displayValue !== undefined && field.formatting.displayValue.trim() !== "";
 }
 
 const styles = stylex.create({

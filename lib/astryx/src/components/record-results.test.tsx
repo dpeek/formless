@@ -25,12 +25,20 @@ describe("canonical record-result fixtures", () => {
     const fields = editable.fields.map(({ field }) => field);
     const title = requiredField(editable, "title").field;
     const ownerEmail = requiredField(editable, "ownerEmail").field;
+    const readOnlyEstimate = requiredField(readOnly, "estimateHours").field;
     const status = requiredField(editable, "status").field;
     const transition = requiredAction(editable, "transition");
     const deletion = requiredAction(editable, "delete");
 
     expect(structuredClone(fixtures)).toEqual(fixtures);
     expect(editable.availability.state).toBe("ready");
+    expect(new Set(editable.fields.map((field) => field.id)).size).toBe(editable.fields.length);
+    expect(readOnly.fields.map(({ field }) => field.fieldName)).toEqual(
+      editable.fields.map(({ field }) => field.fieldName),
+    );
+    expect(editingDisabled.fields.map(({ field }) => field.fieldName)).toEqual(
+      editable.fields.map(({ field }) => field.fieldName),
+    );
     expect(title.mode).toBe("editor");
     expect(title.pending).toEqual({ isPending: true, label: "Saving task" });
     expect(ownerEmail.errors?.[0]?.message).toBe("Owner email is required.");
@@ -48,15 +56,7 @@ describe("canonical record-result fixtures", () => {
           field.mode === "editor" && "rendererKind" in field ? field.rendererKind : undefined,
         ),
     ).toEqual(
-      expect.arrayContaining([
-        "color",
-        "enum-icon",
-        "icon",
-        "markdown",
-        "media",
-        "quiet-date",
-        "value-unit",
-      ]),
+      expect.arrayContaining(["color", "icon", "markdown", "media", "quiet-date", "value-unit"]),
     );
     expect(status.mode).toBe("display");
     expect(status.stateMachineFacts?.interaction.kind).toBe("display");
@@ -64,6 +64,18 @@ describe("canonical record-result fixtures", () => {
     expect(deletion.control.confirmation?.kind).toBe("destructiveConfirmation");
     expect(editable.warnings[0]?.items[0]?.message).toBe("Owner email is missing.");
     expect(readOnly.fields.every(({ field }) => field.mode === "display")).toBe(true);
+    expect(readOnlyEstimate.mode).toBe("display");
+    if (readOnlyEstimate.mode !== "display") {
+      throw new Error("Expected the read-only Estimate fixture to use display mode.");
+    }
+    expect(readOnlyEstimate.formatting.suffix).toBe("h");
+    expect(
+      editingDisabled.fields
+        .filter(({ field }) => field.mode === "editor")
+        .every(({ field }) => field.access.kind === "disabled"),
+    ).toBe(true);
+    expect(requiredField(editingDisabled, "slug").field.access.kind).toBe("readOnly");
+    expect(requiredField(editingDisabled, "status").field.access.kind).toBe("stateMachine");
     expect(editingDisabled.editing).toEqual({
       disabledReason: "Editing requires an owner session.",
       enabled: false,
@@ -90,6 +102,19 @@ describe("Record Results prototype layout", () => {
     expect(html).toContain("Complete");
     expect(html).toContain("Owner email is missing.");
     expect(html).toContain('aria-label="More actions for Prepare launch checklist"');
+  });
+
+  it("shows a shared editing-disabled reason only in the record banner", () => {
+    const disabled = requiredFixture(
+      createFormlessUiRecordResultFixtures(),
+      "editing-disabled",
+    ).recordResult;
+    const html = renderToStaticMarkup(
+      <AstryxRecordResultRenderer onIntent={() => undefined} recordResult={disabled} />,
+    );
+
+    expect(html.split("Editing requires an owner session.")).toHaveLength(2);
+    expect(html).toContain("Owner email is required.");
   });
 
   it("simulates controlled field changes and visible union fields", () => {

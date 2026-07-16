@@ -1,5 +1,6 @@
 import { Banner } from "@astryxdesign/core/Banner";
 import { Card } from "@astryxdesign/core/Card";
+import { Divider } from "@astryxdesign/core/Divider";
 import { EmptyState } from "@astryxdesign/core/EmptyState";
 import { HStack } from "@astryxdesign/core/HStack";
 import { MoreMenu } from "@astryxdesign/core/MoreMenu";
@@ -17,7 +18,6 @@ import { FormlessUiFieldRenderer } from "./fields/renderer.tsx";
 import {
   AstryxOperationButton,
   AstryxOperationButtonWithProgress,
-  AstryxOperationCompactStatus,
   AstryxOperationDestructiveConfirmation,
   AstryxOperationFeedback,
   operationIcon,
@@ -41,9 +41,6 @@ export function AstryxRecordResultRenderer({
       gap={spacing.gap}
       width="100%"
     >
-      {recordResult.editing.enabled ? null : (
-        <Banner container="card" status="info" title={recordResult.editing.disabledReason} />
-      )}
       <AstryxRecordResultContent
         onIntent={onIntent}
         recordResult={recordResult}
@@ -120,10 +117,26 @@ function AstryxRecordResultContent({
         gap={spacing.gap}
         width="100%"
       >
+        {recordResult.editing.enabled ? null : (
+          <Banner container="card" status="info" title={recordResult.editing.disabledReason} />
+        )}
+        {recordResult.warnings.map((warning) => {
+          const firstWarning = warning.items[0];
+          const otherIssueCount = Math.max(0, warning.items.length - 1);
+          const title = firstWarning
+            ? `${firstWarning.message}${
+                otherIssueCount > 0
+                  ? ` and ${otherIssueCount} other issue${otherIssueCount === 1 ? "" : "s"}`
+                  : ""
+              }`
+            : warning.title;
+
+          return <Banner container="card" key={warning.id} status="warning" title={title} />;
+        })}
         <VStack gap={spacing.fieldGap} width="100%">
           {recordResult.fields.map((field) => (
             <FormlessUiFieldRenderer
-              field={field.field}
+              field={astryxRecordResultFieldPresentation(field.field, recordResult)}
               key={field.id}
               onIntent={(intent) =>
                 dispatchAstryxRecordResultFieldIntent(
@@ -142,22 +155,31 @@ function AstryxRecordResultContent({
           recordId={selectedRecord.id}
           recordResult={recordResult}
         />
-        {recordResult.warnings.map((warning) => {
-          const description = warning.items.map((item) => item.message).join(" ");
-
-          return (
-            <Banner
-              container="card"
-              description={description || undefined}
-              key={warning.id}
-              status="warning"
-              title={warning.title}
-            />
-          );
-        })}
       </VStack>
     </Card>
   );
+}
+
+function astryxRecordResultFieldPresentation(
+  field: FormlessUiRecordResultFieldContract["field"],
+  recordResult: FormlessUiRecordResultContract,
+) {
+  if (
+    recordResult.editing.enabled ||
+    field.access.kind !== "disabled" ||
+    field.access.disabledReason !== recordResult.editing.disabledReason
+  ) {
+    return field;
+  }
+
+  return {
+    ...field,
+    access: {
+      canPatch: false as const,
+      kind: "disabled" as const,
+      writable: true as const,
+    },
+  };
 }
 
 function AstryxRecordResultActionGroup({
@@ -178,6 +200,7 @@ function AstryxRecordResultActionGroup({
 
   return (
     <>
+      <Divider isFullBleed />
       <HStack align="center" gap={1} justify="end" width="100%" wrap="wrap">
         {recordResult.actions.primary.map((action) => (
           <AstryxRecordResultActionButton
@@ -261,9 +284,6 @@ function AstryxRecordResultActionEffects({
           onIntent={handleIntent}
         />
       ) : null}
-      {action.control.status.status === "idle" ? null : (
-        <AstryxOperationCompactStatus status={action.control.status} />
-      )}
       <AstryxOperationFeedback feedback={action.control.feedback} />
     </>
   );

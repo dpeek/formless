@@ -4,7 +4,7 @@ import { Selector, SelectorOption, type SelectorOptionData } from "@astryxdesign
 import { Text } from "@astryxdesign/core/Text";
 import { Tooltip } from "@astryxdesign/core/Tooltip";
 import { VisuallyHidden } from "@astryxdesign/core/VisuallyHidden";
-import { colorVars, spacingVars } from "@astryxdesign/core/theme/tokens.stylex";
+import { spacingVars } from "@astryxdesign/core/theme/tokens.stylex";
 import type {
   FormlessUiDisplayField,
   FormlessUiField,
@@ -64,10 +64,6 @@ export function SelectorFieldEditor({
   const enumTriggerContent = enumPresentationTriggerContent(field);
   const enumListContent = enumPresentationListContent(field);
   const selectedOption = optionsByValue.get(value);
-  const selectedEnumOption =
-    field.control.kind === "enum"
-      ? field.options?.enumOptions?.find((option) => option.value === value)
-      : undefined;
   const hasEnumOptionVisuals =
     usesEnumOptionVisuals && visualOptions.some((option) => hasSelectorOptionVisual(option));
   const startIcon =
@@ -78,7 +74,7 @@ export function SelectorFieldEditor({
     label: field.label,
     isLabelHidden: fieldLabelIsHidden(field),
     description: fieldDescription(field),
-    isRequired: field.required,
+    isRequired: enumRequiredMarkerIsVisible(field),
     isDisabled: fieldInteractionIsDisabled(field),
     isLoading: Boolean(field.pending?.isPending),
     options,
@@ -101,10 +97,6 @@ export function SelectorFieldEditor({
       fieldStatus(field) ??
       (undeclaredMessage ? { type: "warning" as const, message: undeclaredMessage } : undefined),
     width: "100%",
-    xstyle:
-      usesEnumOptionVisuals && selectedEnumOption
-        ? enumTriggerIntentStyle(selectedEnumOption.presentation.color.intent)
-        : undefined,
   };
 
   if (!enumFacts?.clearable) {
@@ -132,6 +124,14 @@ export function SelectorFieldEditor({
         emitImmediateRecordFieldCommit(field, value, onIntent);
       }}
     />
+  );
+}
+
+function enumRequiredMarkerIsVisible(field: FormlessUiEditorField) {
+  const enumFacts = field.enum?.kind === "editor" ? field.enum : undefined;
+
+  return (
+    field.required && !(enumFacts?.clearable === false && enumFacts.valueStatus.kind === "declared")
   );
 }
 
@@ -221,35 +221,7 @@ function RichSelectorOption({
   );
 }
 
-function enumTriggerIntentStyle(intent: "neutral" | "success" | "warning" | "danger") {
-  if (intent === "success") {
-    return styles.enumSuccess;
-  }
-
-  if (intent === "warning") {
-    return styles.enumWarning;
-  }
-
-  if (intent === "danger") {
-    return styles.enumDanger;
-  }
-
-  return undefined;
-}
-
 const styles = stylex.create({
-  enumSuccess: {
-    backgroundColor: colorVars["--color-success-muted"],
-    borderColor: colorVars["--color-success"],
-  },
-  enumWarning: {
-    backgroundColor: colorVars["--color-warning-muted"],
-    borderColor: colorVars["--color-warning"],
-  },
-  enumDanger: {
-    backgroundColor: colorVars["--color-error-muted"],
-    borderColor: colorVars["--color-error"],
-  },
   enumDisplayValue: {
     gap: spacingVars["--spacing-2"],
   },

@@ -61,12 +61,9 @@ describe("Astryx record-result renderer", () => {
     expect(html).toContain("Pushing workspace");
     expect(html).toContain('aria-busy="true"');
     expect(html).toContain("data-operation-progress");
-    expect(html).toContain('data-operation-status="pending"');
     expect(html).toContain('aria-label="More actions for Prepare launch"');
     expect(html).toContain("Delete task?");
     expect(html).toContain("Prepare launch checklist will be removed from this workspace.");
-    expect(html).toContain('data-operation-status="failed"');
-    expect(html).toContain("Overdue tasks not archived");
     expect(html).toContain("Readiness warnings");
     expect(html).toContain("Assign an owner.");
     expect(html.indexOf("Push workspace")).toBeLessThan(

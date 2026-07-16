@@ -2,6 +2,7 @@ import type { FieldSchema } from "@dpeek/formless-schema";
 import type {
   FormlessUiField,
   FormlessUiOperationControlContract,
+  FormlessUiRecordField,
   FormlessUiRecordResultActionContract,
   FormlessUiRecordResultContract,
   FormlessUiRecordResultFieldContract,
@@ -72,6 +73,7 @@ const urlSchema = {
 } satisfies Extract<FieldSchema, { type: "text" }>;
 
 const ownerEmailSchema = {
+  format: "email",
   label: "Owner email",
   required: true,
   type: "text",
@@ -153,16 +155,6 @@ export function taskStatusField(value: "done" | "open") {
 }
 
 function editableRecordResultFixture(): FormlessUiRecordResultContract {
-  const fields = [
-    editableTitleField(),
-    readOnlySlugField(),
-    kindField("article"),
-    recordResultUnionField("article"),
-    invalidOwnerEmailField(),
-    ...specializedRecordFields(),
-    taskStatusField("open"),
-  ];
-
   return readyRecordResult({
     accessibilityLabel: "Task record",
     actions: {
@@ -173,7 +165,7 @@ function editableRecordResultFixture(): FormlessUiRecordResultContract {
       secondaryAccessibilityLabel: "More actions for Prepare launch checklist",
     },
     editing: { enabled: true },
-    fields,
+    fields: readyRecordFields("editable"),
     selectedRecordLabel: "Prepare launch checklist",
     warnings: [
       {
@@ -191,7 +183,7 @@ function readOnlyRecordResultFixture(): FormlessUiRecordResultContract {
     accessibilityLabel: "Read-only task record",
     actions: emptyActions("read-only"),
     editing: { enabled: true },
-    fields: [readOnlyTitleField(), readOnlySlugField(), taskStatusField("done")],
+    fields: readyRecordFields("read-only"),
     selectedRecordLabel: "Prepare launch checklist",
     warnings: [],
   });
@@ -205,10 +197,115 @@ function editingDisabledRecordResultFixture(): FormlessUiRecordResultContract {
       disabledReason: "Editing requires an owner session.",
       enabled: false,
     },
-    fields: [readOnlyTitleField(), readOnlySlugField(), taskStatusField("open")],
+    fields: readyRecordFields("editing-disabled"),
     selectedRecordLabel: "Prepare launch checklist",
     warnings: [],
   });
+}
+
+type ReadyRecordFieldState = "editable" | "editing-disabled" | "read-only";
+
+function readyRecordFields(state: ReadyRecordFieldState): FormlessUiField[] {
+  const fields = [
+    editableTitleField(),
+    readOnlySlugField(),
+    kindField("article"),
+    recordResultUnionField("article"),
+    invalidOwnerEmailField(),
+    ...specializedRecordFields(),
+    taskStatusField("open"),
+  ];
+
+  if (state === "read-only") {
+    return fields.map(readOnlyRecordField);
+  }
+
+  if (state === "editing-disabled") {
+    return fields.map(editingDisabledRecordField);
+  }
+
+  return fields;
+}
+
+function readOnlyRecordField(field: FormlessUiField): FormlessUiField {
+  if (field.mode === "display") {
+    return field;
+  }
+
+  if (field.surface === "create" || field.surface === "operation") {
+    throw new Error(`Expected an existing-record field, received ${field.surface}.`);
+  }
+
+  const suffix = field.formatting.suffix ?? field.suffix ?? recordFieldUnitSuffix(field);
+
+  return displayField({
+    access: { kind: "readOnly", writable: false },
+    color: field.color,
+    commit: field.commit,
+    control: field.control,
+    density: field.density,
+    editor: field.editor,
+    errors: field.errors,
+    field: field.field,
+    fieldName: field.fieldName,
+    fieldRef: field.fieldRef,
+    formatting: {
+      ...field.formatting,
+      displayValue: field.formatting.displayValue ?? String(field.value ?? ""),
+      ...(suffix === undefined ? {} : { suffix }),
+    },
+    icon: field.icon,
+    label: field.label,
+    labelVisibility: field.labelVisibility,
+    media: field.media
+      ? {
+          missingSelectedAsset: field.media.missingSelectedAsset,
+          previewHref: field.media.previewHref,
+          selectedAssetId: field.media.selectedAssetId,
+        }
+      : undefined,
+    options: field.options,
+    presentation: field.presentation,
+    recordId: field.recordId,
+    reference:
+      field.reference?.kind === "editor"
+        ? { kind: "display", valueStatus: field.reference.valueStatus }
+        : field.reference,
+    stateMachine: field.stateMachine,
+    stateMachineFacts: field.stateMachineFacts,
+    suffix,
+    surface: field.surface,
+    value: field.value,
+    visibleWhen: field.visibleWhen,
+    writable: false,
+  });
+}
+
+function recordFieldUnitSuffix(field: FormlessUiRecordField) {
+  const unitValue = String(field.drafts.unitRecordValue ?? "");
+
+  if (!field.valueUnit || unitValue === "") {
+    return undefined;
+  }
+
+  return field.valueUnit.options.find((option) => option.value === unitValue)?.label ?? unitValue;
+}
+
+function editingDisabledRecordField(field: FormlessUiField): FormlessUiField {
+  if (field.mode === "display" || field.access.kind !== "editable") {
+    return field;
+  }
+
+  return {
+    ...field,
+    access: {
+      canPatch: false,
+      disabledReason: "Editing requires an owner session.",
+      kind: "disabled",
+      writable: true,
+    },
+    pending: undefined,
+  };
 }
 
 function stateRecordResultFixture(state: "empty" | "unavailable"): FormlessUiRecordResultContract {
@@ -282,20 +379,6 @@ function editableTitleField() {
     pending: { isPending: true, label: "Saving task" },
     recordId: taskId,
     rendererKind: "text",
-  });
-}
-
-function readOnlyTitleField() {
-  return displayField({
-    control: titleControl,
-    editor: titleControl.editor,
-    field: titleSchema,
-    fieldName: "title",
-    formatting: { displayValue: "Prepare launch checklist" },
-    labelVisibility: "visible",
-    recordId: taskId,
-    surface: "record",
-    value: "Prepare launch checklist",
   });
 }
 
@@ -391,13 +474,12 @@ function specializedRecordFields(): FormlessUiField[] {
     scenarioRecordField("number", "value-unit"),
     scenarioRecordField("date", "quiet-date"),
     scenarioRecordField("markdown", "markdown"),
-    scenarioRecordField("enum", "enum-icon"),
   ];
 }
 
 function scenarioRecordField(
   kind: (typeof fieldScenarioGroups)[number]["kind"],
-  rendererKind: "color" | "enum-icon" | "icon" | "markdown" | "media" | "quiet-date" | "value-unit",
+  rendererKind: "color" | "icon" | "markdown" | "media" | "quiet-date" | "value-unit",
 ) {
   const group = fieldScenarioGroups.find((candidate) => candidate.kind === kind);
   const variant = group?.variants.find(
