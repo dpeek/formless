@@ -6,6 +6,7 @@ import { Dialog, DialogHeader } from "@astryxdesign/core/Dialog";
 import { FieldStatus } from "@astryxdesign/core/FieldStatus";
 import { FormLayout } from "@astryxdesign/core/FormLayout";
 import { HStack } from "@astryxdesign/core/HStack";
+import { IconButton } from "@astryxdesign/core/IconButton";
 import { Layout, LayoutContent, LayoutFooter } from "@astryxdesign/core/Layout";
 import { Heading } from "@astryxdesign/core/Text";
 import { VStack } from "@astryxdesign/core/VStack";
@@ -313,21 +314,39 @@ function CreateButton({
   onClick?: () => void;
 }) {
   const icon = button.content.kind === "label" ? undefined : button.content.icon;
+  const renderedIcon = icon ? createButtonIcon(icon) : undefined;
+  const tooltip =
+    button.disabledReason ??
+    (button.content.kind === "iconOnly" ? button.accessibilityLabel : undefined);
+
+  if (button.content.kind === "iconOnly" && renderedIcon) {
+    return (
+      <IconButton
+        form={form}
+        icon={renderedIcon}
+        isDisabled={Boolean(button.disabled)}
+        isLoading={Boolean(button.pending?.isPending)}
+        label={button.accessibilityLabel}
+        onClick={onClick}
+        size={createButtonSize(button)}
+        tooltip={tooltip}
+        type={button.type}
+        variant={createButtonVariant(button)}
+      />
+    );
+  }
 
   return (
     <Button
       form={form}
-      icon={icon ? createButtonIcon(icon) : undefined}
+      icon={renderedIcon}
       isDisabled={Boolean(button.disabled)}
       isIconOnly={button.content.kind === "iconOnly"}
       isLoading={Boolean(button.pending?.isPending)}
       label={button.accessibilityLabel}
       onClick={onClick}
       size={createButtonSize(button)}
-      tooltip={
-        button.disabledReason ??
-        (button.content.kind === "iconOnly" ? button.accessibilityLabel : undefined)
-      }
+      tooltip={tooltip}
       type={button.type}
       variant={createButtonVariant(button)}
     >

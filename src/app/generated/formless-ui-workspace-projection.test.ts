@@ -56,6 +56,7 @@ describe("generated Formless UI workspace projection", () => {
 
     expect(workspace).toMatchObject({
       accessibilityLabel: "Tasks",
+      actions: [],
       id: "workspace:tasks",
       kind: "workspace",
       sections: [

@@ -36,6 +36,8 @@ describe("legacy application shell renderer", () => {
     expect(html).toContain('aria-label="Applications"');
     expect(html).toContain('aria-label="Tasks"');
     expect(html).toContain('href="/tasks"');
+    expect(html).toContain('aria-label="Instance"');
+    expect(html).toContain('href="/"');
     expect(html).toContain('data-formless-shell-destination="root:project-1"');
     expect(html).toContain('aria-pressed="true"');
     expect(html).toContain(">4</span>");
@@ -139,6 +141,15 @@ function shellFixture(): {
           label: "Tasks",
           selected: false,
         },
+        {
+          accessibilityLabel: "Instance",
+          availability: { available: true },
+          href: "/",
+          id: "instance:home",
+          kind: "shellLinkDestination",
+          label: "Instance",
+          selected: false,
+        },
       ],
       id: "shell:apps",
       kind: "shellNavigationSection",
@@ -178,7 +189,7 @@ function shellFixture(): {
       destinations: [],
       id: "shell:settings",
       kind: "shellNavigationSection",
-      label: "App settings",
+      label: "Settings",
       role: "appSettings",
       settings: {
         id: "shell:settings:controls",

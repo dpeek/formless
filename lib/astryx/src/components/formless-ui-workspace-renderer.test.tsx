@@ -50,6 +50,17 @@ describe("Astryx workspace renderer", () => {
     );
     const workspace: FormlessUiWorkspaceContract = {
       accessibilityLabel: "Task workspace",
+      actions: [
+        {
+          accessibilityLabel: "View site (opens in a new tab)",
+          href: "/sites/site",
+          id: "view-site",
+          kind: "workspaceLinkAction",
+          label: "View site",
+          prominence: "primary",
+          target: "newTab",
+        },
+      ],
       id: taskScope.screenId,
       kind: "workspace",
       label: "Tasks",
@@ -107,6 +118,10 @@ describe("Astryx workspace renderer", () => {
     const html = renderWorkspace(workspace);
 
     expect(html).toContain(`data-formless-astryx-workspace="${workspace.id}"`);
+    expect(html).toContain('data-formless-astryx-workspace-link-action="view-site"');
+    expect(html).toContain('href="/sites/site"');
+    expect(html).toContain('target="_blank"');
+    expect(html).toContain('rel="noopener noreferrer"');
     expect(html).toContain(`data-formless-astryx-workspace-section="${taskScope.sectionId}"`);
     expect(html).not.toContain("<h2>Task section</h2>");
     expect(html).toMatch(/<h2[^>]*>Companies<\/h2>/);
@@ -139,6 +154,7 @@ describe("Astryx workspace renderer", () => {
     const selector = context(scope, "localListDetail");
     const workspace: FormlessUiWorkspaceContract = {
       accessibilityLabel: "Site workspace",
+      actions: [],
       id: scope.screenId,
       kind: "workspace",
       label: "Site",
@@ -403,6 +419,7 @@ function oneSectionWorkspace(
 ): FormlessUiWorkspaceContract {
   return {
     accessibilityLabel: "Workspace",
+    actions: [],
     id: scope.screenId,
     kind: "workspace",
     label: "Workspace",

@@ -54,6 +54,7 @@ import {
 } from "./shared/instance-auth.ts";
 import { runtimeTopologyRoutes, type RuntimeRouteAccess } from "./shared/runtime-topology.ts";
 import type { AppInstallsResponse } from "./shared/protocol.ts";
+import type { FormlessUiWorkspaceLinkActionContract } from "@dpeek/formless-astryx/contract";
 
 type HomeRouteProps = {
   activePackageResolver?: AppPackageResolver | undefined;
@@ -63,6 +64,7 @@ type HomeRouteProps = {
   target?: ClientAppTarget;
   schemaKey: ClientAppSchemaKey;
   screenPath: string;
+  workspaceActions?: readonly FormlessUiWorkspaceLinkActionContract[];
 };
 
 type InstanceShellRouteProps = {
@@ -552,6 +554,11 @@ function AppRoutes({
               schemaKey={world.app.key}
               screenPath="/"
               target={world.target}
+              workspaceActions={siteWorkspaceLinkActionsForWorld(
+                world,
+                publicSitePreview,
+                installedAppRouteContext.appInstalls,
+              )}
             />
           </OwnerRouteGuard>
         </Route>
@@ -565,6 +572,11 @@ function AppRoutes({
                 schemaKey={world.app.key}
                 screenPath={runtimeWildcardScreenPath(params)}
                 target={world.target}
+                workspaceActions={siteWorkspaceLinkActionsForWorld(
+                  world,
+                  publicSitePreview,
+                  installedAppRouteContext.appInstalls,
+                )}
               />
             </OwnerRouteGuard>
           )}
@@ -694,6 +706,10 @@ function InstalledAppHomeRoute({
     return <NotFoundRoute />;
   }
 
+  const install = installedAppRouteContext.appInstalls.find(
+    (candidate) => candidate.installId === installId,
+  );
+
   return (
     <OwnerRouteGuard access={world.access ?? "owner"}>
       <HomeRoute
@@ -701,9 +717,60 @@ function InstalledAppHomeRoute({
         schemaKey={world.app.key}
         screenPath={screenPath}
         target={world.target}
+        workspaceActions={siteWorkspaceLinkActionsForInstall(install)}
       />
     </OwnerRouteGuard>
   );
+}
+
+function siteWorkspaceLinkActionsForWorld(
+  world: RuntimeWorldMount,
+  publicSitePreview: RuntimeProfile["publicSitePreview"],
+  installs: readonly AppInstall[] | undefined,
+): readonly FormlessUiWorkspaceLinkActionContract[] {
+  const installId = world.target?.kind === "appInstall" ? world.target.installId : undefined;
+  const install = installId
+    ? installs?.find((candidate) => candidate.installId === installId)
+    : undefined;
+
+  if (install) {
+    return siteWorkspaceLinkActionsForInstall(install);
+  }
+
+  if (!publicSitePreview || world.app.key !== publicSitePreview.packageAppKey) {
+    return [];
+  }
+
+  return siteWorkspaceLinkActions(publicSitePreview.homeRoute ?? publicSitePreview.rootRoute);
+}
+
+function siteWorkspaceLinkActionsForInstall(
+  install: AppInstall | undefined,
+): readonly FormlessUiWorkspaceLinkActionContract[] {
+  if (!install) {
+    return [];
+  }
+
+  const href =
+    install.launchLinks?.find((link) => link.routeKind === "publicSite")?.href ??
+    install.routes?.find((route) => route.enabled && route.routeKind === "publicSite")?.path ??
+    install.publicRoute;
+
+  return href ? siteWorkspaceLinkActions(href) : [];
+}
+
+function siteWorkspaceLinkActions(href: string): readonly FormlessUiWorkspaceLinkActionContract[] {
+  return [
+    {
+      accessibilityLabel: "View site (opens in a new tab)",
+      href,
+      id: "view-site",
+      kind: "workspaceLinkAction",
+      label: "View site",
+      prominence: "primary",
+      target: "newTab",
+    },
+  ];
 }
 
 function InstalledSitePublicRoute({

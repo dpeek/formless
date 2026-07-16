@@ -60,21 +60,23 @@ vi.mock("@astryxdesign/core/SideNav", () => ({
     header,
   }: {
     children: ReactNode;
-    collapsible: { isCollapsed: boolean; onCollapsedChange: (collapsed: boolean) => void };
+    collapsible?: { isCollapsed: boolean; onCollapsedChange: (collapsed: boolean) => void };
     footer: ReactNode;
     header: ReactNode;
   }) =>
     createElement(
       "aside",
-      { "data-collapsed": String(collapsible.isCollapsed), "data-component": "SideNav" },
-      createElement(
-        "button",
-        {
-          "data-action": "toggle-collapsed-navigation",
-          onClick: () => collapsible.onCollapsedChange(!collapsible.isCollapsed),
-        },
-        "Toggle collapsed navigation",
-      ),
+      { "data-collapsible": String(Boolean(collapsible)), "data-component": "SideNav" },
+      collapsible
+        ? createElement(
+            "button",
+            {
+              "data-action": "toggle-collapsed-navigation",
+              onClick: () => collapsible.onCollapsedChange(!collapsible.isCollapsed),
+            },
+            "Toggle collapsed navigation",
+          )
+        : null,
       header,
       createElement("nav", null, children),
       createElement("footer", null, footer),
@@ -260,6 +262,45 @@ vi.mock("@astryxdesign/core/HStack", () => ({
     createElement("div", { "data-component": "HStack", role }, children),
 }));
 
+vi.mock("@astryxdesign/core/HoverCard", () => ({
+  HoverCard: ({
+    alignment,
+    children,
+    content,
+    focusTrigger,
+    placement,
+  }: {
+    alignment?: string;
+    children: ReactNode;
+    content: ReactNode;
+    focusTrigger?: string;
+    placement?: string;
+  }) =>
+    createElement(
+      "div",
+      {
+        "data-alignment": alignment,
+        "data-component": "HoverCard",
+        "data-focus-trigger": focusTrigger,
+        "data-placement": placement,
+      },
+      children,
+      createElement("div", { "data-slot": "hover-card-content" }, content),
+    ),
+}));
+
+vi.mock("@astryxdesign/core/MetadataList", () => ({
+  MetadataList: ({ children, columns }: { children: ReactNode; columns?: string }) =>
+    createElement("dl", { "data-columns": columns, "data-component": "MetadataList" }, children),
+  MetadataListItem: ({ children, label }: { children: ReactNode; label: string }) =>
+    createElement(
+      "div",
+      { "data-component": "MetadataListItem", "data-label": label },
+      createElement("dt", null, label),
+      createElement("dd", null, children),
+    ),
+}));
+
 vi.mock("@astryxdesign/core/VStack", () => ({
   VStack: ({
     children,
@@ -324,6 +365,8 @@ vi.mock("./create-surfaces.tsx", () => ({
         "data-open": String(surface.dialog.open),
         "data-pending": String(Boolean(surface.dialog.form.submit.pending?.isPending)),
         "data-surface": surface.id,
+        "data-trigger-kind": surface.trigger.content.kind,
+        "data-trigger-prominence": surface.trigger.prominence,
       },
       createElement(
         "button",
@@ -393,22 +436,34 @@ describe("Astryx application shell renderer", () => {
       "data-component": "SideNavSection",
     });
     expect(sideNavSections.map((section) => section.props["data-title"])).toEqual([
-      "Instance",
       "Tasks screens",
       "Pages",
-      "App settings",
     ]);
     expect(
       mountedRenderer.root.findAllByProps({ "data-component": "NavHeadingMenuItem" }),
-    ).toHaveLength(2);
+    ).toHaveLength(3);
     expect(requiredByProps(mountedRenderer.root, { "data-label": "Pages" }).props).toMatchObject({
       "data-selected": "true",
       disabled: false,
     });
-    expect(requiredByProps(mountedRenderer.root, { "data-label": "Access" }).props.disabled).toBe(
-      true,
+    expect(requiredByProps(mountedRenderer.root, { "data-label": "Instance" }).props.href).toBe(
+      "/",
     );
-    expect(rendererText(mountedRenderer)).toContain("Owner access is unavailable.");
+    expect(requiredByProps(mountedRenderer.root, { "data-label": "Settings" }).props).toEqual(
+      expect.objectContaining({ "data-component": "SideNavItem" }),
+    );
+    expect(requiredByProps(mountedRenderer.root, { "data-component": "HoverCard" }).props).toEqual(
+      expect.objectContaining({
+        "data-alignment": "start",
+        "data-focus-trigger": "always",
+        "data-placement": "end",
+      }),
+    );
+    expect(
+      mountedRenderer.root
+        .findAllByProps({ "data-component": "MetadataListItem" })
+        .map((item) => item.props["data-label"]),
+    ).toEqual(["World", "Cursor"]);
     expect(rendererText(mountedRenderer)).toContain("3");
     expect(rendererText(mountedRenderer)).toContain("Sync failed. Try again.");
     expect(rendererText(mountedRenderer)).toContain("Workspace changes are queued.");
@@ -425,6 +480,8 @@ describe("Astryx application shell renderer", () => {
       "data-open": "true",
       "data-pending": "true",
       "data-surface": "create:page",
+      "data-trigger-kind": "iconOnly",
+      "data-trigger-prominence": "quiet",
     });
 
     expect(
@@ -434,17 +491,19 @@ describe("Astryx application shell renderer", () => {
     ).toBe("false");
     expect(
       requiredByProps(mountedRenderer.root, { "data-component": "SideNav" }).props[
-        "data-collapsed"
+        "data-collapsible"
       ],
     ).toBe("false");
+    expect(
+      mountedRenderer.root.findAllByProps({
+        "data-action": "toggle-collapsed-navigation",
+      }),
+    ).toHaveLength(0);
 
     await act(async () => {
       requiredByProps(mountedRenderer.root, {
         "data-action": "toggle-mobile-navigation",
       }).props.onClick();
-      requiredByProps(mountedRenderer.root, {
-        "data-action": "toggle-collapsed-navigation",
-      }).props.onClick();
     });
 
     expect(
@@ -452,12 +511,6 @@ describe("Astryx application shell renderer", () => {
         "data-mobile-open"
       ],
     ).toBe("true");
-    expect(
-      requiredByProps(mountedRenderer.root, { "data-component": "SideNav" }).props[
-        "data-collapsed"
-      ],
-    ).toBe("true");
-
     await act(async () => {
       requiredByProps(mountedRenderer.root, { "data-label": "Pages" }).props.onClick();
       requiredByProps(mountedRenderer.root, { "data-action": "open-create" }).props.onClick();
@@ -603,7 +656,6 @@ function shellManifest(): FormlessUiShellManifestContract {
     id: shellReference.shellId,
     kind: "shellManifest",
     navigationSections: [
-      sectionReferences.instance,
       sectionReferences.apps,
       sectionReferences.screens,
       sectionReferences.roots,
@@ -625,20 +677,11 @@ function shellSections(): FormlessUiShellNavigationSectionContract[] {
   };
 
   return [
-    shellSection(sectionReferences.instance.sectionId, "instance", {
-      destinations: [
-        shellLink("instance:settings", "Instance settings", "/"),
-        {
-          ...shellLink("instance:access", "Access", "/access"),
-          availability: { available: false, message: "Owner access is unavailable." },
-        },
-      ],
-      label: "Instance",
-    }),
     shellSection(sectionReferences.apps.sectionId, "appSwitcher", {
       destinations: [
         { ...shellLink("app:tasks", "Tasks", "/tasks"), selected: true },
         shellLink("app:site", "Site", "/site"),
+        shellLink("instance:home", "Instance", "/"),
       ],
       label: "Apps",
     }),
@@ -664,7 +707,7 @@ function shellSections(): FormlessUiShellNavigationSectionContract[] {
       label: "Pages",
     }),
     shellSection(sectionReferences.settings.sectionId, "appSettings", {
-      label: "App settings",
+      label: "Settings",
       settings: {
         id: "settings:tasks",
         kind: "shellSettings",
@@ -778,7 +821,11 @@ function createSurface(): FormlessUiCreateSurfaceContract {
     },
     id: "create:page",
     kind: "createSurface",
-    trigger: shellButton("create:trigger", "Create page", "quiet"),
+    trigger: {
+      ...shellButton("create:trigger", "Create page", "quiet"),
+      content: { icon: "add", kind: "iconOnly" },
+      density: "compact",
+    },
   };
 }
 

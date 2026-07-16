@@ -6,6 +6,7 @@ import type {
   FormlessUiFieldIntent,
   FormlessUiOperationPresentationIntent,
   FormlessUiWorkspaceIntent,
+  FormlessUiWorkspaceLinkActionContract,
 } from "@dpeek/formless-astryx/contract";
 import { FormlessUiContractHostProvider } from "@dpeek/formless-astryx/contract-host/react";
 import type { QueryEvaluationContext, RecordValues } from "@dpeek/formless-schema";
@@ -136,6 +137,7 @@ export function GeneratedWorkspaceRuntime({
   screen,
   sectionExternalActions = {},
   today,
+  workspaceActions = [],
 }: {
   getSectionSelection: (
     section: HomeScreenCollectionSectionModel,
@@ -147,6 +149,7 @@ export function GeneratedWorkspaceRuntime({
     Record<string, readonly GeneratedWorkspaceSectionExternalAction[] | undefined>
   >;
   today: string;
+  workspaceActions?: readonly FormlessUiWorkspaceLinkActionContract[];
 }) {
   const snapshot = useSyncExternalStore(
     subscribeToClientStore,
@@ -200,6 +203,7 @@ export function GeneratedWorkspaceRuntime({
     tableDialogOpenById,
     tableStateByResultId,
     today,
+    workspaceActions,
   });
   const bindings = useMemo(() => base.bindings, [base.bindingKey]);
   const controller = useGeneratedOperationController(bindings);
@@ -219,6 +223,7 @@ export function GeneratedWorkspaceRuntime({
     tableDialogOpenById,
     tableStateByResultId,
     today,
+    workspaceActions,
   });
   const appTarget = useSchemaAppTarget();
   const writeOptions = useSchemaAppWriteOptions();
@@ -985,6 +990,7 @@ function selectWorkspaceRuntimeFoundation({
   tableDialogOpenById,
   tableStateByResultId,
   today,
+  workspaceActions,
 }: {
   confirmationOpenByControlId: Readonly<Record<string, boolean | undefined>>;
   controller: GeneratedOperationController;
@@ -1012,6 +1018,7 @@ function selectWorkspaceRuntimeFoundation({
     >
   >;
   today: string;
+  workspaceActions: readonly FormlessUiWorkspaceLinkActionContract[];
 }) {
   const bindings: GeneratedOperationControlBinding[] = [];
   const foundation = selectGeneratedWorkspaceFoundation({
@@ -1037,6 +1044,7 @@ function selectWorkspaceRuntimeFoundation({
     },
     snapshot,
     today,
+    workspaceActions,
   });
 
   for (const section of foundation?.runtimePlan.sections ?? []) {

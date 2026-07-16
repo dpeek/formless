@@ -1555,6 +1555,16 @@ export type FormlessUiWorkspaceExternalActionContract = {
   kind: "workspaceExternalAction";
 };
 
+export type FormlessUiWorkspaceLinkActionContract = {
+  accessibilityLabel: string;
+  href: string;
+  id: string;
+  kind: "workspaceLinkAction";
+  label: string;
+  prominence: "primary" | "secondary";
+  target: "newTab" | "sameTab";
+};
+
 export type FormlessUiWorkspaceSectionContract = {
   accessibilityLabel: string;
   actions: readonly FormlessUiWorkspaceExternalActionContract[];
@@ -1567,6 +1577,7 @@ export type FormlessUiWorkspaceSectionContract = {
 
 export type FormlessUiWorkspaceContract = {
   accessibilityLabel: string;
+  actions: readonly FormlessUiWorkspaceLinkActionContract[];
   id: string;
   kind: "workspace";
   label: string;

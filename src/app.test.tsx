@@ -88,6 +88,7 @@ import type { StoredRecord } from "@dpeek/formless-storage";
 import type { BootstrapResponse } from "./shared/protocol.ts";
 import type { SchemaKey } from "./shared/schema-apps.ts";
 import type { AppSchema, EntitySchema } from "@dpeek/formless-schema";
+import type { FormlessUiWorkspaceLinkActionContract } from "@dpeek/formless-astryx/contract";
 import { parseAppSchema } from "@dpeek/formless-schema";
 import type { NumericExpression } from "@dpeek/formless-schema";
 import {
@@ -164,10 +165,12 @@ function tableResult(
 function SchemaKeyProbeHomeRoute({
   schemaKey: routeSchemaKey,
   target,
+  workspaceActions = [],
 }: {
   schemaKey: ClientAppSchemaKey;
   screenPath: string;
   target?: ClientAppTarget;
+  workspaceActions?: readonly FormlessUiWorkspaceLinkActionContract[];
 }) {
   const contextSchemaKey = useSchemaKey();
   const targetKind = typeof target === "string" ? "schemaKey" : (target?.kind ?? "none");
@@ -182,6 +185,7 @@ function SchemaKeyProbeHomeRoute({
       data-target-kind={targetKind}
     >
       Schema key {contextSchemaKey}
+      <WorkspaceActionProbe actions={workspaceActions} />
     </main>
   );
 }
@@ -190,10 +194,12 @@ function TargetProbeHomeRoute({
   schemaKey,
   screenPath,
   target,
+  workspaceActions = [],
 }: {
   schemaKey: ClientAppSchemaKey;
   screenPath: string;
   target?: ClientAppTarget;
+  workspaceActions?: readonly FormlessUiWorkspaceLinkActionContract[];
 }) {
   const targetKind = typeof target === "string" ? "schemaKey" : (target?.kind ?? "none");
   const installId =
@@ -205,8 +211,29 @@ function TargetProbeHomeRoute({
       data-route-schema-key={schemaKey}
       data-screen-path={screenPath}
       data-target-kind={targetKind}
-    />
+    >
+      <WorkspaceActionProbe actions={workspaceActions} />
+    </main>
   );
+}
+
+function WorkspaceActionProbe({
+  actions,
+}: {
+  actions: readonly FormlessUiWorkspaceLinkActionContract[];
+}) {
+  return actions.map((action) => (
+    <a
+      aria-label={action.accessibilityLabel}
+      data-workspace-link-action={action.id}
+      href={action.href}
+      key={action.id}
+      rel={action.target === "newTab" ? "noopener noreferrer" : undefined}
+      target={action.target === "newTab" ? "_blank" : undefined}
+    >
+      {action.label}
+    </a>
+  ));
 }
 
 function SitePageRouteProbe({
@@ -600,7 +627,7 @@ function expectRuntimeShell(html: string) {
   expect(html).toContain('data-frame="application-shell"');
   expect(html).toContain('data-formless-shell-scope="multiApp"');
   expect(html).toContain('aria-label="Applications"');
-  expect(shellHtml).toContain("Instance settings");
+  expect(linkHtml(shellHtml, "/")).toContain('aria-label="Instance"');
   expect(html).not.toContain('aria-label="Workbench actions"');
   expect(html).not.toContain('data-frame="workbench-toolbar"');
 }
@@ -620,7 +647,7 @@ function expectAppSettings(
   },
 ) {
   expect(html).toContain(`aria-label="${appLabel} app settings"`);
-  expect(html).toContain(">App settings<");
+  expect(html).toContain(">Settings<");
   expect(html).toContain(`aria-label="Toggle ${appLabel} navigation"`);
   expectSyncStatusControl(html, syncWorldKey);
   expect(html).toContain("Reset source seed data");
@@ -669,10 +696,10 @@ describe("App smoke routes", () => {
     expect(html).toContain('data-formless-shell-scope="multiApp"');
     expectRuntimeShell(html);
     expect(linkHtml(runtimeShellHtml(html), "/")).toContain('aria-current="page"');
-    expect(linkHtml(runtimeShellHtml(html), "/")).toContain("Instance settings");
+    expect(linkHtml(runtimeShellHtml(html), "/")).toContain('aria-label="Instance"');
     expect(html).toContain("Instance Settings");
     expect(html).toContain('aria-label="Instance navigation"');
-    expect(html).toContain('aria-label="Instance settings"');
+    expect(html).toContain('aria-label="Settings"');
     expect(html).toContain('aria-label="Access"');
     expect(html).toContain('href="/access"');
     expect(html).not.toContain("Overview");
@@ -715,9 +742,10 @@ describe("App smoke routes", () => {
     expect(html).toContain("Not found");
     expectRuntimeShell(html);
     expect(runtimeShellHtml(html)).not.toContain('aria-current="page"');
-    expect(linkHtml(runtimeShellHtml(html), "/")).toContain("Instance settings");
+    expect(linkHtml(runtimeShellHtml(html), "/")).toContain('aria-label="Instance"');
+    expect(html).not.toContain('aria-label="Instance navigation"');
     expect(html).toContain('data-frame="application-shell"');
-    expect(html).not.toContain("App settings");
+    expect(html).not.toContain('aria-label="Tasks app settings"');
   });
 
   it('renders the "/tasks" route with task navigation', () => {
@@ -902,11 +930,14 @@ describe("App smoke routes", () => {
     expect(adminHtml).toContain('data-formless-shell-scope="multiApp"');
     expect(adminHtml).toContain('data-target-kind="appInstall"');
     expect(adminHtml).toContain('data-install-id="personal"');
-    expect(adminHtml).toContain('aria-label="Instance navigation"');
-    expect(adminHtml).toContain('aria-label="Instance settings"');
-    expect(adminHtml).toContain('aria-label="Access"');
+    expect(adminHtml).not.toContain('aria-label="Instance navigation"');
+    expect(linkHtml(adminHtml, "/")).toContain('aria-label="Instance"');
     expect(adminHtml).toContain('aria-label="Personal Site"');
-    expect(adminHtml).toContain('aria-label="Personal Site public site"');
+    expect(adminHtml).not.toContain('aria-label="Personal Site public site"');
+    expect(linkHtml(adminHtml, "/sites/personal")).toContain(
+      'aria-label="View site (opens in a new tab)"',
+    );
+    expect(linkHtml(adminHtml, "/sites/personal")).toContain('target="_blank"');
     expect(adminHtml).toContain('href="/"');
     expect(adminHtml).not.toContain('aria-label="Site management"');
     expect(adminHtml).not.toContain("App management");
@@ -916,7 +947,7 @@ describe("App smoke routes", () => {
     expect(adminHtml).not.toContain('href="/deployments"');
   });
 
-  it("renders unified instance and app destinations with active route state", () => {
+  it("renders unified instance and app destinations with Site launch outside the switcher", () => {
     const personalInstall: AppInstall = {
       ...appInstallFixture({ installId: "personal", label: "Personal Site" }),
       adminRoute: "/workspace/personal",
@@ -974,12 +1005,15 @@ describe("App smoke routes", () => {
     const publicTile = linkHtml(html, "/public/personal");
 
     expect(html).toContain('data-formless-shell-scope="multiApp"');
-    expect(html).toContain('aria-label="Instance navigation"');
-    expect(settingsTile).toContain('aria-label="Instance settings"');
+    expect(html).not.toContain('aria-label="Instance navigation"');
+    expect(settingsTile).toContain('aria-label="Instance"');
     expect(settingsTile).not.toContain('aria-current="page"');
     expect(adminTile).toContain('aria-label="Personal Site"');
     expect(adminTile).toContain('aria-current="page"');
-    expect(publicTile).toContain('aria-label="Personal Site public site"');
+    expect(html).not.toContain('aria-label="Personal Site public site"');
+    expect(publicTile).toContain('aria-label="View site (opens in a new tab)"');
+    expect(publicTile).toContain('target="_blank"');
+    expect(publicTile).toContain('rel="noopener noreferrer"');
     expect(publicTile).not.toContain('aria-current="page"');
   });
 
@@ -1100,7 +1134,7 @@ describe("App smoke routes", () => {
     expect(html).toContain("Schema</dt><dd>Loading</dd>");
     expect(html).toContain("Cursor</dt><dd>0</dd>");
     expect(html).not.toContain("Schema</dt><dd>v1</dd>");
-    expect(runtimeShellHtml(html)).toContain("Instance settings");
+    expect(linkHtml(runtimeShellHtml(html), "/")).toContain('aria-label="Instance"');
     expect(linkHtml(runtimeShellHtml(html), "/site")).not.toContain('aria-current="page"');
     expect(linkHtml(runtimeShellHtml(html), "/apps/personal")).toContain('aria-current="page"');
     expect(linkHtml(runtimeShellHtml(html), "/apps/personal")).toContain("Personal Site");
@@ -1618,9 +1652,12 @@ describe("App smoke routes", () => {
   it('renders Site authoring profile admin at "/admin" without the multi-app shell', () => {
     applyBootstrapResponse(bootstrap(testSiteSeedRecords, siteSourceSchema), "site");
     const html = renderRoute("/admin", createSiteAuthoringRuntimeProfile());
+    const viewSiteLink = linkHtml(html, "/");
 
     expect(html).toContain('data-formless-shell-scope="appOnly"');
     expect(html).toContain('data-frame="application-shell"');
+    expect(viewSiteLink).toContain('aria-label="View site (opens in a new tab)"');
+    expect(viewSiteLink).toContain('target="_blank"');
     expectAppSettings(html, { appLabel: "Site", schemaKey: "site" });
     expect(html).toContain('<div class="px-2 py-1 text-sm font-semibold">Site</div>');
     expect(html).toContain('<h1 class="truncate text-sm font-medium">');
@@ -3083,8 +3120,12 @@ describe("generated collection home", () => {
   it("renders generated Site workspace with root sidebar nav and tree layout", () => {
     bootstrapSiteEditor();
     const html = renderRoute("/site");
+    const viewSiteLink = linkHtml(html, "/site-preview/home");
 
     expect(html).toContain('class="mx-auto w-full max-w-[112rem]"');
+    expect(viewSiteLink).toContain('aria-label="View site (opens in a new tab)"');
+    expect(viewSiteLink).toContain('target="_blank"');
+    expect(viewSiteLink).toContain('rel="noopener noreferrer"');
     expect(html).toContain('aria-label="Site screens"');
     expect(html).toContain('href="/site/settings"');
     expect(html).toContain('aria-label="Settings"');

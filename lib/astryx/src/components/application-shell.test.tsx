@@ -30,7 +30,6 @@ describe("canonical application-shell fixtures", () => {
     const devWorkbench = requiredShell(fixtures, "dev-workbench");
     const productInstance = requiredShell(fixtures, "product-instance");
     const appOnly = requiredShell(fixtures, "app-only");
-    const mappedApp = requiredShell(fixtures, "mapped-app");
     const siteAuthoring = requiredShell(fixtures, "site-authoring");
     const appDestinations = requiredSection(devWorkbench, "appSwitcher").destinations;
     const devScreens = requiredSection(devWorkbench, "screens");
@@ -41,19 +40,34 @@ describe("canonical application-shell fixtures", () => {
     const serialized = JSON.stringify(fixtures);
 
     expect(structuredClone(fixtures)).toEqual(fixtures);
+    expect(fixtures.slice(0, 2).map(({ id, label }) => ({ id, label }))).toEqual([
+      { id: "product-instance", label: "Instance" },
+      { id: "dev-workbench", label: "App" },
+    ]);
     expect(devWorkbench.manifest.scope).toBe("multiApp");
-    expect(productInstance.manifest).toMatchObject({ scope: "multiApp", title: "Formless" });
+    expect(productInstance.manifest).toMatchObject({ scope: "multiApp", title: "Instance" });
     expect(appOnly.manifest.scope).toBe("appOnly");
-    expect(mappedApp.manifest).toMatchObject({ scope: "appOnly", title: "CRM" });
     expect(siteAuthoring.manifest).toMatchObject({ scope: "appOnly", title: "Site" });
     expect(appOnly.sections.some((section) => section.role === "appSwitcher")).toBe(false);
-    expect(mappedApp.sections.some((section) => section.role === "appSwitcher")).toBe(false);
-    expect(appDestinations.filter((destination) => destination.id.endsWith(":admin"))).toHaveLength(
-      2,
+    expect(devWorkbench.sections.some((section) => section.role === "instance")).toBe(false);
+    expect(
+      requiredSection(productInstance, "instance").destinations.map(({ label }) => label),
+    ).toEqual(["Settings", "Access"]);
+    expect(requiredSection(productInstance, "instance").label).toBeUndefined();
+    expect(appDestinations.map(({ label }) => label)).toEqual(["Tasks", "CRM", "Site", "Instance"]);
+    expect(appDestinations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ href: "/", label: "Instance", selected: false }),
+      ]),
+    );
+    expect(requiredSection(productInstance, "appSwitcher").destinations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ href: "/", label: "Instance", selected: true }),
+      ]),
     );
     expect(
       appDestinations.filter((destination) => destination.id.includes(":public:")),
-    ).toHaveLength(2);
+    ).toHaveLength(0);
     expect(devScreens.destinations).toHaveLength(3);
     expect(requiredSection(siteAuthoring, "screens").destinations).toHaveLength(3);
     expect(devRoots.destinations.map((destination) => destination.countText)).toEqual([
@@ -65,6 +79,12 @@ describe("canonical application-shell fixtures", () => {
       draftInput: { kind: "input", value: "" },
       fieldName: "title",
       mode: "editor",
+    });
+    expect(devRoots.createSurface?.trigger).toMatchObject({
+      accessibilityLabel: "Create projects",
+      content: { icon: "add", kind: "iconOnly" },
+      density: "compact",
+      prominence: "quiet",
     });
     expect(siteRoots.createSurface?.kind).toBe("createSurface");
     expect(devSettings.settings).toMatchObject({
@@ -270,10 +290,11 @@ describe("Application Shell prototype layout", () => {
 
     expect(html).toContain('data-testid="formless-astryx-application-shell:shell:application"');
     expect(html).toContain("Application Shell");
-    expect(html).toContain("Tasks workspace");
-    expect(html).toContain("Personal Site public site");
+    expect(html).toContain("Settings");
+    expect(html).not.toContain("Personal Site public site");
     expect(html).toContain("Ada Lovelace");
-    expect(html).toContain("Dev workbench");
+    expect(html).not.toContain("Dev workbench");
+    expect(html).not.toContain("Product instance");
     expect(html).toContain("No shell");
   });
 

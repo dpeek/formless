@@ -6,6 +6,7 @@ import type {
   FormlessUiWorkspaceCollectionActionContract,
   FormlessUiWorkspaceContract,
   FormlessUiWorkspaceIntent,
+  FormlessUiWorkspaceLinkActionContract,
 } from "@dpeek/formless-astryx/contract";
 import type { QueryEvaluationContext } from "@dpeek/formless-schema";
 import {
@@ -141,6 +142,7 @@ export type SelectGeneratedWorkspaceFoundationOptions = {
   ) => GeneratedWorkspaceSectionFoundationInput | undefined;
   snapshot: BrowserReplicaProjectionSnapshot;
   today: string;
+  workspaceActions?: readonly FormlessUiWorkspaceLinkActionContract[];
 };
 
 type GeneratedWorkspaceNestedResultRuntime =
@@ -236,7 +238,14 @@ export function generatedWorkspaceScreenIsEligible(screen: HomeScreenModel): boo
 export function selectGeneratedWorkspaceFoundation(
   options: SelectGeneratedWorkspaceFoundationOptions,
 ): GeneratedWorkspaceFoundation | undefined {
-  const { screen, sectionSelection = {}, selectSectionFoundation, snapshot, today } = options;
+  const {
+    screen,
+    sectionSelection = {},
+    selectSectionFoundation,
+    snapshot,
+    today,
+    workspaceActions = [],
+  } = options;
 
   if (!generatedWorkspaceScreenIsEligible(screen)) {
     return undefined;
@@ -378,6 +387,7 @@ export function selectGeneratedWorkspaceFoundation(
       sections: sectionPlans,
     },
     workspace: projectGeneratedWorkspaceFormlessUiContract({
+      actions: workspaceActions,
       id: screen.screenName,
       label: screen.label,
       sections: projectedSections,

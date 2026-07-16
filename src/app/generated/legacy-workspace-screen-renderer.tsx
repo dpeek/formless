@@ -6,6 +6,7 @@ import type {
   FormlessUiWorkspaceContract,
   FormlessUiWorkspaceIntentHandler,
   FormlessUiWorkspaceIntentScope,
+  FormlessUiWorkspaceLinkActionContract,
   FormlessUiWorkspaceManifestContract,
   FormlessUiWorkspaceManifestReference,
   FormlessUiWorkspaceSectionContract,
@@ -30,7 +31,7 @@ export function LegacyWorkspaceScreenRenderer({
   onIntent: FormlessUiWorkspaceIntentHandler;
   workspace: FormlessUiWorkspaceContract;
 }) {
-  if (workspace.sections.length === 0) {
+  if (workspace.sections.length === 0 && workspace.actions.length === 0) {
     return null;
   }
 
@@ -56,7 +57,7 @@ export const LegacySubscribedWorkspaceScreenRenderer = memo(
   }) {
     const workspace = useFormlessUiWorkspaceManifest(reference);
 
-    if (!workspace || workspace.sections.length === 0) {
+    if (!workspace || (workspace.sections.length === 0 && workspace.actions.length === 0)) {
       return null;
     }
 
@@ -86,7 +87,44 @@ function LegacyWorkspaceFrame({
       className={workspace.sections.length === 1 ? undefined : "space-y-8"}
       data-formless-legacy-workspace={workspace.id}
     >
+      <LegacyWorkspaceLinkActions actions={workspace.actions} />
       {children}
+    </div>
+  );
+}
+
+export function LegacyWorkspaceLinkActions({
+  actions,
+}: {
+  actions: readonly FormlessUiWorkspaceLinkActionContract[];
+}) {
+  if (actions.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="mb-4 flex justify-end gap-2">
+      {actions.map((action) => {
+        const opensInNewTab = action.target === "newTab";
+
+        return (
+          <a
+            aria-label={action.accessibilityLabel}
+            className={
+              action.prominence === "primary"
+                ? "rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white"
+                : "rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-900"
+            }
+            data-formless-legacy-workspace-link-action={action.id}
+            href={action.href}
+            key={action.id}
+            rel={opensInNewTab ? "noopener noreferrer" : undefined}
+            target={opensInNewTab ? "_blank" : undefined}
+          >
+            {action.label}
+          </a>
+        );
+      })}
     </div>
   );
 }

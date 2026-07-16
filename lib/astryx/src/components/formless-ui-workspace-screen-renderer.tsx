@@ -10,6 +10,7 @@ import type {
   FormlessUiWorkspaceContract,
   FormlessUiWorkspaceExternalActionContract,
   FormlessUiWorkspaceIntentHandler,
+  FormlessUiWorkspaceLinkActionContract,
   FormlessUiWorkspaceManifestContract,
   FormlessUiWorkspaceManifestReference,
   FormlessUiWorkspaceIntentScope,
@@ -35,7 +36,7 @@ export function AstryxWorkspaceScreenRenderer({
   onIntent: FormlessUiWorkspaceIntentHandler;
   workspace: FormlessUiWorkspaceContract;
 }) {
-  if (workspace.sections.length === 0) {
+  if (workspace.sections.length === 0 && workspace.actions.length === 0) {
     return null;
   }
 
@@ -61,7 +62,7 @@ export const AstryxSubscribedWorkspaceScreenRenderer = memo(
   }) {
     const workspace = useFormlessUiWorkspaceManifest(reference);
 
-    if (!workspace || workspace.sections.length === 0) {
+    if (!workspace || (workspace.sections.length === 0 && workspace.actions.length === 0)) {
       return null;
     }
 
@@ -94,8 +95,33 @@ function AstryxWorkspaceFrame({
       role="region"
       width="100%"
     >
+      {workspace.actions.length > 0 ? (
+        <HStack justify="end" width="100%" wrap="wrap">
+          {workspace.actions.map((action) => (
+            <AstryxWorkspaceLinkAction action={action} key={action.id} />
+          ))}
+        </HStack>
+      ) : null}
       {children}
     </VStack>
+  );
+}
+
+function AstryxWorkspaceLinkAction({ action }: { action: FormlessUiWorkspaceLinkActionContract }) {
+  const opensInNewTab = action.target === "newTab";
+
+  return (
+    <Button
+      data-formless-astryx-workspace-link-action={action.id}
+      href={action.href}
+      label={action.accessibilityLabel}
+      rel={opensInNewTab ? "noopener noreferrer" : undefined}
+      size="sm"
+      target={opensInNewTab ? "_blank" : undefined}
+      variant={action.prominence}
+    >
+      {action.label}
+    </Button>
   );
 }
 

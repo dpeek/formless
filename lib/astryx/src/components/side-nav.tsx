@@ -2,11 +2,13 @@ import { AlertDialog } from "@astryxdesign/core/AlertDialog";
 import { Badge, type BadgeVariant } from "@astryxdesign/core/Badge";
 import { Button, type ButtonVariant } from "@astryxdesign/core/Button";
 import { HStack } from "@astryxdesign/core/HStack";
+import { HoverCard } from "@astryxdesign/core/HoverCard";
+import { MetadataList, MetadataListItem } from "@astryxdesign/core/MetadataList";
 import { NavHeadingMenu, NavHeadingMenuItem } from "@astryxdesign/core/NavMenu";
 import { SideNav, SideNavHeading, SideNavItem, SideNavSection } from "@astryxdesign/core/SideNav";
 import { Text } from "@astryxdesign/core/Text";
 import { VStack } from "@astryxdesign/core/VStack";
-import { memo, type ReactNode, useState } from "react";
+import { memo, type ReactNode } from "react";
 import type {
   FormlessUiButtonContract,
   FormlessUiCreateIntent,
@@ -121,15 +123,8 @@ function AstryxApplicationSideNavFrame({
   navigation: ReactNode;
   session: ReactNode;
 }) {
-  const [isCollapsed, setIsCollapsed] = useState(false);
-
   return (
     <SideNav
-      collapsible={{
-        buttonLabel: `Collapse ${manifest.title} navigation`,
-        isCollapsed,
-        onCollapsedChange: setIsCollapsed,
-      }}
       footer={session}
       header={
         <SideNavHeading
@@ -234,6 +229,16 @@ function AstryxShellNavigationSection({
   onIntent: FormlessUiShellIntentHandler;
   section: FormlessUiShellNavigationSectionContract;
 }) {
+  if (section.role === "appSettings" && section.settings) {
+    return (
+      <AstryxShellSettingsNavigationItem
+        onIntent={onIntent}
+        section={section}
+        settings={section.settings}
+      />
+    );
+  }
+
   return (
     <SideNavSection
       endContent={
@@ -257,10 +262,29 @@ function AstryxShellNavigationSection({
           onIntent={onIntent}
         />
       ))}
-      {section.settings ? (
-        <AstryxShellSettings onIntent={onIntent} section={section} settings={section.settings} />
-      ) : null}
     </SideNavSection>
+  );
+}
+
+function AstryxShellSettingsNavigationItem({
+  onIntent,
+  section,
+  settings,
+}: {
+  onIntent: FormlessUiShellIntentHandler;
+  section: FormlessUiShellNavigationSectionContract;
+  settings: FormlessUiShellSettingsContract;
+}) {
+  return (
+    <HoverCard
+      alignment="start"
+      content={<AstryxShellSettings onIntent={onIntent} section={section} settings={settings} />}
+      focusTrigger="always"
+      hasHoverIndication={false}
+      placement="end"
+    >
+      <SideNavItem label={section.label ?? section.accessibilityLabel} />
+    </HoverCard>
   );
 }
 
@@ -328,14 +352,13 @@ function AstryxShellSettings({
             <Badge label={settings.sync.label} variant={syncStatusVariant(settings.sync.state)} />
           </HStack>
           {settings.sync.details ? (
-            <dl>
+            <MetadataList columns="single">
               {settings.sync.details.map((detail) => (
-                <div key={detail.label}>
-                  <dt>{detail.label}</dt>
-                  <dd>{detail.value}</dd>
-                </div>
+                <MetadataListItem key={detail.label} label={detail.label}>
+                  {detail.value}
+                </MetadataListItem>
               ))}
-            </dl>
+            </MetadataList>
           ) : null}
         </VStack>
       ) : null}

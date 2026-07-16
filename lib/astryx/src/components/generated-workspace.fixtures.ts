@@ -10,6 +10,7 @@ import type {
   FormlessUiWorkspaceContextContract,
   FormlessUiWorkspaceContract,
   FormlessUiWorkspaceIntentScope,
+  FormlessUiWorkspaceLinkActionContract,
   FormlessUiWorkspaceQueryNavigationContract,
   FormlessUiWorkspaceResultContract,
   FormlessUiWorkspaceSectionContract,
@@ -181,18 +182,33 @@ function listDetailWorkspace(): FormlessUiWorkspaceContract {
 function singletonContextWorkspace(): FormlessUiWorkspaceContract {
   const scope = workspaceScope("site-settings", "settings", "settings");
 
-  return workspace("site-settings", "Site settings", [
-    section(scope, {
-      collection: readyOrdinaryCollection(scope, {
-        context: populatedContext(scope, "singletonDetail"),
-        contextDetail: recordResult(scope, "site-detail", "Public site"),
+  return workspace(
+    "site-settings",
+    "Site settings",
+    [
+      section(scope, {
+        collection: readyOrdinaryCollection(scope, {
+          context: populatedContext(scope, "singletonDetail"),
+          contextDetail: recordResult(scope, "site-detail", "Public site"),
+          label: "Settings",
+          result: recordResult(scope, "settings", "Site settings"),
+        }),
+        headingVisibility: "hidden",
         label: "Settings",
-        result: recordResult(scope, "settings", "Site settings"),
       }),
-      headingVisibility: "hidden",
-      label: "Settings",
-    }),
-  ]);
+    ],
+    [
+      {
+        accessibilityLabel: "View site (opens in a new tab)",
+        href: "/site-preview/home",
+        id: "view-site",
+        kind: "workspaceLinkAction",
+        label: "View site",
+        prominence: "primary",
+        target: "newTab",
+      },
+    ],
+  );
 }
 
 function emptyContextWorkspace(): FormlessUiWorkspaceContract {
@@ -245,9 +261,11 @@ function workspace(
   id: string,
   label: string,
   sections: readonly FormlessUiWorkspaceSectionContract[],
+  actions: readonly FormlessUiWorkspaceLinkActionContract[] = [],
 ): FormlessUiWorkspaceContract {
   return {
     accessibilityLabel: `${label} workspace`,
+    actions,
     id: `workspace:${id}`,
     kind: "workspace",
     label,

@@ -20,6 +20,7 @@ import type {
   FormlessUiWorkspaceFieldIntent,
   FormlessUiWorkspaceIntentScope,
   FormlessUiWorkspaceItemAvailability,
+  FormlessUiWorkspaceLinkActionContract,
   FormlessUiWorkspaceListIntent,
   FormlessUiWorkspaceOperationIntent,
   FormlessUiWorkspaceRecordResultIntent,
@@ -138,6 +139,7 @@ export type GeneratedWorkspaceSectionProjectionFacts = {
 
 export type ProjectGeneratedWorkspaceFormlessUiContractOptions = {
   accessibilityLabel?: string;
+  actions?: readonly FormlessUiWorkspaceLinkActionContract[];
   id: string;
   label: string;
   sections: readonly GeneratedWorkspaceSectionProjectionFacts[];
@@ -165,6 +167,7 @@ export function generatedWorkspaceScopedId(
 
 export function projectGeneratedWorkspaceFormlessUiContract({
   accessibilityLabel,
+  actions = [],
   id,
   label,
   sections,
@@ -174,6 +177,7 @@ export function projectGeneratedWorkspaceFormlessUiContract({
 
   return {
     accessibilityLabel: accessibilityLabel ?? label,
+    actions,
     id: screenId,
     kind: "workspace",
     label,

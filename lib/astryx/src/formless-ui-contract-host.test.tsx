@@ -602,6 +602,7 @@ function workspaceNodes({
       reference: workspaceReference,
       snapshot: {
         accessibilityLabel: "Work workspace",
+        actions: [],
         id: "workspace:tasks",
         kind: "workspaceManifest",
         label: workspaceLabel,

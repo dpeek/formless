@@ -42,6 +42,7 @@ export function projectGeneratedWorkspaceContractHostPublication(
         reference: workspaceReference,
         snapshot: {
           accessibilityLabel: workspace.accessibilityLabel,
+          actions: workspace.actions,
           id: workspace.id,
           kind: "workspaceManifest",
           label: workspace.label,

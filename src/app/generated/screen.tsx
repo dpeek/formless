@@ -5,6 +5,8 @@ import {
   type GeneratedWorkspaceSectionExternalAction,
 } from "./generated-workspace-runtime.tsx";
 import { generatedWorkspaceScreenIsEligible } from "./generated-workspace-foundation.ts";
+import type { FormlessUiWorkspaceLinkActionContract } from "@dpeek/formless-astryx/contract";
+import { LegacyWorkspaceLinkActions } from "./legacy-workspace-screen-renderer.tsx";
 
 export type HomeScreenSectionSelection = {
   selectedContextRecordId?: string | null;
@@ -18,6 +20,7 @@ export function HomeScreen({
   screen,
   sectionExternalActions = {},
   today,
+  workspaceActions = [],
 }: {
   getSectionSelection: (section: HomeScreenCollectionSectionModel) => HomeScreenSectionSelection;
   onSelectContext: (section: HomeScreenCollectionSectionModel, recordId: string | null) => void;
@@ -27,6 +30,7 @@ export function HomeScreen({
     Record<string, readonly GeneratedWorkspaceSectionExternalAction[] | undefined>
   >;
   today: string;
+  workspaceActions?: readonly FormlessUiWorkspaceLinkActionContract[];
 }) {
   if (generatedWorkspaceScreenIsEligible(screen)) {
     return (
@@ -37,6 +41,7 @@ export function HomeScreen({
         screen={screen}
         sectionExternalActions={sectionExternalActions}
         today={today}
+        workspaceActions={workspaceActions}
       />
     );
   }
@@ -45,23 +50,27 @@ export function HomeScreen({
   const firstSection = sections[0];
 
   if (!firstSection) {
-    return null;
+    return <LegacyWorkspaceLinkActions actions={workspaceActions} />;
   }
 
   if (sections.length === 1) {
     return (
-      <HomeScreenCollectionSection
-        getSectionSelection={getSectionSelection}
-        onSelectContext={onSelectContext}
-        onSelectQuery={onSelectQuery}
-        section={firstSection}
-        today={today}
-      />
+      <>
+        <LegacyWorkspaceLinkActions actions={workspaceActions} />
+        <HomeScreenCollectionSection
+          getSectionSelection={getSectionSelection}
+          onSelectContext={onSelectContext}
+          onSelectQuery={onSelectQuery}
+          section={firstSection}
+          today={today}
+        />
+      </>
     );
   }
 
   return (
     <div className="space-y-8">
+      <LegacyWorkspaceLinkActions actions={workspaceActions} />
       {sections.map((section) => {
         return (
           <section aria-label={section.label} className="space-y-4" key={section.id}>

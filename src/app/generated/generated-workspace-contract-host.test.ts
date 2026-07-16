@@ -26,6 +26,13 @@ describe("generated workspace contract host adapter", () => {
     const table = host.read(tableSection.collection.presentation.result);
 
     expect(workspace).toMatchObject({
+      actions: [
+        {
+          href: "/sites/site",
+          kind: "workspaceLinkAction",
+          target: "newTab",
+        },
+      ],
       id: "workspace:tasks",
       kind: "workspaceManifest",
       sections: [
@@ -169,6 +176,17 @@ function workspaceFixture(options: WorkspaceFixtureOptions = {}): FormlessUiWork
 
   return {
     accessibilityLabel: "Tasks workspace",
+    actions: [
+      {
+        accessibilityLabel: "View site (opens in a new tab)",
+        href: "/sites/site",
+        id: "view-site",
+        kind: "workspaceLinkAction",
+        label: "View site",
+        prominence: "primary",
+        target: "newTab",
+      },
+    ],
     id: "workspace:tasks",
     kind: "workspace",
     label: "Tasks",

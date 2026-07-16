@@ -118,9 +118,15 @@ shell.
   facts are available
 - **THEN** runtime projects one shell manifest with stable identity, title,
   scope, active destination, and ordered navigation-section references
+- **AND** the multi-app switcher presents one explicit Instance destination
+  alongside available app destinations
+- **AND** instance settings and access are projected as local navigation only
+  while an instance route is selected
 - **AND** navigation sections can contain instance settings and access,
-  available app admin and public destinations, generated app screens, root
+  available app admin destinations, generated app screens, root
   record navigation, app settings, and display-safe session controls
+- **AND** public Site routes are excluded from the top-level switcher and are
+  exposed from Site admin workspaces as prominent links that open a new tab
 - **AND** disabled install routes are omitted, destination hrefs derive from
   active route data, and selected state derives from the current path
 - **AND** app install and route configuration tables remain available through
@@ -322,7 +328,8 @@ execution, and effects.
 - WHEN generated runtime prepares it for the active Formless UI renderer
 - THEN the workspace contract carries stable screen identity, an accessible
   label, ordered section identity and labels, section actions, and one complete
-  collection contract per section
+  collection contract per section, plus ordered renderer-neutral workspace link
+  actions when the owning route exposes a related native destination
 - AND each collection carries stable identity, an accessible label, selected
   query identity, optional query navigation, optional context presentation,
   summaries, collection actions, explicit empty or unavailable presentation,
@@ -369,12 +376,17 @@ execution, and effects.
 #### Scenario: Project workspace actions and nested intents
 
 - GIVEN a workspace exposes section actions, context create controls,
-  collection create or command controls, selections, or nested result
-  interactions
+  collection create or command controls, selections, nested result
+  interactions, or a related native destination
 - WHEN generated runtime prepares controlled interaction data
 - THEN external section actions compose canonical action-trigger contracts,
   create controls compose canonical create-surface contracts, and commands
   compose canonical operation-control contracts
+- AND workspace link actions carry stable identity, accessible and visible
+  labels, native href, prominence, and same-tab or new-tab target without an
+  intent callback
+- AND a Site admin workspace receives a prominent `View site` link from active
+  public route facts, while workspaces without a public route receive no link
 - AND workspace intent envelopes carry stable screen, section, collection,
   context, result, field, surface, and control identity as applicable while
   preserving canonical nested field, create, operation, list, table, and
@@ -441,7 +453,8 @@ execution, and effects.
 - WHEN workspace UX is evaluated in the package-local Astryx prototype
 - THEN data-only fixtures use the same contract shapes for an unscoped
   collection, query navigation, ordinary context, list-detail context,
-  singleton and empty context, summaries, section and collection actions,
+  singleton and empty context, summaries, workspace link actions, section and
+  collection actions,
   single- and multi-section screens, unavailable collections, and list, table,
   and record results
 - AND a focused Generated Workspace layout renders the real Astryx screen and
@@ -619,7 +632,14 @@ data reads, session behavior, operations, and effects.
   generated screens, root records and create controls, instance management,
   app settings, sync and reset state, session identity, logout, and the route
   child without importing generated runtime
-- **AND** responsive and collapsed presentation state remains renderer-owned
+- **AND** app settings render as one navigation item whose hover and focus
+  overlay contains sync and workspace-save status plus reset controls
+- **AND** projected sync detail rows render through the Astryx `MetadataList`
+  component
+- **AND** root create actions render as compact ghost Astryx `IconButton`
+  controls with an add icon and the projected accessible label
+- **AND** responsive presentation state remains renderer-owned and desktop
+  navigation remains expanded
 - **AND** the Astryx renderer contains no legacy Formless UI components,
   storage reads, route policy, query evaluation, operation execution, session
   effects, or runtime data imports
@@ -630,9 +650,9 @@ data reads, session behavior, operations, and effects.
 
 - **GIVEN** the legacy renderer consumes complete production shell contracts
 - **WHEN** shell UX is evaluated in the package-local Astryx prototype
-- **THEN** data-only memory-host fixtures cover dev workbench, product instance,
-  multiple installed admin and public destinations, app-only and mapped-app
-  profiles, Site authoring admin, generated screens, root records and counts,
+- **THEN** data-only memory-host fixtures cover App with Tasks, CRM, Site, and
+  Instance destinations, Instance management, app-only profiles, Site
+  authoring admin, generated screens, root records and counts,
   controlled create, sync and reset state, authenticated session state, and
   no-shell selection
 - **AND** fixture reducers may simulate root selection, create, reset, and

@@ -44,6 +44,8 @@ import {
 
 export const GENERATED_APPLICATION_SHELL_ID = "application-shell";
 
+const GENERATED_APPLICATION_SHELL_INSTANCE_DESTINATION_ID = "instance:home";
+
 export type GeneratedShellResetState = {
   open: boolean;
   status:
@@ -184,18 +186,19 @@ export function selectGeneratedShellAppDestinations({
       label: install?.label ?? world.app.label,
     })),
   ];
-  const publicDestinations = installs.flatMap((install) =>
-    selectEnabledPublicRoutes(install).map((route) => ({
-      href: route.path,
-      id: `app-install:${install.installId}:public:${route.id}`,
-      label: `${install.label} public site`,
-    })),
-  );
-  const destinations = dedupeShellLinks([...adminDestinations, ...publicDestinations]);
+  const destinations = dedupeShellLinks([
+    ...adminDestinations,
+    {
+      href: runtimeTopologyRoutes.instanceRootRoute,
+      id: GENERATED_APPLICATION_SHELL_INSTANCE_DESTINATION_ID,
+      label: "Instance",
+    },
+  ]);
   const activeHref = selectGeneratedShellActiveHref(
     currentPath,
     destinations.map(({ href }) => href),
   );
+  const instanceSelected = isGeneratedShellInstancePath(currentPath);
 
   return destinations.map(({ href, id, label }) => ({
     accessibilityLabel: label,
@@ -204,7 +207,10 @@ export function selectGeneratedShellAppDestinations({
     id,
     kind: "shellLinkDestination",
     label,
-    selected: href === activeHref,
+    selected:
+      id === GENERATED_APPLICATION_SHELL_INSTANCE_DESTINATION_ID
+        ? instanceSelected
+        : !instanceSelected && href === activeHref,
   }));
 }
 
@@ -457,9 +463,9 @@ export function projectGeneratedApplicationShell({
   }
 
   const sections: FormlessUiShellNavigationSectionContract[] = [];
+  const instanceSelected = isGeneratedShellInstancePath(currentPath);
 
   if (scope === "multiApp") {
-    sections.push(instanceSection(currentPath));
     sections.push({
       accessibilityLabel: "Applications",
       destinations: selectGeneratedShellAppDestinations({
@@ -475,6 +481,10 @@ export function projectGeneratedApplicationShell({
       role: "appSwitcher",
       shellId: GENERATED_APPLICATION_SHELL_ID,
     });
+
+    if (instanceSelected) {
+      sections.push(instanceSection(currentPath));
+    }
   }
 
   if (routeWorld) {
@@ -503,7 +513,7 @@ export function projectGeneratedApplicationShell({
       destinations: [],
       id: `${GENERATED_APPLICATION_SHELL_ID}:settings:${routeWorld.app.key}`,
       kind: "shellNavigationSection",
-      label: "App settings",
+      label: "Settings",
       role: "appSettings",
       settings: {
         id: `${GENERATED_APPLICATION_SHELL_ID}:settings:${routeWorld.app.key}:controls`,
@@ -529,7 +539,9 @@ export function projectGeneratedApplicationShell({
 
   return {
     manifest: {
-      accessibilityLabel: `${routeWorld?.app.label ?? "Formless"} application shell`,
+      accessibilityLabel: `${
+        routeWorld?.app.label ?? (instanceSelected ? "Instance" : "Formless")
+      } application shell`,
       activeDestination: selectGeneratedShellActiveDestination(sections),
       id: GENERATED_APPLICATION_SHELL_ID,
       kind: "shellManifest",
@@ -537,10 +549,18 @@ export function projectGeneratedApplicationShell({
         formlessUiShellNavigationSectionReference(GENERATED_APPLICATION_SHELL_ID, section.id),
       ),
       scope,
-      title: routeWorld?.app.label ?? "Formless",
+      title: routeWorld?.app.label ?? (instanceSelected ? "Instance" : "Formless"),
     },
     sections,
   };
+}
+
+function isGeneratedShellInstancePath(currentPath: string): boolean {
+  const path = normalizeRuntimeBrowserPath(currentPath);
+
+  return (
+    path === runtimeTopologyRoutes.instanceRootRoute || path === runtimeTopologyRoutes.accessRoute
+  );
 }
 
 export function generatedShellRootSectionId(
@@ -557,7 +577,7 @@ function instanceSection(currentPath: string): FormlessUiShellNavigationSectionC
     {
       href: runtimeTopologyRoutes.instanceRootRoute,
       id: "instance:settings",
-      label: "Instance settings",
+      label: "Settings",
     },
     { href: runtimeTopologyRoutes.accessRoute, id: "instance:access", label: "Access" },
   ] as const;
@@ -579,7 +599,6 @@ function instanceSection(currentPath: string): FormlessUiShellNavigationSectionC
     })),
     id: `${GENERATED_APPLICATION_SHELL_ID}:instance`,
     kind: "shellNavigationSection",
-    label: "Instance",
     role: "instance",
     shellId: GENERATED_APPLICATION_SHELL_ID,
   };
@@ -595,23 +614,6 @@ function shellButton(id: string, label: string, prominence: "primary" | "seconda
     prominence,
     type: "button" as const,
   };
-}
-
-function selectEnabledPublicRoutes(install: AppInstall) {
-  if (install.routes) {
-    return install.routes.filter((route) => route.enabled && route.routeKind === "publicSite");
-  }
-
-  return install.publicRoute
-    ? [
-        {
-          enabled: true,
-          id: `public:${install.installId}`,
-          path: install.publicRoute,
-          routeKind: "publicSite" as const,
-        },
-      ]
-    : [];
 }
 
 function dedupeShellLinks<T extends { href: string; id: string }>(links: readonly T[]): T[] {

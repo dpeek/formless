@@ -24,6 +24,7 @@ import { HomeScreen } from "../generated/screen.tsx";
 import type { GeneratedWorkspaceSectionExternalAction } from "../generated/generated-workspace-runtime.tsx";
 import { NotFoundRoute } from "./not-found.tsx";
 import type { AppPackageResolver } from "@dpeek/formless-installed-apps";
+import type { FormlessUiWorkspaceLinkActionContract } from "@dpeek/formless-astryx/contract";
 import {
   createHomeRouteSelectionState,
   selectHomeRouteSectionContextRecordId,
@@ -49,6 +50,7 @@ export function HomeRoute({
   schemaKey,
   sectionExternalActions,
   screenPath,
+  workspaceActions,
 }: {
   activePackageResolver?: AppPackageResolver | undefined;
   target?: ClientAppTarget;
@@ -57,6 +59,7 @@ export function HomeRoute({
     Record<string, readonly GeneratedWorkspaceSectionExternalAction[] | undefined>
   >;
   screenPath: string;
+  workspaceActions?: readonly FormlessUiWorkspaceLinkActionContract[];
 }) {
   const appTarget = target ?? clientTargetForSchemaKey(schemaKey);
   const appTargetIdentity = appStorageIdentityForClientTarget(appTarget);
@@ -194,6 +197,7 @@ export function HomeRoute({
           screen={homeScreen}
           sectionExternalActions={sectionExternalActions}
           today={today}
+          workspaceActions={workspaceActions}
         />
       </SchemaAppProvider>
     </section>

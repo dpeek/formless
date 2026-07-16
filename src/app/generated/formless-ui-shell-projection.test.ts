@@ -91,7 +91,6 @@ describe("generated application shell projection", () => {
       title: "Site",
     });
     expect(roles).toEqual([
-      "instance",
       "appSwitcher",
       "screens",
       "rootRecords",
@@ -103,19 +102,26 @@ describe("generated application shell projection", () => {
     ]);
     expect(appSection.destinations).toEqual(
       expect.arrayContaining([
+        expect.objectContaining({ href: "/", label: "Instance", selected: false }),
         expect.objectContaining({ href: "/site", label: "Site", selected: true }),
-        expect.objectContaining({
-          href: "/sites/personal",
-          label: "Personal Site public site",
-        }),
       ]),
     );
     expect(appSection.destinations).not.toEqual(
-      expect.arrayContaining([expect.objectContaining({ href: "/sites/disabled" })]),
+      expect.arrayContaining([
+        expect.objectContaining({ href: "/sites/personal" }),
+        expect.objectContaining({ href: "/sites/disabled" }),
+      ]),
     );
     expect(screenSection.destinations.length).toBeGreaterThan(0);
     expect(rootSections).toHaveLength(4);
     expect(rootSections.some((section) => section.createSurface !== undefined)).toBe(true);
+    expect(
+      rootSections.find((section) => section.createSurface)?.createSurface?.trigger,
+    ).toMatchObject({
+      content: { icon: "add", kind: "iconOnly" },
+      density: "compact",
+      prominence: "quiet",
+    });
     expect(rootSections.flatMap((section) => section.destinations).length).toBeGreaterThan(0);
     expect(
       rootSections
@@ -148,6 +154,67 @@ describe("generated application shell projection", () => {
     });
     expect(JSON.stringify(projection)).not.toContain("alchemy-secret-value");
     expect(JSON.stringify(projection)).not.toContain("session-token");
+  });
+
+  it("presents Instance in the top-level switcher with route-local management navigation", () => {
+    const runtimeProfile = createDevRuntimeProfile();
+    const settingsProjection = required(
+      projectGeneratedApplicationShell({
+        currentPath: "/",
+        routeWorld: undefined,
+        runtimeProfile,
+      }),
+    );
+    const accessProjection = required(
+      projectGeneratedApplicationShell({
+        currentPath: "/access",
+        routeWorld: undefined,
+        runtimeProfile,
+      }),
+    );
+
+    expect(settingsProjection.manifest).toMatchObject({
+      activeDestination: {
+        destinationId: "instance:settings",
+        sectionId: "application-shell:instance",
+      },
+      title: "Instance",
+    });
+    expect(settingsProjection.sections.map((section) => section.role)).toEqual([
+      "appSwitcher",
+      "instance",
+      "session",
+    ]);
+    expect(
+      required(settingsProjection.sections.find((section) => section.role === "appSwitcher"))
+        .destinations,
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          href: "/",
+          id: "instance:home",
+          label: "Instance",
+          selected: true,
+        }),
+      ]),
+    );
+    expect(
+      required(accessProjection.sections.find((section) => section.role === "instance"))
+        .destinations,
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ href: "/access", label: "Access", selected: true }),
+      ]),
+    );
+    const settingsSection = required(
+      settingsProjection.sections.find((section) => section.role === "instance"),
+    );
+    expect(settingsSection.label).toBeUndefined();
+    expect(settingsSection.destinations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ href: "/", label: "Settings", selected: true }),
+      ]),
+    );
   });
 
   it("projects anonymous session state without synthesizing a sign-in destination", () => {

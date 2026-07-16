@@ -182,6 +182,7 @@ function workspaceNodes({
       reference: workspaceReference,
       snapshot: {
         accessibilityLabel: "Tasks workspace",
+        actions: [],
         id: workspaceReference.workspaceId,
         kind: "workspaceManifest",
         label: "Tasks",
@@ -339,6 +340,7 @@ function completeWorkspace(): FormlessUiWorkspaceContract {
 
   return {
     accessibilityLabel: "Tasks workspace",
+    actions: [],
     id: workspaceReference.workspaceId,
     kind: "workspace",
     label: "Tasks",

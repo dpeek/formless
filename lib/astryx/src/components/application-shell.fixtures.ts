@@ -11,7 +11,6 @@ import { formlessUiShellNavigationSectionReference } from "../formless-ui-contra
 export type FormlessApplicationShellFixtureId =
   | "app-only"
   | "dev-workbench"
-  | "mapped-app"
   | "no-shell"
   | "product-instance"
   | "site-authoring";
@@ -33,28 +32,22 @@ const shellId = "shell:application";
 export function createFormlessApplicationShellFixtures(): FormlessApplicationShellFixture[] {
   return [
     {
-      id: "dev-workbench",
-      label: "Dev workbench",
-      routeLabel: "Tasks workspace",
-      shell: devWorkbenchShell(),
+      id: "product-instance",
+      label: "Instance",
+      routeLabel: "Settings",
+      shell: productInstanceShell(),
     },
     {
-      id: "product-instance",
-      label: "Product instance",
-      routeLabel: "Instance settings",
-      shell: productInstanceShell(),
+      id: "dev-workbench",
+      label: "App",
+      routeLabel: "Tasks workspace",
+      shell: devWorkbenchShell(),
     },
     {
       id: "app-only",
       label: "App only",
       routeLabel: "Tasks workspace",
       shell: appOnlyShell(),
-    },
-    {
-      id: "mapped-app",
-      label: "Mapped app",
-      routeLabel: "CRM workspace",
-      shell: mappedAppShell(),
     },
     {
       id: "site-authoring",
@@ -73,7 +66,6 @@ export function createFormlessApplicationShellFixtures(): FormlessApplicationShe
 
 function devWorkbenchShell(): FormlessApplicationShellFixtureState {
   const sections = [
-    instanceSection("/apps/tasks"),
     appSwitcherSection("/apps/tasks"),
     screenSection("tasks", "Tasks", "/apps/tasks", [
       ["today", "Today"],
@@ -111,9 +103,9 @@ function devWorkbenchShell(): FormlessApplicationShellFixtureState {
 }
 
 function productInstanceShell(): FormlessApplicationShellFixtureState {
-  const sections = [instanceSection("/"), appSwitcherSection(null), sessionSection()];
+  const sections = [appSwitcherSection("/"), instanceSection("/"), sessionSection()];
 
-  return shell("Formless", "multiApp", sections);
+  return shell("Instance", "multiApp", sections);
 }
 
 function appOnlyShell(): FormlessApplicationShellFixtureState {
@@ -144,26 +136,6 @@ function appOnlyShell(): FormlessApplicationShellFixtureState {
   ];
 
   return shell("Tasks", "appOnly", sections);
-}
-
-function mappedAppShell(): FormlessApplicationShellFixtureState {
-  const sections = [
-    screenSection("crm", "CRM", "/companies", [
-      ["companies", "Companies"],
-      ["contacts", "Contacts"],
-      ["pipeline", "Pipeline"],
-    ]),
-    settingsSection("crm", "CRM", {
-      sync: {
-        label: "Syncing",
-        message: "Receiving CRM changes.",
-        state: "syncing",
-      },
-    }),
-    sessionSection(),
-  ];
-
-  return shell("CRM", "appOnly", sections);
 }
 
 function siteAuthoringShell(): FormlessApplicationShellFixtureState {
@@ -226,10 +198,9 @@ function shell(
 function instanceSection(selectedHref: string | null): FormlessUiShellNavigationSectionContract {
   return section("instance", "instance", {
     destinations: [
-      shellLink("instance:settings", "Instance settings", "/", selectedHref === "/"),
+      shellLink("instance:settings", "Settings", "/", selectedHref === "/"),
       shellLink("instance:access", "Access", "/access", selectedHref === "/access"),
     ],
-    label: "Instance",
   });
 }
 
@@ -247,14 +218,8 @@ function applicationDestinations() {
   return [
     shellLink("app:tasks", "Tasks", "/apps/tasks"),
     shellLink("app:crm", "CRM", "/apps/crm"),
-    shellLink("app-install:personal:admin", "Personal Site", "/apps/personal"),
-    shellLink("app-install:personal:public:site", "Personal Site public site", "/sites/personal"),
-    shellLink("app-install:marketing:admin", "Marketing Site", "/apps/marketing"),
-    shellLink(
-      "app-install:marketing:public:site",
-      "Marketing Site public site",
-      "/sites/marketing",
-    ),
+    shellLink("app:site", "Site", "/apps/site"),
+    shellLink("instance:home", "Instance", "/"),
   ];
 }
 
@@ -330,7 +295,7 @@ function settingsSection(
   const resetId = `${shellId}:reset:${appKey}`;
 
   return section(`settings:${appKey}`, "appSettings", {
-    label: "App settings",
+    label: "Settings",
     settings: {
       id: `${shellId}:settings:${appKey}:controls`,
       kind: "shellSettings",
@@ -457,7 +422,11 @@ function createSurface(appKey: string, label: string): FormlessUiCreateSurfaceCo
     },
     id,
     kind: "createSurface",
-    trigger: button(`${id}:trigger`, `Create ${label.toLowerCase()}`, "quiet"),
+    trigger: {
+      ...button(`${id}:trigger`, `Create ${label.toLowerCase()}`, "quiet"),
+      content: { icon: "add", kind: "iconOnly" },
+      density: "compact",
+    },
   };
 }
 
