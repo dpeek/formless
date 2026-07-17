@@ -32,7 +32,6 @@ sticky footer, card treatments, spacing, or exact markup.
 
 ## Preconditions
 
-- `astryx-shell-auth` is complete and landed on `main`.
 - `@dpeek/formless-astryx` is an explicit workspace package with import
   boundaries and build support for browser and Worker consumers. This change
   owns the public Site renderer export, public CSS, and provider integration.
