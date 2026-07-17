@@ -16,7 +16,7 @@ import { FormlessInstanceManagementLayout } from "./components/instance-manageme
 import { FormlessListsLayout } from "./components/lists.tsx";
 import { FormlessOperationsLayout } from "./components/operations.tsx";
 import { FormlessRecordResultsLayout } from "./components/record-results.tsx";
-import { FormlessSiteLayout } from "./components/site.tsx";
+import { FormlessSiteLayout } from "./components/site-fixture.tsx";
 import { FormlessTablesLayout } from "./components/tables.tsx";
 import {
   FormlessFixtureEnvironmentProvider,

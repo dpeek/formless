@@ -402,6 +402,9 @@ describe("Application Shell prototype layout", () => {
       "./contract",
       "./contract-host",
       "./contract-host/react",
+      "./site/renderer",
+      "./site/global.css",
+      "./site/provider",
     ]);
     expect(productionRuntimeSource).toContain("LegacySubscribedApplicationShellRenderer");
     expect(productionRuntimeSource).not.toContain("AstryxSubscribedApplicationShellRenderer");

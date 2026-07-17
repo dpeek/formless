@@ -105,19 +105,22 @@ package-owned runtime adapter for the resolved Site app package.
 
 ### Requirement: Workspace Site Renderer Extension
 
-The system SHALL allow trusted workspace deploy code to replace the bundled
-Site public page renderer without changing Site records, public tree
-projection, routes, media delivery, or public action storage contracts.
+The system SHALL compose one explicitly supplied built-in Site public page
+renderer with an optional trusted workspace override without changing Site
+records, public tree projection, routes, media delivery, or public action
+storage contracts.
 
 #### Scenario: Renderer input stays projection based
 
 - GIVEN a workspace declares a `site.publicRenderer` extension
 - WHEN preview, installed, mapped-host, or published Site rendering needs a
   public page body
-- THEN the extension renderer receives a stable Site public projection such as
-  `SitePageTree`
-- AND the renderer receives route rendering facts such as link mode and route
+- THEN the extension renderer receives the canonical `SitePublicRendererProps`
+  contract owned by the Site package
+- AND the contract contains the projected `SitePageTree`, link mode, and route
   base needed to produce public links
+- AND active navigation derives from projected route and resolved link facts
+  rather than an additional browser-location or `currentPath` input
 - AND the renderer does not receive raw Authority storage internals, browser
   replica internals, private Turnstile secrets, provider credentials, or app
   install records as renderer input
@@ -147,27 +150,92 @@ projection, routes, media delivery, or public action storage contracts.
 - AND server-only imports, Worker bindings, runtime secrets, and provider
   credentials do not enter the browser renderer bundle
 
-#### Scenario: Default renderer fallback
+#### Scenario: Built-in renderer selection is explicit
 
-- GIVEN no workspace `site.publicRenderer` extension is configured
-- WHEN Site preview, installed, mapped-host, or published rendering runs
-- THEN the bundled Site renderer remains the default renderer
-- AND the default renderer continues to consume the same public Site projection
-  contract used by workspace renderers
+- GIVEN root browser or Worker assembly configures a Site runtime adapter
+- WHEN source preview, installed, mapped-host, or published Site rendering runs
+- THEN the assembly supplies one required built-in page renderer
+- AND an optional workspace `site.publicRenderer` takes precedence over that
+  built-in renderer for successful public pages
+- AND browser hydration and Worker SSR use the same selection rule and canonical
+  renderer props
+- AND Site adapter selection modules do not import the legacy or Astryx
+  renderer implementation
+- AND production root assembly explicitly supplies the legacy built-in renderer
+  until the renderer cutover
 
 #### Scenario: Renderer migration input stays projection shaped
 
 - GIVEN a public Site renderer migration or prototype exercises public page
   rendering behavior
 - WHEN it renders Site content outside the generated admin shell
-- THEN its fixture input is a projected `SitePageTree` or structurally
-  equivalent public projection
+- THEN its fixture input is the canonical projected `SitePageTree` and
+  `SitePublicRendererProps` contract imported from the Site package
 - AND the fixture can include Site settings, SVG icon source, header and footer
   frame roots, page/root block placements, media delivery facts, tree warnings,
   and projected public operation facts
 - AND it does not use raw Authority storage records, app install records,
   browser replica state, generated admin route state, provider credentials, or
   private challenge secrets as renderer input
+
+### Requirement: Public Site System-State Renderer Contract
+
+The system SHALL isolate public Site loading, not-found, and failure
+presentation behind renderer-neutral Site-owned contracts while retaining
+browser and Worker runtime ownership of state selection and document behavior.
+
+#### Scenario: Browser system states use an explicit renderer
+
+- GIVEN public Site route loading, not-found, or failure state is selected in
+  the browser
+- WHEN the public Site client renders that state
+- THEN root assembly supplies one built-in system-state renderer that receives
+  only state kind and display-safe presentation facts
+- AND production root assembly explicitly supplies the legacy system-state
+  renderer until the renderer cutover
+- AND the workspace page-renderer extension does not replace browser
+  system-state presentation
+
+#### Scenario: Worker system states preserve document ownership
+
+- GIVEN Worker public Site rendering resolves a not-found or error result
+- WHEN the Worker produces the public document
+- THEN it uses the explicitly supplied built-in system-state renderer for the
+  display-safe page body
+- AND the Worker retains ownership of HTTP status, headers, document shell,
+  metadata, cache policy, runtime hints, and client assets
+- AND the workspace page-renderer extension remains scoped to successful page
+  bodies and cannot return a not-found document, error document, or `Response`
+
+### Requirement: Astryx Public Site Renderer Candidate
+
+The system SHALL provide a complete Astryx implementation of the canonical
+Site page and system-state renderer contracts without selecting it in
+production.
+
+#### Scenario: Candidate covers shipped public Site presentation
+
+- GIVEN canonical projected Site fixtures exercise public Site rendering
+- WHEN the Astryx candidate renders those fixtures in browser and Worker builds
+- THEN it renders header and footer frames, page and post layouts, every shipped
+  public block, route-aware links, source SVG icons, core media and missing-media
+  states, content lists and summaries, fixed public forms, generic public
+  operation forms, loading, not-found, and failure states
+- AND it follows Astryx layout, typography, navigation, responsive, form, and
+  feedback conventions without recreating legacy markup or styling
+- AND it consumes canonical Site contracts and public helpers through documented
+  Site package exports instead of duplicate projection or renderer types
+
+#### Scenario: Candidate stays outside production assembly
+
+- GIVEN the Astryx page and system-state renderers are complete and exported
+- WHEN production browser and Worker entrypoints are built
+- THEN root assembly still imports and supplies only the legacy Site renderers
+- AND the Site package does not import Astryx
+- AND no renderer flag, environment toggle, per-block selection, production
+  fallback, or dual-renderer mode is introduced
+- AND selecting Astryx, integrating root StyleX and provider assembly, switching
+  public CSS, and deleting the legacy renderer remain one later cutover
 
 ### Requirement: Subscribe Form Public Tree Projection
 
@@ -475,8 +543,8 @@ The system SHALL render subscribe form blocks as public forms on preview, instal
   validation, public-safe error extraction, idempotency key generation, and
   Turnstile response token extraction use shared public operation browser
   client helpers
-- AND subscribe-specific email input mapping and rendered form UI remain owned
-  by the Site app renderer adapter
+- AND subscribe-specific email input mapping remains owned by the Site public
+  form session while the selected renderer owns only presentation
 
 #### Scenario: Render successful subscribe outcome
 
@@ -504,8 +572,8 @@ installed, and mapped public Site routes.
   validation, public-safe error extraction, idempotency key generation, and
   Turnstile response token extraction use shared public operation browser
   client helpers
-- AND contact-specific input mapping and rendered form UI remain owned by the
-  Site app renderer adapter
+- AND contact-specific input mapping remains owned by the Site public form
+  session while the selected renderer owns only presentation
 
 #### Scenario: Render successful contact outcome
 
@@ -545,8 +613,9 @@ forms on preview, installed, and mapped public Site routes.
   text with the same schema-owned validator used by Authority storage
 - AND browser coercion accepts any text value for suggested text fields instead
   of restricting values to the datalist suggestions
-- AND schema-driven form input coercion and rendered controls remain owned by
-  the Site app renderer
+- AND schema-driven form input coercion remains owned by the Site public form
+  session while rendered controls consume only session presentation facts and
+  intents
 
 #### Scenario: Render successful public operation form outcome
 
@@ -570,6 +639,52 @@ forms on preview, installed, and mapped public Site routes.
   envelopes, private challenge facts, submitted private records, provider
   delivery state, notification recipient configuration, or admin-only records
 
+### Requirement: Public Site Form Session Boundary
+
+The system SHALL expose controlled, display-safe public form presentation to
+Site renderers while Site-owned foundations retain validation, challenge, and
+operation execution behavior.
+
+#### Scenario: Renderer consumes controlled form state and intents
+
+- GIVEN a `subscribeForm`, `contactForm`, or `publicOperationForm` block has
+  projected public operation facts
+- WHEN the selected renderer presents the form
+- THEN a Site-owned session supplies stable block and form identity, form kind,
+  labels, body, controlled draft values, display-safe field errors, unavailable,
+  ready, submitting, success, or failed state, submit availability, and
+  presentation intents
+- AND Turnstile presentation carries only its public site key, readiness, reset
+  signal, and token-change intent
+- AND generic public operation fields carry public-safe scalar control, format,
+  suggestion, enum-option, required, and occurrence facts
+- AND the Astryx renderer may adapt generic fields to canonical
+  `FormlessUiField` controls inside the Astryx package
+- AND the Site package does not import Astryx field or renderer contracts
+
+#### Scenario: Site foundation retains public form execution
+
+- GIVEN a visitor edits or submits a public Site form
+- WHEN the Site-owned session handles the presentation intents
+- THEN it retains controlled draft resolution, scalar coercion, schema
+  validation, idempotency keys, request envelope construction, JSON submission,
+  response validation, challenge reset behavior, and display-safe error mapping
+- AND `FormData` extraction, when required by a native boundary, adapts into the
+  same controlled draft instead of becoming the source of truth
+- AND raw errors, private challenge facts, request envelopes, submitted private
+  values, created records, provider state, and notification configuration never
+  enter renderer presentation facts
+
+#### Scenario: Legacy renderer adopts the session seam before cutover
+
+- GIVEN production remains on the legacy Site renderer
+- WHEN fixed or generic public forms render
+- THEN dedicated legacy presentation consumes the Site-owned session facts and
+  dispatches only presentation intents
+- AND current public routes, validation, coercion, Turnstile, idempotency,
+  submission, pending, success, unavailable, and display-safe failure behavior
+  remains unchanged
+
 ### Requirement: Public Site Client Runtime
 
 The system SHALL keep published, mapped, and installed public Site browser
@@ -588,6 +703,22 @@ shell.
 - AND public Site documents that do not need browser interactivity may omit
   public Site script assets
 
+#### Scenario: Candidate theme and CSS remain package scoped
+
+- GIVEN the unselected Astryx public Site renderer is exercised in browser and
+  Worker verification
+- WHEN its provider and styles are assembled
+- THEN the Astryx package exposes the public provider and CSS boundaries needed
+  by that candidate
+- AND Worker rendering starts from a deterministic public theme mode and
+  browser hydration remains structurally stable while stored or system mode is
+  applied
+- AND Site-owned public theme storage and document bootstrap facts remain
+  outside the renderer implementation
+- AND production public entrypoints continue to use the legacy provider and
+  global CSS until the renderer cutover integrates root StyleX, provider, and
+  public CSS selection atomically
+
 #### Scenario: Public Site assets exclude admin-only code
 
 - GIVEN a visitor opens a published Site page, mapped public Site host, or
@@ -596,6 +727,9 @@ shell.
 - THEN generated admin screens, instance management shell, owner setup and login
   routes, workspace gateway controls, app replica sync for generated admin, and
   generated field editors are not part of the required public Site entrypoint
+- AND the application `FormlessUiContractHost`, generated workspace runtime,
+  shell and auth presentation, and private runtime adapters are not imported by
+  the public Site browser or Worker renderer graph
 - AND public forms continue to post through public operation routes with
   projected operation facts, source block id, idempotency key, and Turnstile
   token

@@ -1424,15 +1424,23 @@ execution.
 - AND media asset ids and preview hrefs remain renderer contract facts while
   media fields render only image thumbnails
 
-#### Scenario: Public Site renderer contracts remain future work
+#### Scenario: Public Site renderer stays outside the application contract host
 
-- GIVEN this stage settles Formless UI field and operation control contracts
-- WHEN future public Site renderer migration work is planned
-- THEN this stage does not settle public Site shell, navigation, block tree,
-  header, footer, fixed public form, block layout, `SitePageTree`, or viewport
-  verification contracts
-- AND public Site surfaces may still reuse `FormlessUiField` for generic public
-  operation input controls when those controls are projected by generated UI
+- GIVEN generated admin, shell, management, auth, and access presentation use
+  the reactive `FormlessUiContractHost`
+- WHEN public Site page, block, frame, system-state, or form presentation is
+  rendered
+- THEN successful public pages consume the Site-owned component-shaped
+  `SitePublicRendererProps` contract with canonical `SitePageTree`, link mode,
+  and route-base facts
+- AND public form renderers consume Site-owned session facts and intents while
+  Site foundations retain validation, coercion, challenge, idempotency, and
+  public operation execution
+- AND Astryx may adapt generic public operation fields to canonical
+  `FormlessUiField` controls inside the Astryx package without importing the
+  application contract host or generated admin runtime into the public graph
+- AND production keeps explicit legacy page and system-state renderers selected
+  while a complete Astryx implementation remains unselected until cutover
 
 ### Requirement: Media Field Renderer Boundary
 

@@ -27,7 +27,7 @@ export const testSiteSeedRecords: StoredRecord[] = [
     height: 1200,
   }),
   block("rec_site_content_profile_intro", "2026-05-05T00:00:03.000Z", {
-    type: "profile",
+    type: "markdown",
     label: "Intro",
     body: "I design and build schema-backed software for teams that need their tools to keep up with the work.",
   }),

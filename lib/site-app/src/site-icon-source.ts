@@ -1,4 +1,4 @@
-import { parseSvgIconSource, type SvgIconElement } from "@dpeek/formless-ui/svg-icon";
+import { parseSourceSvg, type SourceSvgElement } from "@dpeek/formless-source-svg";
 
 export const DEFAULT_SITE_ICON_SVG =
   '<svg viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" fill="none" width="32" height="32" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"><path d="M18 16l4-4-4-4" /><path d="M6 8 2 12l4 4" /><path d="M14.5 4l-5 16" /></svg>';
@@ -47,12 +47,12 @@ export function resolveSiteIconSvgSource(source: string | null | undefined): str
 }
 
 export function sanitizeSiteIconSvgSource(source: string | null | undefined): string | undefined {
-  const parsed = parseSvgIconSource(source);
+  const parsed = parseSourceSvg(source);
 
   return parsed ? serializeSvgElement(parsed, { root: true }) : undefined;
 }
 
-function serializeSvgElement(element: SvgIconElement, options: { root?: boolean } = {}): string {
+function serializeSvgElement(element: SourceSvgElement, options: { root?: boolean } = {}): string {
   const attributes = { ...element.attributes };
 
   if (options.root && !attributes.xmlns) {

@@ -42,6 +42,17 @@ describe("public Site SSR characterization", () => {
     expect(entry).toContain("createRoot(app).render(");
   });
 
+  it("keeps published hydration on explicit legacy Site presentation assembly", () => {
+    const entry = readRepoFile("../public-site-main.tsx");
+
+    expect(entry).toContain("LegacySitePageRenderer");
+    expect(entry).toContain("LegacySitePublicSystemStateRenderer");
+    expect(entry).toContain("builtInRenderer={LegacySitePageRenderer}");
+    expect(entry).toContain("builtInSystemStateRenderer={LegacySitePublicSystemStateRenderer}");
+    expect(entry).toContain("workspaceRenderer={workspaceSitePublicRenderer}");
+    expect(entry).toContain("hydrateRoot(app, appTree)");
+  });
+
   it("characterizes Cloudflare routing as Worker-first for API, published documents, and root icons", () => {
     const wrangler = readRepoFile("../worker/wrangler.jsonc");
 

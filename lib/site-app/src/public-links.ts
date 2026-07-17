@@ -1,9 +1,10 @@
 export type SitePageLinkMode = "preview" | "authoring" | "published" | "installed";
+export type SitePublicRouteBase = `/${string}`;
 
 export function sitePagePathForSlug(
   slug: string,
   linkMode: SitePageLinkMode,
-  routeBase?: `/${string}`,
+  routeBase?: SitePublicRouteBase,
 ): `/${string}` {
   const encodedSlug = encodeSiteSlugPath(slug) || "home";
 
@@ -23,7 +24,7 @@ export function sitePagePathForSlug(
 export function profileAwareSiteHref(
   href: string,
   linkMode: SitePageLinkMode,
-  routeBase?: `/${string}`,
+  routeBase?: SitePublicRouteBase,
 ): string {
   if (isExternalSiteHref(href)) {
     return href;
@@ -85,7 +86,7 @@ function usesTopLevelSitePaths(linkMode: SitePageLinkMode): boolean {
 export function siteHrefMatchesRoute(
   href: string,
   currentSlug: string | undefined,
-  routeBase?: `/${string}`,
+  routeBase?: SitePublicRouteBase,
 ): boolean {
   const linkSlug = routeSlugForSiteHref(href, routeBase);
 
@@ -106,6 +107,14 @@ export function isExternalSiteHref(href: string): boolean {
   return /^https?:\/\//.test(href);
 }
 
+export function siteLinkRel(href: string): "noreferrer" | undefined {
+  return isExternalSiteHref(href) ? "noreferrer" : undefined;
+}
+
+export function siteLinkTarget(href: string): "_blank" | undefined {
+  return isExternalSiteHref(href) ? "_blank" : undefined;
+}
+
 function splitHrefSuffix(href: string): { path: string; suffix: string } {
   const suffixStart = href.search(/[?#]/);
 
@@ -119,7 +128,7 @@ function splitHrefSuffix(href: string): { path: string; suffix: string } {
   };
 }
 
-function routeSlugForSiteHref(href: string, routeBase?: `/${string}`): string | null {
+function routeSlugForSiteHref(href: string, routeBase?: SitePublicRouteBase): string | null {
   if (isExternalSiteHref(href)) {
     return null;
   }
@@ -156,14 +165,16 @@ function normalizeSiteSlug(slug: string): string {
   return normalized === "" ? "home" : normalized;
 }
 
-function normalizeRouteBase(routeBase: `/${string}` | undefined): `/${string}` {
+function normalizeRouteBase(routeBase: SitePublicRouteBase | undefined): SitePublicRouteBase {
   const normalized = (routeBase ?? "/sites").replace(/\/+$/, "");
 
-  return normalized === "" ? "/" : (normalized as `/${string}`);
+  return normalized === "" ? "/" : (normalized as SitePublicRouteBase);
 }
 
-function joinRouteBase(routeBase: `/${string}`, encodedSlug: string): `/${string}` {
-  return routeBase === "/" ? `/${encodedSlug}` : (`${routeBase}/${encodedSlug}` as `/${string}`);
+function joinRouteBase(routeBase: SitePublicRouteBase, encodedSlug: string): SitePublicRouteBase {
+  return routeBase === "/"
+    ? `/${encodedSlug}`
+    : (`${routeBase}/${encodedSlug}` as SitePublicRouteBase);
 }
 
 function encodeSiteSlugPath(slug: string): string {

@@ -1,78 +1,90 @@
 import { useEffect, useState } from "react";
 
-export const PUBLIC_SITE_THEME_STORAGE_KEY = "formless:public-site:theme";
-
-export type PublicSiteTheme = "light" | "dark";
+import {
+  nextPublicSiteThemeMode,
+  publicSiteThemeDocumentMarker,
+  PUBLIC_SITE_THEME_DOCUMENT_DATASET_KEY,
+  PUBLIC_SITE_THEME_SSR_MODE,
+  PUBLIC_SITE_THEME_STORAGE_KEY,
+  PUBLIC_SITE_THEME_SYSTEM_QUERY,
+  resolvePublicSiteThemeMode,
+  type PublicSiteThemeMode,
+} from "../public-theme.ts";
 
 export type PublicSiteThemeController = {
-  theme: PublicSiteTheme;
-  toggleTheme: () => void;
+  mode: PublicSiteThemeMode;
+  toggleMode: () => void;
 };
 
 export function usePublicSiteTheme(): PublicSiteThemeController {
-  const [theme, setTheme] = useState<PublicSiteTheme>("light");
+  const [mode, setMode] = useState<PublicSiteThemeMode>(PUBLIC_SITE_THEME_SSR_MODE);
 
   useEffect(() => {
-    const resolvedTheme = resolveBrowserSiteTheme();
-    applyBrowserSiteTheme(resolvedTheme);
-    setTheme(resolvedTheme);
+    const resolvedMode = resolveBrowserSiteThemeMode();
+    applyBrowserSiteThemeMode(resolvedMode);
+    setMode(resolvedMode);
   }, []);
 
   return {
-    theme,
-    toggleTheme: () => {
-      setTheme((current) => {
-        const next = current === "dark" ? "light" : "dark";
-        persistBrowserSiteTheme(next);
-        applyBrowserSiteTheme(next);
+    mode,
+    toggleMode: () => {
+      setMode((current) => {
+        const next = nextPublicSiteThemeMode(current);
+        persistBrowserSiteThemeMode(next);
+        applyBrowserSiteThemeMode(next);
         return next;
       });
     },
   };
 }
 
-function resolveBrowserSiteTheme(): PublicSiteTheme {
+export function resolveBrowserSiteThemeMode(): PublicSiteThemeMode {
   if (typeof window === "undefined") {
-    return "light";
+    return PUBLIC_SITE_THEME_SSR_MODE;
   }
 
-  const storedTheme = readStoredSiteTheme();
-
-  if (storedTheme) {
-    return storedTheme;
-  }
-
-  return window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  return resolvePublicSiteThemeMode({
+    storedValue: readStoredSiteThemeValue(),
+    systemPrefersDark: browserSystemPrefersDark(),
+  });
 }
 
-function readStoredSiteTheme(): PublicSiteTheme | null {
+function readStoredSiteThemeValue(): string | null {
   try {
-    const stored = window.localStorage.getItem(PUBLIC_SITE_THEME_STORAGE_KEY);
-    return stored === "dark" || stored === "light" ? stored : null;
+    return window.localStorage.getItem(PUBLIC_SITE_THEME_STORAGE_KEY);
   } catch {
     return null;
   }
 }
 
-function applyBrowserSiteTheme(theme: PublicSiteTheme) {
+function browserSystemPrefersDark(): boolean {
+  try {
+    return window.matchMedia?.(PUBLIC_SITE_THEME_SYSTEM_QUERY).matches ?? false;
+  } catch {
+    return false;
+  }
+}
+
+export function applyBrowserSiteThemeMode(mode: PublicSiteThemeMode) {
   if (typeof document === "undefined") {
     return;
   }
 
+  const marker = publicSiteThemeDocumentMarker(mode);
   const root = document.documentElement;
-  root.classList.toggle("dark", theme === "dark");
-  root.classList.toggle("light", theme === "light");
-  root.dataset.siteTheme = theme;
-  root.style.setProperty("color-scheme", theme);
+  root.classList.toggle("dark", mode === "dark");
+  root.classList.toggle("light", mode === "light");
+  root.dataset[PUBLIC_SITE_THEME_DOCUMENT_DATASET_KEY] = marker.dataValue;
+  root.style.setProperty("color-scheme", marker.colorScheme);
 }
 
-function persistBrowserSiteTheme(theme: PublicSiteTheme) {
+export function persistBrowserSiteThemeMode(mode: PublicSiteThemeMode) {
   if (typeof window === "undefined") {
     return;
   }
 
   try {
-    window.localStorage.setItem(PUBLIC_SITE_THEME_STORAGE_KEY, theme);
+    window.localStorage.setItem(PUBLIC_SITE_THEME_STORAGE_KEY, mode);
   } catch {
     // Storage can be unavailable in locked-down browsers; the in-memory theme still works.
   }

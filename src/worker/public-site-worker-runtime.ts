@@ -22,6 +22,10 @@ import {
   type SiteIconRoute,
   type SitePublicOperationTargetResolver,
 } from "@dpeek/formless-site-app/worker";
+import {
+  LegacySitePageRenderer,
+  LegacySitePublicSystemStateRenderer,
+} from "@dpeek/formless-site-app/react";
 import { sitePublicRenderer as workspaceSitePublicRenderer } from "virtual:formless/site-public-renderer/worker";
 import { normalizeSiteRoutePath, type SitePageTree } from "@dpeek/formless-site-app";
 import { BadRequestError } from "./errors.ts";
@@ -106,7 +110,9 @@ const developmentClientAssets: PublicSiteDocumentClientAssets = {
 const emptyClientAssets: PublicSiteDocumentClientAssets = { body: "", head: "" };
 
 const sitePublicWorkerAdapter = createSitePublicWorkerAdapter({
-  renderer: workspaceSitePublicRenderer,
+  builtInRenderer: LegacySitePageRenderer,
+  builtInSystemStateRenderer: LegacySitePublicSystemStateRenderer,
+  workspaceRenderer: workspaceSitePublicRenderer,
 });
 const publicSiteWorkerAdapters = new Map<string, PublicSiteWorkerAdapter>([
   [runtimeTopologyRoutes.publicSitePackageAppKey, sitePublicWorkerAdapter],

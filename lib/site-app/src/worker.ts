@@ -1,5 +1,9 @@
-export { createSitePublicWorkerAdapter, sitePublicWorkerAdapter } from "./worker/adapter.ts";
-export type { SitePublicWorkerAdapter, SitePublicWorkerAdapterOptions } from "./worker/adapter.ts";
+export { createSitePublicWorkerAdapter } from "./worker/adapter.ts";
+export type {
+  SitePublicWorkerAdapter,
+  SitePublicWorkerAdapterOptions,
+  SitePublicWorkerDocumentRenderInput,
+} from "./worker/adapter.ts";
 export type { SitePublicOperationTargetResolver } from "./public-operation-block-projection.ts";
 export {
   PUBLISHED_SITE_ERROR_CACHE_CONTROL,
@@ -32,7 +36,12 @@ export type {
   SitePublicRendererComponent,
   SitePublicRendererProps,
   SitePublicRendererRouteFacts,
+  SitePublicRendererSelection,
 } from "./public-renderer.ts";
+export type {
+  SitePublicSystemStateRendererComponent,
+  SitePublicSystemStateRendererProps,
+} from "./public-system-state.ts";
 export type {
   PublicSiteDocumentClientAssets,
   PublicSiteDocumentRenderInput,

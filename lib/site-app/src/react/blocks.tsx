@@ -1,4 +1,11 @@
-import { useId, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from "react";
+import {
+  useId,
+  useMemo,
+  useSyncExternalStore,
+  type CSSProperties,
+  type FormEvent,
+  type ReactNode,
+} from "react";
 import { MarkdownRenderer } from "@dpeek/formless-ui/markdown-renderer";
 import { SvgIcon } from "@dpeek/formless-ui/svg-icon";
 
@@ -19,29 +26,15 @@ import {
   slottedImagePlacements,
 } from "./media.tsx";
 import { PagePlacementFlow, useSitePageLinkMode, useSitePageRouteBase } from "./page.tsx";
-import {
-  createSiteSubscribeIdempotencyKey,
-  submitSiteSubscribeForm,
-  turnstileResponseTokenFromFormData,
-} from "./subscribe-form.ts";
-import { createSiteContactIdempotencyKey, submitSiteContactForm } from "./contact-form.ts";
-import {
-  createPublicOperationFormIdempotencyKey,
-  executePublicOperationForm,
-  initialPublicOperationFormDraftSessionState,
-  nextPublicOperationFormDraftSessionState,
-  publicOperationFormDraftInput,
-  selectPublicOperationFormDraftSession,
-  turnstileResponseTokenFromFormData as publicOperationFormTurnstileResponseTokenFromFormData,
-  type PublicOperationFormDraftFieldError,
-  type PublicOperationFormDraftFieldInput,
-} from "./public-operation-form.ts";
 import { TurnstileChallenge } from "./turnstile.tsx";
-import type {
-  SiteBlockNode,
-  SitePlacementNode,
-  SitePublicOperationInputFieldNode,
-} from "../types.ts";
+import {
+  createSitePublicFormSessionController,
+  type SitePublicFormField,
+  type SitePublicFormFieldValue,
+  type SitePublicFormSession,
+  type SitePublicFormSessionController,
+} from "../public-form-session.ts";
+import type { SiteBlockNode, SitePlacementNode } from "../types.ts";
 
 const FEATURE_MEDIA_SLOT = "media";
 const FEATURE_ACTIONS_SLOT = "actions";
@@ -125,7 +118,6 @@ function SiteBlockRenderer({
       return <ContentListBlock block={block} />;
     case "post":
     case "project":
-    case "profile":
       return <ContentSummary block={block} />;
     default:
       return null;
@@ -395,62 +387,30 @@ function MarkdownBlock({ block }: { block: SiteBlockNode }) {
 
 function SubscribeFormBlock({ block }: { block: SiteBlockNode }) {
   const emailInputId = useId();
-  const idempotencyKey = useRef(createSiteSubscribeIdempotencyKey(block.id));
-  const [status, setStatus] = useState<"idle" | "submitting" | "success" | "error">("idle");
-  const [error, setError] = useState<string | undefined>();
-  const [challengeResetSignal, setChallengeResetSignal] = useState(0);
-  const operation = block.publicOperation;
-  const siteKey =
-    operation?.challenge.kind === "turnstile" ? operation.challenge.siteKey : undefined;
+  const { controller, session } = useLegacySitePublicFormSession(block);
+  const email = requiredPublicFormField(session, "email");
 
-  if (!operation || !siteKey) {
+  if (session.status === "unavailable") {
     return (
       <section className="max-w-xl space-y-3" data-block-type={block.type}>
-        <SubscribeFormHeading block={block} />
-        <p className="text-sm text-zinc-600 dark:text-zinc-300">Subscribe form unavailable.</p>
+        <PublicFormHeading session={session} />
+        <UnavailablePublicFormFeedback session={session} />
       </section>
     );
   }
 
-  const publicOperation = operation;
+  const publicOperation = requiredPublicFormOperation(block);
+  const challenge = requiredPublicFormChallenge(session);
+  const validationMessage = email.error ? "Complete the email and challenge." : undefined;
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-
-    const formData = new FormData(event.currentTarget);
-    const email = stringFormValue(formData.get("email"));
-    const turnstileToken = turnstileResponseTokenFromFormData(formData);
-
-    if (!email || !turnstileToken) {
-      setStatus("error");
-      setError("Complete the email and challenge.");
-      return;
-    }
-
-    setStatus("submitting");
-    setError(undefined);
-
-    try {
-      await submitSiteSubscribeForm({
-        email,
-        idempotencyKey: idempotencyKey.current,
-        route: publicOperation.route,
-        siteBlockId: block.id,
-        turnstileToken,
-      });
-      setStatus("success");
-    } catch (submitError) {
-      setStatus("error");
-      setError(submitError instanceof Error ? submitError.message : "Subscribe request failed.");
-      setChallengeResetSignal((value) => value + 1);
-    }
+    await controller.dispatch(session.submit.intent);
   }
-
-  const disabled = status === "submitting" || status === "success";
 
   return (
     <section className="max-w-xl space-y-4" data-block-type={block.type}>
-      <SubscribeFormHeading block={block} />
+      <PublicFormHeading session={session} />
       <form
         action={publicOperation.route}
         className="space-y-3"
@@ -462,49 +422,38 @@ function SubscribeFormBlock({ block }: { block: SiteBlockNode }) {
         <label className="grid gap-1 text-sm font-medium text-zinc-700 dark:text-zinc-200">
           <span>Email</span>
           <input
-            className="min-h-11 rounded-md border border-zinc-300 bg-white px-3 text-base text-zinc-950 shadow-sm outline-none transition focus:border-zinc-500 focus:ring-2 focus:ring-zinc-200 disabled:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50 dark:focus:border-zinc-500 dark:focus:ring-zinc-800 dark:disabled:bg-zinc-900"
-            disabled={disabled}
+            aria-describedby={email.error ? `${emailInputId}-error` : undefined}
+            aria-invalid={email.error ? true : undefined}
+            className={siteFormInputClassName}
+            disabled={email.disabled}
             id={emailInputId}
             name="email"
-            required
+            onChange={(event) =>
+              dispatchPublicFormField(controller, email, event.currentTarget.value)
+            }
+            required={email.required}
             type="email"
+            value={publicFormTextValue(email.value)}
           />
         </label>
-        <TurnstileChallenge resetSignal={challengeResetSignal} siteKey={siteKey} />
+        <PublicFormFieldError error={email.error} id={`${emailInputId}-error`} />
+        <TurnstileChallenge
+          onTokenChange={(token) =>
+            void controller.dispatch({ ...challenge.tokenChangeIntent, token })
+          }
+          resetSignal={challenge.resetSignal}
+          siteKey={challenge.siteKey}
+        />
         <button
           className="inline-flex min-h-11 items-center justify-center rounded-md bg-zinc-950 px-4 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-400 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200 dark:disabled:bg-zinc-700 dark:disabled:text-zinc-300"
-          disabled={disabled}
+          disabled={session.disabled}
           type="submit"
         >
-          {status === "submitting" ? "Subscribing..." : block.buttonLabel || "Subscribe"}
+          {session.status === "submitting" ? session.submit.pendingLabel : session.submit.label}
         </button>
-        {status === "success" ? (
-          <p className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
-            You're subscribed.
-          </p>
-        ) : null}
-        {status === "error" ? (
-          <p className="text-sm font-medium text-red-700 dark:text-red-300">
-            {error ?? "Subscribe request failed."}
-          </p>
-        ) : null}
+        <PublicFormOutcome session={session} validationMessage={validationMessage} />
       </form>
     </section>
-  );
-}
-
-function SubscribeFormHeading({ block }: { block: SiteBlockNode }) {
-  return (
-    <div className="space-y-2">
-      <h2 className="text-2xl font-semibold text-zinc-950 dark:text-zinc-50">{block.label}</h2>
-      {block.body ? (
-        <MarkdownRenderer
-          className={`text-base leading-7 text-zinc-700 dark:text-zinc-300 ${siteMarkdownLinkClassName}`}
-          content={block.body}
-          minHeadingLevel={3}
-        />
-      ) : null}
-    </div>
   );
 }
 
@@ -512,69 +461,34 @@ function ContactFormBlock({ block }: { block: SiteBlockNode }) {
   const nameInputId = useId();
   const emailInputId = useId();
   const messageInputId = useId();
-  const idempotencyKey = useRef(createSiteContactIdempotencyKey(block.id));
-  const [status, setStatus] = useState<"idle" | "submitting" | "success" | "error">("idle");
-  const [error, setError] = useState<string | undefined>();
-  const [challengeResetSignal, setChallengeResetSignal] = useState(0);
-  const operation = block.publicOperation;
-  const siteKey =
-    operation?.challenge.kind === "turnstile" ? operation.challenge.siteKey : undefined;
+  const { controller, session } = useLegacySitePublicFormSession(block);
+  const name = requiredPublicFormField(session, "name");
+  const email = requiredPublicFormField(session, "email");
+  const message = requiredPublicFormField(session, "message");
 
-  if (!operation || !siteKey) {
+  if (session.status === "unavailable") {
     return (
       <section className="max-w-2xl space-y-3" data-block-type={block.type}>
-        <ContactFormHeading block={block} />
-        <p className="text-sm text-zinc-600 dark:text-zinc-300">Contact form unavailable.</p>
+        <PublicFormHeading session={session} />
+        <UnavailablePublicFormFeedback session={session} />
       </section>
     );
   }
 
-  const publicOperation = operation;
+  const publicOperation = requiredPublicFormOperation(block);
+  const challenge = requiredPublicFormChallenge(session);
+  const validationMessage = session.fields.some((field) => field.error)
+    ? "Complete the form and challenge."
+    : undefined;
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-
-    const formData = new FormData(event.currentTarget);
-    const name = stringFormValue(formData.get("name"));
-    const email = stringFormValue(formData.get("email"));
-    const message = stringFormValue(formData.get("message"));
-    const turnstileToken = turnstileResponseTokenFromFormData(formData);
-
-    if (!name || !email || !message || !turnstileToken) {
-      setStatus("error");
-      setError("Complete the form and challenge.");
-      return;
-    }
-
-    setStatus("submitting");
-    setError(undefined);
-
-    try {
-      await submitSiteContactForm({
-        email,
-        idempotencyKey: idempotencyKey.current,
-        message,
-        name,
-        route: publicOperation.route,
-        siteBlockId: block.id,
-        turnstileToken,
-      });
-      setStatus("success");
-    } catch (submitError) {
-      setStatus("error");
-      setError(submitError instanceof Error ? submitError.message : "Contact request failed.");
-      setChallengeResetSignal((value) => value + 1);
-    }
+    await controller.dispatch(session.submit.intent);
   }
-
-  const disabled = status === "submitting" || status === "success";
-  const nameLabel = block.nameLabel || "Name";
-  const emailLabel = block.emailLabel || "Email";
-  const messageLabel = block.messageLabel || "Message";
 
   return (
     <section className="max-w-2xl space-y-4" data-block-type={block.type}>
-      <ContactFormHeading block={block} />
+      <PublicFormHeading session={session} />
       <form
         action={publicOperation.route}
         className="grid gap-4"
@@ -583,171 +497,54 @@ function ContactFormBlock({ block }: { block: SiteBlockNode }) {
         method="post"
         onSubmit={onSubmit}
       >
-        <label className="grid gap-1 text-sm font-medium text-zinc-700 dark:text-zinc-200">
-          <span>{nameLabel}</span>
-          <input
-            className="min-h-11 rounded-md border border-zinc-300 bg-white px-3 text-base text-zinc-950 shadow-sm outline-none transition focus:border-zinc-500 focus:ring-2 focus:ring-zinc-200 disabled:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50 dark:focus:border-zinc-500 dark:focus:ring-zinc-800 dark:disabled:bg-zinc-900"
-            disabled={disabled}
-            id={nameInputId}
-            name="name"
-            required
-            type="text"
-          />
-        </label>
-        <label className="grid gap-1 text-sm font-medium text-zinc-700 dark:text-zinc-200">
-          <span>{emailLabel}</span>
-          <input
-            className="min-h-11 rounded-md border border-zinc-300 bg-white px-3 text-base text-zinc-950 shadow-sm outline-none transition focus:border-zinc-500 focus:ring-2 focus:ring-zinc-200 disabled:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50 dark:focus:border-zinc-500 dark:focus:ring-zinc-800 dark:disabled:bg-zinc-900"
-            disabled={disabled}
-            id={emailInputId}
-            name="email"
-            required
-            type="email"
-          />
-        </label>
-        <label className="grid gap-1 text-sm font-medium text-zinc-700 dark:text-zinc-200">
-          <span>{messageLabel}</span>
-          <textarea
-            className="min-h-32 rounded-md border border-zinc-300 bg-white px-3 py-2 text-base text-zinc-950 shadow-sm outline-none transition focus:border-zinc-500 focus:ring-2 focus:ring-zinc-200 disabled:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50 dark:focus:border-zinc-500 dark:focus:ring-zinc-800 dark:disabled:bg-zinc-900"
-            disabled={disabled}
-            id={messageInputId}
-            name="message"
-            required
-          />
-        </label>
-        <TurnstileChallenge resetSignal={challengeResetSignal} siteKey={siteKey} />
+        <FixedPublicFormField controller={controller} field={name} inputId={nameInputId} />
+        <FixedPublicFormField controller={controller} field={email} inputId={emailInputId} />
+        <FixedPublicFormField controller={controller} field={message} inputId={messageInputId} />
+        <TurnstileChallenge
+          onTokenChange={(token) =>
+            void controller.dispatch({ ...challenge.tokenChangeIntent, token })
+          }
+          resetSignal={challenge.resetSignal}
+          siteKey={challenge.siteKey}
+        />
         <button
           className="inline-flex min-h-11 w-fit items-center justify-center rounded-md bg-zinc-950 px-4 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-400 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200 dark:disabled:bg-zinc-700 dark:disabled:text-zinc-300"
-          disabled={disabled}
+          disabled={session.disabled}
           type="submit"
         >
-          {status === "submitting" ? "Sending..." : block.buttonLabel || "Send"}
+          {session.status === "submitting" ? session.submit.pendingLabel : session.submit.label}
         </button>
-        {status === "success" ? (
-          <p className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
-            {block.successLabel || "Thanks. Your message was sent."}
-          </p>
-        ) : null}
-        {status === "error" ? (
-          <p className="text-sm font-medium text-red-700 dark:text-red-300">
-            {error ?? "Contact request failed."}
-          </p>
-        ) : null}
+        <PublicFormOutcome session={session} validationMessage={validationMessage} />
       </form>
     </section>
   );
 }
 
-function ContactFormHeading({ block }: { block: SiteBlockNode }) {
-  return (
-    <div className="space-y-2">
-      <h2 className="text-2xl font-semibold text-zinc-950 dark:text-zinc-50">{block.label}</h2>
-      {block.body ? (
-        <MarkdownRenderer
-          className={`text-base leading-7 text-zinc-700 dark:text-zinc-300 ${siteMarkdownLinkClassName}`}
-          content={block.body}
-          minHeadingLevel={3}
-        />
-      ) : null}
-    </div>
-  );
-}
-
 function PublicOperationFormBlock({ block }: { block: SiteBlockNode }) {
   const formInputIdPrefix = useId();
-  const idempotencyKey = useRef(createPublicOperationFormIdempotencyKey(block.id));
-  const [status, setStatus] = useState<"idle" | "submitting" | "success" | "error">("idle");
-  const [error, setError] = useState<string | undefined>();
-  const [challengeResetSignal, setChallengeResetSignal] = useState(0);
-  const operation = block.publicOperation;
-  const siteKey =
-    operation?.challenge.kind === "turnstile" ? operation.challenge.siteKey : undefined;
-  const publicOperationFields = operation?.fields ?? [];
-  const [draftState, setDraftState] = useState(() =>
-    initialPublicOperationFormDraftSessionState({ fields: publicOperationFields }),
-  );
-  const disabled = status === "submitting" || status === "success";
-  const draftSession = selectPublicOperationFormDraftSession({
-    enabled: !disabled,
-    fields: publicOperationFields,
-    state: draftState,
-  });
+  const { controller, session } = useLegacySitePublicFormSession(block);
 
-  if (!operation || !siteKey || !operation.fields) {
+  if (session.status === "unavailable") {
     return (
       <section className="max-w-2xl space-y-3" data-block-type={block.type}>
-        <PublicOperationFormHeading block={block} />
-        <p className="text-sm text-zinc-600 dark:text-zinc-300">
-          Public operation form unavailable.
-        </p>
+        <PublicFormHeading session={session} />
+        <UnavailablePublicFormFeedback session={session} />
       </section>
     );
   }
 
-  const publicOperation = operation;
+  const publicOperation = requiredPublicFormOperation(block);
+  const challenge = requiredPublicFormChallenge(session);
+  const validationMessage = session.fields.find((field) => field.error)?.error;
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-
-    const formData = new FormData(event.currentTarget);
-    const turnstileToken = publicOperationFormTurnstileResponseTokenFromFormData(formData);
-
-    if (!draftSession.canSubmit) {
-      setStatus("error");
-      setError(
-        firstPublicOperationFormFieldError(draftSession.fieldErrors)?.message ??
-          "Check the form fields.",
-      );
-      return;
-    }
-
-    if (!turnstileToken) {
-      setStatus("error");
-      setError("Complete the challenge.");
-      return;
-    }
-
-    setStatus("submitting");
-    setError(undefined);
-
-    const result = await executePublicOperationForm({
-      idempotencyKey: idempotencyKey.current,
-      input: draftSession.input,
-      route: publicOperation.route,
-      siteBlockId: block.id,
-      turnstileToken,
-    });
-
-    if (result.type === "failed") {
-      setStatus("error");
-      setError(result.displayError);
-      setChallengeResetSignal((value) => value + 1);
-      return;
-    }
-
-    if (result.type === "committed" || result.type === "replayed") {
-      setStatus("success");
-    }
-  }
-
-  function onInputValue(inputName: string, inputValue: PublicOperationFormDraftFieldInput) {
-    setDraftState((state) =>
-      nextPublicOperationFormDraftSessionState({
-        inputName,
-        inputValue,
-        state,
-      }),
-    );
-
-    if (status === "error") {
-      setStatus("idle");
-      setError(undefined);
-    }
+    await controller.dispatch(session.submit.intent);
   }
 
   return (
     <section className="max-w-2xl space-y-4" data-block-type={block.type}>
-      <PublicOperationFormHeading block={block} />
+      <PublicFormHeading session={session} />
       <form
         action={publicOperation.route}
         className="grid gap-4"
@@ -758,48 +555,42 @@ function PublicOperationFormBlock({ block }: { block: SiteBlockNode }) {
         noValidate
         onSubmit={onSubmit}
       >
-        {publicOperationFields.map((field) => (
+        {session.fields.map((field) => (
           <PublicOperationInputField
-            disabled={disabled}
-            error={status === "error" ? draftSession.fieldErrors[field.name] : undefined}
+            controller={controller}
             field={field}
             inputId={`${formInputIdPrefix}-${field.name}`}
-            inputValue={draftState.draft.values[field.name]}
             key={field.name}
-            onInputValue={onInputValue}
           />
         ))}
-        <TurnstileChallenge resetSignal={challengeResetSignal} siteKey={siteKey} />
+        <TurnstileChallenge
+          onTokenChange={(token) =>
+            void controller.dispatch({ ...challenge.tokenChangeIntent, token })
+          }
+          resetSignal={challenge.resetSignal}
+          siteKey={challenge.siteKey}
+        />
         <button
           className="inline-flex min-h-11 w-fit items-center justify-center rounded-md bg-zinc-950 px-4 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-400 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200 dark:disabled:bg-zinc-700 dark:disabled:text-zinc-300"
-          disabled={disabled}
+          disabled={session.disabled}
           type="submit"
         >
-          {status === "submitting" ? "Sending..." : block.buttonLabel || "Submit"}
+          {session.status === "submitting" ? session.submit.pendingLabel : session.submit.label}
         </button>
-        {status === "success" ? (
-          <p className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
-            {block.successLabel || "Thanks. Your request was received."}
-          </p>
-        ) : null}
-        {status === "error" ? (
-          <p className="text-sm font-medium text-red-700 dark:text-red-300">
-            {error ?? "Public operation request failed."}
-          </p>
-        ) : null}
+        <PublicFormOutcome session={session} validationMessage={validationMessage} />
       </form>
     </section>
   );
 }
 
-function PublicOperationFormHeading({ block }: { block: SiteBlockNode }) {
+function PublicFormHeading({ session }: { session: SitePublicFormSession }) {
   return (
     <div className="space-y-2">
-      <h2 className="text-2xl font-semibold text-zinc-950 dark:text-zinc-50">{block.label}</h2>
-      {block.body ? (
+      <h2 className="text-2xl font-semibold text-zinc-950 dark:text-zinc-50">{session.heading}</h2>
+      {session.body ? (
         <MarkdownRenderer
           className={`text-base leading-7 text-zinc-700 dark:text-zinc-300 ${siteMarkdownLinkClassName}`}
-          content={block.body}
+          content={session.body}
           minHeadingLevel={3}
         />
       ) : null}
@@ -808,21 +599,15 @@ function PublicOperationFormHeading({ block }: { block: SiteBlockNode }) {
 }
 
 function PublicOperationInputField({
-  disabled,
-  error,
+  controller,
   field,
   inputId,
-  inputValue,
-  onInputValue,
 }: {
-  disabled: boolean;
-  error?: PublicOperationFormDraftFieldError;
-  field: SitePublicOperationInputFieldNode;
+  controller: SitePublicFormSessionController;
+  field: SitePublicFormField;
   inputId: string;
-  inputValue?: PublicOperationFormDraftFieldInput;
-  onInputValue: (inputName: string, inputValue: PublicOperationFormDraftFieldInput) => void;
 }) {
-  const errorId = error === undefined ? undefined : `${inputId}-error`;
+  const errorId = field.error === undefined ? undefined : `${inputId}-error`;
 
   if (field.control === "boolean") {
     return (
@@ -833,21 +618,21 @@ function PublicOperationInputField({
         >
           <input
             aria-describedby={errorId}
-            aria-invalid={error === undefined ? undefined : true}
-            checked={publicOperationFormBooleanInputChecked(inputValue)}
+            aria-invalid={field.error === undefined ? undefined : true}
+            checked={field.value === true}
             className="size-4 rounded border-zinc-300 text-zinc-950 focus:ring-zinc-300 disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-950 dark:focus:ring-zinc-700"
-            disabled={disabled}
+            disabled={field.disabled}
             id={inputId}
             name={field.name}
             onChange={(event) =>
-              onInputValue(field.name, publicOperationFormDraftInput(event.currentTarget.checked))
+              dispatchPublicFormField(controller, field, event.currentTarget.checked)
             }
             type="checkbox"
             value="true"
           />
           <span>{field.label}</span>
         </label>
-        <PublicOperationInputFieldError error={error} id={errorId} />
+        <PublicFormFieldError error={field.error} id={errorId} />
       </div>
     );
   }
@@ -860,67 +645,58 @@ function PublicOperationInputField({
     >
       <span>{field.label}</span>
       {renderPublicOperationInputControl({
+        controller,
         describedBy: errorId,
-        disabled,
-        error,
         field,
         inputId,
-        inputValue,
-        onInputValue,
       })}
-      <PublicOperationInputFieldError error={error} id={errorId} />
+      <PublicFormFieldError error={field.error} id={errorId} />
     </label>
   );
 }
 
 function renderPublicOperationInputControl({
+  controller,
   describedBy,
-  disabled,
-  error,
   field,
   inputId,
-  inputValue,
-  onInputValue,
 }: {
+  controller: SitePublicFormSessionController;
   describedBy?: string;
-  disabled: boolean;
-  error?: PublicOperationFormDraftFieldError;
-  field: SitePublicOperationInputFieldNode;
+  field: SitePublicFormField;
   inputId: string;
-  inputValue?: PublicOperationFormDraftFieldInput;
-  onInputValue: (inputName: string, inputValue: PublicOperationFormDraftFieldInput) => void;
 }) {
   switch (field.control) {
     case "longText":
       return (
         <textarea
           aria-describedby={describedBy}
-          aria-invalid={error === undefined ? undefined : true}
+          aria-invalid={field.error === undefined ? undefined : true}
           className={siteFormTextareaClassName}
           data-site-public-operation-control="longText"
-          disabled={disabled}
+          disabled={field.disabled}
           id={inputId}
           name={field.name}
           onChange={(event) =>
-            onInputValue(field.name, { kind: "input", value: event.currentTarget.value })
+            dispatchPublicFormField(controller, field, event.currentTarget.value)
           }
-          value={publicOperationFormTextInputValue(inputValue)}
+          value={publicFormTextValue(field.value)}
         />
       );
     case "enum":
       return (
         <select
           aria-describedby={describedBy}
-          aria-invalid={error === undefined ? undefined : true}
+          aria-invalid={field.error === undefined ? undefined : true}
           className={siteFormInputClassName}
           data-site-public-operation-control="enum"
-          disabled={disabled}
+          disabled={field.disabled}
           id={inputId}
           name={field.name}
           onChange={(event) =>
-            onInputValue(field.name, { kind: "input", value: event.currentTarget.value })
+            dispatchPublicFormField(controller, field, event.currentTarget.value)
           }
-          value={publicOperationFormTextInputValue(inputValue)}
+          value={publicFormTextValue(field.value)}
         >
           <option disabled={field.required} value="">
             Select...
@@ -936,67 +712,58 @@ function renderPublicOperationInputControl({
       return (
         <input
           aria-describedby={describedBy}
-          aria-invalid={error === undefined ? undefined : true}
+          aria-invalid={field.error === undefined ? undefined : true}
           className={siteFormInputClassName}
           data-site-public-operation-control="date"
-          disabled={disabled}
+          disabled={field.disabled}
           id={inputId}
           name={field.name}
           onChange={(event) =>
-            onInputValue(field.name, { kind: "input", value: event.currentTarget.value })
+            dispatchPublicFormField(controller, field, event.currentTarget.value)
           }
           type="date"
-          value={publicOperationFormTextInputValue(inputValue)}
+          value={publicFormTextValue(field.value)}
         />
       );
     case "number":
       return (
         <input
           aria-describedby={describedBy}
-          aria-invalid={error === undefined ? undefined : true}
+          aria-invalid={field.error === undefined ? undefined : true}
           className={siteFormInputClassName}
           data-site-public-operation-control="number"
-          disabled={disabled}
+          disabled={field.disabled}
           id={inputId}
           inputMode="decimal"
           name={field.name}
           onChange={(event) =>
-            onInputValue(field.name, { kind: "input", value: event.currentTarget.value })
+            dispatchPublicFormField(controller, field, event.currentTarget.value)
           }
           type="text"
-          value={publicOperationFormTextInputValue(inputValue)}
+          value={publicFormTextValue(field.value)}
         />
       );
     case "text":
     default:
       return renderPublicOperationTextInput({
+        controller,
         describedBy,
-        disabled,
-        error,
         field,
         inputId,
-        inputValue,
-        onInputValue,
       });
   }
 }
 
 function renderPublicOperationTextInput({
+  controller,
   describedBy,
-  disabled,
-  error,
   field,
   inputId,
-  inputValue,
-  onInputValue,
 }: {
+  controller: SitePublicFormSessionController;
   describedBy?: string;
-  disabled: boolean;
-  error?: PublicOperationFormDraftFieldError;
-  field: SitePublicOperationInputFieldNode;
+  field: SitePublicFormField;
   inputId: string;
-  inputValue?: PublicOperationFormDraftFieldInput;
-  onInputValue: (inputName: string, inputValue: PublicOperationFormDraftFieldInput) => void;
 }) {
   const suggestionsId =
     field.suggestions && field.suggestions.length > 0 ? `${inputId}-suggestions` : undefined;
@@ -1006,18 +773,16 @@ function renderPublicOperationTextInput({
     <>
       <input
         aria-describedby={describedBy}
-        aria-invalid={error === undefined ? undefined : true}
+        aria-invalid={field.error === undefined ? undefined : true}
         className={siteFormInputClassName}
         data-site-public-operation-control="text"
-        disabled={disabled}
+        disabled={field.disabled}
         id={inputId}
         list={suggestionsId}
         name={field.name}
-        onChange={(event) =>
-          onInputValue(field.name, { kind: "input", value: event.currentTarget.value })
-        }
+        onChange={(event) => dispatchPublicFormField(controller, field, event.currentTarget.value)}
         type={type}
-        value={publicOperationFormTextInputValue(inputValue)}
+        value={publicFormTextValue(field.value)}
       />
       {suggestionsId ? (
         <datalist id={suggestionsId}>
@@ -1030,44 +795,147 @@ function renderPublicOperationTextInput({
   );
 }
 
-function PublicOperationInputFieldError({
-  error,
-  id,
-}: {
-  error?: PublicOperationFormDraftFieldError;
-  id?: string;
-}) {
+function PublicFormFieldError({ error, id }: { error?: string; id?: string }) {
   return error === undefined ? null : (
     <p className="text-xs font-medium text-red-700 dark:text-red-300" id={id}>
-      {error.message}
+      {error}
     </p>
   );
 }
 
-function publicOperationFormTextInputValue(
-  inputValue: PublicOperationFormDraftFieldInput | undefined,
-): string {
-  if (inputValue === undefined) {
-    return "";
-  }
+function FixedPublicFormField({
+  controller,
+  field,
+  inputId,
+}: {
+  controller: SitePublicFormSessionController;
+  field: SitePublicFormField;
+  inputId: string;
+}) {
+  const errorId = field.error ? `${inputId}-error` : undefined;
 
-  if (typeof inputValue.value === "boolean") {
-    return inputValue.value ? "true" : "false";
-  }
-
-  return String(inputValue.value);
+  return (
+    <label className="grid gap-1 text-sm font-medium text-zinc-700 dark:text-zinc-200">
+      <span>{field.label}</span>
+      {field.control === "longText" ? (
+        <textarea
+          aria-describedby={errorId}
+          aria-invalid={field.error ? true : undefined}
+          className={siteFormTextareaClassName}
+          disabled={field.disabled}
+          id={inputId}
+          name={field.name}
+          onChange={(event) =>
+            dispatchPublicFormField(controller, field, event.currentTarget.value)
+          }
+          required={field.required}
+          value={publicFormTextValue(field.value)}
+        />
+      ) : (
+        <input
+          aria-describedby={errorId}
+          aria-invalid={field.error ? true : undefined}
+          className={siteFormInputClassName}
+          disabled={field.disabled}
+          id={inputId}
+          name={field.name}
+          onChange={(event) =>
+            dispatchPublicFormField(controller, field, event.currentTarget.value)
+          }
+          required={field.required}
+          type={field.format === "email" ? "email" : "text"}
+          value={publicFormTextValue(field.value)}
+        />
+      )}
+      <PublicFormFieldError error={field.error} id={errorId} />
+    </label>
+  );
 }
 
-function publicOperationFormBooleanInputChecked(
-  inputValue: PublicOperationFormDraftFieldInput | undefined,
-): boolean {
-  return inputValue?.value === true;
+function PublicFormOutcome({
+  session,
+  validationMessage,
+}: {
+  session: SitePublicFormSession;
+  validationMessage?: string;
+}) {
+  if (session.feedback?.kind === "success") {
+    return (
+      <p className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
+        {session.feedback.message}
+      </p>
+    );
+  }
+
+  const failureMessage =
+    session.feedback?.kind === "failure" ? session.feedback.message : validationMessage;
+
+  return failureMessage ? (
+    <p className="text-sm font-medium text-red-700 dark:text-red-300">{failureMessage}</p>
+  ) : null;
 }
 
-function firstPublicOperationFormFieldError(
-  fieldErrors: Record<string, PublicOperationFormDraftFieldError>,
-): PublicOperationFormDraftFieldError | undefined {
-  return Object.values(fieldErrors)[0];
+function UnavailablePublicFormFeedback({ session }: { session: SitePublicFormSession }) {
+  return session.feedback?.kind === "unavailable" ? (
+    <p className="text-sm text-zinc-600 dark:text-zinc-300">{session.feedback.message}</p>
+  ) : null;
+}
+
+function useLegacySitePublicFormSession(block: SiteBlockNode): {
+  controller: SitePublicFormSessionController;
+  session: SitePublicFormSession;
+} {
+  const controller = useMemo(() => createSitePublicFormSessionController({ block }), [block]);
+  const session = useSyncExternalStore(
+    controller.subscribe,
+    controller.getSnapshot,
+    controller.getSnapshot,
+  );
+
+  return { controller, session };
+}
+
+function dispatchPublicFormField(
+  controller: SitePublicFormSessionController,
+  field: SitePublicFormField,
+  value: SitePublicFormFieldValue,
+): void {
+  void controller.dispatch({ ...field.changeIntent, value });
+}
+
+function requiredPublicFormField(
+  session: SitePublicFormSession,
+  name: string,
+): SitePublicFormField {
+  const field = session.fields.find((candidate) => candidate.name === name);
+
+  if (!field) {
+    throw new Error(`Public ${session.kind} form is missing field "${name}".`);
+  }
+
+  return field;
+}
+
+function requiredPublicFormOperation(
+  block: SiteBlockNode,
+): NonNullable<SiteBlockNode["publicOperation"]> {
+  if (!block.publicOperation) {
+    throw new Error(`Public form block "${block.id}" is missing its operation.`);
+  }
+
+  return block.publicOperation;
+}
+
+function requiredPublicFormChallenge(session: SitePublicFormSession) {
+  if (!session.challenge) {
+    throw new Error(`Public form session "${session.formId}" is missing its challenge.`);
+  }
+
+  return session.challenge;
+}
+
+function publicFormTextValue(value: SitePublicFormFieldValue): string {
+  return typeof value === "boolean" ? (value ? "true" : "false") : String(value);
 }
 
 function ContentListBlock({ block }: { block: SiteBlockNode }) {
@@ -1206,10 +1074,6 @@ function placementIdSet(placements: SitePlacementNode[]): Set<string> {
 
 function isDefaultPlacement(placement: SitePlacementNode): boolean {
   return !placement.slot;
-}
-
-function stringFormValue(value: FormDataEntryValue | null): string | undefined {
-  return typeof value === "string" && value.trim() !== "" ? value : undefined;
 }
 
 function featureMediaSide(block: SiteBlockNode): "left" | "right" {

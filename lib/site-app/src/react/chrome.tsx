@@ -106,18 +106,18 @@ export function SiteHeaderNavGroup({
 }
 
 function SiteThemeToggle() {
-  const { theme, toggleTheme } = useSiteTheme();
-  const nextTheme = theme === "dark" ? "light" : "dark";
-  const ThemeIcon = theme === "dark" ? SiteThemeDarkIcon : SiteThemeLightIcon;
+  const { mode, toggleMode } = useSiteTheme();
+  const nextTheme = mode === "dark" ? "light" : "dark";
+  const ThemeIcon = mode === "dark" ? SiteThemeDarkIcon : SiteThemeLightIcon;
 
   return (
     <button
       aria-label={`Switch to ${nextTheme} mode`}
-      aria-pressed={theme === "dark"}
+      aria-pressed={mode === "dark"}
       className="flex size-8 shrink-0 items-center justify-center rounded-md text-zinc-700 outline-none transition hover:bg-zinc-100 hover:text-[color:var(--site-link)] focus-visible:ring-2 focus-visible:ring-[color:var(--site-focus)] dark:text-zinc-300 dark:hover:bg-zinc-800"
-      data-site-theme-icon={theme}
+      data-site-theme-icon={mode}
       data-site-theme-toggle
-      onClick={toggleTheme}
+      onClick={toggleMode}
       title={`Switch to ${nextTheme} mode`}
       type="button"
     >

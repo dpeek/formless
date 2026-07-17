@@ -8,6 +8,10 @@ import {
   type InstanceArchive,
 } from "@dpeek/formless-archive";
 import type { SitePageTreeResponse } from "@dpeek/formless-site-app";
+import {
+  LegacySitePageRenderer,
+  LegacySitePublicSystemStateRenderer,
+} from "@dpeek/formless-site-app/react";
 import { renderPublishedSiteDocumentResponse } from "@dpeek/formless-site-app/worker";
 import type { AppInstall } from "@dpeek/formless-installed-apps";
 import {
@@ -356,6 +360,8 @@ describe("instance archive restore API", () => {
     const applied = await postArchiveRestore(appArchiveWithMedia({ dryRun: false }), [mediaFile()]);
     const tree = await getJson<SitePageTreeResponse>("/api/app-installs/site/personal/tree/home");
     const document = await renderPublishedSiteDocumentResponse({
+      builtInRenderer: LegacySitePageRenderer,
+      builtInSystemStateRenderer: LegacySitePublicSystemStateRenderer,
       clientAssets: { body: "", head: "" },
       requestUrl: new URL("https://personal.example/"),
       treeResult: { kind: "found", tree: tree.body },

@@ -1,51 +1,24 @@
-import { sitePageRendererParts } from "./blocks.tsx";
-import type { SitePageLinkMode } from "./links.ts";
-import { SitePageShell } from "./page.tsx";
-import { usePublicSiteTheme } from "./theme.ts";
-import type { SitePublicRendererComponent, SitePublicRendererProps } from "../public-renderer.ts";
-import type { SitePageTree } from "../types.ts";
+import {
+  resolveSitePublicRendererComponent,
+  type SitePublicRendererProps,
+  type SitePublicRendererSelection,
+} from "../public-renderer.ts";
 
-export { PUBLIC_SITE_THEME_STORAGE_KEY } from "./theme.ts";
 export type {
   SitePublicRendererComponent,
   SitePublicRendererProps,
   SitePublicRendererRouteFacts,
+  SitePublicRendererSelection,
 } from "../public-renderer.ts";
 
-export type SitePublicRendererHostProps = SitePublicRendererProps & {
-  renderer?: SitePublicRendererComponent;
-};
+export type SitePublicRendererHostProps = SitePublicRendererProps & SitePublicRendererSelection;
 
-export function SitePageRenderer({
-  linkMode = "preview",
-  routeBase,
-  tree,
-}: {
-  linkMode?: SitePageLinkMode;
-  routeBase?: `/${string}`;
-  tree: SitePageTree;
-}) {
-  const theme = usePublicSiteTheme();
-
-  return (
-    <SitePageShell
-      linkMode={linkMode}
-      parts={sitePageRendererParts}
-      routeBase={routeBase}
-      theme={theme}
-      tree={tree}
-    />
-  );
-}
-
-export function SitePublicRenderer({ renderer, ...props }: SitePublicRendererHostProps) {
-  const Renderer = resolveSitePublicRendererComponent(renderer);
+export function SitePublicRenderer({
+  builtInRenderer,
+  workspaceRenderer,
+  ...props
+}: SitePublicRendererHostProps) {
+  const Renderer = resolveSitePublicRendererComponent({ builtInRenderer, workspaceRenderer });
 
   return <Renderer {...props} />;
-}
-
-export function resolveSitePublicRendererComponent(
-  renderer?: SitePublicRendererComponent,
-): SitePublicRendererComponent {
-  return renderer ?? SitePageRenderer;
 }

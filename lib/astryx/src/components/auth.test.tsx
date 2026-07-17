@@ -339,6 +339,9 @@ describe("Auth prototype layout", () => {
       "./contract",
       "./contract-host",
       "./contract-host/react",
+      "./site/renderer",
+      "./site/global.css",
+      "./site/provider",
     ]);
     expect(productionRendererSource).toContain("LegacySubscribedOwnerAuthRenderer");
     expect(productionRendererSource).toContain("LegacySubscribedAccountAuthRenderer");

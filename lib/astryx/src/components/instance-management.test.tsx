@@ -294,6 +294,9 @@ describe("canonical instance-management fixtures", () => {
       "./contract",
       "./contract-host",
       "./contract-host/react",
+      "./site/renderer",
+      "./site/global.css",
+      "./site/provider",
     ]);
     expect(productionRuntimeSource).toContain("LegacySubscribedManagementRenderer");
     expect(productionRuntimeSource).not.toContain("AstryxSubscribedManagementRenderer");

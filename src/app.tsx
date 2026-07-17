@@ -9,11 +9,16 @@ import {
 } from "react";
 import { Redirect, Route, Switch, useLocation } from "wouter";
 import { NotFoundRoute } from "./app/routes/not-found.tsx";
-import { normalizeSitePageSlug } from "@dpeek/formless-site-app/react";
+import {
+  LegacySitePageRenderer,
+  LegacySitePublicSystemStateRenderer,
+  normalizeSitePageSlug,
+} from "@dpeek/formless-site-app/react";
 import {
   createPublicSiteReactAdapterRegistry,
   publicSiteReactAdapterForPackageAppKey,
   type PublicSiteReactAdapterRegistry,
+  type PublicSiteRouteInputProps,
   type PublicSiteRouteProps,
 } from "./app/public-site-runtime.tsx";
 import type { ApplicationShellRuntimeBoundaryProps } from "./app/application-shell-runtime.tsx";
@@ -102,10 +107,11 @@ export type AppRouteComponents = {
   publicSiteReactAdapters?: PublicSiteReactAdapterRegistry;
 };
 
-const defaultPublicSiteReactAdapters = createPublicSiteReactAdapterRegistry(
-  undefined,
-  workspaceSitePublicRenderer,
-);
+const defaultPublicSiteReactAdapters = createPublicSiteReactAdapterRegistry({
+  builtInRenderer: LegacySitePageRenderer,
+  builtInSystemStateRenderer: LegacySitePublicSystemStateRenderer,
+  workspaceRenderer: workspaceSitePublicRenderer,
+});
 
 const defaultRouteComponents: AppRouteComponents = {
   AccessRoute: lazy(() =>
@@ -487,7 +493,12 @@ function AppRoutes({
   } = routeComponents;
   const publicSiteReactAdapters =
     routeComponents.publicSiteReactAdapters ??
-    createPublicSiteReactAdapterRegistry(routeComponents.SitePageRoute);
+    createPublicSiteReactAdapterRegistry({
+      builtInRenderer: LegacySitePageRenderer,
+      builtInSystemStateRenderer: LegacySitePublicSystemStateRenderer,
+      siteRoute: routeComponents.SitePageRoute,
+      workspaceRenderer: workspaceSitePublicRenderer,
+    });
   const generatedWorlds = runtimeProfile.worlds.filter(hasGeneratedRoutes);
   const browserRoutes = runtimeBrowserRoutePatterns(runtimeProfile);
   const publishedSite = runtimeProfile.publishedSite;
@@ -850,7 +861,7 @@ function PublicSiteRoute({
 }: {
   adapters: PublicSiteReactAdapterRegistry;
   packageAppKey: string;
-  routeProps: PublicSiteRouteProps;
+  routeProps: PublicSiteRouteInputProps;
 }) {
   const adapter = publicSiteReactAdapterForPackageAppKey(packageAppKey, adapters);
 
@@ -866,9 +877,16 @@ function PublicSiteRoute({
   }
 
   const RouteComponent = adapter.Route;
-  const renderer = routeProps.renderer ?? adapter.renderer;
+  const workspaceRenderer = routeProps.workspaceRenderer ?? adapter.workspaceRenderer;
 
-  return <RouteComponent {...routeProps} renderer={renderer} />;
+  return (
+    <RouteComponent
+      {...routeProps}
+      builtInRenderer={adapter.builtInRenderer}
+      builtInSystemStateRenderer={adapter.builtInSystemStateRenderer}
+      workspaceRenderer={workspaceRenderer}
+    />
+  );
 }
 
 function RouteLoading() {

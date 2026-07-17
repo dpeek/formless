@@ -1,0 +1,17 @@
+{
+  "name": "@dpeek/formless-source-svg",
+  "version": "0.1.0",
+  "files": [
+    "src"
+  ],
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "test": "vp test --config ../../vite.config.ts"
+  }
+}

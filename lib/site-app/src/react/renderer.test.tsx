@@ -2,7 +2,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vite-plus/test";
 
 import type { SiteBlockNode, SitePageFrame, SitePageTree, SitePlacementNode } from "../types.ts";
-import { PUBLIC_SITE_THEME_STORAGE_KEY, SitePageRenderer } from "./renderer.tsx";
+import { PUBLIC_SITE_THEME_STORAGE_KEY } from "../public-theme.ts";
+import { LegacySitePageRenderer } from "./legacy-page-renderer.tsx";
 
 const githubIconSvg =
   '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 0 0-3 19c.5.1.7-.2.7-.5v-2c-3 .7-3.6-1.2-3.6-1.2-.5-1.2-1.1-1.5-1.1-1.5-.9-.6.1-.6.1-.6 1 0 1.6 1.1 1.6 1.1.9 1.6 2.5 1.1 3 .8.1-.7.4-1.1.7-1.4-2.4-.3-5-1.2-5-5.3 0-1.2.4-2.1 1.1-2.9-.1-.3-.5-1.4.1-2.9 0 0 .9-.3 3 1.1A10 10 0 0 1 12 5.3c.9 0 1.8.1 2.6.4 2.1-1.4 3-1.1 3-1.1.6 1.5.2 2.6.1 2.9.7.8 1.1 1.7 1.1 2.9 0 4.1-2.5 5-5 5.3.4.3.8 1 .8 2v2.8c0 .3.2.6.8.5A10 10 0 0 0 12 2Z"/></svg>';
@@ -645,7 +646,10 @@ function renderSite(
   } = {},
 ): string {
   return renderToStaticMarkup(
-    <SitePageRenderer linkMode={options.linkMode} tree={siteTree(page, options)} />,
+    <LegacySitePageRenderer
+      linkMode={options.linkMode ?? "preview"}
+      tree={siteTree(page, options)}
+    />,
   );
 }
 

@@ -9,6 +9,9 @@ import {
   type SitePageRouteState,
 } from "./route.tsx";
 import type { SitePublicRendererProps } from "./renderer.tsx";
+import { LegacySitePageRenderer } from "./legacy-page-renderer.tsx";
+import { LegacySitePublicSystemStateRenderer } from "./legacy-system-state.tsx";
+import type { SitePublicSystemStateRendererProps } from "../public-system-state.ts";
 import {
   INITIAL_SITE_PAGE_TREE_SCRIPT_ID,
   readInitialSitePageTree,
@@ -164,7 +167,7 @@ describe("public Site page route data loading", () => {
 });
 
 describe("public Site page route rendering", () => {
-  it("renders ready route state with a configured public renderer", () => {
+  it("selects a workspace page renderer ahead of the required built-in renderer", () => {
     const CustomRenderer = ({ linkMode, routeBase, tree }: SitePublicRendererProps) => (
       <article
         data-custom-public-site-renderer={tree.meta.slug}
@@ -176,10 +179,12 @@ describe("public Site page route rendering", () => {
     );
     const html = renderToStaticMarkup(
       <SitePageRouteView
+        builtInRenderer={LegacySitePageRenderer}
+        builtInSystemStateRenderer={LegacySitePublicSystemStateRenderer}
         linkMode="installed"
-        renderer={CustomRenderer}
         routeBase="/sites/personal"
         state={{ status: "ready", tree: sitePageTree("home") }}
+        workspaceRenderer={CustomRenderer}
       />,
     );
 
@@ -190,15 +195,66 @@ describe("public Site page route rendering", () => {
     expect(html).not.toContain("data-site-theme");
   });
 
-  it("falls back to the bundled public renderer when no renderer is configured", () => {
+  it("selects the explicitly supplied built-in page renderer without a workspace override", () => {
     const html = renderToStaticMarkup(
-      <SitePageRouteView state={{ status: "ready", tree: sitePageTree("home") }} />,
+      <SitePageRouteView
+        builtInRenderer={LegacySitePageRenderer}
+        builtInSystemStateRenderer={LegacySitePublicSystemStateRenderer}
+        state={{ status: "ready", tree: sitePageTree("home") }}
+      />,
     );
 
     expect(html).toContain('data-site-theme="light"');
     expect(html).toContain("flex min-h-dvh flex-col");
     expect(html).toContain("<main");
     expect(html).not.toContain("data-custom-public-site-renderer");
+  });
+
+  it("keeps loading, not-found, and failure states on the built-in system-state renderer", () => {
+    const SystemStateProbe = (props: SitePublicSystemStateRendererProps) => (
+      <output
+        data-home-href={props.kind === "not-found" ? props.homeHref : undefined}
+        data-kind={props.kind}
+        data-message={props.kind === "failure" ? props.message : undefined}
+        data-slug={props.slug}
+      />
+    );
+    const WorkspaceRenderer = () => <article data-workspace-renderer="page-only" />;
+
+    const loading = renderToStaticMarkup(
+      <SitePageRouteView
+        builtInRenderer={LegacySitePageRenderer}
+        builtInSystemStateRenderer={SystemStateProbe}
+        state={{ status: "loading", slug: "home" }}
+        workspaceRenderer={WorkspaceRenderer}
+      />,
+    );
+    const notFound = renderToStaticMarkup(
+      <SitePageRouteView
+        builtInRenderer={LegacySitePageRenderer}
+        builtInSystemStateRenderer={SystemStateProbe}
+        linkMode="installed"
+        routeBase="/sites/personal"
+        state={{ status: "not-found", slug: "missing" }}
+        workspaceRenderer={WorkspaceRenderer}
+      />,
+    );
+    const failure = renderToStaticMarkup(
+      <SitePageRouteView
+        builtInRenderer={LegacySitePageRenderer}
+        builtInSystemStateRenderer={SystemStateProbe}
+        state={{ status: "error", message: "Display-safe failure.", slug: "broken" }}
+        workspaceRenderer={WorkspaceRenderer}
+      />,
+    );
+
+    expect(loading).toContain('data-kind="loading"');
+    expect(loading).toContain('data-slug="home"');
+    expect(notFound).toContain('data-kind="not-found"');
+    expect(notFound).toContain('data-home-href="/sites/personal"');
+    expect(failure).toContain('data-kind="failure"');
+    expect(failure).toContain('data-message="Display-safe failure."');
+    expect(`${loading}${notFound}${failure}`).not.toContain("data-workspace-renderer");
   });
 });
 

@@ -111,7 +111,7 @@ describe("package slice import boundaries", () => {
     expect(failures).toEqual([]);
   });
 
-  it("keeps Formless UI contract consumers on the public contract subpath", async () => {
+  it("keeps Formless Astryx consumers on documented package exports", async () => {
     const failures: string[] = [];
 
     for (const filePath of await boundarySourceFiles()) {
@@ -131,6 +131,75 @@ describe("package slice import boundaries", () => {
 
     expect(failures).toEqual([]);
   });
+
+  it("keeps Astryx Site imports on exact documented package exports", async () => {
+    const failures: string[] = [];
+    const astryxRoot = resolve(repoRoot, "lib/astryx");
+    const siteSourceRoot = resolve(repoRoot, "lib/site-app/src");
+    const packageJson = JSON.parse(await readFile(resolve(astryxRoot, "package.json"), "utf8")) as {
+      dependencies?: Record<string, string>;
+    };
+
+    for (const filePath of await sourceFiles(astryxRoot)) {
+      const source = await readFile(filePath, "utf8");
+      const path = relative(repoRoot, filePath);
+
+      for (const specifier of importSpecifiers(source)) {
+        if (
+          (specifier === "@dpeek/formless-site-app" ||
+            specifier.startsWith("@dpeek/formless-site-app/")) &&
+          !allowedAstryxSitePackageImport(filePath, specifier)
+        ) {
+          failures.push(`${path}: imports Site through undocumented export ${specifier}`);
+        }
+
+        if (relativeImportResolvesInside(filePath, specifier, siteSourceRoot)) {
+          failures.push(`${path}: imports private Site source ${specifier}`);
+        }
+      }
+    }
+
+    expect(packageJson.dependencies?.["@dpeek/formless-site-app"]).toBe("^0.1.0");
+    expect(failures).toEqual([]);
+  });
+
+  it("keeps the Site package independent from Astryx and its application contract host", async () => {
+    const failures: string[] = [];
+    const siteRoot = resolve(repoRoot, "lib/site-app");
+    const astryxSourceRoot = resolve(repoRoot, "lib/astryx/src");
+    const packageJson = JSON.parse(
+      await readFile(resolve(siteRoot, "package.json"), "utf8"),
+    ) as Record<string, unknown>;
+
+    for (const filePath of await sourceFiles(siteRoot)) {
+      const source = await readFile(filePath, "utf8");
+      const path = relative(repoRoot, filePath);
+
+      for (const specifier of importSpecifiers(source)) {
+        if (
+          specifier === "@dpeek/formless-astryx" ||
+          specifier.startsWith("@dpeek/formless-astryx/") ||
+          relativeImportResolvesInside(filePath, specifier, astryxSourceRoot)
+        ) {
+          failures.push(`${path}: imports Astryx through ${specifier}`);
+        }
+      }
+    }
+
+    for (const dependencyGroup of ["dependencies", "devDependencies", "peerDependencies"]) {
+      const dependencies = packageJson[dependencyGroup];
+
+      if (
+        typeof dependencies === "object" &&
+        dependencies !== null &&
+        "@dpeek/formless-astryx" in dependencies
+      ) {
+        failures.push(`lib/site-app/package.json: declares ${dependencyGroup} on Astryx`);
+      }
+    }
+
+    expect(failures).toEqual([]);
+  });
 });
 
 const allowedArchivePackageImports = new Set([
@@ -142,6 +211,7 @@ const allowedSitePackageImports = new Set([
   "@dpeek/formless-site-app",
   "@dpeek/formless-site-app/formless.app.json",
   "@dpeek/formless-site-app/node",
+  "@dpeek/formless-site-app/public/react",
   "@dpeek/formless-site-app/react",
   "@dpeek/formless-site-app/schema.json",
   "@dpeek/formless-site-app/seed-records.json",
@@ -166,7 +236,25 @@ const allowedFormlessAstryxPackageImports = new Set([
   "@dpeek/formless-astryx/contract",
   "@dpeek/formless-astryx/contract-host",
   "@dpeek/formless-astryx/contract-host/react",
+  "@dpeek/formless-astryx/site/renderer",
 ]);
+
+const allowedAstryxSitePackageImports = new Set([
+  "@dpeek/formless-site-app",
+  "@dpeek/formless-site-app/public/react",
+]);
+
+const allowedAstryxSiteTestPackageImports = new Set([
+  "@dpeek/formless-site-app/react",
+  "@dpeek/formless-site-app/worker",
+]);
+
+function allowedAstryxSitePackageImport(filePath: string, specifier: string): boolean {
+  return (
+    allowedAstryxSitePackageImports.has(specifier) ||
+    (filePath.includes(".test.") && allowedAstryxSiteTestPackageImports.has(specifier))
+  );
+}
 
 async function boundarySourceFiles(): Promise<string[]> {
   const nestedFiles = await Promise.all([
@@ -304,6 +392,18 @@ function forbiddenFormlessAstryxImport(importerPath: string, specifier: string):
   const resolvedSpecifier = resolve(dirname(importerPath), specifier);
 
   return pathInside(resolvedSpecifier, resolve(repoRoot, "lib/astryx/src"));
+}
+
+function relativeImportResolvesInside(
+  importerPath: string,
+  specifier: string,
+  parent: string,
+): boolean {
+  if (!specifier.startsWith(".")) {
+    return false;
+  }
+
+  return pathInside(resolve(dirname(importerPath), specifier), parent);
 }
 
 function pathInside(path: string, parent: string): boolean {

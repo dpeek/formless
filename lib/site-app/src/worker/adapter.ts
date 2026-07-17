@@ -2,6 +2,7 @@ import type { AppSchema } from "@dpeek/formless-schema";
 
 import type { SitePublicOperationTargetResolver } from "../public-operation-block-projection.ts";
 import type { SitePublicRendererComponent } from "../public-renderer.ts";
+import type { SitePublicSystemStateRendererComponent } from "../public-system-state.ts";
 import { buildSitePageTree } from "../tree.ts";
 import type { SitePageTree, StoredRecord } from "../types.ts";
 import type {
@@ -25,17 +26,26 @@ type PublicSiteWorkerTreeInput = {
 
 export type SitePublicWorkerAdapter = {
   buildPublicTree(input: PublicSiteWorkerTreeInput): { tree: SitePageTree | null };
-  renderDocument(input: PublicSiteDocumentRenderInput): Promise<PublicSiteDocumentRenderResponse>;
+  renderDocument(
+    input: SitePublicWorkerDocumentRenderInput,
+  ): Promise<PublicSiteDocumentRenderResponse>;
   renderIcon(input: PublicSiteIconRenderInput): Promise<Response>;
   renderIndexing(input: PublicSiteIndexingRenderInput): Response;
 };
 
+export type SitePublicWorkerDocumentRenderInput = Omit<
+  PublicSiteDocumentRenderInput,
+  "builtInRenderer" | "builtInSystemStateRenderer" | "workspaceRenderer"
+>;
+
 export type SitePublicWorkerAdapterOptions = {
-  renderer?: SitePublicRendererComponent;
+  builtInRenderer: SitePublicRendererComponent;
+  builtInSystemStateRenderer: SitePublicSystemStateRendererComponent;
+  workspaceRenderer?: SitePublicRendererComponent;
 };
 
 export function createSitePublicWorkerAdapter(
-  options: SitePublicWorkerAdapterOptions = {},
+  options: SitePublicWorkerAdapterOptions,
 ): SitePublicWorkerAdapter {
   return {
     buildPublicTree(input) {
@@ -50,7 +60,9 @@ export function createSitePublicWorkerAdapter(
 
       return renderPublishedSiteDocumentResponse({
         ...input,
-        renderer: input.renderer ?? options.renderer,
+        builtInRenderer: options.builtInRenderer,
+        builtInSystemStateRenderer: options.builtInSystemStateRenderer,
+        workspaceRenderer: options.workspaceRenderer,
       });
     },
     async renderIcon(input) {
@@ -63,5 +75,3 @@ export function createSitePublicWorkerAdapter(
     },
   };
 }
-
-export const sitePublicWorkerAdapter = createSitePublicWorkerAdapter();

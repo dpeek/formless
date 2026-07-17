@@ -2,11 +2,12 @@ import { SvgIcon } from "@dpeek/formless-ui/svg-icon";
 
 import { displayLabel } from "./display.tsx";
 import {
-  isExternalSiteHref,
   profileAwareSiteHref,
+  siteLinkRel,
+  siteLinkTarget,
   siteHrefMatchesRoute,
   type SitePageLinkMode,
-} from "./links.ts";
+} from "../public-links.ts";
 import {
   useFooterNavigation,
   useHeaderNavigation,
@@ -121,10 +122,4 @@ function linkClassName(
   return `${base} text-[color:var(--site-link)] underline decoration-[color:var(--site-link-decoration)] underline-offset-4 hover:decoration-[color:var(--site-link)]`;
 }
 
-export function siteLinkRel(href: string): "noreferrer" | undefined {
-  return isExternalSiteHref(href) ? "noreferrer" : undefined;
-}
-
-export function siteLinkTarget(href: string): "_blank" | undefined {
-  return isExternalSiteHref(href) ? "_blank" : undefined;
-}
+export { siteLinkRel, siteLinkTarget } from "../public-links.ts";

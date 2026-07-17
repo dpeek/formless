@@ -2,69 +2,28 @@ import type { ReactNode } from "react";
 import { renderToReadableStream } from "react-dom/server.edge";
 
 import { renderInitialSitePageTreeScript } from "../react/initial-tree.ts";
-import {
-  PUBLIC_SITE_THEME_STORAGE_KEY,
-  resolveSitePublicRendererComponent,
-} from "../react/renderer.tsx";
 import { normalizeSitePageSlug } from "../react/slug.ts";
+import {
+  publicSiteThemeDocumentMarker,
+  PUBLIC_SITE_THEME_BOOT_SCRIPT,
+  PUBLIC_SITE_THEME_BOOT_STYLE,
+  PUBLIC_SITE_THEME_SSR_MODE,
+} from "../public-theme.ts";
 import {
   buildPublicDocumentMetadata,
   type PublicDocumentMetadata,
 } from "../public-document-metadata.ts";
-import type { SitePublicRendererComponent } from "../public-renderer.ts";
+import {
+  resolveSitePublicRendererComponent,
+  type SitePublicRendererComponent,
+} from "../public-renderer.ts";
+import { sitePagePathForSlug } from "../public-links.ts";
+import type { SitePublicSystemStateRendererComponent } from "../public-system-state.ts";
 import type { SitePageTree, SitePageTreeResponse } from "../types.ts";
 import {
   publishedSiteDocumentCacheControl,
   type PublishedSiteDocumentCacheKind,
 } from "./site-cache.ts";
-
-const PUBLIC_SITE_THEME_BOOT_SCRIPT_ID = "formless-public-site-theme";
-const PUBLIC_SITE_THEME_BOOT_STYLE_ID = "formless-public-site-theme-style";
-const PUBLIC_SITE_THEME_BOOT_SCRIPT = `<script id="${PUBLIC_SITE_THEME_BOOT_SCRIPT_ID}">
-(() => {
-  const storageKey = ${JSON.stringify(PUBLIC_SITE_THEME_STORAGE_KEY)};
-  const root = document.documentElement;
-  let theme = "light";
-
-  try {
-    const stored = window.localStorage.getItem(storageKey);
-
-    if (stored === "dark" || stored === "light") {
-      theme = stored;
-    } else if (window.matchMedia?.("(prefers-color-scheme: dark)").matches) {
-      theme = "dark";
-    }
-  } catch {
-    try {
-      if (window.matchMedia?.("(prefers-color-scheme: dark)").matches) {
-        theme = "dark";
-      }
-    } catch {}
-  }
-
-  root.classList.toggle("dark", theme === "dark");
-  root.classList.toggle("light", theme === "light");
-  root.dataset.siteTheme = theme;
-  root.style.setProperty("color-scheme", theme);
-})();
-</script>`;
-const PUBLIC_SITE_THEME_BOOT_STYLE = `<style id="${PUBLIC_SITE_THEME_BOOT_STYLE_ID}">
-html.light,
-html.light body {
-  background: #ffffff;
-  color: #09090b;
-  color-scheme: light;
-}
-
-html.dark,
-html.dark body,
-html.dark #app,
-html.dark [data-site-theme] {
-  background: #09090b;
-  color: #f4f4f5;
-  color-scheme: dark;
-}
-</style>`;
 
 export type PublicSiteDocumentClientAssets = {
   body: string;
@@ -89,13 +48,15 @@ export type PublicSiteDocumentTreeResult =
     };
 
 export type PublicSiteDocumentRenderInput = {
+  builtInRenderer: SitePublicRendererComponent;
+  builtInSystemStateRenderer: SitePublicSystemStateRendererComponent;
   clientAssets: PublicSiteDocumentClientAssets;
   requestUrl: URL;
-  renderer?: SitePublicRendererComponent;
   routeBase?: `/${string}`;
   runtimeHints?: readonly PublicSiteDocumentRuntimeHint[];
   slug?: string;
   treeResult: PublicSiteDocumentTreeResult;
+  workspaceRenderer?: SitePublicRendererComponent;
 };
 
 export type PublicSiteDocumentRenderResponse = Response;
@@ -122,7 +83,10 @@ export async function renderPublishedSiteDocumentResponse(
     }
 
     const tree = input.treeResult.tree;
-    const Renderer = resolveSitePublicRendererComponent(input.renderer);
+    const Renderer = resolveSitePublicRendererComponent({
+      builtInRenderer: input.builtInRenderer,
+      workspaceRenderer: input.workspaceRenderer,
+    });
     const appHtml = await renderReactToString(
       <PublishedSiteDocumentShell>
         <Renderer linkMode="published" routeBase={input.routeBase} tree={tree} />
@@ -155,18 +119,16 @@ async function renderNotFoundDocument(
   requestUrl: URL,
   input: PublicSiteDocumentRenderInput,
 ): Promise<string> {
+  const SystemStateRenderer = input.builtInSystemStateRenderer;
+
   return renderDocument(
     await renderReactToString(
       <PublishedSiteDocumentShell>
-        <section className="mx-auto max-w-3xl px-6 py-10">
-          <h1 className="text-2xl font-semibold">Page not found</h1>
-          <p className="mt-2 text-sm text-slate-600">
-            No site page exists for <code>{slug}</code>.
-          </p>
-          <a className="mt-4 inline-flex text-sm font-medium underline" href="/">
-            Home
-          </a>
-        </section>
+        <SystemStateRenderer
+          homeHref={sitePagePathForSlug("home", "published", input.routeBase)}
+          kind="not-found"
+          slug={slug}
+        />
       </PublishedSiteDocumentShell>,
     ),
     {
@@ -186,13 +148,12 @@ async function renderErrorDocument(
   requestUrl: URL,
   input: PublicSiteDocumentRenderInput,
 ): Promise<string> {
+  const SystemStateRenderer = input.builtInSystemStateRenderer;
+
   return renderDocument(
     await renderReactToString(
       <PublishedSiteDocumentShell>
-        <section className="mx-auto max-w-3xl px-6 py-10">
-          <h1 className="text-2xl font-semibold">Site page failed to load</h1>
-          <p className="mt-2 text-sm text-slate-600">{slug}: Site page failed to render.</p>
-        </section>
+        <SystemStateRenderer kind="failure" message="Site page failed to render." slug={slug} />
       </PublishedSiteDocumentShell>,
     ),
     {
@@ -228,6 +189,7 @@ function renderDocument(
     runtimeHints?: readonly PublicSiteDocumentRuntimeHint[];
   },
 ): string {
+  const themeMarker = publicSiteThemeDocumentMarker(PUBLIC_SITE_THEME_SSR_MODE);
   const initialTreeScript = options.initialTree
     ? `\n    ${renderInitialSitePageTreeScript(options.initialTree)}`
     : "";
@@ -236,7 +198,7 @@ function renderDocument(
   const metadataTags = renderMetadataTags(options.metadata);
 
   return `<!doctype html>
-<html lang="en" class="light" data-site-theme="light" style="color-scheme: light;">
+<html lang="en" class="${themeMarker.className}" ${themeMarker.dataAttribute}="${themeMarker.dataValue}" style="${themeMarker.style}">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />

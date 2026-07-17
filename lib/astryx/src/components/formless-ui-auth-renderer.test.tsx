@@ -458,6 +458,9 @@ describe("Astryx auth renderer", () => {
       "./contract",
       "./contract-host",
       "./contract-host/react",
+      "./site/renderer",
+      "./site/global.css",
+      "./site/provider",
     ]);
     expect(rootSource).toContain("<FormlessAuthLayout />");
     expect(rootSource).not.toContain("AstryxSubscribedAuthRenderer");

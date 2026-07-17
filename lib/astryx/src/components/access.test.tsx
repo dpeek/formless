@@ -279,6 +279,9 @@ describe("canonical access-management fixtures", () => {
       "./contract",
       "./contract-host",
       "./contract-host/react",
+      "./site/renderer",
+      "./site/global.css",
+      "./site/provider",
     ]);
     expect(`${productionAppSource}\n${productionAccessSource}`).not.toContain(
       "AstryxSubscribedAccessRenderer",

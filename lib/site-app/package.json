@@ -11,6 +11,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./react": "./src/react.tsx",
+    "./public/react": "./src/public-react.tsx",
     "./worker": "./src/worker.ts",
     "./node": "./src/node.ts",
     "./formless.app.json": "./formless.app.json",
@@ -28,6 +29,7 @@
     "@dpeek/formless-media": "^0.1.0",
     "@dpeek/formless-public-operations": "^0.1.0",
     "@dpeek/formless-schema": "^0.1.0",
+    "@dpeek/formless-source-svg": "^0.1.0",
     "@dpeek/formless-ui": "^0.1.3",
     "react": "19.2.6",
     "react-dom": "19.2.6"

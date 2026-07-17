@@ -1,6 +1,10 @@
 import { StrictMode } from "react";
 import { createRoot, hydrateRoot } from "react-dom/client";
-import { SitePageRoute } from "@dpeek/formless-site-app/react";
+import {
+  LegacySitePageRenderer,
+  LegacySitePublicSystemStateRenderer,
+  SitePageRoute,
+} from "@dpeek/formless-site-app/react";
 import { sitePublicRenderer as workspaceSitePublicRenderer } from "virtual:formless/site-public-renderer/browser";
 import {
   FORMLESS_RUNTIME_APP_INSTALL_ID_META_NAME,
@@ -19,9 +23,11 @@ const appTree = (
     <main className="min-h-dvh">
       <SitePageRoute
         apiRoutePrefix={publicSiteApiRoutePrefix()}
+        builtInRenderer={LegacySitePageRenderer}
+        builtInSystemStateRenderer={LegacySitePublicSystemStateRenderer}
         linkMode="published"
-        renderer={workspaceSitePublicRenderer}
         slug={normalizeSiteRoutePath(window.location.pathname)}
+        workspaceRenderer={workspaceSitePublicRenderer}
       />
     </main>
   </StrictMode>

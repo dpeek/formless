@@ -1,7 +1,6 @@
-import type { SitePublicOperationInputFieldNode } from "../types.ts";
+import type { SitePublicOperationInputFieldNode } from "./types.ts";
 import {
   generatedFieldDraftInput,
-  generatedFieldDraftInputFromNativeFormData,
   resolveGeneratedFieldDraftValues,
   validateTextValueForStorage,
   type FieldEditor,
@@ -12,37 +11,15 @@ import {
   type GeneratedFieldDraftInput,
 } from "@dpeek/formless-schema";
 import {
-  TURNSTILE_RESPONSE_FIELD_NAME,
-  buildPublicOperationRequestBody,
-  createPublicOperationIdempotencyKey,
-  isPublicOperationResponse,
-  submitPublicOperationJson,
-  turnstileResponseTokenFromFormData,
   type PublicOperationInputValue,
   type PublicOperationInputValues,
-  type PublicOperationRequestEnvelope,
-  type PublicOperationResponse,
 } from "@dpeek/formless-public-operations";
-
-export { TURNSTILE_RESPONSE_FIELD_NAME, turnstileResponseTokenFromFormData };
 
 export type PublicOperationFormInputValue = PublicOperationInputValue;
 export type PublicOperationFormInputValues = PublicOperationInputValues;
-export type PublicOperationFormRequest = PublicOperationRequestEnvelope;
-export type PublicOperationFormResponse = PublicOperationResponse;
 export type PublicOperationFormDraftFieldInput = GeneratedFieldDraftInput;
 export type PublicOperationFormDraftInput = GeneratedFieldDraft;
 export type PublicOperationFormDraftFieldError = GeneratedFieldDraftError;
-export type PublicOperationFormExecutionResult =
-  | {
-      type: "committed" | "replayed";
-      affectedCount?: number;
-      output: PublicOperationResponse["output"];
-    }
-  | {
-      type: "failed";
-      displayError: string;
-    };
 
 export type PublicOperationFormInputFieldConfig = SitePublicOperationInputFieldNode & {
   editor: FieldEditor;
@@ -61,28 +38,6 @@ export type PublicOperationFormDraftSessionFacts = {
   input: PublicOperationFormInputValues;
   visibleFields: PublicOperationFormInputFieldConfig[];
 };
-
-export type PublicOperationFormRequestInput = {
-  idempotencyKey: string;
-  input: PublicOperationFormInputValues;
-  siteBlockId: string;
-  turnstileToken: string;
-};
-
-export type SubmitPublicOperationFormInput = PublicOperationFormRequestInput & {
-  fetcher?: typeof fetch;
-  route: string;
-};
-
-export type PublicOperationFormInputCoercionResult =
-  | {
-      ok: true;
-      input: PublicOperationFormInputValues;
-    }
-  | {
-      ok: false;
-      error: string;
-    };
 
 type PublicOperationFormInputFieldValueResolution =
   | {
@@ -213,16 +168,6 @@ export function publicOperationFormDraftInput(
   return generatedFieldDraftInput(value);
 }
 
-export function publicOperationFormDraftFromFormData(
-  fields: readonly SitePublicOperationInputFieldNode[],
-  formData: FormData,
-): PublicOperationFormDraftInput {
-  return generatedFieldDraftInputFromNativeFormData(
-    formData,
-    publicOperationFormInputFieldConfigs(fields),
-  );
-}
-
 export function publicOperationFormInputFieldConfigs(
   fields: readonly SitePublicOperationInputFieldNode[],
 ): PublicOperationFormInputFieldConfig[] {
@@ -235,76 +180,6 @@ export function publicOperationFormInputFieldConfigs(
   }));
 }
 
-export function publicOperationFormRequestBody(
-  input: PublicOperationFormRequestInput,
-): PublicOperationFormRequest {
-  return buildPublicOperationRequestBody(input);
-}
-
-export async function submitPublicOperationForm(
-  input: SubmitPublicOperationFormInput,
-): Promise<PublicOperationFormResponse> {
-  return submitPublicOperationJson({
-    body: publicOperationFormRequestBody(input),
-    fetcher: input.fetcher,
-    invalidResponseMessage: "Public operation request returned an invalid response.",
-    responseGuard: isPublicOperationResponse,
-    route: input.route,
-    submitErrorMessage: "Public operation request failed.",
-  });
-}
-
-export async function executePublicOperationForm(
-  input: SubmitPublicOperationFormInput,
-): Promise<PublicOperationFormExecutionResult> {
-  try {
-    return normalizePublicOperationFormResponse(await submitPublicOperationForm(input));
-  } catch (error) {
-    return {
-      type: "failed",
-      displayError: error instanceof Error ? error.message : "Public operation request failed.",
-    };
-  }
-}
-
-export function normalizePublicOperationFormResponse(
-  response: PublicOperationFormResponse,
-): PublicOperationFormExecutionResult {
-  return {
-    type: response.status,
-    affectedCount: response.output.affectedChangeIds.length,
-    output: response.output,
-  };
-}
-
-export function createPublicOperationFormIdempotencyKey(blockId: string): string {
-  return createPublicOperationIdempotencyKey({
-    purpose: "site-public-operation",
-    siteBlockId: blockId,
-  });
-}
-
-export function publicOperationFormInputValuesFromFormData(
-  fields: readonly SitePublicOperationInputFieldNode[],
-  formData: FormData,
-): PublicOperationFormInputCoercionResult {
-  const result = resolvePublicOperationFormDraftInput({
-    draft: publicOperationFormDraftFromFormData(fields, formData),
-    fields,
-  });
-  const firstError = firstPublicOperationFormDraftError(result);
-
-  return firstError === undefined
-    ? {
-        ok: true,
-        input: result.input,
-      }
-    : {
-        ok: false,
-        error: firstError.message,
-      };
-}
-
 function initialPublicOperationFormDraftFieldInput(
   fieldConfig: PublicOperationFormInputFieldConfig,
 ): PublicOperationFormDraftFieldInput {
@@ -313,12 +188,6 @@ function initialPublicOperationFormDraftFieldInput(
   }
 
   return { kind: "input", value: "" };
-}
-
-function firstPublicOperationFormDraftError(input: {
-  fieldErrors: Record<string, PublicOperationFormDraftFieldError>;
-}): PublicOperationFormDraftFieldError | undefined {
-  return Object.values(input.fieldErrors)[0];
 }
 
 function resolvePublicOperationFormInputFieldValue(

@@ -64,6 +64,7 @@
     "check": "oxlint --type-aware --type-check && oxfmt && bun test ./src"
   },
   "dependencies": {
+    "@dpeek/formless-source-svg": "^0.1.0",
     "@internationalized/date": "^3.12.1",
     "@react-aria/i18n": "^3.12.16",
     "@react-stately/color": "^3.10.0",

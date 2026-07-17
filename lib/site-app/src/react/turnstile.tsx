@@ -1,6 +1,5 @@
 import { useEffect, useRef } from "react";
-
-import { TURNSTILE_RESPONSE_FIELD_NAME } from "./subscribe-form.ts";
+import { TURNSTILE_RESPONSE_FIELD_NAME } from "@dpeek/formless-public-operations";
 
 type TurnstileApi = {
   render: (container: HTMLElement, options: TurnstileRenderOptions) => string;
@@ -28,15 +27,22 @@ const TURNSTILE_SCRIPT_SRC =
 const TURNSTILE_SCRIPT_MARKER = "data-formless-turnstile-script";
 
 export function TurnstileChallenge({
+  onTokenChange,
   resetSignal,
   siteKey,
 }: {
+  onTokenChange: (token: string) => void;
   resetSignal: number;
   siteKey: string;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const onTokenChangeRef = useRef(onTokenChange);
   const tokenInputRef = useRef<HTMLInputElement>(null);
   const widgetIdRef = useRef<string | undefined>(undefined);
+
+  useEffect(() => {
+    onTokenChangeRef.current = onTokenChange;
+  }, [onTokenChange]);
 
   useEffect(() => {
     let cancelled = false;
@@ -53,12 +59,15 @@ export function TurnstileChallenge({
         const widgetId = turnstile.render(container, {
           callback: (token) => {
             setTurnstileToken(tokenInputRef.current, token);
+            onTokenChangeRef.current(token);
           },
           "error-callback": () => {
             setTurnstileToken(tokenInputRef.current, "");
+            onTokenChangeRef.current("");
           },
           "expired-callback": () => {
             setTurnstileToken(tokenInputRef.current, "");
+            onTokenChangeRef.current("");
           },
           "response-field": true,
           "response-field-name": TURNSTILE_RESPONSE_FIELD_NAME,

@@ -23,8 +23,11 @@ import { RecordTree } from "./app/generated/tree.tsx";
 import {
   SitePageRoute,
   SitePageRouteView,
-  SitePageRenderer,
+  LegacySitePageRenderer,
+  LegacySitePublicSystemStateRenderer,
   startSitePageRouteSession,
+  type SitePublicRendererComponent,
+  type SitePublicSystemStateRendererComponent,
   type SitePageRouteState,
 } from "@dpeek/formless-site-app/react";
 import {
@@ -238,11 +241,15 @@ function WorkspaceActionProbe({
 }
 
 function SitePageRouteProbe({
+  builtInRenderer,
+  builtInSystemStateRenderer,
   linkMode,
   routeBase,
   slug,
   target,
 }: {
+  builtInRenderer: SitePublicRendererComponent;
+  builtInSystemStateRenderer: SitePublicSystemStateRendererComponent;
   linkMode?: string;
   routeBase?: string;
   slug: string;
@@ -254,6 +261,8 @@ function SitePageRouteProbe({
 
   return (
     <main
+      data-built-in-renderer={builtInRenderer.name}
+      data-built-in-system-state-renderer={builtInSystemStateRenderer.name}
       data-install-id={installId}
       data-route-base={routeBase}
       data-site-link-mode={linkMode}
@@ -282,7 +291,9 @@ function appRouteComponents(overrides: Partial<AppRouteComponents> = {}): AppRou
 }
 
 function renderSitePage(slug = "home", records = testSiteSeedRecords) {
-  return renderToStaticMarkup(<SitePageRenderer tree={sitePageTree(slug, records)} />);
+  return renderToStaticMarkup(
+    <LegacySitePageRenderer linkMode="preview" tree={sitePageTree(slug, records)} />,
+  );
 }
 
 function sitePageTree(slug = "home", records = testSiteSeedRecords): SitePageTree {
@@ -1063,6 +1074,10 @@ describe("App smoke routes", () => {
     expect(appProfileHtml).not.toContain('aria-label="Instance navigation"');
     expect(installedProfileHtml).not.toContain('aria-label="Instance navigation"');
     expect(publishedSiteHtml).not.toContain('data-frame="application-shell"');
+    expect(publishedSiteHtml).toContain('data-built-in-renderer="LegacySitePageRenderer"');
+    expect(publishedSiteHtml).toContain(
+      'data-built-in-system-state-renderer="LegacySitePublicSystemStateRenderer"',
+    );
     expect(signInHtml).not.toContain('data-frame="application-shell"');
     expect(setupHtml).not.toContain('data-frame="application-shell"');
   });
@@ -1489,6 +1504,10 @@ describe("App smoke routes", () => {
     expect(html).toContain('data-route-base="/sites/personal"');
     expect(html).toContain('data-target-kind="appInstall"');
     expect(html).toContain('data-install-id="personal"');
+    expect(html).toContain('data-built-in-renderer="LegacySitePageRenderer"');
+    expect(html).toContain(
+      'data-built-in-system-state-renderer="LegacySitePublicSystemStateRenderer"',
+    );
     expect(html).not.toContain('data-frame="application-shell"');
   });
 
@@ -1583,6 +1602,23 @@ describe("App smoke routes", () => {
     expect(html).not.toContain('href="/site/schema"');
   });
 
+  it("supplies explicit legacy built-ins to source public Site preview routes", () => {
+    const html = renderToStaticMarkup(
+      <Router ssrPath="/pages/home">
+        <App
+          routeComponents={appRouteComponents({ SitePageRoute: SitePageRouteProbe })}
+          runtimeProfile={createDevRuntimeProfile()}
+        />
+      </Router>,
+    );
+
+    expect(html).toContain('data-site-link-mode="preview"');
+    expect(html).toContain('data-built-in-renderer="LegacySitePageRenderer"');
+    expect(html).toContain(
+      'data-built-in-system-state-renderer="LegacySitePublicSystemStateRenderer"',
+    );
+  });
+
   it('renders a published Site profile home at "/" outside generated admin navigation', () => {
     const html = renderRoute("/", createPublishedSiteRuntimeProfile());
 
@@ -1627,6 +1663,10 @@ describe("App smoke routes", () => {
 
     expect(html).toContain('data-site-link-mode="authoring"');
     expect(html).toContain('data-site-slug="home"');
+    expect(html).toContain('data-built-in-renderer="LegacySitePageRenderer"');
+    expect(html).toContain(
+      'data-built-in-system-state-renderer="LegacySitePublicSystemStateRenderer"',
+    );
     expect(html).not.toContain('data-frame="application-shell"');
     expect(html).not.toContain('href="/tasks"');
     expect(html).not.toContain('href="/site/schema"');
@@ -2156,7 +2196,7 @@ describe("public site renderer", () => {
 
     const previewHtml = renderSitePage("home", records);
     const publishedHtml = renderToStaticMarkup(
-      <SitePageRenderer linkMode="published" tree={sitePageTree("home", records)} />,
+      <LegacySitePageRenderer linkMode="published" tree={sitePageTree("home", records)} />,
     );
 
     expect(previewHtml).toContain('href="/pages/writing"');
@@ -2216,7 +2256,8 @@ describe("public site renderer", () => {
     }
 
     const html = renderToStaticMarkup(
-      <SitePageRenderer
+      <LegacySitePageRenderer
+        linkMode="preview"
         tree={{
           ...tree,
           frame: {
@@ -2236,7 +2277,7 @@ describe("public site renderer", () => {
 
   it("renders published Site links at top-level paths", () => {
     const html = renderToStaticMarkup(
-      <SitePageRenderer linkMode="published" tree={sitePageTree("home")} />,
+      <LegacySitePageRenderer linkMode="published" tree={sitePageTree("home")} />,
     );
 
     expect(html).toContain('href="/"');
@@ -2250,7 +2291,7 @@ describe("public site renderer", () => {
 
   it("renders installed Site links under the selected public route", () => {
     const html = renderToStaticMarkup(
-      <SitePageRenderer
+      <LegacySitePageRenderer
         linkMode="installed"
         routeBase="/sites/personal"
         tree={sitePageTree("home")}
@@ -2269,14 +2310,25 @@ describe("public site renderer", () => {
   it("renders the same published app shell markup from SSR and hydrated route state", () => {
     const tree = sitePageTree("home");
     const ReadySitePageRoute = ({
+      builtInRenderer,
+      builtInSystemStateRenderer,
       linkMode = "preview",
     }: {
+      builtInRenderer: SitePublicRendererComponent;
+      builtInSystemStateRenderer: SitePublicSystemStateRendererComponent;
       linkMode?: "preview" | "authoring" | "published" | "installed";
       slug: string;
-    }) => <SitePageRouteView linkMode={linkMode} state={{ status: "ready", tree }} />;
+    }) => (
+      <SitePageRouteView
+        builtInRenderer={builtInRenderer}
+        builtInSystemStateRenderer={builtInSystemStateRenderer}
+        linkMode={linkMode}
+        state={{ status: "ready", tree }}
+      />
+    );
     const ssrHtml = renderToString(
       <main className="min-h-dvh">
-        <SitePageRenderer linkMode="published" tree={tree} />
+        <LegacySitePageRenderer linkMode="published" tree={tree} />
       </main>,
     );
     const hydratedAppHtml = renderToString(
@@ -2735,7 +2787,8 @@ describe("public site renderer", () => {
   it("renders missing-image placeholders and core-backed image references", () => {
     const tree = sitePageTree("home");
     const html = renderToStaticMarkup(
-      <SitePageRenderer
+      <LegacySitePageRenderer
+        linkMode="preview"
         tree={{
           ...tree,
           page: {
@@ -2934,7 +2987,11 @@ describe("public site renderer", () => {
 
   it("renders a 404 state for missing public site pages", () => {
     const html = renderToStaticMarkup(
-      <SitePageRouteView state={{ status: "not-found", slug: "missing" }} />,
+      <SitePageRouteView
+        builtInRenderer={LegacySitePageRenderer}
+        builtInSystemStateRenderer={LegacySitePublicSystemStateRenderer}
+        state={{ status: "not-found", slug: "missing" }}
+      />,
     );
 
     expect(html).toContain("Page not found");
@@ -2945,7 +3002,12 @@ describe("public site renderer", () => {
 
   it("renders a published 404 state with a top-level Home link", () => {
     const html = renderToStaticMarkup(
-      <SitePageRouteView linkMode="published" state={{ status: "not-found", slug: "missing" }} />,
+      <SitePageRouteView
+        builtInRenderer={LegacySitePageRenderer}
+        builtInSystemStateRenderer={LegacySitePublicSystemStateRenderer}
+        linkMode="published"
+        state={{ status: "not-found", slug: "missing" }}
+      />,
     );
 
     expect(html).toContain("Page not found");
@@ -2957,6 +3019,8 @@ describe("public site renderer", () => {
   it("renders an installed Site 404 state with an installed public Home link", () => {
     const html = renderToStaticMarkup(
       <SitePageRouteView
+        builtInRenderer={LegacySitePageRenderer}
+        builtInSystemStateRenderer={LegacySitePublicSystemStateRenderer}
         linkMode="installed"
         routeBase="/sites/personal"
         state={{ status: "not-found", slug: "missing" }}
@@ -2979,7 +3043,8 @@ describe("public site renderer", () => {
     };
 
     const html = renderToStaticMarkup(
-      <SitePageRenderer
+      <LegacySitePageRenderer
+        linkMode="preview"
         tree={{
           ...tree,
           page: {

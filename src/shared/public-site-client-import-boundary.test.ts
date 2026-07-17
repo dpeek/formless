@@ -1,12 +1,14 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import { dirname, extname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { build, type Plugin } from "esbuild";
 
 import { describe, expect, it } from "vite-plus/test";
 
 const repoRoot = resolve(fileURLToPath(new URL("../../", import.meta.url)));
 const libRoot = resolve(repoRoot, "lib");
 const publicSiteClientEntry = resolve(repoRoot, "src/public-site-main.tsx");
+const astryxPublicSiteCandidateEntry = resolve(repoRoot, "lib/astryx/src/site-renderer.tsx");
 const sourceFileExtensions = new Set([".ts", ".tsx", ".js", ".jsx"]);
 const importResolveExtensions = [".ts", ".tsx", ".js", ".jsx", ".json", ".css"] as const;
 
@@ -32,8 +34,8 @@ describe("public Site client import boundary", () => {
         "lib/site-app/src/react/route.tsx",
         "lib/site-app/src/react/renderer.tsx",
         "lib/site-app/src/react/blocks.tsx",
-        "lib/site-app/src/react/contact-form.ts",
-        "lib/site-app/src/react/subscribe-form.ts",
+        "lib/site-app/src/public-form-session.ts",
+        "lib/site-app/src/public-operation-form-draft.ts",
         "lib/site-app/src/react/turnstile.tsx",
         "lib/ui/src/markdown-renderer.tsx",
       ]),
@@ -41,7 +43,70 @@ describe("public Site client import boundary", () => {
     expect(forbiddenFiles).toEqual([]);
     expect(forbiddenSpecifiers).toEqual([]);
   });
+
+  it("keeps the Astryx candidate graph on its public presentation modules", async () => {
+    const result = await build({
+      absWorkingDir: repoRoot,
+      bundle: true,
+      entryPoints: [astryxPublicSiteCandidateEntry],
+      format: "esm",
+      jsx: "automatic",
+      metafile: true,
+      platform: "browser",
+      plugins: [externalizeCandidateDependencies],
+      write: false,
+    });
+    const fileLabels = [
+      ...new Set([
+        relative(repoRoot, astryxPublicSiteCandidateEntry),
+        ...Object.values(result.metafile.outputs)
+          .flatMap((output) => Object.entries(output.inputs))
+          .filter(([, input]) => input.bytesInOutput > 0)
+          .map(([filePath]) => relative(repoRoot, resolve(repoRoot, filePath))),
+      ]),
+    ].sort();
+    const astryxFiles = fileLabels.filter((filePath) => filePath.startsWith("lib/astryx/src/"));
+    const parsedInputLabels = Object.keys(result.metafile.inputs).map((filePath) =>
+      relative(repoRoot, resolve(repoRoot, filePath)),
+    );
+    const externalSpecifiers = Object.values(result.metafile.outputs)
+      .flatMap((output) => output.imports)
+      .filter((entry) => entry.external)
+      .map((entry) => entry.path)
+      .sort();
+
+    expect(astryxFiles).toEqual([
+      "lib/astryx/src/components/field-primitives.tsx",
+      "lib/astryx/src/components/site-system-state.tsx",
+      "lib/astryx/src/components/site.tsx",
+      "lib/astryx/src/site-provider.tsx",
+      "lib/astryx/src/site-renderer.tsx",
+    ]);
+    expect(fileLabels).toEqual(
+      expect.arrayContaining([
+        "lib/site-app/src/public-form-session.ts",
+        "lib/site-app/src/public-links.ts",
+        "lib/site-app/src/public-theme.ts",
+        "lib/site-app/src/react/theme.ts",
+        "lib/site-app/src/react/turnstile.tsx",
+      ]),
+    );
+    expect(parsedInputLabels).toContain("lib/site-app/src/public-react.tsx");
+    expect(fileLabels.filter(forbiddenAstryxPublicSiteCandidateFile)).toEqual([]);
+    expect(externalSpecifiers.filter(forbiddenPublicSiteClientSpecifier)).toEqual([]);
+  });
 });
+
+const externalizeCandidateDependencies: Plugin = {
+  name: "externalize-candidate-dependencies",
+  setup(build) {
+    build.onResolve({ filter: /^[^./]/ }, ({ path }) =>
+      path === "@dpeek/formless-site-app" || path.startsWith("@dpeek/formless-site-app/")
+        ? undefined
+        : { external: true },
+    );
+  },
+};
 
 async function publicSiteClientImportGraph() {
   const packages = await workspacePackages();
@@ -277,14 +342,34 @@ async function statOrNull(path: string) {
 function forbiddenPublicSiteClientFile(path: string): boolean {
   return (
     forbiddenPublicSiteClientFilePaths.has(path) ||
+    path.startsWith("lib/astryx/src/formless-ui-contract-host") ||
     path.startsWith("lib/ui/src/markdown-plate") ||
     path.startsWith("src/app/generated/") ||
     path.startsWith("src/client/")
   );
 }
 
+function forbiddenAstryxPublicSiteCandidateFile(path: string): boolean {
+  return (
+    path.startsWith("src/") ||
+    path.startsWith("lib/astryx/src/fixtures/") ||
+    path.startsWith("lib/astryx/src/formless-ui-contract-host") ||
+    path.startsWith("lib/astryx/src/components/access") ||
+    path.startsWith("lib/astryx/src/components/application-shell") ||
+    path.startsWith("lib/astryx/src/components/auth") ||
+    path.startsWith("lib/astryx/src/components/generated-workspace") ||
+    path.startsWith("lib/astryx/src/components/instance-management") ||
+    path.startsWith("lib/astryx/src/components/state-input") ||
+    path.startsWith("lib/site-app/src/react/legacy-") ||
+    path.startsWith("lib/site-app/src/worker/") ||
+    path.startsWith("lib/ui/")
+  );
+}
+
 function forbiddenPublicSiteClientSpecifier(specifier: string): boolean {
   return (
+    specifier === "@dpeek/formless-astryx/contract-host" ||
+    specifier === "@dpeek/formless-astryx/contract-host/react" ||
     specifier === "@dpeek/formless-gateway/client" ||
     specifier === "@dpeek/formless-ui/markdown" ||
     specifier === "@dpeek/formless-ui/source-preview" ||

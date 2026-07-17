@@ -264,6 +264,48 @@ Package tests SHALL be fast, deterministic, and local.
 - THEN browser smoke is not required for the package task
 - AND browser smoke remains app-level when visible app behavior changes
 
+### Requirement: Astryx Public Site Presentation Boundary
+
+The Astryx package SHALL expose public Site presentation through documented
+package subpaths while the Site app package remains the owner of public Site
+projection, renderer contracts, and runtime behavior.
+
+#### Scenario: Astryx imports canonical Site contracts
+
+- GIVEN the Astryx package implements public Site page, system-state, block, or
+  form presentation
+- WHEN it imports the renderer input, projected tree, link, media, icon, theme,
+  or form facts needed by that presentation
+- THEN it imports documented public contracts and helpers from
+  `@dpeek/formless-site-app`
+- AND it does not define structurally equivalent private Site projection or
+  renderer input contracts
+- AND `@dpeek/formless-site-app` does not import Astryx
+- AND neither package deep-imports the other package's source internals
+
+#### Scenario: Candidate exports stay separate from activation
+
+- GIVEN the Astryx public Site candidate is complete
+- WHEN the Astryx package export map is evaluated
+- THEN documented public subpaths expose the browser and Worker-compatible Site
+  renderers plus the provider and CSS boundaries needed to verify the candidate
+- AND prototype route roots, scenario controls, and package-local fixture state
+  remain private
+- AND exporting the candidate does not import it from production root browser
+  or Worker assembly, select it as the built-in renderer, integrate root StyleX,
+  or switch production public CSS
+
+#### Scenario: Public renderer graph stays presentation scoped
+
+- GIVEN a consumer builds the Astryx public Site renderer entrypoints
+- WHEN their import graph is checked
+- THEN it excludes repo-root runtime source, the application contract host,
+  generated admin and workspace runtime, shell and auth presentation, browser
+  replica and sync, gateway clients, rich editor modules, storage internals,
+  private challenge facts, and provider credentials
+- AND generic field presentation reused for public operation forms does not pull
+  generated operation execution or admin runtime into the public graph
+
 ### Requirement: Storage Package Slice
 
 The system SHALL provide a Storage package slice under `lib/storage/` for
@@ -772,3 +814,19 @@ runtime storage, provider execution, or app records.
 - AND the Workspace package only supplies contracts, pure helpers, display-safe
   state handling, and local filesystem adapters for workspace source or ignored
   local state
+
+### Requirement: Source SVG Package Slice
+
+The system SHALL provide a renderer-neutral Source SVG package slice under
+`lib/source-svg/` for the shared safe SVG parser and parsed element contract.
+
+#### Scenario: Renderers consume one safe parser
+
+- GIVEN Site source sanitization, shared UI icons, or Astryx source icons consume
+  user-provided SVG markup
+- WHEN they parse that markup
+- THEN they import `parseSourceSvg` from `@dpeek/formless-source-svg`
+- AND the package rejects unsupported elements, unsafe references, malformed
+  markup, and oversized source without depending on React or app runtime code
+- AND each consumer remains responsible only for rendering or serializing the
+  parsed safe element tree

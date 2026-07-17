@@ -11,8 +11,8 @@ import {
 import { primaryImagePlacement, type PublicSitePrimaryImageVariant } from "./media.tsx";
 import { publicSiteThemeVariables } from "./theme-style.ts";
 import type { PublicSiteThemeController } from "./theme.ts";
+import type { SitePageLinkMode } from "../public-links.ts";
 import type { SiteBlockNode, SitePageTree, SitePlacementNode } from "../types.ts";
-import type { SitePageLinkMode } from "./links.ts";
 
 type SitePageRendererParts = {
   Footer: ComponentType<{ block: SiteBlockNode }>;
@@ -35,8 +35,8 @@ export const SiteRouteSlugContext = createContext<string | undefined>(undefined)
 export const HeaderNavigationContext = createContext(false);
 export const FooterNavigationContext = createContext(false);
 export const SiteThemeContext = createContext<PublicSiteThemeController>({
-  theme: "light",
-  toggleTheme: () => {},
+  mode: "light",
+  toggleMode: () => {},
 });
 
 export function SitePageShell({
@@ -54,7 +54,7 @@ export function SitePageShell({
 }) {
   const frame = tree.frame;
   const { Footer, Header } = parts;
-  const themeVariables = publicSiteThemeVariables(tree.site, theme.theme);
+  const themeVariables = publicSiteThemeVariables(tree.site, theme.mode);
   const hasFooter = Boolean(frame.footer);
   const footerCompletelyRevealed = useFooterCompletelyRevealed(hasFooter);
   const bodyClassName = frame.header
@@ -68,11 +68,11 @@ export function SitePageShell({
           <SiteThemeContext.Provider value={theme}>
             <article
               className={
-                theme.theme === "dark"
+                theme.mode === "dark"
                   ? "dark flex min-h-dvh flex-col text-zinc-100"
                   : "flex min-h-dvh flex-col text-zinc-950"
               }
-              data-site-theme={theme.theme}
+              data-site-theme={theme.mode}
               style={themeVariables}
             >
               {frame.header ? <Header block={frame.header} /> : null}

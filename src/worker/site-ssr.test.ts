@@ -268,6 +268,7 @@ describe("published Site Worker SSR", () => {
 
     const html = await response.text();
 
+    expect(html).toContain('data-site-theme="light"');
     expect(html).toContain(
       `<meta name="${FORMLESS_RUNTIME_PROFILE_META_NAME}" content="publishedSite" />`,
     );

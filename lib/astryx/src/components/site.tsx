@@ -1,4 +1,12 @@
-import { useState, type ReactNode } from "react";
+import {
+  useMemo,
+  useState,
+  useSyncExternalStore,
+  type ComponentPropsWithRef,
+  type ComponentType,
+  type FormEvent,
+  type ReactNode,
+} from "react";
 import * as stylex from "@stylexjs/stylex";
 import { Button } from "@astryxdesign/core/Button";
 import {
@@ -19,7 +27,6 @@ import { IconButton } from "@astryxdesign/core/IconButton";
 import { Layout, LayoutContent, LayoutFooter, LayoutHeader } from "@astryxdesign/core/Layout";
 import { Link } from "@astryxdesign/core/Link";
 import { MobileNav } from "@astryxdesign/core/MobileNav";
-import { NumberInput } from "@astryxdesign/core/NumberInput";
 import { Selector, type SelectorOptionData } from "@astryxdesign/core/Selector";
 import { SideNavItem, SideNavSection } from "@astryxdesign/core/SideNav";
 import { TextArea } from "@astryxdesign/core/TextArea";
@@ -34,98 +41,145 @@ import {
   type TopNavProps,
 } from "@astryxdesign/core/TopNav";
 import { VStack } from "@astryxdesign/core/VStack";
-import { CubeIcon } from "@heroicons/react/24/outline";
+import { VisuallyHidden } from "@astryxdesign/core/VisuallyHidden";
+import { MoonIcon, SunIcon } from "@heroicons/react/24/outline";
 import { Markdown } from "@astryxdesign/core/Markdown";
 import { NavIcon } from "@astryxdesign/core/NavIcon";
 import {
-  publicSitePageFixture,
-  type AstryxProjectedSiteBlockNode,
-  type AstryxProjectedSitePageFixture,
-  type AstryxProjectedSitePlacementNode,
-  type AstryxProjectedSitePublicOperationInputFieldNode,
-  type AstryxProjectedSiteRouteFacts,
-  type AstryxProjectedSiteTreeWarning,
-  type AstryxPublicFormPrototypeState,
-} from "../fixtures/public-site-page.ts";
+  createSitePublicFormSessionController,
+  isExternalSiteHref,
+  profileAwareSiteHref,
+  siteHrefMatchesRoute,
+  siteLinkRel,
+  siteLinkTarget,
+  sitePagePathForSlug,
+  type SiteBlockNode,
+  type SitePlacementNode,
+  type SitePublicFormField,
+  type SitePublicFormFieldValue,
+  type SitePublicFormSession,
+  type SitePublicFormSessionController,
+  type SitePublicFormStatus,
+  type SitePublicRendererComponent,
+  type SitePublicRendererProps,
+} from "@dpeek/formless-site-app";
+import {
+  SitePublicTurnstileChallenge,
+  usePublicSiteTheme,
+} from "@dpeek/formless-site-app/public/react";
 import type {
   FieldInputAttributes,
   FieldSchema,
-  FieldValue,
   GeneratedFieldDraftInput,
   PublicSafeOperationInputField,
 } from "@dpeek/formless-schema";
 import type {
   FormlessUiFieldAccess,
   FormlessUiFieldControl,
-  FormlessUiFieldIntentHandler,
   FormlessUiFieldOptions,
   FormlessUiOperationInputField,
 } from "../formless-ui-contract.ts";
+import { AstryxPublicSiteProvider } from "../site-provider.tsx";
 import { SourceIcon } from "./field-primitives.tsx";
 
-export function FormlessSiteLayout() {
+export const AstryxSitePageRenderer: SitePublicRendererComponent = (rendererProps) => (
+  <AstryxSitePresentation rendererProps={rendererProps} />
+);
+
+export function AstryxSitePresentation({
+  formChallengeComponent,
+  formSessionControllers,
+  rendererProps,
+}: {
+  formChallengeComponent?: ProjectedPublicFormChallengeComponent;
+  formSessionControllers?: ReadonlyMap<string, SitePublicFormSessionController>;
+  rendererProps: SitePublicRendererProps;
+}) {
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
+  const theme = usePublicSiteTheme();
   const isMobile = useMediaQuery("(max-width: 768px)");
-  const fixture = publicSitePageFixture;
-  const siteLabel = fixture.tree.site?.label ?? fixture.tree.page.label;
-  const headerLinks = projectedFrameLinks(fixture.tree.frame.header, fixture.routeFacts);
+  const { tree } = rendererProps;
+  const siteLabel = tree.site?.label ?? tree.page.label;
+  const homeHref = sitePagePathForSlug("home", rendererProps.linkMode, rendererProps.routeBase);
+  const headerNavigation = projectedHeaderNavigation(tree.frame.header, rendererProps);
+  const hasMobileNavigation = headerNavigation.some((group) => group.links.length > 0);
+  const header = tree.frame.header;
+  const footer = tree.frame.footer;
 
   return (
-    <FormlessSiteShell
-      header={
-        <LayoutHeader hasDivider>
-          <TopNav
-            xstyle={siteTopNavXstyle}
-            heading={
-              <TopNavHeading
-                xstyle={siteTopNavHeadingXstyle}
-                heading={siteLabel}
-                headingHref="#public-site"
-                logo={
-                  <NavIcon
-                    icon={
-                      <SourceIcon
-                        source={fixture.tree.site?.icon}
-                        fallbackIcon={CubeIcon}
-                        color="inherit"
-                        aria-hidden
+    <AstryxPublicSiteProvider mode={theme.mode} site={tree.site}>
+      <FormlessSiteShell
+        header={
+          header ? (
+            <LayoutHeader hasDivider>
+              <TopNav
+                xstyle={siteTopNavXstyle}
+                label={header.label}
+                heading={
+                  <TopNavHeading
+                    xstyle={siteTopNavHeadingXstyle}
+                    heading={siteLabel}
+                    headingHref={homeHref}
+                    logo={
+                      <NavIcon
+                        icon={<SourceIcon source={tree.site?.icon} color="inherit" aria-hidden />}
                       />
                     }
                   />
                 }
+                centerContent={
+                  !isMobile ? (
+                    <FormlessSiteDesktopNav
+                      group={headerNavigation.find((group) => group.kind === "primary")}
+                    />
+                  ) : null
+                }
+                endContent={
+                  <FormlessSiteHeaderActions
+                    isMobile={isMobile}
+                    secondaryGroup={headerNavigation.find((group) => group.kind === "secondary")}
+                    themeMode={theme.mode}
+                    onOpenMobileNav={() => setIsMobileNavOpen(true)}
+                    onToggleTheme={theme.toggleMode}
+                  />
+                }
               />
-            }
-            centerContent={!isMobile ? <FormlessSitePrimaryNav items={headerLinks} /> : null}
-            endContent={
-              <FormlessSiteHeaderActions
-                isMobile={isMobile}
-                onOpenMobileNav={() => setIsMobileNavOpen(true)}
+            </LayoutHeader>
+          ) : undefined
+        }
+        content={
+          <LayoutContent role="main">
+            <FormlessPublicSiteRouteEntrypoint
+              formChallengeComponent={formChallengeComponent}
+              formSessionControllers={formSessionControllers}
+              rendererProps={rendererProps}
+            />
+          </LayoutContent>
+        }
+        footer={
+          footer ? (
+            <LayoutFooter>
+              <FormlessSiteFooter footer={footer} rendererProps={rendererProps} />
+            </LayoutFooter>
+          ) : undefined
+        }
+        mobileNav={
+          header && hasMobileNavigation ? (
+            <MobileNav
+              isOpen={isMobileNavOpen}
+              onOpenChange={setIsMobileNavOpen}
+              header={siteLabel}
+              label={header.label}
+            >
+              <FormlessSiteMobileNav
+                groups={headerNavigation}
+                onNavigate={() => setIsMobileNavOpen(false)}
               />
-            }
-          />
-        </LayoutHeader>
-      }
-      content={
-        <LayoutContent role="main">
-          <FormlessPublicSiteRouteEntrypoint fixture={fixture} />
-        </LayoutContent>
-      }
-      footer={
-        <LayoutFooter>
-          <FormlessSiteFooter fixture={fixture} />
-        </LayoutFooter>
-      }
-      mobileNav={
-        <MobileNav
-          isOpen={isMobileNavOpen}
-          onOpenChange={setIsMobileNavOpen}
-          header={siteLabel}
-          label="Public site navigation"
-        >
-          <FormlessSiteMobileNav items={headerLinks} onNavigate={() => setIsMobileNavOpen(false)} />
-        </MobileNav>
-      }
-    />
+            </MobileNav>
+          ) : undefined
+        }
+      />
+    </AstryxPublicSiteProvider>
   );
 }
 
@@ -173,6 +227,22 @@ const styles = stylex.create({
   markdownBody: {
     color: colorVars["--color-text-secondary"],
   },
+  plainText: {
+    color: colorVars["--color-text-secondary"],
+    whiteSpace: "pre-line",
+  },
+  heroBlock: {
+    paddingBlock: spacingVars["--spacing-4"],
+  },
+  featureBlock: {
+    paddingBlock: spacingVars["--spacing-4"],
+  },
+  featureContent: {
+    minWidth: 0,
+  },
+  featureMedia: {
+    minWidth: 0,
+  },
   cardBody: {
     minHeight: 150,
   },
@@ -191,9 +261,6 @@ const styles = stylex.create({
   metricValue: {
     color: colorVars["--color-text-primary"],
     fontWeight: fontWeightVars["--font-weight-semibold"],
-  },
-  publicFormGrid: {
-    width: "100%",
   },
   publicFormCard: {
     minHeight: 260,
@@ -231,6 +298,13 @@ const styles = stylex.create({
   publicFormActions: {
     paddingBlockStart: spacingVars["--spacing-1"],
   },
+  publicFormChallenge: {
+    minHeight: 65,
+  },
+  publicFormChallengeDisabled: {
+    opacity: 0.6,
+    pointerEvents: "none",
+  },
   imageFigure: {
     margin: 0,
     width: "100%",
@@ -238,7 +312,7 @@ const styles = stylex.create({
   imageFrame: {
     overflow: "hidden",
     width: "100%",
-    aspectRatio: "3 / 2",
+    aspectRatio: "4 / 3",
     borderRadius: radiusVars["--radius-container"],
     borderWidth: borderVars["--border-width"],
     borderStyle: "solid",
@@ -250,6 +324,51 @@ const styles = stylex.create({
     width: "100%",
     height: "100%",
     objectFit: "cover",
+  },
+  summaryImage: {
+    objectFit: "contain",
+  },
+  missingImage: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 128,
+    paddingBlock: spacingVars["--spacing-6"],
+    paddingInline: spacingVars["--spacing-6"],
+    textAlign: "center",
+  },
+  summaryLayout: {
+    alignItems: "flex-start",
+  },
+  summaryCard: {
+    position: "relative",
+  },
+  summaryLink: {
+    position: "absolute",
+    inset: 0,
+    zIndex: 1,
+    borderRadius: radiusVars["--radius-container"],
+  },
+  summaryInteractiveContent: {
+    position: "relative",
+    zIndex: 2,
+    pointerEvents: "none",
+  },
+  summaryNestedLink: {
+    position: "relative",
+    zIndex: 3,
+    pointerEvents: "auto",
+  },
+  summaryDate: {
+    color: colorVars["--color-text-secondary"],
+  },
+  summaryMedia: {
+    width: "100%",
+    maxWidth: 260,
+  },
+  summaryContent: {
+    minWidth: 0,
+    flex: 1,
   },
   linkList: {
     minWidth: 160,
@@ -281,8 +400,8 @@ const siteTopNavHeadingXstyle = styles.siteTopNavHeading as unknown as NonNullab
 
 type FormlessSiteShellProps = {
   content: ReactNode;
-  footer: ReactNode;
-  header: ReactNode;
+  footer?: ReactNode;
+  header?: ReactNode;
   mobileNav?: ReactNode;
 };
 
@@ -307,12 +426,34 @@ export function FormlessSiteShell({ content, footer, header, mobileNav }: Formle
 
 type FormlessSiteHeaderActionsProps = {
   isMobile: boolean;
+  secondaryGroup?: ProjectedNavigationGroup;
+  themeMode: "light" | "dark";
   onOpenMobileNav: () => void;
+  onToggleTheme: () => void;
 };
 
-function FormlessSiteHeaderActions({ isMobile, onOpenMobileNav }: FormlessSiteHeaderActionsProps) {
+function FormlessSiteHeaderActions({
+  isMobile,
+  secondaryGroup,
+  themeMode,
+  onOpenMobileNav,
+  onToggleTheme,
+}: FormlessSiteHeaderActionsProps) {
+  const nextThemeMode = themeMode === "light" ? "dark" : "light";
+  const ThemeIcon = themeMode === "light" ? MoonIcon : SunIcon;
+
   return (
     <HStack gap={2} vAlign="center" wrap="wrap">
+      {!isMobile ? <FormlessSiteDesktopNav group={secondaryGroup} /> : null}
+      <IconButton
+        aria-pressed={themeMode === "dark"}
+        data-site-theme-control={themeMode}
+        label={`Switch to ${nextThemeMode} mode`}
+        tooltip={`Switch to ${nextThemeMode} mode`}
+        variant="ghost"
+        icon={<ThemeIcon aria-hidden="true" />}
+        onClick={onToggleTheme}
+      />
       {isMobile ? (
         <IconButton
           label="Open navigation"
@@ -329,133 +470,175 @@ function FormlessSiteHeaderActions({ isMobile, onOpenMobileNav }: FormlessSiteHe
 type ProjectedShellLink = {
   label: string;
   publicHref: string;
-  shellHref: string;
-  sourceHref: string;
   isExternal: boolean;
   isSelected: boolean;
   icon?: string;
 };
 
-type ProjectedFormRenderingFacts = {
-  states: readonly AstryxPublicFormPrototypeState[];
-  warnings: readonly AstryxProjectedSiteTreeWarning[];
+type ProjectedNavigationGroup = {
+  kind: "primary" | "secondary";
+  label: string;
+  links: readonly ProjectedShellLink[];
 };
 
-function FormlessSitePrimaryNav({ items }: { items: readonly ProjectedShellLink[] }) {
+type ProjectedFormRenderingFacts = {
+  challengeComponent?: ProjectedPublicFormChallengeComponent;
+  sessionControllers?: ReadonlyMap<string, SitePublicFormSessionController>;
+};
+
+export type ProjectedPublicFormChallengeComponent = ComponentType<{
+  onTokenChange: (token: string) => void;
+  resetSignal: number;
+  siteKey: string;
+}>;
+
+function FormlessSiteDesktopNav({ group }: { group?: ProjectedNavigationGroup }) {
+  if (!group || group.links.length === 0) {
+    return null;
+  }
+
   return (
-    <>
-      {items.map((item) => (
+    <HStack gap={1} data-site-navigation-group={group.kind}>
+      {group.links.map((item) => (
         <TopNavItem
           key={`${item.label}:${item.publicHref}`}
           label={item.label}
-          href={item.shellHref}
-          target={item.isExternal ? "_blank" : undefined}
-          rel={item.isExternal ? "noopener noreferrer" : undefined}
+          href={item.publicHref}
+          target={siteLinkTarget(item.publicHref)}
+          rel={siteLinkRel(item.publicHref)}
           isSelected={item.isSelected}
           data-public-href={item.publicHref}
         />
+      ))}
+    </HStack>
+  );
+}
+
+type FormlessSiteMobileNavProps = {
+  groups: readonly ProjectedNavigationGroup[];
+  onNavigate: () => void;
+};
+
+function FormlessSiteMobileNav({ groups, onNavigate }: FormlessSiteMobileNavProps) {
+  return (
+    <>
+      {groups.map((group) => (
+        <SideNavSection key={group.kind} title={group.label}>
+          {group.links.map((item) => (
+            <SideNavItem
+              key={`${item.label}:${item.publicHref}`}
+              as={item.isExternal ? ExternalSiteNavigationLink : undefined}
+              label={item.label}
+              href={item.publicHref}
+              isSelected={item.isSelected}
+              onClick={onNavigate}
+              data-public-href={item.publicHref}
+            />
+          ))}
+        </SideNavSection>
       ))}
     </>
   );
 }
 
-type FormlessSiteMobileNavProps = {
-  items: readonly ProjectedShellLink[];
-  onNavigate: () => void;
-};
-
-function FormlessSiteMobileNav({ items, onNavigate }: FormlessSiteMobileNavProps) {
+function ExternalSiteNavigationLink({ href, ...anchorProps }: ComponentPropsWithRef<"a">) {
   return (
-    <SideNavSection title="Pages">
-      {items.map((item) => (
-        <SideNavItem
-          key={`${item.label}:${item.publicHref}`}
-          label={item.label}
-          href={item.shellHref}
-          isSelected={item.isSelected}
-          onClick={onNavigate}
-          data-public-href={item.publicHref}
-        />
-      ))}
-    </SideNavSection>
+    <a
+      {...anchorProps}
+      href={href}
+      target={siteLinkTarget(href ?? "")}
+      rel={siteLinkRel(href ?? "")}
+    />
   );
 }
 
 function FormlessPublicSiteRouteEntrypoint({
-  fixture,
+  formChallengeComponent,
+  formSessionControllers,
+  rendererProps,
 }: {
-  fixture: AstryxProjectedSitePageFixture;
+  formChallengeComponent?: ProjectedPublicFormChallengeComponent;
+  formSessionControllers?: ReadonlyMap<string, SitePublicFormSessionController>;
+  rendererProps: SitePublicRendererProps;
 }) {
-  const rootPlacements = orderedPlacements(fixture.tree.page.placements);
+  const { tree } = rendererProps;
   const formFacts = {
-    states: fixture.formStates,
-    warnings: fixture.tree.meta.warnings,
+    ...(formChallengeComponent ? { challengeComponent: formChallengeComponent } : {}),
+    ...(formSessionControllers ? { sessionControllers: formSessionControllers } : {}),
   } satisfies ProjectedFormRenderingFacts;
 
   return (
-    <VStack gap={8} {...stylex.props(styles.mainContent)}>
-      <VStack gap={4} {...stylex.props(styles.pageHero)}>
-        <span {...stylex.props(styles.siteIdentity)}>
-          <SourceIcon
-            source={fixture.tree.site?.icon}
-            fallbackIcon={CubeIcon}
-            color="inherit"
-            size="lg"
-            aria-hidden
-          />
-        </span>
-        <Heading level={1}>{fixture.tree.page.label}</Heading>
-        <ProjectedMarkdown body={fixture.tree.page.body} headingLevelStart={2} />
-      </VStack>
-      <ProjectedPlacementList
-        formFacts={formFacts}
-        placements={rootPlacements}
-        routeFacts={fixture.routeFacts}
-      />
-    </VStack>
+    <ProjectedPageBlock
+      block={tree.page}
+      formFacts={formFacts}
+      routeFacts={rendererProps}
+      siteIcon={tree.site?.icon}
+    />
   );
 }
 
-function FormlessSiteFooter({ fixture }: { fixture: AstryxProjectedSitePageFixture }) {
-  const footerGroups = projectedFooterGroups(fixture.tree.frame.footer, fixture.routeFacts);
+function FormlessSiteFooter({
+  footer,
+  rendererProps,
+}: {
+  footer: SiteBlockNode;
+  rendererProps: SitePublicRendererProps;
+}) {
+  const { tree } = rendererProps;
+  const footerComposition = projectedFooterComposition(footer, rendererProps);
+  const footerNotes =
+    footerComposition.notes.length > 0
+      ? footerComposition.notes
+      : tree.site?.description
+        ? [tree.site.description]
+        : [];
 
   return (
     <VStack gap={8}>
       <HStack gap={10} hAlign="start" wrap="wrap" {...stylex.props(styles.footerColumns)}>
-        {footerGroups.map((group) => (
-          <VStack key={group.label} gap={2} {...stylex.props(styles.linkList)}>
+        {footerComposition.groups.map((group) => (
+          <VStack
+            key={`${group.kind}:${group.label}`}
+            gap={2}
+            data-site-footer-group={group.kind}
+            {...stylex.props(styles.linkList)}
+          >
             <Text type="supporting" weight="semibold" as="p">
               {group.label}
             </Text>
-            {group.links.map((item) => (
-              <Link
-                key={`${item.label}:${item.publicHref}`}
-                href={item.shellHref}
-                isExternalLink={item.isExternal}
-                isStandalone
-                data-public-href={item.publicHref}
-              >
-                <ProjectedLinkLabel item={item} />
-              </Link>
-            ))}
+            <nav aria-label={group.label}>
+              <VStack gap={2}>
+                {group.links.map((item) => (
+                  <ProjectedFooterLink
+                    key={`${item.label}:${item.publicHref}`}
+                    item={item}
+                    social={group.kind === "social"}
+                  />
+                ))}
+              </VStack>
+            </nav>
           </VStack>
         ))}
       </HStack>
-      <Text type="supporting" as="p">
-        {fixture.tree.site?.description ?? fixture.tree.page.label}
-      </Text>
+      {footerNotes.map((note, index) => (
+        <Text key={`${index}:${note}`} type="supporting" as="p">
+          {note}
+        </Text>
+      ))}
     </VStack>
   );
 }
 
 function ProjectedPlacementList({
   formFacts,
+  headingLevel,
   placements,
   routeFacts,
 }: {
   formFacts: ProjectedFormRenderingFacts;
-  placements: readonly AstryxProjectedSitePlacementNode[];
-  routeFacts: AstryxProjectedSiteRouteFacts;
+  headingLevel: SiteHeadingLevel;
+  placements: readonly SitePlacementNode[];
+  routeFacts: SitePublicRendererProps;
 }) {
   const ordered = orderedPlacements(placements);
 
@@ -470,6 +653,8 @@ function ProjectedPlacementList({
           key={placement.id}
           block={placement.block}
           formFacts={formFacts}
+          headingLevel={headingLevel}
+          placement={placement}
           routeFacts={routeFacts}
         />
       ))}
@@ -480,57 +665,361 @@ function ProjectedPlacementList({
 function ProjectedSiteBlock({
   block,
   formFacts,
+  headingLevel,
+  placement,
   routeFacts,
 }: {
-  block: AstryxProjectedSiteBlockNode;
+  block: SiteBlockNode;
   formFacts: ProjectedFormRenderingFacts;
-  routeFacts: AstryxProjectedSiteRouteFacts;
+  headingLevel: SiteHeadingLevel;
+  placement?: SitePlacementNode;
+  routeFacts: SitePublicRendererProps;
 }) {
   switch (block.type) {
+    case "page":
+      return <ProjectedPageBlock block={block} formFacts={formFacts} routeFacts={routeFacts} />;
+    case "group":
+      return (
+        <ProjectedGroupBlock
+          block={block}
+          formFacts={formFacts}
+          headingLevel={headingLevel}
+          placement={placement}
+          routeFacts={routeFacts}
+        />
+      );
+    case "hero":
+      return (
+        <ProjectedHeroBlock
+          block={block}
+          formFacts={formFacts}
+          headingLevel={headingLevel}
+          routeFacts={routeFacts}
+        />
+      );
+    case "feature":
+      return (
+        <ProjectedFeatureBlock
+          block={block}
+          formFacts={formFacts}
+          headingLevel={headingLevel}
+          routeFacts={routeFacts}
+        />
+      );
     case "section":
-      return <ProjectedSectionBlock block={block} formFacts={formFacts} routeFacts={routeFacts} />;
+      return (
+        <ProjectedSectionBlock
+          block={block}
+          formFacts={formFacts}
+          headingLevel={headingLevel}
+          routeFacts={routeFacts}
+        />
+      );
     case "cardGrid":
-      return <ProjectedCardGridBlock block={block} formFacts={formFacts} routeFacts={routeFacts} />;
+      return (
+        <ProjectedCardGridBlock
+          block={block}
+          formFacts={formFacts}
+          headingLevel={headingLevel}
+          routeFacts={routeFacts}
+        />
+      );
     case "card":
-      return <ProjectedCardBlock block={block} formFacts={formFacts} routeFacts={routeFacts} />;
+      return (
+        <ProjectedCardBlock
+          block={block}
+          formFacts={formFacts}
+          headingLevel={headingLevel}
+          routeFacts={routeFacts}
+        />
+      );
     case "metricGrid":
       return (
-        <ProjectedMetricGridBlock block={block} formFacts={formFacts} routeFacts={routeFacts} />
+        <ProjectedMetricGridBlock
+          block={block}
+          formFacts={formFacts}
+          headingLevel={headingLevel}
+          routeFacts={routeFacts}
+        />
       );
     case "metric":
-      return <ProjectedMetricBlock block={block} />;
+      return <ProjectedMetricBlock block={block} headingLevel={headingLevel} />;
+    case "markdown":
+      return (
+        <ProjectedMarkdownBlock
+          block={block}
+          formFacts={formFacts}
+          headingLevel={headingLevel}
+          routeFacts={routeFacts}
+        />
+      );
     case "image":
       return <ProjectedImageBlock block={block} />;
     case "link":
-      return <ProjectedInlineLinkBlock block={block} routeFacts={routeFacts} />;
+      return (
+        <ProjectedInlineLinkBlock block={block} placement={placement} routeFacts={routeFacts} />
+      );
     case "subscribeForm":
     case "contactForm":
     case "publicOperationForm":
-      return <ProjectedPublicFormBlock block={block} formFacts={formFacts} />;
+      return (
+        <ProjectedPublicFormBlock block={block} formFacts={formFacts} headingLevel={headingLevel} />
+      );
+    case "postList":
+    case "projectList":
+      return (
+        <ProjectedContentListBlock
+          block={block}
+          headingLevel={headingLevel}
+          routeFacts={routeFacts}
+        />
+      );
+    case "post":
+    case "project":
+      return (
+        <ProjectedContentSummary
+          block={block}
+          headingLevel={headingLevel}
+          routeFacts={routeFacts}
+        />
+      );
     default:
-      return <ProjectedFallbackBlock block={block} formFacts={formFacts} routeFacts={routeFacts} />;
+      return null;
   }
+}
+
+type SiteHeadingLevel = 1 | 2 | 3 | 4 | 5 | 6;
+
+function ProjectedPageBlock({
+  block,
+  formFacts,
+  routeFacts,
+  siteIcon,
+}: {
+  block: SiteBlockNode;
+  formFacts: ProjectedFormRenderingFacts;
+  routeFacts: SitePublicRendererProps;
+  siteIcon?: string;
+}) {
+  const isPostDetail = routeFacts.tree.route?.kind === "post";
+  const primaryImage = isPostDetail ? primaryImagePlacement(block) : undefined;
+
+  return (
+    <VStack
+      gap={8}
+      data-site-block-type={block.type}
+      data-site-block-id={block.id}
+      {...stylex.props(styles.mainContent)}
+    >
+      <VStack gap={4} {...stylex.props(styles.pageHero)}>
+        {siteIcon ? (
+          <span {...stylex.props(styles.siteIdentity)}>
+            <SourceIcon source={siteIcon} color="inherit" size="lg" aria-hidden />
+          </span>
+        ) : null}
+        {block.label ? <Heading level={1}>{block.label}</Heading> : null}
+        {primaryImage ? (
+          <ProjectedPrimaryImage placement={primaryImage} variant="post-detail" />
+        ) : null}
+        {isPostDetail ? null : <ProjectedMarkdown body={block.body} headingLevelStart={2} />}
+      </VStack>
+      <ProjectedPlacementList
+        formFacts={formFacts}
+        headingLevel={2}
+        placements={defaultPlacements(block)}
+        routeFacts={routeFacts}
+      />
+    </VStack>
+  );
+}
+
+function ProjectedGroupBlock({
+  block,
+  formFacts,
+  headingLevel,
+  placement,
+  routeFacts,
+}: {
+  block: SiteBlockNode;
+  formFacts: ProjectedFormRenderingFacts;
+  headingLevel: SiteHeadingLevel;
+  placement?: SitePlacementNode;
+  routeFacts: SitePublicRendererProps;
+}) {
+  const label = placement?.label ?? block.label;
+
+  return (
+    <section id={block.id} data-site-block-type={block.type}>
+      <VStack gap={4}>
+        {label ? <Heading level={headingLevel}>{label}</Heading> : null}
+        <ProjectedPlainText body={block.body} />
+        <ProjectedPlacementList
+          formFacts={formFacts}
+          headingLevel={nextHeadingLevel(headingLevel)}
+          placements={defaultPlacements(block)}
+          routeFacts={routeFacts}
+        />
+      </VStack>
+    </section>
+  );
+}
+
+function ProjectedHeroBlock({
+  block,
+  formFacts,
+  headingLevel,
+  routeFacts,
+}: {
+  block: SiteBlockNode;
+  formFacts: ProjectedFormRenderingFacts;
+  headingLevel: SiteHeadingLevel;
+  routeFacts: SitePublicRendererProps;
+}) {
+  const media = orderedPlacements(block.placements).filter(
+    (placement) => placement.block.type === "image",
+  );
+  const mediaIds = new Set(media.map((placement) => placement.id));
+  const children = defaultPlacements(block).filter((placement) => !mediaIds.has(placement.id));
+  const content = (
+    <VStack gap={4}>
+      {block.label ? (
+        <Heading level={headingLevel} type="display-1">
+          {block.label}
+        </Heading>
+      ) : null}
+      <ProjectedPlainText body={block.body} />
+    </VStack>
+  );
+
+  return (
+    <section id={block.id} data-site-block-type={block.type} {...stylex.props(styles.heroBlock)}>
+      <VStack gap={5}>
+        {media.length > 0 ? (
+          <Grid columns={{ minWidth: 280, max: 2, repeat: "fit" }} gap={6} width="100%">
+            {content}
+            <div data-site-hero-media>
+              <ProjectedPlacementList
+                formFacts={formFacts}
+                headingLevel={nextHeadingLevel(headingLevel)}
+                placements={media}
+                routeFacts={routeFacts}
+              />
+            </div>
+          </Grid>
+        ) : (
+          content
+        )}
+        <ProjectedPlacementList
+          formFacts={formFacts}
+          headingLevel={nextHeadingLevel(headingLevel)}
+          placements={children}
+          routeFacts={routeFacts}
+        />
+      </VStack>
+    </section>
+  );
+}
+
+function ProjectedFeatureBlock({
+  block,
+  formFacts,
+  headingLevel,
+  routeFacts,
+}: {
+  block: SiteBlockNode;
+  formFacts: ProjectedFormRenderingFacts;
+  headingLevel: SiteHeadingLevel;
+  routeFacts: SitePublicRendererProps;
+}) {
+  const media = slottedPlacements(block, "media", "image");
+  const actions = slottedPlacements(block, "actions", "link");
+  const mediaSide = block.alignment === "right" ? "right" : "left";
+  const content = (
+    <VStack gap={4} {...stylex.props(styles.featureContent)}>
+      {block.label ? <Heading level={headingLevel}>{block.label}</Heading> : null}
+      <ProjectedMarkdown body={block.body} headingLevelStart={nextHeadingLevel(headingLevel)} />
+      {actions.length > 0 ? (
+        <nav aria-label={`${block.label} actions`} data-site-feature-actions>
+          <ProjectedPlacementList
+            formFacts={formFacts}
+            headingLevel={nextHeadingLevel(headingLevel)}
+            placements={actions}
+            routeFacts={routeFacts}
+          />
+        </nav>
+      ) : null}
+    </VStack>
+  );
+  const mediaContent =
+    media.length > 0 ? (
+      <div data-site-feature-media {...stylex.props(styles.featureMedia)}>
+        <ProjectedPlacementList
+          formFacts={formFacts}
+          headingLevel={nextHeadingLevel(headingLevel)}
+          placements={media}
+          routeFacts={routeFacts}
+        />
+      </div>
+    ) : null;
+
+  return (
+    <section
+      id={block.id}
+      data-site-block-type={block.type}
+      data-site-feature-alignment={mediaSide}
+      {...stylex.props(styles.featureBlock)}
+    >
+      <VStack gap={5}>
+        {mediaContent ? (
+          <Grid columns={{ minWidth: 280, max: 2, repeat: "fit" }} gap={6} width="100%">
+            {mediaSide === "left" ? (
+              <>
+                {mediaContent}
+                {content}
+              </>
+            ) : (
+              <>
+                {content}
+                {mediaContent}
+              </>
+            )}
+          </Grid>
+        ) : (
+          content
+        )}
+        <ProjectedPlacementList
+          formFacts={formFacts}
+          headingLevel={nextHeadingLevel(headingLevel)}
+          placements={defaultPlacements(block)}
+          routeFacts={routeFacts}
+        />
+      </VStack>
+    </section>
+  );
 }
 
 function ProjectedSectionBlock({
   block,
   formFacts,
+  headingLevel,
   routeFacts,
 }: {
-  block: AstryxProjectedSiteBlockNode;
+  block: SiteBlockNode;
   formFacts: ProjectedFormRenderingFacts;
-  routeFacts: AstryxProjectedSiteRouteFacts;
+  headingLevel: SiteHeadingLevel;
+  routeFacts: SitePublicRendererProps;
 }) {
   return (
     <section id={block.id} data-site-block-type={block.type} {...stylex.props(styles.sectionBlock)}>
       <VStack gap={5}>
         <VStack gap={2} {...stylex.props(styles.sectionContent)}>
-          <Heading level={2}>{block.label}</Heading>
-          <ProjectedMarkdown body={block.body} headingLevelStart={3} />
+          {block.label ? <Heading level={headingLevel}>{block.label}</Heading> : null}
+          <ProjectedMarkdown body={block.body} headingLevelStart={nextHeadingLevel(headingLevel)} />
         </VStack>
         <ProjectedPlacementList
           formFacts={formFacts}
-          placements={block.placements}
+          headingLevel={nextHeadingLevel(headingLevel)}
+          placements={defaultPlacements(block)}
           routeFacts={routeFacts}
         />
       </VStack>
@@ -541,23 +1030,28 @@ function ProjectedSectionBlock({
 function ProjectedCardGridBlock({
   block,
   formFacts,
+  headingLevel,
   routeFacts,
 }: {
-  block: AstryxProjectedSiteBlockNode;
+  block: SiteBlockNode;
   formFacts: ProjectedFormRenderingFacts;
-  routeFacts: AstryxProjectedSiteRouteFacts;
+  headingLevel: SiteHeadingLevel;
+  routeFacts: SitePublicRendererProps;
 }) {
-  const cards = orderedPlacements(block.placements);
+  const cards = defaultPlacements(block);
 
   return (
-    <VStack gap={3}>
-      <Heading level={3}>{block.label}</Heading>
+    <VStack gap={3} data-site-block-type={block.type}>
+      {block.label ? <Heading level={headingLevel}>{block.label}</Heading> : null}
+      <ProjectedMarkdown body={block.body} headingLevelStart={nextHeadingLevel(headingLevel)} />
       <Grid columns={{ minWidth: 220, max: 3, repeat: "fit" }} gap={4} width="100%">
         {cards.map((placement) => (
           <ProjectedSiteBlock
             key={placement.id}
             block={placement.block}
             formFacts={formFacts}
+            headingLevel={nextHeadingLevel(headingLevel)}
+            placement={placement}
             routeFacts={routeFacts}
           />
         ))}
@@ -569,14 +1063,21 @@ function ProjectedCardGridBlock({
 function ProjectedCardBlock({
   block,
   formFacts,
+  headingLevel,
   routeFacts,
 }: {
-  block: AstryxProjectedSiteBlockNode;
+  block: SiteBlockNode;
   formFacts: ProjectedFormRenderingFacts;
-  routeFacts: AstryxProjectedSiteRouteFacts;
+  headingLevel: SiteHeadingLevel;
+  routeFacts: SitePublicRendererProps;
 }) {
   return (
-    <Card padding={5} minHeight={180}>
+    <Card
+      padding={5}
+      minHeight={180}
+      data-site-block-type={block.type}
+      data-site-block-color={block.color}
+    >
       <VStack gap={3} {...stylex.props(styles.cardBody)}>
         {block.icon ? (
           <span
@@ -588,11 +1089,12 @@ function ProjectedCardBlock({
             <SourceIcon source={block.icon} color="inherit" aria-hidden />
           </span>
         ) : null}
-        <Heading level={4}>{block.label}</Heading>
-        <ProjectedMarkdown body={block.body} headingLevelStart={5} />
+        {block.label ? <Heading level={headingLevel}>{block.label}</Heading> : null}
+        <ProjectedMarkdown body={block.body} headingLevelStart={nextHeadingLevel(headingLevel)} />
         <ProjectedPlacementList
           formFacts={formFacts}
-          placements={block.placements}
+          headingLevel={nextHeadingLevel(headingLevel)}
+          placements={defaultPlacements(block)}
           routeFacts={routeFacts}
         />
       </VStack>
@@ -603,23 +1105,28 @@ function ProjectedCardBlock({
 function ProjectedMetricGridBlock({
   block,
   formFacts,
+  headingLevel,
   routeFacts,
 }: {
-  block: AstryxProjectedSiteBlockNode;
+  block: SiteBlockNode;
   formFacts: ProjectedFormRenderingFacts;
-  routeFacts: AstryxProjectedSiteRouteFacts;
+  headingLevel: SiteHeadingLevel;
+  routeFacts: SitePublicRendererProps;
 }) {
-  const metrics = orderedPlacements(block.placements);
+  const metrics = defaultPlacements(block);
 
   return (
-    <VStack gap={3}>
-      <Heading level={3}>{block.label}</Heading>
+    <VStack gap={3} data-site-block-type={block.type}>
+      {block.label ? <Heading level={headingLevel}>{block.label}</Heading> : null}
+      <ProjectedMarkdown body={block.body} headingLevelStart={nextHeadingLevel(headingLevel)} />
       <Grid columns={{ minWidth: 180, max: 3, repeat: "fit" }} gap={3} width="100%">
         {metrics.map((placement) => (
           <ProjectedSiteBlock
             key={placement.id}
             block={placement.block}
             formFacts={formFacts}
+            headingLevel={nextHeadingLevel(headingLevel)}
+            placement={placement}
             routeFacts={routeFacts}
           />
         ))}
@@ -628,9 +1135,21 @@ function ProjectedMetricGridBlock({
   );
 }
 
-function ProjectedMetricBlock({ block }: { block: AstryxProjectedSiteBlockNode }) {
+function ProjectedMetricBlock({
+  block,
+  headingLevel,
+}: {
+  block: SiteBlockNode;
+  headingLevel: SiteHeadingLevel;
+}) {
   return (
-    <Card padding={4} minHeight={140} variant="muted">
+    <Card
+      padding={4}
+      minHeight={140}
+      variant="muted"
+      data-site-block-type={block.type}
+      data-site-block-color={block.color}
+    >
       <VStack gap={2} {...stylex.props(styles.metricBody)}>
         <Text
           type="large"
@@ -642,42 +1161,52 @@ function ProjectedMetricBlock({ block }: { block: AstryxProjectedSiteBlockNode }
         >
           {block.label}
         </Text>
-        <ProjectedMarkdown body={block.body} headingLevelStart={4} />
+        <ProjectedMarkdown body={block.body} headingLevelStart={headingLevel} />
       </VStack>
     </Card>
   );
 }
 
-function ProjectedImageBlock({ block }: { block: AstryxProjectedSiteBlockNode }) {
-  const preferredHref = block.media?.href ?? block.href;
-  const fallbackHref = block.media?.href ? block.href : undefined;
-
-  if (!preferredHref) {
-    return null;
-  }
+function ProjectedMarkdownBlock({
+  block,
+  formFacts,
+  headingLevel,
+  routeFacts,
+}: {
+  block: SiteBlockNode;
+  formFacts: ProjectedFormRenderingFacts;
+  headingLevel: SiteHeadingLevel;
+  routeFacts: SitePublicRendererProps;
+}) {
+  const hasHeading = Boolean(block.label && block.label !== "Body");
 
   return (
-    <figure {...stylex.props(styles.imageFigure)} data-media-asset-id={block.media?.assetId}>
-      <div
-        {...stylex.props(
-          styles.imageFrame,
-          block.width && block.height ? dynamicStyles.imageAspect(block.width, block.height) : null,
-        )}
-      >
-        <img
-          src={preferredHref}
-          alt={block.label}
-          loading="lazy"
-          data-preferred-src={preferredHref}
-          data-fallback-src={fallbackHref}
-          onError={(event) => {
-            if (fallbackHref && event.currentTarget.src !== fallbackHref) {
-              event.currentTarget.src = fallbackHref;
-            }
-          }}
-          {...stylex.props(styles.image)}
+    <section id={block.id} data-site-block-type={block.type}>
+      <VStack gap={3}>
+        {hasHeading ? <Heading level={headingLevel}>{block.label}</Heading> : null}
+        <ProjectedMarkdown
+          body={block.body}
+          headingLevelStart={hasHeading ? nextHeadingLevel(headingLevel) : headingLevel}
         />
-      </div>
+        <ProjectedPlacementList
+          formFacts={formFacts}
+          headingLevel={hasHeading ? nextHeadingLevel(headingLevel) : headingLevel}
+          placements={defaultPlacements(block)}
+          routeFacts={routeFacts}
+        />
+      </VStack>
+    </section>
+  );
+}
+
+function ProjectedImageBlock({ block }: { block: SiteBlockNode }) {
+  return (
+    <figure
+      {...stylex.props(styles.imageFigure)}
+      data-media-asset-id={block.media?.assetId}
+      data-site-image="block"
+    >
+      <ProjectedImageSurface block={block} variant="block" />
       <figcaption>
         <Text type="supporting" as="span" color="secondary">
           {block.label}
@@ -687,22 +1216,110 @@ function ProjectedImageBlock({ block }: { block: AstryxProjectedSiteBlockNode })
   );
 }
 
+type ProjectedImageVariant = "block" | "post-detail" | "summary";
+
+function ProjectedPrimaryImage({
+  placement,
+  variant,
+}: {
+  placement: SitePlacementNode;
+  variant: Exclude<ProjectedImageVariant, "block">;
+}) {
+  if (placement.block.type !== "image") {
+    return null;
+  }
+
+  return (
+    <figure
+      {...stylex.props(styles.imageFigure)}
+      data-media-asset-id={placement.block.media?.assetId}
+      data-site-primary-image={variant}
+    >
+      <ProjectedImageSurface block={placement.block} variant={variant} />
+    </figure>
+  );
+}
+
+function ProjectedImageSurface({
+  block,
+  variant,
+}: {
+  block: SiteBlockNode;
+  variant: ProjectedImageVariant;
+}) {
+  const aspectRatio = block.width && block.height ? `${block.width} / ${block.height}` : "4 / 3";
+  const mediaHref = block.media?.href;
+
+  return (
+    <div
+      {...stylex.props(
+        styles.imageFrame,
+        block.width && block.height ? dynamicStyles.imageAspect(block.width, block.height) : null,
+      )}
+      data-site-image-aspect-ratio={aspectRatio}
+      data-site-image-variant={variant}
+    >
+      {mediaHref ? (
+        <img
+          src={mediaHref}
+          alt={block.label}
+          height={block.height}
+          loading="lazy"
+          width={block.width}
+          {...stylex.props(styles.image, variant === "summary" ? styles.summaryImage : null)}
+        />
+      ) : (
+        <div
+          aria-label={block.label}
+          data-site-image-missing
+          {...stylex.props(styles.missingImage)}
+        >
+          <Text type="supporting" as="span" color="secondary">
+            {block.label}
+          </Text>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ProjectedInlineLinkBlock({
   block,
+  placement,
   routeFacts,
 }: {
-  block: AstryxProjectedSiteBlockNode;
-  routeFacts: AstryxProjectedSiteRouteFacts;
+  block: SiteBlockNode;
+  placement?: SitePlacementNode;
+  routeFacts: SitePublicRendererProps;
 }) {
   if (!block.href) {
     return null;
   }
 
-  const item = toProjectedShellLink(block, block.href, routeFacts);
+  const item = toProjectedShellLink(block, block.href, routeFacts, placement);
+
+  if (placement?.slot === "actions") {
+    return (
+      <Button
+        label={item.label}
+        href={item.publicHref}
+        target={siteLinkTarget(item.publicHref)}
+        rel={siteLinkRel(item.publicHref)}
+        icon={
+          item.icon ? <SourceIcon source={item.icon} color="inherit" size="sm" aria-hidden /> : null
+        }
+        variant="primary"
+        data-public-href={item.publicHref}
+        data-site-action-link
+      />
+    );
+  }
 
   return (
     <Link
-      href={item.shellHref}
+      href={item.publicHref}
+      target={siteLinkTarget(item.publicHref)}
+      rel={siteLinkRel(item.publicHref)}
       isExternalLink={item.isExternal}
       isStandalone
       data-public-href={item.publicHref}
@@ -712,126 +1329,481 @@ function ProjectedInlineLinkBlock({
   );
 }
 
-function ProjectedFallbackBlock({
+function ProjectedContentListBlock({
   block,
-  formFacts,
+  headingLevel,
   routeFacts,
 }: {
-  block: AstryxProjectedSiteBlockNode;
-  formFacts: ProjectedFormRenderingFacts;
-  routeFacts: AstryxProjectedSiteRouteFacts;
+  block: SiteBlockNode;
+  headingLevel: SiteHeadingLevel;
+  routeFacts: SitePublicRendererProps;
 }) {
+  const items = block.query?.items ?? [];
+
   return (
-    <Card padding={5}>
-      <VStack gap={3}>
-        <Heading level={3}>{block.label}</Heading>
-        <ProjectedMarkdown body={block.body} headingLevelStart={4} />
-        <ProjectedPlacementList
-          formFacts={formFacts}
-          placements={block.placements}
-          routeFacts={routeFacts}
-        />
+    <section data-site-block-type={block.type} data-site-content-list={block.type}>
+      <VStack gap={4}>
+        {block.label ? <Heading level={headingLevel}>{block.label}</Heading> : null}
+        {items.length > 0 ? (
+          <VStack gap={4}>
+            {items.map((item) => (
+              <ProjectedContentSummary
+                key={item.id}
+                block={item}
+                headingLevel={nextHeadingLevel(headingLevel)}
+                routeFacts={routeFacts}
+              />
+            ))}
+          </VStack>
+        ) : (
+          <Text type="supporting" color="secondary" as="p">
+            No published {block.type === "projectList" ? "projects" : "posts"} yet.
+          </Text>
+        )}
       </VStack>
+    </section>
+  );
+}
+
+function ProjectedContentSummary({
+  block,
+  headingLevel,
+  routeFacts,
+}: {
+  block: SiteBlockNode;
+  headingLevel: SiteHeadingLevel;
+  routeFacts: SitePublicRendererProps;
+}) {
+  const primaryImage = primaryImagePlacement(block);
+  const publicHref = block.href
+    ? profileAwareSiteHref(block.href, routeFacts.linkMode, routeFacts.routeBase)
+    : undefined;
+  const summaryContent = (
+    <HStack
+      gap={4}
+      wrap="wrap"
+      data-site-summary-layout={primaryImage ? "media-start" : "text-only"}
+      {...stylex.props(styles.summaryLayout, publicHref ? styles.summaryInteractiveContent : null)}
+    >
+      {primaryImage ? (
+        <div data-site-summary-media {...stylex.props(styles.summaryMedia)}>
+          <ProjectedPrimaryImage placement={primaryImage} variant="summary" />
+        </div>
+      ) : null}
+      <VStack gap={3} data-site-summary-content {...stylex.props(styles.summaryContent)}>
+        {block.date && block.type !== "project" ? (
+          <time dateTime={block.date} {...stylex.props(styles.summaryDate)}>
+            {block.date}
+          </time>
+        ) : null}
+        {block.label ? <Heading level={headingLevel}>{block.label}</Heading> : null}
+        <ProjectedContentSummaryBody block={block} />
+      </VStack>
+    </HStack>
+  );
+
+  return (
+    <Card
+      padding={5}
+      data-site-block-type={block.type}
+      data-site-summary-id={block.id}
+      {...stylex.props(publicHref ? styles.summaryCard : null)}
+    >
+      {publicHref ? (
+        <Link
+          href={publicHref}
+          target={siteLinkTarget(publicHref)}
+          rel={siteLinkRel(publicHref)}
+          color="inherit"
+          data-public-href={publicHref}
+          data-site-summary-link={block.type}
+          {...stylex.props(styles.summaryLink)}
+        >
+          <VisuallyHidden>{block.label}</VisuallyHidden>
+        </Link>
+      ) : null}
+      {summaryContent}
     </Card>
+  );
+}
+
+function ProjectedContentSummaryBody({ block }: { block: SiteBlockNode }) {
+  if (!block.body) {
+    return null;
+  }
+
+  if (block.type === "project") {
+    return (
+      <ProjectedMarkdown
+        body={block.body}
+        headingLevelStart={4}
+        linkComponent={ProjectedSummaryMarkdownLink}
+      />
+    );
+  }
+
+  return <ProjectedPlainText body={block.body} />;
+}
+
+function ProjectedSummaryMarkdownLink({ children, href }: { children: ReactNode; href: string }) {
+  return (
+    <Link
+      href={href}
+      target={siteLinkTarget(href)}
+      rel={siteLinkRel(href)}
+      type="inherit"
+      {...stylex.props(styles.summaryNestedLink)}
+    >
+      {children}
+    </Link>
   );
 }
 
 function ProjectedPublicFormBlock({
   block,
   formFacts,
+  headingLevel,
 }: {
-  block: AstryxProjectedSiteBlockNode;
+  block: SiteBlockNode;
   formFacts: ProjectedFormRenderingFacts;
+  headingLevel: SiteHeadingLevel;
 }) {
-  const variants = projectedFormStateVariants(block, formFacts);
-
-  if (variants.length === 1) {
+  if (block.type === "subscribeForm" || block.type === "contactForm") {
     return (
-      <ProjectedPublicFormVariant
+      <ProjectedFixedPublicFormBlock
         block={block}
-        formState={variants[0]}
-        warning={projectedFormWarning(block, formFacts, variants[0])}
+        formFacts={formFacts}
+        headingLevel={headingLevel}
       />
     );
   }
 
   return (
-    <Grid
-      columns={{ minWidth: 280, max: 2, repeat: "fit" }}
-      gap={4}
-      width="100%"
-      {...stylex.props(styles.publicFormGrid)}
-    >
-      {variants.map((formState, index) => (
-        <ProjectedPublicFormVariant
-          key={`${formState.blockId}:${formState.state}:${index}`}
-          block={block}
-          formState={formState}
-          warning={projectedFormWarning(block, formFacts, formState)}
-        />
-      ))}
-    </Grid>
+    <ProjectedPublicOperationFormBlock
+      block={block}
+      formFacts={formFacts}
+      headingLevel={headingLevel}
+    />
   );
 }
 
-function ProjectedPublicFormVariant({
+function ProjectedFixedPublicFormBlock({
   block,
-  formState,
-  warning,
+  formFacts,
+  headingLevel,
 }: {
-  block: AstryxProjectedSiteBlockNode;
-  formState: AstryxPublicFormPrototypeState;
-  warning?: AstryxProjectedSiteTreeWarning;
+  block: SiteBlockNode;
+  formFacts: ProjectedFormRenderingFacts;
+  headingLevel: SiteHeadingLevel;
 }) {
-  const hasProjectedOperation = Boolean(block.publicOperation);
-  const isUnavailable = formState.state === "unavailable" || !hasProjectedOperation;
-  const isComplete = formState.state === "success";
-  const isSubmitting = formState.state === "submitting";
-  const canRenderFields = !isUnavailable && !isComplete;
-  const message = publicFormStateMessage(block, formState, warning, hasProjectedOperation);
-  const noticeState = isUnavailable ? "unavailable" : formState.state;
-  const shouldRenderNoticeBeforeActions = noticeState === "failed" && canRenderFields;
+  const fixtureController = formFacts.sessionControllers?.get(block.id);
+  const controller = useMemo(
+    () => fixtureController ?? createSitePublicFormSessionController({ block }),
+    [block, fixtureController],
+  );
+  const session = useSyncExternalStore(
+    controller.subscribe,
+    controller.getSnapshot,
+    controller.getSnapshot,
+  );
 
   return (
-    <Card padding={5} variant={isUnavailable ? "muted" : undefined}>
-      <form
-        aria-label={`${block.label} ${publicFormStateLabel(formState.state)}`}
-        data-public-form-kind={block.type}
-        data-public-form-state={isUnavailable ? "unavailable" : formState.state}
-        data-public-operation-key={block.publicOperation?.canonicalKey}
-        data-site-block-type={block.type}
-        onSubmit={(event) => event.preventDefault()}
-        {...stylex.props(styles.publicForm, styles.publicFormCard)}
-      >
-        <VStack gap={4}>
-          <HStack hAlign="between" vAlign="start" gap={3} wrap="wrap">
-            <VStack gap={2} {...stylex.props(styles.publicFormHeader)}>
-              <Heading level={3}>{block.label}</Heading>
-              <ProjectedMarkdown body={block.body} headingLevelStart={4} />
-            </VStack>
-          </HStack>
-          {message && !shouldRenderNoticeBeforeActions ? (
-            <PublicFormStateNotice state={noticeState}>{message}</PublicFormStateNotice>
-          ) : null}
-          {canRenderFields ? (
-            <ProjectedPublicFormFields block={block} isDisabled={isSubmitting} />
-          ) : null}
-          {message && shouldRenderNoticeBeforeActions ? (
-            <PublicFormStateNotice state={noticeState}>{message}</PublicFormStateNotice>
-          ) : null}
-          {canRenderFields ? (
-            <div {...stylex.props(styles.publicFormActions)}>
-              <Button
-                label={isSubmitting ? "Submitting" : (block.buttonLabel ?? "Submit")}
-                type="submit"
-                variant="primary"
-                isDisabled={isSubmitting}
-                isLoading={isSubmitting}
-              />
-            </div>
-          ) : null}
+    <ProjectedFixedPublicFormSession
+      controller={controller}
+      formFacts={formFacts}
+      headingLevel={headingLevel}
+      session={session}
+    />
+  );
+}
+
+function ProjectedFixedPublicFormSession({
+  controller,
+  formFacts,
+  headingLevel,
+  session,
+}: {
+  controller: SitePublicFormSessionController;
+  formFacts: ProjectedFormRenderingFacts;
+  headingLevel: SiteHeadingLevel;
+  session: SitePublicFormSession;
+}) {
+  const blockType = session.kind === "subscribe" ? "subscribeForm" : "contactForm";
+  const challenge = session.challenge;
+  const ChallengeComponent = formFacts.challengeComponent ?? SitePublicTurnstileChallenge;
+
+  async function onSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    await controller.dispatch(session.submit.intent);
+  }
+
+  return (
+    <Card
+      padding={5}
+      variant={session.status === "unavailable" ? "muted" : undefined}
+      data-public-form-kind={session.kind}
+      data-public-form-state={session.status}
+      data-site-block-type={blockType}
+    >
+      <VStack gap={4} {...stylex.props(styles.publicFormCard)}>
+        <VStack gap={2} {...stylex.props(styles.publicFormHeader)}>
+          <Heading level={headingLevel}>{session.heading}</Heading>
+          <ProjectedMarkdown
+            body={session.body}
+            headingLevelStart={nextHeadingLevel(headingLevel)}
+          />
         </VStack>
-      </form>
+        {session.status === "unavailable" ? (
+          <ProjectedPublicFormFeedback session={session} />
+        ) : (
+          <form aria-label={session.heading} noValidate onSubmit={onSubmit}>
+            <VStack gap={4} {...stylex.props(styles.publicForm)}>
+              <VStack gap={3} {...stylex.props(styles.publicFormFields)}>
+                {session.fields.map((field) => (
+                  <ProjectedFixedPublicFormField
+                    key={field.occurrenceId}
+                    controller={controller}
+                    field={field}
+                  />
+                ))}
+              </VStack>
+              {challenge ? (
+                <div
+                  aria-disabled={challenge.disabled || undefined}
+                  data-public-form-challenge={challenge.kind}
+                  data-public-form-challenge-ready={challenge.ready}
+                  data-public-form-challenge-reset={challenge.resetSignal}
+                  {...stylex.props(
+                    styles.publicFormChallenge,
+                    challenge.disabled ? styles.publicFormChallengeDisabled : null,
+                  )}
+                >
+                  <ChallengeComponent
+                    onTokenChange={(token) =>
+                      void controller.dispatch({ ...challenge.tokenChangeIntent, token })
+                    }
+                    resetSignal={challenge.resetSignal}
+                    siteKey={challenge.siteKey}
+                  />
+                </div>
+              ) : null}
+              <ProjectedPublicFormFeedback session={session} />
+              <div {...stylex.props(styles.publicFormActions)}>
+                {session.status === "failed" && session.retryIntent ? (
+                  <Button
+                    label="Try again"
+                    type="button"
+                    variant="secondary"
+                    onClick={() => {
+                      if (session.retryIntent) {
+                        void controller.dispatch(session.retryIntent);
+                      }
+                    }}
+                  />
+                ) : session.status === "success" ? null : (
+                  <Button
+                    isDisabled={!session.submit.ready}
+                    isLoading={session.status === "submitting"}
+                    label={
+                      session.status === "submitting"
+                        ? session.submit.pendingLabel
+                        : session.submit.label
+                    }
+                    type="submit"
+                    variant="primary"
+                  />
+                )}
+              </div>
+            </VStack>
+          </form>
+        )}
+      </VStack>
+    </Card>
+  );
+}
+
+function ProjectedFixedPublicFormField({
+  controller,
+  field,
+}: {
+  controller: SitePublicFormSessionController;
+  field: SitePublicFormField;
+}) {
+  const sharedProps = {
+    "data-public-fixed-field": field.name,
+    htmlName: field.name,
+    isDisabled: field.disabled,
+    isRequired: field.required,
+    label: field.label,
+    status: field.error ? ({ type: "error", message: field.error } as const) : undefined,
+    value: publicFormTextValue(field.value),
+    width: "100%" as const,
+    onChange: (value: string) => dispatchFixedPublicFormField(controller, field, value),
+  };
+
+  return field.control === "longText" ? (
+    <TextArea {...sharedProps} rows={4} />
+  ) : (
+    <TextInput {...sharedProps} type={field.format === "email" ? "email" : "text"} />
+  );
+}
+
+function ProjectedPublicFormFeedback({ session }: { session: SitePublicFormSession }) {
+  const feedback = session.feedback;
+
+  if (!feedback) {
+    return null;
+  }
+
+  return (
+    <PublicFormStateNotice
+      state={
+        feedback.kind === "failure"
+          ? "failed"
+          : feedback.kind === "success"
+            ? "success"
+            : "unavailable"
+      }
+    >
+      {feedback.message}
+    </PublicFormStateNotice>
+  );
+}
+
+function dispatchFixedPublicFormField(
+  controller: SitePublicFormSessionController,
+  field: SitePublicFormField,
+  value: SitePublicFormFieldValue,
+) {
+  void controller.dispatch({ ...field.changeIntent, value });
+}
+
+function publicFormTextValue(value: SitePublicFormFieldValue) {
+  return typeof value === "boolean" ? (value ? "true" : "false") : String(value);
+}
+
+function ProjectedPublicOperationFormBlock({
+  block,
+  formFacts,
+  headingLevel,
+}: {
+  block: SiteBlockNode;
+  formFacts: ProjectedFormRenderingFacts;
+  headingLevel: SiteHeadingLevel;
+}) {
+  const fixtureController = formFacts.sessionControllers?.get(block.id);
+  const controller = useMemo(
+    () => fixtureController ?? createSitePublicFormSessionController({ block }),
+    [block, fixtureController],
+  );
+  const session = useSyncExternalStore(
+    controller.subscribe,
+    controller.getSnapshot,
+    controller.getSnapshot,
+  );
+
+  return (
+    <ProjectedPublicOperationFormSession
+      controller={controller}
+      formFacts={formFacts}
+      headingLevel={headingLevel}
+      session={session}
+    />
+  );
+}
+
+function ProjectedPublicOperationFormSession({
+  controller,
+  formFacts,
+  headingLevel,
+  session,
+}: {
+  controller: SitePublicFormSessionController;
+  formFacts: ProjectedFormRenderingFacts;
+  headingLevel: SiteHeadingLevel;
+  session: SitePublicFormSession;
+}) {
+  const challenge = session.challenge;
+  const ChallengeComponent = formFacts.challengeComponent ?? SitePublicTurnstileChallenge;
+
+  async function onSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    await controller.dispatch(session.submit.intent);
+  }
+
+  return (
+    <Card
+      padding={5}
+      variant={session.status === "unavailable" ? "muted" : undefined}
+      data-public-form-kind={session.kind}
+      data-public-form-state={session.status}
+      data-site-block-type="publicOperationForm"
+    >
+      <VStack gap={4} {...stylex.props(styles.publicFormCard)}>
+        <VStack gap={2} {...stylex.props(styles.publicFormHeader)}>
+          <Heading level={headingLevel}>{session.heading}</Heading>
+          <ProjectedMarkdown
+            body={session.body}
+            headingLevelStart={nextHeadingLevel(headingLevel)}
+          />
+        </VStack>
+        {session.status === "unavailable" ? (
+          <ProjectedPublicFormFeedback session={session} />
+        ) : (
+          <form aria-label={session.heading} noValidate onSubmit={onSubmit}>
+            <VStack gap={4} {...stylex.props(styles.publicForm)}>
+              <ProjectedPublicOperationFormFields controller={controller} session={session} />
+              {challenge ? (
+                <div
+                  aria-disabled={challenge.disabled || undefined}
+                  data-public-form-challenge={challenge.kind}
+                  data-public-form-challenge-ready={challenge.ready}
+                  data-public-form-challenge-reset={challenge.resetSignal}
+                  {...stylex.props(
+                    styles.publicFormChallenge,
+                    challenge.disabled ? styles.publicFormChallengeDisabled : null,
+                  )}
+                >
+                  <ChallengeComponent
+                    onTokenChange={(token) =>
+                      void controller.dispatch({ ...challenge.tokenChangeIntent, token })
+                    }
+                    resetSignal={challenge.resetSignal}
+                    siteKey={challenge.siteKey}
+                  />
+                </div>
+              ) : null}
+              <ProjectedPublicFormFeedback session={session} />
+              <div {...stylex.props(styles.publicFormActions)}>
+                {session.status === "failed" && session.retryIntent ? (
+                  <Button
+                    label="Try again"
+                    type="button"
+                    variant="secondary"
+                    onClick={() => {
+                      if (session.retryIntent) {
+                        void controller.dispatch(session.retryIntent);
+                      }
+                    }}
+                  />
+                ) : session.status === "success" ? null : (
+                  <Button
+                    isDisabled={!session.submit.ready}
+                    isLoading={session.status === "submitting"}
+                    label={
+                      session.status === "submitting"
+                        ? session.submit.pendingLabel
+                        : session.submit.label
+                    }
+                    type="submit"
+                    variant="primary"
+                  />
+                )}
+              </div>
+            </VStack>
+          </form>
+        )}
+      </VStack>
     </Card>
   );
 }
@@ -841,7 +1813,7 @@ function PublicFormStateNotice({
   state,
 }: {
   children: ReactNode;
-  state: AstryxPublicFormPrototypeState["state"];
+  state: SitePublicFormStatus;
 }) {
   return (
     <div
@@ -860,156 +1832,32 @@ function PublicFormStateNotice({
   );
 }
 
-function ProjectedPublicFormFields({
-  block,
-  isDisabled,
-}: {
-  block: AstryxProjectedSiteBlockNode;
-  isDisabled: boolean;
-}) {
-  if (block.type === "subscribeForm") {
-    return <ProjectedSubscribeFormFields block={block} isDisabled={isDisabled} />;
-  }
-
-  if (block.type === "contactForm") {
-    return <ProjectedContactFormFields block={block} isDisabled={isDisabled} />;
-  }
-
-  return <ProjectedPublicOperationFormFields block={block} isDisabled={isDisabled} />;
-}
-
-function ProjectedSubscribeFormFields({
-  block,
-  isDisabled,
-}: {
-  block: AstryxProjectedSiteBlockNode;
-  isDisabled: boolean;
-}) {
-  const [email, setEmail] = useState("reader@example.com");
-
-  return (
-    <VStack gap={3} {...stylex.props(styles.publicFormFields)}>
-      <TextInput
-        data-public-fixed-field="email"
-        htmlName="email"
-        isDisabled={isDisabled}
-        isRequired
-        label={block.emailLabel ?? "Email"}
-        type="email"
-        value={email}
-        width="100%"
-        onChange={setEmail}
-      />
-    </VStack>
-  );
-}
-
-function ProjectedContactFormFields({
-  block,
-  isDisabled,
-}: {
-  block: AstryxProjectedSiteBlockNode;
-  isDisabled: boolean;
-}) {
-  const [name, setName] = useState("Dana Peek");
-  const [email, setEmail] = useState("dana@example.com");
-  const [message, setMessage] = useState("I want to review the public Site renderer.");
-
-  return (
-    <VStack gap={3} {...stylex.props(styles.publicFormFields)}>
-      <TextInput
-        data-public-fixed-field="name"
-        htmlName="name"
-        isDisabled={isDisabled}
-        isRequired
-        label={block.nameLabel ?? "Name"}
-        value={name}
-        width="100%"
-        onChange={setName}
-      />
-      <TextInput
-        data-public-fixed-field="email"
-        htmlName="email"
-        isDisabled={isDisabled}
-        isRequired
-        label={block.emailLabel ?? "Email"}
-        type="email"
-        value={email}
-        width="100%"
-        onChange={setEmail}
-      />
-      <TextArea
-        data-public-fixed-field="message"
-        htmlName="message"
-        isDisabled={isDisabled}
-        isRequired
-        label={block.messageLabel ?? "Message"}
-        rows={4}
-        value={message}
-        width="100%"
-        onChange={setMessage}
-      />
-    </VStack>
-  );
-}
-
 function ProjectedPublicOperationFormFields({
-  block,
-  isDisabled,
+  controller,
+  session,
 }: {
-  block: AstryxProjectedSiteBlockNode;
-  isDisabled: boolean;
+  controller: SitePublicFormSessionController;
+  session: SitePublicFormSession;
 }) {
-  const operation = block.publicOperation;
-  const fields = operation?.fields ?? [];
-  const [draftValues, setDraftValues] = useState(() => createInitialPublicOperationDraft(fields));
-  const handleIntent: FormlessUiFieldIntentHandler = (intent) => {
-    if (intent.type !== "operationDraftChange") {
-      return;
-    }
-
-    setDraftValues((currentValues) => ({
-      ...currentValues,
-      [intent.inputName]: intent.inputValue,
-    }));
-  };
-
-  const updateDraftValue = (inputName: string, value: PublicOperationDraftValue) =>
-    handleIntent({
-      type: "operationDraftChange",
-      inputName,
-      inputValue: publicDraftInputFromValue(value),
-    });
-
-  const clearDraftValue = (inputName: string) =>
-    handleIntent({
-      type: "operationDraftChange",
-      inputName,
-      inputValue: publicDraftInputFromValue(""),
-    });
-
-  const setDraftValue = (inputName: string, inputValue: GeneratedFieldDraftInput | undefined) =>
-    setDraftValues((currentValues) => ({
-      ...currentValues,
-      [inputName]: inputValue,
-    }));
-
-  if (!operation || fields.length === 0) {
+  if (session.fields.length === 0) {
     return null;
   }
 
   return (
     <VStack gap={3} {...stylex.props(styles.publicFormFields)}>
-      {fields.map((field) => {
-        const fieldData = toPublicOperationFieldData(field, draftValues, isDisabled);
+      {session.fields.map((field) => {
+        const fieldData = toPublicOperationFieldData(
+          field,
+          session.status === "submitting",
+          session.submit.pendingLabel,
+        );
 
         return (
           <ProjectedPublicOperationField
             key={fieldData.fieldId}
+            controller={controller}
             field={fieldData}
-            clearDraftValue={clearDraftValue}
-            setDraftValue={setDraftValue}
-            updateDraftValue={updateDraftValue}
+            sessionField={field}
           />
         );
       })}
@@ -1018,18 +1866,19 @@ function ProjectedPublicOperationFormFields({
 }
 
 function ProjectedPublicOperationField({
-  clearDraftValue,
+  controller,
   field,
-  setDraftValue,
-  updateDraftValue,
+  sessionField,
 }: {
-  clearDraftValue: (inputName: string) => void;
+  controller: SitePublicFormSessionController;
   field: ProjectedPublicOperationFieldData;
-  setDraftValue: (inputName: string, inputValue: GeneratedFieldDraftInput | undefined) => void;
-  updateDraftValue: (inputName: string, value: PublicOperationDraftValue) => void;
+  sessionField: SitePublicFormField;
 }) {
   const isPending = Boolean(field.pending?.isPending);
   const isDisabled = field.access.kind !== "editable" || isPending;
+  const status = field.errors?.[0]
+    ? ({ type: "error", message: field.errors[0].message } as const)
+    : undefined;
   const sharedProps = {
     description: field.publicDescription,
     isDisabled,
@@ -1037,18 +1886,20 @@ function ProjectedPublicOperationField({
     isRequired: field.required,
     label: field.label,
     placeholder: field.publicPlaceholder,
+    status,
     width: "100%" as const,
   };
+  const updateDraftValue = (value: SitePublicFormFieldValue) =>
+    void controller.dispatch({ ...sessionField.changeIntent, value });
 
   return (
     <div
       data-public-field-control={publicOperationFieldControlName(field)}
       data-public-field-format={field.field.type === "text" ? field.field.format : undefined}
+      data-public-field-id={field.fieldId}
       data-public-field-name={field.inputName}
     >
       {renderPublicOperationFieldControl(field, {
-        clearDraftValue,
-        setDraftValue,
         sharedProps,
         updateDraftValue,
       })}
@@ -1059,8 +1910,6 @@ function ProjectedPublicOperationField({
 function renderPublicOperationFieldControl(
   field: ProjectedPublicOperationFieldData,
   input: {
-    clearDraftValue: (inputName: string) => void;
-    setDraftValue: (inputName: string, inputValue: GeneratedFieldDraftInput | undefined) => void;
     sharedProps: {
       description?: string;
       isDisabled: boolean;
@@ -1068,12 +1917,13 @@ function renderPublicOperationFieldControl(
       isRequired?: boolean;
       label: string;
       placeholder?: string;
+      status?: { message: string; type: "error" };
       width: "100%";
     };
-    updateDraftValue: (inputName: string, value: PublicOperationDraftValue) => void;
+    updateDraftValue: (value: SitePublicFormFieldValue) => void;
   },
 ) {
-  const { clearDraftValue, setDraftValue, sharedProps, updateDraftValue } = input;
+  const { sharedProps, updateDraftValue } = input;
 
   if (field.input.control === "longText") {
     return (
@@ -1082,7 +1932,7 @@ function renderPublicOperationFieldControl(
         htmlName={field.inputName}
         rows={4}
         value={formatPublicFieldValue(field.draftInput)}
-        onChange={(value) => updateDraftValue(field.inputName, value)}
+        onChange={updateDraftValue}
       />
     );
   }
@@ -1095,9 +1945,10 @@ function renderPublicOperationFieldControl(
         isLoading={sharedProps.isLoading}
         isRequired={sharedProps.isRequired}
         label={sharedProps.label}
+        status={sharedProps.status}
         value={field.draftInput?.value === true}
         width="100%"
-        onChange={(value) => updateDraftValue(field.inputName, value)}
+        onChange={updateDraftValue}
       />
     );
   }
@@ -1108,28 +1959,20 @@ function renderPublicOperationFieldControl(
         {...sharedProps}
         hasClear={!field.required}
         value={publicDateInputValue(formatPublicFieldValue(field.draftInput))}
-        onChange={(value) => updateDraftValue(field.inputName, value ?? "")}
+        onChange={(value) => updateDraftValue(value ?? "")}
       />
     );
   }
 
   if (field.input.control === "number") {
     return (
-      <NumberInput
-        description={sharedProps.description}
-        hasClear
+      <TextInput
+        {...sharedProps}
+        hasClear={!field.required}
         htmlName={field.inputName}
-        isDisabled={sharedProps.isDisabled}
-        isRequired={sharedProps.isRequired}
-        label={sharedProps.label}
-        placeholder={sharedProps.placeholder}
-        value={publicNumberInputValue(field.draftInput)}
-        width={sharedProps.width}
-        onChange={(value) =>
-          value === null
-            ? clearDraftValue(field.inputName)
-            : updateDraftValue(field.inputName, value)
-        }
+        type="text"
+        value={formatPublicFieldValue(field.draftInput)}
+        onChange={updateDraftValue}
       />
     );
   }
@@ -1148,8 +1991,8 @@ function renderPublicOperationFieldControl(
     return (
       <ProjectedPublicOperationTypeahead
         field={field}
-        setDraftValue={setDraftValue}
         sharedProps={sharedProps}
+        updateDraftValue={updateDraftValue}
       />
     );
   }
@@ -1162,7 +2005,7 @@ function renderPublicOperationFieldControl(
       htmlName={field.inputName}
       type={field.field.type === "text" && field.field.format === "email" ? "email" : "text"}
       value={formatPublicFieldValue(field.draftInput)}
-      onChange={(value) => updateDraftValue(field.inputName, value)}
+      onChange={updateDraftValue}
     />
   );
 }
@@ -1171,11 +2014,10 @@ type PublicSuggestionItem = SearchableItem<{ value: string }>;
 
 function ProjectedPublicOperationTypeahead({
   field,
-  setDraftValue,
   sharedProps,
+  updateDraftValue,
 }: {
   field: ProjectedPublicOperationFieldData;
-  setDraftValue: (inputName: string, inputValue: GeneratedFieldDraftInput | undefined) => void;
   sharedProps: {
     description?: string;
     isDisabled: boolean;
@@ -1183,8 +2025,10 @@ function ProjectedPublicOperationTypeahead({
     isRequired?: boolean;
     label: string;
     placeholder?: string;
+    status?: { message: string; type: "error" };
     width: "100%";
   };
+  updateDraftValue: (value: SitePublicFormFieldValue) => void;
 }) {
   const items = publicSuggestionItems(field.options?.referenceOptions ?? []);
   const searchSource = createStaticSource(items);
@@ -1203,17 +2047,14 @@ function ProjectedPublicOperationTypeahead({
         label={sharedProps.label}
         placeholder={sharedProps.placeholder}
         searchSource={searchSource}
+        status={sharedProps.status}
         value={selectedItem}
         width={sharedProps.width}
         debounceMs={0}
         onChange={(item) => {
-          const inputValue = item
-            ? publicDraftInputFromValue(publicSuggestionItemValue(item))
-            : publicDraftInputFromValue("");
-
-          setDraftValue(field.inputName, inputValue);
+          updateDraftValue(item ? publicSuggestionItemValue(item) : "");
         }}
-        onChangeQuery={(query) => setDraftValue(field.inputName, publicDraftInputFromValue(query))}
+        onChangeQuery={updateDraftValue}
       />
       <input name={field.inputName} readOnly type="hidden" value={value} />
     </>
@@ -1233,9 +2074,10 @@ function ProjectedPublicOperationSelector({
     isRequired?: boolean;
     label: string;
     placeholder?: string;
+    status?: { message: string; type: "error" };
     width: "100%";
   };
-  updateDraftValue: (inputName: string, value: PublicOperationDraftValue) => void;
+  updateDraftValue: (value: SitePublicFormFieldValue) => void;
 }) {
   const options = publicSelectorOptions(field.options?.enumOptions ?? []);
   const value = formatPublicFieldValue(field.draftInput);
@@ -1246,7 +2088,7 @@ function ProjectedPublicOperationSelector({
         {...sharedProps}
         options={options}
         value={value || undefined}
-        onChange={(nextValue) => updateDraftValue(field.inputName, nextValue)}
+        onChange={updateDraftValue}
       />
     );
   }
@@ -1257,13 +2099,11 @@ function ProjectedPublicOperationSelector({
       hasClear
       options={options}
       value={value || null}
-      onChange={(nextValue) => updateDraftValue(field.inputName, nextValue ?? "")}
+      onChange={(nextValue) => updateDraftValue(nextValue ?? "")}
     />
   );
 }
 
-type PublicOperationDraftValue = FieldValue;
-type PublicOperationDraftValues = Record<string, GeneratedFieldDraftInput | undefined>;
 type ProjectedPublicOperationFieldData = FormlessUiOperationInputField & {
   publicDescription?: string;
   publicPlaceholder?: string;
@@ -1271,147 +2111,42 @@ type ProjectedPublicOperationFieldData = FormlessUiOperationInputField & {
 type ISODateInputValue =
   `${number}${number}${number}${number}-${number}${number}-${number}${number}`;
 
-function projectedFormStateVariants(
-  block: AstryxProjectedSiteBlockNode,
-  formFacts: ProjectedFormRenderingFacts,
-) {
-  const explicitStates = formFacts.states.filter((state) => state.blockId === block.id);
-
-  if (explicitStates.length > 0) {
-    return explicitStates;
-  }
-
-  const warning = formFacts.warnings.find((candidate) => candidate.recordId === block.id);
-
-  return [
-    {
-      blockId: block.id,
-      state: block.publicOperation && !warning ? "valid" : "unavailable",
-      message: warning?.message,
-      warningCode: warning?.code,
-    },
-  ] satisfies readonly AstryxPublicFormPrototypeState[];
-}
-
-function projectedFormWarning(
-  block: AstryxProjectedSiteBlockNode,
-  formFacts: ProjectedFormRenderingFacts,
-  formState: AstryxPublicFormPrototypeState,
-) {
-  return formFacts.warnings.find(
-    (warning) =>
-      warning.recordId === block.id &&
-      (!formState.warningCode || warning.code === formState.warningCode),
-  );
-}
-
-function publicFormStateLabel(state: AstryxPublicFormPrototypeState["state"]) {
-  switch (state) {
-    case "valid":
-      return "Ready";
-    case "unavailable":
-      return "Unavailable";
-    case "submitting":
-      return "Submitting";
-    case "success":
-      return "Success";
-    case "failed":
-      return "Failed";
-  }
-}
-
-function publicFormStateMessage(
-  block: AstryxProjectedSiteBlockNode,
-  formState: AstryxPublicFormPrototypeState,
-  warning: AstryxProjectedSiteTreeWarning | undefined,
-  hasProjectedOperation: boolean,
-) {
-  if (!hasProjectedOperation || formState.state === "unavailable") {
-    return formState.message ?? warning?.message ?? "This form is unavailable.";
-  }
-
-  if (formState.state === "success") {
-    return formState.message ?? block.successLabel ?? "Submitted.";
-  }
-
-  if (formState.state === "failed") {
-    return formState.message ?? "Submission failed. Try again.";
-  }
-
-  return null;
-}
-
-function createInitialPublicOperationDraft(
-  fields: readonly AstryxProjectedSitePublicOperationInputFieldNode[],
-) {
-  const values: PublicOperationDraftValues = {};
-
-  for (const field of fields) {
-    values[field.name] = publicDraftInputFromValue(initialPublicOperationFieldValue(field));
-  }
-
-  return values;
-}
-
-function initialPublicOperationFieldValue(
-  field: AstryxProjectedSitePublicOperationInputFieldNode,
-): PublicOperationDraftValue {
-  if (field.control === "boolean") {
-    return false;
-  }
-
-  if (field.control === "number") {
-    return "";
-  }
-
-  if (field.control === "date") {
-    return "2026-07-15";
-  }
-
-  if (field.control === "enum") {
-    return field.options?.[0]?.value ?? "";
-  }
-
-  if (field.format === "email") {
-    return "dana@example.com";
-  }
-
-  if (field.format === "phone") {
-    return "+1 555 0100";
-  }
-
-  if (field.suggestions?.[0]) {
-    return field.suggestions[0];
-  }
-
-  return field.control === "longText" ? "Review the projected public page." : "Dana Peek";
-}
-
 function toPublicOperationFieldData(
-  field: AstryxProjectedSitePublicOperationInputFieldNode,
-  draftValues: PublicOperationDraftValues,
-  isDisabled: boolean,
+  field: SitePublicFormField,
+  isPending: boolean,
+  pendingLabel: string,
 ): ProjectedPublicOperationFieldData {
-  const draftInput =
-    draftValues[field.name] ?? publicDraftInputFromValue(initialPublicOperationFieldValue(field));
+  const draftInput = publicDraftInputFromValue(field.value);
   const fieldSchema = toPublicOperationFieldSchema(field);
   const control = toPublicOperationFieldControl(field, fieldSchema);
 
   return {
-    access: publicOperationFieldAccess(isDisabled),
+    access: publicOperationFieldAccess(field.disabled),
     commit: "submit",
     control,
     density: "default",
     draftInput,
     editor: control.editor,
+    ...(field.error
+      ? {
+          errors: [
+            {
+              draftValue: draftInput,
+              fieldName: field.name,
+              message: field.error,
+            },
+          ],
+        }
+      : {}),
     field: fieldSchema,
-    fieldId: field.fieldId,
+    fieldId: field.occurrenceId,
     fieldName: field.name,
     input: toPublicOperationInput(field),
     inputName: field.name,
     label: field.label,
     labelVisibility: "visible",
     options: toPublicOperationFieldOptions(field),
+    ...(isPending ? { pending: { isPending: true, label: pendingLabel } } : {}),
     publicPlaceholder: publicOperationFieldPlaceholder(field),
     required: field.required,
     mode: "editor",
@@ -1420,9 +2155,7 @@ function toPublicOperationFieldData(
   };
 }
 
-function toPublicOperationFieldSchema(
-  field: AstryxProjectedSitePublicOperationInputFieldNode,
-): FieldSchema {
+function toPublicOperationFieldSchema(field: SitePublicFormField): FieldSchema {
   if (field.control === "boolean") {
     return { type: "boolean", required: field.required, label: field.label };
   }
@@ -1456,7 +2189,7 @@ function toPublicOperationFieldSchema(
 }
 
 function toPublicOperationFieldOptions(
-  field: AstryxProjectedSitePublicOperationInputFieldNode,
+  field: SitePublicFormField,
 ): FormlessUiFieldOptions | undefined {
   if (field.control === "enum") {
     return {
@@ -1489,7 +2222,7 @@ function toPublicOperationFieldOptions(
 }
 
 function toPublicOperationFieldControl(
-  field: AstryxProjectedSitePublicOperationInputFieldNode,
+  field: SitePublicFormField,
   fieldSchema: FieldSchema,
 ): FormlessUiFieldControl {
   const common = {
@@ -1557,9 +2290,7 @@ function toPublicOperationFieldControl(
   };
 }
 
-function toPublicOperationInput(
-  field: AstryxProjectedSitePublicOperationInputFieldNode,
-): PublicSafeOperationInputField {
+function toPublicOperationInput(field: SitePublicFormField): PublicSafeOperationInputField {
   return {
     name: field.name,
     label: field.label,
@@ -1594,7 +2325,7 @@ function publicOperationInputAttributes(field: FieldSchema): FieldInputAttribute
   };
 }
 
-function publicOperationFieldPlaceholder(field: AstryxProjectedSitePublicOperationInputFieldNode) {
+function publicOperationFieldPlaceholder(field: SitePublicFormField) {
   if (field.suggestions?.[0]) {
     return field.suggestions[0];
   }
@@ -1652,21 +2383,11 @@ function publicDateInputValue(value: string): ISODateInputValue | undefined {
   return /^\d{4}-\d{2}-\d{2}$/.test(value) ? (value as ISODateInputValue) : undefined;
 }
 
-function publicNumberInputValue(input: GeneratedFieldDraftInput | undefined) {
-  const value = input?.value;
-
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return value;
-  }
-
-  return null;
-}
-
 function formatPublicFieldValue(input: GeneratedFieldDraftInput | undefined) {
   return String(input?.value ?? "");
 }
 
-function publicDraftInputFromValue(value: PublicOperationDraftValue): GeneratedFieldDraftInput {
+function publicDraftInputFromValue(value: SitePublicFormFieldValue): GeneratedFieldDraftInput {
   if (typeof value === "boolean" || typeof value === "number") {
     return { kind: "value", value };
   }
@@ -1677,9 +2398,11 @@ function publicDraftInputFromValue(value: PublicOperationDraftValue): GeneratedF
 function ProjectedMarkdown({
   body,
   headingLevelStart,
+  linkComponent,
 }: {
   body?: string;
   headingLevelStart: 1 | 2 | 3 | 4 | 5 | 6;
+  linkComponent?: ComponentType<{ children: ReactNode; href: string }>;
 }) {
   if (!body) {
     return null;
@@ -1687,10 +2410,30 @@ function ProjectedMarkdown({
 
   return (
     <div {...stylex.props(styles.markdownBody)}>
-      <Markdown headingLevelStart={headingLevelStart} contentWidth="100%">
+      <Markdown
+        headingLevelStart={headingLevelStart}
+        contentWidth="100%"
+        components={linkComponent ? { link: linkComponent } : undefined}
+      >
         {body}
       </Markdown>
     </div>
+  );
+}
+
+function ProjectedPlainText({ body }: { body?: string }) {
+  if (!body) {
+    return null;
+  }
+
+  return (
+    <VStack gap={2} {...stylex.props(styles.plainText)}>
+      {body.split(/\n{2,}/).map((paragraph, index) => (
+        <Text key={`${index}:${paragraph}`} as="p">
+          {paragraph}
+        </Text>
+      ))}
+    </VStack>
   );
 }
 
@@ -1703,8 +2446,26 @@ function ProjectedLinkLabel({ item }: { item: ProjectedShellLink }) {
   );
 }
 
+function ProjectedFooterLink({ item, social }: { item: ProjectedShellLink; social: boolean }) {
+  return (
+    <Link
+      href={item.publicHref}
+      label={social ? item.label : undefined}
+      target={siteLinkTarget(item.publicHref)}
+      rel={siteLinkRel(item.publicHref)}
+      isExternalLink={item.isExternal}
+      isStandalone
+      tooltip={social ? item.label : undefined}
+      data-public-href={item.publicHref}
+      data-site-social-link={social ? true : undefined}
+    >
+      {social && item.icon ? <ProjectedLinkIcon item={item} /> : <ProjectedLinkLabel item={item} />}
+    </Link>
+  );
+}
+
 function ProjectedLinkIcon({ item }: { item: ProjectedShellLink }) {
-  if (item.icon && isSourceSvg(item.icon)) {
+  if (item.icon) {
     return (
       <span {...stylex.props(styles.inlineLinkIcon)}>
         <SourceIcon source={item.icon} color="inherit" size="sm" aria-hidden />
@@ -1716,8 +2477,8 @@ function ProjectedLinkIcon({ item }: { item: ProjectedShellLink }) {
 }
 
 function projectedFrameLinks(
-  block: AstryxProjectedSiteBlockNode | undefined,
-  routeFacts: AstryxProjectedSiteRouteFacts,
+  block: SiteBlockNode | undefined,
+  routeFacts: SitePublicRendererProps,
 ): ProjectedShellLink[] {
   if (!block) {
     return [];
@@ -1729,99 +2490,165 @@ function projectedFrameLinks(
   return links;
 }
 
-function projectedFooterGroups(
-  block: AstryxProjectedSiteBlockNode | undefined,
-  routeFacts: AstryxProjectedSiteRouteFacts,
-) {
-  if (!block) {
+function projectedHeaderNavigation(
+  header: SiteBlockNode | undefined,
+  routeFacts: SitePublicRendererProps,
+): ProjectedNavigationGroup[] {
+  if (!header) {
     return [];
   }
 
-  return orderedPlacements(block.placements)
-    .map((placement) => ({
-      label: placement.block.label,
-      links: projectedFrameLinks(placement.block, routeFacts),
-    }))
-    .filter((group) => group.links.length > 0);
+  const placements = orderedPlacements(header.placements);
+  const primaryPlacement = placements.find((placement) => placement.block.type === "headerPrimary");
+  const secondaryPlacement = placements.find(
+    (placement) => placement.block.type === "headerSecondary",
+  );
+  const directPlacements = placements.filter(
+    (placement) =>
+      placement.block.type !== "headerPrimary" && placement.block.type !== "headerSecondary",
+  );
+
+  if (!primaryPlacement && !secondaryPlacement) {
+    const links = directPlacements.flatMap((placement) =>
+      projectedFrameLinks(placement.block, routeFacts),
+    );
+
+    return links.length > 0 ? [{ kind: "primary", label: header.label, links }] : [];
+  }
+
+  const primaryBlocks = primaryPlacement
+    ? [primaryPlacement.block]
+    : directPlacements.slice(0, 1).map((placement) => placement.block);
+  const secondaryBlocks = [
+    ...(secondaryPlacement ? [secondaryPlacement.block] : []),
+    ...(primaryPlacement ? directPlacements : directPlacements.slice(1)).map(
+      (placement) => placement.block,
+    ),
+  ];
+  const groups: ProjectedNavigationGroup[] = [
+    {
+      kind: "primary",
+      label: primaryPlacement?.block.label ?? header.label,
+      links: primaryBlocks.flatMap((block) => projectedFrameLinks(block, routeFacts)),
+    },
+    {
+      kind: "secondary",
+      label: secondaryPlacement?.block.label ?? header.label,
+      links: secondaryBlocks.flatMap((block) => projectedFrameLinks(block, routeFacts)),
+    },
+  ];
+
+  return groups.filter((group) => group.links.length > 0);
+}
+
+type ProjectedFooterGroup = {
+  kind: "section" | "social" | "links";
+  label: string;
+  links: readonly ProjectedShellLink[];
+};
+
+type ProjectedFooterComposition = {
+  groups: readonly ProjectedFooterGroup[];
+  notes: readonly string[];
+};
+
+function projectedFooterComposition(
+  footer: SiteBlockNode,
+  routeFacts: SitePublicRendererProps,
+): ProjectedFooterComposition {
+  const groups: ProjectedFooterGroup[] = [];
+  const notes: string[] = footer.body ? [footer.body] : [];
+  const directLinks: ProjectedShellLink[] = [];
+
+  for (const placement of orderedPlacements(footer.placements)) {
+    const block = placement.block;
+
+    if (block.type === "footerSection" || block.type === "footerSocial") {
+      const links = projectedFrameLinks(block, routeFacts);
+
+      if (links.length > 0) {
+        groups.push({
+          kind: block.type === "footerSocial" ? "social" : "section",
+          label: block.label,
+          links,
+        });
+      }
+      continue;
+    }
+
+    if (block.type === "link" && block.href) {
+      directLinks.push(toProjectedShellLink(block, block.href, routeFacts, placement));
+      continue;
+    }
+
+    const nestedLinks = projectedFrameLinks(block, routeFacts);
+    if (nestedLinks.length > 0) {
+      groups.push({ kind: "links", label: block.label, links: nestedLinks });
+    } else if (block.body) {
+      notes.push(block.body);
+    }
+  }
+
+  if (directLinks.length > 0) {
+    groups.unshift({ kind: "links", label: footer.label, links: directLinks });
+  }
+
+  return { groups, notes };
 }
 
 function collectProjectedLinks(
-  block: AstryxProjectedSiteBlockNode,
+  block: SiteBlockNode,
   links: ProjectedShellLink[],
-  routeFacts: AstryxProjectedSiteRouteFacts,
+  routeFacts: SitePublicRendererProps,
+  placement?: SitePlacementNode,
 ): void {
   if (block.type === "link" && block.href) {
-    links.push(toProjectedShellLink(block, block.href, routeFacts));
+    links.push(toProjectedShellLink(block, block.href, routeFacts, placement));
   }
 
-  for (const placement of orderedPlacements(block.placements)) {
-    collectProjectedLinks(placement.block, links, routeFacts);
+  for (const childPlacement of orderedPlacements(block.placements)) {
+    collectProjectedLinks(childPlacement.block, links, routeFacts, childPlacement);
   }
 }
 
-function orderedPlacements(
-  placements: readonly AstryxProjectedSitePlacementNode[],
-): AstryxProjectedSitePlacementNode[] {
+function orderedPlacements(placements: readonly SitePlacementNode[]): SitePlacementNode[] {
   return [...placements].sort((first, second) => first.order - second.order);
 }
 
+function defaultPlacements(block: SiteBlockNode): SitePlacementNode[] {
+  return orderedPlacements(block.placements).filter((placement) => !placement.slot);
+}
+
+function slottedPlacements(block: SiteBlockNode, slot: string, type: string): SitePlacementNode[] {
+  return orderedPlacements(block.placements).filter(
+    (placement) => placement.slot === slot && placement.block.type === type,
+  );
+}
+
+function primaryImagePlacement(block: SiteBlockNode): SitePlacementNode | undefined {
+  return orderedPlacements(block.placements).find(
+    (placement) => placement.slot === "primaryImage" && placement.block.type === "image",
+  );
+}
+
+function nextHeadingLevel(level: SiteHeadingLevel): SiteHeadingLevel {
+  return Math.min(level + 1, 6) as SiteHeadingLevel;
+}
+
 function toProjectedShellLink(
-  block: AstryxProjectedSiteBlockNode,
+  block: SiteBlockNode,
   sourceHref: string,
-  routeFacts: AstryxProjectedSiteRouteFacts,
+  routeFacts: SitePublicRendererProps,
+  placement?: SitePlacementNode,
 ): ProjectedShellLink {
-  const publicHref = projectedPublicHref(sourceHref, routeFacts);
-  const isExternal = isExternalHref(publicHref);
+  const publicHref = profileAwareSiteHref(sourceHref, routeFacts.linkMode, routeFacts.routeBase);
+  const isExternal = isExternalSiteHref(publicHref);
 
   return {
-    label: block.label,
-    sourceHref,
+    label: placement?.label ?? block.label,
     publicHref,
-    shellHref: isExternal ? publicHref : "#public-site",
     isExternal,
-    isSelected: isProjectedHrefSelected(publicHref, routeFacts),
+    isSelected: siteHrefMatchesRoute(publicHref, routeFacts.tree.route?.slug, routeFacts.routeBase),
     icon: block.icon,
   };
-}
-
-function projectedPublicHref(href: string, routeFacts: AstryxProjectedSiteRouteFacts) {
-  if (isExternalHref(href) || href.startsWith("#")) {
-    return href;
-  }
-
-  const routeBase = trimTrailingSlash(routeFacts.routeBase ?? "");
-
-  if (href.startsWith("/")) {
-    if (routeBase && (href === routeBase || href.startsWith(`${routeBase}/`))) {
-      return href;
-    }
-
-    return `${routeBase}${href}`;
-  }
-
-  return `${routeBase}/${href}`;
-}
-
-function isProjectedHrefSelected(publicHref: string, routeFacts: AstryxProjectedSiteRouteFacts) {
-  if (isExternalHref(publicHref) || publicHref.startsWith("#")) {
-    return false;
-  }
-
-  return normalizePathname(publicHref) === normalizePathname(routeFacts.currentPath);
-}
-
-function normalizePathname(pathname: string) {
-  return trimTrailingSlash(pathname.split(/[?#]/)[0] || "/") || "/";
-}
-
-function trimTrailingSlash(value: string) {
-  return value.replace(/\/+$/, "");
-}
-
-function isExternalHref(href: string) {
-  return /^[a-z][a-z0-9+.-]*:/i.test(href);
-}
-
-function isSourceSvg(source: string) {
-  return source.trimStart().startsWith("<svg");
 }

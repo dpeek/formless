@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { SitePublicRenderer, type SitePublicRendererComponent } from "./renderer.tsx";
-import { sitePagePathForSlug, type SitePageLinkMode } from "./links.ts";
 import { readInitialSitePageTree } from "./initial-tree.ts";
+import { sitePagePathForSlug, type SitePageLinkMode } from "../public-links.ts";
+import type { SitePublicSystemStateRendererComponent } from "../public-system-state.ts";
 import type { SitePageTree, SitePageTreeResponse } from "../types.ts";
 import { normalizeSitePageSlug } from "./slug.ts";
 
@@ -41,20 +42,24 @@ type SitePageRouteSessionOptions = {
 
 export function SitePageRoute({
   apiRoutePrefix = DEFAULT_SITE_API_ROUTE_PREFIX,
+  builtInRenderer,
+  builtInSystemStateRenderer,
   linkMode = "preview",
   listenForPreviewChanges,
-  renderer,
   routeBase,
   slug,
   startPreviewSync,
+  workspaceRenderer,
 }: {
   apiRoutePrefix?: `/${string}`;
+  builtInRenderer: SitePublicRendererComponent;
+  builtInSystemStateRenderer: SitePublicSystemStateRendererComponent;
   linkMode?: SitePageLinkMode;
   listenForPreviewChanges?: (onChanged: () => void) => () => void;
-  renderer?: SitePublicRendererComponent;
   routeBase?: `/${string}`;
   slug: string;
   startPreviewSync?: (onSynced: () => void) => () => void;
+  workspaceRenderer?: SitePublicRendererComponent;
 }) {
   const normalizedSlug = normalizeSitePageSlug(slug);
   const initialTree = useMemo(
@@ -86,10 +91,12 @@ export function SitePageRoute({
 
   return (
     <SitePageRouteView
+      builtInRenderer={builtInRenderer}
+      builtInSystemStateRenderer={builtInSystemStateRenderer}
       linkMode={linkMode}
-      renderer={renderer}
       routeBase={routeBase}
       state={state}
+      workspaceRenderer={workspaceRenderer}
     />
   );
 }
@@ -198,32 +205,43 @@ function initialTreeMatchesSlug(
 }
 
 export function SitePageRouteView({
+  builtInRenderer,
+  builtInSystemStateRenderer: SystemStateRenderer,
   linkMode = "preview",
-  renderer,
   routeBase,
   state,
+  workspaceRenderer,
 }: {
+  builtInRenderer: SitePublicRendererComponent;
+  builtInSystemStateRenderer: SitePublicSystemStateRendererComponent;
   linkMode?: SitePageLinkMode;
-  renderer?: SitePublicRendererComponent;
   routeBase?: `/${string}`;
   state: SitePageRouteState;
+  workspaceRenderer?: SitePublicRendererComponent;
 }) {
   switch (state.status) {
     case "ready":
       return (
         <SitePublicRenderer
+          builtInRenderer={builtInRenderer}
           linkMode={linkMode}
-          renderer={renderer}
           routeBase={routeBase}
           tree={state.tree}
+          workspaceRenderer={workspaceRenderer}
         />
       );
     case "not-found":
-      return <SitePageNotFound linkMode={linkMode} routeBase={routeBase} slug={state.slug} />;
+      return (
+        <SystemStateRenderer
+          homeHref={sitePagePathForSlug("home", linkMode, routeBase)}
+          kind="not-found"
+          slug={state.slug}
+        />
+      );
     case "error":
-      return <SitePageError message={state.message} slug={state.slug} />;
+      return <SystemStateRenderer kind="failure" message={state.message} slug={state.slug} />;
     case "loading":
-      return <SitePageLoading slug={state.slug} />;
+      return <SystemStateRenderer kind="loading" slug={state.slug} />;
   }
 }
 
@@ -261,51 +279,6 @@ class SitePageNotFoundError extends Error {
   constructor(slug: string) {
     super(`No site page found for "${slug}".`);
   }
-}
-
-function SitePageLoading({ slug }: { slug: string }) {
-  return (
-    <section className="mx-auto max-w-3xl px-6 py-10">
-      <h1 className="text-2xl font-semibold">Loading site page...</h1>
-      <p className="mt-2 text-sm text-slate-600">Loading {slug}.</p>
-    </section>
-  );
-}
-
-function SitePageNotFound({
-  linkMode,
-  routeBase,
-  slug,
-}: {
-  linkMode: SitePageLinkMode;
-  routeBase?: `/${string}`;
-  slug: string;
-}) {
-  return (
-    <section className="mx-auto max-w-3xl px-6 py-10">
-      <h1 className="text-2xl font-semibold">Page not found</h1>
-      <p className="mt-2 text-sm text-slate-600">
-        No site page exists for <code>{slug}</code>.
-      </p>
-      <a
-        className="mt-4 inline-flex text-sm font-medium underline"
-        href={sitePagePathForSlug("home", linkMode, routeBase)}
-      >
-        Home
-      </a>
-    </section>
-  );
-}
-
-function SitePageError({ message, slug }: { message: string; slug: string }) {
-  return (
-    <section className="mx-auto max-w-3xl px-6 py-10">
-      <h1 className="text-2xl font-semibold">Site page failed to load</h1>
-      <p className="mt-2 text-sm text-slate-600">
-        {slug}: {message}
-      </p>
-    </section>
-  );
 }
 
 function errorMessage(body: unknown): string | undefined {
