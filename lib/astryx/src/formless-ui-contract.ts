@@ -2111,6 +2111,307 @@ export type FormlessUiAuthIntent =
 
 export type FormlessUiAuthIntentHandler = (intent: FormlessUiAuthIntent) => Promise<void> | void;
 
+export type FormlessUiAccessFeedbackContract = {
+  detail?: string;
+  id: string;
+  intent: FormlessUiCompactStatusIntent;
+  kind: "accessFeedback";
+  title: string;
+};
+
+export type FormlessUiAccessDisplayFactContract = {
+  id: string;
+  intent?: FormlessUiCompactStatusIntent;
+  kind: "accessDisplayFact";
+  label: string;
+  presentation: "status" | "text" | "timestamp";
+  value: string;
+};
+
+export type FormlessUiAccessRoleContract = {
+  id: string;
+  kind: "accessRole";
+  label: string;
+  scope?: FormlessUiAccessDisplayFactContract;
+  status?: FormlessUiAccessDisplayFactContract;
+};
+
+export type FormlessUiAccessPersonContract = {
+  displayName: string;
+  id: string;
+  kind: "accessPerson";
+  primaryEmail?: string;
+  roles: readonly FormlessUiAccessRoleContract[];
+  status: FormlessUiAccessDisplayFactContract;
+};
+
+export type FormlessUiAccessInvitationAuthoringOpenChangeIntent = {
+  accessId: string;
+  actionId: string;
+  authoringId: string;
+  controlId: string;
+  open: boolean;
+  type: "accessInvitationAuthoringOpenChange";
+};
+
+export type FormlessUiAccessInvitationFieldChangeIntent = {
+  accessId: string;
+  authoringId: string;
+  fieldId: string;
+  type: "accessInvitationFieldChange";
+  value: string;
+};
+
+export type FormlessUiAccessInvitationGrantSelectionIntent = {
+  accessId: string;
+  authoringId: string;
+  controlId: string;
+  groupId: string;
+  optionId: string;
+  selected: boolean;
+  type: "accessInvitationGrantSelection";
+};
+
+export type FormlessUiAccessInvitationSubmitIntent = {
+  accessId: string;
+  actionId: string;
+  authoringId: string;
+  controlId: string;
+  type: "accessInvitationSubmit";
+};
+
+export type FormlessUiAccessInvitationRevocationConfirmationOpenChangeIntent = {
+  accessId: string;
+  actionId: string;
+  confirmationId: string;
+  controlId: string;
+  invitationId: string;
+  open: boolean;
+  type: "accessInvitationRevocationConfirmationOpenChange";
+};
+
+export type FormlessUiAccessInvitationRevokeIntent = {
+  accessId: string;
+  actionId: string;
+  confirmationId: string;
+  controlId: string;
+  invitationId: string;
+  type: "accessInvitationRevoke";
+};
+
+export type FormlessUiAccessIntent =
+  | FormlessUiAccessInvitationAuthoringOpenChangeIntent
+  | FormlessUiAccessInvitationFieldChangeIntent
+  | FormlessUiAccessInvitationGrantSelectionIntent
+  | FormlessUiAccessInvitationRevocationConfirmationOpenChangeIntent
+  | FormlessUiAccessInvitationRevokeIntent
+  | FormlessUiAccessInvitationSubmitIntent;
+
+export type FormlessUiAccessIntentHandler = (
+  intent: FormlessUiAccessIntent,
+) => Promise<void> | void;
+
+export type FormlessUiAccessActionIntent = Extract<FormlessUiAccessIntent, { actionId: string }>;
+
+export type FormlessUiAccessActionPurpose =
+  | "authoring-cancel"
+  | "authoring-open"
+  | "invitation-revoke"
+  | "invitation-submit"
+  | "revocation-cancel"
+  | "revocation-open";
+
+export type FormlessUiAccessActionContract<
+  Intent extends FormlessUiAccessActionIntent = FormlessUiAccessActionIntent,
+> = {
+  control: FormlessUiButtonContract;
+  id: string;
+  intent: Intent;
+  kind: "accessAction";
+  purpose: FormlessUiAccessActionPurpose;
+};
+
+export type FormlessUiAccessInvitationRevocationContract =
+  | {
+      action: FormlessUiAccessActionContract<FormlessUiAccessInvitationRevocationConfirmationOpenChangeIntent>;
+      availability: "available";
+    }
+  | {
+      availability: "unavailable";
+      disabledReason: string;
+    };
+
+export type FormlessUiAccessInvitationContract = {
+  expiresAt: FormlessUiAccessDisplayFactContract;
+  id: string;
+  inviter?: FormlessUiAccessDisplayFactContract;
+  kind: "accessInvitation";
+  revocation: FormlessUiAccessInvitationRevocationContract;
+  scope?: FormlessUiAccessDisplayFactContract;
+  status: FormlessUiAccessDisplayFactContract;
+  target: FormlessUiAccessDisplayFactContract;
+  targetEmail: string;
+};
+
+export type FormlessUiAccessInvitationFieldPurpose =
+  | "display-name"
+  | "expires-at"
+  | "target-app-install"
+  | "target-email"
+  | "target-organization"
+  | "target-surface";
+
+export type FormlessUiAccessInvitationFieldChangeIntentScope = Omit<
+  FormlessUiAccessInvitationFieldChangeIntent,
+  "value"
+>;
+
+export type FormlessUiAccessControlledFieldOptionContract = {
+  disabledReason?: string;
+  id: string;
+  label: string;
+  selected: boolean;
+  value: string;
+};
+
+export type FormlessUiAccessControlledFieldContract = {
+  changeIntent: FormlessUiAccessInvitationFieldChangeIntentScope;
+  disabledReason?: string;
+  errors: readonly string[];
+  id: string;
+  inputKind: "datetime" | "email" | "select" | "text";
+  kind: "accessControlledField";
+  label: string;
+  options?: readonly FormlessUiAccessControlledFieldOptionContract[];
+  purpose: FormlessUiAccessInvitationFieldPurpose;
+  required: boolean;
+  value: string;
+};
+
+export type FormlessUiAccessGrantOptionContract = {
+  disabledReason?: string;
+  id: string;
+  label: string;
+  selected: boolean;
+  selectionIntent: FormlessUiAccessInvitationGrantSelectionIntent;
+};
+
+export type FormlessUiAccessGrantOptionGroupContract = {
+  id: string;
+  kind: "accessGrantOptionGroup";
+  label: string;
+  options: readonly FormlessUiAccessGrantOptionContract[];
+};
+
+export type FormlessUiAccessGrantSelectionContract = {
+  disabledReason?: string;
+  errors: readonly string[];
+  groups: readonly FormlessUiAccessGrantOptionGroupContract[];
+  id: string;
+  kind: "accessGrantSelection";
+  label: string;
+  purpose: "memberships" | "roles";
+  selectedOptionIds: readonly string[];
+};
+
+export type FormlessUiAccessInvitationAuthoringFieldsContract = {
+  displayName: FormlessUiAccessControlledFieldContract;
+  expiresAt: FormlessUiAccessControlledFieldContract;
+  targetAppInstall: FormlessUiAccessControlledFieldContract;
+  targetEmail: FormlessUiAccessControlledFieldContract;
+  targetOrganization: FormlessUiAccessControlledFieldContract;
+  targetSurface: FormlessUiAccessControlledFieldContract;
+};
+
+export type FormlessUiAccessInvitationAuthoringReference = {
+  accessId: string;
+  authoringId: string;
+  kind: "accessInvitationAuthoringReference";
+  role: "accessInvitationAuthoring";
+};
+
+export type FormlessUiAccessInvitationAuthoringContract = {
+  accessId: string;
+  cancel: FormlessUiAccessActionContract<FormlessUiAccessInvitationAuthoringOpenChangeIntent>;
+  description: string;
+  errors: readonly string[];
+  feedback?: FormlessUiAccessFeedbackContract;
+  fields: FormlessUiAccessInvitationAuthoringFieldsContract;
+  grantSelections: readonly [
+    FormlessUiAccessGrantSelectionContract & { purpose: "roles" },
+    FormlessUiAccessGrantSelectionContract & { purpose: "memberships" },
+  ];
+  id: string;
+  kind: "accessInvitationAuthoring";
+  open: boolean;
+  pending?: FormlessUiFieldPending;
+  submit: FormlessUiAccessActionContract<FormlessUiAccessInvitationSubmitIntent>;
+  title: string;
+};
+
+export type FormlessUiAccessConfirmationContract = {
+  action: FormlessUiAccessActionContract<FormlessUiAccessInvitationRevokeIntent>;
+  cancel: FormlessUiAccessActionContract<FormlessUiAccessInvitationRevocationConfirmationOpenChangeIntent>;
+  description: string;
+  id: string;
+  invitationId: string;
+  kind: "accessConfirmation";
+  open: boolean;
+  title: string;
+};
+
+export type FormlessUiAccessManifestReference = {
+  accessId: string;
+  kind: "accessManifestReference";
+  role: "access";
+};
+
+type FormlessUiAccessManifestBaseContract = {
+  accessibilityLabel: string;
+  id: string;
+  kind: "accessManifest";
+  title: string;
+};
+
+export type FormlessUiAccessLoadingContract = FormlessUiAccessManifestBaseContract & {
+  message: string;
+  state: "loading";
+};
+
+export type FormlessUiAccessUnauthorizedContract = FormlessUiAccessManifestBaseContract & {
+  feedback: FormlessUiAccessFeedbackContract;
+  state: "unauthorized";
+};
+
+export type FormlessUiAccessFailureContract = FormlessUiAccessManifestBaseContract & {
+  feedback: FormlessUiAccessFeedbackContract;
+  state: "failed";
+};
+
+export type FormlessUiAccessEmptyStateContract = {
+  description: string;
+  id: string;
+  kind: "accessEmptyState";
+  title: string;
+};
+
+export type FormlessUiAccessReadyContract = FormlessUiAccessManifestBaseContract & {
+  authoring: FormlessUiAccessInvitationAuthoringReference;
+  confirmation?: FormlessUiAccessConfirmationContract;
+  emptyState?: FormlessUiAccessEmptyStateContract;
+  feedback?: FormlessUiAccessFeedbackContract;
+  invitations: readonly FormlessUiAccessInvitationContract[];
+  invite: FormlessUiAccessActionContract<FormlessUiAccessInvitationAuthoringOpenChangeIntent>;
+  people: readonly FormlessUiAccessPersonContract[];
+  state: "ready";
+};
+
+export type FormlessUiAccessManifestContract =
+  | FormlessUiAccessFailureContract
+  | FormlessUiAccessLoadingContract
+  | FormlessUiAccessReadyContract
+  | FormlessUiAccessUnauthorizedContract;
+
 export type FormlessUiManagementFeedbackContract = {
   detail?: string;
   id: string;
@@ -2406,6 +2707,8 @@ export type FormlessUiWorkspaceSectionShellContract = Omit<
 };
 
 export type FormlessUiContractReference =
+  | FormlessUiAccessInvitationAuthoringReference
+  | FormlessUiAccessManifestReference
   | FormlessUiAuthSurfaceReference
   | FormlessUiDocumentThemeReference
   | FormlessUiListResultReference
@@ -2547,6 +2850,7 @@ export type FormlessUiWorkspaceIntentHandler = (
 ) => Promise<void> | void;
 
 export type FormlessUiContractIntent =
+  | FormlessUiAccessIntent
   | FormlessUiAuthIntent
   | FormlessUiDocumentThemeIntent
   | FormlessUiManagementIntent

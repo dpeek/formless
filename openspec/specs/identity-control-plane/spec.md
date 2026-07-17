@@ -474,6 +474,141 @@ identity-control-plane record editor to normal administrators.
   confirmation and current role checks before generic identity records or
   private auth state are changed
 
+### Requirement: Reactive Access Management Presentation Contract
+
+The system SHALL project dedicated instance access management through complete
+renderer-neutral contracts on the stable application host while identity
+runtime code owns authority, invitation creation and delivery, revocation,
+refresh, validation, and private auth state.
+
+#### Scenario: Project complete access management presentation
+
+- GIVEN an authenticated principal opens `/access`
+- WHEN runtime prepares the current access management presentation
+- THEN one typed access-manifest reference resolves one loading, unauthorized,
+  failed, or ready access snapshot
+- AND a ready access snapshot carries the `Access` title, display-safe people
+  with primary email, status, and role labels, display-safe invitations with
+  target, scope, status, expiry, inviter, and explicit revocation availability,
+  page feedback, and one invitation-authoring reference
+- AND the invitation-authoring snapshot carries dialog visibility, controlled
+  target email, display name, expiry, target-surface and applicable scope
+  fields, ordered role and membership option groups, exact selected option ids,
+  explicit option and control disabled reasons, validation, pending state,
+  feedback, and cancel and submit actions
+- AND organization, group, membership, app-registration, app-install, role,
+  inviter, and scope labels are resolved before publication rather than being
+  reconstructed from raw records or displayed from storage ids
+- AND access snapshots contain no raw identity records, grant-authority
+  internals, invitation requests, API clients, runtime callbacks, React nodes,
+  raw invite tokens, token hashes, credentials, challenge secrets, session ids,
+  handoff grants, provider responses, recovery material, or admin bearer
+  material
+
+#### Scenario: Compose access presentation on the application host
+
+- GIVEN the application shell host is active and `/access` is the selected
+  React route child
+- WHEN shell, access summary, invitation authoring, feedback, or confirmation
+  presentation changes
+- THEN the access runtime contributes its renderer-neutral nodes and current
+  intent handler through the existing application-host publication coordinator
+  without creating a nested host or replacing the stable host context
+- AND server rendering seeds `/access` with its loading access-manifest node
+  before route-child effects run, and hydration replaces that contribution
+  atomically with current runtime state
+- AND controlled invitation draft changes replace only the invitation-authoring
+  snapshot while a semantically unchanged access summary retains object
+  identity and does not notify its reference scope
+- AND the complete access contribution adds and removes its manifest and
+  authoring nodes atomically without changing shell reference roles or route
+  selection
+
+#### Scenario: Dispatch canonical access management intents
+
+- GIVEN a subscribed access renderer reads the access manifest and invitation
+  authoring snapshots
+- WHEN the user opens or closes invitation authoring, changes a field, selects
+  target scope, role, or membership options, submits an invitation, opens or
+  closes pending-invitation revocation confirmation, or confirms revocation
+- THEN the renderer dispatches canonical access intents carrying exact current
+  access, authoring, field, option, invitation, confirmation, and control
+  identity as applicable
+- AND runtime resolves each intent against its latest summary, controlled
+  draft, allowed grant options, active authority, and pending state before
+  changing state or invoking an effect
+- AND successful invitation creation resets and closes authoring, refreshes the
+  display-safe summary, and publishes success feedback without exposing private
+  delivery state
+- AND pending invitation revocation requires explicit destructive confirmation,
+  refreshes the summary after success, and remains the only destructive
+  identity action exposed by the first-pass contract
+- AND renderers do not construct invitation requests, infer authority, read
+  identity APIs, create or deliver tokens, revoke private token state, refresh
+  summaries, redact errors, or navigate directly
+
+#### Scenario: Legacy renderer consumes access contracts
+
+- GIVEN production `/access` currently mixes runtime state, direct legacy
+  controls, raw summary-shaped presentation, and invitation effects
+- WHEN runtime publishes the complete access contract graph
+- THEN one subscribed legacy access renderer reads only access references and
+  snapshots, renders people, roles, invitations, controlled invitation
+  authoring, feedback, empty, unauthorized, loading, failure, and destructive
+  confirmation states, and dispatches canonical access intents
+- AND direct legacy `@dpeek/formless-ui` imports for access presentation remain
+  confined to the dedicated legacy seam
+- AND focused coverage asserts projection, current intent resolution, authority,
+  controlled drafts, pending behavior, visible outcomes, and secret exclusion
+  rather than legacy HTML structure
+- AND production remains on the legacy access renderer after this contract
+  migration
+
+#### Scenario: Astryx access management renderer
+
+- GIVEN the legacy renderer consumes complete production access contracts
+- WHEN the replacement renderer implements the same contract in `lib/astryx`
+- THEN pure and subscribed Astryx entrypoints use `Section` and Astryx stack and
+  grid primitives for page layout, `Table` for the uniform people and invitation
+  summaries, and `Badge` and `Timestamp` for status and temporal facts
+- AND invitation authoring opens in a form-purpose `Dialog` using `FormLayout`,
+  `TextInput`, `Selector`, and `DateTimeInput` for controlled single-value
+  fields
+- AND role grants render in one sectioned `MultiSelector` grouped by Instance,
+  App install, and Organization, and memberships render in a separate sectioned
+  `MultiSelector` grouped by Organizations and Groups instead of expanded
+  checkbox lists
+- AND grant selectors do not offer select-all, large option sets are searchable,
+  and projected disabled reasons remain visible without the renderer inferring
+  authority from role names, target kinds, or option ids
+- AND loading, empty, validation, pending, success, and failure states compose
+  Astryx `Spinner`, `EmptyState`, `FieldStatus`, and `Banner` patterns, and
+  pending invitation revocation composes `AlertDialog` before dispatching its
+  confirm intent
+- AND the Astryx renderer contains no legacy Formless UI components, Tailwind
+  classes, identity runtime imports, API clients, effect handlers, private auth
+  state, production export, or production activation
+
+#### Scenario: Access management contract fixtures
+
+- GIVEN production legacy access presentation consumes complete access
+  contracts
+- WHEN access UX is evaluated in the package-local Astryx prototype
+- THEN serializable data-only memory-host fixtures cover owner and
+  instance-admin grants, loading, unauthorized, failed, empty and populated
+  summaries, people and roles, organizations and groups, app-scoped grants,
+  invitation authoring drafts and validation, pending and successful creation,
+  pending invitation revocation confirmation, success, and failure
+- AND a focused Access layout composes the subscribed Astryx access renderer as
+  the route child of the existing application shell through one memory host
+- AND minimal reducers may simulate canonical draft, selection, dialog, submit,
+  confirmation, and revoke intents without importing identity runtime, storage,
+  APIs, invitation delivery, credentials, sessions, private token state,
+  navigation, or timers
+- AND fixtures contain no secrets, unsupported destructive identity actions,
+  legacy comparison UI, prototype proof labels, production renderer activation,
+  or behavior that bypasses the canonical contract host
+
 ### Requirement: Collaborator Invitation Acceptance
 
 The system SHALL accept pending collaborator invitations through auth-origin

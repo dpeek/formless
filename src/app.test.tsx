@@ -50,6 +50,7 @@ import {
   withHomeRouteSelectedSectionQueryName,
 } from "./app/routes/home.tsx";
 import { InstanceShellRoute } from "./app/routes/instance-shell.tsx";
+import { AccessRoute } from "./app/routes/access.tsx";
 import { LocalSessionRoute } from "./app/routes/local-session.tsx";
 import { OwnerLoginRoute } from "./app/routes/owner-login.tsx";
 import { OwnerSetupRoute } from "./app/routes/owner-setup.tsx";
@@ -266,6 +267,7 @@ function SitePageRouteProbe({
 
 function appRouteComponents(overrides: Partial<AppRouteComponents> = {}): AppRouteComponents {
   return {
+    AccessRoute,
     ApplicationShellRuntimeBoundary,
     AuthAccountRoute,
     CollaboratorInvitationAcceptanceRoute,
@@ -918,7 +920,7 @@ describe("App smoke routes", () => {
     expect(shellHtml).toContain("Instance");
     expect(shellHtml).toContain('data-frame="application-shell"');
     expect(accessHtml).toContain("Access");
-    expect(accessHtml).toContain("Loading installed apps...");
+    expect(accessHtml).toContain("Loading access management...");
     expect(accessHtml).toContain('aria-label="Access"');
     expect(accessHtml).not.toContain("Not found");
     expect(deploymentsHtml).toContain("Not found");

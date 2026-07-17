@@ -14,6 +14,7 @@ import {
 } from "@dpeek/formless-site-app/react";
 import { HomeRoute } from "../app/routes/home.tsx";
 import { InstanceShellRoute } from "../app/routes/instance-shell.tsx";
+import { AccessRoute } from "../app/routes/access.tsx";
 import { LocalSessionRoute } from "../app/routes/local-session.tsx";
 import { OwnerLoginRoute } from "../app/routes/owner-login.tsx";
 import { OwnerSetupRoute } from "../app/routes/owner-setup.tsx";
@@ -165,6 +166,7 @@ function renderPublishedRoute(path: string): string {
 
 function appRouteComponents(): AppRouteComponents {
   return {
+    AccessRoute,
     ApplicationShellRuntimeBoundary,
     AuthAccountRoute,
     CollaboratorInvitationAcceptanceRoute,

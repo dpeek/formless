@@ -7,6 +7,9 @@ import {
   useSyncExternalStore,
 } from "react";
 import type {
+  FormlessUiAccessIntentHandler,
+  FormlessUiAccessInvitationAuthoringReference,
+  FormlessUiAccessManifestReference,
   FormlessUiAuthIntentHandler,
   FormlessUiAuthSurfaceReference,
   FormlessUiContractReference,
@@ -59,6 +62,11 @@ export function useFormlessUiWorkspaceIntentHandler(): FormlessUiWorkspaceIntent
   return useCallback((intent) => host.dispatch(intent), [host]);
 }
 
+export function useFormlessUiAccessIntentHandler(): FormlessUiAccessIntentHandler {
+  const host = useFormlessUiContractHost();
+  return useCallback((intent) => host.dispatch(intent), [host]);
+}
+
 export function useFormlessUiAuthIntentHandler(): FormlessUiAuthIntentHandler {
   const host = useFormlessUiContractHost();
   return useCallback((intent) => host.dispatch(intent), [host]);
@@ -100,6 +108,16 @@ export function useFormlessUiContract<Reference extends FormlessUiContractRefere
 }
 
 export function useFormlessUiWorkspaceManifest(reference: FormlessUiWorkspaceManifestReference) {
+  return useFormlessUiContract(reference);
+}
+
+export function useFormlessUiAccessManifest(reference: FormlessUiAccessManifestReference) {
+  return useFormlessUiContract(reference);
+}
+
+export function useFormlessUiAccessInvitationAuthoring(
+  reference: FormlessUiAccessInvitationAuthoringReference,
+) {
   return useFormlessUiContract(reference);
 }
 

@@ -60,6 +60,7 @@ import { runtimeTopologyRoutes, type RuntimeRouteAccess } from "./shared/runtime
 import type { AppInstallsResponse } from "./shared/protocol.ts";
 import type { FormlessUiWorkspaceLinkActionContract } from "@dpeek/formless-astryx/contract";
 import { initialInstanceManagementRuntimeContribution } from "./app/routes/instance-management-contract.ts";
+import { initialInstanceAccessRuntimeContribution } from "./app/routes/access-contract.ts";
 
 type HomeRouteProps = {
   activePackageResolver?: AppPackageResolver | undefined;
@@ -88,6 +89,7 @@ export type RuntimeInstalledAppRouteRegistry = {
 };
 
 export type AppRouteComponents = {
+  AccessRoute: ElementType;
   ApplicationShellRuntimeBoundary: ElementType<ApplicationShellRuntimeBoundaryProps>;
   AuthAccountRoute: ElementType;
   CollaboratorInvitationAcceptanceRoute: ElementType;
@@ -106,6 +108,9 @@ const defaultPublicSiteReactAdapters = createPublicSiteReactAdapterRegistry(
 );
 
 const defaultRouteComponents: AppRouteComponents = {
+  AccessRoute: lazy(() =>
+    import("./app/routes/access.tsx").then((module) => ({ default: module.AccessRoute })),
+  ),
   ApplicationShellRuntimeBoundary: lazy(() =>
     import("./app/application-shell-runtime.tsx").then((module) => ({
       default: module.ApplicationShellRuntimeBoundary,
@@ -198,13 +203,15 @@ export function App({
     [activeRuntimeProfile],
   );
   const normalizedLocation = normalizeRuntimeBrowserPath(location);
-  const initialRouteContractContributions = useMemo(
-    () =>
-      browserRoutes.instanceShellRoute === normalizedLocation
-        ? [initialInstanceManagementRuntimeContribution]
-        : [],
-    [browserRoutes.instanceShellRoute, normalizedLocation],
-  );
+  const initialRouteContractContributions = useMemo(() => {
+    if (browserRoutes.instanceAccessRoute === normalizedLocation) {
+      return [initialInstanceAccessRuntimeContribution];
+    }
+    if (browserRoutes.instanceShellRoute === normalizedLocation) {
+      return [initialInstanceManagementRuntimeContribution];
+    }
+    return [];
+  }, [browserRoutes.instanceAccessRoute, browserRoutes.instanceShellRoute, normalizedLocation]);
   const localWorkspaceGatewayAvailable = useLocalWorkspaceGatewayAvailable(
     localWorkspaceGatewayAvailableProp,
     routeMayNeedLocalWorkspaceGateway(browserRoutes, normalizedLocation),
@@ -469,6 +476,7 @@ function AppRoutes({
   runtimeProfile: RuntimeProfile;
 }) {
   const {
+    AccessRoute,
     AuthAccountRoute,
     CollaboratorInvitationAcceptanceRoute,
     HomeRoute,
@@ -525,7 +533,7 @@ function AppRoutes({
       {browserRoutes.instanceAccessRoute ? (
         <Route path={browserRoutes.instanceAccessRoute}>
           <OwnerRouteGuard access="authenticated">
-            <InstanceShellRoute localWorkspaceGatewayAvailable={localWorkspaceGatewayAvailable} />
+            <AccessRoute />
           </OwnerRouteGuard>
         </Route>
       ) : null}

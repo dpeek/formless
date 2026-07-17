@@ -1,4 +1,10 @@
 import type {
+  FormlessUiAccessActionContract,
+  FormlessUiAccessIntent,
+  FormlessUiAccessInvitationAuthoringContract,
+  FormlessUiAccessInvitationAuthoringReference,
+  FormlessUiAccessManifestContract,
+  FormlessUiAccessManifestReference,
   FormlessUiAuthIntent,
   FormlessUiAuthSurfaceContract,
   FormlessUiAuthSurfaceKind,
@@ -34,29 +40,33 @@ import type {
 } from "./formless-ui-contract.ts";
 
 export type FormlessUiContractSnapshot<Reference extends FormlessUiContractReference> =
-  Reference extends FormlessUiAuthSurfaceReference<infer SurfaceKind>
-    ? Extract<FormlessUiAuthSurfaceContract, { surfaceKind: SurfaceKind }>
-    : Reference extends FormlessUiDocumentThemeReference
-      ? FormlessUiDocumentThemeContract
-      : Reference extends FormlessUiManagementManifestReference
-        ? FormlessUiManagementManifestContract
-        : Reference extends FormlessUiManagementInstallDialogReference
-          ? FormlessUiManagementInstallDialogContract
-          : Reference extends FormlessUiWorkspaceManifestReference
-            ? FormlessUiWorkspaceManifestContract
-            : Reference extends FormlessUiWorkspaceSectionShellReference
-              ? FormlessUiWorkspaceSectionShellContract
-              : Reference extends FormlessUiShellManifestReference
-                ? FormlessUiShellManifestContract
-                : Reference extends FormlessUiShellNavigationSectionReference
-                  ? FormlessUiShellNavigationSectionContract
-                  : Reference extends FormlessUiListResultReference
-                    ? FormlessUiListContract
-                    : Reference extends FormlessUiTableResultReference
-                      ? FormlessUiTableContract
-                      : Reference extends FormlessUiRecordResultReference
-                        ? FormlessUiRecordResultContract
-                        : never;
+  Reference extends FormlessUiAccessManifestReference
+    ? FormlessUiAccessManifestContract
+    : Reference extends FormlessUiAccessInvitationAuthoringReference
+      ? FormlessUiAccessInvitationAuthoringContract
+      : Reference extends FormlessUiAuthSurfaceReference<infer SurfaceKind>
+        ? Extract<FormlessUiAuthSurfaceContract, { surfaceKind: SurfaceKind }>
+        : Reference extends FormlessUiDocumentThemeReference
+          ? FormlessUiDocumentThemeContract
+          : Reference extends FormlessUiManagementManifestReference
+            ? FormlessUiManagementManifestContract
+            : Reference extends FormlessUiManagementInstallDialogReference
+              ? FormlessUiManagementInstallDialogContract
+              : Reference extends FormlessUiWorkspaceManifestReference
+                ? FormlessUiWorkspaceManifestContract
+                : Reference extends FormlessUiWorkspaceSectionShellReference
+                  ? FormlessUiWorkspaceSectionShellContract
+                  : Reference extends FormlessUiShellManifestReference
+                    ? FormlessUiShellManifestContract
+                    : Reference extends FormlessUiShellNavigationSectionReference
+                      ? FormlessUiShellNavigationSectionContract
+                      : Reference extends FormlessUiListResultReference
+                        ? FormlessUiListContract
+                        : Reference extends FormlessUiTableResultReference
+                          ? FormlessUiTableContract
+                          : Reference extends FormlessUiRecordResultReference
+                            ? FormlessUiRecordResultContract
+                            : never;
 
 export type FormlessUiContractHostListener = () => void;
 
@@ -77,6 +87,16 @@ export type FormlessUiContractHost = {
 export type FormlessUiWorkspaceManifestNode = {
   reference: FormlessUiWorkspaceManifestReference;
   snapshot: FormlessUiWorkspaceManifestContract;
+};
+
+export type FormlessUiAccessManifestNode = {
+  reference: FormlessUiAccessManifestReference;
+  snapshot: FormlessUiAccessManifestContract;
+};
+
+export type FormlessUiAccessInvitationAuthoringNode = {
+  reference: FormlessUiAccessInvitationAuthoringReference;
+  snapshot: FormlessUiAccessInvitationAuthoringContract;
 };
 
 export type FormlessUiAuthSurfaceNode = {
@@ -130,6 +150,8 @@ export type FormlessUiManagementInstallDialogNode = {
 };
 
 export type FormlessUiContractHostNode =
+  | FormlessUiAccessInvitationAuthoringNode
+  | FormlessUiAccessManifestNode
   | FormlessUiAuthSurfaceNode
   | FormlessUiDocumentThemeNode
   | FormlessUiListResultNode
@@ -229,6 +251,28 @@ export function formlessUiWorkspaceManifestReference(
     kind: "workspaceManifestReference",
     role: "workspace",
     workspaceId,
+  };
+}
+
+export function formlessUiAccessManifestReference(
+  accessId: string,
+): FormlessUiAccessManifestReference {
+  return {
+    accessId,
+    kind: "accessManifestReference",
+    role: "access",
+  };
+}
+
+export function formlessUiAccessInvitationAuthoringReference(
+  accessId: string,
+  authoringId: string,
+): FormlessUiAccessInvitationAuthoringReference {
+  return {
+    accessId,
+    authoringId,
+    kind: "accessInvitationAuthoringReference",
+    role: "accessInvitationAuthoring",
   };
 }
 
@@ -360,6 +404,10 @@ export function formlessUiRecordResultReference<Role extends FormlessUiResultRef
 
 export function formlessUiContractReferenceKey(reference: FormlessUiContractReference): string {
   switch (reference.kind) {
+    case "accessManifestReference":
+      return JSON.stringify([reference.role, reference.accessId]);
+    case "accessInvitationAuthoringReference":
+      return JSON.stringify([reference.role, reference.accessId, reference.authoringId]);
     case "authSurfaceReference":
       return JSON.stringify([reference.role, reference.surfaceKind, reference.surfaceId]);
     case "documentThemeReference":
@@ -393,6 +441,12 @@ export function isFormlessUiWorkspaceIntent(
   intent: FormlessUiContractIntent,
 ): intent is FormlessUiWorkspaceIntent {
   switch (intent.type) {
+    case "accessInvitationAuthoringOpenChange":
+    case "accessInvitationFieldChange":
+    case "accessInvitationGrantSelection":
+    case "accessInvitationRevocationConfirmationOpenChange":
+    case "accessInvitationRevoke":
+    case "accessInvitationSubmit":
     case "authAction":
     case "authContinuation":
     case "authField":
@@ -412,6 +466,22 @@ export function isFormlessUiWorkspaceIntent(
       return false;
     default:
       return true;
+  }
+}
+
+export function isFormlessUiAccessIntent(
+  intent: FormlessUiContractIntent,
+): intent is FormlessUiAccessIntent {
+  switch (intent.type) {
+    case "accessInvitationAuthoringOpenChange":
+    case "accessInvitationFieldChange":
+    case "accessInvitationGrantSelection":
+    case "accessInvitationRevocationConfirmationOpenChange":
+    case "accessInvitationRevoke":
+    case "accessInvitationSubmit":
+      return true;
+    default:
+      return false;
   }
 }
 
@@ -507,6 +577,22 @@ function assertNodeMatchesReference(node: FormlessUiContractHostNode) {
   const { reference, snapshot } = node;
 
   switch (reference.kind) {
+    case "accessManifestReference":
+      if (snapshot.kind !== "accessManifest" || snapshot.id !== reference.accessId) {
+        throw mismatchedNodeError(reference);
+      }
+      assertAccessManifestContract(snapshot);
+      return;
+    case "accessInvitationAuthoringReference":
+      if (
+        snapshot.kind !== "accessInvitationAuthoring" ||
+        snapshot.id !== reference.authoringId ||
+        snapshot.accessId !== reference.accessId
+      ) {
+        throw mismatchedNodeError(reference);
+      }
+      assertAccessInvitationAuthoringContract(snapshot);
+      return;
     case "authSurfaceReference":
       if (
         snapshot.kind !== "authSurface" ||
@@ -576,6 +662,213 @@ function assertNodeMatchesReference(node: FormlessUiContractHostNode) {
       if (snapshot.kind !== "table" || snapshot.id !== reference.resultId) {
         throw mismatchedNodeError(reference);
       }
+  }
+}
+
+function assertAccessManifestContract(snapshot: FormlessUiAccessManifestContract) {
+  if (snapshot.state !== "ready") {
+    return;
+  }
+
+  const { authoring, confirmation, invitations, invite, people } = snapshot;
+  assertAccessActionIdentity(invite, snapshot.id);
+  if (
+    invite.purpose !== "authoring-open" ||
+    invite.intent.type !== "accessInvitationAuthoringOpenChange" ||
+    invite.intent.authoringId !== authoring.authoringId ||
+    !invite.intent.open
+  ) {
+    throw new Error(
+      `Formless UI access manifest ${JSON.stringify(snapshot.id)} has an invalid authoring action.`,
+    );
+  }
+
+  assertDistinctAccessIdentities(
+    snapshot.id,
+    "people",
+    people.map(({ id }) => id),
+  );
+  assertDistinctAccessIdentities(
+    snapshot.id,
+    "invitations",
+    invitations.map(({ id }) => id),
+  );
+
+  for (const invitation of invitations) {
+    if (invitation.revocation.availability !== "available") {
+      continue;
+    }
+    const action = invitation.revocation.action;
+    assertAccessActionIdentity(action, snapshot.id);
+    if (
+      action.purpose !== "revocation-open" ||
+      action.intent.type !== "accessInvitationRevocationConfirmationOpenChange" ||
+      action.intent.invitationId !== invitation.id ||
+      !action.intent.open
+    ) {
+      throw new Error(
+        `Formless UI access manifest ${JSON.stringify(snapshot.id)} has an invalid invitation revocation action.`,
+      );
+    }
+  }
+
+  if (!confirmation) {
+    return;
+  }
+  assertAccessActionIdentity(confirmation.cancel, snapshot.id);
+  assertAccessActionIdentity(confirmation.action, snapshot.id);
+  if (
+    confirmation.cancel.purpose !== "revocation-cancel" ||
+    confirmation.cancel.intent.type !== "accessInvitationRevocationConfirmationOpenChange" ||
+    confirmation.cancel.intent.confirmationId !== confirmation.id ||
+    confirmation.cancel.intent.invitationId !== confirmation.invitationId ||
+    confirmation.cancel.intent.open ||
+    confirmation.action.purpose !== "invitation-revoke" ||
+    confirmation.action.intent.type !== "accessInvitationRevoke" ||
+    confirmation.action.intent.confirmationId !== confirmation.id ||
+    confirmation.action.intent.invitationId !== confirmation.invitationId
+  ) {
+    throw new Error(
+      `Formless UI access manifest ${JSON.stringify(snapshot.id)} has an invalid revocation confirmation.`,
+    );
+  }
+}
+
+function assertAccessInvitationAuthoringContract(
+  snapshot: FormlessUiAccessInvitationAuthoringContract,
+) {
+  assertAccessActionIdentity(snapshot.cancel, snapshot.accessId);
+  assertAccessActionIdentity(snapshot.submit, snapshot.accessId);
+  if (
+    snapshot.cancel.purpose !== "authoring-cancel" ||
+    snapshot.cancel.intent.type !== "accessInvitationAuthoringOpenChange" ||
+    snapshot.cancel.intent.authoringId !== snapshot.id ||
+    snapshot.cancel.intent.open ||
+    snapshot.submit.purpose !== "invitation-submit" ||
+    snapshot.submit.intent.type !== "accessInvitationSubmit" ||
+    snapshot.submit.intent.authoringId !== snapshot.id
+  ) {
+    throw new Error(
+      `Formless UI access invitation authoring ${JSON.stringify(snapshot.id)} has invalid actions.`,
+    );
+  }
+
+  const expectedFieldPurposes = {
+    displayName: "display-name",
+    expiresAt: "expires-at",
+    targetAppInstall: "target-app-install",
+    targetEmail: "target-email",
+    targetOrganization: "target-organization",
+    targetSurface: "target-surface",
+  } as const;
+  const fields = Object.entries(snapshot.fields) as Array<
+    [keyof typeof expectedFieldPurposes, (typeof snapshot.fields)[keyof typeof snapshot.fields]]
+  >;
+  assertDistinctAccessIdentities(
+    snapshot.id,
+    "fields",
+    fields.map(([, field]) => field.id),
+  );
+  for (const [fieldName, field] of fields) {
+    if (
+      field.purpose !== expectedFieldPurposes[fieldName] ||
+      field.changeIntent.accessId !== snapshot.accessId ||
+      field.changeIntent.authoringId !== snapshot.id ||
+      field.changeIntent.fieldId !== field.id
+    ) {
+      throw new Error(
+        `Formless UI access invitation authoring ${JSON.stringify(snapshot.id)} has an invalid field contract.`,
+      );
+    }
+    if (field.inputKind === "select") {
+      const options = field.options ?? [];
+      assertDistinctAccessIdentities(
+        snapshot.id,
+        "field options",
+        options.map(({ id }) => id),
+      );
+      if (options.filter(({ selected }) => selected).length > 1) {
+        throw new Error(
+          `Formless UI access invitation authoring ${JSON.stringify(snapshot.id)} has inconsistent field selection.`,
+        );
+      }
+      if (options.some(({ selected, value }) => selected !== (value === field.value))) {
+        throw new Error(
+          `Formless UI access invitation authoring ${JSON.stringify(snapshot.id)} has inconsistent field selection.`,
+        );
+      }
+    } else if (field.options !== undefined) {
+      throw new Error(
+        `Formless UI access invitation authoring ${JSON.stringify(snapshot.id)} has options on a non-select field.`,
+      );
+    }
+  }
+
+  const expectedGrantPurposes = ["roles", "memberships"] as const;
+  snapshot.grantSelections.forEach((selection, index) => {
+    if (selection.purpose !== expectedGrantPurposes[index]) {
+      throw new Error(
+        `Formless UI access invitation authoring ${JSON.stringify(snapshot.id)} has invalid grant order.`,
+      );
+    }
+    assertDistinctAccessIdentities(
+      snapshot.id,
+      "grant groups",
+      selection.groups.map(({ id }) => id),
+    );
+    const options = selection.groups.flatMap((group) =>
+      group.options.map((option) => ({ group, option })),
+    );
+    assertDistinctAccessIdentities(
+      snapshot.id,
+      "grant options",
+      options.map(({ option }) => option.id),
+    );
+    const selectedOptionIds = options
+      .filter(({ option }) => option.selected)
+      .map(({ option }) => option.id);
+    if (!semanticallyEqual(selection.selectedOptionIds, selectedOptionIds)) {
+      throw new Error(
+        `Formless UI access invitation authoring ${JSON.stringify(snapshot.id)} has inconsistent grant selection.`,
+      );
+    }
+    for (const { group, option } of options) {
+      const intent = option.selectionIntent;
+      if (
+        intent.accessId !== snapshot.accessId ||
+        intent.authoringId !== snapshot.id ||
+        intent.controlId !== selection.id ||
+        intent.groupId !== group.id ||
+        intent.optionId !== option.id ||
+        intent.selected === option.selected
+      ) {
+        throw new Error(
+          `Formless UI access invitation authoring ${JSON.stringify(snapshot.id)} has an invalid grant-selection intent.`,
+        );
+      }
+    }
+  });
+}
+
+function assertAccessActionIdentity(action: FormlessUiAccessActionContract, accessId: string) {
+  if (
+    action.intent.accessId !== accessId ||
+    action.intent.actionId !== action.id ||
+    action.intent.controlId !== action.control.id
+  ) {
+    throw new Error(`Formless UI access action ${JSON.stringify(action.id)} has invalid identity.`);
+  }
+}
+
+function assertDistinctAccessIdentities(
+  ownerId: string,
+  identityKind: string,
+  identities: readonly string[],
+) {
+  if (new Set(identities).size !== identities.length) {
+    throw new Error(
+      `Formless UI access contract ${JSON.stringify(ownerId)} has duplicate ${identityKind} identities.`,
+    );
   }
 }
 
@@ -788,6 +1081,17 @@ function mismatchedNodeError(reference: FormlessUiContractReference) {
 
 function assertReferencesResolve(nodes: StoredContractNodes) {
   for (const node of nodes.values()) {
+    if (node.snapshot.kind === "accessManifest") {
+      if (node.snapshot.state !== "ready") {
+        continue;
+      }
+      if (node.snapshot.authoring.accessId !== node.snapshot.id) {
+        throw invalidScopedReferenceError(node.snapshot.authoring);
+      }
+      assertReferenceResolves(nodes, node.snapshot.authoring);
+      continue;
+    }
+
     if (node.snapshot.kind === "managementManifest") {
       if (node.snapshot.state !== "ready") {
         continue;
