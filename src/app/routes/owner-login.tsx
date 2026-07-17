@@ -1,6 +1,5 @@
-import { useEffect, useState } from "react";
-import { Button } from "@dpeek/formless-ui/button";
-import { fieldErrorStyles } from "@dpeek/formless-ui/field";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { FormlessUiAuthIntent } from "@dpeek/formless-astryx/contract";
 import { useLocation } from "wouter";
 import {
   authAccountContinuationLocationForReturnTarget,
@@ -23,9 +22,20 @@ import {
   passkeyUnavailableMessage,
   type CreatePasskeyAuthenticationResponse,
 } from "./passkey-browser.ts";
+import { LegacySubscribedOwnerAuthRenderer } from "../generated/legacy-owner-auth-renderer.tsx";
+import {
+  authIntentIsCurrent,
+  createAuthPendingGuard,
+  NoShellAuthRuntimeBoundary,
+} from "./auth-runtime-boundary.tsx";
+import {
+  ownerSignInAuthSurfaceReference,
+  projectOwnerSignInAuthSurface,
+} from "./owner-auth-projection.ts";
 
 export type OwnerLoginRouteState =
   | { status: "complete"; owner: OwnerIdentity }
+  | { continueTo: `/${string}`; owner?: OwnerIdentity; status: "continuing" }
   | { status: "failed"; message: string; owner?: OwnerIdentity }
   | { status: "logging-out"; owner: OwnerIdentity }
   | { status: "loading" }
@@ -49,6 +59,8 @@ type OwnerLoginLocationSetter = (path: `/${string}`, options?: { replace?: boole
 
 export function OwnerLoginRoute() {
   const [state, setState] = useState<OwnerLoginRouteState>({ status: "loading" });
+  const [sessionRevision, setSessionRevision] = useState(0);
+  const pendingGuard = useRef(createAuthPendingGuard());
   const [location, setLocation] = useLocation();
   const redirectTarget = ownerLoginRedirectTargetFromSearch(
     ownerLoginSearchFromRouteLocation(location),
@@ -59,7 +71,7 @@ export function OwnerLoginRoute() {
       startOwnerLoginRouteSession({
         onState: setState,
       }),
-    [],
+    [sessionRevision],
   );
 
   const owner =
@@ -67,32 +79,33 @@ export function OwnerLoginRoute() {
       ? state.owner
       : undefined;
   const disabled = state.status === "submitting" || owner === undefined;
+  const surface = useMemo(() => projectOwnerSignInAuthSurface({ state }), [state]);
 
-  async function submitLogin(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
+  async function submitLogin() {
     if (!owner || disabled) {
       return;
     }
 
-    setState({ status: "submitting", owner });
+    await pendingGuard.current.run(async () => {
+      setState({ status: "submitting", owner });
 
-    try {
-      const response = await loginWithPasskey();
-      const continueTo = ownerLoginSuccessContinuationTarget(
-        response.continueTo,
-        ownerLoginSearchFromRouteLocation(location),
-      );
+      try {
+        const response = await loginWithPasskey();
+        const continueTo = ownerLoginSuccessContinuationTarget(
+          response.continueTo,
+          ownerLoginSearchFromRouteLocation(location),
+        );
 
-      setState({ status: "complete", owner: response.owner });
-      navigateAfterOwnerLogin(continueTo, { setLocation });
-    } catch (error) {
-      setState({
-        status: "failed",
-        message: error instanceof Error ? error.message : "Owner login failed.",
-        owner,
-      });
-    }
+        setState({ continueTo, owner: response.owner, status: "continuing" });
+        navigateAfterOwnerLogin(continueTo, { setLocation });
+      } catch (error) {
+        setState({
+          status: "failed",
+          message: error instanceof Error ? error.message : "Owner login failed.",
+          owner,
+        });
+      }
+    });
   }
 
   async function logout() {
@@ -102,34 +115,62 @@ export function OwnerLoginRoute() {
 
     const loggedOutOwner = state.owner;
 
-    setState({ status: "logging-out", owner: loggedOutOwner });
+    await pendingGuard.current.run(async () => {
+      setState({ status: "logging-out", owner: loggedOutOwner });
 
-    try {
-      const response = await logoutOwnerSession();
+      try {
+        const response = await logoutOwnerSession();
 
-      if (response.continueTo) {
-        navigateAfterOwnerLogin(response.continueTo, { setLocation });
-        return;
+        if (response.continueTo) {
+          setState({ continueTo: response.continueTo, status: "continuing" });
+          navigateAfterOwnerLogin(response.continueTo, { setLocation });
+          return;
+        }
+
+        setState({ status: "ready", owner: loggedOutOwner });
+      } catch (error) {
+        setState({
+          status: "failed",
+          message: error instanceof Error ? error.message : "Owner logout failed.",
+          owner: loggedOutOwner,
+        });
       }
+    });
+  }
 
-      setState({ status: "ready", owner: loggedOutOwner });
-    } catch (error) {
-      setState({
-        status: "failed",
-        message: error instanceof Error ? error.message : "Owner logout failed.",
-        owner: loggedOutOwner,
-      });
+  async function handleIntent(intent: FormlessUiAuthIntent) {
+    if (!authIntentIsCurrent(surface, intent)) {
+      return;
+    }
+
+    if (intent.type === "authPasskey") {
+      await submitLogin();
+      return;
+    }
+
+    if (intent.type === "authAction") {
+      const action = surface.actions.find((candidate) => candidate.id === intent.actionId);
+      if (action?.purpose === "logout") {
+        await logout();
+      } else if (action?.purpose === "retry") {
+        setSessionRevision((revision) => revision + 1);
+      }
+      return;
+    }
+
+    if (intent.type === "authContinuation") {
+      navigateAfterOwnerLogin(redirectTarget, { setLocation });
     }
   }
 
   return (
-    <OwnerLoginRouteView
-      disabled={disabled}
-      onLogout={logout}
-      onSubmit={submitLogin}
-      redirectTarget={redirectTarget}
-      state={state}
-    />
+    <NoShellAuthRuntimeBoundary
+      onIntent={handleIntent}
+      reference={ownerSignInAuthSurfaceReference}
+      snapshot={surface}
+    >
+      <LegacySubscribedOwnerAuthRenderer reference={ownerSignInAuthSurfaceReference} />
+    </NoShellAuthRuntimeBoundary>
   );
 }
 
@@ -173,36 +214,6 @@ export function ownerLoginSuccessContinuationTarget(
 
   return authAccountContinuationLocationForReturnTarget(
     ownerLoginRedirectTargetFromSearch(locationSearch),
-  );
-}
-
-export function OwnerLoginRouteView({
-  disabled,
-  onLogout,
-  onSubmit,
-  redirectTarget = "/",
-  state,
-}: {
-  disabled?: boolean;
-  onLogout?: () => void;
-  onSubmit?: (event: React.FormEvent<HTMLFormElement>) => void;
-  redirectTarget?: `/${string}`;
-  state: OwnerLoginRouteState;
-}) {
-  return (
-    <section className="min-h-dvh bg-bg text-fg">
-      <div className="mx-auto flex min-h-dvh w-full max-w-xl flex-col justify-center px-4 py-12">
-        <div className="space-y-6 rounded-lg border border-border bg-overlay p-6 shadow-sm">
-          <OwnerLoginStateBody
-            disabled={disabled ?? state.status === "submitting"}
-            onLogout={onLogout}
-            onSubmit={onSubmit}
-            redirectTarget={redirectTarget}
-            state={state}
-          />
-        </div>
-      </div>
-    </section>
   );
 }
 
@@ -379,150 +390,6 @@ export class OwnerLoginApiError extends Error {
     this.name = "OwnerLoginApiError";
     this.status = options.status;
   }
-}
-
-function OwnerLoginStateBody({
-  disabled,
-  onLogout,
-  onSubmit,
-  redirectTarget,
-  state,
-}: {
-  disabled: boolean;
-  onLogout?: () => void;
-  onSubmit?: (event: React.FormEvent<HTMLFormElement>) => void;
-  redirectTarget: `/${string}`;
-  state: OwnerLoginRouteState;
-}) {
-  switch (state.status) {
-    case "complete":
-      return (
-        <OwnerLoginMessage
-          action={<OwnerLoginSessionActions onLogout={onLogout} redirectTarget={redirectTarget} />}
-          heading="Owner signed in"
-          message={`Signed in as ${state.owner.name}.`}
-        />
-      );
-    case "logging-out":
-      return (
-        <OwnerLoginMessage heading="Signing out" message={`Signed in as ${state.owner.name}.`} />
-      );
-    case "passkey-unavailable":
-      return <OwnerLoginMessage heading="Passkeys are unavailable" message={state.message} />;
-    case "setup-incomplete":
-      return (
-        <OwnerLoginMessage
-          heading="Owner setup is incomplete"
-          message="Create the first owner before signing in."
-        />
-      );
-    case "failed":
-    case "ready":
-    case "submitting":
-      return (
-        <OwnerLoginForm
-          disabled={disabled || state.owner === undefined}
-          onSubmit={onSubmit}
-          owner={state.owner}
-          submitError={state.status === "failed" ? state.message : undefined}
-        />
-      );
-    case "loading":
-      return (
-        <OwnerLoginMessage heading="Checking owner session" message="Loading sign-in state." />
-      );
-  }
-}
-
-function OwnerLoginForm({
-  disabled,
-  onSubmit,
-  owner,
-  submitError,
-}: {
-  disabled: boolean;
-  onSubmit?: (event: React.FormEvent<HTMLFormElement>) => void;
-  owner?: OwnerIdentity;
-  submitError?: string;
-}) {
-  return (
-    <>
-      <OwnerLoginHeader
-        heading="Owner sign in"
-        message={owner ? `Sign in as ${owner.name}.` : "Sign in to this Formless instance."}
-      />
-      <form className="space-y-4" onSubmit={onSubmit}>
-        {submitError ? (
-          <p
-            className={fieldErrorStyles()}
-            data-slot="field-error"
-            role="alert"
-            slot="errorMessage"
-          >
-            {submitError}
-          </p>
-        ) : null}
-        <Button className="w-full" isDisabled={disabled} type="submit">
-          {disabled ? "Signing in..." : "Sign in with passkey"}
-        </Button>
-      </form>
-    </>
-  );
-}
-
-function OwnerLoginMessage({
-  action,
-  heading,
-  message,
-}: {
-  action?: React.ReactNode;
-  heading: string;
-  message: string;
-}) {
-  return (
-    <div className="space-y-5">
-      <OwnerLoginHeader heading={heading} message={message} />
-      {action}
-    </div>
-  );
-}
-
-function OwnerLoginHeader({ heading, message }: { heading: string; message: string }) {
-  return (
-    <header className="space-y-2">
-      <p className="text-xs font-medium uppercase tracking-wide text-muted-fg">Formless</p>
-      <h1 className="text-2xl font-semibold">{heading}</h1>
-      <p className="text-sm text-muted-fg">{message}</p>
-    </header>
-  );
-}
-
-function OwnerLoginContinueLink({ redirectTarget }: { redirectTarget: `/${string}` }) {
-  return (
-    <a
-      className="inline-flex h-7 items-center justify-center rounded-md bg-primary px-2 text-xs font-medium text-primary-fg transition-colors hover:bg-primary/80"
-      href={redirectTarget}
-    >
-      Continue
-    </a>
-  );
-}
-
-function OwnerLoginSessionActions({
-  onLogout,
-  redirectTarget,
-}: {
-  onLogout?: () => void;
-  redirectTarget: `/${string}`;
-}) {
-  return (
-    <div className="flex flex-wrap gap-2">
-      <OwnerLoginContinueLink redirectTarget={redirectTarget} />
-      <Button intent="secondary" onPress={onLogout} type="button">
-        Sign out
-      </Button>
-    </div>
-  );
 }
 
 async function readOwnerLoginJson(response: Response): Promise<unknown> {

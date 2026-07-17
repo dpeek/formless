@@ -1,4 +1,8 @@
 import type {
+  FormlessUiAuthIntent,
+  FormlessUiAuthSurfaceContract,
+  FormlessUiAuthSurfaceKind,
+  FormlessUiAuthSurfaceReference,
   FormlessUiContractIntent,
   FormlessUiContractIntentHandler,
   FormlessUiContractReference,
@@ -30,27 +34,29 @@ import type {
 } from "./formless-ui-contract.ts";
 
 export type FormlessUiContractSnapshot<Reference extends FormlessUiContractReference> =
-  Reference extends FormlessUiDocumentThemeReference
-    ? FormlessUiDocumentThemeContract
-    : Reference extends FormlessUiManagementManifestReference
-      ? FormlessUiManagementManifestContract
-      : Reference extends FormlessUiManagementInstallDialogReference
-        ? FormlessUiManagementInstallDialogContract
-        : Reference extends FormlessUiWorkspaceManifestReference
-          ? FormlessUiWorkspaceManifestContract
-          : Reference extends FormlessUiWorkspaceSectionShellReference
-            ? FormlessUiWorkspaceSectionShellContract
-            : Reference extends FormlessUiShellManifestReference
-              ? FormlessUiShellManifestContract
-              : Reference extends FormlessUiShellNavigationSectionReference
-                ? FormlessUiShellNavigationSectionContract
-                : Reference extends FormlessUiListResultReference
-                  ? FormlessUiListContract
-                  : Reference extends FormlessUiTableResultReference
-                    ? FormlessUiTableContract
-                    : Reference extends FormlessUiRecordResultReference
-                      ? FormlessUiRecordResultContract
-                      : never;
+  Reference extends FormlessUiAuthSurfaceReference<infer SurfaceKind>
+    ? Extract<FormlessUiAuthSurfaceContract, { surfaceKind: SurfaceKind }>
+    : Reference extends FormlessUiDocumentThemeReference
+      ? FormlessUiDocumentThemeContract
+      : Reference extends FormlessUiManagementManifestReference
+        ? FormlessUiManagementManifestContract
+        : Reference extends FormlessUiManagementInstallDialogReference
+          ? FormlessUiManagementInstallDialogContract
+          : Reference extends FormlessUiWorkspaceManifestReference
+            ? FormlessUiWorkspaceManifestContract
+            : Reference extends FormlessUiWorkspaceSectionShellReference
+              ? FormlessUiWorkspaceSectionShellContract
+              : Reference extends FormlessUiShellManifestReference
+                ? FormlessUiShellManifestContract
+                : Reference extends FormlessUiShellNavigationSectionReference
+                  ? FormlessUiShellNavigationSectionContract
+                  : Reference extends FormlessUiListResultReference
+                    ? FormlessUiListContract
+                    : Reference extends FormlessUiTableResultReference
+                      ? FormlessUiTableContract
+                      : Reference extends FormlessUiRecordResultReference
+                        ? FormlessUiRecordResultContract
+                        : never;
 
 export type FormlessUiContractHostListener = () => void;
 
@@ -71,6 +77,11 @@ export type FormlessUiContractHost = {
 export type FormlessUiWorkspaceManifestNode = {
   reference: FormlessUiWorkspaceManifestReference;
   snapshot: FormlessUiWorkspaceManifestContract;
+};
+
+export type FormlessUiAuthSurfaceNode = {
+  reference: FormlessUiAuthSurfaceReference;
+  snapshot: FormlessUiAuthSurfaceContract;
 };
 
 export type FormlessUiDocumentThemeNode = {
@@ -119,6 +130,7 @@ export type FormlessUiManagementInstallDialogNode = {
 };
 
 export type FormlessUiContractHostNode =
+  | FormlessUiAuthSurfaceNode
   | FormlessUiDocumentThemeNode
   | FormlessUiListResultNode
   | FormlessUiManagementInstallDialogNode
@@ -217,6 +229,21 @@ export function formlessUiWorkspaceManifestReference(
     kind: "workspaceManifestReference",
     role: "workspace",
     workspaceId,
+  };
+}
+
+export function formlessUiAuthSurfaceReference<SurfaceKind extends FormlessUiAuthSurfaceKind>({
+  surfaceId,
+  surfaceKind,
+}: {
+  surfaceId: string;
+  surfaceKind: SurfaceKind;
+}): FormlessUiAuthSurfaceReference<SurfaceKind> {
+  return {
+    kind: "authSurfaceReference",
+    role: "authSurface",
+    surfaceId,
+    surfaceKind,
   };
 }
 
@@ -333,6 +360,8 @@ export function formlessUiRecordResultReference<Role extends FormlessUiResultRef
 
 export function formlessUiContractReferenceKey(reference: FormlessUiContractReference): string {
   switch (reference.kind) {
+    case "authSurfaceReference":
+      return JSON.stringify([reference.role, reference.surfaceKind, reference.surfaceId]);
     case "documentThemeReference":
       return JSON.stringify([reference.role, reference.themeId]);
     case "managementManifestReference":
@@ -364,6 +393,11 @@ export function isFormlessUiWorkspaceIntent(
   intent: FormlessUiContractIntent,
 ): intent is FormlessUiWorkspaceIntent {
   switch (intent.type) {
+    case "authAction":
+    case "authContinuation":
+    case "authField":
+    case "authPasskey":
+    case "authPolicySelection":
     case "documentThemeModeSelection":
     case "managementAuthorizationOpen":
     case "managementInstallDialogOpenChange":
@@ -378,6 +412,21 @@ export function isFormlessUiWorkspaceIntent(
       return false;
     default:
       return true;
+  }
+}
+
+export function isFormlessUiAuthIntent(
+  intent: FormlessUiContractIntent,
+): intent is FormlessUiAuthIntent {
+  switch (intent.type) {
+    case "authAction":
+    case "authContinuation":
+    case "authField":
+    case "authPasskey":
+    case "authPolicySelection":
+      return true;
+    default:
+      return false;
   }
 }
 
@@ -458,6 +507,16 @@ function assertNodeMatchesReference(node: FormlessUiContractHostNode) {
   const { reference, snapshot } = node;
 
   switch (reference.kind) {
+    case "authSurfaceReference":
+      if (
+        snapshot.kind !== "authSurface" ||
+        snapshot.id !== reference.surfaceId ||
+        snapshot.surfaceKind !== reference.surfaceKind
+      ) {
+        throw mismatchedNodeError(reference);
+      }
+      assertAuthSurfaceContract(snapshot);
+      return;
     case "documentThemeReference":
       if (snapshot.kind !== "documentTheme" || snapshot.id !== reference.themeId) {
         throw mismatchedNodeError(reference);
@@ -517,6 +576,95 @@ function assertNodeMatchesReference(node: FormlessUiContractHostNode) {
       if (snapshot.kind !== "table" || snapshot.id !== reference.resultId) {
         throw mismatchedNodeError(reference);
       }
+  }
+}
+
+function assertAuthSurfaceContract(snapshot: FormlessUiAuthSurfaceContract) {
+  const fieldIds = new Set<string>();
+  for (const authField of snapshot.fields) {
+    const { field, intent, purpose } = authField;
+    if (fieldIds.has(field.fieldId)) {
+      throw new Error(
+        `Formless UI auth surface ${JSON.stringify(snapshot.id)} has duplicate field identities.`,
+      );
+    }
+    fieldIds.add(field.fieldId);
+
+    if (
+      intent.surfaceId !== snapshot.id ||
+      intent.fieldId !== field.fieldId ||
+      (purpose === "profile-input" && field.surface !== "operation") ||
+      (purpose !== "profile-input" && field.surface !== "create") ||
+      (purpose === "verification-token" && authField.autocomplete !== "one-time-code")
+    ) {
+      throw new Error(
+        `Formless UI auth surface ${JSON.stringify(snapshot.id)} has an invalid field contract.`,
+      );
+    }
+  }
+
+  const policyIds = new Set<string>();
+  for (const policy of snapshot.policies) {
+    if (policyIds.has(policy.id)) {
+      throw new Error(
+        `Formless UI auth surface ${JSON.stringify(snapshot.id)} has duplicate policy identities.`,
+      );
+    }
+    policyIds.add(policy.id);
+
+    const intent = policy.selectionIntent;
+    if (intent && (intent.surfaceId !== snapshot.id || intent.policyId !== policy.id)) {
+      throw new Error(
+        `Formless UI auth surface ${JSON.stringify(snapshot.id)} has an invalid policy-selection intent.`,
+      );
+    }
+  }
+
+  const actionIds = new Set<string>();
+  for (const action of snapshot.actions) {
+    if (actionIds.has(action.id)) {
+      throw new Error(
+        `Formless UI auth surface ${JSON.stringify(snapshot.id)} has duplicate action identities.`,
+      );
+    }
+    actionIds.add(action.id);
+
+    const { intent } = action;
+    if (
+      intent.surfaceId !== snapshot.id ||
+      intent.actionId !== action.id ||
+      intent.controlId !== action.control.id
+    ) {
+      throw new Error(
+        `Formless UI auth surface ${JSON.stringify(snapshot.id)} has an invalid action intent.`,
+      );
+    }
+  }
+
+  if (snapshot.passkey?.availability === "available") {
+    const { control, id, intent } = snapshot.passkey;
+    if (
+      intent.surfaceId !== snapshot.id ||
+      intent.passkeyId !== id ||
+      intent.controlId !== control.id
+    ) {
+      throw new Error(
+        `Formless UI auth surface ${JSON.stringify(snapshot.id)} has an invalid passkey intent.`,
+      );
+    }
+  }
+
+  if (snapshot.continuation) {
+    const { control, destination, intent } = snapshot.continuation;
+    if (
+      intent.surfaceId !== snapshot.id ||
+      intent.destinationId !== destination.id ||
+      intent.controlId !== control.id
+    ) {
+      throw new Error(
+        `Formless UI auth surface ${JSON.stringify(snapshot.id)} has an invalid continuation intent.`,
+      );
+    }
   }
 }
 

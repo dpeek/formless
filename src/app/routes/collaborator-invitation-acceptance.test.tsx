@@ -1,10 +1,8 @@
-import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
   COLLABORATOR_INVITATION_PASSKEY_REGISTER_OPTIONS_ROUTE,
   COLLABORATOR_INVITATION_PASSKEY_REGISTER_VERIFY_ROUTE,
-  CollaboratorInvitationAcceptanceRouteView,
   collaboratorInvitationAcceptanceContinuationUrl,
   completeCollaboratorInvitationAcceptance,
   fetchCollaboratorInvitationAcceptanceStatus,
@@ -75,92 +73,6 @@ const failureCases = [
   reason: CollaboratorInvitationAcceptanceFailureReason;
 }>;
 
-describe("collaborator invitation acceptance route view", () => {
-  it("renders eligible invitation facts without raw token or private target facts", () => {
-    const html = renderInvitationAcceptanceState({
-      status: "eligible",
-      invitation: eligibleInvitation,
-    });
-
-    expect(html).toContain("Invitation ready");
-    expect(html).toContain("Ada.Collab@example.com");
-    expect(html).toContain("App install");
-    expect(html).toContain("Ada Collaborator");
-    expect(html).toContain("2026-07-01T00:00:00.000Z");
-    expect(html).toContain("Create passkey and accept");
-    expect(html).not.toContain("invitation:eligible");
-    expect(html).not.toContain("site");
-    expect(html).not.toContain(rawToken);
-    expect(html).not.toContain(tokenHash);
-    expect(html).not.toContain("credential");
-    expect(html).not.toContain("session");
-    expect(html).not.toContain("Set-Cookie");
-  });
-
-  it("renders display-safe failure states", () => {
-    for (const testCase of failureCases) {
-      const html = renderInvitationAcceptanceState({
-        status: "unavailable",
-        message: testCase.error,
-        reason: testCase.reason,
-      });
-
-      expect(html, testCase.reason).toContain("Invitation unavailable");
-      expect(html, testCase.reason).toContain(testCase.error);
-      expect(html, testCase.reason).not.toContain(testCase.reason);
-      expect(html, testCase.reason).not.toContain(rawToken);
-      expect(html, testCase.reason).not.toContain(tokenHash);
-      expect(html, testCase.reason).not.toContain("principal:");
-      expect(html, testCase.reason).not.toContain("credential");
-      expect(html, testCase.reason).not.toContain("session");
-      expect(html, testCase.reason).not.toContain("Set-Cookie");
-    }
-  });
-
-  it("renders accepted and continuing states without session ids or handoff secrets", () => {
-    const acceptedHtml = renderInvitationAcceptanceState({
-      status: "accepted",
-      acceptedPrincipal: {
-        displayName: "Ada Collaborator",
-        principalId: "principal:accepted",
-      },
-      invitation: eligibleInvitation,
-      session: { expiresAt: "2026-07-02T00:00:00.000Z" },
-    });
-    const continuingHtml = renderInvitationAcceptanceState({
-      status: "continuing",
-      acceptedPrincipal: {
-        displayName: "Ada Collaborator",
-        principalId: "principal:accepted",
-      },
-      continueTo: "https://site.example.com/dashboard?view=home",
-      handoff: {
-        returnTo: "/dashboard?view=home",
-        targetOrigin: "https://site.example.com",
-      },
-      invitation: eligibleInvitation,
-      session: { expiresAt: "2026-07-02T00:00:00.000Z" },
-    });
-
-    expect(acceptedHtml).toContain("Invitation accepted");
-    expect(acceptedHtml).toContain("Signed in as Ada Collaborator.");
-    expect(acceptedHtml).toContain("Session expires");
-    expect(acceptedHtml).toContain("2026-07-02T00:00:00.000Z");
-    expect(acceptedHtml).not.toContain("principal:accepted");
-    expect(acceptedHtml).not.toContain(sessionId);
-    expect(acceptedHtml).not.toContain(grantSecret);
-    expect(acceptedHtml).not.toContain("Set-Cookie");
-
-    expect(continuingHtml).toContain("Invitation accepted");
-    expect(continuingHtml).toContain("Continuing to https://site.example.com.");
-    expect(continuingHtml).toContain("https://site.example.com/dashboard?view=home");
-    expect(continuingHtml).not.toContain("principal:accepted");
-    expect(continuingHtml).not.toContain(sessionId);
-    expect(continuingHtml).not.toContain(grantSecret);
-    expect(continuingHtml).not.toContain("Set-Cookie");
-  });
-});
-
 describe("collaborator invitation acceptance route data flow", () => {
   it("loads eligible invitation status through the display-safe status API only", async () => {
     const calls: FetchCall[] = [];
@@ -172,6 +84,7 @@ describe("collaborator invitation acceptance route data flow", () => {
       }),
       locationSearch: `?invitationId=${encodeURIComponent(eligibleInvitation.invitationId)}&token=${rawToken}`,
       onState: (state) => states.push(state),
+      passkeysSupported: () => true,
     });
 
     try {
@@ -191,6 +104,36 @@ describe("collaborator invitation acceptance route data flow", () => {
     expect(states).toEqual([
       { status: "loading" },
       { status: "eligible", invitation: eligibleInvitation },
+    ]);
+    expect(JSON.stringify(states)).not.toContain(rawToken);
+    expect(JSON.stringify(states)).not.toContain(tokenHash);
+  });
+
+  it("keeps eligible invitation facts visible when passkeys are unavailable", async () => {
+    const states: CollaboratorInvitationAcceptanceRouteState[] = [];
+    const stop = startCollaboratorInvitationAcceptanceRouteSession({
+      fetcher: recordingJsonFetcher([], {
+        eligible: true,
+        invitation: eligibleInvitation,
+      }),
+      locationSearch: `?invitationId=${encodeURIComponent(eligibleInvitation.invitationId)}&token=${rawToken}`,
+      onState: (state) => states.push(state),
+      passkeysSupported: () => false,
+    });
+
+    try {
+      await waitFor(() => states.some((state) => state.status === "passkey-unavailable"));
+    } finally {
+      stop();
+    }
+
+    expect(states).toEqual([
+      { status: "loading" },
+      {
+        invitation: eligibleInvitation,
+        message: "This browser does not support passkeys.",
+        status: "passkey-unavailable",
+      },
     ]);
     expect(JSON.stringify(states)).not.toContain(rawToken);
     expect(JSON.stringify(states)).not.toContain(tokenHash);
@@ -393,10 +336,6 @@ type FetchCall = {
   input: string;
   method: string | undefined;
 };
-
-function renderInvitationAcceptanceState(state: CollaboratorInvitationAcceptanceRouteState) {
-  return renderToStaticMarkup(<CollaboratorInvitationAcceptanceRouteView state={state} />);
-}
 
 function recordingJsonFetcher(
   calls: FetchCall[],

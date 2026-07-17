@@ -1,8 +1,6 @@
-import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
-  OwnerSetupRouteView,
   completeOwnerSetup,
   fetchOwnerSetupStatus,
   startOwnerSetupRouteSession,
@@ -24,80 +22,11 @@ const owner: OwnerIdentity = {
   createdAt: "2026-05-21T00:00:00.000Z",
 };
 
-describe("owner setup route view", () => {
+describe("owner setup route", () => {
   it("uses the account setup gate route instead of the deleted legacy setup route", () => {
     expect(runtimeTopologyRoutes.authAccountSetupRoute).toBe("/formless/auth/setup");
     expect(isRuntimeClientShellRoute(runtimeTopologyRoutes.authAccountSetupRoute)).toBe(true);
     expect(isRuntimeClientShellRoute("/setup")).toBe(false);
-  });
-
-  it("renders visible setup states", () => {
-    expect(renderOwnerSetupState({ status: "loading" })).toContain("Checking setup link");
-    expect(
-      renderOwnerSetupState({
-        status: "invalid-link",
-        message: "Owner setup link is invalid.",
-      }),
-    ).toContain("Setup link unavailable");
-    expect(
-      renderOwnerSetupState({
-        status: "already-complete",
-        owner,
-      }),
-    ).toContain("Owner setup is complete");
-    expect(
-      renderOwnerSetupState({
-        status: "complete",
-        owner,
-      }),
-    ).toContain("Signed in as Ada Owner.");
-    expect(
-      renderOwnerSetupState({
-        continueTo: "/formless/auth?returnTo=%2F",
-        owner,
-        status: "continuing",
-      }),
-    ).toContain("Continuing to /formless/auth?returnTo=%2F.");
-    expect(
-      renderOwnerSetupState({
-        status: "failed",
-        message: "Owner setup failed.",
-        setupToken,
-      }),
-    ).toContain("Owner setup failed.");
-    expect(
-      renderOwnerSetupState({
-        status: "passkey-unavailable",
-        message: "Passkeys are unavailable in this browser.",
-      }),
-    ).toContain("Passkeys are unavailable");
-  });
-
-  it("renders the first owner form when setup is ready", () => {
-    const html = renderOwnerSetupState({ status: "ready", setupToken });
-
-    expect(html).toContain("Claim this Formless instance");
-    expect(html).toContain("Create owner passkey");
-    expect(html).toContain("Name");
-    expect(html).toContain("Email");
-  });
-
-  it("renders setup completion continuation to the reported admin origin", () => {
-    const html = renderOwnerSetupState({
-      adminOrigin: "https://admin.example.com",
-      status: "complete",
-      owner,
-    });
-    const alreadyCompleteHtml = renderOwnerSetupState({
-      adminOrigin: "https://admin.example.com",
-      status: "already-complete",
-      owner,
-    });
-
-    expect(html).toContain("Continue");
-    expect(html).toContain('href="https://admin.example.com/"');
-    expect(alreadyCompleteHtml).toContain("Continue");
-    expect(alreadyCompleteHtml).toContain('href="https://admin.example.com/"');
   });
 });
 
@@ -170,7 +99,7 @@ describe("owner setup route data flow", () => {
       { status: "loading" },
       {
         status: "passkey-unavailable",
-        message: "Passkeys are unavailable in this browser.",
+        message: "This browser does not support passkeys.",
       },
     ]);
   });
@@ -396,10 +325,6 @@ const registrationResponse = {
   },
   type: "public-key",
 } satisfies OwnerPasskeyRegistrationVerifyRequest["response"];
-
-function renderOwnerSetupState(state: OwnerSetupRouteState) {
-  return renderToStaticMarkup(<OwnerSetupRouteView state={state} />);
-}
 
 function jsonFetcher(body: unknown, init: ResponseInit = {}): typeof fetch {
   return async () => Response.json(body, init);

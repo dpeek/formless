@@ -1,8 +1,6 @@
-import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
-  OwnerLoginRouteView,
   fetchOwnerSessionStatus,
   loginWithPasskey,
   logoutOwnerSession,
@@ -27,67 +25,11 @@ const owner: OwnerIdentity = {
   createdAt: "2026-05-21T00:00:00.000Z",
 };
 
-describe("owner login route view", () => {
+describe("owner login route", () => {
   it("uses the account sign-in gate route instead of the deleted legacy login route", () => {
     expect(runtimeTopologyRoutes.authAccountSignInRoute).toBe("/formless/auth/sign-in");
     expect(isRuntimeClientShellRoute(runtimeTopologyRoutes.authAccountSignInRoute)).toBe(true);
     expect(isRuntimeClientShellRoute("/login")).toBe(false);
-  });
-
-  it("renders visible login states", () => {
-    expect(renderOwnerLoginState({ status: "loading" })).toContain("Checking owner session");
-    expect(renderOwnerLoginState({ status: "setup-incomplete" })).toContain(
-      "Owner setup is incomplete",
-    );
-    expect(renderOwnerLoginState({ status: "ready", owner })).toContain("Owner sign in");
-    expect(renderOwnerLoginState({ status: "submitting", owner })).toContain("Signing in...");
-    expect(renderOwnerLoginState({ status: "logging-out", owner })).toContain("Signing out");
-    expect(
-      renderOwnerLoginState({
-        status: "passkey-unavailable",
-        message: "Passkeys are unavailable in this browser.",
-        owner,
-      }),
-    ).toContain("Passkeys are unavailable");
-    expect(renderOwnerLoginState({ status: "complete", owner })).toContain(
-      "Signed in as Ada Owner.",
-    );
-    expect(
-      renderOwnerLoginState({
-        status: "failed",
-        message: "Passkey login is required.",
-        owner,
-      }),
-    ).toContain("Passkey login is required.");
-  });
-
-  it("renders passkey login without an admin-token input", () => {
-    const html = renderToStaticMarkup(<OwnerLoginRouteView state={{ status: "ready", owner }} />);
-
-    expect(html).toContain("Owner sign in");
-    expect(html).toContain("Sign in as Ada Owner.");
-    expect(html).toContain("Sign in with passkey");
-    expect(html).not.toContain("Admin token");
-    expect(html).not.toContain("current-password");
-  });
-
-  it("renders a logout affordance after sign-in", () => {
-    const html = renderOwnerLoginState({ status: "complete", owner });
-
-    expect(html).toContain("Continue");
-    expect(html).toContain('href="/"');
-    expect(html).toContain("Sign out");
-  });
-
-  it("renders signed-in continuation to the safe return target", () => {
-    const html = renderToStaticMarkup(
-      <OwnerLoginRouteView
-        redirectTarget="/apps/personal/settings?panel=routes"
-        state={{ status: "complete", owner }}
-      />,
-    );
-
-    expect(html).toContain('href="/apps/personal/settings?panel=routes"');
   });
 });
 
@@ -179,7 +121,7 @@ describe("owner login route data flow", () => {
       { status: "loading" },
       {
         status: "passkey-unavailable",
-        message: "Passkeys are unavailable in this browser.",
+        message: "This browser does not support passkeys.",
         owner,
       },
     ]);
@@ -361,10 +303,6 @@ const authenticationResponse = {
   },
   type: "public-key",
 } satisfies OwnerPasskeyLoginVerifyRequest["response"];
-
-function renderOwnerLoginState(state: OwnerLoginRouteState) {
-  return renderToStaticMarkup(<OwnerLoginRouteView state={state} />);
-}
 
 function jsonFetcher(body: unknown, init: ResponseInit = {}): typeof fetch {
   return async () => Response.json(body, init);

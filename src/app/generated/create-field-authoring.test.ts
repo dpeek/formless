@@ -241,6 +241,37 @@ describe("generated create draft session", () => {
     });
   });
 
+  it("uses schema text formats to reject invalid create drafts", () => {
+    const fields = [
+      {
+        editor: "text",
+        field: { format: "email", required: false, type: "text" },
+        fieldName: "email",
+      },
+    ] satisfies CreateFieldConfig[];
+    const state = initialGeneratedCreateDraftSessionState({ fields });
+    const invalid = nextSessionValue(state, "email", "not-an-email");
+    const empty = nextSessionValue(state, "email", "");
+
+    expect(
+      selectGeneratedCreateDraftSession({ enabled: true, fields, state: invalid }),
+    ).toMatchObject({
+      canSubmit: false,
+      fieldErrors: {
+        email: {
+          fieldName: "email",
+          message: "Enter an email address like name@example.com.",
+        },
+      },
+    });
+    expect(
+      selectGeneratedCreateDraftSession({ enabled: true, fields, state: empty }),
+    ).toMatchObject({
+      canSubmit: true,
+      fieldErrors: {},
+    });
+  });
+
   it("keeps invalid number drafts as field errors without operation input", () => {
     const fields = [createField("estimate", "number"), createField("label", "text")];
     const state = nextSessionValue(

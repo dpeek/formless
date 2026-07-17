@@ -1783,6 +1783,334 @@ export type FormlessUiDocumentThemeContract = FormlessUiDocumentThemeContractBas
       }
   );
 
+export type FormlessUiAuthSurfaceKind =
+  | "account-gate"
+  | "collaborator-invitation-acceptance"
+  | "owner-setup"
+  | "owner-sign-in"
+  | "signup";
+
+export type FormlessUiAuthMessageSeverity = "danger" | "info" | "success" | "warning";
+
+export type FormlessUiAuthBrandContract = {
+  kind: "authBrand";
+  label: string;
+};
+
+export type FormlessUiAuthHeadingContract = {
+  description?: string;
+  kind: "authHeading";
+  title: string;
+};
+
+export type FormlessUiAuthFrameContract = {
+  accessibilityLabel: string;
+  brand: FormlessUiAuthBrandContract;
+  heading: FormlessUiAuthHeadingContract;
+  kind: "authFrame";
+};
+
+export type FormlessUiAuthMessageContract = {
+  detail?: string;
+  id: string;
+  kind: "authMessage";
+  severity: FormlessUiAuthMessageSeverity;
+  title: string;
+};
+
+export type FormlessUiAuthFactContract = {
+  id: string;
+  kind: "authFact";
+  label: string;
+  value: string;
+};
+
+export type FormlessUiAuthFieldPurpose =
+  | "display-name"
+  | "email"
+  | "profile-input"
+  | "verification-token";
+
+export type FormlessUiAuthFieldAutocomplete = "email" | "name" | "off" | "one-time-code";
+
+export type FormlessUiAuthFieldIntentScope = {
+  fieldId: string;
+  surfaceId: string;
+  type: "authField";
+};
+
+export type FormlessUiAuthFieldIntent = FormlessUiAuthFieldIntentScope & {
+  intent: FormlessUiFieldIntent;
+};
+
+export type FormlessUiAuthFieldContract =
+  | {
+      autocomplete?: FormlessUiAuthFieldAutocomplete;
+      field: FormlessUiCreateField;
+      intent: FormlessUiAuthFieldIntentScope;
+      kind: "authField";
+      purpose: Exclude<FormlessUiAuthFieldPurpose, "profile-input">;
+    }
+  | {
+      autocomplete?: FormlessUiAuthFieldAutocomplete;
+      field: FormlessUiOperationInputField;
+      intent: FormlessUiAuthFieldIntentScope;
+      kind: "authField";
+      purpose: "profile-input";
+    };
+
+export type FormlessUiAuthPolicyDestinationContract = {
+  href: string;
+  kind: "authPolicyDestination";
+  label: string;
+};
+
+export type FormlessUiAuthPolicySelectionIntent = {
+  accepted: boolean;
+  policyId: string;
+  surfaceId: string;
+  type: "authPolicySelection";
+};
+
+export type FormlessUiAuthPolicyContract = {
+  accepted: boolean;
+  description?: string;
+  destination?: FormlessUiAuthPolicyDestinationContract;
+  id: string;
+  kind: "authPolicy";
+  label: string;
+  required: boolean;
+  selectionIntent?: FormlessUiAuthPolicySelectionIntent;
+};
+
+export type FormlessUiAuthActionPurpose = "logout" | "retry" | "submit";
+
+export type FormlessUiAuthActionIntent = {
+  actionId: string;
+  controlId: string;
+  surfaceId: string;
+  type: "authAction";
+};
+
+export type FormlessUiAuthActionContract = {
+  control: FormlessUiButtonContract;
+  id: string;
+  intent: FormlessUiAuthActionIntent;
+  kind: "authAction";
+  purpose: FormlessUiAuthActionPurpose;
+};
+
+export type FormlessUiAuthPasskeyPurpose = "accept-invitation" | "create" | "sign-in";
+
+export type FormlessUiAuthPasskeyIntent = {
+  controlId: string;
+  passkeyId: string;
+  surfaceId: string;
+  type: "authPasskey";
+};
+
+type FormlessUiAuthPasskeyBaseContract = {
+  id: string;
+  kind: "authPasskey";
+  purpose: FormlessUiAuthPasskeyPurpose;
+};
+
+export type FormlessUiAuthPasskeyContract = FormlessUiAuthPasskeyBaseContract &
+  (
+    | {
+        availability: "available";
+        control: FormlessUiButtonContract;
+        intent: FormlessUiAuthPasskeyIntent;
+        unavailableReason?: never;
+      }
+    | {
+        availability: "unavailable";
+        control?: never;
+        intent?: never;
+        unavailableReason: string;
+      }
+  );
+
+export type FormlessUiAuthFeedbackContract = {
+  detail?: string;
+  id: string;
+  kind: "authFeedback";
+  severity: FormlessUiAuthMessageSeverity;
+  title: string;
+};
+
+export type FormlessUiAuthContinuationDestinationContract = {
+  detail?: string;
+  id: string;
+  kind: "authContinuationDestination";
+  label: string;
+  origin?: string;
+};
+
+export type FormlessUiAuthContinuationIntent = {
+  controlId: string;
+  destinationId: string;
+  surfaceId: string;
+  type: "authContinuation";
+};
+
+export type FormlessUiAuthContinuationContract = {
+  control: FormlessUiButtonContract;
+  destination: FormlessUiAuthContinuationDestinationContract;
+  intent: FormlessUiAuthContinuationIntent;
+  kind: "authContinuation";
+};
+
+export type FormlessUiOwnerSetupAuthSurfaceState =
+  | "already-complete"
+  | "complete"
+  | "continuing"
+  | "failed"
+  | "incomplete"
+  | "invalid"
+  | "loading"
+  | "passkey-unavailable"
+  | "ready"
+  | "submitting";
+
+export type FormlessUiOwnerSignInAuthSurfaceState =
+  | "complete"
+  | "continuing"
+  | "failed"
+  | "incomplete"
+  | "loading"
+  | "logout-pending"
+  | "passkey-unavailable"
+  | "ready"
+  | "submitting";
+
+export type FormlessUiAccountGateKind =
+  | "app-registration"
+  | "credential"
+  | "email-verification"
+  | "invitation"
+  | "profile-completion"
+  | "role-review"
+  | "terms-acceptance";
+
+export type FormlessUiAccountGateAuthSurfaceState =
+  | "blocked"
+  | "complete"
+  | "continuing"
+  | "failed"
+  | "loading"
+  | "passkey-unavailable"
+  | "ready"
+  | "submitting"
+  | "unavailable";
+
+export type FormlessUiSignupStep = "email-verification" | "identity" | "passkey";
+
+export type FormlessUiSignupAuthSurfaceState =
+  | "complete"
+  | "continuing"
+  | "failed"
+  | "loading"
+  | "passkey-unavailable"
+  | "ready"
+  | "submitting";
+
+export type FormlessUiCollaboratorInvitationAuthSurfaceState =
+  | "accepted"
+  | "continuing"
+  | "eligible"
+  | "failed"
+  | "invalid-link"
+  | "loading"
+  | "passkey-unavailable"
+  | "submitting"
+  | "unavailable";
+
+export type FormlessUiAuthSurfaceState =
+  | FormlessUiAccountGateAuthSurfaceState
+  | FormlessUiCollaboratorInvitationAuthSurfaceState
+  | FormlessUiOwnerSetupAuthSurfaceState
+  | FormlessUiOwnerSignInAuthSurfaceState
+  | FormlessUiSignupAuthSurfaceState;
+
+export type FormlessUiAuthSurfaceBaseContract = {
+  actions: readonly FormlessUiAuthActionContract[];
+  continuation?: FormlessUiAuthContinuationContract;
+  facts: readonly FormlessUiAuthFactContract[];
+  feedback?: FormlessUiAuthFeedbackContract;
+  fields: readonly FormlessUiAuthFieldContract[];
+  frame: FormlessUiAuthFrameContract;
+  id: string;
+  kind: "authSurface";
+  message?: FormlessUiAuthMessageContract;
+  passkey?: FormlessUiAuthPasskeyContract;
+  pending: boolean;
+  policies: readonly FormlessUiAuthPolicyContract[];
+};
+
+export type FormlessUiOwnerSetupAuthSurfaceContract = FormlessUiAuthSurfaceBaseContract & {
+  state: FormlessUiOwnerSetupAuthSurfaceState;
+  surfaceKind: "owner-setup";
+};
+
+export type FormlessUiOwnerSignInAuthSurfaceContract = FormlessUiAuthSurfaceBaseContract & {
+  state: FormlessUiOwnerSignInAuthSurfaceState;
+  surfaceKind: "owner-sign-in";
+};
+
+export type FormlessUiAccountGateAuthSurfaceContract = FormlessUiAuthSurfaceBaseContract &
+  (
+    | {
+        gateKind?: never;
+        state: "complete" | "continuing" | "failed" | "loading";
+        surfaceKind: "account-gate";
+      }
+    | {
+        gateKind: FormlessUiAccountGateKind;
+        state: Exclude<
+          FormlessUiAccountGateAuthSurfaceState,
+          "complete" | "continuing" | "failed" | "loading"
+        >;
+        surfaceKind: "account-gate";
+      }
+  );
+
+export type FormlessUiSignupAuthSurfaceContract = FormlessUiAuthSurfaceBaseContract &
+  (
+    | {
+        state: "loading";
+        step?: never;
+        surfaceKind: "signup";
+      }
+    | {
+        state: Exclude<FormlessUiSignupAuthSurfaceState, "loading">;
+        step: FormlessUiSignupStep;
+        surfaceKind: "signup";
+      }
+  );
+
+export type FormlessUiCollaboratorInvitationAuthSurfaceContract =
+  FormlessUiAuthSurfaceBaseContract & {
+    state: FormlessUiCollaboratorInvitationAuthSurfaceState;
+    surfaceKind: "collaborator-invitation-acceptance";
+  };
+
+export type FormlessUiAuthSurfaceContract =
+  | FormlessUiAccountGateAuthSurfaceContract
+  | FormlessUiCollaboratorInvitationAuthSurfaceContract
+  | FormlessUiOwnerSetupAuthSurfaceContract
+  | FormlessUiOwnerSignInAuthSurfaceContract
+  | FormlessUiSignupAuthSurfaceContract;
+
+export type FormlessUiAuthIntent =
+  | FormlessUiAuthActionIntent
+  | FormlessUiAuthContinuationIntent
+  | FormlessUiAuthFieldIntent
+  | FormlessUiAuthPasskeyIntent
+  | FormlessUiAuthPolicySelectionIntent;
+
+export type FormlessUiAuthIntentHandler = (intent: FormlessUiAuthIntent) => Promise<void> | void;
+
 export type FormlessUiManagementFeedbackContract = {
   detail?: string;
   id: string;
@@ -1962,6 +2290,15 @@ export type FormlessUiDocumentThemeReference = {
   themeId: string;
 };
 
+export type FormlessUiAuthSurfaceReference<
+  SurfaceKind extends FormlessUiAuthSurfaceKind = FormlessUiAuthSurfaceKind,
+> = {
+  kind: "authSurfaceReference";
+  role: "authSurface";
+  surfaceId: string;
+  surfaceKind: SurfaceKind;
+};
+
 export type FormlessUiWorkspaceManifestReference = {
   kind: "workspaceManifestReference";
   role: "workspace";
@@ -2069,6 +2406,7 @@ export type FormlessUiWorkspaceSectionShellContract = Omit<
 };
 
 export type FormlessUiContractReference =
+  | FormlessUiAuthSurfaceReference
   | FormlessUiDocumentThemeReference
   | FormlessUiListResultReference
   | FormlessUiManagementInstallDialogReference
@@ -2209,6 +2547,7 @@ export type FormlessUiWorkspaceIntentHandler = (
 ) => Promise<void> | void;
 
 export type FormlessUiContractIntent =
+  | FormlessUiAuthIntent
   | FormlessUiDocumentThemeIntent
   | FormlessUiManagementIntent
   | FormlessUiShellIntent

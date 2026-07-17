@@ -738,6 +738,158 @@ account completion gates.
   handoff grant secrets, provider responses, recovery material, or app-private
   profile values
 
+### Requirement: Reactive Auth-Origin Presentation Contract
+
+The system SHALL project owner setup, owner sign-in, account orchestration, and
+collaborator invitation acceptance through complete renderer-neutral auth
+contracts on stable scoped hosts while instance-auth runtime code owns secrets,
+ceremonies, sessions, route policy, operations, and navigation.
+
+#### Scenario: Publish one complete transient auth surface
+
+- GIVEN a no-shell auth-origin browser route is mounted
+- WHEN runtime prepares its current presentation
+- THEN one typed auth-surface reference resolves one complete immutable snapshot
+  with stable surface identity, surface kind, and state
+- AND the snapshot carries the complete renderer-neutral frame, brand, heading,
+  message severity, ordered display facts, controlled fields, policy facts,
+  actions, passkey availability, pending state, feedback, and continuation
+  presentation applicable to that state
+- AND draft, pending, failure, completion, and continuation transitions publish
+  a new complete auth snapshot while semantically unchanged snapshots retain
+  object identity
+- AND typed reads, cached server snapshots, scoped subscriptions, client
+  rendering, and hydration use the same generic contract-host semantics as
+  other Formless UI contract references
+- AND one transient auth surface remains one subscription boundary unless a
+  measured need establishes a separately hot child boundary
+- AND the auth route does not require an application-shell or management host to
+  render its no-shell surface
+
+#### Scenario: Dispatch canonical auth intents
+
+- GIVEN a subscribed auth renderer receives an auth-surface reference
+- WHEN the user changes a draft, submits or retries a step, starts a passkey
+  ceremony, changes policy acceptance, logs out, or follows an approved
+  continuation
+- THEN the renderer dispatches a canonical auth intent carrying exact current
+  surface, field, policy, action, or destination identity as applicable
+- AND runtime resolves the intent against its latest route state and controlled
+  draft before requesting options, starting browser credential APIs, invoking
+  operations, writing identity state, changing sessions, or navigating
+- AND runtime-approved policy and continuation destinations remain explicit
+  presentation facts rather than values synthesized from raw URL parameters
+- AND renderers do not call auth APIs, browser credential APIs, session clients,
+  operation controllers, or navigation effects directly
+
+#### Scenario: Project owner setup and sign-in states
+
+- GIVEN the configured auth origin renders first-owner setup or owner sign-in
+- WHEN setup status, session status, passkey support, controlled owner identity,
+  pending state, failure, completion, or continuation changes
+- THEN the auth contract represents loading, invalid or incomplete setup,
+  ready, submitting, passkey-unavailable, failed, already-complete, complete,
+  logout-pending, and continuing states where applicable
+- AND ready owner setup carries controlled required name and optional email
+  fields plus one passkey-backed submit action
+- AND owner sign-in carries only display-safe owner identity, passkey action,
+  logout action, and runtime-approved continuation presentation applicable to
+  the current state
+- AND successful setup and sign-in remain transient continuation states rather
+  than becoming a durable account dashboard
+- AND setup capability tokens, passkey options, credential responses, challenge
+  ids, and session material are absent from every auth snapshot
+
+#### Scenario: Project account gates and signup states
+
+- GIVEN `/formless/auth` renders account completion or self-service signup
+- WHEN runtime returns a blocking gate, signup step, failure, completion, or
+  continuation
+- THEN the auth contract can represent `email-verification`, `credential`,
+  `invitation`, `app-registration`, `profile-completion`, `terms-acceptance`,
+  and `role-review` gates with only their display-safe target, operation, and
+  policy facts
+- AND signup presentation covers controlled display name and email entry,
+  verification-token entry, passkey creation, pending, failure,
+  passkey-unavailable, completion, and continuation states supported by the
+  current runtime
+- AND ordinary auth drafts compose canonical submit-bound field contracts and
+  operation-backed profile completion composes canonical operation-input field
+  contracts rather than defining a parallel field system
+- AND verification-token presentation remains controlled and supports browser
+  one-time-code autocomplete without assuming a fixed-length numeric code when
+  runtime uses an opaque token
+- AND terms acceptance projects only runtime-supplied policies, safe policy
+  destinations, controlled acceptance state, and the available completion
+  action
+- AND blocked gates without a current completion action remain display-safe
+  blocked states, and the renderer does not invent signup, invitation decline,
+  destination choice, recovery, or other unavailable actions
+
+#### Scenario: Project collaborator invitation acceptance states
+
+- GIVEN the configured auth origin renders collaborator invitation acceptance
+- WHEN eligibility, passkey support, submission, acceptance, failure, or
+  continuation changes
+- THEN the auth contract represents loading, invalid-link, unavailable,
+  eligible, submitting, passkey-unavailable, failed, accepted, and continuing
+  states as applicable
+- AND eligible presentation includes only display-safe target email, target
+  surface, expiry, invited principal display name, and one passkey-backed
+  acceptance action
+- AND accepted presentation may include display-safe accepted principal,
+  session-expiry, target-origin, and continuation facts returned by runtime
+- AND the renderer does not invent invitation decline, contact-owner, or target
+  selection behavior
+- AND the raw invitation token remains only in the runtime closure that checks
+  eligibility and completes acceptance
+
+#### Scenario: Keep secrets and private target state out of auth contracts
+
+- GIVEN route state or API responses contain private auth or routing material
+- WHEN runtime projects any auth snapshot, intent, fixture, or renderer input
+- THEN setup tokens, raw invitation tokens, token hashes, challenge ids,
+  WebAuthn options and responses, credential ids and material, central session
+  ids, session cookies, handoff grants and secrets, storage identities, provider
+  responses, recovery material, and app-private profile values are absent
+- AND display-safe session expiry, principal display identity, invitation facts,
+  target labels, safe policy destinations, and runtime-approved continuation
+  facts may be projected when the active state needs them
+- AND runtime failures are reduced to concise display-safe messages before
+  publication without exposing private values through nested error objects,
+  serialized host nodes, or fixture data
+
+#### Scenario: Legacy renderer consumes auth contracts
+
+- GIVEN production owner setup, owner sign-in, account, signup, and invitation
+  routes currently render direct legacy controls from runtime-shaped state
+- WHEN each route publishes its auth-surface snapshot
+- THEN pure and subscribed legacy auth renderers consume only auth references
+  and snapshots and dispatch canonical auth intents
+- AND direct legacy `@dpeek/formless-ui` imports for migrated auth presentation
+  remain confined to dedicated legacy seam modules
+- AND focused coverage asserts controlled drafts, available actions, pending and
+  retry behavior, continuation, accessibility, and secret exclusion rather than
+  legacy HTML structure
+- AND production remains on the legacy renderer after this contract migration
+
+#### Scenario: Astryx auth renderer and canonical fixtures
+
+- GIVEN production legacy renderers consume complete auth contracts
+- WHEN the replacement renderer implements the same contract in `lib/astryx`
+- THEN pure and subscribed Astryx entrypoints compose Astryx frame, card, form,
+  field, action, status, passkey, policy, fact, and loading primitives without
+  importing instance-auth runtime
+- AND data-only memory-host fixtures cover all shipped owner setup, sign-in,
+  account gate, signup, invitation, unavailable, failed, complete, and
+  continuation states with minimal canonical intent reducers
+- AND fixtures do not simulate WebAuthn, sessions, storage, handoff grants,
+  redirects, unsupported destination selection, invitation decline, or
+  hard-coded policy actions
+- AND the Astryx renderer contains no legacy Formless UI components, Tailwind
+  classes, runtime clients, route policy, browser credential effects, or
+  production export or activation
+
 ### Requirement: Account Completion Gate Resolution
 
 The system SHALL evaluate target-scoped account completion gates before issuing

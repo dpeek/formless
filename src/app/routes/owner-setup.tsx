@@ -1,9 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearch } from "wouter";
-import { Button } from "@dpeek/formless-ui/button";
-import { Description, FieldGroup, Label, fieldErrorStyles } from "@dpeek/formless-ui/field";
-import { Input } from "@dpeek/formless-ui/input";
-import { TextField } from "@dpeek/formless-ui/text-field";
+import type { FormlessUiAuthIntent } from "@dpeek/formless-astryx/contract";
 import {
   parseOwnerPasskeyRegistrationOptionsResponse,
   parseOwnerPasskeyRegistrationVerifyResponse,
@@ -23,6 +20,17 @@ import {
   passkeyUnavailableMessage,
   type CreatePasskeyRegistrationResponse,
 } from "./passkey-browser.ts";
+import { LegacySubscribedOwnerAuthRenderer } from "../generated/legacy-owner-auth-renderer.tsx";
+import {
+  authIntentIsCurrent,
+  createAuthPendingGuard,
+  NoShellAuthRuntimeBoundary,
+} from "./auth-runtime-boundary.tsx";
+import {
+  ownerSetupAdminHref,
+  ownerSetupAuthSurfaceReference,
+  projectOwnerSetupAuthSurface,
+} from "./owner-auth-projection.ts";
 
 export type OwnerSetupRouteState =
   | { status: "already-complete"; adminOrigin?: string; owner?: OwnerIdentity }
@@ -60,6 +68,8 @@ export function OwnerSetupRoute() {
   const [state, setState] = useState<OwnerSetupRouteState>({ status: "loading" });
   const [ownerName, setOwnerName] = useState("");
   const [ownerEmail, setOwnerEmail] = useState("");
+  const [sessionRevision, setSessionRevision] = useState(0);
+  const pendingGuard = useRef(createAuthPendingGuard());
   const navigateTo: OwnerSetupContinuationNavigator = (target) => {
     window.location.assign(target);
   };
@@ -70,115 +80,121 @@ export function OwnerSetupRoute() {
         locationSearch,
         onState: setState,
       }),
-    [locationSearch],
+    [locationSearch, sessionRevision],
   );
 
-  const submitError = state.status === "failed" ? state.message : undefined;
   const activeSetupState =
     state.status === "ready" || state.status === "failed" || state.status === "submitting"
       ? state
       : undefined;
   const activeSetupToken = activeSetupState?.setupToken;
+  const surface = useMemo(
+    () => projectOwnerSetupAuthSurface({ ownerEmail, ownerName, state }),
+    [ownerEmail, ownerName, state],
+  );
 
-  async function submitOwner(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    if (!activeSetupToken) {
+  async function submitOwner() {
+    if (
+      !activeSetupToken ||
+      surface.passkey?.availability !== "available" ||
+      surface.passkey.control.disabled
+    ) {
       return;
     }
 
     const owner = ownerIdentityInput({ email: ownerEmail, name: ownerName });
-
-    setState({
-      status: "submitting",
-      ...(activeSetupState?.adminOrigin ? { adminOrigin: activeSetupState.adminOrigin } : {}),
-      setupToken: activeSetupToken,
-    });
-
-    try {
-      const completed = await completeOwnerSetup({
-        owner,
+    await pendingGuard.current.run(async () => {
+      setState({
+        status: "submitting",
+        ...(activeSetupState?.adminOrigin ? { adminOrigin: activeSetupState.adminOrigin } : {}),
         setupToken: activeSetupToken,
       });
 
-      if (completed.continueTo) {
-        setState({
-          continueTo: completed.continueTo,
-          owner: completed.owner,
-          status: "continuing",
+      try {
+        const completed = await completeOwnerSetup({
+          owner,
+          setupToken: activeSetupToken,
         });
-        navigateTo(completed.continueTo);
+
+        if (completed.continueTo) {
+          setState({
+            continueTo: completed.continueTo,
+            owner: completed.owner,
+            status: "continuing",
+          });
+          navigateTo(completed.continueTo);
+          return;
+        }
+
+        setState({
+          status: "complete",
+          ...(activeSetupState?.adminOrigin ? { adminOrigin: activeSetupState.adminOrigin } : {}),
+          owner: completed.owner,
+        });
+      } catch (error) {
+        const failure = ownerSetupFailureState(error, activeSetupToken);
+
+        if (
+          activeSetupState?.adminOrigin &&
+          (failure.status === "already-complete" || failure.status === "failed")
+        ) {
+          setState({ ...failure, adminOrigin: activeSetupState.adminOrigin });
+          return;
+        }
+
+        setState(failure);
+      }
+    });
+  }
+
+  async function handleIntent(intent: FormlessUiAuthIntent) {
+    if (!authIntentIsCurrent(surface, intent)) {
+      return;
+    }
+
+    if (intent.type === "authField" && intent.intent.type === "createDraftChange") {
+      const value = intent.intent.fieldValue.value;
+      if (typeof value !== "string") {
         return;
       }
-
-      setState({
-        status: "complete",
-        ...(activeSetupState?.adminOrigin ? { adminOrigin: activeSetupState.adminOrigin } : {}),
-        owner: completed.owner,
-      });
-    } catch (error) {
-      const failure = ownerSetupFailureState(error, activeSetupToken);
-
-      if (
-        activeSetupState?.adminOrigin &&
-        (failure.status === "already-complete" || failure.status === "failed")
-      ) {
-        setState({ ...failure, adminOrigin: activeSetupState.adminOrigin });
-        return;
+      if (intent.intent.fieldName === "name") {
+        setOwnerName(value);
+      } else if (intent.intent.fieldName === "email") {
+        setOwnerEmail(value);
       }
+      return;
+    }
 
-      setState(failure);
+    if (intent.type === "authPasskey") {
+      await submitOwner();
+      return;
+    }
+
+    if (intent.type === "authAction") {
+      const action = surface.actions.find((candidate) => candidate.id === intent.actionId);
+      if (action?.purpose === "retry") {
+        setSessionRevision((revision) => revision + 1);
+      }
+      return;
+    }
+
+    if (intent.type === "authContinuation") {
+      navigateTo(
+        state.status === "complete" || state.status === "already-complete"
+          ? ownerSetupAdminHref(state.adminOrigin)
+          : "/",
+      );
     }
   }
 
   return (
-    <OwnerSetupRouteView
-      ownerEmail={ownerEmail}
-      ownerName={ownerName}
-      onOwnerEmailChange={setOwnerEmail}
-      onOwnerNameChange={setOwnerName}
-      onSubmit={submitOwner}
-      state={state}
-      submitError={submitError}
-    />
-  );
-}
-
-export function OwnerSetupRouteView({
-  ownerEmail = "",
-  ownerName = "",
-  onOwnerEmailChange,
-  onOwnerNameChange,
-  onSubmit,
-  state,
-  submitError,
-}: {
-  ownerEmail?: string;
-  ownerName?: string;
-  onOwnerEmailChange?: (value: string) => void;
-  onOwnerNameChange?: (value: string) => void;
-  onSubmit?: (event: React.FormEvent<HTMLFormElement>) => void;
-  state: OwnerSetupRouteState;
-  submitError?: string;
-}) {
-  const visibleSubmitError = submitError ?? (state.status === "failed" ? state.message : undefined);
-
-  return (
-    <section className="min-h-dvh bg-bg text-fg">
-      <div className="mx-auto flex min-h-dvh w-full max-w-xl flex-col justify-center px-4 py-12">
-        <div className="space-y-6 rounded-lg border border-border bg-overlay p-6 shadow-sm">
-          <OwnerSetupStateBody
-            ownerEmail={ownerEmail}
-            ownerName={ownerName}
-            onOwnerEmailChange={onOwnerEmailChange}
-            onOwnerNameChange={onOwnerNameChange}
-            onSubmit={onSubmit}
-            state={state}
-            submitError={visibleSubmitError}
-          />
-        </div>
-      </div>
-    </section>
+    <NoShellAuthRuntimeBoundary
+      onIntent={handleIntent}
+      reference={ownerSetupAuthSurfaceReference}
+      snapshot={surface}
+    >
+      <LegacySubscribedOwnerAuthRenderer reference={ownerSetupAuthSurfaceReference} />
+    </NoShellAuthRuntimeBoundary>
   );
 }
 
@@ -366,199 +382,6 @@ export class OwnerSetupApiError extends Error {
     this.owner = options.owner;
     this.setupComplete = options.setupComplete;
     this.status = options.status;
-  }
-}
-
-function OwnerSetupStateBody({
-  ownerEmail,
-  ownerName,
-  onOwnerEmailChange,
-  onOwnerNameChange,
-  onSubmit,
-  state,
-  submitError,
-}: {
-  ownerEmail: string;
-  ownerName: string;
-  onOwnerEmailChange?: (value: string) => void;
-  onOwnerNameChange?: (value: string) => void;
-  onSubmit?: (event: React.FormEvent<HTMLFormElement>) => void;
-  state: OwnerSetupRouteState;
-  submitError?: string;
-}) {
-  switch (state.status) {
-    case "already-complete":
-      return (
-        <OwnerSetupMessage
-          action={<OwnerSetupContinueLink adminOrigin={state.adminOrigin} />}
-          heading="Owner setup is complete"
-          message={
-            state.owner
-              ? `${state.owner.name} owns this Formless instance.`
-              : "This instance has an owner."
-          }
-        />
-      );
-    case "complete":
-      return (
-        <OwnerSetupMessage
-          action={<OwnerSetupContinueLink adminOrigin={state.adminOrigin} />}
-          heading="Owner setup complete"
-          message={`Signed in as ${state.owner.name}.`}
-        />
-      );
-    case "continuing":
-      return (
-        <OwnerSetupMessage
-          heading="Owner setup complete"
-          message={`Signed in as ${state.owner.name}. Continuing to ${state.continueTo}.`}
-        />
-      );
-    case "failed":
-    case "ready":
-    case "submitting":
-      return (
-        <OwnerSetupForm
-          disabled={state.status === "submitting"}
-          ownerEmail={ownerEmail}
-          ownerName={ownerName}
-          onOwnerEmailChange={onOwnerEmailChange}
-          onOwnerNameChange={onOwnerNameChange}
-          onSubmit={onSubmit}
-          submitError={submitError}
-        />
-      );
-    case "passkey-unavailable":
-      return <OwnerSetupMessage heading="Passkeys are unavailable" message={state.message} />;
-    case "invalid-link":
-      return <OwnerSetupMessage heading="Setup link unavailable" message={state.message} />;
-    case "loading":
-      return <OwnerSetupMessage heading="Checking setup link" message="Loading setup status." />;
-  }
-}
-
-function OwnerSetupForm({
-  disabled,
-  ownerEmail,
-  ownerName,
-  onOwnerEmailChange,
-  onOwnerNameChange,
-  onSubmit,
-  submitError,
-}: {
-  disabled: boolean;
-  ownerEmail: string;
-  ownerName: string;
-  onOwnerEmailChange?: (value: string) => void;
-  onOwnerNameChange?: (value: string) => void;
-  onSubmit?: (event: React.FormEvent<HTMLFormElement>) => void;
-  submitError?: string;
-}) {
-  const nameInputId = useMemo(() => "owner-setup-name", []);
-  const emailInputId = useMemo(() => "owner-setup-email", []);
-
-  return (
-    <>
-      <OwnerSetupHeader heading="Claim this Formless instance" message="Create the first owner." />
-      <form className="space-y-4" onSubmit={onSubmit}>
-        <FieldGroup>
-          <TextField
-            isDisabled={disabled}
-            isRequired
-            onChange={(value) => onOwnerNameChange?.(value)}
-            value={ownerName}
-          >
-            <Label htmlFor={nameInputId}>Name</Label>
-            <Input autoComplete="name" id={nameInputId} />
-          </TextField>
-          <TextField
-            isDisabled={disabled}
-            onChange={(value) => onOwnerEmailChange?.(value)}
-            type="email"
-            value={ownerEmail}
-          >
-            <Label htmlFor={emailInputId}>Email</Label>
-            <Input autoComplete="email" id={emailInputId} />
-            <Description>Optional</Description>
-          </TextField>
-        </FieldGroup>
-        {submitError ? (
-          <p
-            className={fieldErrorStyles()}
-            data-slot="field-error"
-            role="alert"
-            slot="errorMessage"
-          >
-            {submitError}
-          </p>
-        ) : null}
-        <Button className="w-full" isDisabled={disabled} type="submit">
-          {disabled ? "Creating passkey..." : "Create owner passkey"}
-        </Button>
-      </form>
-    </>
-  );
-}
-
-function OwnerSetupMessage({
-  action,
-  heading,
-  message,
-}: {
-  action?: React.ReactNode;
-  heading: string;
-  message: string;
-}) {
-  return (
-    <div className="space-y-5">
-      <OwnerSetupHeader heading={heading} message={message} />
-      {action}
-    </div>
-  );
-}
-
-function OwnerSetupHeader({ heading, message }: { heading: string; message: string }) {
-  return (
-    <header className="space-y-2">
-      <p className="text-xs font-medium uppercase tracking-wide text-muted-fg">Formless</p>
-      <h1 className="text-2xl font-semibold">{heading}</h1>
-      <p className="text-sm text-muted-fg">{message}</p>
-    </header>
-  );
-}
-
-function OwnerSetupContinueLink({ adminOrigin }: { adminOrigin?: string }) {
-  return (
-    <a
-      className="inline-flex h-7 items-center justify-center rounded-md bg-primary px-2 text-xs font-medium text-primary-fg transition-colors hover:bg-primary/80"
-      href={ownerSetupAdminHref(adminOrigin)}
-    >
-      Continue
-    </a>
-  );
-}
-
-function ownerSetupAdminHref(adminOrigin: string | undefined): string {
-  if (!adminOrigin) {
-    return "/";
-  }
-
-  try {
-    const url = new URL(adminOrigin);
-
-    if (
-      url.username ||
-      url.password ||
-      url.search !== "" ||
-      url.hash !== "" ||
-      (url.protocol !== "http:" && url.protocol !== "https:")
-    ) {
-      return "/";
-    }
-
-    return `${url.origin}/`;
-  } catch {
-    return "/";
   }
 }
 

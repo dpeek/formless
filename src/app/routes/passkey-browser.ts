@@ -6,7 +6,7 @@ import type {
   OwnerPasskeyRegistrationVerifyRequest,
 } from "../../shared/instance-auth.ts";
 
-export const passkeyUnavailableMessage = "Passkeys are unavailable in this browser.";
+export const passkeyUnavailableMessage = "This browser does not support passkeys.";
 
 export type CreatePasskeyRegistrationResponse = (
   options: OwnerPasskeyRegistrationOptionsResponse["options"],

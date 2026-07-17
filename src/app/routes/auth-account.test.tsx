@@ -1,8 +1,6 @@
-import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
-  AuthAccountRouteView,
   authAccountContinuationTarget,
   authAccountCompletionApiContinuationTarget,
   authAccountSignupTargetFromSearch,
@@ -11,7 +9,6 @@ import {
   completeAuthAccountTermsAcceptanceGate,
   completeEmailVerifiedSignupWithPasskey,
   fetchAuthAccountStatus,
-  profileCompletionInputValuesFromFormData,
   requestAuthAccountEmailVerification,
   startAuthAccountRouteSession,
   startEmailVerifiedSignup,
@@ -26,286 +23,6 @@ import type {
   AccountCompletionGateTarget,
   OwnerPasskeyRegistrationVerifyRequest,
 } from "../../shared/instance-auth.ts";
-
-const privateValues = [
-  "central-session-private",
-  "handoff-grant-private",
-  "credential-private",
-  "token-hash-private",
-] as const;
-
-describe("auth account route view", () => {
-  it("renders loading, failed, and complete states", () => {
-    expect(renderAuthAccountState({ status: "loading" })).toContain("Checking account");
-    expect(
-      renderAuthAccountState({ message: "Account target is invalid.", status: "failed" }),
-    ).toContain("Account unavailable");
-    expect(renderAuthAccountState({ result: completeResult(), status: "complete" })).toContain(
-      "Account ready",
-    );
-    expect(
-      renderAuthAccountState({
-        continueTo: "/formless/auth/handoff?state=runtime",
-        result: completeResult(),
-        status: "continuing",
-      }),
-    ).toContain("Continuing to /formless/auth/handoff?state=runtime.");
-  });
-
-  it("renders display-safe blocked states for every first-pass account gate", () => {
-    const cases: Array<{
-      contains: readonly string[];
-      gate: AccountCompletionGate;
-      heading: string;
-    }> = [
-      {
-        contains: ["Email verification", "Ada.User@example.com"],
-        gate: {
-          displayEmail: "Ada.User@example.com",
-          kind: "email-verification",
-        },
-        heading: "Verify email",
-      },
-      {
-        contains: ["Credential", "Passkey"],
-        gate: { credentialMethod: "passkey", kind: "credential" },
-        heading: "Create credential",
-      },
-      {
-        contains: ["Invitation", "Ada.Invited@example.com", "App Install"],
-        gate: {
-          kind: "invitation",
-          targetEmail: "Ada.Invited@example.com",
-          targetSurface: "app-install",
-        },
-        heading: "Accept invitation",
-      },
-      {
-        contains: ["App registration", "task-workspace", "org:north"],
-        gate: {
-          appInstallId: "task-workspace",
-          kind: "app-registration",
-          selectedOrganization: "org:north",
-        },
-        heading: "Register for app",
-      },
-      {
-        contains: ["Profile completion", "Complete profile"],
-        gate: {
-          kind: "profile-completion",
-          operation: { label: "Complete profile", operationKey: "completeProfile" },
-        },
-        heading: "Complete profile",
-      },
-      {
-        contains: ["Terms acceptance", "Workspace terms", "v2026-07-06"],
-        gate: {
-          kind: "terms-acceptance",
-          policies: [
-            {
-              accountPolicyId: "policy:workspace",
-              displayName: "Workspace terms",
-              policyKey: "workspace-terms",
-              version: "2026-07-06",
-            },
-          ],
-        },
-        heading: "Accept terms",
-      },
-      {
-        contains: ["Role review", "app.user", "App Install"],
-        gate: { kind: "role-review", roleKey: "app.user", scopeKind: "app-install" },
-        heading: "Access review required",
-      },
-    ];
-
-    for (const testCase of cases) {
-      const html = renderAuthAccountState({
-        result: blockedResult(testCase.gate),
-        status: "blocked",
-      });
-
-      expect(html, testCase.heading).toContain(testCase.heading);
-      expect(html, testCase.heading).toContain("/schema?view=board");
-      expect(html, testCase.heading).toContain("https://tasks.example.com");
-      expect(html, testCase.heading).toContain("route:tasks");
-
-      for (const expected of testCase.contains) {
-        expect(html, `${testCase.heading} ${expected}`).toContain(expected);
-      }
-
-      for (const privateValue of privateValues) {
-        expect(html, `${testCase.heading} ${privateValue}`).not.toContain(privateValue);
-      }
-
-      expect(html, testCase.heading).not.toContain("Set-Cookie");
-      expect(html, testCase.heading).not.toContain("grantSecret");
-      expect(html, testCase.heading).not.toContain("sessionId");
-      expect(html, testCase.heading).not.toContain("credentialId");
-      expect(html, testCase.heading).not.toContain("tokenHash");
-    }
-  });
-
-  it("renders closed app-registration gates without self-service controls", () => {
-    const html = renderAuthAccountState({
-      result: blockedResult({
-        appInstallId: "task-workspace",
-        kind: "app-registration",
-        operation: { label: "Sign up", operationKey: "signup" },
-        registrationPolicy: "closed",
-        selectedOrganization: "org:north",
-      }),
-      status: "blocked",
-    });
-
-    expect(html).toContain("Registration closed");
-    expect(html).toContain("This app uses closed registration.");
-    expect(html).toContain("Closed app registration");
-    expect(html).toContain("Registration policy");
-    expect(html).toContain("Closed");
-    expect(html).toContain("task-workspace");
-    expect(html).toContain("org:north");
-    expect(html).not.toContain("Register for app");
-    expect(html).not.toContain("Sign up");
-    expect(html).not.toContain("Complete profile");
-    expect(html).not.toContain("Action");
-    expect(html).not.toContain("<button");
-    expect(html).not.toContain("<form");
-  });
-
-  it("renders self-service controls only for runtime-owned completable gates", () => {
-    const emailHtml = renderAuthAccountState({
-      result: blockedResult({
-        displayEmail: "Ada.User@example.com",
-        kind: "email-verification",
-      }),
-      status: "blocked",
-    });
-    const appRegistrationHtml = renderAuthAccountState({
-      result: blockedResult({
-        appInstallId: "task-workspace",
-        kind: "app-registration",
-        operation: {
-          appInstallId: "task-workspace",
-          entityName: "app-registration",
-          label: "Register for app",
-          operationKey: "auth.app-registration.complete",
-        },
-        registrationPolicy: "email-verified",
-      }),
-      status: "blocked",
-    });
-    const termsHtml = renderAuthAccountState({
-      result: blockedResult({
-        kind: "terms-acceptance",
-        operation: {
-          entityName: "principal-policy-acceptance",
-          label: "Accept terms",
-          operationKey: "auth.terms-acceptance.complete",
-        },
-        policies: [
-          {
-            accountPolicyId: "policy:workspace",
-            displayName: "Workspace terms",
-            policyKey: "workspace-terms",
-            version: "2026-07-06",
-          },
-        ],
-      }),
-      status: "blocked",
-    });
-    const roleReviewHtml = renderAuthAccountState({
-      result: blockedResult({ kind: "role-review", roleKey: "app.user" }),
-      status: "blocked",
-    });
-
-    expect(emailHtml).toContain("Send verification email");
-    expect(emailHtml).toContain('name="email"');
-    expect(appRegistrationHtml).toContain("Register for app");
-    expect(appRegistrationHtml).toContain("<form");
-    expect(termsHtml).toContain("Accept terms");
-    expect(termsHtml).toContain('name="acceptedPolicyIds"');
-    expect(roleReviewHtml).not.toContain("<form");
-    expect(roleReviewHtml).not.toContain("<button");
-  });
-
-  it("renders operation-backed profile-completion gates from the input contract", () => {
-    const html = renderAuthAccountState({
-      result: blockedResult(profileCompletionGate()),
-      status: "blocked",
-    });
-
-    expect(html).toContain("Complete profile");
-    expect(html).toContain("Display name");
-    expect(html).toContain('name="displayName"');
-    expect(html).toContain("Contact preference");
-    expect(html).toContain('name="contactPreference"');
-    expect(html).toContain("Email");
-    expect(html).toContain("<form");
-    expect(html).toContain("<button");
-    expect(html).not.toContain("profileValue-private");
-    expect(html).not.toContain("principal:private");
-    expect(html).not.toContain("grantSecret");
-  });
-
-  it("renders unavailable profile-completion states without app-private data", () => {
-    const missingOperationHtml = renderAuthAccountState({
-      result: blockedResult({
-        appInstallId: "task-workspace",
-        kind: "profile-completion",
-      }),
-      status: "blocked",
-    });
-    const unsupportedHtml = renderAuthAccountState({
-      result: blockedResult(
-        profileCompletionGate({
-          inputContract: {
-            fields: [],
-            unsupportedRequiredFields: ["principal"],
-          },
-        }),
-      ),
-      status: "blocked",
-    });
-
-    expect(missingOperationHtml).toContain("Profile completion operation is unavailable.");
-    expect(missingOperationHtml).not.toContain("<form");
-    expect(unsupportedHtml).toContain(
-      "Profile completion requires fields this form cannot render.",
-    );
-    expect(unsupportedHtml).not.toContain('name="principal"');
-    expect(unsupportedHtml).not.toContain("principal:private");
-    expect(unsupportedHtml).not.toContain("profileValue-private");
-  });
-
-  it("renders signup email and passkey setup states", () => {
-    expect(
-      renderAuthAccountState({
-        status: "signup-ready",
-        target: accountTarget(),
-      }),
-    ).toContain("Create account");
-    expect(
-      renderAuthAccountState({
-        challengeId: "challenge:signup",
-        displayName: "Ada User",
-        email: "ada@example.com",
-        expiresAt: "2026-07-07T16:00:00.000Z",
-        status: "signup-email-sent",
-        target: accountTarget(),
-      }),
-    ).toContain("Verification token");
-    expect(
-      renderAuthAccountState({
-        challengeId: "challenge:signup",
-        displayName: "Ada User",
-        email: "ada@example.com",
-        status: "signup-credential-ready",
-        target: accountTarget(),
-      }),
-    ).toContain("Create passkey");
-  });
-});
 
 describe("auth account route data flow", () => {
   it("keeps missing continuation targets local", () => {
@@ -641,18 +358,7 @@ describe("auth account route data flow", () => {
     const calls: JsonFetchCall[] = [];
     const target = accountTarget();
     const operation = profileCompletionOperation();
-    const input = profileCompletionInputValuesFromFormData(
-      profileCompletionInputContract(),
-      formData([
-        ["displayName", "Ada Profile"],
-        ["contactPreference", "email"],
-      ]),
-    );
-
-    expect(input).toEqual({
-      input: { contactPreference: "email", displayName: "Ada Profile" },
-      ok: true,
-    });
+    const input = { contactPreference: "email", displayName: "Ada Profile" };
 
     const completed = await completeAuthAccountProfileCompletionGate({
       fetcher: recordingJsonSequenceFetcher(calls, [
@@ -665,7 +371,7 @@ describe("auth account route data flow", () => {
         },
       ]),
       idempotencyKey: "profile-completion-test",
-      input: input.ok ? input.input : {},
+      input,
       locationSearch: targetBoundLocationSearch(),
       operation,
       target,
@@ -823,10 +529,6 @@ type JsonFetchCall = FetchCall & {
   body: unknown;
 };
 
-function renderAuthAccountState(state: AuthAccountRouteState) {
-  return renderToStaticMarkup(<AuthAccountRouteView state={state} />);
-}
-
 function recordingJsonFetcher(
   calls: FetchCall[],
   body: unknown,
@@ -949,16 +651,6 @@ function accountTarget(
     targetProfile: "app",
     ...input,
   };
-}
-
-function formData(entries: Array<[string, string]>): FormData {
-  const data = new FormData();
-
-  for (const [key, value] of entries) {
-    data.set(key, value);
-  }
-
-  return data;
 }
 
 function targetBoundLocationSearch(): string {

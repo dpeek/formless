@@ -1,0 +1,1216 @@
+import type {
+  FormlessUiAccountGateAuthSurfaceContract,
+  FormlessUiAuthActionContract,
+  FormlessUiAuthContinuationContract,
+  FormlessUiAuthFactContract,
+  FormlessUiAuthFeedbackContract,
+  FormlessUiAuthFieldContract,
+  FormlessUiAuthMessageContract,
+  FormlessUiAuthPasskeyContract,
+  FormlessUiAuthPolicyContract,
+  FormlessUiAuthSurfaceContract,
+  FormlessUiAuthSurfaceReference,
+  FormlessUiButtonContract,
+  FormlessUiFieldIntent,
+  FormlessUiSignupAuthSurfaceContract,
+  FormlessUiSignupStep,
+} from "@dpeek/formless-astryx/contract";
+import { formlessUiAuthSurfaceReference } from "@dpeek/formless-astryx/contract-host";
+import type { FieldValue } from "@dpeek/formless-schema";
+import type { CreateFieldConfig } from "../../client/views.ts";
+import type {
+  AccountCompletionAppRegistrationGate,
+  AccountCompletionGate,
+  AccountCompletionGateOperationInputContract,
+  AccountCompletionGateTarget,
+  AccountCompletionProfileCompletionGate,
+} from "../../shared/instance-auth.ts";
+import {
+  initialGeneratedCreateDraftSessionState,
+  markGeneratedCreateDraftSessionSubmitted,
+  nextGeneratedCreateDraftSessionState,
+  selectGeneratedCreateDraftSession,
+  type GeneratedCreateDraftSessionState,
+} from "../generated/create-field-authoring.ts";
+import {
+  initialGeneratedOperationDraftSessionState,
+  nextGeneratedOperationDraftSessionState,
+  selectGeneratedOperationDraftSession,
+  type GeneratedOperationDraftSessionState,
+} from "../generated/operation-field-authoring.ts";
+import {
+  projectGeneratedCreateFormlessUiFields,
+  projectGeneratedOperationFormlessUiFields,
+} from "../generated/formless-ui-projection.ts";
+import { displaySafeText } from "./instance-management-display-safety.ts";
+import { passkeyUnavailableMessage } from "./passkey-browser.ts";
+import type { AuthAccountRouteState } from "./auth-account.tsx";
+
+export const AUTH_ACCOUNT_GATE_SURFACE_ID = "auth:account";
+export const AUTH_ACCOUNT_SIGNUP_SURFACE_ID = "auth:account:signup";
+
+export const authAccountGateSurfaceReference = formlessUiAuthSurfaceReference({
+  surfaceId: AUTH_ACCOUNT_GATE_SURFACE_ID,
+  surfaceKind: "account-gate",
+});
+export const authAccountSignupSurfaceReference = formlessUiAuthSurfaceReference({
+  surfaceId: AUTH_ACCOUNT_SIGNUP_SURFACE_ID,
+  surfaceKind: "signup",
+});
+
+const accountDraftFieldConfigs: CreateFieldConfig[] = [
+  createTextField("displayName", "Name", true),
+  createTextField("email", "Email", true, "email"),
+  createTextField("token", "Verification token", true),
+];
+
+export type AuthAccountDraftSession = {
+  acceptedPolicyIds: readonly string[];
+  create: GeneratedCreateDraftSessionState;
+  key: string;
+  profile: GeneratedOperationDraftSessionState;
+  submitAttempted: boolean;
+};
+
+export type AuthAccountDraftSubmission =
+  | { kind: "app-registration"; ok: true }
+  | { acceptedPolicyIds: string[]; kind: "terms-acceptance"; ok: true }
+  | { displayName: string; email: string; kind: "signup-identity"; ok: true }
+  | { input: Record<string, unknown>; kind: "profile-completion"; ok: true }
+  | { kind: "verification-token"; ok: true; token: string }
+  | { email: string; kind: "email-verification"; ok: true }
+  | { ok: false };
+
+export function initialAuthAccountDraftSession(
+  state: AuthAccountRouteState,
+): AuthAccountDraftSession {
+  const create = initialGeneratedCreateDraftSessionState({ fields: accountDraftFieldConfigs });
+  const seededCreate = Object.entries(authAccountDraftSeedValues(state)).reduce(
+    (session, [fieldName, value]) =>
+      nextGeneratedCreateDraftSessionState({
+        fieldName,
+        fieldValue: { kind: "input", value },
+        state: session,
+      }),
+    create,
+  );
+  const profileFields = authAccountProfileInputContract(state)?.fields ?? [];
+
+  return {
+    acceptedPolicyIds: [],
+    create: seededCreate,
+    key: authAccountDraftSessionKey(state),
+    profile: initialGeneratedOperationDraftSessionState({ fields: profileFields }),
+    submitAttempted: false,
+  };
+}
+
+export function prepareAuthAccountDraftSession(
+  session: AuthAccountDraftSession,
+  state: AuthAccountRouteState,
+): AuthAccountDraftSession {
+  return session.key === authAccountDraftSessionKey(state)
+    ? session
+    : initialAuthAccountDraftSession(state);
+}
+
+export function nextAuthAccountDraftSession(
+  session: AuthAccountDraftSession,
+  intent: FormlessUiFieldIntent | { accepted: boolean; policyId: string },
+): AuthAccountDraftSession {
+  if ("policyId" in intent) {
+    const acceptedPolicyIds = new Set(session.acceptedPolicyIds);
+    if (intent.accepted) acceptedPolicyIds.add(intent.policyId);
+    else acceptedPolicyIds.delete(intent.policyId);
+    return { ...session, acceptedPolicyIds: [...acceptedPolicyIds] };
+  }
+
+  if (intent.type === "createDraftChange") {
+    return {
+      ...session,
+      create: nextGeneratedCreateDraftSessionState({
+        fieldName: intent.fieldName,
+        fieldValue: intent.fieldValue,
+        state: session.create,
+      }),
+      submitAttempted: false,
+    };
+  }
+
+  if (intent.type === "operationDraftChange") {
+    return {
+      ...session,
+      profile: nextGeneratedOperationDraftSessionState({
+        inputName: intent.inputName,
+        inputValue: intent.inputValue,
+        state: session.profile,
+      }),
+      submitAttempted: false,
+    };
+  }
+
+  return session;
+}
+
+export function markAuthAccountDraftSessionSubmitted(
+  session: AuthAccountDraftSession,
+): AuthAccountDraftSession {
+  return {
+    ...session,
+    create: markGeneratedCreateDraftSessionSubmitted(session.create),
+    submitAttempted: true,
+  };
+}
+
+export function selectAuthAccountDraftSubmission({
+  session,
+  state,
+}: {
+  session: AuthAccountDraftSession;
+  state: AuthAccountRouteState;
+}): AuthAccountDraftSubmission {
+  const fields = authAccountCreateFieldConfigs(state);
+  const create = selectGeneratedCreateDraftSession({
+    enabled: true,
+    fields,
+    state: markGeneratedCreateDraftSessionSubmitted(session.create),
+  });
+
+  if (state.status === "blocked") {
+    const { gate } = state.result;
+    if (gate.kind === "email-verification") {
+      if (state.action?.kind === "email-verification-sent") {
+        const token = stringFieldValue(create.values.token);
+        return create.canSubmit && token
+          ? { kind: "verification-token", ok: true, token }
+          : { ok: false };
+      }
+      const email = stringFieldValue(create.values.email);
+      return create.canSubmit && email
+        ? { email, kind: "email-verification", ok: true }
+        : { ok: false };
+    }
+    if (isCompletableAppRegistrationGate(gate)) {
+      return { kind: "app-registration", ok: true };
+    }
+    if (gate.kind === "terms-acceptance") {
+      const acceptedPolicyIds = gate.policies
+        .map((policy) => policy.accountPolicyId)
+        .filter((policyId) => session.acceptedPolicyIds.includes(policyId));
+      return acceptedPolicyIds.length === gate.policies.length
+        ? { acceptedPolicyIds, kind: "terms-acceptance", ok: true }
+        : { ok: false };
+    }
+    if (gate.kind === "profile-completion" && gate.inputContract && gate.operation) {
+      const profile = selectGeneratedOperationDraftSession({
+        fields: gate.inputContract.fields,
+        state: session.profile,
+        unsupportedRequiredInputNames: gate.inputContract.unsupportedRequiredFields,
+      });
+      return profile.canSubmit
+        ? { input: profile.input, kind: "profile-completion", ok: true }
+        : { ok: false };
+    }
+    return { ok: false };
+  }
+
+  if (isSignupIdentityState(state)) {
+    const displayName = stringFieldValue(create.values.displayName);
+    const email = stringFieldValue(create.values.email);
+    return create.canSubmit && displayName && email
+      ? { displayName, email, kind: "signup-identity", ok: true }
+      : { ok: false };
+  }
+
+  if (isSignupEmailVerificationState(state)) {
+    const token = stringFieldValue(create.values.token);
+    return create.canSubmit && token
+      ? { kind: "verification-token", ok: true, token }
+      : { ok: false };
+  }
+
+  return { ok: false };
+}
+
+export function projectAuthAccountSurface({
+  session,
+  state,
+}: {
+  session: AuthAccountDraftSession;
+  state: AuthAccountRouteState;
+}): FormlessUiAccountGateAuthSurfaceContract | FormlessUiSignupAuthSurfaceContract {
+  return isSignupState(state)
+    ? projectSignupSurface({ session, state })
+    : projectAccountGateSurface({ session, state });
+}
+
+export function authAccountSurfaceReference(
+  surface: FormlessUiAuthSurfaceContract,
+): FormlessUiAuthSurfaceReference<"account-gate" | "signup"> {
+  return surface.surfaceKind === "signup"
+    ? authAccountSignupSurfaceReference
+    : authAccountGateSurfaceReference;
+}
+
+function projectAccountGateSurface({
+  session,
+  state,
+}: {
+  session: AuthAccountDraftSession;
+  state: Exclude<AuthAccountRouteState, { status: `signup-${string}` }>;
+}): FormlessUiAccountGateAuthSurfaceContract {
+  const gate = state.status === "blocked" ? state.result.gate : undefined;
+  const pending = state.status === "blocked" && accountGateActionIsPending(state.action);
+  const contractState = accountGateContractState(state);
+  const feedback = accountGateFeedback(state, session);
+  const continuation = accountGateContinuation(state);
+
+  return {
+    actions: accountGateActions(state),
+    ...(continuation ? { continuation } : {}),
+    facts: accountGateFacts(state),
+    ...(feedback ? { feedback } : {}),
+    fields: accountGateFields(state, session, pending),
+    frame: authFrame(accountGateHeading(state), accountGateDescription(state)),
+    ...(gate ? { gateKind: gate.kind } : {}),
+    id: AUTH_ACCOUNT_GATE_SURFACE_ID,
+    kind: "authSurface",
+    ...(accountGateMessage(state) ? { message: accountGateMessage(state) } : {}),
+    pending,
+    policies: accountGatePolicies(state, session),
+    state: contractState,
+    surfaceKind: "account-gate",
+  } as FormlessUiAccountGateAuthSurfaceContract;
+}
+
+function projectSignupSurface({
+  session,
+  state,
+}: {
+  session: AuthAccountDraftSession;
+  state: Extract<AuthAccountRouteState, { status: `signup-${string}` }>;
+}): FormlessUiSignupAuthSurfaceContract {
+  const pending =
+    state.status.endsWith("-sending") ||
+    state.status.endsWith("-verifying") ||
+    state.status.endsWith("-submitting");
+  const feedback =
+    state.message && state.status !== "signup-passkey-unavailable"
+      ? authFeedback("signup-failure", "Account setup failed", state.message)
+      : undefined;
+  const passkey = signupPasskey(state);
+  const continuation = signupContinuation(state);
+
+  return {
+    actions: signupActions(state),
+    ...(continuation ? { continuation } : {}),
+    facts: signupFacts(state),
+    ...(feedback ? { feedback } : {}),
+    fields: signupFields(state, session, pending),
+    frame: authFrame(signupHeading(state), signupDescription(state)),
+    id: AUTH_ACCOUNT_SIGNUP_SURFACE_ID,
+    kind: "authSurface",
+    ...(signupMessage(state) ? { message: signupMessage(state) } : {}),
+    ...(passkey ? { passkey } : {}),
+    pending,
+    policies: [],
+    state: signupContractState(state),
+    step: signupStep(state),
+    surfaceKind: "signup",
+  };
+}
+
+function accountGateFields(
+  state: Exclude<AuthAccountRouteState, { status: `signup-${string}` }>,
+  session: AuthAccountDraftSession,
+  pending: boolean,
+): readonly FormlessUiAuthFieldContract[] {
+  if (state.status !== "blocked") return [];
+  const { gate } = state.result;
+  if (gate.kind === "profile-completion") {
+    return profileCompletionFields(gate, session, pending);
+  }
+  if (gate.kind !== "email-verification") return [];
+  const fieldName =
+    state.action?.kind === "email-verification-sent" ||
+    state.action?.kind === "email-verification-verifying"
+      ? "token"
+      : "email";
+  return projectCreateAuthFields({
+    fields: accountDraftFieldConfigs.filter((field) => field.fieldName === fieldName),
+    pending,
+    purposeByFieldName:
+      fieldName === "token" ? { token: "verification-token" } : { email: "email" },
+    session,
+    surfaceId: AUTH_ACCOUNT_GATE_SURFACE_ID,
+  });
+}
+
+function signupFields(
+  state: Extract<AuthAccountRouteState, { status: `signup-${string}` }>,
+  session: AuthAccountDraftSession,
+  pending: boolean,
+): readonly FormlessUiAuthFieldContract[] {
+  if (isSignupIdentityState(state)) {
+    return projectCreateAuthFields({
+      fields: accountDraftFieldConfigs.filter(
+        (field) => field.fieldName === "displayName" || field.fieldName === "email",
+      ),
+      pending,
+      purposeByFieldName: { displayName: "display-name", email: "email" },
+      session,
+      surfaceId: AUTH_ACCOUNT_SIGNUP_SURFACE_ID,
+    });
+  }
+  if (isSignupEmailVerificationState(state)) {
+    return projectCreateAuthFields({
+      fields: accountDraftFieldConfigs.filter((field) => field.fieldName === "token"),
+      pending,
+      purposeByFieldName: { token: "verification-token" },
+      session,
+      surfaceId: AUTH_ACCOUNT_SIGNUP_SURFACE_ID,
+    });
+  }
+  return [];
+}
+
+function projectCreateAuthFields({
+  fields,
+  pending,
+  purposeByFieldName,
+  session,
+  surfaceId,
+}: {
+  fields: CreateFieldConfig[];
+  pending: boolean;
+  purposeByFieldName: Record<string, "display-name" | "email" | "verification-token">;
+  session: AuthAccountDraftSession;
+  surfaceId: string;
+}): readonly FormlessUiAuthFieldContract[] {
+  const facts = selectGeneratedCreateDraftSession({
+    enabled: !pending,
+    fields,
+    state: session.create,
+  });
+  const projected = projectGeneratedCreateFormlessUiFields({
+    owner: { kind: "createSurface", surfaceId },
+    pendingByFieldName: Object.fromEntries(fields.map((field) => [field.fieldName, pending])),
+    session: facts,
+    state: session.create,
+  });
+
+  return projected.map((field) => ({
+    autocomplete:
+      field.fieldName === "displayName"
+        ? "name"
+        : field.fieldName === "email"
+          ? "email"
+          : "one-time-code",
+    field,
+    intent: { fieldId: field.fieldId, surfaceId, type: "authField" },
+    kind: "authField",
+    purpose: purposeByFieldName[field.fieldName]!,
+  }));
+}
+
+function profileCompletionFields(
+  gate: AccountCompletionProfileCompletionGate,
+  session: AuthAccountDraftSession,
+  pending: boolean,
+): readonly FormlessUiAuthFieldContract[] {
+  if (
+    !gate.operation ||
+    !gate.inputContract ||
+    gate.inputContract.unsupportedRequiredFields.length > 0
+  )
+    return [];
+  const selected = selectGeneratedOperationDraftSession({
+    enabled: !pending,
+    fields: gate.inputContract.fields,
+    state: session.profile,
+    unsupportedRequiredInputNames: gate.inputContract.unsupportedRequiredFields,
+  });
+  const visibleSession = session.submitAttempted ? selected : { ...selected, fieldErrors: {} };
+  return projectGeneratedOperationFormlessUiFields({
+    owner: { formId: AUTH_ACCOUNT_GATE_SURFACE_ID, kind: "operationForm" },
+    pendingByFieldName: Object.fromEntries(
+      gate.inputContract.fields.map((field) => [field.name, pending]),
+    ),
+    session: visibleSession,
+    state: session.profile,
+  }).map((field) => ({
+    autocomplete: field.input.format === "email" ? "email" : "off",
+    field,
+    intent: { fieldId: field.fieldId, surfaceId: AUTH_ACCOUNT_GATE_SURFACE_ID, type: "authField" },
+    kind: "authField",
+    purpose: "profile-input",
+  }));
+}
+
+function accountGateActions(
+  state: Exclude<AuthAccountRouteState, { status: `signup-${string}` }>,
+): readonly FormlessUiAuthActionContract[] {
+  if (state.status === "failed")
+    return [authAction(AUTH_ACCOUNT_GATE_SURFACE_ID, "retry", "Try again")];
+  if (state.status !== "blocked") return [];
+  if (state.action?.kind === "gate-unavailable")
+    return [authAction(AUTH_ACCOUNT_GATE_SURFACE_ID, "retry", "Try again")];
+  const { gate } = state.result;
+  if (gate.kind === "email-verification") {
+    return [
+      authAction(
+        AUTH_ACCOUNT_GATE_SURFACE_ID,
+        "submit",
+        state.action?.kind === "email-verification-sent" ||
+          state.action?.kind === "email-verification-verifying"
+          ? "Verify email"
+          : "Send verification email",
+        "primary",
+        accountGateActionIsPending(state.action),
+      ),
+    ];
+  }
+  if (isCompletableAppRegistrationGate(gate))
+    return [
+      authAction(
+        AUTH_ACCOUNT_GATE_SURFACE_ID,
+        "submit",
+        operationLabel(gate.operation) ?? "Register for app",
+        "primary",
+        accountGateActionIsPending(state.action),
+      ),
+    ];
+  if (gate.kind === "profile-completion" && profileCompletionIsAvailable(gate))
+    return [
+      authAction(
+        AUTH_ACCOUNT_GATE_SURFACE_ID,
+        "submit",
+        operationLabel(gate.operation) ?? "Complete profile",
+        "primary",
+        accountGateActionIsPending(state.action),
+      ),
+    ];
+  if (gate.kind === "terms-acceptance" && gate.policies.length > 0)
+    return [
+      authAction(
+        AUTH_ACCOUNT_GATE_SURFACE_ID,
+        "submit",
+        operationLabel(gate.operation) ?? "Accept terms",
+        "primary",
+        accountGateActionIsPending(state.action),
+      ),
+    ];
+  return [];
+}
+
+function signupActions(
+  state: Extract<AuthAccountRouteState, { status: `signup-${string}` }>,
+): readonly FormlessUiAuthActionContract[] {
+  if (isSignupIdentityState(state))
+    return [
+      authAction(
+        AUTH_ACCOUNT_SIGNUP_SURFACE_ID,
+        "submit",
+        "Send verification email",
+        "primary",
+        state.status === "signup-email-sending",
+      ),
+    ];
+  if (isSignupEmailVerificationState(state))
+    return [
+      authAction(
+        AUTH_ACCOUNT_SIGNUP_SURFACE_ID,
+        "submit",
+        "Verify email",
+        "primary",
+        state.status === "signup-email-verifying",
+      ),
+    ];
+  return [];
+}
+
+function accountGatePolicies(
+  state: Exclude<AuthAccountRouteState, { status: `signup-${string}` }>,
+  session: AuthAccountDraftSession,
+): readonly FormlessUiAuthPolicyContract[] {
+  if (state.status !== "blocked" || state.result.gate.kind !== "terms-acceptance") return [];
+  return state.result.gate.policies.map((policy) => {
+    const accepted = session.acceptedPolicyIds.includes(policy.accountPolicyId);
+    const destination = safePolicyDestination(policy.policyDocumentUrl, policy.displayName);
+    return {
+      accepted,
+      ...(destination ? { destination } : {}),
+      description: `Version ${displaySafeText(policy.version)}`,
+      id: policy.accountPolicyId,
+      kind: "authPolicy",
+      label: displaySafeText(policy.displayName),
+      required: true,
+      selectionIntent: {
+        accepted: !accepted,
+        policyId: policy.accountPolicyId,
+        surfaceId: AUTH_ACCOUNT_GATE_SURFACE_ID,
+        type: "authPolicySelection",
+      },
+    };
+  });
+}
+
+function accountGateFacts(
+  state: Exclude<AuthAccountRouteState, { status: `signup-${string}` }>,
+): readonly FormlessUiAuthFactContract[] {
+  if (state.status === "loading" || state.status === "failed") return [];
+  if (state.status === "blocked") {
+    const verificationFacts =
+      state.result.gate.kind === "email-verification" && state.action && "email" in state.action
+        ? compactFacts(
+            authFact("verification-email", "Verification email", state.action.email),
+            authFact("verification-expires", "Expires", state.action.expiresAt),
+          )
+        : [];
+    return [
+      ...gateFacts(state.result.gate),
+      ...verificationFacts,
+      ...targetFacts(state.result.target),
+    ];
+  }
+  return targetFacts(state.result.target);
+}
+
+function signupFacts(
+  state: Extract<AuthAccountRouteState, { status: `signup-${string}` }>,
+): readonly FormlessUiAuthFactContract[] {
+  const identityFacts =
+    isSignupPasskeyState(state) ||
+    state.status === "signup-complete" ||
+    state.status === "signup-continuing"
+      ? [authFact("email", "Email", state.email), authFact("name", "Name", state.displayName)]
+      : isSignupEmailVerificationState(state)
+        ? [authFact("email", "Email", state.email), authFact("expires", "Expires", state.expiresAt)]
+        : [];
+  return [...identityFacts, ...targetFacts(state.target)].filter(factIsPresent);
+}
+
+function gateFacts(gate: AccountCompletionGate): FormlessUiAuthFactContract[] {
+  const operation = operationLabel(gate.operation);
+  switch (gate.kind) {
+    case "email-verification":
+      return compactFacts(
+        authFact("gate", "Gate", "Email verification"),
+        authFact("email", "Email", gate.displayEmail),
+        authFact("action", "Action", operation),
+      );
+    case "credential":
+      return compactFacts(
+        authFact("gate", "Gate", "Credential"),
+        authFact(
+          "method",
+          "Method",
+          gate.credentialMethod === "passkey" ? "Passkey" : gate.credentialMethod,
+        ),
+        authFact("action", "Action", operation),
+      );
+    case "invitation":
+      return compactFacts(
+        authFact("gate", "Gate", "Invitation"),
+        authFact("email", "Email", gate.targetEmail),
+        authFact("surface", "Surface", titleCase(gate.targetSurface)),
+        authFact("action", "Action", operation),
+      );
+    case "app-registration":
+      return compactFacts(
+        authFact(
+          "gate",
+          "Gate",
+          gate.registrationPolicy === "closed" ? "Closed app registration" : "App registration",
+        ),
+        authFact("policy", "Registration policy", titleCase(gate.registrationPolicy)),
+        authFact("app", "App install", gate.appInstallId),
+        authFact("organization", "Organization", gate.selectedOrganization),
+        authFact("action", "Action", gate.registrationPolicy === "closed" ? undefined : operation),
+      );
+    case "profile-completion":
+      return compactFacts(
+        authFact("gate", "Gate", "Profile completion"),
+        authFact("app", "App install", gate.appInstallId),
+        authFact("organization", "Organization", gate.selectedOrganization),
+        authFact("action", "Action", operation),
+      );
+    case "terms-acceptance":
+      return compactFacts(
+        authFact("gate", "Gate", "Terms acceptance"),
+        authFact("action", "Action", operation),
+      );
+    case "role-review":
+      return compactFacts(
+        authFact("gate", "Gate", "Role review"),
+        authFact("role", "Role", gate.roleKey),
+        authFact("scope", "Scope", titleCase(gate.scopeKind)),
+        authFact("action", "Action", operation),
+      );
+  }
+}
+
+function targetFacts(target: AccountCompletionGateTarget): FormlessUiAuthFactContract[] {
+  return compactFacts(
+    authFact("destination", "Destination", target.returnTo),
+    authFact("origin", "Origin", safeHttpOrigin(target.targetOrigin)),
+    authFact("target-surface", "Surface", targetProfileLabel(target.targetProfile)),
+    authFact("route", "Route", target.routeId),
+    authFact("target-app", "App install", target.appInstallId),
+    authFact("target-organization", "Organization", target.selectedOrganization),
+  );
+}
+
+function accountGateContractState(
+  state: Exclude<AuthAccountRouteState, { status: `signup-${string}` }>,
+): FormlessUiAccountGateAuthSurfaceContract["state"] {
+  if (state.status !== "blocked") return state.status;
+  if (accountGateActionIsPending(state.action)) return "submitting";
+  if (state.action?.kind === "gate-unavailable") return "failed";
+  if (accountGateIsUnavailable(state.result.gate)) return "unavailable";
+  return accountGateActions(state).length > 0 ? "ready" : "blocked";
+}
+
+function signupContractState(
+  state: Extract<AuthAccountRouteState, { status: `signup-${string}` }>,
+): Exclude<FormlessUiSignupAuthSurfaceContract["state"], "loading"> {
+  if (state.status === "signup-complete") return "complete";
+  if (state.status === "signup-continuing") return "continuing";
+  if (state.status === "signup-passkey-unavailable") return "passkey-unavailable";
+  if (
+    state.status.endsWith("-sending") ||
+    state.status.endsWith("-verifying") ||
+    state.status.endsWith("-submitting")
+  )
+    return "submitting";
+  return state.message ? "failed" : "ready";
+}
+
+function signupStep(
+  state: Extract<AuthAccountRouteState, { status: `signup-${string}` }>,
+): FormlessUiSignupStep {
+  if (isSignupIdentityState(state)) return "identity";
+  if (isSignupEmailVerificationState(state)) return "email-verification";
+  return "passkey";
+}
+
+function accountGateHeading(
+  state: Exclude<AuthAccountRouteState, { status: `signup-${string}` }>,
+): string {
+  if (state.status === "loading") return "Checking account";
+  if (state.status === "failed") return "Account unavailable";
+  if (state.status === "complete" || state.status === "continuing") return "Account ready";
+  return gateCopy(state.result.gate).heading;
+}
+
+function accountGateDescription(
+  state: Exclude<AuthAccountRouteState, { status: `signup-${string}` }>,
+): string | undefined {
+  if (state.status === "complete") return "Your account is ready to continue.";
+  if (state.status === "continuing") return "Opening your approved destination.";
+  if (state.status === "blocked") return gateCopy(state.result.gate).message;
+  return undefined;
+}
+
+function signupHeading(
+  state: Extract<AuthAccountRouteState, { status: `signup-${string}` }>,
+): string {
+  if (isSignupIdentityState(state)) return "Create account";
+  if (isSignupEmailVerificationState(state)) return "Verify email";
+  if (state.status === "signup-passkey-unavailable") return "Passkeys are unavailable";
+  if (state.status === "signup-complete" || state.status === "signup-continuing")
+    return "Account ready";
+  return "Create passkey";
+}
+
+function signupDescription(
+  state: Extract<AuthAccountRouteState, { status: `signup-${string}` }>,
+): string | undefined {
+  if (isSignupIdentityState(state)) return "Verify your email and create a passkey to continue.";
+  if (isSignupEmailVerificationState(state))
+    return `A verification email was sent to ${displaySafeText(state.email ?? "your email")}.`;
+  if (state.status === "signup-complete") return "Your account is ready to continue.";
+  if (state.status === "signup-continuing") return "Opening your approved destination.";
+  if (isSignupPasskeyState(state)) return "Create a passkey credential to finish account setup.";
+  return undefined;
+}
+
+function accountGateMessage(
+  state: Exclude<AuthAccountRouteState, { status: `signup-${string}` }>,
+): FormlessUiAuthMessageContract | undefined {
+  if (state.status === "loading") return authMessage("loading", "Loading account status.");
+  if (state.status === "continuing") return authMessage("continuing", "Continuing...", "success");
+  if (state.status === "blocked" && accountGateIsUnavailable(state.result.gate))
+    return authMessage("unavailable", accountGateUnavailableMessage(state.result.gate), "warning");
+  return undefined;
+}
+
+function signupMessage(
+  state: Extract<AuthAccountRouteState, { status: `signup-${string}` }>,
+): FormlessUiAuthMessageContract | undefined {
+  if (state.status === "signup-passkey-unavailable")
+    return authMessage("passkey", state.message ?? passkeyUnavailableMessage, "warning");
+  if (state.status === "signup-continuing")
+    return authMessage("continuing", "Continuing...", "success");
+  return undefined;
+}
+
+function accountGateFeedback(
+  state: Exclude<AuthAccountRouteState, { status: `signup-${string}` }>,
+  session: AuthAccountDraftSession,
+): FormlessUiAuthFeedbackContract | undefined {
+  if (state.status === "failed")
+    return authFeedback("account-failure", "Account unavailable", state.message);
+  if (state.status === "blocked" && state.action?.kind === "gate-unavailable")
+    return authFeedback("gate-failure", "Account step failed", state.action.message);
+  if (
+    state.status === "blocked" &&
+    state.action?.kind === "email-verification-sent" &&
+    state.action.message
+  )
+    return authFeedback("verification-failure", "Email verification failed", state.action.message);
+  if (
+    state.status === "blocked" &&
+    state.result.gate.kind === "terms-acceptance" &&
+    session.submitAttempted &&
+    state.result.gate.policies.some(
+      (policy) => !session.acceptedPolicyIds.includes(policy.accountPolicyId),
+    )
+  )
+    return authFeedback(
+      "policy-required",
+      "Accept required policies",
+      "Accept all required policies to continue.",
+    );
+  return undefined;
+}
+
+function accountGateContinuation(
+  state: Exclude<AuthAccountRouteState, { status: `signup-${string}` }>,
+): FormlessUiAuthContinuationContract | undefined {
+  if ((state.status !== "complete" && state.status !== "continuing") || !state.continueTo)
+    return undefined;
+  return authContinuation(AUTH_ACCOUNT_GATE_SURFACE_ID, state.result.target, state.continueTo);
+}
+
+function signupContinuation(
+  state: Extract<AuthAccountRouteState, { status: `signup-${string}` }>,
+): FormlessUiAuthContinuationContract | undefined {
+  if (
+    (state.status !== "signup-complete" && state.status !== "signup-continuing") ||
+    !state.continueTo
+  )
+    return undefined;
+  return authContinuation(AUTH_ACCOUNT_SIGNUP_SURFACE_ID, state.result.target, state.continueTo);
+}
+
+function signupPasskey(
+  state: Extract<AuthAccountRouteState, { status: `signup-${string}` }>,
+): FormlessUiAuthPasskeyContract | undefined {
+  if (state.status === "signup-passkey-unavailable")
+    return {
+      availability: "unavailable",
+      id: `${AUTH_ACCOUNT_SIGNUP_SURFACE_ID}:passkey:create`,
+      kind: "authPasskey",
+      purpose: "create",
+      unavailableReason: displaySafeText(state.message ?? passkeyUnavailableMessage),
+    };
+  if (!isSignupPasskeyState(state)) return undefined;
+  const passkeyId = `${AUTH_ACCOUNT_SIGNUP_SURFACE_ID}:passkey:create`;
+  const pending = state.status === "signup-credential-submitting";
+  const control = authButton(
+    `${passkeyId}:control`,
+    pending ? "Creating passkey..." : "Create passkey",
+    "primary",
+    "submit",
+    { pending },
+  );
+  return {
+    availability: "available",
+    control,
+    id: passkeyId,
+    intent: {
+      controlId: control.id,
+      passkeyId,
+      surfaceId: AUTH_ACCOUNT_SIGNUP_SURFACE_ID,
+      type: "authPasskey",
+    },
+    kind: "authPasskey",
+    purpose: "create",
+  };
+}
+
+function authAccountCreateFieldConfigs(state: AuthAccountRouteState): CreateFieldConfig[] {
+  if (state.status === "blocked" && state.result.gate.kind === "email-verification") {
+    const name =
+      state.action?.kind === "email-verification-sent" ||
+      state.action?.kind === "email-verification-verifying"
+        ? "token"
+        : "email";
+    return accountDraftFieldConfigs.filter((field) => field.fieldName === name);
+  }
+  if (isSignupIdentityState(state))
+    return accountDraftFieldConfigs.filter(
+      (field) => field.fieldName === "displayName" || field.fieldName === "email",
+    );
+  if (isSignupEmailVerificationState(state))
+    return accountDraftFieldConfigs.filter((field) => field.fieldName === "token");
+  return [];
+}
+
+function authAccountProfileInputContract(
+  state: AuthAccountRouteState,
+): AccountCompletionGateOperationInputContract | undefined {
+  return state.status === "blocked" && state.result.gate.kind === "profile-completion"
+    ? state.result.gate.inputContract
+    : undefined;
+}
+
+function authAccountDraftSeedValues(state: AuthAccountRouteState): Record<string, string> {
+  if (state.status === "blocked" && state.result.gate.kind === "email-verification") {
+    const email =
+      state.action && "email" in state.action ? state.action.email : state.result.gate.displayEmail;
+    return email ? { email } : {};
+  }
+  if (isSignupState(state))
+    return {
+      ...(state.displayName ? { displayName: state.displayName } : {}),
+      ...(state.email ? { email: state.email } : {}),
+    };
+  return {};
+}
+
+function authAccountDraftSessionKey(state: AuthAccountRouteState): string {
+  if (isSignupState(state)) return `signup:${targetKey(state.target)}`;
+  if (state.status === "blocked") {
+    const operationKey = state.result.gate.operation?.operationKey ?? "none";
+    return `gate:${targetKey(state.result.target)}:${state.result.gate.kind}:${operationKey}`;
+  }
+  return `account:${state.status}`;
+}
+
+function targetKey(target: AccountCompletionGateTarget): string {
+  return JSON.stringify([
+    target.targetOrigin,
+    target.routeId,
+    target.targetProfile,
+    target.appInstallId,
+    target.selectedOrganization,
+    target.returnTo,
+  ]);
+}
+
+function isSignupState(
+  state: AuthAccountRouteState,
+): state is Extract<AuthAccountRouteState, { status: `signup-${string}` }> {
+  return state.status.startsWith("signup-");
+}
+
+function isSignupIdentityState(
+  state: AuthAccountRouteState,
+): state is Extract<AuthAccountRouteState, { status: "signup-ready" | "signup-email-sending" }> {
+  return state.status === "signup-ready" || state.status === "signup-email-sending";
+}
+
+function isSignupEmailVerificationState(
+  state: AuthAccountRouteState,
+): state is Extract<
+  AuthAccountRouteState,
+  { status: "signup-email-sent" | "signup-email-verifying" }
+> {
+  return state.status === "signup-email-sent" || state.status === "signup-email-verifying";
+}
+
+function isSignupPasskeyState(state: AuthAccountRouteState): state is Extract<
+  AuthAccountRouteState,
+  {
+    status:
+      | "signup-credential-ready"
+      | "signup-credential-submitting"
+      | "signup-passkey-unavailable";
+  }
+> {
+  return (
+    state.status === "signup-credential-ready" ||
+    state.status === "signup-credential-submitting" ||
+    state.status === "signup-passkey-unavailable"
+  );
+}
+
+function accountGateActionIsPending(
+  action: Extract<AuthAccountRouteState, { status: "blocked" }>["action"],
+): boolean {
+  return (
+    action?.kind === "email-verification-requesting" ||
+    action?.kind === "email-verification-verifying" ||
+    action?.kind === "gate-submitting" ||
+    action?.kind === "profile-completion-submitting"
+  );
+}
+
+function accountGateIsUnavailable(gate: AccountCompletionGate): boolean {
+  return gate.kind === "profile-completion" && !profileCompletionIsAvailable(gate);
+}
+
+function profileCompletionIsAvailable(gate: AccountCompletionProfileCompletionGate): boolean {
+  return Boolean(
+    gate.operation &&
+    gate.inputContract &&
+    gate.inputContract.unsupportedRequiredFields.length === 0,
+  );
+}
+
+function accountGateUnavailableMessage(gate: AccountCompletionGate): string {
+  if (gate.kind === "profile-completion") {
+    if (!gate.operation || !gate.inputContract)
+      return "Profile completion operation is unavailable.";
+    if (gate.inputContract.unsupportedRequiredFields.length > 0)
+      return "Profile completion requires fields this form cannot render.";
+  }
+  return "This account step is unavailable.";
+}
+
+function isCompletableAppRegistrationGate(
+  gate: AccountCompletionGate,
+): gate is AccountCompletionAppRegistrationGate {
+  return (
+    gate.kind === "app-registration" &&
+    gate.registrationPolicy === "email-verified" &&
+    gate.operation?.operationKey === "auth.app-registration.complete"
+  );
+}
+
+function authAction(
+  surfaceId: string,
+  purpose: "retry" | "submit",
+  label: string,
+  prominence: FormlessUiButtonContract["prominence"] = "primary",
+  pending = false,
+): FormlessUiAuthActionContract {
+  const id = `${surfaceId}:action:${purpose}`;
+  const control = authButton(
+    `${id}:control`,
+    pending ? pendingLabel(label) : label,
+    prominence,
+    purpose === "submit" ? "submit" : "button",
+    { pending },
+  );
+  return {
+    control,
+    id,
+    intent: { actionId: id, controlId: control.id, surfaceId, type: "authAction" },
+    kind: "authAction",
+    purpose,
+  };
+}
+
+function authContinuation(
+  surfaceId: string,
+  target: AccountCompletionGateTarget,
+  continueTo: string,
+): FormlessUiAuthContinuationContract {
+  const destinationId = `${surfaceId}:destination:account`;
+  const control = authButton(`${destinationId}:control`, "Continue", "primary");
+  return {
+    control,
+    destination: {
+      detail: displaySafeText(continueTo),
+      id: destinationId,
+      kind: "authContinuationDestination",
+      label: "Continue",
+      ...(safeHttpOrigin(target.targetOrigin)
+        ? { origin: safeHttpOrigin(target.targetOrigin) }
+        : {}),
+    },
+    intent: { controlId: control.id, destinationId, surfaceId, type: "authContinuation" },
+    kind: "authContinuation",
+  };
+}
+
+function authFrame(title: string, description?: string) {
+  return {
+    accessibilityLabel: title,
+    brand: { kind: "authBrand" as const, label: "Formless" },
+    heading: { ...(description ? { description } : {}), kind: "authHeading" as const, title },
+    kind: "authFrame" as const,
+  };
+}
+
+function authButton(
+  id: string,
+  label: string,
+  prominence: FormlessUiButtonContract["prominence"],
+  type: FormlessUiButtonContract["type"] = "button",
+  options: { pending?: boolean } = {},
+): FormlessUiButtonContract {
+  return {
+    accessibilityLabel: label,
+    content: { kind: "label", label },
+    density: "default",
+    id,
+    kind: "button",
+    ...(options.pending ? { pending: { isPending: true, label } } : {}),
+    prominence,
+    type,
+  };
+}
+
+function authMessage(
+  id: string,
+  title: string,
+  severity: FormlessUiAuthMessageContract["severity"] = "info",
+): FormlessUiAuthMessageContract {
+  return {
+    id: `auth:account:message:${id}`,
+    kind: "authMessage",
+    severity,
+    title: displaySafeText(title),
+  };
+}
+
+function authFeedback(id: string, title: string, detail: string): FormlessUiAuthFeedbackContract {
+  return {
+    detail: displaySafeText(detail),
+    id: `auth:account:feedback:${id}`,
+    kind: "authFeedback",
+    severity: "danger",
+    title,
+  };
+}
+
+function authFact(
+  id: string,
+  label: string,
+  value: string | undefined,
+): FormlessUiAuthFactContract | undefined {
+  return value
+    ? { id: `auth:account:fact:${id}`, kind: "authFact", label, value: displaySafeText(value) }
+    : undefined;
+}
+
+function compactFacts(
+  ...facts: Array<FormlessUiAuthFactContract | undefined>
+): FormlessUiAuthFactContract[] {
+  return facts.filter(factIsPresent);
+}
+
+function factIsPresent(
+  fact: FormlessUiAuthFactContract | undefined,
+): fact is FormlessUiAuthFactContract {
+  return fact !== undefined;
+}
+
+function safePolicyDestination(href: string | undefined, label: string) {
+  if (!href) return undefined;
+  try {
+    const url = new URL(href);
+    if (url.protocol !== "http:" && url.protocol !== "https:") return undefined;
+    return {
+      href: url.toString(),
+      kind: "authPolicyDestination" as const,
+      label: `Open ${displaySafeText(label)}`,
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+function safeHttpOrigin(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:" ? url.origin : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function operationLabel(operation: AccountCompletionGate["operation"]): string | undefined {
+  return operation?.label ?? operation?.operationName ?? operation?.operationKey;
+}
+
+function gateCopy(gate: AccountCompletionGate): { heading: string; message: string } {
+  switch (gate.kind) {
+    case "email-verification":
+      return {
+        heading: "Verify email",
+        message: "Email verification is required before continuing.",
+      };
+    case "credential":
+      return {
+        heading: "Create credential",
+        message: "A passkey credential is required before continuing.",
+      };
+    case "invitation":
+      return {
+        heading: "Accept invitation",
+        message: "An invitation must be accepted before continuing.",
+      };
+    case "app-registration":
+      return gate.registrationPolicy === "closed"
+        ? {
+            heading: "Registration closed",
+            message:
+              "This app uses closed registration. Ask an administrator to grant access before continuing.",
+          }
+        : {
+            heading: "Register for app",
+            message: "App registration is required before continuing.",
+          };
+    case "profile-completion":
+      return {
+        heading: "Complete profile",
+        message: "Profile information is required before continuing.",
+      };
+    case "terms-acceptance":
+      return {
+        heading: "Accept terms",
+        message: "Required account policies must be accepted before continuing.",
+      };
+    case "role-review":
+      return {
+        heading: "Access review required",
+        message: "Access must be reviewed before continuing.",
+      };
+  }
+}
+
+function targetProfileLabel(value: AccountCompletionGateTarget["targetProfile"]): string {
+  if (value === "public-site") return "Public Site";
+  return titleCase(value) ?? value;
+}
+
+function titleCase(value: string | undefined): string | undefined {
+  return value
+    ?.split("-")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function createTextField(
+  fieldName: string,
+  label: string,
+  required: boolean,
+  format?: "email",
+): CreateFieldConfig {
+  return {
+    editor: "text",
+    field: { ...(format ? { format } : {}), label, required, type: "text" },
+    fieldName,
+  };
+}
+
+function stringFieldValue(value: FieldValue | undefined): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  return trimmed === "" ? undefined : trimmed;
+}
+
+function pendingLabel(label: string): string {
+  if (label === "Send verification email") return "Sending...";
+  if (label === "Verify email") return "Verifying...";
+  if (label === "Accept terms") return "Accepting...";
+  if (label === "Complete profile") return "Saving...";
+  if (label === "Register for app") return "Registering...";
+  return label;
+}

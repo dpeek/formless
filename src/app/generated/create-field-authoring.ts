@@ -12,6 +12,7 @@ import {
   resolveCreateDraftValues as resolveCreateDefaultDraftValues,
   resolveCreateValues as resolveCreateDefaultValues,
   selectCreateFieldsForDraftInput,
+  validateTextValueForStorage,
   type CreateDraftFieldError,
   type CreateDraftFieldInput,
   type CreateDraftInput,
@@ -93,9 +94,14 @@ export function selectGeneratedCreateDraftSession({
     queryContext,
     union,
   });
+  const formatErrors = withTextFormatCreateDraftFieldErrors(
+    resolution.fieldErrors,
+    visibleFields,
+    resolution.values,
+  );
   const fieldErrors = state.submitAttempted
-    ? withRequiredCreateDraftFieldErrors(resolution.fieldErrors, visibleFields, resolution.values)
-    : resolution.fieldErrors;
+    ? withRequiredCreateDraftFieldErrors(formatErrors, visibleFields, resolution.values)
+    : formatErrors;
   const defaultsResolved = createDefaultsAreResolved(defaults, queryContext);
 
   return {
@@ -242,6 +248,37 @@ function withRequiredCreateDraftFieldErrors(
           ? `Field "${fieldConfig.fieldName}" is required.`
           : `Field "${fieldConfig.fieldName}" cannot be empty.`,
     };
+  }
+
+  return nextErrors;
+}
+
+function withTextFormatCreateDraftFieldErrors(
+  fieldErrors: Record<string, CreateDraftFieldError>,
+  visibleFields: CreateFieldConfig[],
+  values: RecordValues,
+): Record<string, CreateDraftFieldError> {
+  const nextErrors = { ...fieldErrors };
+
+  for (const fieldConfig of visibleFields) {
+    const value = values[fieldConfig.fieldName];
+    if (
+      fieldConfig.field.type !== "text" ||
+      typeof value !== "string" ||
+      nextErrors[fieldConfig.fieldName] !== undefined
+    ) {
+      continue;
+    }
+
+    try {
+      validateTextValueForStorage(fieldConfig.field, value);
+    } catch (error) {
+      nextErrors[fieldConfig.fieldName] = {
+        fieldName: fieldConfig.fieldName,
+        message:
+          error instanceof Error ? error.message : `Field "${fieldConfig.fieldName}" is invalid.`,
+      };
+    }
   }
 
   return nextErrors;

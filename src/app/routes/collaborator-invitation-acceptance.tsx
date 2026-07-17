@@ -1,6 +1,6 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { FormlessUiAuthIntent } from "@dpeek/formless-astryx/contract";
 import { useSearch } from "wouter";
-import { Button } from "@dpeek/formless-ui/button";
 
 import {
   COLLABORATOR_INVITATION_ACCEPT_PATH,
@@ -18,6 +18,16 @@ import {
   type CollaboratorInvitationPasskeyRegistrationVerifyRequest,
   type CollaboratorInvitationPasskeyRegistrationVerifyResponse,
 } from "../../shared/instance-auth.ts";
+import { LegacySubscribedCollaboratorInvitationAuthRenderer } from "../generated/legacy-owner-auth-renderer.tsx";
+import {
+  authIntentIsCurrent,
+  createAuthPendingGuard,
+  NoShellAuthRuntimeBoundary,
+} from "./auth-runtime-boundary.tsx";
+import {
+  collaboratorInvitationAuthSurfaceReference,
+  projectCollaboratorInvitationAuthSurface,
+} from "./collaborator-invitation-auth-projection.ts";
 import {
   browserSupportsPasskeys,
   createBrowserPasskeyRegistrationResponse,
@@ -64,6 +74,7 @@ type StartCollaboratorInvitationAcceptanceRouteSessionOptions = {
   fetcher?: typeof fetch;
   locationSearch: string;
   onState: (state: CollaboratorInvitationAcceptanceRouteState) => void;
+  passkeysSupported?: () => boolean;
 };
 
 type CollaboratorInvitationAcceptanceFetchOptions = {
@@ -82,6 +93,7 @@ export function CollaboratorInvitationAcceptanceRoute() {
   const [state, setState] = useState<CollaboratorInvitationAcceptanceRouteState>({
     status: "loading",
   });
+  const pendingGuard = useRef(createAuthPendingGuard());
 
   useEffect(
     () =>
@@ -92,10 +104,10 @@ export function CollaboratorInvitationAcceptanceRoute() {
     [locationSearch],
   );
 
-  async function submitAcceptance(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  const surface = useMemo(() => projectCollaboratorInvitationAuthSurface({ state }), [state]);
 
-    if (state.status !== "eligible" && state.status !== "passkey-unavailable") {
+  async function submitAcceptance() {
+    if (state.status !== "eligible") {
       return;
     }
 
@@ -115,60 +127,71 @@ export function CollaboratorInvitationAcceptanceRoute() {
       return;
     }
 
-    setState({ status: "submitting", invitation: state.invitation });
+    const invitation = state.invitation;
 
-    try {
-      const accepted = await completeCollaboratorInvitationAcceptance({
-        request: routeRequest.request,
-      });
-      const continuationUrl = collaboratorInvitationAcceptanceContinuationUrl(accepted);
+    await pendingGuard.current.run(async () => {
+      setState({ status: "submitting", invitation });
 
-      if (continuationUrl) {
+      try {
+        const accepted = await completeCollaboratorInvitationAcceptance({
+          request: routeRequest.request,
+        });
+        const continuationUrl = collaboratorInvitationAcceptanceContinuationUrl(accepted);
+
+        if (continuationUrl) {
+          setState({
+            status: "continuing",
+            acceptedPrincipal: accepted.acceptedPrincipal,
+            continueTo: continuationUrl,
+            ...(accepted.handoff === undefined ? {} : { handoff: accepted.handoff }),
+            invitation: accepted.invitation,
+            session: accepted.session,
+          });
+          window.location.assign(continuationUrl);
+          return;
+        }
+
         setState({
-          status: "continuing",
+          status: "accepted",
           acceptedPrincipal: accepted.acceptedPrincipal,
-          continueTo: continuationUrl,
           ...(accepted.handoff === undefined ? {} : { handoff: accepted.handoff }),
           invitation: accepted.invitation,
           session: accepted.session,
         });
-        window.location.assign(continuationUrl);
-        return;
+      } catch (error) {
+        setState({
+          status: "failed",
+          message: error instanceof Error ? error.message : "Invitation acceptance failed.",
+        });
       }
+    });
+  }
 
-      setState({
-        status: "accepted",
-        acceptedPrincipal: accepted.acceptedPrincipal,
-        ...(accepted.handoff === undefined ? {} : { handoff: accepted.handoff }),
-        invitation: accepted.invitation,
-        session: accepted.session,
-      });
-    } catch (error) {
-      setState({
-        status: "failed",
-        message: error instanceof Error ? error.message : "Invitation acceptance failed.",
-      });
+  async function handleIntent(intent: FormlessUiAuthIntent) {
+    if (!authIntentIsCurrent(surface, intent)) {
+      return;
+    }
+
+    if (intent.type === "authPasskey") {
+      await submitAcceptance();
+      return;
+    }
+
+    if (intent.type === "authContinuation" && state.status === "continuing") {
+      window.location.assign(state.continueTo);
     }
   }
 
-  return <CollaboratorInvitationAcceptanceRouteView onAccept={submitAcceptance} state={state} />;
-}
-
-export function CollaboratorInvitationAcceptanceRouteView({
-  onAccept,
-  state,
-}: {
-  onAccept?: (event: FormEvent<HTMLFormElement>) => void;
-  state: CollaboratorInvitationAcceptanceRouteState;
-}) {
   return (
-    <section className="min-h-dvh bg-bg text-fg">
-      <div className="mx-auto flex min-h-dvh w-full max-w-xl flex-col justify-center px-4 py-12">
-        <div className="space-y-6 rounded-lg border border-border bg-overlay p-6 shadow-sm">
-          <CollaboratorInvitationAcceptanceStateBody onAccept={onAccept} state={state} />
-        </div>
-      </div>
-    </section>
+    <NoShellAuthRuntimeBoundary
+      onIntent={handleIntent}
+      reference={collaboratorInvitationAuthSurfaceReference}
+      snapshot={surface}
+    >
+      <LegacySubscribedCollaboratorInvitationAuthRenderer
+        reference={collaboratorInvitationAuthSurfaceReference}
+      />
+    </NoShellAuthRuntimeBoundary>
   );
 }
 
@@ -176,6 +199,7 @@ export function startCollaboratorInvitationAcceptanceRouteSession({
   fetcher = fetch,
   locationSearch,
   onState,
+  passkeysSupported = browserSupportsPasskeys,
 }: StartCollaboratorInvitationAcceptanceRouteSessionOptions) {
   const controller = new AbortController();
   let stopped = false;
@@ -208,7 +232,13 @@ export function startCollaboratorInvitationAcceptanceRouteSession({
 
       onState(
         status.eligible
-          ? { status: "eligible", invitation: status.invitation }
+          ? passkeysSupported()
+            ? { status: "eligible", invitation: status.invitation }
+            : {
+                status: "passkey-unavailable",
+                invitation: status.invitation,
+                message: passkeyUnavailableMessage,
+              }
           : {
               status: "unavailable",
               message: status.error,
@@ -393,213 +423,6 @@ export class CollaboratorInvitationAcceptanceApiError extends Error {
   }
 }
 
-function CollaboratorInvitationAcceptanceStateBody({
-  onAccept,
-  state,
-}: {
-  onAccept?: (event: FormEvent<HTMLFormElement>) => void;
-  state: CollaboratorInvitationAcceptanceRouteState;
-}) {
-  switch (state.status) {
-    case "accepted":
-      return <AcceptedInvitation accepted={state} />;
-    case "continuing":
-      return <AcceptedInvitation accepted={state} />;
-    case "eligible":
-      return <EligibleInvitation invitation={state.invitation} onAccept={onAccept} />;
-    case "failed":
-      return (
-        <InvitationAcceptanceMessage
-          alert
-          heading="Invitation unavailable"
-          message={state.message}
-        />
-      );
-    case "invalid-link":
-      return (
-        <InvitationAcceptanceMessage
-          alert
-          heading="Invitation unavailable"
-          message={state.message}
-        />
-      );
-    case "loading":
-      return (
-        <InvitationAcceptanceMessage
-          heading="Checking invitation"
-          message="Loading invitation status."
-        />
-      );
-    case "passkey-unavailable":
-      return <PasskeyUnavailableInvitation invitation={state.invitation} message={state.message} />;
-    case "submitting":
-      return <EligibleInvitation disabled invitation={state.invitation} onAccept={onAccept} />;
-    case "unavailable":
-      return (
-        <InvitationAcceptanceMessage
-          alert
-          heading="Invitation unavailable"
-          message={state.message}
-        />
-      );
-  }
-}
-
-function EligibleInvitation({
-  disabled = false,
-  invitation,
-  onAccept,
-}: {
-  disabled?: boolean;
-  invitation: CollaboratorInvitationAcceptanceInvitationSummary;
-  onAccept?: (event: FormEvent<HTMLFormElement>) => void;
-}) {
-  return (
-    <div className="space-y-5">
-      <InvitationAcceptanceHeader
-        heading="Invitation ready"
-        message={
-          invitation.invitedPrincipalDisplayName
-            ? `${invitation.invitedPrincipalDisplayName} has been invited.`
-            : "This invitation is ready."
-        }
-      />
-      <dl className="grid gap-3 text-sm">
-        <InvitationFact label="Email">{invitation.targetEmail}</InvitationFact>
-        <InvitationFact label="Surface">
-          {collaboratorInvitationTargetSurfaceLabel(invitation.targetSurface)}
-        </InvitationFact>
-        {invitation.invitedPrincipalDisplayName ? (
-          <InvitationFact label="Name">{invitation.invitedPrincipalDisplayName}</InvitationFact>
-        ) : null}
-        <InvitationFact label="Expires">
-          <time dateTime={invitation.expiresAt}>{invitation.expiresAt}</time>
-        </InvitationFact>
-      </dl>
-      <form onSubmit={onAccept}>
-        <Button className="w-full" isDisabled={disabled} type="submit">
-          {disabled ? "Creating passkey..." : "Create passkey and accept"}
-        </Button>
-      </form>
-    </div>
-  );
-}
-
-function PasskeyUnavailableInvitation({
-  invitation,
-  message,
-}: {
-  invitation: CollaboratorInvitationAcceptanceInvitationSummary;
-  message: string;
-}) {
-  return (
-    <div className="space-y-5">
-      <InvitationAcceptanceHeader
-        heading="Passkeys are unavailable"
-        message={message}
-        messageRole="alert"
-      />
-      <dl className="grid gap-3 text-sm">
-        <InvitationFact label="Email">{invitation.targetEmail}</InvitationFact>
-        <InvitationFact label="Surface">
-          {collaboratorInvitationTargetSurfaceLabel(invitation.targetSurface)}
-        </InvitationFact>
-        <InvitationFact label="Expires">
-          <time dateTime={invitation.expiresAt}>{invitation.expiresAt}</time>
-        </InvitationFact>
-      </dl>
-    </div>
-  );
-}
-
-function AcceptedInvitation({
-  accepted,
-}: {
-  accepted: Extract<
-    CollaboratorInvitationAcceptanceRouteState,
-    { status: "accepted" | "continuing" }
-  >;
-}) {
-  const continuing = accepted.status === "continuing";
-
-  return (
-    <div className="space-y-5">
-      <InvitationAcceptanceHeader
-        heading="Invitation accepted"
-        message={
-          continuing
-            ? `Signed in as ${accepted.acceptedPrincipal.displayName}. Continuing to ${
-                accepted.handoff?.targetOrigin ?? accepted.continueTo
-              }.`
-            : `Signed in as ${accepted.acceptedPrincipal.displayName}.`
-        }
-      />
-      <dl className="grid gap-3 text-sm">
-        <InvitationFact label="Session expires">
-          <time dateTime={accepted.session.expiresAt}>{accepted.session.expiresAt}</time>
-        </InvitationFact>
-        {accepted.handoff ? (
-          <InvitationFact label="Continue to">
-            {accepted.handoff.targetOrigin}
-            {accepted.handoff.returnTo}
-          </InvitationFact>
-        ) : continuing ? (
-          <InvitationFact label="Continue to">{accepted.continueTo}</InvitationFact>
-        ) : null}
-      </dl>
-    </div>
-  );
-}
-
-function InvitationFact({ children, label }: { children: ReactNode; label: string }) {
-  return (
-    <div className="grid gap-1 rounded-md border border-border bg-bg px-3 py-2">
-      <dt className="text-xs font-medium uppercase tracking-wide text-muted-fg">{label}</dt>
-      <dd className="break-words text-sm font-medium text-fg">{children}</dd>
-    </div>
-  );
-}
-
-function InvitationAcceptanceMessage({
-  alert,
-  heading,
-  message,
-}: {
-  alert?: boolean;
-  heading: string;
-  message: string;
-}) {
-  return (
-    <div className="space-y-5">
-      <InvitationAcceptanceHeader
-        heading={heading}
-        message={message}
-        messageRole={alert ? "alert" : undefined}
-      />
-    </div>
-  );
-}
-
-function InvitationAcceptanceHeader({
-  heading,
-  message,
-  messageRole,
-}: {
-  heading: string;
-  message: string;
-  messageRole?: "alert";
-}) {
-  return (
-    <header className="space-y-2">
-      <p className="text-xs font-medium uppercase tracking-wide text-muted-fg">Formless</p>
-      <h1 className="text-2xl font-semibold">{heading}</h1>
-      <p className="text-sm text-muted-fg" role={messageRole}>
-        {message}
-      </p>
-    </header>
-  );
-}
-
 function collaboratorInvitationAcceptanceRequestFromSearch(
   locationSearch: string,
 ): { ok: true; request: CollaboratorInvitationAcceptanceRequest } | { ok: false; message: string } {
@@ -638,19 +461,6 @@ function collaboratorInvitationAcceptanceErrorMessage(value: unknown, fallback: 
   return isRecord(value) && typeof value.error === "string" && value.error.trim() !== ""
     ? value.error
     : fallback;
-}
-
-function collaboratorInvitationTargetSurfaceLabel(
-  surface: CollaboratorInvitationAcceptanceInvitationSummary["targetSurface"],
-) {
-  switch (surface) {
-    case "app-install":
-      return "App install";
-    case "instance":
-      return "Instance";
-    case "organization":
-      return "Organization";
-  }
 }
 
 function trimSearchPrefix(search: string): string {
