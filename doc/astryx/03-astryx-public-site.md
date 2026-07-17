@@ -2,8 +2,8 @@
 
 ## Outcome
 
-Replace the built-in Tailwind public Site renderer with an Astryx renderer
-through the existing Site public projection contract.
+Prepare a complete Astryx public Site renderer behind an explicit built-in
+presentation seam without changing the production renderer.
 
 The completed change should:
 
@@ -12,29 +12,32 @@ The completed change should:
   owned by `@dpeek/formless-site-app`;
 - make `@dpeek/formless-astryx` implement the canonical Site renderer contract
   by importing it from `@dpeek/formless-site-app`;
-- keep the Site package independent of Astryx and select the built-in renderer
-  from root browser and Worker assembly;
+- keep the Site package independent of Astryx and make root browser and Worker
+  assembly select the legacy built-in renderer explicitly;
 - replace the prototype's structurally equivalent private Site types with the
   canonical Site package types;
 - cover frame navigation, page and post layouts, every shipped public block,
   media, source SVG icons, public links, fixed public forms, and generic public
   operation forms;
-- preserve projection, public action, SSR, hydration, metadata, indexing,
-  caching, icon, and route behavior while changing presentation;
-- add canonical projected Site fixtures and focused Astryx layouts; and
-- switch the built-in renderer only after browser and Worker assembly can select
-  the complete Astryx implementation mechanically, then delete the legacy
-  renderer and its public Tailwind dependency in the same change.
+- preserve current production projection, public action, SSR, hydration,
+  metadata, indexing, caching, icon, route, and presentation behavior;
+- add canonical projected Site fixtures and focused Astryx layouts;
+- isolate renderer-neutral link, theme, form, system-state, and public asset
+  seams from the legacy presentation; and
+- leave Astryx selection, root StyleX and provider integration, public CSS
+  switching, and legacy renderer deletion to `astryx-cutover`.
 
-The Astryx renderer should follow Astryx layout, navigation, typography, form,
-feedback, and responsive patterns. It should not reproduce the old header,
-sticky footer, card treatments, spacing, or exact markup.
+The unselected Astryx renderer should follow Astryx layout, navigation,
+typography, form, feedback, and responsive patterns. It should not reproduce
+the old header, sticky footer, card treatments, spacing, or exact markup.
 
 ## Preconditions
 
 - `@dpeek/formless-astryx` is an explicit workspace package with import
-  boundaries and build support for browser and Worker consumers. This change
-  owns the public Site renderer export, public CSS, and provider integration.
+  boundaries and package-local build support for browser and Worker consumers.
+  This change owns the public Site renderer export and the package-local CSS and
+  provider surfaces needed to verify the unselected candidate. Root StyleX,
+  provider, and public CSS integration remain owned by `astryx-cutover`.
 - The application `FormlessUiContractHost` remains the reactive boundary for
   generated admin, shell, management, auth, and access presentation. It does not
   replace the Site-owned public renderer contract or become a dependency of
@@ -43,8 +46,7 @@ sticky footer, card treatments, spacing, or exact markup.
   for reuse inside the Astryx package where their semantics fit public forms.
 - `@dpeek/formless-site-app` remains the owner of the public Site projection and
   runtime adapter contracts.
-- Production remains on the legacy Site renderer until the final activation
-  task.
+- Production remains on the legacy Site renderer throughout this change.
 
 The shell/auth dependency is primarily sequencing. At proposal time,
 `change-explore` may reduce it to the completed Astryx package-boundary and
@@ -98,8 +100,10 @@ The dependency direction is deliberate:
 - `@dpeek/formless-astryx` may import public contracts and helpers from
   `@dpeek/formless-site-app`.
 - `@dpeek/formless-site-app` must not import `@dpeek/formless-astryx`.
-- root browser and Worker assembly import both packages and pass the Astryx
-  renderer to the Site runtime adapter.
+- root browser and Worker assembly import the legacy Site renderer explicitly
+  and pass it to the Site runtime adapter during this change;
+- `astryx-cutover` later replaces only that root assembly selection with the
+  Astryx renderer.
 
 This avoids a package cycle while keeping Site projection and behavior in the
 Site package. Do not solve the cycle with deep imports, runtime registration,
@@ -107,8 +111,9 @@ global mutable renderer state, compatibility re-exports, or a duplicate Site
 contract in Astryx.
 
 The workspace `site.publicRenderer` extension remains a page-renderer override.
-It should take precedence over the built-in Astryx renderer without moving
-workspace code into either package.
+It should take precedence over the explicitly selected legacy built-in renderer
+now and the Astryx built-in renderer after cutover without moving workspace code
+into either package.
 
 ## Scope
 
@@ -116,8 +121,8 @@ workspace code into either package.
 
 - Canonical Site public page renderer and built-in presentation assembly
   contracts owned by `lib/site-app`.
-- Explicit built-in renderer selection for source preview, installed routes,
-  mapped hosts, published profiles, browser hydration, and Worker SSR.
+- Explicit legacy built-in renderer selection for source preview, installed
+  routes, mapped hosts, published profiles, browser hydration, and Worker SSR.
 - Canonical projected Site fixtures imported into `lib/astryx` through public
   Site package exports.
 - Astryx page shell, responsive header and footer navigation, theme control,
@@ -130,14 +135,16 @@ workspace code into either package.
   unavailable, idle, submitting, success, failure, validation, and Turnstile
   states.
 - Public Site theme persistence, SSR-safe initial mode, browser hydration, and
-  Astryx CSS asset delivery.
-- Browser and Worker renderer parity, public client import boundaries, focused
-  renderer tests, SSR tests, hydration tests, and viewport smoke coverage.
-- Atomic built-in activation and deletion of legacy renderer files, obsolete
-  tests, public Tailwind markup, and Site package `@dpeek/formless-ui`
-  dependencies no longer used.
-- Canonical spec changes required to make the Astryx renderer the built-in Site
-  renderer.
+  a package-owned Astryx public CSS boundary ready for later root integration.
+- Browser and Worker renderer conformance, candidate import boundaries, focused
+  renderer tests, SSR tests, hydration tests, and fixture viewport coverage.
+- Renderer-neutral browser and Worker loading, not-found, and failure contracts
+  with legacy implementations kept selected in production.
+- A precise `astryx-cutover` handoff for the built-in renderer import, root
+  StyleX and provider integration, public CSS entrypoint, system-state
+  presentation, and legacy deletion.
+- Canonical spec changes required to settle renderer ownership and explicit
+  assembly while keeping the legacy renderer current in production.
 
 ### Out of scope
 
@@ -148,6 +155,10 @@ workspace code into either package.
   system, or arbitrary per-block presentation configuration.
 - Changes to workspace renderer extension entrypoint discovery or trusted-code
   policy except where required to compose the built-in renderer explicitly.
+- Selecting Astryx as the production built-in renderer.
+- Root Astryx StyleX compilation, provider assembly, or public CSS activation.
+- Deleting legacy Site renderer files, Tailwind markup, legacy presentation
+  tests, or Site package `@dpeek/formless-ui` dependencies.
 - Moving metadata, sitemap, robots, favicon, ICO, cache, `HEAD`, HTTP response,
   runtime hint, client asset, initial-tree, or error-document ownership into
   Astryx.
@@ -157,10 +168,10 @@ workspace code into either package.
 - Exposing raw records, schemas, app installs, browser replicas, provider
   credentials, Turnstile secrets, submitted private values, created records,
   or notification delivery state to the renderer.
-- Preserving exact Tailwind classes, old DOM structure, sticky footer behavior,
-  legacy theme variables, or legacy snapshot assertions.
-- A compatibility fallback to the removed legacy Site renderer after Astryx is
-  activated.
+- Redesigning the selected legacy renderer, its Tailwind classes, DOM structure,
+  sticky footer behavior, or legacy theme variables.
+- Adding an Astryx production fallback, renderer flag, or dual-renderer runtime
+  mode before cutover.
 
 ## Contract Direction
 
@@ -201,14 +212,15 @@ The current optional-renderer fallback hides the dependency direction inside
 - Site browser and Worker adapters receive a built-in renderer component;
 - an optional workspace renderer overrides that built-in component;
 - source preview, installed, mapped-host, and published paths use the same
-  selection rule; and
-- `lib/site-app` never imports either renderer implementation.
+  selection rule;
+- root assembly passes the legacy implementation throughout this change; and
+- Site adapter selection modules do not import either renderer implementation.
 
-If browser loading, not-found, failure, or Worker-owned error documents need
-Astryx presentation after public Tailwind CSS is removed, define a separate
-renderer-neutral built-in system-state contract in `lib/site-app`. Keep the
-workspace extension scoped to successful page rendering as required by the
-current Site runtime spec.
+Define a separate renderer-neutral built-in system-state contract in
+`lib/site-app` for browser loading, not-found, and failure states plus
+Worker-owned not-found and error documents. Keep legacy system-state
+presentation selected in this change. Keep the workspace extension scoped to
+successful page rendering as required by the current Site runtime spec.
 
 Do not widen `SitePublicRendererProps` with `ReactNode` slots or let a workspace
 renderer return a complete document or `Response`.
@@ -274,8 +286,11 @@ The public renderer must work in both React browser and Worker SSR builds.
 - projected Site accent and background colors may influence presentation only
   through a documented, contrast-safe mapping; do not introduce stored Astryx
   token names.
-- the public entrypoint imports the Astryx public CSS required by the renderer
-  and stops importing legacy Formless UI global CSS at cutover.
+- the Astryx package exposes the public CSS boundary required by the candidate,
+  but the production public entrypoint keeps importing legacy Formless UI global
+  CSS throughout this change;
+- root StyleX integration and the public CSS entrypoint switch remain atomic
+  `astryx-cutover` work;
 - Worker document asset injection remains responsible for emitted stylesheet
   links and browser scripts.
 - the public browser graph must not pull in generated admin, shell/auth,
@@ -283,18 +298,19 @@ The public renderer must work in both React browser and Worker SSR builds.
 
 ## Migration Rules
 
-- Keep the legacy renderer selected in production until the Astryx renderer is
-  complete for browser and Worker consumers.
-- Developing an unselected Astryx renderer on the change branch is allowed;
-  shipping both built-in renderer stacks is not the target.
-- Make the final selection change mechanical: replace the injected built-in
-  renderer, update public CSS entrypoints, and delete the legacy implementation
-  in one task.
+- Keep the legacy page and system-state renderers selected in production for
+  the entire change.
+- Complete and export the unselected Astryx renderer without importing it from
+  production root browser or Worker assembly.
+- Leave a mechanical `astryx-cutover` manifest: replace the injected built-in
+  renderers, integrate root StyleX and the public provider, update the public CSS
+  entrypoint, and delete the legacy implementation and dependencies there.
 - Do not make individual block types switchable in production.
 - Do not add a renderer feature flag, environment toggle, compatibility alias,
   or long-lived dual-theme layer.
-- Preserve Site runtime behavior, not legacy markup. Delete or rewrite tests
-  that only characterize old Tailwind classes or exact DOM structure.
+- Preserve selected legacy presentation and Site runtime behavior. Change
+  legacy markup tests only where the renderer-neutral seam makes them obsolete;
+  broad legacy presentation deletion belongs to `astryx-cutover`.
 - Keep behavior tests for projection input, link resolution, public form
   safety, form state, SSR, hydration, route bases, extension precedence, asset
   boundaries, and public-only data.
@@ -334,9 +350,13 @@ section when current code makes the boundary materially different.
   built-in renderer while retaining an optional workspace override.
 - Make selection precedence `workspace renderer` then `built-in renderer`
   without a package-global registry or hidden legacy import.
-- Keep all production assembly pointed at the legacy renderer in this task.
+- Define renderer-neutral system-state input and built-in selection for browser
+  loading, not-found, and failure states plus Worker not-found and error
+  documents without widening the workspace renderer extension.
+- Make legacy page and system-state renderers explicit implementations of their
+  canonical contracts and keep all production assembly pointed at them.
 - Add focused coverage for source preview, installed, mapped-host, published,
-  browser, Worker, and workspace override selection.
+  browser, Worker, system-state, and workspace override selection.
 
 ### 3. Replace duplicate Astryx Site projection types with canonical Site types
 
@@ -369,6 +389,9 @@ section when current code makes the boundary materially different.
 - Implement an unexported Astryx renderer for the canonical page props and use
   Astryx layout, top navigation, mobile navigation, typography, stack, link,
   icon, and theme controls.
+- Implement an unselected Astryx system-state renderer for browser loading,
+  not-found, and failure facts plus Worker not-found and error facts without
+  widening the workspace successful-page extension.
 - Render optional header and footer frame roots from ordered projected
   placements.
 - Derive internal hrefs, external behavior, and active header state through
@@ -376,7 +399,7 @@ section when current code makes the boundary materially different.
 - Support absent or partial frame roots without blocking page content.
 - Add focused renderer coverage for desktop and mobile navigation, primary and
   secondary groups, footer sections, social links, active state, external
-  targets, and route bases.
+  targets, route bases, and every public system state.
 
 ### 6. Implement Astryx page flow and structural content blocks
 
@@ -461,6 +484,8 @@ section when current code makes the boundary materially different.
   renderer.
 - Adapt the Astryx public renderer wrapper to consume those facts without
   moving Worker document generation into Astryx.
+- Keep the selected legacy theme controller, Worker bootstrap, document marker,
+  and public CSS entrypoint behavior current throughout this change.
 - Map projected Site accent and background colors through contrast-safe public
   presentation behavior only where Astryx supports it cleanly.
 - Keep server output and the first hydrated tree structurally stable while
@@ -538,39 +563,27 @@ section when current code makes the boundary materially different.
 - Remove prototype-only form state types once canonical fixture sessions replace
   them.
 
-### 18. Wire the complete Astryx renderer through browser and Worker assembly
+### 18. Publish and verify the complete unselected Astryx renderer
 
 - Export the production Astryx Site renderer through an explicit public
   package subpath that imports the canonical Site contract.
-- Inject it as the candidate built-in renderer for public browser and Worker
-  adapters while keeping production selection on legacy until the final task.
+- Verify it can be supplied mechanically as the built-in page and system-state
+  renderer in focused browser, Worker SSR, and hydration harnesses without
+  changing root production assembly.
 - Verify source preview, installed routes, mapped hosts, published profiles,
   workspace renderer precedence, SSR markup, initial-tree hydration, public
-  route refresh, and browser interactivity use the same component contract.
-- Ensure public stylesheet assets are emitted and injected for Worker documents
-  and browser hydration without loading admin global CSS.
-- Update the public client import-boundary test to permit only required Astryx
-  public renderer modules and continue excluding generated admin, shell/auth,
+  route refresh, and browser interactivity use the same component contracts.
+- Expose the package-owned public CSS and provider subpaths required by the
+  candidate without importing them from the production public entrypoint or
+  integrating root StyleX.
+- Add a candidate import-boundary test that permits only required Astryx public
+  renderer modules and excludes generated admin, contract host, shell/auth,
   replica, gateway, rich editor, and private runtime code.
-
-### 19. Activate Astryx atomically and delete the legacy public renderer
-
-- Change root browser and Worker assembly to select the complete Astryx
-  renderer as the built-in default when no workspace renderer is configured.
-- Switch the public browser CSS entrypoint from legacy Formless UI global CSS to
-  the Astryx public CSS required by the renderer.
-- Delete the legacy Site page, block, chrome, link, media, display, theme, and
-  renderer modules or reduce remaining Site-owned files to runtime foundations
-  with no presentation duplication.
-- Remove obsolete legacy tests, Tailwind classes, theme boot assumptions,
-  `@dpeek/formless-ui` Site package imports, and dependency entries no longer
-  used.
-- Keep workspace renderer override, Site package contract exports, projection,
-  public operations, route loading, metadata, indexing, icons, cache behavior,
-  SSR documents, and initial-tree hydration intact.
-- Run current devstate checks and public Site browser smoke coverage across
-  representative desktop and mobile preview, published, installed, form, post,
-  missing-page, and failure states.
+- Record the exact root renderer imports and assignments, StyleX integration,
+  provider and CSS entrypoints, legacy modules, tests, and dependency entries
+  that `astryx-cutover` will switch or delete.
+- Keep root browser and Worker assembly explicitly selecting the legacy page
+  and system-state renderers when this task completes.
 
 ## Expected Evidence
 
@@ -588,12 +601,18 @@ The proposed change should collect evidence for:
 - public-only error and success output with no private data;
 - deterministic Worker SSR and clean browser hydration;
 - workspace renderer precedence over the built-in renderer;
-- public stylesheet and client asset delivery;
-- public client import-boundary exclusion of admin and private modules;
+- explicit legacy page and system-state selection in root browser and Worker
+  assembly;
+- package-owned candidate CSS and provider boundaries without production root
+  activation;
+- production public client and candidate import-boundary exclusion of admin and
+  private modules;
 - no application contract-host dependency in `lib/site-app`, the public client,
   or Worker renderer graph;
 - no production block-level renderer switching;
-- no public Tailwind/Formless UI dependency after activation; and
+- no production import or selection of the Astryx renderer;
+- a complete mechanical handoff for `astryx-cutover`, including legacy
+  Tailwind/Formless UI dependency removal; and
 - current devstate and browser smoke results.
 
 ## Proposal-Time Spec Work
@@ -601,11 +620,13 @@ The proposed change should collect evidence for:
 `change-propose` should reconcile at least:
 
 - `openspec/specs/site-runtime/spec.md` for canonical renderer ownership,
-  explicit built-in assembly, Astryx default rendering, public form sessions,
-  theme/SSR behavior, client assets, and atomic fallback removal;
+  explicit built-in and system-state assembly, the legacy renderer as the
+  current built-in, public form sessions, theme/SSR behavior, and client asset
+  ownership;
 - `openspec/specs/generated-ui/spec.md` to replace the statement that public
-  Site renderer contracts remain future work while keeping Site admin
-  authoring separate; and
+  Site renderer contracts remain future work, record the complete unselected
+  Astryx implementation, keep activation deferred to `astryx-cutover`, and keep
+  Site admin authoring separate; and
 - `openspec/specs/package-slices/spec.md` if the Site-to-Astryx dependency
   direction or public package exports require a canonical package rule.
 
@@ -620,7 +641,8 @@ The change is complete when:
 - the canonical public renderer contract still lives in `lib/site-app`;
 - Astryx imports and implements that contract without a reverse package
   dependency;
-- root browser and Worker assembly select Astryx as the built-in renderer;
+- root browser and Worker assembly explicitly select the legacy page and
+  system-state renderers;
 - workspace renderers still override the built-in renderer through the same
   successful-page contract;
 - every shipped public block, frame, route, media, link, and form state is
@@ -632,7 +654,10 @@ The change is complete when:
 - the public browser import graph remains public-only;
 - `lib/site-app` and the public renderer graph do not import the application
   contract host;
-- legacy public Site presentation and its Tailwind/Formless UI dependencies are
-  deleted rather than retained as fallbacks; and
-- the final switch is a mechanical renderer and CSS selection change made only
-  after the Astryx path is complete.
+- the production public entrypoint does not import or select the Astryx
+  renderer, provider, or CSS;
+- legacy public Site presentation and its Tailwind/Formless UI dependencies
+  remain selected and current; and
+- `astryx-cutover` has an exact mechanical renderer, provider, StyleX, CSS,
+  system-state, test, and dependency switch manifest with no missing renderer
+  contract or Astryx layout work.

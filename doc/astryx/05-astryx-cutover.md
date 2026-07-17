@@ -9,6 +9,8 @@ The completed change should:
 - prove that every production app, shell, auth, management, access, generated
   workspace, and Site tree-builder surface has a complete renderer-neutral
   contract-host reference path and complete subscribed Astryx renderer;
+- prove that the public Site has complete canonical page and system-state
+  renderer seams plus complete unselected Astryx implementations;
 - close small residual presentation gaps that were not naturally owned by the
   earlier contract changes;
 - expose only production-ready package subpaths from
@@ -17,26 +19,30 @@ The completed change should:
 - prepare the root ThemeProvider, router bridge, global CSS, renderer
   assembly, and import-boundary guards while production still uses the legacy
   renderer;
-- switch all remaining production application surfaces to Astryx in one
-  mechanical change;
+- switch all remaining production application surfaces and the public Site to
+  Astryx in one mechanical change;
 - delete the dormant legacy renderers, `@dpeek/formless-ui`, Tailwind runtime
   tooling, obsolete tests, and compatibility declarations in that same task;
   and
 - verify all runtime profiles and browser entrypoints with no mixed renderer
   or styling fallback.
 
-The public Site renderer is expected to have switched atomically during
-`astryx-public-site`. This change verifies that boundary but does not perform a
-second public Site migration.
+The public Site renderer remains explicitly legacy after
+`astryx-public-site`. This change switches its page renderer, system-state
+renderer, provider, and CSS through the prepared seams in the same atomic task
+that removes the legacy presentation stack.
 
 ## Preconditions
 
 - `astryx-generated-workspace` is complete and landed on `main`.
 - `astryx-shell-auth` is complete and landed on `main`.
-- `astryx-public-site` is complete and landed on `main`, including its atomic
-  public renderer and stylesheet switch.
+- `astryx-public-site` is complete and landed on `main`, including explicit
+  legacy page and system-state selection, complete unselected Astryx
+  implementations, package-owned public provider and CSS boundaries, and an
+  exact mechanical cutover manifest.
 - `astryx-site-tree-builder` is complete and landed on `main`.
-- Production app surfaces select legacy renderers only through explicit seams.
+- Production app and public Site surfaces select legacy renderers only through
+  explicit seams.
 - Runtime presentation roots own stable contract hosts and publish complete
   immutable node sets through typed references.
 - Legacy and Astryx subscribed renderers support the same references and pure
@@ -66,8 +72,8 @@ The baseline observed while writing this plan is:
   plugins but not the Astryx StyleX build plugin.
 - `src/main.tsx` imports the legacy router provider and
   `@dpeek/formless-ui/global.css`.
-- `src/public-site-main.tsx` also imports legacy global CSS, although the public
-  Site change is expected to replace that path before cutover.
+- `src/public-site-main.tsx` also imports legacy global CSS and explicitly
+  selects the legacy Site renderer until this cutover.
 - the root package depends on `@dpeek/formless-ui`, `@tailwindcss/vite`, and
   `tailwindcss`; the runtime Vite config invokes the Tailwind plugin.
 - `lib/ui/src/global.css` owns the Tailwind import, Typography plugin, React
@@ -118,6 +124,8 @@ subtraction list, not guaranteed remaining work.
   other global presentation hosts required by the complete Astryx app.
 - One centralized production renderer assembly and one application-level
   selection point.
+- One explicit public Site built-in page and system-state selection seam with
+  workspace page-renderer precedence unchanged.
 - Contract conformance, import-boundary, dependency, and client-bundle guards
   required to make the switch mechanical.
 - Atomic activation of Astryx across all remaining application surfaces.
@@ -128,8 +136,9 @@ subtraction list, not guaranteed remaining work.
 
 ### Out of scope
 
-- Reworking the public Site contract or renderer after its completed atomic
-  migration.
+- Reworking the settled public Site contracts or complete Astryx candidate;
+  this change owns only root selection, build/provider/CSS integration, and
+  legacy deletion for that surface.
 - Recreating legacy markup, spacing, responsive breakpoints, narrow rail,
   drag behavior, dialog structure, or exact test selectors.
 - Introducing user-selectable, route-selectable, surface-selectable, feature
@@ -278,9 +287,9 @@ After activation:
 - Complete every contract and Astryx renderer before changing production
   selection.
 - Keep production entirely legacy during preparation tasks.
-- Use one application-level activation task for renderer selection, theme,
-  global CSS, legacy renderer deletion, Tailwind removal, and `lib/ui`
-  deletion.
+- Use one root activation task for application and public Site renderer
+  selection, theme, global and public CSS, legacy renderer deletion, Tailwind
+  removal, and `lib/ui` deletion.
 - Treat that activation task as indivisible and not review-ready until its
   checks pass.
 - Do not add runtime renderer flags or fallback branches to make the cutover
@@ -435,7 +444,8 @@ and split only when the atomic activation invariant remains intact.
   landed public renderer requires distinct asset graphs.
 - Verify light, dark, system, and fixed policies use the Astryx neutral theme
   without reading legacy `.light` or `.dark` classes.
-- Keep `src/main.tsx` on the legacy provider and CSS until the atomic task.
+- Keep `src/main.tsx` and `src/public-site-main.tsx` on their legacy providers
+  and CSS until the atomic task.
 
 ### 10. Centralize complete application renderer assembly
 
@@ -447,7 +457,8 @@ and split only when the atomic activation invariant remains intact.
   workspaces, tree results, routes, dialogs, and shell modules.
 - Reject per-surface fallbacks and ensure a missing renderer is a preparation
   failure rather than a reason to cross presentation stacks.
-- Keep production selection fixed to the complete legacy assembly.
+- Keep production selection fixed to the complete legacy application assembly
+  and explicit legacy public Site renderers.
 
 ### 11. Add cutover conformance and static guards
 
@@ -464,8 +475,8 @@ and split only when the atomic activation invariant remains intact.
 - Add static guards for direct legacy imports, deep Astryx imports, direct
   runtime imports from `lib/astryx`, per-surface renderer selection, and
   unclassified Tailwind markup.
-- Keep the public Site import-boundary test green and update its allowlist only
-  for landed public Astryx modules.
+- Keep the public Site production import-boundary test green during preparation
+  and freeze the exact Astryx public modules added by atomic activation.
 
 ### 12. Exercise the complete Astryx candidate without activating it
 
@@ -481,7 +492,11 @@ and split only when the atomic activation invariant remains intact.
   hydration, portal, and package-export faults before production selection
   changes.
 - Confirm the candidate imports no dormant legacy renderer or legacy CSS.
-- Keep production runtime selection on the legacy assembly.
+- Exercise the public Site page and system-state renderers through focused
+  browser, Worker SSR, hydration, provider, and CSS harnesses without changing
+  production root imports.
+- Keep production application and public Site selection on the legacy
+  renderers.
 
 ### 13. Freeze the mechanical cutover manifest
 
@@ -490,9 +505,9 @@ and split only when the atomic activation invariant remains intact.
   scripts, and lockfile references changed or deleted by activation.
 - Prove each deleted renderer has a complete Astryx counterpart and each
   deleted helper has an explicit current owner.
-- Prove all non-deletion edits are limited to application-level selection,
-  root provider assembly, CSS selection, dependency removal, and current spec
-  wording.
+- Prove all non-deletion edits are limited to application and public Site root
+  selection, provider assembly, CSS selection, dependency removal, and current
+  spec wording.
 - Ensure the atomic task has no unresolved UX, contract, runtime, security, or
   package-design decision.
 - Do not begin activation while any manifest item remains conditional.
@@ -500,12 +515,17 @@ and split only when the atomic activation invariant remains intact.
 ### 14. Activate Astryx and delete the legacy stack atomically
 
 - Switch the single application presentation assembly from legacy to Astryx.
+- Switch the public Site page and system-state built-ins from the explicit
+  legacy implementations to the prepared Astryx implementations while keeping
+  workspace page-renderer precedence unchanged.
 - Keep the existing stable runtime hosts and root references; switch only the
   subscribed renderer assembly.
 - Switch `src/main.tsx` to the Astryx root provider, navigation bridge, global
   hosts, and app CSS.
+- Switch `src/public-site-main.tsx` and Worker public document assembly to the
+  package-owned public Astryx provider and CSS boundary.
 - Delete all dormant legacy generated, tree, shell, management, auth, access,
-  status, fallback, media, and helper renderer modules.
+  status, fallback, media, public Site, and helper renderer modules.
 - Delete obsolete exact-DOM, Tailwind-class, legacy-renderer, and compatibility
   tests while retaining current contract, behavior, security, route, and
   accessibility coverage.
@@ -535,8 +555,8 @@ and split only when the atomic activation invariant remains intact.
 - Browser smoke representative desktop and narrow layouts, light and dark
   modes, navigation, dialogs, focus return, toasts, media, Markdown, and source
   icons.
-- Verify the already-migrated public Site still renders and hydrates through
-  its public-only client graph with workspace renderer precedence intact.
+- Verify the newly selected Astryx public Site renders and hydrates through its
+  public-only client graph with workspace renderer precedence intact.
 - Confirm searches find no legacy UI package, Tailwind stack, mixed renderer,
   compatibility alias, deep Astryx import, or obsolete future-cutover wording.
 - Fix Astryx-only defects directly; do not restore a legacy fallback.
@@ -579,9 +599,10 @@ start another dev server, and rely on the user for prototype visual feedback.
   subscribed presentation assembly, stable contract-host continuity, root
   provider behavior, complete renderer selection, residual application states,
   and deletion of legacy/deferred-switch facts;
-- `openspec/specs/site-runtime/spec.md` only to describe the already-landed
-  Astryx public renderer and verify its isolated asset boundary remains
-  current;
+- `openspec/specs/site-runtime/spec.md` for Astryx as the current built-in page
+  and system-state renderer, workspace page-renderer precedence, public
+  provider and CSS integration, isolated asset boundaries, and deletion of the
+  explicit legacy selection facts;
 - `openspec/specs/package-slices/spec.md` for the production Astryx package
   exports, presentation-only boundary, Media and Site dependency direction,
   and removal of the legacy UI package where those are canonical package
@@ -610,7 +631,8 @@ The Astryx contract migration is complete when:
 - renderer activation preserves host identity, reference keys, atomic
   publication, semantic identity reuse, scoped notification, removal, server
   snapshots, and hydration;
-- the public Site remains on its Astryx renderer and public-only client graph;
+- the public Site uses its Astryx page and system-state renderers, package-owned
+  provider and CSS, and public-only client graph;
 - runtime storage, projection, route policy, auth, sync, operation, and media
   behavior remain outside `lib/astryx`;
 - `lib/astryx` exposes only explicit production subpaths and imports no runtime
