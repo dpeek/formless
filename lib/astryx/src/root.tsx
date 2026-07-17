@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
+import * as stylex from "@stylexjs/stylex";
 import { CommandPalette } from "@astryxdesign/core/CommandPalette";
 import { ToastViewport } from "@astryxdesign/core/Toast";
 import { createStaticSource, type SearchableItem } from "@astryxdesign/core/Typeahead";
+import { colorVars } from "@astryxdesign/core/theme/tokens.stylex";
 import { FormlessAuthLayout } from "./components/auth.tsx";
 import { FormlessAccessLayout } from "./components/access.tsx";
 import { FormlessApplicationShellLayout } from "./components/application-shell.tsx";
@@ -74,13 +76,22 @@ export function FormlessRoot() {
 
   return (
     <FormlessThemeProvider theme={prototypeTheme}>
-      <ToastViewport position="bottomEnd" maxVisible={5}>
-        {currentLayout.render()}
-        <FormlessLayoutCommandPalette currentLayoutAnchor={currentLayout.anchor} />
-      </ToastViewport>
+      <div {...stylex.props(styles.explorer)}>
+        <ToastViewport position="bottomEnd" maxVisible={5}>
+          {currentLayout.render()}
+          <FormlessLayoutCommandPalette currentLayoutAnchor={currentLayout.anchor} />
+        </ToastViewport>
+      </div>
     </FormlessThemeProvider>
   );
 }
+
+const styles = stylex.create({
+  explorer: {
+    backgroundColor: colorVars["--color-background-body"],
+    minHeight: "100vh",
+  },
+});
 
 type FormlessLayoutCommandPaletteProps = {
   currentLayoutAnchor: string;

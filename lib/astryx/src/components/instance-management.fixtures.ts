@@ -1,15 +1,21 @@
 import type { FieldSchema } from "@dpeek/formless-schema";
 import type {
+  FormlessUiActionTriggerContract,
   FormlessUiButtonContract,
   FormlessUiCreateField,
+  FormlessUiCreateSurfaceContract,
+  FormlessUiField,
   FormlessUiManagementInstallDialogContract,
   FormlessUiManagementManifestContract,
   FormlessUiManagementReadyContract,
   FormlessUiManagementWorkspaceOperationContract,
   FormlessUiOperationControlContract,
+  FormlessUiTableActionGroupContract,
   FormlessUiTableColumnContract,
   FormlessUiTableContract,
+  FormlessUiTableEditActionContract,
   FormlessUiWorkspaceCollectionContract,
+  FormlessUiWorkspaceCollectionActionGroupContract,
   FormlessUiWorkspaceContract,
   FormlessUiWorkspaceIntentScope,
   FormlessUiWorkspaceSectionContract,
@@ -19,7 +25,20 @@ import {
   formlessUiManagementManifestReference,
   formlessUiWorkspaceManifestReference,
 } from "../formless-ui-contract-host.ts";
-import { createField, fieldError, textControl } from "./fields/fixture-helpers.ts";
+import {
+  booleanControl,
+  createField,
+  draftInput,
+  enumControl,
+  enumOptions,
+  fieldError,
+  recordDrafts,
+  recordField,
+  referenceControl,
+  referenceEditorFacts,
+  referenceOptions,
+  textControl,
+} from "./fields/fixture-helpers.ts";
 
 export type FormlessInstanceManagementFixtureId =
   | "empty"
@@ -61,9 +80,93 @@ export const instanceManagementAppsReference = formlessUiWorkspaceManifestRefere
 export const instanceManagementRoutesReference = formlessUiWorkspaceManifestReference(
   "instance-management:routes",
 );
+export const instanceManagementInstallActionId = "instance-management:apps:install";
+export const instanceManagementInstallActionControlId = `${instanceManagementInstallActionId}:control`;
 
 const installFieldSchema = (label: string) =>
   ({ label, required: true, type: "text" }) satisfies Extract<FieldSchema, { type: "text" }>;
+
+const routeEnabledField = {
+  default: true,
+  label: "Enabled",
+  required: true,
+  type: "boolean",
+} as const satisfies Extract<FieldSchema, { type: "boolean" }>;
+const routeMatchHostField = {
+  label: "Match host",
+  required: false,
+  type: "text",
+} as const satisfies Extract<FieldSchema, { type: "text" }>;
+const routeMatchPathField = {
+  label: "Match path",
+  required: true,
+  type: "text",
+} as const satisfies Extract<FieldSchema, { type: "text" }>;
+const routeMatchPrefixField = {
+  label: "Match prefix",
+  required: false,
+  type: "text",
+} as const satisfies Extract<FieldSchema, { type: "text" }>;
+const routeKindField = {
+  label: "Kind",
+  required: true,
+  type: "enum",
+  values: {
+    mount: { label: "Mount" },
+    redirect: { label: "Redirect" },
+  },
+} as const satisfies Extract<FieldSchema, { type: "enum" }>;
+const routeTargetProfileField = {
+  label: "Target profile",
+  required: false,
+  type: "enum",
+  values: {
+    app: { label: "App" },
+    instance: { label: "Instance" },
+    "public-site": { label: "Public Site" },
+  },
+} as const satisfies Extract<FieldSchema, { type: "enum" }>;
+const routeAppInstallField = {
+  displayField: "label",
+  label: "App install",
+  required: false,
+  to: "app-install",
+  type: "reference",
+} as const satisfies Extract<FieldSchema, { type: "reference" }>;
+const routeSurfaceField = {
+  label: "Surface",
+  required: false,
+  type: "enum",
+  values: {
+    admin: { label: "Admin" },
+    "public-site": { label: "Public Site" },
+  },
+} as const satisfies Extract<FieldSchema, { type: "enum" }>;
+const routeAccessField = {
+  label: "Access",
+  required: false,
+  type: "enum",
+  values: {
+    anonymous: { label: "Anonymous" },
+    authenticated: { label: "Authenticated" },
+    owner: { label: "Owner" },
+  },
+} as const satisfies Extract<FieldSchema, { type: "enum" }>;
+const routeDeploymentConfigField = {
+  displayField: "label",
+  label: "Deployment config",
+  required: false,
+  to: "deployment-config",
+  type: "reference",
+} as const satisfies Extract<FieldSchema, { type: "reference" }>;
+
+const routeAppInstallOptions = [
+  { id: "site", label: "Site" },
+  { id: "tasks", label: "Tasks" },
+] as const;
+const routeDeploymentConfigOptions = [
+  { id: "instance.primary", label: "instance.primary" },
+] as const;
 
 export function createFormlessInstanceManagementFixtures(): FormlessInstanceManagementFixture[] {
   return [
@@ -547,17 +650,29 @@ function appsWorkspace(installed: boolean) {
           ["tasks", "Tasks", "tasks"],
         ]
       : [],
+    sectionActions: () => [installAppAction()],
   });
 }
 
 function routesWorkspace(installed: boolean) {
   return managementWorkspace(instanceManagementRoutesReference.workspaceId, "Routes", "routes", {
+    collectionActions: routeCollectionActions,
     columns: [
       ["app", "App", "reference"],
       ["path", "Path", "computed"],
     ],
     emptyDescription: "Installed apps publish their routes here.",
     emptyTitle: "No routes configured",
+    keepCollectionReadyWhenEmpty: true,
+    rowActions: (scope, [id, app, path]) =>
+      routeRowActions(scope, {
+        access: id === "site-home" ? "anonymous" : "owner",
+        appInstall: app.toLowerCase(),
+        id,
+        matchPath: path,
+        surface: id === "site-home" ? "public-site" : "admin",
+        targetProfile: id === "site-home" ? "public-site" : "app",
+      }),
     rows: installed
       ? [
           ["site-home", "Site", "/"],
@@ -577,9 +692,20 @@ function managementWorkspace(
       label: string,
       role: "computed" | "field" | "reference",
     ])[];
+    collectionActions?: (
+      scope: FormlessUiWorkspaceIntentScope,
+    ) => FormlessUiWorkspaceCollectionActionGroupContract;
     emptyDescription: string;
     emptyTitle: string;
+    keepCollectionReadyWhenEmpty?: boolean;
+    rowActions?: (
+      scope: FormlessUiWorkspaceIntentScope,
+      row: readonly [id: string, first: string, second: string],
+    ) => FormlessUiTableActionGroupContract;
     rows: readonly (readonly [id: string, first: string, second: string])[];
+    sectionActions?: (
+      scope: FormlessUiWorkspaceIntentScope,
+    ) => FormlessUiWorkspaceSectionContract["actions"];
   },
 ): FormlessUiWorkspaceContract {
   const scope = workspaceScope(workspaceId, localId);
@@ -588,7 +714,7 @@ function managementWorkspace(
   const collection: FormlessUiWorkspaceCollectionContract = {
     accessibilityLabel: label,
     availability:
-      input.rows.length === 0
+      input.rows.length === 0 && !input.keepCollectionReadyWhenEmpty
         ? {
             emptyState: {
               description: input.emptyDescription,
@@ -603,7 +729,7 @@ function managementWorkspace(
     kind: "workspaceCollection",
     label,
     presentation: {
-      actions: emptyCollectionActions(scope),
+      actions: input.collectionActions?.(scope) ?? emptyCollectionActions(scope),
       kind: "ordinary",
       queryNavigation,
       result: table,
@@ -613,7 +739,7 @@ function managementWorkspace(
   };
   const section: FormlessUiWorkspaceSectionContract = {
     accessibilityLabel: `${label} section`,
-    actions: [],
+    actions: input.sectionActions?.(scope) ?? [],
     collection,
     headingVisibility: "hidden",
     id: scope.sectionId,
@@ -642,27 +768,51 @@ function managementTable(
     ])[];
     emptyDescription: string;
     emptyTitle: string;
+    rowActions?: (
+      scope: FormlessUiWorkspaceIntentScope,
+      row: readonly [id: string, first: string, second: string],
+    ) => FormlessUiTableActionGroupContract;
     rows: readonly (readonly [id: string, first: string, second: string])[];
   },
 ): FormlessUiTableContract {
   const resultId = `${scope.collectionId}:result`;
-  const columns = input.columns.map(([id, columnLabel, contentRole], index) => ({
-    accessibilityLabel: columnLabel,
-    alignment: "start" as const,
-    contentRole,
-    id,
-    isRowHeader: index === 0,
-    kind: "tableColumn" as const,
-    label: columnLabel,
-    labelVisibility: "visible" as const,
-    width: index === 0 ? ("auto" as const) : ("md" as const),
-  })) satisfies readonly FormlessUiTableColumnContract[];
+  const columns = [
+    ...input.columns.map(([id, columnLabel, contentRole], index) => ({
+      accessibilityLabel: columnLabel,
+      alignment: "start" as const,
+      contentRole,
+      id,
+      isRowHeader: index === 0,
+      kind: "tableColumn" as const,
+      label: columnLabel,
+      labelVisibility: "visible" as const,
+      width: index === 0 ? ("auto" as const) : ("md" as const),
+    })),
+    ...(input.rowActions === undefined
+      ? []
+      : [
+          {
+            accessibilityLabel: `${label} operations`,
+            alignment: "end" as const,
+            contentRole: "actions" as const,
+            id: "actions",
+            isRowHeader: false,
+            kind: "tableColumn" as const,
+            label: "Actions",
+            labelVisibility: "hidden" as const,
+            width: "xs" as const,
+          },
+        ]),
+  ] satisfies readonly FormlessUiTableColumnContract[];
 
   return {
     accessibilityLabel: label,
     columns,
     density: "default",
-    editing: { disabledReason: "Fixture records are read-only.", enabled: false },
+    editing:
+      input.rowActions === undefined
+        ? { disabledReason: "Fixture records are read-only.", enabled: false }
+        : { enabled: true },
     ...(input.rows.length === 0
       ? {
           emptyState: {
@@ -675,14 +825,397 @@ function managementTable(
       : {}),
     id: resultId,
     kind: "table",
-    rows: input.rows.map(([id, first, second]) => ({
-      accessibilityLabel: `${first} ${label.toLowerCase()} record`,
-      cells: [tableCell(id, columns[0]!, first), tableCell(id, columns[1]!, second)],
-      id: `${resultId}:row:${id}`,
+    rows: input.rows.map((row) => ({
+      accessibilityLabel: `${row[1]} ${label.toLowerCase()} record`,
+      cells: [
+        tableCell(row[0], columns[0]!, row[1]),
+        tableCell(row[0], columns[1]!, row[2]),
+        ...(input.rowActions === undefined
+          ? []
+          : [
+              {
+                columnId: "actions",
+                contents: [input.rowActions(scope, row)],
+                id: `${row[0]}:actions`,
+                kind: "tableCell" as const,
+              },
+            ]),
+      ],
+      id: `${resultId}:row:${row[0]}`,
       kind: "tableRow" as const,
       warnings: [],
     })),
   };
+}
+
+function installAppAction(): FormlessUiWorkspaceSectionContract["actions"][number] {
+  const action: FormlessUiActionTriggerContract = {
+    accessibilityLabel: "Install app",
+    icon: "add",
+    id: instanceManagementInstallActionControlId,
+    intent: "primary",
+    invocationSource: "button",
+    invoke: {
+      controlId: instanceManagementInstallActionControlId,
+      invocationSource: "button",
+    },
+    kind: "actionTrigger",
+    label: "Install",
+  };
+
+  return {
+    action,
+    id: instanceManagementInstallActionId,
+    kind: "workspaceExternalAction",
+  };
+}
+
+function routeCollectionActions(
+  scope: FormlessUiWorkspaceIntentScope,
+): FormlessUiWorkspaceCollectionActionGroupContract {
+  return {
+    id: `${scope.collectionId}:actions`,
+    kind: "workspaceCollectionActions",
+    primary: [{ kind: "createAction", surface: routeCreateSurface(scope) }],
+    secondary: [],
+    secondaryAccessibilityLabel: "More route actions",
+  };
+}
+
+function routeCreateSurface(
+  scope: FormlessUiWorkspaceIntentScope,
+): FormlessUiCreateSurfaceContract {
+  const id = `${scope.collectionId}:create:route`;
+  const title = "Create Route";
+
+  return {
+    dialog: {
+      form: {
+        cancel: button(`${id}:cancel`, "Cancel"),
+        errors: [],
+        fieldSet: {
+          disabled: false,
+          fields: routeCreateFields(id),
+          id: `${id}:fields`,
+          kind: "fieldSet",
+        },
+        id: `${id}:form`,
+        kind: "createForm",
+        submit: button(`${id}:submit`, title, { prominence: "primary", type: "submit" }),
+      },
+      id: `${id}:dialog`,
+      kind: "createDialog",
+      open: false,
+      title,
+    },
+    id,
+    kind: "createSurface",
+    trigger: {
+      ...button(`${id}:trigger`, title, { prominence: "primary" }),
+      content: { icon: "add", kind: "iconAndLabel", label: title },
+    },
+  };
+}
+
+function routeCreateFields(ownerId: string): FormlessUiCreateField[] {
+  return [
+    createRouteBooleanField(ownerId, "enabled", routeEnabledField, true),
+    createRouteTextField(ownerId, "matchHost", routeMatchHostField, ""),
+    createRouteTextField(ownerId, "matchPath", routeMatchPathField, "/docs"),
+    createRouteTextField(ownerId, "matchPrefix", routeMatchPrefixField, ""),
+    createRouteEnumField(ownerId, "kind", routeKindField, "mount"),
+    createRouteEnumField(ownerId, "targetProfile", routeTargetProfileField, "public-site"),
+    createRouteReferenceField(
+      ownerId,
+      "appInstall",
+      routeAppInstallField,
+      "site",
+      routeAppInstallOptions,
+    ),
+    createRouteEnumField(ownerId, "surface", routeSurfaceField, "public-site"),
+    createRouteEnumField(ownerId, "access", routeAccessField, "anonymous"),
+    createRouteReferenceField(
+      ownerId,
+      "deploymentConfig",
+      routeDeploymentConfigField,
+      "instance.primary",
+      routeDeploymentConfigOptions,
+    ),
+  ];
+}
+
+function createRouteTextField(
+  ownerId: string,
+  fieldName: string,
+  field: Extract<FieldSchema, { type: "text" }>,
+  value: string,
+) {
+  const control = textControl(field);
+
+  return createField({
+    control,
+    draftInput: draftInput(value),
+    editor: control.editor,
+    field,
+    fieldName,
+    labelVisibility: "visible",
+    occurrence: { ownerId, placementId: fieldName },
+    recordId: ownerId,
+    value,
+  });
+}
+
+function createRouteBooleanField(
+  ownerId: string,
+  fieldName: string,
+  field: Extract<FieldSchema, { type: "boolean" }>,
+  value: boolean,
+) {
+  const control = booleanControl(field);
+
+  return createField({
+    control,
+    draftInput: draftInput(value),
+    editor: control.editor,
+    field,
+    fieldName,
+    labelVisibility: "visible",
+    occurrence: { ownerId, placementId: fieldName },
+    recordId: ownerId,
+    value,
+  });
+}
+
+function createRouteEnumField(
+  ownerId: string,
+  fieldName: string,
+  field: Extract<FieldSchema, { type: "enum" }>,
+  value: string,
+) {
+  const control = enumControl(field);
+
+  return createField({
+    control,
+    draftInput: draftInput(value),
+    editor: control.editor,
+    field,
+    fieldName,
+    labelVisibility: "visible",
+    occurrence: { ownerId, placementId: fieldName },
+    options: { enumOptions: enumOptions(field) },
+    recordId: ownerId,
+    value,
+  });
+}
+
+function createRouteReferenceField(
+  ownerId: string,
+  fieldName: string,
+  field: Extract<FieldSchema, { type: "reference" }>,
+  value: string,
+  options: readonly { id: string; label: string }[],
+) {
+  const control = referenceControl(field);
+
+  return createField({
+    control,
+    draftInput: draftInput(value),
+    editor: control.editor,
+    field,
+    fieldName,
+    labelVisibility: "visible",
+    occurrence: { ownerId, placementId: fieldName },
+    options: { referenceOptions: referenceOptions(options) },
+    recordId: ownerId,
+    reference: referenceEditorFacts(field, value, options),
+    value,
+  });
+}
+
+type RouteFixtureRecord = {
+  access: "anonymous" | "authenticated" | "owner";
+  appInstall: string;
+  id: string;
+  matchPath: string;
+  surface: "admin" | "public-site";
+  targetProfile: "app" | "instance" | "public-site";
+};
+
+function routeRowActions(
+  scope: FormlessUiWorkspaceIntentScope,
+  record: RouteFixtureRecord,
+): FormlessUiTableActionGroupContract {
+  return {
+    id: `${scope.collectionId}:result:row:${record.id}:actions`,
+    kind: "actionGroup",
+    primary: [],
+    secondary: [routeEditAction(scope, record)],
+    secondaryAccessibilityLabel: `Route operations for ${record.matchPath}`,
+  };
+}
+
+function routeEditAction(
+  scope: FormlessUiWorkspaceIntentScope,
+  record: RouteFixtureRecord,
+): FormlessUiTableEditActionContract {
+  const tableId = `${scope.collectionId}:result`;
+  const rowId = `${tableId}:row:${record.id}`;
+  const dialogId = `${rowId}:route.update:dialog`;
+  const openIntent = {
+    dialogId,
+    open: true,
+    rowId,
+    tableId,
+    type: "tableEditDialogOpenChange" as const,
+  };
+
+  return {
+    dialog: {
+      close: button(`${dialogId}:close`, "Done", { density: "compact" }),
+      description: "Route",
+      id: dialogId,
+      kind: "tableEditDialog",
+      open: false,
+      openChangeIntent: { ...openIntent, open: false },
+      target: {
+        fieldSet: {
+          disabled: false,
+          fields: routeEditFields(rowId, record),
+          id: `${dialogId}:fields`,
+          kind: "fieldSet",
+        },
+        kind: "available",
+      },
+      targetKind: "row",
+      title: "Edit route",
+    },
+    kind: "editAction",
+    openIntent,
+    trigger: button(`${dialogId}:open`, "Edit route", { density: "compact" }),
+  };
+}
+
+function routeEditFields(rowId: string, record: RouteFixtureRecord): FormlessUiField[] {
+  return [
+    recordRouteBooleanField(rowId, "enabled", routeEnabledField, true),
+    recordRouteTextField(rowId, "matchHost", routeMatchHostField, ""),
+    recordRouteTextField(rowId, "matchPath", routeMatchPathField, record.matchPath),
+    recordRouteTextField(rowId, "matchPrefix", routeMatchPrefixField, ""),
+    recordRouteEnumField(
+      rowId,
+      "targetProfile",
+      routeTargetProfileField,
+      record.targetProfile,
+    ),
+    recordRouteReferenceField(
+      rowId,
+      "appInstall",
+      routeAppInstallField,
+      record.appInstall,
+      routeAppInstallOptions,
+    ),
+    recordRouteEnumField(rowId, "surface", routeSurfaceField, record.surface),
+    recordRouteEnumField(rowId, "access", routeAccessField, record.access),
+    recordRouteReferenceField(
+      rowId,
+      "deploymentConfig",
+      routeDeploymentConfigField,
+      "instance.primary",
+      routeDeploymentConfigOptions,
+    ),
+  ];
+}
+
+function recordRouteTextField(
+  rowId: string,
+  fieldName: string,
+  field: Extract<FieldSchema, { type: "text" }>,
+  value: string,
+) {
+  const control = textControl(field);
+
+  return recordField({
+    commit: "field-commit",
+    control,
+    drafts: recordDrafts({ recordValue: value }),
+    editor: control.editor,
+    field,
+    fieldName,
+    labelVisibility: "visible",
+    occurrence: { ownerId: rowId, placementId: fieldName },
+    recordId: rowId,
+    rendererKind: "text",
+  });
+}
+
+function recordRouteBooleanField(
+  rowId: string,
+  fieldName: string,
+  field: Extract<FieldSchema, { type: "boolean" }>,
+  value: boolean,
+) {
+  const control = booleanControl(field);
+
+  return recordField({
+    commit: "immediate",
+    control,
+    drafts: recordDrafts({ recordValue: value }),
+    editor: control.editor,
+    field,
+    fieldName,
+    labelVisibility: "visible",
+    occurrence: { ownerId: rowId, placementId: fieldName },
+    recordId: rowId,
+    rendererKind: "checkbox",
+  });
+}
+
+function recordRouteEnumField(
+  rowId: string,
+  fieldName: string,
+  field: Extract<FieldSchema, { type: "enum" }>,
+  value: string,
+) {
+  const control = enumControl(field);
+
+  return recordField({
+    commit: "immediate",
+    control,
+    drafts: recordDrafts({ recordValue: value }),
+    editor: control.editor,
+    field,
+    fieldName,
+    labelVisibility: "visible",
+    occurrence: { ownerId: rowId, placementId: fieldName },
+    options: { enumOptions: enumOptions(field) },
+    recordId: rowId,
+    rendererKind: "enum",
+  });
+}
+
+function recordRouteReferenceField(
+  rowId: string,
+  fieldName: string,
+  field: Extract<FieldSchema, { type: "reference" }>,
+  value: string,
+  options: readonly { id: string; label: string }[],
+) {
+  const control = referenceControl(field);
+
+  return recordField({
+    commit: "immediate",
+    control,
+    drafts: recordDrafts({ recordValue: value }),
+    editor: control.editor,
+    field,
+    fieldName,
+    labelVisibility: "visible",
+    occurrence: { ownerId: rowId, placementId: fieldName },
+    options: { referenceOptions: referenceOptions(options) },
+    recordId: rowId,
+    reference: referenceEditorFacts(field, value, options),
+    rendererKind: "reference",
+  });
 }
 
 function tableCell(rowId: string, column: FormlessUiTableColumnContract, displayValue: string) {

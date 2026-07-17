@@ -51,6 +51,20 @@ describe("canonical instance-management fixtures", () => {
     expect(workspaceRows(requiredFixture(fixtures, "empty"), "routes")).toHaveLength(0);
     expect(workspaceRows(requiredFixture(fixtures, "installed"), "apps")).toHaveLength(2);
     expect(workspaceRows(requiredFixture(fixtures, "installed"), "routes")).toHaveLength(2);
+    expect(requiredInstallAction(requiredFixture(fixtures, "installed").state).action).toMatchObject({
+      accessibilityLabel: "Install app",
+      label: "Install",
+    });
+    expect(requiredRouteCreateAction(requiredFixture(fixtures, "installed").state).surface).toMatchObject(
+      {
+        dialog: { title: "Create Route" },
+        trigger: { accessibilityLabel: "Create Route" },
+      },
+    );
+    expect(requiredRouteEditAction(requiredFixture(fixtures, "installed").state)).toMatchObject({
+      dialog: { title: "Edit route" },
+      trigger: { accessibilityLabel: "Edit route" },
+    });
     expect(requiredDialog(fixtures, "install-dialog-idle")).toMatchObject({
       errors: [],
       open: true,
@@ -86,8 +100,54 @@ describe("canonical instance-management fixtures", () => {
     );
   });
 
-  it("reduces controlled install and Push intents through the memory host", () => {
+  it("reduces controlled install, route, and Push intents through the memory host", () => {
     const fixtures = createFormlessInstanceManagementFixtures();
+    const managementHost = createFormlessInstanceManagementFixtureHost(
+      requiredFixture(fixtures, "installed"),
+    );
+    const appsSection = requiredWorkspace(managementHost.getState(), "apps").sections[0];
+    const installAction = requiredInstallAction(managementHost.getState());
+    if (!appsSection) {
+      throw new Error("Missing Apps fixture section.");
+    }
+    managementHost.host.dispatch({
+      actionId: installAction.id,
+      collectionId: appsSection.collection.id,
+      controlId: installAction.action.id,
+      intent: installAction.action.invoke,
+      screenId: instanceManagementAppsWorkspaceId(managementHost.getState()),
+      sectionId: appsSection.id,
+      type: "workspaceExternalAction",
+    });
+    expect(requiredCurrentDialog(managementHost.getState()).open).toBe(true);
+
+    const routesSection = requiredWorkspace(managementHost.getState(), "routes").sections[0];
+    const createRoute = requiredRouteCreateAction(managementHost.getState());
+    if (!routesSection) {
+      throw new Error("Missing Routes fixture section.");
+    }
+    managementHost.host.dispatch({
+      collectionId: routesSection.collection.id,
+      intent: { open: true, surfaceId: createRoute.surface.id, type: "createOpenChange" },
+      screenId: instanceManagementRoutesWorkspaceId(managementHost.getState()),
+      sectionId: routesSection.id,
+      surfaceId: createRoute.surface.id,
+      type: "workspaceCreate",
+    });
+    expect(requiredRouteCreateAction(managementHost.getState()).surface.dialog.open).toBe(true);
+
+    const editRoute = requiredRouteEditAction(managementHost.getState());
+    const routesTable = requiredWorkspaceTable(managementHost.getState(), "routes");
+    managementHost.host.dispatch({
+      collectionId: routesSection.collection.id,
+      intent: editRoute.openIntent,
+      resultId: routesTable.id,
+      screenId: instanceManagementRoutesWorkspaceId(managementHost.getState()),
+      sectionId: routesSection.id,
+      type: "workspaceTable",
+    });
+    expect(requiredRouteEditAction(managementHost.getState()).dialog.open).toBe(true);
+
     const installHost = createFormlessInstanceManagementFixtureHost(
       requiredFixture(fixtures, "install-dialog-idle"),
     );
@@ -216,7 +276,7 @@ describe("canonical instance-management fixtures", () => {
     }
   });
 
-  it("renders subscribed management as the real product-instance shell route child", () => {
+  it("renders subscribed management without application-shell chrome", () => {
     const fixtureHost = createFormlessInstanceManagementFixtureHost(
       requiredFixture(createFormlessInstanceManagementFixtures(), "installed"),
     );
@@ -224,13 +284,10 @@ describe("canonical instance-management fixtures", () => {
       <FormlessInstanceManagementFixtureView fixtureHost={fixtureHost} />,
     );
 
-    expect(html).toContain('data-testid="formless-astryx-application-shell:shell:application"');
+    expect(html).not.toContain("formless-astryx-application-shell");
     expect(html).toContain('data-formless-astryx-management="instance-management"');
     expect(html).toContain('data-formless-astryx-workspace="instance-management:apps"');
     expect(html).toContain('data-formless-astryx-workspace="instance-management:routes"');
-    expect(html.indexOf("Instance application shell")).toBeLessThan(
-      html.indexOf("Instance Settings"),
-    );
   });
 
   it("keeps fixtures runtime-free, secret-free, package-local, and inactive in production", async () => {
@@ -342,12 +399,59 @@ function requiredWorkspace(
 }
 
 function workspaceRows(fixture: FormlessInstanceManagementFixture, role: "apps" | "routes") {
-  const workspace = requiredWorkspace(fixture.state, role);
+  return requiredWorkspaceTable(fixture.state, role).rows;
+}
+
+function requiredWorkspaceTable(
+  state: FormlessInstanceManagementFixture["state"],
+  role: "apps" | "routes",
+) {
+  const workspace = requiredWorkspace(state, role);
   const result = workspace.sections[0]?.collection.presentation.result;
   if (result?.kind !== "table") {
     throw new Error(`Expected ${role} table fixture.`);
   }
-  return result.rows;
+  return result;
+}
+
+function requiredInstallAction(state: FormlessInstanceManagementFixture["state"]) {
+  const action = requiredWorkspace(state, "apps").sections[0]?.actions[0];
+  if (!action) {
+    throw new Error("Missing Install app fixture action.");
+  }
+  return action;
+}
+
+function requiredRouteCreateAction(state: FormlessInstanceManagementFixture["state"]) {
+  const action = requiredWorkspace(state, "routes").sections[0]?.collection.presentation.actions.primary.find(
+    (candidate) => candidate.kind === "createAction",
+  );
+  if (!action || action.kind !== "createAction") {
+    throw new Error("Missing Create Route fixture action.");
+  }
+  return action;
+}
+
+function requiredRouteEditAction(state: FormlessInstanceManagementFixture["state"]) {
+  const table = requiredWorkspaceTable(state, "routes");
+  const group = table.rows[0]?.cells
+    .flatMap((cell) => cell.contents)
+    .find((content) => content.kind === "actionGroup");
+  const action = group
+    ? [...group.primary, ...group.secondary].find((candidate) => candidate.kind === "editAction")
+    : undefined;
+  if (!action || action.kind !== "editAction") {
+    throw new Error("Missing Edit route fixture action.");
+  }
+  return action;
+}
+
+function instanceManagementAppsWorkspaceId(state: FormlessInstanceManagementFixture["state"]) {
+  return requiredWorkspace(state, "apps").id;
+}
+
+function instanceManagementRoutesWorkspaceId(state: FormlessInstanceManagementFixture["state"]) {
+  return requiredWorkspace(state, "routes").id;
 }
 
 function referenceKey(

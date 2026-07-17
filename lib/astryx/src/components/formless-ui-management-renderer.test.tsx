@@ -105,7 +105,7 @@ describe("Astryx management renderer", () => {
     expect(html).toContain(`data-formless-astryx-workspace="${routesReference.workspaceId}"`);
     expect(html).toContain('aria-label="Workspace Push"');
     expect(html).toContain('aria-label="Push workspace"');
-    expect(html).toContain('data-operation-status="pending"');
+    expect(html).not.toContain("data-operation-status");
     expect(html).toContain('data-operation-progress="instance-management:push:progress"');
     expect(html).toContain("Writing &lt;path&gt; with TOKEN=[redacted].");
     expect(html).toContain("Cloudflare authorization");

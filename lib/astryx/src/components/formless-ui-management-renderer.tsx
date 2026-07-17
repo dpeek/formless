@@ -39,7 +39,6 @@ import { FormlessUiFieldRenderer } from "./fields/renderer.tsx";
 import {
   AstryxOperationButton,
   AstryxOperationButtonWithProgress,
-  AstryxOperationCompactStatus,
   AstryxOperationFeedback,
   operationButtonVariant,
   operationIcon,
@@ -232,9 +231,6 @@ function AstryxManagementWorkspaceControls({
         </HStack>
         {manifest.workspaceFeedback ? (
           <AstryxManagementFeedback feedback={manifest.workspaceFeedback} />
-        ) : null}
-        {operation && operation.control.status.status !== "idle" ? (
-          <AstryxOperationCompactStatus status={operation.control.status} />
         ) : null}
         {operation?.control.feedback ? (
           <AstryxOperationFeedback feedback={operation.control.feedback} />

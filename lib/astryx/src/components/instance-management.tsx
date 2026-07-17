@@ -1,4 +1,8 @@
+import * as stylex from "@stylexjs/stylex";
+import { HStack } from "@astryxdesign/core/HStack";
 import { SegmentedControl, SegmentedControlItem } from "@astryxdesign/core/SegmentedControl";
+import { MediaTheme, useTheme } from "@astryxdesign/core/theme";
+import { colorVars } from "@astryxdesign/core/theme/tokens.stylex";
 import { useState } from "react";
 import type {
   FormlessUiManagementInstallDialogContract,
@@ -24,23 +28,21 @@ import {
   projectGeneratedWorkspaceFixturePublication,
 } from "./generated-workspace.tsx";
 import {
-  createFormlessApplicationShellFixtures,
-  type FormlessApplicationShellFixture,
-} from "./application-shell.fixtures.ts";
-import { projectFormlessApplicationShellFixturePublication } from "./application-shell.tsx";
-import {
   createFormlessInstanceManagementFixtures,
+  instanceManagementAppsReference,
+  instanceManagementInstallActionControlId,
+  instanceManagementInstallActionId,
   type FormlessInstanceManagementFixture,
   type FormlessInstanceManagementFixtureId,
   type FormlessInstanceManagementFixtureState,
 } from "./instance-management.fixtures.ts";
-import { AstryxSubscribedApplicationShellRenderer } from "./shell.tsx";
 
 export function FormlessInstanceManagementLayout() {
   const [fixtures] = useState(createFormlessInstanceManagementFixtureHosts);
   const [selectedFixtureId, setSelectedFixtureId] =
     useState<FormlessInstanceManagementFixtureId>("installed");
   const selectedFixture = fixtures.find((fixture) => fixture.id === selectedFixtureId);
+  const { mode } = useTheme();
 
   if (!selectedFixture) {
     return null;
@@ -48,20 +50,39 @@ export function FormlessInstanceManagementLayout() {
 
   return (
     <>
-      <SegmentedControl
-        label="Instance management state"
-        layout="hug"
-        onChange={(value) => setSelectedFixtureId(value as FormlessInstanceManagementFixtureId)}
-        value={selectedFixtureId}
+      <HStack
+        aria-label="Instance management fixtures"
+        as="nav"
+        justify="center"
+        paddingBlock={2}
+        paddingInline={4}
+        width="100%"
+        xstyle={styles.fixtureNav}
       >
-        {fixtures.map((fixture) => (
-          <SegmentedControlItem key={fixture.id} label={fixture.label} value={fixture.id} />
-        ))}
-      </SegmentedControl>
+        <MediaTheme mode={mode === "light" ? "dark" : "light"}>
+          <SegmentedControl
+            label="Instance management state"
+            layout="hug"
+            onChange={(value) => setSelectedFixtureId(value as FormlessInstanceManagementFixtureId)}
+            value={selectedFixtureId}
+          >
+            {fixtures.map((fixture) => (
+              <SegmentedControlItem key={fixture.id} label={fixture.label} value={fixture.id} />
+            ))}
+          </SegmentedControl>
+        </MediaTheme>
+      </HStack>
       <FormlessInstanceManagementFixtureView fixtureHost={selectedFixture} />
     </>
   );
 }
+
+const styles = stylex.create({
+  fixtureNav: {
+    backgroundColor: colorVars["--color-background-inverted"],
+    overflowX: "auto",
+  },
+});
 
 export function FormlessInstanceManagementFixtureView({
   fixtureHost,
@@ -70,12 +91,7 @@ export function FormlessInstanceManagementFixtureView({
 }) {
   return (
     <FormlessUiContractHostProvider host={fixtureHost.host}>
-      <AstryxSubscribedApplicationShellRenderer
-        shellReference={fixtureHost.shellReference}
-        themeReference={fixtureHost.themeReference}
-      >
-        <AstryxSubscribedManagementRenderer managementReference={fixtureHost.managementReference} />
-      </AstryxSubscribedApplicationShellRenderer>
+      <AstryxSubscribedManagementRenderer managementReference={fixtureHost.managementReference} />
     </FormlessUiContractHostProvider>
   );
 }
@@ -86,12 +102,6 @@ export type FormlessInstanceManagementFixtureHost = FormlessInstanceManagementFi
     dispatch(intent: FormlessUiManagementIntent | FormlessUiWorkspaceIntent): void;
   };
   managementReference: ReturnType<typeof formlessUiManagementManifestReference>;
-  shellReference: NonNullable<
-    ReturnType<typeof projectFormlessApplicationShellFixturePublication>["shellReference"]
-  >;
-  themeReference: NonNullable<
-    ReturnType<typeof projectFormlessApplicationShellFixturePublication>["themeReference"]
-  >;
 };
 
 export function createFormlessInstanceManagementFixtureHost(
@@ -127,8 +137,6 @@ export function createFormlessInstanceManagementFixtureHost(
     getState: () => state,
     host: host as FormlessInstanceManagementFixtureHost["host"],
     managementReference: initialPublication.managementReference,
-    shellReference: initialPublication.shellReference,
-    themeReference: initialPublication.themeReference,
   };
 }
 
@@ -137,33 +145,15 @@ export function projectFormlessInstanceManagementFixturePublication(
 ): {
   managementReference: ReturnType<typeof formlessUiManagementManifestReference>;
   nodes: FormlessUiContractHostNodeSet;
-  shellReference: NonNullable<
-    ReturnType<typeof projectFormlessApplicationShellFixturePublication>["shellReference"]
-  >;
-  themeReference: NonNullable<
-    ReturnType<typeof projectFormlessApplicationShellFixturePublication>["themeReference"]
-  >;
 } {
-  const shellFixture = productInstanceShellFixture();
-  const shellPublication = projectFormlessApplicationShellFixturePublication(
-    shellFixture.shell,
-    shellFixture.documentTheme,
-  );
   const managementReference = formlessUiManagementManifestReference(state.manifest.id);
   const workspaceNodes = state.workspaces.flatMap(
     (workspace) => projectGeneratedWorkspaceFixturePublication(workspace).nodes,
   );
-  const shellReference = shellPublication.shellReference;
-  const themeReference = shellPublication.themeReference;
-
-  if (!shellReference || !themeReference) {
-    throw new Error("Product instance fixture requires shell and document-theme references.");
-  }
 
   return {
     managementReference,
     nodes: [
-      ...shellPublication.nodes,
       { reference: managementReference, snapshot: state.manifest },
       ...(state.dialog === null
         ? []
@@ -178,8 +168,6 @@ export function projectFormlessInstanceManagementFixturePublication(
           ]),
       ...workspaceNodes,
     ],
-    shellReference,
-    themeReference,
   };
 }
 
@@ -219,6 +207,18 @@ export function applyFormlessInstanceManagementWorkspaceFixtureIntent(
   state: FormlessInstanceManagementFixtureState,
   intent: FormlessUiWorkspaceIntent,
 ): FormlessInstanceManagementFixtureState {
+  if (
+    intent.type === "workspaceExternalAction" &&
+    intent.screenId === instanceManagementAppsReference.workspaceId &&
+    intent.actionId === instanceManagementInstallActionId &&
+    intent.controlId === instanceManagementInstallActionControlId &&
+    intent.intent.controlId === instanceManagementInstallActionControlId
+  ) {
+    return state.dialog && !state.dialog.open
+      ? replaceDialog(state, { ...state.dialog, open: true })
+      : state;
+  }
+
   let changed = false;
   const workspaces = state.workspaces.map((workspace) => {
     const nextWorkspace = applyGeneratedWorkspaceIntent(workspace, intent);
@@ -233,16 +233,6 @@ function createFormlessInstanceManagementFixtureHosts() {
   return createFormlessInstanceManagementFixtures().map(
     createFormlessInstanceManagementFixtureHost,
   );
-}
-
-function productInstanceShellFixture(): FormlessApplicationShellFixture {
-  const fixture = createFormlessApplicationShellFixtures().find(
-    (candidate) => candidate.id === "product-instance",
-  );
-  if (!fixture?.shell || !fixture.documentTheme) {
-    throw new Error("Missing product instance application-shell fixture.");
-  }
-  return fixture;
 }
 
 function applyManagementInstallFieldIntent(
