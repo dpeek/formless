@@ -24,6 +24,7 @@
   },
   "devDependencies": {
     "@astryxdesign/build": "0.1.4",
+    "@astryxdesign/cli": "0.1.4",
     "@stylexjs/unplugin": "0.18.3",
     "@types/react": "19.2.15",
     "@types/react-dom": "19.2.3",
