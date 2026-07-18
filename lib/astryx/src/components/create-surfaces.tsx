@@ -24,6 +24,7 @@ import type {
   FormlessUiSemanticIconId,
 } from "../formless-ui-contract.ts";
 import { FormlessUiFieldRenderer } from "./fields/renderer.tsx";
+import { FormlessFixtureFrame } from "./fixture-layout.tsx";
 import { createField, fieldError, textControl } from "./fields/fixture-helpers.ts";
 
 const requiredTaskMessage = "Task is required.";
@@ -175,31 +176,33 @@ export function FormlessCreateSurfacesLayout() {
   }
 
   return (
-    <main {...stylex.props(styles.screen)}>
-      <div {...stylex.props(styles.content)}>
-        <VStack gap={4}>
-          <Heading level={1}>Create</Heading>
-          <CreateTriggerGroup
-            title="Collection actions"
-            surfaces={surfaces.slice(0, 2)}
-            onFieldIntent={handleFieldIntent}
-            onIntent={handleCreateIntent}
-          />
-          <CreateTriggerGroup
-            title="Compact actions"
-            surfaces={surfaces.slice(2, 4)}
-            onFieldIntent={handleFieldIntent}
-            onIntent={handleCreateIntent}
-          />
-          <CreateTriggerGroup
-            title="Unavailable actions"
-            surfaces={surfaces.slice(4)}
-            onFieldIntent={handleFieldIntent}
-            onIntent={handleCreateIntent}
-          />
-        </VStack>
-      </div>
-    </main>
+    <FormlessFixtureFrame ariaLabel="Create fixtures">
+      <main {...stylex.props(styles.screen)}>
+        <div {...stylex.props(styles.content)}>
+          <VStack gap={4}>
+            <Heading level={1}>Create</Heading>
+            <CreateTriggerGroup
+              title="Collection actions"
+              surfaces={surfaces.slice(0, 2)}
+              onFieldIntent={handleFieldIntent}
+              onIntent={handleCreateIntent}
+            />
+            <CreateTriggerGroup
+              title="Compact actions"
+              surfaces={surfaces.slice(2, 4)}
+              onFieldIntent={handleFieldIntent}
+              onIntent={handleCreateIntent}
+            />
+            <CreateTriggerGroup
+              title="Unavailable actions"
+              surfaces={surfaces.slice(4)}
+              onFieldIntent={handleFieldIntent}
+              onIntent={handleCreateIntent}
+            />
+          </VStack>
+        </div>
+      </main>
+    </FormlessFixtureFrame>
   );
 }
 

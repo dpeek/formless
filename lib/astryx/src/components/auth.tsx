@@ -1,6 +1,3 @@
-import { SegmentedControl, SegmentedControlItem } from "@astryxdesign/core/SegmentedControl";
-import { spacingVars } from "@astryxdesign/core/theme/tokens.stylex";
-import * as stylex from "@stylexjs/stylex";
 import { useState } from "react";
 import type {
   FormlessUiAuthFieldContract,
@@ -23,6 +20,7 @@ import {
   type FormlessAuthFixture,
   type FormlessAuthFixtureId,
 } from "./auth.fixtures.ts";
+import { FormlessFixtureFrame, FormlessFixtureSelector } from "./fixture-layout.tsx";
 import { AstryxSubscribedAuthRenderer } from "./formless-ui-auth-renderer.tsx";
 
 export function FormlessAuthLayout() {
@@ -45,21 +43,29 @@ export function FormlessAuthLayout() {
   );
 
   return (
-    <FormlessUiContractHostProvider host={fixtureHost.host}>
-      <AstryxSubscribedAuthRenderer reference={reference} />
-      <AuthFixtureSwitcher
-        families={families}
-        fixture={fixture}
-        fixtures={familyFixtures}
-        onFixtureChange={setFixtureId}
-        onViewChange={(family) => {
-          const nextFixture = fixtureHost.fixtures.find((candidate) => candidate.family === family);
-          if (nextFixture) {
-            setFixtureId(nextFixture.id);
-          }
-        }}
-      />
-    </FormlessUiContractHostProvider>
+    <FormlessFixtureFrame
+      ariaLabel="Switch auth fixture"
+      controls={
+        <AuthFixtureSwitcher
+          families={families}
+          fixture={fixture}
+          fixtures={familyFixtures}
+          onFixtureChange={setFixtureId}
+          onViewChange={(family) => {
+            const nextFixture = fixtureHost.fixtures.find(
+              (candidate) => candidate.family === family,
+            );
+            if (nextFixture) {
+              setFixtureId(nextFixture.id);
+            }
+          }}
+        />
+      }
+    >
+      <FormlessUiContractHostProvider host={fixtureHost.host}>
+        <AstryxSubscribedAuthRenderer reference={reference} />
+      </FormlessUiContractHostProvider>
+    </FormlessFixtureFrame>
   );
 }
 
@@ -333,34 +339,20 @@ function AuthFixtureSwitcher({
   onViewChange(family: string): void;
 }) {
   return (
-    <div {...stylex.props(styles.switcher)} aria-label="Switch auth fixture">
-      <div {...stylex.props(styles.controlScroller)}>
-        <SegmentedControl
-          label="Auth view"
-          layout="hug"
-          onChange={onViewChange}
-          size="sm"
-          value={fixture.family}
-        >
-          {families.map((family) => (
-            <SegmentedControlItem key={family} label={family} value={family} />
-          ))}
-        </SegmentedControl>
-      </div>
-      <div {...stylex.props(styles.controlScroller)}>
-        <SegmentedControl
-          label={`${fixture.family} state`}
-          layout="hug"
-          onChange={(value) => onFixtureChange(value as FormlessAuthFixtureId)}
-          size="sm"
-          value={fixture.id}
-        >
-          {fixtures.map((candidate) => (
-            <SegmentedControlItem key={candidate.id} label={candidate.label} value={candidate.id} />
-          ))}
-        </SegmentedControl>
-      </div>
-    </div>
+    <>
+      <FormlessFixtureSelector
+        label="Auth view"
+        onSelectionChange={onViewChange}
+        options={families.map((family) => ({ id: family, label: family }))}
+        selectedId={fixture.family}
+      />
+      <FormlessFixtureSelector
+        label={`${fixture.family} state`}
+        onSelectionChange={onFixtureChange}
+        options={fixtures}
+        selectedId={fixture.id}
+      />
+    </>
   );
 }
 
@@ -402,23 +394,3 @@ function writeAuthFixtureParam(fixtureId: string) {
   url.searchParams.set("authFixture", fixtureId);
   window.history.replaceState(null, "", url);
 }
-
-const styles = stylex.create({
-  controlScroller: {
-    maxWidth: "100%",
-    overflowX: "auto",
-  },
-  switcher: {
-    alignItems: "center",
-    display: "flex",
-    flexDirection: "column",
-    gap: spacingVars["--spacing-2"],
-    left: "50%",
-    maxWidth: "calc(100vw - 32px)",
-    position: "fixed",
-    top: spacingVars["--spacing-4"],
-    transform: "translateX(-50%)",
-    width: "max-content",
-    zIndex: 20,
-  },
-});

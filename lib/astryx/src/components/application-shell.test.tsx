@@ -365,7 +365,7 @@ describe("Application Shell prototype layout", () => {
     expect(html).toContain("Settings");
     expect(html).not.toContain("Personal Site public site");
     expect(html).toContain("Ada Lovelace");
-    expect(html).not.toContain('aria-label="Theme mode"');
+    expect(html).toContain('aria-label="Switch to dark mode"');
     expect(html).not.toContain("Dev workbench");
     expect(html).not.toContain("Product instance");
     expect(html).toContain("No shell");

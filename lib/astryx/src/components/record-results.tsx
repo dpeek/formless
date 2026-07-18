@@ -1,6 +1,4 @@
 import { useState } from "react";
-import { HStack } from "@astryxdesign/core/HStack";
-import { SegmentedControl, SegmentedControlItem } from "@astryxdesign/core/SegmentedControl";
 import { Heading } from "@astryxdesign/core/Text";
 import { VStack } from "@astryxdesign/core/VStack";
 import type {
@@ -12,6 +10,7 @@ import type {
   FormlessUiRecordResultIntent,
 } from "../formless-ui-contract.ts";
 import { applyScenarioFieldIntent, withFixtureFieldOccurrence } from "./fields/fixture-helpers.ts";
+import { FormlessFixtureFrame, FormlessFixtureSelector } from "./fixture-layout.tsx";
 import { AstryxRecordResultRenderer } from "./formless-ui-record-result-renderer.tsx";
 import { operationControlFixtures } from "./operation-controls.fixtures.ts";
 import {
@@ -43,36 +42,36 @@ export function FormlessRecordResultsLayout() {
   };
 
   return (
-    <main>
-      <VStack hAlign="center" paddingBlock={6} paddingInline={4} width="100%">
-        <VStack gap={5} maxWidth={760} width="100%">
-          <HStack align="center" justify="between" wrap="wrap">
+    <FormlessFixtureFrame
+      ariaLabel="Record result fixtures"
+      controls={
+        <FormlessFixtureSelector
+          label="Record result state"
+          onSelectionChange={setSelectedFixtureId}
+          options={fixtures}
+          selectedId={selectedFixtureId}
+        />
+      }
+    >
+      <main>
+        <VStack hAlign="center" paddingBlock={6} paddingInline={4} width="100%">
+          <VStack gap={5} maxWidth={760} width="100%">
             <Heading level={1}>Record Results</Heading>
-            <SegmentedControl
-              label="Record result state"
-              layout="hug"
-              onChange={(value) => setSelectedFixtureId(value as FormlessUiRecordResultFixtureId)}
-              value={selectedFixtureId}
-            >
-              {fixtures.map((fixture) => (
-                <SegmentedControlItem key={fixture.id} label={fixture.label} value={fixture.id} />
-              ))}
-            </SegmentedControl>
-          </HStack>
 
-          {selectedFixture ? (
-            <AstryxRecordResultRenderer
-              onIntent={(intent) =>
-                updateSelectedResult((recordResult) =>
-                  applyRecordResultIntent(recordResult, intent),
-                )
-              }
-              recordResult={selectedFixture.recordResult}
-            />
-          ) : null}
+            {selectedFixture ? (
+              <AstryxRecordResultRenderer
+                onIntent={(intent) =>
+                  updateSelectedResult((recordResult) =>
+                    applyRecordResultIntent(recordResult, intent),
+                  )
+                }
+                recordResult={selectedFixture.recordResult}
+              />
+            ) : null}
+          </VStack>
         </VStack>
-      </VStack>
-    </main>
+      </main>
+    </FormlessFixtureFrame>
   );
 }
 

@@ -21,6 +21,7 @@ import {
   applyScenarioFieldSubmit,
   scenarioFieldKey,
 } from "./fields/fixture-helpers.ts";
+import { FormlessFixtureFrame, FormlessFixtureSelector } from "./fixture-layout.tsx";
 import { closestScenarioVariantForFacet } from "./field-scenario-model.ts";
 import type {
   FieldKindKey,
@@ -100,64 +101,65 @@ export function FormlessFieldsLayout() {
     });
   }, [selectedFieldId, showToast, stateMachineError?.fieldName, stateMachineError?.message]);
 
+  const handleKindChange = (kind: FieldKindKey) => {
+    const nextGroup = findScenarioGroup(kind);
+
+    setSelectedKind(kind);
+    setSelectedFacetValues(nextGroup ? defaultFacetValues(nextGroup) : {});
+  };
+
+  const handleFacetChange = (facet: FieldScenarioFacet, value: string) => {
+    if (!selectedGroup) {
+      return;
+    }
+
+    const nextVariant = closestScenarioVariantForFacet(
+      selectedGroup,
+      normalizedFacetValues,
+      facet.id,
+      value,
+    );
+
+    if (nextVariant) {
+      resetFieldScenarioState(setFieldOverrides, setSubmittedFieldKeys, nextVariant.field);
+      setSelectedFacetValues(nextVariant.facets);
+    }
+  };
+
   return (
-    <main {...stylex.props(styles.screen)}>
-      <div {...stylex.props(styles.content)}>
-        <header {...stylex.props(styles.header)}>
-          <VStack gap={1}>
-            <Heading level={1}>Field Explorer</Heading>
-          </VStack>
-        </header>
-
-        <div {...stylex.props(styles.matrix)}>
-          <aside {...stylex.props(styles.kindRail)} aria-label="Field types">
-            {fieldKindOptions.map((option) => (
-              <Button
-                key={option.id}
-                label={option.label}
-                variant={option.id === selectedKindOption.id ? "primary" : "ghost"}
-                xstyle={styles.kindButton}
-                onClick={() => {
-                  const nextGroup = findScenarioGroup(option.id);
-
-                  setSelectedKind(option.id);
-                  setSelectedFacetValues(nextGroup ? defaultFacetValues(nextGroup) : {});
-                }}
-              />
-            ))}
-          </aside>
+    <FormlessFixtureFrame
+      ariaLabel="Field fixtures"
+      controls={
+        <>
+          <FormlessFixtureSelector
+            label="Field type"
+            onSelectionChange={handleKindChange}
+            options={fieldKindOptions}
+            selectedId={selectedKindOption.id}
+          />
+          {selectedGroup
+            ? visibleScenarioFacets(selectedGroup, normalizedFacetValues).map((facet) => (
+                <FieldFacetControl
+                  key={facet.id}
+                  facet={facet}
+                  group={selectedGroup}
+                  selectedValues={normalizedFacetValues}
+                  onChange={(value) => handleFacetChange(facet, value)}
+                />
+              ))
+            : null}
+        </>
+      }
+    >
+      <main {...stylex.props(styles.screen)}>
+        <div {...stylex.props(styles.content)}>
+          <header {...stylex.props(styles.header)}>
+            <VStack gap={1}>
+              <Heading level={1}>Field Explorer</Heading>
+            </VStack>
+          </header>
 
           <section {...stylex.props(styles.workbench)} aria-label={selectedKindOption.label}>
-            {selectedGroup ? (
-              <div {...stylex.props(styles.facetGrid)}>
-                {visibleScenarioFacets(selectedGroup, normalizedFacetValues).map((facet) => (
-                  <FieldFacetControl
-                    key={facet.id}
-                    facet={facet}
-                    group={selectedGroup}
-                    selectedValues={normalizedFacetValues}
-                    onChange={(value) => {
-                      const nextVariant = closestScenarioVariantForFacet(
-                        selectedGroup,
-                        normalizedFacetValues,
-                        facet.id,
-                        value,
-                      );
-
-                      if (nextVariant) {
-                        resetFieldScenarioState(
-                          setFieldOverrides,
-                          setSubmittedFieldKeys,
-                          nextVariant.field,
-                        );
-                        setSelectedFacetValues(nextVariant.facets);
-                      }
-                    }}
-                  />
-                ))}
-              </div>
-            ) : null}
-
             <Card padding={4} variant="muted">
               {selectedField ? (
                 <FieldPreview
@@ -171,8 +173,8 @@ export function FormlessFieldsLayout() {
             </Card>
           </section>
         </div>
-      </div>
-    </main>
+      </main>
+    </FormlessFixtureFrame>
   );
 }
 
@@ -254,7 +256,7 @@ function FieldFacetControl({
   if (fieldScenarioFacetIsAction(facet.id)) {
     return (
       <div {...stylex.props(styles.facetControl)}>
-        <ButtonGroup label={facet.label} size="md">
+        <ButtonGroup label={facet.label} size="sm">
           {options.map((option) => {
             const isDisabled = !facetOptionHasScenario(group, facet.id, option.id, selectedValues);
 
@@ -275,7 +277,13 @@ function FieldFacetControl({
 
   return (
     <div {...stylex.props(styles.facetControl)}>
-      <SegmentedControl value={value} onChange={onChange} label={facet.label} layout="hug">
+      <SegmentedControl
+        value={value}
+        onChange={onChange}
+        label={facet.label}
+        layout="hug"
+        size="sm"
+      >
         {options.map((option) => (
           <SegmentedControlItem
             key={option.id}
@@ -676,39 +684,9 @@ const styles = stylex.create({
     gap: spacingVars["--spacing-3"],
     flexWrap: "wrap",
   },
-  matrix: {
-    display: "grid",
-    gridTemplateColumns: "220px minmax(0, 1fr)",
-    gap: spacingVars["--spacing-4"],
-    alignItems: "start",
-    "@media (max-width: 760px)": {
-      gridTemplateColumns: "minmax(0, 1fr)",
-    },
-  },
-  kindRail: {
-    display: "grid",
-    gap: spacingVars["--spacing-1"],
-    padding: spacingVars["--spacing-2"],
-    borderWidth: borderVars["--border-width"],
-    borderStyle: "solid",
-    borderColor: colorVars["--color-border"],
-    borderRadius: radiusVars["--radius-container"],
-    backgroundColor: colorVars["--color-background-muted"],
-  },
-  kindButton: {
-    width: "100%",
-    justifyContent: "flex-start",
-  },
   workbench: {
     display: "grid",
     gap: spacingVars["--spacing-4"],
-    minWidth: 0,
-  },
-  facetGrid: {
-    display: "flex",
-    alignItems: "flex-end",
-    gap: spacingVars["--spacing-3"],
-    flexWrap: "wrap",
     minWidth: 0,
   },
   facetControl: {

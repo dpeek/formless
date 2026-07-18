@@ -19,6 +19,7 @@ import {
   AstryxOperationDestructiveConfirmation,
   AstryxOperationFeedback,
 } from "./operation-controls.tsx";
+import { FormlessFixtureFrame } from "./fixture-layout.tsx";
 
 type OperationControlState = Record<OperationControlFixtureKey, FormlessUiOperationControlContract>;
 
@@ -143,23 +144,25 @@ export function FormlessOperationsLayout() {
   };
 
   return (
-    <ToastViewport maxVisible={3} position="bottomEnd">
-      <main {...stylex.props(styles.screen)}>
-        <VStack gap={6} xstyle={styles.content}>
-          <Heading level={1}>Operations</Heading>
-          {operationUseCases.map(({ fixtureKey, presentation, title }) => (
-            <OperationUseCase
-              control={controls[fixtureKey]}
-              key={fixtureKey}
-              onIntent={onIntent}
-              presentation={presentation}
-              title={title}
-            />
-          ))}
-        </VStack>
-        <AstryxOperationFeedback feedback={feedback} />
-      </main>
-    </ToastViewport>
+    <FormlessFixtureFrame ariaLabel="Operation fixtures">
+      <ToastViewport maxVisible={3} position="bottomEnd">
+        <main {...stylex.props(styles.screen)}>
+          <VStack gap={6} xstyle={styles.content}>
+            <Heading level={1}>Operations</Heading>
+            {operationUseCases.map(({ fixtureKey, presentation, title }) => (
+              <OperationUseCase
+                control={controls[fixtureKey]}
+                key={fixtureKey}
+                onIntent={onIntent}
+                presentation={presentation}
+                title={title}
+              />
+            ))}
+          </VStack>
+          <AstryxOperationFeedback feedback={feedback} />
+        </main>
+      </ToastViewport>
+    </FormlessFixtureFrame>
   );
 }
 

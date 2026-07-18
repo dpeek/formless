@@ -1,6 +1,9 @@
+import { IconButton } from "@astryxdesign/core/IconButton";
 import { SegmentedControl, SegmentedControlItem } from "@astryxdesign/core/SegmentedControl";
+import { MoonIcon, SunIcon } from "@heroicons/react/24/outline";
 import { memo, type ReactNode } from "react";
 import type {
+  FormlessUiDocumentThemeActiveMode,
   FormlessUiDocumentThemeContract,
   FormlessUiDocumentThemeIntentHandler,
   FormlessUiDocumentThemeReference,
@@ -11,6 +14,36 @@ import {
   useFormlessUiDocumentThemeIntentHandler,
 } from "../formless-ui-contract-host-react.tsx";
 import { FormlessThemeProvider } from "../theme.tsx";
+
+export function FormlessThemeIconToggle({
+  activeMode,
+  control,
+  onIntent,
+}: {
+  activeMode: FormlessUiDocumentThemeActiveMode;
+  control: FormlessUiDocumentThemeSelectionControlContract;
+  onIntent: FormlessUiDocumentThemeIntentHandler;
+}) {
+  const targetMode = activeMode === "light" ? "dark" : "light";
+  const option = control.options.find((candidate) => candidate.mode === targetMode);
+
+  if (!option) {
+    return null;
+  }
+
+  const label = `Switch to ${targetMode} mode`;
+
+  return (
+    <IconButton
+      icon={targetMode === "light" ? <SunIcon /> : <MoonIcon />}
+      label={label}
+      onClick={() => void onIntent(option.selectionIntent)}
+      size="sm"
+      tooltip={label}
+      variant="ghost"
+    />
+  );
+}
 
 export function FormlessThemeToggle({
   control,

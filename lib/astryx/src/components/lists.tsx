@@ -1,6 +1,4 @@
 import { useState } from "react";
-import { HStack } from "@astryxdesign/core/HStack";
-import { SegmentedControl, SegmentedControlItem } from "@astryxdesign/core/SegmentedControl";
 import { Heading } from "@astryxdesign/core/Text";
 import { VStack } from "@astryxdesign/core/VStack";
 import type {
@@ -14,6 +12,7 @@ import type {
   FormlessUiOperationPresentationIntent,
 } from "../formless-ui-contract.ts";
 import { applyScenarioFieldIntent } from "./fields/fixture-helpers.ts";
+import { FormlessFixtureFrame, FormlessFixtureSelector } from "./fixture-layout.tsx";
 import { AstryxListRenderer } from "./formless-ui-list-renderer.tsx";
 import {
   createFormlessUiListFixtures,
@@ -37,38 +36,40 @@ export function FormlessListsLayout() {
   };
 
   return (
-    <main>
-      <VStack hAlign="center" paddingBlock={6} paddingInline={4} width="100%">
-        <VStack gap={5} maxWidth={900} width="100%">
-          <HStack align="center" justify="between" wrap="wrap">
+    <FormlessFixtureFrame
+      ariaLabel="List fixtures"
+      controls={
+        <FormlessFixtureSelector
+          label="List state"
+          onSelectionChange={setSelectedFixtureId}
+          options={fixtures}
+          selectedId={selectedFixtureId}
+        />
+      }
+    >
+      <main>
+        <VStack hAlign="center" paddingBlock={6} paddingInline={4} width="100%">
+          <VStack gap={5} maxWidth={900} width="100%">
             <Heading level={1}>Lists</Heading>
-            <SegmentedControl
-              label="List state"
-              layout="hug"
-              onChange={(value) => setSelectedFixtureId(value as FormlessUiListFixtureId)}
-              value={selectedFixtureId}
-            >
-              {fixtures.map((fixture) => (
-                <SegmentedControlItem key={fixture.id} label={fixture.label} value={fixture.id} />
-              ))}
-            </SegmentedControl>
-          </HStack>
 
-          {selectedFixture ? (
-            <AstryxListRenderer
-              list={selectedFixture.list}
-              onFieldIntent={(itemId, field, intent) =>
-                updateSelectedList((list) => applyListFieldIntent(list, itemId, field, intent))
-              }
-              onListIntent={(intent) => updateSelectedList((list) => applyListIntent(list, intent))}
-              onOperationIntent={(action, intent) =>
-                updateSelectedList((list) => applyListOperationIntent(list, action, intent))
-              }
-            />
-          ) : null}
+            {selectedFixture ? (
+              <AstryxListRenderer
+                list={selectedFixture.list}
+                onFieldIntent={(itemId, field, intent) =>
+                  updateSelectedList((list) => applyListFieldIntent(list, itemId, field, intent))
+                }
+                onListIntent={(intent) =>
+                  updateSelectedList((list) => applyListIntent(list, intent))
+                }
+                onOperationIntent={(action, intent) =>
+                  updateSelectedList((list) => applyListOperationIntent(list, action, intent))
+                }
+              />
+            ) : null}
+          </VStack>
         </VStack>
-      </VStack>
-    </main>
+      </main>
+    </FormlessFixtureFrame>
   );
 }
 

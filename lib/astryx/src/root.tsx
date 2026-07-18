@@ -18,6 +18,11 @@ import { FormlessOperationsLayout } from "./components/operations.tsx";
 import { FormlessRecordResultsLayout } from "./components/record-results.tsx";
 import { FormlessSiteLayout } from "./components/site.tsx";
 import { FormlessTablesLayout } from "./components/tables.tsx";
+import {
+  FormlessFixtureEnvironmentProvider,
+  formlessFixtureTheme,
+  useFormlessFixtureEnvironment,
+} from "./components/fixture-layout.tsx";
 import { FormlessThemeProvider } from "./theme.tsx";
 import type { FormlessUiDocumentThemeContract } from "./formless-ui-contract.ts";
 
@@ -25,6 +30,7 @@ type FormlessPrototypeLayout = {
   name: string;
   anchor: string;
   render: () => ReactNode;
+  usesFixtureTheme: boolean;
 };
 
 type LayoutCommandItem = SearchableItem<{
@@ -33,7 +39,7 @@ type LayoutCommandItem = SearchableItem<{
 }>;
 
 const formlessPrototypeLayouts: FormlessPrototypeLayout[] = [
-  createFormlessPrototypeLayout("Public Site", () => <FormlessSiteLayout />),
+  createFormlessPrototypeLayout("Public Site", () => <FormlessSiteLayout />, false),
   createFormlessPrototypeLayout("Auth", () => <FormlessAuthLayout />),
   createFormlessPrototypeLayout("Operations", () => <FormlessOperationsLayout />),
   createFormlessPrototypeLayout("Create", () => <FormlessCreateSurfacesLayout />),
@@ -63,7 +69,7 @@ const layoutSearchSource = createStaticSource(layoutCommandItems, {
   keywords: (item) => [item.auxiliaryData?.anchor ?? item.id],
 });
 
-const prototypeTheme: FormlessUiDocumentThemeContract = {
+const publicSitePrototypeTheme: FormlessUiDocumentThemeContract = {
   activeMode: "light",
   id: "theme:prototype",
   kind: "documentTheme",
@@ -71,11 +77,23 @@ const prototypeTheme: FormlessUiDocumentThemeContract = {
 };
 
 export function FormlessRoot() {
+  return (
+    <FormlessFixtureEnvironmentProvider>
+      <FormlessThemedRoot />
+    </FormlessFixtureEnvironmentProvider>
+  );
+}
+
+function FormlessThemedRoot() {
   const currentLayoutAnchor = useCurrentLayoutAnchor(defaultLayout.anchor);
   const currentLayout = layoutByAnchor.get(currentLayoutAnchor) ?? defaultLayout;
+  const fixtureEnvironment = useFormlessFixtureEnvironment();
+  const theme = currentLayout.usesFixtureTheme
+    ? formlessFixtureTheme(fixtureEnvironment?.mode ?? "light")
+    : publicSitePrototypeTheme;
 
   return (
-    <FormlessThemeProvider theme={prototypeTheme}>
+    <FormlessThemeProvider theme={theme}>
       <div {...stylex.props(styles.explorer)}>
         <ToastViewport position="bottomEnd" maxVisible={5}>
           {currentLayout.render()}
@@ -157,11 +175,13 @@ function useCurrentLayoutAnchor(defaultAnchor: string) {
 function createFormlessPrototypeLayout(
   name: string,
   render: FormlessPrototypeLayout["render"],
+  usesFixtureTheme = true,
 ): FormlessPrototypeLayout {
   return {
     name,
     anchor: inferLayoutAnchor(name),
     render,
+    usesFixtureTheme,
   };
 }
 

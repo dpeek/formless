@@ -9,9 +9,14 @@ import type {
   FormlessUiShellManifestReference,
   FormlessUiShellNavigationSectionContract,
 } from "../formless-ui-contract.ts";
-import { useFormlessUiShellManifest } from "../formless-ui-contract-host-react.tsx";
+import {
+  useFormlessUiDocumentTheme,
+  useFormlessUiDocumentThemeIntentHandler,
+  useFormlessUiShellManifest,
+} from "../formless-ui-contract-host-react.tsx";
+import { FormlessThemeProvider } from "../theme.tsx";
 import { AstryxApplicationSideNav, AstryxSubscribedApplicationSideNav } from "./side-nav.tsx";
-import { AstryxDocumentThemeRenderer, AstryxSubscribedDocumentThemeRenderer } from "./theme.tsx";
+import { FormlessThemeIconToggle } from "./theme.tsx";
 
 type AstryxApplicationShellRendererProps = {
   children: ReactNode;
@@ -38,6 +43,14 @@ export function AstryxApplicationShellRenderer({
   theme,
 }: AstryxApplicationShellRendererProps) {
   const orderedSections = orderShellSections(manifest, sections);
+  const themeControl =
+    theme?.selectionControl && onThemeIntent ? (
+      <FormlessThemeIconToggle
+        activeMode={theme.activeMode}
+        control={theme.selectionControl}
+        onIntent={onThemeIntent}
+      />
+    ) : undefined;
 
   const shell = (
     <AstryxApplicationShellFrame
@@ -47,6 +60,7 @@ export function AstryxApplicationShellRenderer({
           manifest={manifest}
           onIntent={onIntent}
           sections={orderedSections}
+          themeControl={themeControl}
         />
       }
     >
@@ -54,10 +68,8 @@ export function AstryxApplicationShellRenderer({
     </AstryxApplicationShellFrame>
   );
 
-  return theme && onThemeIntent ? (
-    <AstryxDocumentThemeRenderer onIntent={onThemeIntent} theme={theme}>
-      {shell}
-    </AstryxDocumentThemeRenderer>
+  return theme ? (
+    <FormlessThemeProvider theme={theme}>{shell}</FormlessThemeProvider>
   ) : (
     shell
   );
@@ -67,10 +79,12 @@ export const AstryxSubscribedApplicationShellRenderer = memo(
   function AstryxSubscribedApplicationShellRenderer({
     children,
     shellReference,
+    themeControl,
     themeReference,
   }: {
     children: ReactNode;
     shellReference: FormlessUiShellManifestReference;
+    themeControl?: ReactNode;
     themeReference?: FormlessUiDocumentThemeReference | undefined;
   }) {
     const manifest = useFormlessUiShellManifest(shellReference);
@@ -79,33 +93,87 @@ export const AstryxSubscribedApplicationShellRenderer = memo(
       return children;
     }
 
-    const shell = (
-      <AstryxApplicationShellFrame
+    return themeReference ? (
+      <AstryxSubscribedThemedApplicationShell
         manifest={manifest}
-        sideNav={
-          <AstryxSubscribedApplicationSideNav
-            manifest={manifest}
-            references={manifest.navigationSections}
-          />
-        }
+        themeControl={themeControl}
+        themeReference={themeReference}
       >
         {children}
-      </AstryxApplicationShellFrame>
-    );
-
-    return themeReference ? (
-      <AstryxSubscribedDocumentThemeRenderer themeReference={themeReference}>
-        {shell}
-      </AstryxSubscribedDocumentThemeRenderer>
+      </AstryxSubscribedThemedApplicationShell>
     ) : (
-      shell
+      <AstryxSubscribedApplicationShellContent manifest={manifest} themeControl={themeControl}>
+        {children}
+      </AstryxSubscribedApplicationShellContent>
     );
   },
   (previous, next) =>
     previous.shellReference.shellId === next.shellReference.shellId &&
     previous.themeReference?.themeId === next.themeReference?.themeId &&
+    previous.themeControl === next.themeControl &&
     previous.children === next.children,
 );
+
+function AstryxSubscribedThemedApplicationShell({
+  children,
+  manifest,
+  themeControl,
+  themeReference,
+}: {
+  children: ReactNode;
+  manifest: FormlessUiShellManifestContract;
+  themeControl?: ReactNode;
+  themeReference: FormlessUiDocumentThemeReference;
+}) {
+  const onThemeIntent = useFormlessUiDocumentThemeIntentHandler();
+  const theme = useFormlessUiDocumentTheme(themeReference);
+  const resolvedThemeControl = theme
+    ? theme.selectionControl
+      ? (
+          <FormlessThemeIconToggle
+            activeMode={theme.activeMode}
+            control={theme.selectionControl}
+            onIntent={onThemeIntent}
+          />
+        )
+      : undefined
+    : themeControl;
+  const shell = (
+    <AstryxSubscribedApplicationShellContent
+      manifest={manifest}
+      themeControl={resolvedThemeControl}
+    >
+      {children}
+    </AstryxSubscribedApplicationShellContent>
+  );
+
+  return theme ? <FormlessThemeProvider theme={theme}>{shell}</FormlessThemeProvider> : shell;
+}
+
+function AstryxSubscribedApplicationShellContent({
+  children,
+  manifest,
+  themeControl,
+}: {
+  children: ReactNode;
+  manifest: FormlessUiShellManifestContract;
+  themeControl?: ReactNode;
+}) {
+  return (
+    <AstryxApplicationShellFrame
+      manifest={manifest}
+      sideNav={
+        <AstryxSubscribedApplicationSideNav
+          manifest={manifest}
+          references={manifest.navigationSections}
+          themeControl={themeControl}
+        />
+      }
+    >
+      {children}
+    </AstryxApplicationShellFrame>
+  );
+}
 
 function AstryxApplicationShellFrame({
   children,

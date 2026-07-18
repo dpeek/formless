@@ -36,10 +36,12 @@ export function AstryxApplicationSideNav({
   manifest,
   onIntent,
   sections,
+  themeControl,
 }: {
   manifest: FormlessUiShellManifestContract;
   onIntent: FormlessUiShellIntentHandler;
   sections: readonly FormlessUiShellNavigationSectionContract[];
+  themeControl?: ReactNode;
 }) {
   return (
     <AstryxApplicationSideNavFrame
@@ -68,6 +70,7 @@ export function AstryxApplicationSideNav({
           slot="session"
         />
       ))}
+      themeControl={themeControl}
     />
   );
 }
@@ -75,9 +78,11 @@ export function AstryxApplicationSideNav({
 export function AstryxSubscribedApplicationSideNav({
   manifest,
   references,
+  themeControl,
 }: {
   manifest: FormlessUiShellManifestContract;
   references: readonly FormlessUiShellNavigationSectionReference[];
+  themeControl?: ReactNode;
 }) {
   const onIntent = useFormlessUiShellIntentHandler();
 
@@ -108,6 +113,7 @@ export function AstryxSubscribedApplicationSideNav({
           slot="session"
         />
       ))}
+      themeControl={themeControl}
     />
   );
 }
@@ -117,15 +123,26 @@ function AstryxApplicationSideNavFrame({
   manifest,
   navigation,
   session,
+  themeControl,
 }: {
   appSwitcher: ReactNode;
   manifest: FormlessUiShellManifestContract;
   navigation: ReactNode;
   session: ReactNode;
+  themeControl?: ReactNode;
 }) {
   return (
     <SideNav
-      footer={session}
+      footer={
+        themeControl ? (
+          <VStack gap={2} width="100%">
+            {themeControl}
+            {session}
+          </VStack>
+        ) : (
+          session
+        )
+      }
       header={
         <SideNavHeading
           heading={manifest.title}

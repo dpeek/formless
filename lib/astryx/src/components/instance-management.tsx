@@ -17,7 +17,7 @@ import {
 } from "../formless-ui-contract-host.ts";
 import { FormlessUiContractHostProvider } from "../formless-ui-contract-host-react.tsx";
 import { applyScenarioFieldIntent } from "./fields/fixture-helpers.ts";
-import { FormlessFixtureLayout } from "./fixture-layout.tsx";
+import { FormlessFixtureFrame, FormlessFixtureSelector } from "./fixture-layout.tsx";
 import { AstryxSubscribedManagementRenderer } from "./formless-ui-management-renderer.tsx";
 import {
   applyGeneratedWorkspaceIntent,
@@ -46,15 +46,19 @@ export function FormlessInstanceManagementLayout() {
   }
 
   return (
-    <FormlessFixtureLayout
+    <FormlessFixtureFrame
       ariaLabel="Instance management fixtures"
-      fixtures={fixtures}
-      label="Instance management state"
-      onSelectionChange={setSelectedFixtureId}
-      selectedFixtureId={selectedFixtureId}
+      controls={
+        <FormlessFixtureSelector
+          label="Instance management state"
+          onSelectionChange={setSelectedFixtureId}
+          options={fixtures}
+          selectedId={selectedFixtureId}
+        />
+      }
     >
       <FormlessInstanceManagementFixtureView fixtureHost={selectedFixture} />
-    </FormlessFixtureLayout>
+    </FormlessFixtureFrame>
   );
 }
 

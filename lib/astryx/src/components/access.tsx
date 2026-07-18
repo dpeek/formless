@@ -24,7 +24,7 @@ import {
   type FormlessAccessFixtureId,
   type FormlessAccessFixtureState,
 } from "./access.fixtures.ts";
-import { FormlessFixtureLayout } from "./fixture-layout.tsx";
+import { FormlessFixtureFrame, FormlessFixtureSelector } from "./fixture-layout.tsx";
 import { AstryxSubscribedAccessRenderer } from "./formless-ui-access-renderer.tsx";
 
 export function FormlessAccessLayout() {
@@ -38,15 +38,19 @@ export function FormlessAccessLayout() {
   }
 
   return (
-    <FormlessFixtureLayout
+    <FormlessFixtureFrame
       ariaLabel="Access fixtures"
-      fixtures={fixtureHosts}
-      label="Access state"
-      onSelectionChange={setSelectedFixtureId}
-      selectedFixtureId={selectedFixtureId}
+      controls={
+        <FormlessFixtureSelector
+          label="Access state"
+          onSelectionChange={setSelectedFixtureId}
+          options={fixtureHosts}
+          selectedId={selectedFixtureId}
+        />
+      }
     >
       <FormlessAccessFixtureView fixtureHost={selectedFixtureHost} />
-    </FormlessFixtureLayout>
+    </FormlessFixtureFrame>
   );
 }
 

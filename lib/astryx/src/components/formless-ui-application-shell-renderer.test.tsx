@@ -330,6 +330,23 @@ vi.mock("@astryxdesign/core/HoverCard", () => ({
     ),
 }));
 
+vi.mock("@astryxdesign/core/IconButton", () => ({
+  IconButton: ({
+    icon,
+    label,
+    onClick,
+  }: {
+    icon: ReactNode;
+    label: string;
+    onClick?: () => void;
+  }) =>
+    createElement(
+      "button",
+      { "aria-label": label, "data-component": "IconButton", onClick },
+      icon,
+    ),
+}));
+
 vi.mock("@astryxdesign/core/MetadataList", () => ({
   MetadataList: ({ children, columns }: { children: ReactNode; columns?: string }) =>
     createElement("dl", { "data-columns": columns, "data-component": "MetadataList" }, children),
@@ -734,7 +751,10 @@ describe("Astryx application shell renderer", () => {
       requiredByProps(mountedRenderer.root, { "data-component": "Theme" }).props["data-mode"],
     ).toBe("dark");
     expect(
-      requiredByProps(mountedRenderer.root, { "aria-label": "Theme mode", role: "radiogroup" }),
+      requiredByProps(mountedRenderer.root, {
+        "aria-label": "Switch to light mode",
+        "data-component": "IconButton",
+      }),
     ).toBeDefined();
     expect(rendererText(mountedRenderer)).toContain("Theme workspace");
     expect(rendererText(mountedRenderer)).toContain("Tasks");
@@ -742,8 +762,8 @@ describe("Astryx application shell renderer", () => {
 
     await act(async () => {
       requiredByProps(mountedRenderer.root, {
-        "aria-label": "Light",
-        role: "radio",
+        "aria-label": "Switch to light mode",
+        "data-component": "IconButton",
       }).props.onClick();
     });
 

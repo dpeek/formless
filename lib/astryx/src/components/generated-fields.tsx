@@ -1,11 +1,11 @@
 import { useState } from "react";
 import { Card } from "@astryxdesign/core/Card";
 import { Grid } from "@astryxdesign/core/Grid";
-import { SegmentedControl, SegmentedControlItem } from "@astryxdesign/core/SegmentedControl";
 import { Heading } from "@astryxdesign/core/Text";
 import { VStack } from "@astryxdesign/core/VStack";
 import type { FormlessUiFieldIntentHandler } from "../formless-ui-contract.ts";
 import { applyScenarioFieldIntent, scenarioFieldKey } from "./fields/fixture-helpers.ts";
+import { FormlessFixtureFrame, FormlessFixtureSelector } from "./fixture-layout.tsx";
 import {
   createRecordFieldSurfaceFixtures,
   type RecordFieldSurfaceFixture,
@@ -43,28 +43,29 @@ export function FormlessGeneratedFieldsLayout() {
     };
 
   return (
-    <main>
-      <VStack hAlign="center" paddingBlock={6} paddingInline={4} width="100%">
-        <VStack gap={6} maxWidth={920} width="100%">
-          <Heading level={1}>Generated record fields</Heading>
+    <FormlessFixtureFrame
+      ariaLabel="Generated field fixtures"
+      controls={
+        <FormlessFixtureSelector
+          label="Surface"
+          onSelectionChange={setSelectedSurfaceId}
+          options={surfaceFixtures}
+          selectedId={selectedSurfaceId}
+        />
+      }
+    >
+      <main>
+        <VStack hAlign="center" paddingBlock={6} paddingInline={4} width="100%">
+          <VStack gap={6} maxWidth={920} width="100%">
+            <Heading level={1}>Generated record fields</Heading>
 
-          <SegmentedControl
-            label="Surface"
-            layout="hug"
-            value={selectedSurfaceId}
-            onChange={(value) => setSelectedSurfaceId(value as RecordFieldSurfaceFixture["id"])}
-          >
-            {surfaceFixtures.map((surface) => (
-              <SegmentedControlItem key={surface.id} label={surface.label} value={surface.id} />
-            ))}
-          </SegmentedControl>
-
-          {selectedSurface ? (
-            <RecordFieldSet surface={selectedSurface} onIntent={handleIntent} />
-          ) : null}
+            {selectedSurface ? (
+              <RecordFieldSet surface={selectedSurface} onIntent={handleIntent} />
+            ) : null}
+          </VStack>
         </VStack>
-      </VStack>
-    </main>
+      </main>
+    </FormlessFixtureFrame>
   );
 }
 

@@ -1,6 +1,4 @@
 import { useState } from "react";
-import { HStack } from "@astryxdesign/core/HStack";
-import { SegmentedControl, SegmentedControlItem } from "@astryxdesign/core/SegmentedControl";
 import { Heading } from "@astryxdesign/core/Text";
 import { VStack } from "@astryxdesign/core/VStack";
 import type {
@@ -15,6 +13,7 @@ import type {
   FormlessUiTableRowContract,
 } from "../formless-ui-contract.ts";
 import { applyScenarioFieldIntent } from "./fields/fixture-helpers.ts";
+import { FormlessFixtureFrame, FormlessFixtureSelector } from "./fixture-layout.tsx";
 import { AstryxTableRenderer } from "./formless-ui-table-renderer.tsx";
 import { operationControlFixtures } from "./operation-controls.fixtures.ts";
 import {
@@ -40,40 +39,40 @@ export function FormlessTablesLayout() {
   };
 
   return (
-    <main>
-      <VStack hAlign="center" paddingBlock={6} paddingInline={4} width="100%">
-        <VStack gap={5} maxWidth={1200} width="100%">
-          <HStack align="center" justify="between" wrap="wrap">
+    <FormlessFixtureFrame
+      ariaLabel="Table fixtures"
+      controls={
+        <FormlessFixtureSelector
+          label="Table state"
+          onSelectionChange={setSelectedFixtureId}
+          options={fixtures}
+          selectedId={selectedFixtureId}
+        />
+      }
+    >
+      <main>
+        <VStack hAlign="center" paddingBlock={6} paddingInline={4} width="100%">
+          <VStack gap={5} maxWidth={1200} width="100%">
             <Heading level={1}>Tables</Heading>
-            <SegmentedControl
-              label="Table state"
-              layout="hug"
-              onChange={(value) => setSelectedFixtureId(value as FormlessUiTableFixtureId)}
-              value={selectedFixtureId}
-            >
-              {fixtures.map((fixture) => (
-                <SegmentedControlItem key={fixture.id} label={fixture.label} value={fixture.id} />
-              ))}
-            </SegmentedControl>
-          </HStack>
 
-          {selectedFixture ? (
-            <AstryxTableRenderer
-              onFieldIntent={(_contextId, fieldId, _recordId, intent) =>
-                updateSelectedTable((table) => applyTableFieldIntent(table, fieldId, intent))
-              }
-              onOperationIntent={(action, intent) =>
-                updateSelectedTable((table) => applyTableOperationIntent(table, action, intent))
-              }
-              onTableIntent={(intent) =>
-                updateSelectedTable((table) => applyTableIntent(table, intent))
-              }
-              table={selectedFixture.table}
-            />
-          ) : null}
+            {selectedFixture ? (
+              <AstryxTableRenderer
+                onFieldIntent={(_contextId, fieldId, _recordId, intent) =>
+                  updateSelectedTable((table) => applyTableFieldIntent(table, fieldId, intent))
+                }
+                onOperationIntent={(action, intent) =>
+                  updateSelectedTable((table) => applyTableOperationIntent(table, action, intent))
+                }
+                onTableIntent={(intent) =>
+                  updateSelectedTable((table) => applyTableIntent(table, intent))
+                }
+                table={selectedFixture.table}
+              />
+            ) : null}
+          </VStack>
         </VStack>
-      </VStack>
-    </main>
+      </main>
+    </FormlessFixtureFrame>
   );
 }
 

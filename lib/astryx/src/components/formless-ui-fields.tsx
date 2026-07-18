@@ -27,6 +27,7 @@ import type {
 } from "../formless-ui-contract.ts";
 import { fixtureFormlessUiFieldId } from "./fields/fixture-helpers.ts";
 import { FormlessUiFieldRenderer, FormlessUiFieldSubmitFormAdapter } from "./fields/renderer.tsx";
+import { FormlessFixtureFrame } from "./fixture-layout.tsx";
 
 const pageIconSource = [
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">',
@@ -162,28 +163,30 @@ export function FormlessCanonicalFieldsLayout() {
   }
 
   return (
-    <main {...stylex.props(styles.screen)}>
-      <VStack gap={4} maxWidth={1040} width="100%">
-        <Heading level={1}>Canonical Fields</Heading>
-        <Grid columns={{ minWidth: 280, max: 3 }} gap={3} width="100%">
-          {fields.map((field) => (
-            <Card
-              key={`${field.surface}:${field.recordId ?? "new"}:${field.fieldName}`}
-              padding={4}
-              variant="muted"
-            >
-              <VStack gap={3}>
-                <Text type="label" color="secondary" maxLines={1}>
-                  {field.label}
-                </Text>
-                <FormlessUiFieldRenderer field={field} onIntent={handleIntent} />
-                <FormlessUiFieldSubmitFormAdapter field={field} />
-              </VStack>
-            </Card>
-          ))}
-        </Grid>
-      </VStack>
-    </main>
+    <FormlessFixtureFrame ariaLabel="Canonical field fixtures">
+      <main {...stylex.props(styles.screen)}>
+        <VStack gap={4} maxWidth={1040} width="100%">
+          <Heading level={1}>Canonical Fields</Heading>
+          <Grid columns={{ minWidth: 280, max: 3 }} gap={3} width="100%">
+            {fields.map((field) => (
+              <Card
+                key={`${field.surface}:${field.recordId ?? "new"}:${field.fieldName}`}
+                padding={4}
+                variant="muted"
+              >
+                <VStack gap={3}>
+                  <Text type="label" color="secondary" maxLines={1}>
+                    {field.label}
+                  </Text>
+                  <FormlessUiFieldRenderer field={field} onIntent={handleIntent} />
+                  <FormlessUiFieldSubmitFormAdapter field={field} />
+                </VStack>
+              </Card>
+            ))}
+          </Grid>
+        </VStack>
+      </main>
+    </FormlessFixtureFrame>
   );
 }
 

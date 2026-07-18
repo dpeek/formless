@@ -1,4 +1,3 @@
-import { SegmentedControl, SegmentedControlItem } from "@astryxdesign/core/SegmentedControl";
 import { Heading, Text } from "@astryxdesign/core/Text";
 import { VStack } from "@astryxdesign/core/VStack";
 import { useState } from "react";
@@ -29,6 +28,11 @@ import {
   type FormlessApplicationShellFixtureId,
   type FormlessApplicationShellFixtureState,
 } from "./application-shell.fixtures.ts";
+import {
+  FormlessFixtureFrame,
+  FormlessFixtureSelector,
+  FormlessFixtureThemeToggle,
+} from "./fixture-layout.tsx";
 import { AstryxSubscribedApplicationShellRenderer } from "./shell.tsx";
 
 export function FormlessApplicationShellLayout() {
@@ -48,33 +52,35 @@ export function FormlessApplicationShellLayout() {
           <Heading level={1}>Application Shell</Heading>
           <Text color="secondary">{selectedFixture.routeLabel}</Text>
         </VStack>
-        <SegmentedControl
-          label="Shell state"
-          layout="hug"
-          onChange={(value) => setSelectedFixtureId(value as FormlessApplicationShellFixtureId)}
-          value={selectedFixtureId}
-        >
-          {fixtures.map((fixture) => (
-            <SegmentedControlItem key={fixture.id} label={fixture.label} value={fixture.id} />
-          ))}
-        </SegmentedControl>
       </VStack>
     </main>
   );
 
   return (
-    <FormlessUiContractHostProvider host={selectedFixture.host}>
-      {selectedFixture.shellReference ? (
-        <AstryxSubscribedApplicationShellRenderer
-          shellReference={selectedFixture.shellReference}
-          themeReference={selectedFixture.themeReference ?? undefined}
-        >
-          {routeChild}
-        </AstryxSubscribedApplicationShellRenderer>
-      ) : (
-        routeChild
-      )}
-    </FormlessUiContractHostProvider>
+    <FormlessFixtureFrame
+      ariaLabel="Application shell fixtures"
+      controls={
+        <FormlessFixtureSelector
+          label="Shell state"
+          onSelectionChange={setSelectedFixtureId}
+          options={fixtures}
+          selectedId={selectedFixtureId}
+        />
+      }
+    >
+      <FormlessUiContractHostProvider host={selectedFixture.host}>
+        {selectedFixture.shellReference ? (
+          <AstryxSubscribedApplicationShellRenderer
+            shellReference={selectedFixture.shellReference}
+            themeControl={<FormlessFixtureThemeToggle />}
+          >
+            {routeChild}
+          </AstryxSubscribedApplicationShellRenderer>
+        ) : (
+          routeChild
+        )}
+      </FormlessUiContractHostProvider>
+    </FormlessFixtureFrame>
   );
 }
 
