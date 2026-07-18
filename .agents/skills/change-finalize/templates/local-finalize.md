@@ -48,7 +48,7 @@ Skill-owned instruction source: `.agents/skills/change-finalize/templates/local-
 5. Run `openspec validate --specs --strict --no-interactive`; block with command evidence on failure.
 6. Do not run `openspec archive` and do not commit archived change files.
 7. Run `devstate check`. Current green `devstate check` output can satisfy check evidence; read `./.devstate/status.md` after failures, stale output, conflict resolution, or exact evidence-copy needs. If the completion gate is red, diagnose and fix reasonably actionable failures before deciding whether you are blocked. Do not run `vp test`, `vp check`, `bun test`, or `bun check` manually.
-8. Update the tip commit metadata with finalization evidence, `Formless-Change-State: ready-for-review`, and latest evidence time.
+8. Update the tip commit metadata with finalization evidence, `Formless-Change-State: ready-for-review`, and latest evidence time using `git commit --amend --cleanup=verbatim`; re-run `bun agents change {{change_id}} --json` after the amendment.
 9. Leave `changes/{{change_id}}` as the review branch and do not check it out in the worker worktree.
 10. Do not merge into `main`.
 11. Final response must include changed files, checks, OpenSpec change status, and exactly one signal: `<plan-done/>` or `<blocked/>`.

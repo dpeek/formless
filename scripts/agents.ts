@@ -1991,7 +1991,7 @@ function formatGitBackedHelperCommands(changeId: string, baseRef: string): strin
     `- Inspect branch diff: \`git diff --stat --find-renames ${baseRef}..HEAD\`.`,
     `- Inspect changed paths: \`git diff --name-status --find-renames ${baseRef}..HEAD\`.`,
     "- Update task state, evidence, blockers, and trailers in the commit message.",
-    "- Update the branch tip after code and metadata changes: `git add -A` then `git commit --amend`.",
+    "- Update the branch tip after code and metadata changes: `git add -A` then `git commit --amend --cleanup=verbatim`.",
   ].join("\n");
 }
 
@@ -2257,7 +2257,7 @@ function amendFinalizationMetadata(input: {
   try {
     const amendResult = runFinalizationCommand({
       at: input.at,
-      args: ["commit", "--amend", "-F", messagePath],
+      args: ["commit", "--amend", "--cleanup=verbatim", "-F", messagePath],
       command: "git",
       cwd: input.cwd,
       failurePrefix: "failed to amend finalization metadata",
@@ -2433,7 +2433,7 @@ function runAutomaticFinalization(input: {
   }
 
   const evidenceMessage = `finalized ${changeId}; ran devstate check because ${checkMessage}`;
-  finalizationCommands.push("git commit --amend -F <metadata-message>");
+  finalizationCommands.push("git commit --amend --cleanup=verbatim -F <metadata-message>");
   const metadataFailure = amendFinalizationMetadata({
     at,
     changeId,

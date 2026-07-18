@@ -16,6 +16,7 @@ Use local `changes/<change-id>` branches as the queue. Do not create `openspec/c
 5. Draft a first-pass spec patch directly in the affected canonical spec files.
 6. Write one structured metadata commit with the spec patch, proposal, design, self-contained tasks, evidence, blockers, and trailers.
 7. Leave `Formless-Change-State: draft` until the first-pass spec patch and task sections are ready for automated workers to claim; set it to `ready` only when every task is real implementation or task-specific test work.
+8. Validate the committed metadata: `bun agents change <change-id> --json`.
 
 ## First-Pass Spec Patch
 
@@ -81,12 +82,13 @@ Concrete commit command:
 
 ```bash
 git add openspec/specs/<capability>/spec.md
-git commit -F <message-file>
+git commit --cleanup=verbatim -F <message-file>
 ```
 
 ## Guardrails
 
 - The branch tip commit message is authoritative working memory.
+- Always use `--cleanup=verbatim` when creating or amending structured change commits. Git's default cleanup can treat Markdown `#` headings as comments and strip required metadata sections.
 - Git notes and untracked files are not authoritative proposal, design, task, evidence, blocker, or state storage.
 - The branch diff against local `main` is the review delta.
 - A ready proposal branch includes both structured commit metadata and a first-pass canonical spec patch.

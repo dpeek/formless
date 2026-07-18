@@ -1704,7 +1704,8 @@ describe("local agent worker review branches", () => {
       }
 
       if (command === "git" && args[0] === "commit" && args[1] === "--amend") {
-        const messagePath = args[3];
+        expect(args[2]).toBe("--cleanup=verbatim");
+        const messagePath = args[4];
         const message = messagePath ? readFileSync(messagePath, "utf8") : "";
         expect(message).toContain("- [x] 1.1 Add parser.");
         expect(message).toContain("`devstate check` at 2026-05-28T00:00:00.000Z: checks ok.");
@@ -2001,7 +2002,8 @@ describe("local agent worker review branches", () => {
       }
 
       if (command === "git" && args[0] === "commit" && args[1] === "--amend") {
-        const messagePath = args[3];
+        expect(args[2]).toBe("--cleanup=verbatim");
+        const messagePath = args[4];
         const message = messagePath ? readFileSync(messagePath, "utf8") : "";
         expect(message).toContain("- [x] 1.1 Add parser.");
         expect(message).toContain("`devstate check` at 2026-05-28T00:00:00.000Z: checks ok.");
@@ -2287,7 +2289,8 @@ describe("local agent worker review branches", () => {
       }
 
       if (command === "git" && args[0] === "commit" && args[1] === "--amend") {
-        const messagePath = args[3];
+        expect(args[2]).toBe("--cleanup=verbatim");
+        const messagePath = args[4];
         const message = messagePath ? readFileSync(messagePath, "utf8") : "";
         expect(message).toContain("- [x] 1.1 Add parser.");
         expect(message).toContain("`devstate check` at 2026-05-28T00:00:00.000Z: checks ok.");
@@ -2651,7 +2654,7 @@ describe("local OpenSpec implementation prompt", () => {
     expect(prompt).toContain("scripts/agents.ts | 12 ++++++");
     expect(prompt).toContain("bun agents change add-thing --json");
     expect(prompt).toContain("git log --no-notes -1 --format=%B HEAD");
-    expect(prompt).toContain("git commit --amend");
+    expect(prompt).toContain("git commit --amend --cleanup=verbatim");
     expect(prompt).toContain("Use the selected task section above before broad context reads");
     expect(prompt).toContain("Do not cross into another task section.");
     expect(prompt).toContain("record blocker evidence plus split guidance in commit metadata");

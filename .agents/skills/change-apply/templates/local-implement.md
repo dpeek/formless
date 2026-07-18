@@ -53,7 +53,7 @@ Skill-owned instruction source: `.agents/skills/change-apply/templates/local-imp
 9. Record changed files, `devstate check` evidence, browser smoke evidence when app behavior changed, blockers, and split guidance in structured commit metadata.
 10. Run `devstate check`. Current clean `devstate check` output is required for done evidence; read `./.devstate/status.md` after failures, stale output, conflict resolution, or exact evidence-copy needs. If the completion gate is red, diagnose and fix reasonably actionable failures before deciding whether you are blocked. Do not run `vp test`, `vp check`, `bun test`, or `bun check` manually.
 11. If app behavior changed, smoke with `bun browser ...` and record evidence.
-12. Amend the branch tip so the commit message contains updated task state, evidence, blockers if any, and trailers. Do not merge into `main`.
+12. Amend the branch tip with `git commit --amend --cleanup=verbatim` so Markdown metadata headings are preserved, then validate it with `bun agents change {{change_id}} --json`. Do not merge into `main`.
 13. Do not perform automatic finalization, archive, spec promotion, or ready-for-review work in this implementation session.
 14. Final response must include changed files, checks, change metadata status, and exactly one signal: `<task-done/>`, `<plan-done/>`, or `<blocked/>`.
 
