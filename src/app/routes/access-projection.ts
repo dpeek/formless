@@ -64,7 +64,6 @@ export type AccessManagementPresentationState =
 
 export type AccessInvitationDraft = {
   displayName: string;
-  expiresAt: string;
   membershipOptionIds: readonly string[];
   roleOptionIds: readonly string[];
   targetAppInstallId: string;
@@ -90,7 +89,6 @@ export type ProjectAccessOptions = {
   confirmationInvitationId?: string | undefined;
   draft: AccessInvitationDraft;
   installs: readonly AppInstall[];
-  now: string;
   revocation: AccessInvitationRevocationState;
   state: AccessManagementPresentationState;
   submission: AccessInvitationSubmissionState;
@@ -123,20 +121,13 @@ export type AccessIntentActions = {
 
 export function createInitialAccessInvitationDraft({
   installs,
-  now,
   summary,
 }: {
   installs: readonly AppInstall[];
-  now: string;
   summary?: IdentityAccessManagementSummary | undefined;
 }): AccessInvitationDraft {
-  const expiresAt = new Date(now);
-  expiresAt.setDate(expiresAt.getDate() + 7);
-  expiresAt.setSeconds(0, 0);
-
   return {
     displayName: "",
-    expiresAt: localDateTimeValue(expiresAt),
     membershipOptionIds: [],
     roleOptionIds: [],
     targetAppInstallId: installs[0]?.installId ?? "",
@@ -193,13 +184,13 @@ export function projectAccess(options: ProjectAccessOptions): AccessProjection {
     ...base,
     authoring: instanceAccessInvitationAuthoringReference,
     ...(confirmation === undefined ? {} : { confirmation }),
-    ...(accessSummaryIsEmpty(summary)
+    ...(invitations.length === 0
       ? {
-          emptyState: {
+          invitationsEmptyState: {
             description: "Invite a collaborator to add access.",
-            id: `${INSTANCE_ACCESS_ID}:empty`,
+            id: `${INSTANCE_ACCESS_ID}:invitations:empty`,
             kind: "accessEmptyState",
-            title: "No people or invitations",
+            title: "No invitations",
           },
         }
       : {}),
@@ -208,6 +199,16 @@ export function projectAccess(options: ProjectAccessOptions): AccessProjection {
     invite: accessInviteAction(summary, options.submission),
     kind: "accessManifest",
     people,
+    ...(people.length === 0
+      ? {
+          peopleEmptyState: {
+            description: "Invite a collaborator to add access.",
+            id: `${INSTANCE_ACCESS_ID}:people:empty`,
+            kind: "accessEmptyState",
+            title: "No people",
+          },
+        }
+      : {}),
     state: "ready",
   };
 
@@ -471,40 +472,37 @@ function projectAccessAuthoringFields(
   );
   const surfaceOptions = [
     fieldOption("surface", "instance", "Instance", draft.targetSurface === "instance"),
-    fieldOption(
-      "surface",
-      "app-install",
-      "App install",
-      draft.targetSurface === "app-install",
-      appOptions.length === 0 ? "No app installs are available." : undefined,
-    ),
-    fieldOption(
-      "surface",
-      "organization",
-      "Organization",
-      draft.targetSurface === "organization",
-      organizationOptions.length === 0 ? "No organizations are available." : undefined,
-    ),
+    ...(appOptions.length > 0
+      ? [
+          fieldOption(
+            "surface",
+            "app-install",
+            "App install",
+            draft.targetSurface === "app-install",
+          ),
+        ]
+      : []),
+    ...(organizationOptions.length > 0
+      ? [
+          fieldOption(
+            "surface",
+            "organization",
+            "Organization",
+            draft.targetSurface === "organization",
+          ),
+        ]
+      : []),
   ];
 
   return {
     displayName: accessField({
       disabledReason: pendingReason,
-      errors: requiredTextErrors("Display name", draft.displayName),
+      errors: requiredTextErrors("Name", draft.displayName),
       inputKind: "text",
-      label: "Display name",
+      label: "Name",
       purpose: "display-name",
       required: true,
       value: draft.displayName,
-    }),
-    expiresAt: accessField({
-      disabledReason: pendingReason,
-      errors: expiresAtErrors(draft.expiresAt, options.now),
-      inputKind: "datetime",
-      label: "Expires",
-      purpose: "expires-at",
-      required: true,
-      value: draft.expiresAt,
     }),
     targetAppInstall: accessField({
       disabledReason:
@@ -519,10 +517,10 @@ function projectAccessAuthoringFields(
           ? ["Choose an available app install scope."]
           : [],
       inputKind: "select",
-      label: "App install scope",
+      label: "Scope",
       options: appOptions,
       purpose: "target-app-install",
-      required: draft.targetSurface === "app-install",
+      required: false,
       value: draft.targetAppInstallId,
     }),
     targetEmail: accessField({
@@ -548,10 +546,10 @@ function projectAccessAuthoringFields(
           ? ["Choose an available organization scope."]
           : [],
       inputKind: "select",
-      label: "Organization scope",
+      label: "Scope",
       options: organizationOptions,
       purpose: "target-organization",
-      required: draft.targetSurface === "organization",
+      required: false,
       value: draft.targetOrganizationId,
     }),
     targetSurface: accessField({
@@ -562,10 +560,10 @@ function projectAccessAuthoringFields(
         ? []
         : ["Choose an available target surface."],
       inputKind: "select",
-      label: "Target surface",
+      label: "Surface",
       options: surfaceOptions,
       purpose: "target-surface",
-      required: true,
+      required: false,
       value: draft.targetSurface,
     }),
   };
@@ -578,7 +576,13 @@ function projectRoleSelection(
 ): FormlessUiAccessGrantSelectionContract & { purpose: "roles" } {
   const pendingReason =
     options.submission.status === "submitting" ? "Invitation creation is in progress." : undefined;
-  const groups = (["instance", "app-install", "organization"] as const).map((scopeKind) => ({
+  const scopeKinds =
+    options.draft.targetSurface === "app-install"
+      ? (["instance", "app-install"] as const)
+      : options.draft.targetSurface === "organization"
+        ? (["instance", "organization"] as const)
+        : (["instance"] as const);
+  const groups = scopeKinds.map((scopeKind) => ({
     id: `${INSTANCE_ACCESS_ID}:role-group:${scopeKind}`,
     kind: "accessGrantOptionGroup" as const,
     label: fieldKeyLabel(scopeKind),
@@ -732,7 +736,11 @@ function projectAccessPeople(
 ): readonly FormlessUiAccessPersonContract[] {
   const rolesByPrincipalId = new Map<string, IdentityAccessRoleSummary[]>();
   for (const role of summary.roles) {
-    if (role.targetKind !== "principal" || role.targetPrincipalId === undefined) {
+    if (
+      role.status !== "active" ||
+      role.targetKind !== "principal" ||
+      role.targetPrincipalId === undefined
+    ) {
       continue;
     }
     rolesByPrincipalId.set(role.targetPrincipalId, [
@@ -751,13 +759,12 @@ function projectAccessPeople(
     roles: (rolesByPrincipalId.get(person.principalId) ?? []).map((role) => ({
       id: role.roleAssignmentId,
       kind: "accessRole",
-      label: safeLabel(role.displayLabel, "Unnamed role"),
+      label: accessRoleLabel(role.roleKey),
       scope: accessFact(
         `${role.roleAssignmentId}:scope`,
         "Scope",
         accessRoleScopeLabel(role, labels),
       ),
-      status: accessStatusFact(`${role.roleAssignmentId}:status`, role.status),
     })),
     status: accessStatusFact(`${person.principalId}:status`, person.status),
   }));
@@ -783,32 +790,31 @@ function projectAccessInvitations(
       revocationDisabledReason,
     );
     const revocation =
-      invitation.status !== "pending" || !canManage
-        ? {
-            availability: "unavailable" as const,
-            disabledReason:
-              invitation.status !== "pending"
-                ? "Only pending invitations can be revoked."
-                : "Owner or administrator access is required.",
-          }
-        : {
-            action: {
-              control: revokeControl,
-              id: `${INSTANCE_ACCESS_ID}:revocation-open:${correlationSegment(invitation.invitationId)}`,
-              intent: {
-                accessId: INSTANCE_ACCESS_ID,
-                actionId: `${INSTANCE_ACCESS_ID}:revocation-open:${correlationSegment(invitation.invitationId)}`,
-                confirmationId: ACCESS_REVOCATION_CONFIRMATION_ID,
-                controlId: revokeControl.id,
-                invitationId: invitation.invitationId,
-                open: true,
-                type: "accessInvitationRevocationConfirmationOpenChange" as const,
+      invitation.status !== "pending"
+        ? { availability: "unavailable" as const }
+        : !canManage
+          ? {
+              availability: "unavailable" as const,
+              disabledReason: "Owner or administrator access is required.",
+            }
+          : {
+              action: {
+                control: revokeControl,
+                id: `${INSTANCE_ACCESS_ID}:revocation-open:${correlationSegment(invitation.invitationId)}`,
+                intent: {
+                  accessId: INSTANCE_ACCESS_ID,
+                  actionId: `${INSTANCE_ACCESS_ID}:revocation-open:${correlationSegment(invitation.invitationId)}`,
+                  confirmationId: ACCESS_REVOCATION_CONFIRMATION_ID,
+                  controlId: revokeControl.id,
+                  invitationId: invitation.invitationId,
+                  open: true,
+                  type: "accessInvitationRevocationConfirmationOpenChange" as const,
+                },
+                kind: "accessAction" as const,
+                purpose: "revocation-open" as const,
               },
-              kind: "accessAction" as const,
-              purpose: "revocation-open" as const,
-            },
-            availability: "available" as const,
-          };
+              availability: "available" as const,
+            };
 
     return {
       expiresAt: accessFact(
@@ -1008,7 +1014,6 @@ function accessInvitationRequest(
     ...target,
     appRegistrations:
       draft.targetSurface === "app-install" ? [{ appInstallId: draft.targetAppInstallId }] : [],
-    expiresAt: new Date(draft.expiresAt).toISOString(),
     invitedPrincipal: { displayName: draft.displayName.trim() },
     memberships,
     principalEmail: { primary: true, recovery: false },
@@ -1062,6 +1067,22 @@ function accessRoleScopeLabel(role: IdentityAccessRoleSummary, labels: AccessLab
       : (labels.organizations.get(role.scopeOrganizationId) ?? "Unavailable organization");
   }
   return "Instance";
+}
+
+function accessRoleLabel(roleKey: IdentityAccessRoleSummary["roleKey"]): string {
+  switch (roleKey) {
+    case "instance.owner":
+      return "Owner";
+    case "instance.admin":
+    case "app.admin":
+      return "Administrator";
+    case "app.editor":
+      return "Editor";
+    case "app.viewer":
+      return "Viewer";
+    case "app.user":
+      return "User";
+  }
 }
 
 function accessInvitationScopeLabel(
@@ -1283,8 +1304,6 @@ function accessDraftWithFieldValue(
   switch (purpose) {
     case "display-name":
       return { ...draft, displayName: value };
-    case "expires-at":
-      return { ...draft, expiresAt: value };
     case "target-app-install":
       return { ...draft, targetAppInstallId: value };
     case "target-email":
@@ -1338,31 +1357,6 @@ function emailErrors(value: string): readonly string[] {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim()) ? [] : ["Email must be valid."];
 }
 
-function expiresAtErrors(value: string, now: string): readonly string[] {
-  const required = requiredTextErrors("Expires", value);
-  if (required.length > 0) {
-    return required;
-  }
-  const expiresAt = new Date(value);
-  const current = new Date(now);
-  if (Number.isNaN(expiresAt.getTime())) {
-    return ["Expires must be a valid date and time."];
-  }
-  return expiresAt.getTime() > current.getTime() ? [] : ["Expires must be in the future."];
-}
-
-function accessSummaryIsEmpty(summary: IdentityAccessManagementSummary): boolean {
-  return (
-    summary.people.length === 0 &&
-    summary.invitations.length === 0 &&
-    summary.roles.length === 0 &&
-    summary.appRegistrations.length === 0 &&
-    summary.memberships.length === 0 &&
-    summary.organizations.length === 0 &&
-    summary.groups.length === 0
-  );
-}
-
 function safeLabel(value: string, fallback: string): string {
   const safe = displaySafeText(value).trim();
   return safe === "" ? fallback : safe;
@@ -1370,14 +1364,6 @@ function safeLabel(value: string, fallback: string): string {
 
 function correlationSegment(value: string): string {
   return encodeURIComponent(value).replaceAll("%", "_");
-}
-
-function localDateTimeValue(value: Date): string {
-  return `${value.getFullYear()}-${datePart(value.getMonth() + 1)}-${datePart(value.getDate())}T${datePart(value.getHours())}:${datePart(value.getMinutes())}`;
-}
-
-function datePart(value: number): string {
-  return String(value).padStart(2, "0");
 }
 
 function distinctStrings(values: readonly string[]): readonly string[] {

@@ -24,7 +24,6 @@ export type CreateIdentityAccessManagementInvitationInput = {
     appInstallId: string;
     selectedOrganization?: string;
   }>;
-  expiresAt: string;
   idempotencyKey: string;
   invitedPrincipal?: {
     displayName: string;

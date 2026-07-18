@@ -39,22 +39,15 @@ import {
   referenceOptions,
   textControl,
 } from "./fields/fixture-helpers.ts";
+import { createWorkspacePushOperationControlFixture } from "./operation-controls.fixtures.ts";
 
 export type FormlessInstanceManagementFixtureId =
   | "empty"
   | "failed"
   | "gateway-unavailable"
-  | "install-dialog-failed"
-  | "install-dialog-idle"
-  | "install-dialog-pending"
-  | "install-dialog-validation"
   | "installed"
   | "loading"
-  | "push-authorization-required"
-  | "push-failed"
-  | "push-idle"
-  | "push-pending"
-  | "push-success";
+  | "push-authorization-required";
 
 export type FormlessInstanceManagementFixtureState = {
   dialog: FormlessUiManagementInstallDialogContract | null;
@@ -82,6 +75,11 @@ export const instanceManagementRoutesReference = formlessUiWorkspaceManifestRefe
 );
 export const instanceManagementInstallActionId = "instance-management:apps:install";
 export const instanceManagementInstallActionControlId = `${instanceManagementInstallActionId}:control`;
+export const instanceManagementWorkspacePushOperationId = "instance-management:workspace:push";
+export const instanceManagementWorkspacePushFixture = createWorkspacePushOperationControlFixture({
+  id: `${instanceManagementWorkspacePushOperationId}:control`,
+  outcome: "success",
+});
 
 const installFieldSchema = (label: string) =>
   ({ label, required: true, type: "text" }) satisfies Extract<FieldSchema, { type: "text" }>;
@@ -182,51 +180,6 @@ export function createFormlessInstanceManagementFixtures(): FormlessInstanceMana
     }),
     readyFixture("empty", "Empty", { installed: false }),
     readyFixture("installed", "Installed", {}),
-    readyFixture("install-dialog-idle", "Install", {
-      dialog: installDialog({ open: true }),
-    }),
-    readyFixture("install-dialog-validation", "Install validation", {
-      dialog: installDialog({
-        errors: ["Install id is required."],
-        fields: installFields({ installId: "", installIdError: "Install id is required." }),
-        open: true,
-        submit: button("instance-management:install-submit", "Install Site", {
-          disabledReason: "Resolve the validation errors.",
-          disabled: true,
-          prominence: "primary",
-          type: "submit",
-        }),
-      }),
-    }),
-    readyFixture("install-dialog-pending", "Installing", {
-      dialog: installDialog({
-        feedback: managementFeedback(
-          "install-pending",
-          "Installing app",
-          "The app install is being prepared.",
-          "info",
-        ),
-        open: true,
-        pending: { isPending: true, label: "Installing app" },
-        submit: button("instance-management:install-submit", "Install Site", {
-          disabled: true,
-          pending: { isPending: true, label: "Installing app" },
-          prominence: "primary",
-          type: "submit",
-        }),
-      }),
-    }),
-    readyFixture("install-dialog-failed", "Install failed", {
-      dialog: installDialog({
-        feedback: managementFeedback(
-          "install-failed",
-          "Install failed",
-          "The selected install id is already in use.",
-          "danger",
-        ),
-        open: true,
-      }),
-    }),
     readyFixture("gateway-unavailable", "Gateway unavailable", {
       manifestOverrides: {
         workspaceFeedback: managementFeedback(
@@ -238,10 +191,6 @@ export function createFormlessInstanceManagementFixtures(): FormlessInstanceMana
         workspaceOperation: undefined,
       },
     }),
-    readyFixture("push-idle", "Push idle", { pushState: "idle" }),
-    readyFixture("push-pending", "Push pending", { pushState: "pending" }),
-    readyFixture("push-success", "Push success", { pushState: "success" }),
-    readyFixture("push-failed", "Push failed", { pushState: "failed" }),
     readyFixture("push-authorization-required", "Push authorization", {
       pushState: "authorization-required",
     }),
@@ -444,11 +393,10 @@ function packageOption(
   };
 }
 
-type PushFixtureState = "authorization-required" | "failed" | "idle" | "pending" | "success";
+type PushFixtureState = "authorization-required" | "idle";
 
 function pushOperation(state: PushFixtureState): FormlessUiManagementWorkspaceOperationContract {
-  const controlId = "instance-management:workspace:push:control";
-  const operationId = "instance-management:workspace:push";
+  const operationId = instanceManagementWorkspacePushOperationId;
   const promptId = `${operationId}:authorization`;
 
   return {
@@ -470,155 +418,27 @@ function pushOperation(state: PushFixtureState): FormlessUiManagementWorkspaceOp
           },
         }
       : {}),
-    control: pushControl(controlId, state),
+    control: pushControl(state),
     id: operationId,
     kind: "managementWorkspaceOperation",
   };
 }
 
-function pushControl(
-  controlId: string,
-  state: PushFixtureState,
-): FormlessUiOperationControlContract {
-  const pending = state === "pending";
-  const status =
-    state === "success"
-      ? operationStatus(
-          controlId,
-          "Workspace pushed",
-          "Source is up to date.",
-          "success",
-          "committed",
-        )
-      : state === "failed"
-        ? operationStatus(
-            controlId,
-            "Push failed",
-            "The workspace gateway rejected Push.",
-            "danger",
-            "failed",
-          )
-        : state === "authorization-required"
-          ? operationStatus(
-              controlId,
-              "Authorization required",
-              "Authorize the workspace gateway.",
-              "warning",
-              "idle",
-            )
-          : pending
-            ? operationStatus(
-                controlId,
-                "Pushing workspace",
-                "Uploading source files.",
-                "info",
-                "pending",
-              )
-            : operationStatus(
-                controlId,
-                "Push ready",
-                "Workspace source can be pushed.",
-                "neutral",
-                "idle",
-              );
-  const progress = pending
+function pushControl(state: PushFixtureState): FormlessUiOperationControlContract {
+  const control = instanceManagementWorkspacePushFixture.initial;
+
+  return state === "authorization-required"
     ? {
-        detail: "Uploading display-safe workspace source.",
-        id: `${controlId}:progress`,
-        kind: "operationProgress" as const,
-        steps: [
-          { id: `${controlId}:plan`, label: "Plan", status: "succeeded" as const },
-          { id: `${controlId}:upload`, label: "Upload source", status: "running" as const },
-        ],
-        title: "Pushing workspace",
-        updatedAt: 1,
+        ...control,
+        status: {
+          ...control.status,
+          accessibilityLabel: "Authorization required. Authorize the workspace gateway.",
+          detail: "Authorize the workspace gateway.",
+          intent: "warning",
+          label: "Authorization required",
+        },
       }
-    : undefined;
-  const feedback =
-    state === "success"
-      ? operationFeedback(
-          controlId,
-          "Workspace pushed",
-          "Source is up to date.",
-          "success",
-          "committed",
-        )
-      : state === "failed"
-        ? operationFeedback(
-            controlId,
-            "Push failed",
-            "The workspace gateway rejected Push.",
-            "danger",
-            "failed",
-          )
-        : pending
-          ? {
-              ...operationFeedback(
-                controlId,
-                "Pushing workspace",
-                "Uploading source files.",
-                "info",
-                "pending",
-              ),
-              activeProgress: { label: "Upload source", stepId: `${controlId}:upload` },
-              progress,
-            }
-          : undefined;
-
-  return {
-    ...(feedback === undefined ? {} : { feedback }),
-    id: controlId,
-    kind: "operationControl",
-    ...(progress === undefined ? {} : { progress }),
-    status,
-    trigger: operationButton(controlId, "Push workspace", {
-      ...(pending
-        ? {
-            disabled: true,
-            disabledReason: "Pushing workspace",
-            pending: { isPending: true, label: "Pushing workspace" },
-          }
-        : {}),
-      density: "compact",
-      prominence: "primary",
-    }),
-  };
-}
-
-function operationStatus(
-  controlId: string,
-  label: string,
-  detail: string,
-  intent: "danger" | "info" | "neutral" | "success" | "warning",
-  status: "committed" | "failed" | "idle" | "pending",
-) {
-  return {
-    accessibilityLabel: `${label}. ${detail}`,
-    detail,
-    id: `${controlId}:status`,
-    intent,
-    kind: "compactStatus" as const,
-    ...(status === "pending" ? { pending: { isPending: true, label } } : {}),
-    label,
-    status,
-  };
-}
-
-function operationFeedback(
-  controlId: string,
-  title: string,
-  detail: string,
-  intent: "danger" | "info" | "success",
-  status: "committed" | "failed" | "pending",
-) {
-  return {
-    detail,
-    id: `${controlId}:feedback`,
-    intent,
-    kind: "operationFeedbackEvent" as const,
-    status,
-    title,
-  };
+    : control;
 }
 
 function managementFeedback(
@@ -644,6 +464,7 @@ function appsWorkspace(installed: boolean) {
     ],
     emptyDescription: "Install an app to add it to this instance.",
     emptyTitle: "No apps installed",
+    keepCollectionReadyWhenEmpty: true,
     rows: installed
       ? [
           ["site", "Site", "site"],
@@ -860,7 +681,7 @@ function installAppAction(): FormlessUiWorkspaceSectionContract["actions"][numbe
       invocationSource: "button",
     },
     kind: "actionTrigger",
-    label: "Install",
+    label: "Install App",
   };
 
   return {
@@ -1101,12 +922,7 @@ function routeEditFields(rowId: string, record: RouteFixtureRecord): FormlessUiF
     recordRouteTextField(rowId, "matchHost", routeMatchHostField, ""),
     recordRouteTextField(rowId, "matchPath", routeMatchPathField, record.matchPath),
     recordRouteTextField(rowId, "matchPrefix", routeMatchPrefixField, ""),
-    recordRouteEnumField(
-      rowId,
-      "targetProfile",
-      routeTargetProfileField,
-      record.targetProfile,
-    ),
+    recordRouteEnumField(rowId, "targetProfile", routeTargetProfileField, record.targetProfile),
     recordRouteReferenceField(
       rowId,
       "appInstall",
@@ -1303,16 +1119,5 @@ function button(
     ...(options.pending === undefined ? {} : { pending: options.pending }),
     prominence: options.prominence ?? "secondary",
     type: options.type ?? "button",
-  };
-}
-
-function operationButton(
-  id: string,
-  label: string,
-  options: Parameters<typeof button>[2] = {},
-): FormlessUiOperationControlContract["trigger"] {
-  return {
-    ...button(id, label, options),
-    intent: { controlId: id, invocationSource: "button", type: "operationInvoke" },
   };
 }

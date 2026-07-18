@@ -30,7 +30,6 @@ export type AccessRouteDependencies = {
   createInvitation?: (input: CreateIdentityAccessManagementInvitationInput) => Promise<unknown>;
   fetchInstalls?: (options?: { signal?: AbortSignal }) => Promise<AppInstallsResponse>;
   fetchSummary?: (options?: { signal?: AbortSignal }) => Promise<IdentityAccessManagementSummary>;
-  now?: () => string;
   revokeInvitation?: (input: RevokeIdentityAccessManagementInvitationInput) => Promise<unknown>;
 };
 
@@ -45,7 +44,6 @@ export function AccessRoute({ dependencies = {} }: { dependencies?: AccessRouteD
     dependencies.createInvitation ?? createIdentityAccessManagementInvitation;
   const revokeInvitation =
     dependencies.revokeInvitation ?? revokeIdentityAccessManagementInvitation;
-  const now = dependencies.now ?? currentAccessTime;
   const createIdempotencyKey =
     dependencies.createIdempotencyKey ?? createAccessInvitationIdempotencyKey;
   const [installs, setInstalls] = useState<readonly AppInstall[]>([]);
@@ -53,7 +51,7 @@ export function AccessRoute({ dependencies = {} }: { dependencies?: AccessRouteD
   const [authoringOpen, setAuthoringOpen] = useState(false);
   const [confirmationInvitationId, setConfirmationInvitationId] = useState<string>();
   const [draft, setDraft] = useState<AccessInvitationDraft>(() =>
-    createInitialAccessInvitationDraft({ installs: [], now: now() }),
+    createInitialAccessInvitationDraft({ installs: [] }),
   );
   const [submission, setSubmission] = useState<AccessInvitationSubmissionState>({
     status: "idle",
@@ -82,9 +80,7 @@ export function AccessRoute({ dependencies = {} }: { dependencies?: AccessRouteD
         }
         const nextInstalls = registry.installs;
         setInstalls(nextInstalls);
-        setDraft(
-          createInitialAccessInvitationDraft({ installs: nextInstalls, now: now(), summary }),
-        );
+        setDraft(createInitialAccessInvitationDraft({ installs: nextInstalls, summary }));
         setState({ status: "ready", summary });
       })
       .catch((error: unknown) => {
@@ -106,7 +102,7 @@ export function AccessRoute({ dependencies = {} }: { dependencies?: AccessRouteD
       mounted.current = false;
       controller.abort();
     };
-  }, [fetchInstalls, fetchSummary, now]);
+  }, [fetchInstalls, fetchSummary]);
 
   const changeAuthoringOpen = useCallback((open: boolean) => {
     setAuthoringOpen(open);
@@ -139,7 +135,7 @@ export function AccessRoute({ dependencies = {} }: { dependencies?: AccessRouteD
           return;
         }
         setState({ status: "ready", summary });
-        setDraft(createInitialAccessInvitationDraft({ installs, now: now(), summary }));
+        setDraft(createInitialAccessInvitationDraft({ installs, summary }));
         setAuthoringOpen(false);
         setSubmission({ message: "Invitation created.", status: "succeeded" });
       } catch (error) {
@@ -150,7 +146,7 @@ export function AccessRoute({ dependencies = {} }: { dependencies?: AccessRouteD
         createPending.current = false;
       }
     },
-    [createInvitation, fetchSummary, installs, now],
+    [createInvitation, fetchSummary, installs],
   );
   const submitRevocation = useCallback(
     async (input: RevokeIdentityAccessManagementInvitationInput) => {
@@ -211,12 +207,11 @@ export function AccessRoute({ dependencies = {} }: { dependencies?: AccessRouteD
       confirmationInvitationId,
       draft,
       installs,
-      now: now(),
       revocation,
       state,
       submission,
     }),
-    [authoringOpen, confirmationInvitationId, draft, installs, now, revocation, state, submission],
+    [authoringOpen, confirmationInvitationId, draft, installs, revocation, state, submission],
   );
 
   useLayoutEffect(() => {
@@ -235,10 +230,6 @@ function accessRequestError(error: unknown): string {
   return error instanceof IdentityAccessManagementApiError || error instanceof Error
     ? error.message
     : "Access management request failed.";
-}
-
-function currentAccessTime(): string {
-  return new Date().toISOString();
 }
 
 function createAccessInvitationIdempotencyKey(): string {

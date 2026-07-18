@@ -33,15 +33,7 @@ describe("canonical instance-management fixtures", () => {
       "failed",
       "empty",
       "installed",
-      "install-dialog-idle",
-      "install-dialog-validation",
-      "install-dialog-pending",
-      "install-dialog-failed",
       "gateway-unavailable",
-      "push-idle",
-      "push-pending",
-      "push-success",
-      "push-failed",
       "push-authorization-required",
     ]);
     expect(structuredClone(fixtures)).toEqual(fixtures);
@@ -51,46 +43,26 @@ describe("canonical instance-management fixtures", () => {
     expect(workspaceRows(requiredFixture(fixtures, "empty"), "routes")).toHaveLength(0);
     expect(workspaceRows(requiredFixture(fixtures, "installed"), "apps")).toHaveLength(2);
     expect(workspaceRows(requiredFixture(fixtures, "installed"), "routes")).toHaveLength(2);
-    expect(requiredInstallAction(requiredFixture(fixtures, "installed").state).action).toMatchObject({
+    expect(
+      requiredInstallAction(requiredFixture(fixtures, "installed").state).action,
+    ).toMatchObject({
       accessibilityLabel: "Install app",
-      label: "Install",
+      label: "Install App",
     });
-    expect(requiredRouteCreateAction(requiredFixture(fixtures, "installed").state).surface).toMatchObject(
-      {
-        dialog: { title: "Create Route" },
-        trigger: { accessibilityLabel: "Create Route" },
-      },
-    );
+    expect(
+      requiredRouteCreateAction(requiredFixture(fixtures, "installed").state).surface,
+    ).toMatchObject({
+      dialog: { title: "Create Route" },
+      trigger: { accessibilityLabel: "Create Route" },
+    });
     expect(requiredRouteEditAction(requiredFixture(fixtures, "installed").state)).toMatchObject({
       dialog: { title: "Edit route" },
       trigger: { accessibilityLabel: "Edit route" },
-    });
-    expect(requiredDialog(fixtures, "install-dialog-idle")).toMatchObject({
-      errors: [],
-      open: true,
-    });
-    expect(requiredDialog(fixtures, "install-dialog-idle").pending).toBeUndefined();
-    expect(requiredDialog(fixtures, "install-dialog-validation")).toMatchObject({
-      errors: ["Install id is required."],
-      open: true,
-      submit: { disabled: true },
-    });
-    expect(requiredDialog(fixtures, "install-dialog-pending")).toMatchObject({
-      feedback: { intent: "info", title: "Installing app" },
-      pending: { isPending: true },
-      submit: { pending: { isPending: true } },
-    });
-    expect(requiredDialog(fixtures, "install-dialog-failed")).toMatchObject({
-      feedback: { intent: "danger", title: "Install failed" },
     });
     expect(readyManifest(fixtures, "gateway-unavailable")).toMatchObject({
       workspaceFeedback: { intent: "warning", title: "Workspace Push unavailable" },
       workspaceOperation: undefined,
     });
-    expect(operationStatus(fixtures, "push-idle")).toBe("idle");
-    expect(operationStatus(fixtures, "push-pending")).toBe("pending");
-    expect(operationStatus(fixtures, "push-success")).toBe("committed");
-    expect(operationStatus(fixtures, "push-failed")).toBe("failed");
     expect(
       readyManifest(fixtures, "push-authorization-required").workspaceOperation
         ?.authorizationPrompt,
@@ -148,9 +120,7 @@ describe("canonical instance-management fixtures", () => {
     });
     expect(requiredRouteEditAction(managementHost.getState()).dialog.open).toBe(true);
 
-    const installHost = createFormlessInstanceManagementFixtureHost(
-      requiredFixture(fixtures, "install-dialog-idle"),
-    );
+    const installHost = managementHost;
     const initialDialog = requiredCurrentDialog(installHost.getState());
     const tasksOption = initialDialog.packageOptions.find(
       (option) => option.packageAppKey === "tasks",
@@ -204,7 +174,7 @@ describe("canonical instance-management fixtures", () => {
     });
 
     const pushHost = createFormlessInstanceManagementFixtureHost(
-      requiredFixture(fixtures, "push-idle"),
+      requiredFixture(fixtures, "installed"),
     );
     const idleOperation = requiredOperation(pushHost.getState());
     pushHost.host.dispatch({
@@ -353,25 +323,11 @@ function readyManifest(
   return manifest;
 }
 
-function requiredDialog(
-  fixtures: readonly FormlessInstanceManagementFixture[],
-  id: FormlessInstanceManagementFixtureId,
-) {
-  return requiredCurrentDialog(requiredFixture(fixtures, id).state);
-}
-
 function requiredCurrentDialog(state: FormlessInstanceManagementFixture["state"]) {
   if (!state.dialog) {
     throw new Error("Expected instance-management dialog fixture.");
   }
   return state.dialog;
-}
-
-function operationStatus(
-  fixtures: readonly FormlessInstanceManagementFixture[],
-  id: FormlessInstanceManagementFixtureId,
-) {
-  return readyManifest(fixtures, id).workspaceOperation?.control.status.status;
 }
 
 function requiredOperation(state: FormlessInstanceManagementFixture["state"]) {
@@ -423,7 +379,10 @@ function requiredInstallAction(state: FormlessInstanceManagementFixture["state"]
 }
 
 function requiredRouteCreateAction(state: FormlessInstanceManagementFixture["state"]) {
-  const action = requiredWorkspace(state, "routes").sections[0]?.collection.presentation.actions.primary.find(
+  const action = requiredWorkspace(
+    state,
+    "routes",
+  ).sections[0]?.collection.presentation.actions.primary.find(
     (candidate) => candidate.kind === "createAction",
   );
   if (!action || action.kind !== "createAction") {

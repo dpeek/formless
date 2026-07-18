@@ -139,15 +139,6 @@ function LegacyAccessReadyContent({
   return (
     <>
       {manifest.feedback ? <LegacyAccessFeedback feedback={manifest.feedback} /> : null}
-      {manifest.emptyState ? (
-        <div
-          className="rounded-md border border-dashed border-border px-4 py-6 text-sm text-muted-fg"
-          data-formless-access-empty={manifest.emptyState.id}
-        >
-          <p className="font-medium text-fg">{manifest.emptyState.title}</p>
-          <p>{manifest.emptyState.description}</p>
-        </div>
-      ) : null}
       <div className="grid gap-6 lg:grid-cols-2">
         <LegacyAccessPeople people={manifest.people} />
         <LegacyAccessInvitations invitations={manifest.invitations} onIntent={onIntent} />
@@ -191,9 +182,6 @@ function LegacyAccessPeople({ people }: { people: readonly FormlessUiAccessPerso
                       <span className="font-medium">{role.label}</span>
                       {role.scope ? (
                         <span className="text-muted-fg"> · {role.scope.value}</span>
-                      ) : null}
-                      {role.status ? (
-                        <span className="text-muted-fg"> · {role.status.value}</span>
                       ) : null}
                     </li>
                   ))}
@@ -332,7 +320,6 @@ export function LegacyAccessAuthoringContent({
     >
       <ModalHeader>
         <ModalTitle>{authoring.title}</ModalTitle>
-        <ModalDescription>{authoring.description}</ModalDescription>
       </ModalHeader>
       <ModalBody>
         <div className="space-y-5">
@@ -340,10 +327,13 @@ export function LegacyAccessAuthoringContent({
             {[
               authoring.fields.targetEmail,
               authoring.fields.displayName,
-              authoring.fields.expiresAt,
               authoring.fields.targetSurface,
-              authoring.fields.targetAppInstall,
-              authoring.fields.targetOrganization,
+              ...(authoring.fields.targetSurface.value === "app-install"
+                ? [authoring.fields.targetAppInstall]
+                : []),
+              ...(authoring.fields.targetSurface.value === "organization"
+                ? [authoring.fields.targetOrganization]
+                : []),
             ].map((field) => (
               <LegacyAccessField field={field} key={field.id} onIntent={onIntent} />
             ))}

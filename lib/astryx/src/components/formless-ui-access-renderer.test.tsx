@@ -1,5 +1,4 @@
 import { readFile } from "node:fs/promises";
-import { DateTimeInput, type ISODateTimeString } from "@astryxdesign/core/DateTimeInput";
 import { Dialog } from "@astryxdesign/core/Dialog";
 import { MultiSelector } from "@astryxdesign/core/MultiSelector";
 import { Selector } from "@astryxdesign/core/Selector";
@@ -35,6 +34,7 @@ import {
   AstryxAccessInvitationAuthoringContent,
   AstryxAccessRenderer,
   AstryxSubscribedAccessRenderer,
+  astryxAccessFeedbackToastOptions,
 } from "./formless-ui-access-renderer.tsx";
 
 vi.mock("@stylexjs/stylex", () => ({
@@ -221,6 +221,10 @@ vi.mock("@astryxdesign/core/Spinner", () => ({
     createElement("span", { "aria-label": label, role: "status" }),
 }));
 
+vi.mock("@astryxdesign/core/Toast", () => ({
+  useToast: () => () => undefined,
+}));
+
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const accessReference = formlessUiAccessManifestReference("access:test");
@@ -251,8 +255,12 @@ describe("Astryx access renderer", () => {
     expect(failedHtml).toContain('data-formless-astryx-access-state="failed"');
     expect(failedHtml).toContain('role="alert"');
     expect(failedHtml).toContain("Access failed");
-    expect(emptyHtml).toContain('data-formless-astryx-access-empty="access:test:empty"');
-    expect(emptyHtml).toContain("No access records");
+    expect(emptyHtml).toContain('data-formless-astryx-access-empty="access:test:people:empty"');
+    expect(emptyHtml).toContain(
+      'data-formless-astryx-access-empty="access:test:invitations:empty"',
+    );
+    expect(emptyHtml).toContain("No people");
+    expect(emptyHtml).toContain("No invitations");
     expect(populatedHtml.match(/<table/g)).toHaveLength(2);
     expect(populatedHtml.match(/<thead/g)).toHaveLength(2);
     expect(populatedHtml.match(/<tbody/g)).toHaveLength(2);
@@ -266,7 +274,7 @@ describe("Astryx access renderer", () => {
     expect(populatedHtml).toContain(
       'data-formless-astryx-access-fact="invitation:pending:expires"',
     );
-    expect(populatedHtml).toContain("Invitation created");
+    expect(populatedHtml).not.toContain("Invitation created");
     expect(populatedHtml).toContain('role="alertdialog"');
     expect(populatedHtml).toContain("Revoke invitation?");
     expect(populatedHtml).toContain("Revoke invitation");
@@ -274,12 +282,39 @@ describe("Astryx access renderer", () => {
     expect(populatedHtml).not.toContain("owner-secret");
   });
 
+  it("maps invitation results to operation-style toast behavior", () => {
+    expect(astryxAccessFeedbackToastOptions(accessFeedback("success"))).toMatchObject({
+      autoHideDuration: 5_000,
+      body: "Invitation created",
+      isAutoHide: true,
+      type: "info",
+    });
+    expect(astryxAccessFeedbackToastOptions(accessFeedback("danger"))).toMatchObject({
+      body: "Invitation failed",
+      isAutoHide: false,
+      type: "error",
+    });
+  });
+
   it("composes an accessible controlled form dialog with separate sectioned grant selectors", async () => {
-    const authoring = invitationAuthoring({
-      errors: ["Review the invitation."],
+    const emailError = "Email must be valid.";
+    const roleError = "Choose at least one available role.";
+    const authoringBase = invitationAuthoring({
+      errors: [emailError, roleError, "Review the invitation."],
       feedback: accessFeedback("danger"),
       pending: { isPending: true, label: "Sending invitation" },
     });
+    const authoring: FormlessUiAccessInvitationAuthoringContract = {
+      ...authoringBase,
+      fields: {
+        ...authoringBase.fields,
+        targetEmail: { ...authoringBase.fields.targetEmail, errors: [emailError] },
+      },
+      grantSelections: [
+        { ...authoringBase.grantSelections[0], errors: [roleError] },
+        authoringBase.grantSelections[1],
+      ],
+    };
     let renderer: ReactTestRenderer | undefined;
 
     await act(async () => {
@@ -291,7 +326,6 @@ describe("Astryx access renderer", () => {
     const mounted = required(renderer);
     const dialog = mounted.root.findByType(Dialog);
     const textFields = mounted.root.findAllByType(TextInput);
-    const dateTimeField = mounted.root.findByType(DateTimeInput);
     const selectors = mounted.root.findAllByType(Selector);
     const grantSelectors = mounted.root.findAllByType(MultiSelector);
 
@@ -300,26 +334,41 @@ describe("Astryx access renderer", () => {
     expect(dialog.props.purpose).toBe("form");
     expect(textFields.map((field) => [field.props.label, field.props.value])).toEqual([
       ["Email", "invitee@example.com"],
-      ["Display name", "Grace Hopper"],
+      ["Name", "Grace Hopper"],
     ]);
-    expect(dateTimeField.props.value).toBe("2026-07-24T12:30");
+    expect(textFields.find((field) => field.props.label === "Email")?.props.status).toEqual({
+      message: emailError,
+      type: "error",
+    });
     expect(selectors.map((selector) => [selector.props.label, selector.props.value])).toEqual([
-      ["Target surface", "organization"],
-      ["App install", "site"],
-      ["Organization", "analytical-engine"],
+      ["Surface", "organization"],
+      ["Scope", "analytical-engine"],
     ]);
+    expect(selectors.find((selector) => selector.props.label === "Surface")?.props.isRequired).toBe(
+      false,
+    );
+    expect(selectors.find((selector) => selector.props.label === "Scope")?.props.isRequired).toBe(
+      false,
+    );
     expect(grantSelectors).toHaveLength(2);
     expect(grantSelectors[0]?.props.label).toBe("Roles");
     expect(grantSelectors[0]?.props.options.map((group: { title: string }) => group.title)).toEqual(
-      ["Instance", "App install", "Organization"],
+      ["Instance", "Organization"],
     );
-    expect(grantSelectors[0]?.props.hasSearch).toBe(true);
+    expect(grantSelectors[0]?.props.hasSearch).toBe(false);
     expect(grantSelectors[0]?.props.hasSelectAll).toBe(false);
+    expect(grantSelectors[0]?.props.status).toEqual({ message: roleError, type: "error" });
+    expect(grantSelectors[0]?.props.description).toBe(
+      "Instance role 6: Instance administrators cannot be invited.",
+    );
     expect(grantSelectors[1]?.props.label).toBe("Memberships");
     expect(grantSelectors[1]?.props.options.map((group: { title: string }) => group.title)).toEqual(
       ["Organizations", "Groups"],
     );
     expect(grantSelectors[1]?.props.hasSelectAll).toBe(false);
+    expect(grantSelectors[1]?.props.description).toBe(
+      "Membership grants are unavailable while sending.",
+    );
 
     const html = renderToStaticMarkup(
       <AstryxAccessInvitationAuthoringContent authoring={authoring} onIntent={() => undefined} />,
@@ -327,11 +376,47 @@ describe("Astryx access renderer", () => {
     expect(html).toContain('data-formless-astryx-access-authoring="access:test:authoring"');
     expect(html).toContain('data-formless-astryx-access-grants="roles"');
     expect(html).toContain('data-formless-astryx-access-grants="memberships"');
-    expect(html).toContain("Instance administrators cannot be invited.");
-    expect(html).toContain("Membership grants are unavailable while sending.");
     expect(html).toContain("Review the invitation.");
-    expect(html).toContain("Invitation failed");
+    expect(html).not.toContain("Invitation failed");
     expect(html).toContain("Sending invitation");
+
+    const appInstallHtml = renderToStaticMarkup(
+      <AstryxAccessInvitationAuthoringContent
+        authoring={{
+          ...authoring,
+          fields: {
+            ...authoring.fields,
+            targetSurface: { ...authoring.fields.targetSurface, value: "app-install" },
+          },
+        }}
+        onIntent={() => undefined}
+      />,
+    );
+    expect(appInstallHtml).toContain(
+      'data-formless-astryx-access-field="field:target-app-install"',
+    );
+    expect(appInstallHtml).not.toContain(
+      'data-formless-astryx-access-field="field:target-organization"',
+    );
+
+    const instanceHtml = renderToStaticMarkup(
+      <AstryxAccessInvitationAuthoringContent
+        authoring={{
+          ...authoring,
+          fields: {
+            ...authoring.fields,
+            targetSurface: { ...authoring.fields.targetSurface, value: "instance" },
+          },
+        }}
+        onIntent={() => undefined}
+      />,
+    );
+    expect(instanceHtml).not.toContain(
+      'data-formless-astryx-access-field="field:target-app-install"',
+    );
+    expect(instanceHtml).not.toContain(
+      'data-formless-astryx-access-field="field:target-organization"',
+    );
 
     await act(async () => mounted.unmount());
   });
@@ -361,10 +446,9 @@ describe("Astryx access renderer", () => {
     const email = authoringMounted.root
       .findAllByType(TextInput)
       .find((field) => field.props.label === "Email");
-    const expires = authoringMounted.root.findByType(DateTimeInput);
     const targetSurface = authoringMounted.root
       .findAllByType(Selector)
-      .find((field) => field.props.label === "Target surface");
+      .find((field) => field.props.label === "Surface");
     const roles = authoringMounted.root
       .findAllByType(MultiSelector)
       .find((selection) => selection.props.label === "Roles");
@@ -376,8 +460,7 @@ describe("Astryx access renderer", () => {
 
     await act(async () => {
       required(email).props.onChange("next@example.com");
-      expires.props.onChange("2026-08-01T09:45" as ISODateTimeString);
-      required(targetSurface).props.onChange("app");
+      required(targetSurface).props.onChange("app-install");
       required(roles).props.onChange(["role:instance:0", "role:instance:1"]);
       form.props.onSubmit({ preventDefault: () => undefined });
       authoringDialog.props.onOpenChange(false);
@@ -396,16 +479,9 @@ describe("Astryx access renderer", () => {
       {
         accessId: "access:test",
         authoringId: "access:test:authoring",
-        fieldId: "field:expires-at",
-        type: "accessInvitationFieldChange",
-        value: "2026-08-01T09:45",
-      },
-      {
-        accessId: "access:test",
-        authoringId: "access:test:authoring",
         fieldId: "field:target-surface",
         type: "accessInvitationFieldChange",
-        value: "app",
+        value: "app-install",
       },
       {
         accessId: "access:test",
@@ -449,7 +525,7 @@ describe("Astryx access renderer", () => {
     expect(html).not.toContain("data-formless-access-state");
   });
 
-  it("stays package-local, runtime-free, effect-free, and inactive in production", async () => {
+  it("stays package-local, runtime-free, and inactive in production", async () => {
     const rendererSource = await readFile(
       new URL("./formless-ui-access-renderer.tsx", import.meta.url),
       "utf8",
@@ -469,7 +545,6 @@ describe("Astryx access renderer", () => {
     expect(rendererSource).not.toContain("legacy-access-renderer");
     expect(rendererSource).not.toContain("access-runtime");
     expect(rendererSource).not.toContain("access-projection");
-    expect(rendererSource).not.toContain("useEffect");
     expect(rendererSource).not.toContain("fetch(");
     expect(rendererSource).not.toContain("global.css");
     expect(rendererSource).not.toContain("CheckboxInput");
@@ -529,11 +604,17 @@ function readyManifest({
     ...(confirmation ? { confirmation } : {}),
     ...(empty
       ? {
-          emptyState: {
+          invitationsEmptyState: {
             description: "Invite someone to begin sharing access.",
-            id: "access:test:empty",
+            id: "access:test:invitations:empty",
             kind: "accessEmptyState" as const,
-            title: "No access records",
+            title: "No invitations",
+          },
+          peopleEmptyState: {
+            description: "Invite someone to begin sharing access.",
+            id: "access:test:people:empty",
+            kind: "accessEmptyState" as const,
+            title: "No people",
           },
         }
       : {}),
@@ -567,7 +648,6 @@ function accessPerson(): FormlessUiAccessPersonContract {
         kind: "accessRole",
         label: "Owner",
         scope: accessFact("role:owner:scope", "Scope", "Instance", "text"),
-        status: accessFact("role:owner:status", "Status", "Active", "status", "success"),
       },
     ],
     status: accessFact("person:ada:status", "Status", "Active", "status", "success"),
@@ -614,9 +694,8 @@ function invitationAuthoring({
   pending?: FormlessUiAccessInvitationAuthoringContract["pending"];
 } = {}): FormlessUiAccessInvitationAuthoringContract {
   const fields = {
-    displayName: accessField("display-name", "Display name", "text", "Grace Hopper"),
-    expiresAt: accessField("expires-at", "Expires", "datetime", "2026-07-24T12:30"),
-    targetAppInstall: accessField("target-app-install", "App install", "select", "site", {
+    displayName: accessField("display-name", "Name", "text", "Grace Hopper"),
+    targetAppInstall: accessField("target-app-install", "Scope", "select", "site", {
       options: [
         {
           disabledReason: "The CRM install is paused.",
@@ -627,28 +706,29 @@ function invitationAuthoring({
         },
         { id: "app:site", label: "Site", selected: true, value: "site" },
       ],
+      required: false,
     }),
     targetEmail: accessField("target-email", "Email", "email", "invitee@example.com"),
-    targetOrganization: accessField(
-      "target-organization",
-      "Organization",
-      "select",
-      "analytical-engine",
-      {
-        options: [
-          {
-            id: "organization:analytical-engine",
-            label: "Analytical Engine",
-            selected: true,
-            value: "analytical-engine",
-          },
-        ],
-      },
-    ),
-    targetSurface: accessField("target-surface", "Target surface", "select", "organization", {
+    targetOrganization: accessField("target-organization", "Scope", "select", "analytical-engine", {
+      options: [
+        {
+          id: "organization:analytical-engine",
+          label: "Analytical Engine",
+          selected: true,
+          value: "analytical-engine",
+        },
+      ],
+      required: false,
+    }),
+    targetSurface: accessField("target-surface", "Surface", "select", "organization", {
       options: [
         { id: "surface:instance", label: "Instance", selected: false, value: "instance" },
-        { id: "surface:app", label: "App install", selected: false, value: "app" },
+        {
+          id: "surface:app",
+          label: "App install",
+          selected: false,
+          value: "app-install",
+        },
         {
           id: "surface:organization",
           label: "Organization",
@@ -656,6 +736,7 @@ function invitationAuthoring({
           value: "organization",
         },
       ],
+      required: false,
     }),
   } satisfies FormlessUiAccessInvitationAuthoringContract["fields"];
 
@@ -711,7 +792,7 @@ function roleSelection(): FormlessUiAccessGrantSelectionContract & { purpose: "r
         ...(index === 5 ? { disabledReason: "Instance administrators cannot be invited." } : {}),
       })),
     },
-    roleGroup("roles:app", "App install", 5),
+    roleGroup("roles:app-install", "App install", 5),
     roleGroup("roles:organization", "Organization", 5),
   ];
 
@@ -808,7 +889,7 @@ function accessField(
   label: string,
   inputKind: FormlessUiAccessControlledFieldContract["inputKind"],
   value: string,
-  options: Pick<FormlessUiAccessControlledFieldContract, "options"> = {},
+  options: Partial<Pick<FormlessUiAccessControlledFieldContract, "options" | "required">> = {},
 ): FormlessUiAccessControlledFieldContract {
   const id = `field:${purpose}`;
   return {
@@ -825,7 +906,7 @@ function accessField(
     label,
     ...options,
     purpose,
-    required: true,
+    required: options.required ?? true,
     value,
   };
 }

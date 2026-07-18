@@ -60,7 +60,8 @@ describe("legacy access renderer", () => {
     expect(html[1]).toContain('role="alert"');
     expect(html[2]).toContain('data-formless-access-state="failed"');
     expect(html[3]).toContain('data-formless-access-state="ready"');
-    expect(html[3]).toContain("No people or invitations");
+    expect(html[3]).toContain("No people.");
+    expect(html[3]).toContain("No invitations.");
     expect(html.join(" ")).not.toContain("/Users/ada/formless");
     expect(html.join(" ")).not.toContain("owner-secret");
   });
@@ -105,7 +106,7 @@ describe("legacy access renderer", () => {
     expect(html).toContain("lin@example.com");
     expect(html).toContain("Personal Site");
     expect(html).toContain('aria-label="Invite collaborator"');
-    expect(dialogHtml).toContain("Invite a collaborator and choose their access.");
+    expect(dialogHtml).not.toContain("Invite a collaborator and choose their access.");
     expect(dialogHtml).toContain("Revoke invitation?");
     expect(dialogHtml).toContain("This action cannot be undone.");
     expect(html).not.toContain("Disable principal");
@@ -158,10 +159,10 @@ describe("legacy access renderer", () => {
       "new@example.com",
     );
     await dispatchLegacyAccessGrantSelection(onIntent, roleOption.selectionIntent, true);
-    await onIntent(manifest.invite.intent);
-    await onIntent(authoring.cancel.intent);
-    await onIntent(authoring.submit.intent);
-    await onIntent(
+    onIntent(manifest.invite.intent);
+    onIntent(authoring.cancel.intent);
+    onIntent(authoring.submit.intent);
+    onIntent(
       required(
         manifest.invitations[0]?.revocation.availability === "available"
           ? manifest.invitations[0].revocation.action.intent
@@ -190,9 +191,8 @@ function options(
   const summary = state.status === "ready" ? state.summary : undefined;
   return {
     authoringOpen: false,
-    draft: createInitialAccessInvitationDraft({ installs, now: NOW, summary }),
+    draft: createInitialAccessInvitationDraft({ installs, summary }),
     installs,
-    now: NOW,
     revocation: { status: "idle" },
     state,
     submission: { status: "idle" },

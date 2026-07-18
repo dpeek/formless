@@ -31,7 +31,6 @@ describe("access route runtime", () => {
     const ready = await mountAccessRoute({
       fetchInstalls: async () => ({ installs: [siteInstall()], packages: [] }),
       fetchSummary: async () => populatedSummary(),
-      now: () => NOW,
     });
 
     expect(ready.manifest().state).toBe("ready");
@@ -48,7 +47,6 @@ describe("access route runtime", () => {
           status: 403,
         });
       },
-      now: () => NOW,
     });
     expect(unauthorized.manifest()).toMatchObject({
       state: "unauthorized",
@@ -82,7 +80,6 @@ describe("access route runtime", () => {
         fetchCount += 1;
         return populatedSummary();
       },
-      now: () => NOW,
     });
 
     await runtime.dispatch(runtime.readyManifest().invite.intent);
@@ -147,7 +144,6 @@ describe("access route runtime", () => {
         fetchCount += 1;
         return revokeAttempt > 1 ? revokedSummary() : populatedSummary();
       },
-      now: () => NOW,
       revokeInvitation: async (input) => {
         revokeCalls.push(input);
         revokeAttempt += 1;

@@ -308,10 +308,10 @@ as reviewable identity records.
 - OR trusted automation supplies valid admin bearer authorization
 - WHEN the request creates a collaborator invitation through
   `POST /api/formless/identity/collaborator-invitations` for a valid target
-  email, target surface, expiry, and optional target app install or
-  organization
+  email, target surface, and optional target app install or organization
 - THEN identity storage commits one pending `invitation` record with
   display-safe target facts
+- AND the runtime sets expiry to seven days after the accepted request time
 - AND the inviter principal reference is recorded when the request is
   authorized by a browser principal session
 - AND optional invited principal, principal-email, membership,
@@ -408,7 +408,7 @@ identity-control-plane record editor to normal administrators.
 #### Scenario: Create collaborator invitation from access management
 
 - GIVEN the dedicated access management surface submits an invitation request
-  for a target email, display name, expiry, target surface, and requested
+  for a target email, display name, target surface, and requested
   roles, app registrations, groups, or organization memberships
 - WHEN the request is accepted
 - THEN it uses the collaborator invitation creation contract and private invite
@@ -492,7 +492,7 @@ refresh, validation, and private auth state.
   target, scope, status, expiry, inviter, and explicit revocation availability,
   page feedback, and one invitation-authoring reference
 - AND the invitation-authoring snapshot carries dialog visibility, controlled
-  target email, display name, expiry, target-surface and applicable scope
+  target email, display name, target-surface and applicable scope
   fields, ordered role and membership option groups, exact selected option ids,
   explicit option and control disabled reasons, validation, pending state,
   feedback, and cancel and submit actions

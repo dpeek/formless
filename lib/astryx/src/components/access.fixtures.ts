@@ -19,20 +19,10 @@ import {
 } from "../formless-ui-contract-host.ts";
 
 export type FormlessAccessFixtureId =
-  | "authoring-draft"
-  | "authoring-validation"
-  | "creation-failed"
-  | "creation-pending"
-  | "creation-success"
   | "empty"
   | "failed"
   | "loading"
-  | "populated-instance-admin"
   | "populated-owner"
-  | "revocation-confirmation"
-  | "revocation-failed"
-  | "revocation-pending"
-  | "revocation-success"
   | "unauthorized";
 
 export type FormlessAccessFixtureState = {
@@ -65,63 +55,6 @@ export function createFormlessAccessFixtures(): FormlessAccessFixture[] {
     fixture("failed", "Failed", { authoring: null, manifest: stateManifest("failed") }),
     readyFixture("empty", "Empty", { empty: true }),
     readyFixture("populated-owner", "Owner grants", { authority: "owner" }),
-    readyFixture("populated-instance-admin", "Administrator grants", {
-      authority: "instance-admin",
-    }),
-    readyFixture("authoring-draft", "Invitation draft", {
-      authoring: { draft: "valid", open: true },
-    }),
-    readyFixture("authoring-validation", "Invitation validation", {
-      authoring: { draft: "invalid", open: true },
-    }),
-    readyFixture("creation-pending", "Creating invitation", {
-      authoring: { draft: "valid", open: true, pending: "creation" },
-    }),
-    readyFixture("creation-success", "Invitation created", {
-      authoring: { draft: "empty", open: false },
-      feedback: feedback(
-        "creation-success",
-        "Invitation created",
-        "The invitation was created and delivered.",
-        "success",
-      ),
-    }),
-    readyFixture("creation-failed", "Invitation failed", {
-      authoring: {
-        draft: "valid",
-        feedback: feedback(
-          "creation-failed",
-          "Invitation could not be created",
-          "The invitation request could not be completed.",
-          "danger",
-        ),
-        open: true,
-      },
-    }),
-    readyFixture("revocation-confirmation", "Confirm revocation", {
-      confirmation: revocationConfirmation(false),
-    }),
-    readyFixture("revocation-pending", "Revoking invitation", {
-      confirmation: revocationConfirmation(true),
-      revocationPending: true,
-    }),
-    readyFixture("revocation-success", "Invitation revoked", {
-      feedback: feedback(
-        "revocation-success",
-        "Invitation revoked",
-        "The pending invitation was revoked.",
-        "success",
-      ),
-      invitationState: "revoked",
-    }),
-    readyFixture("revocation-failed", "Revocation failed", {
-      feedback: feedback(
-        "revocation-failed",
-        "Invitation could not be revoked",
-        "The pending invitation remains active.",
-        "danger",
-      ),
-    }),
   ];
 }
 
@@ -221,11 +154,17 @@ function readyManifest({
     ...(confirmation ? { confirmation } : {}),
     ...(empty
       ? {
-          emptyState: {
+          invitationsEmptyState: {
             description: "Invite a collaborator to begin sharing access.",
-            id: "access:fixture:empty",
+            id: "access:fixture:invitations:empty",
             kind: "accessEmptyState" as const,
-            title: "No access records",
+            title: "No invitations",
+          },
+          peopleEmptyState: {
+            description: "Invite a collaborator to begin sharing access.",
+            id: "access:fixture:people:empty",
+            kind: "accessEmptyState" as const,
+            title: "No people",
           },
         }
       : {}),
@@ -253,7 +192,7 @@ function accessPeople(): readonly FormlessUiAccessPersonContract[] {
       primaryEmail: "ada@example.com",
       roles: [
         accessRole("ada-owner", "Owner", "Instance"),
-        accessRole("ada-site-editor", "Site editor", "Site"),
+        accessRole("ada-site-editor", "Editor", "Site"),
       ],
       status: statusFact("person:ada:status", "Active", "success"),
     },
@@ -264,7 +203,7 @@ function accessPeople(): readonly FormlessUiAccessPersonContract[] {
       primaryEmail: "bo@example.com",
       roles: [
         accessRole("bo-admin", "Administrator", "Instance"),
-        accessRole("bo-organization-admin", "Organization administrator", "Formless"),
+        accessRole("bo-organization-admin", "Administrator", "Formless"),
       ],
       status: statusFact("person:bo:status", "Active", "success"),
     },
@@ -277,7 +216,6 @@ function accessRole(id: string, label: string, scope: string) {
     kind: "accessRole" as const,
     label,
     scope: fact(`role:${id}:scope`, "Scope", scope),
-    status: statusFact(`role:${id}:status`, "Active", "success"),
   };
 }
 
@@ -301,7 +239,6 @@ function accessInvitations(
       kind: "accessInvitation",
       revocation: {
         availability: "unavailable",
-        disabledReason: "Only pending invitations can be revoked.",
       },
       scope: fact("invitation:accepted:scope", "Scope", "Formless"),
       status: statusFact("invitation:accepted:status", "Accepted", "success"),
@@ -345,7 +282,6 @@ function pendingInvitation(
         ? { action: revocationAction, availability: "available" }
         : {
             availability: "unavailable",
-            disabledReason: "Only pending invitations can be revoked.",
           },
     scope: fact("invitation:pending:scope", "Scope", "Site"),
     status:
@@ -371,8 +307,8 @@ function invitationAuthoring(
   const draft = options?.draft ?? "empty";
   const pendingReason =
     options?.pending === "creation" ? "Invitation creation is in progress." : undefined;
-  const fields = authoringFields(draft, pendingReason);
-  const grantSelections = authoringGrantSelections(authority, draft, pendingReason);
+  const fields = authoringFields(draft);
+  const grantSelections = authoringGrantSelections(authority, draft);
   const errors = [
     ...Object.values(fields).flatMap((field) => field.errors),
     ...grantSelections.flatMap((selection) => selection.errors),
@@ -398,18 +334,21 @@ function invitationAuthoring(
     kind: "accessInvitationAuthoring",
     open: options?.open ?? false,
     ...(options?.pending ? { pending: { isPending: true, label: "Sending invitation" } } : {}),
-    submit: accessAction(
-      "invitation-submit",
-      options?.pending ? "Sending invitation" : "Send invitation",
-      {
-        accessId: accessFixtureReference.accessId,
-        actionId: "access:fixture:authoring-submit",
-        authoringId: accessFixtureAuthoringReference.authoringId,
-        controlId: "access:fixture:authoring-submit:control",
-        type: "accessInvitationSubmit",
-      },
-      submitDisabledReason,
-      "submit",
+    submit: pendingAccessAction(
+      accessAction(
+        "invitation-submit",
+        options?.pending ? "Sending invitation" : "Send invitation",
+        {
+          accessId: accessFixtureReference.accessId,
+          actionId: "access:fixture:authoring-submit",
+          authoringId: accessFixtureAuthoringReference.authoringId,
+          controlId: "access:fixture:authoring-submit:control",
+          type: "accessInvitationSubmit",
+        },
+        submitDisabledReason,
+        "submit",
+      ),
+      options?.pending === "creation",
     ),
     title: "Invite collaborator",
   };
@@ -417,36 +356,23 @@ function invitationAuthoring(
 
 function authoringFields(
   draft: AccessFixtureDraft,
-  pendingReason?: string,
 ): FormlessUiAccessInvitationAuthoringContract["fields"] {
   const valid = draft === "valid";
   const invalid = draft === "invalid";
   const targetSurface: string = valid ? "app-install" : "instance";
-  const targetAppInstall: string = valid ? "site" : "";
-  const targetOrganization: string = "";
+  const targetAppInstall = "site";
+  const targetOrganization = "formless";
 
   return {
-    displayName: field("display-name", "Display name", "text", valid ? "Grace Hopper" : "", {
-      disabledReason: pendingReason,
-      errors: valid ? [] : ["Display name is required."],
+    displayName: field("display-name", "Name", "text", valid ? "Grace Hopper" : "", {
+      errors: valid ? [] : ["Name is required."],
     }),
-    expiresAt: field(
-      "expires-at",
-      "Expires",
-      "datetime",
-      valid ? "2026-07-24T12:30" : invalid ? "2020-01-01T00:00" : "",
-      {
-        disabledReason: pendingReason,
-        errors: valid ? [] : [invalid ? "Expires must be in the future." : "Expires is required."],
-      },
-    ),
-    targetAppInstall: field("target-app-install", "App install scope", "select", targetAppInstall, {
+    targetAppInstall: field("target-app-install", "Scope", "select", targetAppInstall, {
       disabledReason:
-        pendingReason ??
-        (targetSurface === "app-install" ? undefined : "Choose App install as the target surface."),
+        targetSurface === "app-install" ? undefined : "Choose App install as the target surface.",
       errors: invalid ? ["Choose an available app install scope."] : [],
       options: [fieldOption("app-install:site", "Site", "site", targetAppInstall === "site")],
-      required: targetSurface === "app-install",
+      required: false,
     }),
     targetEmail: field(
       "target-email",
@@ -454,35 +380,24 @@ function authoringFields(
       "email",
       valid ? "grace@example.com" : invalid ? "not-an-email" : "",
       {
-        disabledReason: pendingReason,
         errors: valid ? [] : [invalid ? "Email must be valid." : "Email is required."],
       },
     ),
-    targetOrganization: field(
-      "target-organization",
-      "Organization scope",
-      "select",
-      targetOrganization,
-      {
-        disabledReason:
-          pendingReason ??
-          (targetSurface === "organization"
-            ? undefined
-            : "Choose Organization as the target surface."),
-        errors: [],
-        options: [
-          fieldOption(
-            "organization:formless",
-            "Formless",
-            "formless",
-            targetOrganization === "formless",
-          ),
-        ],
-        required: targetSurface === "organization",
-      },
-    ),
-    targetSurface: field("target-surface", "Target surface", "select", targetSurface, {
-      disabledReason: pendingReason,
+    targetOrganization: field("target-organization", "Scope", "select", targetOrganization, {
+      disabledReason:
+        targetSurface === "organization" ? undefined : "Choose Organization as the target surface.",
+      errors: [],
+      options: [
+        fieldOption(
+          "organization:formless",
+          "Formless",
+          "formless",
+          targetOrganization === "formless",
+        ),
+      ],
+      required: false,
+    }),
+    targetSurface: field("target-surface", "Surface", "select", targetSurface, {
       errors: [],
       options: [
         fieldOption("surface:instance", "Instance", "instance", targetSurface === "instance"),
@@ -499,6 +414,7 @@ function authoringFields(
           targetSurface === "organization",
         ),
       ],
+      required: false,
     }),
   };
 }
@@ -544,7 +460,6 @@ function fieldOption(id: string, label: string, value: string, selected: boolean
 function authoringGrantSelections(
   authority: AccessFixtureAuthority,
   draft: AccessFixtureDraft,
-  pendingReason?: string,
 ): FormlessUiAccessInvitationAuthoringContract["grantSelections"] {
   const selected = draft === "valid";
   const validation = draft === "invalid";
@@ -559,7 +474,6 @@ function authoringGrantSelections(
       instanceRoleOptions,
       "roles",
       selected ? ["role:administrator"] : [],
-      pendingReason,
     ),
     grantGroup(
       "role-group:app-install",
@@ -567,7 +481,7 @@ function authoringGrantSelections(
       [["role:site-editor", "Site editor"]],
       "roles",
       selected || validation ? ["role:site-editor"] : [],
-      validation ? "Choose an available app install scope for app roles." : pendingReason,
+      validation ? "Choose an available app install scope for app roles." : undefined,
     ),
     grantGroup(
       "role-group:organization",
@@ -575,7 +489,6 @@ function authoringGrantSelections(
       [["role:organization-admin", "Organization administrator"]],
       "roles",
       [],
-      pendingReason,
     ),
   ];
   const membershipGroups = [
@@ -585,28 +498,36 @@ function authoringGrantSelections(
       [["membership:formless", "Formless"]],
       "memberships",
       selected ? ["membership:formless"] : [],
-      pendingReason,
     ),
     grantGroup(
       "membership-group:groups",
       "Groups",
-      [
-        ["membership:operations", "Operations"],
-        ["membership:unavailable-group", "Unavailable group"],
-      ],
+      [["membership:operations", "Operations"]],
       "memberships",
-      selected ? ["membership:operations"] : validation ? ["membership:unavailable-group"] : [],
-      pendingReason,
-      validation ? "membership:unavailable-group" : undefined,
+      selected ? ["membership:operations"] : [],
     ),
   ];
   const roleErrors = validation ? ["Choose an available app install scope for app roles."] : [];
-  const membershipErrors = validation ? ["Unavailable group."] : [];
 
   return [
-    grantSelection("roles", roleGroups, roleErrors, pendingReason),
-    grantSelection("memberships", membershipGroups, membershipErrors, pendingReason),
+    grantSelection("roles", roleGroups, roleErrors),
+    grantSelection("memberships", membershipGroups, []),
   ];
+}
+
+function pendingAccessAction<Intent extends FormlessUiAccessActionContract["intent"]>(
+  action: FormlessUiAccessActionContract<Intent>,
+  pending: boolean,
+): FormlessUiAccessActionContract<Intent> {
+  return pending
+    ? {
+        ...action,
+        control: {
+          ...action.control,
+          pending: { isPending: true, label: action.control.accessibilityLabel },
+        },
+      }
+    : action;
 }
 
 function grantSelection<Purpose extends "memberships" | "roles">(
@@ -636,7 +557,6 @@ function grantGroup(
   purpose: "memberships" | "roles",
   selectedIds: readonly string[],
   disabledReason?: string,
-  individuallyDisabledId?: string,
 ): FormlessUiAccessGrantOptionGroupContract {
   const id = `access:fixture:${localId}`;
   const controlId = `access:fixture:${purpose}`;
@@ -648,9 +568,7 @@ function grantGroup(
     options: options.map(([optionLocalId, optionLabel]) => {
       const optionId = `access:fixture:${optionLocalId}`;
       const selected = selectedIds.includes(optionLocalId);
-      const optionDisabledReason =
-        disabledReason ??
-        (individuallyDisabledId === optionLocalId ? "Unavailable group." : undefined);
+      const optionDisabledReason = disabledReason;
 
       return {
         ...(optionDisabledReason ? { disabledReason: optionDisabledReason } : {}),
@@ -668,46 +586,6 @@ function grantGroup(
         },
       };
     }),
-  };
-}
-
-function revocationConfirmation(pending: boolean): FormlessUiAccessConfirmationContract {
-  const disabledReason = pending ? "Invitation revocation is in progress." : undefined;
-
-  return {
-    action: accessAction(
-      "invitation-revoke",
-      pending ? "Revoking..." : "Revoke invitation",
-      {
-        accessId: accessFixtureReference.accessId,
-        actionId: "access:fixture:revocation-confirm",
-        confirmationId: "access:fixture:revocation-confirmation",
-        controlId: "access:fixture:revocation-confirm:control",
-        invitationId: "invitation:pending",
-        type: "accessInvitationRevoke",
-      },
-      disabledReason,
-    ),
-    cancel: accessAction(
-      "revocation-cancel",
-      "Cancel",
-      {
-        accessId: accessFixtureReference.accessId,
-        actionId: "access:fixture:revocation-cancel",
-        confirmationId: "access:fixture:revocation-confirmation",
-        controlId: "access:fixture:revocation-cancel:control",
-        invitationId: "invitation:pending",
-        open: false,
-        type: "accessInvitationRevocationConfirmationOpenChange",
-      },
-      disabledReason,
-    ),
-    description: "The pending invitation for grace@example.com will no longer be usable.",
-    id: "access:fixture:revocation-confirmation",
-    invitationId: "invitation:pending",
-    kind: "accessConfirmation",
-    open: true,
-    title: "Revoke invitation?",
   };
 }
 

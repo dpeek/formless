@@ -200,7 +200,9 @@ function AstryxWorkspaceSectionFrame({
   scope: FormlessUiWorkspaceIntentScope;
   section: FormlessUiWorkspaceSectionContract | FormlessUiWorkspaceSectionShellContract;
 }) {
-  const renderHeader = section.headingVisibility === "visible" || section.actions.length > 0;
+  const renderHeader = section.headingVisibility === "visible";
+  const renderActionsAfterCollection =
+    section.headingVisibility === "hidden" && section.actions.length > 0;
 
   return (
     <Section
@@ -211,7 +213,7 @@ function AstryxWorkspaceSectionFrame({
       variant="transparent"
       width="100%"
     >
-      <VStack gap={renderHeader ? 4 : 0} width="100%">
+      <VStack gap={renderHeader || renderActionsAfterCollection ? 4 : 0} width="100%">
         {renderHeader ? (
           <HStack align="center" gap={3} justify="between" width="100%" wrap="wrap">
             {section.headingVisibility === "visible" ? (
@@ -234,6 +236,18 @@ function AstryxWorkspaceSectionFrame({
           </HStack>
         ) : null}
         {children}
+        {renderActionsAfterCollection ? (
+          <HStack gap={2} wrap="wrap">
+            {section.actions.map((externalAction) => (
+              <AstryxWorkspaceExternalAction
+                externalAction={externalAction}
+                key={externalAction.id}
+                onIntent={onIntent}
+                scope={scope}
+              />
+            ))}
+          </HStack>
+        ) : null}
       </VStack>
     </Section>
   );
@@ -266,7 +280,7 @@ function AstryxWorkspaceExternalAction({
             void dispatchAstryxWorkspaceExternalAction(onIntent, scope, externalAction);
           }
         }}
-        size="sm"
+        size="md"
         tooltip={action.disabledReason}
         variant={astryxWorkspaceActionVariant(action)}
       >

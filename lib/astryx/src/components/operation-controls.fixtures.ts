@@ -242,12 +242,12 @@ const archiveOverdue = snapshots({
   }),
 });
 
-const workspacePushSuccess = workspacePushScenario({
+const workspacePushSuccess = createWorkspacePushOperationControlFixture({
   id: "workspace-source-push-success",
   outcome: "success",
 });
 
-const workspacePushFailure = workspacePushScenario({
+const workspacePushFailure = createWorkspacePushOperationControlFixture({
   id: "workspace-source-push-failure",
   outcome: "failure",
 });
@@ -341,7 +341,7 @@ export const operationControlFixtures = {
 
 export type OperationControlFixtureKey = keyof typeof operationControlFixtures;
 
-function workspacePushScenario({
+export function createWorkspacePushOperationControlFixture({
   id,
   outcome,
 }: {

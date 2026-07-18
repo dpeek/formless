@@ -2133,7 +2133,6 @@ export type FormlessUiAccessRoleContract = {
   kind: "accessRole";
   label: string;
   scope?: FormlessUiAccessDisplayFactContract;
-  status?: FormlessUiAccessDisplayFactContract;
 };
 
 export type FormlessUiAccessPersonContract = {
@@ -2238,7 +2237,7 @@ export type FormlessUiAccessInvitationRevocationContract =
     }
   | {
       availability: "unavailable";
-      disabledReason: string;
+      disabledReason?: string;
     };
 
 export type FormlessUiAccessInvitationContract = {
@@ -2255,7 +2254,6 @@ export type FormlessUiAccessInvitationContract = {
 
 export type FormlessUiAccessInvitationFieldPurpose =
   | "display-name"
-  | "expires-at"
   | "target-app-install"
   | "target-email"
   | "target-organization"
@@ -2316,7 +2314,6 @@ export type FormlessUiAccessGrantSelectionContract = {
 
 export type FormlessUiAccessInvitationAuthoringFieldsContract = {
   displayName: FormlessUiAccessControlledFieldContract;
-  expiresAt: FormlessUiAccessControlledFieldContract;
   targetAppInstall: FormlessUiAccessControlledFieldContract;
   targetEmail: FormlessUiAccessControlledFieldContract;
   targetOrganization: FormlessUiAccessControlledFieldContract;
@@ -2398,11 +2395,12 @@ export type FormlessUiAccessEmptyStateContract = {
 export type FormlessUiAccessReadyContract = FormlessUiAccessManifestBaseContract & {
   authoring: FormlessUiAccessInvitationAuthoringReference;
   confirmation?: FormlessUiAccessConfirmationContract;
-  emptyState?: FormlessUiAccessEmptyStateContract;
   feedback?: FormlessUiAccessFeedbackContract;
   invitations: readonly FormlessUiAccessInvitationContract[];
+  invitationsEmptyState?: FormlessUiAccessEmptyStateContract;
   invite: FormlessUiAccessActionContract<FormlessUiAccessInvitationAuthoringOpenChangeIntent>;
   people: readonly FormlessUiAccessPersonContract[];
+  peopleEmptyState?: FormlessUiAccessEmptyStateContract;
   state: "ready";
 };
 

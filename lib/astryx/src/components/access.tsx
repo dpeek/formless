@@ -1,4 +1,3 @@
-import { SegmentedControl, SegmentedControlItem } from "@astryxdesign/core/SegmentedControl";
 import { useState } from "react";
 import type {
   FormlessUiAccessActionContract,
@@ -25,13 +24,8 @@ import {
   type FormlessAccessFixtureId,
   type FormlessAccessFixtureState,
 } from "./access.fixtures.ts";
-import {
-  createFormlessApplicationShellFixtures,
-  type FormlessApplicationShellFixture,
-} from "./application-shell.fixtures.ts";
-import { projectFormlessApplicationShellFixturePublication } from "./application-shell.tsx";
+import { FormlessFixtureLayout } from "./fixture-layout.tsx";
 import { AstryxSubscribedAccessRenderer } from "./formless-ui-access-renderer.tsx";
-import { AstryxSubscribedApplicationShellRenderer } from "./shell.tsx";
 
 export function FormlessAccessLayout() {
   const [fixtureHosts] = useState(createFormlessAccessFixtureHosts);
@@ -44,19 +38,15 @@ export function FormlessAccessLayout() {
   }
 
   return (
-    <>
-      <SegmentedControl
-        label="Access state"
-        layout="hug"
-        onChange={(value) => setSelectedFixtureId(value as FormlessAccessFixtureId)}
-        value={selectedFixtureId}
-      >
-        {fixtureHosts.map((fixture) => (
-          <SegmentedControlItem key={fixture.id} label={fixture.label} value={fixture.id} />
-        ))}
-      </SegmentedControl>
+    <FormlessFixtureLayout
+      ariaLabel="Access fixtures"
+      fixtures={fixtureHosts}
+      label="Access state"
+      onSelectionChange={setSelectedFixtureId}
+      selectedFixtureId={selectedFixtureId}
+    >
       <FormlessAccessFixtureView fixtureHost={selectedFixtureHost} />
-    </>
+    </FormlessFixtureLayout>
   );
 }
 
@@ -67,12 +57,7 @@ export function FormlessAccessFixtureView({
 }) {
   return (
     <FormlessUiContractHostProvider host={fixtureHost.host}>
-      <AstryxSubscribedApplicationShellRenderer
-        shellReference={fixtureHost.shellReference}
-        themeReference={fixtureHost.themeReference}
-      >
-        <AstryxSubscribedAccessRenderer accessReference={fixtureHost.accessReference} />
-      </AstryxSubscribedApplicationShellRenderer>
+      <AstryxSubscribedAccessRenderer accessReference={fixtureHost.accessReference} />
     </FormlessUiContractHostProvider>
   );
 }
@@ -83,12 +68,6 @@ export type FormlessAccessFixtureHost = FormlessAccessFixture & {
   host: Omit<FormlessUiMutableContractHost, "dispatch"> & {
     dispatch(intent: FormlessUiAccessIntent): void;
   };
-  shellReference: NonNullable<
-    ReturnType<typeof projectFormlessApplicationShellFixturePublication>["shellReference"]
-  >;
-  themeReference: NonNullable<
-    ReturnType<typeof projectFormlessApplicationShellFixturePublication>["themeReference"]
-  >;
 };
 
 export function createFormlessAccessFixtureHost(
@@ -120,34 +99,18 @@ export function createFormlessAccessFixtureHost(
     accessReference: initialPublication.accessReference,
     getState: () => state,
     host: host as FormlessAccessFixtureHost["host"],
-    shellReference: initialPublication.shellReference,
-    themeReference: initialPublication.themeReference,
   };
 }
 
 export function projectFormlessAccessFixturePublication(state: FormlessAccessFixtureState): {
   accessReference: FormlessUiAccessManifestReference;
   nodes: FormlessUiContractHostNodeSet;
-  shellReference: FormlessAccessFixtureHost["shellReference"];
-  themeReference: FormlessAccessFixtureHost["themeReference"];
 } {
-  const shellFixture = accessApplicationShellFixture();
-  const shellPublication = projectFormlessApplicationShellFixturePublication(
-    shellFixture.shell,
-    shellFixture.documentTheme,
-  );
   const accessReference = formlessUiAccessManifestReference(state.manifest.id);
-  const shellReference = shellPublication.shellReference;
-  const themeReference = shellPublication.themeReference;
-
-  if (!shellReference || !themeReference) {
-    throw new Error("Access fixture requires shell and document-theme references.");
-  }
 
   return {
     accessReference,
     nodes: [
-      ...shellPublication.nodes,
       { reference: accessReference, snapshot: state.manifest },
       ...(state.authoring
         ? [
@@ -161,8 +124,6 @@ export function projectFormlessAccessFixturePublication(state: FormlessAccessFix
           ]
         : []),
     ],
-    shellReference,
-    themeReference,
   };
 }
 
@@ -193,46 +154,6 @@ export function applyFormlessAccessFixtureIntent(
 
 function createFormlessAccessFixtureHosts() {
   return createFormlessAccessFixtures().map(createFormlessAccessFixtureHost);
-}
-
-function accessApplicationShellFixture(): FormlessApplicationShellFixture {
-  const fixture = createFormlessApplicationShellFixtures().find(
-    (candidate) => candidate.id === "product-instance",
-  );
-  if (!fixture?.shell || !fixture.documentTheme) {
-    throw new Error("Missing product instance application-shell fixture.");
-  }
-
-  const accessSection = fixture.shell.sections.find((section) =>
-    section.destinations.some((destination) => destination.id === "instance:access"),
-  );
-  const accessDestination = accessSection?.destinations.find(
-    (destination) => destination.id === "instance:access",
-  );
-  if (!accessSection || !accessDestination) {
-    throw new Error("Missing Access application-shell destination.");
-  }
-
-  return {
-    ...fixture,
-    routeLabel: "Access",
-    shell: {
-      manifest: {
-        ...fixture.shell.manifest,
-        activeDestination: {
-          destinationId: accessDestination.id,
-          sectionId: accessSection.id,
-        },
-      },
-      sections: fixture.shell.sections.map((section) => ({
-        ...section,
-        destinations: section.destinations.map((destination) => ({
-          ...destination,
-          selected: destination.id === accessDestination.id,
-        })),
-      })),
-    },
-  };
 }
 
 function applyAuthoringOpenChange(
@@ -335,26 +256,15 @@ function applyAuthoringSubmit(
     return state;
   }
 
-  const pendingReason = "Invitation creation is in progress.";
-  const fields = Object.fromEntries(
-    Object.entries(authoring.fields).map(([key, field]) => [
-      key,
-      { ...field, disabledReason: pendingReason },
-    ]),
-  ) as FormlessUiAccessInvitationAuthoringContract["fields"];
-  const grantSelections: FormlessUiAccessInvitationAuthoringContract["grantSelections"] = [
-    pendingGrantSelection(authoring.grantSelections[0], pendingReason),
-    pendingGrantSelection(authoring.grantSelections[1], pendingReason),
-  ];
-
   return replaceAuthoring(state, {
     ...authoring,
-    cancel: pendingAction(authoring.cancel, pendingReason),
-    feedback: undefined,
-    fields,
-    grantSelections,
-    pending: { isPending: true, label: "Sending invitation" },
-    submit: pendingAction(authoring.submit, pendingReason, "Sending invitation"),
+    feedback: {
+      detail: "The invitation request could not be completed.",
+      id: "access:fixture:feedback:creation-failed",
+      intent: "danger",
+      kind: "accessFeedback",
+      title: "Invitation could not be created",
+    },
   });
 }
 
@@ -372,7 +282,7 @@ function applyRevocationConfirmationOpenChange(
       return state;
     }
 
-    const { confirmation: _confirmation, ...nextManifest } = manifest;
+    const { confirmation: _confirmation, feedback: _feedback, ...nextManifest } = manifest;
     return { ...state, manifest: nextManifest };
   }
 
@@ -390,6 +300,7 @@ function applyRevocationConfirmationOpenChange(
     ...state,
     manifest: {
       ...manifest,
+      feedback: undefined,
       confirmation: revocationConfirmation(intent.invitationId, invitation.targetEmail),
     },
   };
@@ -399,7 +310,7 @@ function applyInvitationRevoke(
   state: FormlessAccessFixtureState,
   manifest: FormlessUiAccessReadyContract,
   intent: Extract<FormlessUiAccessIntent, { type: "accessInvitationRevoke" }>,
-) {
+): FormlessAccessFixtureState {
   const confirmation = manifest.confirmation;
   if (
     !confirmation ||
@@ -409,33 +320,17 @@ function applyInvitationRevoke(
     return state;
   }
 
-  const pendingReason = "Invitation revocation is in progress.";
   return {
     ...state,
     manifest: {
       ...manifest,
-      confirmation: {
-        ...confirmation,
-        action: pendingAction(confirmation.action, pendingReason, "Revoking..."),
-        cancel: pendingAction(confirmation.cancel, pendingReason),
+      feedback: {
+        detail: "The pending invitation remains active.",
+        id: "access:fixture:feedback:revocation-failed",
+        intent: "danger",
+        kind: "accessFeedback",
+        title: "Invitation could not be revoked",
       },
-      feedback: undefined,
-      invitations: manifest.invitations.map((invitation) => {
-        if (
-          invitation.id !== intent.invitationId ||
-          invitation.revocation.availability !== "available"
-        ) {
-          return invitation;
-        }
-
-        return {
-          ...invitation,
-          revocation: {
-            ...invitation.revocation,
-            action: pendingAction(invitation.revocation.action, pendingReason, "Revoking..."),
-          },
-        };
-      }),
     },
   };
 }
@@ -492,46 +387,56 @@ function applyGrantSelection<Purpose extends "memberships" | "roles">(
   };
 }
 
-function pendingGrantSelection<Purpose extends "memberships" | "roles">(
-  selection: FormlessUiAccessGrantSelectionContract & { purpose: Purpose },
-  pendingReason: string,
-): FormlessUiAccessGrantSelectionContract & { purpose: Purpose } {
-  return {
-    ...selection,
-    disabledReason: pendingReason,
-    groups: selection.groups.map((group) => ({
-      ...group,
-      options: group.options.map((option) => ({ ...option, disabledReason: pendingReason })),
-    })),
-  };
-}
-
 function normalizeAuthoringFields(
   fields: FormlessUiAccessInvitationAuthoringContract["fields"],
 ): FormlessUiAccessInvitationAuthoringContract["fields"] {
   const targetSurface = fields.targetSurface.value;
+  const targetAppInstall = accessFieldWithDefaultOption(fields.targetAppInstall);
+  const targetOrganization = accessFieldWithDefaultOption(fields.targetOrganization);
   return {
     ...fields,
     targetAppInstall: {
-      ...fields.targetAppInstall,
+      ...targetAppInstall,
       disabledReason:
         targetSurface === "app-install" ? undefined : "Choose App install as the target surface.",
       errors:
-        targetSurface === "app-install" && !fields.targetAppInstall.value
+        targetSurface === "app-install" && !targetAppInstall.value
           ? ["Choose an available app install scope."]
           : [],
-      required: targetSurface === "app-install",
+      required: false,
     },
     targetOrganization: {
-      ...fields.targetOrganization,
+      ...targetOrganization,
       disabledReason:
         targetSurface === "organization" ? undefined : "Choose Organization as the target surface.",
       errors:
-        targetSurface === "organization" && !fields.targetOrganization.value
+        targetSurface === "organization" && !targetOrganization.value
           ? ["Choose an available organization scope."]
           : [],
-      required: targetSurface === "organization",
+      required: false,
     },
+  };
+}
+
+function accessFieldWithDefaultOption(
+  field: FormlessUiAccessControlledFieldContract,
+): FormlessUiAccessControlledFieldContract {
+  if (field.value) {
+    return field;
+  }
+
+  const defaultOption = field.options?.find((option) => option.disabledReason === undefined);
+  if (!defaultOption) {
+    return field;
+  }
+
+  return {
+    ...field,
+    options: field.options?.map((option) => ({
+      ...option,
+      selected: option.id === defaultOption.id,
+    })),
+    value: defaultOption.value,
   };
 }
 
@@ -622,26 +527,6 @@ function accessAction<Intent extends FormlessUiAccessActionContract["intent"]>(
     intent,
     kind: "accessAction",
     purpose,
-  };
-}
-
-function pendingAction<Intent extends FormlessUiAccessActionContract["intent"]>(
-  action: FormlessUiAccessActionContract<Intent>,
-  disabledReason: string,
-  label?: string,
-): FormlessUiAccessActionContract<Intent> {
-  const nextLabel = label ?? action.control.accessibilityLabel;
-
-  return {
-    ...action,
-    control: {
-      ...action.control,
-      accessibilityLabel: nextLabel,
-      content: { kind: "label", label: nextLabel },
-      disabled: true,
-      disabledReason,
-      pending: { isPending: true, label: nextLabel },
-    },
   };
 }
 

@@ -133,6 +133,7 @@ const appScopedInvitationRoleKeys = [
   "app.user",
 ] as const satisfies readonly IdentityControlPlaneRoleKey[];
 const builtInRoleCreatedAt = "2026-06-26T00:00:00.000Z";
+const collaboratorInvitationLifetimeMs = 7 * 24 * 60 * 60 * 1000;
 const collaboratorInvitationDeliveryMessageKind = "identity.collaboratorInvitation";
 const collaboratorInvitationDeliveryPurpose = "collaborator-invitation-delivery";
 export const INTERNAL_COLLABORATOR_INVITATION_DELIVERY_PATH =
@@ -4381,7 +4382,6 @@ function parseCreateCollaboratorInvitationRequest(
 
   assertAllowedKeys("Collaborator invitation request", object, [
     "appRegistrations",
-    "expiresAt",
     "idempotencyKey",
     "invitationId",
     "invitedPrincipal",
@@ -4400,13 +4400,10 @@ function parseCreateCollaboratorInvitationRequest(
     object.targetEmail,
   );
   const targetFacts = parseCollaboratorInvitationTargetFacts(object);
-  const expiresAt = parseIsoTimestamp("Collaborator invitation expiresAt", object.expiresAt);
   const now = parseOptionalIsoTimestamp("Collaborator invitation now", object.now);
-  const comparisonNow = now ?? new Date().toISOString();
-
-  if (expiresAt <= comparisonNow) {
-    throw new BadRequestError("Collaborator invitation expiresAt must be after now.");
-  }
+  const expiresAt = new Date(
+    new Date(now ?? new Date().toISOString()).getTime() + collaboratorInvitationLifetimeMs,
+  ).toISOString();
 
   return {
     ...targetFacts,

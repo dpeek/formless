@@ -27,7 +27,7 @@ vi.mock("@stylexjs/stylex", () => ({
 }));
 
 describe("canonical access-management fixtures", () => {
-  it("covers access, authority, authoring, creation, and revocation states with data only", () => {
+  it("covers access and authority states with data only", () => {
     const fixtures = createFormlessAccessFixtures();
     const serialized = JSON.stringify(fixtures);
 
@@ -37,36 +37,21 @@ describe("canonical access-management fixtures", () => {
       "failed",
       "empty",
       "populated-owner",
-      "populated-instance-admin",
-      "authoring-draft",
-      "authoring-validation",
-      "creation-pending",
-      "creation-success",
-      "creation-failed",
-      "revocation-confirmation",
-      "revocation-pending",
-      "revocation-success",
-      "revocation-failed",
     ]);
     expect(structuredClone(fixtures)).toEqual(fixtures);
     expect(requiredFixture(fixtures, "loading").state.manifest.state).toBe("loading");
     expect(requiredFixture(fixtures, "unauthorized").state.manifest.state).toBe("unauthorized");
     expect(requiredFixture(fixtures, "failed").state.manifest.state).toBe("failed");
     expect(readyManifest(fixtures, "empty")).toMatchObject({
-      emptyState: { title: "No access records" },
       invitations: [],
+      invitationsEmptyState: { title: "No invitations" },
       people: [],
+      peopleEmptyState: { title: "No people" },
     });
 
     const ownerAuthoring = requiredAuthoring(fixtures, "populated-owner");
-    const adminAuthoring = requiredAuthoring(fixtures, "populated-instance-admin");
     expect(grantLabels(ownerAuthoring.grantSelections[0])).toEqual([
       ["Owner", "Administrator"],
-      ["Site editor"],
-      ["Organization administrator"],
-    ]);
-    expect(grantLabels(adminAuthoring.grantSelections[0])).toEqual([
-      ["Administrator"],
       ["Site editor"],
       ["Organization administrator"],
     ]);
@@ -78,6 +63,14 @@ describe("canonical access-management fixtures", () => {
       "Organizations",
       "Groups",
     ]);
+    expect(ownerAuthoring.fields.targetAppInstall).toMatchObject({
+      required: false,
+      value: "site",
+    });
+    expect(ownerAuthoring.fields.targetOrganization).toMatchObject({
+      required: false,
+      value: "formless",
+    });
 
     const populated = readyManifest(fixtures, "populated-owner");
     expect(populated.people.map(({ displayName }) => displayName)).toEqual([
@@ -90,58 +83,14 @@ describe("canonical access-management fixtures", () => {
       ),
     ).toEqual([
       ["Owner", "Instance"],
-      ["Site editor", "Site"],
+      ["Editor", "Site"],
       ["Administrator", "Instance"],
-      ["Organization administrator", "Formless"],
+      ["Administrator", "Formless"],
     ]);
     expect(populated.invitations.map(({ status }) => status.value)).toEqual([
       "Pending",
       "Accepted",
     ]);
-
-    expect(requiredAuthoring(fixtures, "authoring-draft")).toMatchObject({
-      errors: [],
-      open: true,
-    });
-    expect(requiredAuthoring(fixtures, "authoring-validation")).toMatchObject({
-      errors: expect.arrayContaining([
-        "Display name is required.",
-        "Email must be valid.",
-        "Unavailable group.",
-      ]),
-      open: true,
-      submit: { control: { disabled: true } },
-    });
-    expect(requiredAuthoring(fixtures, "creation-pending")).toMatchObject({
-      pending: { isPending: true, label: "Sending invitation" },
-      submit: { control: { disabled: true } },
-    });
-    expect(readyManifest(fixtures, "creation-success").feedback).toMatchObject({
-      intent: "success",
-      title: "Invitation created",
-    });
-    expect(requiredAuthoring(fixtures, "creation-failed").feedback).toMatchObject({
-      intent: "danger",
-      title: "Invitation could not be created",
-    });
-    expect(readyManifest(fixtures, "revocation-confirmation").confirmation).toMatchObject({
-      open: true,
-      title: "Revoke invitation?",
-    });
-    expect(
-      readyManifest(fixtures, "revocation-pending").confirmation?.action.control,
-    ).toMatchObject({
-      disabled: true,
-      disabledReason: "Invitation revocation is in progress.",
-    });
-    expect(readyManifest(fixtures, "revocation-success")).toMatchObject({
-      feedback: { intent: "success", title: "Invitation revoked" },
-      invitations: [{ status: { value: "Revoked" } }, expect.anything()],
-    });
-    expect(readyManifest(fixtures, "revocation-failed").feedback).toMatchObject({
-      intent: "danger",
-      title: "Invitation could not be revoked",
-    });
 
     expect(serialized).not.toMatch(
       /rawInvite|tokenHash|credential|challengeSecret|sessionId|handoff|providerResponse|recoveryMaterial|adminBearer|private[-_ ]?key|bearer\s/i,
@@ -154,11 +103,29 @@ describe("canonical access-management fixtures", () => {
 
   it("reduces exact current field, selection, dialog, submit, confirmation, and revoke intents", () => {
     const fixtures = createFormlessAccessFixtures();
-    const draftHost = createFormlessAccessFixtureHost(requiredFixture(fixtures, "authoring-draft"));
+    const draftHost = createFormlessAccessFixtureHost(requiredFixture(fixtures, "populated-owner"));
+    const draftInvite = requiredCurrentReadyManifest(draftHost).invite;
+    draftHost.host.dispatch(draftInvite.intent);
     const initialDraft = requiredCurrentAuthoring(draftHost);
     const emailField = initialDraft.fields.targetEmail;
+    const surfaceField = initialDraft.fields.targetSurface;
+
+    draftHost.host.dispatch({ ...surfaceField.changeIntent, value: "app-install" });
+    expect(requiredCurrentAuthoring(draftHost).fields.targetAppInstall).toMatchObject({
+      disabledReason: undefined,
+      required: false,
+      value: "site",
+    });
+    draftHost.host.dispatch({ ...surfaceField.changeIntent, value: "organization" });
+    expect(requiredCurrentAuthoring(draftHost).fields.targetOrganization).toMatchObject({
+      disabledReason: undefined,
+      required: false,
+      value: "formless",
+    });
 
     draftHost.host.dispatch({ ...emailField.changeIntent, value: "updated@example.com" });
+    const displayNameField = requiredCurrentAuthoring(draftHost).fields.displayName;
+    draftHost.host.dispatch({ ...displayNameField.changeIntent, value: "Grace Hopper" });
     expect(requiredCurrentAuthoring(draftHost).fields.targetEmail.value).toBe(
       "updated@example.com",
     );
@@ -184,8 +151,8 @@ describe("canonical access-management fixtures", () => {
     const submit = requiredCurrentAuthoring(draftHost).submit;
     draftHost.host.dispatch(submit.intent);
     expect(requiredCurrentAuthoring(draftHost)).toMatchObject({
-      pending: { isPending: true, label: "Sending invitation" },
-      submit: { control: { disabled: true } },
+      feedback: { intent: "danger", title: "Invitation could not be created" },
+      open: true,
     });
 
     const ownerHost = createFormlessAccessFixtureHost(requiredFixture(fixtures, "populated-owner"));
@@ -208,27 +175,23 @@ describe("canonical access-management fixtures", () => {
     ownerHost.host.dispatch(confirmation.cancel.intent);
     expect(requiredCurrentReadyManifest(ownerHost).confirmation).toBeUndefined();
 
-    const confirmationHost = createFormlessAccessFixtureHost(
-      requiredFixture(fixtures, "revocation-confirmation"),
-    );
-    const revoke = requiredCurrentReadyManifest(confirmationHost).confirmation?.action;
+    ownerHost.host.dispatch(revocation.action.intent);
+    const revoke = requiredCurrentReadyManifest(ownerHost).confirmation?.action;
     if (!revoke) {
       throw new Error("Missing fixture revoke action.");
     }
-    confirmationHost.host.dispatch(revoke.intent);
-    expect(
-      requiredCurrentReadyManifest(confirmationHost).confirmation?.action.control,
-    ).toMatchObject({ disabled: true, pending: { isPending: true } });
-    const pendingRevocation =
-      requiredCurrentReadyManifest(confirmationHost).invitations[0]?.revocation;
-    expect(pendingRevocation?.availability).toBe("available");
-    if (pendingRevocation?.availability === "available") {
-      expect(pendingRevocation.action.control).toMatchObject({ disabled: true });
-    }
+    ownerHost.host.dispatch(revoke.intent);
+    expect(requiredCurrentReadyManifest(ownerHost)).toMatchObject({
+      confirmation: { open: true },
+      feedback: { intent: "danger", title: "Invitation could not be revoked" },
+    });
+    expect(requiredCurrentReadyManifest(ownerHost).invitations[0]?.revocation.availability).toBe(
+      "available",
+    );
   });
 
-  it("publishes shell and access through one host while notifying only changed access scopes", () => {
-    const fixture = requiredFixture(createFormlessAccessFixtures(), "authoring-draft");
+  it("publishes access through one host while notifying only changed access scopes", () => {
+    const fixture = requiredFixture(createFormlessAccessFixtures(), "populated-owner");
     const fixtureHost = createFormlessAccessFixtureHost(fixture);
     const publication = projectFormlessAccessFixturePublication(fixture.state);
     const notifications = new Set<string>();
@@ -238,11 +201,7 @@ describe("canonical access-management fixtures", () => {
       }),
     );
 
-    expect(fixtureHost.host.read(fixtureHost.shellReference)?.title).toBe("Instance");
     expect(fixtureHost.host.read(fixtureHost.accessReference)?.title).toBe("Access");
-    expect(
-      publication.nodes.some(({ reference }) => reference.kind === "shellManifestReference"),
-    ).toBe(true);
     expect(
       publication.nodes.some(({ reference }) => reference.kind === "accessManifestReference"),
     ).toBe(true);
@@ -269,17 +228,15 @@ describe("canonical access-management fixtures", () => {
     }
   });
 
-  it("renders subscribed access as the selected application-shell route child", () => {
+  it("renders subscribed access without application-shell chrome", () => {
     const fixtureHost = createFormlessAccessFixtureHost(
       requiredFixture(createFormlessAccessFixtures(), "populated-owner"),
     );
     const html = renderToStaticMarkup(<FormlessAccessFixtureView fixtureHost={fixtureHost} />);
 
-    expect(html).toContain('data-testid="formless-astryx-application-shell:shell:application"');
+    expect(html).not.toContain("formless-astryx-application-shell");
     expect(html).toContain('data-formless-astryx-access="access:fixture"');
     expect(html).toContain('data-formless-astryx-access-state="ready"');
-    expect(html).toContain('href="/access"');
-    expect(html.indexOf("Instance application shell")).toBeLessThan(html.indexOf("Access"));
   });
 
   it("keeps fixture composition runtime-free, package-local, and inactive in production", async () => {

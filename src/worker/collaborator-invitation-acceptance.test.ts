@@ -68,8 +68,10 @@ const identityApi = IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX;
 const controlPlaneApi = "/api/formless/control-plane";
 const rawToken = "aW52aXRlLXJhdy10b2tlbi0x";
 const otherRawToken = "aW52aXRlLXJhdy10b2tlbi0y";
-const createdAt = "2026-06-01T00:00:00.000Z";
-const futureExpiresAt = "2999-02-01T00:00:00.000Z";
+const createdAt = new Date().toISOString();
+const futureExpiresAt = new Date(
+  new Date(createdAt).getTime() + 7 * 24 * 60 * 60 * 1000,
+).toISOString();
 const pastCreatedAt = "2026-01-01T00:00:00.000Z";
 const pastExpiresAt = "2026-01-02T00:00:00.000Z";
 
@@ -240,7 +242,6 @@ describe("collaborator invitation acceptance status", () => {
             invitationId: "invitation:expired",
             targetEmail: "expired@example.com",
             targetSurface: "instance",
-            expiresAt: pastExpiresAt,
             now: pastCreatedAt,
           });
 
@@ -1490,7 +1491,6 @@ async function createInvitation(input: {
     id?: string;
     selectedOrganization?: string;
   }>;
-  expiresAt?: string;
   invitationId: string;
   invitedPrincipal?: { displayName: string; id: string };
   memberships?: Array<{
@@ -1518,7 +1518,6 @@ async function createInvitation(input: {
       ...(input.targetOrganization === undefined
         ? {}
         : { targetOrganization: input.targetOrganization }),
-      expiresAt: input.expiresAt ?? futureExpiresAt,
       now: input.now ?? createdAt,
       ...(input.invitedPrincipal === undefined ? {} : { invitedPrincipal: input.invitedPrincipal }),
       ...(input.principalEmail === undefined ? {} : { principalEmail: input.principalEmail }),

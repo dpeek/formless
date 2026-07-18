@@ -1,8 +1,3 @@
-import * as stylex from "@stylexjs/stylex";
-import { HStack } from "@astryxdesign/core/HStack";
-import { SegmentedControl, SegmentedControlItem } from "@astryxdesign/core/SegmentedControl";
-import { MediaTheme, useTheme } from "@astryxdesign/core/theme";
-import { colorVars } from "@astryxdesign/core/theme/tokens.stylex";
 import { useState } from "react";
 import type {
   FormlessUiManagementInstallDialogContract,
@@ -22,6 +17,7 @@ import {
 } from "../formless-ui-contract-host.ts";
 import { FormlessUiContractHostProvider } from "../formless-ui-contract-host-react.tsx";
 import { applyScenarioFieldIntent } from "./fields/fixture-helpers.ts";
+import { FormlessFixtureLayout } from "./fixture-layout.tsx";
 import { AstryxSubscribedManagementRenderer } from "./formless-ui-management-renderer.tsx";
 import {
   applyGeneratedWorkspaceIntent,
@@ -32,6 +28,8 @@ import {
   instanceManagementAppsReference,
   instanceManagementInstallActionControlId,
   instanceManagementInstallActionId,
+  instanceManagementWorkspacePushFixture,
+  instanceManagementWorkspacePushOperationId,
   type FormlessInstanceManagementFixture,
   type FormlessInstanceManagementFixtureId,
   type FormlessInstanceManagementFixtureState,
@@ -42,47 +40,23 @@ export function FormlessInstanceManagementLayout() {
   const [selectedFixtureId, setSelectedFixtureId] =
     useState<FormlessInstanceManagementFixtureId>("installed");
   const selectedFixture = fixtures.find((fixture) => fixture.id === selectedFixtureId);
-  const { mode } = useTheme();
 
   if (!selectedFixture) {
     return null;
   }
 
   return (
-    <>
-      <HStack
-        aria-label="Instance management fixtures"
-        as="nav"
-        justify="center"
-        paddingBlock={2}
-        paddingInline={4}
-        width="100%"
-        xstyle={styles.fixtureNav}
-      >
-        <MediaTheme mode={mode === "light" ? "dark" : "light"}>
-          <SegmentedControl
-            label="Instance management state"
-            layout="hug"
-            onChange={(value) => setSelectedFixtureId(value as FormlessInstanceManagementFixtureId)}
-            value={selectedFixtureId}
-          >
-            {fixtures.map((fixture) => (
-              <SegmentedControlItem key={fixture.id} label={fixture.label} value={fixture.id} />
-            ))}
-          </SegmentedControl>
-        </MediaTheme>
-      </HStack>
+    <FormlessFixtureLayout
+      ariaLabel="Instance management fixtures"
+      fixtures={fixtures}
+      label="Instance management state"
+      onSelectionChange={setSelectedFixtureId}
+      selectedFixtureId={selectedFixtureId}
+    >
       <FormlessInstanceManagementFixtureView fixtureHost={selectedFixture} />
-    </>
+    </FormlessFixtureLayout>
   );
 }
-
-const styles = stylex.create({
-  fixtureNav: {
-    backgroundColor: colorVars["--color-background-inverted"],
-    overflowX: "auto",
-  },
-});
 
 export function FormlessInstanceManagementFixtureView({
   fixtureHost,
@@ -128,9 +102,43 @@ export function createFormlessInstanceManagementFixtureHost(
 
       state = nextState;
       host.publish(projectFormlessInstanceManagementFixturePublication(state).nodes);
+
+      if (intent.type === "managementWorkspaceOperation") {
+        scheduleWorkspacePushTimeline();
+      }
     },
     nodes: initialPublication.nodes,
   });
+
+  function scheduleWorkspacePushTimeline() {
+    let delayMs = 0;
+
+    for (const transition of instanceManagementWorkspacePushFixture.timeline ?? []) {
+      delayMs += transition.delayMs;
+      globalThis.setTimeout(() => {
+        if (state.manifest.state !== "ready") {
+          return;
+        }
+
+        const operation = state.manifest.workspaceOperation;
+        if (
+          operation?.id !== instanceManagementWorkspacePushOperationId ||
+          operation.control.status.status !== "pending"
+        ) {
+          return;
+        }
+
+        state = replaceReadyManifest(state, {
+          ...state.manifest,
+          workspaceOperation: {
+            ...operation,
+            control: transition.snapshot,
+          },
+        });
+        host.publish(projectFormlessInstanceManagementFixturePublication(state).nodes);
+      }, delayMs);
+    }
+  }
 
   return {
     ...fixture,
@@ -358,7 +366,8 @@ function applyManagementOperationIntent(
   if (
     operation.control.id !== intent.controlId ||
     intent.intent.controlId !== intent.controlId ||
-    intent.intent.type !== "operationInvoke"
+    intent.intent.type !== "operationInvoke" ||
+    operation.control.status.status === "pending"
   ) {
     return state;
   }
@@ -373,52 +382,10 @@ function applyManagementOperationIntent(
 function pendingOperation(
   operation: FormlessUiManagementWorkspaceOperationContract,
 ): FormlessUiManagementWorkspaceOperationContract {
-  const controlId = operation.control.id;
-  const progress = {
-    detail: "Uploading display-safe workspace source.",
-    id: `${controlId}:progress`,
-    kind: "operationProgress" as const,
-    steps: [
-      { id: `${controlId}:plan`, label: "Plan", status: "succeeded" as const },
-      { id: `${controlId}:upload`, label: "Upload source", status: "running" as const },
-    ],
-    title: "Pushing workspace",
-    updatedAt: 2,
-  };
-
   return {
     ...operation,
     authorizationPrompt: undefined,
-    control: {
-      ...operation.control,
-      feedback: {
-        activeProgress: { label: "Upload source", stepId: `${controlId}:upload` },
-        detail: "Uploading source files.",
-        id: `${controlId}:feedback`,
-        intent: "info",
-        kind: "operationFeedbackEvent",
-        progress,
-        status: "pending",
-        title: "Pushing workspace",
-      },
-      progress,
-      status: {
-        accessibilityLabel: "Pushing workspace. Uploading source files.",
-        detail: "Uploading source files.",
-        id: `${controlId}:status`,
-        intent: "info",
-        kind: "compactStatus",
-        label: "Pushing workspace",
-        pending: { isPending: true, label: "Pushing workspace" },
-        status: "pending",
-      },
-      trigger: {
-        ...operation.control.trigger,
-        disabled: true,
-        disabledReason: "Pushing workspace",
-        pending: { isPending: true, label: "Pushing workspace" },
-      },
-    },
+    control: instanceManagementWorkspacePushFixture.pending,
   };
 }
 

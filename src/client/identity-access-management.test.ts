@@ -86,7 +86,6 @@ describe("identity access management client", () => {
     const result = await createIdentityAccessManagementInvitation(
       {
         appRegistrations: [{ appInstallId: "site" }],
-        expiresAt: "2999-02-01T00:00:00.000Z",
         idempotencyKey: "access-invite-ada",
         invitedPrincipal: { displayName: "Ada Collaborator" },
         principalEmail: { primary: true, recovery: false },
@@ -128,7 +127,6 @@ describe("identity access management client", () => {
     expect(typeof requests[0]?.init?.body).toBe("string");
     expect(JSON.parse(requests[0]?.init?.body as string)).toEqual({
       appRegistrations: [{ appInstallId: "site" }],
-      expiresAt: "2999-02-01T00:00:00.000Z",
       idempotencyKey: "access-invite-ada",
       invitedPrincipal: { displayName: "Ada Collaborator" },
       memberships: [],

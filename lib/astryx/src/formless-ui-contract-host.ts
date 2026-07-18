@@ -755,7 +755,6 @@ function assertAccessInvitationAuthoringContract(
 
   const expectedFieldPurposes = {
     displayName: "display-name",
-    expiresAt: "expires-at",
     targetAppInstall: "target-app-install",
     targetEmail: "target-email",
     targetOrganization: "target-organization",

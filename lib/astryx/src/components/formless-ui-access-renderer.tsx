@@ -4,27 +4,41 @@ import { Banner, type BannerStatus } from "@astryxdesign/core/Banner";
 import { Button, type ButtonVariant } from "@astryxdesign/core/Button";
 import { DateTimeInput, type ISODateTimeString } from "@astryxdesign/core/DateTimeInput";
 import { Dialog, DialogHeader } from "@astryxdesign/core/Dialog";
+import { Divider } from "@astryxdesign/core/Divider";
 import { EmptyState } from "@astryxdesign/core/EmptyState";
 import { FieldStatus } from "@astryxdesign/core/FieldStatus";
 import { FormLayout } from "@astryxdesign/core/FormLayout";
-import { Grid } from "@astryxdesign/core/Grid";
 import { HStack } from "@astryxdesign/core/HStack";
 import { Layout, LayoutContent, LayoutFooter } from "@astryxdesign/core/Layout";
 import { MultiSelector } from "@astryxdesign/core/MultiSelector";
 import { Section } from "@astryxdesign/core/Section";
 import { Selector } from "@astryxdesign/core/Selector";
 import { Spinner } from "@astryxdesign/core/Spinner";
-import { Table, pixel, proportional, type TableColumn } from "@astryxdesign/core/Table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHeader,
+  TableHeaderCell,
+  TableRow,
+  pixel,
+  proportional,
+  resolveColumnWidths,
+  type TableColumn,
+} from "@astryxdesign/core/Table";
 import { Heading, Text } from "@astryxdesign/core/Text";
 import { TextInput } from "@astryxdesign/core/TextInput";
 import { Timestamp } from "@astryxdesign/core/Timestamp";
+import { Token } from "@astryxdesign/core/Token";
+import { useToast, type ToastOptions } from "@astryxdesign/core/Toast";
 import { VStack } from "@astryxdesign/core/VStack";
-import { memo, type FormEvent, type ReactNode } from "react";
+import { memo, useEffect, useRef, type FormEvent, type ReactNode } from "react";
 import type {
   FormlessUiAccessActionContract,
   FormlessUiAccessConfirmationContract,
   FormlessUiAccessControlledFieldContract,
   FormlessUiAccessDisplayFactContract,
+  FormlessUiAccessEmptyStateContract,
   FormlessUiAccessFeedbackContract,
   FormlessUiAccessGrantSelectionContract,
   FormlessUiAccessIntentHandler,
@@ -139,7 +153,7 @@ function AstryxAccessFrame({
             />
           ) : null}
           {manifest.state === "failed" || manifest.state === "unauthorized" ? (
-            <AstryxAccessFeedback feedback={manifest.feedback} />
+            <AstryxAccessFeedbackBanner feedback={manifest.feedback} />
           ) : null}
           {children}
         </VStack>
@@ -159,22 +173,20 @@ function AstryxAccessReadyContent({
 }) {
   return (
     <VStack gap={6} width="100%">
-      {manifest.feedback ? <AstryxAccessFeedback feedback={manifest.feedback} /> : null}
-      {manifest.emptyState ? (
-        <EmptyState
-          data-formless-astryx-access-empty={manifest.emptyState.id}
-          description={manifest.emptyState.description}
-          title={manifest.emptyState.title}
+      {manifest.feedback ? <AstryxAccessFeedbackToast feedback={manifest.feedback} /> : null}
+      <VStack gap={6} width="100%">
+        <AstryxAccessPeople
+          accessId={manifest.id}
+          emptyState={manifest.peopleEmptyState}
+          people={manifest.people}
         />
-      ) : null}
-      <Grid columns={{ max: 2, minWidth: 360, repeat: "fit" }} gap={6} width="100%">
-        <AstryxAccessPeople accessId={manifest.id} people={manifest.people} />
         <AstryxAccessInvitations
           accessId={manifest.id}
+          emptyState={manifest.invitationsEmptyState}
           invitations={manifest.invitations}
           onIntent={onIntent}
         />
-      </Grid>
+      </VStack>
       {authoring ? (
         <AstryxAccessInvitationAuthoring authoring={authoring} onIntent={onIntent} />
       ) : null}
@@ -192,9 +204,11 @@ type AstryxAccessPersonRow = {
 
 function AstryxAccessPeople({
   accessId,
+  emptyState,
   people,
 }: {
   accessId: string;
+  emptyState?: FormlessUiAccessEmptyStateContract;
   people: readonly FormlessUiAccessPersonContract[];
 }) {
   const headingId = `${accessId}:people-heading`;
@@ -221,19 +235,26 @@ function AstryxAccessPeople({
       header: "Roles",
       key: "roles",
       renderCell: ({ person }) => (
-        <VStack gap={1}>
+        <HStack gap={1} wrap="wrap">
           {person.roles.map((role) => (
-            <VStack data-formless-astryx-access-role={role.id} gap={0.5} key={role.id}>
-              <Text type="supporting" weight="medium">
-                {role.label}
-              </Text>
-              <HStack gap={1} wrap="wrap">
-                {role.scope ? <AstryxAccessFact fact={role.scope} /> : null}
-                {role.status ? <AstryxAccessFact fact={role.status} /> : null}
-              </HStack>
-            </VStack>
+            <span data-formless-astryx-access-role={role.id} key={role.id}>
+              <Token
+                color="default"
+                description={role.scope ? `${role.scope.value}: ${role.label}` : role.label}
+                endContent={
+                  role.scope ? (
+                    <HStack align="center" gap={1}>
+                      <Divider orientation="vertical" />
+                      <Text type="supporting">{role.label}</Text>
+                    </HStack>
+                  ) : undefined
+                }
+                label={role.scope?.value ?? role.label}
+                size="sm"
+              />
+            </span>
           ))}
-        </VStack>
+        </HStack>
       ),
       width: proportional(1, { minWidth: 180 }),
     },
@@ -254,16 +275,20 @@ function AstryxAccessPeople({
           </Heading>
           <Badge label={people.length} variant="neutral" />
         </HStack>
-        <Table<AstryxAccessPersonRow>
-          columns={columns}
-          data={rows}
-          density="balanced"
-          dividers="rows"
-          idKey="id"
-          tableProps={{ "aria-labelledby": headingId }}
-          textOverflow="wrap"
-          verticalAlign="top"
-        />
+        {rows.length === 0 && emptyState ? (
+          <AstryxAccessEmptyTable columns={columns} emptyState={emptyState} headingId={headingId} />
+        ) : (
+          <Table<AstryxAccessPersonRow>
+            columns={columns}
+            data={rows}
+            density="balanced"
+            dividers="rows"
+            idKey="id"
+            tableProps={{ "aria-labelledby": headingId }}
+            textOverflow="wrap"
+            verticalAlign="top"
+          />
+        )}
       </VStack>
     </Section>
   );
@@ -276,10 +301,12 @@ type AstryxAccessInvitationRow = {
 
 function AstryxAccessInvitations({
   accessId,
+  emptyState,
   invitations,
   onIntent,
 }: {
   accessId: string;
+  emptyState?: FormlessUiAccessEmptyStateContract;
   invitations: readonly FormlessUiAccessInvitationContract[];
   onIntent: FormlessUiAccessIntentHandler;
 }) {
@@ -337,13 +364,13 @@ function AstryxAccessInvitations({
             destructive
             onIntent={onIntent}
           />
-        ) : (
+        ) : invitation.revocation.disabledReason ? (
           <FieldStatus
             message={invitation.revocation.disabledReason}
             type="warning"
             variant="detached"
           />
-        ),
+        ) : null,
       width: pixel(144),
     },
   ];
@@ -357,18 +384,72 @@ function AstryxAccessInvitations({
           </Heading>
           <Badge label={invitations.length} variant="neutral" />
         </HStack>
-        <Table<AstryxAccessInvitationRow>
-          columns={columns}
-          data={rows}
-          density="balanced"
-          dividers="rows"
-          idKey="id"
-          tableProps={{ "aria-labelledby": headingId }}
-          textOverflow="wrap"
-          verticalAlign="top"
-        />
+        {rows.length === 0 && emptyState ? (
+          <AstryxAccessEmptyTable columns={columns} emptyState={emptyState} headingId={headingId} />
+        ) : (
+          <Table<AstryxAccessInvitationRow>
+            columns={columns}
+            data={rows}
+            density="balanced"
+            dividers="rows"
+            idKey="id"
+            tableProps={{ "aria-labelledby": headingId }}
+            textOverflow="wrap"
+            verticalAlign="top"
+          />
+        )}
       </VStack>
     </Section>
+  );
+}
+
+function AstryxAccessEmptyTable<Row extends Record<string, unknown>>({
+  columns,
+  emptyState,
+  headingId,
+}: {
+  columns: TableColumn<Row>[];
+  emptyState: FormlessUiAccessEmptyStateContract;
+  headingId: string;
+}) {
+  const resolvedWidths = resolveColumnWidths(columns);
+
+  return (
+    <Table<Row>
+      columns={columns}
+      density="balanced"
+      dividers="rows"
+      tableProps={{ "aria-labelledby": headingId }}
+      textOverflow="wrap"
+      verticalAlign="top"
+    >
+      <colgroup>
+        {columns.map((column) => (
+          <col key={column.key} style={resolvedWidths.columns.get(column.key)?.style} />
+        ))}
+      </colgroup>
+      <TableHeader>
+        <TableRow isHeaderRow>
+          {columns.map((column) => (
+            <TableHeaderCell key={column.key} scope="col">
+              {column.header}
+            </TableHeaderCell>
+          ))}
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        <TableRow aria-label={emptyState.title}>
+          <TableCell colSpan={columns.length}>
+            <EmptyState
+              data-formless-astryx-access-empty={emptyState.id}
+              description={emptyState.description}
+              isCompact
+              title={emptyState.title}
+            />
+          </TableCell>
+        </TableRow>
+      </TableBody>
+    </Table>
   );
 }
 
@@ -422,78 +503,92 @@ export function AstryxAccessInvitationAuthoringContent({
   onIntent: FormlessUiAccessIntentHandler;
 }) {
   const formId = `${authoring.id}:form`;
+  const formErrors = astryxAccessFormErrors(authoring);
+  const scopeField =
+    authoring.fields.targetSurface.value === "app-install"
+      ? authoring.fields.targetAppInstall
+      : authoring.fields.targetSurface.value === "organization"
+        ? authoring.fields.targetOrganization
+        : undefined;
 
   return (
-    <form
-      data-formless-astryx-access-authoring={authoring.id}
-      id={formId}
-      noValidate
-      onSubmit={(event) => submitAstryxAccessInvitation(event, authoring, onIntent)}
-    >
-      <Layout
-        content={
-          <LayoutContent>
+    <Layout
+      content={
+        <LayoutContent>
+          <form
+            aria-busy={authoring.pending?.isPending}
+            data-formless-astryx-access-authoring={authoring.id}
+            id={formId}
+            noValidate
+            onSubmit={(event) => submitAstryxAccessInvitation(event, authoring, onIntent)}
+          >
             <VStack gap={5} width="100%">
               <FormLayout direction="vertical">
-                {[
-                  authoring.fields.targetEmail,
-                  authoring.fields.displayName,
-                  authoring.fields.expiresAt,
-                  authoring.fields.targetSurface,
-                  authoring.fields.targetAppInstall,
-                  authoring.fields.targetOrganization,
-                ].map((field) => (
+                <HStack gap={3} width="100%">
                   <AstryxAccessControlledField
-                    field={field}
-                    key={field.id}
+                    field={authoring.fields.targetEmail}
                     onIntent={onIntent}
                     pending={authoring.pending}
                   />
-                ))}
+                  <AstryxAccessControlledField
+                    field={authoring.fields.displayName}
+                    onIntent={onIntent}
+                    pending={authoring.pending}
+                  />
+                </HStack>
+                <HStack gap={3} width="100%">
+                  <AstryxAccessControlledField
+                    field={authoring.fields.targetSurface}
+                    onIntent={onIntent}
+                    pending={authoring.pending}
+                  />
+                  {scopeField ? (
+                    <AstryxAccessControlledField
+                      field={scopeField}
+                      onIntent={onIntent}
+                      pending={authoring.pending}
+                    />
+                  ) : null}
+                </HStack>
                 {authoring.grantSelections.map((selection) => (
                   <AstryxAccessGrantSelection
                     key={selection.id}
                     onIntent={onIntent}
                     pending={authoring.pending}
                     selection={selection}
+                    targetSurface={authoring.fields.targetSurface.value}
                   />
                 ))}
               </FormLayout>
-              {authoring.pending ? (
-                <HStack align="center" gap={2} role="status">
-                  <Spinner aria-label={authoring.pending.label} size="sm" />
-                  <Text type="supporting">{authoring.pending.label}</Text>
-                </HStack>
-              ) : null}
-              {authoring.errors.length > 0 ? (
+              {formErrors.length > 0 ? (
                 <VStack aria-live="assertive" gap={1} role="alert">
-                  {authoring.errors.map((error) => (
+                  {formErrors.map((error) => (
                     <FieldStatus key={error} message={error} type="error" variant="detached" />
                   ))}
                 </VStack>
               ) : null}
-              {authoring.feedback ? <AstryxAccessFeedback feedback={authoring.feedback} /> : null}
+              {authoring.feedback ? (
+                <AstryxAccessFeedbackToast feedback={authoring.feedback} />
+              ) : null}
             </VStack>
-          </LayoutContent>
-        }
-        footer={
-          <LayoutFooter hasDivider>
-            <HStack gap={2} justify="end" width="100%" wrap="wrap">
-              <AstryxAccessAction action={authoring.cancel} onIntent={onIntent} />
-              <AstryxAccessAction action={authoring.submit} form={formId} onIntent={onIntent} />
-            </HStack>
-          </LayoutFooter>
-        }
-        header={
-          <DialogHeader
-            onOpenChange={(open) => void onIntent({ ...authoring.cancel.intent, open })}
-            subtitle={authoring.description}
-            title={authoring.title}
-          />
-        }
-        height="auto"
-      />
-    </form>
+          </form>
+        </LayoutContent>
+      }
+      footer={
+        <LayoutFooter hasDivider>
+          <HStack gap={2} justify="end" width="100%" wrap="wrap">
+            <AstryxAccessAction action={authoring.cancel} onIntent={onIntent} />
+            <AstryxAccessAction action={authoring.submit} form={formId} onIntent={onIntent} />
+          </HStack>
+        </LayoutFooter>
+      }
+      header={
+        <DialogHeader
+          onOpenChange={(open) => void onIntent({ ...authoring.cancel.intent, open })}
+          title={authoring.title}
+        />
+      }
+    />
   );
 }
 
@@ -507,8 +602,14 @@ function AstryxAccessControlledField({
   pending?: FormlessUiAccessInvitationAuthoringContract["pending"];
 }) {
   const isDisabled = field.disabledReason !== undefined || pending !== undefined;
-  const disabledMessage = field.disabledReason ?? pending?.label;
-  const status = field.errors.length > 0 ? ({ type: "error" } as const) : undefined;
+  const disabledMessage = field.disabledReason;
+  const description = astryxAccessDisabledDescription([
+    ...(field.disabledReason ? [field.disabledReason] : []),
+    ...(field.options ?? []).flatMap((option) =>
+      option.disabledReason ? [`${option.label}: ${option.disabledReason}`] : [],
+    ),
+  ]);
+  const status = astryxAccessValidationStatus(field.errors);
   let control: ReactNode;
 
   if (field.inputKind === "select") {
@@ -516,6 +617,7 @@ function AstryxAccessControlledField({
     control = (
       <Selector
         data-formless-astryx-access-field={field.id}
+        description={description}
         disabledMessage={disabledMessage}
         hasSearch={options.length > SEARCHABLE_OPTION_COUNT}
         isDisabled={isDisabled}
@@ -536,6 +638,7 @@ function AstryxAccessControlledField({
     control = (
       <DateTimeInput
         data-formless-astryx-access-field={field.id}
+        description={description}
         disabledMessage={disabledMessage}
         isDisabled={isDisabled}
         isRequired={field.required}
@@ -552,6 +655,7 @@ function AstryxAccessControlledField({
     control = (
       <TextInput
         data-formless-astryx-access-field={field.id}
+        description={description}
         disabledMessage={disabledMessage}
         isDisabled={isDisabled}
         isRequired={field.required}
@@ -565,67 +669,63 @@ function AstryxAccessControlledField({
     );
   }
 
-  return (
-    <VStack gap={1} width="100%">
-      {control}
-      <AstryxAccessFieldMessages field={field} />
-    </VStack>
-  );
-}
-
-function AstryxAccessFieldMessages({ field }: { field: FormlessUiAccessControlledFieldContract }) {
-  const disabledReasons = [
-    ...(field.disabledReason ? [field.disabledReason] : []),
-    ...(field.options ?? []).flatMap((option) =>
-      option.disabledReason ? [`${option.label}: ${option.disabledReason}`] : [],
-    ),
-  ];
-
-  return (
-    <>
-      {field.errors.map((error) => (
-        <FieldStatus key={error} message={error} type="error" variant="detached" />
-      ))}
-      {distinctStrings(disabledReasons).map((reason) => (
-        <FieldStatus key={reason} message={reason} type="warning" variant="detached" />
-      ))}
-    </>
-  );
+  return control;
 }
 
 function AstryxAccessGrantSelection({
   onIntent,
   pending,
   selection,
+  targetSurface,
 }: {
   onIntent: FormlessUiAccessIntentHandler;
   pending?: FormlessUiAccessInvitationAuthoringContract["pending"];
   selection: FormlessUiAccessGrantSelectionContract;
+  targetSurface: string;
 }) {
-  const optionCount = selection.groups.reduce((count, group) => count + group.options.length, 0);
+  const groups =
+    selection.purpose === "roles"
+      ? selection.groups.filter((group) => astryxAccessRoleGroupIsVisible(group.id, targetSurface))
+      : selection.groups;
+  const visibleOptionIds = new Set(
+    groups.flatMap((group) => group.options.map((option) => option.id)),
+  );
+  const visibleSelection = {
+    ...selection,
+    groups,
+    selectedOptionIds: selection.selectedOptionIds.filter((id) => visibleOptionIds.has(id)),
+  };
+  const optionCount = groups.reduce((count, group) => count + group.options.length, 0);
   const isDisabled = selection.disabledReason !== undefined || pending !== undefined;
-  const disabledMessage = selection.disabledReason ?? pending?.label;
+  const disabledMessage = selection.disabledReason;
   const disabledReasons = [
     ...(selection.disabledReason ? [selection.disabledReason] : []),
-    ...selection.groups.flatMap((group) =>
+    ...groups.flatMap((group) =>
       group.options.flatMap((option) =>
         option.disabledReason ? [`${option.label}: ${option.disabledReason}`] : [],
       ),
     ),
   ];
+  const description = astryxAccessDisabledDescription(disabledReasons);
+  const status = astryxAccessValidationStatus(selection.errors);
 
   return (
     <VStack data-formless-astryx-access-grants={selection.purpose} gap={1} width="100%">
       <MultiSelector
+        description={description}
         disabledMessage={disabledMessage}
         hasSearch={optionCount > SEARCHABLE_OPTION_COUNT}
         hasSelectAll={false}
         isDisabled={isDisabled}
         label={selection.label}
         onChange={(selectedOptionIds) =>
-          void dispatchAstryxAccessGrantSelectionChanges(onIntent, selection, selectedOptionIds)
+          void dispatchAstryxAccessGrantSelectionChanges(
+            onIntent,
+            visibleSelection,
+            selectedOptionIds,
+          )
         }
-        options={selection.groups.map((group) => ({
+        options={groups.map((group) => ({
           options: group.options.map((option) => ({
             disabled: option.disabledReason !== undefined,
             label: option.label,
@@ -634,19 +734,26 @@ function AstryxAccessGrantSelection({
           title: group.label,
           type: "section" as const,
         }))}
-        status={selection.errors.length > 0 ? { type: "error" } : undefined}
+        status={status}
         triggerDisplay="labels"
-        value={[...selection.selectedOptionIds]}
+        value={[...visibleSelection.selectedOptionIds]}
         width="100%"
       />
-      {selection.errors.map((error) => (
-        <FieldStatus key={error} message={error} type="error" variant="detached" />
-      ))}
-      {distinctStrings(disabledReasons).map((reason) => (
-        <FieldStatus key={reason} message={reason} type="warning" variant="detached" />
-      ))}
     </VStack>
   );
+}
+
+function astryxAccessRoleGroupIsVisible(groupId: string, targetSurface: string): boolean {
+  if (groupId.endsWith(":instance")) {
+    return true;
+  }
+  if (groupId.endsWith(":app-install")) {
+    return targetSurface === "app-install";
+  }
+  if (groupId.endsWith(":organization")) {
+    return targetSurface === "organization";
+  }
+  return true;
 }
 
 function AstryxAccessConfirmation({
@@ -726,7 +833,7 @@ function AstryxAccessAction({
   );
 }
 
-function AstryxAccessFeedback({ feedback }: { feedback: FormlessUiAccessFeedbackContract }) {
+function AstryxAccessFeedbackBanner({ feedback }: { feedback: FormlessUiAccessFeedbackContract }) {
   return (
     <Banner
       container="card"
@@ -736,6 +843,34 @@ function AstryxAccessFeedback({ feedback }: { feedback: FormlessUiAccessFeedback
       title={feedback.title}
     />
   );
+}
+
+export function astryxAccessFeedbackToastOptions(
+  feedback: FormlessUiAccessFeedbackContract,
+): ToastOptions {
+  const isFailure = feedback.intent === "danger";
+
+  return {
+    ...(isFailure ? {} : { autoHideDuration: 5_000 }),
+    body: feedback.title,
+    collisionBehavior: "overwrite",
+    isAutoHide: !isFailure,
+    type: isFailure ? "error" : "info",
+    uniqueID: feedback.id,
+  };
+}
+
+function AstryxAccessFeedbackToast({ feedback }: { feedback: FormlessUiAccessFeedbackContract }) {
+  const showToast = useToast();
+  const feedbackRef = useRef(feedback);
+  const feedbackUpdateKey = `${feedback.id}:${feedback.intent}:${feedback.title}`;
+  feedbackRef.current = feedback;
+
+  useEffect(() => {
+    showToast(astryxAccessFeedbackToastOptions(feedbackRef.current));
+  }, [feedbackUpdateKey, showToast]);
+
+  return null;
 }
 
 export function dispatchAstryxAccessFieldChange(
@@ -826,4 +961,25 @@ function astryxAccessBannerStatus(
 
 function distinctStrings(values: readonly string[]): readonly string[] {
   return Array.from(new Set(values));
+}
+
+function astryxAccessDisabledDescription(values: readonly string[]): string | undefined {
+  const description = distinctStrings(values).join(" ");
+  return description || undefined;
+}
+
+function astryxAccessValidationStatus(errors: readonly string[]) {
+  const message = errors[0];
+  return message ? ({ message, type: "error" } as const) : undefined;
+}
+
+function astryxAccessFormErrors(
+  authoring: FormlessUiAccessInvitationAuthoringContract,
+): readonly string[] {
+  const fieldErrors = new Set([
+    ...Object.values(authoring.fields).flatMap((field) => field.errors),
+    ...authoring.grantSelections.flatMap((selection) => selection.errors),
+  ]);
+
+  return authoring.errors.filter((error) => !fieldErrors.has(error));
 }

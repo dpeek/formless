@@ -74,7 +74,6 @@ describe("Formless UI access memory contract host", () => {
     expect(authoring).toMatchObject({
       fields: {
         displayName: { value: "Taylor Example" },
-        expiresAt: { inputKind: "datetime" },
         targetAppInstall: { options: [{ label: "Site" }] },
         targetEmail: { value: "taylor@example.com" },
         targetOrganization: { options: [{ label: "Formless" }] },
@@ -356,7 +355,6 @@ function readyAccessManifestNode(): FormlessUiAccessManifestNode & {
               kind: "accessRole",
               label: "Owner",
               scope: fact("role:owner:scope", "Scope", "Instance"),
-              status: fact("role:owner:status", "Status", "Active", "status", "success"),
             },
           ],
           status: fact("person:alex:status", "Status", "Active", "status", "success"),
@@ -397,23 +395,10 @@ function invitationAuthoringNode({
       description: "Invite a collaborator and choose their access.",
       errors: [],
       fields: {
-        displayName: field(
-          "field:display-name",
-          "Display name",
-          "display-name",
-          "text",
-          "Taylor Example",
-        ),
-        expiresAt: field(
-          "field:expires-at",
-          "Expires",
-          "expires-at",
-          "datetime",
-          "2030-01-01T00:00",
-        ),
+        displayName: field("field:display-name", "Name", "display-name", "text", "Taylor Example"),
         targetAppInstall: field(
           "field:target-app-install",
-          "App install scope",
+          "Scope",
           "target-app-install",
           "select",
           "site",
@@ -428,7 +413,7 @@ function invitationAuthoringNode({
         ),
         targetOrganization: field(
           "field:target-organization",
-          "Organization scope",
+          "Scope",
           "target-organization",
           "select",
           "organization:formless",
@@ -443,7 +428,7 @@ function invitationAuthoringNode({
         ),
         targetSurface: field(
           "field:target-surface",
-          "Target surface",
+          "Surface",
           "target-surface",
           "select",
           "instance",

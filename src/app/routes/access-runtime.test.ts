@@ -22,8 +22,6 @@ import {
   instanceAccessReference,
 } from "./access-contract.ts";
 
-const now = "2026-07-17T06:00:00.000Z";
-
 describe("access projection", () => {
   it("projects loading, unauthorized, failed, and empty states with display-safe feedback", () => {
     expect(projectAccess(input({ state: { status: "loading" } })).manifest).toEqual({
@@ -70,12 +68,24 @@ describe("access projection", () => {
 
     const empty = readyProjection({ summary: emptySummary() });
     expect(empty.manifest).toMatchObject({
-      emptyState: { title: "No people or invitations" },
       invitations: [],
+      invitationsEmptyState: { title: "No invitations" },
       people: [],
+      peopleEmptyState: { title: "No people" },
       state: "ready",
     });
     expect(required(empty.authoring).fields.targetAppInstall.options).toHaveLength(1);
+
+    const withoutTargetScopes = required(
+      readyProjection({
+        draft: createInitialAccessInvitationDraft({ installs: [], summary: emptySummary() }),
+        installs: [],
+        summary: emptySummary(),
+      }).authoring,
+    );
+    expect(withoutTargetScopes.fields.targetSurface.options).toMatchObject([
+      { label: "Instance", selected: true, value: "instance" },
+    ]);
   });
 
   it("projects owner people, roles, invitation counts, and resolved or unavailable labels", () => {
@@ -91,12 +101,12 @@ describe("access projection", () => {
         {
           label: "Owner",
           scope: { value: "Instance" },
-          status: { intent: "success", value: "Active" },
         },
-        { label: "Site editor", scope: { value: "Site" } },
+        { label: "Editor", scope: { value: "Site" } },
       ],
       status: { value: "Active" },
     });
+    expect(manifest.people[0]?.roles.map((role) => role.label)).toEqual(["Owner", "Editor"]);
     expect(manifest.invitations[0]).toMatchObject({
       inviter: { value: "Ada Owner" },
       revocation: { availability: "available" },
@@ -107,10 +117,7 @@ describe("access projection", () => {
     });
     expect(manifest.invitations[1]).toMatchObject({
       inviter: { value: "Unavailable person" },
-      revocation: {
-        availability: "unavailable",
-        disabledReason: "Only pending invitations can be revoked.",
-      },
+      revocation: { availability: "unavailable" },
       scope: { value: "Unavailable organization" },
       status: { intent: "success", value: "Accepted" },
     });
@@ -133,9 +140,10 @@ describe("access projection", () => {
       { label: "App install", selected: true, value: "app-install" },
       { label: "Organization", selected: false, value: "organization" },
     ]);
+    expect(authoring.fields.targetSurface.required).toBe(false);
     expect(authoring.fields.targetAppInstall).toMatchObject({
       options: [{ label: "Site", selected: true, value: "install:site" }],
-      required: true,
+      required: false,
     });
     expect(authoring.fields.targetAppInstall.disabledReason).toBeUndefined();
     expect(authoring.fields.targetOrganization).toMatchObject({
@@ -143,16 +151,28 @@ describe("access projection", () => {
       options: [{ label: "Formless", value: "organization:formless" }],
       required: false,
     });
-    expect(roles.groups.map(({ label }) => label)).toEqual([
-      "Instance",
-      "App install",
-      "Organization",
-    ]);
+    expect(roles.groups.map(({ label }) => label)).toEqual(["Instance", "App install"]);
     expect(roles.groups.map(({ options }) => options.map(({ label }) => label))).toEqual([
       ["Owner", "Administrator"],
       ["Site editor"],
-      ["Organization administrator"],
     ]);
+    const organizationRoles = required(
+      readyProjection({
+        draft: { ...draft, targetSurface: "organization" },
+        summary: populatedSummary({ owner: true }),
+      }).authoring,
+    ).grantSelections[0];
+    const instanceRoles = required(
+      readyProjection({
+        draft: { ...draft, targetSurface: "instance" },
+        summary: populatedSummary({ owner: true }),
+      }).authoring,
+    ).grantSelections[0];
+    expect(organizationRoles.groups.map(({ label }) => label)).toEqual([
+      "Instance",
+      "Organization",
+    ]);
+    expect(instanceRoles.groups.map(({ label }) => label)).toEqual(["Instance"]);
     expect(memberships.groups.map(({ label }) => label)).toEqual(["Organizations", "Groups"]);
     expect(memberships.groups.map(({ options }) => options.map(({ label }) => label))).toEqual([
       ["Formless", "Unavailable organization"],
@@ -179,14 +199,13 @@ describe("access projection", () => {
       authoring.grantSelections[0].groups.flatMap((group) =>
         group.options.map(({ label }) => label),
       ),
-    ).toEqual(["Administrator", "Site editor", "Organization administrator"]);
+    ).toEqual(["Administrator", "Site editor"]);
     expect(JSON.stringify(authoring)).not.toContain("Owner grants");
   });
 
   it("projects field, scope, and unavailable-selection validation", () => {
     const draft: AccessInvitationDraft = {
       displayName: "",
-      expiresAt: "2020-01-01T00:00",
       membershipOptionIds: ["instance-access:membership-option:group:group_3Amissing"],
       roleOptionIds: ["instance-access:role-option:app-install:app.editor"],
       targetAppInstallId: "install:missing",
@@ -196,9 +215,8 @@ describe("access projection", () => {
     };
     const authoring = required(readyProjection({ draft }).authoring);
 
-    expect(authoring.fields.displayName.errors).toEqual(["Display name is required."]);
+    expect(authoring.fields.displayName.errors).toEqual(["Name is required."]);
     expect(authoring.fields.targetEmail.errors).toEqual(["Email must be valid."]);
-    expect(authoring.fields.expiresAt.errors).toEqual(["Expires must be in the future."]);
     expect(authoring.fields.targetAppInstall.errors).toEqual([
       "Choose an available app install scope.",
     ]);
@@ -208,7 +226,7 @@ describe("access projection", () => {
     expect(authoring.grantSelections[1].errors).toEqual(["Unavailable group."]);
     expect(authoring.submit.control).toMatchObject({
       disabled: true,
-      disabledReason: "Display name is required.",
+      disabledReason: "Name is required.",
     });
     expect(authoring.errors).not.toContain("install:missing");
     expect(authoring.errors).not.toContain("group:missing");
@@ -594,7 +612,6 @@ function input({
     ...(confirmationInvitationId === undefined ? {} : { confirmationInvitationId }),
     draft,
     installs,
-    now,
     revocation,
     state: state ?? { status: "ready", summary },
     submission,
@@ -613,7 +630,6 @@ function readyProjection({
 function initialDraft(): AccessInvitationDraft {
   return createInitialAccessInvitationDraft({
     installs: [siteInstall()],
-    now,
     summary: populatedSummary(),
   });
 }
@@ -621,7 +637,6 @@ function initialDraft(): AccessInvitationDraft {
 function validDraft(): AccessInvitationDraft {
   return {
     displayName: "Lin Example",
-    expiresAt: "2026-07-24T06:00",
     membershipOptionIds: [],
     roleOptionIds: [],
     targetAppInstallId: "install:site",
@@ -835,6 +850,18 @@ function populatedSummary({
         roleKey: "app.editor",
         scopeKind: "app-install",
         status: "active",
+        targetKind: "principal",
+        targetPrincipalId: "principal:ada",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      },
+      {
+        createdAt: "2026-01-01T00:00:00.000Z",
+        displayLabel: "Administrator",
+        roleAssignmentId: "role-assignment:ada-disabled-admin",
+        roleId: "role:instance-admin",
+        roleKey: "instance.admin",
+        scopeKind: "instance",
+        status: "disabled",
         targetKind: "principal",
         targetPrincipalId: "principal:ada",
         updatedAt: "2026-01-01T00:00:00.000Z",
