@@ -60,7 +60,7 @@
     "access": "public"
   },
   "scripts": {
-    "test": "vp test --config ../../vite.config.ts",
+    "test": "vp test --config ../../vite.config.ts --configLoader runner",
     "check": "oxlint --type-aware --type-check && oxfmt && bun test ./src"
   },
   "dependencies": {

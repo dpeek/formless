@@ -274,7 +274,9 @@ describe("canonical access-management fixtures", () => {
     expect(layoutSource.match(/<FormlessUiContractHostProvider\b/g)).toHaveLength(1);
     expect(rendererSource).not.toContain("FormlessUiContractHostProvider");
     expect(rootSource).toContain("FormlessAccessLayout");
-    expect(packageJson.scripts?.test).toContain("src/components/access.test.tsx");
+    expect(packageJson.scripts?.test).toBe(
+      "vp test --config ../../vite.config.ts --configLoader runner",
+    );
     expect(Object.keys(packageJson.exports ?? {})).toEqual([
       "./contract",
       "./contract-host",

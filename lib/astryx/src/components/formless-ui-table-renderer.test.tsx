@@ -1,5 +1,5 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vite-plus/test";
+import { describe, expect, it, vi } from "vite-plus/test";
 import type { FieldSchema } from "@dpeek/formless-schema";
 import type {
   FormlessUiButtonContract,
@@ -29,6 +29,12 @@ import {
   dispatchAstryxTableAction,
 } from "./formless-ui-table-renderer.tsx";
 import { operationControlFixtures } from "./operation-controls.fixtures.ts";
+
+vi.mock("@stylexjs/stylex", () => ({
+  create: <Styles,>(styles: Styles) => styles,
+  createTheme: () => ({}),
+  props: () => ({}),
+}));
 
 const titleSchema = {
   label: "Task",
@@ -177,7 +183,7 @@ describe("Astryx table renderer", () => {
     expect(html).toContain("Edit task");
     expect(html).toContain("Update the selected task.");
     expect(html).toContain("Task changes could not be saved.");
-    expect(html).toContain('aria-label="Done"');
+    expect(html).toContain(">Done</span>");
     expect(html).toMatch(/<label[^>]*>.*Task.*<\/label>/);
 
     const intents: FormlessUiTableIntent[] = [];

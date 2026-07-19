@@ -1,5 +1,5 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vite-plus/test";
+import { describe, expect, it, vi } from "vite-plus/test";
 import type {
   FormlessUiTableActionGroupContract,
   FormlessUiTableContract,
@@ -15,6 +15,12 @@ import {
   applyTableOperationIntent,
   selectedTableFixture,
 } from "./tables.tsx";
+
+vi.mock("@stylexjs/stylex", () => ({
+  create: <Styles,>(styles: Styles) => styles,
+  createTheme: () => ({}),
+  props: () => ({}),
+}));
 
 describe("canonical table fixtures", () => {
   it("cover production table contract states with serializable data", () => {
@@ -116,7 +122,7 @@ describe("Tables prototype layout", () => {
     const dialogTitle = editAction.dialog.target.fieldSet.fields[0];
     expect(dialogTitle?.mode).toBe("editor");
     expect(dialogTitle && "drafts" in dialogTitle ? dialogTitle.drafts.draft : undefined).toBe(
-      "Prepare launch",
+      "Prepare launch checklist",
     );
     const updatedDialog = dialogTitle
       ? applyTableFieldIntent(updated, dialogTitle.fieldId, {

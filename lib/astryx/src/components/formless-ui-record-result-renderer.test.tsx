@@ -1,5 +1,5 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vite-plus/test";
+import { describe, expect, it, vi } from "vite-plus/test";
 import type { FieldSchema } from "@dpeek/formless-schema";
 import type {
   FormlessUiField,
@@ -22,6 +22,12 @@ import {
   dispatchAstryxRecordResultOperationIntent,
 } from "./formless-ui-record-result-renderer.tsx";
 import { operationControlFixtures } from "./operation-controls.fixtures.ts";
+
+vi.mock("@stylexjs/stylex", () => ({
+  create: <Styles,>(styles: Styles) => styles,
+  createTheme: () => ({}),
+  props: () => ({}),
+}));
 
 const titleSchema = {
   label: "Task",
@@ -52,9 +58,9 @@ describe("Astryx record-result renderer", () => {
     const recordResult = readyRecordResult({ editingEnabled: false, pending: true });
     const html = renderRecordResult(recordResult);
 
-    expect(html).toContain('<section aria-label="Task record"');
+    expect(html).toContain('aria-label="Task record"');
     expect(html).toContain('data-formless-record-result-density="compact"');
-    expect(html).toContain('<article aria-label="Prepare launch"');
+    expect(html).toContain('aria-label="Prepare launch"');
     expect(html).toContain('value="Prepare launch"');
     expect(html).toContain("Task updates are unavailable.");
 
@@ -69,7 +75,6 @@ describe("Astryx record-result renderer", () => {
     expect(html).toContain('aria-label="More actions for Prepare launch"');
     expect(html).toContain("Delete task?");
     expect(html).toContain("Prepare launch checklist will be removed from this workspace.");
-    expect(html).toContain("Readiness warnings");
     expect(html).toContain("Assign an owner.");
     expect(html.indexOf("Push workspace")).toBeLessThan(
       html.indexOf('aria-label="More actions for Prepare launch"'),

@@ -21,6 +21,7 @@ import {
   stateMachineFacts,
   stateMachineField,
   textControl,
+  withFixtureFieldOccurrence,
 } from "./fields/fixture-helpers.ts";
 import { operationControlFixtures } from "./operation-controls.fixtures.ts";
 
@@ -518,6 +519,7 @@ function editTaskAction(
   fields: readonly FormlessUiField[],
 ): FormlessUiTableEditActionContract {
   const dialogId = `${input.rowId}:edit`;
+  const fieldSetId = `${dialogId}:fields`;
 
   return {
     dialog: {
@@ -536,8 +538,8 @@ function editTaskAction(
       target: {
         fieldSet: {
           disabled: false,
-          fields: fields.map(tableDialogField),
-          id: `${dialogId}:fields`,
+          fields: fields.map((field) => tableDialogField(field, fieldSetId)),
+          id: fieldSetId,
           kind: "fieldSet",
           label: "Task fields",
         },
@@ -558,16 +560,19 @@ function editTaskAction(
   };
 }
 
-function tableDialogField(field: FormlessUiField): FormlessUiField {
+function tableDialogField(field: FormlessUiField, fieldSetId: string): FormlessUiField {
   if (field.mode === "editor" && (field.surface === "create" || field.surface === "operation")) {
     return field;
   }
 
-  return {
-    ...field,
-    labelVisibility: "visible",
-    surface: "record",
-  };
+  return withFixtureFieldOccurrence(
+    {
+      ...field,
+      labelVisibility: "visible",
+      surface: "record",
+    },
+    { ownerId: fieldSetId, placementId: field.fieldName },
+  );
 }
 
 function tableButton({

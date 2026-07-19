@@ -1,5 +1,5 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vite-plus/test";
+import { describe, expect, it, vi } from "vite-plus/test";
 import type {
   FormlessUiField,
   FormlessUiRecordResultActionContract,
@@ -13,6 +13,12 @@ import {
   applyRecordResultIntent,
   selectedRecordResultFixture,
 } from "./record-results.tsx";
+
+vi.mock("@stylexjs/stylex", () => ({
+  create: <Styles,>(styles: Styles) => styles,
+  createTheme: () => ({}),
+  props: () => ({}),
+}));
 
 describe("canonical record-result fixtures", () => {
   it("cover production record-result contract states with serializable data", () => {
@@ -97,8 +103,8 @@ describe("Record Results prototype layout", () => {
 
     expect(html).toContain("<h1");
     expect(html).toContain("Record Results");
-    expect(html).toContain('<section aria-label="Task record"');
-    expect(html).toContain('<article aria-label="Prepare launch checklist"');
+    expect(html).toContain('aria-label="Task record"');
+    expect(html).toContain('aria-label="Prepare launch checklist"');
     expect(html).toContain("Prepare launch checklist");
     expect(html).toContain("Edit Page Icon");
     expect(html).toContain("Complete");

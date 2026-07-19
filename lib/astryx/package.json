@@ -13,7 +13,7 @@
   },
   "scripts": {
     "dev": "vite",
-    "test": "vp test src/formless-ui-contract-host.test.tsx src/formless-ui-access-contract-host.test.tsx src/formless-ui-auth-contract-host.test.tsx src/formless-ui-management-contract-host.test.tsx src/components/formless-ui-workspace-renderer.test.tsx src/components/formless-ui-subscribed-workspace-renderer.test.tsx src/components/formless-ui-auth-renderer.test.tsx src/components/formless-ui-access-renderer.test.tsx src/components/formless-ui-management-renderer.test.tsx src/components/formless-ui-application-shell-renderer.test.tsx src/components/formless-ui-document-theme-renderer.test.tsx src/components/application-shell.test.tsx src/components/access.test.tsx src/components/auth.test.tsx src/components/generated-workspace.test.tsx src/components/instance-management.test.tsx src/components/site-contract.test.tsx src/components/site-renderer.test.tsx src/components/source-icon.test.tsx src/site-candidate.test.tsx src/site-provider.test.tsx src/fixtures/public-site.test.ts src/fixtures/public-site-structural.test.ts src/fixtures/public-site-assets.test.ts src/fixtures/public-site-content.test.ts src/fixtures/public-site-forms.test.ts --config ../../vite.config.ts"
+    "test": "vp test --config ../../vite.config.ts --configLoader runner"
   },
   "dependencies": {
     "@astryxdesign/core": "0.1.4",

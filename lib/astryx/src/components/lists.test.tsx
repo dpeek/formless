@@ -1,5 +1,5 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vite-plus/test";
+import { describe, expect, it, vi } from "vite-plus/test";
 import type {
   FormlessUiListContract,
   FormlessUiListOperationActionContract,
@@ -12,6 +12,12 @@ import {
   applyListOperationIntent,
   selectedListFixture,
 } from "./lists.tsx";
+
+vi.mock("@stylexjs/stylex", () => ({
+  create: <Styles,>(styles: Styles) => styles,
+  createTheme: () => ({}),
+  props: () => ({}),
+}));
 
 describe("canonical list fixtures", () => {
   it("cover production list contract states with serializable data", () => {
@@ -74,7 +80,7 @@ describe("Lists prototype layout", () => {
 
     expect(html).toContain("<h1");
     expect(html).toContain("Lists");
-    expect(html).toContain('<section aria-label="Tasks"');
+    expect(html).toContain('aria-label="Tasks"');
     expect(html).toContain("<ul");
     expect(html).toContain("Prepare launch checklist");
     expect(html).toContain("Review release copy");

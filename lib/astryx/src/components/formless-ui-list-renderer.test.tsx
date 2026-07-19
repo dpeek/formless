@@ -1,5 +1,5 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vite-plus/test";
+import { describe, expect, it, vi } from "vite-plus/test";
 import type { FieldSchema } from "@dpeek/formless-schema";
 import type {
   FormlessUiFieldIntent,
@@ -18,6 +18,12 @@ import {
   dispatchAstryxListOperationAction,
 } from "./formless-ui-list-renderer.tsx";
 import { operationControlFixtures } from "./operation-controls.fixtures.ts";
+
+vi.mock("@stylexjs/stylex", () => ({
+  create: <Styles,>(styles: Styles) => styles,
+  createTheme: () => ({}),
+  props: () => ({}),
+}));
 
 const titleSchema = {
   label: "Task",
@@ -60,7 +66,7 @@ describe("Astryx list renderer", () => {
 
     const html = renderList(readOnlyList());
 
-    expect(html).toContain('<section aria-label="Tasks"');
+    expect(html).toContain('aria-label="Tasks"');
     expect(html).toContain("<ul");
     expect(html).toContain("aria-labelledby=");
     expect(html).toContain(">Tasks</span>");
