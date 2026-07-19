@@ -455,6 +455,9 @@ describe("Astryx auth renderer", () => {
     expect(rendererSource).not.toContain("OTPInput");
     expect(rendererSource).not.toContain("tailwind");
     expect(Object.keys(packageJson.exports ?? {})).toEqual([
+      "./application/assembly",
+      "./application/global.css",
+      "./application/provider",
       "./contract",
       "./contract-host",
       "./contract-host/react",

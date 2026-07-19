@@ -14,7 +14,6 @@ import {
   useFormlessUiDocumentThemeIntentHandler,
   useFormlessUiShellManifest,
 } from "../formless-ui-contract-host-react.tsx";
-import { FormlessThemeProvider } from "../theme.tsx";
 import { AstryxApplicationSideNav, AstryxSubscribedApplicationSideNav } from "./side-nav.tsx";
 import { FormlessThemeIconToggle } from "./theme.tsx";
 
@@ -68,7 +67,7 @@ export function AstryxApplicationShellRenderer({
     </AstryxApplicationShellFrame>
   );
 
-  return theme ? <FormlessThemeProvider theme={theme}>{shell}</FormlessThemeProvider> : shell;
+  return shell;
 }
 
 export const AstryxSubscribedApplicationShellRenderer = memo(
@@ -143,7 +142,7 @@ function AstryxSubscribedThemedApplicationShell({
     </AstryxSubscribedApplicationShellContent>
   );
 
-  return theme ? <FormlessThemeProvider theme={theme}>{shell}</FormlessThemeProvider> : shell;
+  return shell;
 }
 
 function AstryxSubscribedApplicationShellContent({
@@ -183,18 +182,24 @@ function AstryxApplicationShellFrame({
   const [isMobileNavigationOpen, setIsMobileNavigationOpen] = useState(false);
 
   return (
-    <AppShell
-      contentPadding={4}
-      data-testid={`formless-astryx-application-shell:${manifest.id}`}
-      mobileNav={{
-        breakpoint: "md",
-        isOpen: isMobileNavigationOpen,
-        onOpenChange: setIsMobileNavigationOpen,
-      }}
-      sideNav={sideNav}
+    <div
+      aria-label={manifest.accessibilityLabel}
+      data-formless-astryx-shell-scope={manifest.scope}
+      role="application"
     >
-      {children}
-    </AppShell>
+      <AppShell
+        contentPadding={4}
+        data-testid={`formless-astryx-application-shell:${manifest.id}`}
+        mobileNav={{
+          breakpoint: "md",
+          isOpen: isMobileNavigationOpen,
+          onOpenChange: setIsMobileNavigationOpen,
+        }}
+        sideNav={sideNav}
+      >
+        {children}
+      </AppShell>
+    </div>
   );
 }
 

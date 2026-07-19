@@ -39,7 +39,7 @@ import {
   useFormlessUiResult,
   useFormlessUiWorkspaceIntentHandler,
 } from "../formless-ui-contract-host-react.tsx";
-import { AstryxCreateSurfaceRenderer } from "./create-surfaces.tsx";
+import { AstryxCreateSurfaceRenderer } from "./formless-ui-create-renderer.tsx";
 import { AstryxListRenderer } from "./formless-ui-list-renderer.tsx";
 import { AstryxRecordResultRenderer } from "./formless-ui-record-result-renderer.tsx";
 import { AstryxTableRenderer } from "./formless-ui-table-renderer.tsx";
@@ -47,7 +47,7 @@ import {
   AstryxSubscribedTreeResultRenderer,
   AstryxTreeResultRenderer,
   dispatchAstryxWorkspaceTreeIntent,
-} from "./tree-results.tsx";
+} from "./formless-ui-tree-renderer.tsx";
 import {
   AstryxOperationButton,
   AstryxOperationButtonWithProgress,

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useEffect, useLayoutEffect, useMemo, useState, useSyncExternalStore } from "react";
 import type {
   FormlessUiActionIntentHandler,
   FormlessUiActionTriggerContract,
@@ -52,7 +52,7 @@ import {
   executeCreateSubmitOperation,
   projectCreateSubmitBinding,
   type CreateHomeOperationConfig,
-} from "./create.tsx";
+} from "./generated-create-runtime.ts";
 import {
   adaptGeneratedCreateFormlessUiDraftChange,
   adaptGeneratedFormlessUiFieldIntent,
@@ -95,7 +95,7 @@ import {
   useGeneratedWorkspaceContractHost,
   type GeneratedWorkspaceRuntimePublication,
 } from "./generated-workspace-contract-host.ts";
-import { LegacySubscribedWorkspaceScreenRenderer } from "./legacy-workspace-screen-renderer.tsx";
+import { ApplicationPresentation } from "../application-presentation.tsx";
 import {
   executeGeneratedOperationControl,
   executeGeneratedOrderingMoveOperation,
@@ -103,7 +103,7 @@ import {
   useGeneratedOperationController,
   useGeneratedOperationControllerVersion,
 } from "./operation-control-runtime.ts";
-import { executeRecordDeleteOperation } from "./record-delete.tsx";
+import { executeRecordDeleteOperation } from "./record-delete-runtime.ts";
 import {
   imageMediaAssetOptionFromUpload,
   resolveGeneratedMediaUploadUpdateDraftPatchValues,
@@ -112,7 +112,7 @@ import {
 } from "./record-field-authoring.ts";
 import { shouldUseAppReplicaReferenceOptions } from "./reference-field-options.ts";
 import { useSchemaAppTarget, useSchemaAppWriteOptions } from "./schema-app-context.tsx";
-import { executeTransitionStateOperation } from "./state-machine-ui.tsx";
+import { executeTransitionStateOperation } from "./state-machine-operation-runtime.ts";
 import type { OperationCommandOutput } from "../../shared/operation-invocation.ts";
 import { selectRecordFieldsForActiveUnion } from "./union-presentation.ts";
 
@@ -183,6 +183,23 @@ type GeneratedWorkspaceResolvedField = Extract<
 export function GeneratedWorkspaceRuntime(props: GeneratedWorkspaceRuntimeProps) {
   const controller = useGeneratedWorkspaceRuntimeController(props);
   return <GeneratedWorkspaceStandaloneBoundary controller={controller} />;
+}
+
+export function GeneratedWorkspaceRuntimeRegistration({
+  onController,
+  ...props
+}: GeneratedWorkspaceRuntimeProps & {
+  onController: (controller: GeneratedWorkspaceRuntimeController | undefined) => void;
+}) {
+  const controller = useGeneratedWorkspaceRuntimeController(props);
+
+  useLayoutEffect(() => {
+    onController(controller);
+  }, [controller, onController]);
+
+  useLayoutEffect(() => () => onController(undefined), [onController]);
+
+  return null;
 }
 
 export function useGeneratedWorkspaceRuntimeController({
@@ -1575,7 +1592,9 @@ export function GeneratedWorkspaceStandaloneBoundary({
 
   return (
     <FormlessUiContractHostProvider host={host}>
-      <LegacySubscribedWorkspaceScreenRenderer reference={workspaceReference} />
+      <ApplicationPresentation
+        presentation={{ kind: "workspace", reference: workspaceReference }}
+      />
     </FormlessUiContractHostProvider>
   );
 }

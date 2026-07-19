@@ -73,6 +73,7 @@ export function SitePageShell({
                   : "flex min-h-dvh flex-col text-zinc-950"
               }
               data-site-theme={theme.mode}
+              data-formless-native-navigation
               style={themeVariables}
             >
               {frame.header ? <Header block={frame.header} /> : null}

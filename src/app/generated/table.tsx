@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { FieldTableColumnConfig } from "../../client/views.ts";
 import { useRecord } from "../../client/store.ts";
-import { GeneratedRecordTableFoundation } from "./generated-table-foundation.tsx";
+import { GeneratedRecordTableFoundation } from "./legacy-generated-table-runtime.tsx";
 import {
   initialGeneratedUpdateDraftSessionState,
   nextGeneratedUpdateDraftSessionState,

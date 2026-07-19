@@ -34,7 +34,7 @@ import {
   projectGeneratedRecordFormlessUiFields,
   type GeneratedFormlessUiReferenceOption,
 } from "./formless-ui-projection.ts";
-import { projectDeleteRecordButtonBinding, selectRecordLabel } from "./record-delete.tsx";
+import { projectDeleteRecordButtonBinding, selectRecordLabel } from "./record-delete-runtime.ts";
 import {
   initialGeneratedUpdateDraftSessionState,
   selectGeneratedUpdateDraftSession,

@@ -35,11 +35,11 @@ import { projectGeneratedOperationFormlessUiControl } from "./formless-ui-operat
 import {
   executeHomeCommandOperation,
   homeCommandOperationCommittedMessage,
-} from "./operations.tsx";
+} from "./home-operation-runtime.ts";
 import {
   executeRecordDeleteOperation,
   projectDeleteRecordButtonBinding,
-} from "./record-delete.tsx";
+} from "./record-delete-runtime.ts";
 
 describe("generated operation controls", () => {
   it("reports collection command committed feedback with affected counts", async () => {

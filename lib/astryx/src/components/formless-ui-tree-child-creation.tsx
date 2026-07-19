@@ -8,7 +8,7 @@ import type {
   FormlessUiTreeIntentHandler,
   FormlessUiTreeParentIdentity,
 } from "../formless-ui-contract.ts";
-import { AstryxCreateSurfaceRenderer } from "./create-surfaces.tsx";
+import { AstryxCreateSurfaceRenderer } from "./formless-ui-create-renderer.tsx";
 
 export function AstryxTreeChildCreation({
   creation,

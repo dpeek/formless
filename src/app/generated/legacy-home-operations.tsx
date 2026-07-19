@@ -6,20 +6,18 @@ import {
   type CommandOperationTargetCountConfig,
   type GeneratedOperationControlBinding,
   type GeneratedOperationController,
-  type GeneratedOperationExecutionResult,
   type HomeOperationConfig,
 } from "../../client/views.ts";
-import type { SyncStatus } from "../../client/sync-status.ts";
 import type { QueryEvaluationContext } from "@dpeek/formless-schema";
-import { GeneratedCreateSurface } from "./create.tsx";
+import { GeneratedCreateSurface } from "./legacy-generated-create.tsx";
 import {
-  executeGeneratedOperationControl,
   handleGeneratedOperationFormlessUiIntent,
   useGeneratedOperationController,
   useGeneratedOperationControllerVersion,
 } from "./operation-control-runtime.ts";
 import { projectGeneratedOperationFormlessUiControl } from "./formless-ui-operation-projection.ts";
 import { LegacyGeneratedOperationButton } from "./legacy-operation-controls.tsx";
+import { executeHomeCommandOperation } from "./home-operation-runtime.ts";
 
 type CommandHomeOperationConfig = Extract<HomeOperationConfig, { type: "command" }>;
 export function HomeOperationRow({
@@ -205,43 +203,4 @@ function HomeCommandOperationControl({
   }
 
   return <LegacyGeneratedOperationButton button={control.trigger} onIntent={onIntent} />;
-}
-
-export async function executeHomeCommandOperation({
-  binding,
-  controller,
-  operation,
-  setStatus,
-  source = "button",
-}: {
-  binding: GeneratedOperationControlBinding;
-  controller: GeneratedOperationController;
-  operation: CommandHomeOperationConfig;
-  setStatus?: (status: SyncStatus) => void;
-  source?: "button" | "confirmationDialog";
-}): Promise<GeneratedOperationExecutionResult> {
-  return executeGeneratedOperationControl({
-    binding,
-    callerInput: {
-      bindingId: binding.id,
-      source,
-    },
-    controller,
-    feedback: {
-      committedMessage: (result) => homeCommandOperationCommittedMessage(operation, result),
-      replayedMessage: binding.feedback?.replayLabel ?? `${operation.label} replayed.`,
-    },
-    setStatus,
-  });
-}
-
-export function homeCommandOperationCommittedMessage(
-  operation: CommandHomeOperationConfig,
-  result: GeneratedOperationExecutionResult,
-): string {
-  const affectedCount = result.type === "failed" ? 0 : (result.affectedCount ?? 0);
-
-  return operation.ui.showAffectedCountOnSuccess
-    ? `${operation.label} synced. ${affectedCount} affected.`
-    : `${operation.label} synced.`;
 }

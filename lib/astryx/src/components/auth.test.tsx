@@ -336,6 +336,9 @@ describe("Auth prototype layout", () => {
     expect(forbiddenImports).toEqual([]);
     expect(rendererSource).not.toMatch(/@dpeek\/formless-ui|className=|src\/app/);
     expect(Object.keys(packageJson.exports ?? {})).toEqual([
+      "./application/assembly",
+      "./application/global.css",
+      "./application/provider",
       "./contract",
       "./contract-host",
       "./contract-host/react",

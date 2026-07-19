@@ -37,7 +37,6 @@ import {
 } from "./generated-record-result-foundation.ts";
 import { indexGeneratedTableFieldOccurrences } from "./generated-table-foundation.tsx";
 import {
-  generatedWorkspaceScreenIsEligible,
   resolveGeneratedWorkspaceIntent,
   selectGeneratedWorkspaceFoundation,
   type GeneratedWorkspaceSectionFoundationInput,
@@ -479,7 +478,6 @@ describe("generated workspace foundation", () => {
     const treeResult = required(treeSection).collection.presentation.result;
     const listResult = required(listSection).collection.presentation.result;
 
-    expect(generatedWorkspaceScreenIsEligible(mixedScreen)).toBe(true);
     expect(mixedFoundation.runtimePlan.sections.map(({ result }) => result.kind)).toEqual([
       "treeResult",
       "list",

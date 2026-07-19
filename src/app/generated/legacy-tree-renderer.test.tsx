@@ -78,7 +78,6 @@ describe("legacy tree renderer", () => {
 
   it("keeps runtime models, reads, controllers, storage, and sync outside the legacy seam", () => {
     const source = readFileSync(new URL("./legacy-tree-renderer.tsx", import.meta.url), "utf8");
-    const screenSource = readFileSync(new URL("./screen.tsx", import.meta.url), "utf8");
     const collectionSource = readFileSync(
       new URL("./legacy-workspace-collection-renderer.tsx", import.meta.url),
       "utf8",
@@ -94,8 +93,6 @@ describe("legacy tree renderer", () => {
     ]) {
       expect(source).not.toContain(excludedImport);
     }
-    expect(screenSource).not.toContain("generatedWorkspaceRuntimeRendererIsAvailable");
-    expect(screenSource).not.toContain("./tree.tsx");
     expect(collectionSource).toContain("LegacySubscribedTreeRenderer");
     expect(collectionSource).toContain("LegacyTreeRenderer");
   });

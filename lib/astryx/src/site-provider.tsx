@@ -1,4 +1,4 @@
-import { Theme } from "@astryxdesign/core";
+import { Theme } from "@astryxdesign/core/theme";
 import { neutralTheme } from "@astryxdesign/theme-neutral";
 import {
   publicSiteThemePalette,
@@ -29,7 +29,12 @@ export function AstryxPublicSiteProvider({ children, mode, site }: AstryxPublicS
 
   return (
     <Theme theme={neutralTheme} mode={mode}>
-      <div data-astryx-public-site-provider data-site-theme={mode} style={style}>
+      <div
+        data-astryx-public-site-provider
+        data-formless-native-navigation
+        data-site-theme={mode}
+        style={style}
+      >
         {children}
       </div>
     </Theme>

@@ -58,7 +58,7 @@ const themeReference = formlessUiDocumentThemeReference("theme:application");
 
 describe("Astryx document theme renderer", () => {
   it.each(["light", "dark"] as const)(
-    "applies fixed %s presentation without synthesizing a selector",
+    "leaves fixed %s provider ownership at the application root without synthesizing a selector",
     async (mode) => {
       let renderer: ReactTestRenderer | undefined;
 
@@ -71,7 +71,7 @@ describe("Astryx document theme renderer", () => {
       });
 
       const mountedRenderer = required(renderer);
-      expect(themeNode(mountedRenderer).props["data-mode"]).toBe(mode);
+      expect(mountedRenderer.root.findAllByProps({ "data-component": "Theme" })).toHaveLength(0);
       expect(mountedRenderer.root.findAllByProps({ role: "radiogroup" })).toHaveLength(0);
 
       await act(async () => {
@@ -104,7 +104,7 @@ describe("Astryx document theme renderer", () => {
       });
 
       const mountedRenderer = required(renderer);
-      expect(themeNode(mountedRenderer).props["data-mode"]).toBe(activeMode);
+      expect(mountedRenderer.root.findAllByProps({ "data-component": "Theme" })).toHaveLength(0);
       expect(
         mountedRenderer.root.findByProps({ "aria-label": "Theme mode", role: "radiogroup" }),
       ).toBeDefined();
@@ -172,7 +172,7 @@ describe("Astryx document theme renderer", () => {
     await act(async () => {
       host.publish([{ reference: themeReference, snapshot: fixedTheme("light") }]);
     });
-    expect(themeNode(mountedRenderer).props["data-mode"]).toBe("light");
+    expect(mountedRenderer.root.findAllByProps({ "data-component": "Theme" })).toHaveLength(0);
     expect(mountedRenderer.root.findAllByProps({ role: "radiogroup" })).toHaveLength(0);
 
     await act(async () => {
@@ -210,6 +210,9 @@ describe("Astryx document theme renderer", () => {
       /\blocalStorage\b|\bsessionStorage\b|\bdocument\.|\bwindow\.|\bcookie\b|useMediaQuery/,
     );
     expect(Object.keys(packageJson.exports ?? {})).toEqual([
+      "./application/assembly",
+      "./application/global.css",
+      "./application/provider",
       "./contract",
       "./contract-host",
       "./contract-host/react",
@@ -217,7 +220,8 @@ describe("Astryx document theme renderer", () => {
       "./site/global.css",
       "./site/provider",
     ]);
-    expect(productionRuntimeSource).toContain("LegacySubscribedApplicationShellRenderer");
+    expect(productionRuntimeSource).toContain("ApplicationPresentation");
+    expect(productionRuntimeSource).not.toContain("LegacySubscribedApplicationShellRenderer");
     expect(productionRuntimeSource).not.toContain("AstryxSubscribedApplicationShellRenderer");
     expect(productionRuntimeSource).not.toContain("global.css");
   });
@@ -269,10 +273,6 @@ function required<Value>(value: Value | null | undefined): Value {
   }
 
   return value;
-}
-
-function themeNode(renderer: ReactTestRenderer) {
-  return renderer.root.findByProps({ "data-component": "Theme" });
 }
 
 function radioByLabel(renderer: ReactTestRenderer, label: string): ReactTestInstance {

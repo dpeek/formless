@@ -14,7 +14,7 @@ import {
   createFormlessUiTreeResultFixtures,
   type FormlessUiTreeResultFixtureId,
 } from "./tree-results.fixtures.ts";
-import { AstryxTreeResultRenderer } from "./tree-results.tsx";
+import { AstryxTreeResultRenderer } from "./formless-ui-tree-renderer.tsx";
 
 vi.mock("@stylexjs/stylex", () => ({
   create: <Styles,>(styles: Styles) => styles,
@@ -123,7 +123,10 @@ describe("Astryx tree hierarchy outline", () => {
       new URL("./formless-ui-tree-outline.tsx", import.meta.url),
       "utf8",
     );
-    const layoutSource = await readFile(new URL("./tree-results.tsx", import.meta.url), "utf8");
+    const layoutSource = await readFile(
+      new URL("./formless-ui-tree-renderer.tsx", import.meta.url),
+      "utf8",
+    );
     const html = renderToStaticMarkup(<AstryxTreeResultRenderer tree={treeFixture("shallow")} />);
 
     expect(layoutSource).toContain('columns={{ max: 2, minWidth: 320, repeat: "fit" }}');

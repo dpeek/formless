@@ -1,6 +1,7 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { astryxStylex } from "@astryxdesign/build/vite";
 import { cloudflare, type PluginConfig, type WorkerConfig } from "@cloudflare/vite-plugin";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
@@ -49,6 +50,8 @@ type RuntimeViteConfigInput = {
 
 const defaultPackageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const workerConfigRelativePath = "src/worker/wrangler.jsonc";
+const astryxWorkerSourcePackages = ["@astryxdesign/core", "@astryxdesign/theme-neutral"] as const;
+const astryxWorkerOptimizedDependencies = ["react/jsx-runtime"] as const;
 
 // vite-plus bundles its own Vite core, while third-party plugins type against public "vite".
 const publicVitePlugins = (plugins: unknown[]): PluginOption[] => plugins as PluginOption[];
@@ -90,14 +93,43 @@ export function runtimeViteConfig(input: RuntimeViteConfigInput = {}) {
       formlessWorkspaceRuntimeExtensionsPlugin({ env }),
       floatingUiReactImportNormalizePlugin(),
       floatingUiReactImportInteropPlugin(),
+      ...publicVitePlugins(
+        astryxStylex({
+          dev: env.NODE_ENV !== "production",
+          rootDir: path.resolve(packageRoot, "lib/astryx"),
+        }),
+      ),
       ...publicVitePlugins(react()),
       ...publicVitePlugins(tailwindcss()),
-      ...(env.VITEST ? [] : publicVitePlugins(cloudflare(cloudflarePluginConfig))),
+      ...(env.VITEST
+        ? []
+        : [
+            ...publicVitePlugins(cloudflare(cloudflarePluginConfig)),
+            astryxCloudflareWorkerSourceCompilationPlugin(),
+          ]),
     ],
     server: {
       fs: {
         allow: serverFsAllow,
       },
+    },
+  };
+}
+
+export function astryxCloudflareWorkerSourceCompilationPlugin(): Plugin {
+  return {
+    name: "formless-astryx-cloudflare-worker-source-compilation",
+    configEnvironment(name) {
+      if (name === "client") {
+        return;
+      }
+
+      return {
+        optimizeDeps: {
+          exclude: [...astryxWorkerSourcePackages],
+          include: [...astryxWorkerOptimizedDependencies],
+        },
+      };
     },
   };
 }

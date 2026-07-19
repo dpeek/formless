@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  astryxCloudflareWorkerSourceCompilationPlugin,
   clientManualChunks,
   floatingUiReactImportInteropCode,
   floatingUiReactImportNormalizeCode,
@@ -31,6 +32,7 @@ type ViteConfigWithEnvironments = {
       build?: ViteConfigBuild;
     };
   };
+  plugins?: unknown[];
 };
 
 type WorkerConfigCustomizer = (config: {
@@ -49,6 +51,87 @@ describe("Runtime Vite config", () => {
       "public-site": resolve(repoRoot, "src/public-site-main.tsx"),
     });
     expect(clientBuild?.rollupOptions?.output?.manualChunks).toBe(clientManualChunks);
+  });
+
+  it("orders the supported Astryx StyleX integration before React and Cloudflare", () => {
+    const developmentConfig = runtimeViteConfig({
+      env: { NODE_ENV: "development" },
+      packageRoot: repoRoot,
+    }) as ViteConfigWithEnvironments;
+    const productionConfig = runtimeViteConfig({
+      env: { NODE_ENV: "production" },
+      packageRoot: repoRoot,
+    }) as ViteConfigWithEnvironments;
+    const developmentPlugins = namedPlugins(developmentConfig.plugins);
+    const productionPlugins = namedPlugins(productionConfig.plugins);
+
+    expect(developmentPlugins).toEqual(productionPlugins);
+    expect(developmentPlugins).toEqual(
+      expect.arrayContaining([
+        "formless-workspace-runtime-extensions",
+        "formless-floating-ui-react-import-normalize",
+        "formless-floating-ui-react-import-interop",
+        "astryx-config",
+        "astryx-css-layer-order",
+        "@stylexjs/unplugin",
+        "astryx-split-layers",
+        "vite:react-babel",
+        "vite:react-refresh",
+        "@tailwindcss/vite:scan",
+        "@tailwindcss/vite:generate:serve",
+        "@tailwindcss/vite:generate:build",
+        "vite-plugin-cloudflare",
+        "formless-astryx-cloudflare-worker-source-compilation",
+      ]),
+    );
+    expect(developmentPlugins.indexOf("@stylexjs/unplugin")).toBeLessThan(
+      developmentPlugins.indexOf("vite:react-babel"),
+    );
+    expect(developmentPlugins.indexOf("@stylexjs/unplugin")).toBeLessThan(
+      developmentPlugins.indexOf("vite-plugin-cloudflare"),
+    );
+    expect(developmentPlugins.indexOf("vite-plugin-cloudflare")).toBeLessThan(
+      developmentPlugins.indexOf("formless-astryx-cloudflare-worker-source-compilation"),
+    );
+  });
+
+  it("keeps Astryx source out of Cloudflare Worker dependency optimization", async () => {
+    const plugin = astryxCloudflareWorkerSourceCompilationPlugin();
+    const configEnvironment = plugin.configEnvironment;
+
+    if (typeof configEnvironment !== "function") {
+      throw new Error("Expected Astryx Cloudflare Worker environment config.");
+    }
+
+    expect(
+      await configEnvironment.call(
+        {} as never,
+        "client",
+        {},
+        {
+          command: "serve",
+          isSsrTargetWebworker: false,
+          mode: "development",
+        },
+      ),
+    ).toBeUndefined();
+    expect(
+      await configEnvironment.call(
+        {} as never,
+        "formless",
+        {},
+        {
+          command: "serve",
+          isSsrTargetWebworker: true,
+          mode: "development",
+        },
+      ),
+    ).toEqual({
+      optimizeDeps: {
+        exclude: ["@astryxdesign/core", "@astryxdesign/theme-neutral"],
+        include: ["react/jsx-runtime"],
+      },
+    });
   });
 
   it("uses the Worker-owned Wrangler config and preserves runtime Cloudflare overrides", () => {
@@ -144,3 +227,12 @@ var SafeReact = { ...React };`);
     );
   });
 });
+
+function namedPlugins(plugins: unknown[] | undefined): string[] {
+  return (plugins ?? [])
+    .flat(Infinity)
+    .map((plugin) =>
+      typeof plugin === "object" && plugin !== null && "name" in plugin ? plugin.name : undefined,
+    )
+    .filter((name): name is string => typeof name === "string");
+}

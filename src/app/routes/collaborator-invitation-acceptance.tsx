@@ -18,7 +18,7 @@ import {
   type CollaboratorInvitationPasskeyRegistrationVerifyRequest,
   type CollaboratorInvitationPasskeyRegistrationVerifyResponse,
 } from "../../shared/instance-auth.ts";
-import { LegacySubscribedCollaboratorInvitationAuthRenderer } from "../generated/legacy-owner-auth-renderer.tsx";
+import { ApplicationPresentation } from "../application-presentation.tsx";
 import {
   authIntentIsCurrent,
   createAuthPendingGuard,
@@ -188,8 +188,11 @@ export function CollaboratorInvitationAcceptanceRoute() {
       reference={collaboratorInvitationAuthSurfaceReference}
       snapshot={surface}
     >
-      <LegacySubscribedCollaboratorInvitationAuthRenderer
-        reference={collaboratorInvitationAuthSurfaceReference}
+      <ApplicationPresentation
+        presentation={{
+          kind: "auth",
+          reference: collaboratorInvitationAuthSurfaceReference,
+        }}
       />
     </NoShellAuthRuntimeBoundary>
   );

@@ -547,27 +547,26 @@ refresh, validation, and private auth state.
   identity APIs, create or deliver tokens, revoke private token state, refresh
   summaries, redact errors, or navigate directly
 
-#### Scenario: Legacy renderer consumes access contracts
+#### Scenario: Astryx renderer consumes access contracts
 
-- GIVEN production `/access` currently mixes runtime state, direct legacy
-  controls, raw summary-shaped presentation, and invitation effects
+- GIVEN production `/access` publishes complete renderer-neutral access
+  contracts while runtime retains invitation effects
 - WHEN runtime publishes the complete access contract graph
-- THEN one subscribed legacy access renderer reads only access references and
+- THEN one subscribed Astryx access renderer reads only access references and
   snapshots, renders people, roles, invitations, controlled invitation
   authoring, feedback, empty, unauthorized, loading, failure, and destructive
   confirmation states, and dispatches canonical access intents
-- AND direct legacy `@dpeek/formless-ui` imports for access presentation remain
-  confined to the dedicated legacy seam
+- AND legacy `@dpeek/formless-ui` imports remain outside the selected production
+  graph
 - AND focused coverage asserts projection, current intent resolution, authority,
   controlled drafts, pending behavior, visible outcomes, and secret exclusion
-  rather than legacy HTML structure
-- AND production remains on the legacy access renderer after this contract
-  migration
+- AND production selects access presentation through the root Astryx application
+  assembly
 
 #### Scenario: Astryx access management renderer
 
-- GIVEN the legacy renderer consumes complete production access contracts
-- WHEN the replacement renderer implements the same contract in `lib/astryx`
+- GIVEN runtime publishes complete production access contracts
+- WHEN the selected renderer implements the contract in `lib/astryx`
 - THEN pure and subscribed Astryx entrypoints use `Section` and Astryx stack and
   grid primitives for page layout, `Table` for the uniform people and invitation
   summaries, and `Badge` and `Timestamp` for status and temporal facts
@@ -587,12 +586,11 @@ refresh, validation, and private auth state.
   confirm intent
 - AND the Astryx renderer contains no legacy Formless UI components, Tailwind
   classes, identity runtime imports, API clients, effect handlers, private auth
-  state, production export, or production activation
+  state, or production selector behavior
 
 #### Scenario: Access management contract fixtures
 
-- GIVEN production legacy access presentation consumes complete access
-  contracts
+- GIVEN runtime publishes complete production access contracts
 - WHEN access UX is evaluated in the package-local Astryx prototype
 - THEN serializable data-only memory-host fixtures cover owner and
   instance-admin grants, loading, unauthorized, failed, empty and populated
@@ -606,7 +604,7 @@ refresh, validation, and private auth state.
   APIs, invitation delivery, credentials, sessions, private token state,
   navigation, or timers
 - AND fixtures contain no secrets, unsupported destructive identity actions,
-  legacy comparison UI, prototype proof labels, production renderer activation,
+  legacy comparison UI, prototype proof labels, production renderer selection,
   or behavior that bypasses the canonical contract host
 
 ### Requirement: Collaborator Invitation Acceptance

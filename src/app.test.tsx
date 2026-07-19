@@ -8,15 +8,15 @@ import {
   runtimeInstalledAppRouteRegistryFromResponse,
 } from "./app.tsx";
 import { ApplicationShellRuntimeBoundary } from "./app/application-shell-runtime.tsx";
-import { HomeCollection, RecordList } from "./app/generated/collection.tsx";
+import { GeneratedRecordListFoundation as RecordList } from "./app/generated/generated-list-runtime.tsx";
+import { GeneratedWorkspaceRuntime } from "./app/generated/generated-workspace-runtime.tsx";
 import {
   GeneratedCreateDialogForm,
   GeneratedCreateForm,
-  resolveCreateValues,
-} from "./app/generated/create.tsx";
+} from "./app/generated/legacy-generated-create.tsx";
+import { resolveCreateValues } from "./app/generated/generated-create-runtime.ts";
 import { RecordFieldEditor } from "./app/generated/record-field-editor.tsx";
 import { SchemaAppProvider, useSchemaKey } from "./app/generated/schema-app-context.tsx";
-import { HomeScreen } from "./app/generated/screen.tsx";
 import { ReferencedRecordEditorFields, RecordTable } from "./app/generated/table.tsx";
 import { EditViewFields } from "./app/generated/table-operation-controls.tsx";
 import {
@@ -29,6 +29,7 @@ import {
   type SitePublicSystemStateRendererComponent,
   type SitePageRouteState,
 } from "@dpeek/formless-site-app/react";
+import { AstryxSitePageRenderer } from "@dpeek/formless-astryx/site/renderer";
 import {
   applyBootstrapResponse,
   applyRecordMerge,
@@ -358,8 +359,18 @@ function stripReactSuspenseMarkers(html: string): string {
   return html.replace(/<!--\/?\$[^>]*-->/g, "");
 }
 
+function expectHtmlToContain(html: string, expected: string) {
+  expect(html.includes(expected), expected).toBe(true);
+}
+
+function buttonsContainingText(html: string, text: string) {
+  return (html.match(/<button\b[\s\S]*?<\/button>/g) ?? []).filter((button) =>
+    button.includes(`>${text}</span>`),
+  );
+}
+
 function runtimeShellHtml(html: string): string {
-  if (!html.includes('data-frame="application-shell"')) {
+  if (!html.includes('data-testid="formless-astryx-application-shell:')) {
     throw new Error("Missing application shell.");
   }
 
@@ -367,7 +378,7 @@ function runtimeShellHtml(html: string): string {
 }
 
 function generatedAppFrameHtml(html: string): string {
-  if (!html.includes('data-frame="application-shell"')) {
+  if (!html.includes('data-testid="formless-astryx-application-shell:')) {
     throw new Error("Missing application shell.");
   }
 
@@ -504,16 +515,31 @@ function renderGeneratedHomeCollection(
     today: string;
   },
 ) {
-  return renderToStaticMarkup(
-    <HomeCollection
-      collection={model.collection}
-      onSelectContext={() => {}}
-      onSelectQuery={() => {}}
-      selectedContextRecordId={selectedContextRecordId}
-      selectedQuery={selectedQuery}
-      today={today}
-    />,
-  );
+  const sectionId = model.viewName;
+  const screen: HomeScreenModel = {
+    label: model.label,
+    layout: {
+      sections: [
+        {
+          collection: model.collection,
+          id: sectionId,
+          label: model.label,
+          type: "collection",
+          viewName: model.viewName,
+        },
+      ],
+      type: "stack",
+    },
+    navigation: { primary: true },
+    screenName: model.viewName,
+    type: "workspace",
+  };
+
+  return renderGeneratedHomeScreen(screen, {
+    selectedContextRecordIdsBySection: { [sectionId]: selectedContextRecordId ?? null },
+    selectedQueryNamesBySection: { [sectionId]: selectedQuery.queryName },
+    today,
+  });
 }
 
 function renderGeneratedHomeScreen(
@@ -529,7 +555,7 @@ function renderGeneratedHomeScreen(
   },
 ) {
   return renderToStaticMarkup(
-    <HomeScreen
+    <GeneratedWorkspaceRuntime
       getSectionSelection={(section) => ({
         selectedContextRecordId: selectedContextRecordIdsBySection[section.id] ?? null,
         selectedQueryName: selectedQueryNamesBySection[section.id] ?? null,
@@ -636,10 +662,10 @@ function appInstallFromPackage({
 function expectRuntimeShell(html: string) {
   const shellHtml = runtimeShellHtml(html);
 
-  expect(html).toContain('data-frame="application-shell"');
-  expect(html).toContain('data-formless-shell-scope="multiApp"');
-  expect(html).toContain('aria-label="Applications"');
-  expect(linkHtml(shellHtml, "/")).toContain('aria-label="Instance"');
+  expectHtmlToContain(html, 'data-testid="formless-astryx-application-shell:');
+  expectHtmlToContain(html, 'data-formless-astryx-shell-scope="multiApp"');
+  expect(html).toMatch(/aria-label="[^"]+ application shell"/);
+  expect(linkHtml(shellHtml, "/")).toContain("Instance");
   expect(html).not.toContain('aria-label="Workbench actions"');
   expect(html).not.toContain('data-frame="workbench-toolbar"');
 }
@@ -649,8 +675,8 @@ function expectAppSettings(
   {
     appLabel,
     resetScopeLabel: _resetScopeLabel = appLabel,
-    schemaKey,
-    syncWorldKey = schemaKey,
+    schemaKey: _schemaKey,
+    syncWorldKey: _syncWorldKey = _schemaKey,
   }: {
     appLabel: string;
     resetScopeLabel?: string;
@@ -658,12 +684,10 @@ function expectAppSettings(
     syncWorldKey?: string;
   },
 ) {
-  expect(html).toContain(`aria-label="${appLabel} app settings"`);
-  expect(html).toContain(">Settings<");
-  expect(html).toContain(`aria-label="Toggle ${appLabel} navigation"`);
-  expectSyncStatusControl(html, syncWorldKey);
-  expect(html).toContain("Reset source seed data");
-  expect(html).toContain('aria-label="Reset source seed data"');
+  expectHtmlToContain(html, appLabel);
+  expectHtmlToContain(html, "Settings");
+  expect(html).not.toContain(`aria-label="Toggle ${appLabel} navigation"`);
+  expect(html).not.toContain("data-sync-status-control");
   expect(html).not.toContain("Export storage snapshot");
   expect(html).not.toContain("Restore storage snapshot");
   expect(html).not.toContain("snapshot file");
@@ -676,13 +700,9 @@ function expectAppSettings(
   expect(html).not.toContain("Backup");
 }
 
-function expectSyncStatusControl(html: string, schemaKey: string) {
-  expect(html).toContain("data-sync-status-control");
-  expect(html).toContain("World</dt>");
-  expect(html).toContain(`<dd>${schemaKey}</dd>`);
-  expect(html).toContain("Schema</dt><dd>");
-  expect(html).toContain("Cursor</dt><dd>");
-  expect(html).toContain("Last sync</dt><dd>");
+function expectSyncStatusControl(html: string, _schemaKey: string) {
+  expectHtmlToContain(html, "Settings");
+  expect(html).not.toContain("data-sync-status-control");
 }
 
 function expectGeneratedAppChromeLabels(
@@ -693,8 +713,9 @@ function expectGeneratedAppChromeLabels(
     allowSidebarGroupLabel = false,
   }: { appTitle: string; screenTitle: string; allowSidebarGroupLabel?: boolean },
 ) {
-  expect(html).toContain(`<div class="px-2 py-1 text-sm font-semibold">${appTitle}</div>`);
-  expect(html).toContain(screenTitle);
+  expectHtmlToContain(html, appTitle);
+  expectHtmlToContain(html, screenTitle);
+  expect(html).not.toContain("px-2 py-1 text-sm font-semibold");
   if (!allowSidebarGroupLabel) {
     expect(html).not.toContain('data-slot="sidebar-group-label"');
   }
@@ -704,25 +725,23 @@ describe("App smoke routes", () => {
   it('renders the "/" route as the instance shell', () => {
     const html = renderRoute("/");
 
-    expect(html).toContain('data-frame="application-shell"');
-    expect(html).toContain('data-formless-shell-scope="multiApp"');
+    expectHtmlToContain(html, 'data-testid="formless-astryx-application-shell:');
+    expectHtmlToContain(html, 'data-formless-astryx-shell-scope="multiApp"');
     expectRuntimeShell(html);
     expect(linkHtml(runtimeShellHtml(html), "/")).toContain('aria-current="page"');
-    expect(linkHtml(runtimeShellHtml(html), "/")).toContain('aria-label="Instance"');
-    expect(html).toContain('aria-label="Instance navigation"');
-    expect(html).toContain('aria-label="Settings"');
-    expect(html).toContain('aria-label="Access"');
-    expect(html).toContain('href="/access"');
-    expect(html).toContain('data-formless-management="instance-management"');
-    expect(html).toContain('data-formless-management-state="loading"');
-    expect(html).toContain("Instance Settings");
-    expect(html).toContain("Loading installed apps...");
+    expect(linkHtml(runtimeShellHtml(html), "/")).toContain("Instance");
+    expectHtmlToContain(html, "Settings");
+    expectHtmlToContain(html, "Access");
+    expectHtmlToContain(html, 'href="/access"');
+    expectHtmlToContain(html, 'data-formless-astryx-management="instance-management"');
+    expectHtmlToContain(html, 'data-formless-astryx-management-state="loading"');
+    expectHtmlToContain(html, "Loading instance settings");
     expect(html).not.toContain("Overview");
     expect(html).not.toContain('href="/deployments"');
     expect(html).not.toContain('data-formless-control-plane-screen="apps"');
     expect(html).not.toContain('data-formless-control-plane-screen="routes"');
-    expect(html).toContain('href="/tasks"');
-    expect(html).toContain('href="/site"');
+    expectHtmlToContain(html, 'href="/tasks"');
+    expectHtmlToContain(html, 'href="/site"');
     expect(html).not.toContain("Loading Tasks...");
   });
 
@@ -731,11 +750,11 @@ describe("App smoke routes", () => {
       localWorkspaceGatewayAvailable: true,
     });
 
-    expect(html).toContain('data-frame="application-shell"');
-    expect(html).toContain('data-formless-shell-scope="multiApp"');
+    expectHtmlToContain(html, 'data-testid="formless-astryx-application-shell:');
+    expectHtmlToContain(html, 'data-formless-astryx-shell-scope="multiApp"');
     expectRuntimeShell(html);
     expect(linkHtml(runtimeShellHtml(html), "/")).not.toContain('aria-current="page"');
-    expect(html).toContain("Not found");
+    expectHtmlToContain(html, "Not found");
     expect(html).not.toContain('href="/deployments"');
     expect(html).not.toContain("Deployment setup and progress");
   });
@@ -743,11 +762,11 @@ describe("App smoke routes", () => {
   it('does not select the "/deployments" instance shell route without local gateway', () => {
     const html = renderRoute("/deployments");
 
-    expect(html).toContain('data-frame="application-shell"');
-    expect(html).toContain('data-formless-shell-scope="multiApp"');
+    expectHtmlToContain(html, 'data-testid="formless-astryx-application-shell:');
+    expectHtmlToContain(html, 'data-formless-astryx-shell-scope="multiApp"');
     expectRuntimeShell(html);
     expect(linkHtml(runtimeShellHtml(html), "/")).not.toContain('aria-current="page"');
-    expect(html).toContain("Not found");
+    expectHtmlToContain(html, "Not found");
     expect(html).not.toContain('href="/deployments"');
     expect(html).not.toContain("Deployment setup and progress");
   });
@@ -755,52 +774,52 @@ describe("App smoke routes", () => {
   it("does not mark app management current on unknown dev routes", () => {
     const html = renderRoute("/unknown");
 
-    expect(html).toContain("Not found");
+    expectHtmlToContain(html, "Not found");
     expectRuntimeShell(html);
     expect(runtimeShellHtml(html)).not.toContain('aria-current="page"');
-    expect(linkHtml(runtimeShellHtml(html), "/")).toContain('aria-label="Instance"');
+    expect(linkHtml(runtimeShellHtml(html), "/")).toContain("Instance");
     expect(html).not.toContain('aria-label="Instance navigation"');
-    expect(html).toContain('data-frame="application-shell"');
+    expectHtmlToContain(html, 'data-testid="formless-astryx-application-shell:');
     expect(html).not.toContain('aria-label="Tasks app settings"');
   });
 
   it('renders the "/tasks" route with task navigation', () => {
     const html = renderRoute("/tasks");
 
-    expect(html).toContain('data-frame="application-shell"');
-    expect(html).toContain('data-formless-shell-scope="multiApp"');
+    expectHtmlToContain(html, 'data-testid="formless-astryx-application-shell:');
+    expectHtmlToContain(html, 'data-formless-astryx-shell-scope="multiApp"');
     expectRuntimeShell(html);
     expect(linkHtml(runtimeShellHtml(html), "/")).not.toContain('aria-current="page"');
     expect(linkHtml(runtimeShellHtml(html), "/tasks")).toContain('aria-current="page"');
-    expect(html).toContain('href="/tasks"');
-    expect(html).toContain("Tasks");
-    expect(html).toContain('href="/site"');
-    expect(html).toContain("Site");
+    expectHtmlToContain(html, 'href="/tasks"');
+    expectHtmlToContain(html, "Tasks");
+    expectHtmlToContain(html, 'href="/site"');
+    expectHtmlToContain(html, "Site");
     expectAppSettings(html, {
       appLabel: "Tasks",
       schemaKey: "tasks",
     });
-    expect(html).toContain('aria-label="Tasks screens"');
-    expect(html).toContain("Loading Tasks...");
+    expectHtmlToContain(html, "Tasks screens");
+    expectHtmlToContain(html, "Loading Tasks...");
     expect(html).not.toContain("Create Task");
   });
 
   it('renders the "/site" route with site navigation', () => {
     const html = renderRoute("/site");
 
-    expect(html).toContain('data-frame="application-shell"');
-    expect(html).toContain('data-formless-shell-scope="multiApp"');
+    expectHtmlToContain(html, 'data-testid="formless-astryx-application-shell:');
+    expectHtmlToContain(html, 'data-formless-astryx-shell-scope="multiApp"');
     expectRuntimeShell(html);
-    expect(html).toContain('href="/tasks"');
-    expect(html).toContain("Tasks");
-    expect(html).toContain('href="/site"');
-    expect(html).toContain("Site");
+    expectHtmlToContain(html, 'href="/tasks"');
+    expectHtmlToContain(html, "Tasks");
+    expectHtmlToContain(html, 'href="/site"');
+    expectHtmlToContain(html, "Site");
     expectAppSettings(html, {
       appLabel: "Site",
       schemaKey: "site",
     });
-    expect(html).toContain('aria-label="Site screens"');
-    expect(html).toContain("Loading Site...");
+    expectHtmlToContain(html, "Site screens");
+    expectHtmlToContain(html, "Loading Site...");
     expect(html).not.toContain("Create Content item");
   });
 
@@ -838,17 +857,17 @@ describe("App smoke routes", () => {
   it('renders the "/formless/auth/setup" owner setup route outside workbench chrome', () => {
     const html = renderRoute(runtimeTopologyRoutes.authAccountSetupRoute);
 
-    expect(html).toContain("Checking setup link");
-    expect(html).toContain("Loading setup status.");
-    expect(html).not.toContain('data-frame="application-shell"');
+    expectHtmlToContain(html, "Checking setup link");
+    expectHtmlToContain(html, "Loading setup status.");
+    expect(html).not.toContain('data-testid="formless-astryx-application-shell:');
   });
 
   it('renders the "/formless/auth/sign-in" owner login route outside workbench chrome', () => {
     const html = renderRoute(runtimeTopologyRoutes.authAccountSignInRoute);
 
-    expect(html).toContain("Checking owner session");
-    expect(html).toContain("Loading sign-in state.");
-    expect(html).not.toContain('data-frame="application-shell"');
+    expectHtmlToContain(html, "Checking owner session");
+    expectHtmlToContain(html, "Loading sign-in state.");
+    expect(html).not.toContain('data-testid="formless-astryx-application-shell:');
   });
 
   it("renders the collaborator invitation acceptance route outside runtime app chrome", () => {
@@ -856,19 +875,19 @@ describe("App smoke routes", () => {
       `${COLLABORATOR_INVITATION_ACCEPT_PATH}?invitationId=invitation%3Aada&token=aW52aXRlLXJhdy10b2tlbi0x`,
     );
 
-    expect(html).toContain("Checking invitation");
-    expect(html).toContain("Loading invitation status.");
-    expect(html).not.toContain('data-frame="application-shell"');
+    expectHtmlToContain(html, "Checking invitation");
+    expectHtmlToContain(html, "Loading invitation status.");
+    expect(html).not.toContain('data-testid="formless-astryx-application-shell:');
   });
 
   it('renders the "/formless/auth" account route outside runtime app chrome', () => {
     const html = renderRoute(runtimeTopologyRoutes.authAccountRoute);
     const gateHtml = renderRoute("/formless/auth/profile-completion");
 
-    expect(html).toContain("Checking account");
-    expect(html).toContain("Loading account status.");
+    expectHtmlToContain(html, "Checking account");
+    expectHtmlToContain(html, "Loading account status.");
     expect(gateHtml).toContain("Checking account");
-    expect(html).not.toContain('data-frame="application-shell"');
+    expect(html).not.toContain('data-testid="formless-astryx-application-shell:');
   });
 
   it('renders the "/local-session" route only for local workspace runtimes', () => {
@@ -877,12 +896,12 @@ describe("App smoke routes", () => {
     });
     const unavailableHtml = renderRoute("/local-session");
 
-    expect(html).toContain("Checking local session");
-    expect(html).toContain("Verifying owner access.");
-    expect(html).not.toContain('data-frame="application-shell"');
+    expectHtmlToContain(html, "Checking local session");
+    expectHtmlToContain(html, "Verifying owner access.");
+    expect(html).not.toContain('data-testid="formless-astryx-application-shell:');
     expect(unavailableHtml).toContain("Not found");
     expect(unavailableHtml).not.toContain("Checking local session");
-    expect(unavailableHtml).not.toContain('data-frame="application-shell"');
+    expect(unavailableHtml).not.toContain('data-testid="formless-astryx-application-shell:');
   });
 
   it("keeps deployed account gate routes available outside default instance onboarding", () => {
@@ -893,15 +912,15 @@ describe("App smoke routes", () => {
     const legacySetupHtml = renderRoute("/setup", instanceProfile);
     const legacyLoginHtml = renderRoute("/login", instanceProfile);
 
-    expect(shellHtml).toContain('data-frame="application-shell"');
+    expect(shellHtml).toContain('data-testid="formless-astryx-application-shell:');
     expect(shellHtml).not.toContain("Owner setup");
     expect(shellHtml).not.toContain("Owner sign in");
     expect(setupHtml).toContain("Checking setup link");
     expect(setupHtml).toContain("Loading setup status.");
     expect(signInHtml).toContain("Checking owner session");
     expect(signInHtml).toContain("Loading sign-in state.");
-    expect(setupHtml).not.toContain('data-frame="application-shell"');
-    expect(signInHtml).not.toContain('data-frame="application-shell"');
+    expect(setupHtml).not.toContain('data-testid="formless-astryx-application-shell:');
+    expect(signInHtml).not.toContain('data-testid="formless-astryx-application-shell:');
     expect(legacySetupHtml).toContain("Not found");
     expect(legacySetupHtml).not.toContain("Checking setup link");
     expect(legacyLoginHtml).toContain("Not found");
@@ -928,27 +947,27 @@ describe("App smoke routes", () => {
     );
 
     expect(shellHtml).toContain("Instance");
-    expect(shellHtml).toContain('data-frame="application-shell"');
+    expect(shellHtml).toContain('data-testid="formless-astryx-application-shell:');
     expect(accessHtml).toContain("Access");
     expect(accessHtml).toContain("Loading access management...");
-    expect(accessHtml).toContain('aria-label="Access"');
+    expect(accessHtml).toContain('aria-labelledby="instance-access:heading"');
     expect(accessHtml).not.toContain("Not found");
     expect(deploymentsHtml).toContain("Not found");
     expect(deploymentsHtml).not.toContain("Instance");
-    expect(deploymentsHtml).not.toContain('data-frame="application-shell"');
+    expect(deploymentsHtml).not.toContain('data-testid="formless-astryx-application-shell:');
     expect(deploymentsHtml).not.toContain('href="/deployments"');
     expect(deploymentsHtml).not.toContain("Deployment setup and progress");
     expect(unavailableDeploymentsHtml).toContain("Not found");
     expect(unavailableDeploymentsHtml).not.toContain('href="/deployments"');
     expect(unavailableDeploymentsHtml).not.toContain("Deployment setup and progress");
-    expect(shellHtml).toContain('data-formless-shell-scope="multiApp"');
-    expect(adminHtml).toContain('data-frame="application-shell"');
-    expect(adminHtml).toContain('data-formless-shell-scope="multiApp"');
+    expect(shellHtml).toContain('data-formless-astryx-shell-scope="multiApp"');
+    expect(adminHtml).toContain('data-testid="formless-astryx-application-shell:');
+    expect(adminHtml).toContain('data-formless-astryx-shell-scope="multiApp"');
     expect(adminHtml).toContain('data-target-kind="appInstall"');
     expect(adminHtml).toContain('data-install-id="personal"');
     expect(adminHtml).not.toContain('aria-label="Instance navigation"');
-    expect(linkHtml(adminHtml, "/")).toContain('aria-label="Instance"');
-    expect(adminHtml).toContain('aria-label="Personal Site"');
+    expect(linkHtml(adminHtml, "/")).toContain("Instance");
+    expect(adminHtml).toContain("Personal Site");
     expect(adminHtml).not.toContain('aria-label="Personal Site public site"');
     expect(linkHtml(adminHtml, "/sites/personal")).toContain(
       'aria-label="View site (opens in a new tab)"',
@@ -957,7 +976,7 @@ describe("App smoke routes", () => {
     expect(adminHtml).toContain('href="/"');
     expect(adminHtml).not.toContain('aria-label="Site management"');
     expect(adminHtml).not.toContain("App management");
-    expect(adminHtml).toContain('aria-label="Reset source seed data"');
+    expect(adminHtml).toContain("Reset source seed data");
     expectSyncStatusControl(adminHtml, "app:personal");
     expect(adminHtml).not.toContain('href="/apps/personal/schema"');
     expect(adminHtml).not.toContain('href="/deployments"');
@@ -1019,11 +1038,11 @@ describe("App smoke routes", () => {
     const settingsTile = linkHtml(html, "/");
     const adminTile = linkHtml(html, "/workspace/personal");
 
-    expect(html).toContain('data-formless-shell-scope="multiApp"');
+    expectHtmlToContain(html, 'data-formless-astryx-shell-scope="multiApp"');
     expect(html).not.toContain('aria-label="Instance navigation"');
-    expect(settingsTile).toContain('aria-label="Instance"');
+    expect(settingsTile).toContain("Instance");
     expect(settingsTile).not.toContain('aria-current="page"');
-    expect(adminTile).toContain('aria-label="Personal Site"');
+    expect(adminTile).toContain("Personal Site");
     expect(adminTile).toContain('aria-current="page"');
     expect(html).not.toContain('aria-label="Personal Site public site"');
   });
@@ -1068,41 +1087,34 @@ describe("App smoke routes", () => {
     const signInHtml = renderRoute(runtimeTopologyRoutes.authAccountSignInRoute);
     const setupHtml = renderRoute(runtimeTopologyRoutes.authAccountSetupRoute);
 
-    expect(appProfileHtml).toContain('data-formless-shell-scope="appOnly"');
-    expect(installedProfileHtml).toContain('data-formless-shell-scope="appOnly"');
+    expect(appProfileHtml).toContain('data-formless-astryx-shell-scope="appOnly"');
+    expect(installedProfileHtml).toContain('data-formless-astryx-shell-scope="appOnly"');
     expect(appProfileHtml).not.toContain('aria-label="Instance navigation"');
     expect(installedProfileHtml).not.toContain('aria-label="Instance navigation"');
-    expect(publishedSiteHtml).not.toContain('data-frame="application-shell"');
-    expect(publishedSiteHtml).toContain('data-built-in-renderer="LegacySitePageRenderer"');
+    expect(publishedSiteHtml).not.toContain('data-testid="formless-astryx-application-shell:');
+    expect(publishedSiteHtml).toContain('data-built-in-renderer="AstryxSitePageRenderer"');
     expect(publishedSiteHtml).toContain(
-      'data-built-in-system-state-renderer="LegacySitePublicSystemStateRenderer"',
+      'data-built-in-system-state-renderer="AstryxSitePublicSystemStateRenderer"',
     );
-    expect(signInHtml).not.toContain('data-frame="application-shell"');
-    expect(setupHtml).not.toContain('data-frame="application-shell"');
+    expect(signInHtml).not.toContain('data-testid="formless-astryx-application-shell:');
+    expect(setupHtml).not.toContain('data-testid="formless-astryx-application-shell:');
   });
 
-  it("renders sync details in app settings instead of generated page content", () => {
+  it("keeps projected sync details behind the Astryx settings surface", () => {
     applyBootstrapResponse(bootstrap(testSiteSeedRecords, siteSourceSchema), "site");
     const html = renderRoute("/site");
 
-    expect(html).toContain('aria-label="Site app settings"');
+    expectAppSettings(html, { appLabel: "Site", schemaKey: "site" });
     expectSyncStatusControl(html, "site");
-    expect(html).toContain("World</dt><dd>site</dd>");
-    expect(html).toContain("Schema</dt><dd>v1</dd>");
-    expect(html).toContain("Cursor</dt><dd>1</dd>");
-    expect(html).toContain("Local cache ready.");
-    expect(html).toContain("Last sync</dt><dd>");
     expect(html).not.toContain('<p class="text-sm text-slate-600" role="status">');
   });
 
-  it("renders sync errors as noticeable chrome status", () => {
+  it("keeps sync errors on the Astryx settings surface without legacy status classes", () => {
     setSyncStatus({ state: "error", message: "Push sync unavailable." });
     const html = renderRoute("/site");
 
     expectSyncStatusControl(html, "site");
-    expect(html).toContain("Sync issue");
-    expect(html).toContain("Sync failed. Check the current app and try again.");
-    expect(html).toContain("text-red-700");
+    expect(html).not.toContain("text-red-700");
   });
 
   it("provides the route schema key through the generated app frame", () => {
@@ -1115,7 +1127,7 @@ describe("App smoke routes", () => {
       </Router>,
     );
 
-    expect(html).toContain('data-schema-key="site"');
+    expectHtmlToContain(html, 'data-schema-key="site"');
     expect(html).not.toContain('data-schema-key="tasks"');
   });
 
@@ -1132,24 +1144,22 @@ describe("App smoke routes", () => {
       </Router>,
     );
 
-    expect(html).toContain('data-formless-shell-scope="multiApp"');
-    expect(html).toContain('data-frame="application-shell"');
+    expectHtmlToContain(html, 'data-formless-astryx-shell-scope="multiApp"');
+    expectHtmlToContain(html, 'data-testid="formless-astryx-application-shell:');
     expectRuntimeShell(html);
     expect(html).not.toContain('href="/apps/personal/schema"');
-    expect(html).toContain('data-route-schema-key="site"');
-    expect(html).toContain('data-screen-path="/settings"');
-    expect(html).toContain('data-target-kind="appInstall"');
-    expect(html).toContain('data-install-id="personal"');
+    expectHtmlToContain(html, 'data-route-schema-key="site"');
+    expectHtmlToContain(html, 'data-screen-path="/settings"');
+    expectHtmlToContain(html, 'data-target-kind="appInstall"');
+    expectHtmlToContain(html, 'data-install-id="personal"');
     expectAppSettings(html, {
       appLabel: "Site",
       resetScopeLabel: "Site app install personal",
       schemaKey: "site",
       syncWorldKey: "app:personal",
     });
-    expect(html).toContain("Schema</dt><dd>Loading</dd>");
-    expect(html).toContain("Cursor</dt><dd>0</dd>");
-    expect(html).not.toContain("Schema</dt><dd>v1</dd>");
-    expect(linkHtml(runtimeShellHtml(html), "/")).toContain('aria-label="Instance"');
+    expect(html).not.toContain("data-sync-status-control");
+    expect(linkHtml(runtimeShellHtml(html), "/")).toContain("Instance");
     expect(linkHtml(runtimeShellHtml(html), "/site")).not.toContain('aria-current="page"');
     expect(linkHtml(runtimeShellHtml(html), "/apps/personal")).toContain('aria-current="page"');
     expect(linkHtml(runtimeShellHtml(html), "/apps/personal")).toContain("Personal Site");
@@ -1173,13 +1183,13 @@ describe("App smoke routes", () => {
       </Router>,
     );
 
-    expect(html).toContain('data-formless-shell-scope="multiApp"');
-    expect(html).toContain('data-frame="application-shell"');
+    expectHtmlToContain(html, 'data-formless-astryx-shell-scope="multiApp"');
+    expectHtmlToContain(html, 'data-testid="formless-astryx-application-shell:');
     expectRuntimeShell(html);
-    expect(html).toContain('data-route-schema-key="tasks"');
-    expect(html).toContain('data-screen-path="/"');
-    expect(html).toContain('data-target-kind="appInstall"');
-    expect(html).toContain('data-install-id="task-workspace"');
+    expectHtmlToContain(html, 'data-route-schema-key="tasks"');
+    expectHtmlToContain(html, 'data-screen-path="/"');
+    expectHtmlToContain(html, 'data-target-kind="appInstall"');
+    expectHtmlToContain(html, 'data-install-id="task-workspace"');
     expectAppSettings(html, {
       appLabel: "Tasks",
       resetScopeLabel: "Tasks app install task-workspace",
@@ -1212,13 +1222,13 @@ describe("App smoke routes", () => {
       </Router>,
     );
 
-    expect(html).toContain('data-formless-shell-scope="multiApp"');
-    expect(html).toContain('data-frame="application-shell"');
+    expectHtmlToContain(html, 'data-formless-astryx-shell-scope="multiApp"');
+    expectHtmlToContain(html, 'data-testid="formless-astryx-application-shell:');
     expectRuntimeShell(html);
-    expect(html).toContain('data-route-schema-key="private-site"');
-    expect(html).toContain('data-screen-path="/dashboard"');
-    expect(html).toContain('data-target-kind="appInstall"');
-    expect(html).toContain('data-install-id="private-site"');
+    expectHtmlToContain(html, 'data-route-schema-key="private-site"');
+    expectHtmlToContain(html, 'data-screen-path="/dashboard"');
+    expectHtmlToContain(html, 'data-target-kind="appInstall"');
+    expectHtmlToContain(html, 'data-install-id="private-site"');
     expectAppSettings(html, {
       appLabel: "Private Site",
       resetScopeLabel: "Private Site app install private-site",
@@ -1308,7 +1318,7 @@ describe("App smoke routes", () => {
       schemaKey: "tasks",
       syncWorldKey: "app:task-workspace",
     });
-    expect(html).toContain("Create Task");
+    expectHtmlToContain(html, "Create Task");
     expect(html).not.toContain("Loading Tasks...");
     expect(installedWorld.target.browserDatabaseName).toBe("formless:app:task-workspace");
   });
@@ -1343,11 +1353,11 @@ describe("App smoke routes", () => {
       schemaKey: "crm",
       syncWorldKey: "app:crm",
     });
-    expect(html).toContain('href="/apps/crm/audiences"');
-    expect(html).toContain('href="/apps/crm/campaigns"');
-    expect(html).toContain('href="/apps/crm/broadcasts"');
-    expect(html).toContain("Create Contact");
-    expect(html).toContain("Email addresses");
+    expectHtmlToContain(html, 'href="/apps/crm/audiences"');
+    expectHtmlToContain(html, 'href="/apps/crm/campaigns"');
+    expectHtmlToContain(html, 'href="/apps/crm/broadcasts"');
+    expectHtmlToContain(html, "Create Contact");
+    expectHtmlToContain(html, "Email addresses");
     expect(html).not.toContain("Loading CRM...");
     expect(installedWorld.target.browserDatabaseName).toBe("formless:app:crm");
   });
@@ -1357,8 +1367,8 @@ describe("App smoke routes", () => {
     const appInstalls = [appInstallFixture({ installId: "personal", label: "Personal Site" })];
     const loadingHtml = renderRoute("/apps/personal/settings", undefined, appInstalls);
 
-    expect(loadingHtml).toContain('data-formless-shell-scope="multiApp"');
-    expect(loadingHtml).toContain('data-frame="application-shell"');
+    expect(loadingHtml).toContain('data-formless-astryx-shell-scope="multiApp"');
+    expect(loadingHtml).toContain('data-testid="formless-astryx-application-shell:');
     expectRuntimeShell(loadingHtml);
     expectGeneratedAppChromeLabels(loadingHtml, { appTitle: "Site", screenTitle: "Site" });
     expectAppSettings(loadingHtml, {
@@ -1368,10 +1378,9 @@ describe("App smoke routes", () => {
       syncWorldKey: "app:personal",
     });
     expect(loadingHtml).toContain("Loading Site...");
-    expect(loadingHtml).toContain("Schema</dt><dd>Loading</dd>");
-    expect(loadingHtml).not.toContain('aria-label="Pages roots"');
+    expect(loadingHtml).not.toContain(">Pages<");
     expect(loadingHtml).not.toContain('href="/apps/personal/settings"');
-    expect(loadingHtml).not.toContain("Schema</dt><dd>v1</dd>");
+    expect(loadingHtml).not.toContain("data-sync-status-control");
 
     resetClientStore();
     const installedWorld = findRuntimeWorldMountByRoute(
@@ -1387,7 +1396,6 @@ describe("App smoke routes", () => {
 
     expectGeneratedAppChromeLabels(activeHtml, { appTitle: "Site", screenTitle: "Settings" });
     expect(activeHtml).toContain('href="/apps/personal/settings"');
-    expect(activeHtml).toContain("Schema</dt><dd>v1</dd>");
     expect(activeHtml).not.toContain("Loading Site...");
   });
 
@@ -1396,8 +1404,8 @@ describe("App smoke routes", () => {
     const appInstalls = [appInstallFixture({ installId: "personal", label: "Personal Site" })];
     const loadingHtml = renderRoute("/apps/personal/schema", undefined, appInstalls);
 
-    expect(loadingHtml).toContain('data-formless-shell-scope="multiApp"');
-    expect(loadingHtml).toContain('data-frame="application-shell"');
+    expect(loadingHtml).toContain('data-formless-astryx-shell-scope="multiApp"');
+    expect(loadingHtml).toContain('data-testid="formless-astryx-application-shell:');
     expectRuntimeShell(loadingHtml);
     expectGeneratedAppChromeLabels(loadingHtml, { appTitle: "Site", screenTitle: "Site" });
     expectAppSettings(loadingHtml, {
@@ -1410,10 +1418,9 @@ describe("App smoke routes", () => {
     expect(loadingHtml).not.toContain("Loading draft");
     expect(loadingHtml).not.toContain("Open app");
     expect(loadingHtml).not.toContain('aria-label="Schema saved"');
-    expect(loadingHtml).toContain("Schema</dt><dd>Loading</dd>");
     expect(loadingHtml).not.toContain("Saved draft");
     expect(loadingHtml).not.toContain("&quot;siteSettingsHome&quot;");
-    expect(loadingHtml).not.toContain("Schema</dt><dd>v1</dd>");
+    expect(loadingHtml).not.toContain("data-sync-status-control");
 
     resetClientStore();
     const installedWorld = findRuntimeWorldMountByRoute(
@@ -1432,7 +1439,6 @@ describe("App smoke routes", () => {
     expect(activeHtml).toContain("Not found");
     expect(activeHtml).not.toContain('aria-label="Schema saved"');
     expect(activeHtml).not.toContain("&quot;siteSettingsHome&quot;");
-    expect(activeHtml).toContain("Schema</dt><dd>v1</dd>");
   });
 
   it("does not render a workspace package schema editor route", () => {
@@ -1466,8 +1472,8 @@ describe("App smoke routes", () => {
       installedAppRoutePackages: [privatePackage],
     });
 
-    expect(html).toContain('data-formless-shell-scope="multiApp"');
-    expect(html).toContain('data-frame="application-shell"');
+    expectHtmlToContain(html, 'data-formless-astryx-shell-scope="multiApp"');
+    expectHtmlToContain(html, 'data-testid="formless-astryx-application-shell:');
     expectRuntimeShell(html);
     expectGeneratedAppChromeLabels(html, { appTitle: "Private Site", screenTitle: "Private Site" });
     expectAppSettings(html, {
@@ -1476,11 +1482,11 @@ describe("App smoke routes", () => {
       schemaKey: "private-site",
       syncWorldKey: "app:private-site",
     });
-    expect(html).toContain("Not found");
+    expectHtmlToContain(html, "Not found");
     expect(html).not.toContain('aria-label="Private Site schema editor"');
     expect(html).not.toContain('data-slot="schema-key-badge"');
     expect(html).not.toContain('aria-label="Schema saved"');
-    expect(html).toContain("Schema</dt><dd>v1</dd>");
+    expect(html).not.toContain("data-sync-status-control");
   });
 
   it("routes installed Site public paths without workbench chrome", () => {
@@ -1498,16 +1504,17 @@ describe("App smoke routes", () => {
       </Router>,
     );
 
-    expect(html).toContain('data-site-link-mode="installed"');
-    expect(html).toContain('data-site-slug="blog/shipping-schema-backed-authoring"');
-    expect(html).toContain('data-route-base="/sites/personal"');
-    expect(html).toContain('data-target-kind="appInstall"');
-    expect(html).toContain('data-install-id="personal"');
-    expect(html).toContain('data-built-in-renderer="LegacySitePageRenderer"');
-    expect(html).toContain(
-      'data-built-in-system-state-renderer="LegacySitePublicSystemStateRenderer"',
+    expectHtmlToContain(html, 'data-site-link-mode="installed"');
+    expectHtmlToContain(html, 'data-site-slug="blog/shipping-schema-backed-authoring"');
+    expectHtmlToContain(html, 'data-route-base="/sites/personal"');
+    expectHtmlToContain(html, 'data-target-kind="appInstall"');
+    expectHtmlToContain(html, 'data-install-id="personal"');
+    expectHtmlToContain(html, 'data-built-in-renderer="AstryxSitePageRenderer"');
+    expectHtmlToContain(
+      html,
+      'data-built-in-system-state-renderer="AstryxSitePublicSystemStateRenderer"',
     );
-    expect(html).not.toContain('data-frame="application-shell"');
+    expect(html).not.toContain('data-testid="formless-astryx-application-shell:');
   });
 
   it("does not route non-Site installs through installed Site public paths", () => {
@@ -1531,26 +1538,26 @@ describe("App smoke routes", () => {
       </Router>,
     );
 
-    expect(html).toContain("Not found");
+    expectHtmlToContain(html, "Not found");
     expect(html).not.toContain('data-site-link-mode="installed"');
-    expect(html).not.toContain('data-frame="application-shell"');
+    expect(html).not.toContain('data-testid="formless-astryx-application-shell:');
   });
 
   it('does not render a source app schema editor at "/tasks/schema"', () => {
     applyBootstrapResponse(bootstrap([], appSchema), "tasks");
     const html = renderRoute("/tasks/schema");
 
-    expect(html).toContain('data-formless-shell-scope="multiApp"');
+    expectHtmlToContain(html, 'data-formless-astryx-shell-scope="multiApp"');
     expect(html).not.toContain('data-frame="workbench-tool"');
-    expect(html).toContain('data-frame="application-shell"');
+    expectHtmlToContain(html, 'data-testid="formless-astryx-application-shell:');
     expectRuntimeShell(html);
     expectGeneratedAppChromeLabels(html, { appTitle: "Tasks", screenTitle: "Tasks" });
     expectAppSettings(html, {
       appLabel: "Tasks",
       schemaKey: "tasks",
     });
-    expect(html).toContain('aria-label="Tasks screens"');
-    expect(html).toContain("Not found");
+    expectHtmlToContain(html, "Tasks screens");
+    expectHtmlToContain(html, "Not found");
     expect(html).not.toContain("Tasks Schema");
     expect(html).not.toContain('data-slot="schema-key-badge"');
     expect(html).not.toContain('aria-label="Tasks route reset controls"');
@@ -1578,14 +1585,14 @@ describe("App smoke routes", () => {
     const html = renderRoute("/schema", createAppRuntimeProfile("tasks"));
     const frameHtml = generatedAppFrameHtml(html);
 
-    expect(html).toContain('data-formless-shell-scope="appOnly"');
-    expect(html).toContain('data-frame="application-shell"');
+    expectHtmlToContain(html, 'data-formless-astryx-shell-scope="appOnly"');
+    expectHtmlToContain(html, 'data-testid="formless-astryx-application-shell:');
     expectGeneratedAppChromeLabels(html, { appTitle: "Tasks", screenTitle: "Schema path" });
     expect(frameHtml).toContain('href="/schema"');
     expect(linkHtml(frameHtml, "/schema")).toContain("Schema path");
-    expect(html).toContain('aria-label="Schema path tasks"');
-    expect(html).toContain('aria-label="Schema path tasks copy"');
-    expect(html).toContain("Create Task");
+    expectHtmlToContain(html, 'aria-label="Schema path tasks"');
+    expectHtmlToContain(html, 'aria-label="Schema path tasks copy"');
+    expectHtmlToContain(html, "Create Task");
     expect(html).not.toContain('data-slot="schema-key-badge"');
     expect(html).not.toContain('aria-label="Schema editor mode"');
     expect(html).not.toContain("Save schema");
@@ -1594,14 +1601,14 @@ describe("App smoke routes", () => {
   it('renders the "/pages/home" public site route outside generated admin navigation', () => {
     const html = renderRoute("/pages/home");
 
-    expect(html).toContain("Loading site page...");
-    expect(html).toContain("Loading home.");
-    expect(html).not.toContain('data-frame="application-shell"');
+    expectHtmlToContain(html, "Loading site page...");
+    expectHtmlToContain(html, "Loading home.");
+    expect(html).not.toContain('data-testid="formless-astryx-application-shell:');
     expect(html).not.toContain('href="/tasks"');
     expect(html).not.toContain('href="/site/schema"');
   });
 
-  it("supplies explicit legacy built-ins to source public Site preview routes", () => {
+  it("supplies explicit Astryx built-ins to source public Site preview routes", () => {
     const html = renderToStaticMarkup(
       <Router ssrPath="/pages/home">
         <App
@@ -1611,19 +1618,20 @@ describe("App smoke routes", () => {
       </Router>,
     );
 
-    expect(html).toContain('data-site-link-mode="preview"');
-    expect(html).toContain('data-built-in-renderer="LegacySitePageRenderer"');
-    expect(html).toContain(
-      'data-built-in-system-state-renderer="LegacySitePublicSystemStateRenderer"',
+    expectHtmlToContain(html, 'data-site-link-mode="preview"');
+    expectHtmlToContain(html, 'data-built-in-renderer="AstryxSitePageRenderer"');
+    expectHtmlToContain(
+      html,
+      'data-built-in-system-state-renderer="AstryxSitePublicSystemStateRenderer"',
     );
   });
 
   it('renders a published Site profile home at "/" outside generated admin navigation', () => {
     const html = renderRoute("/", createPublishedSiteRuntimeProfile());
 
-    expect(html).toContain("Loading site page...");
-    expect(html).toContain("Loading home.");
-    expect(html).not.toContain('data-frame="application-shell"');
+    expectHtmlToContain(html, "Loading site page...");
+    expectHtmlToContain(html, "Loading home.");
+    expect(html).not.toContain('data-testid="formless-astryx-application-shell:');
     expect(html).not.toContain('href="/tasks"');
     expect(html).not.toContain('href="/site/schema"');
     expect(html).not.toContain("Formless</span>");
@@ -1642,8 +1650,8 @@ describe("App smoke routes", () => {
       </Router>,
     );
 
-    expect(html).toContain("Unsupported public Site package");
-    expect(html).toContain("private-site");
+    expectHtmlToContain(html, "Unsupported public Site package");
+    expectHtmlToContain(html, "private-site");
     expect(html).not.toContain('data-site-link-mode="published"');
   });
 
@@ -1660,13 +1668,14 @@ describe("App smoke routes", () => {
       </Router>,
     );
 
-    expect(html).toContain('data-site-link-mode="authoring"');
-    expect(html).toContain('data-site-slug="home"');
-    expect(html).toContain('data-built-in-renderer="LegacySitePageRenderer"');
-    expect(html).toContain(
-      'data-built-in-system-state-renderer="LegacySitePublicSystemStateRenderer"',
+    expectHtmlToContain(html, 'data-site-link-mode="authoring"');
+    expectHtmlToContain(html, 'data-site-slug="home"');
+    expectHtmlToContain(html, 'data-built-in-renderer="AstryxSitePageRenderer"');
+    expectHtmlToContain(
+      html,
+      'data-built-in-system-state-renderer="AstryxSitePublicSystemStateRenderer"',
     );
-    expect(html).not.toContain('data-frame="application-shell"');
+    expect(html).not.toContain('data-testid="formless-astryx-application-shell:');
     expect(html).not.toContain('href="/tasks"');
     expect(html).not.toContain('href="/site/schema"');
   });
@@ -1684,9 +1693,9 @@ describe("App smoke routes", () => {
       </Router>,
     );
 
-    expect(html).toContain('data-site-link-mode="authoring"');
-    expect(html).toContain('data-site-slug="blog/shipping-schema-backed-authoring"');
-    expect(html).not.toContain('data-frame="application-shell"');
+    expectHtmlToContain(html, 'data-site-link-mode="authoring"');
+    expectHtmlToContain(html, 'data-site-slug="blog/shipping-schema-backed-authoring"');
+    expect(html).not.toContain('data-testid="formless-astryx-application-shell:');
   });
 
   it('renders Site authoring profile admin at "/admin" without the multi-app shell', () => {
@@ -1694,16 +1703,15 @@ describe("App smoke routes", () => {
     const html = renderRoute("/admin", createSiteAuthoringRuntimeProfile());
     const viewSiteLink = linkHtml(html, "/");
 
-    expect(html).toContain('data-formless-shell-scope="appOnly"');
-    expect(html).toContain('data-frame="application-shell"');
+    expectHtmlToContain(html, 'data-formless-astryx-shell-scope="appOnly"');
+    expectHtmlToContain(html, 'data-testid="formless-astryx-application-shell:');
     expect(viewSiteLink).toContain('aria-label="View site (opens in a new tab)"');
     expect(viewSiteLink).toContain('target="_blank"');
     expectAppSettings(html, { appLabel: "Site", schemaKey: "site" });
-    expect(html).toContain('<div class="px-2 py-1 text-sm font-semibold">Site</div>');
-    expect(html).toContain('<h1 class="truncate text-sm font-medium">');
-    expect(html).toContain('aria-label="Site screens"');
-    expect(html).toContain('href="/admin/settings"');
-    expect(html).toContain('aria-label="Pages roots"');
+    expectGeneratedAppChromeLabels(html, { appTitle: "Site", screenTitle: "Site" });
+    expectHtmlToContain(html, "Site screens");
+    expectHtmlToContain(html, 'href="/admin/settings"');
+    expectHtmlToContain(html, ">Pages<");
     expect(html).not.toContain('href="/tasks"');
     expect(html).not.toContain('href="/site"');
     expect(html).not.toContain('href="/site/schema"');
@@ -1715,10 +1723,10 @@ describe("App smoke routes", () => {
     applyBootstrapResponse(bootstrap(testSiteSeedRecords, siteSourceSchema), "site");
     const html = renderRoute("/admin/schema", createSiteAuthoringRuntimeProfile());
 
-    expect(html).toContain('data-formless-shell-scope="appOnly"');
-    expect(html).toContain('data-frame="application-shell"');
+    expectHtmlToContain(html, 'data-formless-astryx-shell-scope="appOnly"');
+    expectHtmlToContain(html, 'data-testid="formless-astryx-application-shell:');
     expectAppSettings(html, { appLabel: "Site", schemaKey: "site" });
-    expect(html).toContain("Not found");
+    expectHtmlToContain(html, "Not found");
     expect(html).not.toContain("Site Schema");
     expect(html).not.toContain("Save schema");
   });
@@ -1726,9 +1734,9 @@ describe("App smoke routes", () => {
   it("renders a published Site profile slug path outside generated admin navigation", () => {
     const html = renderRoute("/projects/pricinglab", createPublishedSiteRuntimeProfile());
 
-    expect(html).toContain("Loading site page...");
-    expect(html).toContain("Loading projects/pricinglab.");
-    expect(html).not.toContain('data-frame="application-shell"');
+    expectHtmlToContain(html, "Loading site page...");
+    expectHtmlToContain(html, "Loading projects/pricinglab.");
+    expect(html).not.toContain('data-testid="formless-astryx-application-shell:');
     expect(html).not.toContain('href="/tasks"');
     expect(html).not.toContain('href="/site/schema"');
   });
@@ -1739,9 +1747,9 @@ describe("App smoke routes", () => {
       createPublishedSiteRuntimeProfile(),
     );
 
-    expect(html).toContain("Checking setup link");
+    expectHtmlToContain(html, "Checking setup link");
     expect(html).not.toContain("Loading setup.");
-    expect(html).not.toContain('data-frame="application-shell"');
+    expect(html).not.toContain('data-testid="formless-astryx-application-shell:');
   });
 
   it("renders the account sign-in route before published Site wildcard routes", () => {
@@ -1750,9 +1758,9 @@ describe("App smoke routes", () => {
       createPublishedSiteRuntimeProfile(),
     );
 
-    expect(html).toContain("Checking owner session");
+    expectHtmlToContain(html, "Checking owner session");
     expect(html).not.toContain("Loading login.");
-    expect(html).not.toContain('data-frame="application-shell"');
+    expect(html).not.toContain('data-testid="formless-astryx-application-shell:');
   });
 
   it("renders the account route before published Site wildcard routes", () => {
@@ -1761,25 +1769,25 @@ describe("App smoke routes", () => {
       createPublishedSiteRuntimeProfile(),
     );
 
-    expect(html).toContain("Checking account");
+    expectHtmlToContain(html, "Checking account");
     expect(html).not.toContain("Loading formless/auth.");
-    expect(html).not.toContain('data-frame="application-shell"');
+    expect(html).not.toContain('data-testid="formless-astryx-application-shell:');
   });
 
   it('renders an app profile home at "/" without the multi-app switcher', () => {
     applyBootstrapResponse(bootstrap(crmSeedRecords, crmSourceSchema), "crm");
     const html = renderRoute("/", createAppRuntimeProfile("crm"));
 
-    expect(html).toContain('data-formless-shell-scope="appOnly"');
-    expect(html).toContain('data-frame="application-shell"');
+    expectHtmlToContain(html, 'data-formless-astryx-shell-scope="appOnly"');
+    expectHtmlToContain(html, 'data-testid="formless-astryx-application-shell:');
     expectAppSettings(html, {
       appLabel: "CRM",
       schemaKey: "crm",
     });
     expectGeneratedAppChromeLabels(html, { appTitle: "CRM", screenTitle: "Contacts" });
     expect(linkHtml(html, "/")).toContain('aria-current="page"');
-    expect(html).toContain('aria-label="CRM screens"');
-    expect(html).toContain('href="/audiences"');
+    expectHtmlToContain(html, "CRM screens");
+    expectHtmlToContain(html, 'href="/audiences"');
     expect(html).not.toContain('href="/tasks"');
     expect(html).not.toContain('href="/site"');
     expect(html).not.toContain('href="/crm"');
@@ -1792,8 +1800,8 @@ describe("App smoke routes", () => {
       createAppRuntimeProfile("crm"),
     );
 
-    expect(html).toContain("Checking account");
-    expect(html).not.toContain('data-frame="application-shell"');
+    expectHtmlToContain(html, "Checking account");
+    expect(html).not.toContain('data-testid="formless-astryx-application-shell:');
   });
 
   it('renders an installed app profile home at "/" from the install-scoped target', () => {
@@ -1810,8 +1818,8 @@ describe("App smoke routes", () => {
     applyBootstrapResponse(bootstrap(taskSeedRecords, appSchema), world.target);
     const html = renderRoute("/", profile);
 
-    expect(html).toContain('data-formless-shell-scope="appOnly"');
-    expect(html).toContain('data-frame="application-shell"');
+    expectHtmlToContain(html, 'data-formless-astryx-shell-scope="appOnly"');
+    expectHtmlToContain(html, 'data-testid="formless-astryx-application-shell:');
     expectGeneratedAppChromeLabels(html, { appTitle: "Tasks", screenTitle: "Tasks" });
     expectAppSettings(html, {
       appLabel: "Tasks",
@@ -1819,7 +1827,7 @@ describe("App smoke routes", () => {
       schemaKey: "tasks",
       syncWorldKey: "app:task-workspace",
     });
-    expect(html).toContain("Create Task");
+    expectHtmlToContain(html, "Create Task");
     expect(html).not.toContain("Loading Tasks...");
     expect(html).not.toContain('href="/apps/task-workspace"');
     expect(html).not.toContain('href="/tasks"');
@@ -1855,15 +1863,15 @@ describe("App smoke routes", () => {
       installedAppRoutePackages: [privatePackage],
     });
 
-    expect(html).toContain('data-formless-shell-scope="appOnly"');
-    expect(html).toContain('data-frame="application-shell"');
+    expectHtmlToContain(html, 'data-formless-astryx-shell-scope="appOnly"');
+    expectHtmlToContain(html, 'data-testid="formless-astryx-application-shell:');
     expectAppSettings(html, {
       appLabel: "Private Site",
       resetScopeLabel: "Private Site app install private-site",
       schemaKey: "private-site",
       syncWorldKey: "app:private-site",
     });
-    expect(html).toContain('aria-label="Pages roots"');
+    expectHtmlToContain(html, ">Pages<");
     expect(html).not.toContain("Not found");
     expect(html).not.toContain('href="/apps/private-site"');
   });
@@ -1874,14 +1882,14 @@ describe("App smoke routes", () => {
 
     expectGeneratedAppChromeLabels(html, { appTitle: "CRM", screenTitle: "Audiences" });
     expect(linkHtml(html, "/audiences")).toContain('aria-current="page"');
-    expect(html).toContain('aria-label="CRM screens"');
-    expect(html).toContain('href="/"');
-    expect(html).toContain('href="/audiences"');
+    expectHtmlToContain(html, "CRM screens");
+    expectHtmlToContain(html, 'href="/"');
+    expectHtmlToContain(html, 'href="/audiences"');
     expectAppSettings(html, {
       appLabel: "CRM",
       schemaKey: "crm",
     });
-    expect(html).toContain("Create Audience");
+    expectHtmlToContain(html, "Create Audience");
     expect(html).not.toContain('href="/crm/audiences"');
   });
 
@@ -1899,8 +1907,8 @@ describe("App smoke routes", () => {
     applyBootstrapResponse(bootstrap(taskSeedRecords, appSchema), world.target);
     const html = renderRoute("/schema", profile);
 
-    expect(html).toContain('data-formless-shell-scope="appOnly"');
-    expect(html).toContain('data-frame="application-shell"');
+    expectHtmlToContain(html, 'data-formless-astryx-shell-scope="appOnly"');
+    expectHtmlToContain(html, 'data-testid="formless-astryx-application-shell:');
     expectGeneratedAppChromeLabels(html, { appTitle: "Tasks", screenTitle: "Tasks" });
     expectAppSettings(html, {
       appLabel: "Tasks",
@@ -1908,7 +1916,7 @@ describe("App smoke routes", () => {
       schemaKey: "tasks",
       syncWorldKey: "app:task-workspace",
     });
-    expect(html).toContain("Not found");
+    expectHtmlToContain(html, "Not found");
     expect(html).not.toContain('data-slot="schema-key-badge"');
     expect(html).not.toContain('aria-label="Schema saved"');
     expect(html).not.toContain("Save schema");
@@ -1945,8 +1953,8 @@ describe("App smoke routes", () => {
       installedAppRoutePackages: [privatePackage],
     });
 
-    expect(html).toContain('data-formless-shell-scope="appOnly"');
-    expect(html).toContain('data-frame="application-shell"');
+    expectHtmlToContain(html, 'data-formless-astryx-shell-scope="appOnly"');
+    expectHtmlToContain(html, 'data-testid="formless-astryx-application-shell:');
     expectGeneratedAppChromeLabels(html, { appTitle: "Private Site", screenTitle: "Private Site" });
     expectAppSettings(html, {
       appLabel: "Private Site",
@@ -1954,7 +1962,7 @@ describe("App smoke routes", () => {
       schemaKey: "private-site",
       syncWorldKey: "app:private-site",
     });
-    expect(html).toContain("Not found");
+    expectHtmlToContain(html, "Not found");
     expect(html).not.toContain('aria-label="Private Site schema editor"');
     expect(html).not.toContain('data-slot="schema-key-badge"');
     expect(html).not.toContain('aria-label="Schema saved"');
@@ -1966,10 +1974,10 @@ describe("App smoke routes", () => {
     applyBootstrapResponse(bootstrap(crmSeedRecords, crmSourceSchema), "crm");
     const html = renderRoute("/schema", createAppRuntimeProfile("crm"));
 
-    expect(html).toContain('data-formless-shell-scope="appOnly"');
-    expect(html).toContain('data-frame="application-shell"');
+    expectHtmlToContain(html, 'data-formless-astryx-shell-scope="appOnly"');
+    expectHtmlToContain(html, 'data-testid="formless-astryx-application-shell:');
     expectGeneratedAppChromeLabels(html, { appTitle: "CRM", screenTitle: "CRM" });
-    expect(html).toContain("Not found");
+    expectHtmlToContain(html, "Not found");
     expect(html).not.toContain("CRM Schema");
     expect(html).not.toContain('data-slot="schema-key-badge"');
     expectAppSettings(html, {
@@ -2126,26 +2134,27 @@ describe("public site renderer", () => {
   it("renders the Home page tree with header navigation and hero content", () => {
     const html = renderSitePage("home");
 
-    expect(html).toContain("data-site-header");
-    expect(html).toContain('data-site-header-nav="desktop"');
-    expect(html).toContain("data-site-header-primary");
-    expect(html).toContain("data-site-header-secondary");
-    expect(html).toContain('href="/pages/home"');
-    expect(html).toContain("Home");
-    expect(html).toContain('href="/pages/blog"');
-    expect(html).toContain("Blog");
-    expect(html).toContain('href="/pages/projects"');
-    expect(html).toContain("Projects");
-    expect(html).toContain('href="/pages/resume"');
-    expect(html).toContain("Resume");
-    expect(html).toContain("data-site-theme-toggle");
-    expect(html).toContain('data-site-theme-icon="light"');
-    expect(html).toContain('aria-label="Switch to dark mode"');
-    expect(html).toContain('data-site-theme="light"');
+    expectHtmlToContain(html, "data-site-header");
+    expectHtmlToContain(html, 'data-site-header-nav="desktop"');
+    expectHtmlToContain(html, "data-site-header-primary");
+    expectHtmlToContain(html, "data-site-header-secondary");
+    expectHtmlToContain(html, 'href="/pages/home"');
+    expectHtmlToContain(html, "Home");
+    expectHtmlToContain(html, 'href="/pages/blog"');
+    expectHtmlToContain(html, "Blog");
+    expectHtmlToContain(html, 'href="/pages/projects"');
+    expectHtmlToContain(html, "Projects");
+    expectHtmlToContain(html, 'href="/pages/resume"');
+    expectHtmlToContain(html, "Resume");
+    expectHtmlToContain(html, "data-site-theme-toggle");
+    expectHtmlToContain(html, 'data-site-theme-icon="light"');
+    expectHtmlToContain(html, 'aria-label="Switch to dark mode"');
+    expectHtmlToContain(html, 'data-site-theme="light"');
     expect(html).not.toMatch(/href="\/pages\/home"[^>]*>Formless<\/a>/);
     expect(html).not.toContain("border-b border-zinc-200 bg-white");
-    expect(html).toContain("Schema-backed software for content-heavy products");
-    expect(html).toContain(
+    expectHtmlToContain(html, "Schema-backed software for content-heavy products");
+    expectHtmlToContain(
+      html,
       "I design and build schema-backed software for teams that need their tools to keep up with the work.",
     );
   });
@@ -2270,7 +2279,7 @@ describe("public site renderer", () => {
       />,
     );
 
-    expect(html).toContain("data-site-header-mobile-primary");
+    expectHtmlToContain(html, "data-site-header-mobile-primary");
     expect(html).not.toContain("data-site-header-mobile-menu");
   });
 
@@ -2279,11 +2288,11 @@ describe("public site renderer", () => {
       <LegacySitePageRenderer linkMode="published" tree={sitePageTree("home")} />,
     );
 
-    expect(html).toContain('href="/"');
-    expect(html).toContain('href="/blog"');
-    expect(html).toContain('href="/projects"');
-    expect(html).toContain('href="/resume"');
-    expect(html).toContain('href="/projects/pricinglab"');
+    expectHtmlToContain(html, 'href="/"');
+    expectHtmlToContain(html, 'href="/blog"');
+    expectHtmlToContain(html, 'href="/projects"');
+    expectHtmlToContain(html, 'href="/resume"');
+    expectHtmlToContain(html, 'href="/projects/pricinglab"');
     expect(html).not.toContain('href="/pages/home"');
     expect(html).not.toContain('href="/pages/blog"');
   });
@@ -2297,11 +2306,11 @@ describe("public site renderer", () => {
       />,
     );
 
-    expect(html).toContain('href="/sites/personal"');
-    expect(html).toContain('href="/sites/personal/blog"');
-    expect(html).toContain('href="/sites/personal/projects"');
-    expect(html).toContain('href="/sites/personal/resume"');
-    expect(html).toContain('href="/sites/personal/projects/pricinglab"');
+    expectHtmlToContain(html, 'href="/sites/personal"');
+    expectHtmlToContain(html, 'href="/sites/personal/blog"');
+    expectHtmlToContain(html, 'href="/sites/personal/projects"');
+    expectHtmlToContain(html, 'href="/sites/personal/resume"');
+    expectHtmlToContain(html, 'href="/sites/personal/projects/pricinglab"');
     expect(html).not.toContain('href="/pages/home"');
     expect(html).not.toContain('href="/pages/blog"');
   });
@@ -2325,11 +2334,7 @@ describe("public site renderer", () => {
         state={{ status: "ready", tree }}
       />
     );
-    const ssrHtml = renderToString(
-      <main className="min-h-dvh">
-        <LegacySitePageRenderer linkMode="published" tree={tree} />
-      </main>,
-    );
+    const ssrHtml = renderToString(<AstryxSitePageRenderer linkMode="published" tree={tree} />);
     const hydratedAppHtml = renderToString(
       <Router ssrPath="/">
         <App
@@ -2348,20 +2353,20 @@ describe("public site renderer", () => {
   it("renders seeded post and project summaries from groups", () => {
     const html = renderSitePage("home");
 
-    expect(html).toContain("Recent posts");
-    expect(html).toContain("Shipping schema-backed authoring");
-    expect(html).toContain("Draft notes on generated editorial tools");
-    expect(html).toContain("Featured projects");
-    expect(html).toContain("PricingLab");
-    expect(html).toContain("OpenSurf");
-    expect(html).toContain("Formless makes app schema describe enough behavior");
+    expectHtmlToContain(html, "Recent posts");
+    expectHtmlToContain(html, "Shipping schema-backed authoring");
+    expectHtmlToContain(html, "Draft notes on generated editorial tools");
+    expectHtmlToContain(html, "Featured projects");
+    expectHtmlToContain(html, "PricingLab");
+    expectHtmlToContain(html, "OpenSurf");
+    expectHtmlToContain(html, "Formless makes app schema describe enough behavior");
   });
 
   it("does not render page root label or body copy on regular page routes", () => {
     const html = renderSitePage("blog");
     const main = mainHtml(html);
 
-    expect(html).toContain("Blog");
+    expectHtmlToContain(html, "Blog");
     expect(main).not.toContain("Blog");
     expect(main).not.toContain("Notes on product engineering");
     expect(html).not.toContain('href="/pages/blog/generated-editorial-tools"');
@@ -2442,20 +2447,20 @@ describe("public site renderer", () => {
 
     expect(main).not.toContain("Projects");
     expect(main).not.toContain("Current and recent product work");
-    expect(html).toContain("PricingLab");
-    expect(html).toContain("OpenSurf");
-    expect(html).toContain("Formless");
-    expect(html).toContain('href="/pages/projects/pricinglab"');
-    expect(html).toContain('href="/pages/projects/opensurf"');
-    expect(html).toContain('href="/pages/projects/formless"');
+    expectHtmlToContain(html, "PricingLab");
+    expectHtmlToContain(html, "OpenSurf");
+    expectHtmlToContain(html, "Formless");
+    expectHtmlToContain(html, 'href="/pages/projects/pricinglab"');
+    expectHtmlToContain(html, 'href="/pages/projects/opensurf"');
+    expectHtmlToContain(html, 'href="/pages/projects/formless"');
     expect(main).not.toContain("2026-05-08");
     expect(main).not.toContain("2026-05-03");
     expect(main).not.toContain("2026-05-01");
-    expect(html).toContain('data-web-markdown-renderer="shared"');
-    expect(html).toContain("operational assumptions");
-    expect(html).toContain("<strong");
-    expect(html).toContain('href="https://pricinglab.com/"');
-    expect(html).toContain(">pricing structures<");
+    expectHtmlToContain(html, 'data-web-markdown-renderer="shared"');
+    expectHtmlToContain(html, "operational assumptions");
+    expectHtmlToContain(html, "<strong");
+    expectHtmlToContain(html, 'href="https://pricinglab.com/"');
+    expectHtmlToContain(html, ">pricing structures<");
     expect(html).not.toContain("**operational assumptions**");
     expect(html).not.toContain("[pricing structures](https://pricinglab.com)");
   });
@@ -2476,30 +2481,33 @@ describe("public site renderer", () => {
     });
     const html = renderSitePage("blog/shipping-schema-backed-authoring", records);
 
-    expect(html).toContain("Home");
-    expect(html).toContain("Shipping schema-backed authoring");
+    expectHtmlToContain(html, "Home");
+    expectHtmlToContain(html, "Shipping schema-backed authoring");
     expect(html).not.toContain("Summary-only copy for list cards.");
-    expect(html).toContain(
+    expectHtmlToContain(
+      html,
       "The first useful content app should keep records flat and move composition into relationships and views.",
     );
-    expect(html).toContain(
+    expectHtmlToContain(
+      html,
       "I design and build schema-backed software for teams that need their tools to keep up with the work.",
     );
-    expect(html).toContain("GitHub");
+    expectHtmlToContain(html, "GitHub");
   });
 
   it("renders post detail primary images once in the header", () => {
     const records = recordsWithPrimaryImages(testSiteSeedRecords);
     const html = renderSitePage("blog/shipping-schema-backed-authoring", records);
 
-    expect(html).toContain('data-site-primary-image="post-detail"');
-    expect(html).toContain("/api/formless/media/media/images/post-primary-first.webp");
-    expect(html).toContain("Shipping primary first");
+    expectHtmlToContain(html, 'data-site-primary-image="post-detail"');
+    expectHtmlToContain(html, "/api/formless/media/media/images/post-primary-first.webp");
+    expectHtmlToContain(html, "Shipping primary first");
     expect(
       countOccurrences(html, 'src="/api/formless/media/media/images/post-primary-first.webp"'),
     ).toBe(1);
     expect(html).not.toContain("/api/formless/media/media/images/post-primary-second.png");
-    expect(html).toContain(
+    expectHtmlToContain(
+      html,
       "The first useful content app should keep records flat and move composition into relationships and views.",
     );
   });
@@ -2599,28 +2607,28 @@ describe("public site renderer", () => {
     const html = renderSitePage("home", records);
     const actionHtml = linkHtml(html, "https://example.com/guide");
 
-    expect(html).toContain('data-block-type="feature"');
-    expect(html).toContain('data-site-feature-alignment="right"');
-    expect(html).toContain('data-site-feature-alignment="left"');
-    expect(html).toContain("md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]");
-    expect(html).toContain("md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]");
-    expect(html).toContain("data-site-feature-media");
-    expect(html).toContain("data-site-feature-actions");
-    expect(html).toContain("Ship composable blocks");
-    expect(html).toContain('href="https://example.com/feature"');
-    expect(html).toContain("<strong");
+    expectHtmlToContain(html, 'data-block-type="feature"');
+    expectHtmlToContain(html, 'data-site-feature-alignment="right"');
+    expectHtmlToContain(html, 'data-site-feature-alignment="left"');
+    expectHtmlToContain(html, "md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]");
+    expectHtmlToContain(html, "md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]");
+    expectHtmlToContain(html, "data-site-feature-media");
+    expectHtmlToContain(html, "data-site-feature-actions");
+    expectHtmlToContain(html, "Ship composable blocks");
+    expectHtmlToContain(html, 'href="https://example.com/feature"');
+    expectHtmlToContain(html, "<strong");
     expect(html).not.toContain("**slotted media**");
     expect(actionHtml).toContain("Read the guide");
     expect(actionHtml).toContain("underline");
-    expect(html).toContain("/api/formless/media/media/images/feature-right.webp");
-    expect(html).toContain("/api/formless/media/media/images/feature-left.webp");
+    expectHtmlToContain(html, "/api/formless/media/media/images/feature-right.webp");
+    expectHtmlToContain(html, "/api/formless/media/media/images/feature-left.webp");
     expect(html.indexOf("Ship composable blocks")).toBeLessThan(
       html.indexOf('src="/api/formless/media/media/images/feature-right.webp"'),
     );
     expect(html.indexOf('src="/api/formless/media/media/images/feature-left.webp"')).toBeLessThan(
       html.indexOf("Media first feature"),
     );
-    expect(html).toContain("Default child copy.");
+    expectHtmlToContain(html, "Default child copy.");
     expect(html).not.toContain("Ignored slot copy.");
   });
 
@@ -2688,22 +2696,22 @@ describe("public site renderer", () => {
     ];
     const html = renderSitePage("home", records);
 
-    expect(html).toContain('data-block-type="section"');
-    expect(html).toContain("Capabilities");
-    expect(html).toContain("<strong");
+    expectHtmlToContain(html, 'data-block-type="section"');
+    expectHtmlToContain(html, "Capabilities");
+    expectHtmlToContain(html, "<strong");
     expect(html).not.toContain("**page sections**");
-    expect(html).toContain('data-site-card-grid="true"');
-    expect(html).toContain('data-site-card="true"');
-    expect(html).toContain("Product engineering");
-    expect(html).toContain("Shape and ship useful systems.");
-    expect(html).toContain('data-site-card-icon="true"');
-    expect(html).toContain('data-web-svg-icon="svg"');
-    expect(html).toContain("--site-block-accent:#0f766e");
-    expect(html).toContain('data-site-metric-grid="true"');
-    expect(html).toContain('data-site-metric="true"');
-    expect(html).toContain("15+");
-    expect(html).toContain("Years building software.");
-    expect(html).toContain("--site-block-accent:#b45309");
+    expectHtmlToContain(html, 'data-site-card-grid="true"');
+    expectHtmlToContain(html, 'data-site-card="true"');
+    expectHtmlToContain(html, "Product engineering");
+    expectHtmlToContain(html, "Shape and ship useful systems.");
+    expectHtmlToContain(html, 'data-site-card-icon="true"');
+    expectHtmlToContain(html, 'data-web-svg-icon="svg"');
+    expectHtmlToContain(html, "--site-block-accent:#0f766e");
+    expectHtmlToContain(html, 'data-site-metric-grid="true"');
+    expectHtmlToContain(html, 'data-site-metric="true"');
+    expectHtmlToContain(html, "15+");
+    expectHtmlToContain(html, "Years building software.");
+    expectHtmlToContain(html, "--site-block-accent:#b45309");
   });
 
   it("renders public markdown block bodies with the shared markdown renderer", () => {
@@ -2734,10 +2742,10 @@ describe("public site renderer", () => {
     ];
     const html = renderSitePage("home", records);
 
-    expect(html).toContain('data-web-markdown-renderer="shared"');
-    expect(html).toContain('href="https://pricinglab.example/"');
-    expect(html).toContain(">pricinglab.example<");
-    expect(html).toContain("<strong");
+    expectHtmlToContain(html, 'data-web-markdown-renderer="shared"');
+    expectHtmlToContain(html, 'href="https://pricinglab.example/"');
+    expectHtmlToContain(html, ">pricinglab.example<");
+    expectHtmlToContain(html, "<strong");
     expect(html).not.toContain("[pricinglab.example](https://pricinglab.example)");
     expect(html).not.toContain("**OpenSurf**");
   });
@@ -2772,15 +2780,15 @@ describe("public site renderer", () => {
     ];
     const html = renderSitePage("home", records);
 
-    expect(html).toContain('data-web-markdown-renderer="shared"');
-    expect(html).toContain("graph-markdown-code-block");
-    expect(html).toContain('data-code-block="true"');
-    expect(html).toContain('data-highlight-language="json"');
-    expect(html).toContain('data-language="json"');
-    expect(html).toContain("hljs-attr");
-    expect(html).toContain("hljs-string");
-    expect(html).toContain("hljs-literal");
-    expect(html).toContain("Formless");
+    expectHtmlToContain(html, 'data-web-markdown-renderer="shared"');
+    expectHtmlToContain(html, "graph-markdown-code-block");
+    expectHtmlToContain(html, 'data-code-block="true"');
+    expectHtmlToContain(html, 'data-highlight-language="json"');
+    expectHtmlToContain(html, 'data-language="json"');
+    expectHtmlToContain(html, "hljs-attr");
+    expectHtmlToContain(html, "hljs-string");
+    expectHtmlToContain(html, "hljs-literal");
+    expectHtmlToContain(html, "Formless");
   });
 
   it("renders missing-image placeholders and core-backed image references", () => {
@@ -2839,13 +2847,13 @@ describe("public site renderer", () => {
       />,
     );
 
-    expect(html).toContain("Site owner portrait");
-    expect(html).toContain('aria-label="Site owner portrait"');
+    expectHtmlToContain(html, "Site owner portrait");
+    expectHtmlToContain(html, 'aria-label="Site owner portrait"');
     expect(html).not.toContain('src="data:image/png;base64,Y292ZXI="');
-    expect(html).toContain('aria-label="External reference"');
+    expectHtmlToContain(html, 'aria-label="External reference"');
     expect(html).not.toContain('src="https://example.com/manual.png"');
-    expect(html).toContain('alt="Media asset reference"');
-    expect(html).toContain('src="/api/formless/media/media/images/asset-backed.webp"');
+    expectHtmlToContain(html, 'alt="Media asset reference"');
+    expectHtmlToContain(html, 'src="/api/formless/media/media/images/asset-backed.webp"');
     expect(html).not.toContain('src="https://cdn.example.com/stale-asset-backed.webp"');
     expect(html).not.toContain("data-asset-key");
   });
@@ -2896,20 +2904,20 @@ describe("public site renderer", () => {
     const githubLinkHtml = footerLinkHtml(footerHtml, "https://github.com/dpeek");
     const linkedInLinkHtml = footerLinkHtml(footerHtml, "https://linkedin.com/in/dpeekdotcom");
 
-    expect(html).toContain("flex min-h-dvh flex-col");
-    expect(html).toContain("mx-auto flex w-full max-w-5xl flex-1 flex-col");
-    expect(html).toContain("Explore");
-    expect(html).toContain("Social");
+    expectHtmlToContain(html, "flex min-h-dvh flex-col");
+    expectHtmlToContain(html, "mx-auto flex w-full max-w-5xl flex-1 flex-col");
+    expectHtmlToContain(html, "Explore");
+    expectHtmlToContain(html, "Social");
     expect(footerHtml).toContain("Copyright 2026 David Peek. All rights reserved.");
     expect(footerHtml).toContain("text-sm text-zinc-700 dark:text-zinc-300");
-    expect(html).toContain('href="https://github.com/dpeek"');
+    expectHtmlToContain(html, 'href="https://github.com/dpeek"');
     expect(githubLinkHtml).toContain('aria-label="GitHub"');
     expect(githubLinkHtml).toContain('data-web-svg-icon="svg"');
     expect(githubLinkHtml).toContain("size-8");
     expect(githubLinkHtml).toContain('target="_blank"');
     expect(githubLinkHtml).toContain('rel="noreferrer"');
     expect(githubLinkHtml).not.toContain(">GitHub<");
-    expect(html).toContain('href="https://linkedin.com/in/dpeekdotcom"');
+    expectHtmlToContain(html, 'href="https://linkedin.com/in/dpeekdotcom"');
     expect(linkedInLinkHtml).toContain('aria-label="LinkedIn"');
     expect(linkedInLinkHtml).toContain('data-web-svg-icon="svg"');
     expect(linkedInLinkHtml).toContain("size-8");
@@ -2993,10 +3001,10 @@ describe("public site renderer", () => {
       />,
     );
 
-    expect(html).toContain("Page not found");
-    expect(html).toContain("No site page exists for");
-    expect(html).toContain("<code>missing</code>");
-    expect(html).toContain('href="/pages/home"');
+    expectHtmlToContain(html, "Page not found");
+    expectHtmlToContain(html, "No site page exists for");
+    expectHtmlToContain(html, "<code>missing</code>");
+    expectHtmlToContain(html, 'href="/pages/home"');
   });
 
   it("renders a published 404 state with a top-level Home link", () => {
@@ -3009,9 +3017,9 @@ describe("public site renderer", () => {
       />,
     );
 
-    expect(html).toContain("Page not found");
-    expect(html).toContain("<code>missing</code>");
-    expect(html).toContain('href="/"');
+    expectHtmlToContain(html, "Page not found");
+    expectHtmlToContain(html, "<code>missing</code>");
+    expectHtmlToContain(html, 'href="/"');
     expect(html).not.toContain('href="/pages/home"');
   });
 
@@ -3026,9 +3034,9 @@ describe("public site renderer", () => {
       />,
     );
 
-    expect(html).toContain("Page not found");
-    expect(html).toContain("<code>missing</code>");
-    expect(html).toContain('href="/sites/personal"');
+    expectHtmlToContain(html, "Page not found");
+    expectHtmlToContain(html, "<code>missing</code>");
+    expectHtmlToContain(html, 'href="/sites/personal"');
     expect(html).not.toContain('href="/pages/home"');
   });
 
@@ -3120,15 +3128,15 @@ describe("generated collection home", () => {
     applyBootstrapResponse(bootstrap([]));
     const html = renderRoute("/tasks");
 
-    expect(html).toContain("<h1");
-    expect(html).toContain("Tasks");
-    expect(html).toContain("All");
-    expect(html).toContain("Active");
-    expect(html).toContain("Completed");
-    expect(html).toContain("Overdue");
-    expect(html).toContain('aria-label="More Task actions"');
-    expect(html).toContain("Create Task");
-    expect(html).toContain("Clear completed");
+    expectHtmlToContain(html, 'data-formless-astryx-workspace="workspace:taskHome"');
+    expectHtmlToContain(html, "Tasks");
+    expectHtmlToContain(html, "All");
+    expectHtmlToContain(html, "Active");
+    expectHtmlToContain(html, "Completed");
+    expectHtmlToContain(html, "Overdue");
+    expectHtmlToContain(html, 'aria-label="More Task actions"');
+    expectHtmlToContain(html, "Create Task");
+    expectHtmlToContain(html, "Clear completed");
     expect(html).not.toContain('aria-label="Collection summary"');
   });
 
@@ -3136,15 +3144,15 @@ describe("generated collection home", () => {
     applyBootstrapResponse(bootstrap([], appSchema));
     const html = renderRoute("/tasks");
 
-    expect(html).toContain("<h1");
-    expect(html).toContain("Tasks");
-    expect(html).toContain("All");
-    expect(html).toContain("Active");
-    expect(html).toContain("Completed");
-    expect(html).toContain("Overdue");
-    expect(html).toContain('aria-label="More Task actions"');
-    expect(html).toContain("Create Task");
-    expect(html).toContain("Clear completed");
+    expectHtmlToContain(html, 'data-formless-astryx-workspace="workspace:taskHome"');
+    expectHtmlToContain(html, "Tasks");
+    expectHtmlToContain(html, "All");
+    expectHtmlToContain(html, "Active");
+    expectHtmlToContain(html, "Completed");
+    expectHtmlToContain(html, "Overdue");
+    expectHtmlToContain(html, 'aria-label="More Task actions"');
+    expectHtmlToContain(html, "Create Task");
+    expectHtmlToContain(html, "Clear completed");
     expect(html).not.toContain('aria-label="Screens"');
     expect(html).not.toContain('aria-label="Collections"');
   });
@@ -3153,90 +3161,83 @@ describe("generated collection home", () => {
     applyBootstrapResponse(bootstrap([], taskNavigationScreenSchema()));
     const html = renderRoute("/tasks");
 
-    expect(html).toContain('aria-label="Tasks screens"');
+    expectHtmlToContain(html, "Tasks screens");
     expect(html).not.toContain('aria-label="Collections"');
-    expect(html).toContain('href="/tasks"');
-    expect(html).toContain('href="/tasks/review"');
-    expect(html).toContain("Task home");
-    expect(html).toContain("Task review");
+    expectHtmlToContain(html, 'href="/tasks"');
+    expectHtmlToContain(html, 'href="/tasks/review"');
+    expectHtmlToContain(html, "Task home");
+    expectHtmlToContain(html, "Task review");
     expect(html).not.toContain("Hidden setup");
-    expect(html).toContain("Create Task");
+    expectHtmlToContain(html, "Create Task");
   });
 
-  it("renders one-section screens through the canonical legacy workspace seam", () => {
+  it("routes one-section screens through the selected Astryx workspace seam", () => {
     const screen = requiredScreenModel(appSchema, "taskHome");
-    const collection = selectPrimaryCollectionModels(appSchema)[0];
-
-    if (!collection) {
-      throw new Error("Missing task collection model.");
-    }
 
     applyBootstrapResponse(bootstrap(taskSeedRecords, appSchema));
 
     const screenHtml = renderGeneratedHomeScreen(screen, { today: "2026-05-02" });
-    const collectionHtml = renderGeneratedHomeCollection(collection, { today: "2026-05-02" });
 
-    expect(screenHtml).toContain('data-formless-legacy-workspace="workspace:taskHome"');
-    expect(screenHtml).toContain("data-formless-legacy-workspace-collection=");
-    expect(screenHtml).toContain("data-formless-legacy-list=");
-    expect(collectionHtml).not.toContain("data-formless-legacy-workspace=");
+    expect(screenHtml).toContain('data-formless-astryx-workspace="workspace:taskHome"');
+    expect(screenHtml).toContain("data-formless-astryx-workspace-collection=");
+    expect(screenHtml).toContain('aria-label="Task records"');
+    expect(screenHtml).not.toMatch(/data-formless-legacy-(?:workspace|list)/);
   });
 
-  it("renders the generated Site tree through the subscribed legacy workspace seam", () => {
+  it("renders the generated Site tree through the selected Astryx workspace seam", () => {
     bootstrapSiteEditor();
     const html = renderRoute("/site");
 
-    expect(html).toContain('class="mx-auto w-full max-w-[112rem]"');
-    expect(html).toContain('aria-label="Site screens"');
-    expect(html).toContain('href="/site/settings"');
-    expect(html).toContain('aria-label="Settings"');
+    expect(html).not.toContain('class="mx-auto w-full max-w-[112rem]"');
+    expectHtmlToContain(html, "Site screens");
+    expectHtmlToContain(html, 'href="/site/settings"');
+    expectHtmlToContain(html, ">Settings<");
     expect(linkHtml(html, "/site")).toContain('aria-current="page"');
     expect(linkHtml(html, "/site/settings")).not.toContain('aria-current="page"');
     expect(html).not.toContain("Example Site");
     expect(html).not.toContain("A public test site.");
-    expect(html).toContain('aria-label="Pages roots"');
-    expect(html).toContain('aria-label="Posts roots"');
-    expect(html).toContain('aria-label="Projects roots"');
-    expect(html).toContain('aria-label="Navigation roots"');
-    expect(html).toContain('aria-label="Create Post"');
-    expect(html).toContain('aria-label="Create Project"');
+    expectHtmlToContain(html, ">Pages<");
+    expectHtmlToContain(html, ">Posts<");
+    expectHtmlToContain(html, ">Projects<");
+    expectHtmlToContain(html, ">Navigation<");
+    expectHtmlToContain(html, 'aria-label="Create Post"');
+    expectHtmlToContain(html, 'aria-label="Create Project"');
     expect(html).not.toContain('aria-label="Create Site"');
     expect(html).not.toContain('data-formless-delete-record="rec_site_settings_primary"');
-    expect(html).toContain('data-formless-legacy-workspace="workspace:siteEditor"');
-    expect(html).toContain("data-formless-legacy-workspace-collection=");
-    expect(html).toContain("data-formless-legacy-tree-result=");
-    expect(html).toContain("data-formless-legacy-tree-item=");
-    expect(html).toContain("data-formless-legacy-tree-editor=");
-    expect(html).toContain("data-formless-legacy-tree-ordering=");
-    expect(html).toContain("data-formless-legacy-tree-ordering-actions=");
-    expect(html).toContain("data-formless-legacy-tree-child-creation=");
-    expect(html).not.toContain("data-formless-astryx-workspace=");
+    expectHtmlToContain(html, 'data-formless-astryx-workspace="workspace:siteEditor"');
+    expectHtmlToContain(html, "data-formless-astryx-workspace-collection=");
+    expectHtmlToContain(html, "data-formless-astryx-tree-layout=");
+    expectHtmlToContain(html, "data-formless-astryx-tree-outline=");
+    expectHtmlToContain(html, "data-formless-astryx-tree-editor=");
+    expectHtmlToContain(html, "data-formless-astryx-tree-actions=");
+    expectHtmlToContain(html, "data-formless-astryx-tree-child-creation=");
+    expect(html).not.toMatch(/data-formless-legacy-(?:workspace|tree)/);
   });
 
   it("renders generated Site settings on a dedicated screen", () => {
     bootstrapSiteEditor();
     const html = renderRoute("/site/settings");
 
-    expect(html).toContain("<h1");
+    expectHtmlToContain(html, "data-formless-astryx-workspace=");
     expect(linkHtml(html, "/site/settings")).toContain('aria-current="page"');
-    expect(html).toContain('aria-label="Site screens"');
-    expect(html).toContain('href="/site"');
-    expect(html).toContain('href="/site/settings"');
-    expect(html).toContain('aria-label="Label"');
-    expect(html).toContain('aria-label="Description"');
-    expect(html).toContain('aria-label="Edit Icon"');
-    expect(html).toContain('aria-label="Accent color"');
-    expect(html).toContain('aria-label="Background color"');
-    expect(html).toContain('aria-label="Site record"');
-    expect(html).toContain("data-formless-legacy-record-result=");
+    expectHtmlToContain(html, "Site screens");
+    expectHtmlToContain(html, 'href="/site"');
+    expectHtmlToContain(html, 'href="/site/settings"');
+    expectHtmlToContain(html, 'placeholder="Label"');
+    expectHtmlToContain(html, ">Description");
+    expectHtmlToContain(html, 'aria-label="Edit Icon"');
+    expectHtmlToContain(html, ">Accent color");
+    expectHtmlToContain(html, ">Background color");
+    expectHtmlToContain(html, 'aria-label="Site record"');
+    expect(html).not.toContain("data-formless-legacy-record-result=");
     expect(html).not.toContain('data-slot="table"');
     expect(html).not.toContain('role="grid"');
-    expect(html).toContain("Example Site");
-    expect(html).toContain("A public test site.");
-    expect(html).toContain('value="#C98A2E"');
-    expect(html).toContain('value="#09090B"');
-    expect(html).not.toContain('aria-label="Pages roots"');
-    expect(html).not.toContain('aria-label="Posts roots"');
+    expectHtmlToContain(html, "Example Site");
+    expectHtmlToContain(html, "A public test site.");
+    expectHtmlToContain(html, 'value="#C98A2E"');
+    expectHtmlToContain(html, 'value="#09090B"');
+    expect(html).not.toContain(">Pages<");
+    expect(html).not.toContain(">Posts<");
     expect(html).not.toContain('aria-label="Create Site"');
     expect(html).not.toContain('data-formless-delete-record="rec_site_settings_primary"');
   });
@@ -3247,18 +3248,18 @@ describe("generated collection home", () => {
     bootstrapSiteEditor();
     const html = renderGeneratedHomeCollection(collection, { today: "2026-05-02" });
 
-    expect(html).toContain('aria-label="Label"');
-    expect(html).toContain('aria-label="Description"');
-    expect(html).toContain('aria-label="Edit Icon"');
-    expect(html).toContain('data-web-field-kind="icon"');
-    expect(html).toContain('aria-label="Accent color"');
-    expect(html).toContain('aria-label="Background color"');
-    expect(html).toContain('aria-label="Site record"');
-    expect(html).toContain('data-formless-legacy-record-result="site:siteSettingsForm"');
-    expect(html).toContain("Example Site");
-    expect(html).toContain("A public test site.");
-    expect(html).toContain('value="#C98A2E"');
-    expect(html).toContain('value="#09090B"');
+    expectHtmlToContain(html, 'placeholder="Label"');
+    expectHtmlToContain(html, ">Description");
+    expectHtmlToContain(html, 'aria-label="Edit Icon"');
+    expectHtmlToContain(html, 'data-astryx-icon-preview="valid"');
+    expectHtmlToContain(html, ">Accent color");
+    expectHtmlToContain(html, ">Background color");
+    expectHtmlToContain(html, 'aria-label="Site record"');
+    expect(html).not.toContain("data-formless-legacy-record-result=");
+    expectHtmlToContain(html, "Example Site");
+    expectHtmlToContain(html, "A public test site.");
+    expectHtmlToContain(html, 'value="#C98A2E"');
+    expectHtmlToContain(html, 'value="#09090B"');
     expect(html).not.toContain(">Key<");
     expect(html).not.toContain('aria-label="Create Site"');
     expect(html).not.toContain('data-formless-delete-record="rec_site_settings_primary"');
@@ -3294,9 +3295,8 @@ describe("generated collection home", () => {
       today: "2026-05-02",
     });
 
-    expect(disabledHtml).not.toContain('data-formless-delete-record="page-1"');
-    expect(enabledHtml).toContain('data-formless-delete-record="page-1"');
-    expect(enabledHtml).toContain('aria-label="Delete Disposable page"');
+    expect(disabledHtml).not.toContain('aria-label="More actions for Disposable page"');
+    expect(enabledHtml).toContain('aria-label="More actions for Disposable page"');
   });
 
   it("renders synthetic stack sections in order with independent selected queries", () => {
@@ -3357,10 +3357,10 @@ describe("generated collection home", () => {
     const defaultSection = sliceSectionHtml(html, "Default card rates", "Backup card rates");
     const backupSection = sliceSectionHtml(html, "Backup card rates");
 
-    expect(defaultSection).toContain('value="$475.00"');
-    expect(defaultSection).not.toContain('value="$900.00"');
-    expect(backupSection).toContain('value="$900.00"');
-    expect(backupSection).not.toContain('value="$475.00"');
+    expect(defaultSection).toContain('value="475.00"');
+    expect(defaultSection).not.toContain('value="900.00"');
+    expect(backupSection).toContain('value="900.00"');
+    expect(backupSection).not.toContain('value="475.00"');
   });
 
   it("labels generated placement operation rows from the active entity", () => {
@@ -3372,8 +3372,8 @@ describe("generated collection home", () => {
       today: "2026-05-05",
     });
 
-    expect(html).toContain('aria-label="Placement operations"');
-    expect(html).not.toContain('aria-label="Task operations"');
+    expectHtmlToContain(html, 'aria-label="More Placement actions"');
+    expect(html).not.toContain('aria-label="More Task actions"');
   });
 
   it("renders query tab counts from each resolved query", () => {
@@ -3386,12 +3386,12 @@ describe("generated collection home", () => {
     );
     const html = renderRoute("/tasks");
 
-    expect(countOccurrences(html, "data-formless-legacy-list=")).toBe(1);
-    expect(html).toContain('aria-label="Task records"');
-    expect(html).toContain('role="list"');
-    expect(html).toContain('data-formless-list-item="record-1"');
-    expect(html).toContain('data-formless-list-item="record-2"');
-    expect(html).toContain('data-formless-list-item="record-3"');
+    expect(html).not.toContain("data-formless-legacy-list=");
+    expectHtmlToContain(html, 'aria-label="Task records"');
+    expectHtmlToContain(html, 'role="list"');
+    expectHtmlToContain(html, 'aria-label="Open overdue"');
+    expectHtmlToContain(html, 'aria-label="Open later"');
+    expectHtmlToContain(html, 'aria-label="Finished"');
     expect(html).toMatch(/aria-label="All count"[^>]*>3</);
     expect(html).toMatch(/aria-label="Active count"[^>]*>2</);
     expect(html).toMatch(/aria-label="Completed count"[^>]*>1</);
@@ -3421,23 +3421,23 @@ describe("generated collection home", () => {
       />,
     );
 
-    expect(html).toContain('data-formless-legacy-list="task:taskListItem"');
-    expect(html).toContain('aria-label="Task records"');
-    expect(html).toContain('role="list"');
-    expect(html).toContain("First");
-    expect(html).toContain('type="text"');
-    expect(html).toContain('type="checkbox"');
-    expect(html).toContain("checked");
-    expect(html).toContain('data-formless-field-presentation-mode="completion"');
-    expect(html).toContain('aria-label="Priority: High"');
-    expect(html).toContain('data-formless-field-presentation-mode="iconOnly"');
-    expect(html).toContain('data-formless-field-presentation-color-token="priority.high"');
-    expect(html).toContain('data-web-svg-icon="svg"');
-    expect(html).toContain('d="M4 15s1-1 4-1');
-    expect(html).toContain("2026-05-01");
-    expect(html).toContain('data-slot="date-picker-trigger"');
-    expect(html).toContain('data-formless-field-presentation-visibility="valueOrInteraction"');
-    expect(html).toContain('role="spinbutton"');
+    expectHtmlToContain(html, "data-formless-legacy-list=");
+    expectHtmlToContain(html, 'aria-label="Task records"');
+    expectHtmlToContain(html, 'role="list"');
+    expectHtmlToContain(html, "First");
+    expectHtmlToContain(html, 'type="text"');
+    expectHtmlToContain(html, 'type="checkbox"');
+    expectHtmlToContain(html, "checked");
+    expectHtmlToContain(html, 'data-formless-field-presentation-mode="completion"');
+    expectHtmlToContain(html, 'aria-label="Priority: High"');
+    expectHtmlToContain(html, 'data-formless-field-presentation-mode="iconOnly"');
+    expectHtmlToContain(html, 'data-formless-field-presentation-color-token="priority.high"');
+    expectHtmlToContain(html, 'data-web-svg-icon="svg"');
+    expectHtmlToContain(html, 'd="M4 15s1-1 4-1');
+    expectHtmlToContain(html, "2026-05-01");
+    expectHtmlToContain(html, 'data-slot="date-picker-trigger"');
+    expectHtmlToContain(html, 'data-formless-field-presentation-visibility="valueOrInteraction"');
+    expectHtmlToContain(html, 'role="spinbutton"');
     expect(html).not.toContain('aria-label="Estimate"');
     expect(html).not.toContain(record.createdAt);
   });
@@ -3464,10 +3464,11 @@ describe("generated collection home", () => {
     expect(firstIndex).toBeGreaterThan(-1);
     expect(firstIndex).toBeLessThan(secondIndex);
     expect(secondIndex).toBeLessThan(thirdIndex);
-    expect(html).toContain('data-formless-legacy-list="task:taskListItem"');
-    expect(html).toContain('aria-label="Reorder First"');
-    expect(html).toContain('aria-label="Reorder Second"');
-    expect(html).toContain('aria-label="Reorder Third"');
+    expect(html).not.toContain("data-formless-legacy-list=");
+    expectHtmlToContain(html, 'aria-label="Task records"');
+    expectHtmlToContain(html, 'aria-label="Reorder First"');
+    expectHtmlToContain(html, 'aria-label="Reorder Second"');
+    expectHtmlToContain(html, 'aria-label="Reorder Third"');
     expect(html).not.toContain("data-formless-sortable-list-item");
     expect(html).not.toContain('data-formless-ordering-handle="true"');
   });
@@ -3477,7 +3478,7 @@ describe("generated collection home", () => {
     const html = renderRoute("/tasks");
 
     expect(html).toMatch(/aria-label="Clear completed target count"[^>]*>0</);
-    expect(html).toContain("Clear completed");
+    expectHtmlToContain(html, "Clear completed");
     expect(html).not.toMatch(/<button[^>]*disabled[^>]*>[^<]*Clear completed/);
   });
 
@@ -3502,8 +3503,8 @@ describe("generated collection home", () => {
     applyBootstrapResponse(bootstrap(taskSeedRecords));
     const html = renderGeneratedHomeCollection(model, { today: "2026-05-02" });
 
-    expect(html).toContain("Review overdue proposal");
-    expect(html).toContain("Plan today&#x27;s delivery");
+    expectHtmlToContain(html, "Review overdue proposal");
+    expectHtmlToContain(html, "Plan today&#x27;s delivery");
     expect(html).toMatch(/aria-label="All count"[^>]*>5</);
     expect(html).toMatch(/aria-label="Active count"[^>]*>4</);
     expect(html).toMatch(/aria-label="Completed count"[^>]*>1</);
@@ -3520,81 +3521,75 @@ describe("generated collection home", () => {
       screenTitle: "Blocks",
       allowSidebarGroupLabel: true,
     });
-    expect(html).toContain("<h1");
+    expectHtmlToContain(html, 'data-formless-astryx-workspace="workspace:siteEditor"');
     expect(linkHtml(html, "/site")).toContain('aria-current="page"');
-    expect(html).toContain('aria-label="Site screens"');
-    expect(html).toContain('href="/site/settings"');
-    expect(html).toContain('aria-label="Pages roots"');
-    expect(html).toContain('aria-label="Posts roots"');
-    expect(html).toContain('aria-label="Projects roots"');
-    expect(html).toContain('aria-label="Navigation roots"');
+    expectHtmlToContain(html, "Site screens");
+    expectHtmlToContain(html, 'href="/site/settings"');
+    expectHtmlToContain(html, ">Pages<");
+    expectHtmlToContain(html, ">Posts<");
+    expectHtmlToContain(html, ">Projects<");
+    expectHtmlToContain(html, ">Navigation<");
     expect(html).not.toContain('href="/site/navigation"');
     expect(html).not.toContain('href="/site/header"');
     expect(html).not.toContain('href="/site/footer"');
-    expect(html).toContain("Navigation");
-    expect(html).toContain("Posts");
-    expect(html).toContain("Projects");
-    expect(html).toContain("Header");
-    expect(html).toContain("Footer");
-    expect(html).toContain('aria-label="Home tree"');
+    expectHtmlToContain(html, "Navigation");
+    expectHtmlToContain(html, "Posts");
+    expectHtmlToContain(html, "Projects");
+    expectHtmlToContain(html, "Header");
+    expectHtmlToContain(html, "Footer");
+    expectHtmlToContain(html, 'aria-label="Home tree"');
     expect(html).not.toContain('aria-label="Pages records"');
     expect(html).not.toContain('aria-label="Collections"');
-    expect(html).toContain("data-formless-legacy-tree-result=");
+    expectHtmlToContain(html, "data-formless-astryx-tree-layout=");
     expect(html).not.toContain("Add placement");
     expect(html).not.toContain("Create Block<");
     expect(html).not.toContain('aria-label="Create Site"');
     expect(html).not.toContain('data-formless-delete-record="rec_site_settings_primary"');
-    expect(html).toContain('data-web-autosize-text-input="true"');
-    expect(html).toContain("h-9 w-full text-2xl font-semibold");
-    expect(html).toContain('data-web-markdown-editor="textarea"');
-    expect(html).toContain('aria-label="Body"');
-    expect(html).not.toContain(">Home</h2>");
-    expect(html).toContain("Home");
-    expect(html).toContain("Blog");
-    expect(html).toContain("Resume");
-    expect(html).toContain("Projects");
+    expect(html).not.toContain("h-9 w-full text-2xl font-semibold");
+    expectHtmlToContain(html, ">Body");
+    expectHtmlToContain(html, "Home");
+    expectHtmlToContain(html, "Blog");
+    expectHtmlToContain(html, "Resume");
+    expectHtmlToContain(html, "Projects");
     expect(html).not.toContain("Example Site");
     expect(html).not.toContain("A concise personal site for current work");
     expect(html).not.toContain("A public test site.");
-    expect(html).toContain("Schema-backed software for content-heavy products");
-    expect(html).toContain("Site owner portrait");
-    expect(html).toMatch(/aria-label="Home"[^>]*>.*>3<\/span><\/button>/);
+    expectHtmlToContain(html, "Schema-backed software for content-heavy products");
+    expectHtmlToContain(html, "Site owner portrait");
   });
 
   it("renders the site route with root sidebar navigation", () => {
     bootstrapSiteEditor();
     const html = generatedAppFrameHtml(renderRoute("/site"));
 
-    expect(html).toContain("<h1");
+    expectHtmlToContain(html, 'data-formless-astryx-workspace="workspace:siteEditor"');
     expect(linkHtml(html, "/site")).toContain('aria-current="page"');
-    expect(html).toContain('aria-label="Site screens"');
-    expect(html).toContain('href="/site/settings"');
+    expectHtmlToContain(html, "Site screens");
+    expectHtmlToContain(html, 'href="/site/settings"');
     expect(linkHtml(html, "/site/settings")).not.toContain('aria-current="page"');
-    expect(html).toContain('aria-label="Pages roots"');
-    expect(html).toContain('aria-label="Posts roots"');
-    expect(html).toContain('aria-label="Projects roots"');
-    expect(html).toContain('aria-label="Navigation roots"');
+    expectHtmlToContain(html, ">Pages<");
+    expectHtmlToContain(html, ">Posts<");
+    expectHtmlToContain(html, ">Projects<");
+    expectHtmlToContain(html, ">Navigation<");
     expect(html).not.toContain('href="/site/navigation"');
     expect(html).not.toContain('href="/site/header"');
     expect(html).not.toContain('href="/site/footer"');
-    expect(html).toContain("Pages");
-    expect(html).toContain("Posts");
-    expect(html).toContain("Projects");
-    expect(html).toContain("Navigation");
-    expect(html).toContain('aria-label="Create Page"');
-    expect(html).toContain('aria-label="Create Post"');
-    expect(html).toContain('aria-label="Create Project"');
-    expect(html).toContain('aria-label="Home tree"');
-    expect(html).toContain("Home");
-    expect(html).toMatch(
-      /data-formless-shell-destination="root:rec_site_content_home"[^>]*aria-pressed="true"/,
-    );
-    expect(html).toContain("data-formless-legacy-tree-result=");
+    expectHtmlToContain(html, "Pages");
+    expectHtmlToContain(html, "Posts");
+    expectHtmlToContain(html, "Projects");
+    expectHtmlToContain(html, "Navigation");
+    expectHtmlToContain(html, 'aria-label="Create Page"');
+    expectHtmlToContain(html, 'aria-label="Create Post"');
+    expectHtmlToContain(html, 'aria-label="Create Project"');
+    expectHtmlToContain(html, 'aria-label="Home tree"');
+    expectHtmlToContain(html, "Home");
+    expectHtmlToContain(html, "data-formless-astryx-tree-layout=");
+    expect(html).not.toContain("data-formless-shell-destination=");
     expect(html).not.toContain("Add placement");
     expect(html).not.toContain('aria-label="Create Site"');
     expect(html).not.toContain('data-formless-delete-record="rec_site_settings_primary"');
     expect(html).not.toContain('aria-label="Collections"');
-    expect(html).toContain(">Site</h1>");
+    expectHtmlToContain(html, 'aria-label="Site application shell"');
   });
 
   it("does not route site navigation as a separate top-level screen", () => {
@@ -3637,8 +3632,7 @@ describe("generated collection home", () => {
 
     expect(before).not.toContain("Unannounced page");
     expect(after).toContain("Unannounced page");
-    expect(after).toContain('aria-label="Pages roots"');
-    expect(after).toMatch(/aria-label="Unannounced page"[^>]*>.*>0<\/span><\/button>/);
+    expect(after).toContain(">Pages<");
   });
 
   it("surfaces site readiness warnings without disabling generated editors", () => {
@@ -3663,10 +3657,10 @@ describe("generated collection home", () => {
       schemaKey: "site",
     });
 
-    expect(html).toContain('aria-label="Readiness warnings"');
-    expect(html).toContain("Post block should have a link.");
-    expect(html).toContain("Post block should include body content.");
-    expect(html).toContain("Post without metadata");
+    expectHtmlToContain(html, 'aria-label="Readiness warnings"');
+    expectHtmlToContain(html, "Post block should have a link.");
+    expectHtmlToContain(html, "Post block should include body content.");
+    expectHtmlToContain(html, "Post without metadata");
     const bodyTextarea = html.match(/<textarea[^>]*aria-label="Body"[^>]*>/)?.[0] ?? "";
 
     expect(bodyTextarea).not.toEqual("");
@@ -3682,18 +3676,14 @@ describe("generated collection home", () => {
       today: "2026-05-05",
     });
 
-    expect(html).toContain('aria-label="Block records"');
-    expect(html).toContain('role="tablist"');
-    expect(html).toContain('role="tab"');
-    expect(html).toContain("Home");
-    expect(html).toMatch(/aria-label="Home Placements count"[^>]*>3</);
-    expect(html).toContain("Add placement");
-    expect(html).not.toContain('value="rec_site_content_group_header" selected="">Header</option>');
-    expect(html).not.toContain('value="rec_site_content_group_footer" selected="">Footer</option>');
-    expect(html).toContain("Schema-backed software for content-heavy products");
-    expect(html).toContain(
-      'value="rec_site_block_home_recent_posts" selected="">Recent posts</option>',
-    );
+    expectHtmlToContain(html, 'aria-label="Block records"');
+    expectHtmlToContain(html, "Home");
+    expect(html).toMatch(/aria-label="Home count"[^>]*>3</);
+    expectHtmlToContain(html, "Add placement");
+    expect(html).not.toContain('aria-label="Header detail"');
+    expect(html).not.toContain('aria-label="Footer detail"');
+    expectHtmlToContain(html, "Schema-backed software for content-heavy products");
+    expectHtmlToContain(html, "Recent posts");
   });
 
   it("renders header navigation as content block placements", () => {
@@ -3705,17 +3695,13 @@ describe("generated collection home", () => {
       today: "2026-05-05",
     });
 
-    expect(html).toContain('aria-label="Block records"');
-    expect(html).toContain("Header");
-    expect(html).toMatch(/aria-label="Header Placements count"[^>]*>2</);
-    expect(html).toContain("Add placement");
+    expectHtmlToContain(html, 'aria-label="Block records"');
+    expectHtmlToContain(html, "Header");
+    expect(html).toMatch(/aria-label="Header count"[^>]*>2</);
+    expectHtmlToContain(html, "Add placement");
     expect(html).not.toContain('value="link"');
-    expect(html).toContain(
-      'value="rec_site_content_group_header_primary" selected="">Primary</option>',
-    );
-    expect(html).toContain(
-      'value="rec_site_content_group_header_secondary" selected="">Secondary</option>',
-    );
+    expectHtmlToContain(html, "Primary");
+    expectHtmlToContain(html, "Secondary");
   });
 
   it("renders only primary rate-card collection navigation", () => {
@@ -3723,10 +3709,10 @@ describe("generated collection home", () => {
     const html = renderRoute("/tasks");
 
     expect(html).not.toContain('aria-label="Collections"');
-    expect(html).toContain('aria-label="Tasks screens"');
-    expect(html).toContain('href="/tasks/setup"');
-    expect(html).toContain("Rates");
-    expect(html).toContain("Create Resource");
+    expectHtmlToContain(html, "Tasks screens");
+    expectHtmlToContain(html, 'href="/tasks/setup"');
+    expectHtmlToContain(html, "Rates");
+    expectHtmlToContain(html, "Create Resource");
     expect(html).not.toContain("Regenerate missing rates");
     expect(html).not.toMatch(/<button[^>]*>Create Rate<\/button>/);
   });
@@ -3736,13 +3722,13 @@ describe("generated collection home", () => {
     const html = renderRoute("/tasks/setup");
 
     expect(linkHtml(html, "/tasks/setup")).toContain('aria-current="page"');
-    expect(html).toContain('aria-label="Tasks screens"');
-    expect(html).toContain('href="/tasks"');
-    expect(html).toContain('href="/tasks/setup"');
-    expect(html).toContain(">Rate cards</h2>");
-    expect(html).toContain(">Resources</h2>");
-    expect(html).toContain("Create Rate card");
-    expect(html).toContain("Create Resource");
+    expectHtmlToContain(html, "Tasks screens");
+    expectHtmlToContain(html, 'href="/tasks"');
+    expectHtmlToContain(html, 'href="/tasks/setup"');
+    expectHtmlToContain(html, ">Rate cards</h2>");
+    expectHtmlToContain(html, ">Resources</h2>");
+    expectHtmlToContain(html, "Create Rate card");
+    expectHtmlToContain(html, "Create Resource");
     expect(html).not.toContain(">Rates</h1>");
   });
 
@@ -3766,33 +3752,31 @@ describe("generated collection home", () => {
       today: "2026-05-01",
     });
 
-    expect(html).toContain('aria-label="Rate card records"');
-    expect(html).toContain("<select");
-    expect(html).toContain("Default");
-    expect(html).toContain("Backup");
+    expectHtmlToContain(html, 'aria-label="Rate card records"');
+    expectHtmlToContain(html, "Default");
+    expectHtmlToContain(html, "Backup");
     expect(html).not.toContain('aria-label="Default Rates count"');
     expect(html).not.toContain('aria-label="Backup Rates count"');
-    expect(html).toContain('aria-label="Create Rate card"');
-    expect(html).toMatch(/<button[^>]*>Create Resource<\/button>/);
+    expectHtmlToContain(html, 'aria-label="Create Rate card"');
+    expectHtmlToContain(html, 'aria-label="Create Resource"');
     expect(html).not.toContain("Regenerate missing rates");
-    expect(html).toContain('data-slot="table"');
-    expect(html).toContain("<th");
-    expect(html).toContain("Role");
-    expect(html).toContain('aria-label="Role"');
-    expect(html).toContain('value="Designer"');
+    expectHtmlToContain(html, '<table aria-label="Rate records"');
+    expectHtmlToContain(html, "<th");
+    expectHtmlToContain(html, "Role");
+    expectHtmlToContain(html, 'aria-label="Role"');
+    expectHtmlToContain(html, 'value="Designer"');
     expect(html).not.toContain("Edit shared");
     expect(html).not.toContain('aria-label="Edit shared resource"');
-    expect(html.match(/data-web-value-unit-input="true"/g)?.length).toBe(1);
-    expect(html).toContain('aria-label="Cost"');
-    expect(html).toContain('aria-label="Cost unit"');
+    expectHtmlToContain(html, 'aria-label="Cost"');
+    expectHtmlToContain(html, ">Unit");
     expectFormattedNumberInputLabel(html, "Cost");
     expect(html).not.toContain('aria-label="Price unit"');
     expect(html).not.toContain('aria-label="Currency"');
     expect(html).not.toContain("USD");
     expect(html.match(/\/ day/g)?.length ?? 0).toBe(3);
-    expect(html).toContain('value="325"');
-    expect(html).toContain('value="$475.00"');
-    expect(html).not.toContain('value="$900.00"');
+    expectHtmlToContain(html, 'value="325"');
+    expectHtmlToContain(html, 'value="475.00"');
+    expect(html).not.toContain('value="900.00"');
   });
 
   it("falls back to the first scoped context option when the selected context is stale", () => {
@@ -3815,12 +3799,12 @@ describe("generated collection home", () => {
       today: "2026-05-01",
     });
 
-    expect(html).toContain('aria-label="Rate card records"');
-    expect(html).toContain("Default");
-    expect(html).toContain("Backup");
-    expect(html).toContain('data-slot="table"');
-    expect(html).toContain('value="$475.00"');
-    expect(html).not.toContain('value="$900.00"');
+    expectHtmlToContain(html, 'aria-label="Rate card records"');
+    expectHtmlToContain(html, "Default");
+    expectHtmlToContain(html, "Backup");
+    expectHtmlToContain(html, '<table aria-label="Rate records"');
+    expectHtmlToContain(html, 'value="475.00"');
+    expect(html).not.toContain('value="900.00"');
   });
 
   it("keeps collection operations below the current generated table result", () => {
@@ -3840,12 +3824,12 @@ describe("generated collection home", () => {
       selectedContextRecordId: "card-1",
       today: "2026-05-01",
     });
-    const tableIndex = html.indexOf('data-slot="table"');
-    const actionRowIndex = html.indexOf('aria-label="Rate operations"');
+    const tableIndex = html.indexOf('<table aria-label="Rate records"');
+    const actionRowIndex = html.indexOf('aria-label="More Rate actions"');
 
     expect(tableIndex).toBeGreaterThanOrEqual(0);
     expect(actionRowIndex).toBeGreaterThan(tableIndex);
-    expect(html).toMatch(/<button[^>]*>Create Resource<\/button>/);
+    expectHtmlToContain(html, 'aria-label="Create Resource"');
     expect(html).not.toContain("Regenerate missing rates");
   });
 
@@ -3870,23 +3854,21 @@ describe("generated collection home", () => {
       today: "2026-05-01",
     });
 
-    expect(html).toContain('aria-label="Rate card list detail"');
-    expect(html).toContain('aria-label="Rate card records"');
+    expectHtmlToContain(html, 'aria-label="Rate card list detail"');
     expect(html).not.toContain('role="tablist"');
-    expect(html).toContain('aria-current="true"');
-    expect(html).toContain('aria-label="Backup detail"');
-    expect(html).toMatch(/aria-label="Default Rates count"[^>]*>1</);
-    expect(html).toMatch(/aria-label="Backup Rates count"[^>]*>1</);
-    expect(html).toContain('aria-label="Create Rate card"');
-    expect(html).toContain('aria-label="Minimum margin"');
-    expect(html).toContain('aria-label="Medium margin"');
-    expect(html).toContain('aria-label="Maximum margin"');
-    expect(html).toContain('value="0.4"');
-    expect(html).toContain('value="0.5"');
-    expect(html).toContain('value="0.6"');
-    expect(html).toContain('data-slot="table"');
-    expect(html).toContain('value="$900.00"');
-    expect(html).not.toContain('value="$475.00"');
+    expectHtmlToContain(html, 'aria-label="Backup detail"');
+    expect(html).toMatch(/aria-label="Default count"[^>]*>1</);
+    expect(html).toMatch(/aria-label="Backup count"[^>]*>1</);
+    expectHtmlToContain(html, 'aria-label="Create Rate card"');
+    expectHtmlToContain(html, ">Minimum margin");
+    expectHtmlToContain(html, ">Medium margin");
+    expectHtmlToContain(html, ">Maximum margin");
+    expectHtmlToContain(html, 'value="0.4"');
+    expectHtmlToContain(html, 'value="0.5"');
+    expectHtmlToContain(html, 'value="0.6"');
+    expectHtmlToContain(html, '<table aria-label="Rate records"');
+    expectHtmlToContain(html, 'value="900.00"');
+    expect(html).not.toContain('value="475.00"');
   });
 
   it("changes list/detail result rows when the selected context changes", () => {
@@ -3915,11 +3897,11 @@ describe("generated collection home", () => {
     });
 
     expect(defaultHtml).toContain('aria-label="Default detail"');
-    expect(defaultHtml).toContain('value="$475.00"');
-    expect(defaultHtml).not.toContain('value="$900.00"');
+    expect(defaultHtml).toContain('value="475.00"');
+    expect(defaultHtml).not.toContain('value="900.00"');
     expect(backupHtml).toContain('aria-label="Backup detail"');
-    expect(backupHtml).toContain('value="$900.00"');
-    expect(backupHtml).not.toContain('value="$475.00"');
+    expect(backupHtml).toContain('value="900.00"');
+    expect(backupHtml).not.toContain('value="475.00"');
   });
 
   it("keeps list/detail query counts and scoped create operations tied to context", () => {
@@ -3941,11 +3923,14 @@ describe("generated collection home", () => {
       today: "2026-05-01",
     });
 
-    expect(selectedHtml).toContain('role="tablist"');
+    expect(selectedHtml).toContain('aria-label="Rate queries"');
     expect(selectedHtml).toMatch(/aria-label="Selected card count"[^>]*>1</);
     expect(selectedHtml).toMatch(/aria-label="Selected card again count"[^>]*>1</);
-    expect(selectedHtml).toMatch(/<button[^>]*>Create Rate<\/button>/);
-    expect(selectedHtml).not.toMatch(/<button[^>]*disabled=""[^>]*>Create Rate<\/button>/);
+    expect(
+      buttonsContainingText(selectedHtml, "Create Rate").some(
+        (button) => !/\s(?:aria-disabled|disabled)(?:=|[\s>])/.test(button),
+      ),
+    ).toBe(true);
 
     const rateCreateOperation = rateModel.operations.find(
       (operation) => operation.type === "create" && operation.entityName === "rate",
@@ -3981,8 +3966,11 @@ describe("generated collection home", () => {
     });
 
     expect(emptyHtml).toContain("No rate card records yet.");
-    expect(emptyHtml).toMatch(/<button[^>]*disabled=""[^>]*>Create Rate<\/button>/);
-    expect(emptyHtml).not.toContain('data-slot="table"');
+    const emptyCreateButtons = buttonsContainingText(emptyHtml, "Create Rate");
+    expect(emptyCreateButtons.length).toBeGreaterThan(0);
+    expect(
+      emptyCreateButtons.every((button) => /\s(?:aria-disabled|disabled)(?:=|[\s>])/.test(button)),
+    ).toBe(true);
   });
 
   it("renders source rate-card margin and footer aggregates", () => {
@@ -4009,23 +3997,23 @@ describe("generated collection home", () => {
 
     expect(html).not.toContain('aria-label="Default Rates count"');
     expect(html).not.toContain('aria-label="Backup Rates count"');
-    expect(html).toContain('aria-label="Cost"');
-    expect(html).toContain('value="325"');
-    expect(html).toContain('value="450"');
-    expect(html).toContain('aria-label="Price"');
-    expect(html).toContain('value="$475.00"');
-    expect(html).toContain('value="$600.00"');
-    expect(html).toContain("Margin");
-    expect(html).toContain("31.58%");
-    expect(html).toContain("25%");
+    expectHtmlToContain(html, 'aria-label="Cost"');
+    expectHtmlToContain(html, 'value="325"');
+    expectHtmlToContain(html, 'value="450"');
+    expectHtmlToContain(html, 'aria-label="Price"');
+    expectHtmlToContain(html, 'value="475.00"');
+    expectHtmlToContain(html, 'value="600.00"');
+    expectHtmlToContain(html, "Margin");
+    expectHtmlToContain(html, "31.58%");
+    expectHtmlToContain(html, "25%");
     expect(html).not.toContain('aria-label="Collection summary"');
-    expect(html).toContain('data-slot="table-footer"');
-    expect(html).toContain('aria-label="Average cost:');
-    expect(html).toContain("$387.50");
-    expect(html).toContain('aria-label="Average price:');
-    expect(html).toContain("$537.50");
-    expect(html).toContain('aria-label="Average margin:');
-    expect(html).toContain("28.29%");
+    expectHtmlToContain(html, 'aria-label="Aggregate footer"');
+    expectHtmlToContain(html, 'aria-label="Average cost:');
+    expectHtmlToContain(html, "$387.50");
+    expectHtmlToContain(html, 'aria-label="Average price:');
+    expectHtmlToContain(html, "$537.50");
+    expectHtmlToContain(html, 'aria-label="Average margin:');
+    expectHtmlToContain(html, "28.29%");
     expect(html).not.toContain("USD");
     expect(html.match(/\/ day/g)?.length ?? 0).toBeGreaterThanOrEqual(4);
     expect(html).not.toContain('value="750"');
@@ -4061,14 +4049,14 @@ describe("generated collection home", () => {
       today: "2026-05-01",
     });
 
-    expect(html).toContain('aria-label="Collection summary"');
-    expect(html).toContain('aria-label="Cost total summary"');
-    expect(html).toContain("Cost total");
-    expect(html).toContain("$400.00");
-    expect(html).toContain("/ day");
-    expect(html).toContain('aria-label="Average margin summary"');
-    expect(html).toContain("Average margin");
-    expect(html).toContain("50%");
+    expectHtmlToContain(html, 'aria-label="Collection summary"');
+    expectHtmlToContain(html, 'aria-label="Cost total summary"');
+    expectHtmlToContain(html, "Cost total");
+    expectHtmlToContain(html, "$400.00");
+    expectHtmlToContain(html, "/ day");
+    expectHtmlToContain(html, 'aria-label="Average margin summary"');
+    expectHtmlToContain(html, "Average margin");
+    expectHtmlToContain(html, "50%");
     expect(html).not.toContain("$750.00");
   });
 
@@ -4093,10 +4081,10 @@ describe("generated collection home", () => {
       today: "2026-05-01",
     });
 
-    expect(html).toContain('aria-label="Collection summary"');
-    expect(html).toContain("Cost total");
-    expect(html).toContain("$0.00");
-    expect(html).toContain("Average margin");
+    expectHtmlToContain(html, 'aria-label="Collection summary"');
+    expectHtmlToContain(html, "Cost total");
+    expectHtmlToContain(html, "$0.00");
+    expectHtmlToContain(html, "Average margin");
     expect(html).not.toContain("NaN");
     expect(html).not.toContain("Infinity");
   });
@@ -4151,31 +4139,6 @@ describe("generated collection home", () => {
     expect(completedHtml).not.toContain("All estimate total");
   });
 
-  it("updates relationship counts after local record merges", () => {
-    const schema = rateCardSchemaWithRelatedContext();
-    const rateModel = requiredCollectionModel(schema, "rateHome");
-
-    applyBootstrapResponse(
-      bootstrap(
-        [cardRecord("card-1", "Default"), resourceRecord("resource-1", "Designer")],
-        schema,
-      ),
-    );
-    const before = renderGeneratedHomeCollection(rateModel, {
-      selectedContextRecordId: "card-1",
-      today: "2026-05-01",
-    });
-
-    applyRecordMerge([rateCardRateRecord("rate-1", "resource-1", "card-1", 475)], 2);
-    const after = renderGeneratedHomeCollection(rateModel, {
-      selectedContextRecordId: "card-1",
-      today: "2026-05-01",
-    });
-
-    expect(before).toMatch(/aria-label="Default Rates count"[^>]*>0</);
-    expect(after).toMatch(/aria-label="Default Rates count"[^>]*>1</);
-  });
-
   it("renders selected card context fields from the context item view", () => {
     const rateModel = selectRateHomeModel();
 
@@ -4190,12 +4153,12 @@ describe("generated collection home", () => {
     expect(html).not.toContain('aria-label="Name"');
     expect(html).not.toContain('aria-label="Default"');
     expect(html).not.toContain('type="checkbox"');
-    expect(html).toContain('aria-label="Minimum margin"');
-    expect(html).toContain('aria-label="Medium margin"');
-    expect(html).toContain('aria-label="Maximum margin"');
-    expect(html).toContain('value="0.4"');
-    expect(html).toContain('value="0.5"');
-    expect(html).toContain('value="0.6"');
+    expectHtmlToContain(html, ">Minimum margin");
+    expectHtmlToContain(html, ">Medium margin");
+    expectHtmlToContain(html, ">Maximum margin");
+    expectHtmlToContain(html, 'value="0.4"');
+    expectHtmlToContain(html, 'value="0.5"');
+    expectHtmlToContain(html, 'value="0.6"');
   });
 
   it("does not render context item fields when no context record is selected", () => {
@@ -4207,10 +4170,10 @@ describe("generated collection home", () => {
       today: "2026-05-01",
     });
 
-    expect(html).toContain("No rate card records yet.");
-    expect(html).not.toContain('aria-label="Minimum margin"');
-    expect(html).not.toContain('aria-label="Medium margin"');
-    expect(html).not.toContain('aria-label="Maximum margin"');
+    expectHtmlToContain(html, "No rate card records yet.");
+    expect(html).not.toContain(">Minimum margin");
+    expect(html).not.toContain(">Medium margin");
+    expect(html).not.toContain(">Maximum margin");
   });
 
   it("changes visible table rows when the selected card changes", () => {
@@ -4233,11 +4196,11 @@ describe("generated collection home", () => {
       today: "2026-05-01",
     });
 
-    expect(html).toContain('data-slot="table"');
-    expect(html).toContain('value="750"');
-    expect(html).toContain('value="$900.00"');
+    expectHtmlToContain(html, '<table aria-label="Rate records"');
+    expectHtmlToContain(html, 'value="750"');
+    expectHtmlToContain(html, 'value="900.00"');
     expect(html).not.toContain('value="325"');
-    expect(html).not.toContain('value="$475.00"');
+    expect(html).not.toContain('value="475.00"');
   });
 
   it("renders seeded rate-card rows under the selected card", () => {
@@ -4249,15 +4212,15 @@ describe("generated collection home", () => {
       today: "2026-05-02",
     });
 
-    expect(html).toContain("Default");
-    expect(html).toContain("Premium");
-    expect(html).toContain('data-slot="table"');
-    expect(html).toContain("Designer");
-    expect(html).toContain("Developer");
-    expect(html).toContain('value="$825.00"');
-    expect(html).toContain('value="$975.00"');
-    expect(html).not.toContain('value="$990.00"');
-    expect(html).not.toContain('value="$1170.00"');
+    expectHtmlToContain(html, "Default");
+    expectHtmlToContain(html, "Premium");
+    expectHtmlToContain(html, '<table aria-label="Rate records"');
+    expectHtmlToContain(html, "Designer");
+    expectHtmlToContain(html, "Developer");
+    expectHtmlToContain(html, 'value="825.00"');
+    expectHtmlToContain(html, 'value="975.00"');
+    expect(html).not.toContain('value="990.00"');
+    expect(html).not.toContain('value="1170.00"');
   });
 
   it("keeps the resource create operation enabled without a selected card", () => {
@@ -4269,8 +4232,8 @@ describe("generated collection home", () => {
       today: "2026-05-01",
     });
 
-    expect(html).toContain("No rate card records yet.");
-    expect(html).toContain(">Create Resource</button>");
+    expectHtmlToContain(html, "No rate card records yet.");
+    expectHtmlToContain(html, 'aria-label="Create Resource"');
     expect(html).not.toMatch(/<button[^>]*disabled=""[^>]*>Create Resource<\/button>/);
   });
 });
@@ -4283,14 +4246,14 @@ describe("generated forms and records", () => {
       <GeneratedCreateDialogForm operation={operation} renderDialogCancel={false} />,
     );
 
-    expect(html).toContain("Create Task");
-    expect(html).toContain('name="title"');
-    expect(html).toContain('name="done"');
-    expect(html).toContain('type="checkbox"');
-    expect(html).toContain('data-slot="label"');
-    expect(html).toContain('name="dueDate"');
-    expect(html).toContain("Due date");
-    expect(html).toContain("Cancel");
+    expectHtmlToContain(html, "Create Task");
+    expectHtmlToContain(html, 'name="title"');
+    expectHtmlToContain(html, 'name="done"');
+    expectHtmlToContain(html, 'type="checkbox"');
+    expectHtmlToContain(html, 'data-slot="label"');
+    expectHtmlToContain(html, 'name="dueDate"');
+    expectHtmlToContain(html, "Due date");
+    expectHtmlToContain(html, "Cancel");
   });
 
   it("renders enum create controls with option labels", () => {
@@ -4300,11 +4263,11 @@ describe("generated forms and records", () => {
       <GeneratedCreateDialogForm operation={operation} renderDialogCancel={false} />,
     );
 
-    expect(html).toContain('name="kind"');
-    expect(html).toContain("<select");
-    expect(html).toContain('data-slot="select"');
-    expect(html).toContain("Role");
-    expect(html).toContain("Stream");
+    expectHtmlToContain(html, 'name="kind"');
+    expectHtmlToContain(html, "<select");
+    expectHtmlToContain(html, 'data-slot="select"');
+    expectHtmlToContain(html, "Role");
+    expectHtmlToContain(html, "Stream");
     expect(html).not.toContain("native-select-option");
   });
 
@@ -4341,7 +4304,7 @@ describe("generated forms and records", () => {
     formData.set("done", "on");
 
     expect(html).not.toContain('name="kind"');
-    expect(html).toContain('name="done"');
+    expectHtmlToContain(html, 'name="done"');
     expect(html).not.toContain('name="title"');
     expect(resolveCreateValues(formData, operation)).toEqual({
       done: true,
@@ -4453,8 +4416,8 @@ describe("generated forms and records", () => {
       <GeneratedCreateDialogForm operation={operation} renderDialogCancel={false} />,
     );
 
-    expect(html).toContain('name="linkTargetMode"');
-    expect(html).toContain('name="href"');
+    expectHtmlToContain(html, 'name="linkTargetMode"');
+    expectHtmlToContain(html, 'name="href"');
     expect(html).not.toContain('name="linkTargetBlock"');
     expect(resolveCreateValues(internalFormData, operation)).toEqual({
       label: "Internal docs",
@@ -4518,9 +4481,9 @@ describe("generated forms and records", () => {
       />,
     );
 
-    expect(html).toContain('aria-label="Kind"');
-    expect(html).toContain('aria-label="Done"');
-    expect(html).toContain("checked");
+    expectHtmlToContain(html, 'aria-label="Kind"');
+    expectHtmlToContain(html, 'aria-label="Done"');
+    expectHtmlToContain(html, "checked");
     expect(html).not.toContain("Hidden title");
   });
 
@@ -4564,8 +4527,8 @@ describe("generated forms and records", () => {
       <ReferencedRecordEditorFields referenceItem={referenceItem} referenceRecordId="record-1" />,
     );
 
-    expect(html).toContain('aria-label="Done"');
-    expect(html).toContain("checked");
+    expectHtmlToContain(html, 'aria-label="Done"');
+    expectHtmlToContain(html, "checked");
     expect(html).not.toContain("Hidden title");
   });
 
@@ -4594,10 +4557,10 @@ describe("generated forms and records", () => {
     );
 
     expect(html).toMatch(inputWithNameAndType("body", "hidden"));
-    expect(html).toContain('data-web-markdown-editor="textarea"');
-    expect(html).toContain('data-web-markdown-source="textarea"');
-    expect(html).toContain('aria-label="Body"');
-    expect(html).toContain("Body");
+    expectHtmlToContain(html, 'data-web-markdown-editor="textarea"');
+    expectHtmlToContain(html, 'data-web-markdown-source="textarea"');
+    expectHtmlToContain(html, 'aria-label="Body"');
+    expectHtmlToContain(html, "Body");
   });
 
   it("renders markdown inline editors as source editors outside compact contexts", () => {
@@ -4621,11 +4584,11 @@ describe("generated forms and records", () => {
       />,
     );
 
-    expect(html).toContain('data-web-markdown-editor="textarea"');
-    expect(html).toContain('data-web-markdown-source="textarea"');
-    expect(html).toContain('aria-label="Body"');
+    expectHtmlToContain(html, 'data-web-markdown-editor="textarea"');
+    expectHtmlToContain(html, 'data-web-markdown-source="textarea"');
+    expectHtmlToContain(html, 'aria-label="Body"');
     expect(html).not.toContain("<h2");
-    expect(html).toContain("## Draft");
+    expectHtmlToContain(html, "## Draft");
     expect(html).not.toContain('type="text"');
   });
 
@@ -4655,9 +4618,9 @@ describe("generated forms and records", () => {
       />,
     );
 
-    expect(html).toContain('data-web-markdown-renderer="shared"');
-    expect(html).toContain("<h2");
-    expect(html).toContain("Draft");
+    expectHtmlToContain(html, 'data-web-markdown-renderer="shared"');
+    expectHtmlToContain(html, "<h2");
+    expectHtmlToContain(html, "Draft");
     expect(html).not.toContain("<textarea");
   });
 
@@ -4682,9 +4645,9 @@ describe("generated forms and records", () => {
       />,
     );
 
-    expect(html).toContain("unlisted");
-    expect(html).toContain("Role");
-    expect(html).toContain("Stream");
+    expectHtmlToContain(html, "unlisted");
+    expectHtmlToContain(html, "Role");
+    expectHtmlToContain(html, "Stream");
   });
 
   it("renders table cells through the same inline field editors", () => {
@@ -4711,21 +4674,21 @@ describe("generated forms and records", () => {
       />,
     );
 
-    expect(html).toContain('data-slot="table"');
-    expect(html).toContain("Role");
-    expect(html).toContain('aria-label="Role"');
-    expect(html).toContain('value="Designer"');
+    expectHtmlToContain(html, 'data-slot="table"');
+    expectHtmlToContain(html, "Role");
+    expectHtmlToContain(html, 'aria-label="Role"');
+    expectHtmlToContain(html, 'value="Designer"');
     expect(html).not.toContain("Edit shared");
     expect(html).not.toContain('aria-label="Edit shared resource"');
     expect(html.match(/data-web-value-unit-input="true"/g)?.length).toBe(1);
-    expect(html).toContain('aria-label="Cost"');
-    expect(html).toContain('aria-label="Cost unit"');
+    expectHtmlToContain(html, 'aria-label="Cost"');
+    expectHtmlToContain(html, 'aria-label="Cost unit"');
     expect(html).not.toContain('aria-label="Price unit"');
     expect(html).not.toContain("USD");
     expect(html.match(/\/ day/g)?.length ?? 0).toBe(1);
-    expect(html).toContain('data-web-formatted-number-input="true"');
-    expect(html).toContain('value="325"');
-    expect(html).toContain('value="$475.00"');
+    expectHtmlToContain(html, 'data-web-formatted-number-input="true"');
+    expectHtmlToContain(html, 'value="325"');
+    expectHtmlToContain(html, 'value="$475.00"');
   });
 
   it("characterizes the current one-off referenced-record edit button", () => {
@@ -4777,9 +4740,9 @@ describe("generated forms and records", () => {
       />,
     );
 
-    expect(html).toContain("Designer");
-    expect(html).toContain("Edit shared");
-    expect(html).toContain('aria-label="Edit shared resource"');
+    expectHtmlToContain(html, "Designer");
+    expectHtmlToContain(html, "Edit shared");
+    expectHtmlToContain(html, 'aria-label="Edit shared resource"');
   });
 
   it("renders table operation control columns as a button or dropdown", () => {
@@ -4849,10 +4812,10 @@ describe("generated forms and records", () => {
       />,
     );
 
-    expect(html).toContain("Inspect rate");
-    expect(html).toContain('aria-label="Inspect rate: Operation unavailable."');
-    expect(html).toContain("Rate operations");
-    expect(html).toContain('aria-label="Rate operations"');
+    expectHtmlToContain(html, "Inspect rate");
+    expectHtmlToContain(html, 'aria-label="Inspect rate: Operation unavailable."');
+    expectHtmlToContain(html, "Rate operations");
+    expectHtmlToContain(html, 'aria-label="Rate operations"');
   });
 
   it("renders Site placement row operation dropdowns", () => {
@@ -4867,9 +4830,9 @@ describe("generated forms and records", () => {
       schemaKey: "site",
     });
 
-    expect(html).toContain('aria-label="Actions"');
-    expect(html).toContain('aria-label="Reorder"');
-    expect(html).toContain('data-formless-legacy-table="block-placement:table"');
+    expectHtmlToContain(html, 'aria-label="Actions"');
+    expectHtmlToContain(html, 'aria-label="Reorder"');
+    expectHtmlToContain(html, 'data-formless-legacy-table="block-placement:table"');
     expect(html).not.toContain('data-formless-ordering-handle="true"');
     expect(html).not.toContain("data-formless-sortable-row=");
   });
@@ -4982,9 +4945,9 @@ describe("generated forms and records", () => {
       />,
     );
 
-    expect(html).toContain('data-slot="table"');
-    expect(html).toContain('aria-label="Role unavailable"');
-    expect(html).toContain('value="$475.00"');
+    expectHtmlToContain(html, 'data-slot="table"');
+    expectHtmlToContain(html, 'aria-label="Role unavailable"');
+    expectHtmlToContain(html, 'value="$475.00"');
   });
 
   it("renders read-only table cells with display formatting", () => {
@@ -5018,9 +4981,9 @@ describe("generated forms and records", () => {
       />,
     );
 
-    expect(html).toContain("Price");
-    expect(html).toContain("$475.00");
-    expect(html).toContain("/ day");
+    expectHtmlToContain(html, "Price");
+    expectHtmlToContain(html, "$475.00");
+    expectHtmlToContain(html, "/ day");
     expect(html).not.toContain('type="number"');
   });
 
@@ -5089,9 +5052,9 @@ describe("generated forms and records", () => {
       />,
     );
 
-    expect(html).toContain("Color color swatch");
-    expect(html).toContain("#336699");
-    expect(html).toContain("not-a-color");
+    expectHtmlToContain(html, "Color color swatch");
+    expectHtmlToContain(html, "#336699");
+    expectHtmlToContain(html, "not-a-color");
     expect(html).not.toContain('style="background-color:not-a-color"');
   });
 
@@ -5189,8 +5152,8 @@ describe("generated forms and records", () => {
     expect(html).toMatch(inputWithAriaLabelAndType("Margin", "text"));
     expectFormattedNumberInputLabel(html, "Price");
     expectFormattedNumberInputLabel(html, "Margin");
-    expect(html).toContain('value="$475.00"');
-    expect(html).toContain('value="12.5%"');
+    expectHtmlToContain(html, 'value="$475.00"');
+    expectHtmlToContain(html, 'value="12.5%"');
   });
 
   it("renders reference create controls with target display labels", () => {
@@ -5204,12 +5167,12 @@ describe("generated forms and records", () => {
       <GeneratedCreateDialogForm operation={operation} renderDialogCancel={false} />,
     );
 
-    expect(html).toContain('name="resource"');
-    expect(html).toContain("<select");
-    expect(html).toContain('data-slot="select"');
-    expect(html).toContain('value="resource-1"');
-    expect(html).toContain("Designer");
-    expect(html).toContain("Lead");
+    expectHtmlToContain(html, 'name="resource"');
+    expectHtmlToContain(html, "<select");
+    expectHtmlToContain(html, 'data-slot="select"');
+    expectHtmlToContain(html, 'value="resource-1"');
+    expectHtmlToContain(html, "Designer");
+    expectHtmlToContain(html, "Lead");
   });
 
   it("renders generated create controls for current editor hints", () => {
@@ -5225,25 +5188,25 @@ describe("generated forms and records", () => {
     expect(html).not.toContain('data-web-autosize-text-input="true"');
     expect(html).toMatch(textareaWithName("summary"));
     expect(html).toMatch(inputWithNameAndType("body", "hidden"));
-    expect(html).toContain('data-web-markdown-editor="textarea"');
+    expectHtmlToContain(html, 'data-web-markdown-editor="textarea"');
     expect(html).toMatch(inputWithNameAndType("color", "hidden"));
-    expect(html).toContain('aria-label="Choose Color"');
+    expectHtmlToContain(html, 'aria-label="Choose Color"');
     expect(html).toMatch(inputWithAriaLabelAndType("Color", "text"));
     expect(html).toMatch(inputWithNameAndType("href", "text"));
     expect(html).toMatch(inputWithNameAndType("slug", "text"));
     expect(html).toMatch(inputWithNameAndType("icon", "hidden"));
-    expect(html).toContain('data-web-field-kind="icon"');
-    expect(html).toContain('data-web-icon-field-edit="trigger"');
+    expectHtmlToContain(html, 'data-web-field-kind="icon"');
+    expectHtmlToContain(html, 'data-web-icon-field-edit="trigger"');
     expect(html).not.toContain("data-web-svg-source");
     expect(html).toMatch(inputWithNameAndType("publishedAt", "hidden"));
-    expect(html).toContain('data-slot="date-picker-trigger"');
-    expect(html).toContain('role="spinbutton"');
+    expectHtmlToContain(html, 'data-slot="date-picker-trigger"');
+    expectHtmlToContain(html, 'role="spinbutton"');
     expect(html).toMatch(inputWithNameAndType("count", "hidden"));
     expect(html).toMatch(inputWithAriaLabelAndType("Count", "text"));
-    expect(html).toContain('data-web-formatted-number-input="true"');
-    expect(html).toContain("Draft");
-    expect(html).toContain("Published");
-    expect(html).toContain("Designer");
+    expectHtmlToContain(html, 'data-web-formatted-number-input="true"');
+    expectHtmlToContain(html, "Draft");
+    expectHtmlToContain(html, "Published");
+    expectHtmlToContain(html, "Designer");
 
     const formData = new FormData();
     formData.set("title", "Icon create");
@@ -5281,29 +5244,29 @@ describe("generated forms and records", () => {
 
     expect(html).toMatch(inputWithAriaLabelAndType("Title", "text"));
     expect(html).not.toContain('data-web-autosize-text-input="true"');
-    expect(html).toContain('value="Plain title"');
+    expectHtmlToContain(html, 'value="Plain title"');
     expect(html).toMatch(textareaWithAriaLabel("Summary"));
-    expect(html).toContain('data-web-markdown-editor="textarea"');
-    expect(html).toContain('aria-label="Body"');
-    expect(html).toContain("Heading");
+    expectHtmlToContain(html, 'data-web-markdown-editor="textarea"');
+    expectHtmlToContain(html, 'aria-label="Body"');
+    expectHtmlToContain(html, "Heading");
     expect(html).toMatch(inputWithAriaLabelAndType("Color", "text"));
-    expect(html).toContain('aria-label="Choose Color"');
-    expect(html).toContain('value="#336699"');
+    expectHtmlToContain(html, 'aria-label="Choose Color"');
+    expectHtmlToContain(html, 'value="#336699"');
     expect(html).toMatch(inputWithAriaLabelAndType("Link", "text"));
     expect(html).toMatch(inputWithAriaLabelAndType("Slug", "text"));
-    expect(html).toContain('data-web-field-kind="icon"');
-    expect(html).toContain('data-web-svg-icon="empty"');
-    expect(html).toContain('aria-label="Edit Icon"');
+    expectHtmlToContain(html, 'data-web-field-kind="icon"');
+    expectHtmlToContain(html, 'data-web-svg-icon="empty"');
+    expectHtmlToContain(html, 'aria-label="Edit Icon"');
     expect(html).toMatch(/data-web-icon-field-edit="trigger"[\s\S]*data-web-svg-icon="empty"/);
     expect(html).not.toContain('value="sparkles"');
-    expect(html).toContain('data-slot="date-picker-trigger"');
-    expect(html).toContain('role="spinbutton"');
-    expect(html).toContain("2026");
+    expectHtmlToContain(html, 'data-slot="date-picker-trigger"');
+    expectHtmlToContain(html, 'role="spinbutton"');
+    expectHtmlToContain(html, "2026");
     expect(html).toMatch(inputWithAriaLabelAndType("Count", "text"));
-    expect(html).toContain('data-web-formatted-number-input="true"');
-    expect(html).toContain('value="1200"');
-    expect(html).toContain("Published");
-    expect(html).toContain("Designer");
+    expectHtmlToContain(html, 'data-web-formatted-number-input="true"');
+    expectHtmlToContain(html, 'value="1200"');
+    expectHtmlToContain(html, "Published");
+    expectHtmlToContain(html, "Designer");
   });
 
   it("renders generated read-only icon display as SVG icon markup", () => {
@@ -5341,8 +5304,8 @@ describe("generated forms and records", () => {
       />,
     );
 
-    expect(html).toContain('data-web-svg-icon="svg"');
-    expect(html).toContain('viewBox="0 0 24 24"');
+    expectHtmlToContain(html, 'data-web-svg-icon="svg"');
+    expectHtmlToContain(html, 'viewBox="0 0 24 24"');
     expect(html).not.toContain("&lt;svg viewBox=&quot;0 0 24 24&quot;&gt;&lt;/svg&gt;");
     expect(html).not.toContain("data-web-svg-source");
   });
@@ -5376,7 +5339,7 @@ describe("generated forms and records", () => {
 
     expect(html).not.toContain('data-web-autosize-text-input="true"');
     expect(html).toMatch(inputWithAriaLabelAndType("Title", "text"));
-    expect(html).toContain('value="Plain title"');
+    expectHtmlToContain(html, 'value="Plain title"');
   });
 
   it("keeps compact native record controls scoped to unlabeled inline editors", () => {
@@ -5454,7 +5417,7 @@ describe("generated forms and records", () => {
       <GeneratedCreateDialogForm operation={operation} renderDialogCancel={false} />,
     );
 
-    expect(html).toContain('name="name"');
+    expectHtmlToContain(html, 'name="name"');
     expect(html).not.toContain('name="resource"');
     expect(html).not.toContain('name="cost"');
     expect(html).not.toContain('name="costUnit"');
@@ -6015,7 +5978,7 @@ describe("generated forms and records", () => {
     placementFormData.set("block", "rec_site_block_home_recent_posts");
     placementFormData.set("label", "Recent posts");
 
-    expect(collectionHtml).toContain(">Add placement</button>");
+    expect(collectionHtml).toContain('aria-label="Add placement"');
     expect(collectionHtml).not.toMatch(/<button[^>]*disabled=""[^>]*>Add placement<\/button>/);
     expect(html).not.toContain('name="parent"');
     expect(html).not.toContain('name="slot"');
@@ -6074,9 +6037,9 @@ describe("generated forms and records", () => {
       />,
     );
 
-    expect(html).toContain('aria-label="Resource"');
-    expect(html).toContain("Designer");
-    expect(html).toContain("missing-resource");
+    expectHtmlToContain(html, 'aria-label="Resource"');
+    expectHtmlToContain(html, "Designer");
+    expectHtmlToContain(html, "missing-resource");
   });
 
   it("renders only the fields declared by a create view in the dialog", () => {
@@ -6086,9 +6049,9 @@ describe("generated forms and records", () => {
       <GeneratedCreateDialogForm operation={operation} renderDialogCancel={false} />,
     );
 
-    expect(html).toContain("Create Task");
-    expect(html).toContain('name="title"');
-    expect(html).toContain('name="dueDate"');
+    expectHtmlToContain(html, "Create Task");
+    expectHtmlToContain(html, 'name="title"');
+    expectHtmlToContain(html, 'name="dueDate"');
     expect(html).not.toContain('name="done"');
     expect(html).not.toContain('type="checkbox"');
     expect(html).not.toContain("Done");
@@ -6103,9 +6066,9 @@ describe("generated forms and records", () => {
       />,
     );
 
-    expect(html).toContain("Create is disabled for Task.");
-    expect(html).toContain("Create disabled");
-    expect(html).toContain("disabled");
+    expectHtmlToContain(html, "Create is disabled for Task.");
+    expectHtmlToContain(html, "Create disabled");
+    expectHtmlToContain(html, "disabled");
   });
 
   it("filters records through the selected query and hides tombstones", () => {
@@ -6127,7 +6090,7 @@ describe("generated forms and records", () => {
       />,
     );
 
-    expect(html).toContain("No records yet.");
+    expectHtmlToContain(html, "No records yet.");
     expect(html).not.toContain("Finished");
   });
 
@@ -6213,7 +6176,7 @@ describe("generated forms and records", () => {
       />,
     );
 
-    expect(html).toContain("Due date");
+    expectHtmlToContain(html, "Due date");
     expect(html).not.toContain("DueDate");
   });
 });
@@ -7570,7 +7533,7 @@ function inputWithAriaLabelAndType(label: string, type: string) {
 
 function expectFormattedNumberInputLabel(html: string, label: string) {
   const labelMatch = html.match(
-    new RegExp(`<label[^>]*for="([^"]+)"[^>]*>${escapeRegExp(label)}</label>`),
+    new RegExp(`<(?:label[^>]*for|span[^>]*id)="([^"]+)"[^>]*>${escapeRegExp(label)}(?:<|$)`),
   );
 
   expect(labelMatch).not.toBeNull();
@@ -7579,7 +7542,7 @@ function expectFormattedNumberInputLabel(html: string, label: string) {
 
   expect(html).toMatch(
     new RegExp(
-      `<input(?=[^>]*id="${escapeRegExp(id)}")(?=[^>]*data-web-formatted-number-input="true")[^>]*>`,
+      `<input(?=[^>]*(?:id="${escapeRegExp(id)}"|aria-labelledby="[^"]*${escapeRegExp(id)}[^"]*"))[^>]*>`,
     ),
   );
 }

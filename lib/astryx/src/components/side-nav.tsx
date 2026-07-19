@@ -27,7 +27,7 @@ import {
   useFormlessUiShellIntentHandler,
   useFormlessUiShellNavigationSection,
 } from "../formless-ui-contract-host-react.tsx";
-import { AstryxCreateSurfaceRenderer } from "./create-surfaces.tsx";
+import { AstryxCreateSurfaceRenderer } from "./formless-ui-create-renderer.tsx";
 import { operationIcon } from "./operation-controls.tsx";
 
 type AstryxShellSectionSlot = "appSwitcher" | "navigation" | "session";
@@ -224,7 +224,9 @@ function AstryxApplicationSwitcherSection({
       label={
         <HStack align="center" gap={2} justify="between" width="100%">
           <Text type="label" weight={destination.selected ? "semibold" : undefined}>
-            {destination.label}
+            <span aria-current={destination.selected ? "page" : undefined}>
+              {destination.label}
+            </span>
           </Text>
           {destination.countText ? (
             <Badge

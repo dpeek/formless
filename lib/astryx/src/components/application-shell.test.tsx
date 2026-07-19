@@ -399,6 +399,9 @@ describe("Application Shell prototype layout", () => {
     expect(fixtureSource).toContain("documentTheme");
     expect(sideNavSource).not.toContain("FormlessUiDocumentTheme");
     expect(Object.keys(packageJson.exports ?? {})).toEqual([
+      "./application/assembly",
+      "./application/global.css",
+      "./application/provider",
       "./contract",
       "./contract-host",
       "./contract-host/react",
@@ -406,7 +409,8 @@ describe("Application Shell prototype layout", () => {
       "./site/global.css",
       "./site/provider",
     ]);
-    expect(productionRuntimeSource).toContain("LegacySubscribedApplicationShellRenderer");
+    expect(productionRuntimeSource).toContain("ApplicationPresentation");
+    expect(productionRuntimeSource).not.toContain("LegacySubscribedApplicationShellRenderer");
     expect(productionRuntimeSource).not.toContain("AstryxSubscribedApplicationShellRenderer");
   });
 });

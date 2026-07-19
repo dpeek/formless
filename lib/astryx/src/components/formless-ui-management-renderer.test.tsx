@@ -247,6 +247,9 @@ describe("Astryx management renderer", () => {
       /\bclassName\b|\blocalStorage\b|\bsessionStorage\b|\bdocument\.|\bwindow\.|\bfetch\(/,
     );
     expect(Object.keys(packageJson.exports ?? {})).toEqual([
+      "./application/assembly",
+      "./application/global.css",
+      "./application/provider",
       "./contract",
       "./contract-host",
       "./contract-host/react",
@@ -254,7 +257,8 @@ describe("Astryx management renderer", () => {
       "./site/global.css",
       "./site/provider",
     ]);
-    expect(productionRuntimeSource).toContain("LegacySubscribedManagementRenderer");
+    expect(productionRuntimeSource).toContain("ApplicationPresentation");
+    expect(productionRuntimeSource).not.toContain("LegacySubscribedManagementRenderer");
     expect(productionRuntimeSource).not.toContain("AstryxSubscribedManagementRenderer");
     expect(productionRuntimeSource).not.toContain("global.css");
   });

@@ -6,7 +6,7 @@ import type {
   TableFooterSlotConfig,
   TransitionStateOperationConfig,
 } from "../../client/views.ts";
-import type { RecordLabelFieldConfig } from "./record-delete.tsx";
+import type { RecordLabelFieldConfig } from "./record-delete-runtime.ts";
 import {
   ORDERING_DND_TYPE,
   type ResultOrderingDragData,

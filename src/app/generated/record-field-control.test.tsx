@@ -1,7 +1,7 @@
 import { Children, isValidElement, type ComponentProps, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it } from "vite-plus/test";
-import { type ImageMediaAssetOption } from "@dpeek/formless-media/react";
+import type { ImageMediaAssetOption } from "@dpeek/formless-media/client";
 import { NativeSelectContent } from "@dpeek/formless-ui/native-select";
 import {
   selectCollectionModels,

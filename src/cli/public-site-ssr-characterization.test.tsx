@@ -42,13 +42,15 @@ describe("public Site SSR characterization", () => {
     expect(entry).toContain("createRoot(app).render(");
   });
 
-  it("keeps published hydration on explicit legacy Site presentation assembly", () => {
+  it("keeps published hydration on the explicit Astryx Site presentation assembly", () => {
     const entry = readRepoFile("../public-site-main.tsx");
 
-    expect(entry).toContain("LegacySitePageRenderer");
-    expect(entry).toContain("LegacySitePublicSystemStateRenderer");
-    expect(entry).toContain("builtInRenderer={LegacySitePageRenderer}");
-    expect(entry).toContain("builtInSystemStateRenderer={LegacySitePublicSystemStateRenderer}");
+    expect(entry).toContain("AstryxSitePageRenderer");
+    expect(entry).toContain("AstryxSitePublicSystemStateRenderer");
+    expect(entry).toContain("builtInRenderer={AstryxSitePageRenderer}");
+    expect(entry).toContain("builtInSystemStateRenderer={AstryxSitePublicSystemStateRenderer}");
+    expect(entry).toContain("@dpeek/formless-astryx/site/global.css");
+    expect(entry).not.toMatch(/LegacySite(?:Page|PublicSystemState)Renderer/);
     expect(entry).toContain("workspaceRenderer={workspaceSitePublicRenderer}");
     expect(entry).toContain("hydrateRoot(app, appTree)");
   });

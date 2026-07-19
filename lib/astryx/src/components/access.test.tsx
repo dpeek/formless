@@ -278,6 +278,9 @@ describe("canonical access-management fixtures", () => {
       "vp test --config ../../vite.config.ts --configLoader runner",
     );
     expect(Object.keys(packageJson.exports ?? {})).toEqual([
+      "./application/assembly",
+      "./application/global.css",
+      "./application/provider",
       "./contract",
       "./contract-host",
       "./contract-host/react",
@@ -289,7 +292,8 @@ describe("canonical access-management fixtures", () => {
       "AstryxSubscribedAccessRenderer",
     );
     expect(`${productionAppSource}\n${productionAccessSource}`).not.toContain("access.fixtures");
-    expect(productionAccessSource).toContain("LegacySubscribedAccessRenderer");
+    expect(productionAccessSource).toContain("ApplicationPresentation");
+    expect(productionAccessSource).not.toContain("LegacySubscribedAccessRenderer");
   });
 });
 

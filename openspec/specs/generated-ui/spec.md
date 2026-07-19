@@ -307,9 +307,8 @@ summary slots, operation controls, and schema-declared result types.
 
 The system SHALL project complete generated screens whose collection sections
 use list, table, record, or tree results through a controlled renderer-neutral
-Formless UI workspace contract before selecting the active renderer, while
-generated runtime code owns model selection, reads, evaluation, operation
-execution, and effects.
+Formless UI workspace contract while generated runtime code owns model
+selection, reads, evaluation, operation execution, and effects.
 
 #### Scenario: Select complete workspace composition
 
@@ -411,13 +410,13 @@ execution, and effects.
   own operation state, upload media, patch records, execute operations, or
   update route state locally
 
-#### Scenario: Legacy renderer consumes the workspace contract
+#### Scenario: Workspace presentation stays behind the renderer contract
 
-- GIVEN production generated screens currently compose headings, React-node
-  section controls, tabs, badges, context selectors, summaries, list-detail
-  layout, collection actions, and result dispatch directly in React
+- GIVEN generated screens compose headings, section controls, tabs, badges,
+  context selectors, summaries, list-detail layout, collection actions, and
+  result dispatch
 - WHEN generated runtime projects a generated workspace
-- THEN dedicated legacy screen and collection adapters render only the
+- THEN the selected screen and collection adapters render only the
   canonical workspace and nested contracts and dispatch canonical intents
 - AND production single-section and multi-section list-, table-, record-, and
   tree-backed screens, ordinary and list-detail contexts, counts, summaries,
@@ -426,21 +425,20 @@ execution, and effects.
 - AND callers that provide a non-schema section action supply canonical action
   facts and an intent handler instead of a React node; the owning shell retains
   its dialog state and effect execution
-- AND the legacy adapters do not select models, read records, evaluate queries,
-  counts, aggregates, or computed values, own route or authoring state, build
-  operation input, execute operations, or update sync state
-- AND direct legacy Formless UI imports for migrated screen and collection
-  chrome remain confined to the dedicated legacy seam modules
+- AND the presentation adapters do not select models, read records, evaluate
+  queries, counts, aggregates, or computed values, own route or authoring
+  state, build operation input, execute operations, or update sync state
+- AND legacy Formless UI imports remain outside the selected production graph
 - AND focused coverage asserts projected facts, nested intent dispatch,
   selection fallback, context changes, counts, summaries, actions, result
   composition, and visible empty or unavailable behavior instead of legacy HTML
   structure or one-to-one visual parity
-- AND production remains on the legacy renderer after this contract migration
+- AND production renders the contract through the Astryx application assembly
 
 #### Scenario: Astryx workspace renderer
 
-- GIVEN the legacy renderer consumes complete production workspace contracts
-- WHEN the replacement renderer implements the same contracts in `lib/astryx`
+- GIVEN runtime publishes complete production workspace contracts
+- WHEN the selected renderer implements those contracts in `lib/astryx`
 - THEN it composes Astryx section, stack, grid, card, navigation, tabs or
   selector, badge, status, empty-state, action, create, operation, list, table,
   field, and record-result primitives without importing generated runtime
@@ -451,12 +449,12 @@ execution, and effects.
 - AND the Astryx workspace renderer contains no Tailwind classes, legacy
   Formless UI components, storage reads, query or aggregate evaluation,
   operation execution, media clients, sync effects, or runtime data imports
-- AND adding the renderer does not export or activate Astryx in production or
-  introduce Astryx theme and global CSS into runtime entrypoints
+- AND the renderer is exported through documented Astryx package subpaths and
+  receives theme and CSS only from root application assembly
 
 #### Scenario: Astryx workspace contract fixtures
 
-- GIVEN the legacy renderer consumes complete production workspace contracts
+- GIVEN runtime publishes complete production workspace contracts
 - WHEN workspace UX is evaluated in the package-local Astryx prototype
 - THEN data-only fixtures use the same contract shapes for an unscoped
   collection, query navigation, ordinary context, list-detail context,
@@ -564,23 +562,21 @@ operation execution, ordering plans, navigation, and effects.
   selected-path visibility rather than silent truncation or always-expanded
   full-depth editors
 
-#### Scenario: Legacy tree renderer consumes the complete contract
+#### Scenario: Selected tree renderer consumes the complete contract
 
-- GIVEN production tree workspaces use direct record hooks, runtime operation
-  controllers, nested Tailwind cards, and drag behavior
+- GIVEN production tree workspaces use the generated workspace contract host
 - WHEN the generated tree foundation publishes a complete tree-result node
-- THEN a subscribed legacy tree renderer reads only the scoped tree-result
+- THEN the subscribed Astryx tree renderer reads only the scoped tree-result
   reference and delegates to a pure complete-snapshot renderer
-- AND direct legacy Formless UI imports for the tree path remain confined to
-  dedicated legacy seam modules
+- AND legacy Formless UI imports remain outside the selected production graph
 - AND production tree sections use the same generated workspace host path as
   list, table, and record results without a direct tree fallback
-- AND production remains on the legacy workspace renderer after the migration
+- AND production remains on the selected Astryx workspace renderer
 
 #### Scenario: Astryx tree renderer and fixtures
 
-- GIVEN the legacy renderer consumes complete production tree contracts
-- WHEN the replacement renderer implements the same contract in `lib/astryx`
+- GIVEN runtime publishes complete production tree contracts
+- WHEN the selected renderer implements the contract in `lib/astryx`
 - THEN it uses an accessible Astryx hierarchy outline with controlled selection,
   disclosure, concise item rows, and a responsive focused editor
 - AND it composes canonical field, create, operation, confirmation, ordering,
@@ -592,7 +588,7 @@ operation execution, ordering plans, navigation, and effects.
 - AND the Astryx renderer contains no legacy Formless UI components, Tailwind
   classes, records, schemas, storage reads, operation execution, DnD behavior,
   media clients, sync effects, or runtime imports
-- AND adding the renderer does not activate Astryx in production
+- AND the renderer is selected only through the root application assembly
 
 ### Requirement: Reactive Generated UI Contract Host
 
@@ -663,8 +659,8 @@ entrypoints.
 
 #### Scenario: Preserve pure renderers and data-only fixtures
 
-- GIVEN legacy and Astryx renderers already accept complete workspace, list,
-  table, record-result, and tree-result contract snapshots
+- GIVEN Astryx renderers accept complete workspace, list, table, record-result,
+  and tree-result contract snapshots
 - WHEN subscribed renderer entrypoints consume contract references from the
   host
 - THEN subscribed wrappers read scoped snapshots and delegate presentation to
@@ -681,8 +677,8 @@ entrypoints.
 - AND tree-result references, snapshots, nodes, subscription hooks, memory-host
   publication, server snapshots, and hydration use the same host semantics as
   list, table, and record results
-- AND extending the host does not activate Astryx in production, replace the
-  client store, or change auth-route, public Site, or renderer-cutover behavior
+- AND extending the host does not create an independent renderer selector,
+  replace the client store, or change auth-route or public Site behavior
 
 ### Requirement: Reactive Application Shell Contract Host
 
@@ -739,27 +735,26 @@ data reads, session behavior, operations, and effects.
 - **AND** renderers do not mutate canonical route, record, operation, reset, or
   session state locally
 
-#### Scenario: Legacy renderer consumes the shell contract
+#### Scenario: Astryx renderer consumes the shell contract
 
-- **GIVEN** production currently composes separate workbench, app-frame,
-  instance-rail, app-sidebar, and instance-shell chrome
+- **GIVEN** production publishes one unified application shell contract
 - **WHEN** runtime publishes an eligible unified shell
-- **THEN** one subscribed legacy renderer reads only shell references and
+- **THEN** one subscribed Astryx renderer reads only shell references and
   snapshots, renders the selected route workspace as its child, and dispatches
   canonical shell intents
 - **AND** production dev workbench, instance management, installed app admin,
   app-profile, mapped-app, and Site authoring admin routes use that renderer at
   their specified shell scope
 - **AND** no-shell routes remain outside the shell host and renderer
-- **AND** direct legacy `@dpeek/formless-ui` imports for migrated shell chrome
-  remain confined to dedicated legacy seam modules
-- **AND** production remains on the legacy renderer after the shell contract
-  migration
+- **AND** legacy `@dpeek/formless-ui` imports remain outside the selected
+  production graph
+- **AND** production selects the renderer through the root Astryx application
+  assembly
 
 #### Scenario: Astryx shell renderer
 
-- **GIVEN** the legacy renderer consumes complete production shell contracts
-- **WHEN** the replacement renderer implements the same contracts in
+- **GIVEN** runtime publishes complete production shell contracts
+- **WHEN** the selected renderer implements the contracts in
   `lib/astryx`
 - **THEN** pure and subscribed Astryx entrypoints render app switching,
   generated screens, root records and create controls, instance management,
@@ -776,12 +771,12 @@ data reads, session behavior, operations, and effects.
 - **AND** the Astryx renderer contains no legacy Formless UI components,
   storage reads, route policy, query evaluation, operation execution, session
   effects, or runtime data imports
-- **AND** adding the renderer does not export or activate Astryx in production
-  or introduce Astryx theme and global CSS into runtime entrypoints
+- **AND** the renderer is exported through documented Astryx subpaths and
+  receives theme and CSS only from root application assembly
 
 #### Scenario: Astryx shell contract fixtures
 
-- **GIVEN** the legacy renderer consumes complete production shell contracts
+- **GIVEN** runtime publishes complete production shell contracts
 - **WHEN** shell UX is evaluated in the package-local Astryx prototype
 - **THEN** data-only memory-host fixtures cover App with Tasks, CRM, Site, and
   Instance destinations, Instance management, app-only profiles, Site
@@ -793,15 +788,13 @@ data reads, session behavior, operations, and effects.
   replica, storage, operation controllers, or session clients
 - **AND** shell fixtures do not synthesize theme controls, while document-theme
   fixtures may compose a separate theme node through the same memory host
-- **AND** fixtures do not export or activate the Astryx shell renderer in
-  production
+- **AND** fixtures do not define or mutate production renderer selection
 
 ### Requirement: Generated List Renderer Contract
 
 The system SHALL project complete generated list results through a controlled
-renderer-neutral Formless UI list contract before selecting the active
-renderer, while generated runtime code owns record reads, authoring state,
-operation execution, and ordering effects.
+renderer-neutral Formless UI list contract while generated runtime code owns
+record reads, authoring state, operation execution, and ordering effects.
 
 #### Scenario: Project complete list result
 
@@ -849,32 +842,31 @@ operation execution, and ordering effects.
   projected list-item capabilities without recreating legacy drag gestures,
   action placement, or row markup one-for-one
 
-#### Scenario: Legacy renderer consumes the list contract
+#### Scenario: Astryx renderer consumes the list contract
 
-- GIVEN production generated lists currently render legacy Formless UI object
-  list, field, menu, warning, ordering, transition, and delete components
+- GIVEN production generated lists publish complete renderer-neutral contracts
 - WHEN generated runtime projects a complete list result
-- THEN a dedicated legacy list adapter renders only the projected list, item,
+- THEN the Astryx list adapter renders only the projected list, item,
   field, operation, warning, empty-state, and ordering contracts and dispatches
   their intents
 - AND production list paths for ordered records, visible union fields, ordinary
   and specialized editors, state transitions, delete confirmation, readiness
   warnings, editing-disabled state, and empty state cross that adapter boundary
-- AND the legacy adapter does not query records, select union fields, own draft
-  sessions, load reference or media options, build operation input, calculate
-  rank patches, execute operations, or update sync state
-- AND production list rendering does not use raw model callbacks, legacy
-  React-node slots, or DnD event types to bypass the renderer-neutral contract
+- AND the presentation adapter does not query records, select union fields, own
+  draft sessions, load reference or media options, build operation input,
+  calculate rank patches, execute operations, or update sync state
+- AND production list rendering does not use raw model callbacks, React-node
+  slots, or DnD event types to bypass the renderer-neutral contract
 - AND focused coverage asserts projected facts, intent dispatch, successful and
   failed field edits, transition and delete behavior, ordering behavior,
   warnings, empty state, and visible fallbacks instead of legacy HTML structure
   or one-to-one visual parity
-- AND production remains on the legacy renderer after this contract migration
+- AND production selects the Astryx renderer through root application assembly
 
 #### Scenario: Astryx list renderer
 
-- GIVEN the legacy renderer consumes the complete production list contract
-- WHEN the replacement renderer implements the same contract in `lib/astryx`
+- GIVEN runtime publishes the complete production list contract
+- WHEN the selected renderer implements that contract in `lib/astryx`
 - THEN it uses Astryx list, field, action, menu, empty-state, status, tooltip,
   and feedback primitives without importing generated runtime
 - AND the list uses a visible or assistive heading, consistent density, optional
@@ -894,12 +886,11 @@ operation execution, and ordering effects.
 - AND the Astryx list renderer contains no Tailwind classes, legacy Formless UI
   components, storage reads, operation execution, sync effects, or runtime data
   imports
-- AND adding the renderer does not export or activate Astryx in production or
-  introduce Astryx theme and global CSS into runtime entrypoints
+- AND the renderer receives theme and CSS only from root application assembly
 
 #### Scenario: Astryx list contract fixtures
 
-- GIVEN the legacy renderer consumes complete production list contracts
+- GIVEN runtime publishes complete production list contracts
 - WHEN list UX is evaluated in the package-local Astryx prototype
 - THEN data-only fixtures use the same contract shapes to cover editable and
   read-only fields, active union variants, state transitions, destructive
@@ -911,18 +902,17 @@ operation execution, and ordering effects.
   and reorder intents for UX review but does not import generated runtime,
   storage, browser replica, operation controllers, ordering plans, sync, or app
   targets
-- AND the fixtures contain no Tailwind classes and do not export or activate the
-  Astryx list renderer in production
+- AND the fixtures contain no Tailwind classes and do not define or mutate
+  production renderer selection
 - AND collection tabs, context selection, summaries, collection toolbars,
-  record results, public Site rendering, shell navigation, and the
-  production renderer switch remain owned by later slices
+  record results, public Site rendering, and shell navigation remain owned by
+  their existing contracts
 
 ### Requirement: Generated Record Result Renderer Contract
 
 The system SHALL project complete generated record results through a controlled
-renderer-neutral Formless UI record-result contract before selecting the active
-renderer, while generated runtime code owns record selection, authoring state,
-operation execution, and effects.
+renderer-neutral Formless UI record-result contract while generated runtime
+code owns record selection, authoring state, operation execution, and effects.
 
 #### Scenario: Project complete record result
 
@@ -966,20 +956,19 @@ operation execution, and effects.
   parse schema, read icon catalogs, upload media, patch records, or execute
   operations
 
-#### Scenario: Legacy renderer consumes the record-result contract
+#### Scenario: Astryx renderer consumes the record-result contract
 
-- GIVEN production generated record results currently compose record reads,
-  fields, transition controls, delete controls, warnings, and empty state in
-  React
+- GIVEN production generated record results publish complete renderer-neutral
+  contracts
 - WHEN generated runtime projects a complete record result
-- THEN a dedicated legacy record-result adapter renders only the projected
+- THEN the Astryx record-result adapter renders only the projected
   result, field, operation, confirmation, warning, empty, unavailable, and
   editing-availability contracts and dispatches their intents
 - AND the production collection `record` result path for ordinary and
   specialized editors, read-only displays, active unions, state transitions,
   delete confirmation, warnings, editing-disabled state, unavailable records,
   and empty state crosses that adapter boundary
-- AND the legacy adapter does not query records, select fields, own draft or icon
+- AND the presentation adapter does not query records, select fields, own draft or icon
   dialog state, load reference or media options, upload media, build operation
   input, execute operations, or update sync state
 - AND focused coverage asserts projected facts, nested intent dispatch,
@@ -988,13 +977,12 @@ operation execution, and effects.
   structure or one-to-one visual parity
 - AND collection context detail, remaining referenced-record leaf paths, and
   tree-builder composition remain on their existing production paths
-- AND production remains on the legacy renderer after this contract migration
+- AND production selects the Astryx renderer through root application assembly
 
 #### Scenario: Astryx record-result renderer
 
-- GIVEN the legacy renderer consumes the complete production record-result
-  contract
-- WHEN the replacement renderer implements the same contract in `lib/astryx`
+- GIVEN runtime publishes the complete production record-result contract
+- WHEN the selected renderer implements that contract in `lib/astryx`
 - THEN it composes Astryx field, operation, confirmation, status, warning, and
   empty-state primitives for ready, empty, unavailable, editing-disabled,
   warning, confirmation, and pending states
@@ -1003,12 +991,11 @@ operation execution, and effects.
 - AND the Astryx renderer dispatches only canonical nested intents and contains
   no generated runtime, storage, browser replica, media client, operation
   execution, sync effect, Tailwind, or legacy Formless UI imports
-- AND adding the renderer does not export or activate Astryx in production or
-  introduce Astryx theme and global CSS into runtime entrypoints
+- AND the renderer receives theme and CSS only from root application assembly
 
 #### Scenario: Astryx record-result contract fixtures
 
-- GIVEN the legacy renderer consumes complete production record-result contracts
+- GIVEN runtime publishes complete production record-result contracts
 - WHEN record-result UX is evaluated in the package-local Astryx prototype
 - THEN data-only fixtures use the same contract shapes to cover editable and
   read-only detail, active unions, visible-field changes, specialized fields,
@@ -1021,8 +1008,8 @@ operation execution, and effects.
 - AND package-local fixtures do not import generated runtime, storage, browser
   replica, media clients, operation controllers, sync, app targets, collection
   tabs, context selection, summaries, or tree composition
-- AND the fixtures contain no Tailwind classes and do not export or activate the
-  Astryx record-result renderer in production
+- AND the fixtures contain no Tailwind classes and do not define or mutate
+  production renderer selection
 
 ### Requirement: Table Surfaces
 
@@ -1046,9 +1033,8 @@ computed, operation-control, and ordering-handle columns.
 ### Requirement: Generated Table Renderer Contract
 
 The system SHALL project complete generated table results through a controlled
-renderer-neutral Formless UI table contract before selecting the active
-renderer, while generated runtime code owns record reads, authoring state,
-operation execution, and ordering effects.
+renderer-neutral Formless UI table contract while generated runtime code owns
+record reads, authoring state, operation execution, and ordering effects.
 
 #### Scenario: Project complete table result
 
@@ -1099,32 +1085,31 @@ operation execution, and ordering effects.
   interaction that preserves the projected capability without recreating the
   legacy drag gesture, menu structure, or dialog markup one-for-one
 
-#### Scenario: Legacy renderer consumes the table contract
+#### Scenario: Astryx renderer consumes the table contract
 
-- GIVEN production generated tables currently render legacy Formless UI table,
-  field, menu, dialog, and ordering components
+- GIVEN production generated tables publish complete renderer-neutral contracts
 - WHEN generated runtime projects a complete table result
-- THEN a dedicated legacy table adapter renders only the projected table,
+- THEN the Astryx table adapter renders only the projected table,
   nested field, operation, dialog, warning, and footer contracts and dispatches
   their intents
 - AND production table paths for field, reference-field, computed,
   operation-control, state-transition, ordering-handle, delete, edit-dialog,
   readiness-warning, empty-state, and aggregate-footer behavior cross that
   adapter boundary
-- AND the legacy adapter does not read records, resolve references, evaluate
+- AND the presentation adapter does not read records, resolve references, evaluate
   computed values, own draft sessions, build operation input, calculate rank
   patches, execute operations, or update sync state
-- AND production table rendering does not use raw model callbacks or legacy
-  React-node slots to bypass the renderer-neutral table contract
+- AND production table rendering does not use raw model callbacks or React-node
+  slots to bypass the renderer-neutral table contract
 - AND focused coverage asserts projected facts, intent dispatch, controlled
   dialog lifecycle, successful and failed edits, ordering behavior, and visible
   fallbacks instead of legacy HTML structure or one-to-one visual parity
-- AND production remains on the legacy renderer after this contract migration
+- AND production selects the Astryx renderer through root application assembly
 
 #### Scenario: Astryx table renderer
 
-- GIVEN the legacy renderer consumes the complete production table contract
-- WHEN the replacement renderer implements the same contract in `lib/astryx`
+- GIVEN runtime publishes the complete production table contract
+- WHEN the selected renderer implements that contract in `lib/astryx`
 - THEN it uses Astryx table, field, action, menu, dialog, empty-state, status, and
   feedback primitives without importing generated runtime
 - AND table columns use explicit renderer-owned widths, spacious default table
@@ -1149,11 +1134,11 @@ operation execution, and ordering effects.
 - AND the Astryx table renderer contains no Tailwind classes, legacy Formless UI
   components, storage reads, operation execution, sync effects, or runtime data
   imports
-- AND adding the renderer does not export or activate Astryx in production
+- AND the renderer is selected only through root application assembly
 
 #### Scenario: Astryx table contract fixtures
 
-- GIVEN the legacy renderer consumes complete production table contracts
+- GIVEN runtime publishes complete production table contracts
 - WHEN table UX is evaluated in the package-local Astryx prototype
 - THEN data-only fixtures use the same contract shapes to cover editable and
   read-only fields, references, computed values, state transitions, row actions,
@@ -1165,11 +1150,11 @@ operation execution, and ordering effects.
 - AND package-local fixture state may simulate field, action, dialog, and
   reorder intents for UX review but does not import generated runtime, storage,
   browser replica, operation controllers, ordering plans, sync, or app targets
-- AND the fixtures contain no Tailwind classes and do not export or activate the
-  Astryx table renderer in production
+- AND the fixtures contain no Tailwind classes and do not define or mutate
+  production renderer selection
 - AND collection tabs, context selection, summaries, collection toolbars, list,
-  record results, public Site rendering, shell navigation, and the
-  production renderer switch remain owned by later slices
+  record results, public Site rendering, and shell navigation remain owned by
+  their existing contracts
 
 ### Requirement: Field Editing And Presentation
 
@@ -1261,9 +1246,8 @@ The system SHALL render generated field displays and editors from field behavior
   `FormData` extraction
 - AND browser submit-form adapters may project HTML field names and hidden
   inputs from `FormlessUiField` data only at the submit-form boundary
-- AND production generated surfaces may render `FormlessUiField` through a
-  legacy `@dpeek/formless-ui` seam before the renderer implementation switches
-  to the replacement renderer
+- AND production generated surfaces render `FormlessUiField` through the
+  selected Astryx field renderer
 - AND renderer implementations do not import schema parser internals, browser
   replica APIs, app target selectors, write option hooks, `submitOperation`,
   media clients, sync status hooks, or generated UI storage helpers
@@ -1299,10 +1283,10 @@ The system SHALL render generated field displays and editors from field behavior
   record-result placement id, arbitrary nested object id, or recursive contract
   match as a field occurrence id
 
-#### Scenario: Minimal common Formless UI contract foundation
+#### Scenario: Common Formless UI contract foundation
 
-- GIVEN generated UI prepares renderer-facing contracts for the first migration
-  slices
+- GIVEN generated UI prepares renderer-facing contracts across selected
+  presentation surfaces
 - WHEN it projects buttons, action triggers, menus, confirmation prompts,
   compact status, field sets, submit-boundary hidden inputs, media picker
   facts, icon picker facts, or semantic control icons
@@ -1317,14 +1301,13 @@ The system SHALL render generated field displays and editors from field behavior
   props, storage handles, browser replica hooks, sync functions, Tailwind
   classes, React components, raw records, or media client calls
 - AND table, collection, shell/navigation, public Site, and tree-builder
-  contracts remain future slice-owned contracts until those surfaces migrate
+  contracts remain owned by their specific capability boundaries
 
 ### Requirement: Generated Create Surface Contract
 
 The system SHALL project generated create triggers, dialogs, and forms through a
-controlled Formless UI create-surface contract before selecting the active
-renderer, while generated runtime code owns create policy, draft state,
-validation, and operation execution.
+controlled Formless UI create-surface contract while generated runtime code
+owns create policy, draft state, validation, and operation execution.
 
 #### Scenario: Project controlled create surface
 
@@ -1350,16 +1333,15 @@ validation, and operation execution.
   draft session, operation controller, sync feedback, created record selection,
   and caller-owned success behavior
 
-#### Scenario: Legacy renderer consumes the create surface contract
+#### Scenario: Astryx renderer consumes the create surface contract
 
-- GIVEN production generated UI currently uses the legacy renderer for create
-  buttons, dialogs, forms, and fields
+- GIVEN production generated UI publishes controlled create-surface contracts
 - WHEN generated runtime projects a create surface
 - THEN collection operation rows, context selectors, list-detail selectors,
   root navigation groups, standalone generated create dialogs, and embedded
-  tree-child create forms render through a legacy adapter that consumes the
+  tree-child create forms render through an Astryx adapter that consumes the
   controlled create-surface and field contracts
-- AND the legacy adapter receives projected display facts and open, field,
+- AND the presentation adapter receives projected display facts and open, field,
   cancel, and submit intents instead of raw operation configs, query context,
   draft-session state, operation controllers, records, or storage hooks
 - AND field changes emit controlled field intents and form submission emits a
@@ -1378,11 +1360,11 @@ validation, and operation execution.
   fields, pending submission, failure retry, and created-record callbacks
 - AND coverage asserts projected contract and user-visible behavior rather than
   legacy HTML structure, legacy component slots, or one-to-one visual parity
-- AND production remains on the legacy renderer after this contract migration
+- AND production selects the Astryx renderer through root application assembly
 
 #### Scenario: Astryx create surface fixture
 
-- GIVEN the legacy renderer consumes the production create-surface contract
+- GIVEN runtime publishes the production create-surface contract
 - WHEN product UX is evaluated in `lib/astryx`
 - THEN an unexported package fixture renders representative create triggers,
   dialog state, projected create fields, validation, pending submission, and
@@ -1395,19 +1377,17 @@ validation, and operation execution.
 - AND package-local fixture state may simulate intents for UX review but does
   not import generated runtime, operation execution, browser replica, storage,
   or sync behavior
-- AND adding the fixture does not export or activate an Astryx production
-  create renderer
+- AND the fixture does not define or mutate production renderer selection
 - AND command buttons, collection and table chrome, edit and delete dialogs,
-  the tree-builder presentation contract, public Site forms, and production
-  Astryx renderer activation remain owned by later migration slices
+  the tree-builder presentation contract, and public Site forms remain owned by
+  their existing contracts
 
 ### Requirement: Generated Record Field Renderer Contract
 
 The system SHALL project supported existing-record field editors and read-only
-field displays on migrated surfaces through the Formless UI field contract
-before selecting the active renderer, while generated runtime code owns record
-reads, draft state, field visibility, update resolution, and operation
-execution.
+field displays through the Formless UI field contract while generated runtime
+code owns record reads, draft state, field visibility, update resolution, and
+operation execution.
 
 #### Scenario: Project ordinary record editor and display fields
 
@@ -1448,13 +1428,12 @@ execution.
   asset loading and upload, grouped patch resolution, transition binding,
   writes, sync feedback, and auto-save effects
 
-#### Scenario: Legacy renderer consumes record field contracts
+#### Scenario: Astryx renderer consumes record field contracts
 
-- GIVEN production generated UI renders existing-record fields with legacy
-  components and Tailwind classes
+- GIVEN production generated UI publishes existing-record field contracts
 - WHEN generated runtime projects a supported record field on a migrated
   surface
-- THEN a dedicated legacy adapter renders only the projected field contract and
+- THEN the Astryx adapter renders only the projected field contract and
   dispatches field intents without reading records, loading options, resolving
   patches, invoking operations, or updating sync state
 - AND list, table, and record-result call sites retain their editing, read-only
@@ -1465,12 +1444,12 @@ execution.
 - AND collection context detail, remaining referenced-record leaf paths, and
   tree-builder field composition may remain on their existing paths until their
   owning renderer contracts are formalised
-- AND production remains on the legacy renderer after this contract migration
+- AND production selects the Astryx renderer through root application assembly
 
 #### Scenario: Astryx record field data fixtures
 
-- GIVEN the legacy renderer consumes ordinary production record field contracts
-- WHEN replacement-renderer UX is evaluated in `lib/astryx`
+- GIVEN runtime publishes ordinary production record field contracts
+- WHEN renderer UX is evaluated in `lib/astryx`
 - THEN unexported package-local data-only fixtures provide representative
   `FormlessUiRecordField` and `FormlessUiDisplayField` values using the same
   contract shapes as production
@@ -1480,8 +1459,7 @@ execution.
 - AND the fixtures contain no React components, generated runtime imports,
   browser replica reads, storage records, operation execution, media clients,
   sync behavior, or Tailwind classes
-- AND adding the fixtures does not export or activate an Astryx production
-  record field renderer
+- AND fixtures do not define or mutate production renderer selection
 
 #### Scenario: Formless UI field contract coverage
 
@@ -1559,8 +1537,8 @@ execution.
 - AND Astryx may adapt generic public operation fields to canonical
   `FormlessUiField` controls inside the Astryx package without importing the
   application contract host or generated admin runtime into the public graph
-- AND production keeps explicit legacy page and system-state renderers selected
-  while a complete Astryx implementation remains unselected until cutover
+- AND production browser and Worker roots select the Astryx page and
+  system-state renderers through explicit public Site assembly
 
 ### Requirement: Media Field Renderer Boundary
 
@@ -1580,8 +1558,8 @@ while delegating media-specific controls to the active Formless UI renderer.
   and display-safe labels without exposing raw asset ids or URLs for authoring
 - AND generated and renderer contracts expose one Media control and renderer
   kind without an Image field kind or asset-versus-URL mode discriminator
-- AND the legacy `@dpeek/formless-ui` seam may adapt the current Media React
-  control while the legacy renderer remains active
+- AND Media React controls and legacy Formless UI adapters remain outside the
+  selected production graph
 - AND the field value remains a flat media asset id committed as text by
   generated UI
 
@@ -1808,9 +1786,8 @@ entity operations and view operation bindings.
   indicators, compact status, or toast feedback render
 - THEN the renderer consumes only projected operation control data, current
   execution state, and callback functions supplied by generated UI
-- AND production generated surfaces may render operation control contracts
-  through a legacy `@dpeek/formless-ui` seam before the renderer implementation
-  switches to the replacement renderer
+- AND production generated surfaces render operation control contracts through
+  the selected Astryx renderer
 - AND renderer implementations do not import or call `submitOperation`, app
   target selectors, schema parsing helpers, browser replica APIs, write option
   hooks, local auto-save hooks, operation handler helpers, or auth policy
@@ -1847,13 +1824,12 @@ entity operations and view operation bindings.
   disabled reasons, status copy, and feedback copy rather than inferring them
   from operation kinds
 
-#### Scenario: Legacy renderer consumes operation button contracts
+#### Scenario: Astryx renderer consumes operation button contracts
 
 - GIVEN production collection commands, record deletion, compact status, and
-  progress output use legacy `@dpeek/formless-ui` components and Tailwind
-  classes
+  progress output publish complete renderer-neutral contracts
 - WHEN those leaf surfaces migrate to the Formless UI operation contract
-- THEN dedicated legacy adapters render the projected controls, confirmations,
+- THEN Astryx adapters render the projected controls, confirmations,
   status, and progress while dispatching only presentation and invocation
   intents
 - AND collection queries and counts, record reads and labels, operation
@@ -1863,13 +1839,13 @@ entity operations and view operation bindings.
   deduplication, confirmation lifecycle, committed, replayed, and failed
   behavior, and user-visible feedback rather than legacy HTML structure or
   one-to-one visual parity
-- AND production remains on the legacy renderer after this contract migration
+- AND production selects the Astryx renderer through root application assembly
 
 #### Scenario: Astryx operation control renderer
 
-- GIVEN production operation leaves consume the renderer-neutral operation
-  contract through the legacy seam
-- WHEN the replacement renderer implements the same contract in `lib/astryx`
+- GIVEN production operation leaves publish the renderer-neutral operation
+  contract
+- WHEN the selected renderer implements that contract in `lib/astryx`
 - THEN it uses Astryx action, badge, destructive confirmation, loading, status,
   progress, and toast primitives without importing generated runtime
 - AND it presents one primary action per action group, uses loading state for
@@ -1881,12 +1857,11 @@ entity operations and view operation bindings.
   feedback events are deduplicated by projected identity
 - AND replacement-renderer behavior follows Astryx interaction and hierarchy
   conventions without recreating legacy markup or styling
-- AND adding the Astryx renderer does not export or activate it in production
+- AND the renderer is selected only through root application assembly
 
 #### Scenario: Astryx operation control fixtures
 
-- GIVEN the legacy renderer consumes production operation button and feedback
-  contracts
+- GIVEN runtime publishes production operation button and feedback contracts
 - WHEN operation UX is evaluated in the package-local Astryx Operations layout
 - THEN data-only fixtures use the same contract shapes to cover collection
   command buttons, a target-count badge, disabled and pending controls,
@@ -1895,10 +1870,10 @@ entity operations and view operation bindings.
 - AND package-local fixture state may simulate open-state, invocation, result,
   and feedback intents for UX review but does not import operation controllers,
   generated runtime, storage, browser replica, sync, or app target modules
-- AND the fixture renderer contains no Tailwind classes and does not activate
-  Astryx in production
+- AND the fixture renderer contains no Tailwind classes and does not define or
+  mutate production renderer selection
 - AND create and public operation forms, workspace shell controls, and public
-  Site rendering remain owned by later slices
+  Site rendering remain owned by their existing contracts
 
 #### Scenario: Specialized controls use adapters
 
@@ -2121,39 +2096,37 @@ navigation, and external effects.
 - AND renderers do not call control-plane, gateway, browser, operation, or
   navigation effects directly
 
-#### Scenario: Legacy renderer consumes management contracts
+#### Scenario: Astryx renderer consumes management contracts
 
-- GIVEN production instance management currently mixes runtime state, direct
-  legacy components, generated workspaces, and workspace gateway controls
+- GIVEN production instance management publishes complete renderer-neutral
+  contracts for generated workspaces and workspace gateway controls
 - WHEN runtime publishes the complete management contract graph
-- THEN one subscribed legacy management renderer reads only contract references
+- THEN one subscribed Astryx management renderer reads only contract references
   and snapshots, renders the referenced Apps and Routes workspaces and install
   dialog, and dispatches canonical intents
-- AND direct legacy `@dpeek/formless-ui` imports for the migrated overview remain
-  confined to dedicated legacy seam modules
+- AND legacy `@dpeek/formless-ui` imports remain outside the selected
+  production graph
 - AND focused coverage asserts loading, failure, workspace availability,
   install-dialog behavior, Push behavior, external authorization, display-safe
   feedback, and intent dispatch rather than legacy HTML structure
-- AND production remains on the legacy renderer and `/access` presentation is
-  unchanged after this contract migration
+- AND production selects Astryx for management and `/access` through the same
+  root application assembly
 
 #### Scenario: Astryx management renderer
 
-- GIVEN the legacy renderer consumes complete production management contracts
-- WHEN the replacement renderer implements the same contract in `lib/astryx`
+- GIVEN runtime publishes complete production management contracts
+- WHEN the selected renderer implements the contract in `lib/astryx`
 - THEN pure and subscribed Astryx entrypoints compose existing workspace,
   operation, progress, status, dialog, field, feedback, and empty-state
   primitives without importing generated runtime
 - AND the Astryx renderer contains no legacy Formless UI components, Tailwind
   classes, control-plane reads, gateway clients, operation execution, browser
   effects, or runtime data imports
-- AND adding the renderer does not export or activate it in production,
-  introduce Astryx theme or global CSS into runtime entrypoints, or change
-  access and authentication presentation
+- AND the renderer receives theme and CSS only from root application assembly
 
 #### Scenario: Instance management contract fixtures
 
-- GIVEN the legacy renderer consumes complete production management contracts
+- GIVEN runtime publishes complete production management contracts
 - WHEN instance management UX is evaluated in the package-local Astryx
   prototype
 - THEN data-only memory-host fixtures cover loading, failed, empty, installed
@@ -2166,7 +2139,7 @@ navigation, and external effects.
   without importing generated runtime, control-plane clients, gateway clients,
   storage, browser replica, operation controllers, routing, or browser effects
 - AND fixtures contain no secrets, Tailwind classes, production renderer
-  activation, or behavior that bypasses the canonical contract host
+  selection, or behavior that bypasses the canonical contract host
 
 ### Requirement: Schema-Driven Instance Management UI
 
@@ -2527,25 +2500,22 @@ behavior for onboarding steps that write schema records.
 
 ### Requirement: Document Theme Renderer Contract
 
-The system SHALL present document theme policy and mode through a controlled
-renderer-neutral Formless UI contract before selecting the active renderer,
-while the owning runtime retains preference storage, system-mode resolution,
-SSR bootstrap, document effects, and renderer activation.
+The system SHALL present application document theme policy and mode through a
+controlled renderer-neutral Formless UI contract while the application runtime
+retains preference storage, system-mode resolution, browser bootstrap, and
+document effects.
 
 #### Scenario: Project controlled document theme
 
-- **GIVEN** a top-level application surface has a fixed or user-controlled
-  theme policy
+- **GIVEN** a top-level application surface uses the application theme policy
 - **WHEN** the application runtime prepares theme presentation for a renderer
-- **THEN** it projects a stable document-theme identity, policy, active mode,
-  and optional mode-selection control through contract types owned by
-  `lib/astryx`
-- **AND** theme modes are `system`, `light`, or `dark`, while a fixed policy
-  selects only `light` or `dark`
-- **AND** a user-controlled theme control carries its selected mode, ordered
-  display-safe mode options, and canonical mode-selection intents
-- **AND** a fixed policy omits the selection control and does not invite the
-  renderer to synthesize one
+- **THEN** it projects a stable document-theme identity, selected preference,
+  resolved light or dark mode, ordered display-safe options, and canonical
+  mode-selection intents through contract types owned by `lib/astryx`
+- **AND** application preference modes are `system`, `light`, or `dark`
+- **AND** absent stored preference defaults to `system`
+- **AND** the preference is app-wide and is separate from the public Site theme
+  contract and Site-owned public theme storage
 - **AND** theme selection is a presentation intent rather than an app-schema
   operation, mutation, action execution, or Authority write
 - **AND** the top-level workspace package imports the contract through an
@@ -2559,46 +2529,127 @@ SSR bootstrap, document effects, and renderer activation.
 - **THEN** the snapshot contains no cookie names, storage adapters, browser
   media-query APIs, document mutation callbacks, React nodes, Tailwind classes,
   Astryx component props, or renderer-specific state
-- **AND** runtime or later activation work owns preference persistence,
-  preference scope, system-mode resolution, SSR document markers, hydration,
-  cache behavior, and document-root side effects
+- **AND** application runtime owns local preference persistence, system-mode
+  resolution, pre-mount browser bootstrap, document markers, and document-root
+  side effects
+- **AND** application runtime has no SSR theme path
 - **AND** a fixed surface can override the active mode without requiring the
   renderer contract to erase or replace any separately owned user preference
 
-#### Scenario: Legacy renderer consumes the theme contract
+#### Scenario: Astryx renderer consumes the theme contract
 
-- **GIVEN** production remains on the legacy application renderer
+- **GIVEN** production uses the Astryx application assembly
 - **WHEN** the top-level workspace supplies a document-theme contract
-- **THEN** a dedicated legacy theme adapter renders only the projected active
-  mode and optional control and dispatches canonical mode-selection intents
-- **AND** the legacy adapter does not own policy selection, preference storage,
-  system-mode resolution, SSR bootstrap, or document initialization
-- **AND** absence of a user-controlled theme control preserves surfaces that do
-  not expose a theme action
-- **AND** focused coverage asserts fixed and user-controlled presentation,
-  mode selection, and intent dispatch instead of legacy DOM structure
-- **AND** this contract migration does not select the replacement renderer,
-  activate Astryx theme or global CSS, or change production persistence and SSR
-  behavior
+- **THEN** the Astryx theme adapter renders only the projected active mode and
+  control and dispatches canonical mode-selection intents
+- **AND** the renderer does not own policy selection, preference storage,
+  system-mode resolution, browser bootstrap, or document initialization
+- **AND** one root `FormlessThemeProvider` wraps application shell and no-shell
+  routes, while shell and leaf renderers consume theme facts without mounting a
+  second provider
+- **AND** root application assembly owns the document-level toast surface
 
-#### Scenario: Formless Astryx theme renderer
+#### Scenario: Apply the resolved application theme before mount
 
-- **GIVEN** the legacy renderer consumes the complete production document-theme
-  contract
-- **WHEN** the Formless replacement renderer implements the same contract in
-  `lib/astryx`
-- **THEN** pure and subscribed Astryx adapters apply the projected active mode,
-  render the optional mode-selection control, and dispatch only canonical theme
-  intents
-- **AND** the subscribed Astryx application-shell renderer can consume the
-  separate document-theme reference without adding theme state to shell
-  navigation sections
-- **AND** the renderer uses Astryx theme and control primitives without reading
-  local storage, cookies, runtime profiles, route state, generated records, or
-  browser replica state
-- **AND** fixed light, fixed dark, user system, user light, and user dark data-only
-  fixtures exercise the same contract shapes through the reusable memory host
-- **AND** adding the replacement renderer does not export or activate it in
-  production, introduce Astryx global CSS into runtime entrypoints, or settle
-  cookie, SSR, public Site, account preference, or per-surface preference
-  behavior
+- **GIVEN** the application document starts before React mounts
+- **WHEN** runtime resolves the stored `system`, `light`, or `dark` preference
+- **THEN** it applies one resolved light or dark data marker and matching
+  `color-scheme` to the document before rendering the application
+- **AND** it does not depend on legacy `.light` or `.dark` document classes
+- **AND** changes to stored preference or system color scheme update the marker,
+  `color-scheme`, provider value, and document-theme contract coherently
+- **AND** system, light, and dark fixtures exercise the same contract through
+  the reusable memory host
+
+### Requirement: Application System-State Presentation Contract
+
+The system SHALL present top-level application loading, empty, missing,
+unavailable, blocked, and failure states through renderer-neutral contracts
+while route and runtime foundations retain state selection and effects.
+
+#### Scenario: Project residual application states
+
+- GIVEN an application route cannot yet render a shell, management surface,
+  auth surface, access surface, or generated workspace contract
+- WHEN runtime selects its top-level loading, empty, missing, unavailable,
+  blocked, or failure state
+- THEN it publishes one complete immutable system-state snapshot with stable
+  identity, state kind, display-safe heading, message, ordered facts, feedback,
+  and available retry, continuation, or navigation intents
+- AND runtime owns route matching, owner and session checks, schema loading,
+  package capability checks, retry effects, navigation, and error redaction
+- AND the snapshot contains no storage clients, route callbacks, raw errors,
+  React nodes, Tailwind classes, or renderer-specific props
+
+#### Scenario: Astryx renders every selected application state
+
+- GIVEN production root assembly selects Astryx
+- WHEN any application route or top-level runtime state renders
+- THEN shell, management, auth, access, generated workspace, tree, list, table,
+  record, field, create, operation, and residual system-state presentation all
+  enter through the Astryx assembly
+- AND no selected route renders direct Tailwind system-state markup or falls
+  back to a legacy presentation module
+- AND no per-surface renderer flag, environment toggle, route-local selector,
+  or dual-renderer mode exists
+
+### Requirement: Astryx Application Runtime Assembly
+
+The system SHALL select one complete Astryx application presentation assembly
+at production roots while runtime foundations retain data, state, policy,
+effects, routing, and stable contract-host ownership.
+
+#### Scenario: Root assembly selects presentation once
+
+- GIVEN the browser application root assembles production presentation
+- WHEN shell and no-shell routes mount
+- THEN one application presentation assembly supplies Astryx shell,
+  management, auth, access, generated workspace, tree, list, table,
+  record-result, field, create, operation, theme, and system-state entrypoints
+- AND route foundations and contract publishers do not import or choose between
+  renderer implementations
+- AND the selected renderer consumes the existing stable host, scoped
+  references, immutable snapshots, intent handlers, and React route child
+  without moving runtime state or effects into `lib/astryx`
+- AND selection is one source constant with no fallback path
+
+#### Scenario: Application roots own provider and navigation integration
+
+- GIVEN the Astryx application assembly is active
+- WHEN application root behavior is installed
+- THEN one root provider, application CSS boundary, StyleX integration, toast
+  surface, document-theme controller, and navigation adapter cover shell and
+  no-shell routes
+- AND the navigation adapter intercepts eligible same-origin primary link
+  activation and preserves modified clicks, downloads, external origins,
+  unsupported targets, hash-only navigation, and explicit opt-out behavior
+- AND application shell renderers do not mount a nested theme provider or own
+  document navigation effects
+- AND public Site browser and Worker roots use their separate public provider,
+  CSS, navigation, and theme assembly
+
+#### Scenario: Selected production graph is Astryx only
+
+- GIVEN production application and public Site entrypoints are built
+- WHEN their reachable dependency graphs and emitted assets are inspected
+- THEN presentation imports use documented Astryx package subpaths
+- AND application roots include application Astryx CSS and public roots include
+  public Site Astryx CSS
+- AND selected graphs exclude `@dpeek/formless-ui`, legacy renderer modules,
+  Media React adapters, direct Tailwind application markup, legacy application
+  CSS, and private Astryx source deep imports
+- AND dormant legacy source and dependencies may remain only outside reachable
+  production graphs for a separate cleanup change
+
+#### Scenario: Activate the complete graph atomically
+
+- GIVEN every Astryx slice, residual state, provider, build, navigation, theme,
+  conformance, and dependency-graph check passes before activation
+- WHEN production selection changes
+- THEN application browser, public Site browser, and public Site Worker roots
+  select Astryx presentation, provider, CSS, and build integration in one
+  indivisible change
+- AND selection-coupled tests assert only Astryx production entrypoints
+- AND the activation does not delete dormant legacy source or dependency
+  declarations and does not change storage, auth, Site projection, public form,
+  route, or operation semantics

@@ -18,9 +18,7 @@ import {
 } from "./access-contract.ts";
 import { AccessRoute, type AccessRouteDependencies } from "./access.tsx";
 
-vi.mock("../generated/legacy-access-renderer.tsx", () => ({
-  LegacySubscribedAccessRenderer: () => null,
-}));
+vi.mock("../application-presentation.tsx", () => ({ ApplicationPresentation: () => null }));
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 

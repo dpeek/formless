@@ -4,6 +4,9 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./application/assembly": "./src/application-assembly.tsx",
+    "./application/global.css": "./src/application.css",
+    "./application/provider": "./src/application-provider.tsx",
     "./contract": "./src/formless-ui-contract.ts",
     "./contract-host": "./src/formless-ui-contract-host.ts",
     "./contract-host/react": "./src/formless-ui-contract-host-react.tsx",

@@ -44,7 +44,7 @@ import {
 } from "./record-field-authoring.ts";
 import { inputValueToFieldValue } from "./format.ts";
 import { useSchemaAppTarget, useSchemaAppWriteOptions } from "./schema-app-context.tsx";
-import { StateMachineStateBadge } from "./state-machine-ui.tsx";
+import { StateMachineStateBadge } from "./legacy-state-machine-ui.tsx";
 
 type RecordFieldEditorProps = {
   density?: "default" | "compact";

@@ -1,4 +1,4 @@
-import { parseSvgIconSource } from "@dpeek/formless-ui/svg-icon";
+import { parseSourceSvg } from "@dpeek/formless-source-svg";
 import { describe, expect, it } from "vite-plus/test";
 import {
   findIconCatalogEntry,
@@ -54,9 +54,20 @@ describe("icon catalog", () => {
     expect(findIconCatalogEntry("missing")).toBeUndefined();
   });
 
-  it("keeps every catalog SVG source parseable by the safe SVG icon parser", () => {
+  it("keeps every catalog SVG source parseable by the renderer-neutral safe parser", () => {
     for (const entry of iconCatalogEntries) {
-      expect(parseSvgIconSource(entry.source), entry.key).not.toBeNull();
+      expect(parseSourceSvg(entry.source), entry.key).not.toBeNull();
     }
+  });
+
+  it.each([
+    "<svg><script>alert(1)</script></svg>",
+    "<svg><foreignObject><p>HTML</p></foreignObject></svg>",
+    '<svg><path href="javascript:alert(1)" /></svg>',
+    '<svg><path fill="url(https://example.com/pattern.svg)" /></svg>',
+    "<svg><path></svg>",
+    `<svg>${" ".repeat(50_000)}</svg>`,
+  ])("keeps unsafe, malformed, and oversized catalog source outside the safe policy", (source) => {
+    expect(parseSourceSvg(source)).toBeNull();
   });
 });

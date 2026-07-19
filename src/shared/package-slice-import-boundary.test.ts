@@ -200,6 +200,78 @@ describe("package slice import boundaries", () => {
 
     expect(failures).toEqual([]);
   });
+
+  it("keeps candidate media and source SVG consumers off dormant presentation adapters", async () => {
+    const astryxRoot = resolve(repoRoot, "lib/astryx");
+    const candidateSourcePaths = [
+      ...(await sourceFiles(resolve(astryxRoot, "src"))).filter(
+        (filePath) => !filePath.includes(".test.") && !filePath.includes(".fixtures."),
+      ),
+      ...candidateGeneratedMediaSourceFiles.map((path) => resolve(repoRoot, path)),
+      resolve(repoRoot, "src/shared/icon-catalog.ts"),
+    ];
+    const candidateFailures: string[] = [];
+
+    for (const filePath of candidateSourcePaths) {
+      const source = await readFile(filePath, "utf8");
+      const path = relative(repoRoot, filePath);
+
+      for (const specifier of importSpecifiers(source)) {
+        if (
+          specifier === "@dpeek/formless-media/react" ||
+          specifier === "@dpeek/formless-ui/svg-icon"
+        ) {
+          candidateFailures.push(`${path}: imports dormant presentation ${specifier}`);
+        }
+      }
+    }
+
+    const mediaReactImporters: string[] = [];
+
+    for (const filePath of await boundarySourceFiles()) {
+      const source = await readFile(filePath, "utf8");
+
+      if (importSpecifiers(source).includes("@dpeek/formless-media/react")) {
+        mediaReactImporters.push(relative(repoRoot, filePath));
+      }
+    }
+
+    const rootPackage = await readPackageJson(resolve(repoRoot, "package.json"));
+    const astryxPackage = await readPackageJson(resolve(astryxRoot, "package.json"));
+    const sitePackage = await readPackageJson(resolve(repoRoot, "lib/site-app/package.json"));
+    const sourceSvgPackage = await readPackageJson(
+      resolve(repoRoot, "lib/source-svg/package.json"),
+    );
+    const iconCatalogValidationSource = await readFile(
+      resolve(repoRoot, "src/shared/icon-catalog.test.ts"),
+      "utf8",
+    );
+    const astryxSourceIconSource = await readFile(
+      resolve(astryxRoot, "src/components/field-primitives.tsx"),
+      "utf8",
+    );
+    const siteIconSource = await readFile(
+      resolve(repoRoot, "lib/site-app/src/site-icon-source.ts"),
+      "utf8",
+    );
+
+    expect(candidateFailures).toEqual([]);
+    expect(mediaReactImporters.sort()).toEqual([
+      "src/app/generated/create-field-control.tsx",
+      "src/app/generated/record-field-control.tsx",
+    ]);
+    expect(importSpecifiers(iconCatalogValidationSource)).toContain("@dpeek/formless-source-svg");
+    expect(importSpecifiers(iconCatalogValidationSource)).not.toContain(
+      "@dpeek/formless-ui/svg-icon",
+    );
+    expect(importSpecifiers(astryxSourceIconSource)).toContain("@dpeek/formless-source-svg");
+    expect(importSpecifiers(siteIconSource)).toContain("@dpeek/formless-source-svg");
+    expect(rootPackage.dependencies?.["@dpeek/formless-source-svg"]).toBe("^0.1.0");
+    expect(astryxPackage.dependencies?.["@dpeek/formless-source-svg"]).toBe("^0.1.0");
+    expect(sitePackage.dependencies?.["@dpeek/formless-source-svg"]).toBe("^0.1.0");
+    expect(sourceSvgPackage.dependencies).toBeUndefined();
+    expect(sourceSvgPackage.peerDependencies).toBeUndefined();
+  });
 });
 
 const allowedArchivePackageImports = new Set([
@@ -233,9 +305,14 @@ const allowedTasksPackageImports = new Set([
 ]);
 
 const allowedFormlessAstryxPackageImports = new Set([
+  "@dpeek/formless-astryx/application/assembly",
+  "@dpeek/formless-astryx/application/global.css",
+  "@dpeek/formless-astryx/application/provider",
   "@dpeek/formless-astryx/contract",
   "@dpeek/formless-astryx/contract-host",
   "@dpeek/formless-astryx/contract-host/react",
+  "@dpeek/formless-astryx/site/global.css",
+  "@dpeek/formless-astryx/site/provider",
   "@dpeek/formless-astryx/site/renderer",
 ]);
 
@@ -249,11 +326,35 @@ const allowedAstryxSiteTestPackageImports = new Set([
   "@dpeek/formless-site-app/worker",
 ]);
 
+const candidateGeneratedMediaSourceFiles = [
+  "src/app/generated/formless-ui-intents.ts",
+  "src/app/generated/formless-ui-projection.ts",
+  "src/app/generated/generated-create-runtime.ts",
+  "src/app/generated/generated-list-foundation.ts",
+  "src/app/generated/generated-record-result-foundation.ts",
+  "src/app/generated/generated-table-foundation.tsx",
+  "src/app/generated/generated-tree-create-foundation.ts",
+  "src/app/generated/generated-tree-foundation.ts",
+  "src/app/generated/generated-workspace-foundation.ts",
+  "src/app/generated/generated-workspace-runtime.tsx",
+  "src/app/generated/record-field-authoring.ts",
+] as const;
+
 function allowedAstryxSitePackageImport(filePath: string, specifier: string): boolean {
   return (
     allowedAstryxSitePackageImports.has(specifier) ||
     (filePath.includes(".test.") && allowedAstryxSiteTestPackageImports.has(specifier))
   );
+}
+
+async function readPackageJson(path: string): Promise<{
+  dependencies?: Record<string, string>;
+  peerDependencies?: Record<string, string>;
+}> {
+  return JSON.parse(await readFile(path, "utf8")) as {
+    dependencies?: Record<string, string>;
+    peerDependencies?: Record<string, string>;
+  };
 }
 
 async function boundarySourceFiles(): Promise<string[]> {

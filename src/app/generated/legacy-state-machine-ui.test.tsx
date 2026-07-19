@@ -24,11 +24,11 @@ import { GeneratedCreateFieldControl } from "./create-field-control.tsx";
 import { projectGeneratedCreateFormlessUiField } from "./formless-ui-projection.ts";
 import { RecordFieldEditor } from "./record-field-editor.tsx";
 import {
-  executeTransitionStateOperation,
   RecordStateTransitionMenu,
   RecordTransitionOperationControls,
   StateMachineStateBadge,
-} from "./state-machine-ui.tsx";
+} from "./legacy-state-machine-ui.tsx";
+import { executeTransitionStateOperation } from "./state-machine-operation-runtime.ts";
 
 beforeEach(async () => {
   await deleteClientDb("tasks");

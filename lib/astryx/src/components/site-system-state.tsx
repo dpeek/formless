@@ -6,20 +6,23 @@ import type {
   SitePublicSystemStateRendererComponent,
   SitePublicSystemStateRendererProps,
 } from "@dpeek/formless-site-app";
+import { AstryxPublicSiteProvider } from "../site-provider.tsx";
 
 export const AstryxSitePublicSystemStateRenderer: SitePublicSystemStateRendererComponent = (
   props,
 ) => (
-  <Layout
-    contentWidth={640}
-    height="auto"
-    padding={6}
-    content={
-      <LayoutContent role="main">
-        <AstryxSitePublicSystemState {...props} />
-      </LayoutContent>
-    }
-  />
+  <AstryxPublicSiteProvider mode="light">
+    <Layout
+      contentWidth={640}
+      height="auto"
+      padding={6}
+      content={
+        <LayoutContent role="main">
+          <AstryxSitePublicSystemState {...props} />
+        </LayoutContent>
+      }
+    />
+  </AstryxPublicSiteProvider>
 );
 
 function AstryxSitePublicSystemState(props: SitePublicSystemStateRendererProps) {

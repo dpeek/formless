@@ -5,6 +5,9 @@ import type {
   FormlessUiAccessInvitationAuthoringReference,
   FormlessUiAccessManifestContract,
   FormlessUiAccessManifestReference,
+  FormlessUiApplicationSystemStateContract,
+  FormlessUiApplicationSystemStateIntent,
+  FormlessUiApplicationSystemStateReference,
   FormlessUiAuthIntent,
   FormlessUiAuthSurfaceContract,
   FormlessUiAuthSurfaceKind,
@@ -44,33 +47,35 @@ import type {
 export type FormlessUiContractSnapshot<Reference extends FormlessUiContractReference> =
   Reference extends FormlessUiAccessManifestReference
     ? FormlessUiAccessManifestContract
-    : Reference extends FormlessUiAccessInvitationAuthoringReference
-      ? FormlessUiAccessInvitationAuthoringContract
-      : Reference extends FormlessUiAuthSurfaceReference<infer SurfaceKind>
-        ? Extract<FormlessUiAuthSurfaceContract, { surfaceKind: SurfaceKind }>
-        : Reference extends FormlessUiDocumentThemeReference
-          ? FormlessUiDocumentThemeContract
-          : Reference extends FormlessUiManagementManifestReference
-            ? FormlessUiManagementManifestContract
-            : Reference extends FormlessUiManagementInstallDialogReference
-              ? FormlessUiManagementInstallDialogContract
-              : Reference extends FormlessUiWorkspaceManifestReference
-                ? FormlessUiWorkspaceManifestContract
-                : Reference extends FormlessUiWorkspaceSectionShellReference
-                  ? FormlessUiWorkspaceSectionShellContract
-                  : Reference extends FormlessUiShellManifestReference
-                    ? FormlessUiShellManifestContract
-                    : Reference extends FormlessUiShellNavigationSectionReference
-                      ? FormlessUiShellNavigationSectionContract
-                      : Reference extends FormlessUiListResultReference
-                        ? FormlessUiListContract
-                        : Reference extends FormlessUiTableResultReference
-                          ? FormlessUiTableContract
-                          : Reference extends FormlessUiTreeResultReference
-                            ? FormlessUiTreeResultContract
-                            : Reference extends FormlessUiRecordResultReference
-                              ? FormlessUiRecordResultContract
-                              : never;
+    : Reference extends FormlessUiApplicationSystemStateReference
+      ? FormlessUiApplicationSystemStateContract
+      : Reference extends FormlessUiAccessInvitationAuthoringReference
+        ? FormlessUiAccessInvitationAuthoringContract
+        : Reference extends FormlessUiAuthSurfaceReference<infer SurfaceKind>
+          ? Extract<FormlessUiAuthSurfaceContract, { surfaceKind: SurfaceKind }>
+          : Reference extends FormlessUiDocumentThemeReference
+            ? FormlessUiDocumentThemeContract
+            : Reference extends FormlessUiManagementManifestReference
+              ? FormlessUiManagementManifestContract
+              : Reference extends FormlessUiManagementInstallDialogReference
+                ? FormlessUiManagementInstallDialogContract
+                : Reference extends FormlessUiWorkspaceManifestReference
+                  ? FormlessUiWorkspaceManifestContract
+                  : Reference extends FormlessUiWorkspaceSectionShellReference
+                    ? FormlessUiWorkspaceSectionShellContract
+                    : Reference extends FormlessUiShellManifestReference
+                      ? FormlessUiShellManifestContract
+                      : Reference extends FormlessUiShellNavigationSectionReference
+                        ? FormlessUiShellNavigationSectionContract
+                        : Reference extends FormlessUiListResultReference
+                          ? FormlessUiListContract
+                          : Reference extends FormlessUiTableResultReference
+                            ? FormlessUiTableContract
+                            : Reference extends FormlessUiTreeResultReference
+                              ? FormlessUiTreeResultContract
+                              : Reference extends FormlessUiRecordResultReference
+                                ? FormlessUiRecordResultContract
+                                : never;
 
 export type FormlessUiContractHostListener = () => void;
 
@@ -91,6 +96,11 @@ export type FormlessUiContractHost = {
 export type FormlessUiWorkspaceManifestNode = {
   reference: FormlessUiWorkspaceManifestReference;
   snapshot: FormlessUiWorkspaceManifestContract;
+};
+
+export type FormlessUiApplicationSystemStateNode = {
+  reference: FormlessUiApplicationSystemStateReference;
+  snapshot: FormlessUiApplicationSystemStateContract;
 };
 
 export type FormlessUiAccessManifestNode = {
@@ -161,6 +171,7 @@ export type FormlessUiManagementInstallDialogNode = {
 export type FormlessUiContractHostNode =
   | FormlessUiAccessInvitationAuthoringNode
   | FormlessUiAccessManifestNode
+  | FormlessUiApplicationSystemStateNode
   | FormlessUiAuthSurfaceNode
   | FormlessUiDocumentThemeNode
   | FormlessUiListResultNode
@@ -261,6 +272,16 @@ export function formlessUiWorkspaceManifestReference(
     kind: "workspaceManifestReference",
     role: "workspace",
     workspaceId,
+  };
+}
+
+export function formlessUiApplicationSystemStateReference(
+  stateId: string,
+): FormlessUiApplicationSystemStateReference {
+  return {
+    kind: "applicationSystemStateReference",
+    role: "applicationSystemState",
+    stateId,
   };
 }
 
@@ -431,6 +452,8 @@ export function formlessUiContractReferenceKey(reference: FormlessUiContractRefe
   switch (reference.kind) {
     case "accessManifestReference":
       return JSON.stringify([reference.role, reference.accessId]);
+    case "applicationSystemStateReference":
+      return JSON.stringify([reference.role, reference.stateId]);
     case "accessInvitationAuthoringReference":
       return JSON.stringify([reference.role, reference.accessId, reference.authoringId]);
     case "authSurfaceReference":
@@ -473,6 +496,7 @@ export function isFormlessUiWorkspaceIntent(
     case "accessInvitationRevocationConfirmationOpenChange":
     case "accessInvitationRevoke":
     case "accessInvitationSubmit":
+    case "applicationSystemStateAction":
     case "authAction":
     case "authContinuation":
     case "authField":
@@ -493,6 +517,12 @@ export function isFormlessUiWorkspaceIntent(
     default:
       return true;
   }
+}
+
+export function isFormlessUiApplicationSystemStateIntent(
+  intent: FormlessUiContractIntent,
+): intent is FormlessUiApplicationSystemStateIntent {
+  return intent.type === "applicationSystemStateAction";
 }
 
 export function isFormlessUiAccessIntent(
@@ -609,6 +639,12 @@ function assertNodeMatchesReference(node: FormlessUiContractHostNode) {
       }
       assertAccessManifestContract(snapshot);
       return;
+    case "applicationSystemStateReference":
+      if (snapshot.kind !== "applicationSystemState" || snapshot.id !== reference.stateId) {
+        throw mismatchedNodeError(reference);
+      }
+      assertApplicationSystemStateContract(snapshot);
+      return;
     case "accessInvitationAuthoringReference":
       if (
         snapshot.kind !== "accessInvitationAuthoring" ||
@@ -693,6 +729,31 @@ function assertNodeMatchesReference(node: FormlessUiContractHostNode) {
       if (snapshot.kind !== "treeResult" || snapshot.id !== reference.resultId) {
         throw mismatchedNodeError(reference);
       }
+  }
+}
+
+function assertApplicationSystemStateContract(snapshot: FormlessUiApplicationSystemStateContract) {
+  const actionIds = new Set<string>();
+  const controlIds = new Set<string>();
+
+  for (const action of snapshot.actions) {
+    if (actionIds.has(action.id) || controlIds.has(action.control.id)) {
+      throw new Error(
+        `Formless UI application system state ${JSON.stringify(snapshot.id)} has duplicate action identities.`,
+      );
+    }
+    actionIds.add(action.id);
+    controlIds.add(action.control.id);
+
+    if (
+      action.intent.stateId !== snapshot.id ||
+      action.intent.actionId !== action.id ||
+      action.intent.controlId !== action.control.id
+    ) {
+      throw new Error(
+        `Formless UI application system state ${JSON.stringify(snapshot.id)} has an invalid action intent.`,
+      );
+    }
   }
 }
 

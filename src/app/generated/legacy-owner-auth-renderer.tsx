@@ -250,6 +250,21 @@ export const LegacySubscribedCollaboratorInvitationAuthRenderer = memo(
   },
 );
 
+export const LegacySubscribedAuthRenderer = memo(
+  function LegacySubscribedAuthRenderer({
+    reference,
+  }: {
+    reference: FormlessUiAuthSurfaceReference;
+  }) {
+    const surface = useFormlessUiAuthSurface(reference);
+    const onIntent = useFormlessUiAuthIntentHandler();
+    return surface ? <LegacyAuthRenderer onIntent={onIntent} surface={surface} /> : null;
+  },
+  (previous, next) =>
+    previous.reference.surfaceId === next.reference.surfaceId &&
+    previous.reference.surfaceKind === next.reference.surfaceKind,
+);
+
 function LegacyOwnerAuthField({
   field: authField,
   onIntent,

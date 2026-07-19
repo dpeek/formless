@@ -12,6 +12,9 @@ import {
 } from "../../shared/instance-auth.ts";
 import { runtimeTopologyRoutes } from "../../shared/runtime-topology.ts";
 import { fetchOwnerSessionStatus } from "./owner-login.tsx";
+import type { FormlessUiApplicationSystemStateContract } from "@dpeek/formless-astryx/contract";
+import { projectApplicationSystemState } from "./application-system-state-projection.ts";
+import { ApplicationSystemStateRuntime } from "./application-system-state-runtime.tsx";
 
 export type LocalSessionRouteState =
   | { status: "blocked"; blockedDatabaseNames: string[]; message: string }
@@ -49,26 +52,43 @@ export function LocalSessionRoute() {
 }
 
 export function LocalSessionRouteView({ state }: { state: LocalSessionRouteState }) {
-  return (
-    <section className="min-h-dvh bg-bg text-fg">
-      <div className="mx-auto flex min-h-dvh w-full max-w-xl flex-col justify-center px-4 py-12">
-        <div className="space-y-3 rounded-lg border border-border bg-overlay p-6 shadow-sm">
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-fg">Formless</p>
-          <h1 className="text-2xl font-semibold">{localSessionRouteHeading(state)}</h1>
-          <p className="text-sm text-muted-fg">{localSessionRouteMessage(state)}</p>
-          {state.status === "blocked" ? (
-            <ul className="space-y-1 text-xs text-muted-fg">
-              {state.blockedDatabaseNames.map((databaseName) => (
-                <li key={databaseName}>
-                  <code>{databaseName}</code>
-                </li>
-              ))}
-            </ul>
-          ) : null}
-        </div>
-      </div>
-    </section>
-  );
+  return <ApplicationSystemStateRuntime snapshot={projectLocalSessionRouteSystemState(state)} />;
+}
+
+export function projectLocalSessionRouteSystemState(
+  state: LocalSessionRouteState,
+): FormlessUiApplicationSystemStateContract {
+  return projectApplicationSystemState({
+    ...(state.status === "blocked"
+      ? {
+          facts: state.blockedDatabaseNames.map((databaseName, index) => ({
+            id: `blocked-database:${index}`,
+            label: `Blocked database ${index + 1}`,
+            value: databaseName,
+          })),
+          feedback: {
+            detail: state.message,
+            id: "feedback:local-session-blocked",
+            intent: "warning" as const,
+            title: "Browser cache reset blocked",
+          },
+        }
+      : state.status === "failed"
+        ? {
+            feedback: {
+              detail: state.message,
+              id: "feedback:local-session-failed",
+              intent: "danger" as const,
+              title: "Local session failed",
+            },
+          }
+        : {}),
+    heading: localSessionRouteHeading(state),
+    id: "application-system-state:local-session",
+    message: localSessionRouteMessage(state),
+    state:
+      state.status === "blocked" ? "blocked" : state.status === "failed" ? "failure" : "loading",
+  });
 }
 
 export function startLocalSessionRouteSession({

@@ -42,7 +42,7 @@ import {
   LegacyGeneratedOperationDestructiveConfirmation,
 } from "./legacy-operation-controls.tsx";
 import { RecordReadinessWarnings } from "./readiness-warnings.tsx";
-import { StateMachineStateBadge } from "./state-machine-ui.tsx";
+import { StateMachineStateBadge } from "./legacy-state-machine-ui.tsx";
 
 export type LegacyTableFieldIntentHandler = (
   contextId: string,

@@ -44,10 +44,14 @@ runtime semantic migration.
   to `FormlessUiField` projection.
 - `src/app/generated/formless-ui-intents.ts`: `FormlessUiFieldIntent` adapter
   back to generated draft/session/commit behavior.
-- `src/app/generated/create.tsx`, `create-field-control.tsx`,
-  `record-field-control.tsx`, `table.tsx`, and `collection.tsx`: current
-  generated surfaces that still render largely through direct
+- `src/app/generated/generated-create-runtime.ts`: live create session,
+  projection, selection, and operation behavior.
+- `src/app/generated/legacy-generated-create.tsx`,
+  `create-field-control.tsx`, `record-field-control.tsx`, and `table.tsx`:
+  dormant generated presentation that still renders largely through direct
   `@dpeek/formless-ui` imports.
+- `src/app/generated/generated-workspace-runtime.tsx` and the subscribed
+  legacy workspace renderers: the sole generated screen and collection path.
 - `src/app/application-shell-runtime.tsx` and
   `src/app/generated/legacy-application-shell-renderer.tsx`: current runtime
   shell projection boundary and production legacy renderer seam.
@@ -110,22 +114,84 @@ Shell/navigation is unresolved. Current runtime UX is a separate instance rail
 plus generated app screens. The Astryx prototype points toward unified
 navigation, but it is not canonical behavior.
 
-Media is partly resolved at the contract level and unresolved at the package
-boundary. `FormlessUiField` already carries media asset options, preview facts,
-upload enablement, upload patch fields, and media select/file intents. The
-remaining risk is that the reusable media React control is exported from
-`@dpeek/formless-media/react` while depending on Formless UI primitives and
-Tailwind.
+Media is resolved for cutover preparation. `FormlessUiField` carries media asset
+options, selected and missing-asset facts, preview facts, upload enablement,
+upload patch fields, and media select/file intents. Canonical Site source has
+five live media editor declarations across create-operation, record, table,
+detail, and tree ownership, and focused conformance tests cover each through the
+same contract and Astryx field renderer. `@dpeek/formless-media/react` remains
+only in dormant legacy create and record controls for post-cutover cleanup;
+runtime and type-only consumers use `@dpeek/formless-media/client`.
 
-Icon fields are less resolved than media. Current generated icon controls store
-and edit SVG source strings. The contract can carry SVG presentation for enum
-values, but it has no icon option catalog for icon editor fields. The current
-semantic control icon map also lives inside `@dpeek/formless-ui`.
+Safe source SVG parsing is renderer-neutral. Shared icon-catalog validation,
+Site icon serialization, legacy SVG presentation, and Astryx source-icon
+presentation import `@dpeek/formless-source-svg`; Site remains independent from
+Astryx. The legacy semantic control icon map remains inside
+`@dpeek/formless-ui` until post-cutover cleanup.
 
-Tailwind is still structural. Browser entrypoints import
-`@dpeek/formless-ui/global.css`, runtime Vite installs the Tailwind plugin, and
-many runtime, shell, generated, media, and public Site modules contain Tailwind
-utility classes directly.
+The complete selected Astryx application assembly is packaged at
+`@dpeek/formless-astryx/application/assembly`. It composes subscribed shell,
+management, auth, access, workspace, tree, list, table, record-result, field,
+create, operation, theme, and application system-state presentation over the
+stable contract host. The package also exposes independent
+`application/provider` and `application/global.css` boundaries. Package
+fixtures, prototype roots, public Site presentation, runtime internals, and
+individual renderer leaves are outside the application export graph. Production create and tree
+renderers live in `formless-ui-create-renderer.tsx` and
+`formless-ui-tree-renderer.tsx`, separate from their package-local prototype
+hosts.
+
+Application runtime presentation enters through the renderer-neutral assembly
+contract in `src/app/application-presentation-contract.ts` and the direct
+Astryx package export in `src/app/application-presentation.tsx`. The dormant
+legacy adapter remains outside the selected graph. Routes, shell runtime,
+generated workspace runtime, and system-state runtime do not import or accept
+renderer choices. Embedded, standalone browser, and Worker public Site roots
+explicitly supply the Astryx page and system-state renderers while preserving
+workspace renderer precedence on the separate Site-owned boundary.
+
+The root runtime Vite factory now applies the supported Astryx StyleX plugin
+suite before React, Tailwind, and Cloudflare, with package-local Astryx module
+resolution and the existing workspace renderer extension and client chunking
+unchanged. Public Site development documents load the StyleX virtual runtime,
+layer order, and stylesheet even when hydration is omitted; production Worker
+documents load the layer order and manifest-owned CSS for the public entry.
+Focused dual-entry build coverage compiles the selected production application
+and public browser entries, verifies emitted StyleX atoms and manifest CSS, and
+rejects admin application modules from the public chunk graph. A separate
+Worker graph guard follows the selected public renderer through documented
+Astryx and Site package exports.
+
+The browser-only application theme runtime now defaults malformed or absent
+storage to `system`, resolves system/light/dark to one active mode, applies
+`data-formless-application-theme` plus `color-scheme`, and projects the stable
+`theme:application` contract and canonical intents. `index.html` runs its
+bootstrap module before `src/main.tsx`; application storage and document state
+remain separate from Site-owned public theme state. The selected Astryx root
+composes the exported application provider, one theme provider, one
+toast viewport, the stable contract host, the package CSS boundary, and the
+runtime same-origin navigation bridge. Shell presentation consumes the theme
+reference without mounting another provider, and public Site renderer roots
+carry the explicit native-navigation opt-out. The production application root
+mounts this assembly and the embedded and standalone public roots load the
+package-owned public CSS boundary.
+
+Executable production guards exercise the selected Astryx application assembly
+over the complete canonical route/profile matrix and stable memory-host
+instances. The public Astryx page and system-state renderers
+both own the public provider boundary; system-state SSR uses deterministic
+light mode, while workspace page-renderer precedence remains outside that
+built-in provider. A static cutover manifest freezes the selected application,
+browser Site, and Worker Site roots, providers, CSS boundaries, StyleX plugin
+order, complete renderer counterparts, selected graph isolation, documented
+package imports, absence of Tailwind utility markup in Astryx package graphs,
+and the separate dormant source, test, package, adapter, CSS, and dependency
+cleanup inventory.
+
+Tailwind and `@dpeek/formless-ui` dependencies, the Tailwind Vite plugin, legacy
+CSS, and dormant legacy modules remain for the separate cleanup change. The
+selected production presentation roots do not import legacy CSS or render
+Tailwind-dependent legacy presentation.
 
 ## Remaining Phases
 
@@ -516,6 +582,3 @@ Not allowed:
   fragments remain allowed projection facts;
 - renderer migration that changes generated runtime semantics;
 - compatibility shims for removed behavior.
-
-Native `FormData`, field names, and hidden inputs are submit-adapter concerns.
-They should not become the source of truth for generated runtime state.

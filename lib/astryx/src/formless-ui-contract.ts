@@ -2861,6 +2861,68 @@ export type FormlessUiManagementManifestContract =
   | FormlessUiManagementLoadingContract
   | FormlessUiManagementReadyContract;
 
+export type FormlessUiApplicationSystemStateKind =
+  | "blocked"
+  | "empty"
+  | "failure"
+  | "loading"
+  | "missing"
+  | "unavailable";
+
+export type FormlessUiApplicationSystemStateActionPurpose = "continue" | "navigate" | "retry";
+
+export type FormlessUiApplicationSystemStateIntent = {
+  actionId: string;
+  controlId: string;
+  stateId: string;
+  type: "applicationSystemStateAction";
+};
+
+export type FormlessUiApplicationSystemStateIntentHandler = (
+  intent: FormlessUiApplicationSystemStateIntent,
+) => Promise<void> | void;
+
+export type FormlessUiApplicationSystemStateActionContract = {
+  control: FormlessUiButtonContract;
+  id: string;
+  intent: FormlessUiApplicationSystemStateIntent;
+  kind: "applicationSystemStateAction";
+  purpose: FormlessUiApplicationSystemStateActionPurpose;
+};
+
+export type FormlessUiApplicationSystemStateFactContract = {
+  id: string;
+  kind: "applicationSystemStateFact";
+  label: string;
+  value: string;
+};
+
+export type FormlessUiApplicationSystemStateFeedbackContract = {
+  detail?: string;
+  id: string;
+  intent: FormlessUiCompactStatusIntent;
+  kind: "applicationSystemStateFeedback";
+  title: string;
+};
+
+export type FormlessUiApplicationSystemStateContract = {
+  accessibilityLabel: string;
+  actions: readonly FormlessUiApplicationSystemStateActionContract[];
+  facts: readonly FormlessUiApplicationSystemStateFactContract[];
+  feedback?: FormlessUiApplicationSystemStateFeedbackContract;
+  heading: string;
+  id: string;
+  kind: "applicationSystemState";
+  message: string;
+  state: FormlessUiApplicationSystemStateKind;
+};
+
+export type FormlessUiApplicationSystemStateReference = {
+  kind: "applicationSystemStateReference";
+  role: "applicationSystemState";
+  stateId: string;
+};
+
 export type FormlessUiDocumentThemeReference = {
   kind: "documentThemeReference";
   role: "documentTheme";
@@ -2994,6 +3056,7 @@ export type FormlessUiWorkspaceSectionShellContract = Omit<
 export type FormlessUiContractReference =
   | FormlessUiAccessInvitationAuthoringReference
   | FormlessUiAccessManifestReference
+  | FormlessUiApplicationSystemStateReference
   | FormlessUiAuthSurfaceReference
   | FormlessUiDocumentThemeReference
   | FormlessUiListResultReference
@@ -3144,6 +3207,7 @@ export type FormlessUiWorkspaceIntentHandler = (
 
 export type FormlessUiContractIntent =
   | FormlessUiAccessIntent
+  | FormlessUiApplicationSystemStateIntent
   | FormlessUiAuthIntent
   | FormlessUiDocumentThemeIntent
   | FormlessUiManagementIntent

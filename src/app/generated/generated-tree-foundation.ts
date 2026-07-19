@@ -37,7 +37,7 @@ import {
   type GeneratedRecordResultRecordState,
   type SelectGeneratedRecordResultFoundationOptions,
 } from "./generated-record-result-foundation.ts";
-import { selectRecordLabel } from "./record-delete.tsx";
+import { selectRecordLabel } from "./record-delete-runtime.ts";
 import { selectRecordContextLinkForActiveUnion } from "./union-presentation.ts";
 import {
   projectGeneratedTreeChildCreation,

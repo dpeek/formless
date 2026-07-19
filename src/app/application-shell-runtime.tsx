@@ -6,14 +6,9 @@ import {
   useRef,
   useState,
   useSyncExternalStore,
-  type ElementType,
   type ReactNode,
 } from "react";
-import type {
-  FormlessUiDocumentThemeReference,
-  FormlessUiShellIntent,
-  FormlessUiShellManifestReference,
-} from "@dpeek/formless-astryx/contract";
+import type { FormlessUiShellIntent } from "@dpeek/formless-astryx/contract";
 import type { AppInstall, AppPackageResolver } from "@dpeek/formless-installed-apps";
 import {
   appStorageIdentityForClientTarget,
@@ -35,7 +30,7 @@ import {
   useGeneratedCreateRuntime,
   type GeneratedCreateRuntime,
   type GeneratedCreateTriggerPresentation,
-} from "./generated/create.tsx";
+} from "./generated/generated-create-runtime.ts";
 import {
   resolveGeneratedApplicationShellIntent,
   useGeneratedApplicationShellContractHost,
@@ -50,7 +45,8 @@ import {
   selectGeneratedShellScope,
   type GeneratedShellResetState,
 } from "./generated/formless-ui-shell-projection.ts";
-import { LegacySubscribedApplicationShellRenderer } from "./generated/legacy-application-shell-renderer.tsx";
+import { ApplicationPresentation } from "./application-presentation.tsx";
+import type { ApplicationRootThemeRuntime } from "./application-root-context.tsx";
 import { SchemaAppProvider } from "./generated/schema-app-context.tsx";
 import {
   HomeRouteSelectionProvider,
@@ -71,12 +67,6 @@ const ROOT_CREATE_TRIGGER: GeneratedCreateTriggerPresentation = {
   prominence: "quiet",
 };
 
-export type ApplicationShellRuntimeRendererProps = {
-  children: ReactNode;
-  shellReference: FormlessUiShellManifestReference;
-  themeReference?: FormlessUiDocumentThemeReference | undefined;
-};
-
 export type ApplicationShellRuntimeDependencies = {
   fetchOwnerSession?: () => Promise<OwnerSessionStatusResponse>;
   logout?: () => Promise<OwnerLogoutResponse>;
@@ -91,13 +81,13 @@ export type ApplicationShellRuntimeDependencies = {
 export type ApplicationShellRuntimeBoundaryProps = {
   activePackageResolver?: AppPackageResolver | undefined;
   activeScreenPath?: string | undefined;
+  applicationTheme?: ApplicationRootThemeRuntime | undefined;
   children: ReactNode;
   currentPath: string;
   dependencies?: ApplicationShellRuntimeDependencies;
   installedAppRouteInstalls?: readonly AppInstall[] | undefined;
   initialRouteContractContributions?: readonly ApplicationRuntimeContractContribution[];
   ownerSession?: OwnerSessionStatusResponse | undefined;
-  renderer?: ElementType<ApplicationShellRuntimeRendererProps> | undefined;
   routeWorld: RuntimeWorldMount | undefined;
   runtimeProfile: RuntimeProfile;
   screenModels?: readonly HomeScreenModel[] | undefined;
@@ -128,13 +118,13 @@ export function ApplicationShellRuntimeBoundary(props: ApplicationShellRuntimeBo
 function ApplicationShellRuntime({
   activePackageResolver,
   activeScreenPath,
+  applicationTheme,
   children,
   currentPath,
   dependencies = {},
   initialRouteContractContributions,
   installedAppRouteInstalls = [],
   ownerSession: ownerSessionProp,
-  renderer: Renderer = LegacySubscribedApplicationShellRenderer,
   routeWorld,
   runtimeProfile,
   screenModels: screenModelsProp,
@@ -351,6 +341,21 @@ function ApplicationShellRuntime({
     projection,
   });
 
+  useLayoutEffect(() => {
+    if (applicationTheme) {
+      coordinator.publish("application-theme", applicationTheme.publication);
+    } else {
+      coordinator.remove("application-theme");
+    }
+  }, [applicationTheme, coordinator]);
+
+  useLayoutEffect(
+    () => () => {
+      coordinator.remove("application-theme");
+    },
+    [coordinator],
+  );
+
   useEffect(() => {
     if (ownerSessionProp !== undefined) {
       setOwnerSession(ownerSessionProp);
@@ -432,12 +437,18 @@ function ApplicationShellRuntime({
     }
   }
 
-  const routeWorkspace =
-    Renderer && shellReference ? (
-      <Renderer shellReference={shellReference}>{children}</Renderer>
-    ) : (
-      children
-    );
+  const routeWorkspace = shellReference ? (
+    <ApplicationPresentation
+      presentation={{
+        children,
+        kind: "shell",
+        shellReference,
+        themeReference: applicationTheme?.reference,
+      }}
+    />
+  ) : (
+    children
+  );
 
   return (
     <ApplicationRuntimeContractHostProvider coordinator={coordinator}>

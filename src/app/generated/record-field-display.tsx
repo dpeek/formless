@@ -16,7 +16,7 @@ import {
   EMPTY_GENERATED_REFERENCE_OPTIONS,
   shouldUseAppReplicaReferenceOptions,
 } from "./reference-field-options.ts";
-import { StateMachineStateBadge } from "./state-machine-ui.tsx";
+import { StateMachineStateBadge } from "./legacy-state-machine-ui.tsx";
 import { LegacyDisplayFieldAdapter } from "./legacy-record-field-adapter.tsx";
 import {
   projectGeneratedDisplayFormlessUiField,

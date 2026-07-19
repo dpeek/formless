@@ -161,8 +161,7 @@ storage contracts.
   renderer props
 - AND Site adapter selection modules do not import the legacy or Astryx
   renderer implementation
-- AND production root assembly explicitly supplies the legacy built-in renderer
-  until the renderer cutover
+- AND production root assembly explicitly supplies the Astryx built-in renderer
 
 #### Scenario: Renderer migration input stays projection shaped
 
@@ -191,8 +190,8 @@ browser and Worker runtime ownership of state selection and document behavior.
 - WHEN the public Site client renders that state
 - THEN root assembly supplies one built-in system-state renderer that receives
   only state kind and display-safe presentation facts
-- AND production root assembly explicitly supplies the legacy system-state
-  renderer until the renderer cutover
+- AND production root assembly explicitly supplies the Astryx system-state
+  renderer
 - AND the workspace page-renderer extension does not replace browser
   system-state presentation
 
@@ -207,16 +206,16 @@ browser and Worker runtime ownership of state selection and document behavior.
 - AND the workspace page-renderer extension remains scoped to successful page
   bodies and cannot return a not-found document, error document, or `Response`
 
-### Requirement: Astryx Public Site Renderer Candidate
+### Requirement: Astryx Public Site Renderer
 
 The system SHALL provide a complete Astryx implementation of the canonical
-Site page and system-state renderer contracts without selecting it in
-production.
+Site page and system-state renderer contracts and select it as the production
+built-in renderer.
 
-#### Scenario: Candidate covers shipped public Site presentation
+#### Scenario: Renderer covers shipped public Site presentation
 
 - GIVEN canonical projected Site fixtures exercise public Site rendering
-- WHEN the Astryx candidate renders those fixtures in browser and Worker builds
+- WHEN the Astryx renderer renders those fixtures in browser and Worker builds
 - THEN it renders header and footer frames, page and post layouts, every shipped
   public block, route-aware links, source SVG icons, core media and missing-media
   states, content lists and summaries, fixed public forms, generic public
@@ -226,16 +225,18 @@ production.
 - AND it consumes canonical Site contracts and public helpers through documented
   Site package exports instead of duplicate projection or renderer types
 
-#### Scenario: Candidate stays outside production assembly
+#### Scenario: Renderer is selected at public roots
 
-- GIVEN the Astryx page and system-state renderers are complete and exported
+- GIVEN the Astryx page and system-state renderers are exported through
+  documented package subpaths
 - WHEN production browser and Worker entrypoints are built
-- THEN root assembly still imports and supplies only the legacy Site renderers
+- THEN root assembly imports and supplies only the Astryx built-in Site
+  renderers
 - AND the Site package does not import Astryx
 - AND no renderer flag, environment toggle, per-block selection, production
   fallback, or dual-renderer mode is introduced
-- AND selecting Astryx, integrating root StyleX and provider assembly, switching
-  public CSS, and deleting the legacy renderer remain one later cutover
+- AND public browser and Worker roots integrate Astryx StyleX, provider, and CSS
+  boundaries atomically while preserving workspace renderer precedence
 
 ### Requirement: Subscribe Form Public Tree Projection
 
@@ -731,12 +732,12 @@ operation execution behavior.
   values, created records, provider state, and notification configuration never
   enter renderer presentation facts
 
-#### Scenario: Legacy renderer adopts the session seam before cutover
+#### Scenario: Selected renderer consumes the session seam
 
-- GIVEN production remains on the legacy Site renderer
+- GIVEN production uses the Astryx Site renderer
 - WHEN fixed or generic public forms render
-- THEN dedicated legacy presentation consumes the Site-owned session facts and
-  dispatches only presentation intents
+- THEN Astryx presentation consumes the Site-owned session facts and dispatches
+  only presentation intents
 - AND current public routes, validation, coercion, Turnstile, idempotency,
   submission, pending, success, unavailable, and display-safe failure behavior
   remains unchanged
@@ -759,21 +760,20 @@ shell.
 - AND public Site documents that do not need browser interactivity may omit
   public Site script assets
 
-#### Scenario: Candidate theme and CSS remain package scoped
+#### Scenario: Public theme and CSS remain package scoped
 
-- GIVEN the unselected Astryx public Site renderer is exercised in browser and
-  Worker verification
+- GIVEN the selected Astryx public Site renderer is assembled in browser and
+  Worker rendering
 - WHEN its provider and styles are assembled
 - THEN the Astryx package exposes the public provider and CSS boundaries needed
-  by that candidate
+  by public roots
 - AND Worker rendering starts from a deterministic public theme mode and
   browser hydration remains structurally stable while stored or system mode is
   applied
 - AND Site-owned public theme storage and document bootstrap facts remain
   outside the renderer implementation
-- AND production public entrypoints continue to use the legacy provider and
-  global CSS until the renderer cutover integrates root StyleX, provider, and
-  public CSS selection atomically
+- AND production public entrypoints use the Astryx public provider, StyleX, and
+  CSS boundaries without importing application provider or CSS assembly
 
 #### Scenario: Public Site assets exclude admin-only code
 

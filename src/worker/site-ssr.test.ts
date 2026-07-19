@@ -83,7 +83,11 @@ describe("published Site Worker SSR", () => {
     expect(html).toContain('<link rel="icon" sizes="any" href="/favicon.ico" />');
     expect(html).toContain('<link rel="apple-touch-icon" href="/apple-touch-icon.png" />');
     expect(html).toContain('<div id="app">');
-    expect(html).toContain('<main class="min-h-dvh"><article');
+    expect(html).toContain("data-astryx-public-site-provider");
+    expect(html).toContain('role="main"');
+    expect(html).toContain("@layer reset, astryx-base, astryx-theme, product;");
+    expect(html).toContain('<link rel="stylesheet" href="/virtual:stylex.css" />');
+    expect(html).toContain('<script type="module" src="/@id/virtual:stylex:runtime"></script>');
     expect(html).toContain('data-site-theme="light"');
     expect(html).toContain('<script id="formless-public-site-theme">');
     expect(html).toContain('const storageKey = "formless:public-site:theme";');
@@ -100,8 +104,9 @@ describe("published Site Worker SSR", () => {
     expect(html).toContain('<meta name="twitter:card" content="summary" />');
     expect(html).not.toContain("og:image");
     expect(html).toContain("Home");
-    expect(html).toContain("data-site-header");
-    expect(html).toContain("data-site-footer");
+    expect(html).toContain("data-astryx-public-site-provider");
+    expect(html).toContain('role="navigation"');
+    expect(html).toContain("data-site-footer-group");
     expect(html).toContain(
       `<meta name="${FORMLESS_RUNTIME_PROFILE_META_NAME}" content="publishedSite" />`,
     );
@@ -151,6 +156,33 @@ describe("published Site Worker SSR", () => {
     expect(await headResponse.text()).toBe("");
   });
 
+  it("loads development StyleX CSS for public documents without hydration", async () => {
+    const response = await handlePublicSiteDocumentRequest(
+      new Request("https://example.com/static", {
+        headers: { Accept: "text/html" },
+      }),
+      envWithTreeResponse(
+        Response.json(
+          testSitePageTree("static", {
+            frame: {},
+            label: "Static page",
+          }),
+        ),
+      ),
+    );
+
+    if (!response) {
+      throw new Error("Expected a published Site document response.");
+    }
+
+    const html = await response.text();
+
+    expect(html).toContain("@layer reset, astryx-base, astryx-theme, product;");
+    expect(html).toContain('<link rel="stylesheet" href="/virtual:stylex.css" />');
+    expect(html).not.toContain("virtual:stylex:runtime");
+    expect(html).not.toContain("/src/public-site-main.tsx");
+  });
+
   it("injects production client assets from the public Site manifest", async () => {
     const assetRequests: string[] = [];
     const response = await handlePublicSiteDocumentRequest(
@@ -183,6 +215,7 @@ describe("published Site Worker SSR", () => {
     expect(html).toContain(
       '<link rel="stylesheet" crossorigin href="/assets/public-site-test.css">',
     );
+    expect(html).toContain("@layer reset, astryx-base, astryx-theme, product;");
     expect(html).toContain(
       '<script type="module" crossorigin src="/assets/public-site-test.js"></script>',
     );
@@ -288,8 +321,8 @@ describe("published Site Worker SSR", () => {
     expect(html).toContain("Starter post");
     expect(html).toContain("<title>Starter post | Starter Site</title>");
     expect(html).toContain('<meta property="og:type" content="article" />');
-    expect(html).toContain("data-site-header");
-    expect(html).toContain("data-site-footer");
+    expect(html).toContain("data-astryx-public-site-provider");
+    expect(html).toContain('role="main"');
     expect(html).toContain('href="/blog"');
     expect(html).not.toContain('href="/pages/blog"');
     expect(html).not.toContain("Loading site page...");
@@ -344,7 +377,8 @@ describe("published Site Worker SSR", () => {
     expect(html).toContain("<title>Page not found | Site</title>");
     expect(html).toContain("Page not found");
     expect(html).toContain("No site page exists for");
-    expect(html).toContain("<code>missing-page</code>");
+    expect(html).toContain("No site page exists for missing-page.");
+    expect(html).toContain('data-site-system-state="not-found"');
     expect(html).not.toContain(INITIAL_SITE_PAGE_TREE_SCRIPT_ID);
   });
 

@@ -59,7 +59,7 @@ vi.mock("@dpeek/formless-site-app/public/react", async (importOriginal) => {
   };
 });
 
-vi.mock("@astryxdesign/core", () => ({
+vi.mock("@astryxdesign/core/theme", () => ({
   Theme: ({ children, mode }: { children: ReactNode; mode: string }) =>
     createElement("div", { "data-component": "Theme", "data-mode": mode }, children),
 }));
@@ -1758,6 +1758,7 @@ describe("Astryx public Site system states", () => {
     });
     const mounted = required(renderer);
 
+    expect(mounted.root.findByProps({ "data-astryx-public-site-provider": true })).toBeDefined();
     expect(mounted.root.findByProps({ "data-site-system-state": kind })).toBeDefined();
     expect(rendererText(mounted)).toContain(title);
     expect(rendererText(mounted)).toContain(detail);
@@ -1782,6 +1783,7 @@ describe("Astryx public Site system states", () => {
     const html = renderToStaticMarkup(<AstryxSitePublicSystemStateRenderer {...props} />);
 
     expect(html).toContain(title);
+    expect(html).toContain("data-astryx-public-site-provider");
     expect(html).toContain(`data-site-system-state="${props.kind}"`);
     expect(html).not.toContain("<html");
   });

@@ -37,7 +37,7 @@ import { dateValueToStoredDateValue, storedDateValueToDateValue } from "./date-v
 import { completionCheckboxClassName } from "./field-presentation.tsx";
 import { encodeNumberEditorInputValue, numberInputValueToFieldValue } from "./format.ts";
 import { EMPTY_GENERATED_REFERENCE_OPTIONS } from "./reference-field-options.ts";
-import { StateMachineStateBadge } from "./state-machine-ui.tsx";
+import { StateMachineStateBadge } from "./legacy-state-machine-ui.tsx";
 import {
   imageMediaAssetOptionFromUpload,
   upsertMediaAssetOption,

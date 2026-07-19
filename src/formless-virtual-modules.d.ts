@@ -1,5 +1,5 @@
 declare module "virtual:formless/site-public-renderer/browser" {
-  import type { SitePublicRendererComponent } from "@dpeek/formless-site-app/react";
+  import type { SitePublicRendererComponent } from "@dpeek/formless-site-app";
 
   export const sitePublicRenderer: SitePublicRendererComponent | undefined;
 }

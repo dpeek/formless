@@ -397,7 +397,7 @@ vi.mock("@astryxdesign/core/Text", () => ({
     ),
 }));
 
-vi.mock("./create-surfaces.tsx", () => ({
+vi.mock("./formless-ui-create-renderer.tsx", () => ({
   AstryxCreateSurfaceRenderer: ({
     onFieldIntent,
     onIntent,
@@ -533,9 +533,7 @@ describe("Astryx application shell renderer", () => {
     expect(rendererText(mountedRenderer)).toContain("Ada Lovelace");
     expect(rendererText(mountedRenderer)).toContain("ada@example.com");
     expect(rendererText(mountedRenderer)).toContain("Route workspace");
-    expect(
-      requiredByProps(mountedRenderer.root, { "data-component": "Theme" }).props["data-mode"],
-    ).toBe("dark");
+    expect(mountedRenderer.root.findAllByProps({ "data-component": "Theme" })).toHaveLength(0);
     expect(mountedRenderer.root.findAllByProps({ role: "radiogroup" })).toHaveLength(0);
 
     const createSurface = requiredByProps(mountedRenderer.root, {
@@ -743,9 +741,7 @@ describe("Astryx application shell renderer", () => {
     }
 
     const mountedRenderer = renderer;
-    expect(
-      requiredByProps(mountedRenderer.root, { "data-component": "Theme" }).props["data-mode"],
-    ).toBe("dark");
+    expect(mountedRenderer.root.findAllByProps({ "data-component": "Theme" })).toHaveLength(0);
     expect(
       requiredByProps(mountedRenderer.root, {
         "aria-label": "Switch to light mode",

@@ -28,7 +28,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("unselected Astryx public Site candidate", () => {
+describe("selected Astryx public Site renderer", () => {
   it("satisfies the canonical page and system-state renderer contracts", () => {
     const pageRenderer: SitePublicRendererComponent = AstryxSitePageRenderer;
     const systemStateRenderer: SitePublicSystemStateRendererComponent =
@@ -68,8 +68,11 @@ describe("unselected Astryx public Site candidate", () => {
 
     expect(readyHtml).toContain("data-astryx-public-site-provider");
     expect(readyHtml).toContain(tree.page.label);
+    expect(loadingHtml).toContain("data-astryx-public-site-provider");
     expect(loadingHtml).toContain('data-site-system-state="loading"');
+    expect(notFoundHtml).toContain("data-astryx-public-site-provider");
     expect(notFoundHtml).toContain('data-site-system-state="not-found"');
+    expect(failureHtml).toContain("data-astryx-public-site-provider");
     expect(failureHtml).toContain('data-site-system-state="failure"');
   });
 
@@ -104,8 +107,10 @@ describe("unselected Astryx public Site candidate", () => {
     expect(foundHtml).toContain("data-astryx-public-site-provider");
     expect(foundHtml).toContain(`id="${INITIAL_SITE_PAGE_TREE_SCRIPT_ID}"`);
     expect(notFoundResponse.status).toBe(404);
+    expect(notFoundHtml).toContain("data-astryx-public-site-provider");
     expect(notFoundHtml).toContain('data-site-system-state="not-found"');
     expect(failureResponse.status).toBe(500);
+    expect(failureHtml).toContain("data-astryx-public-site-provider");
     expect(failureHtml).toContain('data-site-system-state="failure"');
   });
 

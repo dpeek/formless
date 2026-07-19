@@ -90,12 +90,13 @@ function createHarness() {
 describe("instance control-plane API routes", () => {
   it("requires owner, instance-admin, or admin authorization for dashboard control-plane reads", async () => {
     const anonymous = await harness.fetch(`${controlPlaneApi}/bootstrap`);
+    const anonymousBody = await anonymous.json();
     const admin = await getJson<BootstrapResponse>(`${controlPlaneApi}/bootstrap`);
     const ownerRead = await getOwnerJson<BootstrapResponse>(`${controlPlaneApi}/bootstrap`);
 
     expect(anonymous.status).toBe(401);
     expect(anonymous.headers.get("WWW-Authenticate")).toBe('Bearer realm="formless-admin"');
-    expect(await anonymous.json()).toEqual({
+    expect(anonymousBody).toEqual({
       error:
         "Owner session, instance-admin session, or admin authorization is required for this read endpoint.",
     });

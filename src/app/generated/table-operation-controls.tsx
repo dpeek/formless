@@ -32,7 +32,7 @@ import {
 } from "../../client/views.ts";
 import type { StoredRecord } from "@dpeek/formless-storage";
 import { RecordFieldEditor } from "./record-field-editor.tsx";
-import { RecordTransitionOperationControls } from "./state-machine-ui.tsx";
+import { RecordTransitionOperationControls } from "./legacy-state-machine-ui.tsx";
 import {
   initialGeneratedUpdateDraftSessionState,
   nextGeneratedUpdateDraftSessionState,

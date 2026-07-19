@@ -9,11 +9,12 @@ import {
 } from "react";
 import { Redirect, Route, Switch, useLocation } from "wouter";
 import { NotFoundRoute } from "./app/routes/not-found.tsx";
+import { normalizeSitePageSlug } from "@dpeek/formless-site-app/public/react";
 import {
-  LegacySitePageRenderer,
-  LegacySitePublicSystemStateRenderer,
-  normalizeSitePageSlug,
-} from "@dpeek/formless-site-app/react";
+  AstryxSitePageRenderer,
+  AstryxSitePublicSystemStateRenderer,
+} from "@dpeek/formless-astryx/site/renderer";
+import "@dpeek/formless-astryx/site/global.css";
 import {
   createPublicSiteReactAdapterRegistry,
   publicSiteReactAdapterForPackageAppKey,
@@ -66,6 +67,9 @@ import type { AppInstallsResponse } from "./shared/protocol.ts";
 import type { FormlessUiWorkspaceLinkActionContract } from "@dpeek/formless-astryx/contract";
 import { initialInstanceManagementRuntimeContribution } from "./app/routes/instance-management-contract.ts";
 import { initialInstanceAccessRuntimeContribution } from "./app/routes/access-contract.ts";
+import { projectApplicationSystemState } from "./app/routes/application-system-state-projection.ts";
+import { ApplicationSystemStateRuntime } from "./app/routes/application-system-state-runtime.tsx";
+import { useApplicationRootThemeRuntime } from "./app/application-root-context.tsx";
 
 type HomeRouteProps = {
   activePackageResolver?: AppPackageResolver | undefined;
@@ -108,8 +112,8 @@ export type AppRouteComponents = {
 };
 
 const defaultPublicSiteReactAdapters = createPublicSiteReactAdapterRegistry({
-  builtInRenderer: LegacySitePageRenderer,
-  builtInSystemStateRenderer: LegacySitePublicSystemStateRenderer,
+  builtInRenderer: AstryxSitePageRenderer,
+  builtInSystemStateRenderer: AstryxSitePublicSystemStateRenderer,
   workspaceRenderer: workspaceSitePublicRenderer,
 });
 
@@ -173,6 +177,7 @@ export function App({
   runtimeProfile?: RuntimeProfile;
 } = {}) {
   const [location] = useLocation();
+  const rootThemeRuntime = useApplicationRootThemeRuntime();
   const routeComponents = resolveAppRouteComponents(routeComponentOverrides);
   const runtimeProfile = useMemo(
     () => runtimeProfileProp ?? resolveRuntimeProfile(),
@@ -234,9 +239,14 @@ export function App({
 
   if (routeRegistryLoading) {
     return (
-      <main className="min-h-dvh">
-        <RouteLoading />
-      </main>
+      <ApplicationSystemStateRuntime
+        snapshot={projectApplicationSystemState({
+          heading: "Loading application",
+          id: "application-system-state:route-registry",
+          message: "Loading installed app routes...",
+          state: "loading",
+        })}
+      />
     );
   }
 
@@ -249,14 +259,12 @@ export function App({
 
   if (!shellScope) {
     return (
-      <main className="min-h-dvh">
-        <AppRoutes
-          installedAppRouteContext={installedAppRouteContext}
-          localWorkspaceGatewayAvailable={localWorkspaceGatewayAvailable}
-          routeComponents={routeComponents}
-          runtimeProfile={activeRuntimeProfile}
-        />
-      </main>
+      <AppRoutes
+        installedAppRouteContext={installedAppRouteContext}
+        localWorkspaceGatewayAvailable={localWorkspaceGatewayAvailable}
+        routeComponents={routeComponents}
+        runtimeProfile={activeRuntimeProfile}
+      />
     );
   }
 
@@ -266,6 +274,7 @@ export function App({
     <Suspense fallback={<RouteLoading />}>
       <ApplicationShellRuntimeBoundary
         activePackageResolver={installedAppRouteContext.activePackageResolver}
+        applicationTheme={rootThemeRuntime}
         currentPath={location}
         initialRouteContractContributions={initialRouteContractContributions}
         installedAppRouteInstalls={installedAppRouteInstalls}
@@ -494,8 +503,8 @@ function AppRoutes({
   const publicSiteReactAdapters =
     routeComponents.publicSiteReactAdapters ??
     createPublicSiteReactAdapterRegistry({
-      builtInRenderer: LegacySitePageRenderer,
-      builtInSystemStateRenderer: LegacySitePublicSystemStateRenderer,
+      builtInRenderer: AstryxSitePageRenderer,
+      builtInSystemStateRenderer: AstryxSitePublicSystemStateRenderer,
       siteRoute: routeComponents.SitePageRoute,
       workspaceRenderer: workspaceSitePublicRenderer,
     });
@@ -867,12 +876,15 @@ function PublicSiteRoute({
 
   if (!adapter) {
     return (
-      <section className="mx-auto max-w-3xl px-6 py-10">
-        <h1 className="text-2xl font-semibold">Unsupported public Site package</h1>
-        <p className="mt-2 text-sm text-slate-600">
-          Package app <code>{packageAppKey}</code> has no registered public Site React adapter.
-        </p>
-      </section>
+      <ApplicationSystemStateRuntime
+        snapshot={projectApplicationSystemState({
+          facts: [{ id: "package-app-key", label: "Package app", value: packageAppKey }],
+          heading: "Unsupported public Site package",
+          id: "application-system-state:unsupported-public-site-package",
+          message: `Package app ${packageAppKey} has no registered public Site React adapter.`,
+          state: "unavailable",
+        })}
+      />
     );
   }
 
@@ -890,7 +902,16 @@ function PublicSiteRoute({
 }
 
 function RouteLoading() {
-  return <p className="text-sm text-muted-fg">Loading...</p>;
+  return (
+    <ApplicationSystemStateRuntime
+      snapshot={projectApplicationSystemState({
+        heading: "Loading Formless",
+        id: "application-system-state:route-loading",
+        message: "Loading...",
+        state: "loading",
+      })}
+    />
+  );
 }
 
 function OwnerRouteGuard({
@@ -951,7 +972,16 @@ function OwnerRouteGuard({
 }
 
 function OwnerRouteLoading() {
-  return <p className="text-sm text-muted-fg">Checking owner access...</p>;
+  return (
+    <ApplicationSystemStateRuntime
+      snapshot={projectApplicationSystemState({
+        heading: "Checking owner access",
+        id: "application-system-state:owner-access",
+        message: "Checking owner access...",
+        state: "loading",
+      })}
+    />
+  );
 }
 
 function ownerRouteTarget(location: string): OwnerLoginRedirectTarget {

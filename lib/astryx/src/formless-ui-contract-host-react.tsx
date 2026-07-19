@@ -10,6 +10,8 @@ import type {
   FormlessUiAccessIntentHandler,
   FormlessUiAccessInvitationAuthoringReference,
   FormlessUiAccessManifestReference,
+  FormlessUiApplicationSystemStateIntentHandler,
+  FormlessUiApplicationSystemStateReference,
   FormlessUiAuthIntentHandler,
   FormlessUiAuthSurfaceReference,
   FormlessUiContractReference,
@@ -68,6 +70,11 @@ export function useFormlessUiAccessIntentHandler(): FormlessUiAccessIntentHandle
   return useCallback((intent) => host.dispatch(intent), [host]);
 }
 
+export function useFormlessUiApplicationSystemStateIntentHandler(): FormlessUiApplicationSystemStateIntentHandler {
+  const host = useFormlessUiContractHost();
+  return useCallback((intent) => host.dispatch(intent), [host]);
+}
+
 export function useFormlessUiAuthIntentHandler(): FormlessUiAuthIntentHandler {
   const host = useFormlessUiContractHost();
   return useCallback((intent) => host.dispatch(intent), [host]);
@@ -113,6 +120,12 @@ export function useFormlessUiWorkspaceManifest(reference: FormlessUiWorkspaceMan
 }
 
 export function useFormlessUiAccessManifest(reference: FormlessUiAccessManifestReference) {
+  return useFormlessUiContract(reference);
+}
+
+export function useFormlessUiApplicationSystemState(
+  reference: FormlessUiApplicationSystemStateReference,
+) {
   return useFormlessUiContract(reference);
 }
 

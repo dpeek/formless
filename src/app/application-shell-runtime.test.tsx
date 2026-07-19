@@ -1,9 +1,15 @@
-import { beforeEach, describe, expect, it } from "vite-plus/test";
+import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import type { ReactNode } from "react";
-import type { FormlessUiShellNavigationSectionReference } from "@dpeek/formless-astryx/contract";
+import type {
+  FormlessUiDocumentThemeContract,
+  FormlessUiShellNavigationSectionReference,
+} from "@dpeek/formless-astryx/contract";
 import type { FormlessUiContractHost } from "@dpeek/formless-astryx/contract-host";
-import { formlessUiShellManifestReference } from "@dpeek/formless-astryx/contract-host";
+import {
+  formlessUiDocumentThemeReference,
+  formlessUiShellManifestReference,
+} from "@dpeek/formless-astryx/contract-host";
 import { useFormlessUiContractHost } from "@dpeek/formless-astryx/contract-host/react";
 import type { StoredRecord } from "@dpeek/formless-storage";
 import { applyBootstrapResponse, resetClientStore } from "../client/store.ts";
@@ -18,12 +24,63 @@ import {
 } from "./routes/home-selection.tsx";
 import { createDevRuntimeProfile, findRuntimeWorldMountByRoute } from "./runtime-profile.ts";
 
+vi.mock("./application-presentation.tsx", () => ({
+  ApplicationPresentation: ({
+    presentation,
+  }: {
+    presentation: { children?: ReactNode; kind: string };
+  }) => (presentation.kind === "shell" ? presentation.children : null),
+}));
+
 beforeEach(() => {
   resetClientStore();
   resetSyncStatus();
 });
 
 describe("application shell runtime boundary", () => {
+  it("publishes the selected root theme into the existing stable shell host", async () => {
+    applyBootstrapResponse(bootstrapResponse(taskSourceSchema, []), "tasks");
+    const runtimeProfile = createDevRuntimeProfile();
+    const routeWorld = required(findRuntimeWorldMountByRoute(runtimeProfile, "/tasks"));
+    const reference = formlessUiDocumentThemeReference("theme:application");
+    const snapshot: FormlessUiDocumentThemeContract = {
+      activeMode: "dark",
+      id: reference.themeId,
+      kind: "documentTheme",
+      policy: { kind: "fixed", mode: "dark" },
+    };
+    let host: FormlessUiContractHost | undefined;
+    let renderer: ReactTestRenderer | undefined;
+
+    function HostProbe() {
+      host = useFormlessUiContractHost();
+      return null;
+    }
+
+    await act(async () => {
+      renderer = create(
+        <ApplicationShellRuntimeBoundary
+          applicationTheme={{
+            publication: { nodes: [{ reference, snapshot }] },
+            reference,
+          }}
+          currentPath="/tasks"
+          ownerSession={{ authenticated: false, setupComplete: true }}
+          routeWorld={routeWorld}
+          runtimeProfile={runtimeProfile}
+          screenModels={[]}
+        >
+          <HostProbe />
+        </ApplicationShellRuntimeBoundary>,
+      );
+    });
+
+    const initialHost = required(host);
+    expect(initialHost.read(reference)).toBe(snapshot);
+
+    await act(async () => renderer?.unmount());
+  });
+
   it("keeps one host while resolving root selection and controlled create against current state", async () => {
     applyBootstrapResponse(
       bootstrapResponse(taskSourceSchema, [projectRecord("project-1"), projectRecord("project-2")]),
@@ -71,12 +128,13 @@ describe("application shell runtime boundary", () => {
           currentPath="/tasks"
           dependencies={dependencies}
           ownerSession={{ authenticated: false, setupComplete: true }}
-          renderer={HostProbe}
           routeWorld={routeWorld}
           runtimeProfile={runtimeProfile}
           screenModels={[screen]}
         >
-          <SelectionProbe />
+          <HostProbe>
+            <SelectionProbe />
+          </HostProbe>
         </ApplicationShellRuntimeBoundary>,
       );
     });
@@ -236,11 +294,12 @@ describe("application shell runtime boundary", () => {
             session: { expiresAt: "private-session-value" },
             setupComplete: true,
           }}
-          renderer={HostProbe}
           routeWorld={routeWorld}
           runtimeProfile={runtimeProfile}
         >
-          <div>Workspace</div>
+          <HostProbe>
+            <div>Workspace</div>
+          </HostProbe>
         </ApplicationShellRuntimeBoundary>,
       );
     });

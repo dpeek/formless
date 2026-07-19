@@ -1,0 +1,118 @@
+import type {
+  FormlessUiApplicationSystemStateActionContract,
+  FormlessUiApplicationSystemStateActionPurpose,
+  FormlessUiApplicationSystemStateContract,
+  FormlessUiApplicationSystemStateIntent,
+  FormlessUiApplicationSystemStateKind,
+  FormlessUiCompactStatusIntent,
+} from "@dpeek/formless-astryx/contract";
+import { displaySafeText } from "./instance-management-display-safety.ts";
+
+export type ApplicationSystemStateProjectionInput = {
+  accessibilityLabel?: string;
+  actions?: readonly {
+    accessibilityLabel?: string;
+    id: string;
+    label: string;
+    prominence?: "primary" | "quiet" | "secondary";
+    purpose: FormlessUiApplicationSystemStateActionPurpose;
+  }[];
+  facts?: readonly { id: string; label: string; value: string }[];
+  feedback?: {
+    detail?: string;
+    id: string;
+    intent: FormlessUiCompactStatusIntent;
+    title: string;
+  };
+  heading: string;
+  id: string;
+  message: string;
+  state: FormlessUiApplicationSystemStateKind;
+};
+
+export type ResolvedApplicationSystemStateIntent =
+  | { action: FormlessUiApplicationSystemStateActionContract; kind: "action" }
+  | { kind: "ignored" };
+
+export function projectApplicationSystemState(
+  input: ApplicationSystemStateProjectionInput,
+): FormlessUiApplicationSystemStateContract {
+  return {
+    accessibilityLabel: displaySafeText(input.accessibilityLabel ?? input.heading),
+    actions: (input.actions ?? []).map((action) => applicationSystemStateAction(input.id, action)),
+    facts: (input.facts ?? []).map((fact) => ({
+      id: fact.id,
+      kind: "applicationSystemStateFact" as const,
+      label: displaySafeText(fact.label),
+      value: displaySafeText(fact.value),
+    })),
+    ...(input.feedback
+      ? {
+          feedback: {
+            ...(input.feedback.detail === undefined
+              ? {}
+              : { detail: displaySafeText(input.feedback.detail) }),
+            id: input.feedback.id,
+            intent: input.feedback.intent,
+            kind: "applicationSystemStateFeedback" as const,
+            title: displaySafeText(input.feedback.title),
+          },
+        }
+      : {}),
+    heading: displaySafeText(input.heading),
+    id: input.id,
+    kind: "applicationSystemState",
+    message: displaySafeText(input.message),
+    state: input.state,
+  };
+}
+
+export function resolveApplicationSystemStateIntent(
+  snapshot: FormlessUiApplicationSystemStateContract,
+  intent: FormlessUiApplicationSystemStateIntent,
+): ResolvedApplicationSystemStateIntent {
+  if (intent.stateId !== snapshot.id) {
+    return { kind: "ignored" };
+  }
+
+  const action = snapshot.actions.find(
+    (candidate) =>
+      candidate.id === intent.actionId &&
+      candidate.control.id === intent.controlId &&
+      candidate.intent.stateId === intent.stateId &&
+      candidate.intent.actionId === intent.actionId &&
+      candidate.intent.controlId === intent.controlId,
+  );
+
+  return action && !action.control.disabled && !action.control.pending
+    ? { action, kind: "action" }
+    : { kind: "ignored" };
+}
+
+function applicationSystemStateAction(
+  stateId: string,
+  input: NonNullable<ApplicationSystemStateProjectionInput["actions"]>[number],
+): FormlessUiApplicationSystemStateActionContract {
+  const controlId = `control:${input.id}`;
+
+  return {
+    control: {
+      accessibilityLabel: displaySafeText(input.accessibilityLabel ?? input.label),
+      content: { kind: "label", label: displaySafeText(input.label) },
+      density: "default",
+      id: controlId,
+      kind: "button",
+      prominence: input.prominence ?? "primary",
+      type: "button",
+    },
+    id: input.id,
+    intent: {
+      actionId: input.id,
+      controlId,
+      stateId,
+      type: "applicationSystemStateAction",
+    },
+    kind: "applicationSystemStateAction",
+    purpose: input.purpose,
+  };
+}

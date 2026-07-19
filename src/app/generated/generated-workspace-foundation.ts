@@ -350,10 +350,6 @@ export type GeneratedWorkspaceResolvedIntent =
       section: GeneratedWorkspaceSectionRuntimePlan;
     };
 
-export function generatedWorkspaceScreenIsEligible(_screen: HomeScreenModel): boolean {
-  return true;
-}
-
 export function selectGeneratedWorkspaceFoundation(
   options: SelectGeneratedWorkspaceFoundationOptions,
 ): GeneratedWorkspaceFoundation | undefined {

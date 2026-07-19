@@ -5,6 +5,7 @@ import { applyBootstrapResponse, resetClientStore } from "../../client/store.ts"
 import {
   selectCollectionModels,
   type HomeQueryTabConfig,
+  type HomeScreenModel,
   type HomeViewModel,
 } from "../../client/views.ts";
 import type { StoredRecord } from "@dpeek/formless-storage";
@@ -19,14 +20,14 @@ import {
 } from "../../test/schema-apps.ts";
 import { testSiteSeedRecords } from "../../test/site-records.ts";
 import { bootstrapResponse } from "../../test/protocol-builders.ts";
-import { HomeCollection } from "./collection.tsx";
+import { GeneratedWorkspaceRuntime } from "./generated-workspace-runtime.tsx";
 
 describe("generated table app paths", () => {
   beforeEach(() => {
     resetClientStore();
   });
 
-  it("keeps the rate table on the React Aria table path", () => {
+  it("renders the rate table through the selected Astryx table path", () => {
     const html = renderGeneratedTableCollectionHtml({
       records: rateSeedRecords,
       schema: rateSourceSchema,
@@ -35,24 +36,22 @@ describe("generated table app paths", () => {
       viewName: "rateHome",
     });
 
-    expect(html).toContain('aria-label="Rate records"');
-    expect(html).toContain('role="grid"');
-    expect(html).toContain('data-slot="table-column"');
-    expect(html).toContain("Role");
-    expect(html).toContain('aria-label="Cost"');
-    expect(html).toContain('aria-label="Cost unit"');
-    expect(html).toContain('data-web-value-unit-input="true"');
-    expect(html).toContain('aria-label="Price"');
-    expect(html).toContain("Margin");
-    expect(html).toContain('data-slot="table-footer"');
-    expect(html).toContain('aria-label="Average cost:');
-    expect(html).toContain('aria-label="Average price:');
-    expect(html).toContain('aria-label="Average margin:');
-    expect(html).toContain("Create Resource");
+    expectHtmlToContain(html, 'aria-label="Rate records"');
+    expectHtmlToContain(html, '<table aria-label="Rate records"');
+    expectHtmlToContain(html, "Role");
+    expectHtmlToContain(html, 'aria-label="Cost"');
+    expectHtmlToContain(html, ">Unit");
+    expectHtmlToContain(html, 'aria-label="Price"');
+    expectHtmlToContain(html, "Margin");
+    expectHtmlToContain(html, 'aria-label="Aggregate footer"');
+    expectHtmlToContain(html, 'aria-label="Average cost:');
+    expectHtmlToContain(html, 'aria-label="Average price:');
+    expectHtmlToContain(html, 'aria-label="Average margin:');
+    expectHtmlToContain(html, "Create Resource");
     expect(html).not.toContain("USD");
   });
 
-  it("keeps a Task table view using source task fields on the React Aria table path", () => {
+  it("renders a Task table view using source task fields through Astryx", () => {
     const schema = taskSourceTableSchema();
     const html = renderGeneratedTableCollectionHtml({
       records: taskSeedRecords,
@@ -61,15 +60,15 @@ describe("generated table app paths", () => {
       viewName: "taskTableHome",
     });
 
-    expect(html).toContain('aria-label="Task records"');
-    expect(html).toContain('role="grid"');
-    expect(html).toContain("Review overdue proposal");
-    expect(html).toContain('aria-label="Title"');
-    expect(html).toContain('aria-label="Done"');
-    expect(html).toContain('type="checkbox"');
-    expect(html).toContain('data-slot="date-picker-trigger"');
-    expect(html).toContain('role="spinbutton"');
-    expect(html).toContain("High");
+    expectHtmlToContain(html, 'aria-label="Task records"');
+    expectHtmlToContain(html, '<table aria-label="Task records"');
+    expectHtmlToContain(html, "Review overdue proposal");
+    expectHtmlToContain(html, 'aria-label="Title"');
+    expectHtmlToContain(html, 'aria-label="Done"');
+    expectHtmlToContain(html, 'type="checkbox"');
+    expectHtmlToContain(html, 'aria-label="Open calendar"');
+    expectHtmlToContain(html, 'role="combobox"');
+    expectHtmlToContain(html, "High");
     expect(html).not.toContain('data-formless-delete-record="rec_task_overdue"');
   });
 
@@ -81,18 +80,19 @@ describe("generated table app paths", () => {
       viewName: "siteSettingsHome",
     });
 
-    expect(html).toContain('aria-label="Site record"');
-    expect(html).toContain('data-formless-legacy-record-result="site:siteSettingsForm"');
-    expect(html).not.toContain('role="grid"');
-    expect(html).toContain('aria-label="Label"');
-    expect(html).toContain('aria-label="Description"');
-    expect(html).toContain('aria-label="Edit Icon"');
-    expect(html).toContain('data-web-field-kind="icon"');
+    expectHtmlToContain(html, 'aria-label="Site record"');
+    expectHtmlToContain(html, "data-formless-record-result=");
+    expect(html).not.toContain("data-formless-legacy-record-result=");
+    expect(html).not.toContain('<table aria-label="Site record"');
+    expectHtmlToContain(html, 'placeholder="Label"');
+    expectHtmlToContain(html, ">Description");
+    expectHtmlToContain(html, 'aria-label="Edit Icon"');
+    expectHtmlToContain(html, 'data-astryx-icon-preview="valid"');
     expect(html).not.toContain('aria-label="Create Site"');
     expect(html).not.toContain('data-formless-delete-record="rec_site_settings_primary"');
   });
 
-  it("keeps Site placement table operation controls and ordering controls on the React Aria table path", () => {
+  it("keeps Site placement operations and ordering on the selected Astryx table path", () => {
     const html = renderGeneratedTableCollectionHtml({
       records: testSiteSeedRecords,
       schema: siteSourceSchema,
@@ -101,13 +101,11 @@ describe("generated table app paths", () => {
       viewName: "pageCompositionHome",
     });
 
-    expect(html).toContain('aria-label="Placement records"');
-    expect(html).toContain('role="grid"');
-    expect(html).toContain('aria-label="Reorder"');
-    expect(html).toContain('aria-label="Actions"');
-    expect(html).toContain(
-      'data-formless-legacy-table="block-placement:placementsForSelectedBlock"',
-    );
+    expectHtmlToContain(html, 'aria-label="Placement records"');
+    expectHtmlToContain(html, '<table aria-label="Placement records"');
+    expectHtmlToContain(html, 'aria-label="Reorder"');
+    expectHtmlToContain(html, 'aria-label="Actions"');
+    expect(html).not.toContain("data-formless-legacy-table=");
     expect(html).not.toContain('data-formless-ordering-handle="true"');
     expect(html).not.toContain("data-formless-sortable-row=");
     expect(html).not.toContain('data-formless-delete-record="rec_site_place_home_hero"');
@@ -139,13 +137,17 @@ function renderGeneratedCollectionHtml({
     schemaKey,
   );
 
+  const screen = collectionScreen(model);
+
   return renderToStaticMarkup(
-    <HomeCollection
-      collection={model.collection}
+    <GeneratedWorkspaceRuntime
+      getSectionSelection={() => ({
+        selectedContextRecordId: selectedContextRecordId ?? null,
+        selectedQueryName: (selectedQuery ?? model.collection.queries.defaultTab).queryName,
+      })}
       onSelectContext={() => {}}
       onSelectQuery={() => {}}
-      selectedContextRecordId={selectedContextRecordId}
-      selectedQuery={selectedQuery ?? model.collection.queries.defaultTab}
+      screen={screen}
       today="2026-05-22"
     />,
   );
@@ -176,16 +178,41 @@ function renderGeneratedTableCollectionHtml({
     schemaKey,
   );
 
+  const screen = collectionScreen(model);
+
   return renderToStaticMarkup(
-    <HomeCollection
-      collection={model.collection}
+    <GeneratedWorkspaceRuntime
+      getSectionSelection={() => ({
+        selectedContextRecordId: selectedContextRecordId ?? null,
+        selectedQueryName: (selectedQuery ?? model.collection.queries.defaultTab).queryName,
+      })}
       onSelectContext={() => {}}
       onSelectQuery={() => {}}
-      selectedContextRecordId={selectedContextRecordId}
-      selectedQuery={selectedQuery ?? model.collection.queries.defaultTab}
+      screen={screen}
       today="2026-05-22"
     />,
   );
+}
+
+function collectionScreen(model: HomeViewModel): HomeScreenModel {
+  return {
+    label: model.label,
+    layout: {
+      sections: [
+        {
+          collection: model.collection,
+          id: model.viewName,
+          label: model.label,
+          type: "collection",
+          viewName: model.viewName,
+        },
+      ],
+      type: "stack",
+    },
+    navigation: { primary: true },
+    screenName: model.viewName,
+    type: "workspace",
+  };
 }
 
 function requiredCollectionModel(schema: AppSchema, viewName: string): HomeViewModel {
@@ -244,4 +271,8 @@ function taskSourceTableSchema(): AppSchema {
       },
     },
   };
+}
+
+function expectHtmlToContain(html: string, expected: string) {
+  expect(html.includes(expected), expected).toBe(true);
 }

@@ -40,7 +40,7 @@ import {
   useGeneratedOperationController,
   useGeneratedOperationControllerVersion,
 } from "./operation-control-runtime.ts";
-import { executeRecordDeleteOperation } from "./record-delete.tsx";
+import { executeRecordDeleteOperation } from "./record-delete-runtime.ts";
 import {
   fieldValueToRecordFieldEditorInputValue,
   imageMediaAssetOptionFromUpload,
@@ -52,7 +52,7 @@ import {
 } from "./record-field-authoring.ts";
 import { shouldUseAppReplicaReferenceOptions } from "./reference-field-options.ts";
 import { useSchemaAppTarget, useSchemaAppWriteOptions } from "./schema-app-context.tsx";
-import { executeTransitionStateOperation } from "./state-machine-ui.tsx";
+import { executeTransitionStateOperation } from "./state-machine-operation-runtime.ts";
 
 type GeneratedListFieldRuntimeState = GeneratedListFieldAuthoringState;
 

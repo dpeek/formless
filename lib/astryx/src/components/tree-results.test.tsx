@@ -12,10 +12,10 @@ import {
   type FormlessUiTreeResultFixtureId,
 } from "./tree-results.fixtures.ts";
 import {
-  AstryxTreeResultRenderer,
   FormlessTreeResultsLayout,
   createFormlessUiTreeResultFixtureHost,
 } from "./tree-results.tsx";
+import { AstryxTreeResultRenderer } from "./formless-ui-tree-renderer.tsx";
 
 vi.mock("@stylexjs/stylex", () => ({
   create: <Styles,>(styles: Styles) => styles,
@@ -393,26 +393,30 @@ describe("Tree Results prototype layout", () => {
       "utf8",
     );
     const layoutSource = await readFile(new URL("./tree-results.tsx", import.meta.url), "utf8");
+    const rendererSource = await readFile(
+      new URL("./formless-ui-tree-renderer.tsx", import.meta.url),
+      "utf8",
+    );
     const outlineSource = await readFile(
       new URL("./formless-ui-tree-outline.tsx", import.meta.url),
       "utf8",
     );
     const rootSource = await readFile(new URL("../root.tsx", import.meta.url), "utf8");
-    const productionScreenSource = await readFile(
-      new URL("../../../../src/app/generated/screen.tsx", import.meta.url),
+    const productionRuntimeSource = await readFile(
+      new URL("../../../../src/app/generated/generated-workspace-runtime.tsx", import.meta.url),
       "utf8",
     );
 
     expect(fixtureSource).not.toMatch(/\breact\b|formless-ui-contract-host|className=|tailwind/i);
     expect(outlineSource).toContain('from "@astryxdesign/core/TreeList"');
     expect(layoutSource).toContain("createFormlessUiMemoryContractHost");
-    expect(layoutSource).toContain("useFormlessUiTreeResult");
-    expect(layoutSource).toContain('columns={{ max: 2, minWidth: 320, repeat: "fit" }}');
-    expect(`${fixtureSource}\n${layoutSource}\n${outlineSource}`).not.toMatch(
+    expect(rendererSource).toContain("useFormlessUiTreeResult");
+    expect(rendererSource).toContain('columns={{ max: 2, minWidth: 320, repeat: "fit" }}');
+    expect(`${fixtureSource}\n${layoutSource}\n${rendererSource}\n${outlineSource}`).not.toMatch(
       /src\/(?:app|client|worker)|browser-replica|operation-controller|recordsById|rankPlan|sync|@dnd-kit|draggable|droppable/,
     );
     expect(rootSource).toContain("<FormlessTreeResultsLayout />");
-    expect(productionScreenSource).not.toMatch(
+    expect(productionRuntimeSource).not.toMatch(
       /FormlessTreeResultsLayout|AstryxTreeResultRenderer|tree-results\.fixtures/,
     );
   });

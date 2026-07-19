@@ -19,7 +19,7 @@ import {
   createFormlessUiTreeResultFixtures,
   type FormlessUiTreeResultFixtureId,
 } from "./tree-results.fixtures.ts";
-import { AstryxTreeResultRenderer } from "./tree-results.tsx";
+import { AstryxTreeResultRenderer } from "./formless-ui-tree-renderer.tsx";
 
 vi.mock("@stylexjs/stylex", () => ({
   create: <Styles,>(styles: Styles) => styles,

@@ -13,7 +13,7 @@ import {
   createSiteAuthoringRuntimeProfile,
   findRuntimeWorldMountByRoute,
 } from "../runtime-profile.ts";
-import { projectInitialGeneratedCreateRuntimeSurface } from "./create.tsx";
+import { projectInitialGeneratedCreateRuntimeSurface } from "./generated-create-runtime.ts";
 import {
   projectGeneratedApplicationShell,
   selectGeneratedShellActiveHref,

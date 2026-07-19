@@ -11,7 +11,7 @@ import {
   type RevokeIdentityAccessManagementInvitationInput,
 } from "../../client/identity-access-management.ts";
 import type { AppInstallsResponse } from "../../shared/protocol.ts";
-import { LegacySubscribedAccessRenderer } from "../generated/legacy-access-renderer.tsx";
+import { ApplicationPresentation } from "../application-presentation.tsx";
 import { useApplicationRuntimePublicationCoordinatorContext } from "../generated/application-runtime-contract-host.tsx";
 import { instanceAccessReference } from "./access-contract.ts";
 import {
@@ -223,7 +223,11 @@ export function AccessRoute({ dependencies = {} }: { dependencies?: AccessRouteD
     return () => publicationController.dispose();
   }, [publicationController]);
 
-  return <LegacySubscribedAccessRenderer accessReference={instanceAccessReference} />;
+  return (
+    <ApplicationPresentation
+      presentation={{ accessReference: instanceAccessReference, kind: "access" }}
+    />
+  );
 }
 
 function accessRequestError(error: unknown): string {

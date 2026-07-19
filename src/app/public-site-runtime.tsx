@@ -5,7 +5,7 @@ import {
   type SitePublicRendererComponent,
   type SitePublicSystemStateRendererComponent,
   type SitePageLinkMode,
-} from "@dpeek/formless-site-app/react";
+} from "@dpeek/formless-site-app/public/react";
 import { appStorageIdentityForClientTarget, type ClientAppTarget } from "../client/app-target.ts";
 import { listenForClientEvents } from "../client/broadcast.ts";
 import { startPushSync } from "../client/sync.ts";

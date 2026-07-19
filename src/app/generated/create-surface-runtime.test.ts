@@ -6,7 +6,7 @@ import {
   nextGeneratedCreateDraftSessionState,
   selectGeneratedCreateDraftSession,
 } from "./create-field-authoring.ts";
-import { executeGeneratedCreateSubmission } from "./create.tsx";
+import { executeGeneratedCreateSubmission } from "./generated-create-runtime.ts";
 import { projectGeneratedCreateFormlessUiSurface } from "./formless-ui-projection.ts";
 import {
   indexGeneratedCreateSurfaceFields,

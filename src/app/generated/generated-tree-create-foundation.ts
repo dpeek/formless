@@ -29,7 +29,7 @@ import {
   projectGeneratedCreateFormlessUiSurface,
   type GeneratedFormlessUiReferenceOption,
 } from "./formless-ui-projection.ts";
-import type { CreateHomeOperationConfig } from "./create.tsx";
+import type { CreateHomeOperationConfig } from "./generated-create-runtime.ts";
 import { humanizeFieldName } from "../../client/view-labels.ts";
 
 export type GeneratedTreeChildCreationProjectionOptions = {

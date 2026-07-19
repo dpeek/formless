@@ -20,7 +20,7 @@ import {
   passkeyUnavailableMessage,
   type CreatePasskeyRegistrationResponse,
 } from "./passkey-browser.ts";
-import { LegacySubscribedOwnerAuthRenderer } from "../generated/legacy-owner-auth-renderer.tsx";
+import { ApplicationPresentation } from "../application-presentation.tsx";
 import {
   authIntentIsCurrent,
   createAuthPendingGuard,
@@ -193,7 +193,9 @@ export function OwnerSetupRoute() {
       reference={ownerSetupAuthSurfaceReference}
       snapshot={surface}
     >
-      <LegacySubscribedOwnerAuthRenderer reference={ownerSetupAuthSurfaceReference} />
+      <ApplicationPresentation
+        presentation={{ kind: "auth", reference: ownerSetupAuthSurfaceReference }}
+      />
     </NoShellAuthRuntimeBoundary>
   );
 }

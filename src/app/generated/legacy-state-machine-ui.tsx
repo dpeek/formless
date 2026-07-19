@@ -7,26 +7,22 @@ import {
   stateMachineStateIsTerminal,
   type TransitionStateOperationAvailability,
 } from "../../client/state-machine-model.ts";
-import type { SyncStatus } from "../../client/sync-status.ts";
 import type {
   StateMachineFieldConfig,
   TransitionStateOperationConfig,
 } from "../../client/views.ts";
 import {
   projectStateTransitionOperationControlBinding,
-  type GeneratedOperationCallerInput,
   type GeneratedOperationControlBinding,
-  type GeneratedOperationController,
-  type GeneratedOperationExecutionResult,
 } from "../../client/views.ts";
 import type { FieldValue, RecordValues } from "@dpeek/formless-storage";
 import { enumValuePresentation, GeneratedFieldPresentationIcon } from "./field-presentation.tsx";
 import {
-  executeGeneratedOperationControl,
   useGeneratedOperationController,
   useGeneratedOperationControllerVersion,
 } from "./operation-control-runtime.ts";
 import type { FieldSchema } from "@dpeek/formless-schema";
+import { executeTransitionStateOperation } from "./state-machine-operation-runtime.ts";
 
 type ProjectedTransitionOperationControl = {
   availability: TransitionStateOperationAvailability;
@@ -316,38 +312,6 @@ export function RecordTransitionOperationControls({
       })}
     </div>
   );
-}
-
-export async function executeTransitionStateOperation({
-  binding,
-  controller,
-  operation,
-  recordId,
-  setStatus,
-  source,
-}: {
-  binding: GeneratedOperationControlBinding;
-  controller: GeneratedOperationController;
-  operation: TransitionStateOperationConfig;
-  recordId: string;
-  setStatus?: (status: SyncStatus) => void;
-  source: GeneratedOperationCallerInput["source"];
-}): Promise<GeneratedOperationExecutionResult> {
-  return executeGeneratedOperationControl({
-    binding,
-    callerInput: {
-      bindingId: binding.id,
-      recordId,
-      source,
-    },
-    controller,
-    feedback: {
-      committedMessage: `${operation.label} synced.`,
-      progressMessage: `${operation.label}...`,
-      replayedMessage: `${operation.label} synced.`,
-    },
-    setStatus,
-  });
 }
 
 function badgeIntentForPresentation(

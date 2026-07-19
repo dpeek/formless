@@ -19,7 +19,7 @@ import {
   runtimeAuthAccountGateRoutes,
   runtimeTopologyRoutes,
 } from "../../shared/runtime-topology.ts";
-import { LegacySubscribedAccountAuthRenderer } from "../generated/legacy-owner-auth-renderer.tsx";
+import { ApplicationPresentation } from "../application-presentation.tsx";
 import {
   authIntentIsCurrent,
   createAuthPendingGuard,
@@ -605,7 +605,7 @@ export function AuthAccountRoute() {
       reference={reference}
       snapshot={surface}
     >
-      <LegacySubscribedAccountAuthRenderer reference={reference} />
+      <ApplicationPresentation presentation={{ kind: "auth", reference }} />
     </NoShellAuthRuntimeBoundary>
   );
 }

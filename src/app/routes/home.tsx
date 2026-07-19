@@ -20,10 +20,12 @@ import {
 import { selectScreenModelByPath } from "../../client/views.ts";
 import { todayDateString } from "../../shared/date.ts";
 import { SchemaAppProvider } from "../generated/schema-app-context.tsx";
-import { HomeScreen } from "../generated/screen.tsx";
-import type {
-  GeneratedWorkspaceRuntimeController,
-  GeneratedWorkspaceSectionExternalAction,
+import {
+  GeneratedWorkspaceRuntime,
+  GeneratedWorkspaceRuntimeRegistration,
+  type GeneratedWorkspaceRuntimeController,
+  type GeneratedWorkspaceRuntimeProps,
+  type GeneratedWorkspaceSectionExternalAction,
 } from "../generated/generated-workspace-runtime.tsx";
 import { NotFoundRoute } from "./not-found.tsx";
 import type { AppPackageResolver } from "@dpeek/formless-installed-apps";
@@ -36,6 +38,8 @@ import {
   withHomeRouteSelectedSectionContextRecordId,
   withHomeRouteSelectedSectionQueryName,
 } from "./home-selection.tsx";
+import { projectApplicationSystemState } from "./application-system-state-projection.ts";
+import { ApplicationSystemStateRuntime } from "./application-system-state-runtime.tsx";
 
 export {
   createHomeRouteSelectionState,
@@ -162,14 +166,7 @@ export function HomeRoute({
       return null;
     }
 
-    return (
-      <section className="mx-auto max-w-3xl space-y-4">
-        <h1 className="text-2xl font-semibold">Formless</h1>
-        <p className="text-sm text-slate-600">
-          <SchemaLoadingMessage appLabel={appLabel} />
-        </p>
-      </section>
-    );
+    return <HomeRouteSchemaSystemState appLabel={appLabel} />;
   }
 
   if (!homeScreen) {
@@ -182,10 +179,14 @@ export function HomeRoute({
     }
 
     return (
-      <section className="mx-auto max-w-3xl space-y-4">
-        <h1 className="text-2xl font-semibold">Formless</h1>
-        <p>No entities are defined in the active schema.</p>
-      </section>
+      <ApplicationSystemStateRuntime
+        snapshot={projectApplicationSystemState({
+          heading: "Formless",
+          id: `application-system-state:schema-empty:${appSchemaKey}`,
+          message: "No entities are defined in the active schema.",
+          state: "empty",
+        })}
+      />
     );
   }
 
@@ -195,7 +196,7 @@ export function HomeRoute({
       schemaKey={schemaKey}
       target={appTarget}
     >
-      <HomeScreen
+      <HomeRouteGeneratedWorkspace
         getSectionSelection={(section) => ({
           selectedContextRecordId: selectHomeRouteSectionContextRecordId(
             selectionState,
@@ -237,17 +238,50 @@ export function HomeRoute({
     </SchemaAppProvider>
   );
 
+  return workspace;
+}
+
+function HomeRouteGeneratedWorkspace({
+  onGeneratedWorkspaceController,
+  ...props
+}: GeneratedWorkspaceRuntimeProps & {
+  onGeneratedWorkspaceController?: (
+    controller: GeneratedWorkspaceRuntimeController | undefined,
+  ) => void;
+}) {
   return onGeneratedWorkspaceController ? (
-    workspace
+    <GeneratedWorkspaceRuntimeRegistration
+      {...props}
+      onController={onGeneratedWorkspaceController}
+    />
   ) : (
-    <section className="mx-auto w-full max-w-[112rem]">{workspace}</section>
+    <GeneratedWorkspaceRuntime {...props} />
   );
 }
 
-function SchemaLoadingMessage({ appLabel }: { appLabel: string }) {
+function HomeRouteSchemaSystemState({ appLabel }: { appLabel: string }) {
   const syncStatus = useSyncStatus();
+  const failed = syncStatus.state === "error";
 
-  return syncStatus.state === "error" ? `Could not load ${appLabel}.` : `Loading ${appLabel}...`;
+  return (
+    <ApplicationSystemStateRuntime
+      snapshot={projectApplicationSystemState({
+        ...(failed
+          ? {
+              feedback: {
+                id: "feedback:schema-load",
+                intent: "danger" as const,
+                title: `${appLabel} unavailable`,
+              },
+            }
+          : {}),
+        heading: "Formless",
+        id: `application-system-state:schema:${appLabel}`,
+        message: failed ? `Could not load ${appLabel}.` : `Loading ${appLabel}...`,
+        state: failed ? "failure" : "loading",
+      })}
+    />
+  );
 }
 
 function useTodayDateString() {

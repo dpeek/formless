@@ -13,7 +13,6 @@ import {
   useFormlessUiDocumentTheme,
   useFormlessUiDocumentThemeIntentHandler,
 } from "../formless-ui-contract-host-react.tsx";
-import { FormlessThemeProvider } from "../theme.tsx";
 
 export function FormlessThemeIconToggle({
   activeMode,
@@ -81,12 +80,12 @@ export function AstryxDocumentThemeRenderer({
   theme: FormlessUiDocumentThemeContract;
 }) {
   return (
-    <FormlessThemeProvider theme={theme}>
+    <>
       {theme.selectionControl ? (
         <FormlessThemeToggle control={theme.selectionControl} onIntent={onIntent} />
       ) : null}
       {children}
-    </FormlessThemeProvider>
+    </>
   );
 }
 

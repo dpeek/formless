@@ -7,7 +7,7 @@ import { describe, expect, it, vi } from "vite-plus/test";
 
 import { AstryxPublicSiteProvider } from "./site-provider.tsx";
 
-vi.mock("@astryxdesign/core", () => ({
+vi.mock("@astryxdesign/core/theme", () => ({
   Theme: ({ children, mode }: { children: ReactNode; mode: string }) =>
     createElement("section", { "data-astryx-theme-mode": mode }, children),
 }));
@@ -20,17 +20,18 @@ describe("Astryx public Site provider", () => {
   it.each(["light", "dark"] as const)("applies the canonical %s mode", (mode) => {
     const html = renderToStaticMarkup(
       <AstryxPublicSiteProvider mode={mode}>
-        <main>Site candidate</main>
+        <main>Selected Site renderer</main>
       </AstryxPublicSiteProvider>,
     );
 
     expect(html).toContain(`data-astryx-theme-mode="${mode}"`);
     expect(html).toContain(`data-site-theme="${mode}"`);
+    expect(html).toContain("data-formless-native-navigation");
     expect(html).toContain("data-astryx-public-site-provider");
     expect(html).toContain(`color-scheme:${mode}`);
     expect(html).toContain("--formless-public-site-background:");
     expect(html).toContain("--formless-public-site-link:");
-    expect(html).toContain("<main>Site candidate</main>");
+    expect(html).toContain("<main>Selected Site renderer</main>");
   });
 
   it("maps valid authored colors through the Site-owned palette", () => {
@@ -73,7 +74,7 @@ describe("Astryx public Site provider", () => {
     expect(html).toContain("--formless-public-site-background:rgb(9 9 11)");
   });
 
-  it("exports candidate-only provider and CSS package boundaries", async () => {
+  it("exports production provider and CSS package boundaries", async () => {
     const packageJson = JSON.parse(
       await readFile(resolve(packageRoot, "package.json"), "utf8"),
     ) as {
@@ -88,21 +89,26 @@ describe("Astryx public Site provider", () => {
     expect(css).toContain('@import "@astryxdesign/core/reset.css";');
     expect(css).toContain('@import "@astryxdesign/theme-neutral/theme.css";');
     expect(css).toContain("[data-astryx-public-site-provider]");
+    expect(providerSource).toContain('from "@astryxdesign/core/theme"');
+    expect(providerSource).not.toContain('from "@astryxdesign/core"');
     expect(providerSource).not.toMatch(/localStorage|sessionStorage|document\.|window\.|useEffect/);
   });
 
-  it("leaves production public browser and Worker assembly on legacy seams", async () => {
+  it("owns production public browser and Worker presentation assembly", async () => {
     const [browserSource, workerSource] = await Promise.all([
       readFile(resolve(repoRoot, "src/public-site-main.tsx"), "utf8"),
       readFile(resolve(repoRoot, "src/worker/public-site-worker-runtime.ts"), "utf8"),
     ]);
 
-    expect(browserSource).toContain("LegacySitePageRenderer");
-    expect(browserSource).toContain("LegacySitePublicSystemStateRenderer");
-    expect(browserSource).toContain("@dpeek/formless-ui/global.css");
-    expect(browserSource).not.toContain("@dpeek/formless-astryx/site");
-    expect(workerSource).toContain("LegacySitePageRenderer");
-    expect(workerSource).toContain("LegacySitePublicSystemStateRenderer");
-    expect(workerSource).not.toContain("@dpeek/formless-astryx/site");
+    expect(browserSource).toContain("AstryxSitePageRenderer");
+    expect(browserSource).toContain("AstryxSitePublicSystemStateRenderer");
+    expect(browserSource).toContain("@dpeek/formless-astryx/site/global.css");
+    expect(browserSource).not.toContain("@dpeek/formless-ui");
+    expect(workerSource).toContain("AstryxSitePageRenderer");
+    expect(workerSource).toContain("AstryxSitePublicSystemStateRenderer");
+    expect(workerSource).toContain("@dpeek/formless-astryx/site/renderer");
+    for (const source of [browserSource, workerSource]) {
+      expect(source).not.toMatch(/LegacySite(?:Page|PublicSystemState)Renderer/);
+    }
   });
 });

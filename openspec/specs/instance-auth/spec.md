@@ -859,24 +859,24 @@ ceremonies, sessions, route policy, operations, and navigation.
   publication without exposing private values through nested error objects,
   serialized host nodes, or fixture data
 
-#### Scenario: Legacy renderer consumes auth contracts
+#### Scenario: Astryx renderer consumes auth contracts
 
 - GIVEN production owner setup, owner sign-in, account, signup, and invitation
-  routes currently render direct legacy controls from runtime-shaped state
+  routes publish complete renderer-neutral auth contracts
 - WHEN each route publishes its auth-surface snapshot
-- THEN pure and subscribed legacy auth renderers consume only auth references
+- THEN pure and subscribed Astryx auth renderers consume only auth references
   and snapshots and dispatch canonical auth intents
-- AND direct legacy `@dpeek/formless-ui` imports for migrated auth presentation
-  remain confined to dedicated legacy seam modules
+- AND legacy `@dpeek/formless-ui` imports remain outside the selected production
+  graph
 - AND focused coverage asserts controlled drafts, available actions, pending and
-  retry behavior, continuation, accessibility, and secret exclusion rather than
-  legacy HTML structure
-- AND production remains on the legacy renderer after this contract migration
+  retry behavior, continuation, accessibility, and secret exclusion
+- AND production selects auth presentation through the root Astryx application
+  assembly
 
 #### Scenario: Astryx auth renderer and canonical fixtures
 
-- GIVEN production legacy renderers consume complete auth contracts
-- WHEN the replacement renderer implements the same contract in `lib/astryx`
+- GIVEN runtime publishes complete production auth contracts
+- WHEN the selected renderer implements the contract in `lib/astryx`
 - THEN pure and subscribed Astryx entrypoints compose Astryx frame, card, form,
   field, action, status, passkey, policy, fact, and loading primitives without
   importing instance-auth runtime
@@ -888,7 +888,7 @@ ceremonies, sessions, route policy, operations, and navigation.
   hard-coded policy actions
 - AND the Astryx renderer contains no legacy Formless UI components, Tailwind
   classes, runtime clients, route policy, browser credential effects, or
-  production export or activation
+  production selector behavior
 
 ### Requirement: Account Completion Gate Resolution
 

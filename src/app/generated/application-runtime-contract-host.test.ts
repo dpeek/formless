@@ -23,7 +23,11 @@ describe("application runtime contract publication coordinator", () => {
     const shellReference = formlessUiShellManifestReference("application-shell");
     const workspaceReference = formlessUiWorkspaceManifestReference("workspace:apps");
     const initialShell = required(host.read(shellReference));
+    const initialServerShell = required(host.getServerSnapshot(shellReference));
     const notifications = { shell: 0, workspace: 0 };
+
+    expect(initialServerShell).toBe(initialShell);
+    expect(host.getServerSnapshot(workspaceReference)).toBeUndefined();
 
     host.subscribe(shellReference, () => notifications.shell++);
     host.subscribe(workspaceReference, () => notifications.workspace++);
@@ -33,6 +37,7 @@ describe("application runtime contract publication coordinator", () => {
     expect(coordinator.host).toBe(host);
     expect(host.read(shellReference)).toBe(initialShell);
     expect(host.read(workspaceReference)).toMatchObject({ id: "workspace:apps", label: "Apps" });
+    expect(host.getServerSnapshot(workspaceReference)).toBeUndefined();
     expect(notifications).toEqual({ shell: 0, workspace: 1 });
 
     const initialWorkspace = required(host.read(workspaceReference));
@@ -48,6 +53,32 @@ describe("application runtime contract publication coordinator", () => {
     expect(host.read(shellReference)).toBe(initialShell);
     expect(host.read(workspaceReference)).toBeUndefined();
     expect(notifications).toEqual({ shell: 0, workspace: 3 });
+  });
+
+  it("keeps initial route-child server snapshots stable for hydration", () => {
+    const coordinator = createApplicationRuntimePublicationCoordinator([
+      ["shell", shellPublication("Formless")],
+      ["route-child", workspacePublication("Server apps")],
+    ]);
+    const host = coordinator.host;
+    const shellReference = formlessUiShellManifestReference("application-shell");
+    const workspaceReference = formlessUiWorkspaceManifestReference("workspace:apps");
+    const serverShell = required(host.getServerSnapshot(shellReference));
+    const serverWorkspace = required(host.getServerSnapshot(workspaceReference));
+    let shellSeenFromWorkspaceNotification: unknown;
+
+    host.subscribe(workspaceReference, () => {
+      shellSeenFromWorkspaceNotification = host.read(shellReference);
+    });
+
+    coordinator.publish("route-child", workspacePublication("Client apps"));
+
+    expect(coordinator.host).toBe(host);
+    expect(host.read(shellReference)).toBe(serverShell);
+    expect(host.read(workspaceReference)?.label).toBe("Client apps");
+    expect(host.getServerSnapshot(shellReference)).toBe(serverShell);
+    expect(host.getServerSnapshot(workspaceReference)).toBe(serverWorkspace);
+    expect(shellSeenFromWorkspaceNotification).toBe(serverShell);
   });
 
   it("dispatches through the latest matching handler and removes it with its contributor", async () => {

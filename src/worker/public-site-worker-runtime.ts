@@ -23,9 +23,9 @@ import {
   type SitePublicOperationTargetResolver,
 } from "@dpeek/formless-site-app/worker";
 import {
-  LegacySitePageRenderer,
-  LegacySitePublicSystemStateRenderer,
-} from "@dpeek/formless-site-app/react";
+  AstryxSitePageRenderer,
+  AstryxSitePublicSystemStateRenderer,
+} from "@dpeek/formless-astryx/site/renderer";
 import { sitePublicRenderer as workspaceSitePublicRenderer } from "virtual:formless/site-public-renderer/worker";
 import { normalizeSiteRoutePath, type SitePageTree } from "@dpeek/formless-site-app";
 import { BadRequestError } from "./errors.ts";
@@ -102,16 +102,24 @@ window.$RefreshReg$ = () => {};
 window.$RefreshSig$ = () => (type) => type;
 window.__vite_plugin_react_preamble_installed__ = true;
 </script>`;
+const viteStylexLayerOrderTag = "<style>@layer reset, astryx-base, astryx-theme, product;</style>";
+const viteStylexDevelopmentHead = `${viteStylexLayerOrderTag}
+    <link rel="stylesheet" href="/virtual:stylex.css" />`;
 const developmentClientAssets: PublicSiteDocumentClientAssets = {
   body: `${viteReactRefreshPreamble}
+    <script type="module" src="/@id/virtual:stylex:runtime"></script>
     <script type="module" src="${runtimeTopologyRoutes.publicSiteClientModulePath}"></script>`,
-  head: "",
+  head: viteStylexDevelopmentHead,
+};
+const developmentStyleAssets: PublicSiteDocumentClientAssets = {
+  body: "",
+  head: viteStylexDevelopmentHead,
 };
 const emptyClientAssets: PublicSiteDocumentClientAssets = { body: "", head: "" };
 
 const sitePublicWorkerAdapter = createSitePublicWorkerAdapter({
-  builtInRenderer: LegacySitePageRenderer,
-  builtInSystemStateRenderer: LegacySitePublicSystemStateRenderer,
+  builtInRenderer: AstryxSitePageRenderer,
+  builtInSystemStateRenderer: AstryxSitePublicSystemStateRenderer,
   workspaceRenderer: workspaceSitePublicRenderer,
 });
 const publicSiteWorkerAdapters = new Map<string, PublicSiteWorkerAdapter>([
@@ -545,7 +553,7 @@ async function loadClientDocumentAssets(
   options: { includeScripts: boolean },
 ): Promise<PublicSiteDocumentClientAssets> {
   if (!env.ASSETS) {
-    return options.includeScripts ? developmentClientAssets : emptyClientAssets;
+    return options.includeScripts ? developmentClientAssets : developmentStyleAssets;
   }
 
   try {
@@ -634,6 +642,7 @@ function publicSiteClientAssetsFromManifest(
     ...(entry.css ?? []),
   ]);
   const headTags = [
+    ...(cssFiles.length > 0 ? [viteStylexLayerOrderTag] : []),
     ...(options.includeScripts
       ? importedChunks.map((chunk) => modulePreloadTag(assetPath(chunk.file)))
       : []),

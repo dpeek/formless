@@ -19,7 +19,7 @@ import type {
   PackageInstallDrafts,
   WorkspaceGatewayRouteState,
 } from "./instance-shell.tsx";
-import { LegacySubscribedManagementRenderer } from "../generated/legacy-management-renderer.tsx";
+import { ApplicationPresentation } from "../application-presentation.tsx";
 import { HomeRoute, type HomeRouteClientLoadState } from "./home.tsx";
 import {
   dispatchInstanceManagementIntent,
@@ -288,7 +288,12 @@ export function InstanceManagementRuntime({
         screenPath="/routes"
         target={controlPlaneTarget}
       />
-      <LegacySubscribedManagementRenderer managementReference={instanceManagementReference} />
+      <ApplicationPresentation
+        presentation={{
+          kind: "management",
+          managementReference: instanceManagementReference,
+        }}
+      />
     </>
   );
 }
