@@ -432,7 +432,10 @@ describe("public Site form sessions", () => {
         }),
       }),
       fetcher: async (_input, init) => {
-        requestBodies.push(String(init?.body));
+        if (typeof init?.body !== "string") {
+          throw new Error("Expected a JSON request body.");
+        }
+        requestBodies.push(init.body);
         attempt += 1;
 
         return attempt === 1

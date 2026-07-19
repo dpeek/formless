@@ -3,6 +3,7 @@ import type {
   FormlessUiListContract,
   FormlessUiRecordResultContract,
   FormlessUiTableContract,
+  FormlessUiTreeResultContract,
   FormlessUiWorkspaceContract,
 } from "@dpeek/formless-astryx/contract";
 import { createFormlessUiMemoryContractHost } from "@dpeek/formless-astryx/contract-host";
@@ -203,6 +204,51 @@ describe("generated workspace contract host adapter", () => {
 
     expect(calls).toEqual(["initial", "current"]);
   });
+
+  it("publishes a mixed tree result atomically with stable shells and scoped notification", () => {
+    const initial = projectGeneratedWorkspaceContractHostPublication(mixedWorkspaceFixture());
+    const host = createFormlessUiMemoryContractHost({ nodes: initial.nodes });
+    const manifest = required(host.read(initial.workspaceReference));
+    const treeSectionReference = required(manifest.sections[2]);
+    const treeSection = required(host.read(treeSectionReference));
+    const treeReference = treeSection.collection.presentation.result;
+    const initialManifest = manifest;
+    const initialSection = treeSection;
+    const initialTree = required(host.read(treeReference));
+    const notifications = { section: 0, tree: 0, workspace: 0 };
+    let removalWasAtomic = false;
+
+    host.subscribe(initial.workspaceReference, () => {
+      notifications.workspace++;
+      removalWasAtomic =
+        host.read(treeSectionReference) === undefined && host.read(treeReference) === undefined;
+    });
+    host.subscribe(treeSectionReference, () => notifications.section++);
+    host.subscribe(treeReference, () => notifications.tree++);
+
+    host.publish(projectGeneratedWorkspaceContractHostPublication(mixedWorkspaceFixture()).nodes);
+    expect(notifications).toEqual({ section: 0, tree: 0, workspace: 0 });
+    expect(host.read(initial.workspaceReference)).toBe(initialManifest);
+    expect(host.read(treeSectionReference)).toBe(initialSection);
+    expect(host.read(treeReference)).toBe(initialTree);
+
+    host.publish(
+      projectGeneratedWorkspaceContractHostPublication(mixedWorkspaceFixture("Updated hero")).nodes,
+    );
+    expect(notifications).toEqual({ section: 0, tree: 1, workspace: 0 });
+    expect(host.read(initial.workspaceReference)).toBe(initialManifest);
+    expect(host.read(treeSectionReference)).toBe(initialSection);
+    expect(host.read(treeReference)).toMatchObject({
+      items: [{ label: "Updated hero" }],
+      kind: "treeResult",
+    });
+
+    host.publish(projectGeneratedWorkspaceContractHostPublication(workspaceFixture()).nodes);
+    expect(notifications).toEqual({ section: 1, tree: 2, workspace: 1 });
+    expect(removalWasAtomic).toBe(true);
+    expect(host.read(treeSectionReference)).toBeUndefined();
+    expect(host.read(treeReference)).toBeUndefined();
+  });
 });
 
 type WorkspaceFixtureOptions = {
@@ -243,6 +289,75 @@ function workspaceFixture(options: WorkspaceFixtureOptions = {}): FormlessUiWork
     kind: "workspace",
     label: "Tasks",
     sections: (options.sectionOrder ?? ["tasks", "archive"]).map((key) => sections[key]),
+  };
+}
+
+function mixedWorkspaceFixture(itemLabel = "Hero"): FormlessUiWorkspaceContract {
+  const workspace = workspaceFixture();
+  return { ...workspace, sections: [...workspace.sections, treeSection(itemLabel)] };
+}
+
+function treeSection(itemLabel: string) {
+  return {
+    accessibilityLabel: "Site tree section",
+    actions: [],
+    collection: {
+      accessibilityLabel: "Site tree collection",
+      availability: { state: "ready" as const },
+      id: "collection:site-tree",
+      kind: "workspaceCollection" as const,
+      label: "Site tree",
+      presentation: {
+        actions: workspaceActions("collection:site-tree"),
+        kind: "ordinary" as const,
+        result: treeResult(itemLabel),
+        summaries: [],
+      },
+      selectedQueryId: null,
+    },
+    headingVisibility: "visible" as const,
+    id: "section:site-tree",
+    kind: "workspaceSection" as const,
+    label: "Site tree",
+  };
+}
+
+function treeResult(itemLabel: string): FormlessUiTreeResultContract {
+  const id = "tree:site";
+  const itemId = `${id}:item:hero`;
+
+  return {
+    accessibilityLabel: "Homepage tree",
+    availability: { state: "ready" },
+    density: "default",
+    editing: { enabled: true },
+    feedback: [],
+    id,
+    items: [
+      {
+        accessibilityLabel: itemLabel,
+        availability: { available: true },
+        childRecordId: "block:hero",
+        children: [],
+        contextActions: [],
+        id: itemId,
+        kind: "treeItem",
+        label: itemLabel,
+        placementId: "placement:hero",
+        selected: false,
+        selectionIntent: { itemId, resultId: id, type: "treeItemSelection" },
+        structure: { state: "branch" },
+        warnings: [],
+      },
+    ],
+    kind: "treeResult",
+    root: {
+      accessibilityLabel: "Homepage tree root",
+      id: `${id}:root:homepage`,
+      kind: "treeRoot",
+      label: "Homepage",
+    },
+    warnings: [],
   };
 }
 

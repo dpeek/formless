@@ -8,6 +8,7 @@ import type {
   FormlessUiRecordResultContract,
   FormlessUiRecordResultIntent,
   FormlessUiTableIntent,
+  FormlessUiTreeIntent,
   FormlessUiWorkspaceAvailability,
   FormlessUiWorkspaceCollectionActionContract,
   FormlessUiWorkspaceCollectionActionGroupContract,
@@ -28,6 +29,7 @@ import type {
   FormlessUiWorkspaceSectionContract,
   FormlessUiWorkspaceSummaryContract,
   FormlessUiWorkspaceTableIntent,
+  FormlessUiWorkspaceTreeIntent,
 } from "@dpeek/formless-astryx/contract";
 
 export type GeneratedWorkspaceIdentityScope = FormlessUiWorkspaceIntentScope;
@@ -567,6 +569,14 @@ export function projectGeneratedWorkspaceRecordResultIntent(
     resultId,
     type: "workspaceRecordResult",
   };
+}
+
+export function projectGeneratedWorkspaceTreeIntent(
+  scope: FormlessUiWorkspaceIntentScope,
+  resultId: string,
+  intent: FormlessUiTreeIntent,
+): FormlessUiWorkspaceTreeIntent {
+  return { ...scope, intent, resultId, type: "workspaceTree" };
 }
 
 function projectSelectedQueryId(

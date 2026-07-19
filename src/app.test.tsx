@@ -19,7 +19,6 @@ import { SchemaAppProvider, useSchemaKey } from "./app/generated/schema-app-cont
 import { HomeScreen } from "./app/generated/screen.tsx";
 import { ReferencedRecordEditorFields, RecordTable } from "./app/generated/table.tsx";
 import { EditViewFields } from "./app/generated/table-operation-controls.tsx";
-import { RecordTree } from "./app/generated/tree.tsx";
 import {
   SitePageRoute,
   SitePageRouteView,
@@ -3183,7 +3182,7 @@ describe("generated collection home", () => {
     expect(collectionHtml).not.toContain("data-formless-legacy-workspace=");
   });
 
-  it("renders generated Site workspace with root sidebar nav and tree layout", () => {
+  it("renders the generated Site tree through the subscribed legacy workspace seam", () => {
     bootstrapSiteEditor();
     const html = renderRoute("/site");
 
@@ -3203,18 +3202,15 @@ describe("generated collection home", () => {
     expect(html).toContain('aria-label="Create Project"');
     expect(html).not.toContain('aria-label="Create Site"');
     expect(html).not.toContain('data-formless-delete-record="rec_site_settings_primary"');
-    expect(html).not.toContain(
-      "grid min-w-0 gap-6 md:grid-cols-[minmax(12rem,16rem)_minmax(0,1fr)] xl:grid-cols-[minmax(14rem,18rem)_minmax(0,1fr)]",
-    );
-    expect(html).toContain("grid min-w-0 gap-3 pt-1");
-    expect(html).not.toContain("grid min-w-0 gap-3 pt-1 sm:grid-cols-2 xl:grid-cols-3");
-    expect(html).toContain('aria-label="Placement tree"');
-    expect(html).toContain('aria-label="Drag placement"');
-    expect(html).toContain('data-formless-ordering-handle="true"');
-    expect(html).toContain("data-formless-sortable-tree-placement=");
-    expect(html).not.toContain("data-formless-legacy-workspace=");
-    expect(html).not.toContain("Move placement up");
-    expect(html).not.toContain("Move placement down");
+    expect(html).toContain('data-formless-legacy-workspace="workspace:siteEditor"');
+    expect(html).toContain("data-formless-legacy-workspace-collection=");
+    expect(html).toContain("data-formless-legacy-tree-result=");
+    expect(html).toContain("data-formless-legacy-tree-item=");
+    expect(html).toContain("data-formless-legacy-tree-editor=");
+    expect(html).toContain("data-formless-legacy-tree-ordering=");
+    expect(html).toContain("data-formless-legacy-tree-ordering-actions=");
+    expect(html).toContain("data-formless-legacy-tree-child-creation=");
+    expect(html).not.toContain("data-formless-astryx-workspace=");
   });
 
   it("renders generated Site settings on a dedicated screen", () => {
@@ -3268,307 +3264,6 @@ describe("generated collection home", () => {
     expect(html).not.toContain('data-formless-delete-record="rec_site_settings_primary"');
   });
 
-  it("sorts generated Site tree siblings by result ordering rank", () => {
-    const collection = requiredSiteCollectionModel("siteCompositionHome");
-
-    bootstrapSiteEditor([
-      siteBlockRecord("page-1", { type: "page", label: "Tree root" }),
-      siteBlockRecord("block-1", { type: "group", label: "Shared child" }),
-      sitePlacementRecord("placement-3", "Third", 3000),
-      sitePlacementRecord("placement-1", "First", 1000),
-      sitePlacementRecord("placement-2", "Second", 2000),
-    ]);
-
-    const html = renderGeneratedHomeCollection(collection, {
-      selectedContextRecordId: "page-1",
-      today: "2026-05-02",
-    });
-
-    expect(html.indexOf('data-formless-sortable-tree-placement="placement-1"')).toBeLessThan(
-      html.indexOf('data-formless-sortable-tree-placement="placement-2"'),
-    );
-    expect(html.indexOf('data-formless-sortable-tree-placement="placement-2"')).toBeLessThan(
-      html.indexOf('data-formless-sortable-tree-placement="placement-3"'),
-    );
-    expect(html).toContain('aria-label="Drag placement"');
-    expect(html).toContain("data-formless-sortable-tree-placement=");
-  });
-
-  it("renders Site link tree nodes with mode-specific target editors", () => {
-    const collection = requiredSiteCollectionModel("siteCompositionHome");
-
-    if (!collection.context || collection.result.type !== "tree") {
-      throw new Error("Site composition home should render a context tree.");
-    }
-
-    bootstrapSiteEditor([
-      siteBlockRecord("page-1", { type: "page", label: "Tree root" }),
-      siteBlockRecord("page-2", { type: "page", label: "Docs page", href: "/docs" }),
-      siteBlockRecord("link-1", {
-        type: "link",
-        label: "Docs internal",
-        linkTargetMode: "internal",
-        linkTargetBlock: "page-2",
-        href: "/stale-docs",
-        icon: "book",
-        color: "#336699",
-      }),
-      siteBlockRecord("link-2", {
-        type: "link",
-        label: "Docs external",
-        linkTargetMode: "external",
-        href: "https://example.com/docs",
-        icon: "book",
-      }),
-      {
-        id: "placement-1",
-        entity: "block-placement",
-        values: {
-          parent: "page-1",
-          block: "link-1",
-          label: "Placement label",
-          order: 1000,
-        },
-        createdAt: "2026-05-05T00:00:40.000Z",
-        updatedAt: "2026-05-05T00:00:40.000Z",
-      },
-      {
-        id: "placement-2",
-        entity: "block-placement",
-        values: {
-          parent: "page-1",
-          block: "link-2",
-          label: "External placement label",
-          order: 2000,
-        },
-        createdAt: "2026-05-05T00:00:41.000Z",
-        updatedAt: "2026-05-05T00:00:41.000Z",
-      },
-    ]);
-    const html = renderToStaticMarkup(
-      <RecordTree
-        context={collection.context}
-        entity={collection.entity}
-        entityName={collection.entityName}
-        queryContext={{ today: "2026-05-02", values: { block: "page-1" } }}
-        result={collection.result}
-      />,
-    );
-
-    expect(html).toContain('aria-label="Label"');
-    expect(html).toContain('value="Docs internal"');
-    expect(html).toContain('value="Docs external"');
-    expect(html).toContain('aria-label="Link target"');
-    expect(html).toContain('value="internal" selected="">Internal</option>');
-    expect(html).toContain('value="external" selected="">External</option>');
-    expect(html).toContain('aria-label="Target block"');
-    expect(html).toContain('value="page-2" selected="">Docs page</option>');
-    expect(html).toContain('aria-label="Link"');
-    expect(html).toContain('value="https://example.com/docs"');
-    expect(html).not.toContain('value="/stale-docs"');
-    expect(html).not.toContain("Placement label");
-    expect(html).not.toContain("External placement label");
-    expect(html).toContain('data-web-field-kind="icon"');
-    expect(html).toContain('data-web-svg-icon="empty"');
-    expect(html).toContain('aria-label="Edit Icon"');
-    expect(html).toMatch(/data-web-icon-field-edit="trigger"[\s\S]*data-web-svg-icon="empty"/);
-    expect(html).not.toContain('aria-label="Choose Color"');
-  });
-
-  it("renders Site tree add controls from allowed child policy", () => {
-    const collection = requiredSiteCollectionModel("siteCompositionHome");
-
-    if (!collection.context || collection.result.type !== "tree") {
-      throw new Error("Site composition home should render a context tree.");
-    }
-
-    bootstrapSiteEditor([siteBlockRecord("page-1", { type: "page", label: "Blank page" })]);
-    const emptyRootHtml = renderToStaticMarkup(
-      <RecordTree
-        context={collection.context}
-        entity={collection.entity}
-        entityName={collection.entityName}
-        queryContext={{ today: "2026-05-02", values: { block: "page-1" } }}
-        result={collection.result}
-      />,
-    );
-
-    expect(emptyRootHtml).toContain("No records yet.");
-    expect(emptyRootHtml).toContain('data-formless-tree-add-parent="page-1"');
-    expect(emptyRootHtml).toContain(
-      'data-formless-tree-add-operation="block-placement.addTreeChild"',
-    );
-    expect(emptyRootHtml).toContain(
-      'data-formless-tree-add-variants="group section hero feature cardGrid metricGrid markdown image link project postList projectList subscribeForm contactForm publicOperationForm"',
-    );
-    expect(emptyRootHtml).toContain('aria-label="Add child"');
-    expect(emptyRootHtml).toContain('data-formless-tree-add-trigger="page-1"');
-    expect(emptyRootHtml).toContain(
-      'data-formless-tree-add-variant-operations="block-placement.addTreeChild block-placement.addTreeChild',
-    );
-
-    resetClientStore();
-    bootstrapSiteEditor([siteBlockRecord("post-1", { type: "post", label: "Blank post" })]);
-    const postRootHtml = renderToStaticMarkup(
-      <RecordTree
-        context={collection.context}
-        entity={collection.entity}
-        entityName={collection.entityName}
-        queryContext={{ today: "2026-05-02", values: { block: "post-1" } }}
-        result={collection.result}
-      />,
-    );
-
-    expect(postRootHtml).toContain('data-formless-tree-add-parent="post-1"');
-    expect(postRootHtml).toContain('data-formless-tree-add-variants="markdown image"');
-    expect(postRootHtml).toContain('data-formless-tree-add-labels="Markdown|Primary image"');
-    expect(postRootHtml).toContain('data-formless-tree-add-slots="default primaryImage"');
-
-    resetClientStore();
-    bootstrapSiteEditor([
-      siteBlockRecord("project-1", { type: "project", label: "Blank project" }),
-    ]);
-    const projectRootHtml = renderToStaticMarkup(
-      <RecordTree
-        context={collection.context}
-        entity={collection.entity}
-        entityName={collection.entityName}
-        queryContext={{ today: "2026-05-02", values: { block: "project-1" } }}
-        result={collection.result}
-      />,
-    );
-
-    expect(projectRootHtml).toContain('data-formless-tree-add-parent="project-1"');
-    expect(projectRootHtml).toContain('data-formless-tree-add-variants="image"');
-    expect(projectRootHtml).toContain('data-formless-tree-add-labels="Primary image"');
-    expect(projectRootHtml).toContain('data-formless-tree-add-slots="primaryImage"');
-
-    resetClientStore();
-    bootstrapSiteEditor([
-      siteBlockRecord("feature-1", { type: "feature", label: "Blank feature" }),
-    ]);
-    const featureRootHtml = renderToStaticMarkup(
-      <RecordTree
-        context={collection.context}
-        entity={collection.entity}
-        entityName={collection.entityName}
-        queryContext={{ today: "2026-05-02", values: { block: "feature-1" } }}
-        result={collection.result}
-      />,
-    );
-
-    expect(featureRootHtml).toContain('data-formless-tree-add-parent="feature-1"');
-    expect(featureRootHtml).toContain('data-formless-tree-add-variants="image link"');
-    expect(featureRootHtml).toContain('data-formless-tree-add-labels="Feature image|Action link"');
-    expect(featureRootHtml).toContain('data-formless-tree-add-slots="media actions"');
-
-    resetClientStore();
-    bootstrapSiteEditor([
-      siteBlockRecord("section-1", { type: "section", label: "Blank section" }),
-    ]);
-    const sectionRootHtml = renderToStaticMarkup(
-      <RecordTree
-        context={collection.context}
-        entity={collection.entity}
-        entityName={collection.entityName}
-        queryContext={{ today: "2026-05-02", values: { block: "section-1" } }}
-        result={collection.result}
-      />,
-    );
-
-    expect(sectionRootHtml).toContain('data-formless-tree-add-parent="section-1"');
-    expect(sectionRootHtml).toContain(
-      'data-formless-tree-add-variants="group section hero feature cardGrid metricGrid markdown image link project postList projectList subscribeForm contactForm publicOperationForm"',
-    );
-
-    resetClientStore();
-    bootstrapSiteEditor([
-      siteBlockRecord("card-grid-1", { type: "cardGrid", label: "Blank card grid" }),
-    ]);
-    const cardGridRootHtml = renderToStaticMarkup(
-      <RecordTree
-        context={collection.context}
-        entity={collection.entity}
-        entityName={collection.entityName}
-        queryContext={{ today: "2026-05-02", values: { block: "card-grid-1" } }}
-        result={collection.result}
-      />,
-    );
-
-    expect(cardGridRootHtml).toContain('data-formless-tree-add-parent="card-grid-1"');
-    expect(cardGridRootHtml).toContain('data-formless-tree-add-variants="card"');
-    expect(cardGridRootHtml).toContain('data-formless-tree-add-labels="Card"');
-
-    resetClientStore();
-    bootstrapSiteEditor([
-      siteBlockRecord("metric-grid-1", { type: "metricGrid", label: "Blank metric grid" }),
-    ]);
-    const metricGridRootHtml = renderToStaticMarkup(
-      <RecordTree
-        context={collection.context}
-        entity={collection.entity}
-        entityName={collection.entityName}
-        queryContext={{ today: "2026-05-02", values: { block: "metric-grid-1" } }}
-        result={collection.result}
-      />,
-    );
-
-    expect(metricGridRootHtml).toContain('data-formless-tree-add-parent="metric-grid-1"');
-    expect(metricGridRootHtml).toContain('data-formless-tree-add-variants="metric"');
-    expect(metricGridRootHtml).toContain('data-formless-tree-add-labels="Metric"');
-
-    resetClientStore();
-    bootstrapSiteEditor([
-      siteBlockRecord("page-1", { type: "page", label: "Tree root" }),
-      siteBlockRecord("group-1", { type: "group", label: "Empty group" }),
-      siteBlockRecord("link-1", { type: "link", label: "Docs", href: "/docs" }),
-      {
-        id: "placement-1",
-        entity: "block-placement",
-        values: {
-          parent: "page-1",
-          block: "group-1",
-          order: 1000,
-        },
-        createdAt: "2026-05-05T00:00:40.000Z",
-        updatedAt: "2026-05-05T00:00:40.000Z",
-      },
-      {
-        id: "placement-2",
-        entity: "block-placement",
-        values: {
-          parent: "page-1",
-          block: "link-1",
-          order: 2000,
-          slot: "actions",
-        },
-        createdAt: "2026-05-05T00:00:41.000Z",
-        updatedAt: "2026-05-05T00:00:41.000Z",
-      },
-    ]);
-    const nestedHtml = renderToStaticMarkup(
-      <RecordTree
-        context={collection.context}
-        entity={collection.entity}
-        entityName={collection.entityName}
-        queryContext={{ today: "2026-05-02", values: { block: "page-1" } }}
-        result={collection.result}
-      />,
-    );
-
-    expect(nestedHtml).toContain('data-formless-tree-add-parent="group-1"');
-    expect(nestedHtml).toContain(
-      'data-formless-tree-add-variants="group section hero feature cardGrid metricGrid markdown image link project postList projectList subscribeForm contactForm publicOperationForm"',
-    );
-    expect(nestedHtml).not.toContain('data-formless-tree-add-parent="link-1"');
-    expect(nestedHtml).toContain('data-formless-tree-placement-slot="actions"');
-    expect(nestedHtml).toContain('data-formless-tree-remove-placement="placement-1"');
-    expect(nestedHtml).toContain(
-      'data-formless-tree-remove-operation="block-placement.removeTreePlacement"',
-    );
-    expect(nestedHtml).toContain('aria-label="Remove child placement"');
-  });
-
   it("renders source Site list/detail delete controls only when context entity policy enables them", () => {
     const disabledSchema = schemaWithEntityDeletePolicy(siteSourceSchema, "block", false);
     const disabledCollection = requiredCollectionModel(disabledSchema, "siteCompositionHome");
@@ -3602,63 +3297,6 @@ describe("generated collection home", () => {
     expect(disabledHtml).not.toContain('data-formless-delete-record="page-1"');
     expect(enabledHtml).toContain('data-formless-delete-record="page-1"');
     expect(enabledHtml).toContain('aria-label="Delete Disposable page"');
-  });
-
-  it("renders tree placement remove controls without child delete actions", () => {
-    const disabledSchema = schemaWithEntityDeletePolicy(siteSourceSchema, "block", false);
-    const disabledCollection = requiredCollectionModel(disabledSchema, "siteCompositionHome");
-    const enabledCollection = requiredSiteCollectionModel("siteCompositionHome");
-    const records = [
-      siteBlockRecord("page-1", { type: "page", label: "Tree root" }),
-      siteBlockRecord("block-1", { type: "group", label: "Disposable group" }),
-      sitePlacementRecord("placement-1", "Placed group", 1000),
-    ];
-
-    if (!disabledCollection.context || disabledCollection.result.type !== "tree") {
-      throw new Error("Site composition home should render a context tree.");
-    }
-
-    if (!enabledCollection.context || enabledCollection.result.type !== "tree") {
-      throw new Error("Site composition home should render a context tree.");
-    }
-
-    applyBootstrapResponse(bootstrap(records, disabledSchema), "site");
-    const disabledHtml = renderToStaticMarkup(
-      <RecordTree
-        context={disabledCollection.context}
-        entity={disabledCollection.entity}
-        entityName={disabledCollection.entityName}
-        queryContext={{ today: "2026-05-02", values: { block: "page-1" } }}
-        result={disabledCollection.result}
-      />,
-    );
-
-    resetClientStore();
-    applyBootstrapResponse(bootstrap(records, siteSourceSchema), "site");
-    const enabledHtml = renderToStaticMarkup(
-      <RecordTree
-        context={enabledCollection.context}
-        entity={enabledCollection.entity}
-        entityName={enabledCollection.entityName}
-        queryContext={{ today: "2026-05-02", values: { block: "page-1" } }}
-        result={enabledCollection.result}
-      />,
-    );
-
-    expect(disabledHtml).toContain('data-formless-tree-remove-placement="placement-1"');
-    expect(disabledHtml).toContain(
-      'data-formless-tree-remove-operation="block-placement.removeTreePlacement"',
-    );
-    expect(disabledHtml).not.toContain('data-formless-tree-delete-child="block-1"');
-    expect(enabledHtml).toContain('data-formless-tree-remove-placement="placement-1"');
-    expect(enabledHtml).toContain(
-      'data-formless-tree-remove-operation="block-placement.removeTreePlacement"',
-    );
-    expect(enabledHtml).not.toContain('data-formless-tree-delete-child="block-1"');
-    expect(enabledHtml).toContain('aria-label="Remove child placement"');
-    expect(enabledHtml).toContain("absolute right-2 top-2");
-    expect(enabledHtml).toContain("lucide-x");
-    expect(enabledHtml).not.toContain('aria-label="Delete child block"');
   });
 
   it("renders synthetic stack sections in order with independent selected queries", () => {
@@ -3898,10 +3536,10 @@ describe("generated collection home", () => {
     expect(html).toContain("Projects");
     expect(html).toContain("Header");
     expect(html).toContain("Footer");
-    expect(html).toContain('aria-label="Site roots list detail"');
+    expect(html).toContain('aria-label="Home tree"');
     expect(html).not.toContain('aria-label="Pages records"');
     expect(html).not.toContain('aria-label="Collections"');
-    expect(html).toContain('aria-label="Placement tree"');
+    expect(html).toContain("data-formless-legacy-tree-result=");
     expect(html).not.toContain("Add placement");
     expect(html).not.toContain("Create Block<");
     expect(html).not.toContain('aria-label="Create Site"');
@@ -3946,12 +3584,12 @@ describe("generated collection home", () => {
     expect(html).toContain('aria-label="Create Page"');
     expect(html).toContain('aria-label="Create Post"');
     expect(html).toContain('aria-label="Create Project"');
-    expect(html).toContain('aria-label="Site roots list detail"');
+    expect(html).toContain('aria-label="Home tree"');
     expect(html).toContain("Home");
     expect(html).toMatch(
       /data-formless-shell-destination="root:rec_site_content_home"[^>]*aria-pressed="true"/,
     );
-    expect(html).toContain('aria-label="Placement tree"');
+    expect(html).toContain("data-formless-legacy-tree-result=");
     expect(html).not.toContain("Add placement");
     expect(html).not.toContain('aria-label="Create Site"');
     expect(html).not.toContain('data-formless-delete-record="rec_site_settings_primary"');
@@ -4863,180 +4501,6 @@ describe("generated forms and records", () => {
     expect(streamHtml).toContain('aria-label="Done"');
     expect(streamHtml).toContain("checked");
     expect(streamHtml).not.toContain("Hidden title");
-  });
-
-  it("renders tree child fields for the active union discriminator", () => {
-    const schema = generatedDiscriminatedTaskSchema();
-    const model = requiredCollectionModel(schema, "taskTreeHome");
-
-    if (!model.collection.context || model.result.type !== "tree") {
-      throw new Error("Task tree home should render a context tree.");
-    }
-
-    applyBootstrapResponse(
-      bootstrap(
-        [
-          discriminatedTaskRecord("task-parent", "role", "Parent", false),
-          discriminatedTaskRecord("task-child", "stream", "Hidden child title", true),
-          taskPlacementRecord("placement-1", "task-parent", "task-child"),
-        ],
-        schema,
-      ),
-    );
-    const html = renderToStaticMarkup(
-      <RecordTree
-        context={model.collection.context}
-        queryContext={{ today: "2026-05-01", values: { task: "task-parent" } }}
-        result={model.result}
-      />,
-    );
-
-    expect(html).toContain('aria-label="Placement tree"');
-    expect(html).toContain('aria-label="Done"');
-    expect(html).toContain("checked");
-    expect(html).not.toContain("Hidden child title");
-  });
-
-  it("renders tree child context links for active union context-link presentations", () => {
-    const schema = generatedDiscriminatedTaskSchema({ streamItemPresentation: "contextLink" });
-    const model = requiredCollectionModel(schema, "taskTreeHome");
-
-    if (!model.collection.context || model.result.type !== "tree") {
-      throw new Error("Task tree home should render a context tree.");
-    }
-
-    applyBootstrapResponse(
-      bootstrap(
-        [
-          discriminatedTaskRecord("task-parent", "role", "Parent", false),
-          discriminatedTaskRecord("task-child", "stream", "Stream child", true),
-          taskPlacementRecord("placement-1", "task-parent", "task-child"),
-        ],
-        schema,
-      ),
-    );
-    const html = renderToStaticMarkup(
-      <RecordTree
-        context={model.collection.context}
-        onSelectContext={() => {}}
-        queryContext={{ today: "2026-05-01", values: { task: "task-parent" } }}
-        result={model.result}
-        selectableContextRecordIds={new Set(["task-parent", "task-child"])}
-      />,
-    );
-
-    expect(html).toContain("Stream child");
-    expect(html).toContain('aria-label="Select Stream child"');
-    expect(html).toContain(">Open</button>");
-    expect(html).not.toContain('aria-label="Done"');
-    expect(html).not.toContain("checked");
-  });
-
-  it("treats configured tree child variants as leaf nodes", () => {
-    const schema = generatedDiscriminatedTaskSchema({
-      streamItemPresentation: "contextLink",
-      treeBranchVariants: { stream: "leaf" },
-    });
-    const model = requiredCollectionModel(schema, "taskTreeHome");
-
-    if (!model.collection.context || model.result.type !== "tree") {
-      throw new Error("Task tree home should render a context tree.");
-    }
-
-    applyBootstrapResponse(
-      bootstrap(
-        [
-          discriminatedTaskRecord("task-parent", "role", "Parent", false),
-          discriminatedTaskRecord("task-child", "stream", "Stream child", true),
-          discriminatedTaskRecord("task-grandchild", "role", "Nested role", false),
-          taskPlacementRecord("placement-1", "task-parent", "task-child"),
-          taskPlacementRecord("placement-2", "task-child", "task-grandchild"),
-        ],
-        schema,
-      ),
-    );
-    const html = renderToStaticMarkup(
-      <RecordTree
-        context={model.collection.context}
-        onSelectContext={() => {}}
-        queryContext={{ today: "2026-05-01", values: { task: "task-parent" } }}
-        result={model.result}
-        selectableContextRecordIds={new Set(["task-parent", "task-child"])}
-      />,
-    );
-
-    expect(html).toContain("Stream child");
-    expect(html).toContain('aria-label="Select Stream child"');
-    expect(html).not.toContain("Nested role");
-  });
-
-  it("expands a configured leaf variant when it is the selected tree root", () => {
-    const schema = generatedDiscriminatedTaskSchema({
-      streamItemPresentation: "contextLink",
-      treeBranchVariants: { stream: "leaf" },
-    });
-    const model = requiredCollectionModel(schema, "taskTreeHome");
-
-    if (!model.collection.context || model.result.type !== "tree") {
-      throw new Error("Task tree home should render a context tree.");
-    }
-
-    applyBootstrapResponse(
-      bootstrap(
-        [
-          discriminatedTaskRecord("task-parent", "role", "Parent", false),
-          discriminatedTaskRecord("task-child", "stream", "Stream child", true),
-          discriminatedTaskRecord("task-grandchild", "role", "Nested role", false),
-          taskPlacementRecord("placement-1", "task-parent", "task-child"),
-          taskPlacementRecord("placement-2", "task-child", "task-grandchild"),
-        ],
-        schema,
-      ),
-    );
-    const html = renderToStaticMarkup(
-      <RecordTree
-        context={model.collection.context}
-        onSelectContext={() => {}}
-        queryContext={{ today: "2026-05-01", values: { task: "task-child" } }}
-        result={model.result}
-        selectableContextRecordIds={new Set(["task-parent", "task-child"])}
-      />,
-    );
-
-    expect(html).toContain("Nested role");
-  });
-
-  it("disables tree child context links outside the selectable context records", () => {
-    const schema = generatedDiscriminatedTaskSchema({ streamItemPresentation: "contextLink" });
-    const model = requiredCollectionModel(schema, "taskTreeHome");
-
-    if (!model.collection.context || model.result.type !== "tree") {
-      throw new Error("Task tree home should render a context tree.");
-    }
-
-    applyBootstrapResponse(
-      bootstrap(
-        [
-          discriminatedTaskRecord("task-parent", "role", "Parent", false),
-          discriminatedTaskRecord("task-child", "stream", "Stream child", true),
-          taskPlacementRecord("placement-1", "task-parent", "task-child"),
-        ],
-        schema,
-      ),
-    );
-    const html = renderToStaticMarkup(
-      <RecordTree
-        context={model.collection.context}
-        onSelectContext={() => {}}
-        queryContext={{ today: "2026-05-01", values: { task: "task-parent" } }}
-        result={model.result}
-        selectableContextRecordIds={new Set(["task-parent"])}
-      />,
-    );
-
-    expect(html).toContain('aria-label="Select Stream child"');
-    expect(html).toContain('disabled=""');
-    expect(html).not.toContain('aria-label="Done"');
   });
 
   it("renders edit view fields for the active union discriminator", () => {
@@ -7198,16 +6662,6 @@ function discriminatedTaskRecord(
     values: { kind, title, done },
     createdAt: "2026-05-11T00:00:00.000Z",
     updatedAt: "2026-05-11T00:00:00.000Z",
-  };
-}
-
-function taskPlacementRecord(id: string, parent: string, task: string): StoredRecord {
-  return {
-    id,
-    entity: "task-placement",
-    values: { parent, task, order: 1 },
-    createdAt: "2026-05-11T00:00:01.000Z",
-    updatedAt: "2026-05-11T00:00:01.000Z",
   };
 }
 

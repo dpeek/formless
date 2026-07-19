@@ -271,18 +271,18 @@ summary slots, operation controls, and schema-declared result types.
 
 - GIVEN generated UI renders a collection result inside a screen workspace
 - WHEN it selects a `list`, `record`, `table`, or `tree` result model
-- THEN eligible non-tree workspace foundations compose canonical list, record,
-  or table result contracts under the projected collection contract before the
+- THEN generated workspace foundations compose canonical list, record, table,
+  or tree result contracts under the projected collection contract before the
   active workspace renderer renders them
 - AND list and record foundations consume result facts from
   `src/client/list-result-model.ts`
 - AND the table foundation consumes table result facts selected through
   `src/client/collection-result-model.ts`
-- AND a screen containing a tree result remains wholly on the current tree
-  workspace path where `RecordTree` consumes tree result facts from
-  `src/client/tree-result-model.ts`
-- AND record-result fields, actions, warnings, empty state, and availability are
-  not composed directly in the collection renderer
+- AND the tree foundation consumes tree result facts from
+  `src/client/tree-result-model.ts` and projects flat placement and child
+  records into a complete renderer-neutral tree result
+- AND record- and tree-result fields, actions, warnings, empty state, and
+  availability are not composed directly in the collection renderer
 - AND generated ordering UI consumes result ordering facts from `src/client/result-ordering-model.ts`
 
 #### Scenario: List-detail context
@@ -303,31 +303,29 @@ summary slots, operation controls, and schema-declared result types.
 - AND list ordering does not require a drag-handle gesture when equivalent
   projected move actions preserve the declared ordering capability
 
-### Requirement: Generated Non-Tree Workspace Renderer Contract
+### Requirement: Generated Workspace Renderer Contract
 
 The system SHALL project complete generated screens whose collection sections
-use list, table, or record results through a controlled renderer-neutral
+use list, table, record, or tree results through a controlled renderer-neutral
 Formless UI workspace contract before selecting the active renderer, while
 generated runtime code owns model selection, reads, evaluation, operation
 execution, and effects.
 
-#### Scenario: Select complete non-tree workspace eligibility
+#### Scenario: Select complete workspace composition
 
 - GIVEN generated UI selects a workspace screen
-- WHEN every collection section uses a list, table, or record result
+- WHEN its collection sections use list, table, record, or tree results
 - THEN the complete screen and all ordered sections are eligible for the
   renderer-neutral workspace boundary
-- AND when any section uses a tree result the complete screen remains on its
-  current production path
-- AND generated UI does not split one screen between contract and non-contract
-  renderers or add a temporary tree member, opaque slot, React-node escape
-  hatch, placeholder, or compatibility wrapper to the workspace contract
-- AND a later tree-builder change may extend the final workspace result union
-  before tree-backed screens cross the same boundary
+- AND each section composes exactly one complete canonical result before the
+  active renderer is selected
+- AND generated UI does not split one screen between contract and direct
+  runtime renderers or add an opaque slot, React-node escape hatch,
+  placeholder, or compatibility wrapper to the workspace contract
 
 #### Scenario: Project complete screen and collection presentation
 
-- GIVEN an eligible non-tree workspace screen is selected
+- GIVEN a generated workspace screen is selected
 - WHEN generated runtime prepares it for the active Formless UI renderer
 - THEN the workspace contract carries stable screen identity, an accessible
   label, ordered section identity and labels, section actions, and one complete
@@ -336,9 +334,9 @@ execution, and effects.
 - AND each collection carries stable identity, an accessible label, selected
   query identity, optional query navigation, optional context presentation,
   summaries, collection actions, explicit empty or unavailable presentation,
-  and exactly one canonical list, table, or record-result contract
+  and exactly one canonical list, table, record-result, or tree-result contract
 - AND nested create surfaces, operation controls, fields, lists, tables, and
-  record results retain their canonical contract shapes and receive
+  record and tree results retain their canonical contract shapes and receive
   screen-and-section-scoped identities when composed into a workspace
 - AND single-section and multi-section screens preserve schema order without
   repeating the active screen heading in the screen body
@@ -392,8 +390,8 @@ execution, and effects.
   public route facts, while workspaces without a public route receive no link
 - AND workspace intent envelopes carry stable screen, section, collection,
   context, result, field, surface, and control identity as applicable while
-  preserving canonical nested field, create, operation, list, table, and
-  record-result intents
+  preserving canonical nested field, create, operation, list, table,
+  record-result, and tree-result intents
 - AND a workspace field envelope carries the exact projected field occurrence
   id rather than deriving identity from its schema field name, operation input
   name, record id, table context id, or another containing contract id
@@ -418,11 +416,11 @@ execution, and effects.
 - GIVEN production generated screens currently compose headings, React-node
   section controls, tabs, badges, context selectors, summaries, list-detail
   layout, collection actions, and result dispatch directly in React
-- WHEN generated runtime projects an eligible non-tree workspace
+- WHEN generated runtime projects a generated workspace
 - THEN dedicated legacy screen and collection adapters render only the
   canonical workspace and nested contracts and dispatch canonical intents
-- AND production single-section and multi-section list-, table-, and
-  record-backed screens, ordinary and list-detail contexts, counts, summaries,
+- AND production single-section and multi-section list-, table-, record-, and
+  tree-backed screens, ordinary and list-detail contexts, counts, summaries,
   context detail, create controls, command controls, empty states, and
   unavailable states cross that adapter boundary
 - AND callers that provide a non-schema section action supply canonical action
@@ -439,7 +437,7 @@ execution, and effects.
   structure or one-to-one visual parity
 - AND production remains on the legacy renderer after this contract migration
 
-#### Scenario: Astryx non-tree workspace renderer
+#### Scenario: Astryx workspace renderer
 
 - GIVEN the legacy renderer consumes complete production workspace contracts
 - WHEN the replacement renderer implements the same contracts in `lib/astryx`
@@ -458,27 +456,147 @@ execution, and effects.
 
 #### Scenario: Astryx workspace contract fixtures
 
-- GIVEN the legacy renderer consumes complete production non-tree workspace
-  contracts
+- GIVEN the legacy renderer consumes complete production workspace contracts
 - WHEN workspace UX is evaluated in the package-local Astryx prototype
 - THEN data-only fixtures use the same contract shapes for an unscoped
   collection, query navigation, ordinary context, list-detail context,
   singleton and empty context, summaries, workspace link actions, section and
   collection actions,
   single- and multi-section screens, unavailable collections, and list, table,
-  and record results
+  record, and tree results
 - AND a focused Generated Workspace layout renders the real Astryx screen and
   collection renderers with minimal local selection, field, create, operation,
   and confirmation intent simulation
 - AND package-local fixtures do not import generated runtime, storage, browser
   replica, query or aggregate evaluators, media clients, operation controllers,
-  sync, app targets, tree composition, or shell behavior
+  sync, app targets, or shell behavior
 - AND the fixtures contain no Tailwind classes and do not export or activate the
   Astryx workspace renderer in production
 
+### Requirement: Generated Tree Builder Renderer Contract
+
+The system SHALL project complete generated tree results through a controlled
+renderer-neutral Formless UI tree-builder contract while generated runtime
+owns flat record reads, tree-model selection, traversal, authoring state,
+operation execution, ordering plans, navigation, and effects.
+
+#### Scenario: Project flat records into a complete tree result
+
+- GIVEN a generated collection selects a tree result for one root record
+- WHEN generated runtime prepares the result for the active workspace renderer
+- THEN it projects stable tree and root identity, accessibility and density
+  facts, editing availability, explicit ready, empty, or unavailable state,
+  recursively ordered tree items, controlled selection, one selected-item
+  editor, display-safe feedback, and nested intent routing
+- AND each item preserves distinct placement-edge, child-record, and stable
+  presentation identities while carrying only projected labels, variant facts,
+  slot facts, disclosure state, structural state, child items, and applicable
+  actions
+- AND items with projected children expose controlled disclosure state whose
+  exact open-change intents are validated and retained by generated runtime
+- AND the nested hierarchy is a presentation projection over flat placement and
+  child records rather than stored nesting or denormalized child arrays
+- AND the contract does not expose tree result models, relationships, schemas,
+  records, record maps, query contexts, operation bindings or controllers,
+  ordering scope keys or rank plans, recursion bookkeeping, storage hooks, sync
+  functions, React nodes, Tailwind classes, or renderer props
+
+#### Scenario: Select and edit one tree item
+
+- GIVEN a projected tree contains one or more placement items
+- WHEN the user selects an item
+- THEN runtime retains the selected placement identity without patching a
+  record or changing the workspace root
+- AND the selected editor projects placement fields separately from child
+  fields through canonical field-set contracts, including active union,
+  `visibleWhen`, specialized field, draft, pending, and display-safe error facts
+- AND a valid item-view context target produces a projected context-navigation
+  action whose intent is resolved by runtime
+- AND initial load, refresh, child creation, placement removal, or disappearance
+  of the selected item resolves through a stable explicit selection fallback
+  rather than leaving a stale editor
+- AND non-selected rows remain concise and do not duplicate complete editors
+
+#### Scenario: Create and remove tree placements
+
+- GIVEN the selected root or item permits one or more schema-declared child
+  variants
+- WHEN the renderer opens child creation or placement removal
+- THEN runtime projects stable allowed-variant options and only the active
+  canonical create surface for child creation
+- AND runtime retains branch and slot policy, discriminator and literal default
+  derivation, create draft state, `create-tree-child` execution, operation
+  output handling, refresh, and created-item selection
+- AND placement removal composes a canonical operation control and destructive
+  confirmation for `remove-tree-placement`
+- AND the tree result exposes no child-record delete control through placement
+  removal capability
+
+#### Scenario: Order placements inside one parent and slot
+
+- GIVEN a tree result declares ordered placement edges
+- WHEN the user selects an available `top`, `up`, `down`, or `bottom` action
+- THEN the tree contract carries a tree-specific reorder intent using the
+  shared semantic ordering direction
+- AND runtime calculates and executes the sparse-rank update only within the
+  exact projected parent-and-slot scope
+- AND boundary availability, pending state, no-op moves, rebalance requirements,
+  operation failures, and committed moves are projected without drag data,
+  target indexes, sortable refs, suspended drops, or cross-scope movement
+- AND preserving ordering capability does not require a drag gesture
+
+#### Scenario: Project structural diagnostics
+
+- GIVEN traversal encounters readiness issues, a missing child, a cycle, a leaf
+  branch, or descendants beyond the declared maximum depth
+- WHEN runtime projects the tree result
+- THEN placement and child readiness warnings remain distinct from item-local
+  missing-child, cycle-stopped, and depth-stopped structural diagnostics
+- AND warnings carry stable identity, display-safe codes or labels, and
+  display-safe messages without records, payloads, exceptions, parser errors,
+  operation responses, or sync internals
+- AND a missing-child placement remains selectable so its placement fields and
+  removal action stay reachable, while deleted or invalid child records do not
+  enter the selected editor's child fields or child creation contract
+- AND cycle-stopped and depth-stopped items expose no child creation even when
+  their referenced child record would otherwise permit child variants
+- AND valid deep trees remain discoverable through controlled disclosure and
+  selected-path visibility rather than silent truncation or always-expanded
+  full-depth editors
+
+#### Scenario: Legacy tree renderer consumes the complete contract
+
+- GIVEN production tree workspaces use direct record hooks, runtime operation
+  controllers, nested Tailwind cards, and drag behavior
+- WHEN the generated tree foundation publishes a complete tree-result node
+- THEN a subscribed legacy tree renderer reads only the scoped tree-result
+  reference and delegates to a pure complete-snapshot renderer
+- AND direct legacy Formless UI imports for the tree path remain confined to
+  dedicated legacy seam modules
+- AND production tree sections use the same generated workspace host path as
+  list, table, and record results without a direct tree fallback
+- AND production remains on the legacy workspace renderer after the migration
+
+#### Scenario: Astryx tree renderer and fixtures
+
+- GIVEN the legacy renderer consumes complete production tree contracts
+- WHEN the replacement renderer implements the same contract in `lib/astryx`
+- THEN it uses an accessible Astryx hierarchy outline with controlled selection,
+  disclosure, concise item rows, and a responsive focused editor
+- AND it composes canonical field, create, operation, confirmation, ordering,
+  warning, status, and empty-state renderers without reading generated runtime
+- AND package-local data-only fixtures cover shallow and maximum-depth trees,
+  selected paths, slots, active variants, context actions, empty, unavailable,
+  missing-child, cycle, depth-stopped, leaf, warning, editing-disabled, and
+  pending states through the reusable memory host
+- AND the Astryx renderer contains no legacy Formless UI components, Tailwind
+  classes, records, schemas, storage reads, operation execution, DnD behavior,
+  media clients, sync effects, or runtime imports
+- AND adding the renderer does not activate Astryx in production
+
 ### Requirement: Reactive Generated UI Contract Host
 
-The system SHALL expose eligible generated workspace contracts through a
+The system SHALL expose generated workspace contracts through a
 stable renderer-neutral reactive host that supports concurrency-safe scoped
 subscriptions while preserving complete data-only snapshots and pure renderer
 entrypoints.
@@ -487,7 +605,7 @@ entrypoints.
 
 - GIVEN generated runtime owns replica reads, local interaction state,
   operation execution, media effects, sync feedback, and route selection
-- WHEN it exposes an eligible non-tree workspace to a renderer
+- WHEN it exposes a generated workspace to a renderer
 - THEN a stable host supports typed contract-reference reads, cached server
   snapshots, scoped subscriptions, and dispatch of canonical workspace intents
 - AND contract references use stable workspace, section, and result identities
@@ -522,8 +640,8 @@ entrypoints.
 
 #### Scenario: Subscribe at workspace, section, and result boundaries
 
-- GIVEN an eligible workspace contains ordered collection sections and each
-  section contains one main list, table, or record result plus optional context
+- GIVEN a workspace contains ordered collection sections and each section
+  contains one main list, table, record, or tree result plus optional context
   detail
 - WHEN generated runtime publishes its projected contracts
 - THEN the workspace subscription exposes screen presentation and ordered
@@ -532,7 +650,7 @@ entrypoints.
   context selection, counts, summaries, availability, and main and context
   result references
 - AND each main or context result subscription exposes its existing complete
-  canonical list, table, or record-result snapshot
+  canonical list, table, record-result, or tree-result snapshot
 - AND a field draft or nested operation-state change can notify only its result
   subtree, a count, summary, query, context, or availability change can notify
   only its section subtree, and screen structure or section ordering can notify
@@ -546,7 +664,7 @@ entrypoints.
 #### Scenario: Preserve pure renderers and data-only fixtures
 
 - GIVEN legacy and Astryx renderers already accept complete workspace, list,
-  table, and record-result contract snapshots
+  table, record-result, and tree-result contract snapshots
 - WHEN subscribed renderer entrypoints consume contract references from the
   host
 - THEN subscribed wrappers read scoped snapshots and delegate presentation to
@@ -560,9 +678,11 @@ entrypoints.
   than production generated runtime
 - AND workspace subscription boundaries remain independent from application
   shell contract nodes
-- AND introducing the host does not activate Astryx in production, add tree
-  support, replace the client store, or change auth-route, public Site, or
-  renderer-cutover behavior
+- AND tree-result references, snapshots, nodes, subscription hooks, memory-host
+  publication, server snapshots, and hydration use the same host semantics as
+  list, table, and record results
+- AND extending the host does not activate Astryx in production, replace the
+  client store, or change auth-route, public Site, or renderer-cutover behavior
 
 ### Requirement: Reactive Application Shell Contract Host
 
@@ -794,7 +914,7 @@ operation execution, and ordering effects.
 - AND the fixtures contain no Tailwind classes and do not export or activate the
   Astryx list renderer in production
 - AND collection tabs, context selection, summaries, collection toolbars,
-  record and tree results, public Site rendering, shell navigation, and the
+  record results, public Site rendering, shell navigation, and the
   production renderer switch remain owned by later slices
 
 ### Requirement: Generated Record Result Renderer Contract
@@ -1048,7 +1168,7 @@ operation execution, and ordering effects.
 - AND the fixtures contain no Tailwind classes and do not export or activate the
   Astryx table renderer in production
 - AND collection tabs, context selection, summaries, collection toolbars, list,
-  record, and tree results, public Site rendering, shell navigation, and the
+  record results, public Site rendering, shell navigation, and the
   production renderer switch remain owned by later slices
 
 ### Requirement: Field Editing And Presentation
@@ -1777,8 +1897,8 @@ entity operations and view operation bindings.
   generated runtime, storage, browser replica, sync, or app target modules
 - AND the fixture renderer contains no Tailwind classes and does not activate
   Astryx in production
-- AND tree controls, create and public operation forms, workspace shell controls,
-  and public Site rendering remain owned by later slices
+- AND create and public operation forms, workspace shell controls, and public
+  Site rendering remain owned by later slices
 
 #### Scenario: Specialized controls use adapters
 

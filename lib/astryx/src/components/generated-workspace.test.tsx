@@ -4,13 +4,18 @@ import { describe, expect, it, vi } from "vite-plus/test";
 import type {
   FormlessUiContractReference,
   FormlessUiListContract,
+  FormlessUiTreeResultContract,
   FormlessUiWorkspaceCollectionContract,
   FormlessUiWorkspaceContract,
   FormlessUiWorkspaceSectionContract,
 } from "../formless-ui-contract.ts";
 import { formlessUiContractReferenceKey } from "../formless-ui-contract-host.ts";
+import { FormlessUiContractHostProvider } from "../formless-ui-contract-host-react.tsx";
 import { AstryxWorkspaceCollectionRenderer } from "./formless-ui-workspace-collection-renderer.tsx";
-import { AstryxWorkspaceScreenRenderer } from "./formless-ui-workspace-screen-renderer.tsx";
+import {
+  AstryxSubscribedWorkspaceScreenRenderer,
+  AstryxWorkspaceScreenRenderer,
+} from "./formless-ui-workspace-screen-renderer.tsx";
 import {
   createFormlessGeneratedWorkspaceFixtures,
   type FormlessGeneratedWorkspaceFixtureId,
@@ -47,6 +52,11 @@ describe("canonical generated-workspace fixtures", () => {
     ).context;
     const emptyCollection = requiredWorkspace(fixtures, "empty-collection").sections[0]!.collection;
     const unavailable = requiredWorkspace(fixtures, "unavailable").sections[0]!.collection;
+    const siteTree = requiredOrdinary(
+      requiredWorkspace(fixtures, "site-tree").sections[0]!.collection,
+    );
+    const siteTreeListDetail = requiredWorkspace(fixtures, "site-tree-list-detail").sections[0]!
+      .collection.presentation;
     const serialized = JSON.stringify(fixtures);
 
     expect(structuredClone(fixtures)).toEqual(fixtures);
@@ -79,7 +89,13 @@ describe("canonical generated-workspace fixtures", () => {
     expect(emptyContext?.options).toEqual([]);
     expect(emptyCollection.availability.state).toBe("empty");
     expect(unavailable.availability.state).toBe("unavailable");
-    expect(serialized).not.toContain('"kind":"tree"');
+    expect(siteTree.result.kind).toBe("treeResult");
+    expect(siteTreeListDetail).toMatchObject({
+      kind: "listDetail",
+      result: { kind: "treeResult" },
+      selector: { presentation: "localListDetail", selectedOptionId: expect.any(String) },
+    });
+    expect(serialized).toContain('"kind":"treeResult"');
     expect(serialized).not.toContain("className");
   });
 });
@@ -89,6 +105,11 @@ describe("Generated Workspace prototype layout", () => {
     const layoutHtml = renderToStaticMarkup(<FormlessGeneratedWorkspaceLayout />);
     const listDetailHtml = renderWorkspace(requiredWorkspaceFixtures(), "list-detail");
     const multiSectionHtml = renderWorkspace(requiredWorkspaceFixtures(), "multi-section");
+    const siteTreeHtml = renderSubscribedWorkspace(requiredWorkspaceFixtures(), "site-tree");
+    const siteTreeListDetailHtml = renderSubscribedWorkspace(
+      requiredWorkspaceFixtures(),
+      "site-tree-list-detail",
+    );
 
     expect(layoutHtml).toContain("Generated Workspace");
     expect(layoutHtml).toContain('data-formless-astryx-workspace="workspace:tasks"');
@@ -103,6 +124,14 @@ describe("Generated Workspace prototype layout", () => {
     expect(multiSectionHtml).toMatch(/<h2[^>]*>Companies<\/h2>/);
     expect(multiSectionHtml).toMatch(/<h2[^>]*>Contact<\/h2>/);
     expect(multiSectionHtml.indexOf("Companies")).toBeLessThan(multiSectionHtml.indexOf("Contact"));
+    expect(siteTreeHtml).toContain("data-formless-astryx-tree-layout=");
+    expect(siteTreeHtml).toContain('role="tree"');
+    expect(siteTreeHtml).toContain('aria-label="Homepage record"');
+    expect(siteTreeHtml).toContain("data-formless-astryx-tree-editor=");
+    expect(siteTreeHtml).toContain("Add child to Navigation");
+    expect(siteTreeListDetailHtml).toContain('role="combobox"');
+    expect(siteTreeListDetailHtml).toContain("Homepage");
+    expect(siteTreeListDetailHtml).toContain('role="tree"');
   });
 
   it("keeps query and context selection controlled by canonical intents", () => {
@@ -371,6 +400,131 @@ describe("Generated Workspace prototype layout", () => {
     }
   });
 
+  it("routes scoped tree selection, fields, and creation through only the tree-result node", () => {
+    const workspace = requiredWorkspace(requiredWorkspaceFixtures(), "site-tree");
+    const fixtureHost = createFormlessGeneratedWorkspaceFixtureHost(workspace);
+    const section = workspace.sections[0]!;
+    const publication = projectGeneratedWorkspaceFixturePublication(workspace);
+    const tree = requiredTreeResult(requiredOrdinary(section.collection).result);
+    const editor = tree.selectedEditor;
+    const placementField = editor?.placementFields.fields.find(
+      (field) => field.fieldName === "label",
+    );
+    const rootCreation = tree.rootChildCreation;
+    const createSurface = rootCreation?.activeCreateSurface;
+    const createField = createSurface?.dialog.form.fieldSet.fields[0];
+    const brand = tree.items[0]?.children[0];
+    const treeReference = requiredReference(
+      publication.nodes.map(({ reference }) => reference),
+      (reference) => reference.kind === "treeResultReference",
+    );
+    const sectionReference = requiredReference(
+      publication.nodes.map(({ reference }) => reference),
+      (reference) => reference.kind === "workspaceSectionShellReference",
+    );
+    const initialSectionSnapshot = fixtureHost.host.read(sectionReference);
+    const notifications = new Map<string, number>();
+    const unsubscribe = publication.nodes.map(({ reference }) =>
+      fixtureHost.host.subscribe(reference, () => {
+        const key = formlessUiContractReferenceKey(reference);
+        notifications.set(key, (notifications.get(key) ?? 0) + 1);
+      }),
+    );
+
+    if (!editor || !placementField || !rootCreation || !createSurface || !createField || !brand) {
+      throw new Error("Missing interactive Site tree workspace fixtures.");
+    }
+
+    fixtureHost.host.dispatch({
+      ...scope(section),
+      intent: {
+        fieldId: placementField.fieldId,
+        intent: {
+          fieldName: placementField.fieldName,
+          type: "recordEditorDraftChange",
+          value: "Updated navigation",
+        },
+        resultId: tree.id,
+        target: {
+          fieldSetId: editor.placementFields.id,
+          itemId: editor.itemId,
+          kind: "placement",
+        },
+        type: "treeField",
+      },
+      resultId: tree.id,
+      type: "workspaceTree",
+    });
+    expect(
+      recordDraft(
+        currentWorkspaceTree(
+          fixtureHost.getWorkspace(),
+        ).selectedEditor?.placementFields.fields.find(
+          (field) => field.fieldId === placementField.fieldId,
+        ),
+      ),
+    ).toBe("Updated navigation");
+
+    fixtureHost.host.dispatch({
+      ...scope(section),
+      intent: {
+        intent: { open: true, surfaceId: createSurface.id, type: "createOpenChange" },
+        parent: { kind: "root" },
+        resultId: tree.id,
+        surfaceId: createSurface.id,
+        type: "treeCreate",
+      },
+      resultId: tree.id,
+      type: "workspaceTree",
+    });
+    expect(
+      currentWorkspaceTree(fixtureHost.getWorkspace()).rootChildCreation?.activeCreateSurface
+        ?.dialog.open,
+    ).toBe(true);
+
+    fixtureHost.host.dispatch({
+      ...scope(section),
+      intent: {
+        fieldId: createField.fieldId,
+        intent: {
+          fieldName: createField.fieldName,
+          fieldValue: { kind: "input", value: "Intro" },
+          type: "createDraftChange",
+        },
+        resultId: tree.id,
+        target: { kind: "create", parent: { kind: "root" }, surfaceId: createSurface.id },
+        type: "treeField",
+      },
+      resultId: tree.id,
+      type: "workspaceTree",
+    });
+    expect(
+      currentWorkspaceTree(fixtureHost.getWorkspace()).rootChildCreation?.activeCreateSurface
+        ?.dialog.form.fieldSet.fields[0],
+    ).toMatchObject({ draftInput: { kind: "input", value: "Intro" } });
+
+    fixtureHost.host.dispatch({
+      ...scope(section),
+      intent: brand.selectionIntent,
+      resultId: tree.id,
+      type: "workspaceTree",
+    });
+    const selected = currentWorkspaceTree(fixtureHost.getWorkspace());
+    expect(selected.items[0]?.children[0]?.selected).toBe(true);
+    expect(selected.selectedEditor).toMatchObject({
+      itemId: brand.id,
+      placementId: brand.placementId,
+    });
+    expect(Array.from(notifications.keys())).toEqual([
+      formlessUiContractReferenceKey(treeReference),
+    ]);
+    expect(fixtureHost.host.read(sectionReference)).toBe(initialSectionSnapshot);
+
+    for (const stopListening of unsubscribe) {
+      stopListening();
+    }
+  });
+
   it("keeps fixture snapshots and their interactive host free of runtime dependencies", async () => {
     const fixtureSource = await readFile(
       new URL("./generated-workspace.fixtures.ts", import.meta.url),
@@ -447,6 +601,19 @@ function requiredRecordResult(
   return result;
 }
 
+function requiredTreeResult(
+  result: FormlessUiWorkspaceCollectionContract["presentation"]["result"],
+): FormlessUiTreeResultContract {
+  if (result.kind !== "treeResult") {
+    throw new Error("Expected tree-result fixture.");
+  }
+  return result;
+}
+
+function currentWorkspaceTree(workspace: FormlessUiWorkspaceContract) {
+  return requiredTreeResult(requiredOrdinary(workspace.sections[0]!.collection).result);
+}
+
 function recordDraft(field: FormlessUiListContract["items"][number]["fields"][number] | undefined) {
   return field?.mode === "editor" && "drafts" in field ? field.drafts.draft : undefined;
 }
@@ -488,6 +655,18 @@ function renderWorkspace(
       onIntent={() => undefined}
       workspace={requiredWorkspace(fixtures, id)}
     />,
+  );
+}
+
+function renderSubscribedWorkspace(
+  fixtures: ReturnType<typeof createFormlessGeneratedWorkspaceFixtures>,
+  id: FormlessGeneratedWorkspaceFixtureId,
+) {
+  const fixtureHost = createFormlessGeneratedWorkspaceFixtureHost(requiredWorkspace(fixtures, id));
+  return renderToStaticMarkup(
+    <FormlessUiContractHostProvider host={fixtureHost.host}>
+      <AstryxSubscribedWorkspaceScreenRenderer reference={fixtureHost.workspaceReference} />
+    </FormlessUiContractHostProvider>,
   );
 }
 

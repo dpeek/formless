@@ -222,7 +222,11 @@ function renderedText(renderer: ReactTestRenderer): string {
 }
 
 function requestBody(request: { init?: RequestInit } | undefined): unknown {
-  return JSON.parse(String(request?.init?.body));
+  const body = request?.init?.body;
+  if (typeof body !== "string") {
+    throw new Error("Expected a JSON request body.");
+  }
+  return JSON.parse(body);
 }
 
 function formBlock(

@@ -1,8 +1,11 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vite-plus/test";
 import type {
+  FormlessUiContextResultReference,
   FormlessUiListContract,
   FormlessUiRecordResultContract,
+  FormlessUiTreeResultReference,
+  FormlessUiTreeResultContract,
   FormlessUiWorkspaceContract,
   FormlessUiWorkspaceSectionShellContract,
 } from "@dpeek/formless-astryx/contract";
@@ -10,6 +13,7 @@ import {
   createFormlessUiMemoryContractHost,
   formlessUiListResultReference,
   formlessUiRecordResultReference,
+  formlessUiTreeResultReference,
   formlessUiWorkspaceManifestReference,
   formlessUiWorkspaceSectionShellReference,
   type FormlessUiContractHostNodeSet,
@@ -56,6 +60,58 @@ describe("legacy subscribed workspace renderer", () => {
       expect(html).toContain('data-formless-legacy-record-result="record:task-context"');
       expect(html).toContain("Tasks section");
     }
+  });
+
+  it("renders a list-detail tree result through separate stable host references", () => {
+    const treeWorkspaceReference = formlessUiWorkspaceManifestReference("workspace:site");
+    const treeSectionReference = formlessUiWorkspaceSectionShellReference(
+      treeWorkspaceReference.workspaceId,
+      "section:composition",
+    );
+    const treeResultReference = formlessUiTreeResultReference({
+      resultId: "tree:site",
+      role: "mainResult",
+      sectionId: treeSectionReference.sectionId,
+      workspaceId: treeWorkspaceReference.workspaceId,
+    });
+    const treeContextReference = formlessUiRecordResultReference({
+      resultId: "record:site-root",
+      role: "contextResult",
+      sectionId: treeSectionReference.sectionId,
+      workspaceId: treeWorkspaceReference.workspaceId,
+    });
+    const host = createFormlessUiMemoryContractHost({
+      nodes: [
+        {
+          reference: treeWorkspaceReference,
+          snapshot: {
+            accessibilityLabel: "Site workspace",
+            actions: [],
+            id: treeWorkspaceReference.workspaceId,
+            kind: "workspaceManifest",
+            label: "Site",
+            sections: [treeSectionReference],
+          },
+        },
+        {
+          reference: treeSectionReference,
+          snapshot: treeSectionShell(treeResultReference, treeContextReference),
+        },
+        { reference: treeResultReference, snapshot: treeResult() },
+        { reference: treeContextReference, snapshot: contextResult("record:site-root") },
+      ],
+    });
+    const html = renderToStaticMarkup(
+      <FormlessUiContractHostProvider host={host}>
+        <LegacySubscribedWorkspaceScreenRenderer reference={treeWorkspaceReference} />
+      </FormlessUiContractHostProvider>,
+    );
+
+    expect(html).toContain('data-formless-legacy-workspace="workspace:site"');
+    expect(html).toContain('data-formless-legacy-workspace-collection="collection:composition"');
+    expect(html).toContain('data-formless-legacy-record-result="record:site-root"');
+    expect(html).toContain('data-formless-legacy-tree-result="tree:site"');
+    expect(html).toContain("Site roots");
   });
 });
 
@@ -130,7 +186,7 @@ function listResult(): FormlessUiListContract {
   };
 }
 
-function contextResult(): FormlessUiRecordResultContract {
+function contextResult(id = contextResultReference.resultId): FormlessUiRecordResultContract {
   return {
     accessibilityLabel: "Selected task context",
     actions: {
@@ -144,8 +200,74 @@ function contextResult(): FormlessUiRecordResultContract {
     density: "compact",
     editing: { enabled: true },
     fields: [],
-    id: contextResultReference.resultId,
+    id,
     kind: "recordResult",
+    warnings: [],
+  };
+}
+
+function treeSectionShell(
+  result: FormlessUiTreeResultReference,
+  context: FormlessUiContextResultReference,
+): FormlessUiWorkspaceSectionShellContract {
+  return {
+    accessibilityLabel: "Composition section",
+    actions: [],
+    collection: {
+      accessibilityLabel: "Site composition",
+      availability: { state: "ready" },
+      id: "collection:composition",
+      kind: "workspaceCollection",
+      label: "Composition",
+      presentation: {
+        accessibilityLabel: "Site composition list detail",
+        actions: {
+          id: "collection:composition:actions",
+          kind: "workspaceCollectionActions",
+          primary: [],
+          secondary: [],
+          secondaryAccessibilityLabel: "More composition actions",
+        },
+        contextDetail: context,
+        id: "collection:composition:list-detail",
+        kind: "listDetail",
+        result,
+        selector: {
+          accessibilityLabel: "Site roots",
+          availability: { state: "ready" },
+          id: "context:site-root",
+          kind: "workspaceContext",
+          label: "Site roots",
+          options: [],
+          presentation: "localListDetail",
+        },
+        summaries: [],
+      },
+      selectedQueryId: null,
+    },
+    headingVisibility: "visible",
+    id: "section:composition",
+    kind: "workspaceSectionShell",
+    label: "Composition",
+  };
+}
+
+function treeResult(): FormlessUiTreeResultContract {
+  return {
+    accessibilityLabel: "Homepage composition",
+    availability: { state: "ready" },
+    density: "default",
+    editing: { enabled: true },
+    feedback: [],
+    id: "tree:site",
+    items: [],
+    kind: "treeResult",
+    root: {
+      accessibilityLabel: "Homepage root",
+      id: "tree:site:root",
+      kind: "treeRoot",
+      label: "Homepage",
+    },
     warnings: [],
   };
 }

@@ -106,7 +106,7 @@ export type SelectGeneratedRecordResultFoundationOptions = {
   entity: EntitySchema;
   entityName: string;
   fieldState?: GeneratedRecordResultFieldAuthoringState;
-  fieldPresentation?: "contextDetail" | "recordResult";
+  fieldPresentation?: "contextDetail" | "recordResult" | "treeChild" | "treePlacement";
   id: string;
   mediaAssetOptionsByFieldName?: Readonly<Record<string, readonly ImageMediaAssetOption[]>>;
   operationStateByExecutionKey?: Readonly<
@@ -201,15 +201,21 @@ export function selectGeneratedRecordResultFoundation({
   const fieldDisabledReasons = Object.fromEntries(
     session.visibleFields.map((field) => [field.fieldName, resolvedEditingDisabledReason]),
   );
+  const treeChildFieldsRenderInline =
+    fieldPresentation === "treeChild" &&
+    generatedRecordResultFieldsRenderInline(session.visibleFields);
   const fields = projectGeneratedRecordFormlessUiFields({
     canPatch: result.updateOperation !== undefined,
-    density,
+    density: fieldPresentation === "treePlacement" ? "compact" : density,
     densityByFieldName:
-      fieldPresentation === "contextDetail"
+      fieldPresentation === "contextDetail" || fieldPresentation === "treeChild"
         ? Object.fromEntries(
             session.visibleFields.map((field) => [
               field.fieldName,
-              isGeneratedRecordResultHeadingField(field) ? "default" : density,
+              isGeneratedRecordResultHeadingField(field) ||
+              (fieldPresentation === "treeChild" && isGeneratedRecordResultRichField(field))
+                ? "default"
+                : density,
             ]),
           )
         : undefined,
@@ -225,11 +231,13 @@ export function selectGeneratedRecordResultFoundation({
     pendingByFieldName: nextFieldState.pendingByFieldName as Readonly<Record<string, boolean>>,
     pendingLabelByFieldName: nextFieldState.pendingLabelByFieldName,
     presentationByFieldName:
-      fieldPresentation === "contextDetail"
+      fieldPresentation === "contextDetail" || fieldPresentation === "treeChild"
         ? Object.fromEntries(
             session.visibleFields.map((field) => [
               field.fieldName,
-              isGeneratedRecordResultHeadingField(field) ? "heading" : "default",
+              !treeChildFieldsRenderInline && isGeneratedRecordResultHeadingField(field)
+                ? "heading"
+                : "default",
             ]),
           )
         : undefined,
@@ -239,11 +247,11 @@ export function selectGeneratedRecordResultFoundation({
     session,
     showLabel: true,
     showLabelByFieldName:
-      fieldPresentation === "contextDetail"
+      fieldPresentation === "contextDetail" || fieldPresentation === "treeChild"
         ? Object.fromEntries(
             session.visibleFields.map((field) => [
               field.fieldName,
-              !isGeneratedRecordResultHeadingField(field),
+              !treeChildFieldsRenderInline && !isGeneratedRecordResultHeadingField(field),
             ]),
           )
         : undefined,
@@ -595,5 +603,25 @@ function isGeneratedRecordResultHeadingField(fieldConfig: RecordFieldConfig): bo
     (fieldConfig.fieldName === "label" ||
       fieldConfig.fieldName === "name" ||
       fieldConfig.fieldName === "title")
+  );
+}
+
+function isGeneratedRecordResultRichField(fieldConfig: RecordFieldConfig): boolean {
+  return fieldConfig.field.type === "text" && fieldConfig.editor === "markdown";
+}
+
+function generatedRecordResultFieldsRenderInline(fields: readonly RecordFieldConfig[]): boolean {
+  if (fields.length !== 2) {
+    return false;
+  }
+
+  const fieldNames = new Set(fields.map((field) => field.fieldName));
+  return (
+    fieldNames.has("label") &&
+    fieldNames.has("href") &&
+    fields.every(
+      (field) =>
+        field.field.type === "text" && (field.editor === "text" || field.editor === "href"),
+    )
   );
 }

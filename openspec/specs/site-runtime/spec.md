@@ -377,7 +377,9 @@ public tree traversal.
 
 ### Requirement: Site Authoring
 
-The system SHALL expose Site authoring through generated admin screens that edit Site settings and tree-structured block composition without exposing raw implementation-only fields as primary controls.
+The system SHALL expose Site authoring through generated admin screens that
+edit Site settings and renderer-neutral tree-structured block composition
+without exposing raw implementation-only fields as primary controls.
 
 #### Scenario: Settings edit hides key
 
@@ -393,6 +395,60 @@ The system SHALL expose Site authoring through generated admin screens that edit
 - WHEN they add an allowed child variant
 - THEN the runtime creates a child block and a block placement
 - AND the available child variants follow the parent block type and slot policy
+- AND schema-declared variant labels, discriminator defaults, and literal
+  placement values are resolved before the create intent reaches the renderer
+
+#### Scenario: Project flat Site records for tree authoring
+
+- GIVEN a Site root, block records, and block placement records exist
+- WHEN the composition workspace projects its tree result
+- THEN runtime builds an ordered nested authoring tree from the flat records
+- AND each projected item keeps placement-edge identity separate from
+  child-block identity
+- AND storage does not gain nested child arrays or denormalized presentation
+  trees
+
+#### Scenario: Focus one placement for editing
+
+- GIVEN the composition tree contains one or more placements
+- WHEN the author selects a tree item
+- THEN the hierarchy keeps concise item presentation while one focused editor
+  exposes placement fields separately from child-block fields
+- AND selecting an item does not patch Site records or change the selected Site
+  root
+- AND item-view context navigation remains available for child blocks that are
+  valid root context targets
+- AND refresh, creation, or placement removal resolves a missing selection
+  through a stable runtime-owned fallback
+
+#### Scenario: Remove a tree placement
+
+- GIVEN an author selects a removable Site tree item
+- WHEN they confirm removal
+- THEN the runtime invokes the declared `remove-tree-placement` operation for
+  the placement edge
+- AND the authoring control does not delete or offer to delete the child block
+  record
+
+#### Scenario: Order Site placements
+
+- GIVEN sibling placements are ordered within one parent and semantic slot
+- WHEN the author selects an available top, up, down, or bottom action
+- THEN runtime updates the declared placement rank only inside that parent and
+  slot scope
+- AND the authoring capability does not require drag and drop or permit
+  cross-parent or cross-slot movement
+
+#### Scenario: Surface Site tree diagnostics
+
+- GIVEN Site tree authoring encounters placement or block readiness warnings, a
+  missing child block, a cycle, a leaf branch, or descendants beyond the
+  declared maximum depth
+- WHEN the tree result is projected
+- THEN the selected item exposes display-safe readiness and structural
+  diagnostics without blocking otherwise valid authoring
+- AND deep valid trees remain discoverable through controlled disclosure and a
+  focused editor rather than rendering every nested block editor at once
 
 #### Scenario: Root selection groups
 

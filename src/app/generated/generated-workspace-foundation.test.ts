@@ -16,7 +16,8 @@ import type {
 import type { EntityOperationPresentationConfig } from "../../client/operation-presentation-model.ts";
 import { selectScreenModels } from "../../client/views.ts";
 import type { RecordResultModel } from "../../client/list-result-model.ts";
-import { rateSeedRecords, rateSourceSchema } from "../../test/schema-apps.ts";
+import { rateSeedRecords, rateSourceSchema, siteSourceSchema } from "../../test/schema-apps.ts";
+import { testSiteSeedRecords } from "../../test/site-records.ts";
 import { projectGeneratedOperationFormlessUiControl } from "./formless-ui-operation-projection.ts";
 import { projectGeneratedRecordFormlessUiField } from "./formless-ui-projection.ts";
 import {
@@ -28,6 +29,7 @@ import {
   projectGeneratedWorkspaceOperationIntent,
   projectGeneratedWorkspaceRecordResultIntent,
   projectGeneratedWorkspaceTableIntent,
+  projectGeneratedWorkspaceTreeIntent,
 } from "./formless-ui-workspace-projection.ts";
 import {
   createGeneratedRecordResultFieldAuthoringState,
@@ -350,7 +352,7 @@ describe("generated workspace foundation", () => {
     ).toBeUndefined();
   });
 
-  it("scopes repeated list sections, resolves list intents, and rejects whole tree screens", () => {
+  it("scopes repeated list sections, resolves list intents, and composes mixed tree screens", () => {
     const setup = requiredScreen("rateSetup");
     const cards = required(setup.layout.sections[0]);
     const cardRecords = rateSeedRecords
@@ -452,27 +454,117 @@ describe("generated workspace foundation", () => {
       }),
     ).toBeUndefined();
 
-    const treeScreen = {
-      ...screen,
+    const siteEditor = required(
+      selectScreenModels(siteSourceSchema).find(
+        (candidate) => candidate.screenName === "siteEditor",
+      ),
+    );
+    const siteSection = required(siteEditor.layout.sections[0]);
+    const mixedScreen: HomeScreenModel = {
+      ...siteEditor,
       layout: {
-        ...screen.layout,
-        sections: [
-          {
-            ...cards,
-            collection: {
-              ...cards.collection,
-              result: { type: "tree" },
-            },
-          },
-        ],
+        ...siteEditor.layout,
+        sections: [siteSection, { ...cards, collection: repeatedCollection, id: "cards" }],
       },
-    } as unknown as HomeScreenModel;
-    expect(generatedWorkspaceScreenIsEligible(treeScreen)).toBe(false);
-    expect(
+    };
+    const mixedFoundation = required(
       selectGeneratedWorkspaceFoundation({
-        screen: treeScreen,
-        snapshot: projectionSnapshot(rateSeedRecords),
+        screen: mixedScreen,
+        sectionSelection: { site: { selectedContextRecordId: "rec_site_content_home" } },
+        snapshot: projectionSnapshot([...testSiteSeedRecords, ...rateSeedRecords]),
         today: "2026-07-16",
+      }),
+    );
+    const [treeSection, listSection] = mixedFoundation.workspace.sections;
+    const treeResult = required(treeSection).collection.presentation.result;
+    const listResult = required(listSection).collection.presentation.result;
+
+    expect(generatedWorkspaceScreenIsEligible(mixedScreen)).toBe(true);
+    expect(mixedFoundation.runtimePlan.sections.map(({ result }) => result.kind)).toEqual([
+      "treeResult",
+      "list",
+    ]);
+    expect(treeResult).toMatchObject({
+      availability: { state: "ready" },
+      kind: "treeResult",
+      root: { label: "Home" },
+    });
+    expect(listResult.kind).toBe("list");
+    if (treeResult.kind !== "treeResult") {
+      throw new Error("Missing tree result.");
+    }
+    const firstTreeItem = required(treeResult.items[0]);
+    expect(firstTreeItem.id).not.toBe(firstTreeItem.placementId);
+    expect(firstTreeItem.id).not.toBe(firstTreeItem.childRecordId);
+    expect(JSON.stringify(treeResult)).not.toContain("recordsById");
+    const treePlan = required(mixedFoundation.runtimePlan.sections[0]);
+    const treeIntent = projectGeneratedWorkspaceTreeIntent(
+      treePlan.scope,
+      treeResult.id,
+      firstTreeItem.selectionIntent,
+    );
+    expect(resolveGeneratedWorkspaceIntent(mixedFoundation.runtimePlan, treeIntent)).toMatchObject({
+      kind: "treeSelection",
+      selection: {
+        itemId: firstTreeItem.id,
+        placementId: firstTreeItem.placementId,
+      },
+    });
+    const treeEditor = required(treeResult.selectedEditor);
+    const treeChildField = required(treeEditor.childFields?.fields[0]);
+    const treeNestedFieldIntent = {
+      fieldId: treeChildField.fieldId,
+      intent: {
+        fieldName: treeChildField.fieldName,
+        type: "recordEditorDraftChange",
+        value: "Next child value",
+      },
+      resultId: treeResult.id,
+      target: {
+        fieldSetId: required(treeEditor.childFields).id,
+        itemId: treeEditor.itemId,
+        kind: "child",
+      },
+      type: "treeField",
+    } as const;
+    const treeFieldIntent = projectGeneratedWorkspaceTreeIntent(
+      treePlan.scope,
+      treeResult.id,
+      treeNestedFieldIntent,
+    );
+    expect(
+      resolveGeneratedWorkspaceIntent(mixedFoundation.runtimePlan, treeFieldIntent),
+    ).toMatchObject({
+      field: { fieldId: treeChildField.fieldId, recordId: treeEditor.childRecordId },
+      kind: "treeField",
+      runtime: { target: { kind: "child", recordId: treeEditor.childRecordId } },
+    });
+    expect(
+      resolveGeneratedWorkspaceIntent(mixedFoundation.runtimePlan, {
+        ...treeFieldIntent,
+        intent: {
+          ...treeNestedFieldIntent,
+          target: { ...treeNestedFieldIntent.target, kind: "placement" },
+        },
+      }),
+    ).toBeUndefined();
+    expect(
+      resolveGeneratedWorkspaceIntent(mixedFoundation.runtimePlan, {
+        ...treeIntent,
+        intent: { ...firstTreeItem.selectionIntent, itemId: `${firstTreeItem.id}:stale` },
+      }),
+    ).toBeUndefined();
+    expect(
+      resolveGeneratedWorkspaceIntent(mixedFoundation.runtimePlan, {
+        ...treeIntent,
+        intent: { ...firstTreeItem.selectionIntent, resultId: listResult.id },
+      }),
+    ).toBeUndefined();
+    expect(
+      resolveGeneratedWorkspaceIntent(mixedFoundation.runtimePlan, {
+        ...treeIntent,
+        collectionId: required(mixedFoundation.runtimePlan.sections[1]).scope.collectionId,
+        sectionId: required(mixedFoundation.runtimePlan.sections[1]).scope.sectionId,
       }),
     ).toBeUndefined();
   });

@@ -424,6 +424,8 @@ export type HomeResultConfig =
       childItemViewName: string;
       childRecordFields: RecordFieldConfig[];
       childRecordUnion?: RecordUnionPresentationConfig;
+      placementEntityName: string;
+      placementEntity: EntitySchema;
       placementItemViewName?: string;
       placementRecordFields?: RecordFieldConfig[];
       placementRecordUnion?: RecordUnionPresentationConfig;

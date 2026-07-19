@@ -879,9 +879,11 @@ export type FormlessUiFieldSetContract = {
 
 export type FormlessUiListDensity = "compact" | "default";
 
+export type FormlessUiSemanticOrderingDirection = "bottom" | "down" | "top" | "up";
+
 export type FormlessUiListReorderIntent = {
   actionId: string;
-  direction: "bottom" | "down" | "top" | "up";
+  direction: FormlessUiSemanticOrderingDirection;
   itemId: string;
   listId: string;
   type: "listReorder";
@@ -1160,7 +1162,7 @@ export type FormlessUiTableEditDialogOpenChangeIntent = {
 
 export type FormlessUiTableReorderIntent = {
   actionId: string;
-  direction: "bottom" | "down" | "top" | "up";
+  direction: FormlessUiSemanticOrderingDirection;
   rowId: string;
   tableId: string;
   type: "tableReorder";
@@ -1373,6 +1375,281 @@ export type FormlessUiCreateSurfaceContract = {
   trigger: FormlessUiButtonContract;
 };
 
+export type FormlessUiTreeDensity = "compact" | "default";
+
+export type FormlessUiTreeEditingAvailability =
+  | {
+      enabled: true;
+    }
+  | {
+      disabledReason: string;
+      enabled: false;
+    };
+
+export type FormlessUiTreeEmptyStateContract = {
+  description?: string;
+  id: string;
+  kind: "treeEmptyState";
+  title: string;
+};
+
+export type FormlessUiTreeAvailability =
+  | {
+      state: "ready";
+    }
+  | {
+      emptyState: FormlessUiTreeEmptyStateContract;
+      state: "empty";
+    }
+  | {
+      message: string;
+      state: "unavailable";
+    };
+
+export type FormlessUiTreeParentIdentity =
+  | {
+      kind: "root";
+    }
+  | {
+      itemId: string;
+      kind: "item";
+    };
+
+export type FormlessUiTreeItemSelectionIntent = {
+  itemId: string;
+  resultId: string;
+  type: "treeItemSelection";
+};
+
+export type FormlessUiTreeDisclosureOpenChangeIntent = {
+  itemId: string;
+  open: boolean;
+  resultId: string;
+  type: "treeDisclosureOpenChange";
+};
+
+export type FormlessUiTreeContextActionIntent = {
+  actionId: string;
+  itemId: string;
+  resultId: string;
+  type: "treeContextAction";
+};
+
+export type FormlessUiTreeChildVariantSelectionIntent = {
+  parent: FormlessUiTreeParentIdentity;
+  resultId: string;
+  variantId: string;
+  type: "treeChildVariantSelection";
+};
+
+export type FormlessUiTreeCreateIntent = {
+  intent: FormlessUiCreateIntent;
+  parent: FormlessUiTreeParentIdentity;
+  resultId: string;
+  surfaceId: string;
+  type: "treeCreate";
+};
+
+export type FormlessUiTreeFieldTarget =
+  | {
+      fieldSetId: string;
+      itemId: string;
+      kind: "child" | "placement";
+    }
+  | {
+      kind: "create";
+      parent: FormlessUiTreeParentIdentity;
+      surfaceId: string;
+    };
+
+export type FormlessUiTreeFieldIntent = {
+  fieldId: string;
+  intent: FormlessUiFieldIntent;
+  resultId: string;
+  target: FormlessUiTreeFieldTarget;
+  type: "treeField";
+};
+
+export type FormlessUiTreeOperationIntent = {
+  controlId: string;
+  intent: FormlessUiOperationPresentationIntent;
+  itemId: string;
+  resultId: string;
+  type: "treeOperation";
+};
+
+export type FormlessUiTreeReorderIntent = {
+  actionId: string;
+  direction: FormlessUiSemanticOrderingDirection;
+  itemId: string;
+  resultId: string;
+  type: "treeReorder";
+};
+
+export type FormlessUiTreeIntent =
+  | FormlessUiTreeChildVariantSelectionIntent
+  | FormlessUiTreeContextActionIntent
+  | FormlessUiTreeCreateIntent
+  | FormlessUiTreeDisclosureOpenChangeIntent
+  | FormlessUiTreeFieldIntent
+  | FormlessUiTreeItemSelectionIntent
+  | FormlessUiTreeOperationIntent
+  | FormlessUiTreeReorderIntent;
+
+export type FormlessUiTreeIntentHandler = (intent: FormlessUiTreeIntent) => Promise<void> | void;
+
+export type FormlessUiTreeWarningContract = {
+  id: string;
+  items: readonly {
+    code: string;
+    message: string;
+  }[];
+  kind: "treeWarning";
+  source: "child" | "placement" | "tree";
+  title: string;
+};
+
+export type FormlessUiTreeItemAvailability =
+  | {
+      available: true;
+    }
+  | {
+      available: false;
+      message: string;
+    };
+
+export type FormlessUiTreeItemVariantContract = {
+  id: string;
+  kind: "treeItemVariant";
+  label: string;
+};
+
+export type FormlessUiTreeItemSlotContract = {
+  id: string;
+  kind: "treeItemSlot";
+  label: string;
+};
+
+export type FormlessUiTreeItemStructureContract =
+  | {
+      state: "branch" | "leaf";
+    }
+  | {
+      message: string;
+      state: "cycleStopped" | "depthStopped" | "missingChild";
+    };
+
+export type FormlessUiTreeItemDisclosureContract = {
+  accessibilityLabel: string;
+  id: string;
+  intent: FormlessUiTreeDisclosureOpenChangeIntent;
+  kind: "treeItemDisclosure";
+  open: boolean;
+};
+
+export type FormlessUiTreeContextActionContract = {
+  availability: FormlessUiTreeItemAvailability;
+  control: FormlessUiButtonContract;
+  id: string;
+  intent: FormlessUiTreeContextActionIntent;
+  kind: "treeContextAction";
+};
+
+export type FormlessUiTreeOrderingActionContract = FormlessUiActionControlState & {
+  direction: FormlessUiTreeReorderIntent["direction"];
+  id: string;
+  intent: FormlessUiTreeReorderIntent;
+  label: string;
+  structurallyAvailable: boolean;
+};
+
+export type FormlessUiTreeOrderingContract = {
+  accessibilityLabel: string;
+  actions: readonly FormlessUiTreeOrderingActionContract[];
+  affordance: "reorder";
+  id: string;
+  kind: "treeOrdering";
+  pending: boolean;
+};
+
+export type FormlessUiTreeChildVariantContract = {
+  availability: FormlessUiTreeItemAvailability;
+  id: string;
+  kind: "treeChildVariant";
+  label: string;
+  selected: boolean;
+  selectionIntent: FormlessUiTreeChildVariantSelectionIntent;
+  slot?: FormlessUiTreeItemSlotContract;
+};
+
+export type FormlessUiTreeChildCreationContract = {
+  accessibilityLabel: string;
+  activeCreateSurface?: FormlessUiCreateSurfaceContract;
+  activeVariantId?: string;
+  id: string;
+  kind: "treeChildCreation";
+  variants: readonly FormlessUiTreeChildVariantContract[];
+};
+
+export type FormlessUiTreeItemContract = {
+  accessibilityLabel: string;
+  availability: FormlessUiTreeItemAvailability;
+  childRecordId?: string;
+  children: readonly FormlessUiTreeItemContract[];
+  contextActions: readonly FormlessUiTreeContextActionContract[];
+  disclosure?: FormlessUiTreeItemDisclosureContract;
+  id: string;
+  kind: "treeItem";
+  label: string;
+  ordering?: FormlessUiTreeOrderingContract;
+  placementId: string;
+  selected: boolean;
+  selectionIntent: FormlessUiTreeItemSelectionIntent;
+  slot?: FormlessUiTreeItemSlotContract;
+  structure: FormlessUiTreeItemStructureContract;
+  variant?: FormlessUiTreeItemVariantContract;
+  warnings: readonly FormlessUiTreeWarningContract[];
+};
+
+export type FormlessUiTreeSelectedEditorContract = {
+  accessibilityLabel: string;
+  availability: FormlessUiTreeItemAvailability;
+  childCreation?: FormlessUiTreeChildCreationContract;
+  childFields?: FormlessUiFieldSetContract;
+  childRecordId?: string;
+  editing: FormlessUiTreeEditingAvailability;
+  id: string;
+  itemId: string;
+  kind: "treeSelectedEditor";
+  placementFields: FormlessUiFieldSetContract;
+  placementId: string;
+  removePlacement?: FormlessUiOperationControlContract;
+  warnings: readonly FormlessUiTreeWarningContract[];
+};
+
+export type FormlessUiTreeRootContract = {
+  accessibilityLabel: string;
+  id: string;
+  kind: "treeRoot";
+  label: string;
+};
+
+export type FormlessUiTreeResultContract = {
+  accessibilityLabel: string;
+  availability: FormlessUiTreeAvailability;
+  density: FormlessUiTreeDensity;
+  editing: FormlessUiTreeEditingAvailability;
+  feedback: readonly FormlessUiOperationFeedbackEventContract[];
+  id: string;
+  items: readonly FormlessUiTreeItemContract[];
+  kind: "treeResult";
+  root: FormlessUiTreeRootContract;
+  rootChildCreation?: FormlessUiTreeChildCreationContract;
+  selectedEditor?: FormlessUiTreeSelectedEditorContract;
+  status?: FormlessUiCompactStatusContract;
+  warnings: readonly FormlessUiTreeWarningContract[];
+};
+
 export type FormlessUiItemDetailContract = {
   kind: "itemDetail";
   fields: readonly FormlessUiField[];
@@ -1504,7 +1781,8 @@ export type FormlessUiWorkspaceSummaryContract = {
 export type FormlessUiWorkspaceResultContract =
   | FormlessUiListContract
   | FormlessUiRecordResultContract
-  | FormlessUiTableContract;
+  | FormlessUiTableContract
+  | FormlessUiTreeResultContract;
 
 export type FormlessUiWorkspaceOrdinaryCollectionContract = {
   actions: FormlessUiWorkspaceCollectionActionGroupContract;
@@ -2642,6 +2920,14 @@ export type FormlessUiTableResultReference = {
   workspaceId: string;
 };
 
+export type FormlessUiTreeResultReference = {
+  kind: "treeResultReference";
+  resultId: string;
+  role: "mainResult";
+  sectionId: string;
+  workspaceId: string;
+};
+
 export type FormlessUiRecordResultReference<
   Role extends FormlessUiResultReferenceRole = FormlessUiResultReferenceRole,
 > = {
@@ -2655,7 +2941,8 @@ export type FormlessUiRecordResultReference<
 export type FormlessUiMainResultReference =
   | FormlessUiListResultReference
   | FormlessUiRecordResultReference<"mainResult">
-  | FormlessUiTableResultReference;
+  | FormlessUiTableResultReference
+  | FormlessUiTreeResultReference;
 
 export type FormlessUiContextResultReference = FormlessUiRecordResultReference<"contextResult">;
 
@@ -2716,6 +3003,7 @@ export type FormlessUiContractReference =
   | FormlessUiShellManifestReference
   | FormlessUiShellNavigationSectionReference
   | FormlessUiTableResultReference
+  | FormlessUiTreeResultReference
   | FormlessUiWorkspaceManifestReference
   | FormlessUiWorkspaceSectionShellReference;
 
@@ -2832,6 +3120,12 @@ export type FormlessUiWorkspaceRecordResultIntent = FormlessUiWorkspaceIntentSco
   type: "workspaceRecordResult";
 };
 
+export type FormlessUiWorkspaceTreeIntent = FormlessUiWorkspaceIntentScope & {
+  intent: FormlessUiTreeIntent;
+  resultId: string;
+  type: "workspaceTree";
+};
+
 export type FormlessUiWorkspaceIntent =
   | FormlessUiWorkspaceContextSelectionIntent
   | FormlessUiWorkspaceCreateIntent
@@ -2841,7 +3135,8 @@ export type FormlessUiWorkspaceIntent =
   | FormlessUiWorkspaceOperationIntent
   | FormlessUiWorkspaceQuerySelectionIntent
   | FormlessUiWorkspaceRecordResultIntent
-  | FormlessUiWorkspaceTableIntent;
+  | FormlessUiWorkspaceTableIntent
+  | FormlessUiWorkspaceTreeIntent;
 
 export type FormlessUiWorkspaceIntentHandler = (
   intent: FormlessUiWorkspaceIntent,

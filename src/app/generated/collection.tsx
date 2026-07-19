@@ -30,7 +30,6 @@ import { DeleteRecordButton } from "./record-delete.tsx";
 import { RecordFieldEditor } from "./record-field-editor.tsx";
 import { RecordTransitionOperationControls } from "./state-machine-ui.tsx";
 import { RecordTable } from "./table.tsx";
-import { RecordTree } from "./tree.tsx";
 import { selectRecordFieldsForActiveUnion } from "./union-presentation.ts";
 import { GeneratedRecordListFoundation } from "./generated-list-runtime.tsx";
 import { GeneratedRecordResultRuntime } from "./generated-record-result-runtime.tsx";
@@ -101,7 +100,6 @@ export function HomeCollection({
       />
 
       <CollectionResult
-        context={undefined}
         entity={entity}
         entityName={entityName}
         query={selectedQuery.query}
@@ -219,15 +217,12 @@ function ScopedHomeCollection({
           />
 
           <CollectionResult
-            context={context}
             entity={entity}
             entityName={entityName}
-            onSelectContext={onSelectContext}
             query={selectedQuery.query}
             queryName={selectedQuery.queryName}
             queryContext={contextSelection.queryContext}
             result={result}
-            selectableContextRecordIds={contextSelection.selectableRecordIds}
           />
         </>
       ) : null}
@@ -277,7 +272,6 @@ function ListDetailScopedHomeCollection({
     detailLabel,
     isEmpty,
     queryContext,
-    selectableRecordIds,
     showLocalSelector,
     showUnselectedState,
   } = contextSelection;
@@ -348,15 +342,12 @@ function ListDetailScopedHomeCollection({
             />
 
             <CollectionResult
-              context={context}
               entity={entity}
               entityName={entityName}
-              onSelectContext={onSelectContext}
               query={selectedQuery.query}
               queryName={selectedQuery.queryName}
               queryContext={queryContext}
               result={result}
-              selectableContextRecordIds={selectableRecordIds}
             />
           </>
         ) : isEmpty ? null : showUnselectedState ? (
@@ -757,25 +748,19 @@ function AggregateSummarySlot({
 }
 
 function CollectionResult({
-  context,
   entity,
   entityName,
-  onSelectContext,
   query,
   queryName,
   queryContext,
   result,
-  selectableContextRecordIds,
 }: {
-  context: HomeContextConfig | undefined;
   entity: EntitySchema;
   entityName: string;
-  onSelectContext?: (recordId: string | null) => void;
   query: HomeQueryTabConfig["query"];
   queryName: string;
   queryContext?: QueryEvaluationContext;
   result: CollectionResultModel;
-  selectableContextRecordIds?: Set<string>;
 }) {
   if (result.type === "table") {
     return (
@@ -802,21 +787,7 @@ function CollectionResult({
     );
   }
 
-  if (result.type === "tree") {
-    return (
-      <RecordTree
-        context={context}
-        entity={entity}
-        entityName={entityName}
-        onSelectContext={onSelectContext}
-        queryContext={queryContext}
-        result={result}
-        selectableContextRecordIds={selectableContextRecordIds}
-      />
-    );
-  }
-
-  return (
+  return result.type === "list" ? (
     <GeneratedRecordListFoundation
       entity={entity}
       entityName={entityName}
@@ -824,7 +795,7 @@ function CollectionResult({
       queryContext={queryContext}
       result={result}
     />
-  );
+  ) : null;
 }
 
 export { GeneratedRecordListFoundation as RecordList };

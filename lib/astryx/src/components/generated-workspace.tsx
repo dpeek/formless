@@ -26,6 +26,7 @@ import {
   formlessUiListResultReference,
   formlessUiRecordResultReference,
   formlessUiTableResultReference,
+  formlessUiTreeResultReference,
   formlessUiWorkspaceManifestReference,
   formlessUiWorkspaceSectionShellReference,
   isFormlessUiWorkspaceIntent,
@@ -44,6 +45,7 @@ import {
 } from "./generated-workspace.fixtures.ts";
 import { applyListFieldIntent, applyListIntent } from "./lists.tsx";
 import { applyTableFieldIntent, applyTableIntent } from "./tables.tsx";
+import { applyFormlessUiTreeResultFixtureIntent } from "./tree-results.tsx";
 
 export function FormlessGeneratedWorkspaceLayout() {
   const [fixtures] = useState(createFormlessGeneratedWorkspaceHosts);
@@ -229,6 +231,15 @@ function projectGeneratedWorkspaceFixtureMainResult(
     }
     case "table": {
       const reference = formlessUiTableResultReference({
+        resultId: result.id,
+        role: "mainResult",
+        sectionId,
+        workspaceId,
+      });
+      return { node: { reference, snapshot: result }, reference };
+    }
+    case "treeResult": {
+      const reference = formlessUiTreeResultReference({
         resultId: result.id,
         role: "mainResult",
         sectionId,
@@ -424,12 +435,25 @@ function applyCollectionIntent(
     };
   }
 
-  return {
-    ...collection,
-    presentation: mapWorkspaceResults(collection.presentation, intent.resultId, (result) =>
-      result.kind === "recordResult" ? applyRecordResultIntent(result, intent.intent) : result,
-    ),
-  };
+  if (intent.type === "workspaceTree") {
+    return {
+      ...collection,
+      presentation: mapWorkspaceResults(collection.presentation, intent.resultId, (result) =>
+        result.kind === "treeResult"
+          ? applyFormlessUiTreeResultFixtureIntent(result, intent.intent)
+          : result,
+      ),
+    };
+  }
+
+  return intent.type === "workspaceRecordResult"
+    ? {
+        ...collection,
+        presentation: mapWorkspaceResults(collection.presentation, intent.resultId, (result) =>
+          result.kind === "recordResult" ? applyRecordResultIntent(result, intent.intent) : result,
+        ),
+      }
+    : collection;
 }
 
 function withQueryNavigation(
@@ -627,7 +651,9 @@ function mapResultOperation(
     };
   }
 
-  return mapRecordResultOperation(result, controlId, intent);
+  return result.kind === "recordResult"
+    ? mapRecordResultOperation(result, controlId, intent)
+    : result;
 }
 
 function mapListActionGroup(

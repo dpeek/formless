@@ -18,6 +18,7 @@ import { FormlessOperationsLayout } from "./components/operations.tsx";
 import { FormlessRecordResultsLayout } from "./components/record-results.tsx";
 import { FormlessSiteLayout } from "./components/site-fixture.tsx";
 import { FormlessTablesLayout } from "./components/tables.tsx";
+import { FormlessTreeResultsLayout } from "./components/tree-results.tsx";
 import {
   FormlessFixtureEnvironmentProvider,
   formlessFixtureTheme,
@@ -53,6 +54,7 @@ const formlessPrototypeLayouts: FormlessPrototypeLayout[] = [
   createFormlessPrototypeLayout("Record Results", () => <FormlessRecordResultsLayout />),
   createFormlessPrototypeLayout("Lists", () => <FormlessListsLayout />),
   createFormlessPrototypeLayout("Tables", () => <FormlessTablesLayout />),
+  createFormlessPrototypeLayout("Tree Results", () => <FormlessTreeResultsLayout />),
 ];
 
 const defaultLayout = formlessPrototypeLayouts[0];

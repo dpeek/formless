@@ -32,6 +32,8 @@ import type {
   FormlessUiShellNavigationSectionReference,
   FormlessUiTableContract,
   FormlessUiTableResultReference,
+  FormlessUiTreeResultContract,
+  FormlessUiTreeResultReference,
   FormlessUiWorkspaceIntent,
   FormlessUiWorkspaceManifestContract,
   FormlessUiWorkspaceManifestReference,
@@ -64,9 +66,11 @@ export type FormlessUiContractSnapshot<Reference extends FormlessUiContractRefer
                         ? FormlessUiListContract
                         : Reference extends FormlessUiTableResultReference
                           ? FormlessUiTableContract
-                          : Reference extends FormlessUiRecordResultReference
-                            ? FormlessUiRecordResultContract
-                            : never;
+                          : Reference extends FormlessUiTreeResultReference
+                            ? FormlessUiTreeResultContract
+                            : Reference extends FormlessUiRecordResultReference
+                              ? FormlessUiRecordResultContract
+                              : never;
 
 export type FormlessUiContractHostListener = () => void;
 
@@ -134,6 +138,11 @@ export type FormlessUiTableResultNode = {
   snapshot: FormlessUiTableContract;
 };
 
+export type FormlessUiTreeResultNode = {
+  reference: FormlessUiTreeResultReference;
+  snapshot: FormlessUiTreeResultContract;
+};
+
 export type FormlessUiRecordResultNode = {
   reference: FormlessUiRecordResultReference;
   snapshot: FormlessUiRecordResultContract;
@@ -161,6 +170,7 @@ export type FormlessUiContractHostNode =
   | FormlessUiShellManifestNode
   | FormlessUiShellNavigationSectionNode
   | FormlessUiTableResultNode
+  | FormlessUiTreeResultNode
   | FormlessUiWorkspaceManifestNode
   | FormlessUiWorkspaceSectionShellNode;
 
@@ -387,6 +397,21 @@ export function formlessUiTableResultReference({
   };
 }
 
+export function formlessUiTreeResultReference({
+  resultId,
+  role,
+  sectionId,
+  workspaceId,
+}: Omit<FormlessUiTreeResultReference, "kind">): FormlessUiTreeResultReference {
+  return {
+    kind: "treeResultReference",
+    resultId,
+    role,
+    sectionId,
+    workspaceId,
+  };
+}
+
 export function formlessUiRecordResultReference<Role extends FormlessUiResultReferenceRole>({
   resultId,
   role,
@@ -427,6 +452,7 @@ export function formlessUiContractReferenceKey(reference: FormlessUiContractRefe
     case "listResultReference":
     case "recordResultReference":
     case "tableResultReference":
+    case "treeResultReference":
       return JSON.stringify([
         reference.role,
         reference.workspaceId,
@@ -660,6 +686,11 @@ function assertNodeMatchesReference(node: FormlessUiContractHostNode) {
       return;
     case "tableResultReference":
       if (snapshot.kind !== "table" || snapshot.id !== reference.resultId) {
+        throw mismatchedNodeError(reference);
+      }
+      return;
+    case "treeResultReference":
+      if (snapshot.kind !== "treeResult" || snapshot.id !== reference.resultId) {
         throw mismatchedNodeError(reference);
       }
   }

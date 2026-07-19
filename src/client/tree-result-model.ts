@@ -122,6 +122,8 @@ export function selectTreeResultModel(
     childItemViewName: result.childItemView,
     childRecordFields: selectRecordFields(childItemView, childEntity),
     ...(childRecordUnion === undefined ? {} : { childRecordUnion }),
+    placementEntityName: entityName,
+    placementEntity: entity,
     ...(placementItemViewName === undefined || placementItemView === undefined
       ? {}
       : {

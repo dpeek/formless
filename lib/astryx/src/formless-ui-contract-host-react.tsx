@@ -22,6 +22,7 @@ import type {
   FormlessUiShellIntentHandler,
   FormlessUiShellManifestReference,
   FormlessUiShellNavigationSectionReference,
+  FormlessUiTreeResultReference,
   FormlessUiWorkspaceIntentHandler,
   FormlessUiWorkspaceManifestReference,
   FormlessUiWorkspaceSectionShellReference,
@@ -160,5 +161,9 @@ export function useFormlessUiWorkspaceSectionShell(
 export function useFormlessUiResult<Reference extends FormlessUiResultReference>(
   reference: Reference,
 ) {
+  return useFormlessUiContract(reference);
+}
+
+export function useFormlessUiTreeResult(reference: FormlessUiTreeResultReference) {
   return useFormlessUiContract(reference);
 }

@@ -4,6 +4,7 @@ import type {
   FormlessUiField,
   FormlessUiOperationControlContract,
   FormlessUiTableContract,
+  FormlessUiTreeResultContract,
   FormlessUiWorkspaceCollectionActionContract,
   FormlessUiWorkspaceContract,
   FormlessUiWorkspaceIntent,
@@ -65,6 +66,30 @@ import {
   resolveGeneratedTableFieldIntent,
   type GeneratedTableFieldIndex,
 } from "./generated-table-foundation.tsx";
+import {
+  resolveGeneratedTreeChildVariantSelectionIntent,
+  resolveGeneratedTreeContextActionIntent,
+  resolveGeneratedTreeCreateFieldIntent,
+  resolveGeneratedTreeCreateIntent,
+  resolveGeneratedTreeDisclosureIntent,
+  resolveGeneratedTreeFieldIntent,
+  resolveGeneratedTreeItemSelectionIntent,
+  resolveGeneratedTreeOperationIntent,
+  resolveGeneratedTreeReorderIntent,
+  selectGeneratedTreeFoundation,
+  type GeneratedTreeFoundation,
+  type GeneratedTreeDisclosureRuntime,
+  type GeneratedTreeFieldIntentRuntime,
+  type GeneratedTreeItemSelectionRuntime,
+  type GeneratedTreePlacementRemovalRuntime,
+  type GeneratedTreeOrderingRuntime,
+  type GeneratedTreeContextNavigationRuntime,
+  type SelectGeneratedTreeFoundationOptions,
+} from "./generated-tree-foundation.ts";
+import type {
+  GeneratedTreeChildCreateRuntime,
+  GeneratedTreeChildVariantRuntime,
+} from "./generated-tree-create-foundation.ts";
 
 export type GeneratedWorkspaceSectionSelection = {
   selectedContextRecordId?: string | null;
@@ -118,6 +143,11 @@ type GeneratedWorkspaceRecordResultFoundationOptions = Partial<
   >
 >;
 
+type GeneratedWorkspaceTreeFoundationOptions = Omit<
+  SelectGeneratedTreeFoundationOptions,
+  "context" | "id" | "recordsById" | "result" | "rootRecordId" | "selectableContextRecordIds"
+>;
+
 export type GeneratedWorkspaceSectionFoundationInput = {
   collectionActions?: readonly GeneratedWorkspaceCollectionActionFoundation[];
   contextCreate?: GeneratedWorkspaceContextCreateFoundation;
@@ -130,6 +160,7 @@ export type GeneratedWorkspaceSectionFoundationInput = {
     recordState?: GeneratedRecordResultRecordState;
   };
   table?: GeneratedWorkspaceTableFoundation;
+  tree?: GeneratedWorkspaceTreeFoundationOptions;
 };
 
 export type GeneratedWorkspaceSectionSelectionFacts = {
@@ -175,6 +206,11 @@ type GeneratedWorkspaceNestedResultRuntime =
       fieldsById: GeneratedTableFieldIndex;
       kind: "table";
       runtime: unknown;
+    }
+  | {
+      contract: FormlessUiTreeResultContract;
+      foundation: GeneratedTreeFoundation;
+      kind: "treeResult";
     };
 
 type GeneratedWorkspaceCreateControlRuntime = {
@@ -256,10 +292,66 @@ export type GeneratedWorkspaceResolvedIntent =
       kind: "result";
       result: GeneratedWorkspaceNestedResultRuntime;
       section: GeneratedWorkspaceSectionRuntimePlan;
+    }
+  | {
+      kind: "treeChildVariant";
+      result: GeneratedWorkspaceNestedResultRuntime & { kind: "treeResult" };
+      runtime: GeneratedTreeChildVariantRuntime;
+      section: GeneratedWorkspaceSectionRuntimePlan;
+    }
+  | {
+      kind: "treeCreate";
+      result: GeneratedWorkspaceNestedResultRuntime & { kind: "treeResult" };
+      runtime: GeneratedTreeChildCreateRuntime;
+      section: GeneratedWorkspaceSectionRuntimePlan;
+    }
+  | {
+      disclosure: GeneratedTreeDisclosureRuntime;
+      kind: "treeDisclosure";
+      result: GeneratedWorkspaceNestedResultRuntime & { kind: "treeResult" };
+      section: GeneratedWorkspaceSectionRuntimePlan;
+    }
+  | {
+      field: FormlessUiField;
+      kind: "treeCreateField";
+      result: GeneratedWorkspaceNestedResultRuntime & { kind: "treeResult" };
+      runtime: GeneratedTreeChildCreateRuntime;
+      section: GeneratedWorkspaceSectionRuntimePlan;
+    }
+  | {
+      field: FormlessUiField;
+      kind: "treeField";
+      result: GeneratedWorkspaceNestedResultRuntime & { kind: "treeResult" };
+      runtime: GeneratedTreeFieldIntentRuntime;
+      section: GeneratedWorkspaceSectionRuntimePlan;
+    }
+  | {
+      kind: "treeContextNavigation";
+      navigation: GeneratedTreeContextNavigationRuntime;
+      result: GeneratedWorkspaceNestedResultRuntime & { kind: "treeResult" };
+      section: GeneratedWorkspaceSectionRuntimePlan;
+    }
+  | {
+      kind: "treeSelection";
+      result: GeneratedWorkspaceNestedResultRuntime & { kind: "treeResult" };
+      section: GeneratedWorkspaceSectionRuntimePlan;
+      selection: GeneratedTreeItemSelectionRuntime;
+    }
+  | {
+      kind: "treeOperation";
+      result: GeneratedWorkspaceNestedResultRuntime & { kind: "treeResult" };
+      runtime: GeneratedTreePlacementRemovalRuntime;
+      section: GeneratedWorkspaceSectionRuntimePlan;
+    }
+  | {
+      kind: "treeOrdering";
+      result: GeneratedWorkspaceNestedResultRuntime & { kind: "treeResult" };
+      runtime: GeneratedTreeOrderingRuntime;
+      section: GeneratedWorkspaceSectionRuntimePlan;
     };
 
-export function generatedWorkspaceScreenIsEligible(screen: HomeScreenModel): boolean {
-  return screen.layout.sections.every((section) => section.collection.result.type !== "tree");
+export function generatedWorkspaceScreenIsEligible(_screen: HomeScreenModel): boolean {
+  return true;
 }
 
 export function selectGeneratedWorkspaceFoundation(
@@ -273,10 +365,6 @@ export function selectGeneratedWorkspaceFoundation(
     today,
     workspaceActions = [],
   } = options;
-
-  if (!generatedWorkspaceScreenIsEligible(screen)) {
-    return undefined;
-  }
 
   const screenId = generatedWorkspaceScreenId(screen.screenName);
   const sectionPlans: GeneratedWorkspaceSectionRuntimePlan[] = [];
@@ -569,6 +657,95 @@ export function resolveGeneratedWorkspaceIntent(
       : undefined;
   }
 
+  if (intent.type === "workspaceTree") {
+    if (result.kind !== "treeResult") {
+      return undefined;
+    }
+    if (intent.intent.type === "treeItemSelection") {
+      const selection = resolveGeneratedTreeItemSelectionIntent(
+        result.foundation.runtimePlan,
+        intent.intent,
+      );
+      return selection === undefined
+        ? undefined
+        : { kind: "treeSelection", result, section, selection };
+    }
+    if (intent.intent.type === "treeDisclosureOpenChange") {
+      const disclosure = resolveGeneratedTreeDisclosureIntent(
+        result.foundation.runtimePlan,
+        intent.intent,
+      );
+      return disclosure === undefined
+        ? undefined
+        : { disclosure, kind: "treeDisclosure", result, section };
+    }
+    if (intent.intent.type === "treeContextAction") {
+      const navigation = resolveGeneratedTreeContextActionIntent(
+        result.foundation.runtimePlan,
+        intent.intent,
+      );
+      return navigation === undefined
+        ? undefined
+        : { kind: "treeContextNavigation", navigation, result, section };
+    }
+    if (intent.intent.type === "treeChildVariantSelection") {
+      const runtime = resolveGeneratedTreeChildVariantSelectionIntent(
+        result.foundation.runtimePlan,
+        intent.intent,
+      );
+      return runtime === undefined
+        ? undefined
+        : { kind: "treeChildVariant", result, runtime, section };
+    }
+    if (intent.intent.type === "treeCreate") {
+      const runtime = resolveGeneratedTreeCreateIntent(
+        result.foundation.runtimePlan,
+        intent.intent,
+      );
+      return runtime === undefined ? undefined : { kind: "treeCreate", result, runtime, section };
+    }
+    if (intent.intent.type === "treeField") {
+      const create = resolveGeneratedTreeCreateFieldIntent(
+        result.foundation.runtimePlan,
+        intent.intent,
+      );
+      if (create !== undefined) {
+        return {
+          field: create.field,
+          kind: "treeCreateField",
+          result,
+          runtime: create.runtime,
+          section,
+        };
+      }
+      const runtime = resolveGeneratedTreeFieldIntent(result.foundation.runtimePlan, intent.intent);
+      return runtime === undefined
+        ? undefined
+        : { field: runtime.field, kind: "treeField", result, runtime, section };
+    }
+    if (intent.intent.type === "treeOperation") {
+      const runtime = resolveGeneratedTreeOperationIntent(
+        result.foundation.runtimePlan,
+        intent.intent,
+      );
+      return runtime === undefined
+        ? undefined
+        : { kind: "treeOperation", result, runtime, section };
+    }
+    if (intent.intent.type === "treeReorder") {
+      const runtime = resolveGeneratedTreeReorderIntent(
+        result.foundation.runtimePlan,
+        intent.intent,
+      );
+      return runtime === undefined ? undefined : { kind: "treeOrdering", result, runtime, section };
+    }
+    return undefined;
+  }
+
+  if (intent.type !== "workspaceRecordResult") {
+    return undefined;
+  }
+
   return result.kind === "recordResult" &&
     intent.intent.resultId === result.contract.id &&
     selectGeneratedRecordResultRuntimeForIntent(result.foundation.runtimePlan, intent.intent) !==
@@ -638,7 +815,7 @@ function generatedWorkspaceResultLocalId(section: HomeScreenCollectionSectionMod
     return result.tableViewName;
   }
   if (result.type === "tree") {
-    throw new Error("Tree results are not eligible for generated workspace identities.");
+    return result.childItemViewName;
   }
   return result.itemViewName;
 }
@@ -690,7 +867,16 @@ function selectGeneratedWorkspaceResult(
   }
 
   if (result.type === "tree") {
-    throw new Error("Tree results are not eligible for generated workspace foundations.");
+    const foundation = selectGeneratedTreeFoundation({
+      context: collection.context,
+      id: facts.resultId,
+      recordsById: facts.snapshot.recordsById,
+      result,
+      rootRecordId: facts.contextSelection?.activeRecordId,
+      selectableContextRecordIds: facts.contextSelection?.selectableRecordIds,
+      ...input.tree,
+    });
+    return { contract: foundation.tree, foundation, kind: "treeResult" };
   }
 
   if (input.table === undefined) {

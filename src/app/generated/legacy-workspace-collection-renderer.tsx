@@ -30,6 +30,7 @@ import {
   projectGeneratedWorkspaceOperationIntent,
   projectGeneratedWorkspaceRecordResultIntent,
   projectGeneratedWorkspaceTableIntent,
+  projectGeneratedWorkspaceTreeIntent,
 } from "./formless-ui-workspace-projection.ts";
 import { LegacyGeneratedCreateSurface } from "./legacy-create-surface.tsx";
 import { LegacyListRenderer } from "./legacy-list-renderer.tsx";
@@ -39,6 +40,7 @@ import {
 } from "./legacy-operation-controls.tsx";
 import { LegacyRecordResultRenderer } from "./legacy-record-result-renderer.tsx";
 import { LegacyTableRenderer } from "./legacy-table-renderer.tsx";
+import { LegacySubscribedTreeRenderer, LegacyTreeRenderer } from "./legacy-tree-renderer.tsx";
 
 export function LegacyWorkspaceCollectionRenderer({
   collection,
@@ -533,13 +535,27 @@ const LegacySubscribedWorkspaceMainResult = memo(function LegacySubscribedWorksp
   reference: FormlessUiMainResultReference;
   scope: FormlessUiWorkspaceIntentScope;
 }) {
+  return reference.kind === "treeResultReference" ? (
+    <LegacySubscribedTreeRenderer reference={reference} scope={scope} />
+  ) : (
+    <LegacySubscribedWorkspaceNonTreeResult reference={reference} scope={scope} />
+  );
+}, subscribedMainResultPropsEqual);
+
+function LegacySubscribedWorkspaceNonTreeResult({
+  reference,
+  scope,
+}: {
+  reference: Exclude<FormlessUiMainResultReference, { kind: "treeResultReference" }>;
+  scope: FormlessUiWorkspaceIntentScope;
+}) {
   const onIntent = useFormlessUiWorkspaceIntentHandler();
   const result = useFormlessUiResult(reference);
 
   return result ? (
     <LegacyWorkspaceResult onIntent={onIntent} result={result} scope={scope} />
   ) : null;
-}, subscribedMainResultPropsEqual);
+}
 
 const LegacySubscribedWorkspaceContextResult = memo(
   function LegacySubscribedWorkspaceContextResult({
@@ -674,6 +690,17 @@ function LegacyWorkspaceResult({
           onIntent(projectGeneratedWorkspaceTableIntent(scope, result.id, intent))
         }
         table={result}
+      />
+    );
+  }
+
+  if (result.kind === "treeResult") {
+    return (
+      <LegacyTreeRenderer
+        onIntent={(intent) =>
+          onIntent(projectGeneratedWorkspaceTreeIntent(scope, result.id, intent))
+        }
+        tree={result}
       />
     );
   }

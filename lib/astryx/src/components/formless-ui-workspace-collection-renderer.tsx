@@ -44,6 +44,11 @@ import { AstryxListRenderer } from "./formless-ui-list-renderer.tsx";
 import { AstryxRecordResultRenderer } from "./formless-ui-record-result-renderer.tsx";
 import { AstryxTableRenderer } from "./formless-ui-table-renderer.tsx";
 import {
+  AstryxSubscribedTreeResultRenderer,
+  AstryxTreeResultRenderer,
+  dispatchAstryxWorkspaceTreeIntent,
+} from "./tree-results.tsx";
+import {
   AstryxOperationButton,
   AstryxOperationButtonWithProgress,
   AstryxOperationCompactStatus,
@@ -569,13 +574,27 @@ const AstryxSubscribedWorkspaceMainResult = memo(function AstryxSubscribedWorksp
   reference: FormlessUiMainResultReference;
   scope: FormlessUiWorkspaceIntentScope;
 }) {
+  if (reference.kind === "treeResultReference") {
+    return <AstryxSubscribedTreeResultRenderer reference={reference} scope={scope} />;
+  }
+
+  return <AstryxSubscribedWorkspaceNonTreeMainResult reference={reference} scope={scope} />;
+}, subscribedMainResultPropsEqual);
+
+function AstryxSubscribedWorkspaceNonTreeMainResult({
+  reference,
+  scope,
+}: {
+  reference: Exclude<FormlessUiMainResultReference, { kind: "treeResultReference" }>;
+  scope: FormlessUiWorkspaceIntentScope;
+}) {
   const onIntent = useFormlessUiWorkspaceIntentHandler();
   const result = useFormlessUiResult(reference);
 
   return result ? (
     <AstryxWorkspaceResult onIntent={onIntent} result={result} scope={scope} />
   ) : null;
-}, subscribedMainResultPropsEqual);
+}
 
 const AstryxSubscribedWorkspaceContextResult = memo(
   function AstryxSubscribedWorkspaceContextResult({
@@ -706,7 +725,16 @@ function AstryxWorkspaceResult({
     );
   }
 
-  return <AstryxWorkspaceRecordResult onIntent={onIntent} recordResult={result} scope={scope} />;
+  if (result.kind === "recordResult") {
+    return <AstryxWorkspaceRecordResult onIntent={onIntent} recordResult={result} scope={scope} />;
+  }
+
+  return (
+    <AstryxTreeResultRenderer
+      onIntent={(intent) => dispatchAstryxWorkspaceTreeIntent(onIntent, scope, result.id, intent)}
+      tree={result}
+    />
+  );
 }
 
 function AstryxWorkspaceRecordResult({

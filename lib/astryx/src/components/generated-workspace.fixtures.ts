@@ -5,6 +5,9 @@ import type {
   FormlessUiCreateSurfaceContract,
   FormlessUiOperationControlContract,
   FormlessUiRecordResultContract,
+  FormlessUiTreeChildCreationContract,
+  FormlessUiTreeItemContract,
+  FormlessUiTreeResultContract,
   FormlessUiWorkspaceCollectionActionGroupContract,
   FormlessUiWorkspaceCollectionContract,
   FormlessUiWorkspaceContextContract,
@@ -20,6 +23,10 @@ import { createFormlessUiListFixtures } from "./lists.fixtures.ts";
 import { operationControlFixtures } from "./operation-controls.fixtures.ts";
 import { createFormlessUiRecordResultFixtures } from "./record-results.fixtures.ts";
 import { createFormlessUiTableFixtures } from "./tables.fixtures.ts";
+import {
+  createFormlessUiTreeResultFixtures,
+  type FormlessUiTreeResultFixtureId,
+} from "./tree-results.fixtures.ts";
 
 export type FormlessGeneratedWorkspaceFixtureId =
   | "empty-collection"
@@ -27,6 +34,8 @@ export type FormlessGeneratedWorkspaceFixtureId =
   | "list-detail"
   | "multi-section"
   | "singleton-context"
+  | "site-tree"
+  | "site-tree-list-detail"
   | "tasks"
   | "unavailable";
 
@@ -49,6 +58,12 @@ export function createFormlessGeneratedWorkspaceFixtures(): FormlessGeneratedWor
     { id: "tasks", label: "Tasks", workspace: tasksWorkspace() },
     { id: "multi-section", label: "CRM", workspace: multiSectionWorkspace() },
     { id: "list-detail", label: "List detail", workspace: listDetailWorkspace() },
+    { id: "site-tree", label: "Site tree", workspace: siteTreeWorkspace("ordinary") },
+    {
+      id: "site-tree-list-detail",
+      label: "Site tree list detail",
+      workspace: siteTreeWorkspace("listDetail"),
+    },
     {
       id: "singleton-context",
       label: "Singleton",
@@ -175,6 +190,46 @@ function listDetailWorkspace(): FormlessUiWorkspaceContract {
       },
       headingVisibility: "hidden",
       label: "Project work",
+    }),
+  ]);
+}
+
+function siteTreeWorkspace(presentation: "listDetail" | "ordinary"): FormlessUiWorkspaceContract {
+  const workspaceId = presentation === "ordinary" ? "site-tree" : "site-tree-list-detail";
+  const scope = workspaceScope(workspaceId, "composition", "blocks");
+  const result = treeResult(scope, "shallow");
+  const contextDetail = recordResult(scope, "root-detail", "Homepage");
+
+  return workspace(workspaceId, "Site composition", [
+    section(scope, {
+      collection:
+        presentation === "ordinary"
+          ? readyOrdinaryCollection(scope, {
+              context: siteRootContext(scope, "localTabs"),
+              contextDetail,
+              label: "Page composition",
+              result,
+            })
+          : {
+              accessibilityLabel: "Site roots and composition",
+              availability: { state: "ready" },
+              id: scope.collectionId,
+              kind: "workspaceCollection",
+              label: "Page composition",
+              presentation: {
+                accessibilityLabel: "Site roots and composition",
+                actions: emptyCollectionActions(scope),
+                contextDetail,
+                id: scopedId(scope, "listDetail", "site-roots"),
+                kind: "listDetail",
+                result,
+                selector: siteRootContext(scope, "localListDetail"),
+                summaries: [],
+              },
+              selectedQueryId: null,
+            },
+      headingVisibility: "hidden",
+      label: "Composition",
     }),
   ]);
 }
@@ -409,6 +464,39 @@ function populatedContext<P extends FormlessUiWorkspaceContextContract["presenta
   };
 }
 
+function siteRootContext<P extends "localListDetail" | "localTabs">(
+  scope: WorkspaceFixtureScope,
+  presentation: P,
+): FormlessUiWorkspaceContextContract & { presentation: P } {
+  const contextId = scopedId(scope, "context", "site-roots");
+  const homepageId = scopedId(scope, "contextOption", "homepage");
+  const headerId = scopedId(scope, "contextOption", "header");
+  const option = (id: string, label: string, selected: boolean) => ({
+    availability: { available: true } as const,
+    id,
+    kind: "workspaceContextOption" as const,
+    label,
+    selected,
+    selectionIntent: {
+      ...scope,
+      contextId,
+      contextOptionId: id,
+      type: "workspaceContextSelection" as const,
+    },
+  });
+
+  return {
+    accessibilityLabel: "Site roots",
+    availability: { state: "ready" },
+    id: contextId,
+    kind: "workspaceContext",
+    label: "Roots",
+    options: [option(homepageId, "Homepage", true), option(headerId, "Header", false)],
+    presentation,
+    selectedOptionId: homepageId,
+  };
+}
+
 function emptyContext(scope: WorkspaceFixtureScope): FormlessUiWorkspaceContextContract {
   return {
     accessibilityLabel: "Project records",
@@ -592,6 +680,83 @@ function tableResult(
   };
 }
 
+function treeResult(
+  scope: WorkspaceFixtureScope,
+  fixtureId: FormlessUiTreeResultFixtureId,
+): FormlessUiTreeResultContract {
+  const source = requiredTreeResultFixture(fixtureId);
+  const id = scopedId(scope, "result", fixtureId);
+
+  return {
+    ...source,
+    id,
+    items: scopeTreeItems(source.items, id),
+    root: { ...source.root, id: `${id}:root` },
+    ...(source.rootChildCreation === undefined
+      ? {}
+      : { rootChildCreation: scopeTreeChildCreation(source.rootChildCreation, id) }),
+    ...(source.selectedEditor === undefined
+      ? {}
+      : {
+          selectedEditor: {
+            ...source.selectedEditor,
+            ...(source.selectedEditor.childCreation === undefined
+              ? {}
+              : {
+                  childCreation: scopeTreeChildCreation(source.selectedEditor.childCreation, id),
+                }),
+          },
+        }),
+  };
+}
+
+function scopeTreeItems(
+  items: readonly FormlessUiTreeItemContract[],
+  resultId: string,
+): readonly FormlessUiTreeItemContract[] {
+  return items.map((item) => ({
+    ...item,
+    children: scopeTreeItems(item.children, resultId),
+    contextActions: item.contextActions.map((action) => ({
+      ...action,
+      intent: { ...action.intent, resultId },
+    })),
+    ...(item.disclosure === undefined
+      ? {}
+      : {
+          disclosure: {
+            ...item.disclosure,
+            intent: { ...item.disclosure.intent, resultId },
+          },
+        }),
+    ...(item.ordering === undefined
+      ? {}
+      : {
+          ordering: {
+            ...item.ordering,
+            actions: item.ordering.actions.map((action) => ({
+              ...action,
+              intent: { ...action.intent, resultId },
+            })),
+          },
+        }),
+    selectionIntent: { ...item.selectionIntent, resultId },
+  }));
+}
+
+function scopeTreeChildCreation(
+  creation: FormlessUiTreeChildCreationContract,
+  resultId: string,
+): FormlessUiTreeChildCreationContract {
+  return {
+    ...creation,
+    variants: creation.variants.map((variant) => ({
+      ...variant,
+      selectionIntent: { ...variant.selectionIntent, resultId },
+    })),
+  };
+}
+
 function recordResult(
   scope: WorkspaceFixtureScope,
   localId: string,
@@ -728,4 +893,12 @@ function requiredRecordResultFixture() {
     throw new Error("Missing editable record-result fixture.");
   }
   return fixture.recordResult;
+}
+
+function requiredTreeResultFixture(id: FormlessUiTreeResultFixtureId) {
+  const fixture = createFormlessUiTreeResultFixtures().find((candidate) => candidate.id === id);
+  if (!fixture) {
+    throw new Error(`Missing ${id} tree-result fixture.`);
+  }
+  return fixture.tree;
 }

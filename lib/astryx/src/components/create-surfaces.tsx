@@ -239,10 +239,12 @@ function CreateTriggerGroup({
 export function AstryxCreateSurfaceRenderer({
   onFieldIntent,
   onIntent,
+  renderTrigger = true,
   surface,
 }: {
   onFieldIntent: FormlessUiCreateFieldIntentHandler;
   onIntent: FormlessUiCreateIntentHandler;
+  renderTrigger?: boolean;
   surface: FormlessUiCreateSurfaceContract;
 }) {
   const emitOpenChange = (open: boolean) => {
@@ -251,7 +253,9 @@ export function AstryxCreateSurfaceRenderer({
 
   return (
     <>
-      <CreateButton button={surface.trigger} onClick={() => emitOpenChange(true)} />
+      {renderTrigger ? (
+        <CreateButton button={surface.trigger} onClick={() => emitOpenChange(true)} />
+      ) : null}
       <Dialog
         aria-label={surface.dialog.title}
         isOpen={surface.dialog.open}

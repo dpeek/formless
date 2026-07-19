@@ -335,8 +335,8 @@ function AuthFixtureSwitcher({
   families: readonly string[];
   fixture: FormlessAuthFixture;
   fixtures: readonly FormlessAuthFixture[];
-  onFixtureChange(fixtureId: FormlessAuthFixtureId): void;
-  onViewChange(family: string): void;
+  onFixtureChange: (fixtureId: FormlessAuthFixtureId) => void;
+  onViewChange: (family: string) => void;
 }) {
   return (
     <>

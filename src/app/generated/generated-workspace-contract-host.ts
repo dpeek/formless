@@ -15,6 +15,7 @@ import {
   formlessUiListResultReference,
   formlessUiRecordResultReference,
   formlessUiTableResultReference,
+  formlessUiTreeResultReference,
   formlessUiWorkspaceManifestReference,
   formlessUiWorkspaceSectionShellReference,
   isFormlessUiWorkspaceIntent,
@@ -187,6 +188,15 @@ function projectMainResult(
     }
     case "table": {
       const reference = formlessUiTableResultReference({
+        resultId: result.id,
+        role: "mainResult",
+        sectionId,
+        workspaceId,
+      });
+      return { node: { reference, snapshot: result }, reference };
+    }
+    case "treeResult": {
+      const reference = formlessUiTreeResultReference({
         resultId: result.id,
         role: "mainResult",
         sectionId,
