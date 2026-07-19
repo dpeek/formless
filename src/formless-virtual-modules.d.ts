@@ -18,7 +18,3 @@ interface ImportMetaEnv extends Record<string, string | boolean | undefined> {
 interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
-
-declare module "*.css";
-declare module "@dpeek/formless-ui/global.css";
-declare module "@dpeek/formless-ui/global";

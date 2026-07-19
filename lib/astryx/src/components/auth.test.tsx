@@ -303,7 +303,7 @@ describe("Auth prototype layout", () => {
     expect(html).not.toContain("Decline invitation");
   });
 
-  it("keeps fixtures and reducers free of runtime effects and production activation", async () => {
+  it("keeps fixtures and reducers runtime-free while production selects the package renderer", async () => {
     const fixtureSource = await readFile(new URL("./auth.fixtures.ts", import.meta.url), "utf8");
     const layoutSource = await readFile(new URL("./auth.tsx", import.meta.url), "utf8");
     const rendererSource = await readFile(
@@ -313,8 +313,12 @@ describe("Auth prototype layout", () => {
     const packageJson = JSON.parse(
       await readFile(new URL("../../package.json", import.meta.url), "utf8"),
     ) as { exports?: Record<string, unknown> };
-    const productionRendererSource = await readFile(
-      new URL("../../../../src/app/generated/legacy-owner-auth-renderer.tsx", import.meta.url),
+    const applicationAssemblySource = await readFile(
+      new URL("../application-assembly.tsx", import.meta.url),
+      "utf8",
+    );
+    const applicationSelectionSource = await readFile(
+      new URL("../../../../src/app/application-presentation.tsx", import.meta.url),
       "utf8",
     );
     const imports = [fixtureSource, layoutSource].flatMap(importSpecifiers);
@@ -346,12 +350,11 @@ describe("Auth prototype layout", () => {
       "./site/global.css",
       "./site/provider",
     ]);
-    expect(productionRendererSource).toContain("LegacySubscribedOwnerAuthRenderer");
-    expect(productionRendererSource).toContain("LegacySubscribedAccountAuthRenderer");
-    expect(productionRendererSource).toContain(
-      "LegacySubscribedCollaboratorInvitationAuthRenderer",
-    );
-    expect(productionRendererSource).not.toContain("AstryxSubscribedAuthRenderer");
+    expect(applicationAssemblySource).toContain("AstryxSubscribedAuthRenderer");
+    expect(applicationAssemblySource).toContain('case "auth"');
+    expect(applicationAssemblySource).not.toMatch(/Legacy[A-Z]|legacy-/);
+    expect(applicationSelectionSource).toContain("AstryxApplicationAssembly");
+    expect(applicationSelectionSource).not.toMatch(/Legacy[A-Z]|legacy-/);
   });
 });
 

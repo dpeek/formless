@@ -17,8 +17,8 @@ The system SHALL provide a Media package under `lib/media/`.
 - GIVEN the Media package is scaffolded
 - WHEN package files are present
 - THEN it contains `AGENTS.md`, `package.json`, `tsconfig.json`,
-  `src/types.ts`, `src/index.ts`, `src/client.ts`, `src/react.tsx`, and
-  `src/worker.ts`
+  `src/types.ts`, `src/index.ts`, `src/client.ts`, and `src/worker.ts`
+- AND it exposes no React adapter or renderer-specific entrypoint
 
 #### Scenario: Media package tests
 
@@ -100,28 +100,24 @@ provider store adapters.
 - THEN those facts stay in Media-owned metadata and provider adapters
 - AND app records do not store provider-specific URLs
 
-### Requirement: Media UI Adapter Boundary
+### Requirement: Media Renderer Boundary
 
 The Media package SHALL keep media contracts, pure helpers, client adapters, and
-Worker adapters renderer-independent. The current React adapter MAY remain as a
-legacy UI adapter while legacy generated surfaces still use it, but it is not
-the future renderer boundary.
+Worker adapters renderer-independent and SHALL NOT expose a React adapter.
 
-#### Scenario: Legacy media control adapter
+#### Scenario: Media presentation stays with the selected renderer
 
 - GIVEN generated authoring needs media asset selection, image upload, preview,
   or broken-asset display
-- WHEN the legacy generated UI renderer seam renders media-specific controls
-- THEN the seam may use the Media React adapter internally
-- AND generated UI passes selected asset state, media asset options, preview
+- WHEN the selected renderer renders media-specific controls
+- THEN generated UI passes selected asset state, media asset options, preview
   hrefs, display-safe labels, missing selected asset facts, upload availability,
   removal availability, and file-select intent availability through the
-  Formless UI field contract instead of importing the Media React adapter
-  directly
-- AND the legacy adapter exposes asset-backed Media behavior without an Image
-  field kind or URL authoring mode
-- AND replacement media controls live with the replacement renderer package, not
-  in the Media package
+  Formless UI field contract
+- AND the renderer consumes those facts and dispatches canonical field intents
+  without importing renderer code from the Media package
+- AND asset-backed Media behavior does not introduce an Image field kind or URL
+  authoring mode
 
 #### Scenario: Generic layout stays outside Media
 
@@ -136,8 +132,7 @@ the future renderer boundary.
 - WHEN the controls need picker, upload, preview, or broken-asset presentation
 - THEN the controls consume renderer-neutral media facts and intent callbacks
 - AND the Media package does not import generic UI primitives, generated UI
-  modules, renderer packages, Tailwind classes, or React component libraries for
-  the replacement renderer
+  modules, renderer packages, styling frameworks, or React component libraries
 
 ### Requirement: Media Ownership Exclusions
 

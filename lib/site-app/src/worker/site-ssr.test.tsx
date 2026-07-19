@@ -2,7 +2,6 @@ import { describe, expect, it } from "vite-plus/test";
 
 import { INITIAL_SITE_PAGE_TREE_SCRIPT_ID } from "../react/initial-tree.ts";
 import type { SitePublicRendererProps } from "../public-renderer.ts";
-import { LegacySitePageRenderer, LegacySitePublicSystemStateRenderer } from "../react.tsx";
 import type { SitePublicSystemStateRendererProps } from "../public-system-state.ts";
 import type { SiteBlockNode, SitePageTree } from "../types.ts";
 import {
@@ -25,7 +24,7 @@ describe("published Site document rendering", () => {
     );
     const response = await renderPublishedSiteDocumentResponse({
       builtInRenderer: BuiltInRenderer,
-      builtInSystemStateRenderer: LegacySitePublicSystemStateRenderer,
+      builtInSystemStateRenderer: SystemStateRendererProbe,
       clientAssets: {
         body: '<script type="module" src="/assets/custom-client.js"></script>',
         head: '<link rel="stylesheet" href="/assets/custom-client.css">',
@@ -42,7 +41,7 @@ describe("published Site document rendering", () => {
     expect(response.headers.get("Cache-Control")).toBe(PUBLISHED_SITE_HTML_CACHE_CONTROL);
     expect(response.headers.get("Content-Type")).toBe("text/html; charset=utf-8");
     expect(html).toContain("<!doctype html>");
-    expect(html).toContain('<div id="app"><main class="min-h-dvh"><article');
+    expect(html).toContain('<div id="app"><main style="min-height:100dvh"><article');
     expect(html).toContain('data-custom-public-site-renderer="projects"');
     expect(html).toContain('data-link-mode="published"');
     expect(html).toContain('data-route-base="/campaign"');
@@ -58,10 +57,10 @@ describe("published Site document rendering", () => {
     expect(html).not.toContain("data-built-in-public-site-renderer");
   });
 
-  it("selects the explicitly supplied legacy page renderer without a workspace override", async () => {
+  it("selects the explicitly supplied built-in page renderer without a workspace override", async () => {
     const response = await renderPublishedSiteDocumentResponse({
-      builtInRenderer: LegacySitePageRenderer,
-      builtInSystemStateRenderer: LegacySitePublicSystemStateRenderer,
+      builtInRenderer: PageRendererProbe,
+      builtInSystemStateRenderer: SystemStateRendererProbe,
       clientAssets: { body: "", head: "" },
       requestUrl: new URL("https://example.com/"),
       treeResult: { kind: "found", tree: sitePageTree("home") },
@@ -72,8 +71,9 @@ describe("published Site document rendering", () => {
     expect(html).toContain(
       '<html lang="en" class="light" data-site-theme="light" style="color-scheme: light;">',
     );
-    expect(html).toContain('<main class="min-h-dvh"><article');
-    expect(html).toContain('data-site-theme="light"');
+    expect(html).toContain('<main style="min-height:100dvh"><article');
+    expect(html).toContain('data-built-in-public-site-renderer="home"');
+    expect(html).toContain('data-link-mode="published"');
     expect(html).toContain('<script id="formless-public-site-theme">');
     expect(html).toContain('const storageKey = "formless:public-site:theme";');
     expect(html).toContain("(prefers-color-scheme: dark)");
@@ -93,7 +93,7 @@ describe("published Site document rendering", () => {
       </section>
     );
     const response = await renderPublishedSiteDocumentResponse({
-      builtInRenderer: LegacySitePageRenderer,
+      builtInRenderer: PageRendererProbe,
       builtInSystemStateRenderer: SystemStateRenderer,
       clientAssets: { body: "", head: "" },
       requestUrl: new URL("https://example.com/missing"),
@@ -121,7 +121,7 @@ describe("published Site document rendering", () => {
       </section>
     );
     const response = await renderPublishedSiteDocumentResponse({
-      builtInRenderer: LegacySitePageRenderer,
+      builtInRenderer: PageRendererProbe,
       builtInSystemStateRenderer: SystemStateRenderer,
       clientAssets: { body: "", head: "" },
       requestUrl: new URL("https://example.com/broken"),
@@ -136,6 +136,22 @@ describe("published Site document rendering", () => {
     expect(html).not.toContain("data-workspace-renderer");
   });
 });
+
+function PageRendererProbe({ linkMode, routeBase, tree }: SitePublicRendererProps) {
+  return (
+    <article
+      data-built-in-public-site-renderer={tree.meta.slug}
+      data-link-mode={linkMode}
+      data-route-base={routeBase}
+    >
+      Built-in document {tree.page.label}
+    </article>
+  );
+}
+
+function SystemStateRendererProbe(props: SitePublicSystemStateRendererProps) {
+  return <section data-system-state={props.kind}>{props.slug}</section>;
+}
 
 function sitePageTree(slug: string): SitePageTree {
   return {

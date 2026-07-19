@@ -77,13 +77,11 @@ describe("Runtime Vite config", () => {
         "astryx-split-layers",
         "vite:react-babel",
         "vite:react-refresh",
-        "@tailwindcss/vite:scan",
-        "@tailwindcss/vite:generate:serve",
-        "@tailwindcss/vite:generate:build",
         "vite-plugin-cloudflare",
         "formless-astryx-cloudflare-worker-source-compilation",
       ]),
     );
+    expect(developmentPlugins.filter((name) => name.includes("tailwind"))).toEqual([]);
     expect(developmentPlugins.indexOf("@stylexjs/unplugin")).toBeLessThan(
       developmentPlugins.indexOf("vite:react-babel"),
     );
@@ -175,7 +173,9 @@ describe("Runtime Vite config", () => {
         "/repo/node_modules/.bun/@floating-ui+react-dom@2.1.8/node_modules/@floating-ui/react-dom/dist/floating-ui.react-dom.mjs",
       ),
     ).toBe("floating-ui");
-    expect(clientManualChunks("/repo/src/app/generated/create-field-control.tsx")).toBeUndefined();
+    expect(
+      clientManualChunks("/repo/src/app/generated/generated-workspace-runtime.tsx"),
+    ).toBeUndefined();
   });
 
   it("inlines the Floating UI React DOM positioning hook before production bundling", () => {

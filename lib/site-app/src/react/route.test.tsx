@@ -9,8 +9,6 @@ import {
   type SitePageRouteState,
 } from "./route.tsx";
 import type { SitePublicRendererProps } from "./renderer.tsx";
-import { LegacySitePageRenderer } from "./legacy-page-renderer.tsx";
-import { LegacySitePublicSystemStateRenderer } from "./legacy-system-state.tsx";
 import type { SitePublicSystemStateRendererProps } from "../public-system-state.ts";
 import {
   INITIAL_SITE_PAGE_TREE_SCRIPT_ID,
@@ -179,8 +177,8 @@ describe("public Site page route rendering", () => {
     );
     const html = renderToStaticMarkup(
       <SitePageRouteView
-        builtInRenderer={LegacySitePageRenderer}
-        builtInSystemStateRenderer={LegacySitePublicSystemStateRenderer}
+        builtInRenderer={PageRendererProbe}
+        builtInSystemStateRenderer={SystemStateRendererProbe}
         linkMode="installed"
         routeBase="/sites/personal"
         state={{ status: "ready", tree: sitePageTree("home") }}
@@ -192,21 +190,21 @@ describe("public Site page route rendering", () => {
     expect(html).toContain('data-link-mode="installed"');
     expect(html).toContain('data-route-base="/sites/personal"');
     expect(html).toContain("Custom page home");
-    expect(html).not.toContain("data-site-theme");
+    expect(html).not.toContain("data-built-in-public-site-renderer");
   });
 
   it("selects the explicitly supplied built-in page renderer without a workspace override", () => {
     const html = renderToStaticMarkup(
       <SitePageRouteView
-        builtInRenderer={LegacySitePageRenderer}
-        builtInSystemStateRenderer={LegacySitePublicSystemStateRenderer}
+        builtInRenderer={PageRendererProbe}
+        builtInSystemStateRenderer={SystemStateRendererProbe}
         state={{ status: "ready", tree: sitePageTree("home") }}
       />,
     );
 
-    expect(html).toContain('data-site-theme="light"');
-    expect(html).toContain("flex min-h-dvh flex-col");
-    expect(html).toContain("<main");
+    expect(html).toContain('data-built-in-public-site-renderer="home"');
+    expect(html).toContain('data-link-mode="preview"');
+    expect(html).toContain("Built-in page home");
     expect(html).not.toContain("data-custom-public-site-renderer");
   });
 
@@ -223,7 +221,7 @@ describe("public Site page route rendering", () => {
 
     const loading = renderToStaticMarkup(
       <SitePageRouteView
-        builtInRenderer={LegacySitePageRenderer}
+        builtInRenderer={PageRendererProbe}
         builtInSystemStateRenderer={SystemStateProbe}
         state={{ status: "loading", slug: "home" }}
         workspaceRenderer={WorkspaceRenderer}
@@ -231,7 +229,7 @@ describe("public Site page route rendering", () => {
     );
     const notFound = renderToStaticMarkup(
       <SitePageRouteView
-        builtInRenderer={LegacySitePageRenderer}
+        builtInRenderer={PageRendererProbe}
         builtInSystemStateRenderer={SystemStateProbe}
         linkMode="installed"
         routeBase="/sites/personal"
@@ -241,7 +239,7 @@ describe("public Site page route rendering", () => {
     );
     const failure = renderToStaticMarkup(
       <SitePageRouteView
-        builtInRenderer={LegacySitePageRenderer}
+        builtInRenderer={PageRendererProbe}
         builtInSystemStateRenderer={SystemStateProbe}
         state={{ status: "error", message: "Display-safe failure.", slug: "broken" }}
         workspaceRenderer={WorkspaceRenderer}
@@ -257,6 +255,22 @@ describe("public Site page route rendering", () => {
     expect(`${loading}${notFound}${failure}`).not.toContain("data-workspace-renderer");
   });
 });
+
+function PageRendererProbe({ linkMode, routeBase, tree }: SitePublicRendererProps) {
+  return (
+    <article
+      data-built-in-public-site-renderer={tree.meta.slug}
+      data-link-mode={linkMode}
+      data-route-base={routeBase}
+    >
+      Built-in page {tree.page.label}
+    </article>
+  );
+}
+
+function SystemStateRendererProbe(props: SitePublicSystemStateRendererProps) {
+  return <output data-system-state={props.kind} data-slug={props.slug} />;
+}
 
 function initialTreeScriptText(tree: SitePageTreeResponse): string {
   const script = renderInitialSitePageTreeScript(tree);

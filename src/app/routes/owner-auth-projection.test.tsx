@@ -1,19 +1,11 @@
-import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vite-plus/test";
 import type { FormlessUiAuthIntent } from "@dpeek/formless-astryx/contract";
-import { FormlessUiContractHostProvider } from "@dpeek/formless-astryx/contract-host/react";
-import {
-  LegacyOwnerAuthRenderer,
-  LegacySubscribedOwnerAuthRenderer,
-  dispatchLegacyOwnerAuthFieldIntent,
-} from "../generated/legacy-owner-auth-renderer.tsx";
 import {
   authIntentIsCurrent,
   createAuthPendingGuard,
   createNoShellAuthRuntimeHost,
 } from "./auth-runtime-boundary.tsx";
 import {
-  ownerSetupAuthSurfaceReference,
   ownerSignInAuthSurfaceReference,
   projectOwnerSetupAuthSurface,
   projectOwnerSignInAuthSurface,
@@ -66,7 +58,7 @@ describe("owner auth projection", () => {
     );
   });
 
-  it("projects controlled canonical owner fields and current exact intents", async () => {
+  it("projects controlled canonical owner fields and current exact intents", () => {
     const surface = projectOwnerSetupAuthSurface({
       ownerEmail: "ada@example.com",
       ownerName: "Ada Owner",
@@ -102,28 +94,16 @@ describe("owner auth projection", () => {
       ),
     ).toBe(false);
 
-    const calls: FormlessUiAuthIntent[] = [];
-    await dispatchLegacyOwnerAuthFieldIntent(
-      (intent) => {
-        calls.push(intent);
-      },
-      nameField,
-      {
+    const fieldIntent: FormlessUiAuthIntent = {
+      ...nameField.intent,
+      intent: {
         fieldName: "name",
         fieldValue: { kind: "input", value: "Grace Owner" },
         type: "createDraftChange",
       },
-    );
-    expect(calls).toEqual([
-      {
-        ...nameField.intent,
-        intent: {
-          fieldName: "name",
-          fieldValue: { kind: "input", value: "Grace Owner" },
-          type: "createDraftChange",
-        },
-      },
-    ]);
+    };
+    expect(authIntentIsCurrent(surface, fieldIntent)).toBe(true);
+    expect(authIntentIsCurrent(surface, { ...fieldIntent, fieldId: "field:stale" })).toBe(false);
   });
 
   it("uses canonical draft validity to gate owner passkey creation", () => {
@@ -194,33 +174,19 @@ describe("owner auth projection", () => {
     expect(serialized).not.toContain("owner-secret");
   });
 
-  it("renders accessible pure and subscribed legacy owner surfaces", () => {
+  it("projects accessible owner presentation without private setup state", () => {
     const surface = projectOwnerSetupAuthSurface({
       ownerEmail: "ada@example.com",
       ownerName: "Ada Owner",
       state: { setupToken, status: "ready" },
     });
-    const pureHtml = renderToStaticMarkup(
-      <LegacyOwnerAuthRenderer onIntent={() => undefined} surface={surface} />,
-    );
-    const runtime = createNoShellAuthRuntimeHost(
-      ownerSetupAuthSurfaceReference,
-      surface,
-      () => undefined,
-    );
-    const subscribedHtml = renderToStaticMarkup(
-      <FormlessUiContractHostProvider host={runtime.host}>
-        <LegacySubscribedOwnerAuthRenderer reference={ownerSetupAuthSurfaceReference} />
-      </FormlessUiContractHostProvider>,
-    );
-
-    for (const html of [pureHtml, subscribedHtml]) {
-      expect(html).toContain(`aria-labelledby="${surface.id}:heading"`);
-      expect(html).toContain('autoComplete="name"');
-      expect(html).toContain('autoComplete="email"');
-      expect(html).toContain("Create owner passkey");
-      expect(html).not.toContain(setupToken);
-    }
+    expect(surface.frame.accessibilityLabel).toBe("Claim this Formless instance");
+    expect(surface.fields.map(({ autocomplete }) => autocomplete)).toEqual(["name", "email"]);
+    expect(surface.passkey).toMatchObject({
+      availability: "available",
+      control: { accessibilityLabel: "Create owner passkey" },
+    });
+    expect(JSON.stringify(surface)).not.toContain(setupToken);
   });
 
   it("keeps the no-shell host stable and deduplicates pending operations", async () => {

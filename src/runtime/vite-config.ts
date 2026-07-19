@@ -3,7 +3,6 @@ import { fileURLToPath } from "node:url";
 
 import { astryxStylex } from "@astryxdesign/build/vite";
 import { cloudflare, type PluginConfig, type WorkerConfig } from "@cloudflare/vite-plugin";
-import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { type Plugin, type PluginOption } from "vite-plus";
 import {
@@ -100,7 +99,6 @@ export function runtimeViteConfig(input: RuntimeViteConfigInput = {}) {
         }),
       ),
       ...publicVitePlugins(react()),
-      ...publicVitePlugins(tailwindcss()),
       ...(env.VITEST
         ? []
         : [

@@ -9,9 +9,9 @@ import {
 } from "@dpeek/formless-archive";
 import type { SitePageTreeResponse } from "@dpeek/formless-site-app";
 import {
-  LegacySitePageRenderer,
-  LegacySitePublicSystemStateRenderer,
-} from "@dpeek/formless-site-app/react";
+  AstryxSitePageRenderer,
+  AstryxSitePublicSystemStateRenderer,
+} from "@dpeek/formless-astryx/site/renderer";
 import { renderPublishedSiteDocumentResponse } from "@dpeek/formless-site-app/worker";
 import type { AppInstall } from "@dpeek/formless-installed-apps";
 import {
@@ -360,8 +360,8 @@ describe("instance archive restore API", () => {
     const applied = await postArchiveRestore(appArchiveWithMedia({ dryRun: false }), [mediaFile()]);
     const tree = await getJson<SitePageTreeResponse>("/api/app-installs/site/personal/tree/home");
     const document = await renderPublishedSiteDocumentResponse({
-      builtInRenderer: LegacySitePageRenderer,
-      builtInSystemStateRenderer: LegacySitePublicSystemStateRenderer,
+      builtInRenderer: AstryxSitePageRenderer,
+      builtInSystemStateRenderer: AstryxSitePublicSystemStateRenderer,
       clientAssets: { body: "", head: "" },
       requestUrl: new URL("https://personal.example/"),
       treeResult: { kind: "found", tree: tree.body },
@@ -384,8 +384,9 @@ describe("instance archive restore API", () => {
     expect(JSON.stringify(tree.body)).toContain(coreMediaHref);
     expect(tree.body.page.label).toBe("Home");
     expect(document.status).toBe(200);
-    expect(html).toContain('<main class="min-h-dvh"><article');
-    expect(html).toContain('data-site-theme="light"');
+    expect(html).toContain('<main style="min-height:100dvh">');
+    expect(html).toContain("data-astryx-public-site-provider");
+    expect(html).toContain(coreMediaHref);
     expect(html).not.toContain("data-custom-public-site-renderer");
     expect(served.status).toBe(200);
     expect(served.headers.get("Content-Type")).toBe("image/png");

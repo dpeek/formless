@@ -428,7 +428,8 @@ selection, reads, evaluation, operation execution, and effects.
 - AND the presentation adapters do not select models, read records, evaluate
   queries, counts, aggregates, or computed values, own route or authoring
   state, build operation input, execute operations, or update sync state
-- AND legacy Formless UI imports remain outside the selected production graph
+- AND generated runtime and test source uses documented Astryx contract and
+  contract-host exports without owning presentation implementation
 - AND focused coverage asserts projected facts, nested intent dispatch,
   selection fallback, context changes, counts, summaries, actions, result
   composition, and visible empty or unavailable behavior instead of legacy HTML
@@ -568,7 +569,8 @@ operation execution, ordering plans, navigation, and effects.
 - WHEN the generated tree foundation publishes a complete tree-result node
 - THEN the subscribed Astryx tree renderer reads only the scoped tree-result
   reference and delegates to a pure complete-snapshot renderer
-- AND legacy Formless UI imports remain outside the selected production graph
+- AND generated runtime and test source uses documented Astryx contract and
+  contract-host exports without owning tree presentation
 - AND production tree sections use the same generated workspace host path as
   list, table, and record results without a direct tree fallback
 - AND production remains on the selected Astryx workspace renderer
@@ -746,8 +748,8 @@ data reads, session behavior, operations, and effects.
   app-profile, mapped-app, and Site authoring admin routes use that renderer at
   their specified shell scope
 - **AND** no-shell routes remain outside the shell host and renderer
-- **AND** legacy `@dpeek/formless-ui` imports remain outside the selected
-  production graph
+- **AND** application source and tests consume presentation only through
+  documented Astryx package exports
 - **AND** production selects the renderer through the root Astryx application
   assembly
 
@@ -1475,8 +1477,8 @@ operation execution.
 - AND source SVG icon rendering accepts a display-safe SVG source supplied by
   generated UI and preserves renderer icon sizing, color, accessibility, and
   layout semantics
-- AND reusable source SVG parsing or sanitizing is not owned by the legacy
-  `@dpeek/formless-ui` renderer package after that package is retired
+- AND reusable source SVG parsing or sanitizing comes from
+  `@dpeek/formless-source-svg` rather than a presentation package
 - AND color fields use a renderer-owned color input primitive while generated UI
   owns validation, draft value preservation, and commit policy
 - AND when the color picker control can only represent valid opaque hex colors,
@@ -1494,13 +1496,13 @@ operation execution.
 - AND custom SVG drafts, parse errors, open state, cancel/save availability,
   empty value state, and source-backed preview state are explicit contract facts
 - AND the renderer does not infer icon options by reading the runtime icon
-  catalog, parsing app schema, importing legacy icon components, or changing
+  catalog, parsing app schema, importing runtime icon components, or changing
   stored icon values to ids
 
 #### Scenario: Formless UI generated-field contract vertical slice
 
-- GIVEN a Formless UI renderer package or seam renders a generated-field
-  migration slice
+- GIVEN the selected Formless UI renderer renders a generated-field vertical
+  slice
 - WHEN the slice renders one coherent record workflow and one public operation
   form workflow
 - THEN create form fields, record edit fields, table-cell fields, detail or
@@ -1558,8 +1560,8 @@ while delegating media-specific controls to the active Formless UI renderer.
   and display-safe labels without exposing raw asset ids or URLs for authoring
 - AND generated and renderer contracts expose one Media control and renderer
   kind without an Image field kind or asset-versus-URL mode discriminator
-- AND Media React controls and legacy Formless UI adapters remain outside the
-  selected production graph
+- AND the Media package exposes no React presentation adapter and selected
+  Media presentation stays in Astryx
 - AND the field value remains a flat media asset id committed as text by
   generated UI
 
@@ -2104,8 +2106,8 @@ navigation, and external effects.
 - THEN one subscribed Astryx management renderer reads only contract references
   and snapshots, renders the referenced Apps and Routes workspaces and install
   dialog, and dispatches canonical intents
-- AND legacy `@dpeek/formless-ui` imports remain outside the selected
-  production graph
+- AND application source and tests consume presentation only through documented
+  Astryx package exports
 - AND focused coverage asserts loading, failure, workspace availability,
   install-dialog behavior, Push behavior, external authorization, display-safe
   feedback, and intent dispatch rather than legacy HTML structure
@@ -2635,21 +2637,21 @@ effects, routing, and stable contract-host ownership.
 - THEN presentation imports use documented Astryx package subpaths
 - AND application roots include application Astryx CSS and public roots include
   public Site Astryx CSS
-- AND selected graphs exclude `@dpeek/formless-ui`, legacy renderer modules,
-  Media React adapters, direct Tailwind application markup, legacy application
-  CSS, and private Astryx source deep imports
-- AND dormant legacy source and dependencies may remain only outside reachable
-  production graphs for a separate cleanup change
+- AND selected graphs contain no other Formless presentation package, Media
+  React entrypoint, utility CSS compiler or static utility markup, mixed
+  application CSS path, or private Astryx source import
+- AND repository source, tests, manifests, declarations, build plugins, and the
+  workspace lockfile expose only the current Astryx, Media, and Site package
+  boundaries
 
-#### Scenario: Activate the complete graph atomically
+#### Scenario: Astryx selection is unconditional
 
-- GIVEN every Astryx slice, residual state, provider, build, navigation, theme,
-  conformance, and dependency-graph check passes before activation
-- WHEN production selection changes
-- THEN application browser, public Site browser, and public Site Worker roots
-  select Astryx presentation, provider, CSS, and build integration in one
-  indivisible change
-- AND selection-coupled tests assert only Astryx production entrypoints
-- AND the activation does not delete dormant legacy source or dependency
-  declarations and does not change storage, auth, Site projection, public form,
-  route, or operation semantics
+- GIVEN application browser, public Site browser, and public Site Worker roots
+  select Astryx presentation, provider, CSS, and build integration
+- WHEN runtime composes an application or built-in public Site surface
+- THEN the production selectors and stable renderer-neutral contract hosts do
+  not change
+- AND no renderer flag, compatibility alias, private package import, or fallback
+  presentation path participates in selection
+- AND storage, auth, Site projection, public form, route, and operation semantics
+  remain outside presentation selection

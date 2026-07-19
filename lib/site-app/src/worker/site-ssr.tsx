@@ -169,7 +169,7 @@ async function renderErrorDocument(
 }
 
 function PublishedSiteDocumentShell({ children }: { children: ReactNode }) {
-  return <main className="min-h-dvh">{children}</main>;
+  return <main style={{ minHeight: "100dvh" }}>{children}</main>;
 }
 
 async function renderReactToString(node: ReactNode): Promise<string> {

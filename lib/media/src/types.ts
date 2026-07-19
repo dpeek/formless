@@ -5,9 +5,9 @@
  * shapes, delivery facts, storage keys, object metadata, and the provider store
  * seam. App-specific usage metadata remains owned by app schemas and runtimes.
  *
- * This file is intentionally import-free so runtime-neutral, client, React, and
- * Worker entrypoints can share the same documented contract without pulling in
- * adapter code.
+ * This file is intentionally import-free so runtime-neutral, client, and Worker
+ * entrypoints can share the same documented contract without pulling in adapter
+ * code.
  */
 export const MEDIA_PUBLIC_CONTRACT_VERSION = 1;
 

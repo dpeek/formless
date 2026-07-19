@@ -161,7 +161,8 @@ Worker/runtime responsibilities.
 
 - GIVEN a package exposes adapter subpaths
 - WHEN `package.json` declares supported imports
-- THEN it documents the root, client, React, and Worker entrypoints
+- THEN it documents only the root and adapter entrypoints that the package owns
+- AND a package without React behavior does not expose a React entrypoint
 - AND it does not export unowned internal implementation files
 
 #### Scenario: Client adapter
@@ -283,8 +284,7 @@ their existing state, projection, policy, and effect ownership.
   the public Site provider and CSS boundary
 - AND root runtime does not deep-import Astryx source or assemble individual
   renderer leaves into route-local selector tables
-- AND prototype roots, fixture state, scenario controls, and legacy comparison
-  presentation remain private
+- AND prototype roots, fixture state, and scenario controls remain private
 
 #### Scenario: Astryx imports canonical Site contracts
 
@@ -335,7 +335,22 @@ their existing state, projection, policy, and effect ownership.
 - AND reusable source SVG parsing comes from
   `@dpeek/formless-source-svg`
 - AND application media presentation uses renderer-neutral Media contracts
-  without importing Media React adapters into the selected production graph
+  while the Media package exposes no React presentation adapter
+
+#### Scenario: Repository presentation dependencies stay Astryx-only
+
+- GIVEN Astryx is the selected application and built-in public Site renderer
+- WHEN package manifests, source imports, build plugins, declarations, and the
+  workspace lockfile are inspected
+- THEN `@dpeek/formless-astryx` is the only Formless presentation package
+  consumed by production runtime
+- AND Astryx imports use documented subpaths, the Media package exposes only
+  root, client, and Worker entrypoints, and the root build uses Astryx StyleX
+  plus package-owned CSS without a utility CSS compiler
+- AND no compatibility alias or private Astryx source import participates in the
+  repository package graph
+- AND the Site package retains renderer-neutral contracts, runtime adapters,
+  public form sessions, and theme behavior without depending on Astryx
 
 ### Requirement: Storage Package Slice
 

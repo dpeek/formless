@@ -346,7 +346,6 @@ function forbiddenPublicSiteClientFile(path: string): boolean {
   return (
     forbiddenPublicSiteClientFilePaths.has(path) ||
     path.startsWith("lib/astryx/src/formless-ui-contract-host") ||
-    path.startsWith("lib/ui/src/markdown-plate") ||
     path.startsWith("src/app/generated/") ||
     path.startsWith("src/client/")
   );
@@ -377,8 +376,6 @@ function forbiddenPublicSiteClientSpecifier(specifier: string): boolean {
     specifier === "@dpeek/formless-astryx/contract-host" ||
     specifier === "@dpeek/formless-astryx/contract-host/react" ||
     specifier === "@dpeek/formless-gateway/client" ||
-    specifier === "@dpeek/formless-ui/markdown" ||
-    specifier === "@dpeek/formless-ui/source-preview" ||
     specifier === "platejs" ||
     specifier.startsWith("platejs/") ||
     specifier.startsWith("@platejs/")
@@ -397,5 +394,4 @@ const forbiddenPublicSiteClientFilePaths = new Set([
   "src/app/routes/local-session.tsx",
   "src/app/routes/owner-login.tsx",
   "src/app/routes/owner-setup.tsx",
-  "lib/ui/src/markdown.tsx",
 ]);

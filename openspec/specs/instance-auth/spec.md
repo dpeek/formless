@@ -866,8 +866,7 @@ ceremonies, sessions, route policy, operations, and navigation.
 - WHEN each route publishes its auth-surface snapshot
 - THEN pure and subscribed Astryx auth renderers consume only auth references
   and snapshots and dispatch canonical auth intents
-- AND legacy `@dpeek/formless-ui` imports remain outside the selected production
-  graph
+- AND auth presentation imports only documented Astryx package subpaths
 - AND focused coverage asserts controlled drafts, available actions, pending and
   retry behavior, continuation, accessibility, and secret exclusion
 - AND production selects auth presentation through the root Astryx application
@@ -886,9 +885,9 @@ ceremonies, sessions, route policy, operations, and navigation.
 - AND fixtures do not simulate WebAuthn, sessions, storage, handoff grants,
   redirects, unsupported destination selection, invitation decline, or
   hard-coded policy actions
-- AND the Astryx renderer contains no legacy Formless UI components, Tailwind
-  classes, runtime clients, route policy, browser credential effects, or
-  production selector behavior
+- AND the Astryx renderer uses package-owned styling and contains no runtime
+  clients, route policy, browser credential effects, or production selector
+  behavior
 
 ### Requirement: Account Completion Gate Resolution
 

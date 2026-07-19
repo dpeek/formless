@@ -159,13 +159,13 @@ storage contracts.
   built-in renderer for successful public pages
 - AND browser hydration and Worker SSR use the same selection rule and canonical
   renderer props
-- AND Site adapter selection modules do not import the legacy or Astryx
-  renderer implementation
+- AND Site adapter selection modules do not import a concrete built-in renderer
+  implementation
 - AND production root assembly explicitly supplies the Astryx built-in renderer
 
-#### Scenario: Renderer migration input stays projection shaped
+#### Scenario: Renderer fixture input stays projection shaped
 
-- GIVEN a public Site renderer migration or prototype exercises public page
+- GIVEN a public Site renderer fixture or prototype exercises public page
   rendering behavior
 - WHEN it renders Site content outside the generated admin shell
 - THEN its fixture input is the canonical projected `SitePageTree` and
@@ -221,7 +221,7 @@ built-in renderer.
   states, content lists and summaries, fixed public forms, generic public
   operation forms, loading, not-found, and failure states
 - AND it follows Astryx layout, typography, navigation, responsive, form, and
-  feedback conventions without recreating legacy markup or styling
+  feedback conventions through package-owned presentation and styling
 - AND it consumes canonical Site contracts and public helpers through documented
   Site package exports instead of duplicate projection or renderer types
 
@@ -237,6 +237,17 @@ built-in renderer.
   fallback, or dual-renderer mode is introduced
 - AND public browser and Worker roots integrate Astryx StyleX, provider, and CSS
   boundaries atomically while preserving workspace renderer precedence
+
+#### Scenario: Site package is renderer neutral
+
+- GIVEN the Site package public exports and source graph are inspected
+- WHEN production roots compose the built-in public page and system-state
+  presentation
+- THEN the Site package supplies renderer-neutral contracts, route hosts,
+  public form sessions, theme behavior, and browser and Worker adapters
+- AND built-in page and system-state presentation comes only from the renderer
+  supplied by production roots
+- AND it has no dependency on Astryx or another Formless presentation package
 
 ### Requirement: Subscribe Form Public Tree Projection
 

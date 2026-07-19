@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { build, type PluginOption } from "vite-plus";
@@ -46,6 +46,8 @@ describe("Astryx StyleX root build integration", () => {
 
     expect(packageJson.dependencies?.["@astryxdesign/build"]).toBe("0.1.4");
     expect(packageJson.dependencies?.["@stylexjs/unplugin"]).toBe("0.18.3");
+    expect(packageJson.dependencies?.["@tailwindcss/vite"]).toBeUndefined();
+    expect(packageJson.dependencies?.tailwindcss).toBeUndefined();
     expect(packageJson.devDependencies?.["@astryxdesign/build"]).toBeUndefined();
     expect(packageJson.devDependencies?.["@stylexjs/unplugin"]).toBeUndefined();
   });
@@ -55,6 +57,7 @@ describe("Astryx StyleX root build integration", () => {
       env: { NODE_ENV: "production", VITEST: "true" },
       packageRoot: repoRoot,
     }) as { plugins?: PluginOption[] };
+    const runtimePluginNames = namedPlugins((runtimeConfig.plugins ?? []) as unknown[]);
     const result = await build({
       build: {
         cssCodeSplit: true,
@@ -91,6 +94,8 @@ describe("Astryx StyleX root build integration", () => {
     const publicSiteManifestEntry = requiredManifestEntry(manifest, publicSiteEntryChunk.fileName);
     const applicationCss = manifestCss(applicationManifestEntry, manifest);
     const publicSiteCss = manifestCss(publicSiteManifestEntry, manifest);
+    const applicationWorkspaceCss = workspaceCssModules(applicationModules);
+    const publicSiteWorkspaceCss = workspaceCssModules(publicSiteModules);
     const emittedCss = assets
       .filter(({ fileName }) => fileName.endsWith(".css"))
       .map(assetText)
@@ -125,6 +130,12 @@ describe("Astryx StyleX root build integration", () => {
     ] as const) {
       expect(modules.filter(forbiddenSelectedProductionModule), label).toEqual([]);
     }
+    expect(runtimePluginNames.filter((name) => name.includes("tailwind"))).toEqual([]);
+    expect(applicationWorkspaceCss).toEqual([
+      "lib/astryx/src/application.css",
+      "lib/astryx/src/global.css",
+    ]);
+    expect(publicSiteWorkspaceCss).toEqual(["lib/astryx/src/global.css"]);
     expect(applicationCss.length).toBeGreaterThan(0);
     expect(publicSiteCss.length).toBeGreaterThan(0);
     expect(emittedCss).toContain("@layer");
@@ -145,6 +156,24 @@ function forbiddenSelectedProductionModule(moduleId: string): boolean {
     moduleId.includes("/lib/media/src/react.tsx") ||
     moduleId.includes("/src/app/astryx-application-presentation.ts")
   );
+}
+
+function workspaceCssModules(modules: readonly string[]): string[] {
+  return modules
+    .map((moduleId) => moduleId.split("?", 1)[0])
+    .filter((moduleId): moduleId is string => moduleId !== undefined && moduleId.endsWith(".css"))
+    .map((moduleId) => relative(repoRoot, moduleId))
+    .filter((moduleId) => !moduleId.startsWith("..") && !moduleId.startsWith("node_modules/"))
+    .sort();
+}
+
+function namedPlugins(plugins: readonly unknown[]): string[] {
+  return plugins
+    .flat(Infinity)
+    .map((plugin) =>
+      typeof plugin === "object" && plugin !== null && "name" in plugin ? plugin.name : undefined,
+    )
+    .filter((name): name is string => typeof name === "string");
 }
 
 function buildOutputs(value: unknown): BuildOutput[] {

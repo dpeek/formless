@@ -88,7 +88,7 @@ describe("production Astryx application presentation conformance", () => {
   });
 });
 
-type CutoverRoute = {
+type PresentationRoute = {
   childPresentation?: ApplicationPresentationContract;
   host: FormlessUiContractHost;
   nodes: FormlessUiContractHostNodeSet;
@@ -96,7 +96,7 @@ type CutoverRoute = {
 };
 
 function applicationRouteFixtures() {
-  return new Map<string, () => CutoverRoute>([
+  return new Map<string, () => PresentationRoute>([
     [
       "collaborator-invitation",
       () => authRoute("collaborator-invitation-acceptance", "Invitation acceptance"),
@@ -121,7 +121,7 @@ function applicationRouteFixtures() {
 function authRoute(
   surfaceKind: FormlessUiAuthSurfaceContract["surfaceKind"],
   title: string,
-): CutoverRoute {
+): PresentationRoute {
   const snapshot = authSurface(surfaceKind, title);
   const reference = formlessUiAuthSurfaceReference({
     surfaceId: snapshot.id,
@@ -146,7 +146,7 @@ function authSurface(
       heading: { kind: "authHeading" as const, title },
       kind: "authFrame" as const,
     },
-    id: `auth:${surfaceKind}:cutover`,
+    id: `auth:${surfaceKind}:conformance`,
     kind: "authSurface" as const,
     message: {
       id: `auth:${surfaceKind}:loading`,
@@ -173,8 +173,8 @@ function authSurface(
   }
 }
 
-function managementRoute(): CutoverRoute {
-  const reference = formlessUiManagementManifestReference("management:cutover");
+function managementRoute(): PresentationRoute {
+  const reference = formlessUiManagementManifestReference("management:conformance");
   const nodes = [
     {
       reference,
@@ -192,8 +192,8 @@ function managementRoute(): CutoverRoute {
   return route(nodes, { kind: "management", managementReference: reference });
 }
 
-function accessRoute(): CutoverRoute {
-  const reference = formlessUiAccessManifestReference("access:cutover");
+function accessRoute(): PresentationRoute {
+  const reference = formlessUiAccessManifestReference("access:conformance");
   const nodes = [
     {
       reference,
@@ -211,7 +211,7 @@ function accessRoute(): CutoverRoute {
   return route(nodes, { accessReference: reference, kind: "access" });
 }
 
-function workspaceRoute(id: string): CutoverRoute {
+function workspaceRoute(id: string): PresentationRoute {
   const reference = formlessUiWorkspaceManifestReference(`workspace:${id}`);
   const nodes = [
     {
@@ -242,8 +242,8 @@ function workspaceRoute(id: string): CutoverRoute {
 
 function systemStateRoute(
   state: "blocked" | "failure" | "loading" | "missing" | "unavailable",
-): CutoverRoute {
-  const reference = formlessUiApplicationSystemStateReference(`system-state:${state}:cutover`);
+): PresentationRoute {
+  const reference = formlessUiApplicationSystemStateReference(`system-state:${state}:conformance`);
   const nodes = [
     {
       reference,
@@ -259,9 +259,9 @@ function systemStateRoute(
   return route(nodes, { kind: "applicationSystemState", systemStateReference: reference });
 }
 
-function shelledRoute(child: CutoverRoute): CutoverRoute {
-  const shellReference = formlessUiShellManifestReference("shell:cutover");
-  const themeReference = formlessUiDocumentThemeReference("theme:cutover");
+function shelledRoute(child: PresentationRoute): PresentationRoute {
+  const shellReference = formlessUiShellManifestReference("shell:conformance");
+  const themeReference = formlessUiDocumentThemeReference("theme:conformance");
   const nodes = [
     {
       reference: shellReference,
@@ -308,10 +308,10 @@ function route(
     host: createFormlessUiMemoryContractHost({ nodes, serverNodes: nodes }),
     nodes,
     presentation,
-  } satisfies CutoverRoute;
+  } satisfies PresentationRoute;
 }
 
-function renderRoute(route: CutoverRoute, assembly: ApplicationPresentationAssembly) {
+function renderRoute(route: PresentationRoute, assembly: ApplicationPresentationAssembly) {
   const Renderer = assembly.Renderer;
   const presentation =
     route.presentation.kind === "shell" && route.childPresentation
@@ -352,7 +352,7 @@ const astryxSurfaceMarkers = {
 function requiredMapValue<Key, Value>(map: ReadonlyMap<Key, Value>, key: Key): Value {
   const value = map.get(key);
   if (!value) {
-    throw new Error(`Missing ${String(key)} cutover fixture.`);
+    throw new Error(`Missing ${String(key)} presentation fixture.`);
   }
   return value;
 }

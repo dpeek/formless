@@ -1,13 +1,7 @@
-import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vite-plus/test";
 import type { FormlessUiAuthIntent } from "@dpeek/formless-astryx/contract";
-import { FormlessUiContractHostProvider } from "@dpeek/formless-astryx/contract-host/react";
 
 import type { CollaboratorInvitationAcceptanceInvitationSummary } from "../../shared/instance-auth.ts";
-import {
-  LegacyCollaboratorInvitationAuthRenderer,
-  LegacySubscribedCollaboratorInvitationAuthRenderer,
-} from "../generated/legacy-owner-auth-renderer.tsx";
 import {
   authIntentIsCurrent,
   createAuthPendingGuard,
@@ -189,35 +183,21 @@ describe("collaborator invitation auth projection", () => {
     expect(serialized).not.toContain("target-selection");
   });
 
-  it("renders accessible pure and subscribed legacy invitation surfaces", () => {
+  it("projects accessible invitation presentation without private identity state", () => {
     const surface = projectCollaboratorInvitationAuthSurface({
       state: { invitation, status: "eligible" },
     });
-    const pureHtml = renderToStaticMarkup(
-      <LegacyCollaboratorInvitationAuthRenderer onIntent={() => undefined} surface={surface} />,
+    expect(surface.frame.accessibilityLabel).toBe("Invitation ready");
+    expect(surface.facts).toEqual(
+      expect.arrayContaining([expect.objectContaining({ value: "Ada.Collab@example.com" })]),
     );
-    const runtime = createNoShellAuthRuntimeHost(
-      collaboratorInvitationAuthSurfaceReference,
-      surface,
-      () => undefined,
-    );
-    const subscribedHtml = renderToStaticMarkup(
-      <FormlessUiContractHostProvider host={runtime.host}>
-        <LegacySubscribedCollaboratorInvitationAuthRenderer
-          reference={collaboratorInvitationAuthSurfaceReference}
-        />
-      </FormlessUiContractHostProvider>,
-    );
-
-    for (const html of [pureHtml, subscribedHtml]) {
-      expect(html).toContain(`aria-labelledby="${surface.id}:heading"`);
-      expect(html).toContain("Ada.Collab@example.com");
-      expect(html).toContain("Create passkey and accept");
-      expect(html).not.toContain(invitation.invitationId);
-      expect(html).not.toContain("Decline");
-      expect(html).not.toContain("Contact owner");
-      expect(html).not.toContain("Choose destination");
-    }
+    expect(surface.passkey).toMatchObject({
+      availability: "available",
+      control: { accessibilityLabel: "Create passkey and accept" },
+    });
+    const serialized = JSON.stringify(surface);
+    expect(serialized).not.toContain(invitation.invitationId);
+    expect(serialized).not.toMatch(/Decline|Contact owner|Choose destination/);
   });
 
   it("dispatches only exact current intents and deduplicates pending acceptance", async () => {

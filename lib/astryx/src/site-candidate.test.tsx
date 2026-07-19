@@ -126,7 +126,7 @@ describe("selected Astryx public Site renderer", () => {
     });
 
     const hydrationHtml = renderToString(
-      <main className="min-h-dvh">
+      <main style={{ minHeight: "100dvh" }}>
         <SitePageRoute
           builtInRenderer={AstryxSitePageRenderer}
           builtInSystemStateRenderer={AstryxSitePublicSystemStateRenderer}

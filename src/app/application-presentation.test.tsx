@@ -67,19 +67,17 @@ describe("application presentation assembly selection", () => {
     ).toContain("Server loading");
   });
 
-  it("keeps the runtime contract and dormant legacy adapter without a dual selector", async () => {
-    const [contractSource, productionSource, astryxSource, legacySource] = await Promise.all([
+  it("keeps the runtime contract and selected Astryx assembly without a dual selector", async () => {
+    const [contractSource, productionSource, astryxSource] = await Promise.all([
       readFile(new URL("./application-presentation-contract.ts", import.meta.url), "utf8"),
       readFile(new URL("./application-presentation.tsx", import.meta.url), "utf8"),
       readFile(new URL("../../lib/astryx/src/application-assembly.tsx", import.meta.url), "utf8"),
-      readFile(new URL("./legacy-application-presentation.tsx", import.meta.url), "utf8"),
     ]);
 
     expect(contractSource).toContain("export type ApplicationPresentationAssembly");
     expect(productionSource).toContain("AstryxApplicationAssembly as ApplicationPresentation");
     expect(productionSource).not.toMatch(/legacy|selected/i);
     expect(astryxSource).toContain("export function AstryxApplicationAssembly");
-    expect(legacySource).toContain("satisfies ApplicationPresentationAssembly");
   });
 
   it("keeps renderer selection out of route, shell, workspace, and system-state runtimes", async () => {

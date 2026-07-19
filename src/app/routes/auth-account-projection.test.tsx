@@ -1,12 +1,5 @@
-import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vite-plus/test";
 import type { FormlessUiAuthIntent } from "@dpeek/formless-astryx/contract";
-import { FormlessUiContractHostProvider } from "@dpeek/formless-astryx/contract-host/react";
-import {
-  LegacyAccountAuthRenderer,
-  LegacySubscribedAccountAuthRenderer,
-  dispatchLegacyOwnerAuthFieldIntent,
-} from "../generated/legacy-owner-auth-renderer.tsx";
 import type {
   AccountCompletionContinuationResult,
   AccountCompletionGate,
@@ -25,11 +18,7 @@ import {
   projectAuthAccountSurface,
   selectAuthAccountDraftSubmission,
 } from "./auth-account-projection.ts";
-import {
-  authIntentIsCurrent,
-  createAuthPendingGuard,
-  createNoShellAuthRuntimeHost,
-} from "./auth-runtime-boundary.tsx";
+import { authIntentIsCurrent, createAuthPendingGuard } from "./auth-runtime-boundary.tsx";
 import type { AuthAccountRouteState } from "./auth-account.tsx";
 
 const privateValues = [
@@ -385,7 +374,7 @@ describe("auth account projection", () => {
     expect(JSON.stringify(surface)).not.toContain("challenge:signup-private");
   });
 
-  it("projects canonical operation fields and rejects unsupported required profile inputs", async () => {
+  it("projects canonical operation fields and rejects unsupported required profile inputs", () => {
     const state: AuthAccountRouteState = {
       result: blockedResult(profileCompletionGate()),
       status: "blocked",
@@ -423,15 +412,8 @@ describe("auth account projection", () => {
       ok: true,
     });
 
-    const calls: FormlessUiAuthIntent[] = [];
-    await dispatchLegacyOwnerAuthFieldIntent(
-      (intent) => {
-        calls.push(intent);
-      },
-      displayName,
-      change,
-    );
-    expect(calls).toEqual([{ ...displayName.intent, intent: change }]);
+    const fieldIntent: FormlessUiAuthIntent = { ...displayName.intent, intent: change };
+    expect(authIntentIsCurrent(surface, fieldIntent)).toBe(true);
 
     const unavailableState: AuthAccountRouteState = {
       result: blockedResult(
@@ -500,31 +482,27 @@ describe("auth account projection", () => {
     });
   });
 
-  it("renders accessible pure and subscribed legacy account surfaces", () => {
+  it("projects accessible account presentation without private runtime values", () => {
     const state: AuthAccountRouteState = {
       result: blockedResult(profileCompletionGate()),
       status: "blocked",
     };
     const session = initialAuthAccountDraftSession(state);
     const surface = projectAuthAccountSurface({ session, state });
-    const reference = authAccountSurfaceReference(surface);
-    const pureHtml = renderToStaticMarkup(
-      <LegacyAccountAuthRenderer onIntent={() => undefined} surface={surface} />,
+    expect(surface.frame.accessibilityLabel).toBe("Complete profile");
+    expect(surface.fields.map(({ field }) => field.label)).toEqual([
+      "Display name",
+      "Contact preference",
+    ]);
+    expect(surface.actions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          control: expect.objectContaining({ accessibilityLabel: "Complete profile" }),
+        }),
+      ]),
     );
-    const runtime = createNoShellAuthRuntimeHost(reference, surface, () => undefined);
-    const subscribedHtml = renderToStaticMarkup(
-      <FormlessUiContractHostProvider host={runtime.host}>
-        <LegacySubscribedAccountAuthRenderer reference={reference} />
-      </FormlessUiContractHostProvider>,
-    );
-
-    for (const html of [pureHtml, subscribedHtml]) {
-      expect(html).toContain(`aria-labelledby="${surface.id}:heading"`);
-      expect(html).toContain("Display name");
-      expect(html).toContain("Contact preference");
-      expect(html).toContain("Complete profile");
-      for (const privateValue of privateValues) expect(html).not.toContain(privateValue);
-    }
+    const serialized = JSON.stringify(surface);
+    for (const privateValue of privateValues) expect(serialized).not.toContain(privateValue);
   });
 
   it("keeps references scoped, rejects pending intents, and deduplicates operations", async () => {

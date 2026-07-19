@@ -110,7 +110,12 @@ export function TurnstileChallenge({
 
   return (
     <>
-      <div className="min-h-[65px]" data-site-turnstile data-sitekey={siteKey} ref={containerRef} />
+      <div
+        data-site-turnstile
+        data-sitekey={siteKey}
+        ref={containerRef}
+        style={{ minHeight: 65 }}
+      />
       <input
         data-site-turnstile-token
         defaultValue=""

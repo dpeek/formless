@@ -42,9 +42,7 @@ export type {
   PublicSiteThemePalette,
   PublicSiteThemePreference,
 } from "./public-theme.ts";
-export { LegacySitePageRenderer } from "./react/legacy-page-renderer.tsx";
 export { SitePublicRenderer } from "./react/renderer.tsx";
-export { LegacySitePublicSystemStateRenderer } from "./react/legacy-system-state.tsx";
 export type {
   SitePublicRendererComponent,
   SitePublicRendererHostProps,

@@ -556,8 +556,7 @@ refresh, validation, and private auth state.
   snapshots, renders people, roles, invitations, controlled invitation
   authoring, feedback, empty, unauthorized, loading, failure, and destructive
   confirmation states, and dispatches canonical access intents
-- AND legacy `@dpeek/formless-ui` imports remain outside the selected production
-  graph
+- AND access presentation imports only documented Astryx package subpaths
 - AND focused coverage asserts projection, current intent resolution, authority,
   controlled drafts, pending behavior, visible outcomes, and secret exclusion
 - AND production selects access presentation through the root Astryx application
@@ -584,9 +583,9 @@ refresh, validation, and private auth state.
   Astryx `Spinner`, `EmptyState`, `FieldStatus`, and `Banner` patterns, and
   pending invitation revocation composes `AlertDialog` before dispatching its
   confirm intent
-- AND the Astryx renderer contains no legacy Formless UI components, Tailwind
-  classes, identity runtime imports, API clients, effect handlers, private auth
-  state, or production selector behavior
+- AND the Astryx renderer uses package-owned styling and contains no identity
+  runtime imports, API clients, effect handlers, private auth state, or
+  production selector behavior
 
 #### Scenario: Access management contract fixtures
 
