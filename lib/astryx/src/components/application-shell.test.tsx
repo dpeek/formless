@@ -394,7 +394,7 @@ describe("Application Shell prototype layout", () => {
     );
     expect(hostSource).toContain("createFormlessUiMemoryContractHost");
     expect(hostSource).toContain("AstryxSubscribedApplicationShellRenderer");
-    expect(shellSource).toContain("AstryxSubscribedDocumentThemeRenderer");
+    expect(shellSource).toContain("useFormlessUiDocumentTheme(themeReference)");
     expect(forbiddenImports).toEqual([]);
     expect(fixtureSource).toContain("documentTheme");
     expect(sideNavSource).not.toContain("FormlessUiDocumentTheme");
