@@ -68,11 +68,7 @@ export function AstryxApplicationShellRenderer({
     </AstryxApplicationShellFrame>
   );
 
-  return theme ? (
-    <FormlessThemeProvider theme={theme}>{shell}</FormlessThemeProvider>
-  ) : (
-    shell
-  );
+  return theme ? <FormlessThemeProvider theme={theme}>{shell}</FormlessThemeProvider> : shell;
 }
 
 export const AstryxSubscribedApplicationShellRenderer = memo(
@@ -127,17 +123,17 @@ function AstryxSubscribedThemedApplicationShell({
 }) {
   const onThemeIntent = useFormlessUiDocumentThemeIntentHandler();
   const theme = useFormlessUiDocumentTheme(themeReference);
-  const resolvedThemeControl = theme
-    ? theme.selectionControl
-      ? (
-          <FormlessThemeIconToggle
-            activeMode={theme.activeMode}
-            control={theme.selectionControl}
-            onIntent={onThemeIntent}
-          />
-        )
-      : undefined
-    : themeControl;
+  const resolvedThemeControl = theme ? (
+    theme.selectionControl ? (
+      <FormlessThemeIconToggle
+        activeMode={theme.activeMode}
+        control={theme.selectionControl}
+        onIntent={onThemeIntent}
+      />
+    ) : undefined
+  ) : (
+    themeControl
+  );
   const shell = (
     <AstryxSubscribedApplicationShellContent
       manifest={manifest}

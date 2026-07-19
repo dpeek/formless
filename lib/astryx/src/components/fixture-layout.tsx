@@ -81,7 +81,9 @@ export function FormlessFixtureFrame({
     </div>
   );
 
-  return sharedEnvironment ? frame : (
+  return sharedEnvironment ? (
+    frame
+  ) : (
     <FormlessFixtureEnvironmentContext value={environment}>
       <FormlessThemeProvider theme={formlessFixtureTheme(mode)}>{frame}</FormlessThemeProvider>
     </FormlessFixtureEnvironmentContext>

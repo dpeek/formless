@@ -340,11 +340,7 @@ vi.mock("@astryxdesign/core/IconButton", () => ({
     label: string;
     onClick?: () => void;
   }) =>
-    createElement(
-      "button",
-      { "aria-label": label, "data-component": "IconButton", onClick },
-      icon,
-    ),
+    createElement("button", { "aria-label": label, "data-component": "IconButton", onClick }, icon),
 }));
 
 vi.mock("@astryxdesign/core/MetadataList", () => ({
