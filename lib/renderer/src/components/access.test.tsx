@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 import type {
   AccessGrantSelectionContract,
   AccessInvitationAuthoringContract,
@@ -18,13 +18,6 @@ import {
   createFormlessAccessFixtureHost,
   projectFormlessAccessFixturePublication,
 } from "./access.tsx";
-
-vi.mock("@stylexjs/stylex", () => ({
-  create: <Styles,>(styles: Styles) => styles,
-  createTheme: () => ({}),
-  keyframes: () => "animation",
-  props: () => ({}),
-}));
 
 describe("canonical access-management fixtures", () => {
   it("covers access and authority states with data only", () => {

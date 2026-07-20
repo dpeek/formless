@@ -1,5 +1,5 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 import type {
   FieldContract,
   RecordResultActionContract,
@@ -13,12 +13,6 @@ import {
   applyRecordResultIntent,
   selectedRecordResultFixture,
 } from "./record-results.tsx";
-
-vi.mock("@stylexjs/stylex", () => ({
-  create: <Styles,>(styles: Styles) => styles,
-  createTheme: () => ({}),
-  props: () => ({}),
-}));
 
 describe("canonical record-result fixtures", () => {
   it("cover production record-result contract states with serializable data", () => {

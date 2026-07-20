@@ -31,11 +31,6 @@ import { FormlessSiteSystemStateRenderer } from "./site-system-state.tsx";
 
 const viewport = vi.hoisted(() => ({ isMobile: false }));
 
-vi.mock("@stylexjs/stylex", () => ({
-  create: <Styles,>(styles: Styles) => styles,
-  props: () => ({}),
-}));
-
 vi.mock("@dpeek/formless-site-app/public/react", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@dpeek/formless-site-app/public/react")>();
 

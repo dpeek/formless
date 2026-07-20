@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 import type {
   FieldContract,
   TreeIntent,
@@ -13,12 +13,6 @@ import {
 } from "./tree-results.fixtures.ts";
 import { FormlessTreeResultsLayout, createTreeResultFixtureHost } from "./tree-results.tsx";
 import { AstryxTreeResultRenderer } from "./tree-renderer.tsx";
-
-vi.mock("@stylexjs/stylex", () => ({
-  create: <Styles,>(styles: Styles) => styles,
-  createTheme: () => ({}),
-  props: () => ({}),
-}));
 
 describe("canonical tree-result fixtures", () => {
   it("cover shallow hierarchy, selected paths, slots, variants, context, and depth", () => {

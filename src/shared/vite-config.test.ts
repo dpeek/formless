@@ -33,6 +33,9 @@ type ViteConfigWithEnvironments = {
     };
   };
   plugins?: unknown[];
+  resolve?: {
+    alias?: Record<string, string>;
+  };
 };
 
 type WorkerConfigCustomizer = (config: {
@@ -90,6 +93,26 @@ describe("Runtime Vite config", () => {
     expect(developmentPlugins.indexOf("vite-plugin-cloudflare")).toBeLessThan(
       developmentPlugins.indexOf("formless-astryx-cloudflare-worker-source-compilation"),
     );
+  });
+
+  it("shims StyleX without starting its Vite server integration in unit tests", () => {
+    const testConfig = runtimeViteConfig({
+      env: { NODE_ENV: "test", VITEST: "true" },
+      packageRoot: repoRoot,
+    }) as ViteConfigWithEnvironments;
+    const productionBuildTestConfig = runtimeViteConfig({
+      env: { NODE_ENV: "production", VITEST: "true" },
+      packageRoot: repoRoot,
+    }) as ViteConfigWithEnvironments;
+
+    expect(namedPlugins(testConfig.plugins)).toContain("astryx-config");
+    expect(namedPlugins(testConfig.plugins)).not.toContain("@stylexjs/unplugin");
+    expect(namedPlugins(testConfig.plugins)).not.toContain("astryx-split-layers");
+    expect(testConfig.resolve?.alias).toEqual({
+      "@stylexjs/stylex": resolve(repoRoot, "src/test/stylex.ts"),
+    });
+    expect(namedPlugins(productionBuildTestConfig.plugins)).toContain("@stylexjs/unplugin");
+    expect(productionBuildTestConfig.resolve?.alias).toBeUndefined();
   });
 
   it("keeps Astryx source out of Cloudflare Worker dependency optimization", async () => {

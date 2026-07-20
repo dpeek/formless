@@ -4,12 +4,6 @@ import { describe, expect, it, vi } from "vite-plus/test";
 
 import { SourceIcon, sourceIconIsRenderable } from "./field-primitives.tsx";
 
-vi.mock("@stylexjs/stylex", () => ({
-  create: <Styles,>(styles: Styles) => styles,
-  createTheme: () => ({}),
-  props: () => ({}),
-}));
-
 vi.mock("@astryxdesign/core/Icon", () => ({
   Icon: ({
     color: _color,

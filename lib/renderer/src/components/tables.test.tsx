@@ -1,5 +1,5 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 import type {
   TableActionGroupContract,
   TableContract,
@@ -15,12 +15,6 @@ import {
   applyTableOperationIntent,
   selectedTableFixture,
 } from "./tables.tsx";
-
-vi.mock("@stylexjs/stylex", () => ({
-  create: <Styles,>(styles: Styles) => styles,
-  createTheme: () => ({}),
-  props: () => ({}),
-}));
 
 describe("canonical table fixtures", () => {
   it("cover production table contract states with serializable data", () => {

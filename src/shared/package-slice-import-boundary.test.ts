@@ -160,7 +160,7 @@ describe("package slice import boundaries", () => {
     expect(rendererPackage.name).toBe("@dpeek/formless-renderer");
     expect(rendererPackage.dependencies?.["@dpeek/formless-presentation"]).toBe("workspace:*");
     expect(presentationPackage.dependencies).toEqual({
-      "@dpeek/formless-schema": "^0.1.0",
+      "@dpeek/formless-schema": "workspace:*",
       react: "19.2.6",
     });
     expect(failures).toEqual([]);
@@ -195,7 +195,7 @@ describe("package slice import boundaries", () => {
       }
     }
 
-    expect(packageJson.dependencies?.["@dpeek/formless-site-app"]).toBe("^0.1.0");
+    expect(packageJson.dependencies?.["@dpeek/formless-site-app"]).toBe("workspace:*");
     expect(failures).toEqual([]);
   });
 
@@ -346,9 +346,9 @@ describe("package slice import boundaries", () => {
     expect(importSpecifiers(iconCatalogValidationSource)).toContain("@dpeek/formless-source-svg");
     expect(importSpecifiers(rendererSourceIconSource)).toContain("@dpeek/formless-source-svg");
     expect(importSpecifiers(siteIconSource)).toContain("@dpeek/formless-source-svg");
-    expect(rootPackage.dependencies?.["@dpeek/formless-source-svg"]).toBe("^0.1.0");
-    expect(rendererPackage.dependencies?.["@dpeek/formless-source-svg"]).toBe("^0.1.0");
-    expect(sitePackage.dependencies?.["@dpeek/formless-source-svg"]).toBe("^0.1.0");
+    expect(rootPackage.dependencies?.["@dpeek/formless-source-svg"]).toBe("workspace:*");
+    expect(rendererPackage.dependencies?.["@dpeek/formless-source-svg"]).toBe("workspace:*");
+    expect(sitePackage.dependencies?.["@dpeek/formless-source-svg"]).toBe("workspace:*");
     expect(sourceSvgPackage.dependencies).toBeUndefined();
     expect(sourceSvgPackage.peerDependencies).toBeUndefined();
   });

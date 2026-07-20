@@ -9,12 +9,6 @@ import { createFormlessApplicationShellFixtures } from "./components/application
 import { projectFormlessApplicationShellFixturePublication } from "./components/application-shell.tsx";
 import { createFormlessApplicationSystemStateFixtures } from "./components/application-system-state.fixtures.ts";
 
-vi.mock("@stylexjs/stylex", () => ({
-  create: <Styles,>(styles: Styles) => styles,
-  createTheme: () => ({}),
-  props: () => ({}),
-}));
-
 vi.mock("@astryxdesign/core", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@astryxdesign/core")>()),
   Theme: ({ children, mode }: { children: ReactNode; mode: string }) =>

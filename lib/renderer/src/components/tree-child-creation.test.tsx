@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 import type {
   CreateSurfaceContract,
   FieldIntent,
@@ -18,12 +18,6 @@ import {
 import { createTreeResultFixtures, type TreeResultFixtureId } from "./tree-results.fixtures.ts";
 import { AstryxTreeResultRenderer } from "./tree-renderer.tsx";
 import { fieldError as createFieldError } from "./fields/fixture-helpers.ts";
-
-vi.mock("@stylexjs/stylex", () => ({
-  create: <Styles,>(styles: Styles) => styles,
-  createTheme: () => ({}),
-  props: () => ({}),
-}));
 
 describe("Astryx tree child creation", () => {
   it("renders accessible root and nested action menus from projected variants", () => {

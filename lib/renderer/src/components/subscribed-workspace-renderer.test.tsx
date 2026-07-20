@@ -27,12 +27,6 @@ import {
   AstryxWorkspaceScreenRenderer,
 } from "./workspace-screen-renderer.tsx";
 
-vi.mock("@stylexjs/stylex", () => ({
-  create: <Styles,>(styles: Styles) => styles,
-  createTheme: () => ({}),
-  props: () => ({}),
-}));
-
 vi.mock("@astryxdesign/core/Button", () => ({
   Button: (props: ComponentProps<"button">) => createElement("button", props),
 }));

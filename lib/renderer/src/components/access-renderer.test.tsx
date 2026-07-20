@@ -37,13 +37,6 @@ import {
   astryxAccessFeedbackToastOptions,
 } from "./access-renderer.tsx";
 
-vi.mock("@stylexjs/stylex", () => ({
-  create: <Styles,>(styles: Styles) => styles,
-  createTheme: () => ({}),
-  keyframes: () => "animation",
-  props: () => ({}),
-}));
-
 vi.mock("@astryxdesign/core/AlertDialog", () => ({
   AlertDialog: ({
     actionLabel,

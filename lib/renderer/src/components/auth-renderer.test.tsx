@@ -33,12 +33,6 @@ import {
   dispatchAstryxAuthFieldIntent,
 } from "./auth-renderer.tsx";
 
-vi.mock("@stylexjs/stylex", () => ({
-  create: <Styles,>(styles: Styles) => styles,
-  createTheme: () => ({}),
-  props: () => ({}),
-}));
-
 vi.mock("@astryxdesign/core/Button", () => ({
   Button: ({
     children,

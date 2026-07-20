@@ -18,12 +18,6 @@ import { renderPublishedSiteDocumentResponse } from "@dpeek/formless-site-app/wo
 
 import { publicSiteStructuralLayoutFixtures } from "./fixtures/public-site-structural.ts";
 
-vi.mock("@stylexjs/stylex", () => ({
-  create: <Styles,>(styles: Styles) => styles,
-  createTheme: () => ({}),
-  props: () => ({}),
-}));
-
 afterEach(() => {
   vi.unstubAllGlobals();
 });

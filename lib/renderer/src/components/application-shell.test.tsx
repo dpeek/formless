@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 import type {
   PresentationReference,
   DocumentThemeIntent,
@@ -18,12 +18,6 @@ import {
   createFormlessApplicationShellFixtureHost,
   projectFormlessApplicationShellFixturePublication,
 } from "./application-shell.tsx";
-
-vi.mock("@stylexjs/stylex", () => ({
-  create: <Styles,>(styles: Styles) => styles,
-  createTheme: () => ({}),
-  props: () => ({}),
-}));
 
 describe("canonical application-shell fixtures", () => {
   it("cover shell profiles, destinations, navigation, controls, session, and no-shell state", () => {

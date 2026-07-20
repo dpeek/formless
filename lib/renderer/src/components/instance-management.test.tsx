@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 import type {
   PresentationReference,
   WorkspaceContract,
@@ -16,12 +16,6 @@ import {
   createFormlessInstanceManagementFixtureHost,
   projectFormlessInstanceManagementFixturePublication,
 } from "./instance-management.tsx";
-
-vi.mock("@stylexjs/stylex", () => ({
-  create: <Styles,>(styles: Styles) => styles,
-  createTheme: () => ({}),
-  props: () => ({}),
-}));
 
 describe("canonical instance-management fixtures", () => {
   it("covers every management, install, gateway, and Push state with serializable data", () => {

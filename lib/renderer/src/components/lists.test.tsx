@@ -1,5 +1,5 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 import type {
   ListContract,
   ListOperationActionContract,
@@ -12,12 +12,6 @@ import {
   applyListOperationIntent,
   selectedListFixture,
 } from "./lists.tsx";
-
-vi.mock("@stylexjs/stylex", () => ({
-  create: <Styles,>(styles: Styles) => styles,
-  createTheme: () => ({}),
-  props: () => ({}),
-}));
 
 describe("canonical list fixtures", () => {
   it("cover production list contract states with serializable data", () => {

@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 import type { AccountGateKind } from "@dpeek/formless-presentation/contract";
 import { presentationReferenceKey } from "@dpeek/formless-presentation/host";
 import { createFormlessAuthFixtures, type FormlessAuthFixture } from "./auth.fixtures.ts";
@@ -9,12 +9,6 @@ import {
   applyFormlessAuthFixtureIntent,
   createFormlessAuthFixtureHost,
 } from "./auth.tsx";
-
-vi.mock("@stylexjs/stylex", () => ({
-  create: <Styles,>(styles: Styles) => styles,
-  createTheme: () => ({}),
-  props: () => ({}),
-}));
 
 describe("canonical auth fixtures", () => {
   it("covers every shipped auth family, state, gate, signup step, profile, and policy", () => {

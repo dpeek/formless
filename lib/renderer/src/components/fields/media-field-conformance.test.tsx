@@ -1,18 +1,12 @@
 import type { ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 
 import type { FieldIntent, FieldSurface } from "@dpeek/formless-presentation/contract";
 import { MediaInput, type MediaInputProps } from "../media-input.tsx";
 import { FieldRenderer } from "./field-renderer.tsx";
 import { MediaFieldEditor } from "./media-field.tsx";
 import { mediaScenarioGroups } from "./media-field.fixtures.ts";
-
-vi.mock("@stylexjs/stylex", () => ({
-  create: <Styles,>(styles: Styles) => styles,
-  createTheme: () => ({}),
-  props: () => ({}),
-}));
 
 const supportedMediaSurfaces = [
   { groupId: "media-create", surface: "create" },

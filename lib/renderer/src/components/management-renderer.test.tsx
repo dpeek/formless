@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 import type {
   ButtonContract,
   CreateFieldContract,
@@ -26,12 +26,6 @@ import {
   dispatchAstryxManagementInstallFieldIntent,
   dispatchAstryxManagementWorkspaceOperationIntent,
 } from "./management-renderer.tsx";
-
-vi.mock("@stylexjs/stylex", () => ({
-  create: <Styles,>(styles: Styles) => styles,
-  createTheme: () => ({}),
-  props: () => ({}),
-}));
 
 const managementReference = managementManifestReference("instance-management");
 const dialogReference = managementInstallDialogReference(

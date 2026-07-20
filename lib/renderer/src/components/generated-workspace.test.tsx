@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 import type {
   PresentationReference,
   ListContract,
@@ -26,12 +26,6 @@ import {
   projectGeneratedWorkspaceFixturePublication,
   selectedGeneratedWorkspaceFixture,
 } from "./generated-workspace.tsx";
-
-vi.mock("@stylexjs/stylex", () => ({
-  create: <Styles,>(styles: Styles) => styles,
-  createTheme: () => ({}),
-  props: () => ({}),
-}));
 
 describe("canonical generated-workspace fixtures", () => {
   it("cover production workspace contract states with serializable data", () => {

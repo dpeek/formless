@@ -58,6 +58,7 @@ const publicVitePlugins = (plugins: unknown[]): PluginOption[] => plugins as Plu
 export function runtimeViteConfig(input: RuntimeViteConfigInput = {}) {
   const env = input.env ?? process.env;
   const packageRoot = input.packageRoot ?? defaultPackageRoot;
+  const isUnitTest = env.VITEST === "true" && env.NODE_ENV !== "production";
   const installedNodeModulesRoot = packageInstallNodeModulesRoot(packageRoot);
   const siteProjectRoot = env[FORMLESS_SITE_PROJECT_ROOT_ENV_NAME];
   const workspaceAppPackages = env[FORMLESS_WORKSPACE_APP_PACKAGES_ENV_NAME]?.trim();
@@ -67,6 +68,13 @@ export function runtimeViteConfig(input: RuntimeViteConfigInput = {}) {
     ...(siteProjectRoot ? [siteProjectRoot] : []),
   ];
   const cloudflarePluginConfig = runtimeCloudflarePluginConfig({ env, packageRoot });
+  const astryxPlugins = astryxStylex({
+    dev: env.NODE_ENV !== "production",
+    rootDir: path.resolve(packageRoot, "lib/renderer"),
+  });
+  const activeAstryxPlugins = isUnitTest
+    ? astryxPlugins.filter((plugin) => plugin.name === "astryx-config")
+    : astryxPlugins;
 
   return {
     environments: {
@@ -92,12 +100,7 @@ export function runtimeViteConfig(input: RuntimeViteConfigInput = {}) {
       formlessWorkspaceRuntimeExtensionsPlugin({ env }),
       floatingUiReactImportNormalizePlugin(),
       floatingUiReactImportInteropPlugin(),
-      ...publicVitePlugins(
-        astryxStylex({
-          dev: env.NODE_ENV !== "production",
-          rootDir: path.resolve(packageRoot, "lib/renderer"),
-        }),
-      ),
+      ...publicVitePlugins(activeAstryxPlugins),
       ...publicVitePlugins(react()),
       ...(env.VITEST
         ? []
@@ -106,6 +109,13 @@ export function runtimeViteConfig(input: RuntimeViteConfigInput = {}) {
             astryxCloudflareWorkerSourceCompilationPlugin(),
           ]),
     ],
+    resolve: isUnitTest
+      ? {
+          alias: {
+            "@stylexjs/stylex": path.resolve(packageRoot, "src/test/stylex.ts"),
+          },
+        }
+      : undefined,
     server: {
       fs: {
         allow: serverFsAllow,

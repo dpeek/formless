@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 import type { TreeIntent, TreeItemContract } from "@dpeek/formless-presentation/contract";
 import {
   AstryxTreeOutline,
@@ -12,12 +12,6 @@ import {
 } from "./tree-outline.tsx";
 import { createTreeResultFixtures, type TreeResultFixtureId } from "./tree-results.fixtures.ts";
 import { AstryxTreeResultRenderer } from "./tree-renderer.tsx";
-
-vi.mock("@stylexjs/stylex", () => ({
-  create: <Styles,>(styles: Styles) => styles,
-  createTheme: () => ({}),
-  props: () => ({}),
-}));
 
 describe("Astryx tree hierarchy outline", () => {
   it("renders concise accessible rows with tree roles, semantic icons, facts, and context actions", () => {

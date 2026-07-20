@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 import { renderToStaticMarkup } from "react-dom/server";
 import type {
   CompactStatusContract,
@@ -22,12 +22,6 @@ import {
   isAstryxOperationResultFeedback,
   operationButtonVariant,
 } from "./operation-renderer.tsx";
-
-vi.mock("@stylexjs/stylex", () => ({
-  create: <Styles,>(styles: Styles) => styles,
-  createTheme: () => ({}),
-  props: () => ({}),
-}));
 
 describe("Astryx operation controls", () => {
   it("maps projected hierarchy to semantic Astryx button variants", () => {

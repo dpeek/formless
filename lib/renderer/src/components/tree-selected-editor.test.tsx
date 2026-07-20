@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 import type {
   FieldContract,
   FieldIntent,
@@ -13,12 +13,6 @@ import {
 } from "./tree-selected-editor.tsx";
 import { createTreeResultFixtures, type TreeResultFixtureId } from "./tree-results.fixtures.ts";
 import { AstryxTreeResultRenderer } from "./tree-renderer.tsx";
-
-vi.mock("@stylexjs/stylex", () => ({
-  create: <Styles,>(styles: Styles) => styles,
-  createTheme: () => ({}),
-  props: () => ({}),
-}));
 
 describe("Astryx tree selected-item editor", () => {
   it("renders placement-edge and child-record fields in distinct labelled regions", () => {

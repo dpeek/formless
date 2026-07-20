@@ -1,5 +1,5 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 import type { FieldSchema } from "@dpeek/formless-schema";
 import type {
   FieldIntent,
@@ -18,12 +18,6 @@ import {
   dispatchAstryxListOperationAction,
 } from "./list-renderer.tsx";
 import { operationControlFixtures } from "./operation-controls.fixtures.ts";
-
-vi.mock("@stylexjs/stylex", () => ({
-  create: <Styles,>(styles: Styles) => styles,
-  createTheme: () => ({}),
-  props: () => ({}),
-}));
 
 const titleSchema = {
   label: "Task",

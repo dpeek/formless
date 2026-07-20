@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 import type {
   OperationPresentationIntent,
   TreeIntent,
@@ -17,12 +17,6 @@ import {
 } from "./tree-actions.tsx";
 import { createTreeResultFixtures, type TreeResultFixtureId } from "./tree-results.fixtures.ts";
 import { AstryxTreeResultRenderer } from "./tree-renderer.tsx";
-
-vi.mock("@stylexjs/stylex", () => ({
-  create: <Styles,>(styles: Styles) => styles,
-  createTheme: () => ({}),
-  props: () => ({}),
-}));
 
 describe("Astryx tree actions and diagnostics", () => {
   it("keeps placement removal visible and semantic ordering in a boundary-aware menu", () => {
