@@ -51,13 +51,14 @@ Data stays flat. Compose in query, view, projection, action layer.
 
 ## Repo Map
 
-- `src/shared/`: schema, protocol, read models, field behavior, app identities.
-- `src/client/`: browser replica, projections, generated view models.
-- `src/app/`: React routes, generated runtime and projections, renderer composition.
-- `src/worker/`: Worker routes, Authority, storage, installed apps, public SSR.
-- `src/cli/`: Formless CLI implementation, project files, publish, archives, domains.
-- `src/media/`: core media model and providers.
-- `src/test/`: shared test fixtures.
+- `lib/formless/`: published Formless runtime and CLI workspace package.
+- `lib/formless/src/shared/`: schema, protocol, read models, field behavior, app identities.
+- `lib/formless/src/client/`: browser replica, projections, generated view models.
+- `lib/formless/src/app/`: React routes, generated runtime and projections, renderer composition.
+- `lib/formless/src/worker/`: Worker routes, Authority, storage, installed apps, public SSR.
+- `lib/formless/src/cli/`: Formless CLI implementation, project files, publish, archives, domains.
+- `lib/formless/src/media/`: core media model and providers.
+- `lib/formless/src/test/`: shared test fixtures.
 - `schema/apps/`: bundled Tasks and CRM app schemas and seed records.
 - `lib/site-app/`: bundled Site app manifest, schema, seed records, and adapters.
 - `lib/presentation/`: renderer-neutral Formless UI contracts, hosts, and React adapters.
@@ -174,7 +175,7 @@ For `bun agents watch <worker-name>`:
 - Do not add shims, re-exports, redirects, migrations, schema versions, deprecated CLI commands, explicit 404 handlers, tests, proof, or docs for removed/deprecated behavior.
 - Specs describe current or desired behavior. When behavior is removed, delete or update old code, tests, and spec facts instead of preserving rejection or alias paths.
 - Tests must not depend on exact `lib/site-app/seed-records.json` content.
-- Use `src/test/site-records.ts` fixtures for Site record shape.
+- Use `lib/formless/src/test/site-records.ts` fixtures for Site record shape.
 - Claims in docs must point to code, schema, tests, specs, or shipped behavior.
 - Shipped facts belong in `openspec/specs/`.
 - Human narrative does not belong in agent docs.

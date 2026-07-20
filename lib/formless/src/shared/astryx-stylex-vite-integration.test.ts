@@ -7,9 +7,10 @@ import { describe, expect, it } from "vite-plus/test";
 
 import { clientManualChunks, runtimeViteConfig } from "../runtime/vite-config.ts";
 
-const repoRoot = resolve(fileURLToPath(new URL("../../", import.meta.url)));
-const applicationEntry = resolve(repoRoot, "src/main.tsx");
-const publicSiteEntry = resolve(repoRoot, "src/public-site-main.tsx");
+const packageRoot = resolve(fileURLToPath(new URL("../../", import.meta.url)));
+const repoRoot = resolve(packageRoot, "../..");
+const applicationEntry = resolve(packageRoot, "src/main.tsx");
+const publicSiteEntry = resolve(packageRoot, "src/public-site-main.tsx");
 
 type BuildAsset = {
   fileName: string;
@@ -39,7 +40,9 @@ type ManifestChunk = {
 
 describe("Formless Renderer Astryx StyleX root build integration", () => {
   it("ships the runtime build plugin and its compatible StyleX peer", async () => {
-    const packageJson = JSON.parse(await readFile(resolve(repoRoot, "package.json"), "utf8")) as {
+    const packageJson = JSON.parse(
+      await readFile(resolve(packageRoot, "package.json"), "utf8"),
+    ) as {
       dependencies?: Record<string, string>;
       devDependencies?: Record<string, string>;
     };
@@ -51,7 +54,8 @@ describe("Formless Renderer Astryx StyleX root build integration", () => {
   it("emits the selected production application and public entries with isolated Renderer graphs", async () => {
     const runtimeConfig = runtimeViteConfig({
       env: { NODE_ENV: "production", VITEST: "true" },
-      packageRoot: repoRoot,
+      packageRoot,
+      workspaceRoot: repoRoot,
     }) as { plugins?: PluginOption[] };
     const result = await build({
       build: {
@@ -71,7 +75,7 @@ describe("Formless Renderer Astryx StyleX root build integration", () => {
       },
       configFile: false,
       plugins: runtimeConfig.plugins ?? [],
-      root: repoRoot,
+      root: packageRoot,
     });
     const outputs = buildOutputs(result);
     const items = outputs.flatMap(({ output }) => output);

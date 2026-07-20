@@ -162,8 +162,8 @@ package slice.
 - **THEN** those dependencies come from public package exports such as
   `@dpeek/formless-storage`, `@dpeek/formless-installed-apps`,
   `@dpeek/formless-instance-control-plane`, and `@dpeek/formless-schema`
-- **AND** the Archive package does not import repo-root `src/shared/*` or
-  `src/test/*` modules
+- **AND** the Archive package does not import `lib/formless/src/shared/*` or
+  `lib/formless/src/test/*` modules
 
 #### Scenario: Package does not own archive execution
 
@@ -414,8 +414,8 @@ semantic operation contracts through the Workspace package slice.
 - **THEN** those dependencies come from public package exports such as
   `@dpeek/formless-storage`, `@dpeek/formless-installed-apps`, and
   `@dpeek/formless-schema`
-- **AND** the Workspace package does not import repo-root `src/shared/*` or
-  `src/test/*` modules
+- **AND** the Workspace package does not import `lib/formless/src/shared/*` or
+  `lib/formless/src/test/*` modules
 
 #### Scenario: Package does not own runtime mutation
 

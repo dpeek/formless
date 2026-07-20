@@ -4,7 +4,8 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vite-plus/test";
 
-const repoRoot = resolve(fileURLToPath(new URL("../../", import.meta.url)));
+const packageRoot = resolve(fileURLToPath(new URL("../../", import.meta.url)));
+const repoRoot = resolve(packageRoot, "../..");
 
 describe("package slice import boundaries", () => {
   it("keeps schema consumers on the public package root", async () => {
@@ -151,7 +152,7 @@ describe("package slice import boundaries", () => {
       }
     }
 
-    const rootPackage = await readPackageJson(resolve(repoRoot, "package.json"));
+    const rootPackage = await readPackageJson(resolve(packageRoot, "package.json"));
     const presentationPackage = await readPackageJson(resolve(presentationRoot, "package.json"));
     const rendererPackage = await readPackageJson(resolve(repoRoot, "lib/renderer/package.json"));
 
@@ -282,11 +283,11 @@ describe("package slice import boundaries", () => {
     }
 
     const generatedProjectionImports = importSpecifiers(
-      await readFile(resolve(repoRoot, "src/app/generated/field-projection.ts"), "utf8"),
+      await readFile(resolve(packageRoot, "src/app/generated/field-projection.ts"), "utf8"),
     );
     const generatedRuntimeImports = importSpecifiers(
       await readFile(
-        resolve(repoRoot, "src/app/generated/generated-workspace-runtime.tsx"),
+        resolve(packageRoot, "src/app/generated/generated-workspace-runtime.tsx"),
         "utf8",
       ),
     );
@@ -294,7 +295,7 @@ describe("package slice import boundaries", () => {
       await readFile(resolve(rendererRoot, "src/components/fields/media-field.tsx"), "utf8"),
     );
     const workerRuntimeImports = importSpecifiers(
-      await readFile(resolve(repoRoot, "src/worker/index.ts"), "utf8"),
+      await readFile(resolve(packageRoot, "src/worker/index.ts"), "utf8"),
     );
 
     expect(mediaSourceFailures).toEqual([]);
@@ -324,14 +325,14 @@ describe("package slice import boundaries", () => {
 
   it("keeps source SVG consumers on the shared package", async () => {
     const rendererRoot = resolve(repoRoot, "lib/renderer");
-    const rootPackage = await readPackageJson(resolve(repoRoot, "package.json"));
+    const rootPackage = await readPackageJson(resolve(packageRoot, "package.json"));
     const rendererPackage = await readPackageJson(resolve(rendererRoot, "package.json"));
     const sitePackage = await readPackageJson(resolve(repoRoot, "lib/site-app/package.json"));
     const sourceSvgPackage = await readPackageJson(
       resolve(repoRoot, "lib/source-svg/package.json"),
     );
     const iconCatalogValidationSource = await readFile(
-      resolve(repoRoot, "src/shared/icon-catalog.test.ts"),
+      resolve(packageRoot, "src/shared/icon-catalog.test.ts"),
       "utf8",
     );
     const rendererSourceIconSource = await readFile(
@@ -436,7 +437,6 @@ async function readPackageJson(path: string): Promise<{
 
 async function boundarySourceFiles(): Promise<string[]> {
   const nestedFiles = await Promise.all([
-    sourceFiles(resolve(repoRoot, "src")),
     sourceFiles(resolve(repoRoot, "lib")),
     sourceFiles(resolve(repoRoot, "scripts")),
   ]);

@@ -1,18 +1,11 @@
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-
 import { defineConfig } from "vite-plus";
 import { defaultExclude as defaultTestExclude } from "vite-plus/test/config";
-import { runtimeViteConfig } from "./lib/formless/src/runtime/vite-config.ts";
+import { runtimeViteConfig } from "./src/runtime/vite-config.ts";
 
-const repoRoot = path.dirname(fileURLToPath(import.meta.url));
 const ignoredScratchGlobs = [".agents/**"];
 
 export default defineConfig({
-  ...runtimeViteConfig({
-    packageRoot: path.resolve(repoRoot, "lib/formless"),
-    workspaceRoot: repoRoot,
-  }),
+  ...runtimeViteConfig(),
   fmt: { ignorePatterns: ignoredScratchGlobs },
   lint: { ignorePatterns: ignoredScratchGlobs, options: { typeAware: true, typeCheck: true } },
   test: {
@@ -24,11 +17,6 @@ export default defineConfig({
       deps: {
         inline: ["vite-plus"],
       },
-    },
-  },
-  run: {
-    cache: {
-      scripts: true,
     },
   },
 });

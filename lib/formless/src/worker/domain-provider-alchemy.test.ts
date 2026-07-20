@@ -1,3 +1,5 @@
+import { fileURLToPath } from "node:url";
+
 import { build } from "esbuild";
 import { describe, expect, it } from "vite-plus/test";
 import type { DeployResourceGraph } from "@dpeek/formless-deploy";
@@ -520,7 +522,7 @@ describe("Alchemy domain provider adapter", () => {
         platform: "browser",
         stdin: {
           contents: `
-            import { runAlchemyDomainProviderPlan } from "./src/worker/domain-provider-alchemy.ts";
+            import { runAlchemyDomainProviderPlan } from "./domain-provider-alchemy.ts";
 
             export default {
               async fetch() {
@@ -529,7 +531,7 @@ describe("Alchemy domain provider adapter", () => {
             };
           `,
           loader: "ts",
-          resolveDir: process.cwd(),
+          resolveDir: fileURLToPath(new URL(".", import.meta.url)),
           sourcefile: "domain-provider-worker-proof.ts",
         },
         target: "es2023",

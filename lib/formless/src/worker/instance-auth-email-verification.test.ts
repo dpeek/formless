@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 
 import type { StoredRecord } from "@dpeek/formless-storage";
@@ -17,6 +18,8 @@ const authEmail = "email-sender:auth@mail.example.com";
 const ownerEmail = "ada@example.com";
 const ownerId = "principal:ada";
 const createdAt = "2026-07-07T00:00:00.000Z";
+const packageRoot = resolve(fileURLToPath(new URL("../../", import.meta.url)));
+const workspaceRoot = resolve(packageRoot, "../..");
 
 let harness: Harness | undefined;
 let harnessDir: string | undefined;
@@ -394,42 +397,42 @@ async function writeEmailVerificationHarness() {
       import {
         INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX,
         INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
-      } from "${process.cwd()}/lib/instance-control-plane/src/index.ts";
+      } from "${workspaceRoot}/lib/instance-control-plane/src/index.ts";
       import {
         IDENTITY_CONTROL_PLANE_STORAGE_IDENTITY,
-      } from "${process.cwd()}/lib/identity-control-plane/src/index.ts";
+      } from "${workspaceRoot}/lib/identity-control-plane/src/index.ts";
       import {
         createCentralAuthSessionCookie,
-      } from "${process.cwd()}/src/worker/central-auth-session.ts";
+      } from "${packageRoot}/src/worker/central-auth-session.ts";
       import {
         handleInstanceEmailRuntimeDurableObjectRequest,
-      } from "${process.cwd()}/src/worker/email-runtime.ts";
+      } from "${packageRoot}/src/worker/email-runtime.ts";
       import {
         ensureEmailDeliveryTables,
         listEmailDeliveries,
         readEmailDeliveryRenderedMessageById,
-      } from "${process.cwd()}/src/worker/email-runtime-state.ts";
-      import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "${process.cwd()}/src/worker/formless-instance.ts";
+      } from "${packageRoot}/src/worker/email-runtime-state.ts";
+      import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "${packageRoot}/src/worker/formless-instance.ts";
       import {
         ensureIdentityOwner,
         handleIdentityControlPlaneDurableObjectRequest,
-      } from "${process.cwd()}/src/worker/identity-control-plane.ts";
-      import { INTERNAL_READ_RECORDS_PATH } from "${process.cwd()}/src/worker/instance-control-plane.ts";
+      } from "${packageRoot}/src/worker/identity-control-plane.ts";
+      import { INTERNAL_READ_RECORDS_PATH } from "${packageRoot}/src/worker/instance-control-plane.ts";
       import {
         handleInstanceAuthEmailVerificationApiRequest,
         handleInstanceAuthEmailVerificationDurableObjectRequest,
-      } from "${process.cwd()}/src/worker/instance-auth-email-verification.ts";
+      } from "${packageRoot}/src/worker/instance-auth-email-verification.ts";
       import {
         ensureInstanceAuthTables,
         listEmailVerificationChallenges,
         readEmailVerificationChallenge,
         writeInstanceAuthConfig,
-      } from "${process.cwd()}/src/worker/instance-auth-state.ts";
+      } from "${packageRoot}/src/worker/instance-auth-state.ts";
       import {
         ensureStorageTables,
         getBootstrapRecords,
         writeRecordSetForCommandOperationOutcome,
-      } from "${process.cwd()}/src/worker/storage.ts";
+      } from "${packageRoot}/src/worker/storage.ts";
 
       export default {
         async fetch(request, env) {

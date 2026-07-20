@@ -234,7 +234,7 @@ workspace package exports, npm dependencies, or Node built-ins.
 - WHEN the import path is resolved
 - THEN the dependency is package-local, a documented public workspace package
   root or subpath, an external package, or a Node built-in
-- AND it does not resolve into repo-root `src/`, `src/test/`, or another
+- AND it does not resolve into `lib/formless/src/`, `lib/formless/src/test/`, or another
   package's unexported `lib/<other-package>/src/` internals
 
 #### Scenario: Package tests stay package-local
@@ -243,7 +243,7 @@ workspace package exports, npm dependencies, or Node built-ins.
 - WHEN they need schemas, records, package manifests, storage snapshots, or
   media examples
 - THEN they use package-local fixtures or public package exports
-- AND they do not import repo-root `src/test/*` fixtures or root runtime-only
+- AND they do not import `lib/formless/src/test/*` fixtures or Formless runtime-only
   modules
 
 ### Requirement: Package-Local Verification
@@ -387,7 +387,7 @@ retaining Astryx as an internal component and build dependency.
 - GIVEN a consumer builds the `@dpeek/formless-renderer` public Site renderer
   entrypoints
 - WHEN their import graph is checked
-- THEN it excludes repo-root runtime source, the application Presentation Host,
+- THEN it excludes `lib/formless/src/` runtime source, the application Presentation Host,
   generated admin and workspace runtime, shell and auth presentation, browser
   replica and sync, gateway clients, rich editor modules, storage internals,
   private challenge facts, and provider credentials

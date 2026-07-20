@@ -1,85 +1,28 @@
 {
-  "name": "@dpeek/formless",
-  "version": "0.1.9",
-  "bin": {
-    "formless": "scripts/formless-bin.ts"
-  },
+  "name": "@dpeek/formless-monorepo",
+  "private": true,
   "workspaces": [
     "lib/*"
   ],
-  "files": [
-    "index.html",
-    "README.md",
-    "schema",
-    "scripts",
-    "src",
-    "tsconfig.json",
-    "vite.config.ts"
-  ],
   "type": "module",
-  "publishConfig": {
-    "access": "public"
-  },
   "scripts": {
     "check:setup": "bun install && bun check:packages >/dev/null 2>&1 &",
     "check:openspec": "openspec validate --specs --strict --no-interactive",
-    "check:packages": "vp run --recursive check",
+    "check:packages": "vp run --recursive check && vp run --workspace-root check",
     "check:ready": "bun check:openspec && bun check:packages",
     "agents": "bun run scripts/agents.ts",
-    "check": "vp check --fix src && vp test --dir src --configLoader runner && vp test --dir scripts --configLoader runner",
-    "dev": "bun scripts/formless.ts dev --workspace tmp/dev-workspace --reset",
-    "dev:instance": "FORMLESS_RUNTIME_PROFILE=instance VITE_FORMLESS_RUNTIME_PROFILE=instance FORMLESS_LAUNCH_FIXTURE=empty vp dev",
-    "dev:instance:empty": "FORMLESS_RUNTIME_PROFILE=instance VITE_FORMLESS_RUNTIME_PROFILE=instance FORMLESS_LAUNCH_FIXTURE=empty vp dev",
-    "dev:instance:multi-site": "FORMLESS_RUNTIME_PROFILE=instance VITE_FORMLESS_RUNTIME_PROFILE=instance FORMLESS_LAUNCH_FIXTURE=multi-site vp dev"
-  },
-  "dependencies": {
-    "@astryxdesign/build": "0.1.4",
-    "@cf-wasm/resvg": "0.3.4",
-    "@cloudflare/vite-plugin": "^1.45.1",
-    "@dpeek/formless-archive": "workspace:*",
-    "@dpeek/formless-crm-app": "workspace:*",
-    "@dpeek/formless-deploy": "workspace:*",
-    "@dpeek/formless-gateway": "workspace:*",
-    "@dpeek/formless-identity-control-plane": "workspace:*",
-    "@dpeek/formless-installed-apps": "workspace:*",
-    "@dpeek/formless-instance-control-plane": "workspace:*",
-    "@dpeek/formless-media": "workspace:*",
-    "@dpeek/formless-presentation": "workspace:*",
-    "@dpeek/formless-public-operations": "workspace:*",
-    "@dpeek/formless-renderer": "workspace:*",
-    "@dpeek/formless-schema": "workspace:*",
-    "@dpeek/formless-site-app": "workspace:*",
-    "@dpeek/formless-source-svg": "workspace:*",
-    "@dpeek/formless-storage": "workspace:*",
-    "@dpeek/formless-tasks-app": "workspace:*",
-    "@dpeek/formless-workspace": "workspace:*",
-    "@internationalized/date": "^3.12.1",
-    "@simplewebauthn/browser": "^13.3.0",
-    "@simplewebauthn/server": "^13.3.1",
-    "@stylexjs/unplugin": "0.18.3",
-    "@vitejs/plugin-react": "^6.0.1",
-    "alchemy": "^0.93.9",
-    "react": "19.2.6",
-    "react-dom": "19.2.6",
-    "vite-plus": "^0.2.5",
-    "wouter": "^3.9.0",
-    "wrangler": "^4.85.0"
+    "check": "vp check --fix scripts && vp test --dir scripts --configLoader runner",
+    "dev": "bun lib/formless/bin/formless.ts dev --workspace tmp/dev-workspace --reset",
+    "dev:instance": "bun run --cwd lib/formless dev:instance",
+    "dev:instance:empty": "bun run --cwd lib/formless dev:instance:empty",
+    "dev:instance:multi-site": "bun run --cwd lib/formless dev:instance:multi-site"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20260426.1",
     "@fission-ai/openspec": "^1.5.0",
-    "@testing-library/dom": "^10.4.1",
-    "@testing-library/react": "^16.3.2",
     "@types/node": "^25.6.0",
-    "@types/react": "19.2.15",
-    "@types/react-dom": "19.2.3",
     "agent-browser": "^0.32.3",
-    "esbuild": "^0.28.1",
-    "fake-indexeddb": "^6.2.5",
-    "jsdom": "^29.1.1",
-    "miniflare": "^4.20260424.0",
     "typescript": "~6.0.2",
-    "zod": "3.25.76"
+    "vite-plus": "^0.2.5"
   },
   "packageManager": "bun@1.3.14"
 }

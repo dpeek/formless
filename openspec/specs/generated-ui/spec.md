@@ -250,22 +250,22 @@ summary slots, operation controls, and schema-declared result types.
 
 #### Scenario: Collection model selection
 
-- GIVEN collection models are selected in `src/client/views.ts`
+- GIVEN collection models are selected in `lib/formless/src/client/views.ts`
 - WHEN `HomeViewModel.collection` builds a `HomeCollectionConfig`
 - THEN the model selects entity, context, query tabs, default query, result,
   operation controls, and summaries before rendering
-- AND it composes shell facts from `src/client/collection-shell-model.ts` with result facts from `src/client/collection-result-model.ts`
+- AND it composes shell facts from `lib/formless/src/client/collection-shell-model.ts` with result facts from `lib/formless/src/client/collection-result-model.ts`
 - AND shell selection owns query tabs, default query, context, summaries,
   operation controls, related collections, and create facts
 
 #### Scenario: Result model ownership
 
-- GIVEN collection result selection dispatches from `src/client/collection-result-model.ts`
+- GIVEN collection result selection dispatches from `lib/formless/src/client/collection-result-model.ts`
 - WHEN a `list`, `record`, `table`, or `tree` result model is selected
-- THEN `src/client/list-result-model.ts` owns list and record result facts
-- AND `src/client/table-model.ts` owns table result and footer facts
-- AND `src/client/tree-result-model.ts` owns tree result facts
-- AND `src/client/result-ordering-model.ts` owns shared result ordering facts
+- THEN `lib/formless/src/client/list-result-model.ts` owns list and record result facts
+- AND `lib/formless/src/client/table-model.ts` owns table result and footer facts
+- AND `lib/formless/src/client/tree-result-model.ts` owns tree result facts
+- AND `lib/formless/src/client/result-ordering-model.ts` owns shared result ordering facts
 
 #### Scenario: Selected result renderer handoff
 
@@ -275,15 +275,15 @@ summary slots, operation controls, and schema-declared result types.
   or tree result contracts under the projected collection contract before the
   active workspace renderer renders them
 - AND list and record foundations consume result facts from
-  `src/client/list-result-model.ts`
+  `lib/formless/src/client/list-result-model.ts`
 - AND the table foundation consumes table result facts selected through
-  `src/client/collection-result-model.ts`
+  `lib/formless/src/client/collection-result-model.ts`
 - AND the tree foundation consumes tree result facts from
-  `src/client/tree-result-model.ts` and projects flat placement and child
+  `lib/formless/src/client/tree-result-model.ts` and projects flat placement and child
   records into a complete renderer-neutral tree result
 - AND record- and tree-result fields, actions, warnings, empty state, and
   availability are not composed directly in the collection renderer
-- AND generated ordering UI consumes result ordering facts from `src/client/result-ordering-model.ts`
+- AND generated ordering UI consumes result ordering facts from `lib/formless/src/client/result-ordering-model.ts`
 
 #### Scenario: List-detail context
 

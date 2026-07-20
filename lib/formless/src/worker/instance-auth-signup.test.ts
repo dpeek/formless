@@ -1,7 +1,8 @@
 import { createHash, generateKeyPairSync, type KeyObject } from "node:crypto";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 
 import type { EmailDeliveryRecord, EmailDeliveryRenderedMessage } from "../shared/email-runtime.ts";
@@ -24,6 +25,8 @@ type HarnessDispatchFetchInit = Parameters<Harness["mf"]["dispatchFetch"]>[1];
 const authOrigin = "https://auth.example.com";
 const authEmail = "email-sender:auth@mail.example.com";
 const createdAt = "2026-07-07T00:00:00.000Z";
+const packageRoot = resolve(fileURLToPath(new URL("../../", import.meta.url)));
+const workspaceRoot = resolve(packageRoot, "../..");
 const signupTarget = {
   appInstallId: "crm",
   returnTo: "/apps/crm",
@@ -381,40 +384,40 @@ async function writeSignupHarness() {
       import {
         INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX,
         INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
-      } from "${process.cwd()}/lib/instance-control-plane/src/index.ts";
+      } from "${workspaceRoot}/lib/instance-control-plane/src/index.ts";
       import {
         IDENTITY_CONTROL_PLANE_STORAGE_IDENTITY,
-      } from "${process.cwd()}/lib/identity-control-plane/src/index.ts";
+      } from "${workspaceRoot}/lib/identity-control-plane/src/index.ts";
       import {
         ensureEmailDeliveryTables,
         listEmailDeliveries,
         readEmailDeliveryRenderedMessageById,
-      } from "${process.cwd()}/src/worker/email-runtime-state.ts";
+      } from "${packageRoot}/src/worker/email-runtime-state.ts";
       import {
         handleInstanceEmailRuntimeDurableObjectRequest,
-      } from "${process.cwd()}/src/worker/email-runtime.ts";
-      import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "${process.cwd()}/src/worker/formless-instance.ts";
+      } from "${packageRoot}/src/worker/email-runtime.ts";
+      import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "${packageRoot}/src/worker/formless-instance.ts";
       import {
         handleIdentityControlPlaneDurableObjectRequest,
-      } from "${process.cwd()}/src/worker/identity-control-plane.ts";
-      import { INTERNAL_READ_RECORDS_PATH } from "${process.cwd()}/src/worker/instance-control-plane.ts";
+      } from "${packageRoot}/src/worker/identity-control-plane.ts";
+      import { INTERNAL_READ_RECORDS_PATH } from "${packageRoot}/src/worker/instance-control-plane.ts";
       import {
         handleInstanceAuthSignupApiRequest,
         handleInstanceAuthSignupDurableObjectRequest,
-      } from "${process.cwd()}/src/worker/instance-auth-signup.ts";
+      } from "${packageRoot}/src/worker/instance-auth-signup.ts";
       import {
         INTERNAL_AUTH_PROFILE_COMPLETION_SCHEMA_PATH,
-      } from "${process.cwd()}/src/worker/instance-auth-account-completion.ts";
+      } from "${packageRoot}/src/worker/instance-auth-account-completion.ts";
       import {
         ensureInstanceAuthTables,
         listEmailVerificationChallenges,
         readPasskeyCredentialsForPrincipal,
         writeInstanceAuthConfig,
-      } from "${process.cwd()}/src/worker/instance-auth-state.ts";
+      } from "${packageRoot}/src/worker/instance-auth-state.ts";
       import {
         ensureStorageTables,
         getBootstrapRecords,
-      } from "${process.cwd()}/src/worker/storage.ts";
+      } from "${packageRoot}/src/worker/storage.ts";
 
       export default {
         async fetch(request, env) {

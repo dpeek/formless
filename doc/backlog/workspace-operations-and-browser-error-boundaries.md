@@ -47,26 +47,26 @@ Relevant current implementation includes:
 - `lib/gateway/src/client.ts`
 - `lib/gateway/src/response-safety.ts`
 - `lib/gateway/src/sidecar.ts`
-- `src/cli/instance-workspace-operations.ts`
-- `src/cli/instance-workspace-operation-handlers.ts`
-- `src/cli/instance-workspace-source-sync-operation.ts`
-- `src/cli/instance-workspace-deployment.ts`
-- `src/cli/instance-workspace-credential-setup.ts`
-- `src/cli/workspace-gateway-operation-adapter.ts`
-- `src/cli/workspace-gateway-auto-save.ts`
-- `src/cli/cli-workspace-command-adapter.ts`
-- `src/cli/cli-workspace-operation-formatter.ts`
-- `src/client/workspace-operation-runtime.ts`
-- `src/client/operation-control-controller.ts`
-- `src/client/app-installs.ts`
-- `src/client/sync.ts`
-- `src/app/routes/home.tsx`
-- `src/app/routes/instance-shell.tsx`
-- `src/app/routes/instance-management-runtime.tsx`
-- `src/app/routes/instance-management-projection.ts`
-- `src/app/routes/instance-management-display-safety.ts`
-- `src/worker/instance-app-installs.ts`
-- `src/worker/instance-control-plane.ts`
+- `lib/formless/src/cli/instance-workspace-operations.ts`
+- `lib/formless/src/cli/instance-workspace-operation-handlers.ts`
+- `lib/formless/src/cli/instance-workspace-source-sync-operation.ts`
+- `lib/formless/src/cli/instance-workspace-deployment.ts`
+- `lib/formless/src/cli/instance-workspace-credential-setup.ts`
+- `lib/formless/src/cli/workspace-gateway-operation-adapter.ts`
+- `lib/formless/src/cli/workspace-gateway-auto-save.ts`
+- `lib/formless/src/cli/cli-workspace-command-adapter.ts`
+- `lib/formless/src/cli/cli-workspace-operation-formatter.ts`
+- `lib/formless/src/client/workspace-operation-runtime.ts`
+- `lib/formless/src/client/operation-control-controller.ts`
+- `lib/formless/src/client/app-installs.ts`
+- `lib/formless/src/client/sync.ts`
+- `lib/formless/src/app/routes/home.tsx`
+- `lib/formless/src/app/routes/instance-shell.tsx`
+- `lib/formless/src/app/routes/instance-management-runtime.tsx`
+- `lib/formless/src/app/routes/instance-management-projection.ts`
+- `lib/formless/src/app/routes/instance-management-display-safety.ts`
+- `lib/formless/src/worker/instance-app-installs.ts`
+- `lib/formless/src/worker/instance-control-plane.ts`
 
 ## Confirmed Direction
 
@@ -525,7 +525,7 @@ Browser runtime owns exhaustive mappings from semantic facts to copy:
 Formless Renderer contracts receive only the mapped presentation facts. Once
 every input is structural and semantic, delete:
 
-- `src/app/routes/instance-management-display-safety.ts`;
+- `lib/formless/src/app/routes/instance-management-display-safety.ts`;
 - `displaySafeText()` calls and tests;
 - arbitrary error precedence and string inference in workspace operation
   runtime;

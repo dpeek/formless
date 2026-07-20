@@ -5,9 +5,10 @@ import { build, type Plugin } from "esbuild";
 
 import { describe, expect, it } from "vite-plus/test";
 
-const repoRoot = resolve(fileURLToPath(new URL("../../", import.meta.url)));
+const packageRoot = resolve(fileURLToPath(new URL("../../", import.meta.url)));
+const repoRoot = resolve(packageRoot, "../..");
 const libRoot = resolve(repoRoot, "lib");
-const publicSiteClientEntry = resolve(repoRoot, "src/public-site-main.tsx");
+const publicSiteClientEntry = resolve(packageRoot, "src/public-site-main.tsx");
 const sourceFileExtensions = new Set([".ts", ".tsx", ".js", ".jsx"]);
 const importResolveExtensions = [".ts", ".tsx", ".js", ".jsx", ".json", ".css"] as const;
 
@@ -28,7 +29,7 @@ describe("public Site client import boundary", () => {
 
     expect(fileLabels).toEqual(
       expect.arrayContaining([
-        "src/public-site-main.tsx",
+        "lib/formless/src/public-site-main.tsx",
         "lib/site-app/src/public-react.tsx",
         "lib/site-app/src/react/route.tsx",
         "lib/site-app/src/react/renderer.tsx",
@@ -84,7 +85,7 @@ describe("public Site client import boundary", () => {
     );
     expect(fileLabels).toEqual(
       expect.arrayContaining([
-        "src/public-site-main.tsx",
+        "lib/formless/src/public-site-main.tsx",
         "lib/site-app/src/public-form-session.ts",
         "lib/site-app/src/public-links.ts",
         "lib/site-app/src/public-theme.ts",
@@ -346,16 +347,16 @@ function forbiddenPublicSiteClientFile(path: string): boolean {
   return (
     forbiddenPublicSiteClientFilePaths.has(path) ||
     path.startsWith("lib/presentation/src/host") ||
-    path.startsWith("src/app/generated/") ||
-    path.startsWith("src/client/")
+    path.startsWith("lib/formless/src/app/generated/") ||
+    path.startsWith("lib/formless/src/client/")
   );
 }
 
 function forbiddenSelectedPublicSiteFile(path: string): boolean {
   return (
-    path.startsWith("src/app/") ||
-    path.startsWith("src/client/") ||
-    path.startsWith("src/worker/") ||
+    path.startsWith("lib/formless/src/app/") ||
+    path.startsWith("lib/formless/src/client/") ||
+    path.startsWith("lib/formless/src/worker/") ||
     path.startsWith("lib/renderer/src/fixtures/") ||
     path.startsWith("lib/presentation/src/host") ||
     path.startsWith("lib/renderer/src/components/access") ||
@@ -384,10 +385,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 const forbiddenPublicSiteClientFilePaths = new Set([
-  "src/app/application-shell-runtime.tsx",
-  "src/app/routes/home.tsx",
-  "src/app/routes/instance-shell.tsx",
-  "src/app/routes/local-session.tsx",
-  "src/app/routes/owner-login.tsx",
-  "src/app/routes/owner-setup.tsx",
+  "lib/formless/src/app/application-shell-runtime.tsx",
+  "lib/formless/src/app/routes/home.tsx",
+  "lib/formless/src/app/routes/instance-shell.tsx",
+  "lib/formless/src/app/routes/local-session.tsx",
+  "lib/formless/src/app/routes/owner-login.tsx",
+  "lib/formless/src/app/routes/owner-setup.tsx",
 ]);

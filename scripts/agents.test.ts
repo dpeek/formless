@@ -1657,9 +1657,7 @@ describe("local agent worker review branches", () => {
         const messagePath = args[4];
         const message = messagePath ? readFileSync(messagePath, "utf8") : "";
         expect(message).toContain("- [x] 1.1 Add parser.");
-        expect(message).toContain(
-          "`bun check:packages` at 2026-05-28T00:00:00.000Z: checks ok.",
-        );
+        expect(message).toContain("`bun check:packages` at 2026-05-28T00:00:00.000Z: checks ok.");
         expect(message).toContain(
           "Finalization at 2026-05-28T00:00:00.000Z: finalized add-thing; ran bun check:ready.",
         );
@@ -1835,7 +1833,8 @@ describe("local agent worker review branches", () => {
       expect(readChangeLease(paths.root, "add-thing")).toMatchObject({
         latestEvidence: {
           command: "bun check:ready",
-          message: "bun check:ready failed during finalization for add-thing: spec validation failed",
+          message:
+            "bun check:ready failed during finalization for add-thing: spec validation failed",
         },
         state: "blocked",
       });
@@ -1926,9 +1925,7 @@ describe("local agent worker review branches", () => {
         const messagePath = args[4];
         const message = messagePath ? readFileSync(messagePath, "utf8") : "";
         expect(message).toContain("- [x] 1.1 Add parser.");
-        expect(message).toContain(
-          "`bun check:packages` at 2026-05-28T00:00:00.000Z: checks ok.",
-        );
+        expect(message).toContain("`bun check:packages` at 2026-05-28T00:00:00.000Z: checks ok.");
         expect(message).toContain(
           "Finalization at 2026-05-28T00:00:00.000Z: finalized add-thing; ran bun check:ready.",
         );
@@ -2199,9 +2196,7 @@ describe("local agent worker review branches", () => {
         const messagePath = args[4];
         const message = messagePath ? readFileSync(messagePath, "utf8") : "";
         expect(message).toContain("- [x] 1.1 Add parser.");
-        expect(message).toContain(
-          "`bun check:packages` at 2026-05-28T00:00:00.000Z: checks ok.",
-        );
+        expect(message).toContain("`bun check:packages` at 2026-05-28T00:00:00.000Z: checks ok.");
         expect(message).toContain(
           "Finalization at 2026-05-28T00:01:00.000Z: finalized add-thing; ran bun check:ready.",
         );

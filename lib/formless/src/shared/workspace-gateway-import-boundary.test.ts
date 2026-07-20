@@ -4,7 +4,8 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vite-plus/test";
 
-const repoRoot = resolve(fileURLToPath(new URL("../../", import.meta.url)));
+const packageRoot = resolve(fileURLToPath(new URL("../../", import.meta.url)));
+const repoRoot = resolve(packageRoot, "../..");
 
 describe("workspace package import boundaries", () => {
   it("keeps Gateway and Workspace consumers on public package subpaths", async () => {
@@ -42,12 +43,9 @@ const allowedWorkspacePackageImports = new Set([
 ]);
 
 async function boundarySourceFiles(): Promise<string[]> {
-  const nestedFiles = await Promise.all([
-    sourceFiles(resolve(repoRoot, "src")),
-    sourceFiles(resolve(repoRoot, "lib")),
-  ]);
+  const nestedFiles = await sourceFiles(resolve(repoRoot, "lib"));
 
-  return [...nestedFiles.flat(), resolve(repoRoot, "vite.config.ts")].sort();
+  return [...nestedFiles, resolve(repoRoot, "vite.config.ts")].sort();
 }
 
 async function sourceFiles(dir: string): Promise<string[]> {

@@ -4,10 +4,9 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vite-plus/test";
 
-const repoRoot = resolve(fileURLToPath(new URL("../../", import.meta.url)));
+const packageRoot = resolve(fileURLToPath(new URL("../../", import.meta.url)));
+const repoRoot = resolve(packageRoot, "../..");
 const libRoot = resolve(repoRoot, "lib");
-const rootSourceDir = resolve(repoRoot, "src");
-const rootTestSourceDir = resolve(rootSourceDir, "test");
 const packageSourceExtensions = new Set([".ts", ".tsx"]);
 const importResolveExtensions = [".ts", ".tsx", ".js", ".jsx", ".json", ".css"] as const;
 
@@ -74,18 +73,6 @@ async function boundaryFailuresForImport(
   }
 
   const resolvedLabel = relative(repoRoot, resolvedImport);
-
-  if (isInside(rootTestSourceDir, resolvedImport)) {
-    return [
-      `${fileLabel}: relative import "${specifier}" resolves into repo-root src/test at ${resolvedLabel}`,
-    ];
-  }
-
-  if (isInside(rootSourceDir, resolvedImport)) {
-    return [
-      `${fileLabel}: relative import "${specifier}" resolves into repo-root src at ${resolvedLabel}`,
-    ];
-  }
 
   const targetPackage = packageForPath(resolvedImport, packages);
 

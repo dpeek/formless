@@ -45,6 +45,7 @@ export {
 type RuntimeViteConfigInput = {
   env?: NodeJS.ProcessEnv;
   packageRoot?: string;
+  workspaceRoot?: string;
 };
 
 const defaultPackageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
@@ -58,19 +59,21 @@ const publicVitePlugins = (plugins: unknown[]): PluginOption[] => plugins as Plu
 export function runtimeViteConfig(input: RuntimeViteConfigInput = {}) {
   const env = input.env ?? process.env;
   const packageRoot = input.packageRoot ?? defaultPackageRoot;
+  const workspaceRoot = input.workspaceRoot ?? workspaceRootForPackageRoot(packageRoot);
   const isUnitTest = env.VITEST === "true" && env.NODE_ENV !== "production";
   const installedNodeModulesRoot = packageInstallNodeModulesRoot(packageRoot);
   const siteProjectRoot = env[FORMLESS_SITE_PROJECT_ROOT_ENV_NAME];
   const workspaceAppPackages = env[FORMLESS_WORKSPACE_APP_PACKAGES_ENV_NAME]?.trim();
   const serverFsAllow = [
     packageRoot,
+    ...(workspaceRoot === packageRoot ? [] : [workspaceRoot]),
     ...(installedNodeModulesRoot ? [installedNodeModulesRoot] : []),
     ...(siteProjectRoot ? [siteProjectRoot] : []),
   ];
   const cloudflarePluginConfig = runtimeCloudflarePluginConfig({ env, packageRoot });
   const astryxPlugins = astryxStylex({
     dev: env.NODE_ENV !== "production",
-    rootDir: path.resolve(packageRoot, "lib/renderer"),
+    rootDir: workspaceRoot,
   });
   const activeAstryxPlugins = isUnitTest
     ? astryxPlugins.filter((plugin) => plugin.name === "astryx-config")
@@ -149,6 +152,18 @@ export function packageInstallNodeModulesRoot(root: string): string | null {
   return path.basename(scopeRoot) === "@dpeek" && path.basename(nodeModulesRoot) === "node_modules"
     ? nodeModulesRoot
     : null;
+}
+
+export function workspaceRootForPackageRoot(packageRoot: string): string {
+  const installedNodeModulesRoot = packageInstallNodeModulesRoot(packageRoot);
+
+  if (installedNodeModulesRoot) {
+    return path.dirname(installedNodeModulesRoot);
+  }
+
+  return path.basename(path.dirname(packageRoot)) === "lib"
+    ? path.resolve(packageRoot, "../..")
+    : packageRoot;
 }
 
 export function runtimeWorkerConfigPath(packageRoot = defaultPackageRoot): string {
