@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import type { FormlessUiAuthIntent } from "@dpeek/formless-astryx/contract";
+import type { FormlessUiAuthIntent } from "@dpeek/formless-presentation/contract";
 import type {
   AccountCompletionContinuationResult,
   AccountCompletionGate,

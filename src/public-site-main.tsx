@@ -2,15 +2,15 @@ import { StrictMode } from "react";
 import { createRoot, hydrateRoot } from "react-dom/client";
 import { SitePageRoute } from "@dpeek/formless-site-app/public/react";
 import {
-  AstryxSitePageRenderer,
-  AstryxSitePublicSystemStateRenderer,
-} from "@dpeek/formless-astryx/site/renderer";
+  FormlessSitePageRenderer,
+  FormlessSiteSystemStateRenderer,
+} from "@dpeek/formless-renderer/site/renderer";
 import { sitePublicRenderer as workspaceSitePublicRenderer } from "virtual:formless/site-public-renderer/browser";
 import {
   FORMLESS_RUNTIME_APP_INSTALL_ID_META_NAME,
   FORMLESS_RUNTIME_PACKAGE_APP_KEY_META_NAME,
 } from "./shared/runtime-topology.ts";
-import "@dpeek/formless-astryx/site/global.css";
+import "@dpeek/formless-renderer/site/global.css";
 
 const app = document.getElementById("app");
 
@@ -22,8 +22,8 @@ const appTree = (
   <StrictMode>
     <SitePageRoute
       apiRoutePrefix={publicSiteApiRoutePrefix()}
-      builtInRenderer={AstryxSitePageRenderer}
-      builtInSystemStateRenderer={AstryxSitePublicSystemStateRenderer}
+      builtInRenderer={FormlessSitePageRenderer}
+      builtInSystemStateRenderer={FormlessSiteSystemStateRenderer}
       linkMode="published"
       slug={normalizeSiteRoutePath(window.location.pathname)}
       workspaceRenderer={workspaceSitePublicRenderer}

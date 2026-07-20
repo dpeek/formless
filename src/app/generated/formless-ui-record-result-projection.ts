@@ -5,7 +5,7 @@ import type {
   FormlessUiRecordResultActionGroupContract,
   FormlessUiRecordResultContract,
   FormlessUiRecordResultOperationActionContract,
-} from "@dpeek/formless-astryx/contract";
+} from "@dpeek/formless-presentation/contract";
 import type { RecordReadinessWarning } from "../../client/readiness.ts";
 
 export type GeneratedRecordResultPlacedAction = {

@@ -3,11 +3,11 @@ import type {
   FormlessUiDocumentThemeContract,
   FormlessUiDocumentThemeMode,
   FormlessUiDocumentThemeSelectionControlContract,
-} from "@dpeek/formless-astryx/contract";
+} from "@dpeek/formless-presentation/contract";
 import {
   formlessUiDocumentThemeReference,
   isFormlessUiDocumentThemeIntent,
-} from "@dpeek/formless-astryx/contract-host";
+} from "@dpeek/formless-presentation/contract-host";
 import type { ApplicationRuntimeContractPublication } from "./generated/application-runtime-contract-host.tsx";
 
 export const APPLICATION_THEME_STORAGE_KEY = "formless:application:theme";

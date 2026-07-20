@@ -2,7 +2,7 @@ import { StrictMode, type ReactNode } from "react";
 import { createRoot, hydrateRoot } from "react-dom/client";
 import { useLocation } from "wouter";
 import { App } from "./app.tsx";
-import { AstryxApplicationRoot } from "./app/astryx-application-root.tsx";
+import { ApplicationRendererRoot } from "./app/application-renderer-root.tsx";
 
 const app = document.getElementById("app");
 
@@ -28,6 +28,8 @@ function ApplicationRoot({ children }: { children: ReactNode }) {
   const [, navigate] = useLocation();
 
   return (
-    <AstryxApplicationRoot navigate={(path) => navigate(path)}>{children}</AstryxApplicationRoot>
+    <ApplicationRendererRoot navigate={(path) => navigate(path)}>
+      {children}
+    </ApplicationRendererRoot>
   );
 }

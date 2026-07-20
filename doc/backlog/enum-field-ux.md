@@ -28,5 +28,5 @@ Status: backlog. This is not shipped behavior. Shipped behavior lives in
 
 Each item needs an explicit renderer-neutral contract and product decision
 before it appears in fixtures or the Formless Renderer. The
-`@dpeek/formless-astryx` implementation must not infer these behaviors from enum
+`@dpeek/formless-renderer` implementation must not infer these behaviors from enum
 value names or raw presentation tokens.

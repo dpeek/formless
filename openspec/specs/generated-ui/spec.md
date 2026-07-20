@@ -429,8 +429,8 @@ selection, reads, evaluation, operation execution, and effects.
   queries, counts, aggregates, or computed values, own route or authoring
   state, build operation input, execute operations, or update sync state
 - AND generated runtime and test source uses documented
-  `@dpeek/formless-astryx` contract and contract-host exports without owning
-  presentation implementation
+  `@dpeek/formless-presentation` contract and contract-host exports without
+  owning presentation implementation
 - AND focused coverage asserts projected facts, nested intent dispatch,
   selection fallback, context changes, counts, summaries, actions, result
   composition, and visible empty or unavailable behavior
@@ -440,7 +440,7 @@ selection, reads, evaluation, operation execution, and effects.
 #### Scenario: Formless workspace renderer
 
 - GIVEN runtime publishes complete production workspace contracts
-- WHEN the selected renderer implements those contracts in `lib/astryx`
+- WHEN the selected renderer implements those contracts in `lib/renderer`
 - THEN it composes package section, stack, grid, card, navigation, tabs or
   selector, badge, status, empty-state, action, create, operation, list, table,
   field, and record-result primitives without importing generated runtime
@@ -452,8 +452,8 @@ selection, reads, evaluation, operation execution, and effects.
   aggregates, execute operations, use media clients, run sync effects, or import
   runtime data
 - AND the renderer is exported through documented
-  `@dpeek/formless-astryx` package subpaths and receives theme and CSS only from
-  root application assembly
+  `@dpeek/formless-renderer` package subpaths and receives theme and CSS only
+  from root application assembly
 
 #### Scenario: Workspace contract fixtures
 
@@ -570,8 +570,8 @@ operation execution, ordering plans, navigation, and effects.
 - THEN the subscribed Formless Renderer tree entrypoint reads only the scoped
   tree-result reference and delegates to a pure complete-snapshot renderer
 - AND generated runtime and test source uses documented
-  `@dpeek/formless-astryx` contract and contract-host exports without owning
-  tree presentation
+  `@dpeek/formless-presentation` contract and contract-host exports without
+  owning tree presentation
 - AND production tree sections use the same generated workspace host path as
   list, table, and record results without a direct tree fallback
 - AND production uses the Formless Renderer workspace entrypoint
@@ -579,7 +579,7 @@ operation execution, ordering plans, navigation, and effects.
 #### Scenario: Formless tree renderer and fixtures
 
 - GIVEN runtime publishes complete production tree contracts
-- WHEN the selected renderer implements the contract in `lib/astryx`
+- WHEN the selected renderer implements the contract in `lib/renderer`
 - THEN it uses an accessible package hierarchy outline with controlled selection,
   disclosure, concise item rows, and a responsive focused editor
 - AND it composes canonical field, create, operation, confirmation, ordering,
@@ -612,12 +612,12 @@ entrypoints.
 - AND React Context carries the stable host rather than a changing workspace
   snapshot
 - AND renderer-neutral host types, provider and subscription hooks, and a
-  reusable memory implementation live in `lib/astryx` without importing
+  reusable memory implementation live in `lib/presentation` without importing
   generated runtime, `src/*`, browser replica, storage, query evaluation,
   operation execution, media clients, or sync behavior
 - AND the production adapter that reads client-store and runtime state,
   projects contracts, resolves effects, and dispatches intents remains outside
-  `lib/astryx`
+  `lib/presentation`
 
 #### Scenario: Publish contract snapshots transactionally
 
@@ -748,8 +748,9 @@ data reads, session behavior, operations, and effects.
   app-profile, mapped-app, and Site authoring admin routes use that renderer at
   their specified shell scope
 - **AND** no-shell routes remain outside the shell host and renderer
-- **AND** application source and tests consume presentation only through
-  documented `@dpeek/formless-astryx` package exports
+- **AND** application source and tests consume contracts and host behavior
+  through documented `@dpeek/formless-presentation` exports and concrete
+  rendering through documented `@dpeek/formless-renderer` exports
 - **AND** production mounts the renderer through the root Formless Renderer
   application assembly
 
@@ -757,7 +758,7 @@ data reads, session behavior, operations, and effects.
 
 - **GIVEN** runtime publishes complete production shell contracts
 - **WHEN** the selected renderer implements the contracts in
-  `lib/astryx`
+  `lib/renderer`
 - **THEN** pure and subscribed renderer entrypoints render app switching,
   generated screens, root records and create controls, instance management,
   app settings, sync and reset state, session identity, logout, and the route
@@ -773,7 +774,7 @@ data reads, session behavior, operations, and effects.
 - **AND** the renderer does not read storage, own route policy, evaluate
   queries, execute operations, run session effects, or import runtime data
 - **AND** the renderer is exported through documented
-  `@dpeek/formless-astryx` subpaths and receives theme and CSS only from root
+  `@dpeek/formless-renderer` subpaths and receives theme and CSS only from root
   application assembly
 
 #### Scenario: Shell contract fixtures
@@ -865,7 +866,7 @@ record reads, authoring state, operation execution, and ordering effects.
 #### Scenario: Formless list renderer
 
 - GIVEN runtime publishes the complete production list contract
-- WHEN the selected renderer implements that contract in `lib/astryx`
+- WHEN the selected renderer implements that contract in `lib/renderer`
 - THEN it uses package list, field, action, menu, empty-state, status, tooltip,
   and feedback primitives without importing generated runtime
 - AND the list uses a visible or assistive heading, consistent density, optional
@@ -976,7 +977,7 @@ code owns record selection, authoring state, operation execution, and effects.
 #### Scenario: Formless record-result renderer
 
 - GIVEN runtime publishes the complete production record-result contract
-- WHEN the selected renderer implements that contract in `lib/astryx`
+- WHEN the selected renderer implements that contract in `lib/renderer`
 - THEN it composes package field, operation, confirmation, status, warning, and
   empty-state primitives for ready, empty, unavailable, editing-disabled,
   warning, confirmation, and pending states
@@ -1099,7 +1100,7 @@ record reads, authoring state, operation execution, and ordering effects.
 #### Scenario: Formless table renderer
 
 - GIVEN runtime publishes the complete production table contract
-- WHEN the selected renderer implements that contract in `lib/astryx`
+- WHEN the selected renderer implements that contract in `lib/renderer`
 - THEN it uses package table, field, action, menu, dialog, empty-state, status, and
   feedback primitives without importing generated runtime
 - AND table columns use explicit renderer-owned widths, spacious default table
@@ -1350,7 +1351,7 @@ owns create policy, draft state, validation, and operation execution.
 #### Scenario: Create surface contract fixture
 
 - GIVEN runtime publishes the production create-surface contract
-- WHEN product UX is evaluated in `lib/astryx`
+- WHEN product UX is evaluated in `lib/renderer`
 - THEN an unexported package fixture renders representative create triggers,
   dialog state, projected create fields, validation, pending submission, and
   failure state from the same contract shape used by production
@@ -1432,7 +1433,7 @@ operation execution.
 #### Scenario: Record field data fixtures
 
 - GIVEN runtime publishes ordinary production record field contracts
-- WHEN renderer UX is evaluated in `lib/astryx`
+- WHEN renderer UX is evaluated in `lib/renderer`
 - THEN unexported package-local data-only fixtures provide representative
   `FormlessUiRecordField` and `FormlessUiDisplayField` values using the same
   contract shapes as production
@@ -1516,7 +1517,7 @@ operation execution.
 - AND public form renderers consume Site-owned session facts and intents while
   Site foundations retain validation, coercion, challenge, idempotency, and
   public operation execution
-- AND `@dpeek/formless-astryx` may adapt generic public operation fields to
+- AND `@dpeek/formless-renderer` may adapt generic public operation fields to
   canonical `FormlessUiField` controls inside the package without importing the
   application contract host or generated admin runtime into the public graph
 - AND production browser and Worker roots mount the Formless Renderer page and
@@ -1541,7 +1542,7 @@ while delegating media-specific controls to the active Formless UI renderer.
 - AND generated and renderer contracts expose one Media control and renderer
   kind without an Image field kind or asset-versus-URL mode discriminator
 - AND the Media package exposes no React presentation adapter and selected
-  Media presentation stays in `@dpeek/formless-astryx`
+  Media presentation stays in `@dpeek/formless-renderer`
 - AND the field value remains a flat media asset id committed as text by
   generated UI
 
@@ -1828,7 +1829,7 @@ entity operations and view operation bindings.
 
 - GIVEN production operation leaves publish the renderer-neutral operation
   contract
-- WHEN the selected renderer implements that contract in `lib/astryx`
+- WHEN the selected renderer implements that contract in `lib/renderer`
 - THEN it uses package action, badge, destructive confirmation, loading, status,
   progress, and toast primitives without importing generated runtime
 - AND it presents one primary action per action group, uses loading state for
@@ -2084,8 +2085,9 @@ navigation, and external effects.
 - THEN one subscribed Formless Renderer management entrypoint reads only
   contract references and snapshots, renders the referenced Apps and Routes
   workspaces and install dialog, and dispatches canonical intents
-- AND application source and tests consume presentation only through documented
-  `@dpeek/formless-astryx` package exports
+- AND application source and tests consume contracts and host behavior through
+  documented `@dpeek/formless-presentation` exports and concrete rendering
+  through documented `@dpeek/formless-renderer` exports
 - AND focused coverage asserts loading, failure, workspace availability,
   install-dialog behavior, Push behavior, external authorization, display-safe
   feedback, and intent dispatch
@@ -2095,7 +2097,7 @@ navigation, and external effects.
 #### Scenario: Formless management renderer
 
 - GIVEN runtime publishes complete production management contracts
-- WHEN the selected renderer implements the contract in `lib/astryx`
+- WHEN the selected renderer implements the contract in `lib/renderer`
 - THEN pure and subscribed renderer entrypoints compose existing workspace,
   operation, progress, status, dialog, field, feedback, and empty-state
   primitives without importing generated runtime
@@ -2489,7 +2491,7 @@ document effects.
 - **WHEN** the application runtime prepares theme presentation for a renderer
 - **THEN** it projects a stable document-theme identity, selected preference,
   resolved light or dark mode, ordered display-safe options, and canonical
-  mode-selection intents through contract types owned by `lib/astryx`
+  mode-selection intents through contract types owned by `lib/presentation`
 - **AND** application preference modes are `system`, `light`, or `dark`
 - **AND** absent stored preference defaults to `system`
 - **AND** the preference is app-wide and is separate from the public Site theme
@@ -2497,8 +2499,8 @@ document effects.
 - **AND** theme selection is a presentation intent rather than an app-schema
   operation, mutation, action execution, or Authority write
 - **AND** the top-level workspace package imports the contract through an
-  explicit `@dpeek/formless-astryx` contract subpath rather than defining a
-  parallel runtime contract or deep-importing package source
+  explicit `@dpeek/formless-presentation` contract subpath rather than defining
+  a parallel runtime contract or deep-importing package source
 
 #### Scenario: Runtime behavior stays outside the contract renderer
 
@@ -2578,24 +2580,26 @@ routing, and stable contract-host ownership.
 
 - GIVEN the browser application root assembles production presentation
 - WHEN shell and no-shell routes mount
-- THEN one Formless Renderer application assembly supplies shell,
+- THEN one `FormlessApplicationRenderer` receives
+  `FormlessApplicationPresentation` and supplies shell,
   management, auth, access, generated workspace, tree, list, table,
   record-result, field, create, operation, theme, and system-state entrypoints
 - AND route foundations and contract publishers do not import or choose between
   renderer implementations
 - AND the selected renderer consumes the existing stable host, scoped
   references, immutable snapshots, intent handlers, and React route child
-  without moving runtime state or effects into `lib/astryx`
+  without moving runtime state or effects into `lib/renderer`
 - AND root assembly obtains the implementation from documented
-  `@dpeek/formless-astryx` package subpaths
+  `@dpeek/formless-renderer` package subpaths
 
 #### Scenario: Application roots own provider and navigation integration
 
 - GIVEN the Formless Renderer application assembly is active
 - WHEN application root behavior is installed
-- THEN one root provider, application CSS boundary, StyleX integration, toast
-  surface, document-theme controller, and navigation adapter cover shell and
-  no-shell routes
+- THEN `application-renderer-root` exports `ApplicationRendererRoot` and mounts
+  one `FormlessApplicationRendererProvider`, application CSS boundary, StyleX
+  integration, toast surface, document-theme controller, and navigation adapter
+  across shell and no-shell routes
 - AND the navigation adapter intercepts eligible same-origin primary link
   activation and preserves modified clicks, downloads, external origins,
   unsupported targets, hash-only navigation, and explicit opt-out behavior
@@ -2611,6 +2615,6 @@ routing, and stable contract-host ownership.
 - THEN application roots load the Formless Renderer application provider and
   CSS while public roots load its public Site provider and CSS
 - AND the build applies the StyleX integration required by
-  `@dpeek/formless-astryx`
+  `@dpeek/formless-renderer`
 - AND storage, auth, Site projection, public forms, routes, and operations remain
   outside renderer asset assembly

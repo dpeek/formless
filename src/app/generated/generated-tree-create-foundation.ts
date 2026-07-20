@@ -3,7 +3,7 @@ import type {
   FormlessUiTreeChildCreationContract,
   FormlessUiTreeEditingAvailability,
   FormlessUiTreeParentIdentity,
-} from "@dpeek/formless-astryx/contract";
+} from "@dpeek/formless-presentation/contract";
 import type { ImageMediaAssetOption } from "@dpeek/formless-media/client";
 import type { QueryEvaluationContext } from "@dpeek/formless-schema";
 import type { StoredRecord } from "@dpeek/formless-storage";

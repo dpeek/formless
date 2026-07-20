@@ -30,7 +30,7 @@ import type {
   FormlessUiWorkspaceSummaryContract,
   FormlessUiWorkspaceTableIntent,
   FormlessUiWorkspaceTreeIntent,
-} from "@dpeek/formless-astryx/contract";
+} from "@dpeek/formless-presentation/contract";
 
 export type GeneratedWorkspaceIdentityScope = FormlessUiWorkspaceIntentScope;
 

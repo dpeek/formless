@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import type { FormlessUiTreeItemContract } from "@dpeek/formless-astryx/contract";
+import type { FormlessUiTreeItemContract } from "@dpeek/formless-presentation/contract";
 import type { StoredRecord } from "@dpeek/formless-storage";
 import { selectTreeResultModel, type TreeResultModel } from "../../client/tree-result-model.ts";
 import { selectScreenModels } from "../../client/views.ts";

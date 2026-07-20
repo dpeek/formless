@@ -1,8 +1,8 @@
-import type { FormlessUiManagementLoadingContract } from "@dpeek/formless-astryx/contract";
+import type { FormlessUiManagementLoadingContract } from "@dpeek/formless-presentation/contract";
 import {
   formlessUiManagementInstallDialogReference,
   formlessUiManagementManifestReference,
-} from "@dpeek/formless-astryx/contract-host";
+} from "@dpeek/formless-presentation/contract-host";
 import type { ApplicationRuntimeContractContribution } from "../generated/application-runtime-contract-host.tsx";
 
 export const INSTANCE_MANAGEMENT_ID = "instance-management";

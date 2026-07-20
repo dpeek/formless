@@ -159,7 +159,7 @@ async function buildWorkerBundle(entryPoint: string): Promise<WorkerBundle> {
 }
 
 function astryxStylexWorkerBundlePlugin(): Plugin {
-  const rootDir = resolve("lib/astryx");
+  const rootDir = resolve("lib/renderer");
   const stylexOptions = {
     dev: false,
     runtimeInjection: false,

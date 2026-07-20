@@ -144,7 +144,7 @@ UI without a Media React package entrypoint.
 
 ### Contract and projection
 
-- `lib/astryx/src/formless-ui-contract.ts`: field contracts and intents.
+- `lib/presentation/src/formless-ui-contract.ts`: field contracts and intents.
 - `src/app/generated/formless-ui-projection.ts`: Create, Record, Display, and
   Operation field projection plus stable occurrence ids.
 - `src/app/generated/formless-ui-intents.ts`: canonical intent adaptation.
@@ -169,32 +169,34 @@ UI without a Media React package entrypoint.
 
 ### Formless Renderer fixtures and implementation
 
-- `lib/astryx/src/components/field-scenario-model.ts`: independent axes,
+- `lib/renderer/src/components/field-scenario-model.ts`: independent axes,
   inclusion predicates, projection, and per-kind surface merging.
-- `lib/astryx/src/components/fields/fixtures.ts`: field-kind and surface catalog.
-- `lib/astryx/src/components/fields/fixture-helpers.ts`: contract fixture
+- `lib/renderer/src/components/fields/fixtures.ts`: field-kind and surface catalog.
+- `lib/renderer/src/components/fields/fixture-helpers.ts`: contract fixture
   constructors and local intent simulation.
-- `lib/astryx/src/components/fields/*-field.fixtures.ts`: current per-kind
+- `lib/renderer/src/components/fields/*-field.fixtures.ts`: current per-kind
   surface matrices.
-- `lib/astryx/src/components/fields/renderer.tsx`: mode, state-machine, and
+- `lib/renderer/src/components/fields/renderer.tsx`: mode, state-machine, and
   renderer-kind dispatch.
-- `lib/astryx/src/components/fields/field-chrome.tsx`: labels, density, access,
+- `lib/renderer/src/components/fields/field-chrome.tsx`: labels, density, access,
   status, draft, and commit adapters.
-- `lib/astryx/src/components/fields/*-field.tsx`: field-specific presentation.
+- `lib/renderer/src/components/fields/*-field.tsx`: field-specific presentation.
 
 ## Styling and package boundaries
 
-The Formless Renderer is implemented by `@dpeek/formless-astryx`, which exposes
-the application assembly, application and Site providers, contract hosts,
-renderers, and separate application and Site CSS entries. Field components use
-Astryx components and StyleX. Root Vite integration compiles the package through
-`src/runtime/vite-config.ts`.
+`@dpeek/formless-presentation` exposes renderer-neutral Formless UI contracts,
+references, intents, contract hosts, and the React host adapter. The Formless
+Renderer is implemented by `@dpeek/formless-renderer`, which exposes the
+application renderer, application and Site providers, public Site renderers,
+and separate application and Site CSS entries. Field components use Astryx
+components and StyleX. Root Vite integration compiles the Renderer package
+through `src/runtime/vite-config.ts`.
 
 `@dpeek/formless-media` exposes only root, client, and Worker entrypoints.
 `@dpeek/formless-site-app` owns renderer-neutral Site contracts, public form
 sessions, theme behavior, and browser and Worker adapters. Site does not depend
 on Astryx or the Formless Renderer package; production roots supply the renderer
-exported by `@dpeek/formless-astryx` explicitly.
+exported by `@dpeek/formless-renderer` explicitly.
 
 ## Executable evidence
 
@@ -208,8 +210,8 @@ exported by `@dpeek/formless-astryx` explicitly.
   `formless-ui-record-result-projection.test.ts` cover composed surfaces.
 - `src/app/generated/media-presentation-conformance.test.ts` covers live schema
   Media occurrences through the generated contract.
-- `lib/astryx/src/components/fields/media-field-conformance.test.tsx` covers
+- `lib/renderer/src/components/fields/media-field-conformance.test.tsx` covers
   Formless Renderer Media behavior and intents across supported surfaces.
 - Per-field fixture and renderer tests under
-  `lib/astryx/src/components/fields/` cover accessible labels, values,
+  `lib/renderer/src/components/fields/` cover accessible labels, values,
   presentation, drafts, and intents.

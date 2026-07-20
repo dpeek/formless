@@ -2,7 +2,7 @@ import type {
   FormlessUiCreateField,
   FormlessUiCreateSurfaceContract,
   FormlessUiFieldIntent,
-} from "@dpeek/formless-astryx/contract";
+} from "@dpeek/formless-presentation/contract";
 
 export type GeneratedCreateFieldIndex = ReadonlyMap<string, FormlessUiCreateField>;
 

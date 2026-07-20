@@ -37,7 +37,7 @@ type ManifestChunk = {
   isEntry?: boolean;
 };
 
-describe("Astryx StyleX root build integration", () => {
+describe("Formless Renderer Astryx StyleX root build integration", () => {
   it("ships the runtime build plugin and its compatible StyleX peer", async () => {
     const packageJson = JSON.parse(await readFile(resolve(repoRoot, "package.json"), "utf8")) as {
       dependencies?: Record<string, string>;
@@ -48,7 +48,7 @@ describe("Astryx StyleX root build integration", () => {
     expect(packageJson.dependencies?.["@stylexjs/unplugin"]).toBe("0.18.3");
   });
 
-  it("emits the selected production application and public entries with isolated Astryx graphs", async () => {
+  it("emits the selected production application and public entries with isolated Renderer graphs", async () => {
     const runtimeConfig = runtimeViteConfig({
       env: { NODE_ENV: "production", VITEST: "true" },
       packageRoot: repoRoot,
@@ -99,9 +99,9 @@ describe("Astryx StyleX root build integration", () => {
     expect(applicationModules).toEqual(
       expect.arrayContaining([
         expect.stringContaining("src/main.tsx"),
-        expect.stringContaining("src/app/astryx-application-root.tsx"),
-        expect.stringContaining("lib/astryx/src/application-assembly.tsx"),
-        expect.stringContaining("lib/astryx/src/components/shell.tsx"),
+        expect.stringContaining("src/app/application-renderer-root.tsx"),
+        expect.stringContaining("lib/renderer/src/application-assembly.tsx"),
+        expect.stringContaining("lib/renderer/src/components/shell.tsx"),
       ]),
     );
     expect(applicationModules).not.toEqual(
@@ -109,21 +109,21 @@ describe("Astryx StyleX root build integration", () => {
     );
     expect(publicSiteModules).toEqual(
       expect.arrayContaining([
-        expect.stringContaining("lib/astryx/src/components/site.tsx"),
-        expect.stringContaining("lib/astryx/src/site-provider.tsx"),
+        expect.stringContaining("lib/renderer/src/components/site.tsx"),
+        expect.stringContaining("lib/renderer/src/site-provider.tsx"),
       ]),
     );
     expect(publicSiteModules).not.toEqual(
       expect.arrayContaining([
-        expect.stringContaining("lib/astryx/src/application-assembly.tsx"),
+        expect.stringContaining("lib/renderer/src/application-assembly.tsx"),
         expect.stringContaining("src/app/"),
       ]),
     );
     expect(applicationWorkspaceCss).toEqual([
-      "lib/astryx/src/application.css",
-      "lib/astryx/src/global.css",
+      "lib/renderer/src/application.css",
+      "lib/renderer/src/global.css",
     ]);
-    expect(publicSiteWorkspaceCss).toEqual(["lib/astryx/src/global.css"]);
+    expect(publicSiteWorkspaceCss).toEqual(["lib/renderer/src/global.css"]);
     expect(applicationCss.length).toBeGreaterThan(0);
     expect(publicSiteCss.length).toBeGreaterThan(0);
     expect(emittedCss).toContain("@layer");

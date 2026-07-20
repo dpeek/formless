@@ -4,7 +4,7 @@ import type {
   FormlessUiCreateFieldIntentHandler,
   FormlessUiCreateIntent,
   FormlessUiCreateSurfaceContract,
-} from "@dpeek/formless-astryx/contract";
+} from "@dpeek/formless-presentation/contract";
 import type { QueryEvaluationContext } from "@dpeek/formless-schema";
 import type { RecordValues } from "@dpeek/formless-storage";
 import { setSyncStatus } from "../../client/sync-status.ts";

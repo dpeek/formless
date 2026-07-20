@@ -95,7 +95,7 @@ export function runtimeViteConfig(input: RuntimeViteConfigInput = {}) {
       ...publicVitePlugins(
         astryxStylex({
           dev: env.NODE_ENV !== "production",
-          rootDir: path.resolve(packageRoot, "lib/astryx"),
+          rootDir: path.resolve(packageRoot, "lib/renderer"),
         }),
       ),
       ...publicVitePlugins(react()),

@@ -1,0 +1,29 @@
+{
+  "name": "@dpeek/formless-presentation",
+  "version": "0.1.0",
+  "files": [
+    "src"
+  ],
+  "type": "module",
+  "exports": {
+    "./contract": "./src/formless-ui-contract.ts",
+    "./contract-host": "./src/formless-ui-contract-host.ts",
+    "./contract-host/react": "./src/formless-ui-contract-host-react.tsx"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "test": "vp test --config ../../vite.config.ts --configLoader runner"
+  },
+  "dependencies": {
+    "@dpeek/formless-schema": "^0.1.0",
+    "react": "19.2.6"
+  },
+  "devDependencies": {
+    "@types/react": "19.2.15",
+    "@types/react-dom": "19.2.3",
+    "react-dom": "19.2.6",
+    "typescript": "~6.0.2"
+  }
+}

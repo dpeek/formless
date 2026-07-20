@@ -4,7 +4,7 @@ import type {
   FormlessUiFieldIntent,
   FormlessUiListContract,
   FormlessUiListIntent,
-} from "@dpeek/formless-astryx/contract";
+} from "@dpeek/formless-presentation/contract";
 import type { AppSchema, EntitySchema } from "@dpeek/formless-schema";
 import type { StoredRecord } from "@dpeek/formless-storage";
 import { getRecordReadinessWarnings } from "../../client/readiness.ts";

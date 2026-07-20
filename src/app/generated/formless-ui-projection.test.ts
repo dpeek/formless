@@ -18,7 +18,7 @@ import type { TransitionStateOperationConfig } from "../../client/state-machine-
 import type {
   FormlessUiDisplayField,
   FormlessUiRecordField,
-} from "@dpeek/formless-astryx/contract";
+} from "@dpeek/formless-presentation/contract";
 import { resolveIconCatalogSvg } from "../../shared/icon-catalog.ts";
 import {
   initialGeneratedCreateDraftSessionState,

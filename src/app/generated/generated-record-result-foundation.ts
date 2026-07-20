@@ -4,7 +4,7 @@ import type {
   FormlessUiFieldIntent,
   FormlessUiRecordResultContract,
   FormlessUiRecordResultIntent,
-} from "@dpeek/formless-astryx/contract";
+} from "@dpeek/formless-presentation/contract";
 import {
   resolveRecordFieldValue,
   type AppSchema,

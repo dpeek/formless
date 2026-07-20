@@ -8,7 +8,7 @@ import {
   useSyncExternalStore,
   type ReactNode,
 } from "react";
-import type { FormlessUiShellIntent } from "@dpeek/formless-astryx/contract";
+import type { FormlessUiShellIntent } from "@dpeek/formless-presentation/contract";
 import type { AppInstall, AppPackageResolver } from "@dpeek/formless-installed-apps";
 import {
   appStorageIdentityForClientTarget,

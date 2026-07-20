@@ -29,7 +29,7 @@ import {
 } from "../generated/generated-workspace-runtime.tsx";
 import { NotFoundRoute } from "./not-found.tsx";
 import type { AppPackageResolver } from "@dpeek/formless-installed-apps";
-import type { FormlessUiWorkspaceLinkActionContract } from "@dpeek/formless-astryx/contract";
+import type { FormlessUiWorkspaceLinkActionContract } from "@dpeek/formless-presentation/contract";
 import {
   createHomeRouteSelectionState,
   selectHomeRouteSectionContextRecordId,

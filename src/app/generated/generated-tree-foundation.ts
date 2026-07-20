@@ -13,7 +13,7 @@ import type {
   FormlessUiTreeReorderIntent,
   FormlessUiTreeResultContract,
   FormlessUiTreeWarningContract,
-} from "@dpeek/formless-astryx/contract";
+} from "@dpeek/formless-presentation/contract";
 import type { AppSchema } from "@dpeek/formless-schema";
 import type { FieldValue, StoredRecord } from "@dpeek/formless-storage";
 import type { RecordResultModel } from "../../client/list-result-model.ts";

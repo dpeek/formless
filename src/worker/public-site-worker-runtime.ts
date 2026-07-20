@@ -23,9 +23,9 @@ import {
   type SitePublicOperationTargetResolver,
 } from "@dpeek/formless-site-app/worker";
 import {
-  AstryxSitePageRenderer,
-  AstryxSitePublicSystemStateRenderer,
-} from "@dpeek/formless-astryx/site/renderer";
+  FormlessSitePageRenderer,
+  FormlessSiteSystemStateRenderer,
+} from "@dpeek/formless-renderer/site/renderer";
 import { sitePublicRenderer as workspaceSitePublicRenderer } from "virtual:formless/site-public-renderer/worker";
 import { normalizeSiteRoutePath, type SitePageTree } from "@dpeek/formless-site-app";
 import { BadRequestError } from "./errors.ts";
@@ -118,8 +118,8 @@ const developmentStyleAssets: PublicSiteDocumentClientAssets = {
 const emptyClientAssets: PublicSiteDocumentClientAssets = { body: "", head: "" };
 
 const sitePublicWorkerAdapter = createSitePublicWorkerAdapter({
-  builtInRenderer: AstryxSitePageRenderer,
-  builtInSystemStateRenderer: AstryxSitePublicSystemStateRenderer,
+  builtInRenderer: FormlessSitePageRenderer,
+  builtInSystemStateRenderer: FormlessSiteSystemStateRenderer,
   workspaceRenderer: workspaceSitePublicRenderer,
 });
 const publicSiteWorkerAdapters = new Map<string, PublicSiteWorkerAdapter>([

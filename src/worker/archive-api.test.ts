@@ -9,9 +9,9 @@ import {
 } from "@dpeek/formless-archive";
 import type { SitePageTreeResponse } from "@dpeek/formless-site-app";
 import {
-  AstryxSitePageRenderer,
-  AstryxSitePublicSystemStateRenderer,
-} from "@dpeek/formless-astryx/site/renderer";
+  FormlessSitePageRenderer,
+  FormlessSiteSystemStateRenderer,
+} from "@dpeek/formless-renderer/site/renderer";
 import { renderPublishedSiteDocumentResponse } from "@dpeek/formless-site-app/worker";
 import type { AppInstall } from "@dpeek/formless-installed-apps";
 import {
@@ -360,8 +360,8 @@ describe("instance archive restore API", () => {
     const applied = await postArchiveRestore(appArchiveWithMedia({ dryRun: false }), [mediaFile()]);
     const tree = await getJson<SitePageTreeResponse>("/api/app-installs/site/personal/tree/home");
     const document = await renderPublishedSiteDocumentResponse({
-      builtInRenderer: AstryxSitePageRenderer,
-      builtInSystemStateRenderer: AstryxSitePublicSystemStateRenderer,
+      builtInRenderer: FormlessSitePageRenderer,
+      builtInSystemStateRenderer: FormlessSiteSystemStateRenderer,
       clientAssets: { body: "", head: "" },
       requestUrl: new URL("https://personal.example/"),
       treeResult: { kind: "found", tree: tree.body },

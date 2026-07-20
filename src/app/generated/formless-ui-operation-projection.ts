@@ -8,7 +8,7 @@ import type {
   FormlessUiOperationFeedbackEventContract,
   FormlessUiOperationProgressContract,
   FormlessUiOperationProgressStepContract,
-} from "@dpeek/formless-astryx/contract";
+} from "@dpeek/formless-presentation/contract";
 import type {
   GeneratedOperationControlBinding,
   GeneratedOperationExecutionState,

@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vite-plus/test";
 import type {
   FormlessUiAccessManifestContract,
   FormlessUiAccessReadyContract,
-} from "@dpeek/formless-astryx/contract";
+} from "@dpeek/formless-presentation/contract";
 import type { IdentityAccessManagementSummary } from "@dpeek/formless-identity-control-plane";
 import type { AppInstall } from "@dpeek/formless-installed-apps";
 import {

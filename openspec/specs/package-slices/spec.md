@@ -265,31 +265,85 @@ Package tests SHALL be fast, deterministic, and local.
 - THEN browser smoke is not required for the package task
 - AND browser smoke remains app-level when visible app behavior changes
 
+### Requirement: Formless Presentation Package Slice
+
+The system SHALL provide a renderer-neutral Presentation package slice under
+`lib/presentation/` for application presentation contracts, references, intents,
+and reactive contract-host behavior.
+
+#### Scenario: Presentation contracts and host exports are explicit
+
+- GIVEN application runtime publishes renderer-neutral presentation
+- WHEN runtime publishers, renderer implementations, or focused tests consume
+  the presentation protocol
+- THEN contract types, references, and intents come from documented
+  `@dpeek/formless-presentation/contract` exports
+- AND host types, reference helpers, and the reusable memory host come from
+  documented `@dpeek/formless-presentation/contract-host` exports
+- AND the React provider and subscription hooks come from documented
+  `@dpeek/formless-presentation/contract-host/react` exports
+- AND consumers do not need a concrete renderer package to publish, host, read,
+  subscribe to, or dispatch presentation contracts
+
+#### Scenario: Presentation ownership stays renderer neutral
+
+- GIVEN generated UI, auth, access, management, shell, theme, and system-state
+  runtimes publish presentation contracts
+- WHEN the Presentation package dependency graph is evaluated
+- THEN it may depend on canonical schema contracts and React for its explicit
+  React host adapter
+- AND it does not own renderer components, styling, provider themes, routing,
+  storage, browser replica reads, auth effects, operation execution, or Site
+  projection
+- AND public Site renderer contracts remain owned by
+  `@dpeek/formless-site-app`
+
 ### Requirement: Formless Renderer Package Boundary
 
 The Formless Renderer implementation SHALL expose application and public Site
-presentation through documented `@dpeek/formless-astryx` package subpaths while
-root runtime and the Site app package retain their existing state, projection,
-policy, and effect ownership.
+presentation through documented `@dpeek/formless-renderer` package subpaths
+while consuming application protocol from `@dpeek/formless-presentation` and
+retaining Astryx as an internal component and build dependency.
 
 #### Scenario: Application presentation exports stay complete and minimal
 
 - GIVEN root application assembly mounts the Formless Renderer
 - WHEN consumers import the application contract, host, assembly, provider,
   renderer, or CSS boundaries
-- THEN they import documented `@dpeek/formless-astryx` subpaths
-- AND one exported application assembly supplies shell, management, auth,
+- THEN application contracts and hosts come from documented
+  `@dpeek/formless-presentation` subpaths
+- AND concrete assembly, provider, renderer, and CSS boundaries come from
+  documented `@dpeek/formless-renderer` subpaths
+- AND `FormlessApplicationRenderer` accepts
+  `FormlessApplicationPresentation` through
+  `FormlessApplicationRendererProps` and supplies shell, management, auth,
   access, generated workspace, tree, list, table, record-result, field, create,
   operation, theme, and residual system-state presentation
+- AND `FormlessApplicationRendererProvider` accepts
+  `FormlessApplicationRendererProviderProps`
 - AND the application provider and CSS boundary are exported independently from
   the public Site provider and CSS boundary
-- AND root runtime does not deep-import `@dpeek/formless-astryx` source or
+- AND root runtime does not deep-import `@dpeek/formless-renderer` source or
   assemble individual renderer leaves into route-local selector tables
 - AND fixture roots, fixture state, and scenario controls remain private
 
+#### Scenario: Public renderer names describe the product capability
+
+- GIVEN consumers import the documented application and public Site renderer
+  entrypoints
+- WHEN those entrypoints expose renderer, provider, assembly, or presentation
+  symbols
+- THEN application entrypoints export `FormlessApplicationRenderer`,
+  `FormlessApplicationPresentation`, and
+  `FormlessApplicationRendererProvider`
+- AND public Site entrypoints export `FormlessSitePageRenderer`,
+  `FormlessSiteSystemStateRenderer`, and `FormlessSiteRendererProvider`
+- AND Astryx names remain scoped to concrete component, token, StyleX, CSS, or
+  build facts inside the renderer implementation
+
 #### Scenario: Renderer package imports canonical Site contracts
 
-- GIVEN `@dpeek/formless-astryx` implements public Site page, system-state,
+- GIVEN `@dpeek/formless-renderer` implements public Site page, system-state,
   block, or form presentation
 - WHEN it imports the renderer input, projected tree, link, media, icon, theme,
   or form facts needed by that presentation
@@ -297,13 +351,14 @@ policy, and effect ownership.
   `@dpeek/formless-site-app`
 - AND it does not define structurally equivalent private Site projection or
   renderer input contracts
-- AND `@dpeek/formless-site-app` does not import `@dpeek/formless-astryx`
+- AND `@dpeek/formless-site-app` does not import
+  `@dpeek/formless-renderer`
 - AND neither package deep-imports the other package's source internals
 
 #### Scenario: Public Site exports stay separate from application exports
 
 - GIVEN the Formless Renderer public Site implementation is complete
-- WHEN the `@dpeek/formless-astryx` package export map is evaluated
+- WHEN the `@dpeek/formless-renderer` package export map is evaluated
 - THEN documented public subpaths expose the browser and Worker-compatible Site
   renderers plus the public provider and CSS boundaries needed by production
   public roots
@@ -314,7 +369,7 @@ policy, and effect ownership.
 
 #### Scenario: Public renderer graph stays presentation scoped
 
-- GIVEN a consumer builds the `@dpeek/formless-astryx` public Site renderer
+- GIVEN a consumer builds the `@dpeek/formless-renderer` public Site renderer
   entrypoints
 - WHEN their import graph is checked
 - THEN it excludes repo-root runtime source, the application contract host,
@@ -329,9 +384,9 @@ policy, and effect ownership.
 - GIVEN application or public Site presentation is rendered through the
   Formless Renderer
 - WHEN the package dependency graph is checked
-- THEN `@dpeek/formless-astryx` consumes renderer-neutral contracts, stable
+- THEN `@dpeek/formless-renderer` consumes application contracts, stable
   references, display facts, React children, and canonical intents through
-  public package exports
+  `@dpeek/formless-presentation` exports
 - AND it does not own browser replica reads, storage, routing policy, auth
   ceremonies, identity authority, Site projection, public form execution,
   operation execution, navigation effects, theme persistence, or document
@@ -857,8 +912,8 @@ The system SHALL provide a renderer-neutral Source SVG package slice under
 
 #### Scenario: Renderers consume one safe parser
 
-- GIVEN Site source sanitization, shared UI icons, or Astryx source icons consume
-  user-provided SVG markup
+- GIVEN Site source sanitization, shared UI icons, or Formless Renderer source
+  icons consume user-provided SVG markup
 - WHEN they parse that markup
 - THEN they import `parseSourceSvg` from `@dpeek/formless-source-svg`
 - AND the package rejects unsupported elements, unsafe references, malformed

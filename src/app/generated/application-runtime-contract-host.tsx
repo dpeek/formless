@@ -2,13 +2,13 @@ import { createContext, type ReactNode, useContext, useLayoutEffect, useState } 
 import type {
   FormlessUiContractIntent,
   FormlessUiContractIntentHandler,
-} from "@dpeek/formless-astryx/contract";
+} from "@dpeek/formless-presentation/contract";
 import {
   createFormlessUiMemoryContractHost,
   type FormlessUiContractHostNodeSet,
   type FormlessUiMutableContractHost,
-} from "@dpeek/formless-astryx/contract-host";
-import { FormlessUiContractHostProvider } from "@dpeek/formless-astryx/contract-host/react";
+} from "@dpeek/formless-presentation/contract-host";
+import { FormlessUiContractHostProvider } from "@dpeek/formless-presentation/contract-host/react";
 
 export type ApplicationRuntimeIntentHandler = {
   dispatch: FormlessUiContractIntentHandler;

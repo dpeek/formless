@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import { createFormlessUiMemoryContractHost } from "@dpeek/formless-astryx/contract-host";
+import { createFormlessUiMemoryContractHost } from "@dpeek/formless-presentation/contract-host";
 import type { AppInstall } from "@dpeek/formless-installed-apps";
 import { selectGeneratedRootNavigationFacts } from "../../client/generated-authoring.ts";
 import { selectPrimaryScreenModels } from "../../client/views.ts";

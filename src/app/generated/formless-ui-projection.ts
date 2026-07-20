@@ -50,7 +50,7 @@ import type {
   FormlessUiStateTransitionOperation,
   FormlessUiValueUnitCommit,
   FormlessUiValueUnitField,
-} from "@dpeek/formless-astryx/contract";
+} from "@dpeek/formless-presentation/contract";
 import {
   fieldLabel,
   recordFieldIsWritable,

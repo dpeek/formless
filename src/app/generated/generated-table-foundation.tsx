@@ -7,7 +7,7 @@ import type {
   FormlessUiTableCellContentContract,
   FormlessUiTableContract,
   FormlessUiTableOperationActionContract,
-} from "@dpeek/formless-astryx/contract";
+} from "@dpeek/formless-presentation/contract";
 import {
   evaluateNumericExpression,
   resolveRecordFieldValue,

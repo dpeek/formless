@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type {
   FormlessUiOperationInvokeIntent,
   FormlessUiOperationPresentationIntent,
-} from "@dpeek/formless-astryx/contract";
+} from "@dpeek/formless-presentation/contract";
 import {
   createGeneratedOperationController,
   type GeneratedOperationCallerInput,

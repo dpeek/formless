@@ -1,8 +1,8 @@
-import type { FormlessUiContractIntent } from "@dpeek/formless-astryx/contract";
+import type { FormlessUiContractIntent } from "@dpeek/formless-presentation/contract";
 import {
   isFormlessUiAccessIntent,
   type FormlessUiContractHostNodeSet,
-} from "@dpeek/formless-astryx/contract-host";
+} from "@dpeek/formless-presentation/contract-host";
 import type {
   ApplicationRuntimeContractPublication,
   ApplicationRuntimePublicationCoordinator,

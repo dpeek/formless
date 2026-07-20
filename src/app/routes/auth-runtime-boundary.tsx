@@ -4,13 +4,13 @@ import type {
   FormlessUiAuthIntentHandler,
   FormlessUiAuthSurfaceContract,
   FormlessUiAuthSurfaceReference,
-} from "@dpeek/formless-astryx/contract";
+} from "@dpeek/formless-presentation/contract";
 import {
   createFormlessUiMemoryContractHost,
   isFormlessUiAuthIntent,
   type FormlessUiMutableContractHost,
-} from "@dpeek/formless-astryx/contract-host";
-import { FormlessUiContractHostProvider } from "@dpeek/formless-astryx/contract-host/react";
+} from "@dpeek/formless-presentation/contract-host";
+import { FormlessUiContractHostProvider } from "@dpeek/formless-presentation/contract-host/react";
 
 export type NoShellAuthRuntimeHost = {
   host: FormlessUiMutableContractHost;

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearch } from "wouter";
-import type { FormlessUiAuthIntent } from "@dpeek/formless-astryx/contract";
+import type { FormlessUiAuthIntent } from "@dpeek/formless-presentation/contract";
 import {
   parseOwnerPasskeyRegistrationOptionsResponse,
   parseOwnerPasskeyRegistrationVerifyResponse,

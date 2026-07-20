@@ -111,11 +111,11 @@ describe("package slice import boundaries", () => {
     expect(failures).toEqual([]);
   });
 
-  it("keeps Formless Astryx consumers on documented package exports", async () => {
+  it("keeps Formless Renderer consumers on documented package exports", async () => {
     const failures: string[] = [];
 
     for (const filePath of await boundarySourceFiles()) {
-      if (pathInside(filePath, resolve(repoRoot, "lib/astryx"))) {
+      if (pathInside(filePath, resolve(repoRoot, "lib/renderer"))) {
         continue;
       }
 
@@ -123,8 +123,8 @@ describe("package slice import boundaries", () => {
       const path = relative(repoRoot, filePath);
 
       for (const specifier of importSpecifiers(source)) {
-        if (forbiddenFormlessAstryxImport(filePath, specifier)) {
-          failures.push(`${path}: imports Formless Astryx through ${specifier}`);
+        if (forbiddenFormlessRendererImport(filePath, specifier)) {
+          failures.push(`${path}: imports Formless Renderer through ${specifier}`);
         }
       }
     }
@@ -132,15 +132,51 @@ describe("package slice import boundaries", () => {
     expect(failures).toEqual([]);
   });
 
-  it("keeps Astryx Site imports on exact documented package exports", async () => {
+  it("keeps Presentation consumers on documented package exports", async () => {
     const failures: string[] = [];
-    const astryxRoot = resolve(repoRoot, "lib/astryx");
+    const presentationRoot = resolve(repoRoot, "lib/presentation");
+
+    for (const filePath of await boundarySourceFiles()) {
+      if (pathInside(filePath, presentationRoot)) {
+        continue;
+      }
+
+      const source = await readFile(filePath, "utf8");
+      const path = relative(repoRoot, filePath);
+
+      for (const specifier of importSpecifiers(source)) {
+        if (forbiddenFormlessPresentationImport(filePath, specifier)) {
+          failures.push(`${path}: imports Presentation through ${specifier}`);
+        }
+      }
+    }
+
+    const rootPackage = await readPackageJson(resolve(repoRoot, "package.json"));
+    const presentationPackage = await readPackageJson(resolve(presentationRoot, "package.json"));
+    const rendererPackage = await readPackageJson(resolve(repoRoot, "lib/renderer/package.json"));
+
+    expect(rootPackage.dependencies?.["@dpeek/formless-renderer"]).toBe("workspace:*");
+    expect(rootPackage.dependencies?.["@dpeek/formless-presentation"]).toBe("workspace:*");
+    expect(rendererPackage.name).toBe("@dpeek/formless-renderer");
+    expect(rendererPackage.dependencies?.["@dpeek/formless-presentation"]).toBe("workspace:*");
+    expect(presentationPackage.dependencies).toEqual({
+      "@dpeek/formless-schema": "^0.1.0",
+      react: "19.2.6",
+    });
+    expect(failures).toEqual([]);
+  });
+
+  it("keeps Renderer Site imports on exact documented package exports", async () => {
+    const failures: string[] = [];
+    const rendererRoot = resolve(repoRoot, "lib/renderer");
     const siteSourceRoot = resolve(repoRoot, "lib/site-app/src");
-    const packageJson = JSON.parse(await readFile(resolve(astryxRoot, "package.json"), "utf8")) as {
+    const packageJson = JSON.parse(
+      await readFile(resolve(rendererRoot, "package.json"), "utf8"),
+    ) as {
       dependencies?: Record<string, string>;
     };
 
-    for (const filePath of await sourceFiles(astryxRoot)) {
+    for (const filePath of await sourceFiles(rendererRoot)) {
       const source = await readFile(filePath, "utf8");
       const path = relative(repoRoot, filePath);
 
@@ -148,7 +184,7 @@ describe("package slice import boundaries", () => {
         if (
           (specifier === "@dpeek/formless-site-app" ||
             specifier.startsWith("@dpeek/formless-site-app/")) &&
-          !allowedAstryxSitePackageImport(filePath, specifier)
+          !allowedRendererSitePackageImport(filePath, specifier)
         ) {
           failures.push(`${path}: imports Site through undocumented export ${specifier}`);
         }
@@ -163,10 +199,11 @@ describe("package slice import boundaries", () => {
     expect(failures).toEqual([]);
   });
 
-  it("keeps the Site package independent from Astryx and its application contract host", async () => {
+  it("keeps the Site package independent from Renderer and the Presentation host", async () => {
     const failures: string[] = [];
     const siteRoot = resolve(repoRoot, "lib/site-app");
-    const astryxSourceRoot = resolve(repoRoot, "lib/astryx/src");
+    const rendererSourceRoot = resolve(repoRoot, "lib/renderer/src");
+    const presentationSourceRoot = resolve(repoRoot, "lib/presentation/src");
     const packageJson = JSON.parse(
       await readFile(resolve(siteRoot, "package.json"), "utf8"),
     ) as Record<string, unknown>;
@@ -177,11 +214,14 @@ describe("package slice import boundaries", () => {
 
       for (const specifier of importSpecifiers(source)) {
         if (
-          specifier === "@dpeek/formless-astryx" ||
-          specifier.startsWith("@dpeek/formless-astryx/") ||
-          relativeImportResolvesInside(filePath, specifier, astryxSourceRoot)
+          specifier === "@dpeek/formless-renderer" ||
+          specifier.startsWith("@dpeek/formless-renderer/") ||
+          specifier === "@dpeek/formless-presentation" ||
+          specifier.startsWith("@dpeek/formless-presentation/") ||
+          relativeImportResolvesInside(filePath, specifier, rendererSourceRoot) ||
+          relativeImportResolvesInside(filePath, specifier, presentationSourceRoot)
         ) {
-          failures.push(`${path}: imports Astryx through ${specifier}`);
+          failures.push(`${path}: imports renderer presentation through ${specifier}`);
         }
       }
     }
@@ -192,17 +232,20 @@ describe("package slice import boundaries", () => {
       if (
         typeof dependencies === "object" &&
         dependencies !== null &&
-        "@dpeek/formless-astryx" in dependencies
+        ("@dpeek/formless-renderer" in dependencies ||
+          "@dpeek/formless-presentation" in dependencies)
       ) {
-        failures.push(`lib/site-app/package.json: declares ${dependencyGroup} on Astryx`);
+        failures.push(
+          `lib/site-app/package.json: declares ${dependencyGroup} on renderer presentation`,
+        );
       }
     }
 
     expect(failures).toEqual([]);
   });
 
-  it("keeps Media contracts and adapters renderer-independent across generated and Astryx flows", async () => {
-    const astryxRoot = resolve(repoRoot, "lib/astryx");
+  it("keeps Media contracts and adapters renderer-independent across generated and Renderer flows", async () => {
+    const rendererRoot = resolve(repoRoot, "lib/renderer");
     const mediaRoot = resolve(repoRoot, "lib/media");
     const mediaSourceFailures: string[] = [];
 
@@ -247,8 +290,8 @@ describe("package slice import boundaries", () => {
         "utf8",
       ),
     );
-    const astryxMediaFieldImports = importSpecifiers(
-      await readFile(resolve(astryxRoot, "src/components/fields/media-field.tsx"), "utf8"),
+    const rendererMediaFieldImports = importSpecifiers(
+      await readFile(resolve(rendererRoot, "src/components/fields/media-field.tsx"), "utf8"),
     );
     const workerRuntimeImports = importSpecifiers(
       await readFile(resolve(repoRoot, "src/worker/index.ts"), "utf8"),
@@ -258,31 +301,31 @@ describe("package slice import boundaries", () => {
     expect(unsupportedMediaImports).toEqual([]);
     expect(generatedProjectionImports).toEqual(
       expect.arrayContaining([
-        "@dpeek/formless-astryx/contract",
+        "@dpeek/formless-presentation/contract",
         "@dpeek/formless-media",
         "@dpeek/formless-media/client",
       ]),
     );
     expect(generatedRuntimeImports).toEqual(
       expect.arrayContaining([
-        "@dpeek/formless-astryx/contract",
-        "@dpeek/formless-astryx/contract-host/react",
+        "@dpeek/formless-presentation/contract",
+        "@dpeek/formless-presentation/contract-host/react",
         "@dpeek/formless-media/client",
       ]),
     );
-    expect(astryxMediaFieldImports).toEqual(
-      expect.arrayContaining(["../../formless-ui-contract.ts", "../media-input.tsx"]),
+    expect(rendererMediaFieldImports).toEqual(
+      expect.arrayContaining(["@dpeek/formless-presentation/contract", "../media-input.tsx"]),
     );
     expect(
-      astryxMediaFieldImports.some((specifier) => specifier.startsWith("@dpeek/formless-media")),
+      rendererMediaFieldImports.some((specifier) => specifier.startsWith("@dpeek/formless-media")),
     ).toBe(false);
     expect(workerRuntimeImports).toContain("@dpeek/formless-media/worker");
   });
 
   it("keeps source SVG consumers on the shared package", async () => {
-    const astryxRoot = resolve(repoRoot, "lib/astryx");
+    const rendererRoot = resolve(repoRoot, "lib/renderer");
     const rootPackage = await readPackageJson(resolve(repoRoot, "package.json"));
-    const astryxPackage = await readPackageJson(resolve(astryxRoot, "package.json"));
+    const rendererPackage = await readPackageJson(resolve(rendererRoot, "package.json"));
     const sitePackage = await readPackageJson(resolve(repoRoot, "lib/site-app/package.json"));
     const sourceSvgPackage = await readPackageJson(
       resolve(repoRoot, "lib/source-svg/package.json"),
@@ -291,8 +334,8 @@ describe("package slice import boundaries", () => {
       resolve(repoRoot, "src/shared/icon-catalog.test.ts"),
       "utf8",
     );
-    const astryxSourceIconSource = await readFile(
-      resolve(astryxRoot, "src/components/field-primitives.tsx"),
+    const rendererSourceIconSource = await readFile(
+      resolve(rendererRoot, "src/components/field-primitives.tsx"),
       "utf8",
     );
     const siteIconSource = await readFile(
@@ -301,10 +344,10 @@ describe("package slice import boundaries", () => {
     );
 
     expect(importSpecifiers(iconCatalogValidationSource)).toContain("@dpeek/formless-source-svg");
-    expect(importSpecifiers(astryxSourceIconSource)).toContain("@dpeek/formless-source-svg");
+    expect(importSpecifiers(rendererSourceIconSource)).toContain("@dpeek/formless-source-svg");
     expect(importSpecifiers(siteIconSource)).toContain("@dpeek/formless-source-svg");
     expect(rootPackage.dependencies?.["@dpeek/formless-source-svg"]).toBe("^0.1.0");
-    expect(astryxPackage.dependencies?.["@dpeek/formless-source-svg"]).toBe("^0.1.0");
+    expect(rendererPackage.dependencies?.["@dpeek/formless-source-svg"]).toBe("^0.1.0");
     expect(sitePackage.dependencies?.["@dpeek/formless-source-svg"]).toBe("^0.1.0");
     expect(sourceSvgPackage.dependencies).toBeUndefined();
     expect(sourceSvgPackage.peerDependencies).toBeUndefined();
@@ -347,41 +390,46 @@ const allowedMediaPackageImports = new Set([
   "@dpeek/formless-media/worker",
 ]);
 
-const allowedFormlessAstryxPackageImports = new Set([
-  "@dpeek/formless-astryx/application/assembly",
-  "@dpeek/formless-astryx/application/global.css",
-  "@dpeek/formless-astryx/application/provider",
-  "@dpeek/formless-astryx/contract",
-  "@dpeek/formless-astryx/contract-host",
-  "@dpeek/formless-astryx/contract-host/react",
-  "@dpeek/formless-astryx/site/global.css",
-  "@dpeek/formless-astryx/site/provider",
-  "@dpeek/formless-astryx/site/renderer",
+const allowedFormlessRendererPackageImports = new Set([
+  "@dpeek/formless-renderer/application/assembly",
+  "@dpeek/formless-renderer/application/global.css",
+  "@dpeek/formless-renderer/application/provider",
+  "@dpeek/formless-renderer/site/global.css",
+  "@dpeek/formless-renderer/site/provider",
+  "@dpeek/formless-renderer/site/renderer",
 ]);
 
-const allowedAstryxSitePackageImports = new Set([
+const allowedFormlessPresentationPackageImports = new Set([
+  "@dpeek/formless-presentation/contract",
+  "@dpeek/formless-presentation/contract-host",
+  "@dpeek/formless-presentation/contract-host/react",
+]);
+
+const allowedRendererSitePackageImports = new Set([
   "@dpeek/formless-site-app",
   "@dpeek/formless-site-app/public/react",
 ]);
 
-const allowedAstryxSiteTestPackageImports = new Set([
+const allowedRendererSiteTestPackageImports = new Set([
   "@dpeek/formless-site-app/react",
   "@dpeek/formless-site-app/worker",
 ]);
 
-function allowedAstryxSitePackageImport(filePath: string, specifier: string): boolean {
+function allowedRendererSitePackageImport(filePath: string, specifier: string): boolean {
   return (
-    allowedAstryxSitePackageImports.has(specifier) ||
-    (filePath.includes(".test.") && allowedAstryxSiteTestPackageImports.has(specifier))
+    allowedRendererSitePackageImports.has(specifier) ||
+    (filePath.includes(".test.") && allowedRendererSiteTestPackageImports.has(specifier))
   );
 }
 
 async function readPackageJson(path: string): Promise<{
   dependencies?: Record<string, string>;
+  name?: string;
   peerDependencies?: Record<string, string>;
 }> {
   return JSON.parse(await readFile(path, "utf8")) as {
     dependencies?: Record<string, string>;
+    name?: string;
     peerDependencies?: Record<string, string>;
   };
 }
@@ -506,12 +554,15 @@ function forbiddenRootTasksSourceImport(specifier: string): boolean {
   return specifier.includes("schema/apps/tasks/");
 }
 
-function forbiddenFormlessAstryxImport(importerPath: string, specifier: string): boolean {
-  if (allowedFormlessAstryxPackageImports.has(specifier)) {
+function forbiddenFormlessRendererImport(importerPath: string, specifier: string): boolean {
+  if (allowedFormlessRendererPackageImports.has(specifier)) {
     return false;
   }
 
-  if (specifier === "@dpeek/formless-astryx" || specifier.startsWith("@dpeek/formless-astryx/")) {
+  if (
+    specifier === "@dpeek/formless-renderer" ||
+    specifier.startsWith("@dpeek/formless-renderer/")
+  ) {
     return true;
   }
 
@@ -521,7 +572,28 @@ function forbiddenFormlessAstryxImport(importerPath: string, specifier: string):
 
   const resolvedSpecifier = resolve(dirname(importerPath), specifier);
 
-  return pathInside(resolvedSpecifier, resolve(repoRoot, "lib/astryx/src"));
+  return pathInside(resolvedSpecifier, resolve(repoRoot, "lib/renderer/src"));
+}
+
+function forbiddenFormlessPresentationImport(importerPath: string, specifier: string): boolean {
+  if (allowedFormlessPresentationPackageImports.has(specifier)) {
+    return false;
+  }
+
+  if (
+    specifier === "@dpeek/formless-presentation" ||
+    specifier.startsWith("@dpeek/formless-presentation/")
+  ) {
+    return true;
+  }
+
+  if (!specifier.startsWith(".")) {
+    return false;
+  }
+
+  const resolvedSpecifier = resolve(dirname(importerPath), specifier);
+
+  return pathInside(resolvedSpecifier, resolve(repoRoot, "lib/presentation/src"));
 }
 
 function relativeImportResolvesInside(

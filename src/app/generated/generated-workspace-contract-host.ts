@@ -9,7 +9,7 @@ import type {
   FormlessUiWorkspaceManifestReference,
   FormlessUiWorkspaceSectionContract,
   FormlessUiWorkspaceSectionShellReference,
-} from "@dpeek/formless-astryx/contract";
+} from "@dpeek/formless-presentation/contract";
 import {
   createFormlessUiMemoryContractHost,
   formlessUiListResultReference,
@@ -22,7 +22,7 @@ import {
   type FormlessUiContractHostNode,
   type FormlessUiContractHostNodeSet,
   type FormlessUiMutableContractHost,
-} from "@dpeek/formless-astryx/contract-host";
+} from "@dpeek/formless-presentation/contract-host";
 import type { ApplicationRuntimeContractPublication } from "./application-runtime-contract-host.tsx";
 
 export type GeneratedWorkspaceContractHostPublication = {

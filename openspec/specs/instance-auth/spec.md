@@ -866,17 +866,18 @@ ceremonies, sessions, route policy, operations, and navigation.
 - WHEN each route publishes its auth-surface snapshot
 - THEN pure and subscribed Formless Renderer auth entrypoints consume only auth
   references and snapshots and dispatch canonical auth intents
-- AND auth presentation imports only documented
-  `@dpeek/formless-astryx` package subpaths
+- AND auth runtime imports contracts and host behavior from documented
+  `@dpeek/formless-presentation` subpaths while renderer entrypoints come from
+  documented `@dpeek/formless-renderer` subpaths
 - AND focused coverage asserts controlled drafts, available actions, pending and
   retry behavior, continuation, accessibility, and secret exclusion
-- AND production mounts auth presentation through the root Formless Renderer
-  application assembly
+- AND production mounts auth presentation through the root
+  `FormlessApplicationRenderer`
 
 #### Scenario: Formless auth renderer and canonical fixtures
 
 - GIVEN runtime publishes complete production auth contracts
-- WHEN the selected renderer implements the contract in `lib/astryx`
+- WHEN the selected renderer implements the contract in `lib/renderer`
 - THEN pure and subscribed renderer entrypoints compose package frame, card,
   form, field, action, status, passkey, policy, fact, and loading primitives
   without importing instance-auth runtime

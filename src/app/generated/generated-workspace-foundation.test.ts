@@ -6,7 +6,7 @@ import type {
   FormlessUiCreateSurfaceContract,
   FormlessUiOperationControlContract,
   FormlessUiTableContract,
-} from "@dpeek/formless-astryx/contract";
+} from "@dpeek/formless-presentation/contract";
 import type { StoredRecord } from "@dpeek/formless-storage";
 import type {
   GeneratedOperationControlBinding,

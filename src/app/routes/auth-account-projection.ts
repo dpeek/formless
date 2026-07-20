@@ -14,8 +14,8 @@ import type {
   FormlessUiFieldIntent,
   FormlessUiSignupAuthSurfaceContract,
   FormlessUiSignupStep,
-} from "@dpeek/formless-astryx/contract";
-import { formlessUiAuthSurfaceReference } from "@dpeek/formless-astryx/contract-host";
+} from "@dpeek/formless-presentation/contract";
+import { formlessUiAuthSurfaceReference } from "@dpeek/formless-presentation/contract-host";
 import type { FieldValue } from "@dpeek/formless-schema";
 import type { CreateFieldConfig } from "../../client/views.ts";
 import type {

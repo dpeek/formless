@@ -10,8 +10,8 @@ import type {
   FormlessUiWorkspaceIntent,
   FormlessUiWorkspaceIntentHandler,
   FormlessUiWorkspaceLinkActionContract,
-} from "@dpeek/formless-astryx/contract";
-import { FormlessUiContractHostProvider } from "@dpeek/formless-astryx/contract-host/react";
+} from "@dpeek/formless-presentation/contract";
+import { FormlessUiContractHostProvider } from "@dpeek/formless-presentation/contract-host/react";
 import {
   listCoreImageMediaAssets,
   uploadCoreImageMediaFile,

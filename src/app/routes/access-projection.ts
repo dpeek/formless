@@ -20,7 +20,7 @@ import type {
   FormlessUiAccessReadyContract,
   FormlessUiButtonContract,
   FormlessUiCompactStatusIntent,
-} from "@dpeek/formless-astryx/contract";
+} from "@dpeek/formless-presentation/contract";
 import type {
   IdentityAccessInvitationGrantOptions,
   IdentityAccessInvitationMembershipGrantOption,

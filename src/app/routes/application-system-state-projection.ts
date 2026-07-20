@@ -5,7 +5,7 @@ import type {
   FormlessUiApplicationSystemStateIntent,
   FormlessUiApplicationSystemStateKind,
   FormlessUiCompactStatusIntent,
-} from "@dpeek/formless-astryx/contract";
+} from "@dpeek/formless-presentation/contract";
 import { displaySafeText } from "./instance-management-display-safety.ts";
 
 export type ApplicationSystemStateProjectionInput = {

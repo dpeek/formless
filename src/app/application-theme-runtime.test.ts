@@ -3,7 +3,7 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   createFormlessUiMemoryContractHost,
   type FormlessUiContractHost,
-} from "@dpeek/formless-astryx/contract-host";
+} from "@dpeek/formless-presentation/contract-host";
 import {
   APPLICATION_THEME_DOCUMENT_ATTRIBUTE,
   APPLICATION_THEME_STORAGE_KEY,

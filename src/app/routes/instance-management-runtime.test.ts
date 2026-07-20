@@ -4,8 +4,8 @@ import type {
   FormlessUiManagementReadyContract,
   FormlessUiWorkspaceContract,
   FormlessUiWorkspaceIntent,
-} from "@dpeek/formless-astryx/contract";
-import { formlessUiWorkspaceManifestReference } from "@dpeek/formless-astryx/contract-host";
+} from "@dpeek/formless-presentation/contract";
+import { formlessUiWorkspaceManifestReference } from "@dpeek/formless-presentation/contract-host";
 import { listInstallableAppPackages } from "@dpeek/formless-installed-apps";
 import type { WorkspaceGatewayOperation } from "@dpeek/formless-gateway/client";
 import { bundledAppPackageResolver } from "../../shared/app-packages.ts";

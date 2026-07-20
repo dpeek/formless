@@ -41,7 +41,7 @@ describe("public Site client import boundary", () => {
     expect(forbiddenSpecifiers).toEqual([]);
   });
 
-  it("keeps the selected production bundle on Astryx public presentation modules", async () => {
+  it("keeps the selected production bundle on Formless Renderer public presentation modules", async () => {
     const result = await build({
       absWorkingDir: repoRoot,
       bundle: true,
@@ -63,7 +63,7 @@ describe("public Site client import boundary", () => {
           .map(([filePath]) => relative(repoRoot, resolve(repoRoot, filePath))),
       ]),
     ].sort();
-    const astryxFiles = fileLabels.filter((filePath) => filePath.startsWith("lib/astryx/src/"));
+    const rendererFiles = fileLabels.filter((filePath) => filePath.startsWith("lib/renderer/src/"));
     const parsedInputLabels = Object.keys(result.metafile.inputs).map((filePath) =>
       relative(repoRoot, resolve(repoRoot, filePath)),
     );
@@ -73,13 +73,13 @@ describe("public Site client import boundary", () => {
       .map((entry) => entry.path)
       .sort();
 
-    expect(astryxFiles).toEqual(
+    expect(rendererFiles).toEqual(
       expect.arrayContaining([
-        "lib/astryx/src/components/field-primitives.tsx",
-        "lib/astryx/src/components/site-system-state.tsx",
-        "lib/astryx/src/components/site.tsx",
-        "lib/astryx/src/global.css",
-        "lib/astryx/src/site-provider.tsx",
+        "lib/renderer/src/components/field-primitives.tsx",
+        "lib/renderer/src/components/site-system-state.tsx",
+        "lib/renderer/src/components/site.tsx",
+        "lib/renderer/src/global.css",
+        "lib/renderer/src/site-provider.tsx",
       ]),
     );
     expect(fileLabels).toEqual(
@@ -104,7 +104,7 @@ const externalizeProductionDependencies: Plugin = {
     build.onResolve({ filter: /^[^./]/ }, ({ path }) =>
       path === "@dpeek/formless-site-app" ||
       path.startsWith("@dpeek/formless-site-app/") ||
-      path.startsWith("@dpeek/formless-astryx/")
+      path.startsWith("@dpeek/formless-renderer/")
         ? undefined
         : { external: true },
     );
@@ -345,7 +345,7 @@ async function statOrNull(path: string) {
 function forbiddenPublicSiteClientFile(path: string): boolean {
   return (
     forbiddenPublicSiteClientFilePaths.has(path) ||
-    path.startsWith("lib/astryx/src/formless-ui-contract-host") ||
+    path.startsWith("lib/presentation/src/formless-ui-contract-host") ||
     path.startsWith("src/app/generated/") ||
     path.startsWith("src/client/")
   );
@@ -356,22 +356,22 @@ function forbiddenSelectedPublicSiteFile(path: string): boolean {
     path.startsWith("src/app/") ||
     path.startsWith("src/client/") ||
     path.startsWith("src/worker/") ||
-    path.startsWith("lib/astryx/src/fixtures/") ||
-    path.startsWith("lib/astryx/src/formless-ui-contract-host") ||
-    path.startsWith("lib/astryx/src/components/access") ||
-    path.startsWith("lib/astryx/src/components/application-shell") ||
-    path.startsWith("lib/astryx/src/components/auth") ||
-    path.startsWith("lib/astryx/src/components/generated-workspace") ||
-    path.startsWith("lib/astryx/src/components/instance-management") ||
-    path.startsWith("lib/astryx/src/components/state-input") ||
+    path.startsWith("lib/renderer/src/fixtures/") ||
+    path.startsWith("lib/presentation/src/formless-ui-contract-host") ||
+    path.startsWith("lib/renderer/src/components/access") ||
+    path.startsWith("lib/renderer/src/components/application-shell") ||
+    path.startsWith("lib/renderer/src/components/auth") ||
+    path.startsWith("lib/renderer/src/components/generated-workspace") ||
+    path.startsWith("lib/renderer/src/components/instance-management") ||
+    path.startsWith("lib/renderer/src/components/state-input") ||
     path.startsWith("lib/site-app/src/worker/")
   );
 }
 
 function forbiddenPublicSiteClientSpecifier(specifier: string): boolean {
   return (
-    specifier === "@dpeek/formless-astryx/contract-host" ||
-    specifier === "@dpeek/formless-astryx/contract-host/react" ||
+    specifier === "@dpeek/formless-presentation/contract-host" ||
+    specifier === "@dpeek/formless-presentation/contract-host/react" ||
     specifier === "@dpeek/formless-gateway/client" ||
     specifier === "platejs" ||
     specifier.startsWith("platejs/") ||

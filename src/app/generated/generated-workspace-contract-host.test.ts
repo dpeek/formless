@@ -5,8 +5,8 @@ import type {
   FormlessUiTableContract,
   FormlessUiTreeResultContract,
   FormlessUiWorkspaceContract,
-} from "@dpeek/formless-astryx/contract";
-import { createFormlessUiMemoryContractHost } from "@dpeek/formless-astryx/contract-host";
+} from "@dpeek/formless-presentation/contract";
+import { createFormlessUiMemoryContractHost } from "@dpeek/formless-presentation/contract-host";
 import type { GeneratedOperationControlBinding } from "../../client/views.ts";
 import { projectGeneratedListOperationAction } from "./formless-ui-list-projection.ts";
 import { projectGeneratedOperationFormlessUiControl } from "./formless-ui-operation-projection.ts";

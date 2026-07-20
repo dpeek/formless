@@ -11,10 +11,10 @@ import { Redirect, Route, Switch, useLocation } from "wouter";
 import { NotFoundRoute } from "./app/routes/not-found.tsx";
 import { normalizeSitePageSlug } from "@dpeek/formless-site-app/public/react";
 import {
-  AstryxSitePageRenderer,
-  AstryxSitePublicSystemStateRenderer,
-} from "@dpeek/formless-astryx/site/renderer";
-import "@dpeek/formless-astryx/site/global.css";
+  FormlessSitePageRenderer,
+  FormlessSiteSystemStateRenderer,
+} from "@dpeek/formless-renderer/site/renderer";
+import "@dpeek/formless-renderer/site/global.css";
 import {
   createPublicSiteReactAdapterRegistry,
   publicSiteReactAdapterForPackageAppKey,
@@ -64,7 +64,7 @@ import {
 } from "./shared/instance-auth.ts";
 import { runtimeTopologyRoutes, type RuntimeRouteAccess } from "./shared/runtime-topology.ts";
 import type { AppInstallsResponse } from "./shared/protocol.ts";
-import type { FormlessUiWorkspaceLinkActionContract } from "@dpeek/formless-astryx/contract";
+import type { FormlessUiWorkspaceLinkActionContract } from "@dpeek/formless-presentation/contract";
 import { initialInstanceManagementRuntimeContribution } from "./app/routes/instance-management-contract.ts";
 import { initialInstanceAccessRuntimeContribution } from "./app/routes/access-contract.ts";
 import { projectApplicationSystemState } from "./app/routes/application-system-state-projection.ts";
@@ -112,8 +112,8 @@ export type AppRouteComponents = {
 };
 
 const defaultPublicSiteReactAdapters = createPublicSiteReactAdapterRegistry({
-  builtInRenderer: AstryxSitePageRenderer,
-  builtInSystemStateRenderer: AstryxSitePublicSystemStateRenderer,
+  builtInRenderer: FormlessSitePageRenderer,
+  builtInSystemStateRenderer: FormlessSiteSystemStateRenderer,
   workspaceRenderer: workspaceSitePublicRenderer,
 });
 
@@ -503,8 +503,8 @@ function AppRoutes({
   const publicSiteReactAdapters =
     routeComponents.publicSiteReactAdapters ??
     createPublicSiteReactAdapterRegistry({
-      builtInRenderer: AstryxSitePageRenderer,
-      builtInSystemStateRenderer: AstryxSitePublicSystemStateRenderer,
+      builtInRenderer: FormlessSitePageRenderer,
+      builtInSystemStateRenderer: FormlessSiteSystemStateRenderer,
       siteRoute: routeComponents.SitePageRoute,
       workspaceRenderer: workspaceSitePublicRenderer,
     });

@@ -6,8 +6,8 @@ import type {
   FormlessUiAuthPasskeyContract,
   FormlessUiButtonContract,
   FormlessUiCollaboratorInvitationAuthSurfaceContract,
-} from "@dpeek/formless-astryx/contract";
-import { formlessUiAuthSurfaceReference } from "@dpeek/formless-astryx/contract-host";
+} from "@dpeek/formless-presentation/contract";
+import { formlessUiAuthSurfaceReference } from "@dpeek/formless-presentation/contract-host";
 
 import type { CollaboratorInvitationAcceptanceInvitationSummary } from "../../shared/instance-auth.ts";
 import { displaySafeText } from "./instance-management-display-safety.ts";

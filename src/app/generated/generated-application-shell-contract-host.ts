@@ -4,13 +4,13 @@ import type {
   FormlessUiShellIntent,
   FormlessUiShellIntentHandler,
   FormlessUiShellManifestReference,
-} from "@dpeek/formless-astryx/contract";
+} from "@dpeek/formless-presentation/contract";
 import {
   formlessUiShellManifestReference,
   formlessUiShellNavigationSectionReference,
   isFormlessUiShellIntent,
   type FormlessUiContractHostNodeSet,
-} from "@dpeek/formless-astryx/contract-host";
+} from "@dpeek/formless-presentation/contract-host";
 import {
   type ApplicationRuntimeContractContribution,
   type ApplicationRuntimeContractPublication,

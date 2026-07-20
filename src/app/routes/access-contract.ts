@@ -1,8 +1,8 @@
-import type { FormlessUiAccessLoadingContract } from "@dpeek/formless-astryx/contract";
+import type { FormlessUiAccessLoadingContract } from "@dpeek/formless-presentation/contract";
 import {
   formlessUiAccessInvitationAuthoringReference,
   formlessUiAccessManifestReference,
-} from "@dpeek/formless-astryx/contract-host";
+} from "@dpeek/formless-presentation/contract-host";
 import type { ApplicationRuntimeContractContribution } from "../generated/application-runtime-contract-host.tsx";
 
 export const INSTANCE_ACCESS_ID = "instance-access";

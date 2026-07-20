@@ -395,7 +395,7 @@ is required, it additionally shows:
 - optional supporting subdomain text;
 - a disabled Continue button until a choice is selected.
 
-The `@dpeek/formless-astryx` package already uses its Selector primitive in the
+The `@dpeek/formless-renderer` package already uses its Selector primitive in the
 management install dialog. The operation interaction should reuse that
 primitive rather than introduce a provider-specific renderer.
 

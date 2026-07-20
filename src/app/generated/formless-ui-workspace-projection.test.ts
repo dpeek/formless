@@ -6,7 +6,7 @@ import type {
   FormlessUiRecordResultContract,
   FormlessUiWorkspaceCollectionActionContract,
   FormlessUiWorkspaceResultContract,
-} from "@dpeek/formless-astryx/contract";
+} from "@dpeek/formless-presentation/contract";
 import {
   generatedWorkspaceCollectionId,
   generatedWorkspaceScopedId,

@@ -5,7 +5,7 @@ import type {
   FormlessUiListOperationActionContract,
   FormlessUiListOrderingContract,
   FormlessUiOperationControlContract,
-} from "@dpeek/formless-astryx/contract";
+} from "@dpeek/formless-presentation/contract";
 import type { RecordReadinessWarning } from "../../client/readiness.ts";
 import type { OrderingMoveMenuItem } from "./ordering-ui.ts";
 

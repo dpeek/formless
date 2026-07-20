@@ -9,7 +9,7 @@ import type {
   FormlessUiManagementReadyContract,
   FormlessUiManagementWorkspaceOperationContract,
   FormlessUiWorkspaceManifestReference,
-} from "@dpeek/formless-astryx/contract";
+} from "@dpeek/formless-presentation/contract";
 import {
   validateAppInstallId,
   type InstallableAppPackage,

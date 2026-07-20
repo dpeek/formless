@@ -9,7 +9,7 @@ import type {
   FormlessUiWorkspaceContract,
   FormlessUiWorkspaceIntent,
   FormlessUiWorkspaceLinkActionContract,
-} from "@dpeek/formless-astryx/contract";
+} from "@dpeek/formless-presentation/contract";
 import type { QueryEvaluationContext } from "@dpeek/formless-schema";
 import {
   createAggregateValueMatchingQuerySelector,

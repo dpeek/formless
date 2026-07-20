@@ -8,8 +8,8 @@ import type {
   FormlessUiShellScope,
   FormlessUiShellSessionContract,
   FormlessUiShellSyncStatusContract,
-} from "@dpeek/formless-astryx/contract";
-import { formlessUiShellNavigationSectionReference } from "@dpeek/formless-astryx/contract-host";
+} from "@dpeek/formless-presentation/contract";
+import { formlessUiShellNavigationSectionReference } from "@dpeek/formless-presentation/contract-host";
 import type { AppInstall, AppPackageResolver } from "@dpeek/formless-installed-apps";
 import {
   createEntityRecordCountReferencingFieldSelector,

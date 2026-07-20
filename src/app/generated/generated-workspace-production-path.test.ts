@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vite-plus/test";
-import { createFormlessUiMemoryContractHost } from "@dpeek/formless-astryx/contract-host";
+import { createFormlessUiMemoryContractHost } from "@dpeek/formless-presentation/contract-host";
 import { instanceControlPlaneSchema } from "@dpeek/formless-instance-control-plane";
 import type { AppSchema } from "@dpeek/formless-schema";
 import type { StoredRecord } from "@dpeek/formless-storage";

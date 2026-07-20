@@ -19,7 +19,7 @@ import {
   type SitePublicSystemStateRendererComponent,
   type SitePageRouteState,
 } from "@dpeek/formless-site-app/react";
-import { AstryxSitePageRenderer } from "@dpeek/formless-astryx/site/renderer";
+import { FormlessSitePageRenderer } from "@dpeek/formless-renderer/site/renderer";
 import { applyBootstrapResponse, applyRecordMerge, resetClientStore } from "./client/store.ts";
 import type { EntityOperationPresentationConfig } from "./client/operation-presentation-model.ts";
 import type { ClientAppTarget } from "./client/app-target.ts";
@@ -72,7 +72,7 @@ import type { StoredRecord } from "@dpeek/formless-storage";
 import type { BootstrapResponse } from "./shared/protocol.ts";
 import type { SchemaKey } from "./shared/schema-apps.ts";
 import type { AppSchema, EntitySchema } from "@dpeek/formless-schema";
-import type { FormlessUiWorkspaceLinkActionContract } from "@dpeek/formless-astryx/contract";
+import type { FormlessUiWorkspaceLinkActionContract } from "@dpeek/formless-presentation/contract";
 import { parseAppSchema } from "@dpeek/formless-schema";
 import type { NumericExpression } from "@dpeek/formless-schema";
 import {
@@ -902,9 +902,9 @@ describe("App smoke routes", () => {
     expect(appProfileHtml).not.toContain('aria-label="Instance navigation"');
     expect(installedProfileHtml).not.toContain('aria-label="Instance navigation"');
     expect(publishedSiteHtml).not.toContain('data-testid="formless-astryx-application-shell:');
-    expect(publishedSiteHtml).toContain('data-built-in-renderer="AstryxSitePageRenderer"');
+    expect(publishedSiteHtml).toContain('data-built-in-renderer="FormlessSitePageRenderer"');
     expect(publishedSiteHtml).toContain(
-      'data-built-in-system-state-renderer="AstryxSitePublicSystemStateRenderer"',
+      'data-built-in-system-state-renderer="FormlessSiteSystemStateRenderer"',
     );
     expect(signInHtml).not.toContain('data-testid="formless-astryx-application-shell:');
     expect(setupHtml).not.toContain('data-testid="formless-astryx-application-shell:');
@@ -1317,10 +1317,10 @@ describe("App smoke routes", () => {
     expectHtmlToContain(html, 'data-route-base="/sites/personal"');
     expectHtmlToContain(html, 'data-target-kind="appInstall"');
     expectHtmlToContain(html, 'data-install-id="personal"');
-    expectHtmlToContain(html, 'data-built-in-renderer="AstryxSitePageRenderer"');
+    expectHtmlToContain(html, 'data-built-in-renderer="FormlessSitePageRenderer"');
     expectHtmlToContain(
       html,
-      'data-built-in-system-state-renderer="AstryxSitePublicSystemStateRenderer"',
+      'data-built-in-system-state-renderer="FormlessSiteSystemStateRenderer"',
     );
     expect(html).not.toContain('data-testid="formless-astryx-application-shell:');
   });
@@ -1427,10 +1427,10 @@ describe("App smoke routes", () => {
     );
 
     expectHtmlToContain(html, 'data-site-link-mode="preview"');
-    expectHtmlToContain(html, 'data-built-in-renderer="AstryxSitePageRenderer"');
+    expectHtmlToContain(html, 'data-built-in-renderer="FormlessSitePageRenderer"');
     expectHtmlToContain(
       html,
-      'data-built-in-system-state-renderer="AstryxSitePublicSystemStateRenderer"',
+      'data-built-in-system-state-renderer="FormlessSiteSystemStateRenderer"',
     );
   });
 
@@ -1478,10 +1478,10 @@ describe("App smoke routes", () => {
 
     expectHtmlToContain(html, 'data-site-link-mode="authoring"');
     expectHtmlToContain(html, 'data-site-slug="home"');
-    expectHtmlToContain(html, 'data-built-in-renderer="AstryxSitePageRenderer"');
+    expectHtmlToContain(html, 'data-built-in-renderer="FormlessSitePageRenderer"');
     expectHtmlToContain(
       html,
-      'data-built-in-system-state-renderer="AstryxSitePublicSystemStateRenderer"',
+      'data-built-in-system-state-renderer="FormlessSiteSystemStateRenderer"',
     );
     expect(html).not.toContain('data-testid="formless-astryx-application-shell:');
     expect(html).not.toContain('href="/tasks"');
@@ -1958,7 +1958,7 @@ describe("public Site route runtime", () => {
         state={{ status: "ready", tree }}
       />
     );
-    const ssrHtml = renderToString(<AstryxSitePageRenderer linkMode="published" tree={tree} />);
+    const ssrHtml = renderToString(<FormlessSitePageRenderer linkMode="published" tree={tree} />);
     const hydratedAppHtml = renderToString(
       <Router ssrPath="/">
         <App

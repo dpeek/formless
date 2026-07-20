@@ -1,9 +1,9 @@
 import { useCallback, useLayoutEffect, useMemo, useState } from "react";
-import type { FormlessUiContractIntent } from "@dpeek/formless-astryx/contract";
+import type { FormlessUiContractIntent } from "@dpeek/formless-presentation/contract";
 import {
   isFormlessUiManagementIntent,
   type FormlessUiContractHostNodeSet,
-} from "@dpeek/formless-astryx/contract-host";
+} from "@dpeek/formless-presentation/contract-host";
 import { INSTANCE_CONTROL_PLANE_SCHEMA_KEY } from "@dpeek/formless-instance-control-plane";
 import type { PackageAppKey } from "@dpeek/formless-installed-apps";
 import { instanceControlPlaneClientTarget } from "../../client/app-target.ts";

@@ -3,14 +3,14 @@ import type {
   FormlessUiApplicationSystemStateContract,
   FormlessUiApplicationSystemStateIntentHandler,
   FormlessUiApplicationSystemStateReference,
-} from "@dpeek/formless-astryx/contract";
+} from "@dpeek/formless-presentation/contract";
 import {
   createFormlessUiMemoryContractHost,
   formlessUiApplicationSystemStateReference,
   isFormlessUiApplicationSystemStateIntent,
   type FormlessUiMutableContractHost,
-} from "@dpeek/formless-astryx/contract-host";
-import { FormlessUiContractHostProvider } from "@dpeek/formless-astryx/contract-host/react";
+} from "@dpeek/formless-presentation/contract-host";
+import { FormlessUiContractHostProvider } from "@dpeek/formless-presentation/contract-host/react";
 import { ApplicationPresentation } from "../application-presentation.tsx";
 
 export type ApplicationSystemStateRuntimeHost = {

@@ -556,17 +556,18 @@ refresh, validation, and private auth state.
   references and snapshots, renders people, roles, invitations, controlled
   invitation authoring, feedback, empty, unauthorized, loading, failure, and
   destructive confirmation states, and dispatches canonical access intents
-- AND access presentation imports only documented
-  `@dpeek/formless-astryx` package subpaths
+- AND access runtime imports contracts and host behavior from documented
+  `@dpeek/formless-presentation` subpaths while renderer entrypoints come from
+  documented `@dpeek/formless-renderer` subpaths
 - AND focused coverage asserts projection, current intent resolution, authority,
   controlled drafts, pending behavior, visible outcomes, and secret exclusion
-- AND production mounts access presentation through the root Formless Renderer
-  application assembly
+- AND production mounts access presentation through the root
+  `FormlessApplicationRenderer`
 
 #### Scenario: Formless access management renderer
 
 - GIVEN runtime publishes complete production access contracts
-- WHEN the selected renderer implements the contract in `lib/astryx`
+- WHEN the selected renderer implements the contract in `lib/renderer`
 - THEN pure and subscribed renderer entrypoints use package `Section`, stack,
   and grid primitives for page layout, `Table` for the uniform people and
   invitation summaries, and `Badge` and `Timestamp` for status and temporal

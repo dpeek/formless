@@ -1,0 +1,46 @@
+{
+  "name": "@dpeek/formless-renderer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./application/assembly": "./src/application-assembly.tsx",
+    "./application/global.css": "./src/application.css",
+    "./application/provider": "./src/application-provider.tsx",
+    "./site/renderer": "./src/site-renderer.tsx",
+    "./site/global.css": "./src/global.css",
+    "./site/provider": "./src/site-provider.tsx"
+  },
+  "scripts": {
+    "dev": "vite",
+    "test": "vp test --config ../../vite.config.ts --configLoader runner"
+  },
+  "dependencies": {
+    "@astryxdesign/core": "0.1.4",
+    "@astryxdesign/theme-neutral": "0.1.4",
+    "@dpeek/formless-presentation": "workspace:*",
+    "@dpeek/formless-schema": "^0.1.0",
+    "@dpeek/formless-site-app": "^0.1.0",
+    "@dpeek/formless-source-svg": "^0.1.0",
+    "@heroicons/react": "latest",
+    "@stylexjs/stylex": "0.18.3",
+    "@thesvg/react": "^3.0.19",
+    "react": "19.2.6",
+    "react-dom": "19.2.6"
+  },
+  "devDependencies": {
+    "@astryxdesign/build": "0.1.4",
+    "@astryxdesign/cli": "0.1.4",
+    "@stylexjs/unplugin": "0.18.3",
+    "@types/react": "19.2.15",
+    "@types/react-dom": "19.2.3",
+    "@types/react-test-renderer": "^19.1.0",
+    "@vitejs/plugin-react": "latest",
+    "react-test-renderer": "19.2.6",
+    "typescript": "~6.0.2",
+    "vite": "latest"
+  },
+  "browserslist": [
+    "last 1 Chrome version"
+  ]
+}

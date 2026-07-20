@@ -1,1 +1,1 @@
-export { AstryxApplicationAssembly as ApplicationPresentation } from "@dpeek/formless-astryx/application/assembly";
+export { FormlessApplicationRenderer as ApplicationPresentation } from "@dpeek/formless-renderer/application/assembly";

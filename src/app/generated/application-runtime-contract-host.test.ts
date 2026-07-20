@@ -2,13 +2,13 @@ import { describe, expect, it } from "vite-plus/test";
 import type {
   FormlessUiContractIntent,
   FormlessUiContractIntentHandler,
-} from "@dpeek/formless-astryx/contract";
+} from "@dpeek/formless-presentation/contract";
 import {
   formlessUiShellManifestReference,
   formlessUiWorkspaceManifestReference,
   isFormlessUiShellIntent,
   isFormlessUiWorkspaceIntent,
-} from "@dpeek/formless-astryx/contract-host";
+} from "@dpeek/formless-presentation/contract-host";
 import {
   createApplicationRuntimePublicationCoordinator,
   type ApplicationRuntimeContractPublication,

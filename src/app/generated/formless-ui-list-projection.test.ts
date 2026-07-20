@@ -4,7 +4,7 @@ import type { StoredRecord } from "@dpeek/formless-storage";
 import type {
   FormlessUiListOperationActionContract,
   FormlessUiOperationControlContract,
-} from "@dpeek/formless-astryx/contract";
+} from "@dpeek/formless-presentation/contract";
 import type { EntityOperationPresentationConfig } from "../../client/operation-presentation-model.ts";
 import type { ResultOrderingConfig } from "../../client/result-ordering-model.ts";
 import type { ListResultModel } from "../../client/list-result-model.ts";

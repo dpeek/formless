@@ -4,13 +4,13 @@ import type { ReactNode } from "react";
 import type {
   FormlessUiDocumentThemeContract,
   FormlessUiShellNavigationSectionReference,
-} from "@dpeek/formless-astryx/contract";
-import type { FormlessUiContractHost } from "@dpeek/formless-astryx/contract-host";
+} from "@dpeek/formless-presentation/contract";
+import type { FormlessUiContractHost } from "@dpeek/formless-presentation/contract-host";
 import {
   formlessUiDocumentThemeReference,
   formlessUiShellManifestReference,
-} from "@dpeek/formless-astryx/contract-host";
-import { useFormlessUiContractHost } from "@dpeek/formless-astryx/contract-host/react";
+} from "@dpeek/formless-presentation/contract-host";
+import { useFormlessUiContractHost } from "@dpeek/formless-presentation/contract-host/react";
 import type { StoredRecord } from "@dpeek/formless-storage";
 import { applyBootstrapResponse, resetClientStore } from "../client/store.ts";
 import { resetSyncStatus } from "../client/sync-status.ts";

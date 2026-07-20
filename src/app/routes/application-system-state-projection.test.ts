@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import type { FormlessUiApplicationSystemStateKind } from "@dpeek/formless-astryx/contract";
+import type { FormlessUiApplicationSystemStateKind } from "@dpeek/formless-presentation/contract";
 import {
   projectApplicationSystemState,
   resolveApplicationSystemStateIntent,

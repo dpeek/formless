@@ -162,7 +162,7 @@ storage contracts.
 - AND Site adapter selection modules do not import a concrete built-in renderer
   implementation
 - AND production root assembly explicitly supplies the Formless Renderer
-  implementation exported by `@dpeek/formless-astryx`
+  `FormlessSitePageRenderer` exported by `@dpeek/formless-renderer`
 
 #### Scenario: Renderer fixture input stays projection shaped
 
@@ -192,7 +192,7 @@ browser and Worker runtime ownership of state selection and document behavior.
 - THEN root assembly supplies one built-in system-state renderer that receives
   only state kind and display-safe presentation facts
 - AND production root assembly explicitly supplies the Formless Renderer
-  system-state implementation
+  `FormlessSiteSystemStateRenderer`
 - AND the workspace page-renderer extension does not replace browser
   system-state presentation
 
@@ -211,7 +211,7 @@ browser and Worker runtime ownership of state selection and document behavior.
 
 The system SHALL provide a complete Formless Renderer implementation of the
 canonical Site page and system-state renderer contracts through
-`@dpeek/formless-astryx` and mount it as the production built-in renderer.
+`@dpeek/formless-renderer` and mount it as the production built-in renderer.
 
 #### Scenario: Renderer covers shipped public Site presentation
 
@@ -229,11 +229,13 @@ canonical Site page and system-state renderer contracts through
 #### Scenario: Renderer is selected at public roots
 
 - GIVEN the Formless Renderer page and system-state implementations are
-  exported through documented `@dpeek/formless-astryx` package subpaths
+  exported through documented `@dpeek/formless-renderer` package subpaths
 - WHEN production browser and Worker entrypoints are built
-- THEN root assembly imports and supplies the built-in Site renderers
-- AND public browser and Worker roots integrate the package's StyleX, provider,
-  and CSS boundaries atomically while preserving workspace renderer precedence
+- THEN root assembly imports and supplies `FormlessSitePageRenderer` and
+  `FormlessSiteSystemStateRenderer`
+- AND public browser and Worker roots integrate
+  `FormlessSiteRendererProvider`, the package's StyleX integration, and its CSS
+  boundary atomically while preserving workspace renderer precedence
 
 #### Scenario: Site package is renderer neutral
 
@@ -244,7 +246,7 @@ canonical Site page and system-state renderer contracts through
   public form sessions, theme behavior, and browser and Worker adapters
 - AND built-in page and system-state presentation comes only from the renderer
   supplied by production roots
-- AND it does not depend on `@dpeek/formless-astryx` or another presentation
+- AND it does not depend on `@dpeek/formless-renderer` or another presentation
   implementation
 
 ### Requirement: Subscribe Form Public Tree Projection
@@ -724,10 +726,10 @@ operation execution behavior.
   signal, and token-change intent
 - AND generic public operation fields carry public-safe scalar control, format,
   suggestion, enum-option, required, and occurrence facts
-- AND `@dpeek/formless-astryx` may adapt generic fields to canonical
+- AND `@dpeek/formless-renderer` may adapt generic fields to canonical
   `FormlessUiField` controls inside the renderer package
-- AND the Site package does not import `@dpeek/formless-astryx` field or renderer
-  contracts
+- AND the Site package does not import `@dpeek/formless-renderer` field or
+  renderer contracts
 
 #### Scenario: Site foundation retains public form execution
 
@@ -775,14 +777,14 @@ shell.
 - GIVEN the Formless Renderer public Site implementation is assembled in browser
   and Worker rendering
 - WHEN its provider and styles are assembled
-- THEN `@dpeek/formless-astryx` exposes the public provider and CSS boundaries
-  needed by public roots
+- THEN `@dpeek/formless-renderer` exposes the public provider and CSS
+  boundaries needed by public roots
 - AND Worker rendering starts from a deterministic public theme mode and
   browser hydration remains structurally stable while stored or system mode is
   applied
 - AND Site-owned public theme storage and document bootstrap facts remain
   outside the renderer implementation
-- AND production public entrypoints use the `@dpeek/formless-astryx` public
+- AND production public entrypoints use the `@dpeek/formless-renderer` public
   provider, StyleX integration, and CSS boundaries without importing application
   provider or CSS assembly
 

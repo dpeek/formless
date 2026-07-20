@@ -3,7 +3,7 @@ import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import type {
   FormlessUiTreeItemContract,
   FormlessUiTreeResultContract,
-} from "@dpeek/formless-astryx/contract";
+} from "@dpeek/formless-presentation/contract";
 import type { StoredRecord } from "@dpeek/formless-storage";
 import type { ChangeRow } from "../../shared/protocol.ts";
 import type { OperationInvocationResponse } from "../../shared/operation-invocation.ts";
