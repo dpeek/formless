@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vite-plus/test";
 import { createMemoryPresentationHost } from "@dpeek/formless-presentation/host";
 import { instanceControlPlaneSchema } from "@dpeek/formless-instance-control-plane";
@@ -73,16 +72,6 @@ describe("generated workspace production path", () => {
     expect(workspace).toMatchObject({ id: "workspace:taskHome", kind: "workspaceManifest" });
     expect(section).toMatchObject({ kind: "workspaceSectionShell" });
     expect(result).toMatchObject({ kind: "list" });
-  });
-
-  it("routes production screens directly to the generated workspace runtime", () => {
-    const routeSource = readFileSync(new URL("../routes/home.tsx", import.meta.url), "utf8");
-
-    expect(routeSource).toContain('from "../generated/generated-workspace-runtime.tsx"');
-    expect(routeSource).toContain("<GeneratedWorkspaceRuntime");
-    expect(routeSource).not.toContain("generated/screen");
-    expect(routeSource).not.toContain("generated/collection");
-    expect(routeSource).not.toContain("generatedWorkspaceScreenIsEligible");
   });
 });
 

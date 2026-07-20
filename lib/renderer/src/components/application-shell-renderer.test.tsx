@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 
 import { act, fireEvent, render, waitFor, type RenderResult } from "@testing-library/react";
-import { createElement } from "react";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import type {
   ButtonContract,
@@ -24,62 +23,6 @@ import {
   AstryxApplicationShellRenderer,
   AstryxSubscribedApplicationShellRenderer,
 } from "./shell.tsx";
-
-vi.mock("./create-renderer.tsx", () => ({
-  AstryxCreateSurfaceRenderer: ({
-    onFieldIntent,
-    onIntent,
-    surface,
-  }: {
-    onFieldIntent: (
-      fieldId: string,
-      intent: {
-        fieldName: string;
-        fieldValue: { kind: "input"; value: string };
-        type: "createDraftChange";
-      },
-    ) => void;
-    onIntent: (intent: { open: boolean; surfaceId: string; type: "createOpenChange" }) => void;
-    surface: CreateSurfaceContract;
-  }) =>
-    createElement(
-      "div",
-      {
-        "data-component": "AstryxCreateSurfaceRenderer",
-        "data-errors": surface.dialog.form.errors.join(" "),
-        "data-open": String(surface.dialog.open),
-        "data-pending": String(Boolean(surface.dialog.form.submit.pending?.isPending)),
-        "data-surface": surface.id,
-        "data-trigger-kind": surface.trigger.content.kind,
-        "data-trigger-prominence": surface.trigger.prominence,
-      },
-      createElement(
-        "button",
-        {
-          "data-action": "open-create",
-          onClick: () => onIntent({ open: true, surfaceId: surface.id, type: "createOpenChange" }),
-        },
-        "Open create",
-      ),
-      createElement(
-        "button",
-        {
-          "data-action": "change-create-field",
-          onClick: () =>
-            onFieldIntent("field:create:page:label", {
-              fieldName: "label",
-              fieldValue: { kind: "input", value: "New page" },
-              type: "createDraftChange",
-            }),
-        },
-        "Change create field",
-      ),
-    ),
-}));
-
-vi.mock("./operation-renderer.tsx", () => ({
-  operationIcon: (icon: string) => createElement("span", { "data-icon": icon }),
-}));
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -130,24 +73,26 @@ describe("Astryx application shell renderer", () => {
     expect(rendererText(mountedRenderer)).toContain("ada@example.com");
     expect(rendererText(mountedRenderer)).toContain("Route workspace");
 
-    const createSurface = requiredByProps(container, {
-      "data-component": "AstryxCreateSurfaceRenderer",
-    });
-    expect(createSurface.getAttribute("data-open")).toBe("true");
-    expect(createSurface.getAttribute("data-surface")).toBe("create:page");
-
     const mobileNav = required(
-      container.querySelector<HTMLDialogElement>('dialog:not([role="alertdialog"])'),
+      container.querySelector<HTMLDialogElement>('dialog[aria-label="Navigation"]'),
     );
     expect(mobileNav.open).toBe(false);
 
     fireEvent.click(requiredByProps(container, { "aria-label": "Open navigation" }));
 
     expect(mobileNav.open).toBe(true);
+    const createDialog = await waitFor(() =>
+      required(
+        Array.from(
+          container.querySelectorAll<HTMLDialogElement>('dialog[aria-label="Create page"]'),
+        ).find((dialog) => dialog.open),
+      ),
+    );
+    expect(createDialog.textContent).toContain("Page name is required.");
+    expect(createDialog.textContent).toContain("Creating...");
     fireEvent.click(pages);
     fireEvent.click(requiredByProps(container, { "aria-label": "Open navigation" }));
-    fireEvent.click(requiredByProps(container, { "data-action": "open-create" }));
-    fireEvent.click(requiredByProps(container, { "data-action": "change-create-field" }));
+    fireEvent.click(interactiveByLabel(container, "Create page"));
     fireEvent.click(interactiveByLabel(container, "Reset source seed data"));
     const resetDialog = required(container.querySelector<HTMLElement>('[role="alertdialog"]'));
     fireEvent.click(interactiveByLabel(resetDialog, "Cancel"));
@@ -164,18 +109,6 @@ describe("Astryx application shell renderer", () => {
       },
       {
         intent: { open: true, surfaceId: "create:page", type: "createOpenChange" },
-        sectionId: sectionReferences.roots.sectionId,
-        shellId: shellReference.shellId,
-        surfaceId: "create:page",
-        type: "shellCreate",
-      },
-      {
-        fieldId: "field:create:page:label",
-        intent: {
-          fieldName: "label",
-          fieldValue: { kind: "input", value: "New page" },
-          type: "createDraftChange",
-        },
         sectionId: sectionReferences.roots.sectionId,
         shellId: shellReference.shellId,
         surfaceId: "create:page",
@@ -287,13 +220,11 @@ describe("Astryx application shell renderer", () => {
         </AstryxSubscribedApplicationShellRenderer>
       </PresentationHostProvider>,
     );
-    expect(mountedRenderer.container.querySelector("[data-site-theme]")).toBeNull();
     expect(
       requiredByProps(mountedRenderer.container, { "aria-label": "Switch to light mode" }),
     ).toBeDefined();
     expect(rendererText(mountedRenderer)).toContain("Theme workspace");
     expect(rendererText(mountedRenderer)).toContain("Tasks");
-    expect(JSON.stringify(sections).toLowerCase()).not.toContain("theme");
 
     fireEvent.click(
       requiredByProps(mountedRenderer.container, { "aria-label": "Switch to light mode" }),

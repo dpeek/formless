@@ -2,7 +2,8 @@
 
 import { fireEvent, render, within } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
+import { ToastViewport } from "@astryxdesign/core/Toast";
 import type {
   AccessActionContract,
   AccessConfirmationContract,
@@ -30,12 +31,7 @@ import {
   AstryxAccessInvitationAuthoringContent,
   AstryxAccessRenderer,
   AstryxSubscribedAccessRenderer,
-  astryxAccessFeedbackToastOptions,
 } from "./access-renderer.tsx";
-
-vi.mock("@astryxdesign/core/Toast", () => ({
-  useToast: () => () => undefined,
-}));
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -59,18 +55,11 @@ describe("Astryx access renderer", () => {
       invitationAuthoring(),
     );
 
-    expect(loadingHtml).toContain('data-formless-astryx-access-state="loading"');
     expect(loadingHtml).toContain('role="status"');
     expect(loadingHtml).toContain("Loading access summary");
-    expect(unauthorizedHtml).toContain('data-formless-astryx-access-state="unauthorized"');
     expect(unauthorizedHtml).toContain("Access unavailable");
-    expect(failedHtml).toContain('data-formless-astryx-access-state="failed"');
     expect(failedHtml).toContain('role="alert"');
     expect(failedHtml).toContain("Access failed");
-    expect(emptyHtml).toContain('data-formless-astryx-access-empty="access:test:people:empty"');
-    expect(emptyHtml).toContain(
-      'data-formless-astryx-access-empty="access:test:invitations:empty"',
-    );
     expect(emptyHtml).toContain("No people");
     expect(emptyHtml).toContain("No invitations");
     expect(populatedHtml.match(/<table/g)).toHaveLength(2);
@@ -82,30 +71,12 @@ describe("Astryx access renderer", () => {
     expect(populatedHtml).toContain("ada@example.com");
     expect(populatedHtml).toContain("Owner");
     expect(populatedHtml).toContain("pending@example.com");
-    expect(populatedHtml).toContain('data-formless-astryx-access-fact="person:ada:status"');
-    expect(populatedHtml).toContain(
-      'data-formless-astryx-access-fact="invitation:pending:expires"',
-    );
     expect(populatedHtml).not.toContain("Invitation created");
     expect(populatedHtml).toContain('role="alertdialog"');
     expect(populatedHtml).toContain("Revoke invitation?");
     expect(populatedHtml).toContain("Revoke invitation");
     expect(populatedHtml).not.toContain("raw-invitation-token");
     expect(populatedHtml).not.toContain("owner-secret");
-  });
-
-  it("maps invitation results to operation-style toast behavior", () => {
-    expect(astryxAccessFeedbackToastOptions(accessFeedback("success"))).toMatchObject({
-      autoHideDuration: 5_000,
-      body: "Invitation created",
-      isAutoHide: true,
-      type: "info",
-    });
-    expect(astryxAccessFeedbackToastOptions(accessFeedback("danger"))).toMatchObject({
-      body: "Invitation failed",
-      isAutoHide: false,
-      type: "error",
-    });
   });
 
   it("composes an accessible controlled form dialog with separate sectioned grant selectors", async () => {
@@ -128,7 +99,9 @@ describe("Astryx access renderer", () => {
       ],
     };
     const { container, unmount } = render(
-      <AstryxAccessInvitationAuthoring authoring={authoring} onIntent={() => undefined} />,
+      <ToastViewport isTopLayer={false}>
+        <AstryxAccessInvitationAuthoring authoring={authoring} onIntent={() => undefined} />
+      </ToastViewport>,
     );
     const queries = within(container);
     const dialog = queries.getByRole("dialog", { name: "Invite person" });
@@ -156,50 +129,9 @@ describe("Astryx access renderer", () => {
     const html = renderToStaticMarkup(
       <AstryxAccessInvitationAuthoringContent authoring={authoring} onIntent={() => undefined} />,
     );
-    expect(html).toContain('data-formless-astryx-access-authoring="access:test:authoring"');
-    expect(html).toContain('data-formless-astryx-access-grants="roles"');
-    expect(html).toContain('data-formless-astryx-access-grants="memberships"');
     expect(html).toContain("Review the invitation.");
     expect(html).not.toContain("Invitation failed");
     expect(html).toContain("Sending invitation");
-
-    const appInstallHtml = renderToStaticMarkup(
-      <AstryxAccessInvitationAuthoringContent
-        authoring={{
-          ...authoring,
-          fields: {
-            ...authoring.fields,
-            targetSurface: { ...authoring.fields.targetSurface, value: "app-install" },
-          },
-        }}
-        onIntent={() => undefined}
-      />,
-    );
-    expect(appInstallHtml).toContain(
-      'data-formless-astryx-access-field="field:target-app-install"',
-    );
-    expect(appInstallHtml).not.toContain(
-      'data-formless-astryx-access-field="field:target-organization"',
-    );
-
-    const instanceHtml = renderToStaticMarkup(
-      <AstryxAccessInvitationAuthoringContent
-        authoring={{
-          ...authoring,
-          fields: {
-            ...authoring.fields,
-            targetSurface: { ...authoring.fields.targetSurface, value: "instance" },
-          },
-        }}
-        onIntent={() => undefined}
-      />,
-    );
-    expect(instanceHtml).not.toContain(
-      'data-formless-astryx-access-field="field:target-app-install"',
-    );
-    expect(instanceHtml).not.toContain(
-      'data-formless-astryx-access-field="field:target-organization"',
-    );
 
     unmount();
   });
@@ -285,10 +217,9 @@ describe("Astryx access renderer", () => {
       </PresentationHostProvider>,
     );
 
-    expect(html).toContain('data-formless-astryx-access-state="ready"');
-    expect(html).toContain('data-formless-astryx-access-authoring="access:test:authoring"');
+    expect(html).toContain("Access");
+    expect(html).toContain("Ada Lovelace");
     expect(html).toContain('value="invitee@example.com"');
-    expect(html).not.toContain("data-formless-access-state");
   });
 });
 

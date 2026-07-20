@@ -1,8 +1,66 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import { parseAppSchema } from "./index.ts";
+import { taskSchema, taskScreen } from "./schema-test-fixtures.ts";
 
 describe("schema screens", () => {
+  it("parses static app-relative paths and rejects duplicate routes", () => {
+    const schema = parseAppSchema({
+      ...taskSchema(),
+      screens: { home: taskScreen({ path: "/schema" }) },
+    });
+
+    expect(schema.screens?.home?.path).toBe("/schema");
+    expect(() =>
+      parseAppSchema({
+        ...taskSchema(),
+        screens: {
+          home: taskScreen({ path: "/tasks" }),
+          duplicate: taskScreen({ label: "Duplicate", path: "/tasks" }),
+        },
+      }),
+    ).toThrow('Screen path "/tasks" must be unique. Used by "home" and "duplicate".');
+
+    for (const path of ["", "tasks", "/tasks/:taskId", "/*"]) {
+      expect(() =>
+        parseAppSchema({ ...taskSchema(), screens: { home: taskScreen({ path }) } }),
+      ).toThrow('Screen "home" path must be a static app-relative path.');
+    }
+  });
+
+  it("validates layout section identity and collection view references", () => {
+    expect(() =>
+      parseAppSchema({
+        ...taskSchema(),
+        screens: {
+          home: taskScreen({
+            layout: {
+              type: "stack",
+              sections: [
+                { id: "tasks", type: "collection", view: "taskHome" },
+                { id: "tasks", type: "collection", view: "taskHome" },
+              ],
+            },
+          }),
+        },
+      }),
+    ).toThrow('Screen "home" layout section id "tasks" must be unique.');
+
+    expect(() =>
+      parseAppSchema({
+        ...taskSchema(),
+        screens: {
+          home: taskScreen({
+            layout: {
+              type: "stack",
+              sections: [{ id: "tasks", type: "collection", view: "taskCreate" }],
+            },
+          }),
+        },
+      }),
+    ).toThrow('Screen "home" layout section 0 must reference a collection view.');
+  });
+
   it("parses optional owner, authenticated, and anonymous screen access", () => {
     const schema = parseAppSchema(screenAccessSchema());
 

@@ -1,8 +1,7 @@
 // @vitest-environment jsdom
 
-import { act, fireEvent, render } from "@testing-library/react";
-import { Children, createElement, isValidElement, type ReactNode } from "react";
-import { describe, expect, it, vi } from "vite-plus/test";
+import { act, fireEvent, render, within } from "@testing-library/react";
+import { describe, expect, it } from "vite-plus/test";
 import type {
   DocumentThemeContract,
   DocumentThemeIntent,
@@ -14,44 +13,6 @@ import {
 } from "@dpeek/formless-presentation/host";
 import { PresentationHostProvider } from "@dpeek/formless-presentation/host/react";
 import { AstryxDocumentThemeRenderer, AstryxSubscribedDocumentThemeRenderer } from "./theme.tsx";
-
-vi.mock("@astryxdesign/core", () => ({
-  Theme: ({ children, mode }: { children: ReactNode; mode: string }) =>
-    createElement("div", { "data-component": "Theme", "data-mode": mode }, children),
-}));
-
-vi.mock("@astryxdesign/core/SegmentedControl", () => ({
-  SegmentedControl: ({
-    children,
-    label,
-    onChange,
-    value,
-  }: {
-    children: ReactNode;
-    label: string;
-    onChange: (value: string) => void;
-    value: string;
-  }) =>
-    createElement(
-      "div",
-      { "aria-label": label, role: "radiogroup" },
-      Children.map(children, (child) =>
-        isValidElement<{ label: string; value: string }>(child)
-          ? createElement(
-              "button",
-              {
-                "aria-checked": child.props.value === value,
-                "aria-label": child.props.label,
-                onClick: () => onChange(child.props.value),
-                role: "radio",
-              },
-              child.props.label,
-            )
-          : child,
-      ),
-    ),
-  SegmentedControlItem: () => null,
-}));
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -67,57 +28,46 @@ describe("Astryx document theme renderer", () => {
         </AstryxDocumentThemeRenderer>,
       );
 
-      expect(container.querySelector('[data-component="Theme"]')).toBeNull();
       expect(container.querySelector('[role="radiogroup"]')).toBeNull();
+      expect(container.textContent).toContain("Workspace");
 
       unmount();
     },
   );
 
-  it.each([
-    ["system", "dark", "System"],
-    ["light", "light", "Light"],
-    ["dark", "dark", "Dark"],
-  ] as const)(
-    "keeps user %s selection controlled while applying active %s presentation",
-    (selectedMode, activeMode, selectedLabel) => {
-      const intents: DocumentThemeIntent[] = [];
-      const { container, unmount } = render(
-        <AstryxDocumentThemeRenderer
-          onIntent={(intent) => {
-            intents.push(intent);
-          }}
-          theme={userTheme(selectedMode, activeMode)}
-        >
-          <article>Workspace</article>
-        </AstryxDocumentThemeRenderer>,
-      );
+  it("keeps user selection controlled and dispatches the selected projected intent", () => {
+    const intents: DocumentThemeIntent[] = [];
+    const { container, unmount } = render(
+      <AstryxDocumentThemeRenderer
+        onIntent={(intent) => {
+          intents.push(intent);
+        }}
+        theme={userTheme("system", "dark")}
+      >
+        <article>Workspace</article>
+      </AstryxDocumentThemeRenderer>,
+    );
 
-      expect(container.querySelector('[data-component="Theme"]')).toBeNull();
-      expect(
-        container.querySelector('[aria-label="Theme mode"][role="radiogroup"]'),
-      ).not.toBeNull();
-      expect(radioByLabel(container, selectedLabel).getAttribute("aria-checked")).toBe("true");
-      expect(
-        Array.from(container.querySelectorAll('[role="radio"]'), (node) =>
-          node.getAttribute("aria-label"),
-        ),
-      ).toEqual(["System", "Light", "Dark"]);
+    expect(container.querySelector('[aria-label="Theme mode"][role="radiogroup"]')).not.toBeNull();
+    expect(radioByLabel(container, "System").getAttribute("aria-checked")).toBe("true");
+    expect(
+      Array.from(container.querySelectorAll('[role="radio"]'), (node) => node.textContent),
+    ).toEqual(["System", "Light", "Dark"]);
 
-      fireEvent.click(radioByLabel(container, selectedLabel));
+    fireEvent.click(radioByLabel(container, "Light"));
 
-      expect(intents).toEqual([
-        {
-          controlId: "control:theme-mode",
-          mode: selectedMode,
-          themeId: themeReference.themeId,
-          type: "documentThemeModeSelection",
-        },
-      ]);
+    expect(intents).toEqual([
+      {
+        controlId: "control:theme-mode",
+        mode: "light",
+        themeId: themeReference.themeId,
+        type: "documentThemeModeSelection",
+      },
+    ]);
+    expect(radioByLabel(container, "System").getAttribute("aria-checked")).toBe("true");
 
-      unmount();
-    },
-  );
+    unmount();
+  });
 
   it("subscribes to theme snapshots and dispatches through the memory host", async () => {
     const intents: DocumentThemeIntent[] = [];
@@ -150,7 +100,6 @@ describe("Astryx document theme renderer", () => {
     await act(async () => {
       host.publish([{ reference: themeReference, snapshot: fixedTheme("light") }]);
     });
-    expect(container.querySelector('[data-component="Theme"]')).toBeNull();
     expect(container.querySelector('[role="radiogroup"]')).toBeNull();
 
     unmount();
@@ -197,14 +146,6 @@ function userTheme(
   };
 }
 
-function required<Value>(value: Value): NonNullable<Value> {
-  if (value === null || value === undefined) {
-    throw new Error("Expected value.");
-  }
-
-  return value as NonNullable<Value>;
-}
-
 function radioByLabel(container: HTMLElement, label: string): HTMLElement {
-  return required(container.querySelector<HTMLElement>(`[aria-label="${label}"][role="radio"]`));
+  return within(container).getByRole("radio", { name: label });
 }

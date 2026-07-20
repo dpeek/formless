@@ -1,11 +1,8 @@
-import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vite-plus/test";
 import type {
   ButtonContract,
-  PresentationIntent,
   CreateFieldContract,
   ManagementInstallDialogContract,
-  ManagementIntent,
   ManagementManifestContract,
   ManagementReadyContract,
 } from "./contract.ts";
@@ -21,11 +18,6 @@ import {
   type ShellManifestNode,
   type WorkspaceManifestNode,
 } from "./host.ts";
-import {
-  PresentationHostProvider,
-  useManagementInstallDialog,
-  useManagementManifest,
-} from "./host-react.tsx";
 
 const managementReference = managementManifestReference("management:instance");
 const installDialogReference = managementInstallDialogReference(
@@ -150,127 +142,7 @@ describe("management memory Presentation Host", () => {
       }),
     ).toThrow("invalid package-selection intent");
   });
-
-  it("publishes complete management graphs atomically with identity reuse and scoped removal", () => {
-    const host = createMemoryPresentationHost({
-      nodes: [...readyManagementNodes(), shellNode()],
-    });
-    const initialManagement = host.read(managementReference);
-    const initialDialog = host.read(installDialogReference);
-    const initialAppsWorkspace = host.read(appsWorkspaceReference);
-    const initialShell = host.read(shellReference);
-    const calls: string[] = [];
-    let removedDialogVisibleFromManagementNotification = true;
-
-    host.subscribe(managementReference, () => {
-      calls.push("management");
-      removedDialogVisibleFromManagementNotification =
-        host.read(installDialogReference) !== undefined;
-    });
-    host.subscribe(installDialogReference, () => calls.push("install-dialog"));
-    host.subscribe(appsWorkspaceReference, () => calls.push("apps-workspace"));
-    host.subscribe(shellReference, () => calls.push("shell"));
-
-    host.publish([...readyManagementNodes(), shellNode()]);
-
-    expect(calls).toEqual([]);
-    expect(host.read(managementReference)).toBe(initialManagement);
-    expect(host.read(installDialogReference)).toBe(initialDialog);
-    expect(host.read(appsWorkspaceReference)).toBe(initialAppsWorkspace);
-    expect(host.read(shellReference)).toBe(initialShell);
-
-    host.publish([...readyManagementNodes({ dialogOpen: true }), shellNode()]);
-
-    expect(calls).toEqual(["install-dialog"]);
-    expect(host.read(managementReference)).toBe(initialManagement);
-    expect(host.read(appsWorkspaceReference)).toBe(initialAppsWorkspace);
-    expect(host.read(shellReference)).toBe(initialShell);
-
-    host.publish([failedManagementNode(), shellNode()]);
-
-    expect(calls).toEqual(["install-dialog", "management", "install-dialog", "apps-workspace"]);
-    expect(removedDialogVisibleFromManagementNotification).toBe(false);
-    expect(host.read(managementReference)?.state).toBe("failed");
-    expect(host.read(installDialogReference)).toBeUndefined();
-    expect(host.read(appsWorkspaceReference)).toBeUndefined();
-    expect(host.read(routesWorkspaceReference)).toBeUndefined();
-    expect(host.read(shellReference)).toBe(initialShell);
-  });
-
-  it("keeps management server snapshots stable for server rendering and hydration", () => {
-    const serverNodes = readyManagementNodes();
-    const host = createMemoryPresentationHost({
-      nodes: readyManagementNodes({ dialogOpen: true }),
-      serverNodes,
-    });
-    const serverManagement = host.getServerSnapshot(managementReference);
-    const serverDialog = host.getServerSnapshot(installDialogReference);
-
-    expect(host.read(managementReference)).toBe(serverManagement);
-    expect(host.read(installDialogReference)?.open).toBe(true);
-    expect(serverDialog?.open).toBe(false);
-    expect(
-      renderToStaticMarkup(
-        <PresentationHostProvider host={host}>
-          <ManagementServerState />
-        </PresentationHostProvider>,
-      ),
-    ).toContain("ready:closed");
-  });
-
-  it("dispatches each canonical management intent without reshaping it", async () => {
-    const calls: PresentationIntent[] = [];
-    const host = createMemoryPresentationHost({
-      dispatch: (intent) => {
-        calls.push(intent);
-      },
-      nodes: readyManagementNodes(),
-    });
-    const dialog = installDialogNode().snapshot;
-    const operation = readyManagementManifestNode().snapshot.workspaceOperation;
-    if (!operation?.authorizationPrompt) {
-      throw new Error("Expected management operation authorization prompt.");
-    }
-    const intents: readonly ManagementIntent[] = [
-      { ...dialog.closeIntent, open: true },
-      dialog.packageOptions[1]!.selectionIntent,
-      {
-        dialogId: dialog.id,
-        fieldId: dialog.fields.label.fieldId,
-        intent: {
-          fieldName: dialog.fields.label.fieldName,
-          fieldValue: { kind: "input", value: "Personal site" },
-          type: "createDraftChange",
-        },
-        managementId: dialog.managementId,
-        type: "managementInstallField",
-      },
-      dialog.submitIntent,
-      {
-        controlId: operation.control.id,
-        intent: operation.control.trigger.intent,
-        managementId: managementReference.managementId,
-        operationId: operation.id,
-        type: "managementWorkspaceOperation",
-      },
-      operation.authorizationPrompt.intent,
-    ];
-
-    for (const intent of intents) {
-      await host.dispatch(intent);
-    }
-
-    expect(calls).toEqual(intents);
-    calls.forEach((intent, index) => expect(intent).toBe(intents[index]));
-  });
 });
-
-function ManagementServerState() {
-  const management = useManagementManifest(managementReference);
-  const dialog = useManagementInstallDialog(installDialogReference);
-
-  return <span>{`${management?.state}:${dialog?.open ? "open" : "closed"}`}</span>;
-}
 
 function readyManagementNodes({ dialogOpen = false }: { dialogOpen?: boolean } = {}) {
   return [

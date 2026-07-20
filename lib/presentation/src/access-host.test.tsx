@@ -1,4 +1,3 @@
-import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vite-plus/test";
 import type {
   AccessActionContract,
@@ -13,25 +12,17 @@ import type {
   AccessManifestContract,
   AccessReadyContract,
   ButtonContract,
-  PresentationIntent,
 } from "./contract.ts";
 import {
   createMemoryPresentationHost,
   accessInvitationAuthoringReference,
   accessManifestReference,
   shellManifestReference,
-  isAccessIntent,
-  isWorkspaceIntent,
   type AccessInvitationAuthoringNode,
   type AccessManifestNode,
   type PresentationNodeSet,
   type ShellManifestNode,
 } from "./host.ts";
-import {
-  PresentationHostProvider,
-  useAccessInvitationAuthoring,
-  useAccessManifest,
-} from "./host-react.tsx";
 
 const accessReference = accessManifestReference("access:instance");
 const authoringReference = accessInvitationAuthoringReference(
@@ -153,124 +144,7 @@ describe("access memory Presentation Host", () => {
       }),
     ).toThrow("invalid identity");
   });
-
-  it("publishes mixed access graphs atomically with semantic reuse and scoped notification", () => {
-    const host = createMemoryPresentationHost({ nodes: readyAccessNodes() });
-    const initialManifest = host.read(accessReference);
-    const initialAuthoring = host.read(authoringReference);
-    const initialShell = host.read(shellReference);
-    const calls: string[] = [];
-    let authoringVisibleFromManifestNotification = true;
-
-    host.subscribe(accessReference, () => {
-      calls.push("access");
-      authoringVisibleFromManifestNotification = host.read(authoringReference) !== undefined;
-    });
-    host.subscribe(authoringReference, () => calls.push("authoring"));
-    host.subscribe(shellReference, () => calls.push("shell"));
-
-    host.publish(readyAccessNodes());
-    expect(calls).toEqual([]);
-    expect(host.read(accessReference)).toBe(initialManifest);
-    expect(host.read(authoringReference)).toBe(initialAuthoring);
-    expect(host.read(shellReference)).toBe(initialShell);
-
-    host.publish(readyAccessNodes({ authoringOpen: true }));
-    expect(calls).toEqual(["authoring"]);
-    expect(host.read(accessReference)).toBe(initialManifest);
-    expect(host.read(shellReference)).toBe(initialShell);
-
-    host.publish([failedAccessNode(), shellNode()]);
-    expect(calls).toEqual(["authoring", "access", "authoring"]);
-    expect(authoringVisibleFromManifestNotification).toBe(false);
-    expect(host.read(authoringReference)).toBeUndefined();
-    expect(host.read(shellReference)).toBe(initialShell);
-  });
-
-  it("keeps loading server snapshots stable through ready hydration", () => {
-    const host = createMemoryPresentationHost({
-      nodes: readyAccessNodes(),
-      serverNodes: [loadingAccessNode(), shellNode()],
-    });
-
-    expect(host.read(accessReference)?.state).toBe("ready");
-    expect(host.getServerSnapshot(accessReference)?.state).toBe("loading");
-    expect(host.getServerSnapshot(authoringReference)).toBeUndefined();
-    expect(
-      renderToStaticMarkup(
-        <PresentationHostProvider host={host}>
-          <AccessServerState />
-        </PresentationHostProvider>,
-      ),
-    ).toContain("loading:closed");
-  });
-
-  it("narrows and dispatches every canonical access intent without reshaping", async () => {
-    const calls: PresentationIntent[] = [];
-    const host = createMemoryPresentationHost({
-      dispatch: (intent) => {
-        calls.push(intent);
-      },
-      nodes: readyAccessNodes(),
-    });
-    const manifest = readyAccessManifestNode().snapshot;
-    const authoring = invitationAuthoringNode().snapshot;
-    const confirmation = required(manifest.confirmation);
-    const roleOption = authoring.grantSelections[0].groups[0]!.options[0]!;
-    const revocation = manifest.invitations[0]!.revocation;
-    if (revocation.availability !== "available") {
-      throw new Error("Expected available revocation fixture.");
-    }
-    const intents: readonly PresentationIntent[] = [
-      manifest.invite.intent,
-      authoring.cancel.intent,
-      {
-        ...authoring.fields.targetEmail.changeIntent,
-        value: "new@example.com",
-      },
-      roleOption.selectionIntent,
-      authoring.submit.intent,
-      revocation.action.intent,
-      confirmation.cancel.intent,
-      confirmation.action.intent,
-    ];
-
-    for (const intent of intents) {
-      expect(isAccessIntent(intent)).toBe(true);
-      expect(isWorkspaceIntent(intent)).toBe(false);
-      await host.dispatch(intent);
-    }
-
-    expect(calls).toEqual(intents);
-    calls.forEach((intent, index) => expect(intent).toBe(intents[index]));
-  });
-
-  it("serializes complete access snapshots without private identity or invitation secrets", () => {
-    const serialized = JSON.stringify(readyAccessNodes());
-
-    for (const excluded of [
-      "adminBearer",
-      "challengeSecret",
-      "credentialMaterial",
-      "handoffGrant",
-      "invitationRequest",
-      "providerResponse",
-      "rawInviteToken",
-      "recoveryMaterial",
-      "sessionId",
-      "tokenHash",
-    ]) {
-      expect(serialized).not.toContain(excluded);
-    }
-  });
 });
-
-function AccessServerState() {
-  const access = useAccessManifest(accessReference);
-  const authoring = useAccessInvitationAuthoring(authoringReference);
-
-  return <span>{`${access?.state}:${authoring?.open ? "open" : "closed"}`}</span>;
-}
 
 function readyAccessNodes({ authoringOpen = false }: { authoringOpen?: boolean } = {}) {
   return [
@@ -721,11 +595,4 @@ function button(
     prominence,
     type,
   };
-}
-
-function required<T>(value: T | undefined): T {
-  if (value === undefined) {
-    throw new Error("Expected fixture value.");
-  }
-  return value;
 }

@@ -1,5 +1,4 @@
-import { readFile } from "node:fs/promises";
-import { relative, resolve } from "node:path";
+import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { build, type PluginOption } from "vite-plus";
@@ -39,19 +38,6 @@ type ManifestChunk = {
 };
 
 describe("Formless Renderer Astryx StyleX root build integration", () => {
-  it("ships the runtime build plugin and its compatible StyleX peer", async () => {
-    const packageJson = JSON.parse(
-      await readFile(resolve(packageRoot, "package.json"), "utf8"),
-    ) as {
-      dependencies?: Record<string, string>;
-      devDependencies?: Record<string, string>;
-    };
-
-    expect(packageJson.dependencies?.["@astryxdesign/build"]).toBe("0.1.4");
-    expect(packageJson.dependencies?.["@stylexjs/babel-plugin"]).toBe("0.18.3");
-    expect(packageJson.dependencies?.["@stylexjs/unplugin"]).toBe("0.18.3");
-  });
-
   it("emits the selected production application and public entries with isolated Renderer graphs", async () => {
     const runtimeConfig = runtimeViteConfig({
       env: { NODE_ENV: "production", VITEST: "true" },
@@ -94,8 +80,6 @@ describe("Formless Renderer Astryx StyleX root build integration", () => {
     const publicSiteManifestEntry = requiredManifestEntry(manifest, publicSiteEntryChunk.fileName);
     const applicationCss = manifestCss(applicationManifestEntry, manifest);
     const publicSiteCss = manifestCss(publicSiteManifestEntry, manifest);
-    const applicationWorkspaceCss = workspaceCssModules(applicationModules);
-    const publicSiteWorkspaceCss = workspaceCssModules(publicSiteModules);
     const emittedCss = assets
       .filter(({ fileName }) => fileName.endsWith(".css"))
       .map(assetText)
@@ -124,30 +108,14 @@ describe("Formless Renderer Astryx StyleX root build integration", () => {
         expect.stringContaining("src/app/"),
       ]),
     );
-    expect(applicationWorkspaceCss).toEqual([
-      "lib/renderer/src/application.css",
-      "lib/renderer/src/global.css",
-    ]);
-    expect(publicSiteWorkspaceCss).toEqual(["lib/renderer/src/global.css"]);
     expect(applicationCss.length).toBeGreaterThan(0);
     expect(publicSiteCss.length).toBeGreaterThan(0);
     expect(emittedCss).toContain("@layer");
     expect(emittedCss).toContain("@layer astryx-base");
     expect(emittedCss).toMatch(/\.x[a-z0-9]+/);
-    expect(emittedCss).toMatch(/min-height:\s*260px/);
-    expect(emittedCss).toMatch(/width:\s*min\(100%,\s*480px\)/);
     expect(emittedCss).not.toContain("stylex.create");
   }, 30_000);
 });
-
-function workspaceCssModules(modules: readonly string[]): string[] {
-  return modules
-    .map((moduleId) => moduleId.split("?", 1)[0])
-    .filter((moduleId): moduleId is string => moduleId !== undefined && moduleId.endsWith(".css"))
-    .map((moduleId) => relative(repoRoot, moduleId))
-    .filter((moduleId) => !moduleId.startsWith("..") && !moduleId.startsWith("node_modules/"))
-    .sort();
-}
 
 function buildOutputs(value: unknown): BuildOutput[] {
   const outputs = Array.isArray(value) ? value : [value];

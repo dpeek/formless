@@ -1,21 +1,7 @@
-import { createElement, type ComponentPropsWithRef, type ElementType } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 
-import { SourceIcon, sourceIconIsRenderable } from "./field-primitives.tsx";
-
-vi.mock("@astryxdesign/core/Icon", () => ({
-  Icon: ({
-    color: _color,
-    icon: IconComponent,
-    size: _size,
-    ...props
-  }: ComponentPropsWithRef<"svg"> & {
-    color?: string;
-    icon: ElementType;
-    size?: string;
-  }) => createElement(IconComponent, props),
-}));
+import { SourceIcon } from "./field-primitives.tsx";
 
 describe("Astryx source SVG icon", () => {
   it("renders safe source during server rendering and strips event handlers", () => {
@@ -23,8 +9,6 @@ describe("Astryx source SVG icon", () => {
       '<svg viewBox="0 0 24 24" onload="alert(1)"><path onclick="alert(1)" d="M4 12h16" /></svg>';
     const markup = renderToStaticMarkup(<SourceIcon source={source} aria-hidden />);
 
-    expect(sourceIconIsRenderable(source)).toBe(true);
-    expect(markup).toContain('data-astryx-source-icon="svg"');
     expect(markup).toContain('<path d="M4 12h16"></path>');
     expect(markup).not.toContain("onload");
     expect(markup).not.toContain("onclick");
@@ -46,8 +30,6 @@ describe("Astryx source SVG icon", () => {
   ] as const)("renders an empty outline for %s source", (_name, source) => {
     const markup = renderToStaticMarkup(<SourceIcon source={source} aria-hidden />);
 
-    expect(sourceIconIsRenderable(source)).toBe(false);
-    expect(markup).toContain('data-astryx-source-icon="empty"');
     expect(markup).toContain("<rect");
     expect(markup).not.toContain("<script");
     expect(markup).not.toContain("foreignObject");

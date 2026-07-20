@@ -33,3 +33,12 @@ Read this when editing `lib/site-app/*`.
 
 - Keep Site records flat.
 - Keep source schema and seed records as package source data, not generated runtime state.
+
+## Test Rules
+
+- Own public Site contracts, session validation, challenge, request, retry and
+  outcome behavior, and Site React, Worker, and Node adapter behavior.
+- Assert observable session results, requests, projected contracts, or adapter
+  output. Concrete Formless Renderer DOM remains Renderer-owned.
+- Reject fixture-catalog, source-text, exact-dependency-version,
+  implementation-history, and removed-behavior proof.

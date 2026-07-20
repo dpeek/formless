@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vite-plus/test";
-import { evaluateAggregate, evaluateNumericExpression, formatReadModelNumber } from "./index.ts";
+import {
+  evaluateAggregate,
+  evaluateNumericExpression,
+  formatReadModelNumber,
+  parseAppSchema,
+  stringifySchema,
+} from "./index.ts";
+import { taskSchema } from "./schema-test-fixtures.ts";
 import type { StoredRecord } from "./index.ts";
 import type { NumericExpression } from "./index.ts";
 
@@ -266,6 +273,105 @@ describe("read model aggregates", () => {
     ).toBeUndefined();
   });
 });
+
+describe("schema read models", () => {
+  it("parses computed values and aggregates through the app schema boundary", () => {
+    const schema = parseAppSchema(readModelSchema());
+
+    expect(schema.readModels).toEqual({
+      computedValues: {
+        doubledEstimate: {
+          entity: "task",
+          type: "number",
+          expression: {
+            kind: "binary",
+            op: "multiply",
+            left: { kind: "field", field: "estimate" },
+            right: { kind: "literal", value: 2 },
+          },
+        },
+      },
+      aggregates: {
+        taskCount: { query: "taskAll", function: "count" },
+        totalEstimate: {
+          query: "taskAll",
+          function: "sum",
+          value: { kind: "field", field: "estimate" },
+        },
+        averageDoubledEstimate: {
+          query: "taskAll",
+          function: "average",
+          value: { kind: "computed", computedValue: "doubledEstimate" },
+        },
+      },
+    });
+    expect(parseAppSchema(JSON.parse(stringifySchema(schema)))).toEqual(schema);
+  });
+
+  it("rejects invalid computed and aggregate references", () => {
+    expect(() =>
+      parseAppSchema({
+        ...readModelSchema(),
+        readModels: {
+          computedValues: {
+            invalid: {
+              entity: "task",
+              type: "number",
+              expression: { kind: "field", field: "title" },
+            },
+          },
+        },
+      }),
+    ).toThrow('field "task.title" must be a number field');
+
+    expect(() =>
+      parseAppSchema({
+        ...readModelSchema(),
+        readModels: {
+          aggregates: {
+            invalid: {
+              query: "missing",
+              function: "sum",
+              value: { kind: "field", field: "estimate" },
+            },
+          },
+        },
+      }),
+    ).toThrow('references unknown query "missing"');
+  });
+});
+
+function readModelSchema() {
+  return taskSchema({
+    readModels: {
+      computedValues: {
+        doubledEstimate: {
+          entity: "task",
+          type: "number",
+          expression: {
+            kind: "binary",
+            op: "multiply",
+            left: { kind: "field", field: "estimate" },
+            right: { kind: "literal", value: 2 },
+          },
+        },
+      },
+      aggregates: {
+        taskCount: { query: "taskAll", function: "count" },
+        totalEstimate: {
+          query: "taskAll",
+          function: "sum",
+          value: { kind: "field", field: "estimate" },
+        },
+        averageDoubledEstimate: {
+          query: "taskAll",
+          function: "average",
+          value: { kind: "computed", computedValue: "doubledEstimate" },
+        },
+      },
+    },
+  });
+}
 
 const rateRecord: StoredRecord = {
   id: "rate-1",

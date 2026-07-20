@@ -49,3 +49,12 @@ Read this when editing `lib/presentation/*`.
 - Do not import the Renderer package, root `src/*`, or the Site implementation
   package.
 - Keep package tests fast, deterministic, and local.
+
+## Test Rules
+
+- Own renderer-neutral contract, reference, publication, identity,
+  subscription, snapshot, hydration, and canonical intent-forwarding semantics.
+- Assert observable public Host or contract behavior. Do not assert concrete
+  Renderer DOM or Formless runtime effects.
+- Reject fixture-catalog, source-text, exact-dependency-version,
+  implementation-history, and removed-behavior proof.

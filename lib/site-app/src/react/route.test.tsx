@@ -162,6 +162,77 @@ describe("public Site page route data loading", () => {
     expect(startedPreviewSync).toBe(false);
     expect(listenedForPreviewChanges).toBe(false);
   });
+
+  it.each(["preview", "authoring"] as const)(
+    "refreshes %s sessions after sync and same-profile changes",
+    async (linkMode) => {
+      const tree = sitePageTree("home");
+      const fetchPaths: string[] = [];
+      const states: SitePageRouteState[] = [];
+      let notifyChanged: (() => void) | undefined;
+      let notifySynced: (() => void) | undefined;
+      const stop = startSitePageRouteSession({
+        fetcher: async (input) => {
+          fetchPaths.push(requestUrl(input));
+          return Response.json(tree);
+        },
+        linkMode,
+        listenForPreviewChanges: (onChanged) => {
+          notifyChanged = onChanged;
+          return () => {};
+        },
+        onState: (state) => states.push(state),
+        slug: "home",
+        startPreviewSync: (onSynced) => {
+          notifySynced = onSynced;
+          return () => {};
+        },
+      });
+
+      try {
+        await waitFor(() => readyStateCount(states) === 1);
+        notifySynced?.();
+        await waitFor(() => readyStateCount(states) === 2);
+        notifyChanged?.();
+        await waitFor(() => readyStateCount(states) === 3);
+      } finally {
+        stop();
+      }
+
+      expect(fetchPaths).toEqual([
+        "/api/site/tree/home",
+        "/api/site/tree/home",
+        "/api/site/tree/home",
+      ]);
+    },
+  );
+
+  it("aborts the active preview read and removes both subscriptions on cleanup", () => {
+    let activeSignal: AbortSignal | undefined;
+    let stoppedChanges = false;
+    let stoppedSync = false;
+    const stop = startSitePageRouteSession({
+      fetcher: (_input, init) => {
+        activeSignal = init?.signal ?? undefined;
+        return new Promise<Response>(() => {});
+      },
+      linkMode: "preview",
+      listenForPreviewChanges: () => () => {
+        stoppedChanges = true;
+      },
+      onState: () => {},
+      slug: "home",
+      startPreviewSync: () => () => {
+        stoppedSync = true;
+      },
+    });
+
+    expect(activeSignal?.aborted).toBe(false);
+    stop();
+    expect(activeSignal?.aborted).toBe(true);
+    expect(stoppedChanges).toBe(true);
+    expect(stoppedSync).toBe(true);
+  });
 });
 
 describe("public Site page route rendering", () => {
@@ -306,4 +377,30 @@ function sitePageTree(slug: string): SitePageTreeResponse {
       slug,
     },
   };
+}
+
+function readyStateCount(states: readonly SitePageRouteState[]) {
+  return states.filter((state) => state.status === "ready").length;
+}
+
+function requestUrl(input: Parameters<typeof fetch>[0]) {
+  if (typeof input === "string") {
+    return input;
+  }
+
+  return input instanceof URL ? input.href : input.url;
+}
+
+async function waitFor(predicate: () => boolean) {
+  const deadline = Date.now() + 1000;
+
+  while (Date.now() < deadline) {
+    if (predicate()) {
+      return;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 1));
+  }
+
+  throw new Error("Timed out waiting for condition.");
 }

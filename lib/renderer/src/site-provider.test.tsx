@@ -1,19 +1,7 @@
-import { readFile } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
-import { createElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 
 import { FormlessSiteRendererProvider } from "./site-provider.tsx";
-
-vi.mock("@astryxdesign/core/theme", () => ({
-  Theme: ({ children, mode }: { children: ReactNode; mode: string }) =>
-    createElement("section", { "data-astryx-theme-mode": mode }, children),
-}));
-
-const sourceRoot = dirname(fileURLToPath(import.meta.url));
-const packageRoot = resolve(sourceRoot, "..");
 
 describe("Formless Site renderer provider", () => {
   it.each(["light", "dark"] as const)("applies the canonical %s mode", (mode) => {
@@ -23,7 +11,7 @@ describe("Formless Site renderer provider", () => {
       </FormlessSiteRendererProvider>,
     );
 
-    expect(html).toContain(`data-astryx-theme-mode="${mode}"`);
+    expect(html).toContain(`data-theme="${mode}"`);
     expect(html).toContain(`data-site-theme="${mode}"`);
     expect(html).toContain("data-formless-native-navigation");
     expect(html).toContain("data-astryx-public-site-provider");
@@ -71,21 +59,5 @@ describe("Formless Site renderer provider", () => {
     expect(html).not.toContain("javascript:red");
     expect(html).not.toContain("transparent");
     expect(html).toContain("--formless-public-site-background:rgb(9 9 11)");
-  });
-
-  it("exports production provider and CSS package boundaries", async () => {
-    const packageJson = JSON.parse(
-      await readFile(resolve(packageRoot, "package.json"), "utf8"),
-    ) as {
-      exports: Record<string, string>;
-    };
-    const css = await readFile(resolve(sourceRoot, "global.css"), "utf8");
-
-    expect(packageJson.exports["./site/renderer"]).toBe("./src/site-renderer.tsx");
-    expect(packageJson.exports["./site/provider"]).toBe("./src/site-provider.tsx");
-    expect(packageJson.exports["./site/global.css"]).toBe("./src/global.css");
-    expect(css).toContain('@import "@astryxdesign/core/reset.css";');
-    expect(css).toContain('@import "@astryxdesign/theme-neutral/theme.css";');
-    expect(css).toContain("[data-astryx-public-site-provider]");
   });
 });

@@ -24,7 +24,6 @@ import {
 import {
   initialGeneratedCreateDraftSessionState,
   markGeneratedCreateDraftSessionSubmitted,
-  resolveGeneratedCreateValues,
   selectGeneratedCreateDraftSession,
   type GeneratedCreateDraftSessionState,
 } from "./create-field-authoring.ts";
@@ -388,20 +387,6 @@ async function submitCreateValues({
   }
 
   return { recordId: selectCreatedOperationRecordId(result) };
-}
-
-export function resolveCreateValues(
-  formData: FormData,
-  operation: CreateHomeOperationConfig,
-  queryContext?: QueryEvaluationContext,
-): RecordValues {
-  return resolveGeneratedCreateValues({
-    formData,
-    fields: operation.fields,
-    union: operation.union,
-    defaults: operation.defaults,
-    queryContext,
-  });
 }
 
 export function projectCreateSubmitBinding(

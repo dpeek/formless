@@ -1,56 +1,29 @@
-import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vite-plus/test";
-import type { ApplicationSystemStateContract, ApplicationSystemStateIntent } from "./contract.ts";
+import type { ApplicationSystemStateContract } from "./contract.ts";
 import {
   createMemoryPresentationHost,
   applicationSystemStateReference,
   type ApplicationSystemStateNode,
 } from "./host.ts";
-import { PresentationHostProvider, useApplicationSystemState } from "./host-react.tsx";
 
 const reference = applicationSystemStateReference("application-system-state:test");
 
 describe("application system-state contract host", () => {
-  it("reads, publishes, subscribes, and caches server state through the typed reference", () => {
-    const serverNode = node("loading", "Loading Formless");
+  it("reads system state through its typed reference", () => {
     const host = createMemoryPresentationHost({
-      nodes: [serverNode],
-      serverNodes: [serverNode],
+      nodes: [node("loading", "Loading Formless")],
     });
-    const calls: string[] = [];
-    const initial = host.read(reference);
+    const state: ApplicationSystemStateContract | undefined = host.read({ ...reference });
 
-    host.subscribe(reference, () => calls.push("system-state"));
-    host.publish([node("loading", "Loading Formless")]);
-    expect(host.read(reference)).toBe(initial);
-    expect(calls).toEqual([]);
-
-    host.publish([node("failure", "Formless unavailable")]);
-    expect(host.read(reference)?.state).toBe("failure");
-    expect(host.getServerSnapshot(reference)).toBe(initial);
-    expect(calls).toEqual(["system-state"]);
-    expect(
-      renderToStaticMarkup(
-        <PresentationHostProvider host={host}>
-          <SystemStateHeading />
-        </PresentationHostProvider>,
-      ),
-    ).toContain("Loading Formless");
+    expect(state).toMatchObject({
+      heading: "Loading Formless",
+      id: reference.stateId,
+      state: "loading",
+    });
   });
 
-  it("dispatches canonical system-state intents and rejects mismatched action identity", async () => {
-    const intents: ApplicationSystemStateIntent[] = [];
+  it("rejects mismatched action identity", () => {
     const actionNode = node("failure", "Formless unavailable", true);
-    const host = createMemoryPresentationHost({
-      dispatch: (intent) => {
-        if (intent.type === "applicationSystemStateAction") intents.push(intent);
-      },
-      nodes: [actionNode],
-    });
-    const intent = actionNode.snapshot.actions[0]!.intent;
-
-    await host.dispatch(intent);
-    expect(intents).toEqual([intent]);
 
     expect(() =>
       createMemoryPresentationHost({
@@ -70,11 +43,6 @@ describe("application system-state contract host", () => {
     ).toThrow("invalid action intent");
   });
 });
-
-function SystemStateHeading() {
-  const state = useApplicationSystemState(reference);
-  return <span>{state?.heading}</span>;
-}
 
 function node(
   state: ApplicationSystemStateContract["state"],

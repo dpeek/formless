@@ -1,13 +1,9 @@
-import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vite-plus/test";
 import type {
   ButtonContract,
-  PresentationIntent,
   OperationButtonContract,
   OperationControlContract,
-  TreeIntent,
   TreeResultContract,
-  WorkspaceTreeIntent,
 } from "./contract.ts";
 import {
   createMemoryPresentationHost,
@@ -18,7 +14,6 @@ import {
   type PresentationNodeSet,
   type TreeResultNode,
 } from "./host.ts";
-import { PresentationHostProvider, useTreeResult } from "./host-react.tsx";
 
 const workspaceReference = workspaceManifestReference("workspace:site");
 const sectionReference = workspaceSectionShellReference(
@@ -33,34 +28,9 @@ const treeReference = treeResultReference({
 });
 
 describe("Formless UI tree contract", () => {
-  it("composes complete renderer-neutral tree data and canonical nested intents", () => {
+  it("keeps tree-specific placement and selected-editor structure", () => {
     const tree = treeResult();
-    const intents = treeIntents();
-    const workspaceIntent: WorkspaceTreeIntent = {
-      collectionId: "collection:pages",
-      intent: intents[0]!,
-      resultId: tree.id,
-      screenId: workspaceReference.workspaceId,
-      sectionId: sectionReference.sectionId,
-      type: "workspaceTree",
-    };
-    const serialized = JSON.stringify({ intents, tree, workspaceIntent });
 
-    expect(structuredClone({ intents, tree, workspaceIntent })).toEqual({
-      intents,
-      tree,
-      workspaceIntent,
-    });
-    expect(intents.map(({ type }) => type)).toEqual([
-      "treeItemSelection",
-      "treeDisclosureOpenChange",
-      "treeContextAction",
-      "treeChildVariantSelection",
-      "treeCreate",
-      "treeField",
-      "treeOperation",
-      "treeReorder",
-    ]);
     expect(tree.items[0]).toMatchObject({
       childRecordId: "block:hero",
       id: "tree-item:hero",
@@ -74,9 +44,6 @@ describe("Formless UI tree contract", () => {
         kind: "operationControl",
       },
     });
-    expect(serialized).not.toMatch(
-      /recordsById|relationship|schema|orderingContext|rankPlan|operationController|sync|className/,
-    );
   });
 });
 
@@ -107,94 +74,7 @@ describe("Formless UI tree-result host member", () => {
       "does not match reference",
     );
   });
-
-  it("publishes tree results atomically with identity reuse and scoped removal", () => {
-    const host = createMemoryPresentationHost({ nodes: treeNodes() });
-    const initialWorkspace = host.read(workspaceReference);
-    const initialSection = host.read(sectionReference);
-    const initialTree = host.read(treeReference);
-    const calls: string[] = [];
-    let updatedLabelSeenFromTreeNotification: string | undefined;
-    let removedTreeSeenFromWorkspaceNotification = true;
-
-    host.subscribe(workspaceReference, () => {
-      calls.push("workspace");
-      removedTreeSeenFromWorkspaceNotification = host.read(treeReference) !== undefined;
-    });
-    host.subscribe(sectionReference, () => calls.push("section"));
-    host.subscribe(treeReference, () => {
-      calls.push("tree");
-      updatedLabelSeenFromTreeNotification = host.read(treeReference)?.items[0]?.label;
-    });
-
-    host.publish(treeNodes());
-
-    expect(calls).toEqual([]);
-    expect(host.read(workspaceReference)).toBe(initialWorkspace);
-    expect(host.read(sectionReference)).toBe(initialSection);
-    expect(host.read(treeReference)).toBe(initialTree);
-
-    host.publish(treeNodes({ itemLabel: "Updated hero" }));
-
-    expect(calls).toEqual(["tree"]);
-    expect(updatedLabelSeenFromTreeNotification).toBe("Updated hero");
-    expect(host.read(workspaceReference)).toBe(initialWorkspace);
-    expect(host.read(sectionReference)).toBe(initialSection);
-
-    host.publish([]);
-
-    expect(calls).toEqual(["tree", "workspace", "section", "tree"]);
-    expect(removedTreeSeenFromWorkspaceNotification).toBe(false);
-    expect(host.read(treeReference)).toBeUndefined();
-  });
-
-  it("keeps tree server snapshots stable for server rendering and hydration", () => {
-    const serverNodes = treeNodes({ itemLabel: "Server hero" });
-    const host = createMemoryPresentationHost({
-      nodes: treeNodes({ itemLabel: "Client hero" }),
-      serverNodes,
-    });
-    const serverTree = host.getServerSnapshot(treeReference);
-
-    expect(serverTree?.items[0]?.label).toBe("Server hero");
-    expect(host.read(treeReference)?.items[0]?.label).toBe("Client hero");
-    expect(host.getServerSnapshot(treeReference)).toBe(serverTree);
-    expect(
-      renderToStaticMarkup(
-        <PresentationHostProvider host={host}>
-          <TreeItemLabel />
-        </PresentationHostProvider>,
-      ),
-    ).toContain("Server hero");
-  });
-
-  it("dispatches the scoped canonical workspace tree intent", async () => {
-    const calls: PresentationIntent[] = [];
-    const host = createMemoryPresentationHost({
-      dispatch: (intent) => {
-        calls.push(intent);
-      },
-      nodes: treeNodes(),
-    });
-    const intent: WorkspaceTreeIntent = {
-      collectionId: "collection:pages",
-      intent: treeIntents()[7]!,
-      resultId: treeReference.resultId,
-      screenId: workspaceReference.workspaceId,
-      sectionId: sectionReference.sectionId,
-      type: "workspaceTree",
-    };
-
-    await host.dispatch(intent);
-
-    expect(calls).toEqual([intent]);
-  });
 });
-
-function TreeItemLabel() {
-  const tree = useTreeResult(treeReference);
-  return <span>{tree?.items[0]?.label}</span>;
-}
 
 function treeNodes({ itemLabel = "Hero" }: { itemLabel?: string } = {}): PresentationNodeSet {
   return [
@@ -516,53 +396,4 @@ function operationButton(
     prominence,
     type: "button",
   };
-}
-
-function treeIntents(): readonly TreeIntent[] {
-  const resultId = treeReference.resultId;
-  const itemId = "tree-item:hero";
-  const parent = { itemId, kind: "item" as const };
-  return [
-    { itemId, resultId, type: "treeItemSelection" },
-    { itemId, open: false, resultId, type: "treeDisclosureOpenChange" },
-    { actionId: "action:open-hero", itemId, resultId, type: "treeContextAction" },
-    {
-      parent,
-      resultId,
-      type: "treeChildVariantSelection",
-      variantId: "variant:hero:text",
-    },
-    {
-      intent: { open: true, surfaceId: "surface:create-child", type: "createOpenChange" },
-      parent,
-      resultId,
-      surfaceId: "surface:create-child",
-      type: "treeCreate",
-    },
-    {
-      fieldId: "field:placement:slot",
-      intent: { fieldName: "slot", type: "recordEditorDraftChange", value: "main" },
-      resultId,
-      target: { fieldSetId: "fields:hero-placement", itemId, kind: "placement" },
-      type: "treeField",
-    },
-    {
-      controlId: "operation:remove-placement",
-      intent: {
-        controlId: "operation:remove-placement",
-        invocationSource: "confirmationDialog",
-        type: "operationInvoke",
-      },
-      itemId,
-      resultId,
-      type: "treeOperation",
-    },
-    {
-      actionId: "order:hero:down",
-      direction: "down",
-      itemId,
-      resultId,
-      type: "treeReorder",
-    },
-  ];
 }

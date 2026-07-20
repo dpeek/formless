@@ -17,10 +17,6 @@ export function sourceLikeSiteSchema(overrides: Partial<AppSchema> = {}): AppSch
   return sourceLikeSchema(siteSourceSchema, overrides);
 }
 
-export function sourceLikeSchemas(): AppSchema[] {
-  return [sourceLikeTaskSchema(), sourceLikeRateSchema(), sourceLikeSiteSchema()];
-}
-
 export function invalidSchemaFrom<T extends object>(
   schema: T,
   mutate: (draft: T) => void,

@@ -53,3 +53,12 @@ Read this when editing `lib/schema/*`.
 - Do not import app records, Durable Object storage, browser state, React, filesystem APIs, provider SDKs, or bundled schema JSON files.
 - Keep package tests fast, deterministic, and local.
 - Do not call live networks, Cloudflare APIs, or a dev server from package tests.
+
+## Test Rules
+
+- Own App schema parsing, stringify and error behavior, field behavior, query
+  and read-model helpers, defaults, metadata, and operation capability facts.
+- Assert observable public return values, errors, or named schema invariants
+  with package-local fixtures. Do not verify Formless runtime behavior here.
+- Reject fixture-catalog, source-text, exact-dependency-version,
+  implementation-history, and removed-behavior proof.

@@ -428,12 +428,9 @@ selection, reads, evaluation, operation execution, and effects.
 - AND the presentation adapters do not select models, read records, evaluate
   queries, counts, aggregates, or computed values, own route or authoring
   state, build operation input, execute operations, or update sync state
-- AND generated runtime and test source uses documented
+- AND generated runtime uses documented
   `@dpeek/formless-presentation` contract and host exports without
   owning presentation implementation
-- AND focused coverage asserts projected facts, nested intent dispatch,
-  selection fallback, context changes, counts, summaries, actions, result
-  composition, and visible empty or unavailable behavior
 - AND production renders the contract through the Formless Renderer application
   assembly
 
@@ -569,7 +566,7 @@ operation execution, ordering plans, navigation, and effects.
 - WHEN the generated tree foundation publishes a complete tree-result node
 - THEN the subscribed Formless Renderer tree entrypoint reads only the scoped
   tree-result reference and delegates to a pure complete-snapshot renderer
-- AND generated runtime and test source uses documented
+- AND generated runtime uses documented
   `@dpeek/formless-presentation` contract and host exports without
   owning tree presentation
 - AND production tree sections use the same generated workspace host path as
@@ -667,7 +664,7 @@ entrypoints.
   host
 - THEN subscribed wrappers read scoped snapshots and delegate presentation to
   the existing pure snapshot renderers
-- AND pure renderer tests may continue passing complete contract snapshots
+- AND pure renderer entrypoints continue accepting complete contract snapshots
   directly without a host
 - AND package-local fixtures remain serializable contract data with no
   callbacks, React nodes, runtime records, replica APIs, media clients,
@@ -748,7 +745,7 @@ data reads, session behavior, operations, and effects.
   app-profile, mapped-app, and Site authoring admin routes use that renderer at
   their specified shell scope
 - **AND** no-shell routes remain outside the shell host and renderer
-- **AND** application source and tests consume contracts and host behavior
+- **AND** application source consumes contracts and host behavior
   through documented `@dpeek/formless-presentation` exports and concrete
   rendering through documented `@dpeek/formless-renderer` exports
 - **AND** production mounts the renderer through the root Formless Renderer
@@ -857,9 +854,6 @@ record reads, authoring state, operation execution, and ordering effects.
   calculate rank patches, execute operations, or update sync state
 - AND production list rendering does not use raw model callbacks, React-node
   slots, or DnD event types to bypass the renderer-neutral contract
-- AND focused coverage asserts projected facts, intent dispatch, successful and
-  failed field edits, transition and delete behavior, ordering behavior,
-  warnings, empty state, and visible fallbacks
 - AND production mounts list presentation through the root Formless Renderer
   application assembly
 
@@ -966,9 +960,6 @@ code owns record selection, authoring state, operation execution, and effects.
 - AND the presentation adapter does not query records, select fields, own draft or icon
   dialog state, load reference or media options, upload media, build operation
   input, execute operations, or update sync state
-- AND focused coverage asserts projected facts, nested intent dispatch,
-  successful and failed field edits, transition and delete behavior, warnings,
-  empty and unavailable states, and visible fallbacks
 - AND collection context detail, referenced-record leaf paths, and tree-builder
   composition retain their owning renderer contracts
 - AND production mounts record-result presentation through the root Formless
@@ -1091,9 +1082,6 @@ record reads, authoring state, operation execution, and ordering effects.
   patches, execute operations, or update sync state
 - AND production table rendering does not use raw model callbacks or React-node
   slots to bypass the renderer-neutral table contract
-- AND focused coverage asserts projected facts, intent dispatch, controlled
-  dialog lifecycle, successful and failed edits, ordering behavior, and visible
-  fallbacks
 - AND production mounts table presentation through the root Formless Renderer
   application assembly
 
@@ -1338,12 +1326,11 @@ owns create policy, draft state, validation, and operation execution.
   after a successful create result
 - AND operation failure leaves the dialog and authored draft values available
   for correction while runtime-owned operation feedback reports the failure
-- AND current create capability coverage includes mutation-policy disabled
+- AND current create capability includes mutation-policy disabled
   state, unresolved context defaults, create-view field selection, union
   variants, `visibleWhen`, hidden literal defaults, required and invalid draft
   errors, reference options, state-machine initial values, supported specialized
   fields, pending submission, failure retry, and created-record callbacks
-- AND coverage asserts projected contract and user-visible behavior
 - AND production mounts create presentation through the root Formless Renderer
   application assembly
 
@@ -1421,8 +1408,6 @@ operation execution.
   options, resolving patches, invoking operations, or updating sync state
 - AND list, table, and record-result call sites retain their editing, read-only
   display, commit, failure, specialized-field, and missing-reference behavior
-- AND focused coverage asserts projected contracts, intent dispatch, successful
-  commits, failed-commit draft behavior, and user-visible display fallbacks
 - AND collection context detail and tree-builder field composition retain their
   owning record-result and tree-result contract boundaries
 - AND production mounts field presentation through the root Formless Renderer
@@ -1435,7 +1420,7 @@ operation execution.
 - THEN unexported package-local data-only fixtures provide representative
   `RecordFieldContract` and `DisplayFieldContract` values using the same
   contract shapes as production
-- AND fixture coverage includes editable, read-only, dirty, invalid, pending,
+- AND fixtures include editable, read-only, dirty, invalid, pending,
   compact, default, heading, visible-label detail, missing-reference, and
   display-fallback states
 - AND the fixtures contain no React components, generated runtime imports,
@@ -1817,9 +1802,6 @@ entity operations and view operation bindings.
 - AND collection queries and counts, record reads and labels, operation
   execution, sync feedback, successful-delete callbacks, and execution-state
   subscriptions remain in generated runtime
-- AND focused coverage asserts projected facts, intent dispatch, pending
-  deduplication, confirmation lifecycle, committed, replayed, failed behavior,
-  and user-visible feedback
 - AND production mounts operation presentation through the root Formless
   Renderer application assembly
 
@@ -2083,12 +2065,9 @@ navigation, and external effects.
 - THEN one subscribed Formless Renderer management entrypoint reads only
   contract references and snapshots, renders the referenced Apps and Routes
   workspaces and install dialog, and dispatches canonical intents
-- AND application source and tests consume contracts and host behavior through
+- AND application source consumes contracts and host behavior through
   documented `@dpeek/formless-presentation` exports and concrete rendering
   through documented `@dpeek/formless-renderer` exports
-- AND focused coverage asserts loading, failure, workspace availability,
-  install-dialog behavior, Push behavior, external authorization, display-safe
-  feedback, and intent dispatch
 - AND production mounts management and `/access` through the same root Formless
   Renderer application assembly
 
@@ -2616,3 +2595,50 @@ routing, and stable Presentation Host ownership.
   `@dpeek/formless-renderer`
 - AND storage, auth, Site projection, public forms, routes, and operations remain
   outside renderer asset assembly
+
+### Requirement: Generated Presentation Verification Boundaries
+
+The system SHALL verify generated presentation at the owning runtime projection,
+Presentation Host, Formless Renderer, and production assembly boundaries without
+repeating the same behavior through multiple concrete render paths.
+
+#### Scenario: Runtime verification stops at presentation contracts
+
+- GIVEN Formless runtime owns route and model selection, projection, state,
+  intent resolution, and effects
+- WHEN generated application behavior is verified in `lib/formless`
+- THEN verification asserts selected runtime targets, projected contracts,
+  Presentation Host publications, canonical intent resolution, and runtime
+  effects
+- AND it does not assert concrete Formless Renderer markup, Astryx component
+  output, renderer-private data attributes, or renderer layout
+- AND a React mount harness may exercise runtime publication or lifecycle
+  behavior only when the observed result remains a contract, host publication,
+  intent, or runtime effect
+
+#### Scenario: Renderer verification maps contracts to user-visible DOM
+
+- GIVEN the Formless Renderer consumes a complete projected contract
+- WHEN renderer behavior is verified in `lib/renderer`
+- THEN verification uses the production renderer with real Astryx components
+  and asserts user-visible DOM, accessibility semantics, controlled values and
+  state, and exact canonical intent dispatch
+- AND it does not replace Astryx components or adjacent production renderer
+  leaves with module mocks or stand-in components
+- AND fixture catalog completeness, fixture reducer behavior, private data
+  attributes, exact Astryx component variants, and Astryx library behavior are
+  not independent Formless Renderer requirements
+- AND public Site session validation, challenge, request, retry, and outcome
+  behavior remains verified at the Site-owned session boundary while renderer
+  verification covers the mapping from projected Site session facts to DOM
+
+#### Scenario: Production assembly verification uses real artifacts
+
+- GIVEN application and public Site roots integrate Formless runtime, package
+  adapters, and the Formless Renderer
+- WHEN their assembly or dependency separation is verified
+- THEN one focused integration at each distinct production root uses actual
+  render, SSR, build, or package output
+- AND source-text assertions, absent-file assertions, exact dependency-version
+  assertions, and duplicated hand-built import graphs do not substitute for the
+  production integration

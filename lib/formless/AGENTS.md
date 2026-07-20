@@ -20,6 +20,17 @@ Package scope: `lib/formless`.
 - Read `src/cli/AGENTS.md` before editing CLI source.
 - Keep package execution under Bun.
 
+## Test Rules
+
+- Own runtime route and model selection, projection, Presentation Host
+  publication, canonical intent resolution, runtime effects, storage, and Worker
+  behavior.
+- Assert selected targets, projected contracts, publications, intents, effects,
+  or other public runtime invariants. Do not assert Renderer markup, Astryx
+  output, private data attributes, or layout.
+- Reject fixture-catalog, source-text, exact-dependency-version,
+  implementation-history, and removed-behavior proof.
+
 ## Checks
 
 - Run `bun check:packages` from the repository root.

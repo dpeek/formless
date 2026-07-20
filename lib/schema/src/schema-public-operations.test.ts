@@ -3,6 +3,7 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   hasAnonymousTurnstileSameOriginAccess,
   isAnonymousPublicOperationExecutable,
+  parseAppSchema,
   projectPublicSafeOperationInputFields,
   selectAnonymousPublicOperation,
   selectAnonymousPublicOperationByKey,
@@ -11,6 +12,105 @@ import {
 } from "./index.ts";
 
 describe("schema public operation facts", () => {
+  it("parses anonymous public handler policy and rejects invalid public declarations", () => {
+    const schema = parseAppSchema(
+      publicOperationSchema({
+        subscribe: publicHandlerOperation(),
+      }),
+    );
+
+    expect(schema.entities.request?.operations?.subscribe).toMatchObject({
+      kind: "command",
+      input: {
+        fields: {
+          email: { type: "text", required: true, label: "Email" },
+        },
+      },
+      effect: {
+        type: "operationHandler",
+        handler: "subscribe",
+      },
+      policy: anonymousTurnstileSameOriginPolicy(),
+    });
+
+    const invalidCases = [
+      {
+        operation: publicHandlerOperation({
+          policy: {
+            actors: ["anonymous"],
+            access: {
+              actor: "authenticated",
+              challenge: { kind: "turnstile" },
+              origin: { kind: "same-origin" },
+            },
+          },
+        }),
+        message: 'access actor must be "anonymous"',
+      },
+      {
+        operation: publicHandlerOperation({
+          policy: {
+            actors: ["anonymous"],
+            access: {
+              actor: "anonymous",
+              challenge: { kind: "none" },
+              origin: { kind: "same-origin" },
+            },
+          },
+        }),
+        message: 'challenge kind must be "turnstile"',
+      },
+      {
+        operation: publicHandlerOperation({
+          policy: {
+            actors: ["anonymous"],
+            access: {
+              actor: "anonymous",
+              challenge: { kind: "turnstile" },
+              origin: { kind: "any" },
+            },
+          },
+        }),
+        message: 'origin kind must be "same-origin"',
+      },
+      {
+        operation: publicHandlerOperation({ input: undefined }),
+        message: "anonymous actor policy requires explicit input",
+      },
+      {
+        operation: publicHandlerOperation({
+          target: { query: "requestCompleted" },
+          effect: {
+            type: "operationHandler",
+            handler: "clear-completed",
+            config: { query: "requestCompleted" },
+          },
+        }),
+        message: "command effect is not eligible for public execution",
+      },
+      {
+        operation: publicHandlerOperation({
+          input: {
+            fields: {
+              owner: { type: "reference", required: true, to: "owner" },
+            },
+          },
+        }),
+        message: 'has unsupported type "reference"',
+      },
+    ];
+
+    for (const invalidCase of invalidCases) {
+      expect(() =>
+        parseAppSchema(
+          publicOperationSchema({
+            subscribe: invalidCase.operation,
+          }),
+        ),
+      ).toThrow(invalidCase.message);
+    }
+  });
+
   it("selects anonymous public create, record-plan command, and public handler command operations", () => {
     const schema = publicOperationSchema({
       createRequest: publicCreateOperation(),
@@ -393,6 +493,12 @@ function publicOperationSchema(operations: Record<string, EntityOperationSchema>
             required: false,
             label: "Quantity",
           },
+          done: {
+            type: "boolean",
+            required: true,
+            label: "Done",
+            default: false,
+          },
           owner: {
             type: "reference",
             required: false,
@@ -410,10 +516,47 @@ function publicOperationSchema(operations: Record<string, EntityOperationSchema>
         entity: "request",
         expression: { kind: "all" },
       },
+      requestCompleted: {
+        label: "Completed requests",
+        entity: "request",
+        expression: {
+          kind: "where",
+          ref: { kind: "value", name: "done" },
+          op: "eq",
+          value: true,
+        },
+      },
     },
-    itemViews: {},
+    itemViews: {
+      requestItem: {
+        entity: "request",
+        fields: {
+          name: { editor: "text", commit: "field-commit" },
+        },
+      },
+    },
     tableViews: {},
-    views: {},
+    views: {
+      requestHome: {
+        type: "collection",
+        label: "Requests",
+        entity: "request",
+        queries: [{ query: "requests" }],
+        defaultQuery: "requests",
+        result: { type: "list", itemView: "requestItem" },
+      },
+    },
+    screens: {
+      home: {
+        type: "workspace",
+        label: "Requests",
+        navigation: { primary: true },
+        layout: {
+          type: "stack",
+          sections: [{ id: "requests", type: "collection", view: "requestHome" }],
+        },
+      },
+    },
   };
 }
 
@@ -472,7 +615,7 @@ function publicRecordPlanOperation(): EntityOperationSchema {
   };
 }
 
-function publicHandlerOperation(): EntityOperationSchema {
+function publicHandlerOperation(overrides: Record<string, unknown> = {}): EntityOperationSchema {
   return {
     label: "Subscribe",
     kind: "command",
@@ -495,7 +638,8 @@ function publicHandlerOperation(): EntityOperationSchema {
     idempotency: { required: true },
     audit: { input: "summary" },
     policy: anonymousTurnstileSameOriginPolicy(),
-  };
+    ...overrides,
+  } as EntityOperationSchema;
 }
 
 function anonymousTurnstileSameOriginPolicy(): EntityOperationSchema["policy"] {

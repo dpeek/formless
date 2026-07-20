@@ -120,6 +120,22 @@ Data stays flat. Compose in query, view, projection, action layer.
 - Block placement: flat parent-child composition edge.
 - Default product Site install: installed Site app with install id `site`.
 
+## Test Rules
+
+- Verify behavior at its owning layer: schema language in `lib/schema`, runtime
+  selection and effects in `lib/formless`, generic host semantics in
+  `lib/presentation`, contract-to-DOM mapping in `lib/renderer`, and public Site
+  sessions and adapters in `lib/site-app`.
+- Every test must observe user-visible behavior, a public contract or artifact,
+  a runtime effect, or a named invariant. Verify cross-package behavior once at
+  the narrowest stable public integration boundary.
+- Renderer tests use production renderers with real Astryx and adjacent
+  production leaves. Do not module-mock Renderer components.
+- Do not add fixture-catalog, source-text, exact-dependency-version,
+  implementation-history, or removed-behavior proof.
+- Do not duplicate facts already enforced by TypeScript, package export maps or
+  validation, production builds, or an existing focused test.
+
 ## Work
 
 1. Select the ready task section from parsed change commit metadata before broad context reads when doing implementation work.

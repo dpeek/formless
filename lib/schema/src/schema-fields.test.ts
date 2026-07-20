@@ -1,8 +1,134 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import { parseAppSchema, stringifySchema } from "./index.ts";
+import { taskEntity, taskSchema } from "./schema-test-fixtures.ts";
 
 describe("schema fields", () => {
+  it("parses enum, number, and field presentation metadata", () => {
+    const source = taskSchema();
+    const schema = parseAppSchema({
+      ...source,
+      entities: {
+        task: taskEntity({
+          fields: {
+            ...taskEntity().fields,
+            estimate: {
+              type: "number",
+              required: true,
+              label: "Estimate",
+              default: 1,
+              min: 0,
+              max: 10,
+              integer: true,
+            },
+            priority: {
+              type: "enum",
+              required: true,
+              label: "Priority",
+              default: "normal",
+              values: {
+                normal: {
+                  label: "Normal",
+                  presentation: { icon: "priority", color: "priority.normal" },
+                },
+                high: {
+                  label: "High",
+                  presentation: { icon: "priority", color: "priority.high" },
+                },
+              },
+            },
+          },
+        }),
+      },
+      itemViews: {
+        taskItem: {
+          entity: "task",
+          fields: {
+            priority: {
+              editor: "enum",
+              commit: "immediate",
+              presentation: { list: "both", mode: "iconOnly", trigger: "icon" },
+            },
+          },
+        },
+      },
+    });
+
+    expect(schema.entities.task?.fields.estimate).toEqual({
+      type: "number",
+      required: true,
+      label: "Estimate",
+      default: 1,
+      min: 0,
+      max: 10,
+      integer: true,
+    });
+    expect(schema.entities.task?.fields.priority).toMatchObject({
+      type: "enum",
+      default: "normal",
+      values: {
+        high: { presentation: { icon: "priority", color: "priority.high" } },
+      },
+    });
+    expect(schema.itemViews.taskItem.fields.priority).toMatchObject({
+      presentation: { list: "both", mode: "iconOnly", trigger: "icon" },
+    });
+    expect(parseAppSchema(JSON.parse(stringifySchema(schema)))).toEqual(schema);
+  });
+
+  it("rejects invalid scalar defaults and presentation metadata", () => {
+    expect(() =>
+      parseAppSchema({
+        ...taskSchema(),
+        entities: {
+          task: taskEntity({
+            fields: {
+              ...taskEntity().fields,
+              priority: {
+                type: "enum",
+                required: true,
+                default: "missing",
+                values: { normal: { label: "Normal" } },
+              },
+            },
+          }),
+        },
+      }),
+    ).toThrow("enum default must match one of its values");
+
+    expect(() =>
+      parseAppSchema({
+        ...taskSchema(),
+        entities: {
+          task: taskEntity({
+            fields: {
+              ...taskEntity().fields,
+              estimate: { type: "number", required: false, min: 10, max: 1 },
+            },
+          }),
+        },
+      }),
+    ).toThrow("number min must be less than or equal to max");
+
+    expect(() =>
+      parseAppSchema({
+        ...taskSchema(),
+        itemViews: {
+          taskItem: {
+            entity: "task",
+            fields: {
+              title: {
+                editor: "text",
+                commit: "field-commit",
+                presentation: { mode: "iconOnly" },
+              },
+            },
+          },
+        },
+      }),
+    ).toThrow("iconOnly presentation requires an enum field");
+  });
+
   it("accepts contact text formats and open text suggestions on entity fields", () => {
     const source = identityReferenceSourceSchema();
     const schema = parseAppSchema({

@@ -59,3 +59,14 @@ Read this when editing `lib/renderer/*`.
   behavior, and semantic affordances must come from passed contract data, concrete
   Astryx component behavior, or an explicit product requirement.
 - Do not start a separate package dev server during normal agent work.
+
+## Test Rules
+
+- Own mapping complete Presentation contracts to user-visible DOM,
+  accessibility semantics, controlled state, and exact canonical intent
+  dispatch.
+- Exercise production renderers with real Astryx and adjacent production
+  renderer leaves. Do not module-mock Renderer components.
+- Do not independently test fixture catalogs or reducers, private data
+  attributes, exact Astryx variants, Astryx behavior, source text, exact
+  dependency versions, implementation history, or removed behavior.

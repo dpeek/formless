@@ -46,11 +46,7 @@ import {
   type RuntimeInstalledAppRouteContext,
   type RuntimeWorldMount,
 } from "./app/runtime-profile.ts";
-import {
-  activeAppPackageResolverFromAppInstallsResponse,
-  activeAppPackageResolverFromPackages,
-  fetchInstanceAppInstalls,
-} from "./client/app-installs.ts";
+import { fetchInstanceAppInstalls } from "./client/app-installs.ts";
 import type { ClientAppSchemaKey, ClientAppTarget } from "./client/app-target.ts";
 import type {
   AppInstall,
@@ -63,13 +59,19 @@ import {
   type OwnerLoginRedirectTarget,
 } from "./shared/instance-auth.ts";
 import { runtimeTopologyRoutes, type RuntimeRouteAccess } from "./shared/runtime-topology.ts";
-import type { AppInstallsResponse } from "./shared/protocol.ts";
 import type { WorkspaceLinkActionContract } from "@dpeek/formless-presentation/contract";
 import { initialInstanceManagementRuntimeContribution } from "./app/routes/instance-management-contract.ts";
 import { initialInstanceAccessRuntimeContribution } from "./app/routes/access-contract.ts";
 import { projectApplicationSystemState } from "./app/routes/application-system-state-projection.ts";
 import { ApplicationSystemStateRuntime } from "./app/routes/application-system-state-runtime.tsx";
 import { useApplicationRootThemeRuntime } from "./app/application-root-context.tsx";
+import {
+  emptyRuntimeInstalledAppRouteRegistry,
+  runtimeInstalledAppRouteRegistryFromInstalls,
+  runtimeInstalledAppRouteRegistryFromResponse,
+  runtimeInstalledAppRouteRegistryRefreshKey,
+  type RuntimeInstalledAppRouteRegistry,
+} from "./app/runtime-installed-app-route-registry.ts";
 
 type HomeRouteProps = {
   activePackageResolver?: AppPackageResolver | undefined;
@@ -89,12 +91,6 @@ type HomeRouteProps = {
 
 type InstanceShellRouteProps = {
   localWorkspaceGatewayAvailable?: boolean | undefined;
-};
-
-export type RuntimeInstalledAppRouteRegistry = {
-  activePackageResolver?: AppPackageResolver | undefined;
-  installs: readonly AppInstall[];
-  packages: readonly InstallableAppPackage[];
 };
 
 export type AppRouteComponents = {
@@ -292,16 +288,6 @@ export function App({
   );
 }
 
-export function runtimeInstalledAppRouteRegistryFromResponse(
-  response: AppInstallsResponse,
-): RuntimeInstalledAppRouteRegistry {
-  return {
-    activePackageResolver: activeAppPackageResolverFromAppInstallsResponse(response),
-    installs: [...response.installs],
-    packages: [...response.packages],
-  };
-}
-
 function resolveAppRouteComponents(
   overrides: Partial<AppRouteComponents> | undefined,
 ): AppRouteComponents {
@@ -318,25 +304,6 @@ function resolveAppRouteComponents(
         : overrides?.SitePageRoute
           ? undefined
           : defaultRouteComponents.publicSiteReactAdapters,
-  };
-}
-
-function runtimeInstalledAppRouteRegistryFromInstalls(
-  installs: readonly AppInstall[],
-  packages: readonly InstallableAppPackage[] = [],
-): RuntimeInstalledAppRouteRegistry {
-  return {
-    activePackageResolver:
-      packages.length > 0 ? activeAppPackageResolverFromPackages(packages) : undefined,
-    installs: [...installs],
-    packages: [...packages],
-  };
-}
-
-function emptyRuntimeInstalledAppRouteRegistry(): RuntimeInstalledAppRouteRegistry {
-  return {
-    installs: [],
-    packages: [],
   };
 }
 
@@ -442,41 +409,6 @@ function routeMayNeedLocalWorkspaceGateway(
   path: string,
 ): boolean {
   return path === routes.localSessionRoute || path === routes.instanceShellRoute;
-}
-
-export function runtimeInstalledAppRouteRegistryRefreshKey(
-  runtimeProfile: RuntimeProfile,
-  location: string,
-): string {
-  const path = normalizeRuntimeBrowserPath(location);
-  const routes = runtimeBrowserRoutePatterns(runtimeProfile);
-
-  return (
-    installedRouteRootPath(path, routes.installedAppHomeRoutePattern) ??
-    installedRouteRootPath(path, routes.installedSitePublicHomeRoutePattern) ??
-    path
-  );
-}
-
-function installedRouteRootPath(
-  path: string,
-  routePattern: `/${string}` | undefined,
-): string | undefined {
-  const routeBase = routePattern?.split("/:installId")[0];
-
-  if (!routeBase) {
-    return undefined;
-  }
-
-  const routePrefix = `${routeBase}/`;
-
-  if (!path.startsWith(routePrefix)) {
-    return undefined;
-  }
-
-  const installId = path.slice(routePrefix.length).split("/")[0];
-
-  return installId ? `${routePrefix}${installId}` : undefined;
 }
 
 function AppRoutes({

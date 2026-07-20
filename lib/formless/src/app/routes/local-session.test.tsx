@@ -1,9 +1,7 @@
-import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vite-plus/test";
 import { FormlessReplicaDatabaseDeleteBlockedError } from "../../client/db.ts";
 import type { OwnerIdentity } from "../../shared/protocol.ts";
 import {
-  LocalSessionRouteView,
   localSessionBrowserResetRequestedFromSearch,
   localSessionRedirectTargetFromSearch,
   startLocalSessionRouteSession,
@@ -15,24 +13,6 @@ const owner: OwnerIdentity = {
   name: "Ada Owner",
   createdAt: "2026-06-01T00:00:00.000Z",
 };
-
-describe("local session route view", () => {
-  it("renders blocked reset database names", () => {
-    const html = renderToStaticMarkup(
-      <LocalSessionRouteView
-        state={{
-          status: "blocked",
-          blockedDatabaseNames: ["formless:tasks", "formless:app:site"],
-          message: "Local browser replica reset was blocked.",
-        }}
-      />,
-    );
-
-    expect(html).toContain("Browser cache reset blocked");
-    expect(html).toContain("formless:tasks");
-    expect(html).toContain("formless:app:site");
-  });
-});
 
 describe("local session route data flow", () => {
   it("verifies an owner session and completes without resetting browser replicas by default", async () => {

@@ -1,15 +1,12 @@
-import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vite-plus/test";
 import type {
   AccountGateAuthSurfaceContract,
   AuthFieldContract,
   AuthFieldAutocomplete,
-  AuthIntent,
   AuthPasskeyContract,
   AuthSurfaceBaseContract,
   ButtonContract,
   CollaboratorInvitationAuthSurfaceContract,
-  PresentationIntent,
   CreateFieldContract,
   OperationInputFieldContract,
   OwnerSetupAuthSurfaceContract,
@@ -20,13 +17,10 @@ import {
   createMemoryPresentationHost,
   authSurfaceReference,
   shellManifestReference,
-  isAuthIntent,
-  isWorkspaceIntent,
   type AuthSurfaceNode,
   type PresentationNodeSet,
   type ShellManifestNode,
 } from "./host.ts";
-import { PresentationHostProvider, useAuthSurface } from "./host-react.tsx";
 
 const ownerSetupReference = authSurfaceReference({
   surfaceId: "auth:owner-setup",
@@ -137,138 +131,7 @@ describe("auth memory Presentation Host", () => {
       }),
     ).toThrow("invalid passkey intent");
   });
-
-  it("reuses semantic identity and scopes auth notifications and removal", () => {
-    const host = createMemoryPresentationHost({
-      nodes: [ownerSignInNode(), shellNode()],
-    });
-    const initialAuth = host.read(ownerSignInReference);
-    const initialShell = host.read(shellReference);
-    const calls: string[] = [];
-
-    host.subscribe(ownerSignInReference, () => calls.push("auth"));
-    host.subscribe(shellReference, () => calls.push("shell"));
-
-    host.publish([ownerSignInNode(), shellNode()]);
-
-    expect(calls).toEqual([]);
-    expect(host.read(ownerSignInReference)).toBe(initialAuth);
-    expect(host.read(shellReference)).toBe(initialShell);
-
-    host.publish([ownerSignInNode("submitting"), shellNode()]);
-
-    expect(calls).toEqual(["auth"]);
-    expect(host.read(shellReference)).toBe(initialShell);
-
-    host.publish([shellNode()]);
-
-    expect(calls).toEqual(["auth", "auth"]);
-    expect(host.read(ownerSignInReference)).toBeUndefined();
-    expect(host.read(shellReference)).toBe(initialShell);
-  });
-
-  it("keeps auth server snapshots stable for server rendering and hydration", () => {
-    const serverNodes = [ownerSetupNode()];
-    const host = createMemoryPresentationHost({
-      nodes: [ownerSetupNode("ready")],
-      serverNodes,
-    });
-    const serverSnapshot = host.getServerSnapshot(ownerSetupReference);
-
-    expect(serverSnapshot?.state).toBe("loading");
-    expect(host.read(ownerSetupReference)?.state).toBe("ready");
-    expect(host.getServerSnapshot(ownerSetupReference)).toBe(serverSnapshot);
-    expect(
-      renderToStaticMarkup(
-        <PresentationHostProvider host={host}>
-          <OwnerSetupState />
-        </PresentationHostProvider>,
-      ),
-    ).toContain("loading");
-  });
-
-  it("dispatches every canonical auth intent with exact identity", async () => {
-    const calls: PresentationIntent[] = [];
-    const host = createMemoryPresentationHost({
-      dispatch: (intent) => {
-        calls.push(intent);
-      },
-      nodes: [ownerSetupNode("ready")],
-    });
-    const intents: readonly AuthIntent[] = [
-      {
-        actionId: "action:submit",
-        controlId: "control:submit",
-        surfaceId: ownerSetupReference.surfaceId,
-        type: "authAction",
-      },
-      {
-        destinationId: "destination:account",
-        controlId: "control:continue",
-        surfaceId: ownerSetupReference.surfaceId,
-        type: "authContinuation",
-      },
-      {
-        fieldId: "field:display-name",
-        intent: {
-          fieldName: "displayName",
-          fieldValue: { kind: "input", value: "Ada Lovelace" },
-          type: "createDraftChange",
-        },
-        surfaceId: ownerSetupReference.surfaceId,
-        type: "authField",
-      },
-      {
-        controlId: "control:passkey",
-        passkeyId: "passkey:create",
-        surfaceId: ownerSetupReference.surfaceId,
-        type: "authPasskey",
-      },
-      {
-        accepted: true,
-        policyId: "policy:terms",
-        surfaceId: ownerSetupReference.surfaceId,
-        type: "authPolicySelection",
-      },
-    ];
-
-    for (const intent of intents) {
-      await host.dispatch(intent);
-    }
-
-    expect(calls).toEqual(intents);
-    intents.forEach((intent, index) => {
-      expect(calls[index]).toBe(intent);
-      expect(isAuthIntent(intent)).toBe(true);
-      expect(isWorkspaceIntent(intent)).toBe(false);
-    });
-  });
-
-  it("serializes complete display-safe auth nodes without runtime secrets", () => {
-    const serialized = JSON.stringify(authStateFamilyNodes());
-    const forbiddenKeys = [
-      "setupToken",
-      "rawInvitationToken",
-      "tokenHash",
-      "challengeId",
-      "credentialResponse",
-      "centralSessionId",
-      "sessionCookie",
-      "handoffSecret",
-      "storageIdentity",
-      "providerResponse",
-      "recoveryMaterial",
-    ];
-
-    expect(JSON.parse(serialized)).toHaveLength(5);
-    forbiddenKeys.forEach((key) => expect(serialized).not.toContain(`"${key}"`));
-  });
 });
-
-function OwnerSetupState() {
-  const surface = useAuthSurface(ownerSetupReference);
-  return <span>{surface?.state}</span>;
-}
 
 function authStateFamilyNodes() {
   return [

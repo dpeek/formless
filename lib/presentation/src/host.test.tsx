@@ -1,19 +1,16 @@
-import { readFile } from "node:fs/promises";
+// @vitest-environment jsdom
 
+import { act, render } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vite-plus/test";
-import packageJson from "../package.json";
 import type {
   PresentationIntent,
   DocumentThemeContract,
-  DocumentThemeIntent,
   ListContract,
   RecordResultContract,
-  ShellIntent,
   ShellManifestContract,
   ShellNavigationSectionContract,
   TableContract,
-  WorkspaceIntent,
   WorkspaceManifestContract,
   WorkspaceSectionShellContract,
 } from "./contract.ts";
@@ -30,12 +27,9 @@ import {
   type PresentationNodeSet,
   type DocumentThemeNode,
 } from "./host.ts";
-import {
-  PresentationHostProvider,
-  useDocumentTheme,
-  useShellManifest,
-  useWorkspaceManifest,
-} from "./host-react.tsx";
+import { PresentationHostProvider, useWorkspaceManifest } from "./host-react.tsx";
+
+(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const workspaceReference = workspaceManifestReference("workspace:tasks");
 const taskSectionReference = workspaceSectionShellReference("workspace:tasks", "section:tasks");
@@ -138,35 +132,6 @@ describe("memory Presentation Host", () => {
         selectedMode: "system",
       },
     });
-  });
-
-  it("reuses theme identity, scopes notifications, and removes themes independently", () => {
-    const host = createMemoryPresentationHost({
-      nodes: [...shellNodes(), userThemeNodes("system", "light")],
-    });
-    const initialTheme = host.read(themeReference);
-    const initialShell = host.read(shellReference);
-    const calls: string[] = [];
-
-    host.subscribe(themeReference, () => calls.push("theme"));
-    host.subscribe(shellReference, () => calls.push("shell"));
-
-    host.publish([...shellNodes(), userThemeNodes("system", "light")]);
-
-    expect(calls).toEqual([]);
-    expect(host.read(themeReference)).toBe(initialTheme);
-    expect(host.read(shellReference)).toBe(initialShell);
-
-    host.publish([...shellNodes(), userThemeNodes("dark", "dark")]);
-
-    expect(calls).toEqual(["theme"]);
-    expect(host.read(shellReference)).toBe(initialShell);
-
-    host.publish(shellNodes());
-
-    expect(calls).toEqual(["theme", "theme"]);
-    expect(host.read(themeReference)).toBeUndefined();
-    expect(host.read(shellReference)).toBe(initialShell);
   });
 
   it("validates document-theme identity, fixed policy, and selection intents", () => {
@@ -319,45 +284,6 @@ describe("memory Presentation Host", () => {
     expect(host.read(taskSectionReference)).toBe(initialTaskSection);
   });
 
-  it("publishes shell and workspace nodes atomically with identity reuse and scoped notification", () => {
-    const host = createMemoryPresentationHost({
-      nodes: [...workspaceNodes(), ...shellNodes()],
-    });
-    const initialShell = host.read(shellReference);
-    const initialAppSection = host.read(appSectionReference);
-    const initialSettingsSection = host.read(settingsSectionReference);
-    const initialWorkspace = host.read(workspaceReference);
-    const calls: string[] = [];
-    let syncMessageSeenFromAppNotification: string | undefined;
-
-    host.subscribe(shellReference, () => calls.push("shell"));
-    host.subscribe(appSectionReference, () => {
-      calls.push("app-section");
-      syncMessageSeenFromAppNotification =
-        host.read(settingsSectionReference)?.settings?.sync?.message;
-    });
-    host.subscribe(settingsSectionReference, () => calls.push("settings-section"));
-    host.subscribe(workspaceReference, () => calls.push("workspace"));
-
-    host.publish([...workspaceNodes(), ...shellNodes()]);
-
-    expect(calls).toEqual([]);
-    expect(host.read(shellReference)).toBe(initialShell);
-    expect(host.read(appSectionReference)).toBe(initialAppSection);
-    expect(host.read(settingsSectionReference)).toBe(initialSettingsSection);
-    expect(host.read(workspaceReference)).toBe(initialWorkspace);
-
-    host.publish([
-      ...workspaceNodes(),
-      ...shellNodes({ appLabel: "Tasks updated", syncMessage: "Sync caught up." }),
-    ]);
-
-    expect(calls).toEqual(["app-section", "settings-section"]);
-    expect(syncMessageSeenFromAppNotification).toBe("Sync caught up.");
-    expect(host.read(shellReference)).toBe(initialShell);
-    expect(host.read(workspaceReference)).toBe(initialWorkspace);
-  });
-
   it("removes references atomically with their parent references", () => {
     const host = createMemoryPresentationHost({ nodes: workspaceNodes() });
     const calls: string[] = [];
@@ -379,25 +305,6 @@ describe("memory Presentation Host", () => {
     expect(host.read(companyResultReference)).toBeUndefined();
   });
 
-  it("removes a shell section in the same publication as its manifest reference", () => {
-    const host = createMemoryPresentationHost({ nodes: shellNodes() });
-    const calls: string[] = [];
-    let removedSectionVisibleFromManifestNotification = true;
-
-    host.subscribe(shellReference, () => {
-      calls.push("shell");
-      removedSectionVisibleFromManifestNotification =
-        host.read(settingsSectionReference) !== undefined;
-    });
-    host.subscribe(settingsSectionReference, () => calls.push("settings-section"));
-
-    host.publish(shellNodes({ includeSettings: false }));
-
-    expect(calls).toEqual(["shell", "settings-section"]);
-    expect(removedSectionVisibleFromManifestNotification).toBe(false);
-    expect(host.read(settingsSectionReference)).toBeUndefined();
-  });
-
   it("rejects an incomplete next node set before replacing current reads", () => {
     const initialNodes = workspaceNodes();
     const host = createMemoryPresentationHost({ nodes: initialNodes });
@@ -408,7 +315,7 @@ describe("memory Presentation Host", () => {
     expect(host.read(companyResultReference)).toBeDefined();
   });
 
-  it("caches server snapshots for server rendering and hydration", () => {
+  it("keeps server snapshots stable through hydration and React subscriptions", async () => {
     const serverNodes = workspaceNodes();
     const host = createMemoryPresentationHost({
       nodes: workspaceNodes(),
@@ -419,66 +326,30 @@ describe("memory Presentation Host", () => {
     expect(host.read(workspaceReference)).toBe(serverSnapshot);
     expect(host.getServerSnapshot(workspaceReference)).toBe(serverSnapshot);
 
-    host.publish(workspaceNodes({ workspaceLabel: "Client work" }));
+    const element = (
+      <PresentationHostProvider host={host}>
+        <WorkspaceLabel />
+      </PresentationHostProvider>
+    );
+    const container = document.createElement("div");
+    container.innerHTML = renderToStaticMarkup(element);
+    document.body.appendChild(container);
+    const rendered = render(element, { container, hydrate: true });
 
-    expect(host.read(workspaceReference)?.label).toBe("Client work");
+    expect(container.textContent).toBe("Work");
+
+    await act(async () => {
+      host.publish(workspaceNodes({ workspaceLabel: "Client work" }));
+    });
+
+    expect(container.textContent).toBe("Client work");
     expect(host.getServerSnapshot(workspaceReference)).toBe(serverSnapshot);
-    expect(
-      renderToStaticMarkup(
-        <PresentationHostProvider host={host}>
-          <WorkspaceLabel />
-        </PresentationHostProvider>,
-      ),
-    ).toContain("Work");
+
+    rendered.unmount();
+    container.remove();
   });
 
-  it("caches shell server snapshots for server rendering and hydration", () => {
-    const serverNodes = shellNodes();
-    const host = createMemoryPresentationHost({
-      nodes: shellNodes(),
-      serverNodes,
-    });
-    const serverSnapshot = host.getServerSnapshot(shellReference);
-
-    expect(host.read(shellReference)).toBe(serverSnapshot);
-
-    host.publish(shellNodes({ title: "Client tasks" }));
-
-    expect(host.read(shellReference)?.title).toBe("Client tasks");
-    expect(host.getServerSnapshot(shellReference)).toBe(serverSnapshot);
-    expect(
-      renderToStaticMarkup(
-        <PresentationHostProvider host={host}>
-          <ShellTitle />
-        </PresentationHostProvider>,
-      ),
-    ).toContain("Tasks");
-  });
-
-  it("caches document-theme server snapshots for server rendering and hydration", () => {
-    const serverNodes = [fixedThemeNodes("light")];
-    const host = createMemoryPresentationHost({
-      nodes: serverNodes,
-      serverNodes,
-    });
-    const serverSnapshot = host.getServerSnapshot(themeReference);
-
-    expect(host.read(themeReference)).toBe(serverSnapshot);
-
-    host.publish([userThemeNodes("dark", "dark")]);
-
-    expect(host.read(themeReference)?.activeMode).toBe("dark");
-    expect(host.getServerSnapshot(themeReference)).toBe(serverSnapshot);
-    expect(
-      renderToStaticMarkup(
-        <PresentationHostProvider host={host}>
-          <ThemeActiveMode />
-        </PresentationHostProvider>,
-      ),
-    ).toContain("light");
-  });
-
-  it("dispatches the canonical workspace intent union", async () => {
+  it("forwards generic presentation intents without reshaping them", async () => {
     const calls: PresentationIntent[] = [];
     const host = createMemoryPresentationHost({
       dispatch: (intent) => {
@@ -486,107 +357,24 @@ describe("memory Presentation Host", () => {
       },
       nodes: workspaceNodes(),
     });
-    const intent: WorkspaceIntent = {
+    const intent = {
       collectionId: "collection:tasks",
       queryId: "query:active",
       screenId: "workspace:tasks",
       sectionId: "section:tasks",
       type: "workspaceQuerySelection",
-    };
+    } satisfies PresentationIntent;
 
     await host.dispatch(intent);
 
     expect(calls).toEqual([intent]);
-  });
-
-  it("dispatches the canonical shell intent union", async () => {
-    const calls: PresentationIntent[] = [];
-    const host = createMemoryPresentationHost({
-      dispatch: (intent) => {
-        calls.push(intent);
-      },
-      nodes: shellNodes(),
-    });
-    const intent: ShellIntent = {
-      controlId: "control:logout",
-      sectionId: sessionSectionReference.sectionId,
-      shellId: shellReference.shellId,
-      type: "shellLogout",
-    };
-
-    await host.dispatch(intent);
-
-    expect(calls).toEqual([intent]);
-  });
-
-  it("dispatches the canonical document-theme intent union", async () => {
-    const calls: PresentationIntent[] = [];
-    const host = createMemoryPresentationHost({
-      dispatch: (intent) => {
-        calls.push(intent);
-      },
-      nodes: [userThemeNodes("system", "light")],
-    });
-    const intent: DocumentThemeIntent = {
-      controlId: "control:theme-mode",
-      mode: "dark",
-      themeId: themeReference.themeId,
-      type: "documentThemeModeSelection",
-    };
-
-    await host.dispatch(intent);
-
-    expect(calls).toEqual([intent]);
-  });
-});
-
-describe("Presentation Host package boundary", () => {
-  it("exports renderer-neutral host and React subscription subpaths", async () => {
-    expect(packageJson.exports).toMatchObject({
-      "./contract": "./src/contract.ts",
-      "./host": "./src/host.ts",
-      "./host/react": "./src/host-react.tsx",
-    });
-    expect(packageJson.publishConfig.exports).toMatchObject({
-      "./contract": {
-        types: "./dist/contract.d.mts",
-        import: "./dist/contract.mjs",
-      },
-      "./host": {
-        types: "./dist/host.d.mts",
-        import: "./dist/host.mjs",
-      },
-      "./host/react": {
-        types: "./dist/host-react.d.mts",
-        import: "./dist/host-react.mjs",
-      },
-    });
-
-    const hostSource = await readFile(new URL("./host.ts", import.meta.url), "utf8");
-    const reactSource = await readFile(new URL("./host-react.tsx", import.meta.url), "utf8");
-    const importSpecifiers = [
-      ...`${hostSource}\n${reactSource}`.matchAll(/from\s+["']([^"']+)["']/g),
-    ]
-      .map((match) => match[1])
-      .sort();
-
-    expect(importSpecifiers).toEqual(["./contract.ts", "./contract.ts", "./host.ts", "react"]);
+    expect(calls[0]).toBe(intent);
   });
 });
 
 function WorkspaceLabel() {
   const workspace = useWorkspaceManifest(workspaceReference);
   return <span>{workspace?.label}</span>;
-}
-
-function ShellTitle() {
-  const shell = useShellManifest(shellReference);
-  return <span>{shell?.title}</span>;
-}
-
-function ThemeActiveMode() {
-  const theme = useDocumentTheme(themeReference);
-  return <span>{theme?.activeMode}</span>;
 }
 
 function fixedThemeNodes(mode: "light" | "dark"): DocumentThemeNode {

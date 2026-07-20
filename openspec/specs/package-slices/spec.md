@@ -248,7 +248,8 @@ workspace package exports, npm dependencies, or Node built-ins.
 
 ### Requirement: Package-Local Verification
 
-Package tests SHALL be fast, deterministic, and local.
+Package verification SHALL be fast, deterministic, local, and limited to
+behavior or artifacts owned by the package.
 
 #### Scenario: Package tests run locally
 
@@ -264,6 +265,29 @@ Package tests SHALL be fast, deterministic, and local.
 - WHEN package verification runs
 - THEN browser smoke is not required for the package task
 - AND browser smoke remains app-level when visible app behavior changes
+
+#### Scenario: Behavior verification stays at the owning package
+
+- GIVEN behavior crosses schema parsing, runtime projection, Presentation Host,
+  renderer, or environment adapter boundaries
+- WHEN focused verification is selected
+- THEN each package verifies only the behavior it owns
+- AND cross-package behavior is verified once at the narrowest stable public
+  integration boundary
+- AND fixture catalog completeness, type declaration shape, source text, and
+  exact dependency versions are not independently verified when type checking,
+  the real build, or package validation already enforces the requirement
+
+#### Scenario: Import boundary verification stays shared and minimal
+
+- GIVEN workspace packages expose explicit roots and documented subpaths
+- WHEN repository package imports are verified
+- THEN one shared boundary check derives allowed workspace imports from package
+  export maps and covers production and test source
+- AND package-specific import allowlists do not duplicate that shared check
+- AND a separate graph or package check exists only for a distinct browser,
+  Worker, SSR, or published-artifact boundary and evaluates the real artifact
+  rather than exact manifest dependency values
 
 ### Requirement: Published Package Artifacts
 

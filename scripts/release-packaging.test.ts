@@ -18,17 +18,9 @@ import { stripVTControlCharacters } from "node:util";
 import * as ts from "typescript";
 import { loadConfigFromFile } from "vite-plus";
 import { describe, expect, it } from "vite-plus/test";
-import formlessViteConfig from "../lib/formless/vite.config.ts";
-import rendererViteConfig from "../lib/renderer/vite.config.ts";
-import repoViteConfig from "../vite.config.ts";
 import { packReleasePackage, releasePackageManifest } from "./release-packaging.ts";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const packageSourceExclusions = [
-  "!src/**/*.test.*",
-  "!src/**/*-fixtures.ts",
-  "!src/**/test-*.ts",
-] as const;
 
 type CodeExport = {
   import: string;
@@ -132,55 +124,8 @@ describe("release package development exports", () => {
     }
   });
 
-  it("keeps every conventional manifest explicit and source-complete", () => {
-    expect(conventionalPackages).toHaveLength(16);
-
-    for (const packageInfo of conventionalPackages) {
-      const { manifest, root } = packageInfo;
-      const codeExports = packageCodeExports(manifest);
-      const packedEntries = manifest.scripts.pack?.slice("vp pack ".length).split(" ").sort();
-
-      expect(Object.keys(manifest.exports).some((subpath) => subpath.includes("*"))).toBe(false);
-      expect(manifest.files).toEqual(
-        expect.arrayContaining(["dist", "src", ...packageSourceExclusions]),
-      );
-      expect(packedEntries).toEqual(
-        codeExports.map(([subpath]) => manifest.exports[subpath].slice(2)).sort(),
-      );
-
-      for (const [subpath, target] of codeExports) {
-        const sourceTarget = manifest.exports[subpath];
-        const sourceStem = path.basename(sourceTarget).replace(/\.tsx?$/, "");
-
-        expect(Object.keys(target)).toEqual(["types", "import"]);
-        expect(target.types).toBe(`./dist/${sourceStem}.d.mts`);
-        expect(target.import).toBe(`./dist/${sourceStem}.mjs`);
-        expect(existsSync(path.resolve(root, sourceTarget))).toBe(true);
-        expect(packageSpecifier(manifest.name, subpath)).not.toContain("*");
-      }
-
-      for (const [subpath, target] of packageAssetExports(manifest)) {
-        expect(manifest.exports[subpath]).toBe(target);
-        expect(manifest.files).toContain(target.slice(2));
-        expect(existsSync(path.resolve(root, target))).toBe(true);
-      }
-    }
-  });
-
-  it("resolves current source by default in TypeScript, Vite, Vitest, and Bun development", () => {
+  it("resolves current source in TypeScript and Bun development", () => {
     const rootTsconfig = readTsconfig(path.resolve(repoRoot, "tsconfig.json"));
-    const rootPackage = readPackageManifest(path.resolve(repoRoot, "package.json"));
-    const formlessPackage = readPackageManifest(
-      path.resolve(repoRoot, "lib/formless/package.json"),
-    );
-
-    expect(rootTsconfig.options.customConditions ?? []).toEqual([]);
-    expect(viteConditions(repoViteConfig)).toEqual([]);
-    expect(viteConditions(formlessViteConfig)).toEqual([]);
-    expect(viteConditions(rendererViteConfig)).toEqual([]);
-    expect(rootPackage.scripts.dev).not.toContain("--conditions");
-    expect(formlessPackage.scripts.dev).not.toContain("--conditions");
-
     const importer = path.resolve(repoRoot, "scripts/release-packaging.test.ts");
     const targets = conventionalPackages.flatMap(({ manifest, root }) =>
       packageCodeExports(manifest).map(([subpath]) => ({
@@ -327,7 +272,7 @@ describe("packed conventional packages", () => {
     }
   });
 
-  it("packs compiled manifests, source files, and only declared raw assets", () => {
+  it("packs compiled manifests, source entrypoints, and declared raw assets", () => {
     const sandbox = createPackageSandbox("source");
     const tarballRoot = path.resolve(sandbox.root, "tarballs");
     const versions = new Map(
@@ -357,15 +302,6 @@ describe("packed conventional packages", () => {
         for (const [, target] of packageAssetExports(manifest)) {
           expect(packedFiles).toContain(target.slice(2));
         }
-
-        expect(
-          packedFiles.filter(
-            (file) =>
-              file.includes(".test.") ||
-              file.endsWith("-fixtures.ts") ||
-              path.basename(file).startsWith("test-"),
-          ),
-        ).toEqual([]);
       }
     } finally {
       rmSync(sandbox.root, { force: true, recursive: true });
@@ -374,80 +310,26 @@ describe("packed conventional packages", () => {
 });
 
 describe("installed runtime build hosts", () => {
-  it("publishes only the Renderer production source graph", () => {
+  it("packs every documented Renderer source entrypoint", () => {
     const root = path.resolve(repoRoot, "lib/renderer");
     const manifest = JSON.parse(readFileSync(path.resolve(root, "package.json"), "utf8")) as {
       exports: Record<string, string>;
-      files: string[];
-      private?: boolean;
-      publishConfig?: { access?: string };
     };
     const packedFiles = packedFileNames(
       runBun(["pm", "pack", "--dry-run", "--ignore-scripts"], root),
     );
-
-    expect(manifest.private).toBeUndefined();
-    expect(manifest.publishConfig?.access).toBe("public");
-    expect(manifest.exports).toEqual({
-      "./application/assembly": "./src/application-assembly.tsx",
-      "./application/global.css": "./src/application.css",
-      "./application/provider": "./src/application-provider.tsx",
-      "./site/renderer": "./src/site-renderer.tsx",
-      "./site/global.css": "./src/global.css",
-      "./site/provider": "./src/site-provider.tsx",
-    });
 
     for (const target of Object.values(manifest.exports)) {
       expect(packedFiles).toContain(target.slice(2));
     }
-
-    expect(
-      packedFiles.filter(
-        (file) =>
-          file.includes(".test.") ||
-          file.includes(".fixtures.") ||
-          file.startsWith("src/fixtures/") ||
-          file.includes("fixture-") ||
-          file === "src/main.tsx" ||
-          file === "src/root.tsx",
-      ),
-    ).toEqual([]);
   });
 
-  it("publishes the Bun CLI and complete package-local runtime build host", () => {
+  it("packs the Bun CLI and package-local runtime build inputs", () => {
     const root = path.resolve(repoRoot, "lib/formless");
-    const manifest = JSON.parse(readFileSync(path.resolve(root, "package.json"), "utf8")) as {
-      dependencies: Record<string, string>;
-      files: string[];
-    };
     const packedFiles = packedFileNames(
       runBun(["pm", "pack", "--dry-run", "--ignore-scripts"], root),
     );
 
-    expect(manifest.files).toEqual(
-      expect.arrayContaining([
-        "bin",
-        "index.html",
-        "src",
-        "!src/**/*.test.*",
-        "!src/**/*-test.*",
-        "!src/test",
-        "!src/**/AGENTS.md",
-        "tsconfig.json",
-        "vite.config.ts",
-      ]),
-    );
-    expect(manifest.dependencies).toMatchObject({
-      "@astryxdesign/build": "0.1.4",
-      "@cloudflare/vite-plugin": expect.any(String),
-      "@dpeek/formless-renderer": "workspace:*",
-      "@stylexjs/babel-plugin": "0.18.3",
-      "@stylexjs/unplugin": "0.18.3",
-      "@vitejs/plugin-react": expect.any(String),
-      vite: expect.any(String),
-      "vite-plus": expect.any(String),
-      wrangler: expect.any(String),
-    });
     expect(packedFiles).toEqual(
       expect.arrayContaining([
         "bin/formless.ts",
@@ -461,15 +343,6 @@ describe("installed runtime build hosts", () => {
         "vite.config.ts",
       ]),
     );
-    expect(
-      packedFiles.filter(
-        (file) =>
-          file.includes(".test.") ||
-          file.includes("-test.") ||
-          file.startsWith("src/test/") ||
-          file.endsWith("/AGENTS.md"),
-      ),
-    ).toEqual([]);
   });
 });
 
@@ -512,10 +385,6 @@ function createPackageSandbox(mode: "release" | "source"): PackageSandbox {
       writeSandboxFile(packageRoot, target, "{}\n");
     }
 
-    writeSandboxFile(packageRoot, "./src/example.test.ts", "throw new Error();\n");
-    writeSandboxFile(packageRoot, "./src/example-contract-fixtures.ts", "throw new Error();\n");
-    writeSandboxFile(packageRoot, "./src/test-records.ts", "throw new Error();\n");
-
     return { manifest, root: packageRoot };
   });
 
@@ -539,10 +408,6 @@ function packageAssetExports(manifest: PackageManifest): [string, string][] {
 
 function packageSpecifier(packageName: string, subpath: string): string {
   return subpath === "." ? packageName : `${packageName}${subpath.slice(1)}`;
-}
-
-function readPackageManifest(packageJsonPath: string): PackageManifest {
-  return JSON.parse(readFileSync(packageJsonPath, "utf8"));
 }
 
 function readTsconfig(tsconfigPath: string): ts.ParsedCommandLine {
@@ -571,20 +436,6 @@ function errorDiagnostics(program: ts.Program): string[] {
     .getPreEmitDiagnostics(program)
     .filter((diagnostic) => diagnostic.category === ts.DiagnosticCategory.Error)
     .map((diagnostic) => ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n"));
-}
-
-function viteConditions(config: unknown): string[] {
-  if (typeof config !== "object" || config === null || !("resolve" in config)) {
-    return [];
-  }
-
-  const resolve = config.resolve;
-
-  if (typeof resolve !== "object" || resolve === null || !("conditions" in resolve)) {
-    return [];
-  }
-
-  return Array.isArray(resolve.conditions) ? resolve.conditions : [];
 }
 
 function resolveTypeScript(
