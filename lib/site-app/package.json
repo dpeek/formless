@@ -22,7 +22,7 @@
     "access": "public"
   },
   "scripts": {
-    "test": "vp test --config ../../vite.config.ts --configLoader runner"
+    "check": "vp check --fix && vp test --configLoader runner"
   },
   "dependencies": {
     "@cf-wasm/resvg": "0.3.4",
@@ -32,5 +32,10 @@
     "@dpeek/formless-source-svg": "workspace:*",
     "react": "19.2.6",
     "react-dom": "19.2.6"
+  },
+  "devDependencies": {
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/react": "^16.3.2",
+    "jsdom": "^29.1.1"
   }
 }

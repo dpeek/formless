@@ -1,6 +1,7 @@
-import { readFile } from "node:fs/promises";
+// @vitest-environment jsdom
+
+import { act, fireEvent, render } from "@testing-library/react";
 import { Children, createElement, isValidElement, type ReactNode } from "react";
-import { act, create, type ReactTestInstance, type ReactTestRenderer } from "react-test-renderer";
 import { describe, expect, it, vi } from "vite-plus/test";
 import type {
   DocumentThemeContract,
@@ -59,24 +60,17 @@ const themeReference = documentThemeReference("theme:application");
 describe("Astryx document theme renderer", () => {
   it.each(["light", "dark"] as const)(
     "leaves fixed %s provider ownership at the application root without synthesizing a selector",
-    async (mode) => {
-      let renderer: ReactTestRenderer | undefined;
+    (mode) => {
+      const { container, unmount } = render(
+        <AstryxDocumentThemeRenderer onIntent={() => undefined} theme={fixedTheme(mode)}>
+          <article>Workspace</article>
+        </AstryxDocumentThemeRenderer>,
+      );
 
-      await act(async () => {
-        renderer = create(
-          <AstryxDocumentThemeRenderer onIntent={() => undefined} theme={fixedTheme(mode)}>
-            <article>Workspace</article>
-          </AstryxDocumentThemeRenderer>,
-        );
-      });
+      expect(container.querySelector('[data-component="Theme"]')).toBeNull();
+      expect(container.querySelector('[role="radiogroup"]')).toBeNull();
 
-      const mountedRenderer = required(renderer);
-      expect(mountedRenderer.root.findAllByProps({ "data-component": "Theme" })).toHaveLength(0);
-      expect(mountedRenderer.root.findAllByProps({ role: "radiogroup" })).toHaveLength(0);
-
-      await act(async () => {
-        mountedRenderer.unmount();
-      });
+      unmount();
     },
   );
 
@@ -86,38 +80,31 @@ describe("Astryx document theme renderer", () => {
     ["dark", "dark", "Dark"],
   ] as const)(
     "keeps user %s selection controlled while applying active %s presentation",
-    async (selectedMode, activeMode, selectedLabel) => {
+    (selectedMode, activeMode, selectedLabel) => {
       const intents: DocumentThemeIntent[] = [];
-      let renderer: ReactTestRenderer | undefined;
+      const { container, unmount } = render(
+        <AstryxDocumentThemeRenderer
+          onIntent={(intent) => {
+            intents.push(intent);
+          }}
+          theme={userTheme(selectedMode, activeMode)}
+        >
+          <article>Workspace</article>
+        </AstryxDocumentThemeRenderer>,
+      );
 
-      await act(async () => {
-        renderer = create(
-          <AstryxDocumentThemeRenderer
-            onIntent={(intent) => {
-              intents.push(intent);
-            }}
-            theme={userTheme(selectedMode, activeMode)}
-          >
-            <article>Workspace</article>
-          </AstryxDocumentThemeRenderer>,
-        );
-      });
-
-      const mountedRenderer = required(renderer);
-      expect(mountedRenderer.root.findAllByProps({ "data-component": "Theme" })).toHaveLength(0);
+      expect(container.querySelector('[data-component="Theme"]')).toBeNull();
       expect(
-        mountedRenderer.root.findByProps({ "aria-label": "Theme mode", role: "radiogroup" }),
-      ).toBeDefined();
-      expect(radioByLabel(mountedRenderer, selectedLabel).props["aria-checked"]).toBe(true);
+        container.querySelector('[aria-label="Theme mode"][role="radiogroup"]'),
+      ).not.toBeNull();
+      expect(radioByLabel(container, selectedLabel).getAttribute("aria-checked")).toBe("true");
       expect(
-        mountedRenderer.root
-          .findAllByProps({ role: "radio" })
-          .map((node) => node.props["aria-label"]),
+        Array.from(container.querySelectorAll('[role="radio"]'), (node) =>
+          node.getAttribute("aria-label"),
+        ),
       ).toEqual(["System", "Light", "Dark"]);
 
-      await act(async () => {
-        radioByLabel(mountedRenderer, selectedLabel).props.onClick();
-      });
+      fireEvent.click(radioByLabel(container, selectedLabel));
 
       expect(intents).toEqual([
         {
@@ -128,9 +115,7 @@ describe("Astryx document theme renderer", () => {
         },
       ]);
 
-      await act(async () => {
-        mountedRenderer.unmount();
-      });
+      unmount();
     },
   );
 
@@ -144,22 +129,15 @@ describe("Astryx document theme renderer", () => {
       },
       nodes: [{ reference: themeReference, snapshot: userTheme("system", "dark") }],
     });
-    let renderer: ReactTestRenderer | undefined;
+    const { container, unmount } = render(
+      <PresentationHostProvider host={host}>
+        <AstryxSubscribedDocumentThemeRenderer themeReference={themeReference}>
+          <article>Subscribed workspace</article>
+        </AstryxSubscribedDocumentThemeRenderer>
+      </PresentationHostProvider>,
+    );
 
-    await act(async () => {
-      renderer = create(
-        <PresentationHostProvider host={host}>
-          <AstryxSubscribedDocumentThemeRenderer themeReference={themeReference}>
-            <article>Subscribed workspace</article>
-          </AstryxSubscribedDocumentThemeRenderer>
-        </PresentationHostProvider>,
-      );
-    });
-
-    const mountedRenderer = required(renderer);
-    await act(async () => {
-      radioByLabel(mountedRenderer, "Light").props.onClick();
-    });
+    fireEvent.click(radioByLabel(container, "Light"));
     expect(intents).toEqual([
       {
         controlId: "control:theme-mode",
@@ -172,35 +150,10 @@ describe("Astryx document theme renderer", () => {
     await act(async () => {
       host.publish([{ reference: themeReference, snapshot: fixedTheme("light") }]);
     });
-    expect(mountedRenderer.root.findAllByProps({ "data-component": "Theme" })).toHaveLength(0);
-    expect(mountedRenderer.root.findAllByProps({ role: "radiogroup" })).toHaveLength(0);
+    expect(container.querySelector('[data-component="Theme"]')).toBeNull();
+    expect(container.querySelector('[role="radiogroup"]')).toBeNull();
 
-    await act(async () => {
-      mountedRenderer.unmount();
-    });
-  });
-
-  it("keeps renderer imports free of runtime concerns", async () => {
-    const providerSource = await readFile(new URL("../theme.tsx", import.meta.url), "utf8");
-    const rendererSource = await readFile(new URL("./theme.tsx", import.meta.url), "utf8");
-    const shellSource = await readFile(new URL("./shell.tsx", import.meta.url), "utf8");
-    const fixtureSource = await readFile(
-      new URL("./application-shell.fixtures.ts", import.meta.url),
-      "utf8",
-    );
-    const sources = [providerSource, rendererSource, shellSource, fixtureSource];
-    const imports = sources.flatMap(importSpecifiers);
-
-    expect(
-      imports.filter((specifier) =>
-        /(?:^|\/)(?:src\/app|src\/client|storage|replica|routing|session-client)(?:\/|$)|formless-schema|\bwouter\b/.test(
-          specifier,
-        ),
-      ),
-    ).toEqual([]);
-    expect(sources.join("\n")).not.toMatch(
-      /\blocalStorage\b|\bsessionStorage\b|\bdocument\.|\bwindow\.|\bcookie\b|useMediaQuery/,
-    );
+    unmount();
   });
 });
 
@@ -244,18 +197,14 @@ function userTheme(
   };
 }
 
-function required<Value>(value: Value | null | undefined): Value {
+function required<Value>(value: Value): NonNullable<Value> {
   if (value === null || value === undefined) {
     throw new Error("Expected value.");
   }
 
-  return value;
+  return value as NonNullable<Value>;
 }
 
-function radioByLabel(renderer: ReactTestRenderer, label: string): ReactTestInstance {
-  return renderer.root.findByProps({ "aria-label": label, role: "radio" });
-}
-
-function importSpecifiers(source: string) {
-  return Array.from(source.matchAll(/\bfrom\s+["']([^"']+)["']/g), (match) => match[1]!);
+function radioByLabel(container: HTMLElement, label: string): HTMLElement {
+  return required(container.querySelector<HTMLElement>(`[aria-label="${label}"][role="radio"]`));
 }

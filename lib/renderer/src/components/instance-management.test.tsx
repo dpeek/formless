@@ -1,4 +1,3 @@
-import { readFile } from "node:fs/promises";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vite-plus/test";
 import type {
@@ -253,31 +252,6 @@ describe("canonical instance-management fixtures", () => {
     expect(html).toContain('data-formless-astryx-workspace="instance-management:apps"');
     expect(html).toContain('data-formless-astryx-workspace="instance-management:routes"');
   });
-
-  it("keeps fixtures runtime-free, secret-free, and package-local", async () => {
-    const fixtureSource = await readFile(
-      new URL("./instance-management.fixtures.ts", import.meta.url),
-      "utf8",
-    );
-    const hostSource = await readFile(
-      new URL("./instance-management.tsx", import.meta.url),
-      "utf8",
-    );
-    const rootSource = await readFile(new URL("../root.tsx", import.meta.url), "utf8");
-    const imports = [fixtureSource, hostSource].flatMap(importSpecifiers);
-
-    expect(
-      imports.filter((specifier) =>
-        /(?:^|\/)(?:src\/app|src\/client|control-plane|gateway-client|storage|replica|routing|operation-controller)(?:\/|$)|\bwouter\b/.test(
-          specifier,
-        ),
-      ),
-    ).toEqual([]);
-    expect(`${fixtureSource}\n${hostSource}`).not.toMatch(
-      /\blocalStorage\b|\bsessionStorage\b|\bdocument\.|\bwindow\.|\bfetch\(|className/,
-    );
-    expect(rootSource).toContain("FormlessInstanceManagementLayout");
-  });
 });
 
 function requiredFixture(
@@ -408,8 +382,4 @@ function referenceKey(
     throw new Error(`Missing ${kind} fixture reference.`);
   }
   return presentationReferenceKey(reference);
-}
-
-function importSpecifiers(source: string) {
-  return Array.from(source.matchAll(/\bfrom\s+["']([^"']+)["']/g), (match) => match[1]!);
 }

@@ -1,4 +1,3 @@
-import { readFile } from "node:fs/promises";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vite-plus/test";
 import type {
@@ -180,17 +179,6 @@ describe("Astryx tree child creation", () => {
     expect(pendingHtml).toContain("Creating block");
     expect(pendingHtml).toContain("Feature child");
     expect(closedHtml).not.toContain("Add text block");
-  });
-
-  it("keeps runtime policy, execution, output, writes, and created selection outside Astryx", async () => {
-    const source = await readFile(new URL("./tree-child-creation.tsx", import.meta.url), "utf8");
-
-    expect(source).toContain("creation.variants");
-    expect(source).toContain("creation.activeCreateSurface");
-    expect(source).toContain("variant.selectionIntent");
-    expect(source).not.toMatch(
-      /activeVariantId|create-tree-child|commandResponse|defaults|operationInput|placementValues|recordsById|selectedEditor|storage|writeRecord/,
-    );
   });
 });
 

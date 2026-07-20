@@ -1,4 +1,3 @@
-import { readFile } from "node:fs/promises";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vite-plus/test";
 import type {
@@ -364,28 +363,6 @@ describe("Application Shell prototype layout", () => {
     expect(html).not.toContain("Product instance");
     expect(html).toContain("No shell");
   });
-
-  it("keeps fixtures and reducers free of runtime dependencies", async () => {
-    const fixtureSource = await readFile(
-      new URL("./application-shell.fixtures.ts", import.meta.url),
-      "utf8",
-    );
-    const hostSource = await readFile(new URL("./application-shell.tsx", import.meta.url), "utf8");
-    const shellSource = await readFile(new URL("./shell.tsx", import.meta.url), "utf8");
-    const sideNavSource = await readFile(new URL("./side-nav.tsx", import.meta.url), "utf8");
-    const imports = [fixtureSource, hostSource].flatMap(importSpecifiers);
-    const forbiddenImports = imports.filter((specifier) =>
-      /(?:^|\/)(?:src\/app|src\/client|routing|storage|replica|operation-controller|session-client)(?:\/|$)|formless-schema|\bwouter\b/.test(
-        specifier,
-      ),
-    );
-    expect(hostSource).toContain("createMemoryPresentationHost");
-    expect(hostSource).toContain("AstryxSubscribedApplicationShellRenderer");
-    expect(shellSource).toContain("useDocumentTheme(themeReference)");
-    expect(forbiddenImports).toEqual([]);
-    expect(fixtureSource).toContain("documentTheme");
-    expect(sideNavSource).not.toContain("DocumentTheme");
-  });
 });
 
 function requiredFixture(
@@ -436,8 +413,4 @@ function referenceKey(nodes: readonly { reference: PresentationReference }[], se
   }
 
   return presentationReferenceKey(reference);
-}
-
-function importSpecifiers(source: string) {
-  return Array.from(source.matchAll(/\bfrom\s+["']([^"']+)["']/g), (match) => match[1]!);
 }

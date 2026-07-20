@@ -1,5 +1,7 @@
+// @vitest-environment jsdom
+
+import { act, render } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
-import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import type { ReactNode } from "react";
 import type {
   DocumentThemeContract,
@@ -47,35 +49,32 @@ describe("application shell runtime boundary", () => {
       policy: { kind: "fixed", mode: "dark" },
     };
     let host: PresentationHost | undefined;
-    let renderer: ReactTestRenderer | undefined;
 
     function HostProbe() {
       host = usePresentationHost();
       return null;
     }
 
-    await act(async () => {
-      renderer = create(
-        <ApplicationShellRuntimeBoundary
-          applicationTheme={{
-            publication: { nodes: [{ reference, snapshot }] },
-            reference,
-          }}
-          currentPath="/tasks"
-          ownerSession={{ authenticated: false, setupComplete: true }}
-          routeWorld={routeWorld}
-          runtimeProfile={runtimeProfile}
-          screenModels={[]}
-        >
-          <HostProbe />
-        </ApplicationShellRuntimeBoundary>,
-      );
-    });
+    const renderer = render(
+      <ApplicationShellRuntimeBoundary
+        applicationTheme={{
+          publication: { nodes: [{ reference, snapshot }] },
+          reference,
+        }}
+        currentPath="/tasks"
+        ownerSession={{ authenticated: false, setupComplete: true }}
+        routeWorld={routeWorld}
+        runtimeProfile={runtimeProfile}
+        screenModels={[]}
+      >
+        <HostProbe />
+      </ApplicationShellRuntimeBoundary>,
+    );
 
     const initialHost = required(host);
     expect(initialHost.read(reference)).toBe(snapshot);
 
-    await act(async () => renderer?.unmount());
+    renderer.unmount();
   });
 
   it("keeps one host while resolving root selection and controlled create against current state", async () => {
@@ -99,7 +98,6 @@ describe("application shell runtime boundary", () => {
         return { recordId: "project-created" };
       },
     };
-    let renderer: ReactTestRenderer | undefined;
 
     function HostProbe({ children }: { children: ReactNode }) {
       host = usePresentationHost();
@@ -118,23 +116,21 @@ describe("application shell runtime boundary", () => {
       return null;
     }
 
-    await act(async () => {
-      renderer = create(
-        <ApplicationShellRuntimeBoundary
-          activeScreenPath="/"
-          currentPath="/tasks"
-          dependencies={dependencies}
-          ownerSession={{ authenticated: false, setupComplete: true }}
-          routeWorld={routeWorld}
-          runtimeProfile={runtimeProfile}
-          screenModels={[screen]}
-        >
-          <HostProbe>
-            <SelectionProbe />
-          </HostProbe>
-        </ApplicationShellRuntimeBoundary>,
-      );
-    });
+    const renderer = render(
+      <ApplicationShellRuntimeBoundary
+        activeScreenPath="/"
+        currentPath="/tasks"
+        dependencies={dependencies}
+        ownerSession={{ authenticated: false, setupComplete: true }}
+        routeWorld={routeWorld}
+        runtimeProfile={runtimeProfile}
+        screenModels={[screen]}
+      >
+        <HostProbe>
+          <SelectionProbe />
+        </HostProbe>
+      </ApplicationShellRuntimeBoundary>,
+    );
 
     const initialHost = required(host);
     const rootSection = required(
@@ -242,9 +238,7 @@ describe("application shell runtime boundary", () => {
     expect(failedCreate.dialog.form.errors).toEqual(["Create failed. Try again."]);
     expect(JSON.stringify(failedCreate)).not.toContain("alchemy-secret-create-error");
 
-    await act(async () => {
-      renderer?.unmount();
-    });
+    renderer.unmount();
   });
 
   it("executes reset and logout effects while projecting only display-safe status", async () => {
@@ -268,38 +262,35 @@ describe("application shell runtime boundary", () => {
         });
       },
     };
-    let renderer: ReactTestRenderer | undefined;
 
     function HostProbe({ children }: { children: ReactNode }) {
       host = usePresentationHost();
       return children;
     }
 
-    await act(async () => {
-      renderer = create(
-        <ApplicationShellRuntimeBoundary
-          currentPath="/tasks"
-          dependencies={dependencies}
-          ownerSession={{
-            authenticated: true,
-            owner: {
-              createdAt: "2026-07-16T00:00:00.000Z",
-              email: "owner@example.com",
-              id: "owner",
-              name: "Owner",
-            },
-            session: { expiresAt: "private-session-value" },
-            setupComplete: true,
-          }}
-          routeWorld={routeWorld}
-          runtimeProfile={runtimeProfile}
-        >
-          <HostProbe>
-            <div>Workspace</div>
-          </HostProbe>
-        </ApplicationShellRuntimeBoundary>,
-      );
-    });
+    const renderer = render(
+      <ApplicationShellRuntimeBoundary
+        currentPath="/tasks"
+        dependencies={dependencies}
+        ownerSession={{
+          authenticated: true,
+          owner: {
+            createdAt: "2026-07-16T00:00:00.000Z",
+            email: "owner@example.com",
+            id: "owner",
+            name: "Owner",
+          },
+          session: { expiresAt: "private-session-value" },
+          setupComplete: true,
+        }}
+        routeWorld={routeWorld}
+        runtimeProfile={runtimeProfile}
+      >
+        <HostProbe>
+          <div>Workspace</div>
+        </HostProbe>
+      </ApplicationShellRuntimeBoundary>,
+    );
 
     const currentHost = required(host);
     const settingsSection = required(
@@ -358,9 +349,7 @@ describe("application shell runtime boundary", () => {
     ).toMatchObject({ state: "anonymous" });
     expect(JSON.stringify(readSections(currentHost))).not.toContain("private-session-value");
 
-    await act(async () => {
-      renderer?.unmount();
-    });
+    renderer.unmount();
   });
 });
 

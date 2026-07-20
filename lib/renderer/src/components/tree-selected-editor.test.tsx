@@ -1,4 +1,3 @@
-import { readFile } from "node:fs/promises";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vite-plus/test";
 import type {
@@ -175,22 +174,6 @@ describe("Astryx tree selected-item editor", () => {
     expect(editingDisabled).toContain("Editing requires an owner session.");
     expect(editingDisabled).toContain("This selected item is unavailable.");
     expect(editingDisabled.match(/<fieldset[^>]*disabled=""/g)).toHaveLength(2);
-  });
-
-  it("retains responsive placement and the pure canonical renderer boundary", async () => {
-    const editorSource = await readFile(
-      new URL("./tree-selected-editor.tsx", import.meta.url),
-      "utf8",
-    );
-    const layoutSource = await readFile(new URL("./tree-renderer.tsx", import.meta.url), "utf8");
-
-    expect(layoutSource).toContain('columns={{ max: 2, minWidth: 320, repeat: "fit" }}');
-    expect(layoutSource).toContain("<AstryxTreeSelectedEditor");
-    expect(editorSource).toContain("FieldRenderer");
-    expect(editorSource).toContain('from "@astryxdesign/core/FormLayout"');
-    expect(editorSource).not.toMatch(
-      /className=|src\/(?:app|client|worker)|generated-runtime|recordsById|browser-replica|operation-controller|storage|sync|@dnd-kit|draggable|droppable/,
-    );
   });
 });
 

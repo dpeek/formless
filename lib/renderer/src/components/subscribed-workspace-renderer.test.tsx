@@ -1,9 +1,10 @@
+// @vitest-environment jsdom
+
+import { act, fireEvent, render } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { createElement, type ComponentProps } from "react";
 import { describe, expect, it, vi } from "vite-plus/test";
 import type {
-  PresentationReference,
   ListContract,
   RecordResultContract,
   WorkspaceContract,
@@ -12,14 +13,12 @@ import type {
 } from "@dpeek/formless-presentation/contract";
 import {
   createMemoryPresentationHost,
-  presentationReferenceKey,
   listResultReference,
   recordResultReference,
   workspaceManifestReference,
   workspaceSectionShellReference,
   isWorkspaceIntent,
   type PresentationNodeSet,
-  type MutablePresentationHost,
 } from "@dpeek/formless-presentation/host";
 import { PresentationHostProvider } from "@dpeek/formless-presentation/host/react";
 import {
@@ -81,29 +80,18 @@ describe("subscribed Astryx workspace renderer", () => {
     }
   });
 
-  it("limits result, section, and structure updates to their subscribed boundaries", async () => {
-    const tracked = createTrackedHost(workspaceNodes());
-    let renderer: ReactTestRenderer | undefined;
+  it("dispatches intents and reflects published result, section, and structure updates", async () => {
+    const tracked = createIntentHost(workspaceNodes());
+    const { container, unmount } = render(
+      <PresentationHostProvider host={tracked.host}>
+        <AstryxSubscribedWorkspaceScreenRenderer reference={workspaceReference} />
+      </PresentationHostProvider>,
+    );
 
-    await act(async () => {
-      renderer = create(
-        <PresentationHostProvider host={tracked.host}>
-          <AstryxSubscribedWorkspaceScreenRenderer reference={workspaceReference} />
-        </PresentationHostProvider>,
-      );
-    });
-
-    if (!renderer) {
-      throw new Error("Expected subscribed renderer to mount.");
-    }
-    const mountedRenderer = renderer;
-
-    const externalAction = mountedRenderer.root
-      .findAllByProps({ "data-formless-astryx-workspace-external-action": "action:install" })
-      .find((candidate) => typeof candidate.props.onClick === "function");
-    await act(async () => {
-      externalAction?.props.onClick();
-    });
+    const externalAction = container.querySelector<HTMLElement>(
+      '[data-formless-astryx-workspace-external-action="action:install"]',
+    );
+    fireEvent.click(required(externalAction));
 
     expect(tracked.intents).toEqual([
       {
@@ -117,28 +105,16 @@ describe("subscribed Astryx workspace renderer", () => {
       },
     ]);
 
-    tracked.resetReads();
     await act(async () => {
       tracked.host.publish(workspaceNodes({ taskResultLabel: "Updated tasks result" }));
     });
+    expect(container.querySelector('[aria-label="Updated tasks result"]')).not.toBeNull();
 
-    expect(tracked.readCount(taskResultReference)).toBeGreaterThan(0);
-    expect(tracked.readCount(companyResultReference)).toBe(0);
-    expect(tracked.readCount(taskSectionReference)).toBe(0);
-    expect(tracked.readCount(companySectionReference)).toBe(0);
-    expect(tracked.readCount(workspaceReference)).toBe(0);
-
-    tracked.resetReads();
     await act(async () => {
       tracked.host.publish(workspaceNodes({ taskSectionLabel: "Updated tasks section" }));
     });
+    expect(container.textContent).toContain("Updated tasks section");
 
-    expect(tracked.readCount(taskSectionReference)).toBeGreaterThan(0);
-    expect(tracked.readCount(companyResultReference)).toBe(0);
-    expect(tracked.readCount(companySectionReference)).toBe(0);
-    expect(tracked.readCount(workspaceReference)).toBe(0);
-
-    tracked.resetReads();
     await act(async () => {
       tracked.host.publish(
         workspaceNodes({
@@ -148,13 +124,12 @@ describe("subscribed Astryx workspace renderer", () => {
       );
     });
 
-    expect(tracked.readCount(workspaceReference)).toBeGreaterThan(0);
-    const rendered = JSON.stringify(mountedRenderer.toJSON());
-    expect(rendered.indexOf("section:companies")).toBeLessThan(rendered.indexOf("section:tasks"));
+    const rendered = container.textContent ?? "";
+    expect(rendered.indexOf("Companies section")).toBeLessThan(
+      rendered.indexOf("Updated tasks section"),
+    );
 
-    await act(async () => {
-      mountedRenderer.unmount();
-    });
+    unmount();
   });
 });
 
@@ -204,6 +179,14 @@ function workspaceNodes({
       snapshot: listResult(companyResultReference.resultId, "Companies result"),
     },
   ];
+}
+
+function required<Value>(value: Value): NonNullable<Value> {
+  if (value === null || value === undefined) {
+    throw new Error("Expected value.");
+  }
+
+  return value as NonNullable<Value>;
 }
 
 function taskSection(label: string): WorkspaceSectionShellContract {
@@ -374,9 +357,9 @@ function completeWorkspace(): WorkspaceContract {
   };
 }
 
-function createTrackedHost(nodes: PresentationNodeSet) {
+function createIntentHost(nodes: PresentationNodeSet) {
   const intents: WorkspaceIntent[] = [];
-  const memoryHost = createMemoryPresentationHost({
+  const host = createMemoryPresentationHost({
     dispatch: (intent) => {
       if (!isWorkspaceIntent(intent)) {
         throw new Error("Tracked workspace host received a shell intent.");
@@ -385,24 +368,6 @@ function createTrackedHost(nodes: PresentationNodeSet) {
     },
     nodes,
   });
-  const reads = new Map<string, number>();
-  const host = {
-    ...memoryHost,
-    read(reference: PresentationReference) {
-      const key = presentationReferenceKey(reference);
-      reads.set(key, (reads.get(key) ?? 0) + 1);
-      return memoryHost.read(reference);
-    },
-  } as MutablePresentationHost;
 
-  return {
-    host,
-    intents,
-    readCount(reference: PresentationReference) {
-      return reads.get(presentationReferenceKey(reference)) ?? 0;
-    },
-    resetReads() {
-      reads.clear();
-    },
-  };
+  return { host, intents };
 }

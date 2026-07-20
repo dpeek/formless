@@ -47,4 +47,3 @@ Read this when editing `lib/storage/*`.
   filesystem APIs, provider SDKs, or bundled schema JSON files.
 - Keep package tests fast, deterministic, and local.
 - Do not call live networks, Cloudflare APIs, or a dev server from package tests.
-- During normal agent work, use repo `devstate`.

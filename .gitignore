@@ -6,7 +6,6 @@ bin
 dist
 .DS_Store
 tmp
-.devstate
 .env
 .alchemy
 .formless

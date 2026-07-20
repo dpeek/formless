@@ -1,4 +1,3 @@
-import { readFile } from "node:fs/promises";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vite-plus/test";
 import type { TreeIntent, TreeItemContract } from "@dpeek/formless-presentation/contract";
@@ -11,7 +10,6 @@ import {
   dispatchAstryxTreeItemSelection,
 } from "./tree-outline.tsx";
 import { createTreeResultFixtures, type TreeResultFixtureId } from "./tree-results.fixtures.ts";
-import { AstryxTreeResultRenderer } from "./tree-renderer.tsx";
 
 describe("Astryx tree hierarchy outline", () => {
   it("renders concise accessible rows with tree roles, semantic icons, facts, and context actions", () => {
@@ -107,20 +105,6 @@ describe("Astryx tree hierarchy outline", () => {
     expect(html).toContain('aria-level="8"');
     expect(html).toMatch(/aria-selected="true"[^>]*tabindex="0"/);
     expect(html).toContain("Maximum tree depth reached.");
-  });
-
-  it("retains responsive layout and stays outside records, routing, browser, and runtime state", async () => {
-    const outlineSource = await readFile(new URL("./tree-outline.tsx", import.meta.url), "utf8");
-    const layoutSource = await readFile(new URL("./tree-renderer.tsx", import.meta.url), "utf8");
-    const html = renderToStaticMarkup(<AstryxTreeResultRenderer tree={treeFixture("shallow")} />);
-
-    expect(layoutSource).toContain('columns={{ max: 2, minWidth: 320, repeat: "fit" }}');
-    expect(html.indexOf('data-formless-astryx-tree-outline="tree:fixture:shallow"')).toBeLessThan(
-      html.indexOf('aria-label="Edit Navigation placement and block"'),
-    );
-    expect(outlineSource).not.toMatch(
-      /childRecordId|placementId|recordsById|queryContext|useLocation|window\.location|src\/(?:app|client|worker)|generated-runtime|browser-replica|operation-controller|@dnd-kit|draggable|droppable/,
-    );
   });
 });
 

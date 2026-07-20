@@ -8,13 +8,11 @@
     "source.fixAll.oxc": "explicit"
   },
   "files.watcherExclude": {
-    "**/.devstate/**": true,
     "**/tmp/**": true,
     "**/sites/**": true,
     "**/node_modules/**": true
   },
   "search.exclude": {
-    "**/.devstate/**": true,
     "**/tmp/**": true,
     "**/sites/**": true,
     "**/node_modules/**": true

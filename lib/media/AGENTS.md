@@ -46,4 +46,3 @@ Read this when editing `lib/media/*`.
 - Do not deep-import `lib/media/src/*` from external runtime code.
 - Keep package tests fast and local. Use fake fetchers, fake stores, fixed ids, and fixed payloads.
 - Do not call live networks, Cloudflare APIs, or a dev server from package tests.
-- During normal agent work, use repo `devstate`.

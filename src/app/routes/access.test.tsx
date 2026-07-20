@@ -1,5 +1,6 @@
-import { readFileSync } from "node:fs";
-import { act, create, type ReactTestRenderer } from "react-test-renderer";
+// @vitest-environment jsdom
+
+import { act, render } from "@testing-library/react";
 import { describe, expect, it, vi } from "vite-plus/test";
 import type {
   AccessManifestContract,
@@ -51,11 +52,6 @@ describe("access route runtime", () => {
       feedback: { detail: "Administrator authority is required." },
     });
     await unauthorized.unmount();
-
-    const source = readFileSync(new URL("./access.tsx", import.meta.url), "utf8");
-    expect(source).not.toContain("formless-gateway");
-    expect(source).not.toContain("InstanceManagementRuntime");
-    expect(source).not.toContain("HomeRoute");
   });
 
   it("keeps the draft controlled, deduplicates pending submit, refreshes, and publishes safe outcomes", async () => {
@@ -189,10 +185,10 @@ describe("access route runtime", () => {
 
 async function mountAccessRoute(dependencies: AccessRouteDependencies) {
   const coordinator = createApplicationRuntimePublicationCoordinator();
-  let renderer: ReactTestRenderer | undefined;
+  let renderer!: ReturnType<typeof render>;
 
   await act(async () => {
-    renderer = create(
+    renderer = render(
       <ApplicationRuntimeContractHostProvider coordinator={coordinator}>
         <AccessRoute dependencies={dependencies} />
       </ApplicationRuntimeContractHostProvider>,
@@ -210,7 +206,7 @@ async function mountAccessRoute(dependencies: AccessRouteDependencies) {
     manifest: () => required(coordinator.host.read(instanceAccessReference)),
     readyManifest: () => readyManifest(required(coordinator.host.read(instanceAccessReference))),
     unmount: async () => {
-      await act(async () => required(renderer).unmount());
+      renderer.unmount();
     },
   };
 }

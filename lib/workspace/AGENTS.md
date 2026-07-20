@@ -48,4 +48,3 @@ Read this when editing `lib/workspace/*`.
 - Do not deep-import `lib/workspace/src/*` from external runtime code.
 - Keep package tests fast and local. Use fake filesystems or temporary directories, fixed ids, fixed clocks, and fixed payloads.
 - Do not call live networks, Cloudflare APIs, provider APIs, or a dev server from package tests.
-- During normal agent work, use repo `devstate`.

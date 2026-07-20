@@ -53,4 +53,3 @@ Read this when editing `src/cli/*`.
 - Do not put CLI operation bodies, provider mutation, filesystem writes, or ignored secret storage into `lib/gateway`.
 - Do not import browser UI from CLI runtime modules.
 - Do not import Worker runtime internals when the instance protocol, workspace contract, or Gateway adapter boundary is enough.
-- During normal agent work, use repo `devstate`.

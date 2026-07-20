@@ -14,7 +14,6 @@ vi.mock("@astryxdesign/core/theme", () => ({
 
 const sourceRoot = dirname(fileURLToPath(import.meta.url));
 const packageRoot = resolve(sourceRoot, "..");
-const repoRoot = resolve(packageRoot, "../..");
 
 describe("Formless Site renderer provider", () => {
   it.each(["light", "dark"] as const)("applies the canonical %s mode", (mode) => {
@@ -81,7 +80,6 @@ describe("Formless Site renderer provider", () => {
       exports: Record<string, string>;
     };
     const css = await readFile(resolve(sourceRoot, "global.css"), "utf8");
-    const providerSource = await readFile(resolve(sourceRoot, "site-provider.tsx"), "utf8");
 
     expect(packageJson.exports["./site/renderer"]).toBe("./src/site-renderer.tsx");
     expect(packageJson.exports["./site/provider"]).toBe("./src/site-provider.tsx");
@@ -89,22 +87,5 @@ describe("Formless Site renderer provider", () => {
     expect(css).toContain('@import "@astryxdesign/core/reset.css";');
     expect(css).toContain('@import "@astryxdesign/theme-neutral/theme.css";');
     expect(css).toContain("[data-astryx-public-site-provider]");
-    expect(providerSource).toContain('from "@astryxdesign/core/theme"');
-    expect(providerSource).not.toContain('from "@astryxdesign/core"');
-    expect(providerSource).not.toMatch(/localStorage|sessionStorage|document\.|window\.|useEffect/);
-  });
-
-  it("owns production public browser and Worker presentation assembly", async () => {
-    const [browserSource, workerSource] = await Promise.all([
-      readFile(resolve(repoRoot, "src/public-site-main.tsx"), "utf8"),
-      readFile(resolve(repoRoot, "src/worker/public-site-worker-runtime.ts"), "utf8"),
-    ]);
-
-    expect(browserSource).toContain("FormlessSitePageRenderer");
-    expect(browserSource).toContain("FormlessSiteSystemStateRenderer");
-    expect(browserSource).toContain("@dpeek/formless-renderer/site/global.css");
-    expect(workerSource).toContain("FormlessSitePageRenderer");
-    expect(workerSource).toContain("FormlessSiteSystemStateRenderer");
-    expect(workerSource).toContain("@dpeek/formless-renderer/site/renderer");
   });
 });

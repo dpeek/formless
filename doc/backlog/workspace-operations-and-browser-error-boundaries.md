@@ -644,7 +644,7 @@ Tests should establish structural safety and observable behavior:
 - CLI output remains source-faithful to typed results.
 - No `.formless/operations` or persisted auto-save state is created.
 
-Run `devstate check` and browser smoke for Push progress, authorization,
+Run `bun check:packages` and browser smoke for Push progress, authorization,
 selection, success, no-change, failure, reload, and unavailable-sidecar states.
 
 ## Explicit Non-Goals

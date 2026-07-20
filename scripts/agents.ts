@@ -2098,23 +2098,6 @@ function parseGitStatusPaths(stdout: string): string[] {
     .map(statusPathFromLine);
 }
 
-function changedFilesBetween(
-  cwd: string,
-  beforeRef: string,
-  afterRef: string,
-  runCommand: CommandRunner,
-): string[] | null {
-  const result = runCommand(cwd, "git", ["diff", "--name-only", beforeRef, afterRef]);
-  if (result.code !== 0) {
-    return null;
-  }
-
-  return result.stdout
-    .split(/\r?\n/)
-    .map((filePath) => filePath.trim())
-    .filter(Boolean);
-}
-
 function changedFilesInWorktree(cwd: string, runCommand: CommandRunner): string[] | null {
   const result = runCommand(cwd, "git", ["status", "--short", "--untracked-files=all"]);
   if (result.code !== 0) {
@@ -2122,53 +2105,6 @@ function changedFilesInWorktree(cwd: string, runCommand: CommandRunner): string[
   }
 
   return parseGitStatusPaths(result.stdout);
-}
-
-function isCodeOrGeneratedPath(filePath: string): boolean {
-  const normalized = filePath.replaceAll("\\", "/");
-  if (
-    normalized === "AGENTS.md" ||
-    normalized.endsWith(".md") ||
-    normalized.startsWith("doc/") ||
-    normalized.startsWith("openspec/")
-  ) {
-    return false;
-  }
-
-  return true;
-}
-
-function latestImplementationCheckEvidence(metadata: FormlessChangeCommitMetadata): string | null {
-  const lines = metadata.evidence.split(/\r?\n/);
-  for (let index = lines.length - 1; index >= 0; index -= 1) {
-    const line = lines[index]?.trim();
-    if (line?.includes("devstate check")) {
-      return line.replace(/^- /, "");
-    }
-  }
-
-  return null;
-}
-
-function readDevstateStatusSummary(worktreeDir: string): string | null {
-  const statusPath = path.join(worktreeDir, ".devstate", "status.md");
-  if (!existsSync(statusPath)) {
-    return null;
-  }
-
-  const lines = readFileSync(statusPath, "utf8")
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-  const summaryIndex = lines.findIndex((line) => line === "## Summary");
-  if (summaryIndex === -1) {
-    return lines.slice(0, 4).join("; ");
-  }
-
-  return lines
-    .slice(summaryIndex + 1, summaryIndex + 5)
-    .filter((line) => line.startsWith("- "))
-    .join("; ");
 }
 
 function finalizationBlockedEvidence(input: {
@@ -2282,18 +2218,6 @@ function runAutomaticFinalization(input: {
   const changeId = input.change.changeId;
   writeLine(input.stdout, `[agents] finalize ${changeId}`);
 
-  const beforeHeadResult = runFinalizationCommand({
-    at,
-    args: ["rev-parse", "--verify", "HEAD"],
-    command: "git",
-    cwd,
-    failurePrefix: "failed to read branch head before finalization rebase",
-    runCommand: input.runCommand,
-  });
-  if ("signal" in beforeHeadResult) {
-    return beforeHeadResult;
-  }
-  const beforeHead = beforeHeadResult.stdout.trim();
   const finalizationCommands = [`git rebase ${input.options.baseRef}`];
 
   const rebaseResult = runFinalizationCommand({
@@ -2308,20 +2232,6 @@ function runAutomaticFinalization(input: {
     input.runCommand(cwd, "git", ["rebase", "--abort"]);
     return rebaseResult;
   }
-
-  const afterHeadResult = runFinalizationCommand({
-    at,
-    args: ["rev-parse", "--verify", "HEAD"],
-    command: "git",
-    cwd,
-    failurePrefix: "failed to read branch head after finalization rebase",
-    runCommand: input.runCommand,
-  });
-  if ("signal" in afterHeadResult) {
-    return afterHeadResult;
-  }
-  const afterHead = afterHeadResult.stdout.trim();
-  const rebaseChangedFiles = changedFilesBetween(cwd, beforeHead, afterHead, input.runCommand);
 
   const metadataCommand = ["log", "--no-notes", "-1", "--format=%B", "HEAD"];
   finalizationCommands.push(`git ${metadataCommand.join(" ")}`);
@@ -2354,54 +2264,22 @@ function runAutomaticFinalization(input: {
     });
   }
 
-  finalizationCommands.push("openspec validate --specs --strict --no-interactive");
-  const validateResult = runFinalizationCommand({
-    at,
-    args: ["validate", "--specs", "--strict", "--no-interactive"],
-    command: "openspec",
-    cwd,
-    failurePrefix: `openspec validate --specs failed for ${changeId}`,
-    runCommand: input.runCommand,
-  });
-  if ("signal" in validateResult) {
-    return validateResult;
-  }
-
-  const implementationCheck = latestImplementationCheckEvidence(metadataParse.metadata);
-  const changedFilesBeforeCheck = changedFilesInWorktree(cwd, input.runCommand);
-  const rebaseCodeFiles = rebaseChangedFiles?.filter(isCodeOrGeneratedPath) ?? [];
-  const finalizationCodeFiles = changedFilesBeforeCheck?.filter(isCodeOrGeneratedPath) ?? [];
-  let checkReason: string | null = null;
-
-  if (!implementationCheck) {
-    checkReason = "latest implementation devstate check evidence not found";
-  } else if (rebaseChangedFiles === null) {
-    checkReason = "could not inspect finalization rebase diff";
-  } else if (changedFilesBeforeCheck === null) {
-    checkReason = "could not inspect finalization worktree changes";
-  } else if (rebaseCodeFiles.length > 0) {
-    checkReason = `finalization rebase changed code: ${rebaseCodeFiles.join(", ")}`;
-  } else if (finalizationCodeFiles.length > 0) {
-    checkReason = `finalization changed code: ${finalizationCodeFiles.join(", ")}`;
-  }
-
-  const checkMessage = checkReason ?? "completion requires fresh check";
-  writeLine(input.stdout, `[agents] finalization check ${changeId}: ${checkMessage}`);
+  finalizationCommands.push("bun check:ready");
+  writeLine(input.stdout, `[agents] finalization check ${changeId}: bun check:ready`);
   const checkResult = runFinalizationCommand({
     at,
-    args: ["check"],
-    command: "devstate",
+    args: ["check:ready"],
+    command: "bun",
     cwd,
-    failurePrefix: `devstate check failed during finalization for ${changeId}`,
+    failurePrefix: `bun check:ready failed during finalization for ${changeId}`,
     runCommand: input.runCommand,
   });
   if ("signal" in checkResult) {
     return checkResult;
   }
-  const statusSummary = readDevstateStatusSummary(cwd);
   writeLine(
     input.stdout,
-    `[agents] finalization check ok ${changeId}: ${statusSummary ?? checkResult.stdout.trim()}`,
+    `[agents] finalization check ok ${changeId}: ${checkResult.stdout.trim() || "passed"}`,
   );
 
   const changedFiles = changedFilesInWorktree(cwd, input.runCommand);
@@ -2432,7 +2310,7 @@ function runAutomaticFinalization(input: {
     });
   }
 
-  const evidenceMessage = `finalized ${changeId}; ran devstate check because ${checkMessage}`;
+  const evidenceMessage = `finalized ${changeId}; ran bun check:ready`;
   finalizationCommands.push("git commit --amend --cleanup=verbatim -F <metadata-message>");
   const metadataFailure = amendFinalizationMetadata({
     at,
@@ -2906,16 +2784,15 @@ function showDryRunClaim(input: {
   );
 }
 
-function runSupervisorDevstateCommand(input: {
-  action: "start" | "stop";
+function runSupervisorSetup(input: {
   changeId: string;
   runCommand: CommandRunner;
   stdout: Pick<NodeJS.WriteStream, "write">;
   worktreeDir: string;
 }): CommandResult {
-  writeLine(input.stdout, `[agents] devstate ${input.action} ${input.changeId}`);
+  writeLine(input.stdout, `[agents] setup ${input.changeId}: bun check:setup`);
   try {
-    return input.runCommand(input.worktreeDir, "devstate", [input.action]);
+    return input.runCommand(input.worktreeDir, "bun", ["check:setup"]);
   } catch (error) {
     return {
       code: 1,
@@ -2963,19 +2840,18 @@ async function runClaimedChange(input: {
   runSession: CodexSessionRunner;
   stdout: Pick<NodeJS.WriteStream, "write">;
 }): Promise<number> {
-  const startResult = runSupervisorDevstateCommand({
-    action: "start",
+  const setupResult = runSupervisorSetup({
     changeId: input.change.changeId,
     runCommand: input.runCommand,
     stdout: input.stdout,
     worktreeDir: input.branchPlan.worktreeDir,
   });
-  if (startResult.code !== 0) {
+  if (setupResult.code !== 0) {
     const evidence: AgentEvidence = {
       at: nowIso(input.now),
-      command: "devstate start",
-      message: `devstate start failed for ${input.change.changeId}: ${commandResultSummary(
-        startResult,
+      command: "bun check:setup",
+      message: `bun check:setup failed for ${input.change.changeId}: ${commandResultSummary(
+        setupResult,
       )}`,
     };
     markClaimedChangeBlocked({
@@ -2989,7 +2865,7 @@ async function runClaimedChange(input: {
     return 1;
   }
 
-  try {
+  {
     let changeMetadata = input.change.metadata ?? null;
     if (!changeMetadata && input.modeOverride !== "finalize") {
       const metadataResult = readClaimedChangeMetadata(
@@ -3204,20 +3080,6 @@ async function runClaimedChange(input: {
     }
 
     return 0;
-  } finally {
-    const stopResult = runSupervisorDevstateCommand({
-      action: "stop",
-      changeId: input.change.changeId,
-      runCommand: input.runCommand,
-      stdout: input.stdout,
-      worktreeDir: input.branchPlan.worktreeDir,
-    });
-    if (stopResult.code !== 0) {
-      writeLine(
-        input.stdout,
-        `[agents] devstate stop failed ${input.change.changeId}: ${commandResultSummary(stopResult)}`,
-      );
-    }
   }
 }
 

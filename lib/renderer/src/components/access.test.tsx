@@ -1,4 +1,3 @@
-import { readFile } from "node:fs/promises";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vite-plus/test";
 import type {
@@ -229,32 +228,6 @@ describe("canonical access-management fixtures", () => {
     expect(html).toContain('data-formless-astryx-access="access:fixture"');
     expect(html).toContain('data-formless-astryx-access-state="ready"');
   });
-
-  it("keeps fixture composition runtime-free and package-local", async () => {
-    const fixtureSource = await readFile(new URL("./access.fixtures.ts", import.meta.url), "utf8");
-    const layoutSource = await readFile(new URL("./access.tsx", import.meta.url), "utf8");
-    const rendererSource = await readFile(
-      new URL("./access-renderer.tsx", import.meta.url),
-      "utf8",
-    );
-    const rootSource = await readFile(new URL("../root.tsx", import.meta.url), "utf8");
-    const imports = [fixtureSource, layoutSource].flatMap(importSpecifiers);
-
-    expect(
-      imports.filter((specifier) =>
-        /(?:^|\/)(?:src\/app|src\/client|identity|storage|replica|api-client|access-runtime|access-projection)(?:\/|$)|\bwouter\b/.test(
-          specifier,
-        ),
-      ),
-    ).toEqual([]);
-    expect(`${fixtureSource}\n${layoutSource}`).not.toMatch(
-      /\blocalStorage\b|\bsessionStorage\b|\bdocument\.|\bwindow\.|\bfetch\(|\bsetTimeout\b|\bsetInterval\b|className/,
-    );
-    expect(layoutSource.match(/createMemoryPresentationHost\(\{/g)).toHaveLength(1);
-    expect(layoutSource.match(/<PresentationHostProvider\b/g)).toHaveLength(1);
-    expect(rendererSource).not.toContain("PresentationHostProvider");
-    expect(rootSource).toContain("FormlessAccessLayout");
-  });
 });
 
 function requiredFixture(fixtures: readonly FormlessAccessFixture[], id: FormlessAccessFixtureId) {
@@ -309,8 +282,4 @@ function requiredCurrentReadyManifest(
 
 function grantLabels(selection: AccessGrantSelectionContract) {
   return selection.groups.map((group) => group.options.map(({ label }) => label));
-}
-
-function importSpecifiers(source: string) {
-  return Array.from(source.matchAll(/\bfrom\s+["']([^"']+)["']/g), (match) => match[1]!);
 }

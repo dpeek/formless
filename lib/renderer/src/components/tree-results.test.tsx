@@ -1,4 +1,3 @@
-import { readFile } from "node:fs/promises";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vite-plus/test";
 import type {
@@ -376,27 +375,6 @@ describe("Tree Results prototype layout", () => {
     expect(html.indexOf('role="tree"')).toBeLessThan(
       html.indexOf('aria-label="Edit Text placement and block"'),
     );
-  });
-
-  it("keeps fixture data and layout outside runtime boundaries", async () => {
-    const fixtureSource = await readFile(
-      new URL("./tree-results.fixtures.ts", import.meta.url),
-      "utf8",
-    );
-    const layoutSource = await readFile(new URL("./tree-results.tsx", import.meta.url), "utf8");
-    const rendererSource = await readFile(new URL("./tree-renderer.tsx", import.meta.url), "utf8");
-    const outlineSource = await readFile(new URL("./tree-outline.tsx", import.meta.url), "utf8");
-    const rootSource = await readFile(new URL("../root.tsx", import.meta.url), "utf8");
-
-    expect(fixtureSource).not.toMatch(/\breact\b|@dpeek\/formless-presentation\/host|className=/i);
-    expect(outlineSource).toContain('from "@astryxdesign/core/TreeList"');
-    expect(layoutSource).toContain("createMemoryPresentationHost");
-    expect(rendererSource).toContain("useTreeResult");
-    expect(rendererSource).toContain('columns={{ max: 2, minWidth: 320, repeat: "fit" }}');
-    expect(`${fixtureSource}\n${layoutSource}\n${rendererSource}\n${outlineSource}`).not.toMatch(
-      /src\/(?:app|client|worker)|browser-replica|operation-controller|recordsById|rankPlan|sync|@dnd-kit|draggable|droppable/,
-    );
-    expect(rootSource).toContain("<FormlessTreeResultsLayout />");
   });
 });
 

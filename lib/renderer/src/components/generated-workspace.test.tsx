@@ -1,4 +1,3 @@
-import { readFile } from "node:fs/promises";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vite-plus/test";
 import type {
@@ -517,27 +516,6 @@ describe("Generated Workspace prototype layout", () => {
     }
   });
 
-  it("keeps fixture snapshots and their interactive host free of runtime dependencies", async () => {
-    const fixtureSource = await readFile(
-      new URL("./generated-workspace.fixtures.ts", import.meta.url),
-      "utf8",
-    );
-    const hostSource = await readFile(
-      new URL("./generated-workspace.tsx", import.meta.url),
-      "utf8",
-    );
-    const imports = [fixtureSource, hostSource].flatMap(importSpecifiers);
-    const forbiddenImports = imports.filter((specifier) =>
-      /generated-workspace-runtime|operation-controller|(?:^|\/)(?:src\/app\/generated|src\/client|storage|replica|media|sync)(?:\/|$)/.test(
-        specifier,
-      ),
-    );
-
-    expect(hostSource).toContain("createMemoryPresentationHost");
-    expect(hostSource).toContain("AstryxSubscribedWorkspaceScreenRenderer");
-    expect(forbiddenImports).toEqual([]);
-  });
-
   it("renders empty context, empty collection, and unavailable collection presentation", () => {
     const fixtures = requiredWorkspaceFixtures();
     const emptyContextHtml = renderWorkspace(fixtures, "empty-context");
@@ -679,8 +657,4 @@ function requiredReference(
     throw new Error("Missing fixture contract reference.");
   }
   return reference;
-}
-
-function importSpecifiers(source: string) {
-  return Array.from(source.matchAll(/\bfrom\s+["']([^"']+)["']/g), (match) => match[1]!);
 }

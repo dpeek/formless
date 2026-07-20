@@ -58,5 +58,4 @@ Read this when editing `lib/renderer/*`.
 - UI labels, icons, colors, states, disabled reasons, primary actions, hidden
   behavior, and semantic affordances must come from passed contract data, concrete
   Astryx component behavior, or an explicit product requirement.
-- Use repository-owned `devstate` checks. Do not start a separate package dev
-  server during normal agent work.
+- Do not start a separate package dev server during normal agent work.

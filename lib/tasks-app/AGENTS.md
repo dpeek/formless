@@ -30,4 +30,3 @@ Read this when editing `lib/tasks-app/*`.
 
 - Keep Tasks records flat.
 - Keep source schema and seed records as package source data, not generated runtime state.
-- During normal agent work, use repo `devstate`.

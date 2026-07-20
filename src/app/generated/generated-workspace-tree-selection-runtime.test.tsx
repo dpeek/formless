@@ -1,5 +1,7 @@
+// @vitest-environment jsdom
+
+import { act, render, type RenderResult } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
-import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import type { TreeItemContract, TreeResultContract } from "@dpeek/formless-presentation/contract";
 import type { StoredRecord } from "@dpeek/formless-storage";
 import type { ChangeRow } from "../../shared/protocol.ts";
@@ -57,7 +59,7 @@ describe("generated workspace tree selection runtime", () => {
     const onSelectContext = vi.fn();
     const onSelectQuery = vi.fn();
     let controller: GeneratedWorkspaceRuntimeController | undefined;
-    let renderer: ReactTestRenderer | undefined;
+    let renderer: RenderResult | undefined;
 
     function RuntimeProbe() {
       controller = useGeneratedWorkspaceRuntimeController({
@@ -71,7 +73,7 @@ describe("generated workspace tree selection runtime", () => {
     }
 
     await act(async () => {
-      renderer = create(
+      renderer = render(
         <SchemaAppProvider schemaKey="site">
           <RuntimeProbe />
         </SchemaAppProvider>,
@@ -198,7 +200,7 @@ describe("generated workspace tree selection runtime", () => {
       ),
     );
     let controller: GeneratedWorkspaceRuntimeController | undefined;
-    let renderer: ReactTestRenderer | undefined;
+    let renderer: RenderResult | undefined;
 
     function RuntimeProbe() {
       controller = useGeneratedWorkspaceRuntimeController({
@@ -212,7 +214,7 @@ describe("generated workspace tree selection runtime", () => {
     }
 
     await act(async () => {
-      renderer = create(
+      renderer = render(
         <SchemaAppProvider schemaKey="site">
           <RuntimeProbe />
         </SchemaAppProvider>,
@@ -281,7 +283,7 @@ describe("generated workspace tree selection runtime", () => {
     const onSelectContext = vi.fn();
     submitOperationMock.mockRejectedValueOnce(new Error("Commit refused."));
     let controller: GeneratedWorkspaceRuntimeController | undefined;
-    let renderer: ReactTestRenderer | undefined;
+    let renderer: RenderResult | undefined;
 
     function RuntimeProbe() {
       controller = useGeneratedWorkspaceRuntimeController({
@@ -295,7 +297,7 @@ describe("generated workspace tree selection runtime", () => {
     }
 
     await act(async () => {
-      renderer = create(
+      renderer = render(
         <SchemaAppProvider schemaKey="site">
           <RuntimeProbe />
         </SchemaAppProvider>,
@@ -409,7 +411,7 @@ describe("generated workspace tree selection runtime", () => {
       ),
     );
     let controller: GeneratedWorkspaceRuntimeController | undefined;
-    let renderer: ReactTestRenderer | undefined;
+    let renderer: RenderResult | undefined;
 
     function RuntimeProbe() {
       controller = useGeneratedWorkspaceRuntimeController({
@@ -423,7 +425,7 @@ describe("generated workspace tree selection runtime", () => {
     }
 
     await act(async () => {
-      renderer = create(
+      renderer = render(
         <SchemaAppProvider schemaKey="site">
           <RuntimeProbe />
         </SchemaAppProvider>,
@@ -560,7 +562,7 @@ describe("generated workspace tree selection runtime", () => {
       ),
     );
     let controller: GeneratedWorkspaceRuntimeController | undefined;
-    let renderer: ReactTestRenderer | undefined;
+    let renderer: RenderResult | undefined;
 
     function RuntimeProbe() {
       controller = useGeneratedWorkspaceRuntimeController({
@@ -574,7 +576,7 @@ describe("generated workspace tree selection runtime", () => {
     }
 
     await act(async () => {
-      renderer = create(
+      renderer = render(
         <SchemaAppProvider schemaKey="site">
           <RuntimeProbe />
         </SchemaAppProvider>,
@@ -796,7 +798,7 @@ describe("generated workspace tree selection runtime", () => {
       ),
     );
     let controller: GeneratedWorkspaceRuntimeController | undefined;
-    let renderer: ReactTestRenderer | undefined;
+    let renderer: RenderResult | undefined;
 
     function RuntimeProbe() {
       controller = useGeneratedWorkspaceRuntimeController({
@@ -810,7 +812,7 @@ describe("generated workspace tree selection runtime", () => {
     }
 
     await act(async () => {
-      renderer = create(
+      renderer = render(
         <SchemaAppProvider schemaKey="site">
           <RuntimeProbe />
         </SchemaAppProvider>,
@@ -924,7 +926,7 @@ describe("generated workspace tree selection runtime", () => {
       ),
     );
     let controller: GeneratedWorkspaceRuntimeController | undefined;
-    let renderer: ReactTestRenderer | undefined;
+    let renderer: RenderResult | undefined;
 
     function RuntimeProbe() {
       controller = useGeneratedWorkspaceRuntimeController({
@@ -938,7 +940,7 @@ describe("generated workspace tree selection runtime", () => {
     }
 
     await act(async () => {
-      renderer = create(
+      renderer = render(
         <SchemaAppProvider schemaKey="site">
           <RuntimeProbe />
         </SchemaAppProvider>,

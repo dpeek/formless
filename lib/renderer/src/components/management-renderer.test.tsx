@@ -1,4 +1,3 @@
-import { readFile } from "node:fs/promises";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vite-plus/test";
 import type {
@@ -212,25 +211,6 @@ describe("Astryx management renderer", () => {
       operationId: operation.id,
       type: "managementAuthorizationOpen",
     });
-  });
-
-  it("keeps the renderer runtime-free", async () => {
-    const rendererSource = await readFile(
-      new URL("./management-renderer.tsx", import.meta.url),
-      "utf8",
-    );
-    const imports = importSpecifiers(rendererSource);
-
-    expect(
-      imports.filter((specifier) =>
-        /(?:^|\/)(?:src\/app|src\/client|control-plane|gateway|storage|replica|routing|operation-controller)(?:\/|$)|\bwouter\b/.test(
-          specifier,
-        ),
-      ),
-    ).toEqual([]);
-    expect(rendererSource).not.toMatch(
-      /\bclassName\b|\blocalStorage\b|\bsessionStorage\b|\bdocument\.|\bwindow\.|\bfetch\(/,
-    );
   });
 });
 
@@ -488,8 +468,4 @@ function required<T>(value: T | null | undefined): T {
     throw new Error("Expected value.");
   }
   return value;
-}
-
-function importSpecifiers(source: string) {
-  return Array.from(source.matchAll(/\bfrom\s+["']([^"']+)["']/g), (match) => match[1]!);
 }

@@ -13,11 +13,10 @@ Finalize completed metadata-backed work before human review. The local finalizat
 2. Verify all required tasks in `git log --no-notes -1 --format=%B HEAD` are complete or intentionally closed.
 3. Rebase on local main: `git rebase main`.
 4. Validate structured metadata from the rebased tip.
-5. Validate canonical specs: `openspec validate --specs --strict --no-interactive`.
-6. Run `devstate check`.
-7. Amend the tip metadata with finalization evidence and `Formless-Change-State: ready-for-review` using `git commit --amend --cleanup=verbatim`.
-8. Validate the amended metadata: `bun agents change <change-id> --json`.
-9. Leave `changes/<change-id>` as the review branch and do not merge into `main`.
+5. Run the finalization gate: `bun check:ready`.
+6. Amend the tip metadata with finalization evidence and `Formless-Change-State: ready-for-review` using `git commit --amend --cleanup=verbatim`.
+7. Validate the amended metadata: `bun agents change <change-id> --json`.
+8. Leave `changes/<change-id>` as the review branch and do not merge into `main`.
 
 ## Guardrails
 
@@ -36,7 +35,6 @@ bun agents change <change-id> --json
 git log --no-notes -1 --format=%B HEAD
 git diff --stat --find-renames main..HEAD
 git rebase main
-openspec validate --specs --strict --no-interactive
-devstate check
+bun check:ready
 git commit --amend --cleanup=verbatim
 ```

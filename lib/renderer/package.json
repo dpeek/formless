@@ -13,7 +13,7 @@
   },
   "scripts": {
     "dev": "vite",
-    "test": "vp test --config ../../vite.config.ts --configLoader runner"
+    "check": "vp check --fix && vp test --configLoader runner --config ../../vite.config.ts"
   },
   "dependencies": {
     "@astryxdesign/core": "0.1.4",
@@ -32,11 +32,12 @@
     "@astryxdesign/build": "0.1.4",
     "@astryxdesign/cli": "0.1.4",
     "@stylexjs/unplugin": "0.18.3",
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/react": "^16.3.2",
     "@types/react": "19.2.15",
     "@types/react-dom": "19.2.3",
-    "@types/react-test-renderer": "^19.1.0",
     "@vitejs/plugin-react": "latest",
-    "react-test-renderer": "19.2.6",
+    "jsdom": "^29.1.1",
     "typescript": "~6.0.2",
     "vite": "latest"
   },

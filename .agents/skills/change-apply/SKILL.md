@@ -15,7 +15,7 @@ Implement exactly one ready task section from the change commit metadata, then s
 4. Select the next task section with unchecked tasks before broad context reads.
 5. Inspect the branch delta: `git diff --stat --find-renames main..HEAD` and `git diff --name-status --find-renames main..HEAD`.
 6. Implement only the selected section.
-7. Run `devstate check`.
+7. Run `bun check:packages`.
 8. Amend the branch tip with code changes, completed task checkboxes, evidence, blockers if any, and updated trailers: `git add -A` then `git commit --amend --cleanup=verbatim`.
 9. Validate the amended metadata: `bun agents change <change-id> --json`.
 
@@ -38,6 +38,6 @@ bun agents change <change-id> --json
 git log --no-notes -1 --format=%B HEAD
 git diff --stat --find-renames main..HEAD
 git diff --name-status --find-renames main..HEAD
-devstate check
+bun check:packages
 git commit --amend --cleanup=verbatim
 ```

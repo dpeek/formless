@@ -32,4 +32,3 @@ Read this when editing `lib/crm-app/*`.
 - Keep CRM records flat.
 - Keep source schema and seed records as package source data, not generated runtime state.
 - Do not add public CRM subscribe writes or email sending here.
-- During normal agent work, use repo `devstate`.

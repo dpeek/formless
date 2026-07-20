@@ -45,4 +45,3 @@ Read this when editing `lib/instance-control-plane/*`.
 - Do not import bundled app schemas, seed records, runtime package registries, React, filesystem APIs, provider SDKs, or Worker adapters.
 - Keep package tests fast, deterministic, and local.
 - Do not call live networks, Cloudflare APIs, provider APIs, or a dev server from package tests.
-- During normal agent work, use repo `devstate`.

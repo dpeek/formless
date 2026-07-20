@@ -49,4 +49,3 @@ Read this when editing `lib/presentation/*`.
 - Do not import the Renderer package, root `src/*`, or the Site implementation
   package.
 - Keep package tests fast, deterministic, and local.
-- Use repository-owned `devstate` checks.

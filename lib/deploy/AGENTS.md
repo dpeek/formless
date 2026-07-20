@@ -46,4 +46,3 @@ Read this when editing `lib/deploy/*`.
 - Import this package from public subpaths only: `@dpeek/formless-deploy`, `@dpeek/formless-deploy/client`, `@dpeek/formless-deploy/react`, or `@dpeek/formless-deploy/worker`.
 - Do not deep-import `lib/deploy/src/*` from external runtime code.
 - Keep package tests fast and deterministic.
-- During normal agent work, use repo `devstate`.

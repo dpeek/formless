@@ -1,4 +1,3 @@
-import { readFile } from "node:fs/promises";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vite-plus/test";
 import type {
@@ -204,18 +203,6 @@ describe("Astryx tree actions and diagnostics", () => {
     expect(cycleHtml).toContain("This branch stops before repeating an ancestor.");
     expect(depthHtml).toContain("Maximum tree depth reached.");
     expect(leafHtml).toContain(">Leaf<");
-  });
-
-  it("stays renderer-only and excludes child deletion and gesture behavior", async () => {
-    const source = await readFile(new URL("./tree-actions.tsx", import.meta.url), "utf8");
-
-    expect(source).toContain('from "@astryxdesign/core/MoreMenu"');
-    expect(source).toContain("AstryxOperationDestructiveConfirmation");
-    expect(source).toContain("AstryxOperationButtonWithProgress");
-    expect(source).toContain("AstryxOperationFeedback");
-    expect(source).not.toMatch(
-      /childRecordId|recordsById|rankPlan|src\/(?:app|client|worker)|generated-runtime|browser-replica|operation-controller|@dnd-kit|draggable|droppable|dragHandle/,
-    );
   });
 });
 

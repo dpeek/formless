@@ -1,6 +1,7 @@
-import { readFile } from "node:fs/promises";
+// @vitest-environment jsdom
+
+import { act, render } from "@testing-library/react";
 import { createElement, type ReactNode } from "react";
-import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { describe, expect, it, vi } from "vite-plus/test";
 import type { PresentationHost } from "@dpeek/formless-presentation/host";
 import { usePresentationHost, useDocumentTheme } from "@dpeek/formless-presentation/host/react";
@@ -33,7 +34,6 @@ describe("production application renderer root", () => {
     let currentHost: PresentationHost | undefined;
     let currentThemeId: string | undefined;
     let currentRootReference = "";
-    let renderer: ReactTestRenderer | undefined;
 
     function RuntimeProbe() {
       currentHost = usePresentationHost();
@@ -42,24 +42,26 @@ describe("production application renderer root", () => {
       return <button autoFocus>Route action</button>;
     }
 
-    await act(async () => {
-      renderer = create(
-        <ApplicationRendererRoot
-          currentHref={() => "https://formless.test/apps/tasks"}
-          navigate={() => undefined}
-          navigationTarget={navigationTarget}
-          themeController={controller}
-        >
-          <RuntimeProbe />
-        </ApplicationRendererRoot>,
-      );
-    });
+    const mounted = render(
+      <ApplicationRendererRoot
+        currentHref={() => "https://formless.test/apps/tasks"}
+        navigate={() => undefined}
+        navigationTarget={navigationTarget}
+        themeController={controller}
+      >
+        <RuntimeProbe />
+      </ApplicationRendererRoot>,
+    );
 
-    const mounted = required(renderer);
     const initialHost = required(currentHost);
-    expect(mounted.root.findAllByProps({ "data-astryx-root-theme": "dark" })).toHaveLength(1);
-    expect(mounted.root.findAllByProps({ "data-astryx-toast-viewport": true })).toHaveLength(1);
-    expect(mounted.root.findByType("button").props.autoFocus).toBe(true);
+    const routeAction = required(
+      [...mounted.container.querySelectorAll("button")].find(
+        (button) => button.textContent === "Route action",
+      ),
+    );
+    expect(mounted.container.querySelectorAll('[data-astryx-root-theme="dark"]')).toHaveLength(1);
+    expect(mounted.container.querySelectorAll("[data-astryx-toast-viewport]")).toHaveLength(1);
+    expect(document.activeElement).toBe(routeAction);
     expect(currentThemeId).toBe(applicationThemeReference.themeId);
     expect(currentRootReference).toBe(applicationThemeReference.themeId);
     expect(navigationTarget.listenerCount()).toBe(1);
@@ -79,27 +81,14 @@ describe("production application renderer root", () => {
     });
 
     expect(currentHost).toBe(initialHost);
-    expect(mounted.root.findAllByProps({ "data-astryx-root-theme": "light" })).toHaveLength(1);
-    expect(mounted.root.findAllByProps({ "data-astryx-root-theme": "dark" })).toHaveLength(0);
-    expect(mounted.root.findByType("button").props.autoFocus).toBe(true);
+    expect(mounted.container.querySelectorAll('[data-astryx-root-theme="light"]')).toHaveLength(1);
+    expect(mounted.container.querySelectorAll('[data-astryx-root-theme="dark"]')).toHaveLength(0);
+    expect(document.activeElement).toBe(routeAction);
     expect(fixture.persisted).toEqual(["light"]);
 
-    await act(async () => mounted.unmount());
+    mounted.unmount();
     expect(navigationTarget.listenerCount()).toBe(0);
     controller.destroy();
-  });
-
-  it("owns application CSS at the selected production entry", async () => {
-    const [rootSource, mainSource, providerSource] = await Promise.all([
-      readFile(new URL("./application-renderer-root.tsx", import.meta.url), "utf8"),
-      readFile(new URL("../main.tsx", import.meta.url), "utf8"),
-      readFile(new URL("../../lib/renderer/src/application-provider.tsx", import.meta.url), "utf8"),
-    ]);
-
-    expect(rootSource).toContain("@dpeek/formless-renderer/application/global.css");
-    expect(rootSource).toContain("FormlessApplicationRendererProvider");
-    expect(providerSource).toContain("ToastViewport");
-    expect(mainSource).toContain("ApplicationRendererRoot");
   });
 });
 

@@ -48,4 +48,3 @@ Read this when editing `lib/public-operations/*`.
 - Keep package tests fast, deterministic, and local.
 - Do not call live networks, Cloudflare APIs, a database, or a dev server from
   package tests.
-- During normal agent work, use repo `devstate`.

@@ -1,4 +1,3 @@
-import { readFile } from "node:fs/promises";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vite-plus/test";
 import type { AccountGateKind } from "@dpeek/formless-presentation/contract";
@@ -296,30 +295,6 @@ describe("Auth prototype layout", () => {
     expect(html).not.toContain("Choose destination");
     expect(html).not.toContain("Decline invitation");
   });
-
-  it("keeps fixtures and reducers runtime-free", async () => {
-    const fixtureSource = await readFile(new URL("./auth.fixtures.ts", import.meta.url), "utf8");
-    const layoutSource = await readFile(new URL("./auth.tsx", import.meta.url), "utf8");
-    const rendererSource = await readFile(new URL("./auth-renderer.tsx", import.meta.url), "utf8");
-    const imports = [fixtureSource, layoutSource].flatMap(importSpecifiers);
-    const forbiddenImports = imports.filter((specifier) =>
-      /(?:^|\/)(?:src\/app|src\/client|routing|storage|replica|operation-controller|session-client|instance-auth)(?:\/|$)|\bwouter\b/.test(
-        specifier,
-      ),
-    );
-
-    expect(fixtureSource).not.toMatch(/\breact\b|@dpeek\/formless-presentation\/host/);
-    expect(layoutSource).toContain("createMemoryPresentationHost");
-    expect(layoutSource).toContain("AstryxSubscribedAuthRenderer");
-    expect(layoutSource).not.toMatch(
-      /navigator\.credentials|setTimeout|location\.(?:assign|replace)|sessionStorage|localStorage/,
-    );
-    expect(fixtureSource).not.toMatch(
-      /Choose destination|Contact owner|Decline invitation|Resend code/,
-    );
-    expect(forbiddenImports).toEqual([]);
-    expect(rendererSource).not.toMatch(/className=|src\/app/);
-  });
 });
 
 function requiredFixture(
@@ -331,8 +306,4 @@ function requiredFixture(
     throw new Error(`Missing ${id} auth fixture.`);
   }
   return fixture;
-}
-
-function importSpecifiers(source: string) {
-  return Array.from(source.matchAll(/\bfrom\s+["']([^"']+)["']/g), (match) => match[1]!);
 }

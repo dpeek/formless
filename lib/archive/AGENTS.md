@@ -45,4 +45,3 @@ Read this when editing `lib/archive/*`.
 - Do not deep-import `lib/archive/src/*` from external runtime code.
 - Keep package tests fast and local. Use temporary directories, fixed ids, fixed clocks, and fixed payloads.
 - Do not call live networks, Cloudflare APIs, provider APIs, or a dev server from package tests.
-- During normal agent work, use repo `devstate`.

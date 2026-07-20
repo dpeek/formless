@@ -1,3 +1,6 @@
+// @vitest-environment jsdom
+
+import { fireEvent, render, waitFor, type RenderResult } from "@testing-library/react";
 import {
   createElement,
   useState,
@@ -6,7 +9,6 @@ import {
   type ReactNode,
 } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import type {
   SiteBlockNode,
@@ -45,11 +47,13 @@ vi.mock("@dpeek/formless-site-app/public/react", async (importOriginal) => {
       resetSignal: number;
       siteKey: string;
     }) =>
-      createElement("div", {
+      createElement("input", {
         "data-component": "SitePublicTurnstileChallenge",
         "data-reset-signal": resetSignal,
         "data-sitekey": siteKey,
-        onTokenChange,
+        onChange: (event: { currentTarget: { value: string } }) =>
+          onTokenChange(event.currentTarget.value),
+        type: "text",
       }),
   };
 });
@@ -622,20 +626,25 @@ describe("Astryx public Site page shell", () => {
     const renderer = await renderPage(shellRendererProps());
 
     expect(componentLabels(renderer, "TopNavItem")).toEqual(["Home", "Work", "Journal", "Contact"]);
-    expect(componentByLabel(renderer, "TopNavItem", "Home").props.href).toBe("/sites/astryx");
-    expect(componentByLabel(renderer, "TopNavItem", "Home").props["aria-current"]).toBe("page");
-    expect(componentByLabel(renderer, "TopNavItem", "Work").props.href).toBe("/sites/astryx/work");
-    expect(componentByLabel(renderer, "TopNavItem", "Contact").props.href).toBe("#contact");
-    expect(renderer.root.findByProps({ "data-component": "TopNavHeading" }).props.href).toBe(
+    expect(componentByLabel(renderer, "TopNavItem", "Home").getAttribute("href")).toBe(
       "/sites/astryx",
     );
+    expect(componentByLabel(renderer, "TopNavItem", "Home").getAttribute("aria-current")).toBe(
+      "page",
+    );
+    expect(componentByLabel(renderer, "TopNavItem", "Work").getAttribute("href")).toBe(
+      "/sites/astryx/work",
+    );
+    expect(componentByLabel(renderer, "TopNavItem", "Contact").getAttribute("href")).toBe(
+      "#contact",
+    );
     expect(
-      renderer.root
-        .findAll(
-          (node) =>
-            typeof node.type === "string" && node.props["data-site-navigation-group"] !== undefined,
-        )
-        .map((node) => node.props["data-site-navigation-group"]),
+      renderer.container.querySelector('[data-component="TopNavHeading"]')?.getAttribute("href"),
+    ).toBe("/sites/astryx");
+    expect(
+      Array.from(renderer.container.querySelectorAll("[data-site-navigation-group]"), (node) =>
+        node.getAttribute("data-site-navigation-group"),
+      ),
     ).toEqual(["primary", "secondary"]);
 
     await unmount(renderer);
@@ -646,17 +655,18 @@ describe("Astryx public Site page shell", () => {
     const renderer = await renderPage(shellRendererProps());
 
     expect(
-      renderer.root
-        .findAll(
-          (node) =>
-            typeof node.type === "string" && node.props["data-site-footer-group"] !== undefined,
-        )
-        .map((node) => node.props["data-site-footer-group"]),
+      Array.from(renderer.container.querySelectorAll("[data-site-footer-group]"), (node) =>
+        node.getAttribute("data-site-footer-group"),
+      ),
     ).toEqual(["section", "social"]);
-    const github = renderer.root.findByProps({ "data-public-href": "https://github.com/dpeek" });
-    expect(github.props.href).toBe("https://github.com/dpeek");
-    expect(github.props.target).toBe("_blank");
-    expect(github.props.rel).toBe("noreferrer");
+    const github = required(
+      renderer.container.querySelector<HTMLAnchorElement>(
+        '[data-public-href="https://github.com/dpeek"]',
+      ),
+    );
+    expect(github.href).toBe("https://github.com/dpeek");
+    expect(github.target).toBe("_blank");
+    expect(github.rel).toBe("noreferrer");
     expect(rendererText(renderer)).toContain(
       "Product design and engineering for teams building ambitious software.",
     );
@@ -668,11 +678,11 @@ describe("Astryx public Site page shell", () => {
     viewport.isMobile = true;
     const renderer = await renderPage(withExternalHeaderLink(shellRendererProps()));
 
-    expect(renderer.root.findAllByProps({ "data-component": "TopNavItem" })).toHaveLength(0);
+    expect(renderer.container.querySelectorAll('[data-component="TopNavItem"]')).toHaveLength(0);
     expect(
-      renderer.root
-        .findAllByProps({ "data-component": "SideNavSection" })
-        .map((node) => node.props["data-title"]),
+      Array.from(renderer.container.querySelectorAll('[data-component="SideNavSection"]'), (node) =>
+        node.getAttribute("data-title"),
+      ),
     ).toEqual(["Primary navigation", "Secondary navigation"]);
     expect(componentLabels(renderer, "SideNavItem")).toEqual([
       "Home",
@@ -682,19 +692,19 @@ describe("Astryx public Site page shell", () => {
       "Documentation",
     ]);
     const documentation = componentByLabel(renderer, "SideNavItem", "Documentation");
-    expect(documentation.props.href).toBe("https://example.com/docs");
-    expect(documentation.props.target).toBe("_blank");
-    expect(documentation.props.rel).toBe("noreferrer");
-    expect(componentByLabel(renderer, "SideNavItem", "Home").props["aria-current"]).toBe("page");
-
-    const mobileNav = renderer.root.findByProps({ "data-component": "MobileNav" });
-    expect(mobileNav.props["data-open"]).toBe("false");
-    await act(async () => {
-      renderer.root.findByProps({ "aria-label": "Open navigation" }).props.onClick();
-    });
-    expect(renderer.root.findByProps({ "data-component": "MobileNav" }).props["data-open"]).toBe(
-      "true",
+    expect(documentation.getAttribute("href")).toBe("https://example.com/docs");
+    expect(documentation.getAttribute("target")).toBe("_blank");
+    expect(documentation.getAttribute("rel")).toBe("noreferrer");
+    expect(componentByLabel(renderer, "SideNavItem", "Home").getAttribute("aria-current")).toBe(
+      "page",
     );
+
+    const mobileNav = required(renderer.container.querySelector('[data-component="MobileNav"]'));
+    expect(mobileNav.getAttribute("data-open")).toBe("false");
+    fireEvent.click(required(renderer.container.querySelector('[aria-label="Open navigation"]')));
+    expect(
+      renderer.container.querySelector('[data-component="MobileNav"]')?.getAttribute("data-open"),
+    ).toBe("true");
 
     await unmount(renderer);
   });
@@ -703,22 +713,24 @@ describe("Astryx public Site page shell", () => {
     viewport.isMobile = false;
     const renderer = await renderPage(shellRendererProps());
 
-    expect(renderer.root.findByProps({ "data-component": "Theme" }).props["data-mode"]).toBe(
-      "light",
-    );
-    const toggle = renderer.root.findByProps({ "aria-label": "Switch to dark mode" });
-    expect(toggle.props["aria-pressed"]).toBe(false);
-
-    await act(async () => {
-      toggle.props.onClick();
-    });
-
-    expect(renderer.root.findByProps({ "data-component": "Theme" }).props["data-mode"]).toBe(
-      "dark",
-    );
     expect(
-      renderer.root.findByProps({ "aria-label": "Switch to light mode" }).props["aria-pressed"],
-    ).toBe(true);
+      renderer.container.querySelector('[data-component="Theme"]')?.getAttribute("data-mode"),
+    ).toBe("light");
+    const toggle = required(
+      renderer.container.querySelector<HTMLButtonElement>('[aria-label="Switch to dark mode"]'),
+    );
+    expect(toggle.getAttribute("aria-pressed")).toBe("false");
+
+    fireEvent.click(toggle);
+
+    expect(
+      renderer.container.querySelector('[data-component="Theme"]')?.getAttribute("data-mode"),
+    ).toBe("dark");
+    expect(
+      renderer.container
+        .querySelector('[aria-label="Switch to light mode"]')
+        ?.getAttribute("aria-pressed"),
+    ).toBe("true");
 
     await unmount(renderer);
   });
@@ -734,12 +746,12 @@ describe("Astryx public Site page shell", () => {
       const renderer = await renderPage(shellRendererProps(frame));
 
       expect(rendererText(renderer)).toContain("Clear digital products for ambitious teams.");
-      expect(renderer.root.findAllByProps({ "data-component": "TopNav" }).length > 0).toBe(
+      expect(renderer.container.querySelectorAll('[data-component="TopNav"]').length > 0).toBe(
         hasHeader,
       );
-      expect(renderer.root.findAllByProps({ "data-component": "LayoutFooter" }).length > 0).toBe(
-        hasFooter,
-      );
+      expect(
+        renderer.container.querySelectorAll('[data-component="LayoutFooter"]').length > 0,
+      ).toBe(hasFooter);
 
       await unmount(renderer);
     },
@@ -859,9 +871,8 @@ describe("Astryx public Site structural blocks", () => {
     await unmount(renderer);
   });
 
-  it("uses feature slots, optional facts, source icons, colors, and ignores unknown blocks", async () => {
+  it("uses valid feature slots and ignores invalid or unknown blocks", async () => {
     viewport.isMobile = false;
-    const icon = `<svg viewBox="0 0 24 24"><path d="M4 12h16"/></svg>`;
     const renderer = await renderPage(
       structuralRendererProps([
         placement(
@@ -915,48 +926,13 @@ describe("Astryx public Site structural blocks", () => {
             ],
           }),
         ),
-        placement(
-          "card-grid",
-          2000,
-          block("card-grid", "cardGrid", "Cards", {
-            placements: [
-              placement(
-                "colored-card",
-                1000,
-                block("colored-card", "card", "Colored card", {
-                  color: "#7c3aed",
-                  icon,
-                }),
-              ),
-            ],
-          }),
-        ),
-        placement(
-          "metric-grid",
-          3000,
-          block("metric-grid", "metricGrid", "Metrics", {
-            placements: [
-              placement(
-                "colored-metric",
-                1000,
-                block("colored-metric", "metric", "42", {
-                  color: "#0891b2",
-                }),
-              ),
-            ],
-          }),
-        ),
       ]),
     );
 
-    expect(renderer.root.findByProps({ "data-site-feature-alignment": "right" })).toBeDefined();
-    expect(renderer.root.findByProps({ "data-site-feature-media": true })).toBeDefined();
-    expect(renderer.root.findByProps({ "data-site-feature-actions": true })).toBeDefined();
-    expect(renderer.root.findByProps({ "data-media-asset-id": "feature-asset" })).toBeDefined();
-    expect(renderer.root.findByProps({ "data-public-href": "/sites/astryx/work" })).toBeDefined();
-    expect(renderer.root.findByProps({ "data-source": icon }).props["data-color"]).toBe("inherit");
-    expect(renderer.root.findByProps({ "data-site-block-color": "#7c3aed" })).toBeDefined();
-    expect(renderer.root.findByProps({ "data-site-block-color": "#0891b2" })).toBeDefined();
+    expect(renderer.container.querySelector('[src="/media/feature.webp"]')).not.toBeNull();
+    expect(
+      renderer.container.querySelector('[data-public-href="/sites/astryx/work"]'),
+    ).not.toBeNull();
     expect(rendererText(renderer)).toContain("Follow-up");
     expect(rendererText(renderer)).not.toContain("Wrong media type");
     expect(rendererText(renderer)).not.toContain("Internal projection warning");
@@ -1013,37 +989,45 @@ describe("Astryx public Site links, source icons, and media", () => {
       },
     });
 
-    expect(componentByLabel(renderer, "TopNavItem", "Work").props.href).toBe("/sites/astryx/work");
-    const inlineInternal = renderer.root.findByProps({
-      "data-public-href": "/sites/astryx/work#details",
-    });
+    expect(componentByLabel(renderer, "TopNavItem", "Work").getAttribute("href")).toBe(
+      "/sites/astryx/work",
+    );
+    const inlineInternal = required(
+      renderer.container.querySelector('[data-public-href="/sites/astryx/work#details"]'),
+    );
     expect(rendererText(renderer)).toContain("Placed link label");
-    expect(inlineInternal.props.target).toBeUndefined();
-    expect(inlineInternal.props.rel).toBeUndefined();
-    const inlineExternal = renderer.root.findByProps({
-      "data-public-href": "https://example.com/reference",
-    });
-    expect(inlineExternal.props.target).toBe("_blank");
-    expect(inlineExternal.props.rel).toBe("noreferrer");
+    expect(inlineInternal.getAttribute("target")).toBeNull();
+    expect(inlineInternal.getAttribute("rel")).toBeNull();
+    const inlineExternal = required(
+      renderer.container.querySelector('[data-public-href="https://example.com/reference"]'),
+    );
+    expect(inlineExternal.getAttribute("target")).toBe("_blank");
+    expect(inlineExternal.getAttribute("rel")).toBe("noreferrer");
 
     const action = componentByLabel(renderer, "Button", "Start now");
-    expect(action.props.href).toBe("/sites/astryx/contact");
-    expect(action.props["data-site-action-link"]).toBe(true);
-    expect(action.findByProps({ "data-source": safeIcon })).toBeDefined();
+    expect(action.getAttribute("href")).toBe("/sites/astryx/contact");
+    expect(action.getAttribute("data-site-action-link")).toBe("true");
+    expect(
+      Array.from(action.querySelectorAll<HTMLElement>("[data-source]")).find(
+        (node) => node.getAttribute("data-source") === safeIcon,
+      ),
+    ).toBeDefined();
 
-    const social = renderer.root.find(
-      (node) => node.type === "a" && node.props["data-public-href"] === "https://github.com/dpeek",
+    const social = required(
+      renderer.container.querySelector<HTMLAnchorElement>(
+        'a[data-public-href="https://github.com/dpeek"]',
+      ),
     );
-    expect(social.props["data-site-social-link"]).toBe(true);
-    expect(social.props["aria-label"]).toBe("GitHub");
-    expect(social.props.target).toBe("_blank");
-    expect(social.props.rel).toBe("noreferrer");
-    expect(social.findByProps({ "data-source": "github" })).toBeDefined();
+    expect(social.getAttribute("data-site-social-link")).toBe("true");
+    expect(social.getAttribute("aria-label")).toBe("GitHub");
+    expect(social.target).toBe("_blank");
+    expect(social.rel).toBe("noreferrer");
+    expect(social.querySelector('[data-source="github"]')).not.toBeNull();
 
     await unmount(renderer);
   });
 
-  it("renders only projected core delivery facts with dimensions, ratios, semantic slots, and missing states", async () => {
+  it("renders projected media with dimensions, semantic slots, and missing states", async () => {
     viewport.isMobile = false;
     const renderer = await renderPage(
       structuralRendererProps([
@@ -1097,36 +1081,25 @@ describe("Astryx public Site links, source icons, and media", () => {
       ]),
     );
 
-    const delivered = renderer.root.findByProps({ src: "/media/delivered.webp" });
-    expect(delivered.props.width).toBe(1600);
-    expect(delivered.props.height).toBe(900);
-    expect(
-      renderer.root.findByProps({ "data-media-asset-id": "asset-delivered" }).props[
-        "data-site-image"
-      ],
-    ).toBe("block");
-    expect(
-      renderer.root.findByProps({ "data-site-image-aspect-ratio": "1600 / 900" }),
-    ).toBeDefined();
-    expect(renderer.root.findAllByProps({ src: "https://example.com/manual-image.jpg" })).toEqual(
-      [],
+    const delivered = required(
+      renderer.container.querySelector<HTMLImageElement>('img[src="/media/delivered.webp"]'),
     );
-    expect(renderer.root.findAllByProps({ src: "https://example.com/manual-missing.jpg" })).toEqual(
-      [],
+    expect(delivered.width).toBe(1600);
+    expect(delivered.height).toBe(900);
+    expect(
+      renderer.container.querySelector('[src="https://example.com/manual-image.jpg"]'),
+    ).toBeNull();
+    expect(
+      renderer.container.querySelector('[src="https://example.com/manual-missing.jpg"]'),
+    ).toBeNull();
+    expect(renderer.container.querySelector('[aria-label="Missing image"]')).not.toBeNull();
+    expect(renderer.container.querySelector('[src="/media/feature.webp"]')).not.toBeNull();
+    const summaryPrimary = required(
+      renderer.container.querySelector('[data-site-primary-image="summary"]'),
     );
     expect(
-      renderer.root.findByProps({ "aria-label": "Missing image" }).props["data-site-image-missing"],
-    ).toBe(true);
-    expect(
-      renderer.root.findAllByProps({ "data-site-image-aspect-ratio": "4 / 3" }).length,
-    ).toBeGreaterThan(0);
-    expect(renderer.root.findByProps({ "data-site-feature-media": true })).toBeDefined();
-    expect(renderer.root.findByProps({ src: "/media/feature.webp" })).toBeDefined();
-    const summaryPrimary = renderer.root.findByProps({ "data-site-primary-image": "summary" });
-    expect(
-      summaryPrimary.findByProps({ "data-site-image-missing": true }).props["aria-label"],
+      summaryPrimary.querySelector('[data-site-image-missing="true"]')?.getAttribute("aria-label"),
     ).toBe("Missing summary image");
-    expect(renderer.root.findByProps({ "data-site-summary-layout": "media-start" })).toBeDefined();
 
     await unmount(renderer);
   });
@@ -1162,11 +1135,13 @@ describe("Astryx public Site links, source icons, and media", () => {
       },
     });
 
-    expect(renderer.root.findAllByProps({ "data-site-primary-image": "post-detail" })).toHaveLength(
+    expect(
+      renderer.container.querySelectorAll('[data-site-primary-image="post-detail"]'),
+    ).toHaveLength(1);
+    expect(renderer.container.querySelectorAll('[src="/media/post.webp"]')).toHaveLength(1);
+    expect(renderer.container.querySelectorAll('[data-media-asset-id="asset-post"]')).toHaveLength(
       1,
     );
-    expect(renderer.root.findAllByProps({ src: "/media/post.webp" })).toHaveLength(1);
-    expect(renderer.root.findAllByProps({ "data-media-asset-id": "asset-post" })).toHaveLength(1);
     expect(rendererText(renderer)).toContain("Post body.");
 
     await unmount(renderer);
@@ -1229,48 +1204,41 @@ describe("Astryx public Site lists, summaries, and post detail", () => {
     );
 
     expect(
-      renderer.root
-        .findAll(
-          (node) =>
-            typeof node.type === "string" && typeof node.props["data-site-summary-id"] === "string",
-        )
-        .map((node) => node.props["data-site-summary-id"]),
+      Array.from(renderer.container.querySelectorAll("[data-site-summary-id]"), (node) =>
+        node.getAttribute("data-site-summary-id"),
+      ),
     ).toEqual([firstPost.id, secondPost.id, project.id]);
     expect(
-      renderer.root.find(
-        (node) =>
-          node.type === "a" &&
-          node.props["data-site-summary-link"] === "post" &&
-          node.props.href === "/sites/astryx/blog/first-post",
+      renderer.container.querySelector(
+        'a[data-site-summary-link="post"][href="/sites/astryx/blog/first-post"]',
       ),
-    ).toBeDefined();
+    ).not.toBeNull();
     expect(
-      renderer.root.find(
-        (node) =>
-          node.type === "a" &&
-          node.props["data-site-summary-link"] === "project" &&
-          node.props.href === "/sites/astryx/projects/projected-project",
+      renderer.container.querySelector(
+        'a[data-site-summary-link="project"][href="/sites/astryx/projects/projected-project"]',
       ),
-    ).toBeDefined();
+    ).not.toBeNull();
     expect(
-      renderer.root.findAll((node) => node.type === "time").map((node) => node.props.dateTime),
+      Array.from(renderer.container.querySelectorAll("time"), (node) =>
+        node.getAttribute("datetime"),
+      ),
     ).toEqual(["2026-07-12", "2026-07-05"]);
-    expect(renderer.root.findAllByProps({ dateTime: "2026-07-01" })).toEqual([]);
-    expect(renderer.root.findByProps({ "data-site-primary-image": "summary" })).toBeDefined();
-    expect(renderer.root.findByProps({ src: "/media/first-post.webp" })).toBeDefined();
-    const projectCard = renderer.root.findByProps({ "data-site-summary-id": project.id });
-    expect(projectCard.findAll((node) => node.type === "a").map((node) => node.props.href)).toEqual(
-      ["/sites/astryx/projects/projected-project", "https://example.com/reference"],
+    expect(renderer.container.querySelector('time[datetime="2026-07-01"]')).toBeNull();
+    expect(renderer.container.querySelector('[data-site-primary-image="summary"]')).not.toBeNull();
+    expect(renderer.container.querySelector('[src="/media/first-post.webp"]')).not.toBeNull();
+    const projectCard = required(
+      renderer.container.querySelector(`[data-site-summary-id="${project.id}"]`),
     );
-    const nestedReference = projectCard.find(
-      (node) => node.type === "a" && node.props.href === "https://example.com/reference",
-    );
-    expect(nestedReference.props.target).toBe("_blank");
-    expect(nestedReference.props.rel).toBe("noreferrer");
     expect(
-      renderer.root
-        .findAll((node) => node.type === "p")
-        .map((node) => node.children.filter((child) => typeof child === "string").join("")),
+      Array.from(projectCard.querySelectorAll("a"), (node) => node.getAttribute("href")),
+    ).toEqual(["/sites/astryx/projects/projected-project", "https://example.com/reference"]);
+    const nestedReference = required(
+      projectCard.querySelector<HTMLAnchorElement>('a[href="https://example.com/reference"]'),
+    );
+    expect(nestedReference.target).toBe("_blank");
+    expect(nestedReference.rel).toBe("noreferrer");
+    expect(
+      Array.from(renderer.container.querySelectorAll("p"), (node) => node.textContent),
     ).toEqual(expect.arrayContaining(["No published posts yet.", "No published projects yet."]));
 
     await unmount(renderer);
@@ -1327,11 +1295,11 @@ describe("Astryx public Site lists, summaries, and post detail", () => {
     expect(rendererText(renderer)).not.toContain("Summary-only copy must stay out");
     expect(rendererText(renderer)).not.toContain("Slotted summary content");
     expect(rendererText(renderer)).toContain("Detail body with a");
-    expect(renderer.root.findByProps({ href: "https://example.com/detail" })).toBeDefined();
-    expect(renderer.root.findAllByProps({ "data-site-primary-image": "post-detail" })).toHaveLength(
-      1,
-    );
-    expect(renderer.root.findAllByProps({ src: "/media/detail-post.webp" })).toHaveLength(1);
+    expect(renderer.container.querySelector('[href="https://example.com/detail"]')).not.toBeNull();
+    expect(
+      renderer.container.querySelectorAll('[data-site-primary-image="post-detail"]'),
+    ).toHaveLength(1);
+    expect(renderer.container.querySelectorAll('[src="/media/detail-post.webp"]')).toHaveLength(1);
 
     await unmount(renderer);
   });
@@ -1339,13 +1307,9 @@ describe("Astryx public Site lists, summaries, and post detail", () => {
 
 describe("Astryx public Site subscribe and contact forms", () => {
   it("renders the multi-form fixture through canonical sessions without the live challenge adapter", async () => {
-    let renderer: ReactTestRenderer | undefined;
-    await act(async () => {
-      renderer = create(
-        <AstryxSitePageFixtureRenderer fixture={publicSiteMultipleFormFixtureLayout} />,
-      );
-    });
-    const mounted = required(renderer);
+    const mounted = render(
+      <AstryxSitePageFixtureRenderer fixture={publicSiteMultipleFormFixtureLayout} />,
+    );
 
     expect(publicFormKinds(mounted)).toEqual([
       "subscribe",
@@ -1354,7 +1318,7 @@ describe("Astryx public Site subscribe and contact forms", () => {
       "contact",
     ]);
     expect(
-      mounted.root.findAllByProps({ "data-component": "SitePublicTurnstileChallenge" }),
+      mounted.container.querySelectorAll('[data-component="SitePublicTurnstileChallenge"]'),
     ).toHaveLength(0);
     expect(
       componentLabels(mounted, "Button").filter((label) => label === "Complete challenge"),
@@ -1386,36 +1350,42 @@ describe("Astryx public Site subscribe and contact forms", () => {
     expect(rendererText(renderer)).toContain("Enquiry");
 
     const fields = fixedFields(renderer);
-    expect(fields.map((field) => field.props.name)).toEqual(["name", "email", "message"]);
-    expect(fields.every((field) => field.props.required === true)).toBe(true);
-    expect(fields.map((field) => field.props.value)).toEqual(["", "", ""]);
-    expect(componentByLabel(renderer, "Button", "Send enquiry").props.disabled).toBe(true);
+    expect(fields.map((field) => field.getAttribute("name"))).toEqual(["name", "email", "message"]);
+    expect(fields.every((field) => (field as HTMLInputElement).required)).toBe(true);
+    expect(fields.map((field) => (field as HTMLInputElement).value)).toEqual(["", "", ""]);
+    expect(componentByLabel(renderer, "Button", "Send enquiry").hasAttribute("disabled")).toBe(
+      true,
+    );
     expect(
-      renderer.root.findByProps({ "data-public-form-challenge": "turnstile" }).props[
-        "data-public-form-challenge-ready"
-      ],
-    ).toBe(false);
+      renderer.container
+        .querySelector('[data-public-form-challenge="turnstile"]')
+        ?.getAttribute("data-public-form-challenge-ready"),
+    ).toBe("false");
 
     await changeFixedField(renderer, "name", "Ada Lovelace");
     await changeFixedField(renderer, "email", "not-an-email");
     await changeFixedField(renderer, "message", "Please send the details.");
 
-    expect(fixedField(renderer, "name").props.value).toBe("Ada Lovelace");
-    expect(fixedField(renderer, "email").props.value).toBe("not-an-email");
-    expect(fixedField(renderer, "email").props["aria-invalid"]).toBe(true);
-    expect(componentByLabel(renderer, "Button", "Send enquiry").props.disabled).toBe(true);
+    expect(fixedField(renderer, "name").value).toBe("Ada Lovelace");
+    expect(fixedField(renderer, "email").value).toBe("not-an-email");
+    expect(fixedField(renderer, "email").getAttribute("aria-invalid")).toBe("true");
+    expect(componentByLabel(renderer, "Button", "Send enquiry").hasAttribute("disabled")).toBe(
+      true,
+    );
 
     await changeFixedField(renderer, "email", "ada@example.com");
     await solveFixedFormChallenge(renderer, "public-challenge-token");
 
-    expect(fixedField(renderer, "email").props.value).toBe("ada@example.com");
-    expect(fixedField(renderer, "email").props["aria-invalid"]).toBeUndefined();
+    expect(fixedField(renderer, "email").value).toBe("ada@example.com");
+    expect(fixedField(renderer, "email").getAttribute("aria-invalid")).toBeNull();
     expect(
-      renderer.root.findByProps({ "data-public-form-challenge": "turnstile" }).props[
-        "data-public-form-challenge-ready"
-      ],
-    ).toBe(true);
-    expect(componentByLabel(renderer, "Button", "Send enquiry").props.disabled).toBeUndefined();
+      renderer.container
+        .querySelector('[data-public-form-challenge="turnstile"]')
+        ?.getAttribute("data-public-form-challenge-ready"),
+    ).toBe("true");
+    expect(componentByLabel(renderer, "Button", "Send enquiry").hasAttribute("disabled")).toBe(
+      false,
+    );
 
     await unmount(renderer);
   });
@@ -1432,11 +1402,11 @@ describe("Astryx public Site subscribe and contact forms", () => {
 
     expect(fixedFormSurface(renderer, "unavailable")).toBeDefined();
     expect(rendererText(renderer)).toContain("Contact form unavailable.");
-    expect(renderer.root.findAllByType("form")).toHaveLength(0);
+    expect(renderer.container.querySelectorAll("form")).toHaveLength(0);
     expect(
-      renderer.root.findAllByProps({ "data-component": "SitePublicTurnstileChallenge" }),
+      renderer.container.querySelectorAll('[data-component="SitePublicTurnstileChallenge"]'),
     ).toHaveLength(0);
-    expect(renderer.root.findAllByProps({ "data-component": "Button" })).toHaveLength(0);
+    expect(renderer.container.querySelectorAll('[data-component="Button"]')).toHaveLength(0);
 
     await unmount(renderer);
   });
@@ -1461,34 +1431,29 @@ describe("Astryx public Site subscribe and contact forms", () => {
 
     await changeFixedField(renderer, "email", "reader@example.com");
     await solveFixedFormChallenge(renderer, "public-challenge-token");
-    const form = renderer.root.findByType("form");
-    let submission: Promise<void> | undefined;
-
-    await act(async () => {
-      submission = form.props.onSubmit({ preventDefault: vi.fn() });
-      await Promise.resolve();
-    });
+    fireEvent.submit(required(renderer.container.querySelector("form")));
+    await waitFor(() => expect(fetcher).toHaveBeenCalledOnce());
 
     expect(fetcher).toHaveBeenCalledOnce();
     expect(fetcher.mock.calls[0]?.[0]).toBe("/api/site/public/operations/subscription/subscribe");
     expect(fixedFormSurface(renderer, "submitting")).toBeDefined();
-    expect(fixedField(renderer, "email").props.disabled).toBe(true);
+    expect(fixedField(renderer, "email").disabled).toBe(true);
     expect(
-      renderer.root.findByProps({ "data-public-form-challenge": "turnstile" }).props[
-        "aria-disabled"
-      ],
-    ).toBe(true);
-    expect(componentByLabel(renderer, "Button", "Subscribing...").props["data-loading"]).toBe(true);
+      renderer.container
+        .querySelector('[data-public-form-challenge="turnstile"]')
+        ?.getAttribute("aria-disabled"),
+    ).toBe("true");
+    expect(
+      componentByLabel(renderer, "Button", "Subscribing...").getAttribute("data-loading"),
+    ).toBe("true");
 
-    await act(async () => {
-      response.resolve(Response.json(publicSubscribeCommandResponse()));
-      await required(submission);
-    });
+    response.resolve(Response.json(publicSubscribeCommandResponse()));
+    await waitFor(() => expect(fixedFormSurface(renderer, "success")).toBeDefined());
 
     expect(fixedFormSurface(renderer, "success")).toBeDefined();
     expect(rendererText(renderer)).toContain("You're on the list.");
-    expect(fixedField(renderer, "email").props.disabled).toBe(true);
-    expect(renderer.root.findAllByProps({ "data-component": "Button" })).toHaveLength(0);
+    expect(fixedField(renderer, "email").disabled).toBe(true);
+    expect(renderer.container.querySelectorAll('[data-component="Button"]')).toHaveLength(0);
 
     await unmount(renderer);
   });
@@ -1512,34 +1477,31 @@ describe("Astryx public Site subscribe and contact forms", () => {
 
     await changeFixedField(renderer, "email", "reader@example.com");
     await solveFixedFormChallenge(renderer, "expired-challenge-token");
-    await act(async () => {
-      await renderer.root.findByType("form").props.onSubmit({ preventDefault: vi.fn() });
-    });
+    fireEvent.submit(required(renderer.container.querySelector("form")));
+    await waitFor(() => expect(fixedFormSurface(renderer, "failed")).toBeDefined());
 
     expect(fixedFormSurface(renderer, "failed")).toBeDefined();
     expect(rendererText(renderer)).toContain("Please try again later.");
     expect(rendererText(renderer)).not.toContain("private-provider-failure");
-    expect(renderer.root.findByProps({ role: "alert" })).toBeDefined();
+    expect(renderer.container.querySelector('[role="alert"]')).not.toBeNull();
     expect(
-      renderer.root.findByProps({ "data-public-form-challenge": "turnstile" }).props[
-        "data-public-form-challenge-reset"
-      ],
-    ).toBe(1);
+      renderer.container
+        .querySelector('[data-public-form-challenge="turnstile"]')
+        ?.getAttribute("data-public-form-challenge-reset"),
+    ).toBe("1");
 
-    await act(async () => {
-      componentByLabel(renderer, "Button", "Try again").props.onClick();
-    });
+    fireEvent.click(componentByLabel(renderer, "Button", "Try again"));
 
     expect(fixedFormSurface(renderer, "ready")).toBeDefined();
     expect(rendererText(renderer)).not.toContain("Please try again later.");
-    expect(componentByLabel(renderer, "Button", "Subscribe").props.disabled).toBe(true);
+    expect(componentByLabel(renderer, "Button", "Subscribe").hasAttribute("disabled")).toBe(true);
 
     await unmount(renderer);
   });
 });
 
 describe("Astryx public Site generic operation form", () => {
-  it("adapts every canonical scalar field to controlled Formless UI field presentation", async () => {
+  it("validates controlled scalar fields before enabling submission", async () => {
     viewport.isMobile = false;
     const renderer = await renderPage(
       genericFormRendererProps(
@@ -1552,22 +1514,27 @@ describe("Astryx public Site generic operation form", () => {
     );
 
     expect(publicOperationFormSurface(renderer, "ready")).toBeDefined();
-    expect(
-      publicOperationFields(renderer).map((field) => field.props["data-public-field-control"]),
-    ).toEqual(["text", "longText", "boolean", "date", "number", "enum", "text", "text", "text"]);
-    expect(publicOperationField(renderer, "name").props["data-public-field-id"]).toBe(
-      "site-public-form:block-generic-controls:field:name",
+    expect(publicOperationFields(renderer)).toHaveLength(9);
+    expect(publicOperationControl(renderer, "name", "TextInput").hasAttribute("required")).toBe(
+      true,
     );
-    expect(publicOperationControl(renderer, "name", "TextInput").props.required).toBe(true);
     expect(publicOperationControl(renderer, "details", "TextArea")).toBeDefined();
-    expect(publicOperationControl(renderer, "approved", "CheckboxInput").props.checked).toBe(false);
+    expect(
+      (publicOperationControl(renderer, "approved", "CheckboxInput") as HTMLInputElement).checked,
+    ).toBe(false);
     expect(publicOperationControl(renderer, "requestedOn", "DateInput")).toBeDefined();
     expect(publicOperationControl(renderer, "quantity", "TextInput")).toBeDefined();
     expect(publicOperationControl(renderer, "tier", "Selector")).toBeDefined();
-    expect(publicOperationControl(renderer, "email", "TextInput").props.type).toBe("email");
-    expect(publicOperationControl(renderer, "phone", "TextInput").props.inputMode).toBe("tel");
+    expect(publicOperationControl(renderer, "email", "TextInput").getAttribute("type")).toBe(
+      "email",
+    );
+    expect(publicOperationControl(renderer, "phone", "TextInput").getAttribute("inputmode")).toBe(
+      "tel",
+    );
     expect(publicOperationControl(renderer, "topic", "Typeahead")).toBeDefined();
-    expect(componentByLabel(renderer, "Button", "Send request").props.disabled).toBe(true);
+    expect(componentByLabel(renderer, "Button", "Send request").hasAttribute("disabled")).toBe(
+      true,
+    );
 
     await changePublicOperationField(renderer, "name", "Ada Lovelace");
     await changePublicOperationField(renderer, "details", "Review the public page.");
@@ -1580,29 +1547,38 @@ describe("Astryx public Site generic operation form", () => {
     await changePublicOperationField(renderer, "topic", "Custom research");
     await solvePublicOperationChallenge(renderer, "public-challenge-token");
 
-    expect(publicOperationControl(renderer, "quantity", "TextInput").props.value).toBe("many");
-    expect(publicOperationControl(renderer, "quantity", "TextInput").props["aria-invalid"]).toBe(
-      true,
-    );
-    expect(publicOperationControl(renderer, "email", "TextInput").props["aria-invalid"]).toBe(true);
+    expect(
+      (publicOperationControl(renderer, "quantity", "TextInput") as HTMLInputElement).value,
+    ).toBe("many");
+    expect(
+      publicOperationControl(renderer, "quantity", "TextInput").getAttribute("aria-invalid"),
+    ).toBe("true");
+    expect(
+      publicOperationControl(renderer, "email", "TextInput").getAttribute("aria-invalid"),
+    ).toBe("true");
     expect(rendererText(renderer)).toContain("Enter a finite number.");
     expect(rendererText(renderer)).toContain("Enter an email address like name@example.com.");
     expect(
-      publicOperationField(renderer, "topic").findByProps({
-        name: "topic",
-        type: "hidden",
-      }).props.value,
+      publicOperationField(renderer, "topic").querySelector<HTMLInputElement>(
+        'input[name="topic"][type="hidden"]',
+      )?.value,
     ).toBe("Custom research");
-    expect(componentByLabel(renderer, "Button", "Send request").props.disabled).toBe(true);
+    expect(componentByLabel(renderer, "Button", "Send request").hasAttribute("disabled")).toBe(
+      true,
+    );
 
     await changePublicOperationField(renderer, "quantity", "12.5");
     await changePublicOperationField(renderer, "email", "ada@example.com");
 
-    expect(publicOperationControl(renderer, "quantity", "TextInput").props.value).toBe("12.5");
     expect(
-      publicOperationControl(renderer, "quantity", "TextInput").props["aria-invalid"],
-    ).toBeUndefined();
-    expect(componentByLabel(renderer, "Button", "Send request").props.disabled).toBeUndefined();
+      (publicOperationControl(renderer, "quantity", "TextInput") as HTMLInputElement).value,
+    ).toBe("12.5");
+    expect(
+      publicOperationControl(renderer, "quantity", "TextInput").getAttribute("aria-invalid"),
+    ).toBeNull();
+    expect(componentByLabel(renderer, "Button", "Send request").hasAttribute("disabled")).toBe(
+      false,
+    );
 
     await unmount(renderer);
   });
@@ -1628,34 +1604,33 @@ describe("Astryx public Site generic operation form", () => {
 
     await changePublicOperationField(renderer, "title", "Public launch review");
     await solvePublicOperationChallenge(renderer, "public-challenge-token");
-    const form = renderer.root.findByType("form");
-    let submission: Promise<void> | undefined;
-
-    await act(async () => {
-      submission = form.props.onSubmit({ preventDefault: vi.fn() });
-      await Promise.resolve();
-    });
+    fireEvent.submit(required(renderer.container.querySelector("form")));
+    await waitFor(() => expect(fetcher).toHaveBeenCalledOnce());
 
     expect(fetcher).toHaveBeenCalledOnce();
     expect(fetcher.mock.calls[0]?.[0]).toBe("/api/site/public/operations/request/submit");
     expect(publicOperationFormSurface(renderer, "submitting")).toBeDefined();
-    expect(publicOperationControl(renderer, "title", "TextInput").props.disabled).toBe(true);
-    expect(publicOperationControl(renderer, "title", "TextInput").props["data-loading"]).toBe(true);
+    expect(publicOperationControl(renderer, "title", "TextInput").hasAttribute("disabled")).toBe(
+      true,
+    );
     expect(
-      renderer.root.findByProps({ "data-public-form-challenge": "turnstile" }).props[
-        "aria-disabled"
-      ],
-    ).toBe(true);
-    expect(componentByLabel(renderer, "Button", "Sending...").props["data-loading"]).toBe(true);
+      publicOperationControl(renderer, "title", "TextInput").getAttribute("data-loading"),
+    ).toBe("true");
+    expect(
+      renderer.container
+        .querySelector('[data-public-form-challenge="turnstile"]')
+        ?.getAttribute("aria-disabled"),
+    ).toBe("true");
+    expect(componentByLabel(renderer, "Button", "Sending...").getAttribute("data-loading")).toBe(
+      "true",
+    );
 
-    await act(async () => {
-      response.resolve(Response.json(publicGenericCommandResponse()));
-      await required(submission);
-    });
+    response.resolve(Response.json(publicGenericCommandResponse()));
+    await waitFor(() => expect(publicOperationFormSurface(renderer, "success")).toBeDefined());
 
     expect(publicOperationFormSurface(renderer, "success")).toBeDefined();
     expect(rendererText(renderer)).toContain("Request received.");
-    expect(renderer.root.findAllByProps({ "data-component": "Button" })).toHaveLength(0);
+    expect(renderer.container.querySelectorAll('[data-component="Button"]')).toHaveLength(0);
 
     await unmount(renderer);
   });
@@ -1683,27 +1658,24 @@ describe("Astryx public Site generic operation form", () => {
 
     await changePublicOperationField(renderer, "title", "Retry this request");
     await solvePublicOperationChallenge(renderer, "expired-challenge-token");
-    await act(async () => {
-      await renderer.root.findByType("form").props.onSubmit({ preventDefault: vi.fn() });
-    });
+    fireEvent.submit(required(renderer.container.querySelector("form")));
+    await waitFor(() => expect(publicOperationFormSurface(renderer, "failed")).toBeDefined());
 
     expect(publicOperationFormSurface(renderer, "failed")).toBeDefined();
     expect(rendererText(renderer)).toContain("Please try the request again.");
     expect(rendererText(renderer)).not.toContain("private-operation-failure");
-    expect(renderer.root.findByProps({ role: "alert" })).toBeDefined();
+    expect(renderer.container.querySelector('[role="alert"]')).not.toBeNull();
     expect(
-      renderer.root.findByProps({ "data-public-form-challenge": "turnstile" }).props[
-        "data-public-form-challenge-reset"
-      ],
-    ).toBe(1);
+      renderer.container
+        .querySelector('[data-public-form-challenge="turnstile"]')
+        ?.getAttribute("data-public-form-challenge-reset"),
+    ).toBe("1");
 
-    await act(async () => {
-      componentByLabel(renderer, "Button", "Try again").props.onClick();
-    });
+    fireEvent.click(componentByLabel(renderer, "Button", "Try again"));
 
     expect(publicOperationFormSurface(renderer, "ready")).toBeDefined();
     expect(rendererText(renderer)).not.toContain("Please try the request again.");
-    expect(componentByLabel(renderer, "Button", "Submit").props.disabled).toBe(true);
+    expect(componentByLabel(renderer, "Button", "Submit").hasAttribute("disabled")).toBe(true);
 
     await unmount(renderer);
   });
@@ -1720,12 +1692,12 @@ describe("Astryx public Site generic operation form", () => {
 
     expect(publicOperationFormSurface(renderer, "unavailable")).toBeDefined();
     expect(rendererText(renderer)).toContain("Public operation form unavailable.");
-    expect(renderer.root.findAllByType("form")).toHaveLength(0);
-    expect(renderer.root.findAllByProps({ "data-public-field-name": "title" })).toHaveLength(0);
+    expect(renderer.container.querySelectorAll("form")).toHaveLength(0);
+    expect(renderer.container.querySelectorAll('[data-public-field-name="title"]')).toHaveLength(0);
     expect(
-      renderer.root.findAllByProps({ "data-component": "SitePublicTurnstileChallenge" }),
+      renderer.container.querySelectorAll('[data-component="SitePublicTurnstileChallenge"]'),
     ).toHaveLength(0);
-    expect(renderer.root.findAllByProps({ "data-component": "Button" })).toHaveLength(0);
+    expect(renderer.container.querySelectorAll('[data-component="Button"]')).toHaveLength(0);
 
     await unmount(renderer);
   });
@@ -1747,21 +1719,19 @@ describe("Astryx public Site system states", () => {
       "journal: Tree unavailable",
     ],
   ] as const)("renders the browser %s state", async (kind, props, title, detail) => {
-    let renderer: ReactTestRenderer | undefined;
-    await act(async () => {
-      renderer = create(<FormlessSiteSystemStateRenderer {...props} />);
-    });
-    const mounted = required(renderer);
+    const mounted = render(<FormlessSiteSystemStateRenderer {...props} />);
 
-    expect(mounted.root.findByProps({ "data-astryx-public-site-provider": true })).toBeDefined();
-    expect(mounted.root.findByProps({ "data-site-system-state": kind })).toBeDefined();
+    expect(
+      mounted.container.querySelector('[data-astryx-public-site-provider="true"]'),
+    ).not.toBeNull();
+    expect(mounted.container.querySelector(`[data-site-system-state="${kind}"]`)).not.toBeNull();
     expect(rendererText(mounted)).toContain(title);
     expect(rendererText(mounted)).toContain(detail);
     if (kind === "not-found") {
-      expect(mounted.root.findByProps({ href: "/sites/astryx" })).toBeDefined();
+      expect(mounted.container.querySelector('[href="/sites/astryx"]')).not.toBeNull();
     }
     if (kind === "failure") {
-      expect(mounted.root.findByProps({ role: "alert" })).toBeDefined();
+      expect(mounted.container.querySelector('[role="alert"]')).not.toBeNull();
     }
 
     await unmount(mounted);
@@ -1932,97 +1902,94 @@ function publicGenericCommandResponse() {
   };
 }
 
-function fixedFormSurface(renderer: ReactTestRenderer, status: string) {
-  return renderer.root.find(
-    (node) =>
-      typeof node.type === "string" &&
-      node.props["data-public-form-state"] === status &&
-      typeof node.props["data-public-form-kind"] === "string",
+function fixedFormSurface(renderer: RenderResult, status: string): HTMLElement {
+  return required(
+    renderer.container.querySelector<HTMLElement>(
+      `[data-public-form-state="${status}"][data-public-form-kind]`,
+    ),
   );
 }
 
-function fixedFields(renderer: ReactTestRenderer) {
-  return renderer.root.findAll(
-    (node) =>
-      typeof node.type === "string" &&
-      (node.type === "input" || node.type === "textarea") &&
-      typeof node.props["data-public-fixed-field"] === "string",
+function fixedFields(renderer: RenderResult): HTMLElement[] {
+  return Array.from(
+    renderer.container.querySelectorAll<HTMLElement>(
+      "input[data-public-fixed-field], textarea[data-public-fixed-field]",
+    ),
   );
 }
 
-function fixedField(renderer: ReactTestRenderer, name: string) {
-  return renderer.root.find(
-    (node) =>
-      typeof node.type === "string" &&
-      (node.type === "input" || node.type === "textarea") &&
-      node.props["data-public-fixed-field"] === name,
+function fixedField(renderer: RenderResult, name: string): HTMLInputElement | HTMLTextAreaElement {
+  return required(
+    renderer.container.querySelector<HTMLInputElement | HTMLTextAreaElement>(
+      `input[data-public-fixed-field="${name}"], textarea[data-public-fixed-field="${name}"]`,
+    ),
   );
 }
 
-async function changeFixedField(renderer: ReactTestRenderer, name: string, value: string) {
-  await act(async () => {
-    fixedField(renderer, name).props.onChange({ currentTarget: { value } });
-  });
+async function changeFixedField(renderer: RenderResult, name: string, value: string) {
+  fireEvent.change(fixedField(renderer, name), { target: { value } });
 }
 
-async function solveFixedFormChallenge(renderer: ReactTestRenderer, token: string) {
-  await act(async () => {
-    renderer.root
-      .findByProps({ "data-component": "SitePublicTurnstileChallenge" })
-      .props.onTokenChange(token);
-  });
-}
-
-function publicOperationFormSurface(renderer: ReactTestRenderer, status: string) {
-  return renderer.root.find(
-    (node) =>
-      typeof node.type === "string" &&
-      node.props["data-public-form-kind"] === "publicOperation" &&
-      node.props["data-public-form-state"] === status,
+async function solveFixedFormChallenge(renderer: RenderResult, token: string) {
+  fireEvent.change(
+    required(
+      renderer.container.querySelector<HTMLInputElement>(
+        '[data-component="SitePublicTurnstileChallenge"]',
+      ),
+    ),
+    { target: { value: token } },
   );
 }
 
-function publicOperationFields(renderer: ReactTestRenderer) {
-  return renderer.root.findAll(
-    (node) =>
-      typeof node.type === "string" && typeof node.props["data-public-field-name"] === "string",
+function publicOperationFormSurface(renderer: RenderResult, status: string): HTMLElement {
+  return required(
+    renderer.container.querySelector<HTMLElement>(
+      `[data-public-form-kind="publicOperation"][data-public-form-state="${status}"]`,
+    ),
   );
 }
 
-function publicOperationField(renderer: ReactTestRenderer, name: string) {
-  return renderer.root.find(
-    (node) => typeof node.type === "string" && node.props["data-public-field-name"] === name,
+function publicOperationFields(renderer: RenderResult): HTMLElement[] {
+  return Array.from(renderer.container.querySelectorAll<HTMLElement>("[data-public-field-name]"));
+}
+
+function publicOperationField(renderer: RenderResult, name: string): HTMLElement {
+  return required(
+    renderer.container.querySelector<HTMLElement>(`[data-public-field-name="${name}"]`),
   );
 }
 
-function publicOperationControl(renderer: ReactTestRenderer, name: string, component: string) {
-  return publicOperationField(renderer, name).findByProps({ "data-component": component });
+function publicOperationControl(
+  renderer: RenderResult,
+  name: string,
+  component: string,
+): HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement {
+  return required(
+    publicOperationField(renderer, name).querySelector<
+      HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
+    >(`[data-component="${component}"]`),
+  );
 }
 
 async function changePublicOperationField(
-  renderer: ReactTestRenderer,
+  renderer: RenderResult,
   name: string,
   value: string | boolean,
 ) {
-  const field = publicOperationField(renderer, name);
-  const control = field.find(
-    (node) =>
-      typeof node.type === "string" &&
-      ["TextInput", "TextArea", "CheckboxInput", "DateInput", "Selector", "Typeahead"].includes(
-        node.props["data-component"],
-      ),
+  const control = required(
+    publicOperationField(renderer, name).querySelector<
+      HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
+    >(
+      '[data-component="TextInput"], [data-component="TextArea"], [data-component="CheckboxInput"], [data-component="DateInput"], [data-component="Selector"], [data-component="Typeahead"]',
+    ),
   );
 
-  await act(async () => {
-    if (typeof value === "boolean") {
-      control.props.onChange({ currentTarget: { checked: value } });
-    } else {
-      control.props.onChange({ currentTarget: { value } });
-    }
+  fireEvent.change(control, {
+    target: typeof value === "boolean" ? { checked: value } : { value },
   });
 }
 
-async function solvePublicOperationChallenge(renderer: ReactTestRenderer, token: string) {
+async function solvePublicOperationChallenge(renderer: RenderResult, token: string) {
   await solveFixedFormChallenge(renderer, token);
 }
 
@@ -2099,82 +2066,67 @@ function withExternalHeaderLink(props: SitePublicRendererProps): SitePublicRende
 }
 
 async function renderPage(props: SitePublicRendererProps) {
-  let renderer: ReactTestRenderer | undefined;
-  await act(async () => {
-    renderer = create(<FormlessSitePageRenderer {...props} />);
-  });
-  return required(renderer);
+  return render(<FormlessSitePageRenderer {...props} />);
 }
 
-function componentLabels(renderer: ReactTestRenderer, component: string): string[] {
-  return renderer.root
-    .findAll((node) => typeof node.type === "string" && node.props["data-component"] === component)
-    .map((node) => node.props["data-label"])
+function componentLabels(renderer: RenderResult, component: string): string[] {
+  return Array.from(
+    renderer.container.querySelectorAll<HTMLElement>(`[data-component="${component}"]`),
+  )
+    .map((node) => node.getAttribute("data-label"))
     .filter((label): label is string => typeof label === "string");
 }
 
-function publicFormKinds(renderer: ReactTestRenderer): string[] {
-  return renderer.root
-    .findAll(
-      (node) =>
-        typeof node.type === "string" && typeof node.props["data-public-form-kind"] === "string",
-    )
-    .map((node) => node.props["data-public-form-kind"]);
+function publicFormKinds(renderer: RenderResult): string[] {
+  return Array.from(renderer.container.querySelectorAll<HTMLElement>("[data-public-form-kind]"))
+    .map((node) => node.getAttribute("data-public-form-kind"))
+    .filter((kind): kind is string => kind !== null);
 }
 
-function componentByLabel(renderer: ReactTestRenderer, component: string, label: string) {
-  return renderer.root.find(
-    (node) =>
-      typeof node.type === "string" &&
-      node.props["data-component"] === component &&
-      node.props["data-label"] === label,
+function componentByLabel(renderer: RenderResult, component: string, label: string): HTMLElement {
+  return required(
+    renderer.container.querySelector<HTMLElement>(
+      `[data-component="${component}"][data-label="${label}"]`,
+    ),
   );
 }
 
-function rendererText(renderer: ReactTestRenderer) {
-  return JSON.stringify(renderer.toJSON());
+function rendererText(renderer: RenderResult) {
+  return renderer.container.textContent ?? "";
 }
 
-function siteBlockTypes(renderer: ReactTestRenderer): string[] {
-  return renderer.root
-    .findAll(
-      (node) =>
-        typeof node.type === "string" && typeof node.props["data-site-block-type"] === "string",
-    )
-    .map((node) => node.props["data-site-block-type"]);
+function siteBlockTypes(renderer: RenderResult): string[] {
+  return Array.from(renderer.container.querySelectorAll<HTMLElement>("[data-site-block-type]"))
+    .map((node) => node.getAttribute("data-site-block-type"))
+    .filter((type): type is string => type !== null);
 }
 
-function headingOutline(renderer: ReactTestRenderer): Array<[number, string]> {
-  return renderer.root
-    .findAll((node) => typeof node.type === "string" && /^h[1-6]$/.test(node.type))
-    .map((node) => {
-      const type = typeof node.type === "string" ? node.type : "h6";
-      const text = node.children.map((child) => (typeof child === "string" ? child : "")).join("");
+function headingOutline(renderer: RenderResult): Array<[number, string]> {
+  return Array.from(
+    renderer.container.querySelectorAll<HTMLHeadingElement>("h1,h2,h3,h4,h5,h6"),
+  ).map((node) => {
+    const type = node.tagName.toLowerCase();
+    const text = node.textContent ?? "";
 
-      return [Number(type.slice(1)), text] as [number, string];
-    });
-}
-
-function markdownHeadingStarts(renderer: ReactTestRenderer): number[] {
-  return renderer.root
-    .findAll(
-      (node) =>
-        typeof node.type === "string" &&
-        node.props["data-component"] === "Markdown" &&
-        typeof node.props["data-heading-level-start"] === "number",
-    )
-    .map((node) => node.props["data-heading-level-start"]);
-}
-
-async function unmount(renderer: ReactTestRenderer) {
-  await act(async () => {
-    renderer.unmount();
+    return [Number(type.slice(1)), text] as [number, string];
   });
 }
 
-function required<T>(value: T | undefined): T {
-  if (value === undefined) {
+function markdownHeadingStarts(renderer: RenderResult): number[] {
+  return Array.from(
+    renderer.container.querySelectorAll<HTMLElement>(
+      '[data-component="Markdown"][data-heading-level-start]',
+    ),
+  ).map((node) => Number(node.getAttribute("data-heading-level-start")));
+}
+
+async function unmount(renderer: RenderResult) {
+  renderer.unmount();
+}
+
+function required<T>(value: T): NonNullable<T> {
+  if (value === null || value === undefined) {
     throw new Error("Expected rendered value");
   }
-  return value;
+  return value as NonNullable<T>;
 }

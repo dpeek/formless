@@ -51,4 +51,3 @@ Read this when editing `lib/installed-apps/*`.
 - Keep package tests fast, deterministic, and local.
 - Do not call live networks, Cloudflare APIs, or a dev server from package
   tests.
-- During normal agent work, use repo `devstate`.

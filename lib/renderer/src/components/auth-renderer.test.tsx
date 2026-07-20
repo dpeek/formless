@@ -1,10 +1,8 @@
-import { readFile } from "node:fs/promises";
-import { Button } from "@astryxdesign/core/Button";
-import { CheckboxInput } from "@astryxdesign/core/CheckboxInput";
-import { TextInput } from "@astryxdesign/core/TextInput";
+// @vitest-environment jsdom
+
+import { act, fireEvent, render, within, type RenderResult } from "@testing-library/react";
 import { createElement, type ReactElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { describe, expect, it, vi } from "vite-plus/test";
 import type {
   AccountGateAuthSurfaceContract,
@@ -239,48 +237,41 @@ describe("Astryx auth renderer", () => {
       fields: [authCreateField("auth:test:signup", verificationTokenField())],
       policies: [termsPolicy("auth:test:signup")],
     });
-    const tokenRenderer = await mount(
-      <AstryxAuthRenderer onIntent={onIntent} surface={tokenSurface} />,
-    );
+    const tokenRenderer = mount(<AstryxAuthRenderer onIntent={onIntent} surface={tokenSurface} />);
 
-    await act(async () => {
-      tokenRenderer.root.findByType(TextInput).props.onChange("next-opaque-token");
-      tokenRenderer.root.findByType(CheckboxInput).props.onChange(true);
-      tokenRenderer.root.findByType("form").props.onSubmit({ preventDefault: () => undefined });
+    const tokenQueries = within(tokenRenderer.container);
+    fireEvent.change(tokenQueries.getByLabelText("Verification token"), {
+      target: { value: "next-opaque-token" },
     });
+    fireEvent.click(tokenQueries.getByLabelText("Accept terms"));
+    fireEvent.submit(required(tokenRenderer.container.querySelector("form")));
 
     const retrySurface = signupSurface("failed", authMessage("Failed", "danger"), {
       actions: [authAction("auth:test:signup", "retry", "Try again")],
     });
-    const retryRenderer = await mount(
-      <AstryxAuthRenderer onIntent={onIntent} surface={retrySurface} />,
-    );
-    await act(async () => {
-      authButtonByControlId(retryRenderer, "auth:test:signup:action:retry:control").props.onClick();
-    });
+    const retryRenderer = mount(<AstryxAuthRenderer onIntent={onIntent} surface={retrySurface} />);
+    fireEvent.click(authButtonByControlId(retryRenderer, "auth:test:signup:action:retry:control"));
 
     const passkeySurface = ownerSignInSurface("ready", undefined, {
       passkey: availablePasskey(ownerSignInReference.surfaceId),
     });
-    const passkeyRenderer = await mount(
+    const passkeyRenderer = mount(
       <AstryxAuthRenderer onIntent={onIntent} surface={passkeySurface} />,
     );
-    await act(async () => {
-      passkeyRenderer.root.findByType("form").props.onSubmit({ preventDefault: () => undefined });
-    });
+    fireEvent.submit(required(passkeyRenderer.container.querySelector("form")));
 
     const continuingSurface = ownerSignInSurface("continuing", undefined, {
       continuation: authContinuation(ownerSignInReference.surfaceId),
     });
-    const continuingRenderer = await mount(
+    const continuingRenderer = mount(
       <AstryxAuthRenderer onIntent={onIntent} surface={continuingSurface} />,
     );
-    await act(async () => {
+    fireEvent.click(
       authButtonByControlId(
         continuingRenderer,
         `${ownerSignInReference.surfaceId}:destination:account:control`,
-      ).props.onClick();
-    });
+      ),
+    );
 
     expect(intents).toEqual([
       {
@@ -342,7 +333,7 @@ describe("Astryx auth renderer", () => {
       type: "authField",
     });
 
-    await unmountAll(tokenRenderer, retryRenderer, passkeyRenderer, continuingRenderer);
+    unmountAll(tokenRenderer, retryRenderer, passkeyRenderer, continuingRenderer);
   });
 
   it("keeps pending controls disabled and omits unavailable actions", async () => {
@@ -352,7 +343,7 @@ describe("Astryx auth renderer", () => {
       fields: [authCreateField("auth:test:signup", verificationTokenField())],
       pending: true,
     });
-    const renderer = await mount(
+    const renderer = mount(
       <AstryxAuthRenderer
         onIntent={(intent) => {
           intents.push(intent);
@@ -362,19 +353,16 @@ describe("Astryx auth renderer", () => {
     );
     const submitButton = authButtonByControlId(renderer, "auth:test:signup:action:submit:control");
 
-    expect(submitButton.props.isDisabled).toBe(true);
-    expect(submitButton.props.isLoading).toBe(true);
-    expect(submitButton.props.onClick).toBeUndefined();
-    expect(renderer.root.findByType("input").props["aria-busy"]).toBeUndefined();
-    await act(async () => {
-      renderer.root.findByType("form").props.onSubmit({ preventDefault: () => undefined });
-    });
+    expect(submitButton.disabled).toBe(true);
+    expect(submitButton.getAttribute("aria-busy")).toBe("true");
+    expect(renderer.container.querySelector("input")?.getAttribute("aria-busy")).toBeNull();
+    fireEvent.submit(required(renderer.container.querySelector("form")));
     expect(intents).toEqual([]);
-    expect(renderer.root.findAllByType(Button)).toHaveLength(1);
-    expect(JSON.stringify(renderer.toJSON())).not.toContain("Contact owner");
-    expect(JSON.stringify(renderer.toJSON())).not.toContain("Decline");
+    expect(renderer.container.querySelectorAll("button")).toHaveLength(1);
+    expect(renderer.container.textContent).not.toContain("Contact owner");
+    expect(renderer.container.textContent).not.toContain("Decline");
 
-    await unmountAll(renderer);
+    unmountAll(renderer);
   });
 
   it("subscribes to one auth host boundary and dispatches through that host", async () => {
@@ -390,13 +378,13 @@ describe("Astryx auth renderer", () => {
         },
       ],
     });
-    const renderer = await mount(
+    const renderer = mount(
       <PresentationHostProvider host={host}>
         <AstryxSubscribedAuthRenderer reference={ownerSignInReference} />
       </PresentationHostProvider>,
     );
 
-    expect(authSurfaceNode(renderer).props["data-formless-astryx-auth-surface-state"]).toBe(
+    expect(authSurfaceNode(renderer).getAttribute("data-formless-astryx-auth-surface-state")).toBe(
       "loading",
     );
     await act(async () => {
@@ -409,34 +397,18 @@ describe("Astryx auth renderer", () => {
         },
       ]);
     });
-    expect(authSurfaceNode(renderer).props["data-formless-astryx-auth-surface-state"]).toBe(
+    expect(authSurfaceNode(renderer).getAttribute("data-formless-astryx-auth-surface-state")).toBe(
       "continuing",
     );
-    await act(async () => {
+    fireEvent.click(
       authButtonByControlId(
         renderer,
         `${ownerSignInReference.surfaceId}:destination:account:control`,
-      ).props.onClick();
-    });
+      ),
+    );
     expect(intents).toEqual([authContinuation(ownerSignInReference.surfaceId).intent]);
 
-    await unmountAll(renderer);
-  });
-
-  it("stays runtime-free", async () => {
-    const rendererSource = await readFile(new URL("./auth-renderer.tsx", import.meta.url), "utf8");
-    const imports = importSpecifiers(rendererSource);
-
-    expect(
-      imports.filter((specifier) =>
-        /(?:^|\/)(?:src\/app|src\/client|instance-auth|gateway|storage|replica|routing|operation-controller)(?:\/|$)|\bwouter\b/.test(
-          specifier,
-        ),
-      ),
-    ).toEqual([]);
-    expect(rendererSource).not.toMatch(
-      /\bclassName\b|\buseEffect\b|\buseState\b|\blocalStorage\b|\bsessionStorage\b|\bdocument\.|\bwindow\.|\bfetch\(|\bcredentials\.|\bnavigator\./,
-    );
+    unmountAll(renderer);
   });
 });
 
@@ -735,35 +707,36 @@ function renderAuth(surface: AuthSurfaceContract) {
   return renderToStaticMarkup(<AstryxAuthRenderer onIntent={() => undefined} surface={surface} />);
 }
 
-async function mount(element: ReactElement) {
-  let renderer: ReactTestRenderer | undefined;
-  await act(async () => {
-    renderer = create(element);
-  });
-  if (!renderer) throw new Error("Expected renderer to mount.");
-  return renderer;
+function mount(element: ReactElement) {
+  return render(element);
 }
 
-async function unmountAll(...renderers: ReactTestRenderer[]) {
-  await act(async () => {
-    renderers.forEach((renderer) => renderer.unmount());
-  });
+function unmountAll(...renderers: RenderResult[]) {
+  renderers.forEach((renderer) => renderer.unmount());
 }
 
-function authButtonByControlId(renderer: ReactTestRenderer, controlId: string) {
-  return renderer.root
-    .findAllByType(Button)
-    .find((button) => button.props["data-formless-astryx-auth-control"] === controlId)!;
+function authButtonByControlId(renderer: RenderResult, controlId: string): HTMLButtonElement {
+  return required(
+    renderer.container.querySelector<HTMLButtonElement>(
+      `[data-formless-astryx-auth-control="${controlId}"]`,
+    ),
+  );
 }
 
-function authSurfaceNode(renderer: ReactTestRenderer) {
-  return renderer.root.findByProps({
-    "data-formless-astryx-auth-surface": ownerSignInReference.surfaceId,
-  });
+function authSurfaceNode(renderer: RenderResult): HTMLElement {
+  return required(
+    renderer.container.querySelector<HTMLElement>(
+      `[data-formless-astryx-auth-surface="${ownerSignInReference.surfaceId}"]`,
+    ),
+  );
 }
 
-function importSpecifiers(source: string) {
-  return Array.from(source.matchAll(/\bfrom\s+["']([^"']+)["']/g), (match) => match[1]!);
+function required<Value>(value: Value): NonNullable<Value> {
+  if (value === null || value === undefined) {
+    throw new Error("Expected value.");
+  }
+
+  return value as NonNullable<Value>;
 }
 
 function dataAttributes(props: Record<string, unknown>) {

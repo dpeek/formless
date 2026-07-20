@@ -33,4 +33,3 @@ Read this when editing `lib/site-app/*`.
 
 - Keep Site records flat.
 - Keep source schema and seed records as package source data, not generated runtime state.
-- During normal agent work, use repo `devstate`.

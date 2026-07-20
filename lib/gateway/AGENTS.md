@@ -52,4 +52,3 @@ Read this when editing `lib/gateway/*`.
 - Do not deep-import `lib/gateway/src/*` from external runtime code.
 - Keep package tests fast and local. Use fake fetchers, fake sidecars, fixed ids, fixed clocks, and fixed payloads.
 - Do not call live networks, Cloudflare APIs, provider APIs, or a dev server from package tests.
-- During normal agent work, use repo `devstate`.

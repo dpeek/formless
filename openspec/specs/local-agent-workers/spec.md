@@ -212,12 +212,11 @@ The system SHALL use `./tmp/worktree/<worker-name>` as the default local worktre
 - **AND** checks out `agents/igor`
 - **AND** resets `agents/igor` to `changes/add-thing` before starting the worker session
 
-#### Scenario: Supervisor owns devstate lifecycle
+#### Scenario: Supervisor starts cached checks
 
 - **WHEN** a claimed change worktree has been prepared for a worker session
-- **THEN** the supervisor runs `devstate start` in that worktree before launching the worker session
-- **AND** the worker prompt does not ask the worker to run `devstate start` or `devstate stop`
-- **AND** the supervisor runs `devstate stop` in that worktree after the worker session completes, blocks, or errors
+- **THEN** the supervisor runs `bun check:setup` in that worktree before launching the worker session
+- **AND** package checks can populate their task cache while the worker runs
 
 #### Scenario: Worker reuses its worktree
 
@@ -282,7 +281,12 @@ The system SHALL run each claimed change through a local Git-backed loop that sh
 #### Scenario: Worker ships one task section
 
 - **WHEN** a claimed change branch has a ready task section in its tip commit message
-- **THEN** the worker implements that task section, runs `devstate check`, updates task and evidence metadata in the commit message, and updates the branch tip
+- **THEN** the worker implements that task section, runs `bun check:packages`, updates task and evidence metadata in the commit message, and updates the branch tip
+
+#### Scenario: Worker validates edited OpenSpec documents
+
+- **WHEN** an implementation session changes a file under `openspec/`
+- **THEN** the worker runs `bun check:openspec` after the final edit and before committing or finishing
 
 #### Scenario: Worker stays inside task section
 
@@ -331,12 +335,12 @@ The system SHALL finalize a completed Git-backed change branch through metadata 
 #### Scenario: Finalization always runs completion check
 
 - **WHEN** finalization validates `changes/add-thing`
-- **THEN** the worker runs `devstate check`, reads `.devstate/status.md` after failures or when exact status text is needed, fixes issues, and records finalization check evidence before marking the branch ready
+- **THEN** the worker runs `bun check:ready`, fixes failures, and records finalization check evidence before marking the branch ready
 
 #### Scenario: Worker resolves clear structural rebase conflicts
 
 - **WHEN** a finalization rebase has structural conflicts whose sides can coexist without changing runtime invariants
-- **THEN** the worker preserves both sides, continues the rebase, runs `devstate check`, and records conflict resolution evidence
+- **THEN** the worker preserves both sides, continues the rebase, runs `bun check:ready`, and records conflict resolution evidence
 
 #### Scenario: Worker blocks on semantic rebase conflicts
 
@@ -368,7 +372,7 @@ The system SHALL rebase existing local change review branches on local `main` th
 #### Scenario: Idle rebase structural conflict is resolved
 
 - **WHEN** an idle rebase has structural conflicts whose sides can coexist without changing runtime invariants
-- **THEN** the worker preserves both sides, continues the rebase, runs `devstate check`, and records conflict resolution evidence
+- **THEN** the worker preserves both sides, continues the rebase, runs `bun check:ready`, and records conflict resolution evidence
 
 #### Scenario: Idle rebase semantic conflict blocks branch
 
@@ -426,11 +430,10 @@ The system SHALL render concise worker prompt packets from the repo-owned Git-ba
 - **THEN** the rendered prompt includes the already-known task state, change state, and relevant file paths needed by the worker
 - **AND** the worker is not required to rerun those commands only to rediscover the same state
 
-#### Scenario: Check output avoids immediate status reread
+#### Scenario: Check output is evidence
 
-- **WHEN** `devstate check` prints current green status for the session
+- **WHEN** a Bun check command exits successfully for the session
 - **THEN** the worker can use that output as check evidence
-- **AND** the worker reads `.devstate/status.md` after failures, stale output, conflict resolution, or when exact status text must be copied into change metadata
 
 #### Scenario: Instructions remain layered
 
