@@ -2,13 +2,12 @@
   "name": "@dpeek/formless",
   "version": "0.1.9",
   "bin": {
-    "formless": "bin/formless.js"
+    "formless": "scripts/formless-bin.ts"
   },
   "workspaces": [
     "lib/*"
   ],
   "files": [
-    "bin",
     "index.html",
     "README.md",
     "schema",
@@ -29,8 +28,7 @@
     "dev": "bun scripts/formless.ts dev --workspace tmp/devstate-workspace --reset",
     "dev:instance": "FORMLESS_RUNTIME_PROFILE=instance VITE_FORMLESS_RUNTIME_PROFILE=instance FORMLESS_LAUNCH_FIXTURE=empty vp dev",
     "dev:instance:empty": "FORMLESS_RUNTIME_PROFILE=instance VITE_FORMLESS_RUNTIME_PROFILE=instance FORMLESS_LAUNCH_FIXTURE=empty vp dev",
-    "dev:instance:multi-site": "FORMLESS_RUNTIME_PROFILE=instance VITE_FORMLESS_RUNTIME_PROFILE=instance FORMLESS_LAUNCH_FIXTURE=multi-site vp dev",
-    "prepack": "bun run scripts/build-package.ts"
+    "dev:instance:multi-site": "FORMLESS_RUNTIME_PROFILE=instance VITE_FORMLESS_RUNTIME_PROFILE=instance FORMLESS_LAUNCH_FIXTURE=multi-site vp dev"
   },
   "dependencies": {
     "@astryxdesign/build": "0.1.4",

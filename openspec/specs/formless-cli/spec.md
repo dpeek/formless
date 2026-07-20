@@ -155,6 +155,34 @@ workspace operations that are promoted to public CLI bindings.
 - **THEN** ignored workspace secret state stores the automation admin token
 - **AND** reviewable workspace source does not store the secret
 
+### Requirement: Bun-Native Package Executable
+
+The package SHALL execute the Formless CLI directly from its TypeScript source
+under Bun without producing a generated CLI JavaScript bundle during package
+preparation.
+
+#### Scenario: Installed package execution
+
+- **GIVEN** Bun is installed and available on the user's executable path
+- **AND** the Formless package and its runtime dependencies are installed
+- **WHEN** the user invokes the package executable as `formless` or through
+  `bunx @dpeek/formless`
+- **THEN** the package executable selects Bun through its executable header
+- **AND** Bun transpiles and executes the TypeScript CLI source at runtime
+- **AND** package preparation, publishing, and installation do not require a
+  generated CLI JavaScript bundle
+- **AND** Node.js without Bun is not a supported Formless CLI runtime
+
+#### Scenario: Runtime build boundaries remain separate
+
+- **GIVEN** the package executable itself does not require a preparation build
+- **WHEN** a command needs browser, Worker, deployment, or workspace runtime
+  artifacts
+- **THEN** the command may still build those artifacts as part of its declared
+  operation
+- **AND** those runtime builds are not treated as compilation of the package
+  executable
+
 ### Requirement: Workspace Operation Definitions
 
 The workspace package SHALL own runtime-neutral workspace operation definitions

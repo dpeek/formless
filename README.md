@@ -11,13 +11,17 @@ This README is the human overview. Agent instructions live separately in `AGENTS
 
 ## Quick Start
 
-Create a local Formless workspace:
+The Formless CLI requires [Bun](https://bun.com/docs/installation). Create a
+local Formless workspace with the Bun package runner:
 
 ```sh
 mkdir my-workspace
 cd my-workspace
-npx @dpeek/formless dev
+bunx @dpeek/formless dev
 ```
+
+The package executes its TypeScript CLI entrypoint directly with Bun. Node.js
+without Bun is not a supported CLI runtime.
 
 Common commands:
 
