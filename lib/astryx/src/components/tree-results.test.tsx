@@ -387,7 +387,7 @@ describe("Tree Results prototype layout", () => {
     );
   });
 
-  it("keeps fixture data and layout outside runtime and production boundaries", async () => {
+  it("keeps fixture data and layout outside runtime boundaries", async () => {
     const fixtureSource = await readFile(
       new URL("./tree-results.fixtures.ts", import.meta.url),
       "utf8",
@@ -402,12 +402,8 @@ describe("Tree Results prototype layout", () => {
       "utf8",
     );
     const rootSource = await readFile(new URL("../root.tsx", import.meta.url), "utf8");
-    const productionRuntimeSource = await readFile(
-      new URL("../../../../src/app/generated/generated-workspace-runtime.tsx", import.meta.url),
-      "utf8",
-    );
 
-    expect(fixtureSource).not.toMatch(/\breact\b|formless-ui-contract-host|className=|tailwind/i);
+    expect(fixtureSource).not.toMatch(/\breact\b|formless-ui-contract-host|className=/i);
     expect(outlineSource).toContain('from "@astryxdesign/core/TreeList"');
     expect(layoutSource).toContain("createFormlessUiMemoryContractHost");
     expect(rendererSource).toContain("useFormlessUiTreeResult");
@@ -416,9 +412,6 @@ describe("Tree Results prototype layout", () => {
       /src\/(?:app|client|worker)|browser-replica|operation-controller|recordsById|rankPlan|sync|@dnd-kit|draggable|droppable/,
     );
     expect(rootSource).toContain("<FormlessTreeResultsLayout />");
-    expect(productionRuntimeSource).not.toMatch(
-      /FormlessTreeResultsLayout|AstryxTreeResultRenderer|tree-results\.fixtures/,
-    );
   });
 });
 

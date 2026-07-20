@@ -204,9 +204,6 @@ describe("package slice import boundaries", () => {
   it("keeps Media contracts and adapters renderer-independent across generated and Astryx flows", async () => {
     const astryxRoot = resolve(repoRoot, "lib/astryx");
     const mediaRoot = resolve(repoRoot, "lib/media");
-    const mediaPackage = JSON.parse(await readFile(resolve(mediaRoot, "package.json"), "utf8")) as {
-      exports?: Record<string, string>;
-    };
     const mediaSourceFailures: string[] = [];
 
     for (const filePath of await sourceFiles(resolve(mediaRoot, "src"))) {
@@ -217,9 +214,7 @@ describe("package slice import boundaries", () => {
         if (
           specifier === "react" ||
           specifier.startsWith("react/") ||
-          specifier.startsWith("react-dom/") ||
-          specifier === "@dpeek/formless-ui" ||
-          specifier.startsWith("@dpeek/formless-ui/")
+          specifier.startsWith("react-dom/")
         ) {
           mediaSourceFailures.push(`${path}: imports renderer dependency ${specifier}`);
         }
@@ -259,13 +254,6 @@ describe("package slice import boundaries", () => {
       await readFile(resolve(repoRoot, "src/worker/index.ts"), "utf8"),
     );
 
-    expect(mediaPackage.exports).toEqual({
-      ".": "./src/index.ts",
-      "./client": "./src/client.ts",
-      "./worker": "./src/worker.ts",
-    });
-    expect(await pathExists(resolve(mediaRoot, "src/react.tsx"))).toBe(false);
-    expect(await pathExists(resolve(mediaRoot, "src/react.test.tsx"))).toBe(false);
     expect(mediaSourceFailures).toEqual([]);
     expect(unsupportedMediaImports).toEqual([]);
     expect(generatedProjectionImports).toEqual(
@@ -291,28 +279,8 @@ describe("package slice import boundaries", () => {
     expect(workerRuntimeImports).toContain("@dpeek/formless-media/worker");
   });
 
-  it("keeps candidate source SVG consumers off dormant presentation adapters", async () => {
+  it("keeps source SVG consumers on the shared package", async () => {
     const astryxRoot = resolve(repoRoot, "lib/astryx");
-    const candidateSourcePaths = [
-      ...(await sourceFiles(resolve(astryxRoot, "src"))).filter(
-        (filePath) => !filePath.includes(".test.") && !filePath.includes(".fixtures."),
-      ),
-      ...candidateGeneratedMediaSourceFiles.map((path) => resolve(repoRoot, path)),
-      resolve(repoRoot, "src/shared/icon-catalog.ts"),
-    ];
-    const candidateFailures: string[] = [];
-
-    for (const filePath of candidateSourcePaths) {
-      const source = await readFile(filePath, "utf8");
-      const path = relative(repoRoot, filePath);
-
-      for (const specifier of importSpecifiers(source)) {
-        if (specifier === "@dpeek/formless-ui/svg-icon") {
-          candidateFailures.push(`${path}: imports dormant presentation ${specifier}`);
-        }
-      }
-    }
-
     const rootPackage = await readPackageJson(resolve(repoRoot, "package.json"));
     const astryxPackage = await readPackageJson(resolve(astryxRoot, "package.json"));
     const sitePackage = await readPackageJson(resolve(repoRoot, "lib/site-app/package.json"));
@@ -332,11 +300,7 @@ describe("package slice import boundaries", () => {
       "utf8",
     );
 
-    expect(candidateFailures).toEqual([]);
     expect(importSpecifiers(iconCatalogValidationSource)).toContain("@dpeek/formless-source-svg");
-    expect(importSpecifiers(iconCatalogValidationSource)).not.toContain(
-      "@dpeek/formless-ui/svg-icon",
-    );
     expect(importSpecifiers(astryxSourceIconSource)).toContain("@dpeek/formless-source-svg");
     expect(importSpecifiers(siteIconSource)).toContain("@dpeek/formless-source-svg");
     expect(rootPackage.dependencies?.["@dpeek/formless-source-svg"]).toBe("^0.1.0");
@@ -404,20 +368,6 @@ const allowedAstryxSiteTestPackageImports = new Set([
   "@dpeek/formless-site-app/react",
   "@dpeek/formless-site-app/worker",
 ]);
-
-const candidateGeneratedMediaSourceFiles = [
-  "src/app/generated/formless-ui-intents.ts",
-  "src/app/generated/formless-ui-projection.ts",
-  "src/app/generated/generated-create-runtime.ts",
-  "src/app/generated/generated-list-foundation.ts",
-  "src/app/generated/generated-record-result-foundation.ts",
-  "src/app/generated/generated-table-foundation.tsx",
-  "src/app/generated/generated-tree-create-foundation.ts",
-  "src/app/generated/generated-tree-foundation.ts",
-  "src/app/generated/generated-workspace-foundation.ts",
-  "src/app/generated/generated-workspace-runtime.tsx",
-  "src/app/generated/record-field-authoring.ts",
-] as const;
 
 function allowedAstryxSitePackageImport(filePath: string, specifier: string): boolean {
   return (

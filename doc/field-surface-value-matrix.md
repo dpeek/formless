@@ -3,21 +3,21 @@
 ## Purpose
 
 This document records the current generated-field boundary shared by runtime
-projection and Astryx presentation. Canonical behavior lives in
+projection and Formless Renderer presentation. Canonical behavior lives in
 `openspec/specs/generated-ui/spec.md`; this matrix is a source index for the
 implemented contract, helpers, fixtures, and renderers.
 
 The boundary has three owners:
 
-| Owner             | Responsibility                                                                                                                                                    |
-| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Generated runtime | Schema interpretation, stable field occurrence ids, drafts, validation, reference and Media reads, operation execution, flat writes, and field-intent adaptation. |
-| Astryx contract   | Renderer-neutral field identity, surface, mode, access, control, value, formatting, status, specialized facts, and canonical intents.                             |
-| Astryx renderer   | Accessible controls, display primitives, picker composition, interaction affordances, and StyleX presentation.                                                    |
+| Owner                     | Responsibility                                                                                                                                                    |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Generated runtime         | Schema interpretation, stable field occurrence ids, drafts, validation, reference and Media reads, operation execution, flat writes, and field-intent adaptation. |
+| Renderer-neutral contract | Field identity, surface, mode, access, control, value, formatting, status, specialized facts, and canonical intents.                                              |
+| Formless Renderer         | Accessible controls, display primitives, picker composition, interaction affordances, and presentation styling.                                                   |
 
 Renderer code does not read app records, execute operations, upload Media,
-parse app schema, or plan writes. Runtime code does not select Astryx component
-props or own presentation styling.
+parse app schema, or plan writes. Runtime code does not select presentation
+component props or own presentation styling.
 
 ## Surface vocabulary
 
@@ -129,7 +129,7 @@ swatch; other stored or draft strings remain visible without coercion.
 Source Icon values are SVG source, never catalog ids. Contract facts carry
 catalog options, dialog state, source-backed selection, preview source, parse
 outcomes, and Save or Cancel availability. Shared validation and parsing come
-from `@dpeek/formless-source-svg`; Astryx owns icon presentation.
+from `@dpeek/formless-source-svg`; the Formless Renderer owns icon presentation.
 
 ### Media
 
@@ -137,8 +137,8 @@ Media fields store one flat asset id. Contract facts carry selected or missing
 asset state, display-safe options, preview hrefs, upload policy, upload patch
 field names, pending state, and asset-select or file-select intent availability.
 Generated runtime and `@dpeek/formless-media/client` own reads, uploads, preview
-resolution, and patch planning. Astryx owns the picker and display UI without a
-Media React package entrypoint.
+resolution, and patch planning. The Formless Renderer owns the picker and display
+UI without a Media React package entrypoint.
 
 ## Runtime and renderer paths
 
@@ -167,7 +167,7 @@ Media React package entrypoint.
 - `src/app/generated/generated-workspace-runtime.tsx`: subscribed runtime
   publication and effects.
 
-### Astryx fixtures and renderers
+### Formless Renderer fixtures and implementation
 
 - `lib/astryx/src/components/field-scenario-model.ts`: independent axes,
   inclusion predicates, projection, and per-kind surface merging.
@@ -180,20 +180,21 @@ Media React package entrypoint.
   renderer-kind dispatch.
 - `lib/astryx/src/components/fields/field-chrome.tsx`: labels, density, access,
   status, draft, and commit adapters.
-- `lib/astryx/src/components/fields/*-field.tsx`: field-specific Astryx
-  presentation.
+- `lib/astryx/src/components/fields/*-field.tsx`: field-specific presentation.
 
 ## Styling and package boundaries
 
-`@dpeek/formless-astryx` exposes the application assembly, application and Site
-providers, contract hosts, renderers, and separate application and Site CSS
-entries. Field components use Astryx components and StyleX. Root Vite
-integration compiles the package through `src/runtime/vite-config.ts`.
+The Formless Renderer is implemented by `@dpeek/formless-astryx`, which exposes
+the application assembly, application and Site providers, contract hosts,
+renderers, and separate application and Site CSS entries. Field components use
+Astryx components and StyleX. Root Vite integration compiles the package through
+`src/runtime/vite-config.ts`.
 
 `@dpeek/formless-media` exposes only root, client, and Worker entrypoints.
 `@dpeek/formless-site-app` owns renderer-neutral Site contracts, public form
 sessions, theme behavior, and browser and Worker adapters. Site does not depend
-on Astryx; production roots supply the Astryx renderer explicitly.
+on Astryx or the Formless Renderer package; production roots supply the renderer
+exported by `@dpeek/formless-astryx` explicitly.
 
 ## Executable evidence
 
@@ -208,7 +209,7 @@ on Astryx; production roots supply the Astryx renderer explicitly.
 - `src/app/generated/media-presentation-conformance.test.ts` covers live schema
   Media occurrences through the generated contract.
 - `lib/astryx/src/components/fields/media-field-conformance.test.tsx` covers
-  Astryx Media rendering and intents across supported surfaces.
+  Formless Renderer Media behavior and intents across supported surfaces.
 - Per-field fixture and renderer tests under
   `lib/astryx/src/components/fields/` cover accessible labels, values,
   presentation, drafts, and intents.

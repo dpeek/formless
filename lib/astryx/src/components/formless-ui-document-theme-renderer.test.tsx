@@ -180,7 +180,7 @@ describe("Astryx document theme renderer", () => {
     });
   });
 
-  it("keeps renderer imports free of runtime concerns and production activation", async () => {
+  it("keeps renderer imports free of runtime concerns", async () => {
     const providerSource = await readFile(new URL("../theme.tsx", import.meta.url), "utf8");
     const rendererSource = await readFile(new URL("./theme.tsx", import.meta.url), "utf8");
     const shellSource = await readFile(new URL("./shell.tsx", import.meta.url), "utf8");
@@ -188,17 +188,9 @@ describe("Astryx document theme renderer", () => {
       new URL("./application-shell.fixtures.ts", import.meta.url),
       "utf8",
     );
-    const packageJson = JSON.parse(
-      await readFile(new URL("../../package.json", import.meta.url), "utf8"),
-    ) as { exports?: Record<string, unknown> };
-    const productionRuntimeSource = await readFile(
-      new URL("../../../../src/app/application-shell-runtime.tsx", import.meta.url),
-      "utf8",
-    );
     const sources = [providerSource, rendererSource, shellSource, fixtureSource];
     const imports = sources.flatMap(importSpecifiers);
 
-    expect(imports).not.toContain("@dpeek/formless-ui");
     expect(
       imports.filter((specifier) =>
         /(?:^|\/)(?:src\/app|src\/client|storage|replica|routing|session-client)(?:\/|$)|formless-schema|\bwouter\b/.test(
@@ -209,21 +201,6 @@ describe("Astryx document theme renderer", () => {
     expect(sources.join("\n")).not.toMatch(
       /\blocalStorage\b|\bsessionStorage\b|\bdocument\.|\bwindow\.|\bcookie\b|useMediaQuery/,
     );
-    expect(Object.keys(packageJson.exports ?? {})).toEqual([
-      "./application/assembly",
-      "./application/global.css",
-      "./application/provider",
-      "./contract",
-      "./contract-host",
-      "./contract-host/react",
-      "./site/renderer",
-      "./site/global.css",
-      "./site/provider",
-    ]);
-    expect(productionRuntimeSource).toContain("ApplicationPresentation");
-    expect(productionRuntimeSource).not.toContain("LegacySubscribedApplicationShellRenderer");
-    expect(productionRuntimeSource).not.toContain("AstryxSubscribedApplicationShellRenderer");
-    expect(productionRuntimeSource).not.toContain("global.css");
   });
 });
 

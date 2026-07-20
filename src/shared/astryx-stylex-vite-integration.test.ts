@@ -46,10 +46,6 @@ describe("Astryx StyleX root build integration", () => {
 
     expect(packageJson.dependencies?.["@astryxdesign/build"]).toBe("0.1.4");
     expect(packageJson.dependencies?.["@stylexjs/unplugin"]).toBe("0.18.3");
-    expect(packageJson.dependencies?.["@tailwindcss/vite"]).toBeUndefined();
-    expect(packageJson.dependencies?.tailwindcss).toBeUndefined();
-    expect(packageJson.devDependencies?.["@astryxdesign/build"]).toBeUndefined();
-    expect(packageJson.devDependencies?.["@stylexjs/unplugin"]).toBeUndefined();
   });
 
   it("emits the selected production application and public entries with isolated Astryx graphs", async () => {
@@ -57,7 +53,6 @@ describe("Astryx StyleX root build integration", () => {
       env: { NODE_ENV: "production", VITEST: "true" },
       packageRoot: repoRoot,
     }) as { plugins?: PluginOption[] };
-    const runtimePluginNames = namedPlugins((runtimeConfig.plugins ?? []) as unknown[]);
     const result = await build({
       build: {
         cssCodeSplit: true,
@@ -124,13 +119,6 @@ describe("Astryx StyleX root build integration", () => {
         expect.stringContaining("src/app/"),
       ]),
     );
-    for (const [label, modules] of [
-      ["application", applicationModules],
-      ["public Site", publicSiteModules],
-    ] as const) {
-      expect(modules.filter(forbiddenSelectedProductionModule), label).toEqual([]);
-    }
-    expect(runtimePluginNames.filter((name) => name.includes("tailwind"))).toEqual([]);
     expect(applicationWorkspaceCss).toEqual([
       "lib/astryx/src/application.css",
       "lib/astryx/src/global.css",
@@ -147,17 +135,6 @@ describe("Astryx StyleX root build integration", () => {
   }, 30_000);
 });
 
-function forbiddenSelectedProductionModule(moduleId: string): boolean {
-  return (
-    moduleId.includes("/src/app/legacy-application-presentation.tsx") ||
-    moduleId.includes("/src/app/generated/legacy-") ||
-    moduleId.includes("/lib/site-app/src/react/legacy-") ||
-    moduleId.includes("/lib/ui/") ||
-    moduleId.includes("/lib/media/src/react.tsx") ||
-    moduleId.includes("/src/app/astryx-application-presentation.ts")
-  );
-}
-
 function workspaceCssModules(modules: readonly string[]): string[] {
   return modules
     .map((moduleId) => moduleId.split("?", 1)[0])
@@ -165,15 +142,6 @@ function workspaceCssModules(modules: readonly string[]): string[] {
     .map((moduleId) => relative(repoRoot, moduleId))
     .filter((moduleId) => !moduleId.startsWith("..") && !moduleId.startsWith("node_modules/"))
     .sort();
-}
-
-function namedPlugins(plugins: readonly unknown[]): string[] {
-  return plugins
-    .flat(Infinity)
-    .map((plugin) =>
-      typeof plugin === "object" && plugin !== null && "name" in plugin ? plugin.name : undefined,
-    )
-    .filter((name): name is string => typeof name === "string");
 }
 
 function buildOutputs(value: unknown): BuildOutput[] {

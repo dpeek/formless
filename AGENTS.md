@@ -15,7 +15,7 @@ Data stays flat. Compose in query, view, projection, action layer.
 - Always: this file.
 - Workstream: assigned Git-backed change branch `changes/<change-id>` and parsed tip commit metadata.
 - Task loop: rendered prompt injected by `bun agents`; source skill templates are reference, not required per-session reads.
-- Package scope: nearest package `AGENTS.md`, for example `lib/ui/AGENTS.md`.
+- Package scope: nearest package `AGENTS.md`, for example `lib/astryx/AGENTS.md`.
 - Capability scope: relevant `openspec/specs/*/spec.md`.
 - Do not read every doc. Read only path needed for task.
 
@@ -53,14 +53,14 @@ Data stays flat. Compose in query, view, projection, action layer.
 
 - `src/shared/`: schema, protocol, read models, field behavior, app identities.
 - `src/client/`: browser replica, projections, generated view models.
-- `src/app/`: React routes, generated UI, Site renderer.
+- `src/app/`: React routes, generated runtime and projections, renderer composition.
 - `src/worker/`: Worker routes, Authority, storage, installed apps, public SSR.
 - `src/cli/`: Formless CLI implementation, project files, publish, archives, domains.
 - `src/media/`: core media model and providers.
 - `src/test/`: shared test fixtures.
 - `schema/apps/`: bundled Tasks and CRM app schemas and seed records.
 - `lib/site-app/`: bundled Site app manifest, schema, seed records, and adapters.
-- `lib/ui/`: shared browser UI package.
+- `lib/astryx/`: Formless Renderer contracts, hosts, and Astryx-backed presentation.
 - `lib/media/`: reusable media contracts and adapters package.
 - `lib/deploy/`: reusable deployment contracts and adapters package.
 - `scripts/`: repo scripts, local agents, package build, seed pull.

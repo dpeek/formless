@@ -164,7 +164,7 @@ function assertCanonicalFixture(fixture: PublicSiteStructuralLayoutFixture): voi
     ),
   ).toBe(true);
   expect(serialized).not.toMatch(
-    /"(?:values|createdAt|deletedAt|schema|records|replica|runtimeQuery|providerCredentials|turnstileSecret|className|legacyDom)"\s*:/,
+    /"(?:values|createdAt|deletedAt|schema|records|replica|runtimeQuery|providerCredentials|turnstileSecret|className)"\s*:/,
   );
   expect(blocks.every(({ publicOperation, query }) => !publicOperation && !query)).toBe(true);
 }

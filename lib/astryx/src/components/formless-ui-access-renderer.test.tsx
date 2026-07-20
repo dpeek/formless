@@ -525,36 +525,17 @@ describe("Astryx access renderer", () => {
     expect(html).not.toContain("data-formless-access-state");
   });
 
-  it("stays package-local, runtime-free, and inactive in production", async () => {
+  it("stays runtime-free and uses package components", async () => {
     const rendererSource = await readFile(
       new URL("./formless-ui-access-renderer.tsx", import.meta.url),
       "utf8",
     );
-    const packageJson = JSON.parse(
-      await readFile(new URL("../../package.json", import.meta.url), "utf8"),
-    ) as { exports?: Record<string, string> };
-    const productionAppSource = await readFile(
-      new URL("../../../../src/app.tsx", import.meta.url),
-      "utf8",
-    );
-
     expect(rendererSource).toContain('from "@astryxdesign/core/Table"');
     expect(rendererSource).toContain('from "@astryxdesign/core/MultiSelector"');
     expect(rendererSource).toContain('from "@astryxdesign/core/AlertDialog"');
-    expect(rendererSource).not.toMatch(/@dpeek\/formless-ui\//);
-    expect(rendererSource).not.toContain("legacy-access-renderer");
     expect(rendererSource).not.toContain("access-runtime");
     expect(rendererSource).not.toContain("access-projection");
     expect(rendererSource).not.toContain("fetch(");
-    expect(rendererSource).not.toContain("global.css");
-    expect(rendererSource).not.toContain("CheckboxInput");
-    expect(rendererSource).not.toContain("<Checkbox");
-    expect(rendererSource).not.toContain("hasSelectAll={true}");
-    expect(Object.values(packageJson.exports ?? {})).not.toContain(
-      "./src/components/formless-ui-access-renderer.tsx",
-    );
-    expect(productionAppSource).not.toContain("AstryxAccessRenderer");
-    expect(productionAppSource).not.toContain("AstryxSubscribedAccessRenderer");
   });
 });
 

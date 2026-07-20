@@ -81,7 +81,7 @@ describe("application theme runtime", () => {
     expect(fixture.subscriberCounts()).toEqual({ storage: 0, system: 0 });
   });
 
-  it("bootstraps the resolved marker before the application entry without legacy theme classes", async () => {
+  it("bootstraps the resolved marker before the application entry", async () => {
     const fixture = themeBrowserFixture({ stored: "system", systemPrefersDark: true });
     const indexSource = await readFile(new URL("../../index.html", import.meta.url), "utf8");
     const bootstrapPosition = indexSource.indexOf("/src/app/application-theme-bootstrap.ts");
@@ -93,7 +93,6 @@ describe("application theme runtime", () => {
     expect(applicationPosition).toBeGreaterThan(bootstrapPosition);
     expect(APPLICATION_THEME_DOCUMENT_ATTRIBUTE).toBe("data-formless-application-theme");
     expect(APPLICATION_THEME_STORAGE_KEY).not.toContain("public-site");
-    expect(indexSource).not.toMatch(/class=["'][^"']*\b(?:light|dark)\b/);
   });
 
   it("defaults malformed storage to system without sharing public Site theme state", () => {

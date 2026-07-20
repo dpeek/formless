@@ -93,22 +93,16 @@ describe("production Astryx application root", () => {
   });
 
   it("owns application CSS at the selected production entry", async () => {
-    const [candidateSource, mainSource, providerSource, shellSource, themeRendererSource] =
-      await Promise.all([
-        readFile(new URL("./astryx-application-root.tsx", import.meta.url), "utf8"),
-        readFile(new URL("../main.tsx", import.meta.url), "utf8"),
-        readFile(new URL("../../lib/astryx/src/application-provider.tsx", import.meta.url), "utf8"),
-        readFile(new URL("../../lib/astryx/src/components/shell.tsx", import.meta.url), "utf8"),
-        readFile(new URL("../../lib/astryx/src/components/theme.tsx", import.meta.url), "utf8"),
-      ]);
+    const [rootSource, mainSource, providerSource] = await Promise.all([
+      readFile(new URL("./astryx-application-root.tsx", import.meta.url), "utf8"),
+      readFile(new URL("../main.tsx", import.meta.url), "utf8"),
+      readFile(new URL("../../lib/astryx/src/application-provider.tsx", import.meta.url), "utf8"),
+    ]);
 
-    expect(candidateSource).toContain("@dpeek/formless-astryx/application/global.css");
-    expect(candidateSource).toContain("AstryxApplicationProvider");
+    expect(rootSource).toContain("@dpeek/formless-astryx/application/global.css");
+    expect(rootSource).toContain("AstryxApplicationProvider");
     expect(providerSource).toContain("ToastViewport");
     expect(mainSource).toContain("AstryxApplicationRoot");
-    expect(mainSource).not.toContain("@dpeek/formless-ui");
-    expect(shellSource).not.toContain("FormlessThemeProvider");
-    expect(themeRendererSource).not.toContain("FormlessThemeProvider");
   });
 });
 

@@ -28,19 +28,19 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("selected Astryx public Site renderer", () => {
+describe("production Formless Renderer public Site integration", () => {
   it("satisfies the canonical page and system-state renderer contracts", () => {
     const pageRenderer: SitePublicRendererComponent = AstryxSitePageRenderer;
     const systemStateRenderer: SitePublicSystemStateRendererComponent =
       AstryxSitePublicSystemStateRenderer;
-    const tree = candidateTree();
+    const tree = siteTree();
 
     const readyHtml = renderToString(
       <SitePageRouteView
         builtInRenderer={pageRenderer}
         builtInSystemStateRenderer={systemStateRenderer}
         linkMode="installed"
-        routeBase="/sites/candidate"
+        routeBase="/sites/renderer"
         state={{ status: "ready", tree }}
       />,
     );
@@ -76,7 +76,7 @@ describe("selected Astryx public Site renderer", () => {
     expect(failureHtml).toContain('data-site-system-state="failure"');
   });
 
-  it("preserves workspace renderer precedence over the Astryx built-in", () => {
+  it("preserves workspace renderer precedence over the built-in Formless Renderer", () => {
     const WorkspaceRenderer: SitePublicRendererComponent = (props) => (
       <div data-workspace-site-renderer>{props.tree.meta.slug}</div>
     );
@@ -85,7 +85,7 @@ describe("selected Astryx public Site renderer", () => {
         builtInRenderer={AstryxSitePageRenderer}
         builtInSystemStateRenderer={AstryxSitePublicSystemStateRenderer}
         linkMode="published"
-        state={{ status: "ready", tree: candidateTree() }}
+        state={{ status: "ready", tree: siteTree() }}
         workspaceRenderer={WorkspaceRenderer}
       />,
     );
@@ -95,10 +95,10 @@ describe("selected Astryx public Site renderer", () => {
   });
 
   it("renders page and system-state bodies through the Worker document harness", async () => {
-    const tree = candidateTree();
-    const foundResponse = await renderCandidateDocument({ kind: "found", tree });
-    const notFoundResponse = await renderCandidateDocument({ kind: "not-found" });
-    const failureResponse = await renderCandidateDocument({ kind: "error" });
+    const tree = siteTree();
+    const foundResponse = await renderPublishedDocument({ kind: "found", tree });
+    const notFoundResponse = await renderPublishedDocument({ kind: "not-found" });
+    const failureResponse = await renderPublishedDocument({ kind: "error" });
     const foundHtml = await foundResponse.text();
     const notFoundHtml = await notFoundResponse.text();
     const failureHtml = await failureResponse.text();
@@ -115,8 +115,8 @@ describe("selected Astryx public Site renderer", () => {
   });
 
   it("matches Worker SSR from the published initial tree on the hydration-first render", async () => {
-    const tree = candidateTree();
-    const response = await renderCandidateDocument({ kind: "found", tree });
+    const tree = siteTree();
+    const response = await renderPublishedDocument({ kind: "found", tree });
     const documentHtml = await response.text();
     const initialTreeText = initialTreeScriptText(documentHtml);
 
@@ -141,24 +141,24 @@ describe("selected Astryx public Site renderer", () => {
   });
 });
 
-function candidateTree(): SitePageTree {
+function siteTree(): SitePageTree {
   const fixture = publicSiteStructuralLayoutFixtures.find(({ id }) => id === "minimal");
 
   if (!fixture) {
-    throw new Error("Missing minimal public Site candidate fixture.");
+    throw new Error("Missing minimal public Site renderer fixture.");
   }
 
   return fixture.rendererProps.tree;
 }
 
-function renderCandidateDocument(
+function renderPublishedDocument(
   treeResult: { kind: "found"; tree: SitePageTree } | { kind: "not-found" } | { kind: "error" },
 ) {
   return renderPublishedSiteDocumentResponse({
     builtInRenderer: AstryxSitePageRenderer,
     builtInSystemStateRenderer: AstryxSitePublicSystemStateRenderer,
     clientAssets: { body: "", head: "" },
-    requestUrl: new URL("https://candidate.example/structural-minimal"),
+    requestUrl: new URL("https://renderer.example/structural-minimal"),
     treeResult,
   });
 }

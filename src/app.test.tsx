@@ -2083,14 +2083,12 @@ describe("generated collection home", () => {
     expect(screenHtml).toContain('data-formless-astryx-workspace="workspace:taskHome"');
     expect(screenHtml).toContain("data-formless-astryx-workspace-collection=");
     expect(screenHtml).toContain('aria-label="Task records"');
-    expect(screenHtml).not.toMatch(/data-formless-legacy-(?:workspace|list)/);
   });
 
   it("renders the generated Site tree through the selected Astryx workspace seam", () => {
     bootstrapSiteEditor();
     const html = renderRoute("/site");
 
-    expect(html).not.toContain('class="mx-auto w-full max-w-[112rem]"');
     expectHtmlToContain(html, "Site screens");
     expectHtmlToContain(html, 'href="/site/settings"');
     expectHtmlToContain(html, ">Settings<");
@@ -2113,7 +2111,6 @@ describe("generated collection home", () => {
     expectHtmlToContain(html, "data-formless-astryx-tree-editor=");
     expectHtmlToContain(html, "data-formless-astryx-tree-actions=");
     expectHtmlToContain(html, "data-formless-astryx-tree-child-creation=");
-    expect(html).not.toMatch(/data-formless-legacy-(?:workspace|tree)/);
   });
 
   it("renders generated Site settings on a dedicated screen", () => {
@@ -2131,7 +2128,6 @@ describe("generated collection home", () => {
     expectHtmlToContain(html, ">Accent color");
     expectHtmlToContain(html, ">Background color");
     expectHtmlToContain(html, 'aria-label="Site record"');
-    expect(html).not.toContain("data-formless-legacy-record-result=");
     expect(html).not.toContain('data-slot="table"');
     expect(html).not.toContain('role="grid"');
     expectHtmlToContain(html, "Example Site");
@@ -2157,7 +2153,6 @@ describe("generated collection home", () => {
     expectHtmlToContain(html, ">Accent color");
     expectHtmlToContain(html, ">Background color");
     expectHtmlToContain(html, 'aria-label="Site record"');
-    expect(html).not.toContain("data-formless-legacy-record-result=");
     expectHtmlToContain(html, "Example Site");
     expectHtmlToContain(html, "A public test site.");
     expectHtmlToContain(html, 'value="#C98A2E"');
@@ -2288,7 +2283,6 @@ describe("generated collection home", () => {
     );
     const html = renderRoute("/tasks");
 
-    expect(html).not.toContain("data-formless-legacy-list=");
     expectHtmlToContain(html, 'aria-label="Task records"');
     expectHtmlToContain(html, 'role="list"');
     expectHtmlToContain(html, 'aria-label="Open overdue"');
@@ -2322,7 +2316,6 @@ describe("generated collection home", () => {
     expect(firstIndex).toBeGreaterThan(-1);
     expect(firstIndex).toBeLessThan(secondIndex);
     expect(secondIndex).toBeLessThan(thirdIndex);
-    expect(html).not.toContain("data-formless-legacy-list=");
     expectHtmlToContain(html, 'aria-label="Task records"');
     expectHtmlToContain(html, 'aria-label="Reorder First"');
     expectHtmlToContain(html, 'aria-label="Reorder Second"');

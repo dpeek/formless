@@ -81,7 +81,6 @@ describe("Runtime Vite config", () => {
         "formless-astryx-cloudflare-worker-source-compilation",
       ]),
     );
-    expect(developmentPlugins.filter((name) => name.includes("tailwind"))).toEqual([]);
     expect(developmentPlugins.indexOf("@stylexjs/unplugin")).toBeLessThan(
       developmentPlugins.indexOf("vite:react-babel"),
     );

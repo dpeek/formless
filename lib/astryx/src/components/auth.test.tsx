@@ -303,22 +303,11 @@ describe("Auth prototype layout", () => {
     expect(html).not.toContain("Decline invitation");
   });
 
-  it("keeps fixtures and reducers runtime-free while production selects the package renderer", async () => {
+  it("keeps fixtures and reducers runtime-free", async () => {
     const fixtureSource = await readFile(new URL("./auth.fixtures.ts", import.meta.url), "utf8");
     const layoutSource = await readFile(new URL("./auth.tsx", import.meta.url), "utf8");
     const rendererSource = await readFile(
       new URL("./formless-ui-auth-renderer.tsx", import.meta.url),
-      "utf8",
-    );
-    const packageJson = JSON.parse(
-      await readFile(new URL("../../package.json", import.meta.url), "utf8"),
-    ) as { exports?: Record<string, unknown> };
-    const applicationAssemblySource = await readFile(
-      new URL("../application-assembly.tsx", import.meta.url),
-      "utf8",
-    );
-    const applicationSelectionSource = await readFile(
-      new URL("../../../../src/app/application-presentation.tsx", import.meta.url),
       "utf8",
     );
     const imports = [fixtureSource, layoutSource].flatMap(importSpecifiers);
@@ -338,23 +327,7 @@ describe("Auth prototype layout", () => {
       /Choose destination|Contact owner|Decline invitation|Resend code/,
     );
     expect(forbiddenImports).toEqual([]);
-    expect(rendererSource).not.toMatch(/@dpeek\/formless-ui|className=|src\/app/);
-    expect(Object.keys(packageJson.exports ?? {})).toEqual([
-      "./application/assembly",
-      "./application/global.css",
-      "./application/provider",
-      "./contract",
-      "./contract-host",
-      "./contract-host/react",
-      "./site/renderer",
-      "./site/global.css",
-      "./site/provider",
-    ]);
-    expect(applicationAssemblySource).toContain("AstryxSubscribedAuthRenderer");
-    expect(applicationAssemblySource).toContain('case "auth"');
-    expect(applicationAssemblySource).not.toMatch(/Legacy[A-Z]|legacy-/);
-    expect(applicationSelectionSource).toContain("AstryxApplicationAssembly");
-    expect(applicationSelectionSource).not.toMatch(/Legacy[A-Z]|legacy-/);
+    expect(rendererSource).not.toMatch(/className=|src\/app/);
   });
 });
 

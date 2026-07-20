@@ -265,15 +265,16 @@ Package tests SHALL be fast, deterministic, and local.
 - THEN browser smoke is not required for the package task
 - AND browser smoke remains app-level when visible app behavior changes
 
-### Requirement: Astryx Presentation Boundary
+### Requirement: Formless Renderer Package Boundary
 
-The Astryx package SHALL expose application and public Site presentation through
-documented package subpaths while root runtime and the Site app package retain
-their existing state, projection, policy, and effect ownership.
+The Formless Renderer implementation SHALL expose application and public Site
+presentation through documented `@dpeek/formless-astryx` package subpaths while
+root runtime and the Site app package retain their existing state, projection,
+policy, and effect ownership.
 
 #### Scenario: Application presentation exports stay complete and minimal
 
-- GIVEN root application assembly selects Astryx presentation
+- GIVEN root application assembly mounts the Formless Renderer
 - WHEN consumers import the application contract, host, assembly, provider,
   renderer, or CSS boundaries
 - THEN they import documented `@dpeek/formless-astryx` subpaths
@@ -282,38 +283,39 @@ their existing state, projection, policy, and effect ownership.
   operation, theme, and residual system-state presentation
 - AND the application provider and CSS boundary are exported independently from
   the public Site provider and CSS boundary
-- AND root runtime does not deep-import Astryx source or assemble individual
-  renderer leaves into route-local selector tables
-- AND prototype roots, fixture state, and scenario controls remain private
+- AND root runtime does not deep-import `@dpeek/formless-astryx` source or
+  assemble individual renderer leaves into route-local selector tables
+- AND fixture roots, fixture state, and scenario controls remain private
 
-#### Scenario: Astryx imports canonical Site contracts
+#### Scenario: Renderer package imports canonical Site contracts
 
-- GIVEN the Astryx package implements public Site page, system-state, block, or
-  form presentation
+- GIVEN `@dpeek/formless-astryx` implements public Site page, system-state,
+  block, or form presentation
 - WHEN it imports the renderer input, projected tree, link, media, icon, theme,
   or form facts needed by that presentation
 - THEN it imports documented public contracts and helpers from
   `@dpeek/formless-site-app`
 - AND it does not define structurally equivalent private Site projection or
   renderer input contracts
-- AND `@dpeek/formless-site-app` does not import Astryx
+- AND `@dpeek/formless-site-app` does not import `@dpeek/formless-astryx`
 - AND neither package deep-imports the other package's source internals
 
 #### Scenario: Public Site exports stay separate from application exports
 
-- GIVEN the Astryx public Site renderer is complete
-- WHEN the Astryx package export map is evaluated
+- GIVEN the Formless Renderer public Site implementation is complete
+- WHEN the `@dpeek/formless-astryx` package export map is evaluated
 - THEN documented public subpaths expose the browser and Worker-compatible Site
   renderers plus the public provider and CSS boundaries needed by production
   public roots
-- AND prototype route roots, scenario controls, and package-local fixture state
+- AND fixture route roots, scenario controls, and package-local fixture state
   remain private
 - AND public exports do not import application shell, management, auth, access,
   generated admin runtime, application provider, or application CSS assembly
 
 #### Scenario: Public renderer graph stays presentation scoped
 
-- GIVEN a consumer builds the Astryx public Site renderer entrypoints
+- GIVEN a consumer builds the `@dpeek/formless-astryx` public Site renderer
+  entrypoints
 - WHEN their import graph is checked
 - THEN it excludes repo-root runtime source, the application contract host,
   generated admin and workspace runtime, shell and auth presentation, browser
@@ -322,12 +324,14 @@ their existing state, projection, policy, and effect ownership.
 - AND generic field presentation reused for public operation forms does not pull
   generated operation execution or admin runtime into the public graph
 
-#### Scenario: Astryx package stays presentation scoped
+#### Scenario: Renderer package stays presentation scoped
 
-- GIVEN application or public Site presentation is rendered through Astryx
+- GIVEN application or public Site presentation is rendered through the
+  Formless Renderer
 - WHEN the package dependency graph is checked
-- THEN Astryx consumes renderer-neutral contracts, stable references, display
-  facts, React children, and canonical intents through public package exports
+- THEN `@dpeek/formless-astryx` consumes renderer-neutral contracts, stable
+  references, display facts, React children, and canonical intents through
+  public package exports
 - AND it does not own browser replica reads, storage, routing policy, auth
   ceremonies, identity authority, Site projection, public form execution,
   operation execution, navigation effects, theme persistence, or document
@@ -336,21 +340,6 @@ their existing state, projection, policy, and effect ownership.
   `@dpeek/formless-source-svg`
 - AND application media presentation uses renderer-neutral Media contracts
   while the Media package exposes no React presentation adapter
-
-#### Scenario: Repository presentation dependencies stay Astryx-only
-
-- GIVEN Astryx is the selected application and built-in public Site renderer
-- WHEN package manifests, source imports, build plugins, declarations, and the
-  workspace lockfile are inspected
-- THEN `@dpeek/formless-astryx` is the only Formless presentation package
-  consumed by production runtime
-- AND Astryx imports use documented subpaths, the Media package exposes only
-  root, client, and Worker entrypoints, and the root build uses Astryx StyleX
-  plus package-owned CSS without a utility CSS compiler
-- AND no compatibility alias or private Astryx source import participates in the
-  repository package graph
-- AND the Site package retains renderer-neutral contracts, runtime adapters,
-  public form sessions, and theme behavior without depending on Astryx
 
 ### Requirement: Storage Package Slice
 

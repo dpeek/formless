@@ -547,28 +547,30 @@ refresh, validation, and private auth state.
   identity APIs, create or deliver tokens, revoke private token state, refresh
   summaries, redact errors, or navigate directly
 
-#### Scenario: Astryx renderer consumes access contracts
+#### Scenario: Formless Renderer consumes access contracts
 
 - GIVEN production `/access` publishes complete renderer-neutral access
   contracts while runtime retains invitation effects
 - WHEN runtime publishes the complete access contract graph
-- THEN one subscribed Astryx access renderer reads only access references and
-  snapshots, renders people, roles, invitations, controlled invitation
-  authoring, feedback, empty, unauthorized, loading, failure, and destructive
-  confirmation states, and dispatches canonical access intents
-- AND access presentation imports only documented Astryx package subpaths
+- THEN one subscribed Formless Renderer access entrypoint reads only access
+  references and snapshots, renders people, roles, invitations, controlled
+  invitation authoring, feedback, empty, unauthorized, loading, failure, and
+  destructive confirmation states, and dispatches canonical access intents
+- AND access presentation imports only documented
+  `@dpeek/formless-astryx` package subpaths
 - AND focused coverage asserts projection, current intent resolution, authority,
   controlled drafts, pending behavior, visible outcomes, and secret exclusion
-- AND production selects access presentation through the root Astryx application
-  assembly
+- AND production mounts access presentation through the root Formless Renderer
+  application assembly
 
-#### Scenario: Astryx access management renderer
+#### Scenario: Formless access management renderer
 
 - GIVEN runtime publishes complete production access contracts
 - WHEN the selected renderer implements the contract in `lib/astryx`
-- THEN pure and subscribed Astryx entrypoints use `Section` and Astryx stack and
-  grid primitives for page layout, `Table` for the uniform people and invitation
-  summaries, and `Badge` and `Timestamp` for status and temporal facts
+- THEN pure and subscribed renderer entrypoints use package `Section`, stack,
+  and grid primitives for page layout, `Table` for the uniform people and
+  invitation summaries, and `Badge` and `Timestamp` for status and temporal
+  facts
 - AND invitation authoring opens in a form-purpose `Dialog` using `FormLayout`,
   `TextInput`, `Selector`, and `DateTimeInput` for controlled single-value
   fields
@@ -580,31 +582,31 @@ refresh, validation, and private auth state.
   and projected disabled reasons remain visible without the renderer inferring
   authority from role names, target kinds, or option ids
 - AND loading, empty, validation, pending, success, and failure states compose
-  Astryx `Spinner`, `EmptyState`, `FieldStatus`, and `Banner` patterns, and
+  package `Spinner`, `EmptyState`, `FieldStatus`, and `Banner` patterns, and
   pending invitation revocation composes `AlertDialog` before dispatching its
   confirm intent
-- AND the Astryx renderer uses package-owned styling and contains no identity
-  runtime imports, API clients, effect handlers, private auth state, or
-  production selector behavior
+- AND the renderer uses package-owned styling and contains no identity runtime
+  imports, API clients, effect handlers, private auth state, or production
+  assembly behavior
 
 #### Scenario: Access management contract fixtures
 
 - GIVEN runtime publishes complete production access contracts
-- WHEN access UX is evaluated in the package-local Astryx prototype
+- WHEN access UX is evaluated with package-local renderer fixtures
 - THEN serializable data-only memory-host fixtures cover owner and
   instance-admin grants, loading, unauthorized, failed, empty and populated
   summaries, people and roles, organizations and groups, app-scoped grants,
   invitation authoring drafts and validation, pending and successful creation,
   pending invitation revocation confirmation, success, and failure
-- AND a focused Access layout composes the subscribed Astryx access renderer as
-  the route child of the existing application shell through one memory host
+- AND a focused Access layout composes the subscribed access renderer as the
+  route child of the existing application shell through one memory host
 - AND minimal reducers may simulate canonical draft, selection, dialog, submit,
   confirmation, and revoke intents without importing identity runtime, storage,
   APIs, invitation delivery, credentials, sessions, private token state,
   navigation, or timers
 - AND fixtures contain no secrets, unsupported destructive identity actions,
-  legacy comparison UI, prototype proof labels, production renderer selection,
-  or behavior that bypasses the canonical contract host
+  production assembly behavior, or behavior that bypasses the canonical
+  contract host
 
 ### Requirement: Collaborator Invitation Acceptance
 

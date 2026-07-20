@@ -371,7 +371,7 @@ describe("Application Shell prototype layout", () => {
     expect(html).toContain("No shell");
   });
 
-  it("keeps fixtures and reducers free of runtime dependencies and production activation", async () => {
+  it("keeps fixtures and reducers free of runtime dependencies", async () => {
     const fixtureSource = await readFile(
       new URL("./application-shell.fixtures.ts", import.meta.url),
       "utf8",
@@ -379,13 +379,6 @@ describe("Application Shell prototype layout", () => {
     const hostSource = await readFile(new URL("./application-shell.tsx", import.meta.url), "utf8");
     const shellSource = await readFile(new URL("./shell.tsx", import.meta.url), "utf8");
     const sideNavSource = await readFile(new URL("./side-nav.tsx", import.meta.url), "utf8");
-    const packageJson = JSON.parse(
-      await readFile(new URL("../../package.json", import.meta.url), "utf8"),
-    ) as { exports?: Record<string, unknown> };
-    const productionRuntimeSource = await readFile(
-      new URL("../../../../src/app/application-shell-runtime.tsx", import.meta.url),
-      "utf8",
-    );
     const imports = [fixtureSource, hostSource].flatMap(importSpecifiers);
     const forbiddenImports = imports.filter((specifier) =>
       /(?:^|\/)(?:src\/app|src\/client|routing|storage|replica|operation-controller|session-client)(?:\/|$)|formless-schema|\bwouter\b/.test(
@@ -398,20 +391,6 @@ describe("Application Shell prototype layout", () => {
     expect(forbiddenImports).toEqual([]);
     expect(fixtureSource).toContain("documentTheme");
     expect(sideNavSource).not.toContain("FormlessUiDocumentTheme");
-    expect(Object.keys(packageJson.exports ?? {})).toEqual([
-      "./application/assembly",
-      "./application/global.css",
-      "./application/provider",
-      "./contract",
-      "./contract-host",
-      "./contract-host/react",
-      "./site/renderer",
-      "./site/global.css",
-      "./site/provider",
-    ]);
-    expect(productionRuntimeSource).toContain("ApplicationPresentation");
-    expect(productionRuntimeSource).not.toContain("LegacySubscribedApplicationShellRenderer");
-    expect(productionRuntimeSource).not.toContain("AstryxSubscribedApplicationShellRenderer");
   });
 });
 

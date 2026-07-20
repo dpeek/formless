@@ -1,7 +1,7 @@
 # Icon Options Runtime Boundary
 
-Purpose: capture future work for id-based icon values in generated UI and
-Astryx rendering.
+Purpose: capture future work for id-based icon values in generated UI and the
+Formless Renderer.
 
 Status: backlog. This is not shipped behavior. Shipped behavior lives in
 `openspec/specs/*/spec.md`.
@@ -57,11 +57,9 @@ updates an icon option, not the stored field value itself.
 
 ## First Slice
 
-Do this after the generated runtime-to-`FormlessUiField` projection is stable
-and before fully migrating icon rendering:
+A first implementation slice:
 
 1. Add `FormlessUiIconOption` and `iconOptions` to the platform UI contract.
 2. Project the default icon catalog into icon options.
 3. Define missing icon option behavior.
 4. Add tests for icon field projection with catalog, custom, and missing ids.
-5. Keep renderer migration separate.

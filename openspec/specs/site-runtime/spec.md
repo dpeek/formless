@@ -161,7 +161,8 @@ storage contracts.
   renderer props
 - AND Site adapter selection modules do not import a concrete built-in renderer
   implementation
-- AND production root assembly explicitly supplies the Astryx built-in renderer
+- AND production root assembly explicitly supplies the Formless Renderer
+  implementation exported by `@dpeek/formless-astryx`
 
 #### Scenario: Renderer fixture input stays projection shaped
 
@@ -190,8 +191,8 @@ browser and Worker runtime ownership of state selection and document behavior.
 - WHEN the public Site client renders that state
 - THEN root assembly supplies one built-in system-state renderer that receives
   only state kind and display-safe presentation facts
-- AND production root assembly explicitly supplies the Astryx system-state
-  renderer
+- AND production root assembly explicitly supplies the Formless Renderer
+  system-state implementation
 - AND the workspace page-renderer extension does not replace browser
   system-state presentation
 
@@ -206,37 +207,33 @@ browser and Worker runtime ownership of state selection and document behavior.
 - AND the workspace page-renderer extension remains scoped to successful page
   bodies and cannot return a not-found document, error document, or `Response`
 
-### Requirement: Astryx Public Site Renderer
+### Requirement: Formless Public Site Renderer
 
-The system SHALL provide a complete Astryx implementation of the canonical
-Site page and system-state renderer contracts and select it as the production
-built-in renderer.
+The system SHALL provide a complete Formless Renderer implementation of the
+canonical Site page and system-state renderer contracts through
+`@dpeek/formless-astryx` and mount it as the production built-in renderer.
 
 #### Scenario: Renderer covers shipped public Site presentation
 
 - GIVEN canonical projected Site fixtures exercise public Site rendering
-- WHEN the Astryx renderer renders those fixtures in browser and Worker builds
+- WHEN the Formless Renderer renders those fixtures in browser and Worker builds
 - THEN it renders header and footer frames, page and post layouts, every shipped
   public block, route-aware links, source SVG icons, core media and missing-media
   states, content lists and summaries, fixed public forms, generic public
   operation forms, loading, not-found, and failure states
-- AND it follows Astryx layout, typography, navigation, responsive, form, and
-  feedback conventions through package-owned presentation and styling
+- AND it follows the renderer's layout, typography, navigation, responsive,
+  form, and feedback conventions through package-owned presentation and styling
 - AND it consumes canonical Site contracts and public helpers through documented
   Site package exports instead of duplicate projection or renderer types
 
 #### Scenario: Renderer is selected at public roots
 
-- GIVEN the Astryx page and system-state renderers are exported through
-  documented package subpaths
+- GIVEN the Formless Renderer page and system-state implementations are
+  exported through documented `@dpeek/formless-astryx` package subpaths
 - WHEN production browser and Worker entrypoints are built
-- THEN root assembly imports and supplies only the Astryx built-in Site
-  renderers
-- AND the Site package does not import Astryx
-- AND no renderer flag, environment toggle, per-block selection, production
-  fallback, or dual-renderer mode is introduced
-- AND public browser and Worker roots integrate Astryx StyleX, provider, and CSS
-  boundaries atomically while preserving workspace renderer precedence
+- THEN root assembly imports and supplies the built-in Site renderers
+- AND public browser and Worker roots integrate the package's StyleX, provider,
+  and CSS boundaries atomically while preserving workspace renderer precedence
 
 #### Scenario: Site package is renderer neutral
 
@@ -247,7 +244,8 @@ built-in renderer.
   public form sessions, theme behavior, and browser and Worker adapters
 - AND built-in page and system-state presentation comes only from the renderer
   supplied by production roots
-- AND it has no dependency on Astryx or another Formless presentation package
+- AND it does not depend on `@dpeek/formless-astryx` or another presentation
+  implementation
 
 ### Requirement: Subscribe Form Public Tree Projection
 
@@ -726,9 +724,10 @@ operation execution behavior.
   signal, and token-change intent
 - AND generic public operation fields carry public-safe scalar control, format,
   suggestion, enum-option, required, and occurrence facts
-- AND the Astryx renderer may adapt generic fields to canonical
-  `FormlessUiField` controls inside the Astryx package
-- AND the Site package does not import Astryx field or renderer contracts
+- AND `@dpeek/formless-astryx` may adapt generic fields to canonical
+  `FormlessUiField` controls inside the renderer package
+- AND the Site package does not import `@dpeek/formless-astryx` field or renderer
+  contracts
 
 #### Scenario: Site foundation retains public form execution
 
@@ -745,10 +744,10 @@ operation execution behavior.
 
 #### Scenario: Selected renderer consumes the session seam
 
-- GIVEN production uses the Astryx Site renderer
+- GIVEN production uses the Formless Renderer Site entrypoint
 - WHEN fixed or generic public forms render
-- THEN Astryx presentation consumes the Site-owned session facts and dispatches
-  only presentation intents
+- THEN Formless Renderer presentation consumes the Site-owned session facts and
+  dispatches only presentation intents
 - AND current public routes, validation, coercion, Turnstile, idempotency,
   submission, pending, success, unavailable, and display-safe failure behavior
   remains unchanged
@@ -773,18 +772,19 @@ shell.
 
 #### Scenario: Public theme and CSS remain package scoped
 
-- GIVEN the selected Astryx public Site renderer is assembled in browser and
-  Worker rendering
+- GIVEN the Formless Renderer public Site implementation is assembled in browser
+  and Worker rendering
 - WHEN its provider and styles are assembled
-- THEN the Astryx package exposes the public provider and CSS boundaries needed
-  by public roots
+- THEN `@dpeek/formless-astryx` exposes the public provider and CSS boundaries
+  needed by public roots
 - AND Worker rendering starts from a deterministic public theme mode and
   browser hydration remains structurally stable while stored or system mode is
   applied
 - AND Site-owned public theme storage and document bootstrap facts remain
   outside the renderer implementation
-- AND production public entrypoints use the Astryx public provider, StyleX, and
-  CSS boundaries without importing application provider or CSS assembly
+- AND production public entrypoints use the `@dpeek/formless-astryx` public
+  provider, StyleX integration, and CSS boundaries without importing application
+  provider or CSS assembly
 
 #### Scenario: Public Site assets exclude admin-only code
 

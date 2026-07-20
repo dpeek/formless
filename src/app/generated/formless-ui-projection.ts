@@ -74,7 +74,6 @@ import type {
   GeneratedCreateDraftSessionState,
 } from "./create-field-authoring.ts";
 import { selectGeneratedFieldControl, type GeneratedFieldControl } from "./field-controls.ts";
-import { selectGeneratedRecordFieldAuthoringAdapter } from "./field-ui-adapters.ts";
 import { fieldValueToInputValue, formatFieldDisplayValue } from "./format.ts";
 import type {
   GeneratedOperationDraftSessionFacts,
@@ -90,6 +89,7 @@ import {
   type GeneratedUpdateDraftSessionFacts,
   type GeneratedUpdateDraftSessionState,
 } from "./record-field-authoring.ts";
+import { selectGeneratedRecordFieldRendererKind } from "./record-field-renderer-model.ts";
 
 export type GeneratedFormlessUiReferenceOption = {
   id: string;
@@ -784,10 +784,10 @@ export function projectGeneratedRecordFormlessUiField({
     };
   }
 
-  const { rendererKind } = selectGeneratedRecordFieldAuthoringAdapter({
+  const rendererKind = selectGeneratedRecordFieldRendererKind({
     density,
     fieldConfig,
-    label,
+    fieldControl: control,
     presentation,
     showLabel,
   });

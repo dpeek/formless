@@ -103,12 +103,8 @@ describe("Astryx public Site provider", () => {
     expect(browserSource).toContain("AstryxSitePageRenderer");
     expect(browserSource).toContain("AstryxSitePublicSystemStateRenderer");
     expect(browserSource).toContain("@dpeek/formless-astryx/site/global.css");
-    expect(browserSource).not.toContain("@dpeek/formless-ui");
     expect(workerSource).toContain("AstryxSitePageRenderer");
     expect(workerSource).toContain("AstryxSitePublicSystemStateRenderer");
     expect(workerSource).toContain("@dpeek/formless-astryx/site/renderer");
-    for (const source of [browserSource, workerSource]) {
-      expect(source).not.toMatch(/LegacySite(?:Page|PublicSystemState)Renderer/);
-    }
   });
 });

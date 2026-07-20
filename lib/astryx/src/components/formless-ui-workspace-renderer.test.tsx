@@ -146,7 +146,6 @@ describe("Astryx workspace renderer", () => {
     expect(html).toContain("No matching tasks");
     expect(html).toContain("No companies");
     expect(html.indexOf("No matching tasks")).toBeLessThan(html.indexOf("No companies"));
-    expect(html).not.toContain("data-formless-legacy-workspace");
   });
 
   it("renders list-detail hierarchy with a selector, context record, table, and controlled actions", () => {

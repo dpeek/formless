@@ -68,7 +68,7 @@ describe("canonical instance-management fixtures", () => {
         ?.authorizationPrompt,
     ).toMatchObject({ title: "Cloudflare authorization required" });
     expect(serialized).not.toMatch(
-      /owner-secret|api[-_ ]?key|private[-_ ]?key|bearer\s|\/Users\/|className|tailwind/i,
+      /owner-secret|api[-_ ]?key|private[-_ ]?key|bearer\s|\/Users\/|className/i,
     );
   });
 
@@ -260,7 +260,7 @@ describe("canonical instance-management fixtures", () => {
     expect(html).toContain('data-formless-astryx-workspace="instance-management:routes"');
   });
 
-  it("keeps fixtures runtime-free, secret-free, package-local, and inactive in production", async () => {
+  it("keeps fixtures runtime-free, secret-free, and package-local", async () => {
     const fixtureSource = await readFile(
       new URL("./instance-management.fixtures.ts", import.meta.url),
       "utf8",
@@ -270,13 +270,6 @@ describe("canonical instance-management fixtures", () => {
       "utf8",
     );
     const rootSource = await readFile(new URL("../root.tsx", import.meta.url), "utf8");
-    const packageJson = JSON.parse(
-      await readFile(new URL("../../package.json", import.meta.url), "utf8"),
-    ) as { exports?: Record<string, unknown> };
-    const productionRuntimeSource = await readFile(
-      new URL("../../../../src/app/routes/instance-management-runtime.tsx", import.meta.url),
-      "utf8",
-    );
     const imports = [fixtureSource, hostSource].flatMap(importSpecifiers);
 
     expect(
@@ -290,21 +283,6 @@ describe("canonical instance-management fixtures", () => {
       /\blocalStorage\b|\bsessionStorage\b|\bdocument\.|\bwindow\.|\bfetch\(|className/,
     );
     expect(rootSource).toContain("FormlessInstanceManagementLayout");
-    expect(Object.keys(packageJson.exports ?? {})).toEqual([
-      "./application/assembly",
-      "./application/global.css",
-      "./application/provider",
-      "./contract",
-      "./contract-host",
-      "./contract-host/react",
-      "./site/renderer",
-      "./site/global.css",
-      "./site/provider",
-    ]);
-    expect(productionRuntimeSource).toContain("ApplicationPresentation");
-    expect(productionRuntimeSource).not.toContain("LegacySubscribedManagementRenderer");
-    expect(productionRuntimeSource).not.toContain("AstryxSubscribedManagementRenderer");
-    expect(productionRuntimeSource).not.toContain("instance-management.fixtures");
   });
 });
 

@@ -859,35 +859,35 @@ ceremonies, sessions, route policy, operations, and navigation.
   publication without exposing private values through nested error objects,
   serialized host nodes, or fixture data
 
-#### Scenario: Astryx renderer consumes auth contracts
+#### Scenario: Formless Renderer consumes auth contracts
 
 - GIVEN production owner setup, owner sign-in, account, signup, and invitation
   routes publish complete renderer-neutral auth contracts
 - WHEN each route publishes its auth-surface snapshot
-- THEN pure and subscribed Astryx auth renderers consume only auth references
-  and snapshots and dispatch canonical auth intents
-- AND auth presentation imports only documented Astryx package subpaths
+- THEN pure and subscribed Formless Renderer auth entrypoints consume only auth
+  references and snapshots and dispatch canonical auth intents
+- AND auth presentation imports only documented
+  `@dpeek/formless-astryx` package subpaths
 - AND focused coverage asserts controlled drafts, available actions, pending and
   retry behavior, continuation, accessibility, and secret exclusion
-- AND production selects auth presentation through the root Astryx application
-  assembly
+- AND production mounts auth presentation through the root Formless Renderer
+  application assembly
 
-#### Scenario: Astryx auth renderer and canonical fixtures
+#### Scenario: Formless auth renderer and canonical fixtures
 
 - GIVEN runtime publishes complete production auth contracts
 - WHEN the selected renderer implements the contract in `lib/astryx`
-- THEN pure and subscribed Astryx entrypoints compose Astryx frame, card, form,
-  field, action, status, passkey, policy, fact, and loading primitives without
-  importing instance-auth runtime
+- THEN pure and subscribed renderer entrypoints compose package frame, card,
+  form, field, action, status, passkey, policy, fact, and loading primitives
+  without importing instance-auth runtime
 - AND data-only memory-host fixtures cover all shipped owner setup, sign-in,
   account gate, signup, invitation, unavailable, failed, complete, and
   continuation states with minimal canonical intent reducers
 - AND fixtures do not simulate WebAuthn, sessions, storage, handoff grants,
   redirects, unsupported destination selection, invitation decline, or
   hard-coded policy actions
-- AND the Astryx renderer uses package-owned styling and contains no runtime
-  clients, route policy, browser credential effects, or production selector
-  behavior
+- AND the renderer uses package-owned styling and contains no runtime clients,
+  route policy, browser credential effects, or production assembly behavior
 
 ### Requirement: Account Completion Gate Resolution
 

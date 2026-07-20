@@ -50,7 +50,6 @@ describe("public Site SSR characterization", () => {
     expect(entry).toContain("builtInRenderer={AstryxSitePageRenderer}");
     expect(entry).toContain("builtInSystemStateRenderer={AstryxSitePublicSystemStateRenderer}");
     expect(entry).toContain("@dpeek/formless-astryx/site/global.css");
-    expect(entry).not.toMatch(/LegacySite(?:Page|PublicSystemState)Renderer/);
     expect(entry).toContain("workspaceRenderer={workspaceSitePublicRenderer}");
     expect(entry).toContain("hydrateRoot(app, appTree)");
   });

@@ -153,7 +153,6 @@ describe("Astryx management renderer", () => {
     expect(html).toContain(`data-formless-astryx-workspace="${routesReference.workspaceId}"`);
     expect(html).toContain("Apps workspace action");
     expect(html).toContain("Routes workspace action");
-    expect(html).not.toContain("data-formless-legacy-workspace");
   });
 
   it("dispatches exact canonical management intent envelopes", async () => {
@@ -221,21 +220,13 @@ describe("Astryx management renderer", () => {
     });
   });
 
-  it("keeps the renderer package-local, runtime-free, and inactive in production", async () => {
+  it("keeps the renderer runtime-free", async () => {
     const rendererSource = await readFile(
       new URL("./formless-ui-management-renderer.tsx", import.meta.url),
       "utf8",
     );
-    const packageJson = JSON.parse(
-      await readFile(new URL("../../package.json", import.meta.url), "utf8"),
-    ) as { exports?: Record<string, unknown> };
-    const productionRuntimeSource = await readFile(
-      new URL("../../../../src/app/routes/instance-management-runtime.tsx", import.meta.url),
-      "utf8",
-    );
     const imports = importSpecifiers(rendererSource);
 
-    expect(imports).not.toContain("@dpeek/formless-ui");
     expect(
       imports.filter((specifier) =>
         /(?:^|\/)(?:src\/app|src\/client|control-plane|gateway|storage|replica|routing|operation-controller)(?:\/|$)|\bwouter\b/.test(
@@ -246,21 +237,6 @@ describe("Astryx management renderer", () => {
     expect(rendererSource).not.toMatch(
       /\bclassName\b|\blocalStorage\b|\bsessionStorage\b|\bdocument\.|\bwindow\.|\bfetch\(/,
     );
-    expect(Object.keys(packageJson.exports ?? {})).toEqual([
-      "./application/assembly",
-      "./application/global.css",
-      "./application/provider",
-      "./contract",
-      "./contract-host",
-      "./contract-host/react",
-      "./site/renderer",
-      "./site/global.css",
-      "./site/provider",
-    ]);
-    expect(productionRuntimeSource).toContain("ApplicationPresentation");
-    expect(productionRuntimeSource).not.toContain("LegacySubscribedManagementRenderer");
-    expect(productionRuntimeSource).not.toContain("AstryxSubscribedManagementRenderer");
-    expect(productionRuntimeSource).not.toContain("global.css");
   });
 });
 

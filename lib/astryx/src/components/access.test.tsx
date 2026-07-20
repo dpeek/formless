@@ -98,7 +98,7 @@ describe("canonical access-management fixtures", () => {
     expect(serialized).not.toMatch(
       /disablePrincipal|removeRole|transferOwner|removeOwner|owner-transfer|principal-disable/i,
     );
-    expect(serialized).not.toMatch(/className|tailwind|legacy comparison|proof label/i);
+    expect(serialized).not.toContain("className");
   });
 
   it("reduces exact current field, selection, dialog, submit, confirmation, and revoke intents", () => {
@@ -239,7 +239,7 @@ describe("canonical access-management fixtures", () => {
     expect(html).toContain('data-formless-astryx-access-state="ready"');
   });
 
-  it("keeps fixture composition runtime-free, package-local, and inactive in production", async () => {
+  it("keeps fixture composition runtime-free and package-local", async () => {
     const fixtureSource = await readFile(new URL("./access.fixtures.ts", import.meta.url), "utf8");
     const layoutSource = await readFile(new URL("./access.tsx", import.meta.url), "utf8");
     const rendererSource = await readFile(
@@ -247,17 +247,6 @@ describe("canonical access-management fixtures", () => {
       "utf8",
     );
     const rootSource = await readFile(new URL("../root.tsx", import.meta.url), "utf8");
-    const packageJson = JSON.parse(
-      await readFile(new URL("../../package.json", import.meta.url), "utf8"),
-    ) as { exports?: Record<string, unknown>; scripts?: Record<string, string> };
-    const productionAppSource = await readFile(
-      new URL("../../../../src/app.tsx", import.meta.url),
-      "utf8",
-    );
-    const productionAccessSource = await readFile(
-      new URL("../../../../src/app/routes/access.tsx", import.meta.url),
-      "utf8",
-    );
     const imports = [fixtureSource, layoutSource].flatMap(importSpecifiers);
 
     expect(
@@ -274,26 +263,6 @@ describe("canonical access-management fixtures", () => {
     expect(layoutSource.match(/<FormlessUiContractHostProvider\b/g)).toHaveLength(1);
     expect(rendererSource).not.toContain("FormlessUiContractHostProvider");
     expect(rootSource).toContain("FormlessAccessLayout");
-    expect(packageJson.scripts?.test).toBe(
-      "vp test --config ../../vite.config.ts --configLoader runner",
-    );
-    expect(Object.keys(packageJson.exports ?? {})).toEqual([
-      "./application/assembly",
-      "./application/global.css",
-      "./application/provider",
-      "./contract",
-      "./contract-host",
-      "./contract-host/react",
-      "./site/renderer",
-      "./site/global.css",
-      "./site/provider",
-    ]);
-    expect(`${productionAppSource}\n${productionAccessSource}`).not.toContain(
-      "AstryxSubscribedAccessRenderer",
-    );
-    expect(`${productionAppSource}\n${productionAccessSource}`).not.toContain("access.fixtures");
-    expect(productionAccessSource).toContain("ApplicationPresentation");
-    expect(productionAccessSource).not.toContain("LegacySubscribedAccessRenderer");
   });
 });
 

@@ -82,7 +82,6 @@ describe("generated table app paths", () => {
 
     expectHtmlToContain(html, 'aria-label="Site record"');
     expectHtmlToContain(html, "data-formless-record-result=");
-    expect(html).not.toContain("data-formless-legacy-record-result=");
     expect(html).not.toContain('<table aria-label="Site record"');
     expectHtmlToContain(html, 'placeholder="Label"');
     expectHtmlToContain(html, ">Description");
@@ -105,7 +104,6 @@ describe("generated table app paths", () => {
     expectHtmlToContain(html, '<table aria-label="Placement records"');
     expectHtmlToContain(html, 'aria-label="Reorder"');
     expectHtmlToContain(html, 'aria-label="Actions"');
-    expect(html).not.toContain("data-formless-legacy-table=");
     expect(html).not.toContain('data-formless-ordering-handle="true"');
     expect(html).not.toContain("data-formless-sortable-row=");
     expect(html).not.toContain('data-formless-delete-record="rec_site_place_home_hero"');

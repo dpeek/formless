@@ -364,15 +364,12 @@ function forbiddenSelectedPublicSiteFile(path: string): boolean {
     path.startsWith("lib/astryx/src/components/generated-workspace") ||
     path.startsWith("lib/astryx/src/components/instance-management") ||
     path.startsWith("lib/astryx/src/components/state-input") ||
-    path.startsWith("lib/site-app/src/react/legacy-") ||
-    path.startsWith("lib/site-app/src/worker/") ||
-    path.startsWith("lib/ui/")
+    path.startsWith("lib/site-app/src/worker/")
   );
 }
 
 function forbiddenPublicSiteClientSpecifier(specifier: string): boolean {
   return (
-    specifier.startsWith("@dpeek/formless-ui") ||
     specifier === "@dpeek/formless-astryx/contract-host" ||
     specifier === "@dpeek/formless-astryx/contract-host/react" ||
     specifier === "@dpeek/formless-gateway/client" ||
@@ -388,7 +385,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 const forbiddenPublicSiteClientFilePaths = new Set([
   "src/app/application-shell-runtime.tsx",
-  "src/app/generated/legacy-application-shell-renderer.tsx",
   "src/app/routes/home.tsx",
   "src/app/routes/instance-shell.tsx",
   "src/app/routes/local-session.tsx",

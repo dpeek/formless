@@ -226,7 +226,6 @@ describe("Astryx auth renderer", () => {
     expect(tokenHtml).toContain("ada@example.com");
     expect(tokenHtml).toContain('data-formless-astryx-auth-status="feedback:token"');
     expect(tokenHtml).toContain('data-formless-astryx-auth-control-kind="action"');
-    expect(tokenHtml).not.toContain("OTPInput");
     expect(passkeyHtml).toContain('data-formless-astryx-auth-control-kind="passkey"');
     expect(unavailableHtml).toContain('data-formless-astryx-auth-passkey="passkey:unavailable"');
     expect(unavailableHtml).toContain("This browser does not support passkeys.");
@@ -430,18 +429,13 @@ describe("Astryx auth renderer", () => {
     await unmountAll(renderer);
   });
 
-  it("stays package-local, runtime-free, prototype-inactive, and absent from package exports", async () => {
+  it("stays runtime-free", async () => {
     const rendererSource = await readFile(
       new URL("./formless-ui-auth-renderer.tsx", import.meta.url),
       "utf8",
     );
-    const rootSource = await readFile(new URL("../root.tsx", import.meta.url), "utf8");
-    const packageJson = JSON.parse(
-      await readFile(new URL("../../package.json", import.meta.url), "utf8"),
-    ) as { exports?: Record<string, unknown> };
     const imports = importSpecifiers(rendererSource);
 
-    expect(imports).not.toContain("@dpeek/formless-ui");
     expect(
       imports.filter((specifier) =>
         /(?:^|\/)(?:src\/app|src\/client|instance-auth|gateway|storage|replica|routing|operation-controller)(?:\/|$)|\bwouter\b/.test(
@@ -452,22 +446,6 @@ describe("Astryx auth renderer", () => {
     expect(rendererSource).not.toMatch(
       /\bclassName\b|\buseEffect\b|\buseState\b|\blocalStorage\b|\bsessionStorage\b|\bdocument\.|\bwindow\.|\bfetch\(|\bcredentials\.|\bnavigator\./,
     );
-    expect(rendererSource).not.toContain("OTPInput");
-    expect(rendererSource).not.toContain("tailwind");
-    expect(Object.keys(packageJson.exports ?? {})).toEqual([
-      "./application/assembly",
-      "./application/global.css",
-      "./application/provider",
-      "./contract",
-      "./contract-host",
-      "./contract-host/react",
-      "./site/renderer",
-      "./site/global.css",
-      "./site/provider",
-    ]);
-    expect(rootSource).toContain("<FormlessAuthLayout />");
-    expect(rootSource).not.toContain("AstryxSubscribedAuthRenderer");
-    expect(rootSource).not.toContain("formless-ui-auth-renderer");
   });
 });
 

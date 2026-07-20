@@ -1,7 +1,7 @@
-# Workspace Operations and Browser Error Boundaries Post-Astryx
+# Workspace Operations and Browser Error Boundaries
 
-Status: backlog. Defer until the Astryx migration is complete. This is not
-shipped behavior. Shipped behavior lives in `openspec/specs/*/spec.md`.
+Status: backlog. This is not shipped behavior. Shipped behavior lives in
+`openspec/specs/*/spec.md`.
 
 ## Purpose
 
@@ -15,11 +15,7 @@ The target architecture keeps real, stepped Push progress while separating:
 - local diagnostic logging;
 - Gateway transport contracts;
 - browser-owned presentation copy;
-- renderer-neutral Astryx presentation contracts.
-
-Do not begin this work while instance management still needs to support both
-legacy and Astryx presentation paths. The operation-interaction and progress
-contracts should change once, against the completed Astryx management surface.
+- renderer-neutral presentation contracts.
 
 ## Problem
 
@@ -111,9 +107,10 @@ or persisted error arrays.
 
 ### Push progress
 
-The generated operation controller and Astryx presentation already support
-ordered progress steps. Runtime adapters can call `reportProgress`, generated
-operation state retains those updates, and Astryx renders pending progress.
+The generated operation controller and Formless Renderer presentation already
+support ordered progress steps. Runtime adapters can call `reportProgress`,
+generated operation state retains those updates, and the Formless Renderer
+renders pending progress.
 
 Production Gateway Push does not currently feed that capability correctly. The
 Gateway start path awaits the complete Push before returning its operation id,
@@ -164,15 +161,15 @@ save is not resumed. A later committed browser write schedules a new save.
 
 ## Target Ownership
 
-| Owner                             | Responsibilities                                                                                                                                                     |
-| --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Workspace package                 | Shared semantic operation inputs and identities only where multiple runtimes need them. No display vocabulary, logs, errors, summaries, or persisted browser state.  |
-| CLI/runtime domain                | Typed Push, Pull, Check, Status, Save, deployment, and credential results; execution orchestration; local exceptions and diagnostics; semantic Push progress events. |
-| Gateway package                   | Push status, waiting interactions, transport failure codes, active-operation reads, and auto-save status.                                                            |
-| Installed Apps package            | Existing install registry failure codes and bounded field facts.                                                                                                     |
-| Deploy and control-plane packages | Semantic deployment observation status, outcome, and failure codes. No arbitrary observed summary or error.                                                          |
-| Browser runtime                   | Gateway polling, interaction submission, semantic code and phase mapping, and source-owned presentation copy.                                                        |
-| Astryx contract and projection    | Final renderer-neutral progress, interaction, status, and feedback facts. No runtime diagnostics.                                                                    |
+| Owner                                     | Responsibilities                                                                                                                                                     |
+| ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Workspace package                         | Shared semantic operation inputs and identities only where multiple runtimes need them. No display vocabulary, logs, errors, summaries, or persisted browser state.  |
+| CLI/runtime domain                        | Typed Push, Pull, Check, Status, Save, deployment, and credential results; execution orchestration; local exceptions and diagnostics; semantic Push progress events. |
+| Gateway package                           | Push status, waiting interactions, transport failure codes, active-operation reads, and auto-save status.                                                            |
+| Installed Apps package                    | Existing install registry failure codes and bounded field facts.                                                                                                     |
+| Deploy and control-plane packages         | Semantic deployment observation status, outcome, and failure codes. No arbitrary observed summary or error.                                                          |
+| Browser runtime                           | Gateway polling, interaction submission, semantic code and phase mapping, and source-owned presentation copy.                                                        |
+| Formless Renderer contract and projection | Final renderer-neutral progress, interaction, status, and feedback facts. No runtime diagnostics.                                                                    |
 
 ## Typed Domain Execution
 
@@ -382,11 +379,10 @@ present, with the `workers.dev` subdomain as supporting detail. These are
 intentional provider facts needed for a user choice, not diagnostic strings.
 Validate their type and maximum size at the provider boundary.
 
-### Astryx account-selection UX
+### Formless Renderer account-selection UX
 
-After the Astryx migration, replace the management contract's specialized
-authorization-only field with one operation-interaction union. The presentation
-union should support:
+Replace the management contract's specialized authorization-only field with one
+operation-interaction union. The presentation union should support:
 
 - external authorization with one action button;
 - controlled single selection with options and a Continue button.
@@ -399,9 +395,9 @@ is required, it additionally shows:
 - optional supporting subdomain text;
 - a disabled Continue button until a choice is selected.
 
-Astryx already uses its Selector primitive in the management install dialog.
-The operation interaction should reuse that primitive rather than introduce a
-provider-specific renderer.
+The `@dpeek/formless-astryx` package already uses its Selector primitive in the
+management install dialog. The operation interaction should reuse that
+primitive rather than introduce a provider-specific renderer.
 
 The route runtime owns ephemeral selected-choice draft state. It resets the
 draft when the interaction id changes. Selection-change and submit are typed
@@ -526,8 +522,8 @@ Browser runtime owns exhaustive mappings from semantic facts to copy:
 - management-data code -> load failure presentation;
 - deployment observation code -> observation presentation.
 
-Astryx contracts receive only the mapped presentation facts. Once every input
-is structural and semantic, delete:
+Formless Renderer contracts receive only the mapped presentation facts. Once
+every input is structural and semantic, delete:
 
 - `src/app/routes/instance-management-display-safety.ts`;
 - `displaySafeText()` calls and tests;
@@ -580,8 +576,8 @@ recovery, waiting interaction, typed failure, and typed result facts.
 
 ## Ordered Implementation Slices
 
-Treat this as one coherent post-Astryx workstream. Partial completion must not
-leave a route where arbitrary diagnostics can enter renderer contracts.
+Treat this as one coherent workstream. Partial completion must not leave a route
+where arbitrary diagnostics can enter renderer contracts.
 
 ### 1. Semantic browser failures
 
@@ -607,13 +603,13 @@ leave a route where arbitrary diagnostics can enter renderer contracts.
 - Poll actual intermediate phase state.
 - Rediscover the current Push after page reload through Gateway status.
 
-### 4. Waiting interactions and Astryx UX
+### 4. Waiting interactions and renderer UX
 
 - Move credential preflight into Push orchestration.
 - Expose typed authorization waiting state.
 - Add operation-scoped account choice handles and submission.
-- Extend the completed Astryx management contract with the operation-interaction
-  union.
+- Extend the Formless Renderer management contract with the
+  operation-interaction union.
 - Add account Selector and Continue behavior to the pending Push card.
 
 ### 5. Remove superseded state
@@ -661,17 +657,3 @@ selection, success, no-change, failure, reload, and unavailable-sidecar states.
 - Multiple concurrent Push operations for one workspace.
 - Backwards-compatible parsing of deleted operation or auto-save state.
 - A generic workflow engine for all CLI commands.
-
-## Start Gate
-
-Start this work only after the project considers the Astryx migration complete.
-At that point, confirm that:
-
-- instance management has one canonical Astryx presentation path;
-- the legacy management renderer no longer constrains contract changes;
-- operation progress projection and intent dispatch are stable;
-- the Astryx management contract can accept one deliberate interaction-contract
-  revision without maintaining parallel shapes.
-
-Then create one Git-backed change workstream and revalidate this proposal
-against the current source before implementation.

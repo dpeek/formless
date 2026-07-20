@@ -1,9 +1,7 @@
-# Enum Field Post-Migration UX
+# Enum Field UX
 
 Status: backlog. This is not shipped behavior. Shipped behavior lives in
 `openspec/specs/*/spec.md`.
-
-After enum rendering reaches migration completeness, consider separately:
 
 ## Stored-value integrity
 
@@ -22,12 +20,13 @@ After enum rendering reaches migration completeness, consider separately:
 ## Options and presentation
 
 - Distinguish unavailable options from options that have not loaded yet.
-- Consider state-like badges or filled triggers beyond legacy semantic styling.
+- Consider state-like badges or filled triggers.
 - Consider color-only swatches and additional presentation-token families.
 - Consider rich icon and semantic-color presentation in Create and Operation forms.
 - Revisit empty labels, placeholders, and clearing behavior.
 - Consider field-level committed or success feedback.
 
-Each item needs an explicit foundation contract and product decision before it
-appears in fixtures or renderers. Astryx must not infer these behaviors from
-enum value names or raw presentation tokens.
+Each item needs an explicit renderer-neutral contract and product decision
+before it appears in fixtures or the Formless Renderer. The
+`@dpeek/formless-astryx` implementation must not infer these behaviors from enum
+value names or raw presentation tokens.

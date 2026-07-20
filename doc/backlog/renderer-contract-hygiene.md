@@ -1,11 +1,11 @@
-# Astryx Contract Hygiene
+# Formless Renderer Contract Hygiene
 
 Status: backlog. This is not shipped behavior. Shipped behavior lives in
 `openspec/specs/*/spec.md`.
 
-After the Astryx migration is complete, revisit the presentation contracts only
-if the current schema-shaped approach causes a concrete stability, ownership,
-or bundle problem.
+Revisit the Formless Renderer presentation contracts only if the current
+schema-shaped approach causes a concrete stability, ownership, or bundle
+problem.
 
 Possible improvements include removing renderer-unused facts, separating
 package-local fixture or session state from public renderer contracts, and
