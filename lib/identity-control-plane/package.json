@@ -15,8 +15,8 @@
     "test": "vp test --config ../../vite.config.ts --configLoader runner"
   },
   "dependencies": {
-    "@dpeek/formless-installed-apps": "^0.1.0",
-    "@dpeek/formless-schema": "^0.1.0",
-    "@dpeek/formless-storage": "^0.1.0"
+    "@dpeek/formless-installed-apps": "workspace:*",
+    "@dpeek/formless-schema": "workspace:*",
+    "@dpeek/formless-storage": "workspace:*"
   }
 }

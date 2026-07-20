@@ -26,10 +26,10 @@
   },
   "dependencies": {
     "@cf-wasm/resvg": "0.3.4",
-    "@dpeek/formless-media": "^0.1.0",
-    "@dpeek/formless-public-operations": "^0.1.0",
-    "@dpeek/formless-schema": "^0.1.0",
-    "@dpeek/formless-source-svg": "^0.1.0",
+    "@dpeek/formless-media": "workspace:*",
+    "@dpeek/formless-public-operations": "workspace:*",
+    "@dpeek/formless-schema": "workspace:*",
+    "@dpeek/formless-source-svg": "workspace:*",
     "react": "19.2.6",
     "react-dom": "19.2.6"
   }
