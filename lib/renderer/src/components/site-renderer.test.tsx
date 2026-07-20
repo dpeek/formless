@@ -1,13 +1,7 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, waitFor, type RenderResult } from "@testing-library/react";
-import {
-  createElement,
-  useState,
-  type ComponentPropsWithRef,
-  type ElementType,
-  type ReactNode,
-} from "react";
+import { act, fireEvent, render, waitFor, type RenderResult } from "@testing-library/react";
+import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import type {
@@ -58,551 +52,9 @@ vi.mock("@dpeek/formless-site-app/public/react", async (importOriginal) => {
   };
 });
 
-vi.mock("@astryxdesign/core/theme", () => ({
-  Theme: ({ children, mode }: { children: ReactNode; mode: string }) =>
-    createElement("div", { "data-component": "Theme", "data-mode": mode }, children),
-}));
-
-vi.mock("@astryxdesign/core/hooks", () => ({
+vi.mock("@astryxdesign/core/hooks", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@astryxdesign/core/hooks")>()),
   useMediaQuery: () => viewport.isMobile,
-}));
-
-vi.mock("@astryxdesign/core/Layout", () => ({
-  Layout: ({
-    content,
-    footer,
-    header,
-  }: {
-    content?: ReactNode;
-    footer?: ReactNode;
-    header?: ReactNode;
-  }) => createElement("div", { "data-component": "Layout" }, header, content, footer),
-  LayoutContent: ({ children, ...props }: ComponentPropsWithRef<"main">) =>
-    createElement("main", { ...props, "data-component": "LayoutContent" }, children),
-  LayoutFooter: ({ children }: { children: ReactNode }) =>
-    createElement("footer", { "data-component": "LayoutFooter" }, children),
-  LayoutHeader: ({ children }: { children: ReactNode }) =>
-    createElement("header", { "data-component": "LayoutHeader" }, children),
-}));
-
-vi.mock("@astryxdesign/core/TopNav", () => ({
-  TopNav: ({
-    centerContent,
-    endContent,
-    heading,
-    label,
-  }: {
-    centerContent?: ReactNode;
-    endContent?: ReactNode;
-    heading?: ReactNode;
-    label?: string;
-  }) =>
-    createElement(
-      "nav",
-      { "aria-label": label, "data-component": "TopNav" },
-      heading,
-      centerContent,
-      endContent,
-    ),
-  TopNavHeading: ({ heading, headingHref }: { heading: string; headingHref?: string }) =>
-    createElement("a", { "data-component": "TopNavHeading", href: headingHref }, heading),
-  TopNavItem: ({
-    isSelected,
-    label,
-    ...props
-  }: ComponentPropsWithRef<"a"> & {
-    isSelected?: boolean;
-    label: string;
-    "data-public-href"?: string;
-  }) =>
-    createElement(
-      "a",
-      {
-        ...props,
-        "aria-current": isSelected ? "page" : undefined,
-        "data-component": "TopNavItem",
-        "data-label": label,
-      },
-      label,
-    ),
-}));
-
-vi.mock("@astryxdesign/core/MobileNav", () => ({
-  MobileNav: ({
-    children,
-    isOpen,
-    label,
-  }: {
-    children: ReactNode;
-    isOpen: boolean;
-    label: string;
-  }) =>
-    createElement(
-      "aside",
-      {
-        "aria-label": label,
-        "data-component": "MobileNav",
-        "data-open": String(isOpen),
-      },
-      children,
-    ),
-}));
-
-vi.mock("@astryxdesign/core/SideNav", () => ({
-  SideNavSection: ({ children, title }: { children: ReactNode; title: string }) =>
-    createElement("section", { "data-component": "SideNavSection", "data-title": title }, children),
-  SideNavItem: ({
-    as,
-    href,
-    isSelected,
-    label,
-    onClick,
-  }: {
-    as?: ElementType;
-    href?: string;
-    isSelected?: boolean;
-    label: string;
-    onClick?: () => void;
-  }) => {
-    const Component = as ?? "a";
-    return createElement(
-      Component,
-      {
-        "aria-current": isSelected ? "page" : undefined,
-        "data-component": "SideNavItem",
-        "data-label": label,
-        href,
-        onClick,
-      },
-      label,
-    );
-  },
-}));
-
-vi.mock("@astryxdesign/core/IconButton", () => ({
-  IconButton: ({
-    "aria-pressed": ariaPressed,
-    "data-site-theme-control": themeControl,
-    icon,
-    label,
-    onClick,
-  }: {
-    "aria-pressed"?: boolean;
-    "data-site-theme-control"?: string;
-    icon: ReactNode;
-    label: string;
-    onClick?: () => void;
-  }) =>
-    createElement(
-      "button",
-      {
-        "aria-label": label,
-        "aria-pressed": ariaPressed,
-        "data-site-theme-control": themeControl,
-        onClick,
-        type: "button",
-      },
-      icon,
-    ),
-}));
-
-vi.mock("@astryxdesign/core/Button", () => ({
-  Button: ({
-    children,
-    href,
-    icon,
-    isDisabled,
-    isLoading,
-    label,
-    rel,
-    target,
-    variant: _variant,
-    ...props
-  }: ComponentPropsWithRef<"a"> & {
-    icon?: ReactNode;
-    isDisabled?: boolean;
-    isLoading?: boolean;
-    label: string;
-    variant?: string;
-  }) => {
-    const Component = href ? "a" : "button";
-    return createElement(
-      Component,
-      {
-        ...props,
-        "data-component": "Button",
-        "data-label": label,
-        "data-loading": isLoading || undefined,
-        disabled: isDisabled || undefined,
-        href,
-        rel,
-        target,
-      },
-      icon,
-      children ?? label,
-    );
-  },
-}));
-
-vi.mock("@astryxdesign/core/TextInput", () => ({
-  TextInput: ({
-    "data-public-fixed-field": fixedField,
-    htmlName,
-    inputMode,
-    isDisabled,
-    isLoading,
-    isRequired,
-    label,
-    onChange,
-    pattern,
-    status,
-    type = "text",
-    value,
-  }: {
-    "data-public-fixed-field"?: string;
-    htmlName?: string;
-    inputMode?: string;
-    isDisabled?: boolean;
-    isLoading?: boolean;
-    isRequired?: boolean;
-    label: string;
-    onChange?: (value: string) => void;
-    pattern?: string;
-    status?: { message?: string; type: string };
-    type?: string;
-    value?: string;
-  }) =>
-    createElement(
-      "label",
-      { "data-component": "TextInputField" },
-      label,
-      createElement("input", {
-        "aria-invalid": status?.type === "error" || undefined,
-        "data-component": "TextInput",
-        "data-loading": isLoading || undefined,
-        "data-public-fixed-field": fixedField,
-        disabled: isDisabled || undefined,
-        inputMode,
-        name: htmlName,
-        onChange: (event: { currentTarget: { value: string } }) =>
-          onChange?.(event.currentTarget.value),
-        required: isRequired || undefined,
-        pattern,
-        type,
-        value,
-      }),
-      status?.message ? createElement("span", { role: "alert" }, status.message) : null,
-    ),
-}));
-
-vi.mock("@astryxdesign/core/TextArea", () => ({
-  TextArea: ({
-    "data-public-fixed-field": fixedField,
-    htmlName,
-    isDisabled,
-    isLoading,
-    isRequired,
-    label,
-    onChange,
-    status,
-    value,
-  }: {
-    "data-public-fixed-field"?: string;
-    htmlName?: string;
-    isDisabled?: boolean;
-    isLoading?: boolean;
-    isRequired?: boolean;
-    label: string;
-    onChange?: (value: string) => void;
-    status?: { message?: string; type: string };
-    value?: string;
-  }) =>
-    createElement(
-      "label",
-      { "data-component": "TextAreaField" },
-      label,
-      createElement("textarea", {
-        "aria-invalid": status?.type === "error" || undefined,
-        "data-component": "TextArea",
-        "data-loading": isLoading || undefined,
-        "data-public-fixed-field": fixedField,
-        disabled: isDisabled || undefined,
-        name: htmlName,
-        onChange: (event: { currentTarget: { value: string } }) =>
-          onChange?.(event.currentTarget.value),
-        required: isRequired || undefined,
-        value,
-      }),
-      status?.message ? createElement("span", { role: "alert" }, status.message) : null,
-    ),
-}));
-
-vi.mock("@astryxdesign/core/CheckboxInput", () => ({
-  CheckboxInput: ({
-    isDisabled,
-    isLoading,
-    isRequired,
-    label,
-    onChange,
-    status,
-    value,
-  }: {
-    isDisabled?: boolean;
-    isLoading?: boolean;
-    isRequired?: boolean;
-    label: string;
-    onChange?: (value: boolean) => void;
-    status?: { message?: string; type: string };
-    value?: boolean;
-  }) =>
-    createElement(
-      "label",
-      { "data-component": "CheckboxInputField" },
-      label,
-      createElement("input", {
-        "aria-invalid": status?.type === "error" || undefined,
-        checked: value,
-        "data-component": "CheckboxInput",
-        "data-loading": isLoading || undefined,
-        disabled: isDisabled || undefined,
-        onChange: (event: { currentTarget: { checked: boolean } }) =>
-          onChange?.(event.currentTarget.checked),
-        required: isRequired || undefined,
-        type: "checkbox",
-      }),
-      status?.message ? createElement("span", { role: "alert" }, status.message) : null,
-    ),
-}));
-
-vi.mock("@astryxdesign/core/DateInput", () => ({
-  DateInput: ({
-    isDisabled,
-    isLoading,
-    isRequired,
-    label,
-    onChange,
-    status,
-    value,
-  }: {
-    isDisabled?: boolean;
-    isLoading?: boolean;
-    isRequired?: boolean;
-    label: string;
-    onChange?: (value: string | undefined) => void;
-    status?: { message?: string; type: string };
-    value?: string;
-  }) =>
-    createElement(
-      "label",
-      { "data-component": "DateInputField" },
-      label,
-      createElement("input", {
-        "aria-invalid": status?.type === "error" || undefined,
-        "data-component": "DateInput",
-        "data-loading": isLoading || undefined,
-        disabled: isDisabled || undefined,
-        onChange: (event: { currentTarget: { value: string } }) =>
-          onChange?.(event.currentTarget.value || undefined),
-        required: isRequired || undefined,
-        type: "date",
-        value: value ?? "",
-      }),
-      status?.message ? createElement("span", { role: "alert" }, status.message) : null,
-    ),
-}));
-
-vi.mock("@astryxdesign/core/Selector", () => ({
-  Selector: ({
-    isDisabled,
-    isLoading,
-    isRequired,
-    label,
-    onChange,
-    options,
-    status,
-    value,
-  }: {
-    isDisabled?: boolean;
-    isLoading?: boolean;
-    isRequired?: boolean;
-    label: string;
-    onChange?: (value: string | null) => void;
-    options: readonly { label: string; value: string }[];
-    status?: { message?: string; type: string };
-    value?: string | null;
-  }) =>
-    createElement(
-      "label",
-      { "data-component": "SelectorField" },
-      label,
-      createElement(
-        "select",
-        {
-          "aria-invalid": status?.type === "error" || undefined,
-          "data-component": "Selector",
-          "data-loading": isLoading || undefined,
-          disabled: isDisabled || undefined,
-          onChange: (event: { currentTarget: { value: string } }) =>
-            onChange?.(event.currentTarget.value || null),
-          required: isRequired || undefined,
-          value: value ?? "",
-        },
-        options.map((option) =>
-          createElement("option", { key: option.value, value: option.value }, option.label),
-        ),
-      ),
-      status?.message ? createElement("span", { role: "alert" }, status.message) : null,
-    ),
-}));
-
-vi.mock("@astryxdesign/core/Typeahead", () => ({
-  createStaticSource: (items: readonly unknown[]) => items,
-  Typeahead: ({
-    isDisabled,
-    isRequired,
-    label,
-    onChangeQuery,
-    status,
-    value,
-  }: {
-    isDisabled?: boolean;
-    isRequired?: boolean;
-    label: string;
-    onChangeQuery?: (value: string) => void;
-    status?: { message?: string; type: string };
-    value?: { label: string } | null;
-  }) => {
-    const [query, setQuery] = useState("");
-
-    return createElement(
-      "label",
-      { "data-component": "TypeaheadField" },
-      label,
-      createElement("input", {
-        "aria-invalid": status?.type === "error" || undefined,
-        "data-component": "Typeahead",
-        disabled: isDisabled || undefined,
-        onChange: (event: { currentTarget: { value: string } }) => {
-          setQuery(event.currentTarget.value);
-          onChangeQuery?.(event.currentTarget.value);
-        },
-        required: isRequired || undefined,
-        type: "text",
-        value: value?.label ?? query,
-      }),
-      status?.message ? createElement("span", { role: "alert" }, status.message) : null,
-    );
-  },
-}));
-
-vi.mock("@astryxdesign/core/Icon", () => ({
-  Icon: ({ icon }: { icon: ReactNode }) => createElement("span", null, icon),
-}));
-
-vi.mock("@astryxdesign/core/Link", () => ({
-  Link: ({
-    children,
-    "data-public-href": publicHref,
-    href,
-    isExternalLink: _isExternalLink,
-    isStandalone: _isStandalone,
-    label,
-    rel,
-    target,
-    tooltip,
-    ...props
-  }: ComponentPropsWithRef<"a"> & {
-    "data-public-href"?: string;
-    isExternalLink?: boolean;
-    isStandalone?: boolean;
-    label?: string;
-    tooltip?: string;
-  }) =>
-    createElement(
-      "a",
-      {
-        ...props,
-        "aria-label": label,
-        "data-public-href": publicHref,
-        href,
-        rel,
-        target,
-        title: tooltip,
-      },
-      children,
-    ),
-}));
-
-vi.mock("@astryxdesign/core/HStack", () => ({
-  HStack: ({
-    children,
-    "data-site-navigation-group": navigationGroup,
-    ...props
-  }: {
-    children: ReactNode;
-    "data-site-navigation-group"?: string;
-  } & Record<string, unknown>) =>
-    createElement("div", { ...props, "data-site-navigation-group": navigationGroup }, children),
-}));
-
-vi.mock("@astryxdesign/core/VStack", () => ({
-  VStack: ({
-    children,
-    ...props
-  }: {
-    children: ReactNode;
-  } & Record<string, unknown>) => createElement("div", props, children),
-}));
-
-vi.mock("@astryxdesign/core/Card", () => ({
-  Card: ({ children, ...props }: { children: ReactNode } & Record<string, unknown>) =>
-    createElement("article", { ...props, "data-component": "Card" }, children),
-}));
-
-vi.mock("@astryxdesign/core/Grid", () => ({
-  Grid: ({ children, ...props }: { children: ReactNode } & Record<string, unknown>) =>
-    createElement("div", { ...props, "data-component": "Grid" }, children),
-}));
-
-vi.mock("@astryxdesign/core/Markdown", () => ({
-  Markdown: ({
-    children,
-    components,
-    headingLevelStart,
-  }: {
-    children: string;
-    components?: { link?: ElementType };
-    headingLevelStart?: number;
-  }) => {
-    const linkMatch = children.match(/\[([^\]]+)\]\(([^)]+)\)/);
-    const LinkComponent = components?.link ?? "a";
-    const renderedChildren = linkMatch
-      ? [
-          children.slice(0, linkMatch.index),
-          createElement(LinkComponent, { href: linkMatch[2], key: linkMatch[2] }, linkMatch[1]),
-          children.slice((linkMatch.index ?? 0) + linkMatch[0].length),
-        ]
-      : children;
-
-    return createElement(
-      "div",
-      {
-        "data-component": "Markdown",
-        "data-heading-level-start": headingLevelStart,
-      },
-      renderedChildren,
-    );
-  },
-}));
-
-vi.mock("@astryxdesign/core/Text", () => ({
-  Heading: ({ children, level }: { children: ReactNode; level: number }) =>
-    createElement(`h${level}`, null, children),
-  Text: ({ children }: { children: ReactNode }) => createElement("p", null, children),
-}));
-
-vi.mock("@astryxdesign/core/NavIcon", () => ({
-  NavIcon: ({ icon }: { icon: ReactNode }) => createElement("span", null, icon),
 }));
 
 vi.mock("./field-primitives.tsx", () => ({
@@ -639,8 +91,8 @@ describe("Astryx public Site page shell", () => {
       "#contact",
     );
     expect(
-      renderer.container.querySelector('[data-component="TopNavHeading"]')?.getAttribute("href"),
-    ).toBe("/sites/astryx");
+      renderer.container.querySelector('a[href="/sites/astryx"]:not([data-public-href])'),
+    ).not.toBeNull();
     expect(
       Array.from(renderer.container.querySelectorAll("[data-site-navigation-group]"), (node) =>
         node.getAttribute("data-site-navigation-group"),
@@ -666,7 +118,7 @@ describe("Astryx public Site page shell", () => {
     );
     expect(github.href).toBe("https://github.com/dpeek");
     expect(github.target).toBe("_blank");
-    expect(github.rel).toBe("noreferrer");
+    expect(new Set(github.rel.split(" "))).toEqual(new Set(["noreferrer", "noopener"]));
     expect(rendererText(renderer)).toContain(
       "Product design and engineering for teams building ambitious software.",
     );
@@ -678,12 +130,10 @@ describe("Astryx public Site page shell", () => {
     viewport.isMobile = true;
     const renderer = await renderPage(withExternalHeaderLink(shellRendererProps()));
 
-    expect(renderer.container.querySelectorAll('[data-component="TopNavItem"]')).toHaveLength(0);
-    expect(
-      Array.from(renderer.container.querySelectorAll('[data-component="SideNavSection"]'), (node) =>
-        node.getAttribute("data-title"),
-      ),
-    ).toEqual(["Primary navigation", "Secondary navigation"]);
+    const topNav = required(renderer.container.querySelector('nav[aria-label="Header"]'));
+    expect(topNav.querySelectorAll("[data-public-href]")).toHaveLength(0);
+    const mobileNav = required(renderer.container.querySelector('dialog[aria-label="Header"]'));
+    expect(groupLabels(mobileNav)).toEqual(["Primary navigation", "Secondary navigation"]);
     expect(componentLabels(renderer, "SideNavItem")).toEqual([
       "Home",
       "Work",
@@ -699,12 +149,9 @@ describe("Astryx public Site page shell", () => {
       "page",
     );
 
-    const mobileNav = required(renderer.container.querySelector('[data-component="MobileNav"]'));
-    expect(mobileNav.getAttribute("data-open")).toBe("false");
+    expect(mobileNav).toHaveProperty("open", false);
     fireEvent.click(required(renderer.container.querySelector('[aria-label="Open navigation"]')));
-    expect(
-      renderer.container.querySelector('[data-component="MobileNav"]')?.getAttribute("data-open"),
-    ).toBe("true");
+    expect(mobileNav).toHaveProperty("open", true);
 
     await unmount(renderer);
   });
@@ -714,7 +161,7 @@ describe("Astryx public Site page shell", () => {
     const renderer = await renderPage(shellRendererProps());
 
     expect(
-      renderer.container.querySelector('[data-component="Theme"]')?.getAttribute("data-mode"),
+      renderer.container.querySelector("[data-site-theme]")?.getAttribute("data-site-theme"),
     ).toBe("light");
     const toggle = required(
       renderer.container.querySelector<HTMLButtonElement>('[aria-label="Switch to dark mode"]'),
@@ -724,7 +171,7 @@ describe("Astryx public Site page shell", () => {
     fireEvent.click(toggle);
 
     expect(
-      renderer.container.querySelector('[data-component="Theme"]')?.getAttribute("data-mode"),
+      renderer.container.querySelector("[data-site-theme]")?.getAttribute("data-site-theme"),
     ).toBe("dark");
     expect(
       renderer.container
@@ -746,12 +193,8 @@ describe("Astryx public Site page shell", () => {
       const renderer = await renderPage(shellRendererProps(frame));
 
       expect(rendererText(renderer)).toContain("Clear digital products for ambitious teams.");
-      expect(renderer.container.querySelectorAll('[data-component="TopNav"]').length > 0).toBe(
-        hasHeader,
-      );
-      expect(
-        renderer.container.querySelectorAll('[data-component="LayoutFooter"]').length > 0,
-      ).toBe(hasFooter);
+      expect(renderer.container.querySelector('nav[aria-label="Header"]') !== null).toBe(hasHeader);
+      expect(renderer.container.querySelector("[data-site-footer-group]") !== null).toBe(hasFooter);
 
       await unmount(renderer);
     },
@@ -858,13 +301,15 @@ describe("Astryx public Site structural blocks", () => {
       [2, "A clear opening"],
       [2, "Placed group label"],
       [3, "Nested section"],
+      [5, "Section detail"],
       [4, "Capabilities"],
       [5, "Direction"],
+      [6, "Card detail"],
       [5, "Delivery"],
       [4, "Outcomes"],
       [2, "Closing notes"],
+      [3, "Closing detail"],
     ]);
-    expect(markdownHeadingStarts(renderer)).toEqual([2, 4, 5, 6, 5, 5, 3]);
     expect(rendererText(renderer)).toContain("First paragraph.");
     expect(rendererText(renderer)).toContain("Second paragraph.");
 
@@ -1002,7 +447,9 @@ describe("Astryx public Site links, source icons, and media", () => {
       renderer.container.querySelector('[data-public-href="https://example.com/reference"]'),
     );
     expect(inlineExternal.getAttribute("target")).toBe("_blank");
-    expect(inlineExternal.getAttribute("rel")).toBe("noreferrer");
+    expect(new Set(inlineExternal.getAttribute("rel")?.split(" "))).toEqual(
+      new Set(["noreferrer", "noopener"]),
+    );
 
     const action = componentByLabel(renderer, "Button", "Start now");
     expect(action.getAttribute("href")).toBe("/sites/astryx/contact");
@@ -1021,7 +468,7 @@ describe("Astryx public Site links, source icons, and media", () => {
     expect(social.getAttribute("data-site-social-link")).toBe("true");
     expect(social.getAttribute("aria-label")).toBe("GitHub");
     expect(social.target).toBe("_blank");
-    expect(social.rel).toBe("noreferrer");
+    expect(new Set(social.rel.split(" "))).toEqual(new Set(["noreferrer", "noopener"]));
     expect(social.querySelector('[data-source="github"]')).not.toBeNull();
 
     await unmount(renderer);
@@ -1236,7 +683,7 @@ describe("Astryx public Site lists, summaries, and post detail", () => {
       projectCard.querySelector<HTMLAnchorElement>('a[href="https://example.com/reference"]'),
     );
     expect(nestedReference.target).toBe("_blank");
-    expect(nestedReference.rel).toBe("noreferrer");
+    expect(new Set(nestedReference.rel.split(" "))).toEqual(new Set(["noreferrer", "noopener"]));
     expect(
       Array.from(renderer.container.querySelectorAll("p"), (node) => node.textContent),
     ).toEqual(expect.arrayContaining(["No published posts yet.", "No published projects yet."]));
@@ -1351,7 +798,7 @@ describe("Astryx public Site subscribe and contact forms", () => {
 
     const fields = fixedFields(renderer);
     expect(fields.map((field) => field.getAttribute("name"))).toEqual(["name", "email", "message"]);
-    expect(fields.every((field) => (field as HTMLInputElement).required)).toBe(true);
+    expect(fields.every((field) => field.getAttribute("aria-required") === "true")).toBe(true);
     expect(fields.map((field) => (field as HTMLInputElement).value)).toEqual(["", "", ""]);
     expect(componentByLabel(renderer, "Button", "Send enquiry").hasAttribute("disabled")).toBe(
       true,
@@ -1406,7 +853,7 @@ describe("Astryx public Site subscribe and contact forms", () => {
     expect(
       renderer.container.querySelectorAll('[data-component="SitePublicTurnstileChallenge"]'),
     ).toHaveLength(0);
-    expect(renderer.container.querySelectorAll('[data-component="Button"]')).toHaveLength(0);
+    expect(componentLabels(renderer, "Button")).toHaveLength(0);
 
     await unmount(renderer);
   });
@@ -1443,9 +890,9 @@ describe("Astryx public Site subscribe and contact forms", () => {
         .querySelector('[data-public-form-challenge="turnstile"]')
         ?.getAttribute("aria-disabled"),
     ).toBe("true");
-    expect(
-      componentByLabel(renderer, "Button", "Subscribing...").getAttribute("data-loading"),
-    ).toBe("true");
+    expect(componentByLabel(renderer, "Button", "Subscribing...").getAttribute("aria-busy")).toBe(
+      "true",
+    );
 
     response.resolve(Response.json(publicSubscribeCommandResponse()));
     await waitFor(() => expect(fixedFormSurface(renderer, "success")).toBeDefined());
@@ -1453,7 +900,7 @@ describe("Astryx public Site subscribe and contact forms", () => {
     expect(fixedFormSurface(renderer, "success")).toBeDefined();
     expect(rendererText(renderer)).toContain("You're on the list.");
     expect(fixedField(renderer, "email").disabled).toBe(true);
-    expect(renderer.container.querySelectorAll('[data-component="Button"]')).toHaveLength(0);
+    expect(componentLabels(renderer, "Button")).toHaveLength(0);
 
     await unmount(renderer);
   });
@@ -1515,9 +962,9 @@ describe("Astryx public Site generic operation form", () => {
 
     expect(publicOperationFormSurface(renderer, "ready")).toBeDefined();
     expect(publicOperationFields(renderer)).toHaveLength(9);
-    expect(publicOperationControl(renderer, "name", "TextInput").hasAttribute("required")).toBe(
-      true,
-    );
+    expect(
+      publicOperationControl(renderer, "name", "TextInput").getAttribute("aria-required"),
+    ).toBe("true");
     expect(publicOperationControl(renderer, "details", "TextArea")).toBeDefined();
     expect(
       (publicOperationControl(renderer, "approved", "CheckboxInput") as HTMLInputElement).checked,
@@ -1613,15 +1060,15 @@ describe("Astryx public Site generic operation form", () => {
     expect(publicOperationControl(renderer, "title", "TextInput").hasAttribute("disabled")).toBe(
       true,
     );
-    expect(
-      publicOperationControl(renderer, "title", "TextInput").getAttribute("data-loading"),
-    ).toBe("true");
+    expect(publicOperationControl(renderer, "title", "TextInput").getAttribute("aria-busy")).toBe(
+      "true",
+    );
     expect(
       renderer.container
         .querySelector('[data-public-form-challenge="turnstile"]')
         ?.getAttribute("aria-disabled"),
     ).toBe("true");
-    expect(componentByLabel(renderer, "Button", "Sending...").getAttribute("data-loading")).toBe(
+    expect(componentByLabel(renderer, "Button", "Sending...").getAttribute("aria-busy")).toBe(
       "true",
     );
 
@@ -1630,7 +1077,7 @@ describe("Astryx public Site generic operation form", () => {
 
     expect(publicOperationFormSurface(renderer, "success")).toBeDefined();
     expect(rendererText(renderer)).toContain("Request received.");
-    expect(renderer.container.querySelectorAll('[data-component="Button"]')).toHaveLength(0);
+    expect(componentLabels(renderer, "Button")).toHaveLength(0);
 
     await unmount(renderer);
   });
@@ -1697,7 +1144,7 @@ describe("Astryx public Site generic operation form", () => {
     expect(
       renderer.container.querySelectorAll('[data-component="SitePublicTurnstileChallenge"]'),
     ).toHaveLength(0);
-    expect(renderer.container.querySelectorAll('[data-component="Button"]')).toHaveLength(0);
+    expect(componentLabels(renderer, "Button")).toHaveLength(0);
 
     await unmount(renderer);
   });
@@ -1963,11 +1410,20 @@ function publicOperationControl(
   renderer: RenderResult,
   name: string,
   component: string,
-): HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement {
+): HTMLButtonElement | HTMLInputElement | HTMLTextAreaElement {
+  const selectors: Record<string, string> = {
+    CheckboxInput: 'input[type="checkbox"]',
+    DateInput: 'input[role="combobox"]',
+    Selector: 'button[role="combobox"]',
+    TextArea: "textarea",
+    TextInput: 'input:not([type="hidden"])',
+    Typeahead: 'input[role="combobox"]',
+  };
+
   return required(
     publicOperationField(renderer, name).querySelector<
-      HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
-    >(`[data-component="${component}"]`),
+      HTMLButtonElement | HTMLInputElement | HTMLTextAreaElement
+    >(required(selectors[component])),
   );
 }
 
@@ -1976,17 +1432,43 @@ async function changePublicOperationField(
   name: string,
   value: string | boolean,
 ) {
+  const field = publicOperationField(renderer, name);
+  const controlKind = field.getAttribute("data-public-field-control");
+
+  if (controlKind === "boolean") {
+    const control = required(field.querySelector<HTMLInputElement>('input[type="checkbox"]'));
+    if (control.checked !== value) {
+      fireEvent.click(control);
+    }
+    return;
+  }
+
+  if (controlKind === "enum") {
+    fireEvent.click(required(field.querySelector<HTMLButtonElement>('button[role="combobox"]')));
+    const option = Array.from(field.querySelectorAll<HTMLElement>('[role="option"]')).find(
+      (candidate) => candidate.textContent?.trim().toLowerCase() === String(value).toLowerCase(),
+    );
+    fireEvent.click(required(option));
+    return;
+  }
+
   const control = required(
-    publicOperationField(renderer, name).querySelector<
-      HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
-    >(
-      '[data-component="TextInput"], [data-component="TextArea"], [data-component="CheckboxInput"], [data-component="DateInput"], [data-component="Selector"], [data-component="Typeahead"]',
+    field.querySelector<HTMLInputElement | HTMLTextAreaElement>(
+      'textarea, input[role="combobox"], input:not([type="hidden"])',
     ),
   );
 
   fireEvent.change(control, {
-    target: typeof value === "boolean" ? { checked: value } : { value },
+    target: { value },
   });
+
+  if (controlKind === "date") {
+    fireEvent.blur(control);
+  }
+
+  if (control.getAttribute("role") === "combobox" && controlKind === "text") {
+    await act(() => new Promise((resolve) => setTimeout(resolve, 200)));
+  }
 }
 
 async function solvePublicOperationChallenge(renderer: RenderResult, token: string) {
@@ -2070,11 +1552,7 @@ async function renderPage(props: SitePublicRendererProps) {
 }
 
 function componentLabels(renderer: RenderResult, component: string): string[] {
-  return Array.from(
-    renderer.container.querySelectorAll<HTMLElement>(`[data-component="${component}"]`),
-  )
-    .map((node) => node.getAttribute("data-label"))
-    .filter((label): label is string => typeof label === "string");
+  return componentElements(renderer, component).map(accessibleLabel);
 }
 
 function publicFormKinds(renderer: RenderResult): string[] {
@@ -2085,9 +1563,31 @@ function publicFormKinds(renderer: RenderResult): string[] {
 
 function componentByLabel(renderer: RenderResult, component: string, label: string): HTMLElement {
   return required(
-    renderer.container.querySelector<HTMLElement>(
-      `[data-component="${component}"][data-label="${label}"]`,
-    ),
+    componentElements(renderer, component).find((node) => accessibleLabel(node) === label),
+  );
+}
+
+function componentElements(renderer: RenderResult, component: string): HTMLElement[] {
+  const selector =
+    component === "TopNavItem"
+      ? "[data-site-navigation-group] a"
+      : component === "SideNavItem"
+        ? "dialog a"
+        : "button, a[data-site-action-link]";
+
+  return Array.from(renderer.container.querySelectorAll<HTMLElement>(selector));
+}
+
+function accessibleLabel(node: HTMLElement): string {
+  return node.getAttribute("aria-label") ?? node.textContent?.replace(/\s+/g, " ").trim() ?? "";
+}
+
+function groupLabels(root: Element): string[] {
+  return Array.from(root.querySelectorAll<HTMLElement>('[role="group"][aria-labelledby]')).map(
+    (group) => {
+      const id = group.getAttribute("aria-labelledby");
+      return id ? (root.ownerDocument.getElementById(id)?.textContent ?? "") : "";
+    },
   );
 }
 
@@ -2110,14 +1610,6 @@ function headingOutline(renderer: RenderResult): Array<[number, string]> {
 
     return [Number(type.slice(1)), text] as [number, string];
   });
-}
-
-function markdownHeadingStarts(renderer: RenderResult): number[] {
-  return Array.from(
-    renderer.container.querySelectorAll<HTMLElement>(
-      '[data-component="Markdown"][data-heading-level-start]',
-    ),
-  ).map((node) => Number(node.getAttribute("data-heading-level-start")));
 }
 
 async function unmount(renderer: RenderResult) {

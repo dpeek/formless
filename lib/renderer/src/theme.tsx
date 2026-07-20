@@ -1,5 +1,5 @@
 import { Theme } from "@astryxdesign/core";
-import { neutralTheme } from "@astryxdesign/theme-neutral";
+import { neutralTheme } from "@astryxdesign/theme-neutral/built";
 import type { ReactNode } from "react";
 import type { DocumentThemeContract } from "@dpeek/formless-presentation/contract";
 

@@ -2,8 +2,7 @@
 
 import { act, fireEvent, render } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { createElement, type ComponentProps } from "react";
-import { describe, expect, it, vi } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 import type {
   ListContract,
   RecordResultContract,
@@ -25,10 +24,6 @@ import {
   AstryxSubscribedWorkspaceScreenRenderer,
   AstryxWorkspaceScreenRenderer,
 } from "./workspace-screen-renderer.tsx";
-
-vi.mock("@astryxdesign/core/Button", () => ({
-  Button: (props: ComponentProps<"button">) => createElement("button", props),
-}));
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 

@@ -426,7 +426,7 @@ export async function runFormlessCli(
         },
         dependencies,
         {
-          devCommand: workspaceDevServerCommandForEnv(dependencies.env, dependencies.packageRoot),
+          devCommand: workspaceDevServerCommandForEnv(dependencies.env),
         },
       );
       return;
@@ -503,11 +503,10 @@ export async function runFormlessCli(
 
 function workspaceDevServerCommandForEnv(
   env: NodeJS.ProcessEnv,
-  packageRoot: string,
 ): FormlessInstanceWorkspaceDevCommand {
   const command: FormlessInstanceWorkspaceDevCommand = {
-    args: ["dev"],
-    command: path.join(packageRoot, "node_modules/.bin/vp"),
+    args: ["run", "--bun", "vp", "dev"],
+    command: "bun",
     label: "vp dev",
   };
   const extraArgs: string[] = [];
@@ -721,9 +720,7 @@ export async function runFormlessInstanceWorkspaceDev(
 ): Promise<void> {
   return runFormlessInstanceWorkspaceDevCommand(input, {
     ...dependencies,
-    devCommand:
-      options.devCommand ??
-      workspaceDevServerCommandForEnv(dependencies.env, dependencies.packageRoot),
+    devCommand: options.devCommand ?? workspaceDevServerCommandForEnv(dependencies.env),
     packageVersion: packageJson.version,
   });
 }

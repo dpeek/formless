@@ -183,6 +183,35 @@ preparation.
 - **AND** those runtime builds are not treated as compilation of the package
   executable
 
+#### Scenario: Installed package contains the runtime build host
+
+- **GIVEN** the Formless package is installed outside the source monorepo
+- **WHEN** `formless dev`, `formless push`, or another declared operation starts
+  a browser or Worker build
+- **THEN** the installed package contains the TypeScript CLI, package-owned
+  runtime Vite configuration, browser shell, Worker configuration and
+  entrypoints, and runtime source and assets required by that build
+- **AND** Vite+ and the runtime build plugins and adapters used by the operation
+  are direct installed runtime dependencies rather than monorepo-only or
+  development-only dependencies
+- **AND** the operation invokes the package-local Vite+ executable from the
+  installed Formless package root
+- **AND** tests, fixtures, and files not required by the installed runtime are
+  excluded from the published package payload
+
+#### Scenario: Verify a packed Formless installation
+
+- **GIVEN** release tarballs are installed with Bun in an isolated workspace
+  without monorepo dependency hoisting
+- **WHEN** release verification invokes the CLI and its runtime build setup
+- **THEN** CLI help executes directly from the published TypeScript source
+- **AND** the bundled browser and Worker production build succeeds with the
+  default published renderer
+- **AND** a production build succeeds with trusted workspace browser and Worker
+  renderer extensions
+- **AND** no operation resolves unpublished monorepo source or undeclared
+  development dependencies
+
 ### Requirement: Workspace Operation Definitions
 
 The workspace package SHALL own runtime-neutral workspace operation definitions

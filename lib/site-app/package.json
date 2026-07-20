@@ -2,10 +2,14 @@
   "name": "@dpeek/formless-site-app",
   "version": "0.1.0",
   "files": [
+    "dist",
     "formless.app.json",
     "schema.json",
     "seed-records.json",
-    "src"
+    "src",
+    "!src/**/*.test.*",
+    "!src/**/*-fixtures.ts",
+    "!src/**/test-*.ts"
   ],
   "type": "module",
   "exports": {
@@ -19,10 +23,36 @@
     "./seed-records.json": "./seed-records.json"
   },
   "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.mts",
+        "import": "./dist/index.mjs"
+      },
+      "./react": {
+        "types": "./dist/react.d.mts",
+        "import": "./dist/react.mjs"
+      },
+      "./public/react": {
+        "types": "./dist/public-react.d.mts",
+        "import": "./dist/public-react.mjs"
+      },
+      "./worker": {
+        "types": "./dist/worker.d.mts",
+        "import": "./dist/worker.mjs"
+      },
+      "./node": {
+        "types": "./dist/node.d.mts",
+        "import": "./dist/node.mjs"
+      },
+      "./formless.app.json": "./formless.app.json",
+      "./schema.json": "./schema.json",
+      "./seed-records.json": "./seed-records.json"
+    },
     "access": "public"
   },
   "scripts": {
-    "check": "vp check --fix && vp test --configLoader runner"
+    "check": "vp check --fix && vp test --configLoader runner",
+    "pack": "vp pack src/index.ts src/react.tsx src/public-react.tsx src/worker.ts src/node.ts"
   },
   "dependencies": {
     "@cf-wasm/resvg": "0.3.4",

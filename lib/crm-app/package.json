@@ -2,10 +2,14 @@
   "name": "@dpeek/formless-crm-app",
   "version": "0.1.0",
   "files": [
+    "dist",
     "formless.app.json",
     "schema.json",
     "seed-records.json",
-    "src"
+    "src",
+    "!src/**/*.test.*",
+    "!src/**/*-fixtures.ts",
+    "!src/**/test-*.ts"
   ],
   "type": "module",
   "exports": {
@@ -15,6 +19,18 @@
     "./seed-records.json": "./seed-records.json"
   },
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.mts",
+        "import": "./dist/index.mjs"
+      },
+      "./formless.app.json": "./formless.app.json",
+      "./schema.json": "./schema.json",
+      "./seed-records.json": "./seed-records.json"
+    }
+  },
+  "scripts": {
+    "pack": "vp pack src/index.ts"
   }
 }

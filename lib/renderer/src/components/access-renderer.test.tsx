@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 
 import { fireEvent, render, within } from "@testing-library/react";
-import { createElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vite-plus/test";
 import type {
@@ -33,262 +32,6 @@ import {
   AstryxSubscribedAccessRenderer,
   astryxAccessFeedbackToastOptions,
 } from "./access-renderer.tsx";
-
-vi.mock("@astryxdesign/core/AlertDialog", () => ({
-  AlertDialog: ({
-    actionLabel,
-    cancelLabel,
-    description,
-    isOpen,
-    onAction,
-    onOpenChange,
-    title,
-    ...props
-  }: {
-    actionLabel: string;
-    cancelLabel?: string;
-    description: string;
-    isOpen: boolean;
-    onAction: () => void;
-    onOpenChange: (open: boolean) => void;
-    title: string;
-    [key: `data-${string}`]: string | undefined;
-  }) =>
-    isOpen
-      ? createElement(
-          "div",
-          {
-            ...dataAttributes(props),
-            "aria-label": title,
-            onAction,
-            onOpenChange,
-            role: "alertdialog",
-          },
-          createElement("h2", undefined, title),
-          createElement("p", undefined, description),
-          createElement("button", { onClick: () => onOpenChange(false) }, cancelLabel),
-          createElement("button", { onClick: onAction }, actionLabel),
-        )
-      : null,
-}));
-
-vi.mock("@astryxdesign/core/Button", () => ({
-  Button: ({
-    children,
-    isDisabled,
-    isLoading,
-    label,
-    onClick,
-    type,
-    ...props
-  }: {
-    children?: ReactNode;
-    isDisabled?: boolean;
-    isLoading?: boolean;
-    label: string;
-    onClick?: () => void;
-    type?: "button" | "submit";
-    [key: `data-${string}`]: string | undefined;
-  }) =>
-    createElement(
-      "button",
-      {
-        ...dataAttributes(props),
-        "aria-busy": isLoading || undefined,
-        "aria-label": label,
-        disabled: isDisabled,
-        onClick,
-        type,
-      },
-      children,
-    ),
-}));
-
-vi.mock("@astryxdesign/core/Dialog", () => ({
-  Dialog: ({
-    children,
-    isOpen,
-    onOpenChange,
-    purpose,
-    ...props
-  }: {
-    children: ReactNode;
-    isOpen: boolean;
-    onOpenChange: (open: boolean) => void;
-    purpose?: string;
-    [key: string]: unknown;
-  }) =>
-    isOpen
-      ? createElement(
-          "dialog",
-          { ...props, "data-purpose": purpose, open: true, role: "dialog" },
-          children,
-          createElement(
-            "button",
-            {
-              "aria-label": `Close ${String(props["aria-label"])}`,
-              onClick: () => onOpenChange(false),
-              type: "button",
-            },
-            "Close",
-          ),
-        )
-      : null,
-  DialogHeader: ({
-    subtitle,
-    title,
-  }: {
-    onOpenChange: (open: boolean) => void;
-    subtitle?: string;
-    title: string;
-  }) =>
-    createElement(
-      "header",
-      undefined,
-      createElement("h2", undefined, title),
-      subtitle ? createElement("p", undefined, subtitle) : null,
-    ),
-}));
-
-vi.mock("@astryxdesign/core/TextInput", () => ({
-  TextInput: ({
-    isRequired,
-    label,
-    onChange,
-    status,
-    value,
-    ...props
-  }: {
-    isRequired?: boolean;
-    label: string;
-    onChange?: (value: string) => void;
-    status?: { message?: string; type: string };
-    value: string;
-    [key: string]: unknown;
-  }) =>
-    createElement(
-      "label",
-      undefined,
-      label,
-      createElement("input", {
-        ...dataAttributes(props),
-        "aria-invalid": status?.type === "error" || undefined,
-        "aria-label": label,
-        onChange: (event: { currentTarget: { value: string } }) =>
-          onChange?.(event.currentTarget.value),
-        required: isRequired || undefined,
-        value,
-      }),
-      status?.message ? createElement("span", { role: "alert" }, status.message) : null,
-    ),
-}));
-
-vi.mock("@astryxdesign/core/DateTimeInput", () => ({
-  DateTimeInput: ({
-    label,
-    value,
-    ...props
-  }: {
-    label: string;
-    value?: string;
-    [key: string]: unknown;
-  }) =>
-    createElement(
-      "label",
-      undefined,
-      label,
-      createElement("input", {
-        ...dataAttributes(props),
-        "aria-label": label,
-        type: "datetime-local",
-        value,
-      }),
-    ),
-}));
-
-vi.mock("@astryxdesign/core/Selector", () => ({
-  Selector: ({
-    isRequired,
-    label,
-    onChange,
-    options,
-    value,
-    ...props
-  }: {
-    isRequired?: boolean;
-    label: string;
-    onChange?: (value: string) => void;
-    options: readonly { label: string; value: string }[];
-    value?: string;
-    [key: string]: unknown;
-  }) =>
-    createElement(
-      "label",
-      undefined,
-      label,
-      createElement(
-        "select",
-        {
-          ...dataAttributes(props),
-          "aria-label": label,
-          onChange: (event: { currentTarget: { value: string } }) =>
-            onChange?.(event.currentTarget.value),
-          required: isRequired || undefined,
-          value,
-        },
-        options.map((option) =>
-          createElement("option", { key: option.value, value: option.value }, option.label),
-        ),
-      ),
-    ),
-}));
-
-vi.mock("@astryxdesign/core/MultiSelector", () => ({
-  MultiSelector: ({
-    description,
-    hasSearch,
-    hasSelectAll,
-    label,
-    onChange,
-    options,
-    status,
-    value,
-    ...props
-  }: {
-    description?: string;
-    hasSearch?: boolean;
-    hasSelectAll?: boolean;
-    label: string;
-    onChange?: (value: string[]) => void;
-    options: readonly { title: string }[];
-    status?: { message?: string; type: string };
-    value: readonly string[];
-    [key: string]: unknown;
-  }) =>
-    createElement(
-      "label",
-      undefined,
-      label,
-      createElement("input", {
-        ...dataAttributes(props),
-        "aria-invalid": status?.type === "error" || undefined,
-        "aria-label": label,
-        "data-description": description,
-        "data-has-search": String(Boolean(hasSearch)),
-        "data-has-select-all": String(Boolean(hasSelectAll)),
-        "data-option-groups": options.map((group) => group.title).join("|"),
-        onChange: (event: { currentTarget: { value: string } }) =>
-          onChange?.(event.currentTarget.value.split(",")),
-        value: value.join(","),
-      }),
-      status?.message ? createElement("span", { role: "alert" }, status.message) : null,
-    ),
-}));
-
-vi.mock("@astryxdesign/core/Spinner", () => ({
-  Spinner: ({ "aria-label": label }: { "aria-label"?: string }) =>
-    createElement("span", { "aria-label": label, role: "status" }),
-}));
 
 vi.mock("@astryxdesign/core/Toast", () => ({
   useToast: () => () => undefined,
@@ -389,45 +132,26 @@ describe("Astryx access renderer", () => {
     );
     const queries = within(container);
     const dialog = queries.getByRole("dialog", { name: "Invite person" });
-    const textFields = ["Email", "Name"].map((label) =>
-      queries.getByLabelText<HTMLInputElement>(label),
-    );
-    const selectors = ["Surface", "Scope"].map((label) =>
-      queries.getByLabelText<HTMLSelectElement>(label),
-    );
-    const grantSelectors = ["Roles", "Memberships"].map((label) =>
-      queries.getByLabelText<HTMLInputElement>(label),
-    );
+    const emailField = queries.getByRole<HTMLInputElement>("textbox", { name: /^Email/ });
+    const nameField = queries.getByRole<HTMLInputElement>("textbox", { name: /^Name/ });
+    const surfaceSelector = queries.getByRole("combobox", { name: /^Surface/ });
+    const scopeSelector = queries.getByRole("combobox", { name: /^Scope/ });
+    const roleSelector = queries.getByRole("combobox", { name: /^Roles/ });
+    const membershipSelector = queries.getByRole("combobox", { name: /^Memberships/ });
 
     expect(dialog).toHaveProperty("open", true);
-    expect(dialog.getAttribute("data-purpose")).toBe("form");
-    expect(textFields.map((field) => [field.getAttribute("aria-label"), field.value])).toEqual([
-      ["Email", "invitee@example.com"],
-      ["Name", "Grace Hopper"],
-    ]);
-    expect(textFields[0]?.getAttribute("aria-invalid")).toBe("true");
+    expect([emailField.value, nameField.value]).toEqual(["invitee@example.com", "Grace Hopper"]);
+    expect(emailField.getAttribute("aria-invalid")).toBe("true");
     expect(queries.getAllByRole("alert").map((alert) => alert.textContent)).toContain(emailError);
-    expect(
-      selectors.map((selector) => [selector.getAttribute("aria-label"), selector.value]),
-    ).toEqual([
-      ["Surface", "organization"],
-      ["Scope", "analytical-engine"],
-    ]);
-    expect(selectors[0]?.required).toBe(false);
-    expect(selectors[1]?.required).toBe(false);
-    expect(grantSelectors).toHaveLength(2);
-    expect(grantSelectors[0]?.getAttribute("data-option-groups")).toBe("Instance|Organization");
-    expect(grantSelectors[0]?.getAttribute("data-has-search")).toBe("false");
-    expect(grantSelectors[0]?.getAttribute("data-has-select-all")).toBe("false");
-    expect(grantSelectors[0]?.getAttribute("aria-invalid")).toBe("true");
-    expect(grantSelectors[0]?.getAttribute("data-description")).toBe(
+    expect(surfaceSelector.textContent).toContain("Organization");
+    expect(scopeSelector.textContent).toContain("Analytical Engine");
+    expect(roleSelector.textContent).toContain("Instance role 1");
+    expect(roleSelector.getAttribute("aria-invalid")).toBe("true");
+    expect(membershipSelector.getAttribute("aria-disabled")).toBe("true");
+    expect(container.textContent).toContain(
       "Instance role 6: Instance administrators cannot be invited.",
     );
-    expect(grantSelectors[1]?.getAttribute("data-option-groups")).toBe("Organizations|Groups");
-    expect(grantSelectors[1]?.getAttribute("data-has-select-all")).toBe("false");
-    expect(grantSelectors[1]?.getAttribute("data-description")).toBe(
-      "Membership grants are unavailable while sending.",
-    );
+    expect(container.textContent).toContain("Membership grants are unavailable while sending.");
 
     const html = renderToStaticMarkup(
       <AstryxAccessInvitationAuthoringContent authoring={authoring} onIntent={() => undefined} />,
@@ -497,17 +221,15 @@ describe("Astryx access renderer", () => {
     const authoringQueries = within(authoringRender.container);
     const accessQueries = within(accessRender.container);
 
-    fireEvent.change(authoringQueries.getByLabelText("Email"), {
+    fireEvent.change(authoringQueries.getByRole("textbox", { name: /^Email/ }), {
       target: { value: "next@example.com" },
     });
-    fireEvent.change(authoringQueries.getByLabelText("Surface"), {
-      target: { value: "app-install" },
-    });
-    fireEvent.change(authoringQueries.getByLabelText("Roles"), {
-      target: { value: "role:instance:0,role:instance:1" },
-    });
+    fireEvent.click(authoringQueries.getByRole("combobox", { name: /^Surface/ }));
+    fireEvent.click(authoringQueries.getByRole("option", { name: "App install" }));
+    fireEvent.click(authoringQueries.getByRole("combobox", { name: /^Roles/ }));
+    fireEvent.click(authoringQueries.getByRole("option", { name: "Instance role 2" }));
     fireEvent.submit(required(authoringRender.container.querySelector("form")));
-    fireEvent.click(authoringQueries.getByLabelText("Close Invite person"));
+    fireEvent.click(authoringQueries.getByRole("button", { name: "Close" }));
     const confirmationDialog = accessQueries.getByRole("alertdialog", {
       name: "Revoke invitation?",
     });
@@ -1014,8 +736,4 @@ function required<Value>(value: Value): NonNullable<Value> {
     throw new Error("Expected value.");
   }
   return value as NonNullable<Value>;
-}
-
-function dataAttributes(props: Record<string, unknown>) {
-  return Object.fromEntries(Object.entries(props).filter(([key]) => key.startsWith("data-")));
 }

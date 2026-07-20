@@ -1137,7 +1137,7 @@ describe("Alchemy Formless instance deployment", () => {
             FORMLESS_TURNSTILE_SITE_KEY: "turnstile-site-key",
           },
           build: {
-            command: "node_modules/.bin/vp build",
+            command: "bun run --bun vp build",
             env: {
               FORMLESS_DEPLOY_VERSION: "0.1.8",
               FORMLESS_DOMAIN_PROVIDER_CLOUDFLARE_ACCOUNT_ID: "account-123",

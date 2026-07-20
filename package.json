@@ -8,19 +8,25 @@
   "scripts": {
     "check:setup": "bun install && bun check:packages >/dev/null 2>&1 &",
     "check:openspec": "openspec validate --specs --strict --no-interactive",
-    "check:packages": "vp run --recursive check && vp run --workspace-root check",
+    "check:packages": "vp run --filter './lib/*' check",
     "check:ready": "bun check:openspec && bun check:packages",
     "agents": "bun run scripts/agents.ts",
     "check": "vp check --fix scripts && vp test --dir scripts --configLoader runner",
+    "pack": "vp run --recursive pack",
+    "pack:release": "bun run scripts/release-packaging.ts",
+    "smoke:release-packaging": "bun run scripts/release-packaging-smoke.ts",
     "dev": "bun lib/formless/bin/formless.ts dev --workspace tmp/dev-workspace --reset",
     "dev:instance": "bun run --cwd lib/formless dev:instance",
     "dev:instance:empty": "bun run --cwd lib/formless dev:instance:empty",
     "dev:instance:multi-site": "bun run --cwd lib/formless dev:instance:multi-site"
   },
   "devDependencies": {
+    "@arethetypeswrong/core": "^0.18.2",
+    "@astryxdesign/core": "0.1.4",
     "@fission-ai/openspec": "^1.5.0",
     "@types/node": "^25.6.0",
     "agent-browser": "^0.32.3",
+    "publint": "^0.3.8",
     "typescript": "~6.0.2",
     "vite-plus": "^0.2.5"
   },

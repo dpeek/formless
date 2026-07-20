@@ -48,6 +48,7 @@ describe("Formless Renderer Astryx StyleX root build integration", () => {
     };
 
     expect(packageJson.dependencies?.["@astryxdesign/build"]).toBe("0.1.4");
+    expect(packageJson.dependencies?.["@stylexjs/babel-plugin"]).toBe("0.18.3");
     expect(packageJson.dependencies?.["@stylexjs/unplugin"]).toBe("0.18.3");
   });
 
@@ -131,7 +132,7 @@ describe("Formless Renderer Astryx StyleX root build integration", () => {
     expect(applicationCss.length).toBeGreaterThan(0);
     expect(publicSiteCss.length).toBeGreaterThan(0);
     expect(emittedCss).toContain("@layer");
-    expect(emittedCss).toMatch(/\.astryx[a-z0-9]+/);
+    expect(emittedCss).toContain("@layer astryx-base");
     expect(emittedCss).toMatch(/\.x[a-z0-9]+/);
     expect(emittedCss).toMatch(/min-height:\s*260px/);
     expect(emittedCss).toMatch(/width:\s*min\(100%,\s*480px\)/);

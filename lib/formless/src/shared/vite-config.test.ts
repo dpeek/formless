@@ -74,7 +74,6 @@ describe("Runtime Vite config", () => {
         "formless-workspace-runtime-extensions",
         "formless-floating-ui-react-import-normalize",
         "formless-floating-ui-react-import-interop",
-        "astryx-config",
         "astryx-css-layer-order",
         "@stylexjs/unplugin",
         "astryx-split-layers",
@@ -105,7 +104,7 @@ describe("Runtime Vite config", () => {
       packageRoot: repoRoot,
     }) as ViteConfigWithEnvironments;
 
-    expect(namedPlugins(testConfig.plugins)).toContain("astryx-config");
+    expect(namedPlugins(testConfig.plugins)).not.toContain("astryx-config");
     expect(namedPlugins(testConfig.plugins)).not.toContain("@stylexjs/unplugin");
     expect(namedPlugins(testConfig.plugins)).not.toContain("astryx-split-layers");
     expect(testConfig.resolve?.alias).toEqual({

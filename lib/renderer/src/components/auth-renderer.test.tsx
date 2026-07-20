@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 
 import { act, fireEvent, render, within, type RenderResult } from "@testing-library/react";
-import { createElement, type ReactElement, type ReactNode } from "react";
+import type { ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 import type {
   AccountGateAuthSurfaceContract,
   AuthActionContract,
@@ -30,108 +30,6 @@ import {
   AstryxSubscribedAuthRenderer,
   dispatchAstryxAuthFieldIntent,
 } from "./auth-renderer.tsx";
-
-vi.mock("@astryxdesign/core/Button", () => ({
-  Button: ({
-    children,
-    isDisabled,
-    isLoading,
-    label,
-    onClick,
-    type,
-    ...props
-  }: {
-    children?: ReactNode;
-    isDisabled?: boolean;
-    isLoading?: boolean;
-    label: string;
-    onClick?: () => void;
-    type?: "button" | "submit";
-    [key: `data-${string}`]: string | undefined;
-  }) =>
-    createElement(
-      "button",
-      {
-        ...dataAttributes(props),
-        "aria-busy": isLoading || undefined,
-        "aria-label": label,
-        disabled: isDisabled,
-        onClick,
-        type,
-      },
-      children,
-    ),
-}));
-
-vi.mock("@astryxdesign/core/Spinner", () => ({
-  Spinner: ({ "aria-label": label }: { "aria-label"?: string }) =>
-    createElement("span", { "aria-label": label, role: "status" }),
-}));
-
-vi.mock("@astryxdesign/core/TextInput", () => ({
-  TextInput: ({
-    autoComplete,
-    label,
-    onChange,
-    type,
-    value,
-    ...props
-  }: {
-    autoComplete?: string;
-    label: string;
-    onChange?: (value: string) => void;
-    type?: string;
-    value: string;
-    [key: `data-${string}`]: string | undefined;
-  }) =>
-    createElement(
-      "label",
-      undefined,
-      label,
-      createElement("input", {
-        ...dataAttributes(props),
-        "aria-label": label,
-        autoComplete,
-        onChange: (event: { currentTarget: { value: string } }) =>
-          onChange?.(event.currentTarget.value),
-        type,
-        value,
-      }),
-    ),
-}));
-
-vi.mock("@astryxdesign/core/CheckboxInput", () => ({
-  CheckboxInput: ({
-    isDisabled,
-    isReadOnly,
-    isRequired,
-    label,
-    onChange,
-    value,
-  }: {
-    isDisabled?: boolean;
-    isReadOnly?: boolean;
-    isRequired?: boolean;
-    label: string;
-    onChange?: (value: boolean) => void;
-    value: boolean;
-  }) =>
-    createElement(
-      "label",
-      undefined,
-      createElement("input", {
-        "aria-label": label,
-        checked: value,
-        disabled: isDisabled,
-        onChange: (event: { currentTarget: { checked: boolean } }) =>
-          onChange?.(event.currentTarget.checked),
-        readOnly: isReadOnly,
-        required: isRequired,
-        type: "checkbox",
-      }),
-      label,
-    ),
-}));
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -240,10 +138,10 @@ describe("Astryx auth renderer", () => {
     const tokenRenderer = mount(<AstryxAuthRenderer onIntent={onIntent} surface={tokenSurface} />);
 
     const tokenQueries = within(tokenRenderer.container);
-    fireEvent.change(tokenQueries.getByLabelText("Verification token"), {
+    fireEvent.change(tokenQueries.getByRole("textbox", { name: /^Verification token/ }), {
       target: { value: "next-opaque-token" },
     });
-    fireEvent.click(tokenQueries.getByLabelText("Accept terms"));
+    fireEvent.click(tokenQueries.getByRole("checkbox", { name: /^Accept terms/ }));
     fireEvent.submit(required(tokenRenderer.container.querySelector("form")));
 
     const retrySurface = signupSurface("failed", authMessage("Failed", "danger"), {
@@ -737,8 +635,4 @@ function required<Value>(value: Value): NonNullable<Value> {
   }
 
   return value as NonNullable<Value>;
-}
-
-function dataAttributes(props: Record<string, unknown>) {
-  return Object.fromEntries(Object.entries(props).filter(([key]) => key.startsWith("data-")));
 }

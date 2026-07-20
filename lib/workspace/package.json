@@ -2,7 +2,11 @@
   "name": "@dpeek/formless-workspace",
   "version": "0.1.0",
   "files": [
-    "src"
+    "dist",
+    "src",
+    "!src/**/*.test.*",
+    "!src/**/*-fixtures.ts",
+    "!src/**/test-*.ts"
   ],
   "type": "module",
   "exports": {
@@ -10,10 +14,21 @@
     "./node": "./src/node.ts"
   },
   "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.mts",
+        "import": "./dist/index.mjs"
+      },
+      "./node": {
+        "types": "./dist/node.d.mts",
+        "import": "./dist/node.mjs"
+      }
+    },
     "access": "public"
   },
   "scripts": {
-    "check": "vp check --fix && vp test --configLoader runner"
+    "check": "vp check --fix && vp test --configLoader runner",
+    "pack": "vp pack src/index.ts src/node.ts"
   },
   "dependencies": {
     "@dpeek/formless-installed-apps": "workspace:*",

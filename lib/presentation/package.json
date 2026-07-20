@@ -2,7 +2,11 @@
   "name": "@dpeek/formless-presentation",
   "version": "0.1.0",
   "files": [
-    "src"
+    "dist",
+    "src",
+    "!src/**/*.test.*",
+    "!src/**/*-fixtures.ts",
+    "!src/**/test-*.ts"
   ],
   "type": "module",
   "exports": {
@@ -11,10 +15,25 @@
     "./host/react": "./src/host-react.tsx"
   },
   "publishConfig": {
+    "exports": {
+      "./contract": {
+        "types": "./dist/contract.d.mts",
+        "import": "./dist/contract.mjs"
+      },
+      "./host": {
+        "types": "./dist/host.d.mts",
+        "import": "./dist/host.mjs"
+      },
+      "./host/react": {
+        "types": "./dist/host-react.d.mts",
+        "import": "./dist/host-react.mjs"
+      }
+    },
     "access": "public"
   },
   "scripts": {
-    "check": "vp check --fix && vp test --configLoader runner"
+    "check": "vp check --fix && vp test --configLoader runner",
+    "pack": "vp pack src/contract.ts src/host.ts src/host-react.tsx"
   },
   "dependencies": {
     "@dpeek/formless-schema": "workspace:*",

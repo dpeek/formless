@@ -1,7 +1,35 @@
 {
   "name": "@dpeek/formless-renderer",
   "version": "0.1.0",
-  "private": true,
+  "files": [
+    "src",
+    "!src/**/*.test.*",
+    "!src/**/*.fixtures.*",
+    "!src/fixtures",
+    "!src/main.tsx",
+    "!src/root.tsx",
+    "!src/components/access.tsx",
+    "!src/components/application-shell.tsx",
+    "!src/components/auth.tsx",
+    "!src/components/canonical-fields.tsx",
+    "!src/components/create-surfaces.tsx",
+    "!src/components/field-scenario-model.ts",
+    "!src/components/fields.tsx",
+    "!src/components/fields/fixture-helpers.ts",
+    "!src/components/fields/fixtures.ts",
+    "!src/components/fields/icon-field.fixture-options.ts",
+    "!src/components/fixture-layout.tsx",
+    "!src/components/generated-fields.tsx",
+    "!src/components/generated-workspace.tsx",
+    "!src/components/input-density.ts",
+    "!src/components/instance-management.tsx",
+    "!src/components/lists.tsx",
+    "!src/components/operations.tsx",
+    "!src/components/record-results.tsx",
+    "!src/components/site-fixture.tsx",
+    "!src/components/tables.tsx",
+    "!src/components/tree-results.tsx"
+  ],
   "type": "module",
   "exports": {
     "./application/assembly": "./src/application-assembly.tsx",
@@ -11,9 +39,12 @@
     "./site/global.css": "./src/global.css",
     "./site/provider": "./src/site-provider.tsx"
   },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "dev": "vite",
-    "check": "vp check --fix && vp test --configLoader runner --config ../../vite.config.ts"
+    "check": "vp check --fix && vp test --configLoader runner"
   },
   "dependencies": {
     "@astryxdesign/core": "0.1.4",

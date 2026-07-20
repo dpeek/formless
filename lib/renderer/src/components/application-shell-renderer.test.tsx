@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
 import { act, fireEvent, render, waitFor, type RenderResult } from "@testing-library/react";
-import { Children, createElement, isValidElement, type ReactNode } from "react";
-import { describe, expect, it, vi } from "vite-plus/test";
+import { createElement } from "react";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import type {
   ButtonContract,
   CreateSurfaceContract,
@@ -24,380 +24,6 @@ import {
   AstryxApplicationShellRenderer,
   AstryxSubscribedApplicationShellRenderer,
 } from "./shell.tsx";
-
-vi.mock("@astryxdesign/core", () => ({
-  Theme: ({ children, mode }: { children: ReactNode; mode: string }) =>
-    createElement("div", { "data-component": "Theme", "data-mode": mode }, children),
-}));
-
-vi.mock("@astryxdesign/core/SegmentedControl", () => ({
-  SegmentedControl: ({
-    children,
-    label,
-    onChange,
-    value,
-  }: {
-    children: ReactNode;
-    label: string;
-    onChange: (value: string) => void;
-    value: string;
-  }) =>
-    createElement(
-      "div",
-      { "aria-label": label, role: "radiogroup" },
-      Children.map(children, (child) =>
-        isValidElement<{ label: string; value: string }>(child)
-          ? createElement(
-              "button",
-              {
-                "aria-checked": child.props.value === value,
-                "aria-label": child.props.label,
-                onClick: () => onChange(child.props.value),
-                role: "radio",
-              },
-              child.props.label,
-            )
-          : child,
-      ),
-    ),
-  SegmentedControlItem: () => null,
-}));
-
-vi.mock("@astryxdesign/core/AppShell", () => ({
-  AppShell: ({
-    children,
-    mobileNav,
-    sideNav,
-    "data-testid": testId,
-  }: {
-    children: ReactNode;
-    mobileNav: { isOpen: boolean; onOpenChange: (open: boolean) => void };
-    sideNav: ReactNode;
-    "data-testid": string;
-  }) =>
-    createElement(
-      "div",
-      {
-        "data-component": "AppShell",
-        "data-mobile-open": String(mobileNav.isOpen),
-        "data-testid": testId,
-      },
-      createElement(
-        "button",
-        {
-          "data-action": "toggle-mobile-navigation",
-          onClick: () => mobileNav.onOpenChange(!mobileNav.isOpen),
-        },
-        "Toggle mobile navigation",
-      ),
-      sideNav,
-      createElement("main", null, children),
-    ),
-}));
-
-vi.mock("@astryxdesign/core/SideNav", () => ({
-  SideNav: ({
-    children,
-    collapsible,
-    footer,
-    header,
-  }: {
-    children: ReactNode;
-    collapsible?: { isCollapsed: boolean; onCollapsedChange: (collapsed: boolean) => void };
-    footer: ReactNode;
-    header: ReactNode;
-  }) =>
-    createElement(
-      "aside",
-      { "data-collapsible": String(Boolean(collapsible)), "data-component": "SideNav" },
-      collapsible
-        ? createElement(
-            "button",
-            {
-              "data-action": "toggle-collapsed-navigation",
-              onClick: () => collapsible.onCollapsedChange(!collapsible.isCollapsed),
-            },
-            "Toggle collapsed navigation",
-          )
-        : null,
-      header,
-      createElement("nav", null, children),
-      createElement("footer", null, footer),
-    ),
-  SideNavHeading: ({ heading, menu }: { heading: string; menu?: ReactNode }) =>
-    createElement(
-      "header",
-      { "data-component": "SideNavHeading", "data-heading": heading },
-      heading,
-      menu,
-    ),
-  SideNavItem: ({
-    endContent,
-    href,
-    isDisabled,
-    isSelected,
-    label,
-    onClick,
-  }: {
-    endContent?: ReactNode;
-    href?: string;
-    isDisabled?: boolean;
-    isSelected?: boolean;
-    label: string;
-    onClick?: () => void;
-  }) =>
-    createElement(
-      href && !isDisabled ? "a" : "button",
-      {
-        "data-component": "SideNavItem",
-        "data-label": label,
-        "data-selected": String(Boolean(isSelected)),
-        disabled: Boolean(isDisabled),
-        href: href && !isDisabled ? href : undefined,
-        onClick,
-      },
-      label,
-      endContent,
-    ),
-  SideNavSection: ({
-    children,
-    endContent,
-    isHeaderHidden,
-    title,
-  }: {
-    children: ReactNode;
-    endContent?: ReactNode;
-    isHeaderHidden?: boolean;
-    title: string;
-  }) =>
-    createElement(
-      "section",
-      {
-        "data-component": "SideNavSection",
-        "data-header-hidden": String(Boolean(isHeaderHidden)),
-        "data-title": title,
-      },
-      endContent,
-      children,
-    ),
-}));
-
-vi.mock("@astryxdesign/core/NavMenu", () => ({
-  NavHeadingMenu: ({ children }: { children: ReactNode }) =>
-    createElement("div", { "data-component": "NavHeadingMenu" }, children),
-  NavHeadingMenuItem: ({
-    description,
-    href,
-    isDisabled,
-    label,
-  }: {
-    description?: ReactNode;
-    href?: string;
-    isDisabled?: boolean;
-    label: ReactNode;
-  }) =>
-    createElement(
-      href && !isDisabled ? "a" : "button",
-      {
-        "data-component": "NavHeadingMenuItem",
-        disabled: Boolean(isDisabled),
-        href: href && !isDisabled ? href : undefined,
-      },
-      label,
-      description,
-    ),
-}));
-
-vi.mock("@astryxdesign/core/AlertDialog", () => ({
-  AlertDialog: ({
-    actionLabel,
-    cancelLabel,
-    description,
-    isActionLoading,
-    isOpen,
-    onAction,
-    onOpenChange,
-    title,
-  }: {
-    actionLabel: string;
-    cancelLabel: string;
-    description: string;
-    isActionLoading: boolean;
-    isOpen: boolean;
-    onAction: () => void;
-    onOpenChange: (open: boolean) => void;
-    title: string;
-  }) =>
-    isOpen
-      ? createElement(
-          "div",
-          {
-            "data-action-loading": String(isActionLoading),
-            "data-component": "AlertDialog",
-            role: "alertdialog",
-          },
-          title,
-          description,
-          createElement(
-            "button",
-            { "data-action": "cancel-reset", onClick: () => onOpenChange(false) },
-            cancelLabel,
-          ),
-          createElement(
-            "button",
-            { "data-action": "confirm-reset", onClick: onAction },
-            actionLabel,
-          ),
-        )
-      : null,
-}));
-
-vi.mock("@astryxdesign/core/Badge", () => ({
-  Badge: ({
-    label,
-    variant,
-    ...props
-  }: {
-    label: ReactNode;
-    variant?: string;
-    "aria-label"?: string;
-  }) =>
-    createElement(
-      "span",
-      {
-        "aria-label": props["aria-label"],
-        "data-component": "Badge",
-        "data-variant": variant,
-      },
-      label,
-    ),
-}));
-
-vi.mock("@astryxdesign/core/Button", () => ({
-  Button: ({
-    children,
-    isDisabled,
-    isLoading,
-    label,
-    onClick,
-  }: {
-    children?: ReactNode;
-    isDisabled?: boolean;
-    isLoading?: boolean;
-    label: string;
-    onClick?: () => void;
-  }) =>
-    createElement(
-      "button",
-      {
-        "aria-label": label,
-        "data-component": "Button",
-        "data-loading": String(Boolean(isLoading)),
-        disabled: Boolean(isDisabled),
-        onClick,
-      },
-      children ?? label,
-    ),
-}));
-
-vi.mock("@astryxdesign/core/HStack", () => ({
-  HStack: ({ children, role }: { children: ReactNode; role?: string }) =>
-    createElement("div", { "data-component": "HStack", role }, children),
-}));
-
-vi.mock("@astryxdesign/core/HoverCard", () => ({
-  HoverCard: ({
-    alignment,
-    children,
-    content,
-    focusTrigger,
-    placement,
-  }: {
-    alignment?: string;
-    children: ReactNode;
-    content: ReactNode;
-    focusTrigger?: string;
-    placement?: string;
-  }) =>
-    createElement(
-      "div",
-      {
-        "data-alignment": alignment,
-        "data-component": "HoverCard",
-        "data-focus-trigger": focusTrigger,
-        "data-placement": placement,
-      },
-      children,
-      createElement("div", { "data-slot": "hover-card-content" }, content),
-    ),
-}));
-
-vi.mock("@astryxdesign/core/IconButton", () => ({
-  IconButton: ({
-    icon,
-    label,
-    onClick,
-  }: {
-    icon: ReactNode;
-    label: string;
-    onClick?: () => void;
-  }) =>
-    createElement("button", { "aria-label": label, "data-component": "IconButton", onClick }, icon),
-}));
-
-vi.mock("@astryxdesign/core/MetadataList", () => ({
-  MetadataList: ({ children, columns }: { children: ReactNode; columns?: string }) =>
-    createElement("dl", { "data-columns": columns, "data-component": "MetadataList" }, children),
-  MetadataListItem: ({ children, label }: { children: ReactNode; label: string }) =>
-    createElement(
-      "div",
-      { "data-component": "MetadataListItem", "data-label": label },
-      createElement("dt", null, label),
-      createElement("dd", null, children),
-    ),
-}));
-
-vi.mock("@astryxdesign/core/VStack", () => ({
-  VStack: ({
-    children,
-    role,
-    ...props
-  }: {
-    children: ReactNode;
-    role?: string;
-    "aria-label"?: string;
-  }) =>
-    createElement(
-      "div",
-      {
-        "aria-label": props["aria-label"],
-        "data-component": "VStack",
-        role,
-      },
-      children,
-    ),
-}));
-
-vi.mock("@astryxdesign/core/Text", () => ({
-  Text: ({
-    as = "span",
-    children,
-    color,
-    role,
-    weight,
-  }: {
-    as?: string;
-    children: ReactNode;
-    color?: string;
-    role?: string;
-    weight?: string;
-  }) =>
-    createElement(
-      as,
-      { "data-color": color, "data-component": "Text", "data-weight": weight, role },
-      children,
-    ),
-}));
 
 vi.mock("./create-renderer.tsx", () => ({
   AstryxCreateSurfaceRenderer: ({
@@ -468,8 +94,13 @@ const sectionReferences = {
   session: shellNavigationSectionReference(shellReference.shellId, "section:session"),
 } as const;
 
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
 describe("Astryx application shell renderer", () => {
   it("renders contract hierarchy and keeps responsive presentation state local", async () => {
+    const viewport = mockMatchMedia(true);
     const intents: ShellIntent[] = [];
     const mountedRenderer = render(
       <AstryxApplicationShellRenderer
@@ -485,20 +116,13 @@ describe("Astryx application shell renderer", () => {
       </AstryxApplicationShellRenderer>,
     );
     const { container } = mountedRenderer;
-    const sideNavSections = container.querySelectorAll('[data-component="SideNavSection"]');
-    expect(Array.from(sideNavSections, (section) => section.getAttribute("data-title"))).toEqual([
-      "Tasks screens",
-      "Pages",
-    ]);
-    const pages = requiredByProps(container, { "data-label": "Pages" });
-    expect(pages.getAttribute("data-selected")).toBe("true");
+    expect(new Set(sideNavSectionLabels(container))).toEqual(new Set(["Tasks screens", "Pages"]));
+    const pages = required(
+      container.querySelector<HTMLButtonElement>('button[aria-current="page"]'),
+    );
+    expect(pages.getAttribute("aria-current")).toBe("page");
     expect((pages as HTMLButtonElement).disabled).toBe(false);
-    expect(
-      requiredByProps(container, {
-        "data-component": "NavHeadingMenuItem",
-        href: "/",
-      }).getAttribute("href"),
-    ).toBe("/");
+    expect(container.querySelector('a[href="/"]')).not.toBeNull();
     expect(rendererText(mountedRenderer)).toContain("Settings");
     expect(rendererText(mountedRenderer)).toContain("Sync failed. Try again.");
     expect(rendererText(mountedRenderer)).toContain("Workspace changes are queued.");
@@ -512,22 +136,23 @@ describe("Astryx application shell renderer", () => {
     expect(createSurface.getAttribute("data-open")).toBe("true");
     expect(createSurface.getAttribute("data-surface")).toBe("create:page");
 
-    expect(
-      requiredByProps(container, { "data-component": "AppShell" }).getAttribute("data-mobile-open"),
-    ).toBe("false");
+    const mobileNav = required(
+      container.querySelector<HTMLDialogElement>('dialog:not([role="alertdialog"])'),
+    );
+    expect(mobileNav.open).toBe(false);
 
-    fireEvent.click(requiredByProps(container, { "data-action": "toggle-mobile-navigation" }));
+    fireEvent.click(requiredByProps(container, { "aria-label": "Open navigation" }));
 
-    expect(
-      requiredByProps(container, { "data-component": "AppShell" }).getAttribute("data-mobile-open"),
-    ).toBe("true");
-    fireEvent.click(requiredByProps(container, { "data-label": "Pages" }));
+    expect(mobileNav.open).toBe(true);
+    fireEvent.click(pages);
+    fireEvent.click(requiredByProps(container, { "aria-label": "Open navigation" }));
     fireEvent.click(requiredByProps(container, { "data-action": "open-create" }));
     fireEvent.click(requiredByProps(container, { "data-action": "change-create-field" }));
-    fireEvent.click(requiredByProps(container, { "aria-label": "Reset source seed data" }));
-    fireEvent.click(requiredByProps(container, { "data-action": "cancel-reset" }));
-    fireEvent.click(requiredByProps(container, { "data-action": "confirm-reset" }));
-    fireEvent.click(requiredByProps(container, { "aria-label": "Log out" }));
+    fireEvent.click(interactiveByLabel(container, "Reset source seed data"));
+    const resetDialog = required(container.querySelector<HTMLElement>('[role="alertdialog"]'));
+    fireEvent.click(interactiveByLabel(resetDialog, "Cancel"));
+    fireEvent.click(interactiveByLabel(resetDialog, "Reset"));
+    fireEvent.click(interactiveByLabel(container, "Log out"));
 
     expect(intents).toEqual([
       {
@@ -586,6 +211,7 @@ describe("Astryx application shell renderer", () => {
     ]);
 
     mountedRenderer.unmount();
+    viewport.mockRestore();
   });
 
   it("subscribes through shell references and dispatches through the host", async () => {
@@ -608,7 +234,11 @@ describe("Astryx application shell renderer", () => {
     expect(rendererText(mountedRenderer)).toContain("Subscribed workspace");
     expect(rendererText(mountedRenderer)).toContain("Tasks");
 
-    fireEvent.click(requiredByProps(mountedRenderer.container, { "data-label": "Pages" }));
+    fireEvent.click(
+      required(
+        mountedRenderer.container.querySelector<HTMLButtonElement>('button[aria-current="page"]'),
+      ),
+    );
 
     expect(intents).toEqual([
       {
@@ -630,12 +260,7 @@ describe("Astryx application shell renderer", () => {
     });
 
     await waitFor(() =>
-      expect(
-        requiredByProps(mountedRenderer.container, {
-          "data-component": "SideNavSection",
-          "data-title": "Updated screens",
-        }),
-      ).toBeDefined(),
+      expect(sideNavSectionLabels(mountedRenderer.container)).toContain("Updated screens"),
     );
 
     mountedRenderer.unmount();
@@ -662,22 +287,16 @@ describe("Astryx application shell renderer", () => {
         </AstryxSubscribedApplicationShellRenderer>
       </PresentationHostProvider>,
     );
-    expect(mountedRenderer.container.querySelector('[data-component="Theme"]')).toBeNull();
+    expect(mountedRenderer.container.querySelector("[data-site-theme]")).toBeNull();
     expect(
-      requiredByProps(mountedRenderer.container, {
-        "aria-label": "Switch to light mode",
-        "data-component": "IconButton",
-      }),
+      requiredByProps(mountedRenderer.container, { "aria-label": "Switch to light mode" }),
     ).toBeDefined();
     expect(rendererText(mountedRenderer)).toContain("Theme workspace");
     expect(rendererText(mountedRenderer)).toContain("Tasks");
     expect(JSON.stringify(sections).toLowerCase()).not.toContain("theme");
 
     fireEvent.click(
-      requiredByProps(mountedRenderer.container, {
-        "aria-label": "Switch to light mode",
-        "data-component": "IconButton",
-      }),
+      requiredByProps(mountedRenderer.container, { "aria-label": "Switch to light mode" }),
     );
 
     expect(intents).toEqual([
@@ -942,6 +561,28 @@ function fixedTheme(mode: "light" | "dark"): DocumentThemeContract {
   };
 }
 
+function sideNavSectionLabels(container: HTMLElement): string[] {
+  return Array.from(container.querySelectorAll<HTMLElement>('[role="group"][aria-labelledby]')).map(
+    (section) => {
+      const labelId = section.getAttribute("aria-labelledby");
+      return labelId ? (section.ownerDocument.getElementById(labelId)?.textContent ?? "") : "";
+    },
+  );
+}
+
+function mockMatchMedia(matches: boolean) {
+  return vi.spyOn(window, "matchMedia").mockImplementation((query) => ({
+    addEventListener: () => undefined,
+    addListener: () => undefined,
+    dispatchEvent: () => true,
+    matches,
+    media: query,
+    onchange: null,
+    removeEventListener: () => undefined,
+    removeListener: () => undefined,
+  }));
+}
+
 function requiredByProps(container: HTMLElement, props: Record<string, unknown>): HTMLElement {
   const match = Array.from(container.querySelectorAll<HTMLElement>("*")).find((element) =>
     Object.entries(props).every(([name, value]) => element.getAttribute(name) === String(value)),
@@ -950,6 +591,23 @@ function requiredByProps(container: HTMLElement, props: Record<string, unknown>)
     throw new Error(`Expected DOM node matching ${JSON.stringify(props)}.`);
   }
   return match;
+}
+
+function interactiveByLabel(container: HTMLElement, label: string): HTMLElement {
+  return required(
+    Array.from(container.querySelectorAll<HTMLElement>("a,button")).find(
+      (node) =>
+        (node.getAttribute("aria-label") ?? node.textContent?.replace(/\s+/g, " ").trim()) ===
+        label,
+    ),
+  );
+}
+
+function required<T>(value: T): NonNullable<T> {
+  if (value === null || value === undefined) {
+    throw new Error("Expected rendered value.");
+  }
+  return value as NonNullable<T>;
 }
 
 function rendererText(renderer: RenderResult) {

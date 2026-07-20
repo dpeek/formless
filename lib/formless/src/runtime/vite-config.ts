@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 
 import { astryxStylex } from "@astryxdesign/build/vite";
 import { cloudflare, type PluginConfig, type WorkerConfig } from "@cloudflare/vite-plugin";
+import stylex from "@stylexjs/unplugin";
 import react from "@vitejs/plugin-react";
 import { type Plugin, type PluginOption } from "vite-plus";
 import {
@@ -71,10 +72,29 @@ export function runtimeViteConfig(input: RuntimeViteConfigInput = {}) {
     ...(siteProjectRoot ? [siteProjectRoot] : []),
   ];
   const cloudflarePluginConfig = runtimeCloudflarePluginConfig({ env, packageRoot });
-  const astryxPlugins = astryxStylex({
+  const astryxStylexOptions = {
     dev: env.NODE_ENV !== "production",
     rootDir: workspaceRoot,
-  });
+  };
+  const astryxPlugins = astryxStylex(astryxStylexOptions)
+    .filter((plugin) => plugin.name !== "astryx-config")
+    .map((plugin) =>
+      plugin.name === "@stylexjs/unplugin"
+        ? serializePluginTransform(
+            stylex.vite({
+              ...astryxStylexOptions,
+              enableInlinedConditionalMerge: true,
+              runtimeInjection: false,
+              treeshakeCompensation: true,
+              unstable_moduleResolution: {
+                rootDir: workspaceRoot,
+                type: "commonJS",
+              },
+              useCSSLayers: true,
+            }),
+          )
+        : plugin,
+    );
   const activeAstryxPlugins = isUnitTest
     ? astryxPlugins.filter((plugin) => plugin.name === "astryx-config")
     : astryxPlugins;
@@ -123,6 +143,30 @@ export function runtimeViteConfig(input: RuntimeViteConfigInput = {}) {
       fs: {
         allow: serverFsAllow,
       },
+    },
+  };
+}
+
+function serializePluginTransform(plugin: Plugin): Plugin {
+  const transform = plugin.transform;
+
+  if (typeof transform !== "function") {
+    return plugin;
+  }
+
+  let pending = Promise.resolve();
+
+  return {
+    ...plugin,
+    transform(...args: Parameters<typeof transform>) {
+      const result = pending.then(() => transform.apply(this, args));
+
+      pending = result.then(
+        () => undefined,
+        () => undefined,
+      );
+
+      return result;
     },
   };
 }

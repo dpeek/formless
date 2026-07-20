@@ -265,6 +265,58 @@ Package tests SHALL be fast, deterministic, and local.
 - THEN browser smoke is not required for the package task
 - AND browser smoke remains app-level when visible app behavior changes
 
+### Requirement: Published Package Artifacts
+
+Published reusable package slices SHALL use shared Vite+ Pack configuration to
+produce explicit ESM runtime and declaration artifacts without bundling
+dependency implementations into each package, while repository development
+resolves the same public imports directly to current package source.
+
+#### Scenario: Build a conventional package slice
+
+- GIVEN a reusable package slice is not the Formless runtime build host or the
+  source-distributed Formless Renderer
+- WHEN its release artifacts are prepared
+- THEN package-local Vite+ Pack emits ESM JavaScript, TypeScript declarations,
+  and source maps for every documented TypeScript or TSX public entrypoint
+- AND package dependencies and peer dependencies remain external to the emitted
+  package code
+- AND package export maps remain explicit manifest declarations that resolve
+  runtime and type conditions from the generated artifact root
+- AND wildcard exports, generated export-map mutation, and package-local
+  `tsdown` configuration are not required
+- AND Pack warnings fail the release build
+
+#### Scenario: Develop against current package source
+
+- GIVEN a repository package source file has changed since its latest Pack
+  output
+- WHEN TypeScript language services, package checks, local Vite or Vitest, or a
+  Bun development command resolves a documented workspace package import
+- THEN the repository package manifest resolves that same explicit public
+  subpath directly to its TypeScript or TSX source entrypoint
+- AND editors, type checks, tests, and local runtime builds do not require Pack
+  or Pack watch mode to observe the current public contract
+- AND Vite can bundle and evaluate package-owned configuration before reading
+  any configured resolution conditions
+- AND the release package manifest separately resolves generated ESM and
+  declaration artifacts
+
+#### Scenario: Publish a conventional package slice
+
+- GIVEN a conventional package slice has been packed for release
+- WHEN its package tarball and public entrypoints are validated
+- THEN the tarball contains the generated runtime and declaration artifacts,
+  the declared package source graph, and only explicitly declared non-code
+  assets
+- AND it excludes tests, fixtures, and development-only files
+- AND its packed manifest resolves runtime and type conditions to generated
+  artifacts without repository source export targets
+- AND package export, ESM, and TypeScript declaration contracts pass package
+  publication validation
+- AND an in-repo app package continues to publish its declared app manifest,
+  source schema, and seed record JSON as uncompiled package artifacts
+
 ### Requirement: Formless Presentation Package Slice
 
 The system SHALL provide a renderer-neutral Presentation package slice under
@@ -410,6 +462,21 @@ retaining Astryx as an internal component and build dependency.
   `@dpeek/formless-source-svg`
 - AND application media presentation uses renderer-neutral Media contracts
   while the Media package exposes no React presentation adapter
+
+#### Scenario: Renderer package is a published runtime build input
+
+- GIVEN the installed Formless runtime provides the bundled application and
+  public Site renderer
+- WHEN local dev, push, or a production runtime build resolves
+  `@dpeek/formless-renderer`
+- THEN the renderer is an installable package with explicit application, public
+  Site, provider, and CSS exports
+- AND it publishes the TypeScript, TSX, and CSS source required by the runtime
+  Vite, Astryx, and StyleX build pipeline instead of a conventional Pack output
+- AND the package excludes tests, fixtures, fixture roots, and scenario controls
+  from its published payload
+- AND the same runtime build setup can replace the bundled renderer entrypoints
+  with trusted workspace renderer extensions
 
 ### Requirement: Storage Package Slice
 

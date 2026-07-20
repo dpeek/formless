@@ -2,16 +2,27 @@
   "name": "@dpeek/formless-public-operations",
   "version": "0.1.0",
   "files": [
-    "src"
+    "dist",
+    "src",
+    "!src/**/*.test.*",
+    "!src/**/*-fixtures.ts",
+    "!src/**/test-*.ts"
   ],
   "type": "module",
   "exports": {
     ".": "./src/index.ts"
   },
   "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.mts",
+        "import": "./dist/index.mjs"
+      }
+    },
     "access": "public"
   },
   "scripts": {
-    "check": "vp check --fix && vp test --configLoader runner"
+    "check": "vp check --fix && vp test --configLoader runner",
+    "pack": "vp pack src/index.ts"
   }
 }

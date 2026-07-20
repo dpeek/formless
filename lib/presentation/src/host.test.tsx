@@ -547,6 +547,20 @@ describe("Presentation Host package boundary", () => {
       "./host": "./src/host.ts",
       "./host/react": "./src/host-react.tsx",
     });
+    expect(packageJson.publishConfig.exports).toMatchObject({
+      "./contract": {
+        types: "./dist/contract.d.mts",
+        import: "./dist/contract.mjs",
+      },
+      "./host": {
+        types: "./dist/host.d.mts",
+        import: "./dist/host.mjs",
+      },
+      "./host/react": {
+        types: "./dist/host-react.d.mts",
+        import: "./dist/host-react.mjs",
+      },
+    });
 
     const hostSource = await readFile(new URL("./host.ts", import.meta.url), "utf8");
     const reactSource = await readFile(new URL("./host-react.tsx", import.meta.url), "utf8");

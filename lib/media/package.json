@@ -2,7 +2,11 @@
   "name": "@dpeek/formless-media",
   "version": "0.1.0",
   "files": [
-    "src"
+    "dist",
+    "src",
+    "!src/**/*.test.*",
+    "!src/**/*-fixtures.ts",
+    "!src/**/test-*.ts"
   ],
   "type": "module",
   "exports": {
@@ -11,9 +15,24 @@
     "./worker": "./src/worker.ts"
   },
   "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.mts",
+        "import": "./dist/index.mjs"
+      },
+      "./client": {
+        "types": "./dist/client.d.mts",
+        "import": "./dist/client.mjs"
+      },
+      "./worker": {
+        "types": "./dist/worker.d.mts",
+        "import": "./dist/worker.mjs"
+      }
+    },
     "access": "public"
   },
   "scripts": {
-    "check": "vp check --fix && vp test --configLoader runner"
+    "check": "vp check --fix && vp test --configLoader runner",
+    "pack": "vp pack src/index.ts src/client.ts src/worker.ts"
   }
 }
