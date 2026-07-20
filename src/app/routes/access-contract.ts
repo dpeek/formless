@@ -1,20 +1,19 @@
-import type { FormlessUiAccessLoadingContract } from "@dpeek/formless-presentation/contract";
+import type { AccessLoadingContract } from "@dpeek/formless-presentation/contract";
 import {
-  formlessUiAccessInvitationAuthoringReference,
-  formlessUiAccessManifestReference,
-} from "@dpeek/formless-presentation/contract-host";
+  accessInvitationAuthoringReference,
+  accessManifestReference,
+} from "@dpeek/formless-presentation/host";
 import type { ApplicationRuntimeContractContribution } from "../generated/application-runtime-contract-host.tsx";
 
 export const INSTANCE_ACCESS_ID = "instance-access";
 export const INSTANCE_ACCESS_INVITATION_AUTHORING_ID = "instance-access:invitation-authoring";
 export const INSTANCE_ACCESS_CONTRIBUTOR_ID = "instance-access";
 
-export const instanceAccessReference = formlessUiAccessManifestReference(INSTANCE_ACCESS_ID);
-export const instanceAccessInvitationAuthoringReference =
-  formlessUiAccessInvitationAuthoringReference(
-    INSTANCE_ACCESS_ID,
-    INSTANCE_ACCESS_INVITATION_AUTHORING_ID,
-  );
+export const instanceAccessReference = accessManifestReference(INSTANCE_ACCESS_ID);
+export const instanceAccessInvitationAuthoringReference = accessInvitationAuthoringReference(
+  INSTANCE_ACCESS_ID,
+  INSTANCE_ACCESS_INVITATION_AUTHORING_ID,
+);
 
 export const instanceAccessLoadingManifest = {
   accessibilityLabel: "Access",
@@ -23,7 +22,7 @@ export const instanceAccessLoadingManifest = {
   message: "Loading access management...",
   state: "loading",
   title: "Access",
-} satisfies FormlessUiAccessLoadingContract;
+} satisfies AccessLoadingContract;
 
 export const initialInstanceAccessRuntimeContribution = [
   INSTANCE_ACCESS_CONTRIBUTOR_ID,

@@ -12,7 +12,7 @@ import {
 } from "../../shared/instance-auth.ts";
 import { runtimeTopologyRoutes } from "../../shared/runtime-topology.ts";
 import { fetchOwnerSessionStatus } from "./owner-login.tsx";
-import type { FormlessUiApplicationSystemStateContract } from "@dpeek/formless-presentation/contract";
+import type { ApplicationSystemStateContract } from "@dpeek/formless-presentation/contract";
 import { projectApplicationSystemState } from "./application-system-state-projection.ts";
 import { ApplicationSystemStateRuntime } from "./application-system-state-runtime.tsx";
 
@@ -57,7 +57,7 @@ export function LocalSessionRouteView({ state }: { state: LocalSessionRouteState
 
 export function projectLocalSessionRouteSystemState(
   state: LocalSessionRouteState,
-): FormlessUiApplicationSystemStateContract {
+): ApplicationSystemStateContract {
   return projectApplicationSystemState({
     ...(state.status === "blocked"
       ? {

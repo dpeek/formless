@@ -1,6 +1,6 @@
 import type {
-  FormlessUiDisplayField,
-  FormlessUiFieldIntentHandler,
+  DisplayFieldContract,
+  FieldIntentHandler,
 } from "@dpeek/formless-presentation/contract";
 import { ColorInput } from "../color-input.tsx";
 import { ColorValueDisplay } from "../field-primitives.tsx";
@@ -13,7 +13,7 @@ import {
   fieldChromeProps,
   fieldIsReadOnly,
   formatInputValue,
-  type FormlessUiEditorField,
+  type EditorField,
 } from "./field-chrome.tsx";
 
 export function ColorFieldEditor({
@@ -21,9 +21,9 @@ export function ColorFieldEditor({
   inputId,
   onIntent,
 }: {
-  field: FormlessUiEditorField;
+  field: EditorField;
   inputId: string;
-  onIntent: FormlessUiFieldIntentHandler | undefined;
+  onIntent: FieldIntentHandler | undefined;
 }) {
   const pickerValue = field.color?.picker;
 
@@ -44,7 +44,7 @@ export function ColorFieldEditor({
   );
 }
 
-export function ColorFieldDisplay({ field }: { field: FormlessUiDisplayField }) {
+export function ColorFieldDisplay({ field }: { field: DisplayFieldContract }) {
   const swatchValue = field.color?.swatch;
 
   return (

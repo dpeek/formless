@@ -1,12 +1,12 @@
 import type { ImageMediaAssetOption } from "@dpeek/formless-media/client";
 import type {
-  FormlessUiField,
-  FormlessUiFieldIntent,
-  FormlessUiTableActionContract,
-  FormlessUiTableActionGroupContract,
-  FormlessUiTableCellContentContract,
-  FormlessUiTableContract,
-  FormlessUiTableOperationActionContract,
+  FieldContract,
+  FieldIntent,
+  TableActionContract,
+  TableActionGroupContract,
+  TableCellContentContract,
+  TableContract,
+  TableOperationActionContract,
 } from "@dpeek/formless-presentation/contract";
 import {
   evaluateNumericExpression,
@@ -40,23 +40,23 @@ import {
 import type { TableCollectionResultModel } from "../../client/collection-result-model.ts";
 import { selectTransitionStateOperationAvailability } from "../../client/state-machine-model.ts";
 import { formatAggregateDisplayValue, formatComputedDisplayValue } from "./format.ts";
-import { projectGeneratedOperationFormlessUiControl } from "./formless-ui-operation-projection.ts";
+import { projectGeneratedOperationControl } from "./operation-projection.ts";
 import {
-  projectGeneratedDisplayFormlessUiField,
-  projectGeneratedRecordFormlessUiFields,
-  type GeneratedFormlessUiRecordFieldOwner,
-} from "./formless-ui-projection.ts";
+  projectGeneratedDisplayField,
+  projectGeneratedRecordFields,
+  type GeneratedRecordFieldOwner,
+} from "./field-projection.ts";
 import {
   projectGeneratedTableActionGroup,
   projectGeneratedTableDisplayValue,
   projectGeneratedTableEditAction,
   projectGeneratedTableFieldContent,
-  projectGeneratedTableFormlessUiContract,
+  projectGeneratedTableContract,
   projectGeneratedTableInvokeAction,
   projectGeneratedTableOperationAction,
   projectGeneratedTableOrdering,
   type GeneratedTablePlacedAction,
-} from "./formless-ui-table-projection.ts";
+} from "./table-projection.ts";
 import {
   executeGeneratedOperationControl,
   executeGeneratedOrderingMoveOperation,
@@ -109,7 +109,7 @@ export type GeneratedTableFieldContextState = {
 export type GeneratedTableFieldRuntime = {
   context: GeneratedTableFieldContext;
   contextId: string;
-  field: FormlessUiField;
+  field: FieldContract;
   fieldConfig: RecordFieldConfig;
   fieldId: string;
   kind: "field";
@@ -281,14 +281,14 @@ export function projectGeneratedRecordTable({
     string,
     {
       accessibilityLabel: string;
-      contentsByColumnId: Record<string, readonly FormlessUiTableCellContentContract[]>;
+      contentsByColumnId: Record<string, readonly TableCellContentContract[]>;
       readinessWarnings: ReturnType<typeof getRecordReadinessWarnings>;
     }
   > = {};
 
   for (const row of presentation.rows) {
     const record = recordsById[row.recordId];
-    const contentsByColumnId: Record<string, readonly FormlessUiTableCellContentContract[]> = {};
+    const contentsByColumnId: Record<string, readonly TableCellContentContract[]> = {};
 
     for (const cell of row.cells) {
       contentsByColumnId[cell.columnId] = record
@@ -347,7 +347,7 @@ export function projectGeneratedRecordTable({
     }),
   );
 
-  const table = projectGeneratedTableFormlessUiContract({
+  const table = projectGeneratedTableContract({
     accessibilityLabel: `${entity.label} records`,
     editingDisabledReason: `Editing is disabled for ${entity.label}.`,
     footerValuesByColumnId,
@@ -364,7 +364,7 @@ export function projectGeneratedRecordTable({
 }
 
 export function indexGeneratedTableFieldOccurrences(
-  table: FormlessUiTableContract,
+  table: TableContract,
   fieldContexts: ReadonlyMap<string, GeneratedTableFieldContext>,
   fieldStateByContextId: Readonly<Record<string, GeneratedTableFieldContextState | undefined>> = {},
 ): GeneratedTableFieldIndex {
@@ -373,7 +373,7 @@ export function indexGeneratedTableFieldOccurrences(
 
   const registerFields = (
     contextId: string,
-    fields: readonly FormlessUiField[],
+    fields: readonly FieldContract[],
     placement: GeneratedTableFieldRuntime["placement"],
   ) => {
     const context = fieldContexts.get(contextId);
@@ -426,7 +426,7 @@ export function indexGeneratedTableFieldOccurrences(
     }
   };
 
-  const indexAction = (action: FormlessUiTableActionContract) => {
+  const indexAction = (action: TableActionContract) => {
     if (action.kind !== "editAction" || action.dialog.target.kind !== "available") {
       return;
     }
@@ -438,7 +438,7 @@ export function indexGeneratedTableFieldOccurrences(
     }
   };
 
-  const indexActionGroup = (group: FormlessUiTableActionGroupContract) => {
+  const indexActionGroup = (group: TableActionGroupContract) => {
     for (const action of [...group.primary, ...group.secondary]) {
       indexAction(action);
     }
@@ -474,7 +474,7 @@ export function resolveGeneratedTableFieldIntent(
   }: {
     contextId: string;
     fieldId: string;
-    intent: FormlessUiFieldIntent;
+    intent: FieldIntent;
     recordId?: string;
     tableId: string;
   },
@@ -528,7 +528,7 @@ function projectGeneratedTableCell({
   runtimePlan: GeneratedTableRuntimePlan;
   schema: AppSchema | null;
   tableId: string;
-}): readonly FormlessUiTableCellContentContract[] {
+}): readonly TableCellContentContract[] {
   if (cell.column.type === "delete") {
     const operation = runtimePlan.operations.find(
       (candidate) => candidate.kind === "delete" && candidate.recordId === record.id,
@@ -650,7 +650,7 @@ function projectGeneratedTableCell({
             },
           ];
     });
-    const contents: FormlessUiTableCellContentContract[] = [];
+    const contents: TableCellContentContract[] = [];
 
     if (actions.length > 0) {
       contents.push(
@@ -712,7 +712,7 @@ function projectGeneratedTableCell({
     ];
   }
 
-  const contents: FormlessUiTableCellContentContract[] = [
+  const contents: TableCellContentContract[] = [
     projectTableRecordField({
       controller,
       contextId: cell.id,
@@ -834,7 +834,7 @@ function projectTableRecordField({
   const referenceOptions = referenceOptionsForField(fieldConfig, recordsById);
   const field = withTableStateTransitionRuntimeState(
     fieldConfig.display === "readOnly" || !recordFieldIsWritable(fieldConfig)
-      ? projectGeneratedDisplayFormlessUiField({
+      ? projectGeneratedDisplayField({
           density: "compact",
           fieldConfig,
           mediaAssetOptions,
@@ -997,7 +997,7 @@ function projectTableEditAction({
 
 function projectFieldContext(
   context: GeneratedTableFieldContext,
-  owner: GeneratedFormlessUiRecordFieldOwner,
+  owner: GeneratedRecordFieldOwner,
   currentState: GeneratedTableFieldContextState | undefined,
   mediaAssetOptions: readonly ImageMediaAssetOption[],
   recordsById: Readonly<Record<string, StoredRecord>>,
@@ -1007,7 +1007,7 @@ function projectFieldContext(
     transitionOperations: readonly TransitionStateOperationConfig[];
     transitionRuntimes: readonly GeneratedTableTransitionRuntime[];
   },
-): readonly FormlessUiField[] {
+): readonly FieldContract[] {
   const state = rebaseGeneratedTableFieldContextState(context, currentState);
   const session = selectGeneratedUpdateDraftSession({
     fields: context.fields,
@@ -1026,7 +1026,7 @@ function projectFieldContext(
     ? groupTransitionOperationsByFieldName(transitionRuntime.transitionOperations, context.fields)
     : undefined;
 
-  return projectGeneratedRecordFormlessUiFields({
+  return projectGeneratedRecordFields({
     canPatch: context.updateOperation !== undefined,
     density: "compact",
     editorDraftByFieldName: state.editorDraftByFieldName,
@@ -1269,7 +1269,7 @@ function projectTransitionRuntimes(
 
 export function selectFieldTransitionRuntime(
   contextId: string,
-  intent: Extract<FormlessUiFieldIntent, { type: "stateTransitionInvoke" }>,
+  intent: Extract<FieldIntent, { type: "stateTransitionInvoke" }>,
   runtimePlan: GeneratedTableRuntimePlan,
 ): GeneratedTableTransitionRuntime | undefined {
   return (runtimePlan.transitionsByContextId.get(contextId) ?? []).find(
@@ -1282,10 +1282,10 @@ export function selectFieldTransitionRuntime(
 }
 
 function withTableStateTransitionRuntimeState(
-  field: FormlessUiField,
+  field: FieldContract,
   runtimes: readonly GeneratedTableTransitionRuntime[],
   controller: GeneratedOperationController,
-): FormlessUiField {
+): FieldContract {
   const facts = field.stateMachineFacts;
 
   if (facts?.interaction.kind !== "transitions") {
@@ -1331,7 +1331,7 @@ function operationAction(
   runtime: GeneratedTableOperationRuntime | undefined,
   controller: GeneratedOperationController,
   confirmationOpenById: Readonly<Record<string, boolean | undefined>>,
-): FormlessUiTableOperationActionContract | undefined {
+): TableOperationActionContract | undefined {
   if (!runtime) {
     return undefined;
   }
@@ -1342,7 +1342,7 @@ function operationAction(
   }
 
   const isDelete = runtime.kind === "delete";
-  const control = projectGeneratedOperationFormlessUiControl({
+  const control = projectGeneratedOperationControl({
     binding: runtime.binding,
     confirmationOpen: confirmationOpenById[runtime.binding.id] ?? false,
     presentation: {
@@ -1386,7 +1386,7 @@ function actionGroupContents(
   id: string,
   secondaryAccessibilityLabel: string,
   actions: readonly GeneratedTablePlacedAction[],
-): readonly FormlessUiTableCellContentContract[] {
+): readonly TableCellContentContract[] {
   return actions.length === 0
     ? []
     : [projectGeneratedTableActionGroup({ actions, id, secondaryAccessibilityLabel })];
@@ -1399,7 +1399,7 @@ function orderingContents(
   tableId: string,
   rowId: string,
   accessibilityLabel: string,
-): readonly FormlessUiTableCellContentContract[] {
+): readonly TableCellContentContract[] {
   const ordering = operations.filter(
     (operation): operation is Extract<GeneratedTableOperationRuntime, { kind: "ordering" }> =>
       operation.kind === "ordering",

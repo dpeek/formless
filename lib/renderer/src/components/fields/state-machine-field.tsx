@@ -1,9 +1,6 @@
 import * as stylex from "@stylexjs/stylex";
 import { spacingVars } from "@astryxdesign/core/theme/tokens.stylex";
-import type {
-  FormlessUiField,
-  FormlessUiFieldIntentHandler,
-} from "@dpeek/formless-presentation/contract";
+import type { FieldContract, FieldIntentHandler } from "@dpeek/formless-presentation/contract";
 import { StateInput } from "../state-input.tsx";
 import { FieldChrome, formatInputValue } from "./field-chrome.tsx";
 import { enumOptionForValue } from "./field-options.tsx";
@@ -13,9 +10,9 @@ export function StateMachineField({
   inputId,
   onIntent,
 }: {
-  field: FormlessUiField;
+  field: FieldContract;
   inputId: string;
-  onIntent: FormlessUiFieldIntentHandler | undefined;
+  onIntent: FieldIntentHandler | undefined;
 }) {
   const facts = field.stateMachineFacts;
 
@@ -83,7 +80,7 @@ export function StateMachineField({
   );
 }
 
-function stateMachineTransitionControlIsDisabled(field: FormlessUiField) {
+function stateMachineTransitionControlIsDisabled(field: FieldContract) {
   return (
     field.access.kind === "disabled" ||
     field.access.kind === "readOnly" ||

@@ -1,22 +1,22 @@
 import type {
-  FormlessUiAuthActionContract,
-  FormlessUiAuthContinuationContract,
-  FormlessUiAuthFeedbackContract,
-  FormlessUiAuthFieldContract,
-  FormlessUiAuthMessageContract,
-  FormlessUiAuthPasskeyContract,
-  FormlessUiButtonContract,
-  FormlessUiOwnerSetupAuthSurfaceContract,
-  FormlessUiOwnerSignInAuthSurfaceContract,
+  AuthActionContract,
+  AuthContinuationContract,
+  AuthFeedbackContract,
+  AuthFieldContract,
+  AuthMessageContract,
+  AuthPasskeyContract,
+  ButtonContract,
+  OwnerSetupAuthSurfaceContract,
+  OwnerSignInAuthSurfaceContract,
 } from "@dpeek/formless-presentation/contract";
-import { formlessUiAuthSurfaceReference } from "@dpeek/formless-presentation/contract-host";
+import { authSurfaceReference } from "@dpeek/formless-presentation/host";
 import type { CreateFieldConfig } from "../../client/views.ts";
 import {
   markGeneratedCreateDraftSessionSubmitted,
   selectGeneratedCreateDraftSession,
   type GeneratedCreateDraftSessionState,
 } from "../generated/create-field-authoring.ts";
-import { projectGeneratedCreateFormlessUiFields } from "../generated/formless-ui-projection.ts";
+import { projectGeneratedCreateFields } from "../generated/field-projection.ts";
 import { displaySafeText } from "./instance-management-display-safety.ts";
 import type { OwnerLoginRouteState } from "./owner-login.tsx";
 import type { OwnerSetupRouteState } from "./owner-setup.tsx";
@@ -37,11 +37,11 @@ const ownerSetupFieldConfigs: CreateFieldConfig[] = [
   },
 ];
 
-export const ownerSetupAuthSurfaceReference = formlessUiAuthSurfaceReference({
+export const ownerSetupAuthSurfaceReference = authSurfaceReference({
   surfaceId: OWNER_SETUP_AUTH_SURFACE_ID,
   surfaceKind: "owner-setup",
 });
-export const ownerSignInAuthSurfaceReference = formlessUiAuthSurfaceReference({
+export const ownerSignInAuthSurfaceReference = authSurfaceReference({
   surfaceId: OWNER_SIGN_IN_AUTH_SURFACE_ID,
   surfaceKind: "owner-sign-in",
 });
@@ -54,7 +54,7 @@ export function projectOwnerSetupAuthSurface({
   ownerEmail: string;
   ownerName: string;
   state: OwnerSetupRouteState;
-}): FormlessUiOwnerSetupAuthSurfaceContract {
+}): OwnerSetupAuthSurfaceContract {
   const pending = state.status === "submitting" || state.status === "continuing";
   const draft = ownerSetupDraft(ownerName, ownerEmail);
   const fields = ownerSetupFields(state, draft);
@@ -86,7 +86,7 @@ export function projectOwnerSignInAuthSurface({
   state,
 }: {
   state: OwnerLoginRouteState;
-}): FormlessUiOwnerSignInAuthSurfaceContract {
+}): OwnerSignInAuthSurfaceContract {
   const pending =
     state.status === "submitting" ||
     state.status === "logging-out" ||
@@ -116,7 +116,7 @@ export function projectOwnerSignInAuthSurface({
 function ownerSetupFields(
   state: OwnerSetupRouteState,
   draft: ReturnType<typeof ownerSetupDraft>,
-): readonly FormlessUiAuthFieldContract[] {
+): readonly AuthFieldContract[] {
   if (
     state.status !== "ready" &&
     state.status !== "submitting" &&
@@ -148,12 +148,12 @@ function ownerSetupDraft(ownerName: string, ownerEmail: string) {
     fields: ownerSetupFieldConfigs,
     state: markGeneratedCreateDraftSessionSubmitted(draftState),
   });
-  const fields = projectGeneratedCreateFormlessUiFields({
+  const fields = projectGeneratedCreateFields({
     owner: { kind: "createSurface", surfaceId: OWNER_SETUP_AUTH_SURFACE_ID },
     session: { ...selected, fieldErrors: submitted.fieldErrors },
     state: draftState,
   }).map(
-    (field): FormlessUiAuthFieldContract => ({
+    (field): AuthFieldContract => ({
       autocomplete: field.fieldName === "email" ? "email" : "name",
       field,
       intent: {
@@ -176,7 +176,7 @@ function ownerSetupDraft(ownerName: string, ownerEmail: string) {
 function ownerSetupPasskey(
   state: OwnerSetupRouteState,
   draft: ReturnType<typeof ownerSetupDraft>,
-): FormlessUiAuthPasskeyContract | undefined {
+): AuthPasskeyContract | undefined {
   if (state.status === "passkey-unavailable") {
     return authUnavailablePasskey("create", state.message);
   }
@@ -203,9 +203,7 @@ function ownerSetupPasskey(
   );
 }
 
-function ownerSignInPasskey(
-  state: OwnerLoginRouteState,
-): FormlessUiAuthPasskeyContract | undefined {
+function ownerSignInPasskey(state: OwnerLoginRouteState): AuthPasskeyContract | undefined {
   if (state.status === "passkey-unavailable") {
     return authUnavailablePasskey("sign-in", state.message);
   }
@@ -236,7 +234,7 @@ function authAvailablePasskey(
   pending: boolean,
   disabled = false,
   disabledReason?: string,
-): FormlessUiAuthPasskeyContract {
+): AuthPasskeyContract {
   const passkeyId = `${purpose === "create" ? OWNER_SETUP_AUTH_SURFACE_ID : OWNER_SIGN_IN_AUTH_SURFACE_ID}:passkey:${purpose}`;
   const control = authButton(`${passkeyId}:control`, label, "primary", "submit", {
     disabled,
@@ -262,7 +260,7 @@ function authAvailablePasskey(
 function authUnavailablePasskey(
   purpose: "create" | "sign-in",
   reason: string,
-): FormlessUiAuthPasskeyContract {
+): AuthPasskeyContract {
   return {
     availability: "unavailable",
     id: `${purpose === "create" ? OWNER_SETUP_AUTH_SURFACE_ID : OWNER_SIGN_IN_AUTH_SURFACE_ID}:passkey:${purpose}`,
@@ -272,13 +270,13 @@ function authUnavailablePasskey(
   };
 }
 
-function ownerSetupActions(state: OwnerSetupRouteState): readonly FormlessUiAuthActionContract[] {
+function ownerSetupActions(state: OwnerSetupRouteState): readonly AuthActionContract[] {
   return state.status === "failed" && !state.setupToken
     ? [authAction(OWNER_SETUP_AUTH_SURFACE_ID, "retry", "Try again")]
     : [];
 }
 
-function ownerSignInActions(state: OwnerLoginRouteState): readonly FormlessUiAuthActionContract[] {
+function ownerSignInActions(state: OwnerLoginRouteState): readonly AuthActionContract[] {
   if (state.status === "complete") {
     return [authAction(OWNER_SIGN_IN_AUTH_SURFACE_ID, "logout", "Sign out", "secondary")];
   }
@@ -291,8 +289,8 @@ function authAction(
   surfaceId: string,
   purpose: "logout" | "retry",
   label: string,
-  prominence: FormlessUiButtonContract["prominence"] = "primary",
-): FormlessUiAuthActionContract {
+  prominence: ButtonContract["prominence"] = "primary",
+): AuthActionContract {
   const id = `${surfaceId}:action:${purpose}`;
   const control = authButton(`${id}:control`, label, prominence);
   return {
@@ -304,9 +302,7 @@ function authAction(
   };
 }
 
-function ownerSetupContinuation(
-  state: OwnerSetupRouteState,
-): FormlessUiAuthContinuationContract | undefined {
+function ownerSetupContinuation(state: OwnerSetupRouteState): AuthContinuationContract | undefined {
   if (state.status !== "already-complete" && state.status !== "complete") {
     return undefined;
   }
@@ -316,7 +312,7 @@ function ownerSetupContinuation(
 function authContinuation(
   id: "account" | "administration",
   origin?: string,
-): FormlessUiAuthContinuationContract {
+): AuthContinuationContract {
   const surfaceId = id === "account" ? OWNER_SIGN_IN_AUTH_SURFACE_ID : OWNER_SETUP_AUTH_SURFACE_ID;
   const destinationId = `${surfaceId}:destination:${id}`;
   const control = authButton(`${destinationId}:control`, "Continue", "primary");
@@ -366,13 +362,13 @@ function authFact(id: string, label: string, value: string) {
 
 function ownerSetupContractState(
   state: OwnerSetupRouteState,
-): FormlessUiOwnerSetupAuthSurfaceContract["state"] {
+): OwnerSetupAuthSurfaceContract["state"] {
   return state.status === "invalid-link" ? "invalid" : state.status;
 }
 
 function ownerSignInContractState(
   state: OwnerLoginRouteState,
-): FormlessUiOwnerSignInAuthSurfaceContract["state"] {
+): OwnerSignInAuthSurfaceContract["state"] {
   if (state.status === "logging-out") {
     return "logout-pending";
   }
@@ -464,7 +460,7 @@ function ownerSignInDescription(state: OwnerLoginRouteState): string | undefined
   }
 }
 
-function ownerSetupMessage(state: OwnerSetupRouteState): FormlessUiAuthMessageContract | undefined {
+function ownerSetupMessage(state: OwnerSetupRouteState): AuthMessageContract | undefined {
   if (state.status === "loading") return authMessage("loading", "Loading setup status.");
   if (state.status === "invalid-link") return authMessage("invalid", state.message, "danger");
   if (state.status === "passkey-unavailable")
@@ -473,9 +469,7 @@ function ownerSetupMessage(state: OwnerSetupRouteState): FormlessUiAuthMessageCo
   return undefined;
 }
 
-function ownerSignInMessage(
-  state: OwnerLoginRouteState,
-): FormlessUiAuthMessageContract | undefined {
+function ownerSignInMessage(state: OwnerLoginRouteState): AuthMessageContract | undefined {
   if (state.status === "loading") return authMessage("loading", "Loading sign-in state.");
   if (state.status === "passkey-unavailable")
     return authMessage("passkey", state.message, "warning");
@@ -502,12 +496,12 @@ function authFrame(title: string, description?: string) {
 function authMessage(
   id: string,
   title: string,
-  severity: FormlessUiAuthMessageContract["severity"] = "info",
-): FormlessUiAuthMessageContract {
+  severity: AuthMessageContract["severity"] = "info",
+): AuthMessageContract {
   return { id: `auth:message:${id}`, kind: "authMessage", severity, title: displaySafeText(title) };
 }
 
-function authFeedback(id: string, title: string, detail: string): FormlessUiAuthFeedbackContract {
+function authFeedback(id: string, title: string, detail: string): AuthFeedbackContract {
   return {
     detail: displaySafeText(detail),
     id: `auth:feedback:${id}`,
@@ -520,10 +514,10 @@ function authFeedback(id: string, title: string, detail: string): FormlessUiAuth
 function authButton(
   id: string,
   label: string,
-  prominence: FormlessUiButtonContract["prominence"],
-  type: FormlessUiButtonContract["type"] = "button",
+  prominence: ButtonContract["prominence"],
+  type: ButtonContract["type"] = "button",
   options: { disabled?: boolean; disabledReason?: string; pending?: boolean } = {},
-): FormlessUiButtonContract {
+): ButtonContract {
   return {
     accessibilityLabel: label,
     content: { kind: "label", label },

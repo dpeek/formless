@@ -1,11 +1,11 @@
 import { Theme } from "@astryxdesign/core";
 import { neutralTheme } from "@astryxdesign/theme-neutral";
 import type { ReactNode } from "react";
-import type { FormlessUiDocumentThemeContract } from "@dpeek/formless-presentation/contract";
+import type { DocumentThemeContract } from "@dpeek/formless-presentation/contract";
 
 export type FormlessThemeProviderProps = {
   children: ReactNode;
-  theme: FormlessUiDocumentThemeContract;
+  theme: DocumentThemeContract;
 };
 
 export function FormlessThemeProvider({ children, theme }: FormlessThemeProviderProps) {

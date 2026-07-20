@@ -4,8 +4,8 @@ import { Text } from "@astryxdesign/core/Text";
 import { TextArea } from "@astryxdesign/core/TextArea";
 import { TextInput } from "@astryxdesign/core/TextInput";
 import type {
-  FormlessUiDisplayField,
-  FormlessUiFieldIntentHandler,
+  DisplayFieldContract,
+  FieldIntentHandler,
 } from "@dpeek/formless-presentation/contract";
 import {
   editorFieldValue,
@@ -17,7 +17,7 @@ import {
   fieldIsReadOnly,
   formatInputValue,
   inputSize,
-  type FormlessUiEditorField,
+  type EditorField,
 } from "./field-chrome.tsx";
 import { MarkdownFieldDisplay, MarkdownInput } from "../field-primitives.tsx";
 
@@ -25,8 +25,8 @@ export function TextFieldEditor({
   field,
   onIntent,
 }: {
-  field: FormlessUiEditorField;
-  onIntent: FormlessUiFieldIntentHandler | undefined;
+  field: EditorField;
+  onIntent: FieldIntentHandler | undefined;
 }) {
   function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
     if (event.key === "Enter") {
@@ -61,8 +61,8 @@ export function TextareaFieldEditor({
   field,
   onIntent,
 }: {
-  field: FormlessUiEditorField;
-  onIntent: FormlessUiFieldIntentHandler | undefined;
+  field: EditorField;
+  onIntent: FieldIntentHandler | undefined;
 }) {
   function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     if (event.key === "Escape") {
@@ -90,8 +90,8 @@ export function MarkdownFieldEditor({
   field,
   onIntent,
 }: {
-  field: FormlessUiEditorField;
-  onIntent: FormlessUiFieldIntentHandler | undefined;
+  field: EditorField;
+  onIntent: FieldIntentHandler | undefined;
 }) {
   function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     if (event.key === "Escape") {
@@ -115,7 +115,7 @@ export function MarkdownFieldEditor({
   );
 }
 
-export function TextFieldDisplay({ field }: { field: FormlessUiDisplayField }) {
+export function TextFieldDisplay({ field }: { field: DisplayFieldContract }) {
   const suffix = field.formatting.suffix ?? field.suffix;
 
   return (
@@ -132,7 +132,7 @@ export function TextFieldDisplay({ field }: { field: FormlessUiDisplayField }) {
   );
 }
 
-export function MarkdownFieldDisplayValue({ field }: { field: FormlessUiDisplayField }) {
+export function MarkdownFieldDisplayValue({ field }: { field: DisplayFieldContract }) {
   return <MarkdownFieldDisplay value={field.formatting.displayValue} />;
 }
 

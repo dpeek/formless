@@ -1,14 +1,14 @@
 import { describe, expect, it } from "vite-plus/test";
 import type {
-  FormlessUiContractIntent,
-  FormlessUiContractIntentHandler,
+  PresentationIntent,
+  PresentationIntentHandler,
 } from "@dpeek/formless-presentation/contract";
 import {
-  formlessUiShellManifestReference,
-  formlessUiWorkspaceManifestReference,
-  isFormlessUiShellIntent,
-  isFormlessUiWorkspaceIntent,
-} from "@dpeek/formless-presentation/contract-host";
+  shellManifestReference,
+  workspaceManifestReference,
+  isShellIntent,
+  isWorkspaceIntent,
+} from "@dpeek/formless-presentation/host";
 import {
   createApplicationRuntimePublicationCoordinator,
   type ApplicationRuntimeContractPublication,
@@ -20,8 +20,8 @@ describe("application runtime contract publication coordinator", () => {
     const workspace = workspacePublication("Apps");
     const coordinator = createApplicationRuntimePublicationCoordinator([["shell", shell]]);
     const host = coordinator.host;
-    const shellReference = formlessUiShellManifestReference("application-shell");
-    const workspaceReference = formlessUiWorkspaceManifestReference("workspace:apps");
+    const shellReference = shellManifestReference("application-shell");
+    const workspaceReference = workspaceManifestReference("workspace:apps");
     const initialShell = required(host.read(shellReference));
     const initialServerShell = required(host.getServerSnapshot(shellReference));
     const notifications = { shell: 0, workspace: 0 };
@@ -61,8 +61,8 @@ describe("application runtime contract publication coordinator", () => {
       ["route-child", workspacePublication("Server apps")],
     ]);
     const host = coordinator.host;
-    const shellReference = formlessUiShellManifestReference("application-shell");
-    const workspaceReference = formlessUiWorkspaceManifestReference("workspace:apps");
+    const shellReference = shellManifestReference("application-shell");
+    const workspaceReference = workspaceManifestReference("workspace:apps");
     const serverShell = required(host.getServerSnapshot(shellReference));
     const serverWorkspace = required(host.getServerSnapshot(workspaceReference));
     let shellSeenFromWorkspaceNotification: unknown;
@@ -135,7 +135,7 @@ describe("application runtime contract publication coordinator", () => {
       ["shell", shellPublication("Formless")],
       ["workspace", workspacePublication("Apps")],
     ]);
-    const workspaceReference = formlessUiWorkspaceManifestReference("workspace:apps");
+    const workspaceReference = workspaceManifestReference("workspace:apps");
     const currentWorkspace = coordinator.host.read(workspaceReference);
 
     expect(() => coordinator.publish("duplicate", workspacePublication("Duplicate Apps"))).toThrow(
@@ -147,16 +147,16 @@ describe("application runtime contract publication coordinator", () => {
 
 function shellPublication(
   title: string,
-  dispatch: FormlessUiContractIntentHandler = () => undefined,
+  dispatch: PresentationIntentHandler = () => undefined,
 ): ApplicationRuntimeContractPublication {
-  const reference = formlessUiShellManifestReference("application-shell");
+  const reference = shellManifestReference("application-shell");
 
   return {
     intentHandlers: [
       {
         dispatch,
-        matches: (intent: FormlessUiContractIntent) =>
-          isFormlessUiShellIntent(intent) && intent.shellId === reference.shellId,
+        matches: (intent: PresentationIntent) =>
+          isShellIntent(intent) && intent.shellId === reference.shellId,
       },
     ],
     nodes: [
@@ -178,16 +178,16 @@ function shellPublication(
 
 function workspacePublication(
   label: string,
-  dispatch: FormlessUiContractIntentHandler = () => undefined,
+  dispatch: PresentationIntentHandler = () => undefined,
 ): ApplicationRuntimeContractPublication {
-  const reference = formlessUiWorkspaceManifestReference("workspace:apps");
+  const reference = workspaceManifestReference("workspace:apps");
 
   return {
     intentHandlers: [
       {
         dispatch,
-        matches: (intent: FormlessUiContractIntent) =>
-          isFormlessUiWorkspaceIntent(intent) && intent.screenId === reference.workspaceId,
+        matches: (intent: PresentationIntent) =>
+          isWorkspaceIntent(intent) && intent.screenId === reference.workspaceId,
       },
     ],
     nodes: [

@@ -6,9 +6,9 @@ import { Tooltip } from "@astryxdesign/core/Tooltip";
 import { VisuallyHidden } from "@astryxdesign/core/VisuallyHidden";
 import { spacingVars } from "@astryxdesign/core/theme/tokens.stylex";
 import type {
-  FormlessUiDisplayField,
-  FormlessUiField,
-  FormlessUiFieldIntentHandler,
+  DisplayFieldContract,
+  FieldContract,
+  FieldIntentHandler,
 } from "@dpeek/formless-presentation/contract";
 import {
   editorFieldValue,
@@ -21,7 +21,7 @@ import {
   fieldStatus,
   formatInputValue,
   inputSize,
-  type FormlessUiEditorField,
+  type EditorField,
 } from "./field-chrome.tsx";
 import {
   enumPresentationListContent,
@@ -37,8 +37,8 @@ export function EnumFieldEditor({
   field,
   onIntent,
 }: {
-  field: FormlessUiEditorField;
-  onIntent: FormlessUiFieldIntentHandler | undefined;
+  field: EditorField;
+  onIntent: FieldIntentHandler | undefined;
 }) {
   return <SelectorFieldEditor field={field} onIntent={onIntent} />;
 }
@@ -47,8 +47,8 @@ export function SelectorFieldEditor({
   field,
   onIntent,
 }: {
-  field: FormlessUiEditorField;
-  onIntent: FormlessUiFieldIntentHandler | undefined;
+  field: EditorField;
+  onIntent: FieldIntentHandler | undefined;
 }) {
   const value = formatInputValue(editorFieldValue(field));
   const visualOptions = selectorVisualOptions(field);
@@ -127,7 +127,7 @@ export function SelectorFieldEditor({
   );
 }
 
-function enumRequiredMarkerIsVisible(field: FormlessUiEditorField) {
+function enumRequiredMarkerIsVisible(field: EditorField) {
   const enumFacts = field.enum?.kind === "editor" ? field.enum : undefined;
 
   return (
@@ -135,7 +135,7 @@ function enumRequiredMarkerIsVisible(field: FormlessUiEditorField) {
   );
 }
 
-export function EnumFieldDisplay({ field }: { field: FormlessUiDisplayField }) {
+export function EnumFieldDisplay({ field }: { field: DisplayFieldContract }) {
   const value = formatInputValue(field.value);
   const option = field.formatting.enumValuePresentation
     ? enumValuePresentationToSelectorVisualOption(field.formatting.enumValuePresentation, value)
@@ -173,7 +173,7 @@ export function EnumFieldDisplay({ field }: { field: FormlessUiDisplayField }) {
   return undeclaredMessage ? <Tooltip content={undeclaredMessage}>{display}</Tooltip> : display;
 }
 
-function enumUndeclaredMessage(field: FormlessUiField): string | undefined {
+function enumUndeclaredMessage(field: FieldContract): string | undefined {
   const valueStatus = field.enum?.valueStatus;
 
   if (valueStatus?.kind !== "undeclared") {

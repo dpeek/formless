@@ -1,42 +1,42 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import type {
-  FormlessUiContractIntent,
-  FormlessUiContextResultReference,
-  FormlessUiMainResultReference,
-  FormlessUiRecordResultContract,
-  FormlessUiWorkspaceContract,
-  FormlessUiWorkspaceIntentHandler,
-  FormlessUiWorkspaceManifestReference,
-  FormlessUiWorkspaceSectionContract,
-  FormlessUiWorkspaceSectionShellReference,
+  PresentationIntent,
+  ContextResultReference,
+  MainResultReference,
+  RecordResultContract,
+  WorkspaceContract,
+  WorkspaceIntentHandler,
+  WorkspaceManifestReference,
+  WorkspaceSectionContract,
+  WorkspaceSectionShellReference,
 } from "@dpeek/formless-presentation/contract";
 import {
-  createFormlessUiMemoryContractHost,
-  formlessUiListResultReference,
-  formlessUiRecordResultReference,
-  formlessUiTableResultReference,
-  formlessUiTreeResultReference,
-  formlessUiWorkspaceManifestReference,
-  formlessUiWorkspaceSectionShellReference,
-  isFormlessUiWorkspaceIntent,
-  type FormlessUiContractHostNode,
-  type FormlessUiContractHostNodeSet,
-  type FormlessUiMutableContractHost,
-} from "@dpeek/formless-presentation/contract-host";
+  createMemoryPresentationHost,
+  listResultReference,
+  recordResultReference,
+  tableResultReference,
+  treeResultReference,
+  workspaceManifestReference,
+  workspaceSectionShellReference,
+  isWorkspaceIntent,
+  type PresentationNode,
+  type PresentationNodeSet,
+  type MutablePresentationHost,
+} from "@dpeek/formless-presentation/host";
 import type { ApplicationRuntimeContractPublication } from "./application-runtime-contract-host.tsx";
 
 export type GeneratedWorkspaceContractHostPublication = {
-  nodes: FormlessUiContractHostNodeSet;
-  workspaceReference: FormlessUiWorkspaceManifestReference;
+  nodes: PresentationNodeSet;
+  workspaceReference: WorkspaceManifestReference;
 };
 
 export type GeneratedWorkspaceRuntimePublication = GeneratedWorkspaceContractHostPublication &
   ApplicationRuntimeContractPublication;
 
 export function projectGeneratedWorkspaceContractHostPublication(
-  workspace: FormlessUiWorkspaceContract,
+  workspace: WorkspaceContract,
 ): GeneratedWorkspaceContractHostPublication {
-  const workspaceReference = formlessUiWorkspaceManifestReference(workspace.id);
+  const workspaceReference = workspaceManifestReference(workspace.id);
   const sectionPublications = workspace.sections.map((section) =>
     projectSection(workspaceReference.workspaceId, section),
   );
@@ -62,8 +62,8 @@ export function projectGeneratedWorkspaceContractHostPublication(
 }
 
 export function prepareGeneratedWorkspaceRuntimePublication(
-  workspace: FormlessUiWorkspaceContract,
-  dispatch: FormlessUiWorkspaceIntentHandler,
+  workspace: WorkspaceContract,
+  dispatch: WorkspaceIntentHandler,
 ): GeneratedWorkspaceRuntimePublication {
   const publication = projectGeneratedWorkspaceContractHostPublication(workspace);
 
@@ -71,14 +71,13 @@ export function prepareGeneratedWorkspaceRuntimePublication(
     ...publication,
     intentHandlers: [
       {
-        dispatch: (intent: FormlessUiContractIntent) => {
-          if (!isFormlessUiWorkspaceIntent(intent)) {
+        dispatch: (intent: PresentationIntent) => {
+          if (!isWorkspaceIntent(intent)) {
             return;
           }
           return dispatch(intent);
         },
-        matches: (intent) =>
-          isFormlessUiWorkspaceIntent(intent) && intent.screenId === workspace.id,
+        matches: (intent) => isWorkspaceIntent(intent) && intent.screenId === workspace.id,
       },
     ],
   };
@@ -88,17 +87,17 @@ export function useGeneratedWorkspaceContractHost({
   dispatch,
   publication,
 }: {
-  dispatch: FormlessUiWorkspaceIntentHandler;
+  dispatch: WorkspaceIntentHandler;
   publication: GeneratedWorkspaceRuntimePublication | undefined;
 }): {
-  host: FormlessUiMutableContractHost;
-  workspaceReference: FormlessUiWorkspaceManifestReference | undefined;
+  host: MutablePresentationHost;
+  workspaceReference: WorkspaceManifestReference | undefined;
 } {
   const dispatchRef = useRef(dispatch);
   const [host] = useState(() =>
-    createFormlessUiMemoryContractHost({
+    createMemoryPresentationHost({
       dispatch: (intent) => {
-        if (!isFormlessUiWorkspaceIntent(intent)) {
+        if (!isWorkspaceIntent(intent)) {
           throw new Error("Generated workspace contract host received a shell intent.");
         }
         return dispatchRef.current(intent);
@@ -117,12 +116,12 @@ export function useGeneratedWorkspaceContractHost({
 
 function projectSection(
   workspaceId: string,
-  section: FormlessUiWorkspaceSectionContract,
+  section: WorkspaceSectionContract,
 ): {
-  nodes: FormlessUiContractHostNodeSet;
-  reference: FormlessUiWorkspaceSectionShellReference;
+  nodes: PresentationNodeSet;
+  reference: WorkspaceSectionShellReference;
 } {
-  const reference = formlessUiWorkspaceSectionShellReference(workspaceId, section.id);
+  const reference = workspaceSectionShellReference(workspaceId, section.id);
   const { contextDetail, result, ...presentation } = section.collection.presentation;
   const mainResult = projectMainResult(workspaceId, section.id, result);
   const projectedContext = contextDetail
@@ -162,14 +161,14 @@ function projectSection(
 function projectMainResult(
   workspaceId: string,
   sectionId: string,
-  result: FormlessUiWorkspaceSectionContract["collection"]["presentation"]["result"],
+  result: WorkspaceSectionContract["collection"]["presentation"]["result"],
 ): {
-  node: FormlessUiContractHostNode;
-  reference: FormlessUiMainResultReference;
+  node: PresentationNode;
+  reference: MainResultReference;
 } {
   switch (result.kind) {
     case "list": {
-      const reference = formlessUiListResultReference({
+      const reference = listResultReference({
         resultId: result.id,
         role: "mainResult",
         sectionId,
@@ -178,7 +177,7 @@ function projectMainResult(
       return { node: { reference, snapshot: result }, reference };
     }
     case "recordResult": {
-      const reference = formlessUiRecordResultReference({
+      const reference = recordResultReference({
         resultId: result.id,
         role: "mainResult",
         sectionId,
@@ -187,7 +186,7 @@ function projectMainResult(
       return { node: { reference, snapshot: result }, reference };
     }
     case "table": {
-      const reference = formlessUiTableResultReference({
+      const reference = tableResultReference({
         resultId: result.id,
         role: "mainResult",
         sectionId,
@@ -196,7 +195,7 @@ function projectMainResult(
       return { node: { reference, snapshot: result }, reference };
     }
     case "treeResult": {
-      const reference = formlessUiTreeResultReference({
+      const reference = treeResultReference({
         resultId: result.id,
         role: "mainResult",
         sectionId,
@@ -210,12 +209,12 @@ function projectMainResult(
 function projectContextResult(
   workspaceId: string,
   sectionId: string,
-  result: FormlessUiRecordResultContract,
+  result: RecordResultContract,
 ): {
-  node: FormlessUiContractHostNode;
-  reference: FormlessUiContextResultReference;
+  node: PresentationNode;
+  reference: ContextResultReference;
 } {
-  const reference = formlessUiRecordResultReference({
+  const reference = recordResultReference({
     resultId: result.id,
     role: "contextResult",
     sectionId,

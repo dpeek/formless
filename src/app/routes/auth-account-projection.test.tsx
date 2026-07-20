@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import type { FormlessUiAuthIntent } from "@dpeek/formless-presentation/contract";
+import type { AuthIntent } from "@dpeek/formless-presentation/contract";
 import type {
   AccountCompletionContinuationResult,
   AccountCompletionGate,
@@ -412,7 +412,7 @@ describe("auth account projection", () => {
       ok: true,
     });
 
-    const fieldIntent: FormlessUiAuthIntent = { ...displayName.intent, intent: change };
+    const fieldIntent: AuthIntent = { ...displayName.intent, intent: change };
     expect(authIntentIsCurrent(surface, fieldIntent)).toBe(true);
 
     const unavailableState: AuthAccountRouteState = {

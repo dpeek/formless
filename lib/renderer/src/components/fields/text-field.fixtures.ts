@@ -8,10 +8,7 @@ import type {
   FieldScenarioGroup,
   FieldScenarioProjectionContext,
 } from "../field-scenario-model.ts";
-import type {
-  FormlessUiFieldSurface,
-  FormlessUiRecordFieldRendererKind,
-} from "@dpeek/formless-presentation/contract";
+import type { FieldSurface, RecordFieldRendererKind } from "@dpeek/formless-presentation/contract";
 import type { FieldSchema } from "@dpeek/formless-schema";
 import {
   createField,
@@ -108,7 +105,7 @@ function scalarTextCreateGroup(kind: Extract<FieldKindKey, "long-text" | "markdo
 
 function scalarTextExistingGroup(
   kind: Extract<FieldKindKey, "long-text" | "markdown" | "text">,
-  surface: Extract<FormlessUiFieldSurface, "detail" | "record" | "table-cell">,
+  surface: Extract<FieldSurface, "detail" | "record" | "table-cell">,
 ) {
   return projectScenarioGroup({
     id: `${kind}-${surface}`,
@@ -281,7 +278,7 @@ function operationTextValue(
 
 function projectExistingTextField(
   kind: Extract<FieldKindKey, "long-text" | "markdown" | "text">,
-  surface: Extract<FormlessUiFieldSurface, "detail" | "record" | "table-cell">,
+  surface: Extract<FieldSurface, "detail" | "record" | "table-cell">,
   { facets }: FieldScenarioProjectionContext,
   presentation: "default" | "heading" | "suffix" = "default",
 ) {
@@ -345,7 +342,7 @@ function textField(
 function textFieldControl(
   kind: Extract<FieldKindKey, "long-text" | "markdown" | "text">,
   field: Extract<FieldSchema, { type: "text" }>,
-  surface: FormlessUiFieldSurface | "display",
+  surface: FieldSurface | "display",
 ) {
   if (kind === "long-text") {
     return textControl(field, { editor: "textarea", controlKind: "textarea" });
@@ -363,9 +360,9 @@ function textFieldControl(
 
 function textRendererKind(
   kind: Extract<FieldKindKey, "long-text" | "markdown" | "text">,
-  surface: Extract<FormlessUiFieldSurface, "detail" | "record" | "table-cell">,
+  surface: Extract<FieldSurface, "detail" | "record" | "table-cell">,
   presentation: "default" | "heading" | "suffix",
-): FormlessUiRecordFieldRendererKind {
+): RecordFieldRendererKind {
   if (kind === "long-text" || (kind === "markdown" && surface === "table-cell")) {
     return "textarea";
   }

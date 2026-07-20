@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import type {
-  FormlessUiButtonContent,
-  FormlessUiCreateFieldIntentHandler,
-  FormlessUiCreateIntent,
-  FormlessUiCreateSurfaceContract,
+  ButtonContent,
+  CreateFieldIntentHandler,
+  CreateIntent,
+  CreateSurfaceContract,
 } from "@dpeek/formless-presentation/contract";
 import type { QueryEvaluationContext } from "@dpeek/formless-schema";
 import type { RecordValues } from "@dpeek/formless-storage";
@@ -28,8 +28,8 @@ import {
   selectGeneratedCreateDraftSession,
   type GeneratedCreateDraftSessionState,
 } from "./create-field-authoring.ts";
-import { adaptGeneratedCreateFormlessUiDraftChange } from "./formless-ui-intents.ts";
-import { projectGeneratedCreateFormlessUiSurface } from "./formless-ui-projection.ts";
+import { adaptGeneratedCreateDraftChange } from "./field-intents.ts";
+import { projectGeneratedCreateSurface } from "./field-projection.ts";
 import {
   indexGeneratedCreateSurfaceFields,
   resolveGeneratedCreateFieldIntent,
@@ -44,7 +44,7 @@ import { shouldUseAppReplicaReferenceOptions } from "./reference-field-options.t
 export type CreateHomeOperationConfig = Extract<HomeOperationConfig, { type: "create" }>;
 
 export type GeneratedCreateTriggerPresentation = {
-  content: FormlessUiButtonContent;
+  content: ButtonContent;
   density: "default" | "compact";
   prominence: "primary" | "secondary" | "quiet";
 };
@@ -77,9 +77,9 @@ export type GeneratedCreateRuntimeOptions = {
 };
 
 export type GeneratedCreateRuntime = {
-  onCreateIntent: (intent: FormlessUiCreateIntent) => Promise<void> | void;
-  onFieldIntent: FormlessUiCreateFieldIntentHandler;
-  surface: FormlessUiCreateSurfaceContract;
+  onCreateIntent: (intent: CreateIntent) => Promise<void> | void;
+  onFieldIntent: CreateFieldIntentHandler;
+  surface: CreateSurfaceContract;
 };
 
 export function useGeneratedCreateRuntime({
@@ -116,7 +116,7 @@ export function useGeneratedCreateRuntime({
   const operationPending = binding === undefined ? false : controller.isPending(binding.id);
   const submitPending = isSubmitting || operationPending;
   const referenceOptionsByFieldName = useCreateReferenceOptionsByFieldName(operation.fields);
-  const surface = projectGeneratedCreateFormlessUiSurface({
+  const surface = projectGeneratedCreateSurface({
     enabled: operation.enabled,
     entityLabel: operation.entity.label,
     ...(submissionError === undefined ? {} : { formErrors: [submissionError] }),
@@ -143,10 +143,7 @@ export function useGeneratedCreateRuntime({
     }
   }, [closeOnSuccess, open, operation.defaults, operation.fields, operation.union]);
 
-  function onFieldIntent(
-    fieldId: string,
-    intent: Parameters<FormlessUiCreateFieldIntentHandler>[1],
-  ) {
+  function onFieldIntent(fieldId: string, intent: Parameters<CreateFieldIntentHandler>[1]) {
     if (
       intent.type !== "createDraftChange" ||
       resolveGeneratedCreateFieldIntent(fieldsById, fieldId, intent) === undefined
@@ -156,7 +153,7 @@ export function useGeneratedCreateRuntime({
 
     setSubmissionError(undefined);
     setDraftSessionState((state) => {
-      const result = adaptGeneratedCreateFormlessUiDraftChange(intent, { state });
+      const result = adaptGeneratedCreateDraftChange(intent, { state });
       return result.state ?? state;
     });
   }
@@ -221,7 +218,7 @@ export function useGeneratedCreateRuntime({
     }
   }
 
-  function onCreateIntent(intent: FormlessUiCreateIntent) {
+  function onCreateIntent(intent: CreateIntent) {
     if (intent.surfaceId !== surface.id) {
       return;
     }
@@ -252,7 +249,7 @@ export function projectInitialGeneratedCreateRuntimeSurface({
   snapshot: BrowserReplicaProjectionSnapshot;
   surfaceId: string;
   trigger: GeneratedCreateTriggerPresentation;
-}): FormlessUiCreateSurfaceContract {
+}): CreateSurfaceContract {
   const state = initialCreateState(operation);
   const session = selectGeneratedCreateDraftSession({
     defaults: operation.defaults,
@@ -263,7 +260,7 @@ export function projectInitialGeneratedCreateRuntimeSurface({
     union: operation.union,
   });
 
-  return projectGeneratedCreateFormlessUiSurface({
+  return projectGeneratedCreateSurface({
     enabled: operation.enabled,
     entityLabel: operation.entity.label,
     id: surfaceId,

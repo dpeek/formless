@@ -3,25 +3,25 @@ import { SegmentedControl, SegmentedControlItem } from "@astryxdesign/core/Segme
 import { MoonIcon, SunIcon } from "@heroicons/react/24/outline";
 import { memo, type ReactNode } from "react";
 import type {
-  FormlessUiDocumentThemeActiveMode,
-  FormlessUiDocumentThemeContract,
-  FormlessUiDocumentThemeIntentHandler,
-  FormlessUiDocumentThemeReference,
-  FormlessUiDocumentThemeSelectionControlContract,
+  DocumentThemeActiveMode,
+  DocumentThemeContract,
+  DocumentThemeIntentHandler,
+  DocumentThemeReference,
+  DocumentThemeSelectionControlContract,
 } from "@dpeek/formless-presentation/contract";
 import {
-  useFormlessUiDocumentTheme,
-  useFormlessUiDocumentThemeIntentHandler,
-} from "@dpeek/formless-presentation/contract-host/react";
+  useDocumentTheme,
+  useDocumentThemeIntentHandler,
+} from "@dpeek/formless-presentation/host/react";
 
 export function FormlessThemeIconToggle({
   activeMode,
   control,
   onIntent,
 }: {
-  activeMode: FormlessUiDocumentThemeActiveMode;
-  control: FormlessUiDocumentThemeSelectionControlContract;
-  onIntent: FormlessUiDocumentThemeIntentHandler;
+  activeMode: DocumentThemeActiveMode;
+  control: DocumentThemeSelectionControlContract;
+  onIntent: DocumentThemeIntentHandler;
 }) {
   const targetMode = activeMode === "light" ? "dark" : "light";
   const option = control.options.find((candidate) => candidate.mode === targetMode);
@@ -48,8 +48,8 @@ export function FormlessThemeToggle({
   control,
   onIntent,
 }: {
-  control: FormlessUiDocumentThemeSelectionControlContract;
-  onIntent: FormlessUiDocumentThemeIntentHandler;
+  control: DocumentThemeSelectionControlContract;
+  onIntent: DocumentThemeIntentHandler;
 }) {
   return (
     <SegmentedControl
@@ -76,8 +76,8 @@ export function AstryxDocumentThemeRenderer({
   theme,
 }: {
   children: ReactNode;
-  onIntent: FormlessUiDocumentThemeIntentHandler;
-  theme: FormlessUiDocumentThemeContract;
+  onIntent: DocumentThemeIntentHandler;
+  theme: DocumentThemeContract;
 }) {
   return (
     <>
@@ -95,10 +95,10 @@ export const AstryxSubscribedDocumentThemeRenderer = memo(
     themeReference,
   }: {
     children: ReactNode;
-    themeReference: FormlessUiDocumentThemeReference;
+    themeReference: DocumentThemeReference;
   }) {
-    const onIntent = useFormlessUiDocumentThemeIntentHandler();
-    const theme = useFormlessUiDocumentTheme(themeReference);
+    const onIntent = useDocumentThemeIntentHandler();
+    const theme = useDocumentTheme(themeReference);
 
     return theme ? (
       <AstryxDocumentThemeRenderer onIntent={onIntent} theme={theme}>

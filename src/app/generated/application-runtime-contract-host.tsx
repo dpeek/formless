@@ -1,27 +1,27 @@
 import { createContext, type ReactNode, useContext, useLayoutEffect, useState } from "react";
 import type {
-  FormlessUiContractIntent,
-  FormlessUiContractIntentHandler,
+  PresentationIntent,
+  PresentationIntentHandler,
 } from "@dpeek/formless-presentation/contract";
 import {
-  createFormlessUiMemoryContractHost,
-  type FormlessUiContractHostNodeSet,
-  type FormlessUiMutableContractHost,
-} from "@dpeek/formless-presentation/contract-host";
-import { FormlessUiContractHostProvider } from "@dpeek/formless-presentation/contract-host/react";
+  createMemoryPresentationHost,
+  type PresentationNodeSet,
+  type MutablePresentationHost,
+} from "@dpeek/formless-presentation/host";
+import { PresentationHostProvider } from "@dpeek/formless-presentation/host/react";
 
 export type ApplicationRuntimeIntentHandler = {
-  dispatch: FormlessUiContractIntentHandler;
-  matches: (intent: FormlessUiContractIntent) => boolean;
+  dispatch: PresentationIntentHandler;
+  matches: (intent: PresentationIntent) => boolean;
 };
 
 export type ApplicationRuntimeContractPublication = {
   intentHandlers?: readonly ApplicationRuntimeIntentHandler[];
-  nodes: FormlessUiContractHostNodeSet;
+  nodes: PresentationNodeSet;
 };
 
 export type ApplicationRuntimePublicationCoordinator = {
-  host: FormlessUiMutableContractHost;
+  host: MutablePresentationHost;
   publish(contributorId: string, publication: ApplicationRuntimeContractPublication): void;
   remove(contributorId: string): void;
 };
@@ -39,7 +39,7 @@ export function createApplicationRuntimePublicationCoordinator(
 ): ApplicationRuntimePublicationCoordinator {
   let contributions = new Map(initialContributions);
   const initialNodes = combinedNodes(contributions);
-  const host = createFormlessUiMemoryContractHost({
+  const host = createMemoryPresentationHost({
     dispatch: dispatchIntent,
     nodes: initialNodes,
     serverNodes: initialNodes,
@@ -47,7 +47,7 @@ export function createApplicationRuntimePublicationCoordinator(
 
   return { host, publish, remove };
 
-  function dispatchIntent(intent: FormlessUiContractIntent) {
+  function dispatchIntent(intent: PresentationIntent) {
     const matches = Array.from(contributions.values()).flatMap(
       (publication) =>
         publication.intentHandlers?.filter((handler) => handler.matches(intent)) ?? [],
@@ -83,7 +83,7 @@ export function createApplicationRuntimePublicationCoordinator(
     const nodes = combinedNodes(next);
 
     // Validate the complete graph before exposing its handlers to host subscribers.
-    createFormlessUiMemoryContractHost({ nodes });
+    createMemoryPresentationHost({ nodes });
     contributions = new Map(next);
     host.publish(nodes);
   }
@@ -107,9 +107,7 @@ export function ApplicationRuntimeContractHostProvider({
 }) {
   return (
     <ApplicationRuntimePublicationCoordinatorContext.Provider value={coordinator}>
-      <FormlessUiContractHostProvider host={coordinator.host}>
-        {children}
-      </FormlessUiContractHostProvider>
+      <PresentationHostProvider host={coordinator.host}>{children}</PresentationHostProvider>
     </ApplicationRuntimePublicationCoordinatorContext.Provider>
   );
 }
@@ -145,6 +143,6 @@ export function useApplicationRuntimePublicationCoordinatorContext() {
 
 function combinedNodes(
   contributions: ReadonlyMap<string, ApplicationRuntimeContractPublication>,
-): FormlessUiContractHostNodeSet {
+): PresentationNodeSet {
   return Array.from(contributions.values()).flatMap((publication) => publication.nodes);
 }

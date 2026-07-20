@@ -477,15 +477,15 @@ identity-control-plane record editor to normal administrators.
 ### Requirement: Reactive Access Management Presentation Contract
 
 The system SHALL project dedicated instance access management through complete
-renderer-neutral contracts on the stable application host while identity
-runtime code owns authority, invitation creation and delivery, revocation,
-refresh, validation, and private auth state.
+renderer-neutral Presentation contracts on the stable application host while
+identity runtime code owns authority, invitation creation and delivery,
+revocation, refresh, validation, and private auth state.
 
 #### Scenario: Project complete access management presentation
 
 - GIVEN an authenticated principal opens `/access`
 - WHEN runtime prepares the current access management presentation
-- THEN one typed access-manifest reference resolves one loading, unauthorized,
+- THEN one typed `AccessManifestReference` resolves one loading, unauthorized,
   failed, or ready access snapshot
 - AND a ready access snapshot carries the `Access` title, display-safe people
   with primary email, status, and role labels, display-safe invitations with
@@ -607,7 +607,7 @@ refresh, validation, and private auth state.
   navigation, or timers
 - AND fixtures contain no secrets, unsupported destructive identity actions,
   production assembly behavior, or behavior that bypasses the canonical
-  contract host
+  Presentation Host
 
 ### Requirement: Collaborator Invitation Acceptance
 

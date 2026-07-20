@@ -9,7 +9,7 @@ import type {
   FieldScenarioGroup,
 } from "../field-scenario-model.ts";
 import type { FieldSchema, StateMachineSchema } from "@dpeek/formless-schema";
-import type { FormlessUiField } from "@dpeek/formless-presentation/contract";
+import type { FieldContract } from "@dpeek/formless-presentation/contract";
 import {
   createField,
   displayField,
@@ -268,14 +268,14 @@ function stateMachineDisplayField(input: {
 }
 
 function applyStateMachineFacts(
-  field: FormlessUiField,
+  field: FieldContract,
   input: {
     field?: Extract<FieldSchema, { type: "enum" }>;
     interaction?: "display" | "transitions";
     machine?: StateMachineSchema;
     value?: unknown;
   },
-): FormlessUiField {
+): FieldContract {
   if (field.mode !== "display") {
     return field;
   }

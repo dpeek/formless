@@ -2,11 +2,11 @@ import { readFile } from "node:fs/promises";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vite-plus/test";
 import type {
-  FormlessUiAccessGrantSelectionContract,
-  FormlessUiAccessInvitationAuthoringContract,
-  FormlessUiAccessReadyContract,
+  AccessGrantSelectionContract,
+  AccessInvitationAuthoringContract,
+  AccessReadyContract,
 } from "@dpeek/formless-presentation/contract";
-import { formlessUiContractReferenceKey } from "@dpeek/formless-presentation/contract-host";
+import { presentationReferenceKey } from "@dpeek/formless-presentation/host";
 import {
   accessFixtureAuthoringReference,
   createFormlessAccessFixtures,
@@ -197,7 +197,7 @@ describe("canonical access-management fixtures", () => {
     const notifications = new Set<string>();
     const stops = [fixtureHost.accessReference, accessFixtureAuthoringReference].map((reference) =>
       fixtureHost.host.subscribe(reference, () => {
-        notifications.add(formlessUiContractReferenceKey(reference));
+        notifications.add(presentationReferenceKey(reference));
       }),
     );
 
@@ -209,7 +209,7 @@ describe("canonical access-management fixtures", () => {
     const email = requiredCurrentAuthoring(fixtureHost).fields.targetEmail;
     fixtureHost.host.dispatch({ ...email.changeIntent, value: "scope@example.com" });
     expect(notifications).toEqual(
-      new Set([formlessUiContractReferenceKey(accessFixtureAuthoringReference)]),
+      new Set([presentationReferenceKey(accessFixtureAuthoringReference)]),
     );
 
     notifications.clear();
@@ -219,9 +219,7 @@ describe("canonical access-management fixtures", () => {
       throw new Error("Missing pending invitation revocation action.");
     }
     fixtureHost.host.dispatch(revocation.action.intent);
-    expect(notifications).toEqual(
-      new Set([formlessUiContractReferenceKey(fixtureHost.accessReference)]),
-    );
+    expect(notifications).toEqual(new Set([presentationReferenceKey(fixtureHost.accessReference)]));
 
     for (const stop of stops) {
       stop();
@@ -243,7 +241,7 @@ describe("canonical access-management fixtures", () => {
     const fixtureSource = await readFile(new URL("./access.fixtures.ts", import.meta.url), "utf8");
     const layoutSource = await readFile(new URL("./access.tsx", import.meta.url), "utf8");
     const rendererSource = await readFile(
-      new URL("./formless-ui-access-renderer.tsx", import.meta.url),
+      new URL("./access-renderer.tsx", import.meta.url),
       "utf8",
     );
     const rootSource = await readFile(new URL("../root.tsx", import.meta.url), "utf8");
@@ -259,9 +257,9 @@ describe("canonical access-management fixtures", () => {
     expect(`${fixtureSource}\n${layoutSource}`).not.toMatch(
       /\blocalStorage\b|\bsessionStorage\b|\bdocument\.|\bwindow\.|\bfetch\(|\bsetTimeout\b|\bsetInterval\b|className/,
     );
-    expect(layoutSource.match(/createFormlessUiMemoryContractHost\(\{/g)).toHaveLength(1);
-    expect(layoutSource.match(/<FormlessUiContractHostProvider\b/g)).toHaveLength(1);
-    expect(rendererSource).not.toContain("FormlessUiContractHostProvider");
+    expect(layoutSource.match(/createMemoryPresentationHost\(\{/g)).toHaveLength(1);
+    expect(layoutSource.match(/<PresentationHostProvider\b/g)).toHaveLength(1);
+    expect(rendererSource).not.toContain("PresentationHostProvider");
     expect(rootSource).toContain("FormlessAccessLayout");
   });
 });
@@ -277,7 +275,7 @@ function requiredFixture(fixtures: readonly FormlessAccessFixture[], id: Formles
 function readyManifest(
   fixtures: readonly FormlessAccessFixture[],
   id: FormlessAccessFixtureId,
-): FormlessUiAccessReadyContract {
+): AccessReadyContract {
   const manifest = requiredFixture(fixtures, id).state.manifest;
   if (manifest.state !== "ready") {
     throw new Error(`Expected ready ${id} access fixture.`);
@@ -298,7 +296,7 @@ function requiredAuthoring(
 
 function requiredCurrentAuthoring(
   fixtureHost: ReturnType<typeof createFormlessAccessFixtureHost>,
-): FormlessUiAccessInvitationAuthoringContract {
+): AccessInvitationAuthoringContract {
   const authoring = fixtureHost.getState().authoring;
   if (!authoring) {
     throw new Error("Expected current access authoring fixture.");
@@ -308,7 +306,7 @@ function requiredCurrentAuthoring(
 
 function requiredCurrentReadyManifest(
   fixtureHost: ReturnType<typeof createFormlessAccessFixtureHost>,
-): FormlessUiAccessReadyContract {
+): AccessReadyContract {
   const manifest = fixtureHost.getState().manifest;
   if (manifest.state !== "ready") {
     throw new Error("Expected current ready access fixture.");
@@ -316,7 +314,7 @@ function requiredCurrentReadyManifest(
   return manifest;
 }
 
-function grantLabels(selection: FormlessUiAccessGrantSelectionContract) {
+function grantLabels(selection: AccessGrantSelectionContract) {
   return selection.groups.map((group) => group.options.map(({ label }) => label));
 }
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import type { FormlessUiTreeItemContract } from "@dpeek/formless-presentation/contract";
+import type { TreeItemContract } from "@dpeek/formless-presentation/contract";
 import type { StoredRecord } from "@dpeek/formless-storage";
 import { selectTreeResultModel, type TreeResultModel } from "../../client/tree-result-model.ts";
 import { selectScreenModels } from "../../client/views.ts";
@@ -1260,18 +1260,16 @@ function selectedPlacements(
 }
 
 function treeItemByPlacement(
-  items: readonly FormlessUiTreeItemContract[],
+  items: readonly TreeItemContract[],
   placementId: string,
-): FormlessUiTreeItemContract {
+): TreeItemContract {
   const item = flattenContractTreeItems(items).find(
     (candidate) => candidate.placementId === placementId,
   );
   return required(item);
 }
 
-function flattenContractTreeItems(
-  items: readonly FormlessUiTreeItemContract[],
-): FormlessUiTreeItemContract[] {
+function flattenContractTreeItems(items: readonly TreeItemContract[]): TreeItemContract[] {
   return items.flatMap((item) => [item, ...flattenContractTreeItems(item.children)]);
 }
 

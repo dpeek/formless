@@ -1,11 +1,11 @@
 import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vite-plus/test";
 import type {
-  FormlessUiManagementReadyContract,
-  FormlessUiWorkspaceContract,
-  FormlessUiWorkspaceIntent,
+  ManagementReadyContract,
+  WorkspaceContract,
+  WorkspaceIntent,
 } from "@dpeek/formless-presentation/contract";
-import { formlessUiWorkspaceManifestReference } from "@dpeek/formless-presentation/contract-host";
+import { workspaceManifestReference } from "@dpeek/formless-presentation/host";
 import { listInstallableAppPackages } from "@dpeek/formless-installed-apps";
 import type { WorkspaceGatewayOperation } from "@dpeek/formless-gateway/client";
 import { bundledAppPackageResolver } from "../../shared/app-packages.ts";
@@ -24,8 +24,8 @@ import {
 import { createInstanceManagementRuntimePublicationController } from "./instance-management-runtime.tsx";
 import { initialInstanceManagementRuntimeContribution } from "./instance-management-contract.ts";
 
-const appsReference = formlessUiWorkspaceManifestReference("instance-apps");
-const routesReference = formlessUiWorkspaceManifestReference("instance-routes");
+const appsReference = workspaceManifestReference("instance-apps");
+const routesReference = workspaceManifestReference("instance-routes");
 
 describe("instance management projection", () => {
   it("projects loading and display-safe failure independently from gateway availability", () => {
@@ -237,7 +237,7 @@ describe("instance management runtime publication", () => {
     const runtime = createInstanceManagementRuntimePublicationController(application);
     const calls: Array<{ kind: string; value?: unknown }> = [];
     const actions = actionsRecording(calls);
-    const appWorkspaceIntents: FormlessUiWorkspaceIntent[] = [];
+    const appWorkspaceIntents: WorkspaceIntent[] = [];
 
     runtime.updateRuntime(input(), actions);
     expect(required(application.host.read(instanceManagementReference)).state).toBe("loading");
@@ -429,7 +429,7 @@ function readyProjection(overrides: Partial<ProjectInstanceManagementOptions> = 
 
 function readyManifest(projection: {
   manifest: ReturnType<typeof projectInstanceManagement>["manifest"];
-}): FormlessUiManagementReadyContract {
+}): ManagementReadyContract {
   if (projection.manifest.state !== "ready") {
     throw new Error(`Expected ready management, received ${projection.manifest.state}.`);
   }
@@ -496,9 +496,9 @@ function managementPushIntent(projection: {
 function workspaceController(
   id: string,
   label: string,
-  dispatch: (intent: FormlessUiWorkspaceIntent) => void = () => undefined,
+  dispatch: (intent: WorkspaceIntent) => void = () => undefined,
 ): GeneratedWorkspaceRuntimeController {
-  const workspace: FormlessUiWorkspaceContract = {
+  const workspace: WorkspaceContract = {
     accessibilityLabel: `${label} workspace`,
     actions: [],
     id,

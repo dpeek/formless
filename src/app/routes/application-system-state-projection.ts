@@ -1,10 +1,10 @@
 import type {
-  FormlessUiApplicationSystemStateActionContract,
-  FormlessUiApplicationSystemStateActionPurpose,
-  FormlessUiApplicationSystemStateContract,
-  FormlessUiApplicationSystemStateIntent,
-  FormlessUiApplicationSystemStateKind,
-  FormlessUiCompactStatusIntent,
+  ApplicationSystemStateActionContract,
+  ApplicationSystemStateActionPurpose,
+  ApplicationSystemStateContract,
+  ApplicationSystemStateIntent,
+  ApplicationSystemStateKind,
+  CompactStatusIntent,
 } from "@dpeek/formless-presentation/contract";
 import { displaySafeText } from "./instance-management-display-safety.ts";
 
@@ -15,28 +15,28 @@ export type ApplicationSystemStateProjectionInput = {
     id: string;
     label: string;
     prominence?: "primary" | "quiet" | "secondary";
-    purpose: FormlessUiApplicationSystemStateActionPurpose;
+    purpose: ApplicationSystemStateActionPurpose;
   }[];
   facts?: readonly { id: string; label: string; value: string }[];
   feedback?: {
     detail?: string;
     id: string;
-    intent: FormlessUiCompactStatusIntent;
+    intent: CompactStatusIntent;
     title: string;
   };
   heading: string;
   id: string;
   message: string;
-  state: FormlessUiApplicationSystemStateKind;
+  state: ApplicationSystemStateKind;
 };
 
 export type ResolvedApplicationSystemStateIntent =
-  | { action: FormlessUiApplicationSystemStateActionContract; kind: "action" }
+  | { action: ApplicationSystemStateActionContract; kind: "action" }
   | { kind: "ignored" };
 
 export function projectApplicationSystemState(
   input: ApplicationSystemStateProjectionInput,
-): FormlessUiApplicationSystemStateContract {
+): ApplicationSystemStateContract {
   return {
     accessibilityLabel: displaySafeText(input.accessibilityLabel ?? input.heading),
     actions: (input.actions ?? []).map((action) => applicationSystemStateAction(input.id, action)),
@@ -68,8 +68,8 @@ export function projectApplicationSystemState(
 }
 
 export function resolveApplicationSystemStateIntent(
-  snapshot: FormlessUiApplicationSystemStateContract,
-  intent: FormlessUiApplicationSystemStateIntent,
+  snapshot: ApplicationSystemStateContract,
+  intent: ApplicationSystemStateIntent,
 ): ResolvedApplicationSystemStateIntent {
   if (intent.stateId !== snapshot.id) {
     return { kind: "ignored" };
@@ -92,7 +92,7 @@ export function resolveApplicationSystemStateIntent(
 function applicationSystemStateAction(
   stateId: string,
   input: NonNullable<ApplicationSystemStateProjectionInput["actions"]>[number],
-): FormlessUiApplicationSystemStateActionContract {
+): ApplicationSystemStateActionContract {
   const controlId = `control:${input.id}`;
 
   return {

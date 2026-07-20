@@ -3,10 +3,7 @@ import { parseAppSchema } from "@dpeek/formless-schema";
 import { describe, expect, it } from "vite-plus/test";
 
 import type { CreateFieldConfig, RecordFieldConfig } from "../../client/views.ts";
-import {
-  projectGeneratedCreateFormlessUiField,
-  projectGeneratedRecordFormlessUiField,
-} from "./formless-ui-projection.ts";
+import { projectGeneratedCreateField, projectGeneratedRecordField } from "./field-projection.ts";
 
 const siteSourceSchema = parseAppSchema(rawSiteSourceSchema);
 
@@ -80,7 +77,7 @@ describe("generated media presentation conformance", () => {
       },
     ];
     const projectedById = {
-      "create-operation": projectGeneratedCreateFormlessUiField({
+      "create-operation": projectGeneratedCreateField({
         fieldConfig: createConfig,
         mediaAssetOptions,
         occurrence: {
@@ -89,7 +86,7 @@ describe("generated media presentation conformance", () => {
         },
         value: "hero.webp",
       }),
-      record: projectGeneratedRecordFormlessUiField({
+      record: projectGeneratedRecordField({
         canPatch: true,
         entityName: "block",
         fieldConfig: recordConfig,
@@ -103,7 +100,7 @@ describe("generated media presentation conformance", () => {
         schema: siteSourceSchema,
         surface: "record",
       }),
-      table: projectGeneratedRecordFormlessUiField({
+      table: projectGeneratedRecordField({
         canPatch: true,
         density: "compact",
         entityName: "block",
@@ -118,7 +115,7 @@ describe("generated media presentation conformance", () => {
         schema: siteSourceSchema,
         surface: "table-cell",
       }),
-      detail: projectGeneratedRecordFormlessUiField({
+      detail: projectGeneratedRecordField({
         canPatch: true,
         entityName: "block",
         fieldConfig: recordConfig,
@@ -137,7 +134,7 @@ describe("generated media presentation conformance", () => {
         showLabel: true,
         surface: "detail",
       }),
-      tree: projectGeneratedRecordFormlessUiField({
+      tree: projectGeneratedRecordField({
         canPatch: true,
         entityName: "block",
         fieldConfig: recordConfig,

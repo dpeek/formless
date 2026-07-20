@@ -7,7 +7,7 @@ import type {
   FieldScenarioGroup,
   FieldScenarioProjectionContext,
 } from "../field-scenario-model.ts";
-import type { FormlessUiFieldSurface } from "@dpeek/formless-presentation/contract";
+import type { FieldSurface } from "@dpeek/formless-presentation/contract";
 import {
   booleanControl,
   createField,
@@ -60,9 +60,7 @@ export const booleanScenarioGroups = [
   }),
 ] satisfies readonly FieldScenarioGroup[];
 
-function existingBooleanGroup(
-  surface: Extract<FormlessUiFieldSurface, "detail" | "record" | "table-cell">,
-) {
+function existingBooleanGroup(surface: Extract<FieldSurface, "detail" | "record" | "table-cell">) {
   return projectScenarioGroup({
     id: `boolean-${surface}`,
     kind: "boolean",
@@ -116,7 +114,7 @@ function projectOperationBooleanField({ facets }: FieldScenarioProjectionContext
 }
 
 function projectExistingBooleanField(
-  surface: Extract<FormlessUiFieldSurface, "detail" | "record" | "table-cell">,
+  surface: Extract<FieldSurface, "detail" | "record" | "table-cell">,
   { facets }: FieldScenarioProjectionContext,
 ) {
   const required = facets.requiredness === "required";

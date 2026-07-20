@@ -15,8 +15,8 @@ Read this when editing `lib/renderer/*`.
 
 - Formless runtime storage, schema parsing, projections, route policy, effects, or
   write planning.
-- Renderer-neutral Formless UI contracts, references, intents, contract hosts, or
-  React host adapters.
+- Renderer-neutral Presentation contracts, references, intents, Presentation
+  Hosts, or React host adapters.
 - Renderer-neutral Site contracts, public form sessions, or Site runtime behavior.
 - Canonical product specs.
 
@@ -44,7 +44,8 @@ Read this when editing `lib/renderer/*`.
 
 - Use **Formless Renderer** for product behavior and **Astryx** only for concrete
   package, component, token, StyleX, CSS, or source facts.
-- Keep `FormlessUi*` vocabulary for the renderer-neutral Presentation protocol.
+- Use the Presentation package's concise surface contract and generic host
+  vocabulary directly.
 - Consume contracts and hosts through documented Presentation package subpaths.
 - Consume projected contract facts and dispatch canonical intents. Do not read app
   records, parse schema, execute operations, or plan writes in renderer code.

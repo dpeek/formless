@@ -8,7 +8,7 @@ import { FormlessAuthLayout } from "./components/auth.tsx";
 import { FormlessAccessLayout } from "./components/access.tsx";
 import { FormlessApplicationShellLayout } from "./components/application-shell.tsx";
 import { FormlessCreateSurfacesLayout } from "./components/create-surfaces.tsx";
-import { FormlessCanonicalFieldsLayout } from "./components/formless-ui-fields.tsx";
+import { FormlessCanonicalFieldsLayout } from "./components/canonical-fields.tsx";
 import { FormlessFieldsLayout } from "./components/fields.tsx";
 import { FormlessGeneratedFieldsLayout } from "./components/generated-fields.tsx";
 import { FormlessGeneratedWorkspaceLayout } from "./components/generated-workspace.tsx";
@@ -25,7 +25,7 @@ import {
   useFormlessFixtureEnvironment,
 } from "./components/fixture-layout.tsx";
 import { FormlessThemeProvider } from "./theme.tsx";
-import type { FormlessUiDocumentThemeContract } from "@dpeek/formless-presentation/contract";
+import type { DocumentThemeContract } from "@dpeek/formless-presentation/contract";
 
 type FormlessPrototypeLayout = {
   name: string;
@@ -71,7 +71,7 @@ const layoutSearchSource = createStaticSource(layoutCommandItems, {
   keywords: (item) => [item.auxiliaryData?.anchor ?? item.id],
 });
 
-const publicSitePrototypeTheme: FormlessUiDocumentThemeContract = {
+const publicSitePrototypeTheme: DocumentThemeContract = {
   activeMode: "light",
   id: "theme:prototype",
   kind: "documentTheme",

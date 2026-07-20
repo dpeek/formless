@@ -1,22 +1,22 @@
 import { useState } from "react";
 import type {
-  FormlessUiAccessActionContract,
-  FormlessUiAccessControlledFieldContract,
-  FormlessUiAccessGrantSelectionContract,
-  FormlessUiAccessIntent,
-  FormlessUiAccessInvitationAuthoringContract,
-  FormlessUiAccessManifestReference,
-  FormlessUiAccessReadyContract,
+  AccessActionContract,
+  AccessControlledFieldContract,
+  AccessGrantSelectionContract,
+  AccessIntent,
+  AccessInvitationAuthoringContract,
+  AccessManifestReference,
+  AccessReadyContract,
 } from "@dpeek/formless-presentation/contract";
 import {
-  createFormlessUiMemoryContractHost,
-  formlessUiAccessInvitationAuthoringReference,
-  formlessUiAccessManifestReference,
-  isFormlessUiAccessIntent,
-  type FormlessUiContractHostNodeSet,
-  type FormlessUiMutableContractHost,
-} from "@dpeek/formless-presentation/contract-host";
-import { FormlessUiContractHostProvider } from "@dpeek/formless-presentation/contract-host/react";
+  createMemoryPresentationHost,
+  accessInvitationAuthoringReference,
+  accessManifestReference,
+  isAccessIntent,
+  type PresentationNodeSet,
+  type MutablePresentationHost,
+} from "@dpeek/formless-presentation/host";
+import { PresentationHostProvider } from "@dpeek/formless-presentation/host/react";
 import {
   accessFixtureAuthoringReference,
   createFormlessAccessFixtures,
@@ -25,7 +25,7 @@ import {
   type FormlessAccessFixtureState,
 } from "./access.fixtures.ts";
 import { FormlessFixtureFrame, FormlessFixtureSelector } from "./fixture-layout.tsx";
-import { AstryxSubscribedAccessRenderer } from "./formless-ui-access-renderer.tsx";
+import { AstryxSubscribedAccessRenderer } from "./access-renderer.tsx";
 
 export function FormlessAccessLayout() {
   const [fixtureHosts] = useState(createFormlessAccessFixtureHosts);
@@ -60,17 +60,17 @@ export function FormlessAccessFixtureView({
   fixtureHost: FormlessAccessFixtureHost;
 }) {
   return (
-    <FormlessUiContractHostProvider host={fixtureHost.host}>
+    <PresentationHostProvider host={fixtureHost.host}>
       <AstryxSubscribedAccessRenderer accessReference={fixtureHost.accessReference} />
-    </FormlessUiContractHostProvider>
+    </PresentationHostProvider>
   );
 }
 
 export type FormlessAccessFixtureHost = FormlessAccessFixture & {
-  accessReference: FormlessUiAccessManifestReference;
+  accessReference: AccessManifestReference;
   getState(): FormlessAccessFixtureState;
-  host: Omit<FormlessUiMutableContractHost, "dispatch"> & {
-    dispatch(intent: FormlessUiAccessIntent): void;
+  host: Omit<MutablePresentationHost, "dispatch"> & {
+    dispatch(intent: AccessIntent): void;
   };
 };
 
@@ -79,11 +79,11 @@ export function createFormlessAccessFixtureHost(
 ): FormlessAccessFixtureHost {
   let state = fixture.state;
   const initialPublication = projectFormlessAccessFixturePublication(state);
-  let host: FormlessUiMutableContractHost;
+  let host: MutablePresentationHost;
 
-  host = createFormlessUiMemoryContractHost({
+  host = createMemoryPresentationHost({
     dispatch: (intent) => {
-      if (!isFormlessUiAccessIntent(intent)) {
+      if (!isAccessIntent(intent)) {
         throw new Error("Access fixture host received an unsupported intent.");
       }
 
@@ -107,10 +107,10 @@ export function createFormlessAccessFixtureHost(
 }
 
 export function projectFormlessAccessFixturePublication(state: FormlessAccessFixtureState): {
-  accessReference: FormlessUiAccessManifestReference;
-  nodes: FormlessUiContractHostNodeSet;
+  accessReference: AccessManifestReference;
+  nodes: PresentationNodeSet;
 } {
-  const accessReference = formlessUiAccessManifestReference(state.manifest.id);
+  const accessReference = accessManifestReference(state.manifest.id);
 
   return {
     accessReference,
@@ -119,7 +119,7 @@ export function projectFormlessAccessFixturePublication(state: FormlessAccessFix
       ...(state.authoring
         ? [
             {
-              reference: formlessUiAccessInvitationAuthoringReference(
+              reference: accessInvitationAuthoringReference(
                 state.authoring.accessId,
                 state.authoring.id,
               ),
@@ -133,7 +133,7 @@ export function projectFormlessAccessFixturePublication(state: FormlessAccessFix
 
 export function applyFormlessAccessFixtureIntent(
   state: FormlessAccessFixtureState,
-  intent: FormlessUiAccessIntent,
+  intent: AccessIntent,
 ): FormlessAccessFixtureState {
   const manifest = state.manifest;
   if (manifest.state !== "ready" || manifest.id !== intent.accessId) {
@@ -162,8 +162,8 @@ function createFormlessAccessFixtureHosts() {
 
 function applyAuthoringOpenChange(
   state: FormlessAccessFixtureState,
-  manifest: FormlessUiAccessReadyContract,
-  intent: Extract<FormlessUiAccessIntent, { type: "accessInvitationAuthoringOpenChange" }>,
+  manifest: AccessReadyContract,
+  intent: Extract<AccessIntent, { type: "accessInvitationAuthoringOpenChange" }>,
 ) {
   const authoring = state.authoring;
   if (!authoring || authoring.id !== intent.authoringId) {
@@ -184,7 +184,7 @@ function applyAuthoringOpenChange(
 
 function applyAuthoringFieldChange(
   state: FormlessAccessFixtureState,
-  intent: Extract<FormlessUiAccessIntent, { type: "accessInvitationFieldChange" }>,
+  intent: Extract<AccessIntent, { type: "accessInvitationFieldChange" }>,
 ) {
   const authoring = state.authoring;
   if (!authoring || authoring.id !== intent.authoringId || authoring.pending) {
@@ -194,10 +194,7 @@ function applyAuthoringFieldChange(
   const fieldEntry = Object.entries(authoring.fields).find(([, field]) =>
     isExactAccessIntent(intent, { ...field.changeIntent, value: intent.value }),
   ) as
-    | [
-        keyof FormlessUiAccessInvitationAuthoringContract["fields"],
-        FormlessUiAccessControlledFieldContract,
-      ]
+    | [keyof AccessInvitationAuthoringContract["fields"], AccessControlledFieldContract]
     | undefined;
   if (!fieldEntry || fieldEntry[1].disabledReason) {
     return state;
@@ -222,14 +219,14 @@ function applyAuthoringFieldChange(
 
 function applyAuthoringGrantSelection(
   state: FormlessAccessFixtureState,
-  intent: Extract<FormlessUiAccessIntent, { type: "accessInvitationGrantSelection" }>,
+  intent: Extract<AccessIntent, { type: "accessInvitationGrantSelection" }>,
 ) {
   const authoring = state.authoring;
   if (!authoring || authoring.id !== intent.authoringId || authoring.pending) {
     return state;
   }
 
-  const grantSelections: FormlessUiAccessInvitationAuthoringContract["grantSelections"] = [
+  const grantSelections: AccessInvitationAuthoringContract["grantSelections"] = [
     applyGrantSelection(authoring.grantSelections[0], intent),
     applyGrantSelection(authoring.grantSelections[1], intent),
   ];
@@ -247,7 +244,7 @@ function applyAuthoringGrantSelection(
 
 function applyAuthoringSubmit(
   state: FormlessAccessFixtureState,
-  intent: Extract<FormlessUiAccessIntent, { type: "accessInvitationSubmit" }>,
+  intent: Extract<AccessIntent, { type: "accessInvitationSubmit" }>,
 ) {
   const authoring = state.authoring;
   if (
@@ -274,11 +271,8 @@ function applyAuthoringSubmit(
 
 function applyRevocationConfirmationOpenChange(
   state: FormlessAccessFixtureState,
-  manifest: FormlessUiAccessReadyContract,
-  intent: Extract<
-    FormlessUiAccessIntent,
-    { type: "accessInvitationRevocationConfirmationOpenChange" }
-  >,
+  manifest: AccessReadyContract,
+  intent: Extract<AccessIntent, { type: "accessInvitationRevocationConfirmationOpenChange" }>,
 ) {
   if (!intent.open) {
     const confirmation = manifest.confirmation;
@@ -312,8 +306,8 @@ function applyRevocationConfirmationOpenChange(
 
 function applyInvitationRevoke(
   state: FormlessAccessFixtureState,
-  manifest: FormlessUiAccessReadyContract,
-  intent: Extract<FormlessUiAccessIntent, { type: "accessInvitationRevoke" }>,
+  manifest: AccessReadyContract,
+  intent: Extract<AccessIntent, { type: "accessInvitationRevoke" }>,
 ): FormlessAccessFixtureState {
   const confirmation = manifest.confirmation;
   if (
@@ -340,9 +334,9 @@ function applyInvitationRevoke(
 }
 
 function applyGrantSelection<Purpose extends "memberships" | "roles">(
-  selection: FormlessUiAccessGrantSelectionContract & { purpose: Purpose },
-  intent: Extract<FormlessUiAccessIntent, { type: "accessInvitationGrantSelection" }>,
-): FormlessUiAccessGrantSelectionContract & { purpose: Purpose } {
+  selection: AccessGrantSelectionContract & { purpose: Purpose },
+  intent: Extract<AccessIntent, { type: "accessInvitationGrantSelection" }>,
+): AccessGrantSelectionContract & { purpose: Purpose } {
   if (selection.id !== intent.controlId || selection.disabledReason) {
     return selection;
   }
@@ -392,8 +386,8 @@ function applyGrantSelection<Purpose extends "memberships" | "roles">(
 }
 
 function normalizeAuthoringFields(
-  fields: FormlessUiAccessInvitationAuthoringContract["fields"],
-): FormlessUiAccessInvitationAuthoringContract["fields"] {
+  fields: AccessInvitationAuthoringContract["fields"],
+): AccessInvitationAuthoringContract["fields"] {
   const targetSurface = fields.targetSurface.value;
   const targetAppInstall = accessFieldWithDefaultOption(fields.targetAppInstall);
   const targetOrganization = accessFieldWithDefaultOption(fields.targetOrganization);
@@ -423,8 +417,8 @@ function normalizeAuthoringFields(
 }
 
 function accessFieldWithDefaultOption(
-  field: FormlessUiAccessControlledFieldContract,
-): FormlessUiAccessControlledFieldContract {
+  field: AccessControlledFieldContract,
+): AccessControlledFieldContract {
   if (field.value) {
     return field;
   }
@@ -444,7 +438,7 @@ function accessFieldWithDefaultOption(
   };
 }
 
-function fieldErrors(field: FormlessUiAccessControlledFieldContract, value: string) {
+function fieldErrors(field: AccessControlledFieldContract, value: string) {
   const trimmed = value.trim();
   if (field.required && !trimmed) {
     return [`${field.label} is required.`];
@@ -456,8 +450,8 @@ function fieldErrors(field: FormlessUiAccessControlledFieldContract, value: stri
 }
 
 function validateAuthoring(
-  authoring: FormlessUiAccessInvitationAuthoringContract,
-): FormlessUiAccessInvitationAuthoringContract {
+  authoring: AccessInvitationAuthoringContract,
+): AccessInvitationAuthoringContract {
   const errors = [
     ...Object.values(authoring.fields).flatMap((field) => field.errors),
     ...authoring.grantSelections.flatMap((selection) => selection.errors),
@@ -484,7 +478,7 @@ function validateAuthoring(
 function revocationConfirmation(
   invitationId: string,
   targetEmail: string,
-): FormlessUiAccessReadyContract["confirmation"] {
+): AccessReadyContract["confirmation"] {
   return {
     action: accessAction("invitation-revoke", "Revoke invitation", {
       accessId: "access:fixture",
@@ -512,11 +506,11 @@ function revocationConfirmation(
   };
 }
 
-function accessAction<Intent extends FormlessUiAccessActionContract["intent"]>(
-  purpose: FormlessUiAccessActionContract<Intent>["purpose"],
+function accessAction<Intent extends AccessActionContract["intent"]>(
+  purpose: AccessActionContract<Intent>["purpose"],
   label: string,
   intent: Intent,
-): FormlessUiAccessActionContract<Intent> {
+): AccessActionContract<Intent> {
   return {
     control: {
       accessibilityLabel: label,
@@ -536,12 +530,12 @@ function accessAction<Intent extends FormlessUiAccessActionContract["intent"]>(
 
 function replaceAuthoring(
   state: FormlessAccessFixtureState,
-  authoring: FormlessUiAccessInvitationAuthoringContract,
+  authoring: AccessInvitationAuthoringContract,
 ) {
   return authoring === state.authoring ? state : { ...state, authoring };
 }
 
-function isExactAccessIntent(actual: FormlessUiAccessIntent, expected: FormlessUiAccessIntent) {
+function isExactAccessIntent(actual: AccessIntent, expected: AccessIntent) {
   const actualRecord = actual as unknown as Record<string, unknown>;
   const expectedRecord = expected as unknown as Record<string, unknown>;
   const actualKeys = Object.keys(actualRecord);

@@ -12,8 +12,8 @@ import {
   type SetStateAction,
 } from "react";
 import type {
-  FormlessUiDocumentThemeContract,
-  FormlessUiDocumentThemeSelectionControlContract,
+  DocumentThemeContract,
+  DocumentThemeSelectionControlContract,
 } from "@dpeek/formless-presentation/contract";
 import { FormlessThemeProvider } from "../theme.tsx";
 import { FormlessThemeIconToggle } from "./theme.tsx";
@@ -139,7 +139,7 @@ const fixtureThemeOptions = [
 
 function fixtureDocumentThemeControl(
   mode: FormlessFixtureThemeMode,
-): FormlessUiDocumentThemeSelectionControlContract {
+): DocumentThemeSelectionControlContract {
   const controlId = "control:fixture-theme";
   const themeId = "theme:fixture";
   const option = (optionMode: FormlessFixtureThemeMode, label: string) => ({
@@ -162,9 +162,7 @@ function fixtureDocumentThemeControl(
   };
 }
 
-export function formlessFixtureTheme(
-  mode: FormlessFixtureThemeMode,
-): FormlessUiDocumentThemeContract {
+export function formlessFixtureTheme(mode: FormlessFixtureThemeMode): DocumentThemeContract {
   return {
     activeMode: mode,
     id: "theme:fixture",

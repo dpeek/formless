@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import type { FormlessUiApplicationSystemStateKind } from "@dpeek/formless-presentation/contract";
+import type { ApplicationSystemStateKind } from "@dpeek/formless-presentation/contract";
 import {
   projectApplicationSystemState,
   resolveApplicationSystemStateIntent,
@@ -13,7 +13,7 @@ describe("application system-state projection", () => {
     "loading",
     "missing",
     "unavailable",
-  ] as const satisfies readonly FormlessUiApplicationSystemStateKind[])(
+  ] as const satisfies readonly ApplicationSystemStateKind[])(
     "projects display-safe %s state without renderer or runtime values",
     (state) => {
       const snapshot = projectApplicationSystemState({

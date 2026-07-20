@@ -1,7 +1,4 @@
-import type {
-  FormlessUiField,
-  FormlessUiFieldSurface,
-} from "@dpeek/formless-presentation/contract";
+import type { FieldContract, FieldSurface } from "@dpeek/formless-presentation/contract";
 
 export type FieldKindKey =
   | "boolean"
@@ -25,7 +22,7 @@ export type FieldKindOption = {
 export type FieldScenarioGroup = {
   id: string;
   kind: FieldKindKey;
-  surface: FormlessUiFieldSurface;
+  surface: FieldSurface;
   facets: readonly FieldScenarioFacet[];
   variants: readonly FieldScenarioVariant[];
 };
@@ -69,16 +66,16 @@ export type FieldScenarioVariant = {
   id: string;
   label: string;
   facets: FieldScenarioFacetValues;
-  field: FormlessUiField;
+  field: FieldContract;
 };
 
 export type FieldScenarioFacetValues = Partial<Record<FieldScenarioFacetId, string>>;
 
-export type FieldScenarioFieldPatch = Partial<FormlessUiField> & Record<string, unknown>;
+export type FieldScenarioFieldPatch = Partial<FieldContract> & Record<string, unknown>;
 
 export type FieldScenarioFieldModifier =
   | FieldScenarioFieldPatch
-  | ((field: FormlessUiField) => FormlessUiField);
+  | ((field: FieldContract) => FieldContract);
 
 export type FieldScenarioComposeOption = FieldScenarioFacetOption & {
   modify?: FieldScenarioFieldModifier | readonly FieldScenarioFieldModifier[];
@@ -92,7 +89,7 @@ export type FieldScenarioComposeAxis = {
 
 export type FieldScenarioComposeContext = {
   facets: FieldScenarioFacetValues;
-  field: FormlessUiField;
+  field: FieldContract;
   optionIds: readonly string[];
   optionLabels: readonly string[];
   options: readonly FieldScenarioComposeOption[];
@@ -101,11 +98,11 @@ export type FieldScenarioComposeContext = {
 export type ComposeScenarioGroupInput = {
   id: string;
   kind: FieldKindKey;
-  surface: FormlessUiFieldSurface;
-  base: FormlessUiField;
+  surface: FieldSurface;
+  base: FieldContract;
   axes: readonly FieldScenarioComposeAxis[];
   include?: (context: FieldScenarioComposeContext) => boolean;
-  finalizeField?: (context: FieldScenarioComposeContext) => FormlessUiField;
+  finalizeField?: (context: FieldScenarioComposeContext) => FieldContract;
   variantId?: (context: FieldScenarioComposeContext) => string;
   variantLabel?: (context: FieldScenarioComposeContext) => string;
 };
@@ -122,7 +119,7 @@ export type ProjectScenarioGroupInput = {
   kind: FieldKindKey;
   axes: readonly FieldScenarioComposeAxis[];
   include?: (context: FieldScenarioProjectionContext) => boolean;
-  projectField: (context: FieldScenarioProjectionContext) => FormlessUiField;
+  projectField: (context: FieldScenarioProjectionContext) => FieldContract;
   variantId?: (context: FieldScenarioProjectionContext) => string;
   variantLabel?: (context: FieldScenarioProjectionContext) => string;
 };
@@ -161,9 +158,9 @@ export function composeScenarioGroup({
 
       const optionIds = options.map((option) => option.id);
       const optionLabels = options.map((option) => option.label);
-      let field = options.reduce<FormlessUiField>(
+      let field = options.reduce<FieldContract>(
         (currentField, option) => applyFieldScenarioModifiers(currentField, option.modify),
-        { ...base } as FormlessUiField,
+        { ...base } as FieldContract,
       );
       let context: FieldScenarioComposeContext = {
         facets,
@@ -249,7 +246,7 @@ export function projectScenarioGroup({
 
 export function mergeScenarioGroupsByKind(
   groups: readonly FieldScenarioGroup[],
-  surfaceOptions: readonly { id: FormlessUiFieldSurface; label: string }[],
+  surfaceOptions: readonly { id: FieldSurface; label: string }[],
 ): FieldScenarioGroup[] {
   const groupsByKind = new Map<FieldKindKey, FieldScenarioGroup[]>();
 
@@ -300,7 +297,7 @@ export function composeScenarioAxis(
 export function scenarioGroup(
   id: string,
   kind: FieldKindKey,
-  surface: FormlessUiFieldSurface,
+  surface: FieldSurface,
   facetsOrAxes: readonly FieldScenarioFacet[] | readonly FieldScenarioAxis[],
   variants?: readonly FieldScenarioVariant[],
 ): FieldScenarioGroup {
@@ -357,7 +354,7 @@ export function facetOption(id: string, label: string): FieldScenarioFacetOption
 export function scenarioVariant(
   id: string,
   label: string,
-  field: FormlessUiField,
+  field: FieldContract,
   facets: FieldScenarioFacetValues = {},
 ): FieldScenarioVariant {
   return { facets, field, id, label };
@@ -414,17 +411,17 @@ function scenarioVariantFacetMatchScore(
 }
 
 function surfaceScenarioFacet(
-  surfaceOptions: readonly { id: FormlessUiFieldSurface; label: string }[],
+  surfaceOptions: readonly { id: FieldSurface; label: string }[],
   kindGroups: readonly FieldScenarioGroup[],
 ): FieldScenarioFacet {
-  const surfaces = new Set<FormlessUiFieldSurface>();
+  const surfaces = new Set<FieldSurface>();
 
   for (const kindGroup of kindGroups) {
     surfaces.add(kindGroup.surface);
 
     for (const variant of kindGroup.variants) {
       if (variant.facets.surface) {
-        surfaces.add(variant.facets.surface as FormlessUiFieldSurface);
+        surfaces.add(variant.facets.surface as FieldSurface);
       }
     }
   }
@@ -484,15 +481,15 @@ function scenarioOptionCombinations(
 }
 
 function applyFieldScenarioModifiers(
-  field: FormlessUiField,
+  field: FieldContract,
   modifiers: FieldScenarioComposeOption["modify"],
-): FormlessUiField {
+): FieldContract {
   if (modifiers === undefined) {
     return field;
   }
 
   if (fieldScenarioModifiersAreArray(modifiers)) {
-    return modifiers.reduce<FormlessUiField>(
+    return modifiers.reduce<FieldContract>(
       (currentField, modifier) => applyFieldScenarioModifier(currentField, modifier),
       field,
     );
@@ -508,12 +505,12 @@ function fieldScenarioModifiersAreArray(
 }
 
 function applyFieldScenarioModifier(
-  field: FormlessUiField,
+  field: FieldContract,
   modifier: FieldScenarioFieldModifier,
-): FormlessUiField {
+): FieldContract {
   if (typeof modifier === "function") {
     return modifier(field);
   }
 
-  return { ...field, ...modifier } as FormlessUiField;
+  return { ...field, ...modifier } as FieldContract;
 }

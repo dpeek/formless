@@ -4,8 +4,8 @@ import { Text } from "@astryxdesign/core/Text";
 import { Timestamp } from "@astryxdesign/core/Timestamp";
 import { durationVars, easeVars, spacingVars } from "@astryxdesign/core/theme/tokens.stylex";
 import type {
-  FormlessUiDisplayField,
-  FormlessUiFieldIntentHandler,
+  DisplayFieldContract,
+  FieldIntentHandler,
 } from "@dpeek/formless-presentation/contract";
 import {
   dateInputValue,
@@ -18,7 +18,7 @@ import {
   formatInputValue,
   inputSize,
   isRecordEditorField,
-  type FormlessUiEditorField,
+  type EditorField,
 } from "./field-chrome.tsx";
 
 export function DateFieldEditor({
@@ -26,9 +26,9 @@ export function DateFieldEditor({
   isQuiet,
   onIntent,
 }: {
-  field: FormlessUiEditorField;
+  field: EditorField;
   isQuiet: boolean;
-  onIntent: FormlessUiFieldIntentHandler | undefined;
+  onIntent: FieldIntentHandler | undefined;
 }) {
   const value = formatInputValue(editorFieldValue(field));
   const changeAction = isRecordEditorField(field)
@@ -63,7 +63,7 @@ export function DateFieldEditor({
   );
 }
 
-export function DateFieldDisplay({ field }: { field: FormlessUiDisplayField }) {
+export function DateFieldDisplay({ field }: { field: DisplayFieldContract }) {
   const temporal = field.formatting.temporal;
   const suffix = field.formatting.suffix ?? field.suffix;
   return (

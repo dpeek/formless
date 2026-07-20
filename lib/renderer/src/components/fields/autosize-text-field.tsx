@@ -11,7 +11,7 @@ import {
   typographyVars,
   typeScaleVars,
 } from "@astryxdesign/core/theme/tokens.stylex";
-import type { FormlessUiFieldIntentHandler } from "@dpeek/formless-presentation/contract";
+import type { FieldIntentHandler } from "@dpeek/formless-presentation/contract";
 import {
   editorFieldValue,
   emitFieldDraftChange,
@@ -22,7 +22,7 @@ import {
   fieldLabelIsHidden,
   fieldStatus,
   formatInputValue,
-  type FormlessUiEditorField,
+  type EditorField,
 } from "./field-chrome.tsx";
 
 export function AutosizeTextFieldEditor({
@@ -30,9 +30,9 @@ export function AutosizeTextFieldEditor({
   inputId,
   onIntent,
 }: {
-  field: FormlessUiEditorField;
+  field: EditorField;
   inputId: string;
-  onIntent: FormlessUiFieldIntentHandler | undefined;
+  onIntent: FieldIntentHandler | undefined;
 }) {
   const value = formatInputValue(editorFieldValue(field));
   const placeholder = field.control.label;

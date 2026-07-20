@@ -1,13 +1,13 @@
 import type {
-  FormlessUiAuthContinuationContract,
-  FormlessUiAuthFactContract,
-  FormlessUiAuthFeedbackContract,
-  FormlessUiAuthMessageContract,
-  FormlessUiAuthPasskeyContract,
-  FormlessUiButtonContract,
-  FormlessUiCollaboratorInvitationAuthSurfaceContract,
+  AuthContinuationContract,
+  AuthFactContract,
+  AuthFeedbackContract,
+  AuthMessageContract,
+  AuthPasskeyContract,
+  ButtonContract,
+  CollaboratorInvitationAuthSurfaceContract,
 } from "@dpeek/formless-presentation/contract";
-import { formlessUiAuthSurfaceReference } from "@dpeek/formless-presentation/contract-host";
+import { authSurfaceReference } from "@dpeek/formless-presentation/host";
 
 import type { CollaboratorInvitationAcceptanceInvitationSummary } from "../../shared/instance-auth.ts";
 import { displaySafeText } from "./instance-management-display-safety.ts";
@@ -15,7 +15,7 @@ import type { CollaboratorInvitationAcceptanceRouteState } from "./collaborator-
 
 export const COLLABORATOR_INVITATION_AUTH_SURFACE_ID = "auth:collaborator-invitation-acceptance";
 
-export const collaboratorInvitationAuthSurfaceReference = formlessUiAuthSurfaceReference({
+export const collaboratorInvitationAuthSurfaceReference = authSurfaceReference({
   surfaceId: COLLABORATOR_INVITATION_AUTH_SURFACE_ID,
   surfaceKind: "collaborator-invitation-acceptance",
 });
@@ -24,7 +24,7 @@ export function projectCollaboratorInvitationAuthSurface({
   state,
 }: {
   state: CollaboratorInvitationAcceptanceRouteState;
-}): FormlessUiCollaboratorInvitationAuthSurfaceContract {
+}): CollaboratorInvitationAuthSurfaceContract {
   const passkey = invitationPasskey(state);
   const continuation = invitationContinuation(state);
 
@@ -56,7 +56,7 @@ export function projectCollaboratorInvitationAuthSurface({
 
 function invitationPasskey(
   state: CollaboratorInvitationAcceptanceRouteState,
-): FormlessUiAuthPasskeyContract | undefined {
+): AuthPasskeyContract | undefined {
   const passkeyId = `${COLLABORATOR_INVITATION_AUTH_SURFACE_ID}:passkey:accept-invitation`;
 
   if (state.status === "passkey-unavailable") {
@@ -99,7 +99,7 @@ function invitationPasskey(
 
 function invitationContinuation(
   state: CollaboratorInvitationAcceptanceRouteState,
-): FormlessUiAuthContinuationContract | undefined {
+): AuthContinuationContract | undefined {
   if (state.status !== "continuing") {
     return undefined;
   }
@@ -129,7 +129,7 @@ function invitationContinuation(
 
 function invitationFacts(
   state: CollaboratorInvitationAcceptanceRouteState,
-): readonly FormlessUiAuthFactContract[] {
+): readonly AuthFactContract[] {
   if (
     state.status === "eligible" ||
     state.status === "submitting" ||
@@ -151,7 +151,7 @@ function invitationFacts(
 
 function invitationEligibilityFacts(
   invitation: CollaboratorInvitationAcceptanceInvitationSummary,
-): readonly FormlessUiAuthFactContract[] {
+): readonly AuthFactContract[] {
   return compactFacts(
     authFact("target-email", "Email", invitation.targetEmail),
     authFact("target-surface", "Surface", targetSurfaceLabel(invitation.targetSurface)),
@@ -202,7 +202,7 @@ function invitationDescription(
 
 function invitationMessage(
   state: CollaboratorInvitationAcceptanceRouteState,
-): FormlessUiAuthMessageContract | undefined {
+): AuthMessageContract | undefined {
   if (state.status === "loading") {
     return authMessage("loading", "Loading invitation status.");
   }
@@ -237,8 +237,8 @@ function authFrame(title: string, description?: string) {
 function authMessage(
   id: string,
   title: string,
-  severity: FormlessUiAuthMessageContract["severity"] = "info",
-): FormlessUiAuthMessageContract {
+  severity: AuthMessageContract["severity"] = "info",
+): AuthMessageContract {
   return {
     id: `${COLLABORATOR_INVITATION_AUTH_SURFACE_ID}:message:${id}`,
     kind: "authMessage",
@@ -247,7 +247,7 @@ function authMessage(
   };
 }
 
-function authFeedback(id: string, title: string, detail: string): FormlessUiAuthFeedbackContract {
+function authFeedback(id: string, title: string, detail: string): AuthFeedbackContract {
   return {
     detail: displaySafeText(detail),
     id: `${COLLABORATOR_INVITATION_AUTH_SURFACE_ID}:feedback:${id}`,
@@ -261,7 +261,7 @@ function authFact(
   id: string,
   label: string,
   value: string | undefined,
-): FormlessUiAuthFactContract | undefined {
+): AuthFactContract | undefined {
   return value
     ? {
         id: `${COLLABORATOR_INVITATION_AUTH_SURFACE_ID}:fact:${id}`,
@@ -272,19 +272,17 @@ function authFact(
     : undefined;
 }
 
-function compactFacts(
-  ...facts: Array<FormlessUiAuthFactContract | undefined>
-): FormlessUiAuthFactContract[] {
-  return facts.filter((fact): fact is FormlessUiAuthFactContract => fact !== undefined);
+function compactFacts(...facts: Array<AuthFactContract | undefined>): AuthFactContract[] {
+  return facts.filter((fact): fact is AuthFactContract => fact !== undefined);
 }
 
 function authButton(
   id: string,
   label: string,
-  prominence: FormlessUiButtonContract["prominence"],
-  type: FormlessUiButtonContract["type"] = "button",
+  prominence: ButtonContract["prominence"],
+  type: ButtonContract["type"] = "button",
   options: { pending?: boolean } = {},
-): FormlessUiButtonContract {
+): ButtonContract {
   return {
     accessibilityLabel: label,
     content: { kind: "label", label },

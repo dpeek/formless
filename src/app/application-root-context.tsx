@@ -1,10 +1,10 @@
 import { createContext, type ReactNode, useContext } from "react";
-import type { FormlessUiDocumentThemeReference } from "@dpeek/formless-presentation/contract";
+import type { DocumentThemeReference } from "@dpeek/formless-presentation/contract";
 import type { ApplicationRuntimeContractPublication } from "./generated/application-runtime-contract-host.tsx";
 
 export type ApplicationRootThemeRuntime = {
   publication: ApplicationRuntimeContractPublication;
-  reference: FormlessUiDocumentThemeReference;
+  reference: DocumentThemeReference;
 };
 
 const ApplicationRootThemeRuntimeContext = createContext<ApplicationRootThemeRuntime | undefined>(

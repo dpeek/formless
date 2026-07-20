@@ -1,8 +1,8 @@
-import type { FormlessUiManagementLoadingContract } from "@dpeek/formless-presentation/contract";
+import type { ManagementLoadingContract } from "@dpeek/formless-presentation/contract";
 import {
-  formlessUiManagementInstallDialogReference,
-  formlessUiManagementManifestReference,
-} from "@dpeek/formless-presentation/contract-host";
+  managementInstallDialogReference,
+  managementManifestReference,
+} from "@dpeek/formless-presentation/host";
 import type { ApplicationRuntimeContractContribution } from "../generated/application-runtime-contract-host.tsx";
 
 export const INSTANCE_MANAGEMENT_ID = "instance-management";
@@ -11,9 +11,8 @@ export const INSTANCE_MANAGEMENT_PUSH_OPERATION_ID = "instance-management:worksp
 export const INSTANCE_MANAGEMENT_PUSH_CONTROL_ID = "workspace:push";
 export const INSTANCE_MANAGEMENT_CONTRIBUTOR_ID = "instance-management";
 
-export const instanceManagementReference =
-  formlessUiManagementManifestReference(INSTANCE_MANAGEMENT_ID);
-export const instanceManagementInstallDialogReference = formlessUiManagementInstallDialogReference(
+export const instanceManagementReference = managementManifestReference(INSTANCE_MANAGEMENT_ID);
+export const instanceManagementInstallDialogReference = managementInstallDialogReference(
   INSTANCE_MANAGEMENT_ID,
   INSTANCE_MANAGEMENT_INSTALL_DIALOG_ID,
 );
@@ -25,7 +24,7 @@ export const instanceManagementLoadingManifest = {
   message: "Loading installed apps...",
   state: "loading",
   title: "Instance Settings",
-} satisfies FormlessUiManagementLoadingContract;
+} satisfies ManagementLoadingContract;
 
 export const initialInstanceManagementRuntimeContribution = [
   INSTANCE_MANAGEMENT_CONTRIBUTOR_ID,

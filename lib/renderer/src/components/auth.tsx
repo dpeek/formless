@@ -1,27 +1,27 @@
 import { useState } from "react";
 import type {
-  FormlessUiAuthFieldContract,
-  FormlessUiAuthFieldIntent,
-  FormlessUiAuthIntent,
-  FormlessUiAuthSurfaceContract,
-  FormlessUiAuthSurfaceReference,
-  FormlessUiButtonContract,
+  AuthFieldContract,
+  AuthFieldIntent,
+  AuthIntent,
+  AuthSurfaceContract,
+  AuthSurfaceReference,
+  ButtonContract,
 } from "@dpeek/formless-presentation/contract";
 import {
-  createFormlessUiMemoryContractHost,
-  formlessUiAuthSurfaceReference,
-  isFormlessUiAuthIntent,
-  type FormlessUiContractHostNodeSet,
-  type FormlessUiMutableContractHost,
-} from "@dpeek/formless-presentation/contract-host";
-import { FormlessUiContractHostProvider } from "@dpeek/formless-presentation/contract-host/react";
+  createMemoryPresentationHost,
+  authSurfaceReference,
+  isAuthIntent,
+  type PresentationNodeSet,
+  type MutablePresentationHost,
+} from "@dpeek/formless-presentation/host";
+import { PresentationHostProvider } from "@dpeek/formless-presentation/host/react";
 import {
   createFormlessAuthFixtures,
   type FormlessAuthFixture,
   type FormlessAuthFixtureId,
 } from "./auth.fixtures.ts";
 import { FormlessFixtureFrame, FormlessFixtureSelector } from "./fixture-layout.tsx";
-import { AstryxSubscribedAuthRenderer } from "./formless-ui-auth-renderer.tsx";
+import { AstryxSubscribedAuthRenderer } from "./auth-renderer.tsx";
 
 export function FormlessAuthLayout() {
   const [fixtureHost] = useState(() => createFormlessAuthFixtureHost(createFormlessAuthFixtures()));
@@ -62,20 +62,20 @@ export function FormlessAuthLayout() {
         />
       }
     >
-      <FormlessUiContractHostProvider host={fixtureHost.host}>
+      <PresentationHostProvider host={fixtureHost.host}>
         <AstryxSubscribedAuthRenderer reference={reference} />
-      </FormlessUiContractHostProvider>
+      </PresentationHostProvider>
     </FormlessFixtureFrame>
   );
 }
 
 export type FormlessAuthFixtureHost = {
   fixtures: readonly FormlessAuthFixture[];
-  getSurface(fixtureId: FormlessAuthFixtureId): FormlessUiAuthSurfaceContract;
-  host: Omit<FormlessUiMutableContractHost, "dispatch"> & {
-    dispatch(intent: FormlessUiAuthIntent): void;
+  getSurface(fixtureId: FormlessAuthFixtureId): AuthSurfaceContract;
+  host: Omit<MutablePresentationHost, "dispatch"> & {
+    dispatch(intent: AuthIntent): void;
   };
-  referenceFor(fixtureId: FormlessAuthFixtureId): FormlessUiAuthSurfaceReference;
+  referenceFor(fixtureId: FormlessAuthFixtureId): AuthSurfaceReference;
 };
 
 export function createFormlessAuthFixtureHost(
@@ -90,11 +90,11 @@ export function createFormlessAuthFixtureHost(
   const surfaceIdsByFixtureId = new Map(
     fixtures.map((fixture) => [fixture.id, fixture.surface.id]),
   );
-  let host: FormlessUiMutableContractHost;
+  let host: MutablePresentationHost;
 
-  host = createFormlessUiMemoryContractHost({
+  host = createMemoryPresentationHost({
     dispatch: (intent) => {
-      if (!isFormlessUiAuthIntent(intent)) {
+      if (!isAuthIntent(intent)) {
         throw new Error("Auth fixture host received an unsupported intent.");
       }
 
@@ -136,10 +136,10 @@ export function createFormlessAuthFixtureHost(
 
 export function projectFormlessAuthFixtureNodes(
   fixtures: readonly FormlessAuthFixture[],
-  surfaces: ReadonlyMap<string, FormlessUiAuthSurfaceContract> = new Map(
+  surfaces: ReadonlyMap<string, AuthSurfaceContract> = new Map(
     fixtures.map((fixture) => [fixture.surface.id, fixture.surface]),
   ),
-): FormlessUiContractHostNodeSet {
+): PresentationNodeSet {
   return fixtures.map((fixture) => {
     const surface = surfaces.get(fixture.surface.id);
     if (!surface) {
@@ -150,9 +150,9 @@ export function projectFormlessAuthFixtureNodes(
 }
 
 export function applyFormlessAuthFixtureIntent(
-  surface: FormlessUiAuthSurfaceContract,
-  intent: FormlessUiAuthIntent,
-): FormlessUiAuthSurfaceContract {
+  surface: AuthSurfaceContract,
+  intent: AuthIntent,
+): AuthSurfaceContract {
   if (surface.id !== intent.surfaceId || surface.pending) {
     return surface;
   }
@@ -183,7 +183,7 @@ export function applyFormlessAuthFixtureIntent(
               }
             : candidate,
         ),
-      } as FormlessUiAuthSurfaceContract;
+      } as AuthSurfaceContract;
     }
     case "authAction": {
       const action = surface.actions.find(
@@ -244,9 +244,9 @@ export function applyFormlessAuthFixtureIntent(
 }
 
 function applyAuthFieldIntent(
-  surface: FormlessUiAuthSurfaceContract,
-  intent: FormlessUiAuthFieldIntent,
-): FormlessUiAuthSurfaceContract {
+  surface: AuthSurfaceContract,
+  intent: AuthFieldIntent,
+): AuthSurfaceContract {
   const target = surface.fields.find(
     (candidate) =>
       candidate.field.fieldId === intent.fieldId && candidate.intent.surfaceId === intent.surfaceId,
@@ -264,13 +264,13 @@ function applyAuthFieldIntent(
     fields: surface.fields.map((candidate) =>
       candidate.field.fieldId === target.field.fieldId ? nextTarget : candidate,
     ),
-  } as FormlessUiAuthSurfaceContract;
+  } as AuthSurfaceContract;
 }
 
 function applyAuthFieldDraft(
-  authField: FormlessUiAuthFieldContract,
-  intent: FormlessUiAuthFieldIntent,
-): FormlessUiAuthFieldContract {
+  authField: AuthFieldContract,
+  intent: AuthFieldIntent,
+): AuthFieldContract {
   const field = authField.field;
   if (
     authField.purpose !== "profile-input" &&
@@ -306,7 +306,7 @@ function applyAuthFieldDraft(
   return authField;
 }
 
-function markAuthButtonPending(button: FormlessUiButtonContract): FormlessUiButtonContract {
+function markAuthButtonPending(button: ButtonContract): ButtonContract {
   if (button.pending?.isPending) {
     return button;
   }
@@ -316,10 +316,8 @@ function markAuthButtonPending(button: FormlessUiButtonContract): FormlessUiButt
   };
 }
 
-function authFixtureReference(
-  surface: FormlessUiAuthSurfaceContract,
-): FormlessUiAuthSurfaceReference {
-  return formlessUiAuthSurfaceReference({
+function authFixtureReference(surface: AuthSurfaceContract): AuthSurfaceReference {
+  return authSurfaceReference({
     surfaceId: surface.id,
     surfaceKind: surface.surfaceKind,
   });

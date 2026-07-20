@@ -1,14 +1,14 @@
 import type {
-  FormlessUiButtonContract,
-  FormlessUiCreateField,
-  FormlessUiManagementAuthorizationPromptContract,
-  FormlessUiManagementFeedbackContract,
-  FormlessUiManagementInstallDialogContract,
-  FormlessUiManagementIntent,
-  FormlessUiManagementManifestContract,
-  FormlessUiManagementReadyContract,
-  FormlessUiManagementWorkspaceOperationContract,
-  FormlessUiWorkspaceManifestReference,
+  ButtonContract,
+  CreateFieldContract,
+  ManagementAuthorizationPromptContract,
+  ManagementFeedbackContract,
+  ManagementInstallDialogContract,
+  ManagementIntent,
+  ManagementManifestContract,
+  ManagementReadyContract,
+  ManagementWorkspaceOperationContract,
+  WorkspaceManifestReference,
 } from "@dpeek/formless-presentation/contract";
 import {
   validateAppInstallId,
@@ -24,7 +24,7 @@ import {
   workspaceGatewayOperationGeneratedRuntimeAdapterResponse,
   type GeneratedOperationExecutionState,
 } from "../../client/views.ts";
-import { projectGeneratedOperationFormlessUiControl } from "../generated/formless-ui-operation-projection.ts";
+import { projectGeneratedOperationControl } from "../generated/operation-projection.ts";
 import type {
   InstanceShellRouteState,
   PackageInstallDraft,
@@ -54,8 +54,8 @@ export {
 } from "./instance-management-contract.ts";
 
 export type InstanceManagementWorkspaceReferences = {
-  apps: FormlessUiWorkspaceManifestReference;
-  routes: FormlessUiWorkspaceManifestReference;
+  apps: WorkspaceManifestReference;
+  routes: WorkspaceManifestReference;
 };
 
 export type ProjectInstanceManagementOptions = {
@@ -77,8 +77,8 @@ export type InstanceManagementAuthorizationRuntime = {
 
 export type InstanceManagementProjection = {
   authorization?: InstanceManagementAuthorizationRuntime | undefined;
-  dialog?: FormlessUiManagementInstallDialogContract | undefined;
-  manifest: FormlessUiManagementManifestContract;
+  dialog?: ManagementInstallDialogContract | undefined;
+  manifest: ManagementManifestContract;
   selectedDraft?: PackageInstallDraft | undefined;
   selectedPackageAppKey?: PackageAppKey | undefined;
 };
@@ -190,7 +190,7 @@ export function projectInstanceManagement(
     state: options.state,
   });
   const workspace = projectWorkspaceOperation(options.workspaceGatewayState);
-  const manifest: FormlessUiManagementReadyContract = {
+  const manifest: ManagementReadyContract = {
     ...base,
     installDialog: instanceManagementInstallDialogReference,
     state: "ready",
@@ -236,7 +236,7 @@ export function selectInstanceManagementPackage(
 
 export function resolveInstanceManagementIntent(
   projection: InstanceManagementProjection,
-  intent: FormlessUiManagementIntent,
+  intent: ManagementIntent,
 ): ResolvedInstanceManagementIntent {
   if (intent.managementId !== projection.manifest.id || projection.manifest.state !== "ready") {
     return { kind: "ignored" };
@@ -321,7 +321,7 @@ export function resolveInstanceManagementIntent(
 
 export async function dispatchInstanceManagementIntent(
   projection: InstanceManagementProjection,
-  intent: FormlessUiManagementIntent,
+  intent: ManagementIntent,
   actions: InstanceManagementIntentActions,
 ): Promise<void> {
   const resolved = resolveInstanceManagementIntent(projection, intent);
@@ -435,7 +435,7 @@ function projectInstallDialog({
   installDialogOpen: boolean;
   selectedPackage: InstallableAppPackage;
   state: Extract<InstanceShellRouteState, { status: "ready" }>;
-}): FormlessUiManagementInstallDialogContract {
+}): ManagementInstallDialogContract {
   const pending = state.installing;
   const selectedInstalling =
     pending && state.installingPackageAppKey === selectedPackage.packageAppKey;
@@ -559,7 +559,7 @@ function createInstallField({
   label: string;
   pending: boolean;
   value: string;
-}): FormlessUiCreateField {
+}): CreateFieldContract {
   const field = { label, required: true, type: "text" as const };
   return {
     access: { canPatch: true, kind: "editable", writable: true },
@@ -594,10 +594,10 @@ function createInstallField({
 }
 
 function projectWorkspaceOperation(state: WorkspaceGatewayRouteState): {
-  authorization?: FormlessUiManagementAuthorizationPromptContract;
+  authorization?: ManagementAuthorizationPromptContract;
   authorizationRuntime?: InstanceManagementAuthorizationRuntime;
-  feedback?: FormlessUiManagementFeedbackContract;
-  operation?: FormlessUiManagementWorkspaceOperationContract;
+  feedback?: ManagementFeedbackContract;
+  operation?: ManagementWorkspaceOperationContract;
 } {
   if (state.status === "failed") {
     return {
@@ -645,7 +645,7 @@ function projectWorkspaceOperation(state: WorkspaceGatewayRouteState): {
     return {};
   }
 
-  const control = projectGeneratedOperationFormlessUiControl({
+  const control = projectGeneratedOperationControl({
     binding,
     feedbackCopy: {
       committed: { title: "Push synced" },
@@ -746,10 +746,10 @@ function managementFeedback(
 function button(
   id: string,
   label: string,
-  prominence: FormlessUiButtonContract["prominence"] = "secondary",
-  type: FormlessUiButtonContract["type"] = "button",
+  prominence: ButtonContract["prominence"] = "secondary",
+  type: ButtonContract["type"] = "button",
   disabled = false,
-): FormlessUiButtonContract {
+): ButtonContract {
   return {
     accessibilityLabel: label,
     content: { kind: "label", label },

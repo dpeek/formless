@@ -1,13 +1,13 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vite-plus/test";
 import type {
-  FormlessUiField,
-  FormlessUiRecordResultActionContract,
-  FormlessUiRecordResultContract,
-  FormlessUiRecordResultIntent,
+  FieldContract,
+  RecordResultActionContract,
+  RecordResultContract,
+  RecordResultIntent,
 } from "@dpeek/formless-presentation/contract";
-import { AstryxRecordResultRenderer } from "./formless-ui-record-result-renderer.tsx";
-import { createFormlessUiRecordResultFixtures } from "./record-results.fixtures.ts";
+import { AstryxRecordResultRenderer } from "./record-result-renderer.tsx";
+import { createRecordResultFixtures } from "./record-results.fixtures.ts";
 import {
   FormlessRecordResultsLayout,
   applyRecordResultIntent,
@@ -22,7 +22,7 @@ vi.mock("@stylexjs/stylex", () => ({
 
 describe("canonical record-result fixtures", () => {
   it("cover production record-result contract states with serializable data", () => {
-    const fixtures = createFormlessUiRecordResultFixtures();
+    const fixtures = createRecordResultFixtures();
     const editable = requiredFixture(fixtures, "editable").recordResult;
     const readOnly = requiredFixture(fixtures, "read-only").recordResult;
     const editingDisabled = requiredFixture(fixtures, "editing-disabled").recordResult;
@@ -113,10 +113,7 @@ describe("Record Results prototype layout", () => {
   });
 
   it("shows a shared editing-disabled reason only in the record banner", () => {
-    const disabled = requiredFixture(
-      createFormlessUiRecordResultFixtures(),
-      "editing-disabled",
-    ).recordResult;
+    const disabled = requiredFixture(createRecordResultFixtures(), "editing-disabled").recordResult;
     const html = renderToStaticMarkup(
       <AstryxRecordResultRenderer onIntent={() => undefined} recordResult={disabled} />,
     );
@@ -205,7 +202,7 @@ describe("Record Results prototype layout", () => {
   });
 
   it("renders only projected empty and unavailable presentation", () => {
-    const fixtures = createFormlessUiRecordResultFixtures();
+    const fixtures = createRecordResultFixtures();
     const empty = requiredFixture(fixtures, "empty").recordResult;
     const unavailable = requiredFixture(fixtures, "unavailable").recordResult;
     const emptyHtml = renderRecordResult(empty);
@@ -220,11 +217,11 @@ describe("Record Results prototype layout", () => {
 });
 
 function editableRecordResult() {
-  return requiredFixture(createFormlessUiRecordResultFixtures(), "editable").recordResult;
+  return requiredFixture(createRecordResultFixtures(), "editable").recordResult;
 }
 
 function requiredFixture(
-  fixtures: ReturnType<typeof createFormlessUiRecordResultFixtures>,
+  fixtures: ReturnType<typeof createRecordResultFixtures>,
   id: "editable" | "editing-disabled" | "empty" | "read-only" | "unavailable",
 ) {
   const fixture = selectedRecordResultFixture(fixtures, id);
@@ -236,7 +233,7 @@ function requiredFixture(
   return fixture;
 }
 
-function requiredField(recordResult: FormlessUiRecordResultContract, fieldName: string) {
+function requiredField(recordResult: RecordResultContract, fieldName: string) {
   const field = recordResult.fields.find((candidate) => candidate.fieldName === fieldName);
 
   if (!field) {
@@ -246,10 +243,7 @@ function requiredField(recordResult: FormlessUiRecordResultContract, fieldName: 
   return field;
 }
 
-function requiredAction(
-  recordResult: FormlessUiRecordResultContract,
-  role: "delete" | "transition",
-) {
+function requiredAction(recordResult: RecordResultContract, role: "delete" | "transition") {
   const action = [...recordResult.actions.primary, ...recordResult.actions.secondary].find(
     (candidate) => candidate.role === role,
   );
@@ -262,10 +256,10 @@ function requiredAction(
 }
 
 function fieldIntent(
-  recordResult: FormlessUiRecordResultContract,
-  field: FormlessUiField,
-  intent: Extract<FormlessUiRecordResultIntent, { type: "recordResultFieldIntent" }>["intent"],
-): FormlessUiRecordResultIntent {
+  recordResult: RecordResultContract,
+  field: FieldContract,
+  intent: Extract<RecordResultIntent, { type: "recordResultFieldIntent" }>["intent"],
+): RecordResultIntent {
   return {
     fieldId: field.fieldId,
     intent,
@@ -276,10 +270,10 @@ function fieldIntent(
 }
 
 function operationIntent(
-  recordResult: FormlessUiRecordResultContract,
-  action: FormlessUiRecordResultActionContract,
-  intent: Extract<FormlessUiRecordResultIntent, { type: "recordResultOperationIntent" }>["intent"],
-): FormlessUiRecordResultIntent {
+  recordResult: RecordResultContract,
+  action: RecordResultActionContract,
+  intent: Extract<RecordResultIntent, { type: "recordResultOperationIntent" }>["intent"],
+): RecordResultIntent {
   return {
     controlId: action.control.id,
     intent,
@@ -289,7 +283,7 @@ function operationIntent(
   };
 }
 
-function requiredRecordId(recordResult: FormlessUiRecordResultContract) {
+function requiredRecordId(recordResult: RecordResultContract) {
   if (!recordResult.selectedRecord) {
     throw new Error("Expected selected record fixture.");
   }
@@ -297,7 +291,7 @@ function requiredRecordId(recordResult: FormlessUiRecordResultContract) {
   return recordResult.selectedRecord.id;
 }
 
-function renderRecordResult(recordResult: FormlessUiRecordResultContract) {
+function renderRecordResult(recordResult: RecordResultContract) {
   return renderToStaticMarkup(
     <AstryxRecordResultRenderer onIntent={() => undefined} recordResult={recordResult} />,
   );

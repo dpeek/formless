@@ -2,8 +2,8 @@ import { CheckboxInput } from "@astryxdesign/core/CheckboxInput";
 import { Switch } from "@astryxdesign/core/Switch";
 import { Text } from "@astryxdesign/core/Text";
 import type {
-  FormlessUiDisplayField,
-  FormlessUiFieldIntentHandler,
+  DisplayFieldContract,
+  FieldIntentHandler,
 } from "@dpeek/formless-presentation/contract";
 import {
   astryxDensity,
@@ -16,15 +16,15 @@ import {
   fieldLabelIsHidden,
   fieldStatus,
   fieldChromeStyles,
-  type FormlessUiEditorField,
+  type EditorField,
 } from "./field-chrome.tsx";
 
 export function BooleanFieldEditor({
   field,
   onIntent,
 }: {
-  field: FormlessUiEditorField;
-  onIntent: FormlessUiFieldIntentHandler | undefined;
+  field: EditorField;
+  onIntent: FieldIntentHandler | undefined;
 }) {
   const value = editorFieldValue(field) === true;
   const handleChange = (nextValue: boolean) => {
@@ -67,7 +67,7 @@ export function BooleanFieldEditor({
   );
 }
 
-export function BooleanFieldDisplay({ field }: { field: FormlessUiDisplayField }) {
+export function BooleanFieldDisplay({ field }: { field: DisplayFieldContract }) {
   return (
     <Text display="block" type="body" xstyle={fieldChromeStyles.displayValue}>
       {field.formatting.displayValue}

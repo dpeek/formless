@@ -9,10 +9,10 @@ import { Text } from "@astryxdesign/core/Text";
 import { VStack } from "@astryxdesign/core/VStack";
 import { borderVars, radiusVars, spacingVars } from "@astryxdesign/core/theme/tokens.stylex";
 import type {
-  FormlessUiDisplayField,
-  FormlessUiFieldIntentHandler,
-  FormlessUiIconPickerFacts,
-  FormlessUiIconPickerSelection,
+  DisplayFieldContract,
+  FieldIntentHandler,
+  IconPickerFacts,
+  IconPickerSelection,
 } from "@dpeek/formless-presentation/contract";
 import { MonospaceTextArea } from "../field-primitives.tsx";
 import { IconPreview } from "../icon-preview.tsx";
@@ -23,7 +23,7 @@ import {
   fieldInteractionIsDisabled,
   FieldChrome,
   formatInputValue,
-  type FormlessUiEditorField,
+  type EditorField,
 } from "./field-chrome.tsx";
 
 type IconPickerMode = "catalog" | "custom";
@@ -33,9 +33,9 @@ export function IconFieldEditor({
   inputId,
   onIntent,
 }: {
-  field: FormlessUiEditorField;
+  field: EditorField;
   inputId: string;
-  onIntent: FormlessUiFieldIntentHandler | undefined;
+  onIntent: FieldIntentHandler | undefined;
 }) {
   const icon = field.icon;
   const savedSource = formatInputValue(editorFieldValue(field));
@@ -106,11 +106,11 @@ function IconPickerPopover({
   onSelect,
   onIntent,
 }: {
-  field: FormlessUiEditorField;
-  icon: FormlessUiIconPickerFacts;
+  field: EditorField;
+  icon: IconPickerFacts;
   isOpen: boolean;
   onSelect: () => void;
-  onIntent: FormlessUiFieldIntentHandler | undefined;
+  onIntent: FieldIntentHandler | undefined;
 }) {
   const selectionMode = iconPickerMode(icon.selection.kind);
   const [mode, setMode] = useState<IconPickerMode>(selectionMode);
@@ -203,7 +203,7 @@ function IconPickerPopover({
   );
 }
 
-export function IconFieldDisplay({ field }: { field: FormlessUiDisplayField }) {
+export function IconFieldDisplay({ field }: { field: DisplayFieldContract }) {
   return (
     <IconPreview
       label={field.label}
@@ -213,15 +213,15 @@ export function IconFieldDisplay({ field }: { field: FormlessUiDisplayField }) {
   );
 }
 
-function iconPickerMode(selectionKind: FormlessUiIconPickerSelection["kind"]): IconPickerMode {
+function iconPickerMode(selectionKind: IconPickerSelection["kind"]): IconPickerMode {
   return selectionKind === "customSource" ? "custom" : "catalog";
 }
 
 async function closeIconPopover(
-  field: FormlessUiEditorField,
-  icon: FormlessUiIconPickerFacts,
+  field: EditorField,
+  icon: IconPickerFacts,
   savedSource: string,
-  onIntent: FormlessUiFieldIntentHandler | undefined,
+  onIntent: FieldIntentHandler | undefined,
 ) {
   const draftIsValid =
     icon.customParseError === undefined && (!field.required || icon.dialogDraft.trim() !== "");
@@ -238,18 +238,18 @@ async function closeIconPopover(
 }
 
 function emitIconDraftChange(
-  field: FormlessUiEditorField,
+  field: EditorField,
   value: string,
-  onIntent: FormlessUiFieldIntentHandler | undefined,
+  onIntent: FieldIntentHandler | undefined,
 ) {
   void onIntent?.({ type: "iconDialogDraftChange", fieldName: field.fieldName, value });
 }
 
 async function selectIconValue(
-  field: FormlessUiEditorField,
+  field: EditorField,
   value: string,
   onSelect: () => void,
-  onIntent: FormlessUiFieldIntentHandler | undefined,
+  onIntent: FieldIntentHandler | undefined,
 ) {
   await onIntent?.({ type: "iconDialogDraftChange", fieldName: field.fieldName, value });
   await commitIconValue(field, value, onIntent);
@@ -257,9 +257,9 @@ async function selectIconValue(
 }
 
 async function commitIconValue(
-  field: FormlessUiEditorField,
+  field: EditorField,
   value: string,
-  onIntent: FormlessUiFieldIntentHandler | undefined,
+  onIntent: FieldIntentHandler | undefined,
 ) {
   if (field.surface === "create") {
     await onIntent?.({

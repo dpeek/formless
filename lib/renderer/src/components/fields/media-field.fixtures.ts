@@ -7,7 +7,7 @@ import type {
   FieldScenarioGroup,
   FieldScenarioProjectionContext,
 } from "../field-scenario-model.ts";
-import type { FormlessUiFieldSurface } from "@dpeek/formless-presentation/contract";
+import type { FieldSurface } from "@dpeek/formless-presentation/contract";
 import {
   createField,
   displayField,
@@ -94,7 +94,7 @@ function createMediaGroup() {
   });
 }
 
-function existingMediaGroup(surface: Extract<FormlessUiFieldSurface, "detail" | "table-cell">) {
+function existingMediaGroup(surface: Extract<FieldSurface, "detail" | "table-cell">) {
   return projectScenarioGroup({
     id: `media-${surface}`,
     kind: "media",
@@ -142,7 +142,7 @@ function projectCreateMediaField({ facets }: FieldScenarioProjectionContext) {
 }
 
 function projectExistingMediaField(
-  surface: Extract<FormlessUiFieldSurface, "detail" | "record" | "table-cell">,
+  surface: Extract<FieldSurface, "detail" | "record" | "table-cell">,
   { facets }: FieldScenarioProjectionContext,
 ) {
   const required = facets.requiredness === "required";

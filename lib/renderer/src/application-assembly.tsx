@@ -1,52 +1,52 @@
 import type { ReactNode } from "react";
 import type {
-  FormlessUiAccessManifestReference,
-  FormlessUiApplicationSystemStateReference,
-  FormlessUiAuthSurfaceReference,
-  FormlessUiDocumentThemeReference,
-  FormlessUiManagementManifestReference,
-  FormlessUiShellManifestReference,
-  FormlessUiWorkspaceManifestReference,
+  AccessManifestReference,
+  ApplicationSystemStateReference,
+  AuthSurfaceReference,
+  DocumentThemeReference,
+  ManagementManifestReference,
+  ShellManifestReference,
+  WorkspaceManifestReference,
 } from "@dpeek/formless-presentation/contract";
-import { AstryxSubscribedAccessRenderer } from "./components/formless-ui-access-renderer.tsx";
-import { AstryxSubscribedApplicationSystemStateRenderer } from "./components/formless-ui-application-system-state-renderer.tsx";
-import { AstryxSubscribedAuthRenderer } from "./components/formless-ui-auth-renderer.tsx";
-import { AstryxSubscribedManagementRenderer } from "./components/formless-ui-management-renderer.tsx";
-import { AstryxSubscribedWorkspaceScreenRenderer } from "./components/formless-ui-workspace-screen-renderer.tsx";
+import { AstryxSubscribedAccessRenderer } from "./components/access-renderer.tsx";
+import { AstryxSubscribedApplicationSystemStateRenderer } from "./components/application-system-state-renderer.tsx";
+import { AstryxSubscribedAuthRenderer } from "./components/auth-renderer.tsx";
+import { AstryxSubscribedManagementRenderer } from "./components/management-renderer.tsx";
+import { AstryxSubscribedWorkspaceScreenRenderer } from "./components/workspace-screen-renderer.tsx";
 import { AstryxSubscribedApplicationShellRenderer } from "./components/shell.tsx";
 import { AstryxSubscribedDocumentThemeRenderer } from "./components/theme.tsx";
 
 export type FormlessApplicationPresentation =
   | {
-      accessReference: FormlessUiAccessManifestReference;
+      accessReference: AccessManifestReference;
       kind: "access";
     }
   | {
       kind: "applicationSystemState";
-      systemStateReference: FormlessUiApplicationSystemStateReference;
+      systemStateReference: ApplicationSystemStateReference;
     }
   | {
       kind: "auth";
-      reference: FormlessUiAuthSurfaceReference;
+      reference: AuthSurfaceReference;
     }
   | {
       children: ReactNode;
       kind: "documentTheme";
-      themeReference: FormlessUiDocumentThemeReference;
+      themeReference: DocumentThemeReference;
     }
   | {
       kind: "management";
-      managementReference: FormlessUiManagementManifestReference;
+      managementReference: ManagementManifestReference;
     }
   | {
       children: ReactNode;
       kind: "shell";
-      shellReference: FormlessUiShellManifestReference;
-      themeReference?: FormlessUiDocumentThemeReference | undefined;
+      shellReference: ShellManifestReference;
+      themeReference?: DocumentThemeReference | undefined;
     }
   | {
       kind: "workspace";
-      reference: FormlessUiWorkspaceManifestReference;
+      reference: WorkspaceManifestReference;
     };
 
 export type FormlessApplicationRendererProps = {

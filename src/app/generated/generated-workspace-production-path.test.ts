@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vite-plus/test";
-import { createFormlessUiMemoryContractHost } from "@dpeek/formless-presentation/contract-host";
+import { createMemoryPresentationHost } from "@dpeek/formless-presentation/host";
 import { instanceControlPlaneSchema } from "@dpeek/formless-instance-control-plane";
 import type { AppSchema } from "@dpeek/formless-schema";
 import type { StoredRecord } from "@dpeek/formless-storage";
@@ -65,7 +65,7 @@ describe("generated workspace production path", () => {
       }),
     );
     const publication = projectGeneratedWorkspaceContractHostPublication(foundation.workspace);
-    const host = createFormlessUiMemoryContractHost({ nodes: publication.nodes });
+    const host = createMemoryPresentationHost({ nodes: publication.nodes });
     const workspace = required(host.read(publication.workspaceReference));
     const section = required(host.read(required(workspace.sections[0])));
     const result = required(host.read(section.collection.presentation.result));

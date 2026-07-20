@@ -23,7 +23,7 @@ import {
   type PublicSiteRouteProps,
 } from "./app/public-site-runtime.tsx";
 import type { ApplicationShellRuntimeBoundaryProps } from "./app/application-shell-runtime.tsx";
-import { selectGeneratedShellScope } from "./app/generated/formless-ui-shell-projection.ts";
+import { selectGeneratedShellScope } from "./app/generated/application-shell-projection.ts";
 import type {
   GeneratedWorkspaceRuntimeController,
   GeneratedWorkspaceSectionExternalAction,
@@ -64,7 +64,7 @@ import {
 } from "./shared/instance-auth.ts";
 import { runtimeTopologyRoutes, type RuntimeRouteAccess } from "./shared/runtime-topology.ts";
 import type { AppInstallsResponse } from "./shared/protocol.ts";
-import type { FormlessUiWorkspaceLinkActionContract } from "@dpeek/formless-presentation/contract";
+import type { WorkspaceLinkActionContract } from "@dpeek/formless-presentation/contract";
 import { initialInstanceManagementRuntimeContribution } from "./app/routes/instance-management-contract.ts";
 import { initialInstanceAccessRuntimeContribution } from "./app/routes/access-contract.ts";
 import { projectApplicationSystemState } from "./app/routes/application-system-state-projection.ts";
@@ -84,7 +84,7 @@ type HomeRouteProps = {
   target?: ClientAppTarget;
   schemaKey: ClientAppSchemaKey;
   screenPath: string;
-  workspaceActions?: readonly FormlessUiWorkspaceLinkActionContract[];
+  workspaceActions?: readonly WorkspaceLinkActionContract[];
 };
 
 type InstanceShellRouteProps = {
@@ -766,7 +766,7 @@ function siteWorkspaceLinkActionsForWorld(
   world: RuntimeWorldMount,
   publicSitePreview: RuntimeProfile["publicSitePreview"],
   installs: readonly AppInstall[] | undefined,
-): readonly FormlessUiWorkspaceLinkActionContract[] {
+): readonly WorkspaceLinkActionContract[] {
   const installId = world.target?.kind === "appInstall" ? world.target.installId : undefined;
   const install = installId
     ? installs?.find((candidate) => candidate.installId === installId)
@@ -785,7 +785,7 @@ function siteWorkspaceLinkActionsForWorld(
 
 function siteWorkspaceLinkActionsForInstall(
   install: AppInstall | undefined,
-): readonly FormlessUiWorkspaceLinkActionContract[] {
+): readonly WorkspaceLinkActionContract[] {
   if (!install) {
     return [];
   }
@@ -798,7 +798,7 @@ function siteWorkspaceLinkActionsForInstall(
   return href ? siteWorkspaceLinkActions(href) : [];
 }
 
-function siteWorkspaceLinkActions(href: string): readonly FormlessUiWorkspaceLinkActionContract[] {
+function siteWorkspaceLinkActions(href: string): readonly WorkspaceLinkActionContract[] {
   return [
     {
       accessibilityLabel: "View site (opens in a new tab)",

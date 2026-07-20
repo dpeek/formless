@@ -1,14 +1,14 @@
 import type {
-  FormlessUiActionTriggerContract,
-  FormlessUiCreateSurfaceContract,
-  FormlessUiField,
-  FormlessUiOperationControlContract,
-  FormlessUiTableContract,
-  FormlessUiTreeResultContract,
-  FormlessUiWorkspaceCollectionActionContract,
-  FormlessUiWorkspaceContract,
-  FormlessUiWorkspaceIntent,
-  FormlessUiWorkspaceLinkActionContract,
+  ActionTriggerContract,
+  CreateSurfaceContract,
+  FieldContract,
+  OperationControlContract,
+  TableContract,
+  TreeResultContract,
+  WorkspaceCollectionActionContract,
+  WorkspaceContract,
+  WorkspaceIntent,
+  WorkspaceLinkActionContract,
 } from "@dpeek/formless-presentation/contract";
 import type { QueryEvaluationContext } from "@dpeek/formless-schema";
 import {
@@ -41,11 +41,11 @@ import {
   generatedWorkspaceScopedId,
   generatedWorkspaceScreenId,
   generatedWorkspaceSectionId,
-  projectGeneratedWorkspaceFormlessUiContract,
+  projectGeneratedWorkspaceContract,
   type GeneratedWorkspaceContextProjectionFacts,
   type GeneratedWorkspaceIdentityScope,
   type GeneratedWorkspaceSectionProjectionFacts,
-} from "./formless-ui-workspace-projection.ts";
+} from "./workspace-projection.ts";
 import {
   resolveGeneratedListFieldIntent,
   selectGeneratedListFoundation,
@@ -97,26 +97,26 @@ export type GeneratedWorkspaceSectionSelection = {
 };
 
 export type GeneratedWorkspaceExternalActionFoundation = {
-  action: FormlessUiActionTriggerContract;
+  action: ActionTriggerContract;
   id: string;
   runtime: unknown;
 };
 
 export type GeneratedWorkspaceCollectionActionFoundation = {
-  action: FormlessUiWorkspaceCollectionActionContract;
+  action: WorkspaceCollectionActionContract;
   placement: "primary" | "secondary";
   runtime: unknown;
 };
 
 export type GeneratedWorkspaceContextCreateFoundation = {
-  action: Extract<FormlessUiWorkspaceCollectionActionContract, { kind: "createAction" }>;
+  action: Extract<WorkspaceCollectionActionContract, { kind: "createAction" }>;
   runtime: unknown;
 };
 
 export type GeneratedWorkspaceTableFoundation = {
   fieldsById: GeneratedTableFieldIndex;
   runtime: unknown;
-  table: FormlessUiTableContract;
+  table: TableContract;
 };
 
 type GeneratedWorkspaceListFoundationOptions = Partial<
@@ -186,7 +186,7 @@ export type SelectGeneratedWorkspaceFoundationOptions = {
   ) => GeneratedWorkspaceSectionFoundationInput | undefined;
   snapshot: BrowserReplicaProjectionSnapshot;
   today: string;
-  workspaceActions?: readonly FormlessUiWorkspaceLinkActionContract[];
+  workspaceActions?: readonly WorkspaceLinkActionContract[];
 };
 
 type GeneratedWorkspaceNestedResultRuntime =
@@ -202,20 +202,20 @@ type GeneratedWorkspaceNestedResultRuntime =
       recordState?: GeneratedRecordResultRecordState;
     }
   | {
-      contract: FormlessUiTableContract;
+      contract: TableContract;
       fieldsById: GeneratedTableFieldIndex;
       kind: "table";
       runtime: unknown;
     }
   | {
-      contract: FormlessUiTreeResultContract;
+      contract: TreeResultContract;
       foundation: GeneratedTreeFoundation;
       kind: "treeResult";
     };
 
 type GeneratedWorkspaceCreateControlRuntime = {
   contextId?: string;
-  contract: FormlessUiCreateSurfaceContract;
+  contract: CreateSurfaceContract;
   fieldsById: GeneratedCreateFieldIndex;
   kind: "create";
   runtime: unknown;
@@ -224,13 +224,13 @@ type GeneratedWorkspaceCreateControlRuntime = {
 type GeneratedWorkspaceControlRuntime =
   | GeneratedWorkspaceCreateControlRuntime
   | {
-      contract: FormlessUiActionTriggerContract;
+      contract: ActionTriggerContract;
       kind: "externalAction";
       runtime: unknown;
     }
   | {
       contextId?: string;
-      contract: FormlessUiOperationControlContract;
+      contract: OperationControlContract;
       kind: "operation";
       runtime: unknown;
     };
@@ -262,7 +262,7 @@ export type GeneratedWorkspaceRuntimePlan = {
 
 export type GeneratedWorkspaceFoundation = {
   runtimePlan: GeneratedWorkspaceRuntimePlan;
-  workspace: FormlessUiWorkspaceContract;
+  workspace: WorkspaceContract;
 };
 
 export type GeneratedWorkspaceResolvedIntent =
@@ -277,7 +277,7 @@ export type GeneratedWorkspaceResolvedIntent =
       section: GeneratedWorkspaceSectionRuntimePlan;
     }
   | {
-      field?: FormlessUiField;
+      field?: FieldContract;
       kind: "field";
       result?: GeneratedWorkspaceNestedResultRuntime;
       runtime?: GeneratedWorkspaceControlRuntime;
@@ -312,14 +312,14 @@ export type GeneratedWorkspaceResolvedIntent =
       section: GeneratedWorkspaceSectionRuntimePlan;
     }
   | {
-      field: FormlessUiField;
+      field: FieldContract;
       kind: "treeCreateField";
       result: GeneratedWorkspaceNestedResultRuntime & { kind: "treeResult" };
       runtime: GeneratedTreeChildCreateRuntime;
       section: GeneratedWorkspaceSectionRuntimePlan;
     }
   | {
-      field: FormlessUiField;
+      field: FieldContract;
       kind: "treeField";
       result: GeneratedWorkspaceNestedResultRuntime & { kind: "treeResult" };
       runtime: GeneratedTreeFieldIntentRuntime;
@@ -497,7 +497,7 @@ export function selectGeneratedWorkspaceFoundation(
       ),
       sections: sectionPlans,
     },
-    workspace: projectGeneratedWorkspaceFormlessUiContract({
+    workspace: projectGeneratedWorkspaceContract({
       actions: workspaceActions,
       id: screen.screenName,
       label: screen.label,
@@ -508,7 +508,7 @@ export function selectGeneratedWorkspaceFoundation(
 
 export function resolveGeneratedWorkspaceIntent(
   runtimePlan: GeneratedWorkspaceRuntimePlan,
-  intent: FormlessUiWorkspaceIntent,
+  intent: WorkspaceIntent,
 ): GeneratedWorkspaceResolvedIntent | undefined {
   const section = runtimePlan.sectionByCollectionId.get(intent.collectionId);
 
@@ -1110,8 +1110,8 @@ function contractContainsId(contract: unknown, id: string): boolean {
 }
 
 function generatedWorkspaceTableIntentMatchesContract(
-  table: FormlessUiTableContract,
-  intent: Extract<FormlessUiWorkspaceIntent, { type: "workspaceTable" }>["intent"],
+  table: TableContract,
+  intent: Extract<WorkspaceIntent, { type: "workspaceTable" }>["intent"],
 ): boolean {
   if (intent.type === "tableEditDialogOpenChange") {
     return contractContainsId(table, intent.dialogId) && contractContainsId(table, intent.rowId);

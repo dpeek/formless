@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vite-plus/test";
 import type {
-  FormlessUiActionTriggerContract,
-  FormlessUiButtonContract,
-  FormlessUiCreateField,
-  FormlessUiCreateSurfaceContract,
-  FormlessUiOperationControlContract,
-  FormlessUiTableContract,
+  ActionTriggerContract,
+  ButtonContract,
+  CreateFieldContract,
+  CreateSurfaceContract,
+  OperationControlContract,
+  TableContract,
 } from "@dpeek/formless-presentation/contract";
 import type { StoredRecord } from "@dpeek/formless-storage";
 import type {
@@ -18,8 +18,8 @@ import { selectScreenModels } from "../../client/views.ts";
 import type { RecordResultModel } from "../../client/list-result-model.ts";
 import { rateSeedRecords, rateSourceSchema, siteSourceSchema } from "../../test/schema-apps.ts";
 import { testSiteSeedRecords } from "../../test/site-records.ts";
-import { projectGeneratedOperationFormlessUiControl } from "./formless-ui-operation-projection.ts";
-import { projectGeneratedRecordFormlessUiField } from "./formless-ui-projection.ts";
+import { projectGeneratedOperationControl } from "./operation-projection.ts";
+import { projectGeneratedRecordField } from "./field-projection.ts";
 import {
   generatedWorkspaceScopedId,
   projectGeneratedWorkspaceCreateIntent,
@@ -30,7 +30,7 @@ import {
   projectGeneratedWorkspaceRecordResultIntent,
   projectGeneratedWorkspaceTableIntent,
   projectGeneratedWorkspaceTreeIntent,
-} from "./formless-ui-workspace-projection.ts";
+} from "./workspace-projection.ts";
 import {
   createGeneratedRecordResultFieldAuthoringState,
   type GeneratedRecordResultRecordState,
@@ -644,7 +644,7 @@ function rateWorkspaceFixture() {
       ],
     },
   };
-  let table: FormlessUiTableContract | undefined;
+  let table: TableContract | undefined;
   const foundation = required(
     selectGeneratedWorkspaceFoundation({
       screen,
@@ -727,7 +727,7 @@ function tableFoundation(id: string, recordIds: readonly string[]) {
     fieldName: "cost",
     label: "Cost",
   } satisfies RecordFieldConfig;
-  const field = projectGeneratedRecordFormlessUiField({
+  const field = projectGeneratedRecordField({
     canPatch: false,
     fieldConfig,
     occurrence: {
@@ -738,7 +738,7 @@ function tableFoundation(id: string, recordIds: readonly string[]) {
     recordValue: record.values.cost,
     surface: "table-cell",
   });
-  const table: FormlessUiTableContract = {
+  const table: TableContract = {
     accessibilityLabel: "Rate records",
     columns: [
       {
@@ -862,7 +862,7 @@ function requiredScreen(screenName: string): HomeScreenModel {
   );
 }
 
-function actionTrigger(id: string, label: string): FormlessUiActionTriggerContract {
+function actionTrigger(id: string, label: string): ActionTriggerContract {
   return {
     id,
     invocationSource: "button",
@@ -872,7 +872,7 @@ function actionTrigger(id: string, label: string): FormlessUiActionTriggerContra
   };
 }
 
-function createSurface(id: string, label: string): FormlessUiCreateSurfaceContract {
+function createSurface(id: string, label: string): CreateSurfaceContract {
   return {
     dialog: {
       form: {
@@ -899,7 +899,7 @@ function createSurface(id: string, label: string): FormlessUiCreateSurfaceContra
   };
 }
 
-function createSurfaceField(surfaceId: string): FormlessUiCreateField {
+function createSurfaceField(surfaceId: string): CreateFieldContract {
   const field = { label: "Name", required: true, type: "text" } as const;
 
   return {
@@ -932,7 +932,7 @@ function createSurfaceField(surfaceId: string): FormlessUiCreateField {
   };
 }
 
-function button(id: string, label: string): FormlessUiButtonContract {
+function button(id: string, label: string): ButtonContract {
   return {
     accessibilityLabel: label,
     content: { kind: "label", label },
@@ -944,7 +944,7 @@ function button(id: string, label: string): FormlessUiButtonContract {
   };
 }
 
-function operationControl(id: string, label: string): FormlessUiOperationControlContract {
+function operationControl(id: string, label: string): OperationControlContract {
   const binding: GeneratedOperationControlBinding = {
     availability: { state: "enabled" },
     canonicalOperationKey: `rate.${id}`,
@@ -959,7 +959,7 @@ function operationControl(id: string, label: string): FormlessUiOperationControl
     scope: "collection",
     visualIntent: "default",
   };
-  return projectGeneratedOperationFormlessUiControl({
+  return projectGeneratedOperationControl({
     binding,
     presentation: {
       accessibilityLabel: label,

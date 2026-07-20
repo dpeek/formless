@@ -1,15 +1,15 @@
 import type { FieldSchema, StateMachineSchema } from "@dpeek/formless-schema";
 import type {
-  FormlessUiButtonContract,
-  FormlessUiField,
-  FormlessUiTableActionContract,
-  FormlessUiTableActionGroupContract,
-  FormlessUiTableColumnContract,
-  FormlessUiTableContract,
-  FormlessUiTableEditActionContract,
-  FormlessUiTableOperationActionContract,
-  FormlessUiTableOrderingContract,
-  FormlessUiTableRowContract,
+  ButtonContract,
+  FieldContract,
+  TableActionContract,
+  TableActionGroupContract,
+  TableColumnContract,
+  TableContract,
+  TableEditActionContract,
+  TableOperationActionContract,
+  TableOrderingContract,
+  TableRowContract,
 } from "@dpeek/formless-presentation/contract";
 import {
   displayField,
@@ -25,12 +25,12 @@ import {
 } from "./fields/fixture-helpers.ts";
 import { operationControlFixtures } from "./operation-controls.fixtures.ts";
 
-export type FormlessUiTableFixtureId = "active" | "editing-disabled" | "empty";
+export type TableFixtureId = "active" | "editing-disabled" | "empty";
 
-export type FormlessUiTableFixture = {
-  id: FormlessUiTableFixtureId;
+export type TableFixture = {
+  id: TableFixtureId;
   label: string;
-  table: FormlessUiTableContract;
+  table: TableContract;
 };
 
 const titleSchema = {
@@ -132,9 +132,9 @@ const tableColumns = [
     labelVisibility: "hidden",
     width: "md",
   },
-] satisfies readonly FormlessUiTableColumnContract[];
+] satisfies readonly TableColumnContract[];
 
-export function createFormlessUiTableFixtures(): FormlessUiTableFixture[] {
+export function createTableFixtures(): TableFixture[] {
   return [
     {
       id: "active",
@@ -154,7 +154,7 @@ export function createFormlessUiTableFixtures(): FormlessUiTableFixture[] {
   ];
 }
 
-function activeTableFixture(): FormlessUiTableContract {
+function activeTableFixture(): TableContract {
   const rows = [
     taskRow({
       canEdit: true,
@@ -210,7 +210,7 @@ function activeTableFixture(): FormlessUiTableContract {
   };
 }
 
-function emptyTableFixture(): FormlessUiTableContract {
+function emptyTableFixture(): TableContract {
   return {
     accessibilityLabel: "Empty tasks",
     columns: tableColumns,
@@ -228,7 +228,7 @@ function emptyTableFixture(): FormlessUiTableContract {
   };
 }
 
-function editingDisabledTableFixture(): FormlessUiTableContract {
+function editingDisabledTableFixture(): TableContract {
   return {
     accessibilityLabel: "Read-only tasks",
     columns: tableColumns,
@@ -273,7 +273,7 @@ type TaskRowInput = {
   warning?: string;
 };
 
-function taskRow(input: TaskRowInput): FormlessUiTableRowContract {
+function taskRow(input: TaskRowInput): TableRowContract {
   const title = taskTitleField(input);
   const status = taskStatusField(input);
   const actions = taskActions(input, title, status);
@@ -452,7 +452,7 @@ function taskScore(input: Pick<TaskRowInput, "score" | "title">) {
   } as const;
 }
 
-function taskOrdering(input: TaskRowInput): FormlessUiTableOrderingContract {
+function taskOrdering(input: TaskRowInput): TableOrderingContract {
   return {
     accessibilityLabel: `Reorder ${input.title}`,
     actions: (["top", "up", "down", "bottom"] as const).map((direction) => {
@@ -490,8 +490,8 @@ function taskOrdering(input: TaskRowInput): FormlessUiTableOrderingContract {
   };
 }
 
-function taskActions(input: TaskRowInput, title: FormlessUiField, status: FormlessUiField) {
-  const secondary: FormlessUiTableActionContract[] = [];
+function taskActions(input: TaskRowInput, title: FieldContract, status: FieldContract) {
+  const secondary: TableActionContract[] = [];
 
   if (input.canEdit) {
     secondary.push(editTaskAction(input, [title, status]));
@@ -502,7 +502,7 @@ function taskActions(input: TaskRowInput, title: FormlessUiField, status: Formle
       control: operationControlFixtures.deleteTask.initial,
       kind: "operationAction",
       role: "delete",
-    } satisfies FormlessUiTableOperationActionContract);
+    } satisfies TableOperationActionContract);
   }
 
   return {
@@ -511,13 +511,13 @@ function taskActions(input: TaskRowInput, title: FormlessUiField, status: Formle
     primary: [],
     secondary,
     secondaryAccessibilityLabel: `More actions for ${input.title}`,
-  } satisfies FormlessUiTableActionGroupContract;
+  } satisfies TableActionGroupContract;
 }
 
 function editTaskAction(
   input: Pick<TaskRowInput, "rowId" | "title">,
-  fields: readonly FormlessUiField[],
-): FormlessUiTableEditActionContract {
+  fields: readonly FieldContract[],
+): TableEditActionContract {
   const dialogId = `${input.rowId}:edit`;
   const fieldSetId = `${dialogId}:fields`;
 
@@ -560,7 +560,7 @@ function editTaskAction(
   };
 }
 
-function tableDialogField(field: FormlessUiField, fieldSetId: string): FormlessUiField {
+function tableDialogField(field: FieldContract, fieldSetId: string): FieldContract {
   if (field.mode === "editor" && (field.surface === "create" || field.surface === "operation")) {
     return field;
   }
@@ -582,8 +582,8 @@ function tableButton({
 }: {
   id: string;
   label: string;
-  prominence?: FormlessUiButtonContract["prominence"];
-}): FormlessUiButtonContract {
+  prominence?: ButtonContract["prominence"];
+}): ButtonContract {
   return {
     accessibilityLabel: label,
     content: { kind: "label", label },
@@ -595,7 +595,7 @@ function tableButton({
   };
 }
 
-function taskFooter(total: string): NonNullable<FormlessUiTableContract["footer"]> {
+function taskFooter(total: string): NonNullable<TableContract["footer"]> {
   return {
     accessibilityLabel: "Task aggregates",
     cells: tableColumns.map((column) =>

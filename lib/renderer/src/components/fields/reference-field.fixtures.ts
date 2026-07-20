@@ -7,7 +7,7 @@ import type {
   FieldScenarioGroup,
   FieldScenarioProjectionContext,
 } from "../field-scenario-model.ts";
-import type { FormlessUiFieldSurface } from "@dpeek/formless-presentation/contract";
+import type { FieldSurface } from "@dpeek/formless-presentation/contract";
 import {
   createField,
   displayField,
@@ -69,7 +69,7 @@ export const referenceScenarioGroups = [
 ] satisfies readonly FieldScenarioGroup[];
 
 function projectExistingReferenceGroup(
-  surface: Extract<FormlessUiFieldSurface, "detail" | "record" | "table-cell">,
+  surface: Extract<FieldSurface, "detail" | "record" | "table-cell">,
 ) {
   return projectScenarioGroup({
     id: `reference-${surface}`,
@@ -103,7 +103,7 @@ function projectCreateReferenceField({ facets }: FieldScenarioProjectionContext)
 }
 
 function projectExistingReferenceField(
-  surface: Extract<FormlessUiFieldSurface, "detail" | "record" | "table-cell">,
+  surface: Extract<FieldSurface, "detail" | "record" | "table-cell">,
   { facets }: FieldScenarioProjectionContext,
 ) {
   const required = facets.requiredness === "required";

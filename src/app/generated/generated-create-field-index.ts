@@ -1,15 +1,15 @@
 import type {
-  FormlessUiCreateField,
-  FormlessUiCreateSurfaceContract,
-  FormlessUiFieldIntent,
+  CreateFieldContract,
+  CreateSurfaceContract,
+  FieldIntent,
 } from "@dpeek/formless-presentation/contract";
 
-export type GeneratedCreateFieldIndex = ReadonlyMap<string, FormlessUiCreateField>;
+export type GeneratedCreateFieldIndex = ReadonlyMap<string, CreateFieldContract>;
 
 export function indexGeneratedCreateSurfaceFields(
-  surface: FormlessUiCreateSurfaceContract,
+  surface: CreateSurfaceContract,
 ): GeneratedCreateFieldIndex {
-  const fieldsById = new Map<string, FormlessUiCreateField>();
+  const fieldsById = new Map<string, CreateFieldContract>();
 
   for (const field of surface.dialog.form.fieldSet.fields) {
     if (fieldsById.has(field.fieldId)) {
@@ -26,8 +26,8 @@ export function indexGeneratedCreateSurfaceFields(
 export function resolveGeneratedCreateFieldIntent(
   fieldsById: GeneratedCreateFieldIndex,
   fieldId: string,
-  intent: FormlessUiFieldIntent,
-): FormlessUiCreateField | undefined {
+  intent: FieldIntent,
+): CreateFieldContract | undefined {
   if (intent.type !== "createDraftChange") {
     return undefined;
   }

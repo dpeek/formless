@@ -1,16 +1,16 @@
 import { useLayoutEffect, useMemo } from "react";
 import type {
-  FormlessUiContractIntent,
-  FormlessUiShellIntent,
-  FormlessUiShellIntentHandler,
-  FormlessUiShellManifestReference,
+  PresentationIntent,
+  ShellIntent,
+  ShellIntentHandler,
+  ShellManifestReference,
 } from "@dpeek/formless-presentation/contract";
 import {
-  formlessUiShellManifestReference,
-  formlessUiShellNavigationSectionReference,
-  isFormlessUiShellIntent,
-  type FormlessUiContractHostNodeSet,
-} from "@dpeek/formless-presentation/contract-host";
+  shellManifestReference,
+  shellNavigationSectionReference,
+  isShellIntent,
+  type PresentationNodeSet,
+} from "@dpeek/formless-presentation/host";
 import {
   type ApplicationRuntimeContractContribution,
   type ApplicationRuntimeContractPublication,
@@ -20,34 +20,34 @@ import {
 import {
   GENERATED_APPLICATION_SHELL_ID,
   type GeneratedApplicationShellProjection,
-} from "./formless-ui-shell-projection.ts";
+} from "./application-shell-projection.ts";
 import {
   indexGeneratedCreateSurfaceFields,
   resolveGeneratedCreateFieldIntent,
 } from "./generated-create-field-index.ts";
 
 export type GeneratedApplicationShellContractHostPublication = {
-  nodes: FormlessUiContractHostNodeSet;
-  shellReference: FormlessUiShellManifestReference;
+  nodes: PresentationNodeSet;
+  shellReference: ShellManifestReference;
 };
 
 const APPLICATION_SHELL_CONTRIBUTOR_ID = "application-shell";
 
 export type ResolvedGeneratedShellIntent =
   | {
-      intent: Extract<FormlessUiShellIntent, { type: "shellCreate" }>;
+      intent: Extract<ShellIntent, { type: "shellCreate" }>;
       kind: "create";
     }
   | {
-      intent: Extract<FormlessUiShellIntent, { type: "shellLogout" }>;
+      intent: Extract<ShellIntent, { type: "shellLogout" }>;
       kind: "logout";
     }
   | {
-      intent: Extract<FormlessUiShellIntent, { type: "shellReset" }>;
+      intent: Extract<ShellIntent, { type: "shellReset" }>;
       kind: "reset";
     }
   | {
-      intent: Extract<FormlessUiShellIntent, { type: "shellRootRecordSelection" }>;
+      intent: Extract<ShellIntent, { type: "shellRootRecordSelection" }>;
       kind: "rootSelection";
     }
   | { kind: "ignored" };
@@ -55,13 +55,13 @@ export type ResolvedGeneratedShellIntent =
 export function projectGeneratedApplicationShellContractHostPublication(
   projection: GeneratedApplicationShellProjection,
 ): GeneratedApplicationShellContractHostPublication {
-  const shellReference = formlessUiShellManifestReference(projection.manifest.id);
+  const shellReference = shellManifestReference(projection.manifest.id);
 
   return {
     nodes: [
       { reference: shellReference, snapshot: projection.manifest },
       ...projection.sections.map((section) => ({
-        reference: formlessUiShellNavigationSectionReference(projection.manifest.id, section.id),
+        reference: shellNavigationSectionReference(projection.manifest.id, section.id),
         snapshot: section,
       })),
     ],
@@ -71,7 +71,7 @@ export function projectGeneratedApplicationShellContractHostPublication(
 
 export function resolveGeneratedApplicationShellIntent(
   projection: GeneratedApplicationShellProjection | undefined,
-  intent: FormlessUiShellIntent,
+  intent: ShellIntent,
 ): ResolvedGeneratedShellIntent {
   if (!projection || intent.shellId !== projection.manifest.id) {
     return { kind: "ignored" };
@@ -133,13 +133,13 @@ export function useGeneratedApplicationShellContractHost({
   initialRouteContributions = [],
   projection,
 }: {
-  dispatch: FormlessUiShellIntentHandler;
+  dispatch: ShellIntentHandler;
   initialRouteContributions?: readonly ApplicationRuntimeContractContribution[];
   projection: GeneratedApplicationShellProjection | undefined;
 }): {
   coordinator: ApplicationRuntimePublicationCoordinator;
   host: ApplicationRuntimePublicationCoordinator["host"];
-  shellReference: FormlessUiShellManifestReference | undefined;
+  shellReference: ShellManifestReference | undefined;
 } {
   const publication = projection
     ? projectGeneratedApplicationShellContractHostPublication(projection)
@@ -154,10 +154,7 @@ export function useGeneratedApplicationShellContractHost({
     ...initialShellContributions,
     ...initialRouteContributions,
   ]);
-  const shellReference = useMemo(
-    () => formlessUiShellManifestReference(GENERATED_APPLICATION_SHELL_ID),
-    [],
-  );
+  const shellReference = useMemo(() => shellManifestReference(GENERATED_APPLICATION_SHELL_ID), []);
 
   useLayoutEffect(() => {
     if (runtimePublication) {
@@ -177,19 +174,18 @@ export function useGeneratedApplicationShellContractHost({
 export function prepareGeneratedApplicationShellRuntimePublication(
   projection: GeneratedApplicationShellProjection,
   publication: GeneratedApplicationShellContractHostPublication,
-  dispatch: FormlessUiShellIntentHandler,
+  dispatch: ShellIntentHandler,
 ): ApplicationRuntimeContractPublication {
   return {
     intentHandlers: [
       {
-        dispatch: (intent: FormlessUiContractIntent) => {
-          if (!isFormlessUiShellIntent(intent)) {
+        dispatch: (intent: PresentationIntent) => {
+          if (!isShellIntent(intent)) {
             return;
           }
           return dispatch(intent);
         },
-        matches: (intent) =>
-          isFormlessUiShellIntent(intent) && intent.shellId === projection.manifest.id,
+        matches: (intent) => isShellIntent(intent) && intent.shellId === projection.manifest.id,
       },
     ],
     nodes: publication.nodes,

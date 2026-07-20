@@ -1,25 +1,25 @@
 import type {
-  FormlessUiAccessActionContract,
-  FormlessUiAccessConfirmationContract,
-  FormlessUiAccessControlledFieldContract,
-  FormlessUiAccessDisplayFactContract,
-  FormlessUiAccessFeedbackContract,
-  FormlessUiAccessGrantOptionContract,
-  FormlessUiAccessGrantOptionGroupContract,
-  FormlessUiAccessGrantSelectionContract,
-  FormlessUiAccessIntent,
-  FormlessUiAccessInvitationAuthoringContract,
-  FormlessUiAccessInvitationAuthoringOpenChangeIntent,
-  FormlessUiAccessInvitationContract,
-  FormlessUiAccessInvitationFieldPurpose,
-  FormlessUiAccessInvitationRevocationConfirmationOpenChangeIntent,
-  FormlessUiAccessInvitationRevokeIntent,
-  FormlessUiAccessInvitationSubmitIntent,
-  FormlessUiAccessManifestContract,
-  FormlessUiAccessPersonContract,
-  FormlessUiAccessReadyContract,
-  FormlessUiButtonContract,
-  FormlessUiCompactStatusIntent,
+  AccessActionContract,
+  AccessConfirmationContract,
+  AccessControlledFieldContract,
+  AccessDisplayFactContract,
+  AccessFeedbackContract,
+  AccessGrantOptionContract,
+  AccessGrantOptionGroupContract,
+  AccessGrantSelectionContract,
+  AccessIntent,
+  AccessInvitationAuthoringContract,
+  AccessInvitationAuthoringOpenChangeIntent,
+  AccessInvitationContract,
+  AccessInvitationFieldPurpose,
+  AccessInvitationRevocationConfirmationOpenChangeIntent,
+  AccessInvitationRevokeIntent,
+  AccessInvitationSubmitIntent,
+  AccessManifestContract,
+  AccessPersonContract,
+  AccessReadyContract,
+  ButtonContract,
+  CompactStatusIntent,
 } from "@dpeek/formless-presentation/contract";
 import type {
   IdentityAccessInvitationGrantOptions,
@@ -95,8 +95,8 @@ export type ProjectAccessOptions = {
 };
 
 export type AccessProjection = {
-  authoring?: FormlessUiAccessInvitationAuthoringContract | undefined;
-  manifest: FormlessUiAccessManifestContract;
+  authoring?: AccessInvitationAuthoringContract | undefined;
+  manifest: AccessManifestContract;
 };
 
 export type ResolvedAccessIntent =
@@ -180,7 +180,7 @@ export function projectAccess(options: ProjectAccessOptions): AccessProjection {
   const people = projectAccessPeople(summary, labels);
   const invitations = projectAccessInvitations(options, summary, labels);
   const confirmation = projectAccessConfirmation(options, invitations);
-  const manifest: FormlessUiAccessReadyContract = {
+  const manifest: AccessReadyContract = {
     ...base,
     authoring: instanceAccessInvitationAuthoringReference,
     ...(confirmation === undefined ? {} : { confirmation }),
@@ -218,7 +218,7 @@ export function projectAccess(options: ProjectAccessOptions): AccessProjection {
 export function resolveAccessIntent(
   options: ProjectAccessOptions,
   projection: AccessProjection,
-  intent: FormlessUiAccessIntent,
+  intent: AccessIntent,
 ): ResolvedAccessIntent {
   if (projection.manifest.state !== "ready" || intent.accessId !== projection.manifest.id) {
     return { kind: "ignored" };
@@ -336,7 +336,7 @@ export function resolveAccessIntent(
 export async function dispatchAccessIntent(
   options: ProjectAccessOptions,
   projection: AccessProjection,
-  intent: FormlessUiAccessIntent,
+  intent: AccessIntent,
   actions: AccessIntentActions,
 ): Promise<void> {
   const resolved = resolveAccessIntent(options, projection, intent);
@@ -368,7 +368,7 @@ function projectAccessInvitationAuthoring(
   options: ProjectAccessOptions,
   summary: IdentityAccessManagementSummary,
   labels: AccessLabels,
-): FormlessUiAccessInvitationAuthoringContract {
+): AccessInvitationAuthoringContract {
   const pending = options.submission.status === "submitting";
   const fields = projectAccessAuthoringFields(options, labels);
   const roleSelection = projectRoleSelection(options, summary.invitationGrantOptions, labels);
@@ -454,7 +454,7 @@ function projectAccessInvitationAuthoring(
 function projectAccessAuthoringFields(
   options: ProjectAccessOptions,
   labels: AccessLabels,
-): FormlessUiAccessInvitationAuthoringContract["fields"] {
+): AccessInvitationAuthoringContract["fields"] {
   const { draft } = options;
   const pendingReason =
     options.submission.status === "submitting" ? "Invitation creation is in progress." : undefined;
@@ -573,7 +573,7 @@ function projectRoleSelection(
   options: ProjectAccessOptions,
   grantOptions: IdentityAccessInvitationGrantOptions,
   labels: AccessLabels,
-): FormlessUiAccessGrantSelectionContract & { purpose: "roles" } {
+): AccessGrantSelectionContract & { purpose: "roles" } {
   const pendingReason =
     options.submission.status === "submitting" ? "Invitation creation is in progress." : undefined;
   const scopeKinds =
@@ -617,7 +617,7 @@ function projectRoleOption(
   labels: AccessLabels,
   scopeKind: IdentityAccessInvitationRoleGrantOption["scopeKind"],
   pendingReason: string | undefined,
-): FormlessUiAccessGrantOptionContract {
+): AccessGrantOptionContract {
   const id = accessRoleOptionId(option);
   const selected = options.draft.roleOptionIds.includes(id);
   const disabledReason =
@@ -650,10 +650,10 @@ function projectMembershipSelection(
   options: ProjectAccessOptions,
   grantOptions: IdentityAccessInvitationGrantOptions,
   labels: AccessLabels,
-): FormlessUiAccessGrantSelectionContract & { purpose: "memberships" } {
+): AccessGrantSelectionContract & { purpose: "memberships" } {
   const pendingReason =
     options.submission.status === "submitting" ? "Invitation creation is in progress." : undefined;
-  const groups: FormlessUiAccessGrantOptionGroupContract[] = [
+  const groups: AccessGrantOptionGroupContract[] = [
     {
       id: `${INSTANCE_ACCESS_ID}:membership-group:organizations`,
       kind: "accessGrantOptionGroup",
@@ -700,7 +700,7 @@ function projectMembershipOption(
   labels: AccessLabels,
   groupKey: "groups" | "organizations",
   pendingReason: string | undefined,
-): FormlessUiAccessGrantOptionContract {
+): AccessGrantOptionContract {
   const id = accessMembershipOptionId(option);
   const selected = options.draft.membershipOptionIds.includes(id);
   const targetId =
@@ -733,7 +733,7 @@ function projectMembershipOption(
 function projectAccessPeople(
   summary: IdentityAccessManagementSummary,
   labels: AccessLabels,
-): readonly FormlessUiAccessPersonContract[] {
+): readonly AccessPersonContract[] {
   const rolesByPrincipalId = new Map<string, IdentityAccessRoleSummary[]>();
   for (const role of summary.roles) {
     if (
@@ -774,7 +774,7 @@ function projectAccessInvitations(
   options: ProjectAccessOptions,
   summary: IdentityAccessManagementSummary,
   labels: AccessLabels,
-): readonly FormlessUiAccessInvitationContract[] {
+): readonly AccessInvitationContract[] {
   const canManage = canManageInvitations(summary.invitationGrantOptions);
 
   return summary.invitations.map((invitation) => {
@@ -853,8 +853,8 @@ function projectAccessInvitations(
 
 function projectAccessConfirmation(
   options: ProjectAccessOptions,
-  invitations: readonly FormlessUiAccessInvitationContract[],
-): FormlessUiAccessConfirmationContract | undefined {
+  invitations: readonly AccessInvitationContract[],
+): AccessConfirmationContract | undefined {
   if (options.confirmationInvitationId === undefined) {
     return undefined;
   }
@@ -923,7 +923,7 @@ function projectAccessConfirmation(
 function accessInviteAction(
   summary: IdentityAccessManagementSummary,
   submission: AccessInvitationSubmissionState,
-): FormlessUiAccessActionContract<FormlessUiAccessInvitationAuthoringOpenChangeIntent> {
+): AccessActionContract<AccessInvitationAuthoringOpenChangeIntent> {
   const disabledReason =
     submission.status === "submitting"
       ? "Invitation creation is in progress."
@@ -954,7 +954,7 @@ function accessInviteAction(
 
 function accessInvitationRequest(
   options: ProjectAccessOptions,
-  authoring: FormlessUiAccessInvitationAuthoringContract,
+  authoring: AccessInvitationAuthoringContract,
 ): Omit<CreateIdentityAccessManagementInvitationInput, "idempotencyKey"> {
   if (options.state.status !== "ready") {
     throw new Error("Access invitation request requires a ready summary.");
@@ -1118,9 +1118,7 @@ function accessRevocationDisabledReason(
     : "Another invitation revocation is in progress.";
 }
 
-function readyFeedback(
-  options: ProjectAccessOptions,
-): FormlessUiAccessFeedbackContract | undefined {
+function readyFeedback(options: ProjectAccessOptions): AccessFeedbackContract | undefined {
   if (options.revocation.status === "failed") {
     return accessFeedback(
       "revocation-failed",
@@ -1152,8 +1150,8 @@ function accessFeedback(
   id: string,
   title: string,
   detail: string,
-  intent: FormlessUiCompactStatusIntent,
-): FormlessUiAccessFeedbackContract {
+  intent: CompactStatusIntent,
+): AccessFeedbackContract {
   return {
     detail: displaySafeText(detail),
     id: `${INSTANCE_ACCESS_ID}:feedback:${id}`,
@@ -1175,13 +1173,13 @@ function accessField({
 }: {
   disabledReason?: string | undefined;
   errors: readonly string[];
-  inputKind: FormlessUiAccessControlledFieldContract["inputKind"];
+  inputKind: AccessControlledFieldContract["inputKind"];
   label: string;
-  options?: FormlessUiAccessControlledFieldContract["options"];
-  purpose: FormlessUiAccessInvitationFieldPurpose;
+  options?: AccessControlledFieldContract["options"];
+  purpose: AccessInvitationFieldPurpose;
   required: boolean;
   value: string;
-}): FormlessUiAccessControlledFieldContract {
+}): AccessControlledFieldContract {
   const id = `${INSTANCE_ACCESS_ID}:field:${purpose}`;
   return {
     changeIntent: {
@@ -1223,9 +1221,9 @@ function accessFact(
   id: string,
   label: string,
   value: string,
-  presentation: FormlessUiAccessDisplayFactContract["presentation"] = "text",
-  intent?: FormlessUiCompactStatusIntent,
-): FormlessUiAccessDisplayFactContract {
+  presentation: AccessDisplayFactContract["presentation"] = "text",
+  intent?: CompactStatusIntent,
+): AccessDisplayFactContract {
   return {
     id,
     ...(intent === undefined ? {} : { intent }),
@@ -1236,11 +1234,11 @@ function accessFact(
   };
 }
 
-function accessStatusFact(id: string, value: string): FormlessUiAccessDisplayFactContract {
+function accessStatusFact(id: string, value: string): AccessDisplayFactContract {
   return accessFact(id, "Status", fieldKeyLabel(value), "status", statusIntent(value));
 }
 
-function statusIntent(value: string): FormlessUiCompactStatusIntent {
+function statusIntent(value: string): CompactStatusIntent {
   if (["accepted", "active", "verified"].includes(value)) {
     return "success";
   }
@@ -1256,10 +1254,10 @@ function statusIntent(value: string): FormlessUiCompactStatusIntent {
 function accessButton(
   id: string,
   label: string,
-  prominence: FormlessUiButtonContract["prominence"],
-  type: FormlessUiButtonContract["type"],
+  prominence: ButtonContract["prominence"],
+  type: ButtonContract["type"],
   disabledReason?: string,
-): FormlessUiButtonContract {
+): ButtonContract {
   return {
     accessibilityLabel: label,
     content: { kind: "label", label },
@@ -1298,7 +1296,7 @@ function canManageInvitations(grantOptions: IdentityAccessInvitationGrantOptions
 
 function accessDraftWithFieldValue(
   draft: AccessInvitationDraft,
-  purpose: FormlessUiAccessInvitationFieldPurpose,
+  purpose: AccessInvitationFieldPurpose,
   value: string,
 ): AccessInvitationDraft {
   switch (purpose) {
@@ -1319,12 +1317,12 @@ function accessDraftWithFieldValue(
 }
 
 function sameAccessActionIntent(
-  actual: FormlessUiAccessIntent,
+  actual: AccessIntent,
   expected:
-    | FormlessUiAccessInvitationAuthoringOpenChangeIntent
-    | FormlessUiAccessInvitationRevocationConfirmationOpenChangeIntent
-    | FormlessUiAccessInvitationRevokeIntent
-    | FormlessUiAccessInvitationSubmitIntent,
+    | AccessInvitationAuthoringOpenChangeIntent
+    | AccessInvitationRevocationConfirmationOpenChangeIntent
+    | AccessInvitationRevokeIntent
+    | AccessInvitationSubmitIntent,
 ): boolean {
   if (actual.type !== expected.type) {
     return false;

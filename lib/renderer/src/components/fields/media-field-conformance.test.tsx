@@ -2,12 +2,9 @@ import type { ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vite-plus/test";
 
-import type {
-  FormlessUiFieldIntent,
-  FormlessUiFieldSurface,
-} from "@dpeek/formless-presentation/contract";
+import type { FieldIntent, FieldSurface } from "@dpeek/formless-presentation/contract";
 import { MediaInput, type MediaInputProps } from "../media-input.tsx";
-import { FormlessUiFieldRenderer } from "./renderer.tsx";
+import { FieldRenderer } from "./field-renderer.tsx";
 import { MediaFieldEditor } from "./media-field.tsx";
 import { mediaScenarioGroups } from "./media-field.fixtures.ts";
 
@@ -33,7 +30,7 @@ describe("Astryx media field conformance", () => {
     const variants = mediaScenarioGroups.flatMap((group) => group.variants);
 
     expect(new Set(variants.map(({ field }) => field.surface))).toEqual(
-      new Set<FormlessUiFieldSurface>(["create", "record", "table-cell", "detail"]),
+      new Set<FieldSurface>(["create", "record", "table-cell", "detail"]),
     );
     expect(variants.some(({ field }) => field.surface === "operation")).toBe(false);
 
@@ -73,14 +70,14 @@ describe("Astryx media field conformance", () => {
         expect(field.media).not.toHaveProperty("uploadEnabled");
       }
 
-      expect(() => renderToStaticMarkup(<FormlessUiFieldRenderer field={field} />)).not.toThrow();
+      expect(() => renderToStaticMarkup(<FieldRenderer field={field} />)).not.toThrow();
     }
   });
 
   it("routes canonical asset selection and file selection for every authoring surface", () => {
     for (const expected of supportedMediaSurfaces) {
       const field = requiredSelectedEditor(expected.groupId);
-      const intents: FormlessUiFieldIntent[] = [];
+      const intents: FieldIntent[] = [];
       const element = MediaFieldEditor({
         field,
         inputId: `media-${expected.surface}`,

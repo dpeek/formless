@@ -2,35 +2,34 @@ import { useState } from "react";
 import { Heading } from "@astryxdesign/core/Text";
 import { VStack } from "@astryxdesign/core/VStack";
 import type {
-  FormlessUiFieldIntent,
-  FormlessUiField,
-  FormlessUiOperationControlContract,
-  FormlessUiRecordResultActionContract,
-  FormlessUiRecordResultContract,
-  FormlessUiRecordResultIntent,
+  FieldIntent,
+  FieldContract,
+  OperationControlContract,
+  RecordResultActionContract,
+  RecordResultContract,
+  RecordResultIntent,
 } from "@dpeek/formless-presentation/contract";
 import { applyScenarioFieldIntent, withFixtureFieldOccurrence } from "./fields/fixture-helpers.ts";
 import { FormlessFixtureFrame, FormlessFixtureSelector } from "./fixture-layout.tsx";
-import { AstryxRecordResultRenderer } from "./formless-ui-record-result-renderer.tsx";
+import { AstryxRecordResultRenderer } from "./record-result-renderer.tsx";
 import { operationControlFixtures } from "./operation-controls.fixtures.ts";
 import {
   completedTaskControl,
-  createFormlessUiRecordResultFixtures,
+  createRecordResultFixtures,
   recordResultUnionField,
   taskStatusField,
-  type FormlessUiRecordResultFixture,
-  type FormlessUiRecordResultFixtureId,
+  type RecordResultFixture,
+  type RecordResultFixtureId,
 } from "./record-results.fixtures.ts";
 
 export function FormlessRecordResultsLayout() {
-  const [fixtures, setFixtures] = useState(createFormlessUiRecordResultFixtures);
-  const [selectedFixtureId, setSelectedFixtureId] =
-    useState<FormlessUiRecordResultFixtureId>("editable");
+  const [fixtures, setFixtures] = useState(createRecordResultFixtures);
+  const [selectedFixtureId, setSelectedFixtureId] = useState<RecordResultFixtureId>("editable");
   const selectedFixture =
     fixtures.find((fixture) => fixture.id === selectedFixtureId) ?? fixtures[0];
 
   const updateSelectedResult = (
-    update: (recordResult: FormlessUiRecordResultContract) => FormlessUiRecordResultContract,
+    update: (recordResult: RecordResultContract) => RecordResultContract,
   ) => {
     setFixtures((currentFixtures) =>
       currentFixtures.map((fixture) =>
@@ -76,9 +75,9 @@ export function FormlessRecordResultsLayout() {
 }
 
 export function applyRecordResultIntent(
-  recordResult: FormlessUiRecordResultContract,
-  intent: FormlessUiRecordResultIntent,
-): FormlessUiRecordResultContract {
+  recordResult: RecordResultContract,
+  intent: RecordResultIntent,
+): RecordResultContract {
   const selectedRecord = recordResult.selectedRecord;
 
   if (
@@ -97,10 +96,10 @@ export function applyRecordResultIntent(
 }
 
 function applyRecordResultFieldIntent(
-  recordResult: FormlessUiRecordResultContract,
+  recordResult: RecordResultContract,
   fieldId: string,
-  intent: FormlessUiFieldIntent,
-): FormlessUiRecordResultContract {
+  intent: FieldIntent,
+): RecordResultContract {
   const sourceField = recordResult.fields.find((field) => field.fieldId === fieldId);
   if (!sourceField) {
     return recordResult;
@@ -118,10 +117,10 @@ function applyRecordResultFieldIntent(
 }
 
 function applyRecordResultOperationIntent(
-  recordResult: FormlessUiRecordResultContract,
+  recordResult: RecordResultContract,
   controlId: string,
-  intent: Extract<FormlessUiRecordResultIntent, { type: "recordResultOperationIntent" }>["intent"],
-): FormlessUiRecordResultContract {
+  intent: Extract<RecordResultIntent, { type: "recordResultOperationIntent" }>["intent"],
+): RecordResultContract {
   const sourceAction = [...recordResult.actions.primary, ...recordResult.actions.secondary].find(
     (action) => action.control.id === controlId,
   );
@@ -160,9 +159,7 @@ function applyRecordResultOperationIntent(
   };
 }
 
-function fixtureOperationResult(
-  control: FormlessUiOperationControlContract,
-): FormlessUiOperationControlContract {
+function fixtureOperationResult(control: OperationControlContract): OperationControlContract {
   if (control.id === "task-complete") {
     return completedTaskControl();
   }
@@ -175,8 +172,8 @@ function fixtureOperationResult(
 }
 
 function unionKindFromIntent(
-  sourceField: FormlessUiField,
-  intent: FormlessUiFieldIntent,
+  sourceField: FieldContract,
+  intent: FieldIntent,
 ): "article" | "link" | undefined {
   if (sourceField.fieldName !== "kind") {
     return undefined;
@@ -193,8 +190,8 @@ function unionKindFromIntent(
 }
 
 function withVisibleUnionField(
-  recordResult: FormlessUiRecordResultContract,
-  fields: readonly FormlessUiField[],
+  recordResult: RecordResultContract,
+  fields: readonly FieldContract[],
   kind: "article" | "link",
 ) {
   const visibleFields = fields.filter(
@@ -212,10 +209,10 @@ function withVisibleUnionField(
 }
 
 function withRecordResultFieldIdentity(
-  recordResult: FormlessUiRecordResultContract,
+  recordResult: RecordResultContract,
   recordId: string,
-  field: FormlessUiField,
-): FormlessUiField {
+  field: FieldContract,
+): FieldContract {
   return withFixtureFieldOccurrence(field, {
     ownerId: `${recordResult.id}:${recordId}`,
     placementId: field.fieldName,
@@ -223,11 +220,11 @@ function withRecordResultFieldIdentity(
 }
 
 function mapRecordResultAction(
-  recordResult: FormlessUiRecordResultContract,
+  recordResult: RecordResultContract,
   controlId: string,
-  update: (action: FormlessUiRecordResultActionContract) => FormlessUiRecordResultActionContract,
-): FormlessUiRecordResultContract {
-  const mapAction = (action: FormlessUiRecordResultActionContract) =>
+  update: (action: RecordResultActionContract) => RecordResultActionContract,
+): RecordResultContract {
+  const mapAction = (action: RecordResultActionContract) =>
     action.control.id === controlId ? update(action) : action;
 
   return {
@@ -241,8 +238,8 @@ function mapRecordResultAction(
 }
 
 export function selectedRecordResultFixture(
-  fixtures: readonly FormlessUiRecordResultFixture[],
-  id: FormlessUiRecordResultFixtureId,
+  fixtures: readonly RecordResultFixture[],
+  id: RecordResultFixtureId,
 ) {
   return fixtures.find((fixture) => fixture.id === id);
 }

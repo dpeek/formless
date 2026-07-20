@@ -29,7 +29,7 @@ import {
 } from "../generated/generated-workspace-runtime.tsx";
 import { NotFoundRoute } from "./not-found.tsx";
 import type { AppPackageResolver } from "@dpeek/formless-installed-apps";
-import type { FormlessUiWorkspaceLinkActionContract } from "@dpeek/formless-presentation/contract";
+import type { WorkspaceLinkActionContract } from "@dpeek/formless-presentation/contract";
 import {
   createHomeRouteSelectionState,
   selectHomeRouteSectionContextRecordId,
@@ -79,7 +79,7 @@ export function HomeRoute({
     Record<string, readonly GeneratedWorkspaceSectionExternalAction[] | undefined>
   >;
   screenPath: string;
-  workspaceActions?: readonly FormlessUiWorkspaceLinkActionContract[];
+  workspaceActions?: readonly WorkspaceLinkActionContract[];
 }) {
   const appTarget = target ?? clientTargetForSchemaKey(schemaKey);
   const appTargetIdentity = appStorageIdentityForClientTarget(appTarget);

@@ -15,7 +15,7 @@ import {
   spacingVars,
 } from "@astryxdesign/core/theme/tokens.stylex";
 import { fieldKindOptions, fieldScenarioGroups } from "./fields/fixtures.ts";
-import { FormlessUiFieldRenderer, FormlessUiFieldSubmitFormAdapter } from "./fields/renderer.tsx";
+import { FieldRenderer, FieldSubmitFormAdapter } from "./fields/field-renderer.tsx";
 import {
   applyScenarioFieldIntent,
   applyScenarioFieldSubmit,
@@ -32,16 +32,13 @@ import type {
   FieldScenarioVariant,
 } from "./field-scenario-model.ts";
 import type {
-  FormlessUiField,
-  FormlessUiFieldIntent,
-  FormlessUiFieldIntentHandler,
+  FieldContract,
+  FieldIntent,
+  FieldIntentHandler,
 } from "@dpeek/formless-presentation/contract";
 
-type FieldOverrides = Record<string, FormlessUiField>;
-type StateTransitionInvokeIntent = Extract<
-  FormlessUiFieldIntent,
-  { type: "stateTransitionInvoke" }
->;
+type FieldOverrides = Record<string, FieldContract>;
+type StateTransitionInvokeIntent = Extract<FieldIntent, { type: "stateTransitionInvoke" }>;
 
 const stateTransitionSimulationDelayMs = 700;
 
@@ -183,14 +180,14 @@ function FieldPreview({
   onIntent,
   onSubmit,
 }: {
-  field: FormlessUiField;
-  onIntent: FormlessUiFieldIntentHandler;
+  field: FieldContract;
+  onIntent: FieldIntentHandler;
   onSubmit: () => void;
 }) {
   const renderer = (
     <>
-      <FormlessUiFieldRenderer field={field} onIntent={onIntent} />
-      <FormlessUiFieldSubmitFormAdapter field={field} />
+      <FieldRenderer field={field} onIntent={onIntent} />
+      <FieldSubmitFormAdapter field={field} />
     </>
   );
 
@@ -304,7 +301,7 @@ function fieldScenarioFacetIsAction(facetId: FieldScenarioFacetId) {
 function resetFieldScenarioState(
   setFieldOverrides: React.Dispatch<React.SetStateAction<FieldOverrides>>,
   setSubmittedFieldKeys: React.Dispatch<React.SetStateAction<Set<string>>>,
-  field: FormlessUiField,
+  field: FieldContract,
 ) {
   const key = scenarioFieldKey(field);
 
@@ -333,7 +330,7 @@ function useFieldMatrixIntentHandler(
   selectedVariant: FieldScenarioVariant | null,
   setFieldOverrides: React.Dispatch<React.SetStateAction<FieldOverrides>>,
   submittedFieldKeys: ReadonlySet<string>,
-): FormlessUiFieldIntentHandler {
+): FieldIntentHandler {
   const transitionTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   useEffect(
@@ -447,9 +444,9 @@ function useFieldMatrixSubmitHandler(
 }
 
 function applyStateTransitionPending(
-  field: FormlessUiField,
+  field: FieldContract,
   intent: StateTransitionInvokeIntent,
-): FormlessUiField {
+): FieldContract {
   if (
     field.fieldName !== intent.fieldName ||
     field.stateMachineFacts === undefined ||
@@ -491,9 +488,9 @@ function applyStateTransitionPending(
 }
 
 function clearStateTransitionPending(
-  field: FormlessUiField,
+  field: FieldContract,
   intent: StateTransitionInvokeIntent,
-): FormlessUiField {
+): FieldContract {
   if (field.fieldName !== intent.fieldName || field.stateMachineFacts === undefined) {
     return field;
   }

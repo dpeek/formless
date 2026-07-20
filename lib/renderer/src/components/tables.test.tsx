@@ -1,13 +1,13 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vite-plus/test";
 import type {
-  FormlessUiTableActionGroupContract,
-  FormlessUiTableContract,
-  FormlessUiTableEditActionContract,
-  FormlessUiTableOperationActionContract,
-  FormlessUiTableOrderingContract,
+  TableActionGroupContract,
+  TableContract,
+  TableEditActionContract,
+  TableOperationActionContract,
+  TableOrderingContract,
 } from "@dpeek/formless-presentation/contract";
-import { createFormlessUiTableFixtures } from "./tables.fixtures.ts";
+import { createTableFixtures } from "./tables.fixtures.ts";
 import {
   FormlessTablesLayout,
   applyTableFieldIntent,
@@ -24,7 +24,7 @@ vi.mock("@stylexjs/stylex", () => ({
 
 describe("canonical table fixtures", () => {
   it("cover production table contract states with serializable data", () => {
-    const fixtures = createFormlessUiTableFixtures();
+    const fixtures = createTableFixtures();
     const active = requiredFixture(fixtures, "active").table;
     const empty = requiredFixture(fixtures, "empty").table;
     const editingDisabled = requiredFixture(fixtures, "editing-disabled").table;
@@ -218,11 +218,11 @@ describe("Tables prototype layout", () => {
 });
 
 function activeTable() {
-  return requiredFixture(createFormlessUiTableFixtures(), "active").table;
+  return requiredFixture(createTableFixtures(), "active").table;
 }
 
 function requiredFixture(
-  fixtures: ReturnType<typeof createFormlessUiTableFixtures>,
+  fixtures: ReturnType<typeof createTableFixtures>,
   id: "active" | "editing-disabled" | "empty",
 ) {
   const fixture = selectedTableFixture(fixtures, id);
@@ -234,7 +234,7 @@ function requiredFixture(
   return fixture;
 }
 
-function tableRowFields(tableRow: FormlessUiTableContract["rows"][number]) {
+function tableRowFields(tableRow: TableContract["rows"][number]) {
   return tableRow.cells.flatMap((cell) =>
     cell.contents.flatMap((content) => {
       if (content.kind === "field") {
@@ -256,7 +256,7 @@ function tableRowFields(tableRow: FormlessUiTableContract["rows"][number]) {
   );
 }
 
-function requiredField(table: FormlessUiTableContract, rowId: string, fieldName: string) {
+function requiredField(table: TableContract, rowId: string, fieldName: string) {
   const field = table.rows
     .find((row) => row.id === rowId)
     ?.cells.flatMap((cell) => cell.contents)
@@ -269,7 +269,7 @@ function requiredField(table: FormlessUiTableContract, rowId: string, fieldName:
   return field.field;
 }
 
-function requiredActionGroup(table: FormlessUiTableContract, rowId: string) {
+function requiredActionGroup(table: TableContract, rowId: string) {
   const content = table.rows
     .find((row) => row.id === rowId)
     ?.cells.flatMap((cell) => cell.contents)
@@ -282,9 +282,9 @@ function requiredActionGroup(table: FormlessUiTableContract, rowId: string) {
   return content;
 }
 
-function requiredEditAction(group: FormlessUiTableActionGroupContract) {
+function requiredEditAction(group: TableActionGroupContract) {
   const action = group.secondary.find(
-    (candidate): candidate is FormlessUiTableEditActionContract => candidate.kind === "editAction",
+    (candidate): candidate is TableEditActionContract => candidate.kind === "editAction",
   );
 
   if (!action) {
@@ -294,9 +294,9 @@ function requiredEditAction(group: FormlessUiTableActionGroupContract) {
   return action;
 }
 
-function requiredDeleteAction(group: FormlessUiTableActionGroupContract) {
+function requiredDeleteAction(group: TableActionGroupContract) {
   const action = group.secondary.find(
-    (candidate): candidate is FormlessUiTableOperationActionContract =>
+    (candidate): candidate is TableOperationActionContract =>
       candidate.kind === "operationAction" && candidate.role === "delete",
   );
 
@@ -307,13 +307,11 @@ function requiredDeleteAction(group: FormlessUiTableActionGroupContract) {
   return action;
 }
 
-function requiredOrdering(table: FormlessUiTableContract, rowId: string) {
+function requiredOrdering(table: TableContract, rowId: string) {
   const content = table.rows
     .find((row) => row.id === rowId)
     ?.cells.flatMap((cell) => cell.contents)
-    .find(
-      (candidate): candidate is FormlessUiTableOrderingContract => candidate.kind === "ordering",
-    );
+    .find((candidate): candidate is TableOrderingContract => candidate.kind === "ordering");
 
   if (!content) {
     throw new Error(`Missing ordering fixture for ${rowId}.`);

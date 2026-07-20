@@ -1,19 +1,19 @@
 import type { FieldSchema } from "@dpeek/formless-schema";
 import type {
-  FormlessUiButtonContract,
-  FormlessUiCreateField,
-  FormlessUiCreateSurfaceContract,
-  FormlessUiField,
-  FormlessUiFieldSetContract,
-  FormlessUiOperationButtonContract,
-  FormlessUiOperationControlContract,
-  FormlessUiTreeChildCreationContract,
-  FormlessUiTreeItemContract,
-  FormlessUiTreeItemStructureContract,
-  FormlessUiTreeParentIdentity,
-  FormlessUiTreeResultContract,
-  FormlessUiTreeSelectedEditorContract,
-  FormlessUiTreeWarningContract,
+  ButtonContract,
+  CreateFieldContract,
+  CreateSurfaceContract,
+  FieldContract,
+  FieldSetContract,
+  OperationButtonContract,
+  OperationControlContract,
+  TreeChildCreationContract,
+  TreeItemContract,
+  TreeItemStructureContract,
+  TreeParentIdentity,
+  TreeResultContract,
+  TreeSelectedEditorContract,
+  TreeWarningContract,
 } from "@dpeek/formless-presentation/contract";
 import {
   draftInput,
@@ -30,7 +30,7 @@ import {
 } from "./fields/fixture-helpers.ts";
 import { fieldScenarioGroups } from "./fields/fixtures.ts";
 
-export type FormlessUiTreeResultFixtureId =
+export type TreeResultFixtureId =
   | "actions"
   | "cycle"
   | "editing-disabled"
@@ -46,13 +46,13 @@ export type FormlessUiTreeResultFixtureId =
   | "shallow"
   | "unavailable";
 
-export type FormlessUiTreeResultFixture = {
-  id: FormlessUiTreeResultFixtureId;
+export type TreeResultFixture = {
+  id: TreeResultFixtureId;
   label: string;
-  tree: FormlessUiTreeResultContract;
+  tree: TreeResultContract;
 };
 
-export function createFormlessUiTreeResultFixtures(): FormlessUiTreeResultFixture[] {
+export function createTreeResultFixtures(): TreeResultFixture[] {
   return [
     { id: "shallow", label: "Shallow", tree: shallowTree() },
     { id: "actions", label: "Actions", tree: actionsTree("actions", "idle") },
@@ -85,11 +85,11 @@ export function createFormlessUiTreeResultFixtures(): FormlessUiTreeResultFixtur
 
 function actionsTree(
   fixtureId: Extract<
-    FormlessUiTreeResultFixtureId,
+    TreeResultFixtureId,
     "actions" | "removal-confirmation" | "removal-failed" | "removal-pending"
   >,
   removalState: "confirmation" | "failed" | "idle" | "pending",
-): FormlessUiTreeResultContract {
+): TreeResultContract {
   const resultId = treeId(fixtureId);
   const selectedId = itemId("announcement");
   const selectedItem = treeItem({
@@ -125,7 +125,7 @@ function actionsTree(
   });
 }
 
-function shallowTree(): FormlessUiTreeResultContract {
+function shallowTree(): TreeResultContract {
   const resultId = treeId("shallow");
   const navigationId = itemId("navigation");
   const navigationWarning = warning(
@@ -219,10 +219,10 @@ function shallowTree(): FormlessUiTreeResultContract {
   });
 }
 
-function maximumDepthTree(): FormlessUiTreeResultContract {
+function maximumDepthTree(): TreeResultContract {
   const resultId = treeId("maximum-depth");
   const labels = ["Page", "Section", "Container", "Stack", "Group", "Panel", "Content", "Text"];
-  let child: FormlessUiTreeItemContract | undefined;
+  let child: TreeItemContract | undefined;
 
   for (let depth = labels.length; depth >= 1; depth -= 1) {
     const label = labels[depth - 1] ?? `Level ${depth}`;
@@ -254,7 +254,7 @@ function maximumDepthTree(): FormlessUiTreeResultContract {
   });
 }
 
-function emptyTree(): FormlessUiTreeResultContract {
+function emptyTree(): TreeResultContract {
   const id = treeId("empty");
 
   return {
@@ -286,7 +286,7 @@ function emptyTree(): FormlessUiTreeResultContract {
   };
 }
 
-function unavailableTree(): FormlessUiTreeResultContract {
+function unavailableTree(): TreeResultContract {
   const id = treeId("unavailable");
 
   return {
@@ -303,15 +303,13 @@ function unavailableTree(): FormlessUiTreeResultContract {
   };
 }
 
-function structuralTree(
-  state: "cycleStopped" | "leaf" | "missingChild",
-): FormlessUiTreeResultContract {
+function structuralTree(state: "cycleStopped" | "leaf" | "missingChild"): TreeResultContract {
   const resultId = treeId(state);
   const id =
     state === "missingChild" ? "missing-block" : state === "cycleStopped" ? "loop" : "text";
   const label =
     state === "missingChild" ? "Missing block" : state === "cycleStopped" ? "Loop" : "Body copy";
-  const structure: FormlessUiTreeItemStructureContract =
+  const structure: TreeItemStructureContract =
     state === "leaf"
       ? { state }
       : {
@@ -350,7 +348,7 @@ function structuralTree(
   });
 }
 
-function noSelectionTree(): FormlessUiTreeResultContract {
+function noSelectionTree(): TreeResultContract {
   const resultId = treeId("no-selection");
 
   return readyTree({
@@ -368,7 +366,7 @@ function noSelectionTree(): FormlessUiTreeResultContract {
   });
 }
 
-function editingDisabledTree(): FormlessUiTreeResultContract {
+function editingDisabledTree(): TreeResultContract {
   const resultId = treeId("editing-disabled");
   const placementWarning = warning(
     "placement-ready",
@@ -428,7 +426,7 @@ function editingDisabledTree(): FormlessUiTreeResultContract {
   });
 }
 
-function pendingTree(): FormlessUiTreeResultContract {
+function pendingTree(): TreeResultContract {
   const resultId = treeId("pending");
   const item = treeItem({
     id: "feature-grid",
@@ -491,16 +489,16 @@ function readyTree({
   status,
   warnings = [],
 }: {
-  editing?: FormlessUiTreeResultContract["editing"];
-  feedback?: FormlessUiTreeResultContract["feedback"];
+  editing?: TreeResultContract["editing"];
+  feedback?: TreeResultContract["feedback"];
   id: string;
-  items: readonly FormlessUiTreeItemContract[];
-  rootChildCreation?: FormlessUiTreeChildCreationContract;
+  items: readonly TreeItemContract[];
+  rootChildCreation?: TreeChildCreationContract;
   rootLabel: string;
-  selectedEditor?: FormlessUiTreeSelectedEditorContract;
-  status?: FormlessUiTreeResultContract["status"];
-  warnings?: readonly FormlessUiTreeWarningContract[];
-}): FormlessUiTreeResultContract {
+  selectedEditor?: TreeSelectedEditorContract;
+  status?: TreeResultContract["status"];
+  warnings?: readonly TreeWarningContract[];
+}): TreeResultContract {
   return {
     accessibilityLabel: `${rootLabel} composition tree`,
     availability: { state: "ready" },
@@ -535,22 +533,22 @@ function treeItem({
   variant,
   warnings = [],
 }: {
-  availability?: FormlessUiTreeItemContract["availability"];
+  availability?: TreeItemContract["availability"];
   childRecord?: boolean;
   childRecordId?: string;
-  children?: readonly FormlessUiTreeItemContract[];
-  contextActions?: FormlessUiTreeItemContract["contextActions"];
+  children?: readonly TreeItemContract[];
+  contextActions?: TreeItemContract["contextActions"];
   disclosureOpen?: boolean;
   id: string;
   label: string;
-  ordering?: FormlessUiTreeItemContract["ordering"];
+  ordering?: TreeItemContract["ordering"];
   resultId: string;
   selected?: boolean;
   slot?: string;
-  structure?: FormlessUiTreeItemStructureContract;
+  structure?: TreeItemStructureContract;
   variant?: string;
-  warnings?: readonly FormlessUiTreeWarningContract[];
-}): FormlessUiTreeItemContract {
+  warnings?: readonly TreeWarningContract[];
+}): TreeItemContract {
   const stableItemId = itemId(id);
 
   return {
@@ -606,18 +604,18 @@ function selectedEditor({
   warnings = [],
 }: {
   available?: boolean;
-  childCreation?: FormlessUiTreeChildCreationContract;
-  childFields?: FormlessUiFieldSetContract;
+  childCreation?: TreeChildCreationContract;
+  childFields?: FieldSetContract;
   childRecord?: boolean;
   childRecordId?: string;
-  editing?: FormlessUiTreeSelectedEditorContract["editing"];
+  editing?: TreeSelectedEditorContract["editing"];
   id: string;
   label: string;
-  placementFields?: FormlessUiFieldSetContract;
-  removePlacement?: FormlessUiOperationControlContract;
+  placementFields?: FieldSetContract;
+  removePlacement?: OperationControlContract;
   resultId: string;
-  warnings?: readonly FormlessUiTreeWarningContract[];
-}): FormlessUiTreeSelectedEditorContract {
+  warnings?: readonly TreeWarningContract[];
+}): TreeSelectedEditorContract {
   const stableItemId = itemId(id);
   const availability = available
     ? ({ available: true } as const)
@@ -649,7 +647,7 @@ function selectedEditor({
 
 function childCreation(
   resultId: string,
-  parent: FormlessUiTreeParentIdentity,
+  parent: TreeParentIdentity,
   {
     accessibilityLabel = "Add child",
     available = true,
@@ -659,7 +657,7 @@ function childCreation(
     available?: boolean;
     pending?: boolean;
   } = {},
-): FormlessUiTreeChildCreationContract {
+): TreeChildCreationContract {
   const parentId = parent.kind === "root" ? "root" : parent.itemId;
   const activeVariantId = `${resultId}:${parentId}:variant:text`;
   const variant = (name: string, slot: string, selected: boolean) => {
@@ -696,8 +694,8 @@ function childCreation(
   };
 }
 
-function createSurface(id: string, pending: boolean): FormlessUiCreateSurfaceContract {
-  const fields = fieldSet<FormlessUiCreateField>(`${id}:fields`, "New block", [
+function createSurface(id: string, pending: boolean): CreateSurfaceContract {
+  const fields = fieldSet<CreateFieldContract>(`${id}:fields`, "New block", [
     createLabelField(id, pending),
   ]);
 
@@ -731,7 +729,7 @@ function createSurface(id: string, pending: boolean): FormlessUiCreateSurfaceCon
   };
 }
 
-function createLabelField(id: string, pending: boolean): FormlessUiCreateField {
+function createLabelField(id: string, pending: boolean): CreateFieldContract {
   const field = { label: "Block label", required: true, type: "text" as const };
 
   return {
@@ -800,7 +798,7 @@ function removePlacementControl(
   resultId: string,
   stableItemId: string,
   state: "confirmation" | "failed" | "idle" | "pending",
-): FormlessUiOperationControlContract {
+): OperationControlContract {
   const controlId = `${resultId}:${stableItemId}:remove-placement`;
   const isOpen = state !== "idle";
   const isPending = state === "pending";
@@ -924,11 +922,11 @@ function contextAction(resultId: string, stableItemId: string, label: string) {
 
 function warning(
   id: string,
-  source: FormlessUiTreeWarningContract["source"],
+  source: TreeWarningContract["source"],
   title: string,
   code: string,
   message: string,
-): FormlessUiTreeWarningContract {
+): TreeWarningContract {
   return {
     id: `warning:${id}`,
     items: [{ code, message }],
@@ -1079,12 +1077,12 @@ function specializedRecordField(
   );
 }
 
-function fieldSet<TField extends FormlessUiField = FormlessUiField>(
+function fieldSet<TField extends FieldContract = FieldContract>(
   id: string,
   label: string,
   fields: readonly TField[] = [],
-  editing: FormlessUiTreeSelectedEditorContract["editing"] = { enabled: true },
-): Omit<FormlessUiFieldSetContract, "fields"> & { fields: readonly TField[] } {
+  editing: TreeSelectedEditorContract["editing"] = { enabled: true },
+): Omit<FieldSetContract, "fields"> & { fields: readonly TField[] } {
   return {
     disabled: !editing.enabled,
     ...(editing.enabled ? {} : { disabledReason: editing.disabledReason }),
@@ -1104,7 +1102,7 @@ function root(label: string, resultId: string) {
   };
 }
 
-function button(id: string, label: string): FormlessUiButtonContract {
+function button(id: string, label: string): ButtonContract {
   return {
     accessibilityLabel: label,
     content: { kind: "label", label },
@@ -1119,8 +1117,8 @@ function button(id: string, label: string): FormlessUiButtonContract {
 function operationButton(
   id: string,
   label: string,
-  intent: FormlessUiOperationButtonContract["intent"],
-): FormlessUiOperationButtonContract {
+  intent: OperationButtonContract["intent"],
+): OperationButtonContract {
   return {
     ...button(id, label),
     intent,

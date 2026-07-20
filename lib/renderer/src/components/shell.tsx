@@ -1,31 +1,31 @@
 import { AppShell } from "@astryxdesign/core/AppShell";
 import { memo, type ReactNode, useState } from "react";
 import type {
-  FormlessUiDocumentThemeContract,
-  FormlessUiDocumentThemeIntentHandler,
-  FormlessUiDocumentThemeReference,
-  FormlessUiShellIntentHandler,
-  FormlessUiShellManifestContract,
-  FormlessUiShellManifestReference,
-  FormlessUiShellNavigationSectionContract,
+  DocumentThemeContract,
+  DocumentThemeIntentHandler,
+  DocumentThemeReference,
+  ShellIntentHandler,
+  ShellManifestContract,
+  ShellManifestReference,
+  ShellNavigationSectionContract,
 } from "@dpeek/formless-presentation/contract";
 import {
-  useFormlessUiDocumentTheme,
-  useFormlessUiDocumentThemeIntentHandler,
-  useFormlessUiShellManifest,
-} from "@dpeek/formless-presentation/contract-host/react";
+  useDocumentTheme,
+  useDocumentThemeIntentHandler,
+  useShellManifest,
+} from "@dpeek/formless-presentation/host/react";
 import { AstryxApplicationSideNav, AstryxSubscribedApplicationSideNav } from "./side-nav.tsx";
 import { FormlessThemeIconToggle } from "./theme.tsx";
 
 type AstryxApplicationShellRendererProps = {
   children: ReactNode;
-  manifest: FormlessUiShellManifestContract;
-  onIntent: FormlessUiShellIntentHandler;
-  sections: readonly FormlessUiShellNavigationSectionContract[];
+  manifest: ShellManifestContract;
+  onIntent: ShellIntentHandler;
+  sections: readonly ShellNavigationSectionContract[];
 } & (
   | {
-      onThemeIntent: FormlessUiDocumentThemeIntentHandler;
-      theme: FormlessUiDocumentThemeContract;
+      onThemeIntent: DocumentThemeIntentHandler;
+      theme: DocumentThemeContract;
     }
   | {
       onThemeIntent?: undefined;
@@ -78,11 +78,11 @@ export const AstryxSubscribedApplicationShellRenderer = memo(
     themeReference,
   }: {
     children: ReactNode;
-    shellReference: FormlessUiShellManifestReference;
+    shellReference: ShellManifestReference;
     themeControl?: ReactNode;
-    themeReference?: FormlessUiDocumentThemeReference | undefined;
+    themeReference?: DocumentThemeReference | undefined;
   }) {
-    const manifest = useFormlessUiShellManifest(shellReference);
+    const manifest = useShellManifest(shellReference);
 
     if (!manifest) {
       return children;
@@ -116,12 +116,12 @@ function AstryxSubscribedThemedApplicationShell({
   themeReference,
 }: {
   children: ReactNode;
-  manifest: FormlessUiShellManifestContract;
+  manifest: ShellManifestContract;
   themeControl?: ReactNode;
-  themeReference: FormlessUiDocumentThemeReference;
+  themeReference: DocumentThemeReference;
 }) {
-  const onThemeIntent = useFormlessUiDocumentThemeIntentHandler();
-  const theme = useFormlessUiDocumentTheme(themeReference);
+  const onThemeIntent = useDocumentThemeIntentHandler();
+  const theme = useDocumentTheme(themeReference);
   const resolvedThemeControl = theme ? (
     theme.selectionControl ? (
       <FormlessThemeIconToggle
@@ -151,7 +151,7 @@ function AstryxSubscribedApplicationShellContent({
   themeControl,
 }: {
   children: ReactNode;
-  manifest: FormlessUiShellManifestContract;
+  manifest: ShellManifestContract;
   themeControl?: ReactNode;
 }) {
   return (
@@ -176,7 +176,7 @@ function AstryxApplicationShellFrame({
   sideNav,
 }: {
   children: ReactNode;
-  manifest: FormlessUiShellManifestContract;
+  manifest: ShellManifestContract;
   sideNav: ReactNode;
 }) {
   const [isMobileNavigationOpen, setIsMobileNavigationOpen] = useState(false);
@@ -204,8 +204,8 @@ function AstryxApplicationShellFrame({
 }
 
 function orderShellSections(
-  manifest: FormlessUiShellManifestContract,
-  sections: readonly FormlessUiShellNavigationSectionContract[],
+  manifest: ShellManifestContract,
+  sections: readonly ShellNavigationSectionContract[],
 ) {
   const sectionById = new Map(sections.map((section) => [section.id, section]));
 

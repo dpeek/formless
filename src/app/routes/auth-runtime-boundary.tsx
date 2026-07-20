@@ -1,32 +1,32 @@
 import { type ReactNode, useLayoutEffect, useState } from "react";
 import type {
-  FormlessUiAuthIntent,
-  FormlessUiAuthIntentHandler,
-  FormlessUiAuthSurfaceContract,
-  FormlessUiAuthSurfaceReference,
+  AuthIntent,
+  AuthIntentHandler,
+  AuthSurfaceContract,
+  AuthSurfaceReference,
 } from "@dpeek/formless-presentation/contract";
 import {
-  createFormlessUiMemoryContractHost,
-  isFormlessUiAuthIntent,
-  type FormlessUiMutableContractHost,
-} from "@dpeek/formless-presentation/contract-host";
-import { FormlessUiContractHostProvider } from "@dpeek/formless-presentation/contract-host/react";
+  createMemoryPresentationHost,
+  isAuthIntent,
+  type MutablePresentationHost,
+} from "@dpeek/formless-presentation/host";
+import { PresentationHostProvider } from "@dpeek/formless-presentation/host/react";
 
 export type NoShellAuthRuntimeHost = {
-  host: FormlessUiMutableContractHost;
-  publish(snapshot: FormlessUiAuthSurfaceContract): void;
-  updateIntentHandler(handler: FormlessUiAuthIntentHandler): void;
+  host: MutablePresentationHost;
+  publish(snapshot: AuthSurfaceContract): void;
+  updateIntentHandler(handler: AuthIntentHandler): void;
 };
 
 export function createNoShellAuthRuntimeHost(
-  reference: FormlessUiAuthSurfaceReference,
-  snapshot: FormlessUiAuthSurfaceContract,
-  initialIntentHandler: FormlessUiAuthIntentHandler,
+  reference: AuthSurfaceReference,
+  snapshot: AuthSurfaceContract,
+  initialIntentHandler: AuthIntentHandler,
 ): NoShellAuthRuntimeHost {
   let intentHandler = initialIntentHandler;
-  const host = createFormlessUiMemoryContractHost({
+  const host = createMemoryPresentationHost({
     dispatch: (intent) => {
-      if (!isFormlessUiAuthIntent(intent)) {
+      if (!isAuthIntent(intent)) {
         throw new Error(`No-shell auth runtime cannot dispatch ${intent.type}.`);
       }
       return intentHandler(intent);
@@ -51,9 +51,9 @@ export function NoShellAuthRuntimeBoundary({
   snapshot,
 }: {
   children: ReactNode;
-  onIntent: FormlessUiAuthIntentHandler;
-  reference: FormlessUiAuthSurfaceReference;
-  snapshot: FormlessUiAuthSurfaceContract;
+  onIntent: AuthIntentHandler;
+  reference: AuthSurfaceReference;
+  snapshot: AuthSurfaceContract;
 }) {
   const [runtime] = useState(() => createNoShellAuthRuntimeHost(reference, snapshot, onIntent));
 
@@ -61,9 +61,7 @@ export function NoShellAuthRuntimeBoundary({
 
   useLayoutEffect(() => runtime.publish(snapshot), [runtime, snapshot]);
 
-  return (
-    <FormlessUiContractHostProvider host={runtime.host}>{children}</FormlessUiContractHostProvider>
-  );
+  return <PresentationHostProvider host={runtime.host}>{children}</PresentationHostProvider>;
 }
 
 export type AuthPendingGuard = {
@@ -92,10 +90,7 @@ export function createAuthPendingGuard(): AuthPendingGuard {
   };
 }
 
-export function authIntentIsCurrent(
-  surface: FormlessUiAuthSurfaceContract,
-  intent: FormlessUiAuthIntent,
-): boolean {
+export function authIntentIsCurrent(surface: AuthSurfaceContract, intent: AuthIntent): boolean {
   if (intent.surfaceId !== surface.id) {
     return false;
   }

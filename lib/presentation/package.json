@@ -6,9 +6,9 @@
   ],
   "type": "module",
   "exports": {
-    "./contract": "./src/formless-ui-contract.ts",
-    "./contract-host": "./src/formless-ui-contract-host.ts",
-    "./contract-host/react": "./src/formless-ui-contract-host-react.tsx"
+    "./contract": "./src/contract.ts",
+    "./host": "./src/host.ts",
+    "./host/react": "./src/host-react.tsx"
   },
   "publishConfig": {
     "access": "public"

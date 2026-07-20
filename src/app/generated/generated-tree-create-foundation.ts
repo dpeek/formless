@@ -1,8 +1,8 @@
 import type {
-  FormlessUiCreateSurfaceContract,
-  FormlessUiTreeChildCreationContract,
-  FormlessUiTreeEditingAvailability,
-  FormlessUiTreeParentIdentity,
+  CreateSurfaceContract,
+  TreeChildCreationContract,
+  TreeEditingAvailability,
+  TreeParentIdentity,
 } from "@dpeek/formless-presentation/contract";
 import type { ImageMediaAssetOption } from "@dpeek/formless-media/client";
 import type { QueryEvaluationContext } from "@dpeek/formless-schema";
@@ -26,9 +26,9 @@ import {
 } from "./create-field-authoring.ts";
 import { indexGeneratedCreateSurfaceFields } from "./generated-create-field-index.ts";
 import {
-  projectGeneratedCreateFormlessUiSurface,
-  type GeneratedFormlessUiReferenceOption,
-} from "./formless-ui-projection.ts";
+  projectGeneratedCreateSurface,
+  type GeneratedReferenceOption,
+} from "./field-projection.ts";
 import type { CreateHomeOperationConfig } from "./generated-create-runtime.ts";
 import { humanizeFieldName } from "../../client/view-labels.ts";
 
@@ -45,9 +45,7 @@ export type GeneratedTreeChildCreationProjectionOptions = {
     Record<string, GeneratedOperationExecutionState | undefined>
   >;
   queryContext?: QueryEvaluationContext;
-  referenceOptionsByFieldName?: Readonly<
-    Record<string, readonly GeneratedFormlessUiReferenceOption[]>
-  >;
+  referenceOptionsByFieldName?: Readonly<Record<string, readonly GeneratedReferenceOption[]>>;
 };
 
 export type GeneratedTreeCreateFieldProjectionState = {
@@ -59,7 +57,7 @@ export type GeneratedTreeChildVariantRuntime = {
   available: boolean;
   creationId: string;
   operation?: CreateHomeOperationConfig;
-  parent: FormlessUiTreeParentIdentity;
+  parent: TreeParentIdentity;
   parentRecordId: string;
   placementEntityName: string;
   placementValues?: TreeAllowedChildVariantConfig["placementValues"];
@@ -72,11 +70,11 @@ export type GeneratedTreeChildCreateRuntime = GeneratedTreeChildVariantRuntime &
   binding: GeneratedOperationControlBinding;
   fieldsById: ReturnType<typeof indexGeneratedCreateSurfaceFields>;
   operation: CreateHomeOperationConfig;
-  surface: FormlessUiCreateSurfaceContract;
+  surface: CreateSurfaceContract;
 };
 
 export type GeneratedTreeChildCreationProjection = {
-  contract: FormlessUiTreeChildCreationContract;
+  contract: TreeChildCreationContract;
   createRuntime?: GeneratedTreeChildCreateRuntime;
   variantRuntimes: readonly GeneratedTreeChildVariantRuntime[];
 };
@@ -92,9 +90,9 @@ export function projectGeneratedTreeChildCreation({
   resultId,
 }: {
   creationId: string;
-  editing: FormlessUiTreeEditingAvailability;
+  editing: TreeEditingAvailability;
   options?: GeneratedTreeChildCreationProjectionOptions;
-  parent: FormlessUiTreeParentIdentity;
+  parent: TreeParentIdentity;
   parentLabel: string;
   parentRecord: StoredRecord;
   result: TreeResultModel;
@@ -215,7 +213,7 @@ function projectGeneratedTreeChildCreateRuntime(
   });
   const operationState = options.operationStateByExecutionKey?.[binding.executionKey];
   const fieldState = options.fieldStateBySurfaceId?.[runtime.surfaceId];
-  const surface = projectGeneratedCreateFormlessUiSurface({
+  const surface = projectGeneratedCreateSurface({
     enabled: runtime.operation.enabled,
     entityLabel: runtime.operation.entity.label,
     errorsByFieldName: fieldState?.errorsByFieldName,

@@ -7,10 +7,7 @@ import type {
   FieldScenarioGroup,
   FieldScenarioProjectionContext,
 } from "../field-scenario-model.ts";
-import type {
-  FormlessUiField,
-  FormlessUiFieldSurface,
-} from "@dpeek/formless-presentation/contract";
+import type { FieldContract, FieldSurface } from "@dpeek/formless-presentation/contract";
 import {
   createField,
   displayField,
@@ -250,7 +247,7 @@ function enumPresentation(
   presentation: string | undefined,
   trigger?: string,
   list?: string,
-): FormlessUiField["presentation"] {
+): FieldContract["presentation"] {
   if (presentation === "icon-only") {
     return {
       mode: "iconOnly",
@@ -319,9 +316,9 @@ function recordEnumField({
   surface = "record",
   value,
 }: {
-  presentation?: FormlessUiField["presentation"];
+  presentation?: FieldContract["presentation"];
   required?: boolean;
-  surface?: Extract<FormlessUiFieldSurface, "detail" | "record" | "table-cell">;
+  surface?: Extract<FieldSurface, "detail" | "record" | "table-cell">;
   value: string;
 }) {
   const field = required ? statusField : optionalStatusField;
@@ -362,9 +359,9 @@ function displayEnumField({
   surface,
   value,
 }: {
-  presentation?: FormlessUiField["presentation"];
+  presentation?: FieldContract["presentation"];
   required?: boolean;
-  surface: Extract<FormlessUiFieldSurface, "detail" | "record" | "table-cell">;
+  surface: Extract<FieldSurface, "detail" | "record" | "table-cell">;
   value: string;
 }) {
   const field = required ? statusField : optionalStatusField;
@@ -398,7 +395,7 @@ function operationEnumField({
   required,
   value,
 }: {
-  errors?: FormlessUiField["errors"];
+  errors?: FieldContract["errors"];
   required: boolean;
   value: string;
 }) {

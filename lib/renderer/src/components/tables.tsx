@@ -2,35 +2,29 @@ import { useState } from "react";
 import { Heading } from "@astryxdesign/core/Text";
 import { VStack } from "@astryxdesign/core/VStack";
 import type {
-  FormlessUiField,
-  FormlessUiFieldIntent,
-  FormlessUiOperationPresentationIntent,
-  FormlessUiTableActionContract,
-  FormlessUiTableActionGroupContract,
-  FormlessUiTableContract,
-  FormlessUiTableIntent,
-  FormlessUiTableOperationActionContract,
-  FormlessUiTableRowContract,
+  FieldContract,
+  FieldIntent,
+  OperationPresentationIntent,
+  TableActionContract,
+  TableActionGroupContract,
+  TableContract,
+  TableIntent,
+  TableOperationActionContract,
+  TableRowContract,
 } from "@dpeek/formless-presentation/contract";
 import { applyScenarioFieldIntent } from "./fields/fixture-helpers.ts";
 import { FormlessFixtureFrame, FormlessFixtureSelector } from "./fixture-layout.tsx";
-import { AstryxTableRenderer } from "./formless-ui-table-renderer.tsx";
+import { AstryxTableRenderer } from "./table-renderer.tsx";
 import { operationControlFixtures } from "./operation-controls.fixtures.ts";
-import {
-  createFormlessUiTableFixtures,
-  type FormlessUiTableFixture,
-  type FormlessUiTableFixtureId,
-} from "./tables.fixtures.ts";
+import { createTableFixtures, type TableFixture, type TableFixtureId } from "./tables.fixtures.ts";
 
 export function FormlessTablesLayout() {
-  const [fixtures, setFixtures] = useState(createFormlessUiTableFixtures);
-  const [selectedFixtureId, setSelectedFixtureId] = useState<FormlessUiTableFixtureId>("active");
+  const [fixtures, setFixtures] = useState(createTableFixtures);
+  const [selectedFixtureId, setSelectedFixtureId] = useState<TableFixtureId>("active");
   const selectedFixture =
     fixtures.find((fixture) => fixture.id === selectedFixtureId) ?? fixtures[0];
 
-  const updateSelectedTable = (
-    update: (table: FormlessUiTableContract) => FormlessUiTableContract,
-  ) => {
+  const updateSelectedTable = (update: (table: TableContract) => TableContract) => {
     setFixtures((currentFixtures) =>
       currentFixtures.map((fixture) =>
         fixture.id === selectedFixtureId ? { ...fixture, table: update(fixture.table) } : fixture,
@@ -77,10 +71,10 @@ export function FormlessTablesLayout() {
 }
 
 export function applyTableFieldIntent(
-  table: FormlessUiTableContract,
+  table: TableContract,
   fieldId: string,
-  intent: FormlessUiFieldIntent,
-): FormlessUiTableContract {
+  intent: FieldIntent,
+): TableContract {
   return {
     ...table,
     rows: table.rows.map((row) =>
@@ -91,10 +85,7 @@ export function applyTableFieldIntent(
   };
 }
 
-export function applyTableIntent(
-  table: FormlessUiTableContract,
-  intent: FormlessUiTableIntent,
-): FormlessUiTableContract {
+export function applyTableIntent(table: TableContract, intent: TableIntent): TableContract {
   if (intent.tableId !== table.id) {
     return table;
   }
@@ -115,10 +106,10 @@ export function applyTableIntent(
 }
 
 export function applyTableOperationIntent(
-  table: FormlessUiTableContract,
-  sourceAction: FormlessUiTableOperationActionContract,
-  intent: FormlessUiOperationPresentationIntent,
-): FormlessUiTableContract {
+  table: TableContract,
+  sourceAction: TableOperationActionContract,
+  intent: OperationPresentationIntent,
+): TableContract {
   return mapTableActions(table, (action) => {
     if (action.kind !== "operationAction" || action.control.id !== sourceAction.control.id) {
       return action;
@@ -143,10 +134,10 @@ export function applyTableOperationIntent(
 }
 
 function reorderFixtureRows(
-  table: FormlessUiTableContract,
+  table: TableContract,
   rowId: string,
   direction: "bottom" | "down" | "top" | "up",
-): FormlessUiTableContract {
+): TableContract {
   const currentIndex = table.rows.findIndex((row) => row.id === rowId);
   if (currentIndex < 0) {
     return table;
@@ -180,10 +171,10 @@ function reorderFixtureRows(
 }
 
 function withOrderingAvailability(
-  row: FormlessUiTableRowContract,
+  row: TableRowContract,
   index: number,
   rowCount: number,
-): FormlessUiTableRowContract {
+): TableRowContract {
   return {
     ...row,
     cells: row.cells.map((cell) => ({
@@ -217,9 +208,9 @@ function withOrderingAvailability(
 }
 
 function mapRowFields(
-  row: FormlessUiTableRowContract,
-  update: (field: FormlessUiField) => FormlessUiField,
-): FormlessUiTableRowContract {
+  row: TableRowContract,
+  update: (field: FieldContract) => FieldContract,
+): TableRowContract {
   return {
     ...row,
     cells: row.cells.map((cell) => ({
@@ -236,9 +227,9 @@ function mapRowFields(
 }
 
 function mapActionGroupFields(
-  group: FormlessUiTableActionGroupContract,
-  update: (field: FormlessUiField) => FormlessUiField,
-): FormlessUiTableActionGroupContract {
+  group: TableActionGroupContract,
+  update: (field: FieldContract) => FieldContract,
+): TableActionGroupContract {
   return {
     ...group,
     primary: group.primary.map((action) => mapActionFields(action, update)),
@@ -247,9 +238,9 @@ function mapActionGroupFields(
 }
 
 function mapActionFields(
-  action: FormlessUiTableActionContract,
-  update: (field: FormlessUiField) => FormlessUiField,
-): FormlessUiTableActionContract {
+  action: TableActionContract,
+  update: (field: FieldContract) => FieldContract,
+): TableActionContract {
   if (action.kind !== "editAction" || action.dialog.target.kind !== "available") {
     return action;
   }
@@ -275,9 +266,9 @@ function mapActionFields(
 }
 
 function mapTableActions(
-  table: FormlessUiTableContract,
-  update: (action: FormlessUiTableActionContract) => FormlessUiTableActionContract,
-): FormlessUiTableContract {
+  table: TableContract,
+  update: (action: TableActionContract) => TableActionContract,
+): TableContract {
   return {
     ...table,
     rows: table.rows.map((row) => mapRowActions(row, update)),
@@ -285,9 +276,9 @@ function mapTableActions(
 }
 
 function mapRowActions(
-  row: FormlessUiTableRowContract,
-  update: (action: FormlessUiTableActionContract) => FormlessUiTableActionContract,
-): FormlessUiTableRowContract {
+  row: TableRowContract,
+  update: (action: TableActionContract) => TableActionContract,
+): TableRowContract {
   return {
     ...row,
     cells: row.cells.map((cell) => ({
@@ -300,9 +291,9 @@ function mapRowActions(
 }
 
 function mapActionGroupActions(
-  group: FormlessUiTableActionGroupContract,
-  update: (action: FormlessUiTableActionContract) => FormlessUiTableActionContract,
-): FormlessUiTableActionGroupContract {
+  group: TableActionGroupContract,
+  update: (action: TableActionContract) => TableActionContract,
+): TableActionGroupContract {
   return {
     ...group,
     primary: group.primary.map((action) => mapActionTree(action, update)),
@@ -311,9 +302,9 @@ function mapActionGroupActions(
 }
 
 function mapActionTree(
-  action: FormlessUiTableActionContract,
-  update: (action: FormlessUiTableActionContract) => FormlessUiTableActionContract,
-): FormlessUiTableActionContract {
+  action: TableActionContract,
+  update: (action: TableActionContract) => TableActionContract,
+): TableActionContract {
   if (action.kind !== "editAction" || action.dialog.target.kind !== "available") {
     return update(action);
   }
@@ -335,9 +326,6 @@ function mapActionTree(
   return update(actionWithChildren);
 }
 
-export function selectedTableFixture(
-  fixtures: readonly FormlessUiTableFixture[],
-  id: FormlessUiTableFixtureId,
-) {
+export function selectedTableFixture(fixtures: readonly TableFixture[], id: TableFixtureId) {
   return fixtures.find((fixture) => fixture.id === id);
 }

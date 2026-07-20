@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import type { FormlessUiAccessReadyContract } from "@dpeek/formless-presentation/contract";
+import type { AccessReadyContract } from "@dpeek/formless-presentation/contract";
 import type { IdentityAccessManagementSummary } from "@dpeek/formless-identity-control-plane";
 import type { AppInstall } from "@dpeek/formless-installed-apps";
 import { createApplicationRuntimePublicationCoordinator } from "../generated/application-runtime-contract-host.tsx";
@@ -904,9 +904,7 @@ function recordingActions(calls: unknown[], submitError?: Error): AccessIntentAc
   };
 }
 
-function readyManifest(
-  projection: ReturnType<typeof projectAccess>,
-): FormlessUiAccessReadyContract {
+function readyManifest(projection: ReturnType<typeof projectAccess>): AccessReadyContract {
   if (projection.manifest.state !== "ready") {
     throw new Error("Expected ready access projection.");
   }

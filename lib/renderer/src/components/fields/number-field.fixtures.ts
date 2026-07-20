@@ -7,10 +7,7 @@ import type {
   FieldScenarioGroup,
   FieldScenarioProjectionContext,
 } from "../field-scenario-model.ts";
-import type {
-  FormlessUiFieldSurface,
-  FormlessUiValueUnitField,
-} from "@dpeek/formless-presentation/contract";
+import type { FieldSurface, ValueUnitField } from "@dpeek/formless-presentation/contract";
 import {
   createField,
   displayField,
@@ -100,9 +97,7 @@ export const numberScenarioGroups = [
   }),
 ] satisfies readonly FieldScenarioGroup[];
 
-function existingNumberGroup(
-  surface: Extract<FormlessUiFieldSurface, "detail" | "record" | "table-cell">,
-) {
+function existingNumberGroup(surface: Extract<FieldSurface, "detail" | "record" | "table-cell">) {
   return projectScenarioGroup({
     id: `number-${surface}`,
     kind: "number",
@@ -122,7 +117,7 @@ function existingNumberGroup(
 }
 
 function existingNumberCombinationIsValid(
-  surface: Extract<FormlessUiFieldSurface, "detail" | "record" | "table-cell">,
+  surface: Extract<FieldSurface, "detail" | "record" | "table-cell">,
   { facets }: FieldScenarioProjectionContext,
 ) {
   const valueUnit = facets.composition === "value-unit";
@@ -223,7 +218,7 @@ function projectOperationNumberField({ facets }: FieldScenarioProjectionContext)
 }
 
 function projectExistingNumberField(
-  surface: Extract<FormlessUiFieldSurface, "detail" | "record" | "table-cell">,
+  surface: Extract<FieldSurface, "detail" | "record" | "table-cell">,
   { facets }: FieldScenarioProjectionContext,
 ) {
   const required = facets.requiredness === "required";
@@ -370,7 +365,7 @@ function unitValue(value: string | undefined) {
 function valueUnitFacts(
   unitField: typeof requiredUnitField | typeof optionalUnitField,
   currentValue: string,
-): FormlessUiValueUnitField {
+): ValueUnitField {
   const declaredOptions = Object.entries(unitField.values).map(([value, option]) => ({
     label: option.label,
     status: "declared" as const,

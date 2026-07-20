@@ -1,8 +1,5 @@
-import type { FormlessUiContractIntent } from "@dpeek/formless-presentation/contract";
-import {
-  isFormlessUiAccessIntent,
-  type FormlessUiContractHostNodeSet,
-} from "@dpeek/formless-presentation/contract-host";
+import type { PresentationIntent } from "@dpeek/formless-presentation/contract";
+import { isAccessIntent, type PresentationNodeSet } from "@dpeek/formless-presentation/host";
 import type {
   ApplicationRuntimeContractPublication,
   ApplicationRuntimePublicationCoordinator,
@@ -64,8 +61,8 @@ export function createAccessRuntimePublicationController(
     );
   }
 
-  async function dispatchIntent(intent: FormlessUiContractIntent) {
-    if (!isFormlessUiAccessIntent(intent) || !input || !projection || !actions) {
+  async function dispatchIntent(intent: PresentationIntent) {
+    if (!isAccessIntent(intent) || !input || !projection || !actions) {
       return;
     }
 
@@ -77,10 +74,10 @@ export function prepareAccessRuntimePublication({
   dispatch,
   projection,
 }: {
-  dispatch: (intent: FormlessUiContractIntent) => Promise<void> | void;
+  dispatch: (intent: PresentationIntent) => Promise<void> | void;
   projection: AccessProjection;
 }): ApplicationRuntimeContractPublication {
-  const nodes: FormlessUiContractHostNodeSet = [
+  const nodes: PresentationNodeSet = [
     { reference: instanceAccessReference, snapshot: projection.manifest },
     ...(projection.authoring === undefined
       ? []
@@ -97,7 +94,7 @@ export function prepareAccessRuntimePublication({
       {
         dispatch,
         matches: (intent) =>
-          isFormlessUiAccessIntent(intent) && intent.accessId === instanceAccessReference.accessId,
+          isAccessIntent(intent) && intent.accessId === instanceAccessReference.accessId,
       },
     ],
     nodes,

@@ -1,24 +1,24 @@
 import { useState } from "react";
 import type {
-  FormlessUiManagementInstallDialogContract,
-  FormlessUiManagementIntent,
-  FormlessUiManagementReadyContract,
-  FormlessUiManagementWorkspaceOperationContract,
-  FormlessUiWorkspaceIntent,
+  ManagementInstallDialogContract,
+  ManagementIntent,
+  ManagementReadyContract,
+  ManagementWorkspaceOperationContract,
+  WorkspaceIntent,
 } from "@dpeek/formless-presentation/contract";
 import {
-  createFormlessUiMemoryContractHost,
-  formlessUiManagementInstallDialogReference,
-  formlessUiManagementManifestReference,
-  isFormlessUiManagementIntent,
-  isFormlessUiWorkspaceIntent,
-  type FormlessUiContractHostNodeSet,
-  type FormlessUiMutableContractHost,
-} from "@dpeek/formless-presentation/contract-host";
-import { FormlessUiContractHostProvider } from "@dpeek/formless-presentation/contract-host/react";
+  createMemoryPresentationHost,
+  managementInstallDialogReference,
+  managementManifestReference,
+  isManagementIntent,
+  isWorkspaceIntent,
+  type PresentationNodeSet,
+  type MutablePresentationHost,
+} from "@dpeek/formless-presentation/host";
+import { PresentationHostProvider } from "@dpeek/formless-presentation/host/react";
 import { applyScenarioFieldIntent } from "./fields/fixture-helpers.ts";
 import { FormlessFixtureFrame, FormlessFixtureSelector } from "./fixture-layout.tsx";
-import { AstryxSubscribedManagementRenderer } from "./formless-ui-management-renderer.tsx";
+import { AstryxSubscribedManagementRenderer } from "./management-renderer.tsx";
 import {
   applyGeneratedWorkspaceIntent,
   projectGeneratedWorkspaceFixturePublication,
@@ -68,18 +68,18 @@ export function FormlessInstanceManagementFixtureView({
   fixtureHost: FormlessInstanceManagementFixtureHost;
 }) {
   return (
-    <FormlessUiContractHostProvider host={fixtureHost.host}>
+    <PresentationHostProvider host={fixtureHost.host}>
       <AstryxSubscribedManagementRenderer managementReference={fixtureHost.managementReference} />
-    </FormlessUiContractHostProvider>
+    </PresentationHostProvider>
   );
 }
 
 export type FormlessInstanceManagementFixtureHost = FormlessInstanceManagementFixture & {
   getState(): FormlessInstanceManagementFixtureState;
-  host: Omit<FormlessUiMutableContractHost, "dispatch"> & {
-    dispatch(intent: FormlessUiManagementIntent | FormlessUiWorkspaceIntent): void;
+  host: Omit<MutablePresentationHost, "dispatch"> & {
+    dispatch(intent: ManagementIntent | WorkspaceIntent): void;
   };
-  managementReference: ReturnType<typeof formlessUiManagementManifestReference>;
+  managementReference: ReturnType<typeof managementManifestReference>;
 };
 
 export function createFormlessInstanceManagementFixtureHost(
@@ -87,13 +87,13 @@ export function createFormlessInstanceManagementFixtureHost(
 ): FormlessInstanceManagementFixtureHost {
   let state = fixture.state;
   const initialPublication = projectFormlessInstanceManagementFixturePublication(state);
-  let host: FormlessUiMutableContractHost;
+  let host: MutablePresentationHost;
 
-  host = createFormlessUiMemoryContractHost({
+  host = createMemoryPresentationHost({
     dispatch: (intent) => {
-      const nextState = isFormlessUiManagementIntent(intent)
+      const nextState = isManagementIntent(intent)
         ? applyFormlessInstanceManagementFixtureIntent(state, intent)
-        : isFormlessUiWorkspaceIntent(intent)
+        : isWorkspaceIntent(intent)
           ? applyFormlessInstanceManagementWorkspaceFixtureIntent(state, intent)
           : undefined;
 
@@ -155,10 +155,10 @@ export function createFormlessInstanceManagementFixtureHost(
 export function projectFormlessInstanceManagementFixturePublication(
   state: FormlessInstanceManagementFixtureState,
 ): {
-  managementReference: ReturnType<typeof formlessUiManagementManifestReference>;
-  nodes: FormlessUiContractHostNodeSet;
+  managementReference: ReturnType<typeof managementManifestReference>;
+  nodes: PresentationNodeSet;
 } {
-  const managementReference = formlessUiManagementManifestReference(state.manifest.id);
+  const managementReference = managementManifestReference(state.manifest.id);
   const workspaceNodes = state.workspaces.flatMap(
     (workspace) => projectGeneratedWorkspaceFixturePublication(workspace).nodes,
   );
@@ -171,7 +171,7 @@ export function projectFormlessInstanceManagementFixturePublication(
         ? []
         : [
             {
-              reference: formlessUiManagementInstallDialogReference(
+              reference: managementInstallDialogReference(
                 state.dialog.managementId,
                 state.dialog.id,
               ),
@@ -185,7 +185,7 @@ export function projectFormlessInstanceManagementFixturePublication(
 
 export function applyFormlessInstanceManagementFixtureIntent(
   state: FormlessInstanceManagementFixtureState,
-  intent: FormlessUiManagementIntent,
+  intent: ManagementIntent,
 ): FormlessInstanceManagementFixtureState {
   if (state.manifest.id !== intent.managementId || state.manifest.state !== "ready") {
     return state;
@@ -217,7 +217,7 @@ export function applyFormlessInstanceManagementFixtureIntent(
 
 export function applyFormlessInstanceManagementWorkspaceFixtureIntent(
   state: FormlessInstanceManagementFixtureState,
-  intent: FormlessUiWorkspaceIntent,
+  intent: WorkspaceIntent,
 ): FormlessInstanceManagementFixtureState {
   if (
     intent.type === "workspaceExternalAction" &&
@@ -249,8 +249,8 @@ function createFormlessInstanceManagementFixtureHosts() {
 
 function applyManagementInstallFieldIntent(
   state: FormlessInstanceManagementFixtureState,
-  dialog: FormlessUiManagementInstallDialogContract,
-  intent: Extract<FormlessUiManagementIntent, { type: "managementInstallField" }>,
+  dialog: ManagementInstallDialogContract,
+  intent: Extract<ManagementIntent, { type: "managementInstallField" }>,
 ) {
   const fieldKey = managementDialogFieldKey(dialog, intent.fieldId);
   if (!fieldKey) {
@@ -268,8 +268,8 @@ function applyManagementInstallFieldIntent(
 
 function applyManagementInstallPackageSelectionIntent(
   state: FormlessInstanceManagementFixtureState,
-  dialog: FormlessUiManagementInstallDialogContract,
-  intent: Extract<FormlessUiManagementIntent, { type: "managementInstallPackageSelection" }>,
+  dialog: ManagementInstallDialogContract,
+  intent: Extract<ManagementIntent, { type: "managementInstallPackageSelection" }>,
 ) {
   const selectedOption = dialog.packageOptions.find(
     (option) => option.id === intent.optionId && option.selectionIntent.fieldId === intent.fieldId,
@@ -309,8 +309,8 @@ function applyManagementInstallPackageSelectionIntent(
 
 function applyManagementInstallSubmitIntent(
   state: FormlessInstanceManagementFixtureState,
-  dialog: FormlessUiManagementInstallDialogContract,
-  intent: Extract<FormlessUiManagementIntent, { type: "managementInstallSubmit" }>,
+  dialog: ManagementInstallDialogContract,
+  intent: Extract<ManagementIntent, { type: "managementInstallSubmit" }>,
 ) {
   if (dialog.submit.id !== intent.controlId || dialog.errors.length > 0 || dialog.submit.disabled) {
     return state;
@@ -337,9 +337,9 @@ function applyManagementInstallSubmitIntent(
 
 function applyManagementOperationIntent(
   state: FormlessInstanceManagementFixtureState,
-  manifest: FormlessUiManagementReadyContract,
+  manifest: ManagementReadyContract,
   intent: Extract<
-    FormlessUiManagementIntent,
+    ManagementIntent,
     { type: "managementAuthorizationOpen" | "managementWorkspaceOperation" }
   >,
 ) {
@@ -384,8 +384,8 @@ function applyManagementOperationIntent(
 }
 
 function pendingOperation(
-  operation: FormlessUiManagementWorkspaceOperationContract,
-): FormlessUiManagementWorkspaceOperationContract {
+  operation: ManagementWorkspaceOperationContract,
+): ManagementWorkspaceOperationContract {
   return {
     ...operation,
     authorizationPrompt: undefined,
@@ -394,9 +394,9 @@ function pendingOperation(
 }
 
 function withInstallValidation(
-  dialog: FormlessUiManagementInstallDialogContract,
-  fields: FormlessUiManagementInstallDialogContract["fields"],
-): FormlessUiManagementInstallDialogContract {
+  dialog: ManagementInstallDialogContract,
+  fields: ManagementInstallDialogContract["fields"],
+): ManagementInstallDialogContract {
   const errors = [fields.label, fields.installId, fields.package].flatMap(
     (field) => field.errors?.map((error) => error.message) ?? [],
   );
@@ -424,9 +424,9 @@ function withInstallValidation(
 }
 
 function managementDialogFieldKey(
-  dialog: FormlessUiManagementInstallDialogContract,
+  dialog: ManagementInstallDialogContract,
   fieldId: string,
-): keyof FormlessUiManagementInstallDialogContract["fields"] | undefined {
+): keyof ManagementInstallDialogContract["fields"] | undefined {
   return (Object.keys(dialog.fields) as (keyof typeof dialog.fields)[]).find(
     (key) => dialog.fields[key].fieldId === fieldId,
   );
@@ -434,14 +434,14 @@ function managementDialogFieldKey(
 
 function replaceDialog(
   state: FormlessInstanceManagementFixtureState,
-  dialog: FormlessUiManagementInstallDialogContract,
+  dialog: ManagementInstallDialogContract,
 ) {
   return dialog === state.dialog ? state : { ...state, dialog };
 }
 
 function replaceReadyManifest(
   state: FormlessInstanceManagementFixtureState,
-  manifest: FormlessUiManagementReadyContract,
+  manifest: ManagementReadyContract,
 ) {
   return manifest === state.manifest ? state : { ...state, manifest };
 }

@@ -1,19 +1,19 @@
 import * as stylex from "@stylexjs/stylex";
 import { colorVars, spacingVars } from "@astryxdesign/core/theme/tokens.stylex";
 import type {
-  FormlessUiEnumOption,
-  FormlessUiEnumValuePresentation,
-  FormlessUiField,
-  FormlessUiFieldPresentationColorIntent,
-  FormlessUiFieldOptions,
-  FormlessUiMediaAssetOption,
+  EnumOption,
+  EnumValuePresentation,
+  FieldContract,
+  FieldPresentationColorIntent,
+  FieldOptions,
+  MediaAssetOption,
 } from "@dpeek/formless-presentation/contract";
 import { SourceIcon } from "../field-primitives.tsx";
-import { editorFieldValue, formatInputValue, type FormlessUiEditorField } from "./field-chrome.tsx";
+import { editorFieldValue, formatInputValue, type EditorField } from "./field-chrome.tsx";
 
 export type SelectorVisualOption = {
   color?: string;
-  colorIntent?: FormlessUiFieldPresentationColorIntent;
+  colorIntent?: FieldPresentationColorIntent;
   colorToken?: string;
   detail?: string;
   label: string;
@@ -21,7 +21,7 @@ export type SelectorVisualOption = {
   value: string;
 };
 
-export function selectorVisualOptions(field: FormlessUiEditorField): SelectorVisualOption[] {
+export function selectorVisualOptions(field: EditorField): SelectorVisualOption[] {
   if (field.control.kind === "enum") {
     return (field.options?.enumOptions ?? []).map(enumOptionToSelectorVisualOption);
   }
@@ -30,7 +30,7 @@ export function selectorVisualOptions(field: FormlessUiEditorField): SelectorVis
 }
 
 export function enumOptionForValue(
-  options: FormlessUiFieldOptions | undefined,
+  options: FieldOptions | undefined,
   value: string,
 ): SelectorVisualOption | undefined {
   return options?.enumOptions
@@ -38,14 +38,12 @@ export function enumOptionForValue(
     .find((option) => option.value === value);
 }
 
-export function enumOptionToSelectorVisualOption(
-  option: FormlessUiEnumOption,
-): SelectorVisualOption {
+export function enumOptionToSelectorVisualOption(option: EnumOption): SelectorVisualOption {
   return enumValuePresentationToSelectorVisualOption(option.presentation, option.value);
 }
 
 export function enumValuePresentationToSelectorVisualOption(
-  presentation: FormlessUiEnumValuePresentation,
+  presentation: EnumValuePresentation,
   value: string,
 ): SelectorVisualOption {
   return {
@@ -58,7 +56,7 @@ export function enumValuePresentationToSelectorVisualOption(
   };
 }
 
-export function mediaPickerOptions(options: FormlessUiFieldOptions | undefined) {
+export function mediaPickerOptions(options: FieldOptions | undefined) {
   return (options?.mediaAssetOptions ?? [])
     .filter((option) => option.missing !== true && option.href.trim() !== "")
     .map((option) => ({
@@ -68,7 +66,7 @@ export function mediaPickerOptions(options: FormlessUiFieldOptions | undefined) 
     }));
 }
 
-export function selectedMediaAsset(field: FormlessUiField): FormlessUiMediaAssetOption | undefined {
+export function selectedMediaAsset(field: FieldContract): MediaAssetOption | undefined {
   const value =
     field.mode === "display"
       ? formatInputValue(field.value)
@@ -77,7 +75,7 @@ export function selectedMediaAsset(field: FormlessUiField): FormlessUiMediaAsset
   return field.options?.mediaAssetOptions?.find((option) => option.id === value);
 }
 
-export function mediaPreviewHref(field: FormlessUiField) {
+export function mediaPreviewHref(field: FieldContract) {
   const value =
     field.mode === "display"
       ? formatInputValue(field.value)
@@ -100,7 +98,7 @@ export function mediaPreviewHref(field: FormlessUiField) {
   return undefined;
 }
 
-function enumPresentationColor(intent: FormlessUiFieldPresentationColorIntent) {
+function enumPresentationColor(intent: FieldPresentationColorIntent) {
   if (intent === "success") {
     return colorVars["--color-success"];
   }
@@ -116,11 +114,11 @@ function enumPresentationColor(intent: FormlessUiFieldPresentationColorIntent) {
   return undefined;
 }
 
-export function enumPresentationTriggerContent(field: FormlessUiField): "label" | "both" {
+export function enumPresentationTriggerContent(field: FieldContract): "label" | "both" {
   return field.enum?.kind === "editor" ? field.enum.triggerContent : "label";
 }
 
-export function enumPresentationListContent(field: FormlessUiField): "icon" | "label" | "both" {
+export function enumPresentationListContent(field: FieldContract): "icon" | "label" | "both" {
   return field.enum?.kind === "editor" ? field.enum.listContent : "label";
 }
 

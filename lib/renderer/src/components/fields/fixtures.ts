@@ -3,7 +3,7 @@ import {
   type FieldKindOption,
   type FieldScenarioGroup,
 } from "../field-scenario-model.ts";
-import type { FormlessUiFieldSurface } from "@dpeek/formless-presentation/contract";
+import type { FieldSurface } from "@dpeek/formless-presentation/contract";
 import { booleanScenarioGroups } from "./boolean-field.fixtures.ts";
 import { colorScenarioGroups } from "./color-field.fixtures.ts";
 import { dateScenarioGroups } from "./date-field.fixtures.ts";
@@ -21,7 +21,7 @@ export const fieldSurfaceOptions = [
   { id: "table-cell", label: "Table Cell" },
   { id: "detail", label: "Item Detail" },
   { id: "operation", label: "Operation" },
-] satisfies readonly { id: FormlessUiFieldSurface; label: string }[];
+] satisfies readonly { id: FieldSurface; label: string }[];
 
 export const fieldKindOptions = [
   { id: "state-machine-enum", label: "State" },

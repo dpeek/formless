@@ -2,8 +2,8 @@ import { readFileSync } from "node:fs";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { describe, expect, it, vi } from "vite-plus/test";
 import type {
-  FormlessUiAccessManifestContract,
-  FormlessUiAccessReadyContract,
+  AccessManifestContract,
+  AccessReadyContract,
 } from "@dpeek/formless-presentation/contract";
 import type { IdentityAccessManagementSummary } from "@dpeek/formless-identity-control-plane";
 import type { AppInstall } from "@dpeek/formless-installed-apps";
@@ -322,7 +322,7 @@ function siteInstall(): AppInstall {
   };
 }
 
-function readyManifest(manifest: FormlessUiAccessManifestContract): FormlessUiAccessReadyContract {
+function readyManifest(manifest: AccessManifestContract): AccessReadyContract {
   if (manifest.state !== "ready") {
     throw new Error("Expected ready access manifest.");
   }

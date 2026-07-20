@@ -28,10 +28,10 @@ import type { StoredRecord } from "@dpeek/formless-storage";
 import {
   executeGeneratedOperationControl,
   executeGeneratedOrderingMoveOperation,
-  handleGeneratedOperationFormlessUiIntent,
+  handleGeneratedOperationIntent,
   selectGeneratedOperationControlTriggerDecision,
 } from "./operation-control-runtime.ts";
-import { projectGeneratedOperationFormlessUiControl } from "./formless-ui-operation-projection.ts";
+import { projectGeneratedOperationControl } from "./operation-projection.ts";
 import {
   executeHomeCommandOperation,
   homeCommandOperationCommittedMessage,
@@ -80,7 +80,7 @@ describe("generated operation controls", () => {
       { state: "idle", message: "Clear completed synced. 2 affected." },
     ]);
     expect(
-      projectGeneratedOperationFormlessUiControl({
+      projectGeneratedOperationControl({
         binding,
         presentation: {
           accessibilityLabel: operation.label,
@@ -147,7 +147,7 @@ describe("generated operation controls", () => {
       { state: "error", message: "Operation endpoint unavailable." },
     ]);
     expect(
-      projectGeneratedOperationFormlessUiControl({
+      projectGeneratedOperationControl({
         binding,
         presentation: {
           accessibilityLabel: operation.label,
@@ -181,7 +181,7 @@ describe("generated operation controls", () => {
 
     expect(controller.isPending(binding.id)).toBe(true);
     await expect(
-      handleGeneratedOperationFormlessUiIntent({
+      handleGeneratedOperationIntent({
         binding,
         controller,
         intent: {
@@ -304,7 +304,7 @@ describe("generated operation controls", () => {
     }
 
     const controller = createGeneratedOperationController({ bindings: [binding] });
-    const control = projectGeneratedOperationFormlessUiControl({
+    const control = projectGeneratedOperationControl({
       binding,
       confirmationOpen: true,
       presentation: {
@@ -326,7 +326,7 @@ describe("generated operation controls", () => {
     const dispatch = (
       result: { type: "committed" | "replayed" } | { type: "failed"; displayError: string },
     ) =>
-      handleGeneratedOperationFormlessUiIntent({
+      handleGeneratedOperationIntent({
         binding,
         confirmationOpen: true,
         controller,
@@ -337,7 +337,7 @@ describe("generated operation controls", () => {
       });
 
     await expect(
-      handleGeneratedOperationFormlessUiIntent({
+      handleGeneratedOperationIntent({
         binding,
         controller,
         intent: control.trigger.intent,
@@ -349,7 +349,7 @@ describe("generated operation controls", () => {
 
     const pendingCloseChanges: boolean[] = [];
     await expect(
-      handleGeneratedOperationFormlessUiIntent({
+      handleGeneratedOperationIntent({
         binding,
         controller: {
           ...controller,
@@ -364,7 +364,7 @@ describe("generated operation controls", () => {
 
     let rejectedInvokeCount = 0;
     await expect(
-      handleGeneratedOperationFormlessUiIntent({
+      handleGeneratedOperationIntent({
         binding,
         confirmationOpen: true,
         controller,
@@ -380,7 +380,7 @@ describe("generated operation controls", () => {
       }),
     ).resolves.toBeUndefined();
     await expect(
-      handleGeneratedOperationFormlessUiIntent({
+      handleGeneratedOperationIntent({
         binding,
         confirmationOpen: false,
         controller,
@@ -403,7 +403,7 @@ describe("generated operation controls", () => {
     expect(openChanges).toEqual([true, false]);
     expect(successes).toEqual(["committed"]);
 
-    await handleGeneratedOperationFormlessUiIntent({
+    await handleGeneratedOperationIntent({
       binding,
       controller,
       intent: control.trigger.intent,

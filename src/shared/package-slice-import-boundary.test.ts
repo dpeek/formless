@@ -282,7 +282,7 @@ describe("package slice import boundaries", () => {
     }
 
     const generatedProjectionImports = importSpecifiers(
-      await readFile(resolve(repoRoot, "src/app/generated/formless-ui-projection.ts"), "utf8"),
+      await readFile(resolve(repoRoot, "src/app/generated/field-projection.ts"), "utf8"),
     );
     const generatedRuntimeImports = importSpecifiers(
       await readFile(
@@ -309,7 +309,7 @@ describe("package slice import boundaries", () => {
     expect(generatedRuntimeImports).toEqual(
       expect.arrayContaining([
         "@dpeek/formless-presentation/contract",
-        "@dpeek/formless-presentation/contract-host/react",
+        "@dpeek/formless-presentation/host/react",
         "@dpeek/formless-media/client",
       ]),
     );
@@ -401,8 +401,8 @@ const allowedFormlessRendererPackageImports = new Set([
 
 const allowedFormlessPresentationPackageImports = new Set([
   "@dpeek/formless-presentation/contract",
-  "@dpeek/formless-presentation/contract-host",
-  "@dpeek/formless-presentation/contract-host/react",
+  "@dpeek/formless-presentation/host",
+  "@dpeek/formless-presentation/host/react",
 ]);
 
 const allowedRendererSitePackageImports = new Set([

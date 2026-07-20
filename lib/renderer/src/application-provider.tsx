@@ -1,11 +1,11 @@
 import type { ReactNode } from "react";
 import { ToastViewport } from "@astryxdesign/core/Toast";
-import type { FormlessUiDocumentThemeContract } from "@dpeek/formless-presentation/contract";
+import type { DocumentThemeContract } from "@dpeek/formless-presentation/contract";
 import { FormlessThemeProvider } from "./theme.tsx";
 
 export type FormlessApplicationRendererProviderProps = {
   children: ReactNode;
-  theme: FormlessUiDocumentThemeContract;
+  theme: DocumentThemeContract;
 };
 
 export function FormlessApplicationRendererProvider({

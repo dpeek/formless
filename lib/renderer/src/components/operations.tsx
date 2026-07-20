@@ -5,9 +5,9 @@ import { ToastViewport } from "@astryxdesign/core/Toast";
 import { VStack } from "@astryxdesign/core/VStack";
 import { colorVars, spacingVars } from "@astryxdesign/core/theme/tokens.stylex";
 import type {
-  FormlessUiOperationControlContract,
-  FormlessUiOperationFeedbackEventContract,
-  FormlessUiOperationPresentationIntentHandler,
+  OperationControlContract,
+  OperationFeedbackEventContract,
+  OperationPresentationIntentHandler,
 } from "@dpeek/formless-presentation/contract";
 import {
   operationControlFixtures,
@@ -18,10 +18,10 @@ import {
   AstryxOperationButtonWithProgress,
   AstryxOperationDestructiveConfirmation,
   AstryxOperationFeedback,
-} from "./operation-controls.tsx";
+} from "./operation-renderer.tsx";
 import { FormlessFixtureFrame } from "./fixture-layout.tsx";
 
-type OperationControlState = Record<OperationControlFixtureKey, FormlessUiOperationControlContract>;
+type OperationControlState = Record<OperationControlFixtureKey, OperationControlContract>;
 
 const sharedClearCompletedFixtureKeys = [
   "clearCompletedToolbar",
@@ -79,10 +79,10 @@ const operationUseCases = [
 
 export function FormlessOperationsLayout() {
   const [controls, setControls] = useState<OperationControlState>(initialOperationControls);
-  const [feedback, setFeedback] = useState<FormlessUiOperationFeedbackEventContract>();
+  const [feedback, setFeedback] = useState<OperationFeedbackEventContract>();
   const runningFixtureKeysRef = useRef<Set<OperationControlFixtureKey>>(new Set());
 
-  const onIntent: FormlessUiOperationPresentationIntentHandler = async (intent) => {
+  const onIntent: OperationPresentationIntentHandler = async (intent) => {
     const fixtureKey = findFixtureKey(controls, intent.controlId);
 
     if (fixtureKey === undefined) {
@@ -172,8 +172,8 @@ function OperationUseCase({
   presentation,
   title,
 }: {
-  control: FormlessUiOperationControlContract;
-  onIntent: FormlessUiOperationPresentationIntentHandler;
+  control: OperationControlContract;
+  onIntent: OperationPresentationIntentHandler;
   presentation: "button" | "destructiveConfirmation" | "workspaceProgress";
   title: string;
 }) {

@@ -7,7 +7,7 @@ import {
   selectGeneratedCreateDraftSession,
 } from "./create-field-authoring.ts";
 import { executeGeneratedCreateSubmission } from "./generated-create-runtime.ts";
-import { projectGeneratedCreateFormlessUiSurface } from "./formless-ui-projection.ts";
+import { projectGeneratedCreateSurface } from "./field-projection.ts";
 import {
   indexGeneratedCreateSurfaceFields,
   resolveGeneratedCreateFieldIntent,
@@ -25,7 +25,7 @@ describe("generated create surface submission", () => {
   it("indexes exact create occurrences and rejects duplicate, stale, and mismatched identity", () => {
     const state = initialGeneratedCreateDraftSessionState({ fields });
     const session = selectGeneratedCreateDraftSession({ enabled: true, fields, state });
-    const surface = projectGeneratedCreateFormlessUiSurface({
+    const surface = projectGeneratedCreateSurface({
       enabled: true,
       entityLabel: "Task",
       id: "create:task",

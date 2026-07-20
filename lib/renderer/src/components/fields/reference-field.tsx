@@ -4,8 +4,8 @@ import { Selector } from "@astryxdesign/core/Selector";
 import { Text } from "@astryxdesign/core/Text";
 import { Tooltip } from "@astryxdesign/core/Tooltip";
 import type {
-  FormlessUiDisplayField,
-  FormlessUiFieldIntentHandler,
+  DisplayFieldContract,
+  FieldIntentHandler,
 } from "@dpeek/formless-presentation/contract";
 import {
   editorFieldValue,
@@ -17,15 +17,15 @@ import {
   fieldStatus,
   formatInputValue,
   inputSize,
-  type FormlessUiEditorField,
+  type EditorField,
 } from "./field-chrome.tsx";
 
 export function ReferenceFieldEditor({
   field,
   onIntent,
 }: {
-  field: FormlessUiEditorField;
-  onIntent: FormlessUiFieldIntentHandler | undefined;
+  field: EditorField;
+  onIntent: FieldIntentHandler | undefined;
 }) {
   const value = formatInputValue(editorFieldValue(field));
   const referenceFacts = field.reference?.kind === "editor" ? field.reference : undefined;
@@ -74,7 +74,7 @@ export function ReferenceFieldEditor({
   );
 }
 
-export function ReferenceFieldDisplay({ field }: { field: FormlessUiDisplayField }) {
+export function ReferenceFieldDisplay({ field }: { field: DisplayFieldContract }) {
   const missingValue =
     field.reference?.kind === "display" && field.reference.valueStatus.kind === "missing"
       ? field.reference.valueStatus.value
@@ -107,10 +107,7 @@ export function ReferenceFieldDisplay({ field }: { field: FormlessUiDisplayField
   );
 }
 
-function missingReferenceMessage(
-  field: FormlessUiEditorField | FormlessUiDisplayField,
-  value: string,
-) {
+function missingReferenceMessage(field: EditorField | DisplayFieldContract, value: string) {
   const message = `Current reference “${value}” is unavailable.`;
 
   return field.mode === "editor" && field.access.kind === "editable"

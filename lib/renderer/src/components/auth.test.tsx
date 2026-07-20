@@ -1,8 +1,8 @@
 import { readFile } from "node:fs/promises";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vite-plus/test";
-import type { FormlessUiAccountGateKind } from "@dpeek/formless-presentation/contract";
-import { formlessUiContractReferenceKey } from "@dpeek/formless-presentation/contract-host";
+import type { AccountGateKind } from "@dpeek/formless-presentation/contract";
+import { presentationReferenceKey } from "@dpeek/formless-presentation/host";
 import { createFormlessAuthFixtures, type FormlessAuthFixture } from "./auth.fixtures.ts";
 import {
   FormlessAuthLayout,
@@ -70,7 +70,7 @@ describe("canonical auth fixtures", () => {
     expect(
       new Set(accountGates.flatMap((surface) => ("gateKind" in surface ? [surface.gateKind] : []))),
     ).toEqual(
-      new Set<FormlessUiAccountGateKind>([
+      new Set<AccountGateKind>([
         "app-registration",
         "credential",
         "email-verification",
@@ -175,10 +175,10 @@ describe("canonical auth fixtures", () => {
     const ownerField = ownerFixture.surface.fields[0];
     const notifications: string[] = [];
     const stopOwner = fixtureHost.host.subscribe(ownerReference, () => {
-      notifications.push(formlessUiContractReferenceKey(ownerReference));
+      notifications.push(presentationReferenceKey(ownerReference));
     });
     const stopUnrelated = fixtureHost.host.subscribe(unrelatedReference, () => {
-      notifications.push(formlessUiContractReferenceKey(unrelatedReference));
+      notifications.push(presentationReferenceKey(unrelatedReference));
     });
     if (!ownerField || ownerField.field.surface !== "create") {
       throw new Error("Missing controlled owner fixture field.");
@@ -196,7 +196,7 @@ describe("canonical auth fixtures", () => {
       draftInput: { kind: "input", value: "Grace Hopper" },
       value: "Grace Hopper",
     });
-    expect(notifications).toEqual([formlessUiContractReferenceKey(ownerReference)]);
+    expect(notifications).toEqual([presentationReferenceKey(ownerReference)]);
 
     const currentOwner = fixtureHost.getSurface(ownerFixture.id);
     const rejected = applyFormlessAuthFixtureIntent(currentOwner, {
@@ -306,10 +306,7 @@ describe("Auth prototype layout", () => {
   it("keeps fixtures and reducers runtime-free", async () => {
     const fixtureSource = await readFile(new URL("./auth.fixtures.ts", import.meta.url), "utf8");
     const layoutSource = await readFile(new URL("./auth.tsx", import.meta.url), "utf8");
-    const rendererSource = await readFile(
-      new URL("./formless-ui-auth-renderer.tsx", import.meta.url),
-      "utf8",
-    );
+    const rendererSource = await readFile(new URL("./auth-renderer.tsx", import.meta.url), "utf8");
     const imports = [fixtureSource, layoutSource].flatMap(importSpecifiers);
     const forbiddenImports = imports.filter((specifier) =>
       /(?:^|\/)(?:src\/app|src\/client|routing|storage|replica|operation-controller|session-client|instance-auth)(?:\/|$)|\bwouter\b/.test(
@@ -317,8 +314,8 @@ describe("Auth prototype layout", () => {
       ),
     );
 
-    expect(fixtureSource).not.toMatch(/\breact\b|formless-ui-contract-host/);
-    expect(layoutSource).toContain("createFormlessUiMemoryContractHost");
+    expect(fixtureSource).not.toMatch(/\breact\b|@dpeek\/formless-presentation\/host/);
+    expect(layoutSource).toContain("createMemoryPresentationHost");
     expect(layoutSource).toContain("AstryxSubscribedAuthRenderer");
     expect(layoutSource).not.toMatch(
       /navigator\.credentials|setTimeout|location\.(?:assign|replace)|sessionStorage|localStorage/,

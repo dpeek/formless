@@ -727,7 +727,7 @@ operation execution behavior.
 - AND generic public operation fields carry public-safe scalar control, format,
   suggestion, enum-option, required, and occurrence facts
 - AND `@dpeek/formless-renderer` may adapt generic fields to canonical
-  `FormlessUiField` controls inside the renderer package
+  `FieldContract` controls inside the renderer package
 - AND the Site package does not import `@dpeek/formless-renderer` field or
   renderer contracts
 
@@ -796,7 +796,7 @@ shell.
 - THEN generated admin screens, instance management shell, owner setup and login
   routes, workspace gateway controls, app replica sync for generated admin, and
   generated field editors are not part of the required public Site entrypoint
-- AND the application `FormlessUiContractHost`, generated workspace runtime,
+- AND the application `PresentationHost`, generated workspace runtime,
   shell and auth presentation, and private runtime adapters are not imported by
   the public Site browser or Worker renderer graph
 - AND public forms continue to post through public operation routes with

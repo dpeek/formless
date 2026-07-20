@@ -2,20 +2,17 @@ import { readFile } from "node:fs/promises";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vite-plus/test";
 import type {
-  FormlessUiField,
-  FormlessUiTreeIntent,
-  FormlessUiTreeItemContract,
+  FieldContract,
+  TreeIntent,
+  TreeItemContract,
 } from "@dpeek/formless-presentation/contract";
 import {
-  createFormlessUiTreeResultFixtures,
-  type FormlessUiTreeResultFixture,
-  type FormlessUiTreeResultFixtureId,
+  createTreeResultFixtures,
+  type TreeResultFixture,
+  type TreeResultFixtureId,
 } from "./tree-results.fixtures.ts";
-import {
-  FormlessTreeResultsLayout,
-  createFormlessUiTreeResultFixtureHost,
-} from "./tree-results.tsx";
-import { AstryxTreeResultRenderer } from "./formless-ui-tree-renderer.tsx";
+import { FormlessTreeResultsLayout, createTreeResultFixtureHost } from "./tree-results.tsx";
+import { AstryxTreeResultRenderer } from "./tree-renderer.tsx";
 
 vi.mock("@stylexjs/stylex", () => ({
   create: <Styles,>(styles: Styles) => styles,
@@ -25,7 +22,7 @@ vi.mock("@stylexjs/stylex", () => ({
 
 describe("canonical tree-result fixtures", () => {
   it("cover shallow hierarchy, selected paths, slots, variants, context, and depth", () => {
-    const fixtures = createFormlessUiTreeResultFixtures();
+    const fixtures = createTreeResultFixtures();
     const shallow = requiredFixture(fixtures, "shallow").tree;
     const maximumDepth = requiredFixture(fixtures, "maximum-depth").tree;
     const shallowItems = collectTreeItems(shallow.items);
@@ -70,7 +67,7 @@ describe("canonical tree-result fixtures", () => {
   });
 
   it("covers empty, unavailable, structural, warning, disabled, and pending states", () => {
-    const fixtures = createFormlessUiTreeResultFixtures();
+    const fixtures = createTreeResultFixtures();
     const empty = requiredFixture(fixtures, "empty").tree;
     const unavailable = requiredFixture(fixtures, "unavailable").tree;
     const missingChild = requiredFixture(fixtures, "missing-child").tree;
@@ -149,8 +146,8 @@ describe("canonical tree-result fixtures", () => {
   });
 
   it("wraps every immutable fixture snapshot in the reusable memory host", () => {
-    const fixtures = createFormlessUiTreeResultFixtures();
-    const fixtureHost = createFormlessUiTreeResultFixtureHost(fixtures);
+    const fixtures = createTreeResultFixtures();
+    const fixtureHost = createTreeResultFixtureHost(fixtures);
 
     for (const fixture of fixtures) {
       const tree = fixtureHost.getTree(fixture.id);
@@ -169,8 +166,8 @@ describe("canonical tree-result fixtures", () => {
   });
 
   it("reduces selection, fields, creation, ordering, confirmation, and removal through scoped host identity", () => {
-    const fixtures = createFormlessUiTreeResultFixtures();
-    const fixtureHost = createFormlessUiTreeResultFixtureHost(fixtures);
+    const fixtures = createTreeResultFixtures();
+    const fixtureHost = createTreeResultFixtureHost(fixtures);
     const shallowReference = fixtureHost.referenceFor("shallow");
     const actionsReference = fixtureHost.referenceFor("actions");
     const notifications = new Map<string, number>();
@@ -364,7 +361,7 @@ describe("Tree Results prototype layout", () => {
   });
 
   it("keeps the complete selected path discoverable in the maximum-depth layout", () => {
-    const tree = requiredFixture(createFormlessUiTreeResultFixtures(), "maximum-depth").tree;
+    const tree = requiredFixture(createTreeResultFixtures(), "maximum-depth").tree;
     const html = renderToStaticMarkup(<AstryxTreeResultRenderer tree={tree} />);
 
     for (const label of [
@@ -393,20 +390,14 @@ describe("Tree Results prototype layout", () => {
       "utf8",
     );
     const layoutSource = await readFile(new URL("./tree-results.tsx", import.meta.url), "utf8");
-    const rendererSource = await readFile(
-      new URL("./formless-ui-tree-renderer.tsx", import.meta.url),
-      "utf8",
-    );
-    const outlineSource = await readFile(
-      new URL("./formless-ui-tree-outline.tsx", import.meta.url),
-      "utf8",
-    );
+    const rendererSource = await readFile(new URL("./tree-renderer.tsx", import.meta.url), "utf8");
+    const outlineSource = await readFile(new URL("./tree-outline.tsx", import.meta.url), "utf8");
     const rootSource = await readFile(new URL("../root.tsx", import.meta.url), "utf8");
 
-    expect(fixtureSource).not.toMatch(/\breact\b|formless-ui-contract-host|className=/i);
+    expect(fixtureSource).not.toMatch(/\breact\b|@dpeek\/formless-presentation\/host|className=/i);
     expect(outlineSource).toContain('from "@astryxdesign/core/TreeList"');
-    expect(layoutSource).toContain("createFormlessUiMemoryContractHost");
-    expect(rendererSource).toContain("useFormlessUiTreeResult");
+    expect(layoutSource).toContain("createMemoryPresentationHost");
+    expect(rendererSource).toContain("useTreeResult");
     expect(rendererSource).toContain('columns={{ max: 2, minWidth: 320, repeat: "fit" }}');
     expect(`${fixtureSource}\n${layoutSource}\n${rendererSource}\n${outlineSource}`).not.toMatch(
       /src\/(?:app|client|worker)|browser-replica|operation-controller|recordsById|rankPlan|sync|@dnd-kit|draggable|droppable/,
@@ -415,10 +406,7 @@ describe("Tree Results prototype layout", () => {
   });
 });
 
-function requiredFixture(
-  fixtures: readonly FormlessUiTreeResultFixture[],
-  id: FormlessUiTreeResultFixtureId,
-) {
+function requiredFixture(fixtures: readonly TreeResultFixture[], id: TreeResultFixtureId) {
   const fixture = fixtures.find((candidate) => candidate.id === id);
   if (!fixture) {
     throw new Error(`Missing ${id} tree-result fixture.`);
@@ -426,16 +414,14 @@ function requiredFixture(
   return fixture;
 }
 
-function collectTreeItems(
-  items: readonly FormlessUiTreeItemContract[],
-): FormlessUiTreeItemContract[] {
+function collectTreeItems(items: readonly TreeItemContract[]): TreeItemContract[] {
   return items.flatMap((item) => [item, ...collectTreeItems(item.children)]);
 }
 
 function findSelectedPath(
-  items: readonly FormlessUiTreeItemContract[],
-  ancestors: readonly FormlessUiTreeItemContract[] = [],
-): FormlessUiTreeItemContract[] | undefined {
+  items: readonly TreeItemContract[],
+  ancestors: readonly TreeItemContract[] = [],
+): TreeItemContract[] | undefined {
   for (const item of items) {
     const path = [...ancestors, item];
     if (item.selected) {
@@ -450,9 +436,9 @@ function findSelectedPath(
 }
 
 function dispatchFixtureTreeIntent(
-  fixtureHost: ReturnType<typeof createFormlessUiTreeResultFixtureHost>,
+  fixtureHost: ReturnType<typeof createTreeResultFixtureHost>,
   resultId: string,
-  intent: FormlessUiTreeIntent,
+  intent: TreeIntent,
 ) {
   void fixtureHost.host.dispatch({
     collectionId: "collection:tree-result-fixtures",
@@ -464,6 +450,6 @@ function dispatchFixtureTreeIntent(
   });
 }
 
-function recordFieldDraft(field: FormlessUiField | undefined) {
+function recordFieldDraft(field: FieldContract | undefined) {
   return field?.mode === "editor" && "drafts" in field ? field.drafts.draft : undefined;
 }

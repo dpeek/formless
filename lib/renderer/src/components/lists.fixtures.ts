@@ -1,11 +1,11 @@
 import type { FieldSchema, StateMachineSchema } from "@dpeek/formless-schema";
 import type {
-  FormlessUiField,
-  FormlessUiListActionGroupContract,
-  FormlessUiListContract,
-  FormlessUiListItemContract,
-  FormlessUiListOperationActionContract,
-  FormlessUiListOrderingContract,
+  FieldContract,
+  ListActionGroupContract,
+  ListContract,
+  ListItemContract,
+  ListOperationActionContract,
+  ListOrderingContract,
 } from "@dpeek/formless-presentation/contract";
 import {
   displayField,
@@ -21,12 +21,12 @@ import {
 } from "./fields/fixture-helpers.ts";
 import { operationControlFixtures } from "./operation-controls.fixtures.ts";
 
-export type FormlessUiListFixtureId = "active" | "editing-disabled" | "empty";
+export type ListFixtureId = "active" | "editing-disabled" | "empty";
 
-export type FormlessUiListFixture = {
-  id: FormlessUiListFixtureId;
+export type ListFixture = {
+  id: ListFixtureId;
   label: string;
-  list: FormlessUiListContract;
+  list: ListContract;
 };
 
 const titleSchema = {
@@ -85,7 +85,7 @@ const taskStatusMachine = stateMachineField({
   machineName: "taskWorkflow",
 });
 
-export function createFormlessUiListFixtures(): FormlessUiListFixture[] {
+export function createListFixtures(): ListFixture[] {
   return [
     {
       id: "active",
@@ -105,7 +105,7 @@ export function createFormlessUiListFixtures(): FormlessUiListFixture[] {
   ];
 }
 
-function activeListFixture(): FormlessUiListContract {
+function activeListFixture(): ListContract {
   const items = [
     taskItem({
       canDelete: true,
@@ -153,7 +153,7 @@ function activeListFixture(): FormlessUiListContract {
   };
 }
 
-function emptyListFixture(): FormlessUiListContract {
+function emptyListFixture(): ListContract {
   return {
     accessibilityLabel: "Empty tasks",
     density: "default",
@@ -171,7 +171,7 @@ function emptyListFixture(): FormlessUiListContract {
   };
 }
 
-function editingDisabledListFixture(): FormlessUiListContract {
+function editingDisabledListFixture(): ListContract {
   return {
     accessibilityLabel: "Read-only tasks",
     density: "default",
@@ -214,7 +214,7 @@ type TaskItemInput = {
   warning?: string;
 };
 
-function taskItem(input: TaskItemInput): FormlessUiListItemContract {
+function taskItem(input: TaskItemInput): ListItemContract {
   const displayTitle = input.title || "Untitled task";
 
   return {
@@ -238,7 +238,7 @@ function taskItem(input: TaskItemInput): FormlessUiListItemContract {
   };
 }
 
-function taskFields(input: TaskItemInput): FormlessUiField[] {
+function taskFields(input: TaskItemInput): FieldContract[] {
   const fields = [taskTitleField(input), taskKindField(input), taskStatusField(input)];
 
   if (input.kind === "link") {
@@ -380,7 +380,7 @@ function taskStatusField(input: TaskItemInput) {
 function taskActions(
   input: Pick<TaskItemInput, "canDelete" | "taskId">,
   displayTitle: string,
-): FormlessUiListActionGroupContract {
+): ListActionGroupContract {
   return {
     id: `${input.taskId}:actions`,
     kind: "actionGroup",
@@ -392,7 +392,7 @@ function taskActions(
   };
 }
 
-function taskOrdering(input: TaskItemInput, displayTitle: string): FormlessUiListOrderingContract {
+function taskOrdering(input: TaskItemInput, displayTitle: string): ListOrderingContract {
   return {
     accessibilityLabel: `Reorder ${displayTitle}`,
     actions: (["top", "up", "down", "bottom"] as const).map((direction) => {
@@ -440,8 +440,8 @@ function taskOrdering(input: TaskItemInput, displayTitle: string): FormlessUiLis
 }
 
 function operationAction(
-  control: FormlessUiListOperationActionContract["control"],
-  role: FormlessUiListOperationActionContract["role"],
-): FormlessUiListOperationActionContract {
+  control: ListOperationActionContract["control"],
+  role: ListOperationActionContract["role"],
+): ListOperationActionContract {
   return { control, kind: "operationAction", role };
 }

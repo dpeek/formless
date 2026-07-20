@@ -2,39 +2,36 @@ import { Heading } from "@astryxdesign/core/Text";
 import { VStack } from "@astryxdesign/core/VStack";
 import { useState } from "react";
 import type {
-  FormlessUiCreateField,
-  FormlessUiFieldSetContract,
-  FormlessUiTreeChildCreationContract,
-  FormlessUiTreeIntent,
-  FormlessUiTreeItemContract,
-  FormlessUiTreeResultContract,
-  FormlessUiTreeResultReference,
-  FormlessUiTreeSelectedEditorContract,
-  FormlessUiWorkspaceIntentScope,
+  CreateFieldContract,
+  FieldSetContract,
+  TreeChildCreationContract,
+  TreeIntent,
+  TreeItemContract,
+  TreeResultContract,
+  TreeResultReference,
+  TreeSelectedEditorContract,
+  WorkspaceIntentScope,
 } from "@dpeek/formless-presentation/contract";
 import {
-  createFormlessUiMemoryContractHost,
-  formlessUiTreeResultReference,
-  isFormlessUiWorkspaceIntent,
-  type FormlessUiContractHostNodeSet,
-  type FormlessUiMutableContractHost,
-} from "@dpeek/formless-presentation/contract-host";
-import { FormlessUiContractHostProvider } from "@dpeek/formless-presentation/contract-host/react";
+  createMemoryPresentationHost,
+  treeResultReference,
+  isWorkspaceIntent,
+  type PresentationNodeSet,
+  type MutablePresentationHost,
+} from "@dpeek/formless-presentation/host";
+import { PresentationHostProvider } from "@dpeek/formless-presentation/host/react";
 import { applyScenarioFieldIntent } from "./fields/fixture-helpers.ts";
 import { FormlessFixtureFrame, FormlessFixtureSelector } from "./fixture-layout.tsx";
 import {
-  createFormlessUiTreeResultFixtures,
-  type FormlessUiTreeResultFixture,
-  type FormlessUiTreeResultFixtureId,
+  createTreeResultFixtures,
+  type TreeResultFixture,
+  type TreeResultFixtureId,
 } from "./tree-results.fixtures.ts";
-import { AstryxSubscribedTreeResultRenderer } from "./formless-ui-tree-renderer.tsx";
+import { AstryxSubscribedTreeResultRenderer } from "./tree-renderer.tsx";
 
 export function FormlessTreeResultsLayout() {
-  const [fixtureHost] = useState(() =>
-    createFormlessUiTreeResultFixtureHost(createFormlessUiTreeResultFixtures()),
-  );
-  const [selectedFixtureId, setSelectedFixtureId] =
-    useState<FormlessUiTreeResultFixtureId>("shallow");
+  const [fixtureHost] = useState(() => createTreeResultFixtureHost(createTreeResultFixtures()));
+  const [selectedFixtureId, setSelectedFixtureId] = useState<TreeResultFixtureId>("shallow");
 
   return (
     <FormlessFixtureFrame
@@ -52,12 +49,12 @@ export function FormlessTreeResultsLayout() {
         <VStack hAlign="center" paddingBlock={6} paddingInline={4} width="100%">
           <VStack gap={5} maxWidth={1200} width="100%">
             <Heading level={1}>Tree Results</Heading>
-            <FormlessUiContractHostProvider host={fixtureHost.host}>
+            <PresentationHostProvider host={fixtureHost.host}>
               <AstryxSubscribedTreeResultRenderer
                 reference={fixtureHost.referenceFor(selectedFixtureId)}
                 scope={treeFixtureWorkspaceScope}
               />
-            </FormlessUiContractHostProvider>
+            </PresentationHostProvider>
           </VStack>
         </VStack>
       </main>
@@ -65,25 +62,25 @@ export function FormlessTreeResultsLayout() {
   );
 }
 
-export type FormlessUiTreeResultFixtureHost = {
-  fixtures: readonly FormlessUiTreeResultFixture[];
-  getTree(fixtureId: FormlessUiTreeResultFixtureId): FormlessUiTreeResultContract;
-  host: FormlessUiMutableContractHost;
-  referenceFor(fixtureId: FormlessUiTreeResultFixtureId): FormlessUiTreeResultReference;
+export type TreeResultFixtureHost = {
+  fixtures: readonly TreeResultFixture[];
+  getTree(fixtureId: TreeResultFixtureId): TreeResultContract;
+  host: MutablePresentationHost;
+  referenceFor(fixtureId: TreeResultFixtureId): TreeResultReference;
 };
 
-export function createFormlessUiTreeResultFixtureHost(
-  fixtures: readonly FormlessUiTreeResultFixture[],
-): FormlessUiTreeResultFixtureHost {
+export function createTreeResultFixtureHost(
+  fixtures: readonly TreeResultFixture[],
+): TreeResultFixtureHost {
   const trees = new Map(fixtures.map((fixture) => [fixture.id, structuredClone(fixture.tree)]));
   const references = new Map(
     fixtures.map((fixture) => [fixture.id, treeFixtureReference(fixture.tree)]),
   );
-  let host: FormlessUiMutableContractHost;
+  let host: MutablePresentationHost;
 
-  host = createFormlessUiMemoryContractHost({
+  host = createMemoryPresentationHost({
     dispatch: (intent) => {
-      if (!isFormlessUiWorkspaceIntent(intent)) {
+      if (!isWorkspaceIntent(intent)) {
         throw new Error("Tree-result fixture host received a non-workspace intent.");
       }
       if (intent.type !== "workspaceTree") {
@@ -103,15 +100,15 @@ export function createFormlessUiTreeResultFixtureHost(
         return;
       }
 
-      const nextTree = applyFormlessUiTreeResultFixtureIntent(tree, intent.intent);
+      const nextTree = applyTreeResultFixtureIntent(tree, intent.intent);
       if (nextTree === tree) {
         return;
       }
 
       trees.set(fixture.id, nextTree);
-      host.publish(projectFormlessUiTreeResultFixtureNodes(fixtures, trees));
+      host.publish(projectTreeResultFixtureNodes(fixtures, trees));
     },
-    nodes: projectFormlessUiTreeResultFixtureNodes(fixtures, trees),
+    nodes: projectTreeResultFixtureNodes(fixtures, trees),
   });
 
   return {
@@ -134,12 +131,12 @@ export function createFormlessUiTreeResultFixtureHost(
   };
 }
 
-export function projectFormlessUiTreeResultFixtureNodes(
-  fixtures: readonly FormlessUiTreeResultFixture[],
-  trees: ReadonlyMap<FormlessUiTreeResultFixtureId, FormlessUiTreeResultContract> = new Map(
+export function projectTreeResultFixtureNodes(
+  fixtures: readonly TreeResultFixture[],
+  trees: ReadonlyMap<TreeResultFixtureId, TreeResultContract> = new Map(
     fixtures.map((fixture) => [fixture.id, fixture.tree]),
   ),
-): FormlessUiContractHostNodeSet {
+): PresentationNodeSet {
   return fixtures.map((fixture) => {
     const tree = trees.get(fixture.id);
     if (!tree) {
@@ -149,10 +146,10 @@ export function projectFormlessUiTreeResultFixtureNodes(
   });
 }
 
-export function applyFormlessUiTreeResultFixtureIntent(
-  tree: FormlessUiTreeResultContract,
-  intent: FormlessUiTreeIntent,
-): FormlessUiTreeResultContract {
+export function applyTreeResultFixtureIntent(
+  tree: TreeResultContract,
+  intent: TreeIntent,
+): TreeResultContract {
   if (intent.resultId !== tree.id) {
     return tree;
   }
@@ -270,7 +267,7 @@ export function applyFormlessUiTreeResultFixtureIntent(
         if (!surface || surface.id !== target.surfaceId || !field) {
           return creation;
         }
-        const nextField = applyScenarioFieldIntent(field, intent.intent) as FormlessUiCreateField;
+        const nextField = applyScenarioFieldIntent(field, intent.intent) as CreateFieldContract;
         if (nextField === field) {
           return creation;
         }
@@ -409,9 +406,9 @@ export function applyFormlessUiTreeResultFixtureIntent(
 }
 
 function updateTreeChildCreation(
-  tree: FormlessUiTreeResultContract,
-  parent: Extract<FormlessUiTreeIntent, { type: "treeChildVariantSelection" }>["parent"],
-  update: (creation: FormlessUiTreeChildCreationContract) => FormlessUiTreeChildCreationContract,
+  tree: TreeResultContract,
+  parent: Extract<TreeIntent, { type: "treeChildVariantSelection" }>["parent"],
+  update: (creation: TreeChildCreationContract) => TreeChildCreationContract,
 ) {
   if (parent.kind === "root") {
     if (!tree.rootChildCreation) {
@@ -432,9 +429,9 @@ function updateTreeChildCreation(
 }
 
 function fixtureSelectedEditorForItem(
-  tree: FormlessUiTreeResultContract,
-  item: FormlessUiTreeItemContract,
-): FormlessUiTreeSelectedEditorContract {
+  tree: TreeResultContract,
+  item: TreeItemContract,
+): TreeSelectedEditorContract {
   if (tree.selectedEditor?.itemId === item.id) {
     return tree.selectedEditor;
   }
@@ -470,8 +467,8 @@ function fixtureSelectedEditorForItem(
 function emptyFixtureTreeFieldSet(
   id: string,
   label: string,
-  editing: FormlessUiTreeResultContract["editing"],
-): FormlessUiFieldSetContract {
+  editing: TreeResultContract["editing"],
+): FieldSetContract {
   return {
     disabled: !editing.enabled,
     ...(editing.enabled ? {} : { disabledReason: editing.disabledReason }),
@@ -483,9 +480,9 @@ function emptyFixtureTreeFieldSet(
 }
 
 function findTreeItem(
-  items: readonly FormlessUiTreeItemContract[],
+  items: readonly TreeItemContract[],
   itemId: string,
-): FormlessUiTreeItemContract | undefined {
+): TreeItemContract | undefined {
   for (const item of items) {
     if (item.id === itemId) {
       return item;
@@ -498,9 +495,7 @@ function findTreeItem(
   return undefined;
 }
 
-function firstAvailableTreeItem(
-  items: readonly FormlessUiTreeItemContract[],
-): FormlessUiTreeItemContract | undefined {
+function firstAvailableTreeItem(items: readonly TreeItemContract[]): TreeItemContract | undefined {
   for (const item of items) {
     if (item.availability.available) {
       return item;
@@ -514,10 +509,10 @@ function firstAvailableTreeItem(
 }
 
 function updateTreeItem(
-  items: readonly FormlessUiTreeItemContract[],
+  items: readonly TreeItemContract[],
   itemId: string,
-  update: (item: FormlessUiTreeItemContract) => FormlessUiTreeItemContract,
-): readonly FormlessUiTreeItemContract[] {
+  update: (item: TreeItemContract) => TreeItemContract,
+): readonly TreeItemContract[] {
   let changed = false;
   const nextItems = items.map((item) => {
     if (item.id === itemId) {
@@ -536,9 +531,9 @@ function updateTreeItem(
 }
 
 function selectTreeItem(
-  items: readonly FormlessUiTreeItemContract[],
+  items: readonly TreeItemContract[],
   itemId: string,
-): readonly FormlessUiTreeItemContract[] {
+): readonly TreeItemContract[] {
   return items.map((item) => ({
     ...item,
     children: selectTreeItem(item.children, itemId),
@@ -547,19 +542,19 @@ function selectTreeItem(
 }
 
 function removeTreeItem(
-  items: readonly FormlessUiTreeItemContract[],
+  items: readonly TreeItemContract[],
   itemId: string,
-): readonly FormlessUiTreeItemContract[] {
+): readonly TreeItemContract[] {
   return items
     .filter((item) => item.id !== itemId)
     .map((item) => ({ ...item, children: removeTreeItem(item.children, itemId) }));
 }
 
 function reorderTreeItem(
-  items: readonly FormlessUiTreeItemContract[],
+  items: readonly TreeItemContract[],
   itemId: string,
-  direction: Extract<FormlessUiTreeIntent, { type: "treeReorder" }>["direction"],
-): readonly FormlessUiTreeItemContract[] {
+  direction: Extract<TreeIntent, { type: "treeReorder" }>["direction"],
+): readonly TreeItemContract[] {
   const index = items.findIndex((item) => item.id === itemId);
   if (index >= 0) {
     const targetIndex =
@@ -594,8 +589,8 @@ function reorderTreeItem(
   return changed ? nextItems : items;
 }
 
-function treeFixtureReference(tree: FormlessUiTreeResultContract) {
-  return formlessUiTreeResultReference({
+function treeFixtureReference(tree: TreeResultContract) {
+  return treeResultReference({
     resultId: tree.id,
     role: "mainResult",
     sectionId: "section:tree-result-fixtures",
@@ -607,4 +602,4 @@ const treeFixtureWorkspaceScope = {
   collectionId: "collection:tree-result-fixtures",
   screenId: "workspace:tree-result-fixtures",
   sectionId: "section:tree-result-fixtures",
-} satisfies FormlessUiWorkspaceIntentScope;
+} satisfies WorkspaceIntentScope;

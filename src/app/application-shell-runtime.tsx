@@ -8,7 +8,7 @@ import {
   useSyncExternalStore,
   type ReactNode,
 } from "react";
-import type { FormlessUiShellIntent } from "@dpeek/formless-presentation/contract";
+import type { ShellIntent } from "@dpeek/formless-presentation/contract";
 import type { AppInstall, AppPackageResolver } from "@dpeek/formless-installed-apps";
 import {
   appStorageIdentityForClientTarget,
@@ -44,7 +44,7 @@ import {
   projectGeneratedApplicationShell,
   selectGeneratedShellScope,
   type GeneratedShellResetState,
-} from "./generated/formless-ui-shell-projection.ts";
+} from "./generated/application-shell-projection.ts";
 import { ApplicationPresentation } from "./application-presentation.tsx";
 import type { ApplicationRootThemeRuntime } from "./application-root-context.tsx";
 import { SchemaAppProvider } from "./generated/schema-app-context.tsx";
@@ -289,7 +289,7 @@ function ApplicationShellRuntime({
   );
 
   const dispatch = useCallback(
-    async (intent: FormlessUiShellIntent) => {
+    async (intent: ShellIntent) => {
       const resolved = resolveGeneratedApplicationShellIntent(projectionRef.current, intent);
 
       switch (resolved.kind) {
@@ -491,12 +491,12 @@ type RootCreateDescriptor = {
 };
 
 type RegisteredGeneratedCreateRuntime = {
-  dispatch: (intent: FormlessUiShellCreateIntent) => Promise<void> | void;
+  dispatch: (intent: ShellCreateIntent) => Promise<void> | void;
   runtime: GeneratedCreateRuntime;
   surfaceKey: string;
 };
 
-type FormlessUiShellCreateIntent = Extract<FormlessUiShellIntent, { type: "shellCreate" }>;
+type ShellCreateIntent = Extract<ShellIntent, { type: "shellCreate" }>;
 
 function RegisteredRootCreateRuntime({
   descriptor,
@@ -523,7 +523,7 @@ function RegisteredRootCreateRuntime({
   });
   const runtimeRef = useRef(runtime);
   runtimeRef.current = runtime;
-  const dispatch = useCallback((intent: FormlessUiShellCreateIntent) => {
+  const dispatch = useCallback((intent: ShellCreateIntent) => {
     if ("fieldId" in intent) {
       return runtimeRef.current.onFieldIntent(intent.fieldId, intent.intent);
     }

@@ -6,9 +6,9 @@ Read this when editing `lib/presentation/*`.
 
 ## Owns
 
-- Renderer-neutral Formless UI contracts, references, and intents.
-- Stable contract-host types, reference helpers, and memory-host behavior.
-- The React contract-host provider and scoped subscription hooks.
+- Renderer-neutral Presentation contracts, references, and intents.
+- Stable Presentation Host types, reference helpers, and memory-host behavior.
+- The React Presentation Host provider and scoped subscription hooks.
 - Focused contract and host coverage.
 
 ## Does Not Own
@@ -22,13 +22,14 @@ Read this when editing `lib/presentation/*`.
 
 ## Map
 
-- `package.json`: explicit contract, contract-host, and React host exports.
+- `package.json`: explicit contract, host, and React host exports.
 - `tsconfig.json`: package-local TypeScript project.
-- `src/formless-ui-contract.ts`: renderer-neutral contracts, references, and intents.
-- `src/formless-ui-contract-host.ts`: host types, reference helpers, validation,
+- `src/contract.ts`: renderer-neutral contracts, references, and intents.
+- `src/host.ts`: host types, reference helpers, validation,
   publication, and memory host.
-- `src/formless-ui-contract-host-react.tsx`: React provider and subscription hooks.
-- `src/*contract-host.test.tsx`: package-local contract and host coverage.
+- `src/host-react.tsx`: React provider and subscription hooks.
+- `src/host.test.tsx` and `src/*-host.test.tsx`: package-local contract
+  and host coverage.
 
 ## Read Path
 
@@ -38,10 +39,10 @@ Read this when editing `lib/presentation/*`.
 
 ## Rules
 
-- Keep Formless UI contracts and hosts renderer-neutral.
+- Keep Presentation contracts and hosts renderer-neutral.
 - Import this package only through `@dpeek/formless-presentation/contract`,
-  `@dpeek/formless-presentation/contract-host`, or
-  `@dpeek/formless-presentation/contract-host/react` outside this package.
+  `@dpeek/formless-presentation/host`, or
+  `@dpeek/formless-presentation/host/react` outside this package.
 - Keep snapshots display-safe and immutable at the host boundary.
 - Keep reference identity stable and subscriptions scoped.
 - Dispatch canonical intents without executing runtime effects.

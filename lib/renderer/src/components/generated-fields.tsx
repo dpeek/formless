@@ -3,14 +3,14 @@ import { Card } from "@astryxdesign/core/Card";
 import { Grid } from "@astryxdesign/core/Grid";
 import { Heading } from "@astryxdesign/core/Text";
 import { VStack } from "@astryxdesign/core/VStack";
-import type { FormlessUiFieldIntentHandler } from "@dpeek/formless-presentation/contract";
+import type { FieldIntentHandler } from "@dpeek/formless-presentation/contract";
 import { applyScenarioFieldIntent, scenarioFieldKey } from "./fields/fixture-helpers.ts";
 import { FormlessFixtureFrame, FormlessFixtureSelector } from "./fixture-layout.tsx";
 import {
   createRecordFieldSurfaceFixtures,
   type RecordFieldSurfaceFixture,
 } from "./fields/record-field.fixtures.ts";
-import { FormlessUiFieldRenderer } from "./fields/renderer.tsx";
+import { FieldRenderer } from "./fields/field-renderer.tsx";
 
 export function FormlessGeneratedFieldsLayout() {
   const [surfaceFixtures, setSurfaceFixtures] = useState(createRecordFieldSurfaceFixtures);
@@ -19,7 +19,7 @@ export function FormlessGeneratedFieldsLayout() {
   const selectedSurface =
     surfaceFixtures.find((surface) => surface.id === selectedSurfaceId) ?? surfaceFixtures[0];
   const handleIntent =
-    (recordId: string): FormlessUiFieldIntentHandler =>
+    (recordId: string): FieldIntentHandler =>
     (intent) => {
       setSurfaceFixtures((currentFixtures) =>
         currentFixtures.map((surface) =>
@@ -73,7 +73,7 @@ function RecordFieldSet({
   onIntent,
   surface,
 }: {
-  onIntent: (recordId: string) => FormlessUiFieldIntentHandler;
+  onIntent: (recordId: string) => FieldIntentHandler;
   surface: RecordFieldSurfaceFixture;
 }) {
   if (surface.id === "table-cell") {
@@ -83,7 +83,7 @@ function RecordFieldSet({
           <Card key={record.id} padding={4} variant="muted">
             <Grid columns={{ minWidth: 120, max: 5 }} gap={2} width="100%">
               {record.fields.map((field) => (
-                <FormlessUiFieldRenderer
+                <FieldRenderer
                   key={scenarioFieldKey(field)}
                   field={field}
                   onIntent={onIntent(record.id)}
@@ -106,7 +106,7 @@ function RecordFieldSet({
     <Card padding={4} variant="muted">
       <VStack gap={4} maxWidth={640} width="100%">
         {record.fields.map((field) => (
-          <FormlessUiFieldRenderer
+          <FieldRenderer
             key={scenarioFieldKey(field)}
             field={field}
             onIntent={onIntent(record.id)}

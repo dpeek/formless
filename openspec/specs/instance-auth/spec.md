@@ -749,7 +749,7 @@ ceremonies, sessions, route policy, operations, and navigation.
 
 - GIVEN a no-shell auth-origin browser route is mounted
 - WHEN runtime prepares its current presentation
-- THEN one typed auth-surface reference resolves one complete immutable snapshot
+- THEN one typed `AuthSurfaceReference` resolves one complete immutable snapshot
   with stable surface identity, surface kind, and state
 - AND the snapshot carries the complete renderer-neutral frame, brand, heading,
   message severity, ordered display facts, controlled fields, policy facts,
@@ -759,8 +759,8 @@ ceremonies, sessions, route policy, operations, and navigation.
   a new complete auth snapshot while semantically unchanged snapshots retain
   object identity
 - AND typed reads, cached server snapshots, scoped subscriptions, client
-  rendering, and hydration use the same generic contract-host semantics as
-  other Formless UI contract references
+  rendering, and hydration use the same generic Presentation Host semantics as
+  other Presentation references
 - AND one transient auth surface remains one subscription boundary unless a
   measured need establishes a separately hot child boundary
 - AND the auth route does not require an application-shell or management host to

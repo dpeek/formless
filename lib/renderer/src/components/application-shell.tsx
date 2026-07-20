@@ -2,26 +2,26 @@ import { Heading, Text } from "@astryxdesign/core/Text";
 import { VStack } from "@astryxdesign/core/VStack";
 import { useState } from "react";
 import type {
-  FormlessUiCreateField,
-  FormlessUiCreateSurfaceContract,
-  FormlessUiDocumentThemeContract,
-  FormlessUiDocumentThemeIntent,
-  FormlessUiDocumentThemeReference,
-  FormlessUiShellIntent,
-  FormlessUiShellManifestReference,
-  FormlessUiShellNavigationSectionContract,
+  CreateFieldContract,
+  CreateSurfaceContract,
+  DocumentThemeContract,
+  DocumentThemeIntent,
+  DocumentThemeReference,
+  ShellIntent,
+  ShellManifestReference,
+  ShellNavigationSectionContract,
 } from "@dpeek/formless-presentation/contract";
 import {
-  createFormlessUiMemoryContractHost,
-  formlessUiDocumentThemeReference,
-  formlessUiShellManifestReference,
-  formlessUiShellNavigationSectionReference,
-  isFormlessUiDocumentThemeIntent,
-  isFormlessUiShellIntent,
-  type FormlessUiContractHostNodeSet,
-  type FormlessUiMutableContractHost,
-} from "@dpeek/formless-presentation/contract-host";
-import { FormlessUiContractHostProvider } from "@dpeek/formless-presentation/contract-host/react";
+  createMemoryPresentationHost,
+  documentThemeReference,
+  shellManifestReference,
+  shellNavigationSectionReference,
+  isDocumentThemeIntent,
+  isShellIntent,
+  type PresentationNodeSet,
+  type MutablePresentationHost,
+} from "@dpeek/formless-presentation/host";
+import { PresentationHostProvider } from "@dpeek/formless-presentation/host/react";
 import {
   createFormlessApplicationShellFixtures,
   type FormlessApplicationShellFixture,
@@ -68,7 +68,7 @@ export function FormlessApplicationShellLayout() {
         />
       }
     >
-      <FormlessUiContractHostProvider host={selectedFixture.host}>
+      <PresentationHostProvider host={selectedFixture.host}>
         {selectedFixture.shellReference ? (
           <AstryxSubscribedApplicationShellRenderer
             shellReference={selectedFixture.shellReference}
@@ -79,19 +79,19 @@ export function FormlessApplicationShellLayout() {
         ) : (
           routeChild
         )}
-      </FormlessUiContractHostProvider>
+      </PresentationHostProvider>
     </FormlessFixtureFrame>
   );
 }
 
 export type FormlessApplicationShellFixtureHost = FormlessApplicationShellFixture & {
-  getDocumentTheme(): FormlessUiDocumentThemeContract | null;
+  getDocumentTheme(): DocumentThemeContract | null;
   getShell(): FormlessApplicationShellFixtureState | null;
-  host: Omit<FormlessUiMutableContractHost, "dispatch"> & {
-    dispatch(intent: FormlessUiDocumentThemeIntent | FormlessUiShellIntent): void;
+  host: Omit<MutablePresentationHost, "dispatch"> & {
+    dispatch(intent: DocumentThemeIntent | ShellIntent): void;
   };
-  shellReference: FormlessUiShellManifestReference | null;
-  themeReference: FormlessUiDocumentThemeReference | null;
+  shellReference: ShellManifestReference | null;
+  themeReference: DocumentThemeReference | null;
 };
 
 export function createFormlessApplicationShellFixtureHost(
@@ -103,11 +103,11 @@ export function createFormlessApplicationShellFixtureHost(
     shell,
     documentTheme,
   );
-  let host: FormlessUiMutableContractHost;
+  let host: MutablePresentationHost;
 
-  host = createFormlessUiMemoryContractHost({
+  host = createMemoryPresentationHost({
     dispatch: (intent) => {
-      if (isFormlessUiDocumentThemeIntent(intent)) {
+      if (isDocumentThemeIntent(intent)) {
         const nextDocumentTheme = applyFormlessApplicationShellFixtureThemeIntent(
           documentTheme,
           intent,
@@ -117,7 +117,7 @@ export function createFormlessApplicationShellFixtureHost(
         }
 
         documentTheme = nextDocumentTheme;
-      } else if (isFormlessUiShellIntent(intent)) {
+      } else if (isShellIntent(intent)) {
         const nextShell = applyFormlessApplicationShellFixtureIntent(shell, intent);
         if (nextShell === shell) {
           return;
@@ -145,14 +145,14 @@ export function createFormlessApplicationShellFixtureHost(
 
 export function projectFormlessApplicationShellFixturePublication(
   shell: FormlessApplicationShellFixtureState | null,
-  documentTheme: FormlessUiDocumentThemeContract | null = null,
+  documentTheme: DocumentThemeContract | null = null,
 ): {
-  nodes: FormlessUiContractHostNodeSet;
-  shellReference: FormlessUiShellManifestReference | null;
-  themeReference: FormlessUiDocumentThemeReference | null;
+  nodes: PresentationNodeSet;
+  shellReference: ShellManifestReference | null;
+  themeReference: DocumentThemeReference | null;
 } {
-  const shellReference = shell ? formlessUiShellManifestReference(shell.manifest.id) : null;
-  const themeReference = documentTheme ? formlessUiDocumentThemeReference(documentTheme.id) : null;
+  const shellReference = shell ? shellManifestReference(shell.manifest.id) : null;
+  const themeReference = documentTheme ? documentThemeReference(documentTheme.id) : null;
 
   return {
     nodes: [
@@ -160,7 +160,7 @@ export function projectFormlessApplicationShellFixturePublication(
         ? [
             { reference: shellReference, snapshot: shell.manifest },
             ...shell.sections.map((section) => ({
-              reference: formlessUiShellNavigationSectionReference(shell.manifest.id, section.id),
+              reference: shellNavigationSectionReference(shell.manifest.id, section.id),
               snapshot: section,
             })),
           ]
@@ -175,9 +175,9 @@ export function projectFormlessApplicationShellFixturePublication(
 }
 
 export function applyFormlessApplicationShellFixtureThemeIntent(
-  documentTheme: FormlessUiDocumentThemeContract | null,
-  intent: FormlessUiDocumentThemeIntent,
-): FormlessUiDocumentThemeContract | null {
+  documentTheme: DocumentThemeContract | null,
+  intent: DocumentThemeIntent,
+): DocumentThemeContract | null {
   const control = documentTheme?.selectionControl;
   const option = control?.options.find(
     (candidate) =>
@@ -199,7 +199,7 @@ export function applyFormlessApplicationShellFixtureThemeIntent(
 
 export function applyFormlessApplicationShellFixtureIntent(
   shell: FormlessApplicationShellFixtureState | null,
-  intent: FormlessUiShellIntent,
+  intent: ShellIntent,
 ): FormlessApplicationShellFixtureState | null {
   if (!shell || shell.manifest.id !== intent.shellId) {
     return shell;
@@ -223,7 +223,7 @@ function createFormlessApplicationShellFixtureHosts() {
 
 function applyRootSelection(
   shell: FormlessApplicationShellFixtureState,
-  intent: Extract<FormlessUiShellIntent, { type: "shellRootRecordSelection" }>,
+  intent: Extract<ShellIntent, { type: "shellRootRecordSelection" }>,
 ) {
   const section = shell.sections.find(
     (candidate) => candidate.id === intent.sectionId && candidate.role === "rootRecords",
@@ -255,7 +255,7 @@ function applyRootSelection(
 
 function applyCreate(
   shell: FormlessApplicationShellFixtureState,
-  intent: Extract<FormlessUiShellIntent, { type: "shellCreate" }>,
+  intent: Extract<ShellIntent, { type: "shellCreate" }>,
 ) {
   const section = shell.sections.find(
     (candidate) =>
@@ -296,11 +296,11 @@ function applyCreate(
 }
 
 function applyCreateDraft(
-  surface: FormlessUiCreateSurfaceContract,
+  surface: CreateSurfaceContract,
   fieldId: string,
   fieldName: string,
-  draftInput: NonNullable<FormlessUiCreateField["draftInput"]>,
-): FormlessUiCreateSurfaceContract {
+  draftInput: NonNullable<CreateFieldContract["draftInput"]>,
+): CreateSurfaceContract {
   const target = surface.dialog.form.fieldSet.fields.find(
     (field) => field.fieldId === fieldId && field.fieldName === fieldName,
   );
@@ -336,8 +336,8 @@ function applyCreateDraft(
 
 function submitCreate(
   shell: FormlessApplicationShellFixtureState,
-  section: FormlessUiShellNavigationSectionContract,
-  createSurface: FormlessUiCreateSurfaceContract,
+  section: ShellNavigationSectionContract,
+  createSurface: CreateSurfaceContract,
 ): FormlessApplicationShellFixtureState {
   const title = createTitle(createSurface.dialog.form.fieldSet.fields);
 
@@ -394,9 +394,7 @@ function submitCreate(
   });
 }
 
-function resetCreateSurface(
-  surface: FormlessUiCreateSurfaceContract,
-): FormlessUiCreateSurfaceContract {
+function resetCreateSurface(surface: CreateSurfaceContract): CreateSurfaceContract {
   return {
     ...surface,
     dialog: {
@@ -420,7 +418,7 @@ function resetCreateSurface(
 
 function applyReset(
   shell: FormlessApplicationShellFixtureState,
-  intent: Extract<FormlessUiShellIntent, { type: "shellReset" }>,
+  intent: Extract<ShellIntent, { type: "shellReset" }>,
 ) {
   const section = shell.sections.find(
     (candidate) =>
@@ -452,7 +450,7 @@ function applyReset(
 
 function applyLogout(
   shell: FormlessApplicationShellFixtureState,
-  intent: Extract<FormlessUiShellIntent, { type: "shellLogout" }>,
+  intent: Extract<ShellIntent, { type: "shellLogout" }>,
 ) {
   const section = shell.sections.find(
     (candidate) =>
@@ -472,13 +470,13 @@ function applyLogout(
 }
 
 function withCreateSurface(
-  section: FormlessUiShellNavigationSectionContract,
-  createSurface: FormlessUiCreateSurfaceContract,
+  section: ShellNavigationSectionContract,
+  createSurface: CreateSurfaceContract,
 ) {
   return { ...section, createSurface };
 }
 
-function createTitle(fields: readonly FormlessUiCreateField[]) {
+function createTitle(fields: readonly CreateFieldContract[]) {
   const draftInput = fields.find((field) => field.fieldName === "title")?.draftInput;
   const value = draftInput?.value;
   return typeof value === "string" ? value.trim() : "";
@@ -486,7 +484,7 @@ function createTitle(fields: readonly FormlessUiCreateField[]) {
 
 function replaceShellSection(
   shell: FormlessApplicationShellFixtureState,
-  nextSection: FormlessUiShellNavigationSectionContract,
+  nextSection: ShellNavigationSectionContract,
   activeDestination = shell.manifest.activeDestination,
 ): FormlessApplicationShellFixtureState {
   return {

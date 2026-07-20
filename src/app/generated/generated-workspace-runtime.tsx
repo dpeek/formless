@@ -1,17 +1,17 @@
 import { useEffect, useLayoutEffect, useMemo, useState, useSyncExternalStore } from "react";
 import type {
-  FormlessUiActionIntentHandler,
-  FormlessUiActionTriggerContract,
-  FormlessUiCreateIntent,
-  FormlessUiCreateSurfaceContract,
-  FormlessUiFieldIntent,
-  FormlessUiOperationPresentationIntent,
-  FormlessUiWorkspaceContract,
-  FormlessUiWorkspaceIntent,
-  FormlessUiWorkspaceIntentHandler,
-  FormlessUiWorkspaceLinkActionContract,
+  ActionIntentHandler,
+  ActionTriggerContract,
+  CreateIntent,
+  CreateSurfaceContract,
+  FieldIntent,
+  OperationPresentationIntent,
+  WorkspaceContract,
+  WorkspaceIntent,
+  WorkspaceIntentHandler,
+  WorkspaceLinkActionContract,
 } from "@dpeek/formless-presentation/contract";
-import { FormlessUiContractHostProvider } from "@dpeek/formless-presentation/contract-host/react";
+import { PresentationHostProvider } from "@dpeek/formless-presentation/host/react";
 import {
   listCoreImageMediaAssets,
   uploadCoreImageMediaFile,
@@ -54,13 +54,13 @@ import {
   type CreateHomeOperationConfig,
 } from "./generated-create-runtime.ts";
 import {
-  adaptGeneratedCreateFormlessUiDraftChange,
-  adaptGeneratedFormlessUiFieldIntent,
-  applyGeneratedFormlessUiFieldIntentResult,
-} from "./formless-ui-intents.ts";
-import { projectGeneratedOperationFormlessUiControl } from "./formless-ui-operation-projection.ts";
-import { projectGeneratedCreateFormlessUiSurface } from "./formless-ui-projection.ts";
-import { generatedWorkspaceScopedId } from "./formless-ui-workspace-projection.ts";
+  adaptGeneratedCreateDraftChange,
+  adaptGeneratedFieldIntent,
+  applyGeneratedFieldIntentResult,
+} from "./field-intents.ts";
+import { projectGeneratedOperationControl } from "./operation-projection.ts";
+import { projectGeneratedCreateSurface } from "./field-projection.ts";
+import { generatedWorkspaceScopedId } from "./workspace-projection.ts";
 import {
   type GeneratedListFieldAuthoringState,
   type GeneratedListOperationRuntime,
@@ -99,7 +99,7 @@ import { ApplicationPresentation } from "../application-presentation.tsx";
 import {
   executeGeneratedOperationControl,
   executeGeneratedOrderingMoveOperation,
-  handleGeneratedOperationFormlessUiIntent,
+  handleGeneratedOperationIntent,
   useGeneratedOperationController,
   useGeneratedOperationControllerVersion,
 } from "./operation-control-runtime.ts";
@@ -121,8 +121,8 @@ const GENERATED_TREE_MOVE_FAILURE_MESSAGE = "Move failed. Try again.";
 const GENERATED_TREE_REMOVE_FAILURE_MESSAGE = "Remove failed. Try again.";
 
 export type GeneratedWorkspaceSectionExternalAction = {
-  action: FormlessUiActionTriggerContract;
-  onIntent: FormlessUiActionIntentHandler;
+  action: ActionTriggerContract;
+  onIntent: ActionIntentHandler;
 };
 
 export type GeneratedWorkspaceRuntimeProps = {
@@ -136,18 +136,18 @@ export type GeneratedWorkspaceRuntimeProps = {
     Record<string, readonly GeneratedWorkspaceSectionExternalAction[] | undefined>
   >;
   today: string;
-  workspaceActions?: readonly FormlessUiWorkspaceLinkActionContract[];
+  workspaceActions?: readonly WorkspaceLinkActionContract[];
 };
 
 export type GeneratedWorkspaceRuntimeController = {
-  dispatch: FormlessUiWorkspaceIntentHandler;
+  dispatch: WorkspaceIntentHandler;
   publication: GeneratedWorkspaceRuntimePublication | undefined;
-  workspace: FormlessUiWorkspaceContract | undefined;
+  workspace: WorkspaceContract | undefined;
 };
 
 type GeneratedWorkspaceExternalActionRuntime = {
   kind: "externalAction";
-  onIntent: FormlessUiActionIntentHandler;
+  onIntent: ActionIntentHandler;
 };
 
 type GeneratedWorkspaceCreateRuntime = {
@@ -377,7 +377,7 @@ export function useGeneratedWorkspaceRuntimeController({
     });
   }, [selected.foundation]);
 
-  async function onIntent(intent: FormlessUiWorkspaceIntent) {
+  async function onIntent(intent: WorkspaceIntent) {
     if (!selected.foundation) {
       return;
     }
@@ -475,7 +475,7 @@ export function useGeneratedWorkspaceRuntimeController({
       const current =
         createStateBySurfaceId[resolved.runtime.surfaceId] ??
         initialCreateState(resolved.runtime.operation);
-      const next = adaptGeneratedCreateFormlessUiDraftChange(intent.intent.intent, {
+      const next = adaptGeneratedCreateDraftChange(intent.intent.intent, {
         state: current,
       }).state;
       setCreateStateBySurfaceId((states) => ({
@@ -535,7 +535,7 @@ export function useGeneratedWorkspaceRuntimeController({
         return;
       }
       const runtime = resolved.runtime;
-      await handleGeneratedOperationFormlessUiIntent({
+      await handleGeneratedOperationIntent({
         binding: runtime.binding,
         confirmationOpen: confirmationOpenByControlId[runtime.binding.id] ?? false,
         controller,
@@ -587,7 +587,7 @@ export function useGeneratedWorkspaceRuntimeController({
         return;
       }
       if (intent.type === "workspaceOperation") {
-        await handleGeneratedOperationFormlessUiIntent({
+        await handleGeneratedOperationIntent({
           binding: runtime.binding,
           confirmationOpen: confirmationOpenByControlId[runtime.binding.id] ?? false,
           controller,
@@ -618,8 +618,8 @@ export function useGeneratedWorkspaceRuntimeController({
         ) {
           const current =
             createStateBySurfaceId[runtime.surfaceId] ?? initialCreateState(runtime.operation);
-          const next = adaptGeneratedCreateFormlessUiDraftChange(
-            intent.intent as Extract<FormlessUiFieldIntent, { type: "createDraftChange" }>,
+          const next = adaptGeneratedCreateDraftChange(
+            intent.intent as Extract<FieldIntent, { type: "createDraftChange" }>,
             { state: current },
           ).state;
           setCreateStateBySurfaceId((states) => ({
@@ -645,7 +645,7 @@ export function useGeneratedWorkspaceRuntimeController({
 
   async function handleCreateIntent(
     runtime: GeneratedWorkspaceCreateRuntime,
-    intent: FormlessUiWorkspaceIntent,
+    intent: WorkspaceIntent,
   ) {
     if (intent.type !== "workspaceCreate") {
       return;
@@ -702,7 +702,7 @@ export function useGeneratedWorkspaceRuntimeController({
 
   async function handleTreeCreateIntent(
     runtime: GeneratedTreeChildCreateRuntime,
-    intent: FormlessUiCreateIntent,
+    intent: CreateIntent,
     resultId: string,
   ) {
     if (intent.type === "createOpenChange") {
@@ -842,7 +842,7 @@ export function useGeneratedWorkspaceRuntimeController({
       setMediaAssetOptions((options) => upsertMediaAssetOption(options, uploadedOption));
       setCreateStateBySurfaceId((states) => ({
         ...states,
-        [runtime.surfaceId]: adaptGeneratedCreateFormlessUiDraftChange(
+        [runtime.surfaceId]: adaptGeneratedCreateDraftChange(
           {
             fieldName,
             fieldValue: { kind: "input", value: uploadedOption.id },
@@ -887,7 +887,7 @@ export function useGeneratedWorkspaceRuntimeController({
       ReturnType<typeof resolveGeneratedWorkspaceIntent>,
       { kind: "result" }
     >["section"],
-    intent: FormlessUiWorkspaceIntent,
+    intent: WorkspaceIntent,
   ) {
     if (result.kind === "list") {
       if (intent.type === "workspaceList") {
@@ -972,7 +972,7 @@ export function useGeneratedWorkspaceRuntimeController({
     if (intent.type === "workspaceOperation") {
       const runtime = tableRuntime.runtimePlan.operationById.get(intent.controlId);
       if (runtime) {
-        await handleGeneratedOperationFormlessUiIntent({
+        await handleGeneratedOperationIntent({
           binding: runtime.binding,
           confirmationOpen: confirmationOpenByControlId[runtime.binding.id] ?? false,
           controller,
@@ -1003,7 +1003,7 @@ export function useGeneratedWorkspaceRuntimeController({
       { kind: "result" }
     >["section"],
     resultId: string,
-    fieldIntent: FormlessUiFieldIntent,
+    fieldIntent: FieldIntent,
   ) {
     const recordId = result.foundation.runtimePlan.recordId;
     const record = recordId ? snapshot.recordsById[recordId] : undefined;
@@ -1055,7 +1055,7 @@ export function useGeneratedWorkspaceRuntimeController({
     updateOperation,
   }: {
     current: GeneratedRecordResultRecordState;
-    fieldIntent: FormlessUiFieldIntent;
+    fieldIntent: FieldIntent;
     fields: readonly RecordFieldConfig[];
     recordId: string;
     resultId: string;
@@ -1304,7 +1304,7 @@ export function useGeneratedWorkspaceRuntimeController({
   async function handleListFieldIntent(
     result: Extract<NonNullable<GeneratedWorkspaceResolvedField["result"]>, { kind: "list" }>,
     section: GeneratedWorkspaceResolvedField["section"],
-    intent: Extract<FormlessUiWorkspaceIntent, { type: "workspaceField" }>,
+    intent: Extract<WorkspaceIntent, { type: "workspaceField" }>,
   ) {
     const model = section.collection.result;
     const recordId = intent.recordId;
@@ -1420,7 +1420,7 @@ export function useGeneratedWorkspaceRuntimeController({
   async function handleTableFieldIntent(
     result: Extract<NonNullable<GeneratedWorkspaceResolvedField["result"]>, { kind: "table" }>,
     _section: GeneratedWorkspaceResolvedField["section"],
-    intent: Extract<FormlessUiWorkspaceIntent, { type: "workspaceField" }>,
+    intent: Extract<WorkspaceIntent, { type: "workspaceField" }>,
   ) {
     const runtime = result.runtime as GeneratedWorkspaceTableRuntime;
     const fieldRuntime = result.fieldsById.get(intent.fieldId);
@@ -1534,9 +1534,9 @@ export function useGeneratedWorkspaceRuntimeController({
     runtime:
       | Exclude<GeneratedListOperationRuntime, { kind: "ordering" }>
       | GeneratedRecordResultOperationRuntime,
-    intent: FormlessUiOperationPresentationIntent,
+    intent: OperationPresentationIntent,
   ) {
-    await handleGeneratedOperationFormlessUiIntent({
+    await handleGeneratedOperationIntent({
       binding: runtime.binding,
       confirmationOpen: confirmationOpenByControlId[runtime.binding.id] ?? false,
       controller,
@@ -1591,11 +1591,11 @@ export function GeneratedWorkspaceStandaloneBoundary({
   }
 
   return (
-    <FormlessUiContractHostProvider host={host}>
+    <PresentationHostProvider host={host}>
       <ApplicationPresentation
         presentation={{ kind: "workspace", reference: workspaceReference }}
       />
-    </FormlessUiContractHostProvider>
+    </PresentationHostProvider>
   );
 }
 
@@ -1612,14 +1612,14 @@ function applyWorkspaceRecordFieldIntent<T extends GeneratedWorkspaceRecordField
   current: T,
   fields: readonly RecordFieldConfig[],
   union: RecordUnionPresentationConfig | undefined,
-  intent: FormlessUiFieldIntent,
+  intent: FieldIntent,
 ): {
   patch?: { fieldName: string; patchValues: Partial<RecordValues> };
   state: T;
 } {
   let state = current;
   let patch: { fieldName: string; patchValues: Partial<RecordValues> } | undefined;
-  const result = adaptGeneratedFormlessUiFieldIntent(intent, {
+  const result = adaptGeneratedFieldIntent(intent, {
     record: {
       editorDraftByFieldName: current.editorDraftByFieldName,
       fields,
@@ -1628,7 +1628,7 @@ function applyWorkspaceRecordFieldIntent<T extends GeneratedWorkspaceRecordField
       union,
     },
   });
-  applyGeneratedFormlessUiFieldIntentResult(result, {
+  applyGeneratedFieldIntentResult(result, {
     onFieldErrorChange: ({ fieldName, message }) => {
       state = {
         ...state,
@@ -1724,7 +1724,7 @@ function selectWorkspaceRuntimeFoundation({
   treeDisclosureOpenByItemId: Readonly<Record<string, boolean | undefined>>;
   treeSelectedPlacementIdByResultId: Readonly<Record<string, string | null | undefined>>;
   mediaAssetOptions: readonly ImageMediaAssetOption[];
-  workspaceActions: readonly FormlessUiWorkspaceLinkActionContract[];
+  workspaceActions: readonly WorkspaceLinkActionContract[];
 }) {
   const bindings: GeneratedOperationControlBinding[] = [];
   const foundation = selectGeneratedWorkspaceFoundation({
@@ -2156,7 +2156,7 @@ function selectWorkspaceCollectionAction({
         )(snapshot),
       }
     : undefined;
-  const control = projectGeneratedOperationFormlessUiControl({
+  const control = projectGeneratedOperationControl({
     binding,
     confirmationOpen: confirmationOpenByControlId[binding.id] ?? false,
     presentation: {
@@ -2218,7 +2218,7 @@ function selectWorkspaceCreateAction({
     }),
   );
   const operationState = controller.getStateByExecutionKey(binding.executionKey);
-  const surface: FormlessUiCreateSurfaceContract = projectGeneratedCreateFormlessUiSurface({
+  const surface: CreateSurfaceContract = projectGeneratedCreateSurface({
     enabled: operation.enabled,
     entityLabel: operation.entity.label,
     id: surfaceId,

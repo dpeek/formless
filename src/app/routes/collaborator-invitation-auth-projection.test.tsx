@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import type { FormlessUiAuthIntent } from "@dpeek/formless-presentation/contract";
+import type { AuthIntent } from "@dpeek/formless-presentation/contract";
 
 import type { CollaboratorInvitationAcceptanceInvitationSummary } from "../../shared/instance-auth.ts";
 import {
@@ -228,7 +228,7 @@ describe("collaborator invitation auth projection", () => {
       false,
     );
 
-    const calls: FormlessUiAuthIntent[] = [];
+    const calls: AuthIntent[] = [];
     const runtime = createNoShellAuthRuntimeHost(
       collaboratorInvitationAuthSurfaceReference,
       eligible,

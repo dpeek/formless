@@ -1,9 +1,6 @@
 import { useCallback, useLayoutEffect, useMemo, useState } from "react";
-import type { FormlessUiContractIntent } from "@dpeek/formless-presentation/contract";
-import {
-  isFormlessUiManagementIntent,
-  type FormlessUiContractHostNodeSet,
-} from "@dpeek/formless-presentation/contract-host";
+import type { PresentationIntent } from "@dpeek/formless-presentation/contract";
+import { isManagementIntent, type PresentationNodeSet } from "@dpeek/formless-presentation/host";
 import { INSTANCE_CONTROL_PLANE_SCHEMA_KEY } from "@dpeek/formless-instance-control-plane";
 import type { PackageAppKey } from "@dpeek/formless-installed-apps";
 import { instanceControlPlaneClientTarget } from "../../client/app-target.ts";
@@ -114,8 +111,8 @@ export function createInstanceManagementRuntimePublicationController(
     );
   }
 
-  async function dispatchManagementIntent(intent: FormlessUiContractIntent) {
-    if (!isFormlessUiManagementIntent(intent) || !projection || !actions) {
+  async function dispatchManagementIntent(intent: PresentationIntent) {
+    if (!isManagementIntent(intent) || !projection || !actions) {
       return;
     }
     await dispatchInstanceManagementIntent(projection, intent, actions);
@@ -129,11 +126,11 @@ export function prepareInstanceManagementRuntimePublication({
   routes,
 }: {
   apps: GeneratedWorkspaceRuntimeController["publication"];
-  dispatch: (intent: FormlessUiContractIntent) => Promise<void> | void;
+  dispatch: (intent: PresentationIntent) => Promise<void> | void;
   projection: InstanceManagementProjection;
   routes: GeneratedWorkspaceRuntimeController["publication"];
 }): ApplicationRuntimeContractPublication {
-  const managementNodes: FormlessUiContractHostNodeSet = [
+  const managementNodes: PresentationNodeSet = [
     { reference: instanceManagementReference, snapshot: projection.manifest },
     ...(projection.dialog === undefined
       ? []
@@ -150,7 +147,7 @@ export function prepareInstanceManagementRuntimePublication({
       {
         dispatch,
         matches: (intent) =>
-          isFormlessUiManagementIntent(intent) &&
+          isManagementIntent(intent) &&
           intent.managementId === instanceManagementReference.managementId,
       },
       ...(apps?.intentHandlers ?? []),

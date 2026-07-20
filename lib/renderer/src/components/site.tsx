@@ -74,10 +74,10 @@ import type {
   PublicSafeOperationInputField,
 } from "@dpeek/formless-schema";
 import type {
-  FormlessUiFieldAccess,
-  FormlessUiFieldControl,
-  FormlessUiFieldOptions,
-  FormlessUiOperationInputField,
+  FieldAccess,
+  FieldControl,
+  FieldOptions,
+  OperationInputFieldContract,
 } from "@dpeek/formless-presentation/contract";
 import { FormlessSiteRendererProvider } from "../site-provider.tsx";
 import { SourceIcon } from "./field-primitives.tsx";
@@ -2104,7 +2104,7 @@ function ProjectedPublicOperationSelector({
   );
 }
 
-type ProjectedPublicOperationFieldData = FormlessUiOperationInputField & {
+type ProjectedPublicOperationFieldData = OperationInputFieldContract & {
   publicDescription?: string;
   publicPlaceholder?: string;
 };
@@ -2188,9 +2188,7 @@ function toPublicOperationFieldSchema(field: SitePublicFormField): FieldSchema {
   };
 }
 
-function toPublicOperationFieldOptions(
-  field: SitePublicFormField,
-): FormlessUiFieldOptions | undefined {
+function toPublicOperationFieldOptions(field: SitePublicFormField): FieldOptions | undefined {
   if (field.control === "enum") {
     return {
       enumOptions: (field.options ?? []).map((option) => ({
@@ -2224,7 +2222,7 @@ function toPublicOperationFieldOptions(
 function toPublicOperationFieldControl(
   field: SitePublicFormField,
   fieldSchema: FieldSchema,
-): FormlessUiFieldControl {
+): FieldControl {
   const common = {
     createDefaultChecked: false,
     createDefaultValue: undefined,
@@ -2305,7 +2303,7 @@ function toPublicOperationInput(field: SitePublicFormField): PublicSafeOperation
   };
 }
 
-function publicOperationFieldAccess(isDisabled: boolean): FormlessUiFieldAccess {
+function publicOperationFieldAccess(isDisabled: boolean): FieldAccess {
   if (isDisabled) {
     return { kind: "disabled", canPatch: false, writable: true };
   }
@@ -2351,7 +2349,7 @@ function publicTextInputElementProps(field: ProjectedPublicOperationFieldData) {
 }
 
 function publicSelectorOptions(
-  options: NonNullable<FormlessUiFieldOptions["enumOptions"]>,
+  options: NonNullable<FieldOptions["enumOptions"]>,
 ): SelectorOptionData[] {
   return options.map((option) => ({
     label: option.label,
@@ -2360,7 +2358,7 @@ function publicSelectorOptions(
 }
 
 function publicSuggestionItems(
-  options: NonNullable<FormlessUiFieldOptions["referenceOptions"]>,
+  options: NonNullable<FieldOptions["referenceOptions"]>,
 ): PublicSuggestionItem[] {
   return options.map((option) => ({
     id: option.id,

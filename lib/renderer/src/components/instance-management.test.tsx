@@ -2,10 +2,10 @@ import { readFile } from "node:fs/promises";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vite-plus/test";
 import type {
-  FormlessUiContractReference,
-  FormlessUiWorkspaceContract,
+  PresentationReference,
+  WorkspaceContract,
 } from "@dpeek/formless-presentation/contract";
-import { formlessUiContractReferenceKey } from "@dpeek/formless-presentation/contract-host";
+import { presentationReferenceKey } from "@dpeek/formless-presentation/host";
 import {
   createFormlessInstanceManagementFixtures,
   type FormlessInstanceManagementFixture,
@@ -212,7 +212,7 @@ describe("canonical instance-management fixtures", () => {
     const notifications = new Set<string>();
     const unsubscribe = publication.nodes.map(({ reference }) =>
       fixtureHost.host.subscribe(reference, () => {
-        notifications.add(formlessUiContractReferenceKey(reference));
+        notifications.add(presentationReferenceKey(reference));
       }),
     );
     const dialog = requiredCurrentDialog(fixtureHost.getState());
@@ -326,7 +326,7 @@ function requiredOperation(state: FormlessInstanceManagementFixture["state"]) {
 function requiredWorkspace(
   state: FormlessInstanceManagementFixture["state"],
   role: "apps" | "routes",
-): FormlessUiWorkspaceContract {
+): WorkspaceContract {
   const manifest = state.manifest;
   if (manifest.state !== "ready") {
     throw new Error("Expected ready instance-management fixture.");
@@ -399,8 +399,8 @@ function instanceManagementRoutesWorkspaceId(state: FormlessInstanceManagementFi
 }
 
 function referenceKey(
-  nodes: readonly { reference: FormlessUiContractReference }[],
-  kind: FormlessUiContractReference["kind"],
+  nodes: readonly { reference: PresentationReference }[],
+  kind: PresentationReference["kind"],
   localId?: string,
 ) {
   const reference = nodes.find(
@@ -413,7 +413,7 @@ function referenceKey(
   if (!reference) {
     throw new Error(`Missing ${kind} fixture reference.`);
   }
-  return formlessUiContractReferenceKey(reference);
+  return presentationReferenceKey(reference);
 }
 
 function importSpecifiers(source: string) {

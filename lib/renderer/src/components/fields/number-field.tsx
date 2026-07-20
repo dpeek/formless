@@ -5,8 +5,8 @@ import { Text } from "@astryxdesign/core/Text";
 import { TextInput } from "@astryxdesign/core/TextInput";
 import type { KeyboardEvent } from "react";
 import type {
-  FormlessUiDisplayField,
-  FormlessUiFieldIntentHandler,
+  DisplayFieldContract,
+  FieldIntentHandler,
 } from "@dpeek/formless-presentation/contract";
 import {
   draftInputFromValue,
@@ -25,7 +25,7 @@ import {
   formatInputValue,
   inputSize,
   isRecordEditorField,
-  type FormlessUiEditorField,
+  type EditorField,
 } from "./field-chrome.tsx";
 
 export function NumberFieldEditor({
@@ -33,9 +33,9 @@ export function NumberFieldEditor({
   showUnit,
   onIntent,
 }: {
-  field: FormlessUiEditorField;
+  field: EditorField;
   showUnit: boolean;
-  onIntent: FormlessUiFieldIntentHandler | undefined;
+  onIntent: FieldIntentHandler | undefined;
 }) {
   const recordField = isRecordEditorField(field) ? field : undefined;
   const valueUnit = showUnit ? recordField?.valueUnit : undefined;
@@ -124,8 +124,8 @@ function ValueUnitSelector({
   field,
   onIntent,
 }: {
-  field: Extract<FormlessUiEditorField, { surface: "detail" | "record" | "table-cell" }>;
-  onIntent: FormlessUiFieldIntentHandler | undefined;
+  field: Extract<EditorField, { surface: "detail" | "record" | "table-cell" }>;
+  onIntent: FieldIntentHandler | undefined;
 }) {
   const valueUnit = field.valueUnit;
 
@@ -171,7 +171,7 @@ function ValueUnitSelector({
   );
 }
 
-export function NumberFieldDisplay({ field }: { field: FormlessUiDisplayField }) {
+export function NumberFieldDisplay({ field }: { field: DisplayFieldContract }) {
   const suffix = field.formatting.suffix ?? field.suffix;
   return (
     <div {...stylex.props(fieldChromeStyles.displayValue, styles.displayValue)}>
@@ -187,7 +187,7 @@ export function NumberFieldDisplay({ field }: { field: FormlessUiDisplayField })
   );
 }
 
-function numberInputText(value: string, format: FormlessUiDisplayField["formatting"]["format"]) {
+function numberInputText(value: string, format: DisplayFieldContract["formatting"]["format"]) {
   const trimmed = value.trim();
 
   if (format === "currency") {

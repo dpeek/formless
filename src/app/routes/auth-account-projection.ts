@@ -1,21 +1,21 @@
 import type {
-  FormlessUiAccountGateAuthSurfaceContract,
-  FormlessUiAuthActionContract,
-  FormlessUiAuthContinuationContract,
-  FormlessUiAuthFactContract,
-  FormlessUiAuthFeedbackContract,
-  FormlessUiAuthFieldContract,
-  FormlessUiAuthMessageContract,
-  FormlessUiAuthPasskeyContract,
-  FormlessUiAuthPolicyContract,
-  FormlessUiAuthSurfaceContract,
-  FormlessUiAuthSurfaceReference,
-  FormlessUiButtonContract,
-  FormlessUiFieldIntent,
-  FormlessUiSignupAuthSurfaceContract,
-  FormlessUiSignupStep,
+  AccountGateAuthSurfaceContract,
+  AuthActionContract,
+  AuthContinuationContract,
+  AuthFactContract,
+  AuthFeedbackContract,
+  AuthFieldContract,
+  AuthMessageContract,
+  AuthPasskeyContract,
+  AuthPolicyContract,
+  AuthSurfaceContract,
+  AuthSurfaceReference,
+  ButtonContract,
+  FieldIntent,
+  SignupAuthSurfaceContract,
+  SignupStep,
 } from "@dpeek/formless-presentation/contract";
-import { formlessUiAuthSurfaceReference } from "@dpeek/formless-presentation/contract-host";
+import { authSurfaceReference } from "@dpeek/formless-presentation/host";
 import type { FieldValue } from "@dpeek/formless-schema";
 import type { CreateFieldConfig } from "../../client/views.ts";
 import type {
@@ -39,9 +39,9 @@ import {
   type GeneratedOperationDraftSessionState,
 } from "../generated/operation-field-authoring.ts";
 import {
-  projectGeneratedCreateFormlessUiFields,
-  projectGeneratedOperationFormlessUiFields,
-} from "../generated/formless-ui-projection.ts";
+  projectGeneratedCreateFields,
+  projectGeneratedOperationFields,
+} from "../generated/field-projection.ts";
 import { displaySafeText } from "./instance-management-display-safety.ts";
 import { passkeyUnavailableMessage } from "./passkey-browser.ts";
 import type { AuthAccountRouteState } from "./auth-account.tsx";
@@ -49,11 +49,11 @@ import type { AuthAccountRouteState } from "./auth-account.tsx";
 export const AUTH_ACCOUNT_GATE_SURFACE_ID = "auth:account";
 export const AUTH_ACCOUNT_SIGNUP_SURFACE_ID = "auth:account:signup";
 
-export const authAccountGateSurfaceReference = formlessUiAuthSurfaceReference({
+export const authAccountGateSurfaceReference = authSurfaceReference({
   surfaceId: AUTH_ACCOUNT_GATE_SURFACE_ID,
   surfaceKind: "account-gate",
 });
-export const authAccountSignupSurfaceReference = formlessUiAuthSurfaceReference({
+export const authAccountSignupSurfaceReference = authSurfaceReference({
   surfaceId: AUTH_ACCOUNT_SIGNUP_SURFACE_ID,
   surfaceKind: "signup",
 });
@@ -116,7 +116,7 @@ export function prepareAuthAccountDraftSession(
 
 export function nextAuthAccountDraftSession(
   session: AuthAccountDraftSession,
-  intent: FormlessUiFieldIntent | { accepted: boolean; policyId: string },
+  intent: FieldIntent | { accepted: boolean; policyId: string },
 ): AuthAccountDraftSession {
   if ("policyId" in intent) {
     const acceptedPolicyIds = new Set(session.acceptedPolicyIds);
@@ -238,15 +238,15 @@ export function projectAuthAccountSurface({
 }: {
   session: AuthAccountDraftSession;
   state: AuthAccountRouteState;
-}): FormlessUiAccountGateAuthSurfaceContract | FormlessUiSignupAuthSurfaceContract {
+}): AccountGateAuthSurfaceContract | SignupAuthSurfaceContract {
   return isSignupState(state)
     ? projectSignupSurface({ session, state })
     : projectAccountGateSurface({ session, state });
 }
 
 export function authAccountSurfaceReference(
-  surface: FormlessUiAuthSurfaceContract,
-): FormlessUiAuthSurfaceReference<"account-gate" | "signup"> {
+  surface: AuthSurfaceContract,
+): AuthSurfaceReference<"account-gate" | "signup"> {
   return surface.surfaceKind === "signup"
     ? authAccountSignupSurfaceReference
     : authAccountGateSurfaceReference;
@@ -258,7 +258,7 @@ function projectAccountGateSurface({
 }: {
   session: AuthAccountDraftSession;
   state: Exclude<AuthAccountRouteState, { status: `signup-${string}` }>;
-}): FormlessUiAccountGateAuthSurfaceContract {
+}): AccountGateAuthSurfaceContract {
   const gate = state.status === "blocked" ? state.result.gate : undefined;
   const pending = state.status === "blocked" && accountGateActionIsPending(state.action);
   const contractState = accountGateContractState(state);
@@ -280,7 +280,7 @@ function projectAccountGateSurface({
     policies: accountGatePolicies(state, session),
     state: contractState,
     surfaceKind: "account-gate",
-  } as FormlessUiAccountGateAuthSurfaceContract;
+  } as AccountGateAuthSurfaceContract;
 }
 
 function projectSignupSurface({
@@ -289,7 +289,7 @@ function projectSignupSurface({
 }: {
   session: AuthAccountDraftSession;
   state: Extract<AuthAccountRouteState, { status: `signup-${string}` }>;
-}): FormlessUiSignupAuthSurfaceContract {
+}): SignupAuthSurfaceContract {
   const pending =
     state.status.endsWith("-sending") ||
     state.status.endsWith("-verifying") ||
@@ -324,7 +324,7 @@ function accountGateFields(
   state: Exclude<AuthAccountRouteState, { status: `signup-${string}` }>,
   session: AuthAccountDraftSession,
   pending: boolean,
-): readonly FormlessUiAuthFieldContract[] {
+): readonly AuthFieldContract[] {
   if (state.status !== "blocked") return [];
   const { gate } = state.result;
   if (gate.kind === "profile-completion") {
@@ -350,7 +350,7 @@ function signupFields(
   state: Extract<AuthAccountRouteState, { status: `signup-${string}` }>,
   session: AuthAccountDraftSession,
   pending: boolean,
-): readonly FormlessUiAuthFieldContract[] {
+): readonly AuthFieldContract[] {
   if (isSignupIdentityState(state)) {
     return projectCreateAuthFields({
       fields: accountDraftFieldConfigs.filter(
@@ -386,13 +386,13 @@ function projectCreateAuthFields({
   purposeByFieldName: Record<string, "display-name" | "email" | "verification-token">;
   session: AuthAccountDraftSession;
   surfaceId: string;
-}): readonly FormlessUiAuthFieldContract[] {
+}): readonly AuthFieldContract[] {
   const facts = selectGeneratedCreateDraftSession({
     enabled: !pending,
     fields,
     state: session.create,
   });
-  const projected = projectGeneratedCreateFormlessUiFields({
+  const projected = projectGeneratedCreateFields({
     owner: { kind: "createSurface", surfaceId },
     pendingByFieldName: Object.fromEntries(fields.map((field) => [field.fieldName, pending])),
     session: facts,
@@ -417,7 +417,7 @@ function profileCompletionFields(
   gate: AccountCompletionProfileCompletionGate,
   session: AuthAccountDraftSession,
   pending: boolean,
-): readonly FormlessUiAuthFieldContract[] {
+): readonly AuthFieldContract[] {
   if (
     !gate.operation ||
     !gate.inputContract ||
@@ -431,7 +431,7 @@ function profileCompletionFields(
     unsupportedRequiredInputNames: gate.inputContract.unsupportedRequiredFields,
   });
   const visibleSession = session.submitAttempted ? selected : { ...selected, fieldErrors: {} };
-  return projectGeneratedOperationFormlessUiFields({
+  return projectGeneratedOperationFields({
     owner: { formId: AUTH_ACCOUNT_GATE_SURFACE_ID, kind: "operationForm" },
     pendingByFieldName: Object.fromEntries(
       gate.inputContract.fields.map((field) => [field.name, pending]),
@@ -449,7 +449,7 @@ function profileCompletionFields(
 
 function accountGateActions(
   state: Exclude<AuthAccountRouteState, { status: `signup-${string}` }>,
-): readonly FormlessUiAuthActionContract[] {
+): readonly AuthActionContract[] {
   if (state.status === "failed")
     return [authAction(AUTH_ACCOUNT_GATE_SURFACE_ID, "retry", "Try again")];
   if (state.status !== "blocked") return [];
@@ -505,7 +505,7 @@ function accountGateActions(
 
 function signupActions(
   state: Extract<AuthAccountRouteState, { status: `signup-${string}` }>,
-): readonly FormlessUiAuthActionContract[] {
+): readonly AuthActionContract[] {
   if (isSignupIdentityState(state))
     return [
       authAction(
@@ -532,7 +532,7 @@ function signupActions(
 function accountGatePolicies(
   state: Exclude<AuthAccountRouteState, { status: `signup-${string}` }>,
   session: AuthAccountDraftSession,
-): readonly FormlessUiAuthPolicyContract[] {
+): readonly AuthPolicyContract[] {
   if (state.status !== "blocked" || state.result.gate.kind !== "terms-acceptance") return [];
   return state.result.gate.policies.map((policy) => {
     const accepted = session.acceptedPolicyIds.includes(policy.accountPolicyId);
@@ -557,7 +557,7 @@ function accountGatePolicies(
 
 function accountGateFacts(
   state: Exclude<AuthAccountRouteState, { status: `signup-${string}` }>,
-): readonly FormlessUiAuthFactContract[] {
+): readonly AuthFactContract[] {
   if (state.status === "loading" || state.status === "failed") return [];
   if (state.status === "blocked") {
     const verificationFacts =
@@ -578,7 +578,7 @@ function accountGateFacts(
 
 function signupFacts(
   state: Extract<AuthAccountRouteState, { status: `signup-${string}` }>,
-): readonly FormlessUiAuthFactContract[] {
+): readonly AuthFactContract[] {
   const identityFacts =
     isSignupPasskeyState(state) ||
     state.status === "signup-complete" ||
@@ -590,7 +590,7 @@ function signupFacts(
   return [...identityFacts, ...targetFacts(state.target)].filter(factIsPresent);
 }
 
-function gateFacts(gate: AccountCompletionGate): FormlessUiAuthFactContract[] {
+function gateFacts(gate: AccountCompletionGate): AuthFactContract[] {
   const operation = operationLabel(gate.operation);
   switch (gate.kind) {
     case "email-verification":
@@ -650,7 +650,7 @@ function gateFacts(gate: AccountCompletionGate): FormlessUiAuthFactContract[] {
   }
 }
 
-function targetFacts(target: AccountCompletionGateTarget): FormlessUiAuthFactContract[] {
+function targetFacts(target: AccountCompletionGateTarget): AuthFactContract[] {
   return compactFacts(
     authFact("destination", "Destination", target.returnTo),
     authFact("origin", "Origin", safeHttpOrigin(target.targetOrigin)),
@@ -663,7 +663,7 @@ function targetFacts(target: AccountCompletionGateTarget): FormlessUiAuthFactCon
 
 function accountGateContractState(
   state: Exclude<AuthAccountRouteState, { status: `signup-${string}` }>,
-): FormlessUiAccountGateAuthSurfaceContract["state"] {
+): AccountGateAuthSurfaceContract["state"] {
   if (state.status !== "blocked") return state.status;
   if (accountGateActionIsPending(state.action)) return "submitting";
   if (state.action?.kind === "gate-unavailable") return "failed";
@@ -673,7 +673,7 @@ function accountGateContractState(
 
 function signupContractState(
   state: Extract<AuthAccountRouteState, { status: `signup-${string}` }>,
-): Exclude<FormlessUiSignupAuthSurfaceContract["state"], "loading"> {
+): Exclude<SignupAuthSurfaceContract["state"], "loading"> {
   if (state.status === "signup-complete") return "complete";
   if (state.status === "signup-continuing") return "continuing";
   if (state.status === "signup-passkey-unavailable") return "passkey-unavailable";
@@ -688,7 +688,7 @@ function signupContractState(
 
 function signupStep(
   state: Extract<AuthAccountRouteState, { status: `signup-${string}` }>,
-): FormlessUiSignupStep {
+): SignupStep {
   if (isSignupIdentityState(state)) return "identity";
   if (isSignupEmailVerificationState(state)) return "email-verification";
   return "passkey";
@@ -737,7 +737,7 @@ function signupDescription(
 
 function accountGateMessage(
   state: Exclude<AuthAccountRouteState, { status: `signup-${string}` }>,
-): FormlessUiAuthMessageContract | undefined {
+): AuthMessageContract | undefined {
   if (state.status === "loading") return authMessage("loading", "Loading account status.");
   if (state.status === "continuing") return authMessage("continuing", "Continuing...", "success");
   if (state.status === "blocked" && accountGateIsUnavailable(state.result.gate))
@@ -747,7 +747,7 @@ function accountGateMessage(
 
 function signupMessage(
   state: Extract<AuthAccountRouteState, { status: `signup-${string}` }>,
-): FormlessUiAuthMessageContract | undefined {
+): AuthMessageContract | undefined {
   if (state.status === "signup-passkey-unavailable")
     return authMessage("passkey", state.message ?? passkeyUnavailableMessage, "warning");
   if (state.status === "signup-continuing")
@@ -758,7 +758,7 @@ function signupMessage(
 function accountGateFeedback(
   state: Exclude<AuthAccountRouteState, { status: `signup-${string}` }>,
   session: AuthAccountDraftSession,
-): FormlessUiAuthFeedbackContract | undefined {
+): AuthFeedbackContract | undefined {
   if (state.status === "failed")
     return authFeedback("account-failure", "Account unavailable", state.message);
   if (state.status === "blocked" && state.action?.kind === "gate-unavailable")
@@ -787,7 +787,7 @@ function accountGateFeedback(
 
 function accountGateContinuation(
   state: Exclude<AuthAccountRouteState, { status: `signup-${string}` }>,
-): FormlessUiAuthContinuationContract | undefined {
+): AuthContinuationContract | undefined {
   if ((state.status !== "complete" && state.status !== "continuing") || !state.continueTo)
     return undefined;
   return authContinuation(AUTH_ACCOUNT_GATE_SURFACE_ID, state.result.target, state.continueTo);
@@ -795,7 +795,7 @@ function accountGateContinuation(
 
 function signupContinuation(
   state: Extract<AuthAccountRouteState, { status: `signup-${string}` }>,
-): FormlessUiAuthContinuationContract | undefined {
+): AuthContinuationContract | undefined {
   if (
     (state.status !== "signup-complete" && state.status !== "signup-continuing") ||
     !state.continueTo
@@ -806,7 +806,7 @@ function signupContinuation(
 
 function signupPasskey(
   state: Extract<AuthAccountRouteState, { status: `signup-${string}` }>,
-): FormlessUiAuthPasskeyContract | undefined {
+): AuthPasskeyContract | undefined {
   if (state.status === "signup-passkey-unavailable")
     return {
       availability: "unavailable",
@@ -984,9 +984,9 @@ function authAction(
   surfaceId: string,
   purpose: "retry" | "submit",
   label: string,
-  prominence: FormlessUiButtonContract["prominence"] = "primary",
+  prominence: ButtonContract["prominence"] = "primary",
   pending = false,
-): FormlessUiAuthActionContract {
+): AuthActionContract {
   const id = `${surfaceId}:action:${purpose}`;
   const control = authButton(
     `${id}:control`,
@@ -1008,7 +1008,7 @@ function authContinuation(
   surfaceId: string,
   target: AccountCompletionGateTarget,
   continueTo: string,
-): FormlessUiAuthContinuationContract {
+): AuthContinuationContract {
   const destinationId = `${surfaceId}:destination:account`;
   const control = authButton(`${destinationId}:control`, "Continue", "primary");
   return {
@@ -1039,10 +1039,10 @@ function authFrame(title: string, description?: string) {
 function authButton(
   id: string,
   label: string,
-  prominence: FormlessUiButtonContract["prominence"],
-  type: FormlessUiButtonContract["type"] = "button",
+  prominence: ButtonContract["prominence"],
+  type: ButtonContract["type"] = "button",
   options: { pending?: boolean } = {},
-): FormlessUiButtonContract {
+): ButtonContract {
   return {
     accessibilityLabel: label,
     content: { kind: "label", label },
@@ -1058,8 +1058,8 @@ function authButton(
 function authMessage(
   id: string,
   title: string,
-  severity: FormlessUiAuthMessageContract["severity"] = "info",
-): FormlessUiAuthMessageContract {
+  severity: AuthMessageContract["severity"] = "info",
+): AuthMessageContract {
   return {
     id: `auth:account:message:${id}`,
     kind: "authMessage",
@@ -1068,7 +1068,7 @@ function authMessage(
   };
 }
 
-function authFeedback(id: string, title: string, detail: string): FormlessUiAuthFeedbackContract {
+function authFeedback(id: string, title: string, detail: string): AuthFeedbackContract {
   return {
     detail: displaySafeText(detail),
     id: `auth:account:feedback:${id}`,
@@ -1082,21 +1082,17 @@ function authFact(
   id: string,
   label: string,
   value: string | undefined,
-): FormlessUiAuthFactContract | undefined {
+): AuthFactContract | undefined {
   return value
     ? { id: `auth:account:fact:${id}`, kind: "authFact", label, value: displaySafeText(value) }
     : undefined;
 }
 
-function compactFacts(
-  ...facts: Array<FormlessUiAuthFactContract | undefined>
-): FormlessUiAuthFactContract[] {
+function compactFacts(...facts: Array<AuthFactContract | undefined>): AuthFactContract[] {
   return facts.filter(factIsPresent);
 }
 
-function factIsPresent(
-  fact: FormlessUiAuthFactContract | undefined,
-): fact is FormlessUiAuthFactContract {
+function factIsPresent(fact: AuthFactContract | undefined): fact is AuthFactContract {
   return fact !== undefined;
 }
 

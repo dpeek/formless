@@ -1,28 +1,28 @@
 import type {
-  FormlessUiAccountGateAuthSurfaceContract,
-  FormlessUiAccountGateKind,
-  FormlessUiAuthActionContract,
-  FormlessUiAuthFieldContract,
-  FormlessUiAuthMessageContract,
-  FormlessUiAuthPasskeyContract,
-  FormlessUiAuthPolicyContract,
-  FormlessUiAuthSurfaceBaseContract,
-  FormlessUiAuthSurfaceContract,
-  FormlessUiButtonContract,
-  FormlessUiCollaboratorInvitationAuthSurfaceContract,
-  FormlessUiCreateField,
-  FormlessUiOperationInputField,
-  FormlessUiOwnerSetupAuthSurfaceContract,
-  FormlessUiOwnerSignInAuthSurfaceContract,
-  FormlessUiSignupAuthSurfaceContract,
-  FormlessUiSignupStep,
+  AccountGateAuthSurfaceContract,
+  AccountGateKind,
+  AuthActionContract,
+  AuthFieldContract,
+  AuthMessageContract,
+  AuthPasskeyContract,
+  AuthPolicyContract,
+  AuthSurfaceBaseContract,
+  AuthSurfaceContract,
+  ButtonContract,
+  CollaboratorInvitationAuthSurfaceContract,
+  CreateFieldContract,
+  OperationInputFieldContract,
+  OwnerSetupAuthSurfaceContract,
+  OwnerSignInAuthSurfaceContract,
+  SignupAuthSurfaceContract,
+  SignupStep,
 } from "@dpeek/formless-presentation/contract";
 
 export type FormlessAuthFixture = {
   family: string;
   id: string;
   label: string;
-  surface: FormlessUiAuthSurfaceContract;
+  surface: AuthSurfaceContract;
 };
 
 export type FormlessAuthFixtureId = FormlessAuthFixture["id"];
@@ -416,8 +416,8 @@ function invitationFixtures(): FormlessAuthFixture[] {
 }
 
 function ownerSetupFixture(
-  state: FormlessUiOwnerSetupAuthSurfaceContract["state"],
-  overrides: Partial<FormlessUiAuthSurfaceBaseContract> = {},
+  state: OwnerSetupAuthSurfaceContract["state"],
+  overrides: Partial<AuthSurfaceBaseContract> = {},
 ): FormlessAuthFixture {
   const suffix = `owner-setup:${state}`;
   return fixture("Owner setup", stateLabel(state), {
@@ -429,8 +429,8 @@ function ownerSetupFixture(
 }
 
 function ownerSignInFixture(
-  state: FormlessUiOwnerSignInAuthSurfaceContract["state"],
-  overrides: Partial<FormlessUiAuthSurfaceBaseContract> = {},
+  state: OwnerSignInAuthSurfaceContract["state"],
+  overrides: Partial<AuthSurfaceBaseContract> = {},
 ): FormlessAuthFixture {
   const suffix = `owner-sign-in:${state}`;
   return fixture("Owner sign in", stateLabel(state), {
@@ -442,12 +442,12 @@ function ownerSignInFixture(
 }
 
 function accountGateFixture(
-  gateKind: FormlessUiAccountGateKind,
+  gateKind: AccountGateKind,
   state: Exclude<
-    FormlessUiAccountGateAuthSurfaceContract["state"],
+    AccountGateAuthSurfaceContract["state"],
     "complete" | "continuing" | "failed" | "loading"
   >,
-  overrides: Partial<FormlessUiAuthSurfaceBaseContract> = {},
+  overrides: Partial<AuthSurfaceBaseContract> = {},
 ): FormlessAuthFixture {
   const suffix = `account-gate:${gateKind}:${state}`;
   return fixture("Account gate", `${gateLabel(gateKind)} · ${stateLabel(state)}`, {
@@ -461,7 +461,7 @@ function accountGateFixture(
 
 function accountTerminalFixture(
   state: "complete" | "continuing" | "failed" | "loading",
-  overrides: Partial<FormlessUiAuthSurfaceBaseContract> = {},
+  overrides: Partial<AuthSurfaceBaseContract> = {},
 ): FormlessAuthFixture {
   const suffix = `account-gate:${state}`;
   return fixture("Account gate", stateLabel(state), {
@@ -473,9 +473,9 @@ function accountTerminalFixture(
 }
 
 function signupFixture(
-  step: FormlessUiSignupStep,
-  state: Exclude<FormlessUiSignupAuthSurfaceContract["state"], "loading">,
-  overrides: Partial<FormlessUiAuthSurfaceBaseContract> = {},
+  step: SignupStep,
+  state: Exclude<SignupAuthSurfaceContract["state"], "loading">,
+  overrides: Partial<AuthSurfaceBaseContract> = {},
 ): FormlessAuthFixture {
   const suffix = `signup:${step}:${state}`;
   return fixture("Signup", `${stepLabel(step)} · ${stateLabel(state)}`, {
@@ -488,8 +488,8 @@ function signupFixture(
 }
 
 function invitationFixture(
-  state: FormlessUiCollaboratorInvitationAuthSurfaceContract["state"],
-  overrides: Partial<FormlessUiAuthSurfaceBaseContract> = {},
+  state: CollaboratorInvitationAuthSurfaceContract["state"],
+  overrides: Partial<AuthSurfaceBaseContract> = {},
 ): FormlessAuthFixture {
   const suffix = `collaborator-invitation-acceptance:${state}`;
   return fixture("Invitation", stateLabel(state), {
@@ -500,15 +500,11 @@ function invitationFixture(
   });
 }
 
-function fixture(
-  family: string,
-  label: string,
-  surface: FormlessUiAuthSurfaceContract,
-): FormlessAuthFixture {
+function fixture(family: string, label: string, surface: AuthSurfaceContract): FormlessAuthFixture {
   return { family, id: surface.id.replace(/^auth:fixture:/, ""), label, surface };
 }
 
-function authSurface(idSuffix: string, title: string): FormlessUiAuthSurfaceBaseContract {
+function authSurface(idSuffix: string, title: string): AuthSurfaceBaseContract {
   return {
     actions: [],
     facts: [],
@@ -580,14 +576,14 @@ function authCreateField({
   surfaceId: idSuffix,
   value = "",
 }: {
-  autocomplete: FormlessUiAuthFieldContract["autocomplete"];
+  autocomplete: AuthFieldContract["autocomplete"];
   fieldName: string;
   label: string;
   purpose: "display-name" | "email" | "verification-token";
   required?: boolean;
   surfaceId: string;
   value?: string;
-}): FormlessUiAuthFieldContract {
+}): AuthFieldContract {
   const surfaceId = `auth:fixture:${idSuffix}`;
   const field = createTextField(surfaceId, fieldName, label, value, required);
   return {
@@ -609,10 +605,10 @@ function authOperationField({
   label: string;
   surfaceId: string;
   value: string;
-}): FormlessUiAuthFieldContract {
+}): AuthFieldContract {
   const surfaceId = `auth:fixture:${idSuffix}`;
   const createField = createTextField(surfaceId, inputName, label, value, true);
-  const field: FormlessUiOperationInputField = {
+  const field: OperationInputFieldContract = {
     ...createField,
     input: { control: "text", label, name: inputName, required: true },
     inputName,
@@ -633,7 +629,7 @@ function createTextField(
   label: string,
   value: string,
   required: boolean,
-): FormlessUiCreateField {
+): CreateFieldContract {
   const field = { label, required, type: "text" as const };
   return {
     access: { canPatch: true, kind: "editable", writable: true },
@@ -665,7 +661,7 @@ function createTextField(
   };
 }
 
-function authPolicy(idSuffix: string): FormlessUiAuthPolicyContract {
+function authPolicy(idSuffix: string): AuthPolicyContract {
   const surfaceId = `auth:fixture:${idSuffix}`;
   return {
     accepted: false,
@@ -685,11 +681,11 @@ function authPolicy(idSuffix: string): FormlessUiAuthPolicyContract {
 
 function authAction(
   idSuffix: string,
-  purpose: FormlessUiAuthActionContract["purpose"],
+  purpose: AuthActionContract["purpose"],
   label: string,
-  prominence: FormlessUiButtonContract["prominence"] = "primary",
+  prominence: ButtonContract["prominence"] = "primary",
   pending = false,
-): FormlessUiAuthActionContract {
+): AuthActionContract {
   const surfaceId = `auth:fixture:${idSuffix}`;
   const id = `${surfaceId}:action:${purpose}`;
   const control = authButton(
@@ -710,10 +706,10 @@ function authAction(
 
 function availablePasskey(
   idSuffix: string,
-  purpose: Extract<FormlessUiAuthPasskeyContract, { availability: "available" }>["purpose"],
+  purpose: Extract<AuthPasskeyContract, { availability: "available" }>["purpose"],
   label: string,
   pending = false,
-): FormlessUiAuthPasskeyContract {
+): AuthPasskeyContract {
   const surfaceId = `auth:fixture:${idSuffix}`;
   const id = `${surfaceId}:passkey:${purpose}`;
   const control = authButton(`${id}:control`, label, "primary", "submit", pending);
@@ -729,9 +725,9 @@ function availablePasskey(
 
 function unavailablePasskey(
   idSuffix: string,
-  purpose: FormlessUiAuthPasskeyContract["purpose"],
+  purpose: AuthPasskeyContract["purpose"],
   unavailableReason: string,
-): FormlessUiAuthPasskeyContract {
+): AuthPasskeyContract {
   return {
     availability: "unavailable",
     id: `auth:fixture:${idSuffix}:passkey:${purpose}`,
@@ -766,10 +762,10 @@ function authContinuation(idSuffix: string, label: string) {
 function authButton(
   id: string,
   label: string,
-  prominence: FormlessUiButtonContract["prominence"],
-  type: FormlessUiButtonContract["type"],
+  prominence: ButtonContract["prominence"],
+  type: ButtonContract["type"],
   pending = false,
-): FormlessUiButtonContract {
+): ButtonContract {
   return {
     accessibilityLabel: label,
     content: { kind: "label", label },
@@ -785,8 +781,8 @@ function authButton(
 function authMessage(
   id: string,
   title: string,
-  severity: FormlessUiAuthMessageContract["severity"] = "info",
-): FormlessUiAuthMessageContract {
+  severity: AuthMessageContract["severity"] = "info",
+): AuthMessageContract {
   return { id: `message:${id}`, kind: "authMessage", severity, title };
 }
 
@@ -803,7 +799,7 @@ function authFact(id: string, label: string, value: string) {
   return { id: `fact:${id}`, kind: "authFact" as const, label, value };
 }
 
-function ownerSetupHeading(state: FormlessUiOwnerSetupAuthSurfaceContract["state"]) {
+function ownerSetupHeading(state: OwnerSetupAuthSurfaceContract["state"]) {
   if (state === "ready" || state === "submitting" || state === "failed")
     return "Claim this instance";
   if (state === "passkey-unavailable") return "Passkeys are unavailable";
@@ -812,7 +808,7 @@ function ownerSetupHeading(state: FormlessUiOwnerSetupAuthSurfaceContract["state
   return "Check owner setup";
 }
 
-function ownerSignInHeading(state: FormlessUiOwnerSignInAuthSurfaceContract["state"]) {
+function ownerSignInHeading(state: OwnerSignInAuthSurfaceContract["state"]) {
   if (state === "complete" || state === "continuing" || state === "logout-pending")
     return "Owner signed in";
   if (state === "passkey-unavailable") return "Passkeys are unavailable";
@@ -820,8 +816,8 @@ function ownerSignInHeading(state: FormlessUiOwnerSignInAuthSurfaceContract["sta
 }
 
 function signupHeading(
-  step: FormlessUiSignupStep,
-  state: Exclude<FormlessUiSignupAuthSurfaceContract["state"], "loading">,
+  step: SignupStep,
+  state: Exclude<SignupAuthSurfaceContract["state"], "loading">,
 ) {
   if (state === "complete" || state === "continuing") return "Account ready";
   if (state === "passkey-unavailable") return "Passkeys are unavailable";
@@ -830,7 +826,7 @@ function signupHeading(
   return "Create passkey";
 }
 
-function invitationHeading(state: FormlessUiCollaboratorInvitationAuthSurfaceContract["state"]) {
+function invitationHeading(state: CollaboratorInvitationAuthSurfaceContract["state"]) {
   if (state === "accepted" || state === "continuing") return "Invitation accepted";
   if (state === "eligible" || state === "submitting") return "Invitation ready";
   if (state === "loading") return "Checking invitation";
@@ -838,14 +834,14 @@ function invitationHeading(state: FormlessUiCollaboratorInvitationAuthSurfaceCon
   return "Invitation unavailable";
 }
 
-function gateLabel(gateKind: FormlessUiAccountGateKind) {
+function gateLabel(gateKind: AccountGateKind) {
   return gateKind
     .split("-")
     .map((part) => `${part[0]?.toUpperCase() ?? ""}${part.slice(1)}`)
     .join(" ");
 }
 
-function stepLabel(step: FormlessUiSignupStep) {
+function stepLabel(step: SignupStep) {
   if (step === "identity") return "Identity";
   return step === "email-verification" ? "Email Verification" : "Passkey";
 }

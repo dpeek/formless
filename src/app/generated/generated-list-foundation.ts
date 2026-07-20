@@ -1,9 +1,9 @@
 import type { ImageMediaAssetOption } from "@dpeek/formless-media/client";
 import type {
-  FormlessUiField,
-  FormlessUiFieldIntent,
-  FormlessUiListContract,
-  FormlessUiListIntent,
+  FieldContract,
+  FieldIntent,
+  ListContract,
+  ListIntent,
 } from "@dpeek/formless-presentation/contract";
 import type { AppSchema, EntitySchema } from "@dpeek/formless-schema";
 import type { StoredRecord } from "@dpeek/formless-storage";
@@ -20,16 +20,13 @@ import {
 } from "../../client/views.ts";
 import type { ListResultModel } from "../../client/list-result-model.ts";
 import {
-  projectGeneratedListFormlessUiContract,
+  projectGeneratedListContract,
   projectGeneratedListOperationAction,
   type GeneratedListItemProjectionFacts,
   type GeneratedListPlacedAction,
-} from "./formless-ui-list-projection.ts";
-import { projectGeneratedOperationFormlessUiControl } from "./formless-ui-operation-projection.ts";
-import {
-  projectGeneratedRecordFormlessUiFields,
-  type GeneratedFormlessUiReferenceOption,
-} from "./formless-ui-projection.ts";
+} from "./list-projection.ts";
+import { projectGeneratedOperationControl } from "./operation-projection.ts";
+import { projectGeneratedRecordFields, type GeneratedReferenceOption } from "./field-projection.ts";
 import {
   selectOrderingMoveMenuItems,
   selectResultOrderingContext,
@@ -75,7 +72,7 @@ export type GeneratedListOperationRuntime =
     };
 
 export type GeneratedListFieldRuntime = {
-  field: FormlessUiField;
+  field: FieldContract;
   fieldConfig: RecordFieldConfig;
   fieldId: string;
   kind: "field";
@@ -105,13 +102,13 @@ type GeneratedListOperationRuntimePlan = Omit<
 
 export type GeneratedListFoundation = {
   fieldStateByRecordId: Readonly<Record<string, GeneratedListFieldAuthoringState | undefined>>;
-  list: FormlessUiListContract;
+  list: ListContract;
   runtimePlan: GeneratedListRuntimePlan;
 };
 
 export type SelectGeneratedListFoundationOptions = {
   confirmationOpenByControlId?: Readonly<Record<string, boolean | undefined>>;
-  density?: FormlessUiListContract["density"];
+  density?: ListContract["density"];
   entity: EntitySchema;
   entityName: string;
   fieldStateByRecordId?: Readonly<Record<string, GeneratedListFieldAuthoringState | undefined>>;
@@ -128,10 +125,7 @@ export type SelectGeneratedListFoundationOptions = {
 };
 
 export type GeneratedListReferenceOptionsByRecordId = Readonly<
-  Record<
-    string,
-    Readonly<Record<string, readonly GeneratedFormlessUiReferenceOption[]>> | undefined
-  >
+  Record<string, Readonly<Record<string, readonly GeneratedReferenceOption[]>> | undefined>
 >;
 
 export type GeneratedListMediaAssetOptionsByRecordId = Readonly<
@@ -227,7 +221,7 @@ export function selectGeneratedListFoundation({
       const state =
         operationStateByExecutionKey[operation.binding.executionKey] ??
         createIdleGeneratedOperationExecutionState(operation.binding.executionKey);
-      const control = projectGeneratedOperationFormlessUiControl({
+      const control = projectGeneratedOperationControl({
         binding: operation.binding,
         confirmationOpen: confirmationOpenByControlId[operation.binding.id] ?? false,
         presentation: generatedListOperationPresentation(operation),
@@ -280,7 +274,7 @@ export function selectGeneratedListFoundation({
 
   return {
     fieldStateByRecordId: nextFieldStateByRecordId,
-    list: projectGeneratedListFormlessUiContract({
+    list: projectGeneratedListContract({
       accessibilityLabel: `${entity.label} records`,
       density,
       editingDisabledReason: `Editing is disabled for ${entity.label}.`,
@@ -324,7 +318,7 @@ export function rebaseGeneratedListFieldAuthoringState(
 
 export function selectGeneratedListRuntimeForIntent(
   runtimePlan: GeneratedListRuntimePlan,
-  intent: FormlessUiListIntent,
+  intent: ListIntent,
 ): Extract<GeneratedListOperationRuntime, { kind: "ordering" }> | undefined {
   return (runtimePlan.orderingByRecordId.get(intent.itemId) ?? []).find(
     (operation) => operation.item.direction === intent.direction,
@@ -340,7 +334,7 @@ export function resolveGeneratedListFieldIntent(
     resultId,
   }: {
     fieldId: string;
-    intent: FormlessUiFieldIntent;
+    intent: FieldIntent;
     recordId?: string;
     resultId?: string;
   },
@@ -377,14 +371,12 @@ function projectGeneratedListFields({
   listId: string;
   mediaAssetOptionsByFieldName?: Readonly<Record<string, readonly ImageMediaAssetOption[]>>;
   record: StoredRecord;
-  referenceOptionsByFieldName?: Readonly<
-    Record<string, readonly GeneratedFormlessUiReferenceOption[]>
-  >;
+  referenceOptionsByFieldName?: Readonly<Record<string, readonly GeneratedReferenceOption[]>>;
   result: ListResultModel;
   schema: AppSchema | null;
 }): {
   fieldConfigs: readonly RecordFieldConfig[];
-  fields: readonly FormlessUiField[];
+  fields: readonly FieldContract[];
 } {
   const session = selectGeneratedUpdateDraftSession({
     fields: result.recordFields,
@@ -394,7 +386,7 @@ function projectGeneratedListFields({
 
   return {
     fieldConfigs: session.visibleFields,
-    fields: projectGeneratedRecordFormlessUiFields({
+    fields: projectGeneratedRecordFields({
       canPatch: result.updateOperation !== undefined,
       density: "default",
       editorDraftByFieldName: fieldState.editorDraftByFieldName,
@@ -430,7 +422,7 @@ function indexGeneratedListFields({
   fields: GeneratedListFieldRuntime[];
   fieldConfigs: readonly RecordFieldConfig[];
   listId: string;
-  projectedFields: readonly FormlessUiField[];
+  projectedFields: readonly FieldContract[];
   record: StoredRecord;
   recordId: string;
   result: ListResultModel;
@@ -469,7 +461,7 @@ function indexGeneratedListFields({
   }
 }
 
-function listFieldIntentFieldName(intent: FormlessUiFieldIntent): string | undefined {
+function listFieldIntentFieldName(intent: FieldIntent): string | undefined {
   return "fieldName" in intent ? intent.fieldName : undefined;
 }
 

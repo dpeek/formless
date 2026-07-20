@@ -2,20 +2,20 @@ import { readFile } from "node:fs/promises";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vite-plus/test";
 import type {
-  FormlessUiContractReference,
-  FormlessUiListContract,
-  FormlessUiTreeResultContract,
-  FormlessUiWorkspaceCollectionContract,
-  FormlessUiWorkspaceContract,
-  FormlessUiWorkspaceSectionContract,
+  PresentationReference,
+  ListContract,
+  TreeResultContract,
+  WorkspaceCollectionContract,
+  WorkspaceContract,
+  WorkspaceSectionContract,
 } from "@dpeek/formless-presentation/contract";
-import { formlessUiContractReferenceKey } from "@dpeek/formless-presentation/contract-host";
-import { FormlessUiContractHostProvider } from "@dpeek/formless-presentation/contract-host/react";
-import { AstryxWorkspaceCollectionRenderer } from "./formless-ui-workspace-collection-renderer.tsx";
+import { presentationReferenceKey } from "@dpeek/formless-presentation/host";
+import { PresentationHostProvider } from "@dpeek/formless-presentation/host/react";
+import { AstryxWorkspaceCollectionRenderer } from "./workspace-collection-renderer.tsx";
 import {
   AstryxSubscribedWorkspaceScreenRenderer,
   AstryxWorkspaceScreenRenderer,
-} from "./formless-ui-workspace-screen-renderer.tsx";
+} from "./workspace-screen-renderer.tsx";
 import {
   createFormlessGeneratedWorkspaceFixtures,
   type FormlessGeneratedWorkspaceFixtureId,
@@ -353,7 +353,7 @@ describe("Generated Workspace prototype layout", () => {
     const notifications = new Map<string, number>();
     const unsubscribe = publication.nodes.map(({ reference }) =>
       fixtureHost.host.subscribe(reference, () => {
-        const key = formlessUiContractReferenceKey(reference);
+        const key = presentationReferenceKey(reference);
         notifications.set(key, (notifications.get(key) ?? 0) + 1);
       }),
     );
@@ -380,7 +380,7 @@ describe("Generated Workspace prototype layout", () => {
     });
 
     expect(Array.from(notifications.keys())).toEqual([
-      formlessUiContractReferenceKey(contextResultReference),
+      presentationReferenceKey(contextResultReference),
     ]);
 
     notifications.clear();
@@ -392,7 +392,7 @@ describe("Generated Workspace prototype layout", () => {
     fixtureHost.host.dispatch(documentation.selectionIntent);
 
     expect(Array.from(notifications.keys())).toEqual([
-      formlessUiContractReferenceKey(companySectionReference),
+      presentationReferenceKey(companySectionReference),
     ]);
 
     for (const stopListening of unsubscribe) {
@@ -426,7 +426,7 @@ describe("Generated Workspace prototype layout", () => {
     const notifications = new Map<string, number>();
     const unsubscribe = publication.nodes.map(({ reference }) =>
       fixtureHost.host.subscribe(reference, () => {
-        const key = formlessUiContractReferenceKey(reference);
+        const key = presentationReferenceKey(reference);
         notifications.set(key, (notifications.get(key) ?? 0) + 1);
       }),
     );
@@ -515,9 +515,7 @@ describe("Generated Workspace prototype layout", () => {
       itemId: brand.id,
       placementId: brand.placementId,
     });
-    expect(Array.from(notifications.keys())).toEqual([
-      formlessUiContractReferenceKey(treeReference),
-    ]);
+    expect(Array.from(notifications.keys())).toEqual([presentationReferenceKey(treeReference)]);
     expect(fixtureHost.host.read(sectionReference)).toBe(initialSectionSnapshot);
 
     for (const stopListening of unsubscribe) {
@@ -541,7 +539,7 @@ describe("Generated Workspace prototype layout", () => {
       ),
     );
 
-    expect(hostSource).toContain("createFormlessUiMemoryContractHost");
+    expect(hostSource).toContain("createMemoryPresentationHost");
     expect(hostSource).toContain("AstryxSubscribedWorkspaceScreenRenderer");
     expect(forbiddenImports).toEqual([]);
   });
@@ -578,23 +576,21 @@ function requiredWorkspace(
   return fixture.workspace;
 }
 
-function requiredOrdinary(collection: FormlessUiWorkspaceCollectionContract) {
+function requiredOrdinary(collection: WorkspaceCollectionContract) {
   if (collection.presentation.kind !== "ordinary") {
     throw new Error("Expected ordinary collection fixture.");
   }
   return collection.presentation;
 }
 
-function requiredList(result: FormlessUiWorkspaceCollectionContract["presentation"]["result"]) {
+function requiredList(result: WorkspaceCollectionContract["presentation"]["result"]) {
   if (result.kind !== "list") {
     throw new Error("Expected list fixture.");
   }
   return result;
 }
 
-function requiredRecordResult(
-  result: FormlessUiWorkspaceCollectionContract["presentation"]["result"],
-) {
+function requiredRecordResult(result: WorkspaceCollectionContract["presentation"]["result"]) {
   if (result.kind !== "recordResult") {
     throw new Error("Expected record-result fixture.");
   }
@@ -602,23 +598,23 @@ function requiredRecordResult(
 }
 
 function requiredTreeResult(
-  result: FormlessUiWorkspaceCollectionContract["presentation"]["result"],
-): FormlessUiTreeResultContract {
+  result: WorkspaceCollectionContract["presentation"]["result"],
+): TreeResultContract {
   if (result.kind !== "treeResult") {
     throw new Error("Expected tree-result fixture.");
   }
   return result;
 }
 
-function currentWorkspaceTree(workspace: FormlessUiWorkspaceContract) {
+function currentWorkspaceTree(workspace: WorkspaceContract) {
   return requiredTreeResult(requiredOrdinary(workspace.sections[0]!.collection).result);
 }
 
-function recordDraft(field: FormlessUiListContract["items"][number]["fields"][number] | undefined) {
+function recordDraft(field: ListContract["items"][number]["fields"][number] | undefined) {
   return field?.mode === "editor" && "drafts" in field ? field.drafts.draft : undefined;
 }
 
-function requiredCreateSurface(workspace: FormlessUiWorkspaceContract) {
+function requiredCreateSurface(workspace: WorkspaceContract) {
   const action = requiredOrdinary(workspace.sections[0]!.collection).actions.primary.find(
     (candidate) => candidate.kind === "createAction",
   );
@@ -628,7 +624,7 @@ function requiredCreateSurface(workspace: FormlessUiWorkspaceContract) {
   return action.surface;
 }
 
-function requiredCollectionOperation(workspace: FormlessUiWorkspaceContract) {
+function requiredCollectionOperation(workspace: WorkspaceContract) {
   const action = requiredOrdinary(workspace.sections[0]!.collection).actions.secondary.find(
     (candidate) => candidate.kind === "operationAction",
   );
@@ -638,7 +634,7 @@ function requiredCollectionOperation(workspace: FormlessUiWorkspaceContract) {
   return action.control;
 }
 
-function scope(section: FormlessUiWorkspaceSectionContract) {
+function scope(section: WorkspaceSectionContract) {
   return {
     collectionId: section.collection.id,
     screenId: section.id.slice(0, section.id.indexOf(":section:")),
@@ -664,13 +660,13 @@ function renderSubscribedWorkspace(
 ) {
   const fixtureHost = createFormlessGeneratedWorkspaceFixtureHost(requiredWorkspace(fixtures, id));
   return renderToStaticMarkup(
-    <FormlessUiContractHostProvider host={fixtureHost.host}>
+    <PresentationHostProvider host={fixtureHost.host}>
       <AstryxSubscribedWorkspaceScreenRenderer reference={fixtureHost.workspaceReference} />
-    </FormlessUiContractHostProvider>,
+    </PresentationHostProvider>,
   );
 }
 
-function renderCollection(section: FormlessUiWorkspaceSectionContract) {
+function renderCollection(section: WorkspaceSectionContract) {
   return renderToStaticMarkup(
     <AstryxWorkspaceCollectionRenderer
       collection={section.collection}
@@ -681,8 +677,8 @@ function renderCollection(section: FormlessUiWorkspaceSectionContract) {
 }
 
 function requiredReference(
-  references: readonly FormlessUiContractReference[],
-  matches: (reference: FormlessUiContractReference) => boolean,
+  references: readonly PresentationReference[],
+  matches: (reference: PresentationReference) => boolean,
 ) {
   const reference = references.find(matches);
   if (!reference) {

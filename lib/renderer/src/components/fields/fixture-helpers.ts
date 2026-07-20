@@ -15,136 +15,136 @@ import {
   validateAuthorityFieldValue,
 } from "@dpeek/formless-schema";
 import type {
-  FormlessUiCreateField,
-  FormlessUiColorFacts,
-  FormlessUiDisplayField,
-  FormlessUiEnumFacts,
-  FormlessUiEnumOption,
-  FormlessUiField,
-  FormlessUiFieldAccess,
-  FormlessUiFieldControl,
-  FormlessUiFieldError,
-  FormlessUiFieldIntent,
-  FormlessUiFieldOptions,
-  FormlessUiFieldPending,
-  FormlessUiIconPickerSelection,
-  FormlessUiMediaAssetOption,
-  FormlessUiMediaAuthoring,
-  FormlessUiMediaPresentation,
-  FormlessUiOperationInputField,
-  FormlessUiRecordField,
-  FormlessUiRecordFieldRendererKind,
-  FormlessUiReferenceFacts,
-  FormlessUiReferenceOption,
-  FormlessUiReferenceValueStatus,
-  FormlessUiStateMachineFacts,
-  FormlessUiStateMachineField,
-  FormlessUiStateTransitionOperation,
-  FormlessUiValueUnitField,
+  CreateFieldContract,
+  ColorFacts,
+  DisplayFieldContract,
+  EnumFacts,
+  EnumOption,
+  FieldContract,
+  FieldAccess,
+  FieldControl,
+  FieldError,
+  FieldIntent,
+  FieldOptions,
+  FieldPending,
+  IconPickerSelection,
+  MediaAssetOption,
+  MediaAuthoring,
+  MediaPresentation,
+  OperationInputFieldContract,
+  RecordFieldContract,
+  RecordFieldRendererKind,
+  ReferenceFacts,
+  ReferenceOption,
+  ReferenceValueStatus,
+  StateMachineFacts,
+  StateMachineField,
+  StateTransitionOperation,
+  ValueUnitField,
 } from "@dpeek/formless-presentation/contract";
 import { sourceIconIsRenderable } from "../field-primitives.tsx";
-import type { FormlessUiEditorField } from "./field-chrome.tsx";
+import type { EditorField } from "./field-chrome.tsx";
 
-export type FormlessUiFixtureFieldOccurrence = {
+export type FixtureFieldOccurrence = {
   ownerId: string;
   placementId: string;
 };
 
-type CommonFieldInput<TControl extends FormlessUiFieldControl> = {
-  access?: FormlessUiFieldAccess;
-  color?: FormlessUiColorFacts;
+type CommonFieldInput<TControl extends FieldControl> = {
+  access?: FieldAccess;
+  color?: ColorFacts;
   control: TControl;
   editor: TControl["editor"];
-  enum?: FormlessUiEnumFacts;
-  errors?: readonly FormlessUiFieldError[];
+  enum?: EnumFacts;
+  errors?: readonly FieldError[];
   field: TControl["field"];
   fieldName: string;
   fieldRef?: FieldRef;
-  icon?: FormlessUiField["icon"];
+  icon?: FieldContract["icon"];
   label?: string;
   labelVisibility: "hidden" | "visible";
-  media?: FormlessUiMediaPresentation;
-  options?: FormlessUiFieldOptions;
-  occurrence: FormlessUiFixtureFieldOccurrence;
-  pending?: FormlessUiFieldPending;
-  presentation?: FormlessUiField["presentation"];
-  reference?: FormlessUiReferenceFacts;
+  media?: MediaPresentation;
+  options?: FieldOptions;
+  occurrence: FixtureFieldOccurrence;
+  pending?: FieldPending;
+  presentation?: FieldContract["presentation"];
+  reference?: ReferenceFacts;
   recordId?: string;
-  stateMachine?: FormlessUiStateMachineField;
-  stateMachineFacts?: FormlessUiStateMachineFacts;
+  stateMachine?: StateMachineField;
+  stateMachineFacts?: StateMachineFacts;
   suffix?: string;
-  visibleWhen?: FormlessUiField["visibleWhen"];
+  visibleWhen?: FieldContract["visibleWhen"];
   writable?: boolean;
 };
 
-type CreateFixtureInput<TControl extends FormlessUiFieldControl> = CommonFieldInput<TControl> & {
+type CreateFixtureInput<TControl extends FieldControl> = CommonFieldInput<TControl> & {
   draftInput?: GeneratedFieldDraftInput;
-  media?: FormlessUiMediaAuthoring;
+  media?: MediaAuthoring;
   value?: FieldValue;
 };
 
-type OperationFixtureInput<TControl extends FormlessUiFieldControl> = CommonFieldInput<TControl> & {
+type OperationFixtureInput<TControl extends FieldControl> = CommonFieldInput<TControl> & {
   draftInput?: GeneratedFieldDraftInput;
   input?: PublicSafeOperationInputField;
   inputName?: string;
-  media?: FormlessUiMediaAuthoring;
+  media?: MediaAuthoring;
   value?: FieldValue;
 };
 
-type RecordFixtureInput<TControl extends FormlessUiFieldControl> = CommonFieldInput<TControl> & {
-  commit: FormlessUiRecordField["commit"];
-  density?: FormlessUiRecordField["density"];
-  drafts: FormlessUiRecordField["drafts"];
-  formatting?: FormlessUiRecordField["formatting"];
-  media?: FormlessUiMediaAuthoring;
-  presentationMode?: FormlessUiRecordField["presentationMode"];
-  rendererKind: FormlessUiRecordFieldRendererKind;
-  surface?: FormlessUiRecordField["surface"];
-  valueUnit?: FormlessUiValueUnitField;
+type RecordFixtureInput<TControl extends FieldControl> = CommonFieldInput<TControl> & {
+  commit: RecordFieldContract["commit"];
+  density?: RecordFieldContract["density"];
+  drafts: RecordFieldContract["drafts"];
+  formatting?: RecordFieldContract["formatting"];
+  media?: MediaAuthoring;
+  presentationMode?: RecordFieldContract["presentationMode"];
+  rendererKind: RecordFieldRendererKind;
+  surface?: RecordFieldContract["surface"];
+  valueUnit?: ValueUnitField;
 };
 
-type DisplayFixtureInput<TControl extends FormlessUiFieldControl> = CommonFieldInput<TControl> & {
-  commit?: FormlessUiDisplayField["commit"];
-  density?: FormlessUiDisplayField["density"];
-  formatting: FormlessUiDisplayField["formatting"];
-  surface?: FormlessUiDisplayField["surface"];
+type DisplayFixtureInput<TControl extends FieldControl> = CommonFieldInput<TControl> & {
+  commit?: DisplayFieldContract["commit"];
+  density?: DisplayFieldContract["density"];
+  formatting: DisplayFieldContract["formatting"];
+  surface?: DisplayFieldContract["surface"];
   value?: FieldValue;
 };
 
 type BaseFieldFacts = {
-  color?: FormlessUiColorFacts;
-  control: FormlessUiFieldControl;
+  color?: ColorFacts;
+  control: FieldControl;
   editor: FieldEditor;
-  enum?: FormlessUiEnumFacts;
-  errors?: readonly FormlessUiFieldError[];
+  enum?: EnumFacts;
+  errors?: readonly FieldError[];
   field: FieldSchema;
   fieldId: string;
   fieldName: string;
   fieldRef?: FieldRef;
-  icon?: FormlessUiField["icon"];
+  icon?: FieldContract["icon"];
   inputName?: string;
   label: string;
   labelVisibility: "hidden" | "visible";
-  media?: FormlessUiMediaPresentation;
-  options?: FormlessUiFieldOptions;
-  pending?: FormlessUiFieldPending;
-  presentation?: FormlessUiField["presentation"];
-  reference?: FormlessUiReferenceFacts;
+  media?: MediaPresentation;
+  options?: FieldOptions;
+  pending?: FieldPending;
+  presentation?: FieldContract["presentation"];
+  reference?: ReferenceFacts;
   recordId?: string;
   required: boolean;
-  stateMachine?: FormlessUiStateMachineField;
-  stateMachineFacts?: FormlessUiStateMachineFacts;
+  stateMachine?: StateMachineField;
+  stateMachineFacts?: StateMachineFacts;
   suffix?: string;
-  surface: FormlessUiField["surface"];
-  visibleWhen?: FormlessUiField["visibleWhen"];
+  surface: FieldContract["surface"];
+  visibleWhen?: FieldContract["visibleWhen"];
   writable?: boolean;
 };
 
-export function createField<TControl extends FormlessUiFieldControl>({
+export function createField<TControl extends FieldControl>({
   draftInput,
   value,
   ...input
-}: CreateFixtureInput<TControl>): FormlessUiCreateField {
+}: CreateFixtureInput<TControl>): CreateFieldContract {
   return {
     ...baseField(input, "create"),
     access: input.access ?? editableAccess(),
@@ -167,27 +167,24 @@ export function createField<TControl extends FormlessUiFieldControl>({
   };
 }
 
-export function fixtureFormlessUiFieldId({
-  ownerId,
-  placementId,
-}: FormlessUiFixtureFieldOccurrence): string {
+export function fixtureFieldId({ ownerId, placementId }: FixtureFieldOccurrence): string {
   return ["fixture-field", ownerId, placementId].map((part) => encodeURIComponent(part)).join(":");
 }
 
-export function withFixtureFieldOccurrence<TField extends FormlessUiField>(
+export function withFixtureFieldOccurrence<TField extends FieldContract>(
   field: TField,
-  occurrence: FormlessUiFixtureFieldOccurrence,
+  occurrence: FixtureFieldOccurrence,
 ): TField {
-  return { ...field, fieldId: fixtureFormlessUiFieldId(occurrence) };
+  return { ...field, fieldId: fixtureFieldId(occurrence) };
 }
 
-export function operationField<TControl extends FormlessUiFieldControl>({
+export function operationField<TControl extends FieldControl>({
   draftInput,
   input,
   inputName,
   value,
   ...fieldInput
-}: OperationFixtureInput<TControl>): FormlessUiOperationInputField {
+}: OperationFixtureInput<TControl>): OperationInputFieldContract {
   const resolvedInputName = inputName ?? fieldInput.fieldName;
 
   return {
@@ -222,7 +219,7 @@ export function operationField<TControl extends FormlessUiFieldControl>({
   };
 }
 
-export function recordField<TControl extends FormlessUiFieldControl>({
+export function recordField<TControl extends FieldControl>({
   commit,
   density = "default",
   drafts,
@@ -233,7 +230,7 @@ export function recordField<TControl extends FormlessUiFieldControl>({
   surface = "record",
   valueUnit,
   ...input
-}: RecordFixtureInput<TControl>): FormlessUiRecordField {
+}: RecordFixtureInput<TControl>): RecordFieldContract {
   return {
     ...baseField(input, surface),
     access: input.access ?? editableAccess(),
@@ -261,14 +258,14 @@ export function recordField<TControl extends FormlessUiFieldControl>({
   };
 }
 
-export function displayField<TControl extends FormlessUiFieldControl>({
+export function displayField<TControl extends FieldControl>({
   commit = "submit",
   density = "default",
   formatting,
   surface = "detail",
   value,
   ...input
-}: DisplayFixtureInput<TControl>): FormlessUiDisplayField {
+}: DisplayFixtureInput<TControl>): DisplayFieldContract {
   return {
     ...baseField(input, surface),
     access: input.access ?? { kind: "readOnly", writable: false },
@@ -293,7 +290,7 @@ export function textControl(
   field: Extract<FieldSchema, { type: "text" }>,
   input: {
     controlKind?: Extract<
-      FormlessUiFieldControl["controlKind"],
+      FieldControl["controlKind"],
       "color" | "icon" | "markdown" | "media" | "text" | "textarea"
     >;
     editor?: Extract<
@@ -303,7 +300,7 @@ export function textControl(
     label?: string;
     control?: FieldEditorControl;
   } = {},
-): Extract<FormlessUiFieldControl, { kind: "text" }> {
+): Extract<FieldControl, { kind: "text" }> {
   const editor = input.editor ?? textEditorFromField(field);
   const controlKind = input.controlKind ?? textControlKind(editor);
 
@@ -320,7 +317,7 @@ export function textControl(
 export function booleanControl(
   field: Extract<FieldSchema, { type: "boolean" }>,
   label = field.label ?? "Boolean",
-): Extract<FormlessUiFieldControl, { kind: "boolean" }> {
+): Extract<FieldControl, { kind: "boolean" }> {
   return controlFacts({
     control: { kind: "checkbox" },
     controlKind: "checkbox",
@@ -334,7 +331,7 @@ export function booleanControl(
 export function dateControl(
   field: Extract<FieldSchema, { type: "date" }>,
   label = field.label ?? "Date",
-): Extract<FormlessUiFieldControl, { kind: "date" }> {
+): Extract<FieldControl, { kind: "date" }> {
   return controlFacts({
     control: { kind: "input", inputType: "date" },
     controlKind: "date",
@@ -348,7 +345,7 @@ export function dateControl(
 export function numberControl(
   field: Extract<FieldSchema, { type: "number" }>,
   label = field.label ?? "Number",
-): Extract<FormlessUiFieldControl, { kind: "number" }> {
+): Extract<FieldControl, { kind: "number" }> {
   return controlFacts({
     control: { kind: "formattedNumber" },
     controlKind: "number",
@@ -367,7 +364,7 @@ export function numberControl(
 export function enumControl(
   field: Extract<FieldSchema, { type: "enum" }>,
   label = field.label ?? "Enum",
-): Extract<FormlessUiFieldControl, { kind: "enum" }> {
+): Extract<FieldControl, { kind: "enum" }> {
   return controlFacts({
     control: { kind: "select" },
     controlKind: "select",
@@ -382,7 +379,7 @@ export function enumControl(
 export function referenceControl(
   field: Extract<FieldSchema, { type: "reference" }>,
   label = field.label ?? "Reference",
-): Extract<FormlessUiFieldControl, { kind: "reference" }> {
+): Extract<FieldControl, { kind: "reference" }> {
   return controlFacts({
     control: { kind: "reference" },
     controlKind: "reference",
@@ -396,7 +393,7 @@ export function referenceControl(
 export function enumOptions(
   field: Extract<FieldSchema, { type: "enum" }>,
   input: Partial<Record<string, { iconSource?: string }>> = {},
-): FormlessUiEnumOption[] {
+): EnumOption[] {
   return Object.entries(field.values).map(([value, option]) => ({
     label: option.label,
     presentation: enumValuePresentation(field, value, input[value]?.iconSource),
@@ -409,7 +406,7 @@ export function enumValuePresentation(
   field: Extract<FieldSchema, { type: "enum" }>,
   value: string,
   iconSource?: string,
-): FormlessUiEnumOption["presentation"] {
+): EnumOption["presentation"] {
   const option = field.values[value];
   const color = option?.presentation?.color;
   const colorIntent = fixturePresentationColorIntent(color);
@@ -428,15 +425,15 @@ export function enumValuePresentation(
   };
 }
 
-export function referenceOptions(options: readonly FormlessUiReferenceOption[]) {
+export function referenceOptions(options: readonly ReferenceOption[]) {
   return options;
 }
 
 export function referenceEditorFacts(
   field: Extract<FieldSchema, { type: "reference" }>,
   value: FieldValue | undefined,
-  options: readonly FormlessUiReferenceOption[],
-): FormlessUiReferenceFacts {
+  options: readonly ReferenceOption[],
+): ReferenceFacts {
   return {
     clearable: !field.required,
     kind: "editor",
@@ -446,8 +443,8 @@ export function referenceEditorFacts(
 
 export function referenceDisplayFacts(
   value: FieldValue | undefined,
-  options: readonly FormlessUiReferenceOption[],
-): FormlessUiReferenceFacts {
+  options: readonly ReferenceOption[],
+): ReferenceFacts {
   return {
     kind: "display",
     valueStatus: fixtureReferenceValueStatus(value, options),
@@ -456,8 +453,8 @@ export function referenceDisplayFacts(
 
 function fixtureReferenceValueStatus(
   value: FieldValue | undefined,
-  options: readonly FormlessUiReferenceOption[],
-): FormlessUiReferenceValueStatus {
+  options: readonly ReferenceOption[],
+): ReferenceValueStatus {
   if (typeof value !== "string" || value === "") {
     return { kind: "unset" };
   }
@@ -468,8 +465,8 @@ function fixtureReferenceValueStatus(
 }
 
 export function mediaAssetOptions(
-  options: readonly FormlessUiMediaAssetOption[],
-): readonly FormlessUiMediaAssetOption[] {
+  options: readonly MediaAssetOption[],
+): readonly MediaAssetOption[] {
   return options;
 }
 
@@ -477,7 +474,7 @@ export function stateMachineField(input: {
   fieldName: string;
   machineName: string;
   machine: StateMachineSchema;
-}): FormlessUiStateMachineField {
+}): StateMachineField {
   return {
     fieldName: input.fieldName,
     initialState: input.machine.initial,
@@ -492,10 +489,10 @@ export function stateMachineFacts(input: {
   field: Extract<FieldSchema, { type: "enum" }>;
   interaction?: "display" | "transitions";
   operationNames: Record<string, string>;
-  stateMachine: FormlessUiStateMachineField;
-  transitionPatches?: Partial<Record<string, Partial<FormlessUiStateTransitionOperation>>>;
+  stateMachine: StateMachineField;
+  transitionPatches?: Partial<Record<string, Partial<StateTransitionOperation>>>;
   transitions?: StateMachineSchema["transitions"];
-}): FormlessUiStateMachineFacts {
+}): StateMachineFacts {
   const transitions = input.transitions ?? input.stateMachine.machine.transitions;
   const currentValue = typeof input.currentValue === "string" ? input.currentValue : "";
   const transitionFacts = Object.entries(transitions).map(([transitionName, transition]) => {
@@ -522,7 +519,7 @@ export function stateMachineFacts(input: {
                   .map((value) => input.field.values[value]?.label ?? value)
                   .join(", ")}.`,
           },
-    } satisfies FormlessUiStateTransitionOperation;
+    } satisfies StateTransitionOperation;
 
     return {
       ...baseTransition,
@@ -571,7 +568,7 @@ export function recordDrafts(input: {
   unitDraft?: string;
   unitDraftInput?: GeneratedFieldDraftInput;
   unitRecordValue?: FieldValue;
-}): FormlessUiRecordField["drafts"] {
+}): RecordFieldContract["drafts"] {
   return {
     draft: input.draft ?? String(input.recordValue ?? ""),
     draftInput: input.draftInput ?? draftInput(input.recordValue),
@@ -582,11 +579,7 @@ export function recordDrafts(input: {
   };
 }
 
-export function fieldError(
-  fieldName: string,
-  message: string,
-  draftValue = "",
-): FormlessUiFieldError {
+export function fieldError(fieldName: string, message: string, draftValue = ""): FieldError {
   return {
     fieldName,
     message,
@@ -594,21 +587,15 @@ export function fieldError(
   };
 }
 
-export function scenarioFieldKey(field: FormlessUiField) {
+export function scenarioFieldKey(field: FieldContract) {
   return `${field.surface}:${field.recordId ?? "record"}:${field.inputName ?? field.fieldName}`;
 }
 
-export function applyScenarioFieldIntent(
-  field: FormlessUiField,
-  intent: FormlessUiFieldIntent,
-): FormlessUiField {
+export function applyScenarioFieldIntent(field: FieldContract, intent: FieldIntent): FieldContract {
   return withFixtureCurrentColorFacts(applyScenarioFieldIntentResult(field, intent));
 }
 
-function applyScenarioFieldIntentResult(
-  field: FormlessUiField,
-  intent: FormlessUiFieldIntent,
-): FormlessUiField {
+function applyScenarioFieldIntentResult(field: FieldContract, intent: FieldIntent): FieldContract {
   if (intent.type === "createDraftChange") {
     if (!isCreateField(field) || field.fieldName !== intent.fieldName) {
       return field;
@@ -768,7 +755,7 @@ export function displayFieldValue(field: FieldSchema, value: FieldValue | undefi
   return String(value);
 }
 
-export function applyScenarioFieldSubmit(field: FormlessUiField): FormlessUiField {
+export function applyScenarioFieldSubmit(field: FieldContract): FieldContract {
   if (!isCreateField(field) && !isOperationField(field)) {
     return field;
   }
@@ -803,9 +790,9 @@ export function applyScenarioFieldSubmit(field: FormlessUiField): FormlessUiFiel
   };
 }
 
-function baseField<TControl extends FormlessUiFieldControl>(
+function baseField<TControl extends FieldControl>(
   input: CommonFieldInput<TControl> & { inputName?: string },
-  surface: FormlessUiField["surface"],
+  surface: FieldContract["surface"],
 ): BaseFieldFacts {
   return {
     control: input.control,
@@ -814,7 +801,7 @@ function baseField<TControl extends FormlessUiFieldControl>(
     enum: input.enum,
     errors: input.errors,
     field: input.field,
-    fieldId: fixtureFormlessUiFieldId(input.occurrence),
+    fieldId: fixtureFieldId(input.occurrence),
     fieldName: input.fieldName,
     fieldRef: input.fieldRef,
     icon: input.icon,
@@ -845,11 +832,11 @@ function fixtureEnumEditorFacts({
   value,
 }: {
   field: FieldSchema;
-  presentation?: FormlessUiField["presentation"];
+  presentation?: FieldContract["presentation"];
   style: "plain" | "rich";
   surface: "create" | "detail" | "operation" | "record" | "table-cell";
   value: FieldValue | undefined;
-}): FormlessUiEnumFacts | undefined {
+}): EnumFacts | undefined {
   if (field.type !== "enum") {
     return undefined;
   }
@@ -881,9 +868,9 @@ function fixtureEnumDisplayFacts({
   value,
 }: {
   field: FieldSchema;
-  presentation?: FormlessUiField["presentation"];
+  presentation?: FieldContract["presentation"];
   value: FieldValue | undefined;
-}): FormlessUiEnumFacts | undefined {
+}): EnumFacts | undefined {
   if (field.type !== "enum") {
     return undefined;
   }
@@ -898,7 +885,7 @@ function fixtureEnumDisplayFacts({
 function fixtureEnumValueStatus(
   field: Extract<FieldSchema, { type: "enum" }>,
   value: FieldValue | undefined,
-): FormlessUiEnumFacts["valueStatus"] {
+): EnumFacts["valueStatus"] {
   if (typeof value !== "string" || value === "") {
     return { kind: "unset" };
   }
@@ -910,7 +897,7 @@ function fixtureEnumValueStatus(
 
 function fixturePresentationColorIntent(
   token: string | undefined,
-): FormlessUiEnumOption["presentation"]["color"]["intent"] {
+): EnumOption["presentation"]["color"]["intent"] {
   if (token === "success" || token === "priority.low") {
     return "success";
   }
@@ -926,7 +913,7 @@ function fixturePresentationColorIntent(
   return "neutral";
 }
 
-function controlFacts<TControl extends FormlessUiFieldControl>({
+function controlFacts<TControl extends FieldControl>({
   control,
   controlKind,
   createDefaultValue,
@@ -1009,7 +996,7 @@ function textEditorControl(editor: FieldEditor): FieldEditorControl {
   return { kind: "input", inputType: "text" };
 }
 
-function editableAccess(): Extract<FormlessUiFieldAccess, { kind: "editable" }> {
+function editableAccess(): Extract<FieldAccess, { kind: "editable" }> {
   return { kind: "editable", canPatch: true, writable: true };
 }
 
@@ -1020,11 +1007,11 @@ function publicSafeOperationInputField({
   label,
   options,
 }: {
-  controlKind: FormlessUiFieldControl["controlKind"];
+  controlKind: FieldControl["controlKind"];
   field: FieldSchema;
   inputName: string;
   label: string;
-  options: FormlessUiFieldOptions | undefined;
+  options: FieldOptions | undefined;
 }): PublicSafeOperationInputField {
   return {
     name: inputName,
@@ -1050,10 +1037,10 @@ function publicSafeOperationInputField({
 }
 
 function applyRecordDraftChange(
-  field: FormlessUiField,
+  field: FieldContract,
   fieldName: string,
   fieldValue: GeneratedFieldDraftInput | undefined,
-): FormlessUiField {
+): FieldContract {
   if (!isRecordField(field)) {
     return field;
   }
@@ -1087,10 +1074,10 @@ function applyRecordDraftChange(
 }
 
 function applyMediaAssetSelect(
-  field: FormlessUiField,
+  field: FieldContract,
   fieldName: string,
   assetId: string,
-): FormlessUiField {
+): FieldContract {
   if (!isRecordField(field) || field.fieldName !== fieldName) {
     return field;
   }
@@ -1117,10 +1104,10 @@ function applyMediaAssetSelect(
 }
 
 function applyMediaFileSelect(
-  field: FormlessUiField,
+  field: FieldContract,
   fieldName: string,
   file: File | undefined,
-): FormlessUiField {
+): FieldContract {
   if (
     file === undefined ||
     field.mode !== "editor" ||
@@ -1191,7 +1178,7 @@ function fixtureMediaFileSlug(fileName: string) {
 }
 
 function applyRecordDraftCommit(
-  field: FormlessUiField,
+  field: FieldContract,
   fieldName: string,
   fieldValue: GeneratedFieldDraftInput,
 ) {
@@ -1235,10 +1222,10 @@ function applyRecordDraftCommit(
 }
 
 function applyIconDialogDraftChange(
-  field: FormlessUiField,
+  field: FieldContract,
   fieldName: string,
   value: string,
-): FormlessUiField {
+): FieldContract {
   if (field.mode !== "editor" || field.fieldName !== fieldName || field.icon === undefined) {
     return field;
   }
@@ -1247,10 +1234,10 @@ function applyIconDialogDraftChange(
 }
 
 function applyIconDialogOpenChange(
-  field: FormlessUiField,
+  field: FieldContract,
   fieldName: string,
   open: boolean,
-): FormlessUiField {
+): FieldContract {
   if (field.mode !== "editor" || field.fieldName !== fieldName || field.icon === undefined) {
     return field;
   }
@@ -1262,7 +1249,7 @@ function applyIconDialogOpenChange(
   );
 }
 
-function applyIconDialogCancel(field: FormlessUiField, fieldName: string): FormlessUiField {
+function applyIconDialogCancel(field: FieldContract, fieldName: string): FieldContract {
   if (field.mode !== "editor" || field.fieldName !== fieldName || field.icon === undefined) {
     return field;
   }
@@ -1270,7 +1257,7 @@ function applyIconDialogCancel(field: FormlessUiField, fieldName: string): Forml
   return withFixtureIconDialogDraft(field, fixtureIconSavedSource(field), false);
 }
 
-function applyIconDialogSave(field: FormlessUiField, fieldName: string): FormlessUiField {
+function applyIconDialogSave(field: FieldContract, fieldName: string): FieldContract {
   if (
     !isRecordField(field) ||
     field.fieldName !== fieldName ||
@@ -1288,10 +1275,10 @@ function applyIconDialogSave(field: FormlessUiField, fieldName: string): Formles
 }
 
 function withFixtureIconDialogDraft(
-  field: FormlessUiEditorField,
+  field: EditorField,
   dialogDraft: string,
   dialogOpen: boolean,
-): FormlessUiEditorField {
+): EditorField {
   const trimmedDraft = dialogDraft.trim();
   const emptyValue = trimmedDraft === "";
   const customParseError =
@@ -1322,10 +1309,7 @@ function withFixtureIconDialogDraft(
   };
 }
 
-function fixtureIconSelection(
-  field: FormlessUiEditorField,
-  source: string,
-): FormlessUiIconPickerSelection {
+function fixtureIconSelection(field: EditorField, source: string): IconPickerSelection {
   if (source.trim() === "") {
     return { kind: "empty" };
   }
@@ -1337,7 +1321,7 @@ function fixtureIconSelection(
     : { kind: "option", optionId: option.id, source };
 }
 
-function fixtureIconSavedSource(field: FormlessUiEditorField) {
+function fixtureIconSavedSource(field: EditorField) {
   if (isRecordField(field)) {
     return field.drafts.draft;
   }
@@ -1349,7 +1333,7 @@ function fixtureIconSavedSource(field: FormlessUiEditorField) {
       : "";
 }
 
-function applyRecordValueCommit(field: FormlessUiField, fieldName: string, value: FieldValue) {
+function applyRecordValueCommit(field: FieldContract, fieldName: string, value: FieldValue) {
   if (!isRecordField(field) || field.fieldName !== fieldName) {
     return field;
   }
@@ -1403,7 +1387,7 @@ function applyRecordValueCommit(field: FormlessUiField, fieldName: string, value
   );
 }
 
-function validateScenarioDraftChange<TField extends FormlessUiField>(
+function validateScenarioDraftChange<TField extends FieldContract>(
   field: TField,
   fieldValue: GeneratedFieldDraftInput,
 ): TField {
@@ -1444,7 +1428,7 @@ function validateScenarioDraftChange<TField extends FormlessUiField>(
 }
 
 function scenarioRecordEditorDraftInput(
-  field: FormlessUiRecordField,
+  field: RecordFieldContract,
   value: string,
 ): GeneratedFieldDraftInput {
   if (field.field.type !== "number") {
@@ -1474,7 +1458,7 @@ function scenarioRecordEditorDraftInput(
   return { kind: "input", value };
 }
 
-function scenarioRecordEditorText(field: FormlessUiRecordField, value: FieldValue | undefined) {
+function scenarioRecordEditorText(field: RecordFieldContract, value: FieldValue | undefined) {
   if (field.field.type !== "number" || typeof value !== "number") {
     return String(value ?? "");
   }
@@ -1492,7 +1476,7 @@ function scenarioRecordEditorText(field: FormlessUiRecordField, value: FieldValu
   return format === "number" ? scenarioPlainNumber(value) : String(value);
 }
 
-function scenarioNumberDisplayValue(field: FormlessUiRecordField, value: FieldValue | undefined) {
+function scenarioNumberDisplayValue(field: RecordFieldContract, value: FieldValue | undefined) {
   return scenarioRecordEditorText(field, value);
 }
 
@@ -1501,7 +1485,7 @@ function scenarioPlainNumber(value: number) {
 }
 
 function applyRecordValueUnitCommit(
-  field: FormlessUiField,
+  field: FieldContract,
   fieldName: string,
   commit: { fieldDraftInput: GeneratedFieldDraftInput; unitDraftInput: GeneratedFieldDraftInput },
 ) {
@@ -1568,10 +1552,10 @@ function applyRecordValueUnitCommit(
 }
 
 function applyStateTransition(
-  field: FormlessUiField,
+  field: FieldContract,
   fieldName: string,
   transitionName: string,
-): FormlessUiField {
+): FieldContract {
   if (field.fieldName !== fieldName || field.stateMachineFacts === undefined) {
     return field;
   }
@@ -1679,9 +1663,9 @@ function validateScenarioFieldValue(
 }
 
 function fixtureColorFacts(
-  control: FormlessUiFieldControl,
+  control: FieldControl,
   value: FieldValue | undefined,
-): FormlessUiColorFacts | undefined {
+): ColorFacts | undefined {
   if (control.controlKind !== "color") {
     return undefined;
   }
@@ -1712,7 +1696,7 @@ function fixtureExpandedHexColor(value: string): string | undefined {
   return `#${expanded.toUpperCase()}`;
 }
 
-function withFixtureCurrentColorFacts(field: FormlessUiField): FormlessUiField {
+function withFixtureCurrentColorFacts(field: FieldContract): FieldContract {
   if (field.control.controlKind !== "color") {
     return field;
   }
@@ -1731,9 +1715,9 @@ function withFixtureCurrentColorFacts(field: FormlessUiField): FormlessUiField {
 }
 
 function withFixtureEnumEditorValue(
-  field: FormlessUiField,
+  field: FieldContract,
   value: FieldValue | undefined,
-): FormlessUiField {
+): FieldContract {
   if (field.mode !== "editor" || field.field.type !== "enum") {
     return field;
   }
@@ -1755,10 +1739,10 @@ function withFixtureEnumEditorValue(
 }
 
 function withFixtureReferenceValue(
-  field: FormlessUiField,
+  field: FieldContract,
   value: FieldValue | undefined,
   { updateFormatting = false }: { updateFormatting?: boolean } = {},
-): FormlessUiField {
+): FieldContract {
   if (field.field.type !== "reference") {
     return field;
   }
@@ -1788,18 +1772,18 @@ function withFixtureReferenceValue(
   };
 }
 
-function removeFieldErrors(errors: readonly FormlessUiFieldError[] | undefined, fieldName: string) {
+function removeFieldErrors(errors: readonly FieldError[] | undefined, fieldName: string) {
   return (errors ?? []).filter((error) => error.fieldName !== fieldName);
 }
 
-function isRecordField(field: FormlessUiField): field is FormlessUiRecordField {
+function isRecordField(field: FieldContract): field is RecordFieldContract {
   return field.mode === "editor" && field.surface !== "create" && field.surface !== "operation";
 }
 
-function isCreateField(field: FormlessUiField): field is FormlessUiCreateField {
+function isCreateField(field: FieldContract): field is CreateFieldContract {
   return field.mode === "editor" && field.surface === "create";
 }
 
-function isOperationField(field: FormlessUiField): field is FormlessUiOperationInputField {
+function isOperationField(field: FieldContract): field is OperationInputFieldContract {
   return field.mode === "editor" && field.surface === "operation";
 }

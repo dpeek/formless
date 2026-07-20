@@ -7,10 +7,7 @@ import type {
   FieldScenarioGroup,
   FieldScenarioProjectionContext,
 } from "../field-scenario-model.ts";
-import type {
-  FormlessUiFieldSurface,
-  FormlessUiIconPickerFacts,
-} from "@dpeek/formless-presentation/contract";
+import type { FieldSurface, IconPickerFacts } from "@dpeek/formless-presentation/contract";
 import {
   createField,
   displayField,
@@ -60,9 +57,7 @@ export const iconScenarioGroups = [
   existingIconGroup("detail"),
 ] satisfies readonly FieldScenarioGroup[];
 
-function existingIconGroup(
-  surface: Extract<FormlessUiFieldSurface, "detail" | "record" | "table-cell">,
-) {
+function existingIconGroup(surface: Extract<FieldSurface, "detail" | "record" | "table-cell">) {
   return projectScenarioGroup({
     id: `source-icon-${surface}`,
     kind: "source-icon",
@@ -95,7 +90,7 @@ function projectCreateIconField({ facets }: FieldScenarioProjectionContext) {
 }
 
 function projectExistingIconField(
-  surface: Extract<FormlessUiFieldSurface, "detail" | "record" | "table-cell">,
+  surface: Extract<FieldSurface, "detail" | "record" | "table-cell">,
   { facets }: FieldScenarioProjectionContext,
 ) {
   const required = facets.requiredness === "required";
@@ -138,7 +133,7 @@ function iconValue(value: string | undefined) {
   return value === "catalog" ? pageIconSource : value === "custom" ? customIconSource : "";
 }
 
-function iconPickerFacts(value: string): FormlessUiIconPickerFacts {
+function iconPickerFacts(value: string): IconPickerFacts {
   const dialogDraft = value;
   const option = iconOptions.find((candidate) => candidate.source === dialogDraft);
 

@@ -3,13 +3,13 @@ import type { KeyboardEvent, ReactNode } from "react";
 import { Field, type FieldStatusInput } from "@astryxdesign/core/Field";
 import type { FieldValue, GeneratedFieldDraftInput } from "@dpeek/formless-schema";
 import type {
-  FormlessUiField,
-  FormlessUiFieldIntentHandler,
-  FormlessUiRecordField,
+  FieldContract,
+  FieldIntentHandler,
+  RecordFieldContract,
 } from "@dpeek/formless-presentation/contract";
 import type { AstryxInputDensity } from "../input-density.ts";
 
-export type FormlessUiEditorField = Extract<FormlessUiField, { mode: "editor" }>;
+export type EditorField = Extract<FieldContract, { mode: "editor" }>;
 export type FieldInputSize = "sm" | "md" | "lg";
 export type ISODateInputValue =
   `${number}${number}${number}${number}-${number}${number}-${number}${number}`;
@@ -20,7 +20,7 @@ export function FieldChrome({
   inputId,
 }: {
   children: ReactNode;
-  field: FormlessUiField;
+  field: FieldContract;
   inputId: string;
 }) {
   return (
@@ -38,7 +38,7 @@ export function FieldChrome({
   );
 }
 
-export function fieldChromeProps(field: FormlessUiEditorField) {
+export function fieldChromeProps(field: EditorField) {
   return {
     label: field.label,
     isLabelHidden: fieldLabelIsHidden(field),
@@ -51,7 +51,7 @@ export function fieldChromeProps(field: FormlessUiEditorField) {
   };
 }
 
-export function fieldStatus(field: FormlessUiField): FieldStatusInput | undefined {
+export function fieldStatus(field: FieldContract): FieldStatusInput | undefined {
   const error = field.errors?.[0];
 
   if (!error) {
@@ -64,11 +64,11 @@ export function fieldStatus(field: FormlessUiField): FieldStatusInput | undefine
   };
 }
 
-export function fieldDescription(field: FormlessUiField) {
+export function fieldDescription(field: FieldContract) {
   return field.access.kind === "disabled" ? field.access.disabledReason : undefined;
 }
 
-export function fieldInteractionIsDisabled(field: FormlessUiField) {
+export function fieldInteractionIsDisabled(field: FieldContract) {
   return (
     field.access.kind === "disabled" ||
     field.access.kind === "readOnly" ||
@@ -78,19 +78,19 @@ export function fieldInteractionIsDisabled(field: FormlessUiField) {
   );
 }
 
-export function fieldIsReadOnly(field: FormlessUiEditorField) {
+export function fieldIsReadOnly(field: EditorField) {
   return field.access.kind !== "editable";
 }
 
-export function fieldLabelIsHidden(field: FormlessUiField) {
+export function fieldLabelIsHidden(field: FieldContract) {
   return field.labelVisibility === "hidden";
 }
 
-function fieldRequiredMarkerIsVisible(field: FormlessUiField) {
+function fieldRequiredMarkerIsVisible(field: FieldContract) {
   return field.mode === "editor" && field.required && field.access.kind !== "stateMachine";
 }
 
-export function inputSize(field: FormlessUiField): FieldInputSize {
+export function inputSize(field: FieldContract): FieldInputSize {
   const density = astryxDensity(field);
 
   if (density === "compact") {
@@ -104,11 +104,11 @@ export function inputSize(field: FormlessUiField): FieldInputSize {
   return "md";
 }
 
-export function astryxDensity(field: FormlessUiField): AstryxInputDensity {
+export function astryxDensity(field: FieldContract): AstryxInputDensity {
   return field.density === "compact" ? "compact" : "balanced";
 }
 
-export function editorFieldValue(field: FormlessUiEditorField): FieldValue | string {
+export function editorFieldValue(field: EditorField): FieldValue | string {
   if (isRecordEditorField(field)) {
     if (field.rendererKind === "checkbox" || field.rendererKind === "completion-checkbox") {
       if (field.drafts.draftInput?.kind === "value") {
@@ -133,9 +133,9 @@ export function editorFieldValue(field: FormlessUiEditorField): FieldValue | str
 }
 
 export function emitFieldDraftChange(
-  field: FormlessUiEditorField,
+  field: EditorField,
   value: FieldValue | string,
-  onIntent: FormlessUiFieldIntentHandler | undefined,
+  onIntent: FieldIntentHandler | undefined,
 ) {
   if (field.surface === "create") {
     void onIntent?.({
@@ -172,9 +172,9 @@ export function emitFieldDraftChange(
 }
 
 export function emitRecordUnitDraftChange(
-  field: FormlessUiRecordField,
+  field: RecordFieldContract,
   unit: string,
-  onIntent: FormlessUiFieldIntentHandler | undefined,
+  onIntent: FieldIntentHandler | undefined,
 ) {
   if (!field.valueUnit) {
     return;
@@ -188,8 +188,8 @@ export function emitRecordUnitDraftChange(
 }
 
 export function emitRecordDraftCommit(
-  field: FormlessUiEditorField,
-  onIntent: FormlessUiFieldIntentHandler | undefined,
+  field: EditorField,
+  onIntent: FieldIntentHandler | undefined,
 ) {
   if (!isRecordEditorField(field)) {
     return;
@@ -203,9 +203,9 @@ export function emitRecordDraftCommit(
 }
 
 export function emitRecordDraftValueCommit(
-  field: FormlessUiEditorField,
+  field: EditorField,
   value: FieldValue | string,
-  onIntent: FormlessUiFieldIntentHandler | undefined,
+  onIntent: FieldIntentHandler | undefined,
 ) {
   if (!isRecordEditorField(field) || field.commit !== "field-commit") {
     return;
@@ -219,8 +219,8 @@ export function emitRecordDraftValueCommit(
 }
 
 export function emitRecordDraftRevert(
-  field: FormlessUiRecordField,
-  onIntent: FormlessUiFieldIntentHandler | undefined,
+  field: RecordFieldContract,
+  onIntent: FieldIntentHandler | undefined,
 ) {
   void onIntent?.({
     type: "recordDraftRevert",
@@ -228,10 +228,7 @@ export function emitRecordDraftRevert(
   });
 }
 
-export function recordCommitHandlers(
-  field: FormlessUiEditorField,
-  onIntent: FormlessUiFieldIntentHandler | undefined,
-) {
+export function recordCommitHandlers(field: EditorField, onIntent: FieldIntentHandler | undefined) {
   return {
     commitImmediate: (value: FieldValue | string) =>
       emitImmediateRecordFieldCommit(field, value, onIntent),
@@ -246,8 +243,8 @@ export function recordCommitHandlers(
 }
 
 export function valueUnitCommitHandlers(
-  field: FormlessUiRecordField,
-  onIntent: FormlessUiFieldIntentHandler | undefined,
+  field: RecordFieldContract,
+  onIntent: FieldIntentHandler | undefined,
 ) {
   return {
     commitImmediate: (value: FieldValue | string) =>
@@ -269,9 +266,9 @@ export function valueUnitCommitHandlers(
 }
 
 export function emitImmediateRecordFieldCommit(
-  field: FormlessUiEditorField,
+  field: EditorField,
   value: FieldValue | string,
-  onIntent: FormlessUiFieldIntentHandler | undefined,
+  onIntent: FieldIntentHandler | undefined,
 ) {
   if (!isRecordEditorField(field) || field.commit !== "immediate") {
     return;
@@ -281,9 +278,9 @@ export function emitImmediateRecordFieldCommit(
 }
 
 export function emitRecordFieldCommit(
-  field: FormlessUiEditorField,
+  field: EditorField,
   value: FieldValue | string,
-  onIntent: FormlessUiFieldIntentHandler | undefined,
+  onIntent: FieldIntentHandler | undefined,
 ) {
   if (!isRecordEditorField(field)) {
     return;
@@ -297,8 +294,8 @@ export function emitRecordFieldCommit(
 }
 
 export function emitRecordFieldRevert(
-  field: FormlessUiEditorField,
-  onIntent: FormlessUiFieldIntentHandler | undefined,
+  field: EditorField,
+  onIntent: FieldIntentHandler | undefined,
 ) {
   if (!isRecordEditorField(field)) {
     return;
@@ -311,9 +308,9 @@ export function emitRecordFieldRevert(
 }
 
 export function emitImmediateValueUnitCommit(
-  field: FormlessUiRecordField,
+  field: RecordFieldContract,
   fieldDraftInput: GeneratedFieldDraftInput,
-  onIntent: FormlessUiFieldIntentHandler | undefined,
+  onIntent: FieldIntentHandler | undefined,
 ) {
   if (field.commit !== "immediate") {
     return;
@@ -323,10 +320,10 @@ export function emitImmediateValueUnitCommit(
 }
 
 export function emitValueUnitCommit(
-  field: FormlessUiRecordField,
+  field: RecordFieldContract,
   fieldDraftInput: GeneratedFieldDraftInput,
   unitDraftInput: GeneratedFieldDraftInput | undefined,
-  onIntent: FormlessUiFieldIntentHandler | undefined,
+  onIntent: FieldIntentHandler | undefined,
 ) {
   if (!field.valueUnit) {
     return;
@@ -347,9 +344,9 @@ export function emitValueUnitCommit(
 }
 
 export function emitMediaAssetSelect(
-  field: FormlessUiEditorField,
+  field: EditorField,
   assetId: string,
-  onIntent: FormlessUiFieldIntentHandler | undefined,
+  onIntent: FieldIntentHandler | undefined,
 ) {
   if (isRecordEditorField(field)) {
     void onIntent?.({
@@ -372,7 +369,7 @@ export function draftInputFromValue(value: FieldValue | string): GeneratedFieldD
 }
 
 export function fieldValueFromDraftValue(
-  field: FormlessUiRecordField,
+  field: RecordFieldContract,
   value: FieldValue | string,
 ): FieldValue {
   if (field.field.type === "boolean") {
@@ -392,7 +389,7 @@ export function fieldValueFromDraftValue(
   return String(value);
 }
 
-export function numberDraftIsInvalid(field: FormlessUiEditorField) {
+export function numberDraftIsInvalid(field: EditorField) {
   if (field.control.controlKind !== "number") {
     return false;
   }
@@ -416,7 +413,7 @@ export function numberInputValue(value: string): number | null {
   return Number.isFinite(number) ? number : null;
 }
 
-export function defaultFormlessUiFieldInputId(field: FormlessUiField) {
+export function defaultFieldInputId(field: FieldContract) {
   return `formless-ui-field-${field.recordId ? `${field.recordId}-` : ""}${field.inputName ?? field.fieldName}`;
 }
 
@@ -424,7 +421,7 @@ export function formatInputValue(value: FieldValue | string | undefined) {
   return value === undefined ? "" : String(value);
 }
 
-export function isRecordEditorField(field: FormlessUiField): field is FormlessUiRecordField {
+export function isRecordEditorField(field: FieldContract): field is RecordFieldContract {
   return field.mode === "editor" && field.surface !== "create" && field.surface !== "operation";
 }
 

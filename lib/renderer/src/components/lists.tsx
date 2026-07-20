@@ -2,32 +2,28 @@ import { useState } from "react";
 import { Heading } from "@astryxdesign/core/Text";
 import { VStack } from "@astryxdesign/core/VStack";
 import type {
-  FormlessUiField,
-  FormlessUiFieldIntent,
-  FormlessUiListContract,
-  FormlessUiListIntent,
-  FormlessUiListItemContract,
-  FormlessUiListOperationActionContract,
-  FormlessUiOperationControlContract,
-  FormlessUiOperationPresentationIntent,
+  FieldContract,
+  FieldIntent,
+  ListContract,
+  ListIntent,
+  ListItemContract,
+  ListOperationActionContract,
+  OperationControlContract,
+  OperationPresentationIntent,
 } from "@dpeek/formless-presentation/contract";
 import { applyScenarioFieldIntent } from "./fields/fixture-helpers.ts";
 import { FormlessFixtureFrame, FormlessFixtureSelector } from "./fixture-layout.tsx";
-import { AstryxListRenderer } from "./formless-ui-list-renderer.tsx";
-import {
-  createFormlessUiListFixtures,
-  type FormlessUiListFixture,
-  type FormlessUiListFixtureId,
-} from "./lists.fixtures.ts";
+import { AstryxListRenderer } from "./list-renderer.tsx";
+import { createListFixtures, type ListFixture, type ListFixtureId } from "./lists.fixtures.ts";
 import { operationControlFixtures } from "./operation-controls.fixtures.ts";
 
 export function FormlessListsLayout() {
-  const [fixtures, setFixtures] = useState(createFormlessUiListFixtures);
-  const [selectedFixtureId, setSelectedFixtureId] = useState<FormlessUiListFixtureId>("active");
+  const [fixtures, setFixtures] = useState(createListFixtures);
+  const [selectedFixtureId, setSelectedFixtureId] = useState<ListFixtureId>("active");
   const selectedFixture =
     fixtures.find((fixture) => fixture.id === selectedFixtureId) ?? fixtures[0];
 
-  const updateSelectedList = (update: (list: FormlessUiListContract) => FormlessUiListContract) => {
+  const updateSelectedList = (update: (list: ListContract) => ListContract) => {
     setFixtures((currentFixtures) =>
       currentFixtures.map((fixture) =>
         fixture.id === selectedFixtureId ? { ...fixture, list: update(fixture.list) } : fixture,
@@ -74,11 +70,11 @@ export function FormlessListsLayout() {
 }
 
 export function applyListFieldIntent(
-  list: FormlessUiListContract,
+  list: ListContract,
   itemId: string,
-  sourceField: FormlessUiField,
-  intent: FormlessUiFieldIntent,
-): FormlessUiListContract {
+  sourceField: FieldContract,
+  intent: FieldIntent,
+): ListContract {
   return {
     ...list,
     items: list.items.map((item) =>
@@ -96,10 +92,7 @@ export function applyListFieldIntent(
   };
 }
 
-export function applyListIntent(
-  list: FormlessUiListContract,
-  intent: FormlessUiListIntent,
-): FormlessUiListContract {
+export function applyListIntent(list: ListContract, intent: ListIntent): ListContract {
   if (intent.listId !== list.id) {
     return list;
   }
@@ -108,10 +101,10 @@ export function applyListIntent(
 }
 
 export function applyListOperationIntent(
-  list: FormlessUiListContract,
-  sourceAction: FormlessUiListOperationActionContract,
-  intent: FormlessUiOperationPresentationIntent,
-): FormlessUiListContract {
+  list: ListContract,
+  sourceAction: ListOperationActionContract,
+  intent: OperationPresentationIntent,
+): ListContract {
   return mapListActions(list, (action) => {
     if (action.control.id !== sourceAction.control.id) {
       return action;
@@ -136,9 +129,7 @@ export function applyListOperationIntent(
   });
 }
 
-function fixtureOperationResult(
-  control: FormlessUiOperationControlContract,
-): FormlessUiOperationControlContract {
+function fixtureOperationResult(control: OperationControlContract): OperationControlContract {
   if (control.id === operationControlFixtures.deleteTask.initial.id) {
     return operationControlFixtures.deleteTask.settled;
   }
@@ -151,10 +142,10 @@ function fixtureOperationResult(
 }
 
 function reorderFixtureItems(
-  list: FormlessUiListContract,
+  list: ListContract,
   itemId: string,
   direction: "bottom" | "down" | "top" | "up",
-): FormlessUiListContract {
+): ListContract {
   const currentIndex = list.items.findIndex((item) => item.id === itemId);
   if (currentIndex < 0) {
     return list;
@@ -188,10 +179,10 @@ function reorderFixtureItems(
 }
 
 function withOrderingAvailability(
-  item: FormlessUiListItemContract,
+  item: ListItemContract,
   index: number,
   itemCount: number,
-): FormlessUiListItemContract {
+): ListItemContract {
   if (!item.ordering) {
     return item;
   }
@@ -230,9 +221,9 @@ function withOrderingAvailability(
 }
 
 function mapListActions(
-  list: FormlessUiListContract,
-  update: (action: FormlessUiListOperationActionContract) => FormlessUiListOperationActionContract,
-): FormlessUiListContract {
+  list: ListContract,
+  update: (action: ListOperationActionContract) => ListOperationActionContract,
+): ListContract {
   return {
     ...list,
     ...(list.emptyState?.action
@@ -249,13 +240,10 @@ function mapListActions(
   };
 }
 
-function sameFixtureField(left: FormlessUiField, right: FormlessUiField) {
+function sameFixtureField(left: FieldContract, right: FieldContract) {
   return left.fieldId === right.fieldId;
 }
 
-export function selectedListFixture(
-  fixtures: readonly FormlessUiListFixture[],
-  id: FormlessUiListFixtureId,
-) {
+export function selectedListFixture(fixtures: readonly ListFixture[], id: ListFixtureId) {
   return fixtures.find((fixture) => fixture.id === id);
 }

@@ -1,15 +1,15 @@
 import type {
-  FormlessUiButtonContract,
-  FormlessUiCreateField,
-  FormlessUiCreateSurfaceContract,
-  FormlessUiDocumentThemeActiveMode,
-  FormlessUiDocumentThemeContract,
-  FormlessUiDocumentThemeMode,
-  FormlessUiShellManifestContract,
-  FormlessUiShellNavigationSectionContract,
-  FormlessUiShellScope,
+  ButtonContract,
+  CreateFieldContract,
+  CreateSurfaceContract,
+  DocumentThemeActiveMode,
+  DocumentThemeContract,
+  DocumentThemeMode,
+  ShellManifestContract,
+  ShellNavigationSectionContract,
+  ShellScope,
 } from "@dpeek/formless-presentation/contract";
-import { formlessUiShellNavigationSectionReference } from "@dpeek/formless-presentation/contract-host";
+import { shellNavigationSectionReference } from "@dpeek/formless-presentation/host";
 
 export type FormlessApplicationShellFixtureId =
   | "app-only"
@@ -19,12 +19,12 @@ export type FormlessApplicationShellFixtureId =
   | "site-authoring";
 
 export type FormlessApplicationShellFixtureState = {
-  manifest: FormlessUiShellManifestContract;
-  sections: readonly FormlessUiShellNavigationSectionContract[];
+  manifest: ShellManifestContract;
+  sections: readonly ShellNavigationSectionContract[];
 };
 
 export type FormlessApplicationShellFixture = {
-  documentTheme: FormlessUiDocumentThemeContract | null;
+  documentTheme: DocumentThemeContract | null;
   id: FormlessApplicationShellFixtureId;
   label: string;
   routeLabel: string;
@@ -73,9 +73,7 @@ export function createFormlessApplicationShellFixtures(): FormlessApplicationShe
   ];
 }
 
-function fixedDocumentTheme(
-  mode: FormlessUiDocumentThemeActiveMode,
-): FormlessUiDocumentThemeContract {
+function fixedDocumentTheme(mode: DocumentThemeActiveMode): DocumentThemeContract {
   return {
     activeMode: mode,
     id: "theme:application",
@@ -85,12 +83,12 @@ function fixedDocumentTheme(
 }
 
 function userDocumentTheme(
-  selectedMode: FormlessUiDocumentThemeMode,
-  activeMode: FormlessUiDocumentThemeActiveMode,
-): FormlessUiDocumentThemeContract {
+  selectedMode: DocumentThemeMode,
+  activeMode: DocumentThemeActiveMode,
+): DocumentThemeContract {
   const themeId = "theme:application";
   const controlId = "control:theme-mode";
-  const option = (mode: FormlessUiDocumentThemeMode, label: string) => ({
+  const option = (mode: DocumentThemeMode, label: string) => ({
     label,
     mode,
     selectionIntent: {
@@ -218,8 +216,8 @@ function siteAuthoringShell(): FormlessApplicationShellFixtureState {
 
 function shell(
   title: string,
-  scope: FormlessUiShellScope,
-  sections: readonly FormlessUiShellNavigationSectionContract[],
+  scope: ShellScope,
+  sections: readonly ShellNavigationSectionContract[],
 ): FormlessApplicationShellFixtureState {
   const selectedSection = [...sections]
     .reverse()
@@ -238,7 +236,7 @@ function shell(
       id: shellId,
       kind: "shellManifest",
       navigationSections: sections.map((section) =>
-        formlessUiShellNavigationSectionReference(shellId, section.id),
+        shellNavigationSectionReference(shellId, section.id),
       ),
       scope,
       title,
@@ -247,7 +245,7 @@ function shell(
   };
 }
 
-function instanceSection(selectedHref: string | null): FormlessUiShellNavigationSectionContract {
+function instanceSection(selectedHref: string | null): ShellNavigationSectionContract {
   return section("instance", "instance", {
     destinations: [
       shellLink("instance:settings", "Settings", "/", selectedHref === "/"),
@@ -256,7 +254,7 @@ function instanceSection(selectedHref: string | null): FormlessUiShellNavigation
   });
 }
 
-function appSwitcherSection(selectedHref: string | null): FormlessUiShellNavigationSectionContract {
+function appSwitcherSection(selectedHref: string | null): ShellNavigationSectionContract {
   return section("apps", "appSwitcher", {
     destinations: applicationDestinations().map((destination) => ({
       ...destination,
@@ -280,7 +278,7 @@ function screenSection(
   appLabel: string,
   selectedHref: string,
   screens: readonly (readonly [id: string, label: string])[],
-): FormlessUiShellNavigationSectionContract {
+): ShellNavigationSectionContract {
   return section(`screens:${appKey}`, "screens", {
     accessibilityLabel: `${appLabel} screens`,
     destinations: screens.map(([id, label]) => {
@@ -300,7 +298,7 @@ function rootSection(
   label: string,
   roots: readonly (readonly [recordId: string, recordLabel: string, countText: string])[],
   withCreate = true,
-): FormlessUiShellNavigationSectionContract {
+): ShellNavigationSectionContract {
   const sectionId = `${shellId}:roots:${appKey}`;
 
   return section(`roots:${appKey}`, "rootRecords", {
@@ -343,7 +341,7 @@ function settingsSection(
       state: "clean" | "dirty" | "failed" | "queued" | "saved" | "saving";
     };
   },
-): FormlessUiShellNavigationSectionContract {
+): ShellNavigationSectionContract {
   const resetId = `${shellId}:reset:${appKey}`;
 
   return section(`settings:${appKey}`, "appSettings", {
@@ -392,7 +390,7 @@ function settingsSection(
   });
 }
 
-function sessionSection(): FormlessUiShellNavigationSectionContract {
+function sessionSection(): ShellNavigationSectionContract {
   return section("owner-session", "session", {
     session: {
       id: `${shellId}:session`,
@@ -409,14 +407,14 @@ function sessionSection(): FormlessUiShellNavigationSectionContract {
 
 function section(
   idSuffix: string,
-  role: FormlessUiShellNavigationSectionContract["role"],
+  role: ShellNavigationSectionContract["role"],
   options: Partial<
     Pick<
-      FormlessUiShellNavigationSectionContract,
+      ShellNavigationSectionContract,
       "accessibilityLabel" | "createSurface" | "destinations" | "label" | "session" | "settings"
     >
   > = {},
-): FormlessUiShellNavigationSectionContract {
+): ShellNavigationSectionContract {
   const id = `${shellId}:${idSuffix}`;
 
   return {
@@ -445,7 +443,7 @@ function shellLink(id: string, label: string, href: string, selected = false) {
   };
 }
 
-function createSurface(appKey: string, label: string): FormlessUiCreateSurfaceContract {
+function createSurface(appKey: string, label: string): CreateSurfaceContract {
   const id = `${shellId}:create:${appKey}`;
 
   return {
@@ -482,12 +480,12 @@ function createSurface(appKey: string, label: string): FormlessUiCreateSurfaceCo
   };
 }
 
-function createTitleField(surfaceId: string, label: string): FormlessUiCreateField {
+function createTitleField(surfaceId: string, label: string): CreateFieldContract {
   const field = {
     label: `${label} name`,
     required: true,
     type: "text" as const,
-  } satisfies FormlessUiCreateField["field"];
+  } satisfies CreateFieldContract["field"];
   const control = {
     control: { inputType: "text" as const, kind: "input" as const },
     controlKind: "text" as const,
@@ -499,7 +497,7 @@ function createTitleField(surfaceId: string, label: string): FormlessUiCreateFie
     kind: "text" as const,
     label: field.label,
     required: true,
-  } satisfies Extract<FormlessUiCreateField["control"], { kind: "text" }>;
+  } satisfies Extract<CreateFieldContract["control"], { kind: "text" }>;
 
   return {
     access: { canPatch: true, kind: "editable", writable: true },
@@ -523,9 +521,9 @@ function createTitleField(surfaceId: string, label: string): FormlessUiCreateFie
 function button(
   id: string,
   label: string,
-  prominence: FormlessUiButtonContract["prominence"] = "secondary",
-  type: FormlessUiButtonContract["type"] = "button",
-): FormlessUiButtonContract {
+  prominence: ButtonContract["prominence"] = "secondary",
+  type: ButtonContract["type"] = "button",
+): ButtonContract {
   return {
     accessibilityLabel: label,
     content: { kind: "label", label },

@@ -307,7 +307,7 @@ summary slots, operation controls, and schema-declared result types.
 
 The system SHALL project complete generated screens whose collection sections
 use list, table, record, or tree results through a controlled renderer-neutral
-Formless UI workspace contract while generated runtime code owns model
+Presentation workspace contract while generated runtime code owns model
 selection, reads, evaluation, operation execution, and effects.
 
 #### Scenario: Select complete workspace composition
@@ -325,7 +325,7 @@ selection, reads, evaluation, operation execution, and effects.
 #### Scenario: Project complete screen and collection presentation
 
 - GIVEN a generated workspace screen is selected
-- WHEN generated runtime prepares it for the active Formless UI renderer
+- WHEN generated runtime prepares it for the Formless Renderer
 - THEN the workspace contract carries stable screen identity, an accessible
   label, ordered section identity and labels, section actions, and one complete
   collection contract per section, plus ordered renderer-neutral workspace link
@@ -429,7 +429,7 @@ selection, reads, evaluation, operation execution, and effects.
   queries, counts, aggregates, or computed values, own route or authoring
   state, build operation input, execute operations, or update sync state
 - AND generated runtime and test source uses documented
-  `@dpeek/formless-presentation` contract and contract-host exports without
+  `@dpeek/formless-presentation` contract and host exports without
   owning presentation implementation
 - AND focused coverage asserts projected facts, nested intent dispatch,
   selection fallback, context changes, counts, summaries, actions, result
@@ -475,7 +475,7 @@ selection, reads, evaluation, operation execution, and effects.
 ### Requirement: Generated Tree Builder Renderer Contract
 
 The system SHALL project complete generated tree results through a controlled
-renderer-neutral Formless UI tree-builder contract while generated runtime
+renderer-neutral Presentation tree-builder contract while generated runtime
 owns flat record reads, tree-model selection, traversal, authoring state,
 operation execution, ordering plans, navigation, and effects.
 
@@ -565,12 +565,12 @@ operation execution, ordering plans, navigation, and effects.
 
 #### Scenario: Selected tree renderer consumes the complete contract
 
-- GIVEN production tree workspaces use the generated workspace contract host
+- GIVEN production tree workspaces use the generated workspace Presentation Host
 - WHEN the generated tree foundation publishes a complete tree-result node
 - THEN the subscribed Formless Renderer tree entrypoint reads only the scoped
   tree-result reference and delegates to a pure complete-snapshot renderer
 - AND generated runtime and test source uses documented
-  `@dpeek/formless-presentation` contract and contract-host exports without
+  `@dpeek/formless-presentation` contract and host exports without
   owning tree presentation
 - AND production tree sections use the same generated workspace host path as
   list, table, and record results without a direct tree fallback
@@ -592,7 +592,7 @@ operation execution, ordering plans, navigation, and effects.
   operations; own DnD behavior; use media clients; run sync effects; or import
   runtime modules
 
-### Requirement: Reactive Generated UI Contract Host
+### Requirement: Reactive Generated UI Presentation Host
 
 The system SHALL expose generated workspace contracts through a
 stable renderer-neutral reactive host that supports concurrency-safe scoped
@@ -682,7 +682,7 @@ entrypoints.
 - AND extending the host does not replace the client store or change auth-route
   or public Site behavior
 
-### Requirement: Reactive Application Shell Contract Host
+### Requirement: Reactive Application Shell Presentation Host
 
 The system SHALL expose eligible application shell presentation through the
 stable renderer-neutral reactive host while runtime code owns route selection,
@@ -795,13 +795,13 @@ data reads, session behavior, operations, and effects.
 ### Requirement: Generated List Renderer Contract
 
 The system SHALL project complete generated list results through a controlled
-renderer-neutral Formless UI list contract while generated runtime code owns
+renderer-neutral Presentation list contract while generated runtime code owns
 record reads, authoring state, operation execution, and ordering effects.
 
 #### Scenario: Project complete list result
 
 - GIVEN generated UI selects a list result model
-- WHEN generated runtime prepares the list for the active Formless UI renderer
+- WHEN generated runtime prepares the list for the Formless Renderer
 - THEN it projects a stable list id, accessible label, density, ordered items,
   empty state, and editing availability
 - AND each list item carries a stable id, accessible label, projected record
@@ -810,7 +810,7 @@ record reads, authoring state, operation execution, and ordering effects.
 - AND each projected list field carries a stable occurrence id scoped by the
   list result, item record, and field placement, so the same schema field in a
   different item or result has a different identity
-- AND ordinary and specialized list fields cross their applicable Formless UI
+- AND ordinary and specialized list fields cross their applicable Presentation
   field contract boundaries before entering the list renderer
 - AND state transitions, delete controls, destructive confirmations, pending
   state, and execution feedback compose existing operation-control contracts
@@ -907,19 +907,19 @@ record reads, authoring state, operation execution, and ordering effects.
 ### Requirement: Generated Record Result Renderer Contract
 
 The system SHALL project complete generated record results through a controlled
-renderer-neutral Formless UI record-result contract while generated runtime
+renderer-neutral Presentation record-result contract while generated runtime
 code owns record selection, authoring state, operation execution, and effects.
 
 #### Scenario: Project complete record result
 
 - GIVEN generated UI selects a record result model
-- WHEN generated runtime prepares the result for the active Formless UI renderer
+- WHEN generated runtime prepares the result for the Formless Renderer
 - THEN it projects a stable result id, accessible label, density, ready, empty,
   or unavailable state, selected record identity, editing availability, ordered
   fields, explicit action hierarchy, display-safe readiness warnings, and
   operation feedback
 - AND ordinary, read-only, icon, media, color, value-unit, quiet-date, Markdown,
-  rich-enum, and state-machine fields cross their applicable Formless UI field
+  rich-enum, and state-machine fields cross their applicable Presentation field
   contract boundaries before entering the result renderer
 - AND state-machine fields carry display-safe lifecycle presentation while valid
   transition and delete actions compose operation-control contracts with
@@ -1025,13 +1025,13 @@ computed, operation-control, and ordering-handle columns.
 ### Requirement: Generated Table Renderer Contract
 
 The system SHALL project complete generated table results through a controlled
-renderer-neutral Formless UI table contract while generated runtime code owns
+renderer-neutral Presentation table contract while generated runtime code owns
 record reads, authoring state, operation execution, and ordering effects.
 
 #### Scenario: Project complete table result
 
 - GIVEN generated UI selects a table result model
-- WHEN generated runtime prepares the table for the active Formless UI renderer
+- WHEN generated runtime prepares the table for the Formless Renderer
 - THEN it projects a stable table id, accessible label, density, semantic column
   definitions, ordered rows, cells, empty state, editing availability, readiness
   warnings, and aggregate footer values
@@ -1044,7 +1044,7 @@ record reads, authoring state, operation execution, and ordering effects.
 - AND an inline field occurrence is scoped by its table cell while a dialog
   field occurrence is scoped by its edit field set, and table draft context ids
   remain separate from field occurrence ids
-- AND ordinary and specialized table fields cross their applicable Formless UI
+- AND ordinary and specialized table fields cross their applicable Presentation
   field contract boundaries before entering the table renderer
 - AND generated runtime retains query evaluation, record and system-field
   reads, reference resolution, computed and aggregate evaluation, readiness
@@ -1202,13 +1202,13 @@ The system SHALL render generated field displays and editors from field behavior
   runtime-owned client path, generated UI may use those options without
   changing the stored app record value shape
 
-#### Scenario: Formless UI field contract boundary
+#### Scenario: Presentation field contract boundary
 
 - GIVEN generated UI renders create forms, record editors, table cells, detail
   fields, Site block authoring fields, or public operation input fields through
-  a Formless UI field renderer
+  the Formless Renderer field entrypoint
 - WHEN the foundation model prepares field data for the view layer
-- THEN it projects each renderable field as `FormlessUiField` data with a stable
+- THEN it projects each renderable field as `FieldContract` data with a stable
   field id, field or input name, label, required state, surface, density, access
   mode, editor or display kind, draft value, committed display value, options,
   presentation metadata, commit policy, pending state, and display-safe field
@@ -1231,8 +1231,8 @@ The system SHALL render generated field displays and editors from field behavior
   core contract does not require browser form names, hidden inputs, or
   `FormData` extraction
 - AND browser submit-form adapters may project HTML field names and hidden
-  inputs from `FormlessUiField` data only at the submit-form boundary
-- AND production generated surfaces render `FormlessUiField` through the
+  inputs from `FieldContract` data only at the submit-form boundary
+- AND production generated surfaces render `FieldContract` through the
   Formless Renderer field entrypoint
 - AND renderer implementations do not import schema parser internals, browser
   replica APIs, app target selectors, write option hooks, `submitOperation`,
@@ -1244,7 +1244,7 @@ The system SHALL render generated field displays and editors from field behavior
 
 - GIVEN the same schema field or operation input can be rendered for different
   records, results, surfaces, cells, dialogs, forms, or other placements
-- WHEN generated runtime projects those fields through `FormlessUiField`
+- WHEN generated runtime projects those fields through `FieldContract`
 - THEN every projected field carries a required opaque `fieldId` identifying
   exactly one occurrence within its published root contract graph
 - AND `fieldName` remains the schema and stored-data key while `inputName`
@@ -1269,7 +1269,7 @@ The system SHALL render generated field displays and editors from field behavior
   record-result placement id, arbitrary nested object id, or recursive contract
   match as a field occurrence id
 
-#### Scenario: Common Formless UI contract foundation
+#### Scenario: Common Presentation contract foundation
 
 - GIVEN generated UI prepares renderer-facing contracts across selected
   presentation surfaces
@@ -1292,15 +1292,14 @@ The system SHALL render generated field displays and editors from field behavior
 ### Requirement: Generated Create Surface Contract
 
 The system SHALL project generated create triggers, dialogs, and forms through a
-controlled Formless UI create-surface contract while generated runtime code
+controlled Presentation create-surface contract while generated runtime code
 owns create policy, draft state, validation, and operation execution.
 
 #### Scenario: Project controlled create surface
 
 - GIVEN a generated collection, context selector, list-detail selector, or root
   navigation group exposes a create operation
-- WHEN generated runtime prepares the create control for the active Formless UI
-  renderer
+- WHEN generated runtime prepares the create control for the Formless Renderer
 - THEN it projects a stable create-surface id, semantic trigger content,
   accessible trigger label, disabled state and reason, controlled dialog open
   state, dialog title, projected create field set, form-level errors, cancel
@@ -1370,7 +1369,7 @@ owns create policy, draft state, validation, and operation execution.
 ### Requirement: Generated Record Field Renderer Contract
 
 The system SHALL project supported existing-record field editors and read-only
-field displays through the Formless UI field contract while generated runtime
+field displays through the Presentation field contract while generated runtime
 code owns record reads, draft state, field visibility, update resolution, and
 operation execution.
 
@@ -1378,8 +1377,8 @@ operation execution.
 
 - GIVEN a generated record-result, list, or table surface renders an ordinary
   writable or read-only field
-- WHEN generated runtime prepares that field for the active Formless UI renderer
-- THEN it projects a `FormlessUiRecordField` or `FormlessUiDisplayField` with a
+- WHEN generated runtime prepares that field for the Formless Renderer
+- THEN it projects a `RecordFieldContract` or `DisplayFieldContract` with a
   stable field id, record id, access mode, committed value, controlled draft,
   display formatting, density, label visibility, pending state, display-safe
   errors, projected options, commit policy, and field intents
@@ -1398,8 +1397,7 @@ operation execution.
 
 - GIVEN a generated record result renders icon, media, color, value-unit,
   quiet-date, Markdown, rich-enum, or state-machine fields
-- WHEN generated runtime prepares those fields for the active Formless UI
-  renderer
+- WHEN generated runtime prepares those fields for the Formless Renderer
 - THEN source-backed icon options and dialog state, media presentation and
   upload facts, color drafts and fallbacks, formatted values and units, temporal
   display, enum presentation, label visibility, density, and state-machine
@@ -1435,7 +1433,7 @@ operation execution.
 - GIVEN runtime publishes ordinary production record field contracts
 - WHEN renderer UX is evaluated in `lib/renderer`
 - THEN unexported package-local data-only fixtures provide representative
-  `FormlessUiRecordField` and `FormlessUiDisplayField` values using the same
+  `RecordFieldContract` and `DisplayFieldContract` values using the same
   contract shapes as production
 - AND fixture coverage includes editable, read-only, dirty, invalid, pending,
   compact, default, heading, visible-label detail, missing-reference, and
@@ -1444,11 +1442,11 @@ operation execution.
   browser replica reads, storage records, operation execution, media clients, or
   sync behavior
 
-#### Scenario: Formless UI field contract coverage
+#### Scenario: Presentation field contract coverage
 
 - GIVEN generated UI projects supported field display and editor kinds to
-  `FormlessUiField`
-- WHEN the active Formless UI renderer renders the projected fields
+  `FieldContract`
+- WHEN the Formless Renderer renders the projected fields
 - THEN text, long text, number, date, boolean, enum, reference, markdown
   display, icon display, source SVG icon display, color, and media
   fields share field framing, labels, status, density, and keyboard
@@ -1469,8 +1467,8 @@ operation execution.
 #### Scenario: Source-backed icon picker contract
 
 - GIVEN a generated icon editor field stores an SVG source string
-- WHEN generated UI projects the field through the Formless UI field contract
-- THEN it includes default runtime icon catalog options as `FormlessUiIconOption`
+- WHEN generated UI projects the field through the Presentation field contract
+- THEN it includes default runtime icon catalog options as `IconOption`
   facts with ids, labels, groups, and SVG sources
 - AND catalog selection matches by option `source` while SVG-source storage
   remains active
@@ -1480,15 +1478,15 @@ operation execution.
   catalog, parsing app schema, importing runtime icon components, or changing
   stored icon values to ids
 
-#### Scenario: Formless UI generated-field contract vertical slice
+#### Scenario: Presentation generated-field contract vertical slice
 
-- GIVEN the selected Formless UI renderer renders a generated-field vertical
+- GIVEN the Formless Renderer renders a generated-field vertical
   slice
 - WHEN the slice renders one coherent record workflow and one public operation
   form workflow
 - THEN create form fields, record edit fields, table-cell fields, detail or
   read-only fields, and public-action form fields are composed from the same
-  projected `FormlessUiField` contract
+  projected `FieldContract`
 - AND a package-local generated foundation fixture owns shared draft state,
   validation errors, pending state, baseline values, commit, revert, missing
   reference fallback, and submit readiness for the slice
@@ -1505,10 +1503,10 @@ operation execution.
 - AND media asset ids and preview hrefs remain renderer contract facts while
   media fields render only image thumbnails
 
-#### Scenario: Public Site renderer stays outside the application contract host
+#### Scenario: Public Site renderer stays outside the application Presentation Host
 
 - GIVEN generated admin, shell, management, auth, and access presentation use
-  the reactive `FormlessUiContractHost`
+  the reactive `PresentationHost`
 - WHEN public Site page, block, frame, system-state, or form presentation is
   rendered
 - THEN successful public pages consume the Site-owned component-shaped
@@ -1518,15 +1516,15 @@ operation execution.
   Site foundations retain validation, coercion, challenge, idempotency, and
   public operation execution
 - AND `@dpeek/formless-renderer` may adapt generic public operation fields to
-  canonical `FormlessUiField` controls inside the package without importing the
-  application contract host or generated admin runtime into the public graph
+  canonical `FieldContract` controls inside the package without importing the
+  application Presentation Host or generated admin runtime into the public graph
 - AND production browser and Worker roots mount the Formless Renderer page and
   system-state entrypoints through explicit public Site assembly
 
 ### Requirement: Media Field Renderer Boundary
 
 The system SHALL keep generated field layout and commit behavior in generated UI
-while delegating media-specific controls to the active Formless UI renderer.
+while delegating media-specific controls to the Formless Renderer.
 
 #### Scenario: Media editor uses renderer contract
 
@@ -1534,7 +1532,7 @@ while delegating media-specific controls to the active Formless UI renderer.
 - WHEN generated UI renders the field
 - THEN generated UI projects media asset options, selected asset state, preview
   facts, upload availability, and file-select intent routing through the
-  Formless UI field contract
+  Presentation field contract
 - AND the active renderer handles asset selection, upload file selection,
   preview, and broken-asset display through projected facts and intent callbacks
 - AND media editors, media libraries, and media displays render image thumbnails
@@ -1553,12 +1551,12 @@ The system SHALL honor generated create, edit, `visibleWhen`, create default, un
 #### Scenario: Shared authoring session foundation
 
 - GIVEN generated create forms, record update/edit surfaces, public operation
-  forms, or generated Formless UI projections author field-shaped values
+  forms, or generated Presentation projections author field-shaped values
 - WHEN the user changes authored values
 - THEN a generated authoring session owns typed draft values, visible field
   selection, field errors, submit or commit readiness, and optional baseline
   values for future save/cancel behavior
-- AND generated controls and Formless UI projections read from and write to that
+- AND generated controls and Presentation projections read from and write to that
   session as the source of truth instead of reading values back from browser
   form controls
 - AND schema-owned or generated-ui-owned resolvers convert typed drafts into
@@ -1617,7 +1615,7 @@ The system SHALL honor generated create, edit, `visibleWhen`, create default, un
 
 - GIVEN an existing record edit session contains committed baseline values and
   typed draft values for writable generated fields
-- WHEN a field commit, edit dialog submit, or generated Formless UI record intent
+- WHEN a field commit, edit dialog submit, or generated Presentation record intent
   prepares an update
 - THEN generated UI resolves the draft through a generated patch resolver before
   invoking the declared update operation
@@ -1762,9 +1760,9 @@ entity operations and view operation bindings.
 - AND progress state does not expose app targets, gateway proxy details,
   filesystem paths, provider secrets, raw logs, or internal tokens
 
-#### Scenario: Formless UI operation control boundary
+#### Scenario: Presentation operation control boundary
 
-- GIVEN generated UI renders operation controls through a Formless UI renderer
+- GIVEN generated UI renders operation controls through the Formless Renderer
 - WHEN buttons, menu items, submit buttons, confirmation dialogs, progress
   indicators, compact status, or toast feedback render
 - THEN the renderer consumes only projected operation control data, current
@@ -1782,7 +1780,7 @@ entity operations and view operation bindings.
 
 - GIVEN generated UI prepares a collection command, record-delete control,
   compact operation status, or operation progress presentation
-- WHEN it projects the control for a Formless UI renderer
+- WHEN it projects the control for the Formless Renderer
 - THEN the renderer contract carries a stable control id, explicit button
   content, semantic prominence, density, accessibility label, availability,
   disabled reason, pending state, optional count badge, optional controlled
@@ -1811,7 +1809,7 @@ entity operations and view operation bindings.
 
 - GIVEN production collection commands, record deletion, compact status, and
   progress output publish complete renderer-neutral contracts
-- WHEN generated runtime publishes those leaves through the Formless UI
+- WHEN generated runtime publishes those leaves through the Presentation
   operation contract
 - THEN Formless Renderer entrypoints render the projected controls,
   confirmations, status, and progress while dispatching only presentation and
@@ -1891,7 +1889,7 @@ entity operations and view operation bindings.
 - THEN generated UI uses a client-side controlled generated operation draft
   session as the source of truth for submitted input values
 - AND the public form reuses generated field projection, editor selection,
-  display-safe validation, and Formless UI field data for supported text,
+  display-safe validation, and Presentation field data for supported text,
   long text, boolean, date, number, and enum input fields
 - AND each projected operation input field carries an occurrence id scoped by
   its hosting block, form, or control and declared input name
@@ -2012,7 +2010,7 @@ status fields.
 - THEN generated UI treats the field as read-only outside transition controls
 - AND create forms allow the initial state behavior declared by the schema
 
-### Requirement: Reactive Instance Management Contract Host
+### Requirement: Reactive Instance Management Presentation Host
 
 The system SHALL expose the product instance overview through complete
 renderer-neutral management contracts on the stable application host while
@@ -2119,7 +2117,7 @@ navigation, and external effects.
   without importing generated runtime, control-plane clients, gateway clients,
   storage, browser replica, operation controllers, routing, or browser effects
 - AND fixtures contain no secrets or behavior that bypasses the canonical
-  contract host
+  Presentation Host
 
 ### Requirement: Schema-Driven Instance Management UI
 
@@ -2481,7 +2479,7 @@ behavior for onboarding steps that write schema records.
 ### Requirement: Document Theme Renderer Contract
 
 The system SHALL present application document theme policy and mode through a
-controlled renderer-neutral Formless UI contract while the application runtime
+controlled renderer-neutral Presentation contract while the application runtime
 retains preference storage, system-mode resolution, browser bootstrap, and
 document effects.
 
@@ -2574,7 +2572,7 @@ while route and runtime foundations retain state selection and effects.
 
 The system SHALL mount one complete Formless Renderer application assembly at
 production roots while runtime foundations retain data, state, policy, effects,
-routing, and stable contract-host ownership.
+routing, and stable Presentation Host ownership.
 
 #### Scenario: Root assembly selects presentation once
 

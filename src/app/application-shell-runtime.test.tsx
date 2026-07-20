@@ -2,15 +2,12 @@ import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import type { ReactNode } from "react";
 import type {
-  FormlessUiDocumentThemeContract,
-  FormlessUiShellNavigationSectionReference,
+  DocumentThemeContract,
+  ShellNavigationSectionReference,
 } from "@dpeek/formless-presentation/contract";
-import type { FormlessUiContractHost } from "@dpeek/formless-presentation/contract-host";
-import {
-  formlessUiDocumentThemeReference,
-  formlessUiShellManifestReference,
-} from "@dpeek/formless-presentation/contract-host";
-import { useFormlessUiContractHost } from "@dpeek/formless-presentation/contract-host/react";
+import type { PresentationHost } from "@dpeek/formless-presentation/host";
+import { documentThemeReference, shellManifestReference } from "@dpeek/formless-presentation/host";
+import { usePresentationHost } from "@dpeek/formless-presentation/host/react";
 import type { StoredRecord } from "@dpeek/formless-storage";
 import { applyBootstrapResponse, resetClientStore } from "../client/store.ts";
 import { resetSyncStatus } from "../client/sync-status.ts";
@@ -42,18 +39,18 @@ describe("application shell runtime boundary", () => {
     applyBootstrapResponse(bootstrapResponse(taskSourceSchema, []), "tasks");
     const runtimeProfile = createDevRuntimeProfile();
     const routeWorld = required(findRuntimeWorldMountByRoute(runtimeProfile, "/tasks"));
-    const reference = formlessUiDocumentThemeReference("theme:application");
-    const snapshot: FormlessUiDocumentThemeContract = {
+    const reference = documentThemeReference("theme:application");
+    const snapshot: DocumentThemeContract = {
       activeMode: "dark",
       id: reference.themeId,
       kind: "documentTheme",
       policy: { kind: "fixed", mode: "dark" },
     };
-    let host: FormlessUiContractHost | undefined;
+    let host: PresentationHost | undefined;
     let renderer: ReactTestRenderer | undefined;
 
     function HostProbe() {
-      host = useFormlessUiContractHost();
+      host = usePresentationHost();
       return null;
     }
 
@@ -89,7 +86,7 @@ describe("application shell runtime boundary", () => {
     const runtimeProfile = createDevRuntimeProfile();
     const routeWorld = required(findRuntimeWorldMountByRoute(runtimeProfile, "/tasks"));
     const screen = rootScreenFixture();
-    let host: FormlessUiContractHost | undefined;
+    let host: PresentationHost | undefined;
     let selectedRecordId: string | null = null;
     let createShouldFail = false;
     const submittedValues: unknown[] = [];
@@ -105,7 +102,7 @@ describe("application shell runtime boundary", () => {
     let renderer: ReactTestRenderer | undefined;
 
     function HostProbe({ children }: { children: ReactNode }) {
-      host = useFormlessUiContractHost();
+      host = usePresentationHost();
       return children;
     }
 
@@ -254,7 +251,7 @@ describe("application shell runtime boundary", () => {
     applyBootstrapResponse(bootstrapResponse(taskSourceSchema, []), "tasks");
     const runtimeProfile = createDevRuntimeProfile();
     const routeWorld = required(findRuntimeWorldMountByRoute(runtimeProfile, "/tasks"));
-    let host: FormlessUiContractHost | undefined;
+    let host: PresentationHost | undefined;
     let resetCount = 0;
     let logoutCount = 0;
     const navigations: string[] = [];
@@ -274,7 +271,7 @@ describe("application shell runtime boundary", () => {
     let renderer: ReactTestRenderer | undefined;
 
     function HostProbe({ children }: { children: ReactNode }) {
-      host = useFormlessUiContractHost();
+      host = usePresentationHost();
       return children;
     }
 
@@ -367,14 +364,14 @@ describe("application shell runtime boundary", () => {
   });
 });
 
-function readSections(host: FormlessUiContractHost) {
-  const manifest = required(host.read(formlessUiShellManifestReference("application-shell")));
+function readSections(host: PresentationHost) {
+  const manifest = required(host.read(shellManifestReference("application-shell")));
 
   return manifest.navigationSections.map((reference) => required(host.read(reference)));
 }
 
-function readSection(host: FormlessUiContractHost, sectionId: string) {
-  const reference: FormlessUiShellNavigationSectionReference = {
+function readSection(host: PresentationHost, sectionId: string) {
+  const reference: ShellNavigationSectionReference = {
     kind: "shellNavigationSectionReference",
     role: "shellNavigationSection",
     sectionId,

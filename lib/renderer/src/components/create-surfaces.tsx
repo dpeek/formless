@@ -7,16 +7,16 @@ import { VStack } from "@astryxdesign/core/VStack";
 import { colorVars, spacingVars } from "@astryxdesign/core/theme/tokens.stylex";
 import type { FieldSchema } from "@dpeek/formless-schema";
 import type {
-  FormlessUiButtonContract,
-  FormlessUiCreateField,
-  FormlessUiCreateIntent,
-  FormlessUiCreateIntentHandler,
-  FormlessUiCreateSurfaceContract,
-  FormlessUiFieldIntent,
+  ButtonContract,
+  CreateFieldContract,
+  CreateIntent,
+  CreateIntentHandler,
+  CreateSurfaceContract,
+  FieldIntent,
 } from "@dpeek/formless-presentation/contract";
 import { FormlessFixtureFrame } from "./fixture-layout.tsx";
 import { createField, fieldError, textControl } from "./fields/fixture-helpers.ts";
-import { AstryxCreateSurfaceRenderer } from "./formless-ui-create-renderer.tsx";
+import { AstryxCreateSurfaceRenderer } from "./create-renderer.tsx";
 
 const requiredTaskMessage = "Task is required.";
 const submissionFailureMessage = "The task could not be created. Try again.";
@@ -85,19 +85,19 @@ const createSurfaceFixtures = [
     disabledReason: "Create task requires a selected context.",
     task: "",
   }),
-] satisfies readonly FormlessUiCreateSurfaceContract[];
+] satisfies readonly CreateSurfaceContract[];
 
 const initiallyFailedSurfaceIds = new Set(["create-root"]);
 
 export function FormlessCreateSurfacesLayout() {
-  const [surfaces, setSurfaces] = useState<FormlessUiCreateSurfaceContract[]>(() =>
+  const [surfaces, setSurfaces] = useState<CreateSurfaceContract[]>(() =>
     createSurfaceFixtures.map(cloneCreateSurface),
   );
   const [failedSurfaceIds, setFailedSurfaceIds] = useState<Set<string>>(
     () => new Set(initiallyFailedSurfaceIds),
   );
 
-  function handleFieldIntent(surfaceId: string, fieldId: string, intent: FormlessUiFieldIntent) {
+  function handleFieldIntent(surfaceId: string, fieldId: string, intent: FieldIntent) {
     setSurfaces((currentSurfaces) =>
       currentSurfaces.map((surface) =>
         surface.id === surfaceId ? applyCreateFieldIntent(surface, fieldId, intent) : surface,
@@ -105,7 +105,7 @@ export function FormlessCreateSurfacesLayout() {
     );
   }
 
-  async function handleCreateIntent(intent: FormlessUiCreateIntent) {
+  async function handleCreateIntent(intent: CreateIntent) {
     if (intent.type === "createOpenChange") {
       setSurfaces((currentSurfaces) =>
         currentSurfaces.map((surface) => {
@@ -203,9 +203,9 @@ function CreateTriggerGroup({
   surfaces,
   title,
 }: {
-  onFieldIntent: (surfaceId: string, fieldId: string, intent: FormlessUiFieldIntent) => void;
-  onIntent: FormlessUiCreateIntentHandler;
-  surfaces: readonly FormlessUiCreateSurfaceContract[];
+  onFieldIntent: (surfaceId: string, fieldId: string, intent: FieldIntent) => void;
+  onIntent: CreateIntentHandler;
+  surfaces: readonly CreateSurfaceContract[];
   title: string;
 }) {
   return (
@@ -238,16 +238,16 @@ function createSurfaceFixture({
   trigger,
   triggerLabel,
 }: {
-  density?: FormlessUiButtonContract["density"];
+  density?: ButtonContract["density"];
   disabledReason?: string;
   formErrors?: readonly string[];
   id: string;
-  prominence?: FormlessUiButtonContract["prominence"];
+  prominence?: ButtonContract["prominence"];
   task: string;
   title: string;
-  trigger: FormlessUiButtonContract["content"];
+  trigger: ButtonContract["content"];
   triggerLabel?: string;
-}): FormlessUiCreateSurfaceContract {
+}): CreateSurfaceContract {
   const fields = createFixtureFields(id, task);
   const disabled = disabledReason !== undefined;
   const submitLabel = formErrors.includes(submissionFailureMessage) ? "Retry" : title;
@@ -293,7 +293,7 @@ function createSurfaceFixture({
   };
 }
 
-function createFixtureFields(id: string, task: string): readonly FormlessUiCreateField[] {
+function createFixtureFields(id: string, task: string): readonly CreateFieldContract[] {
   return [
     createField({
       control: textControl(taskFieldSchema),
@@ -323,9 +323,9 @@ function createFixtureFields(id: string, task: string): readonly FormlessUiCreat
 function createButtonContract(
   id: string,
   label: string,
-  prominence: FormlessUiButtonContract["prominence"],
-  type: FormlessUiButtonContract["type"],
-): FormlessUiButtonContract {
+  prominence: ButtonContract["prominence"],
+  type: ButtonContract["type"],
+): ButtonContract {
   return {
     accessibilityLabel: label,
     content: { kind: "label", label },
@@ -338,10 +338,10 @@ function createButtonContract(
 }
 
 function applyCreateFieldIntent(
-  surface: FormlessUiCreateSurfaceContract,
+  surface: CreateSurfaceContract,
   fieldId: string,
-  intent: FormlessUiFieldIntent,
-): FormlessUiCreateSurfaceContract {
+  intent: FieldIntent,
+): CreateSurfaceContract {
   const fields = surface.dialog.form.fieldSet.fields.map((field) => {
     if (field.fieldId !== fieldId) {
       return field;
@@ -353,9 +353,7 @@ function applyCreateFieldIntent(
   return setCreateSurfaceFields(surface, fields);
 }
 
-function validateCreateSurfaceForSubmit(
-  surface: FormlessUiCreateSurfaceContract,
-): FormlessUiCreateSurfaceContract {
+function validateCreateSurfaceForSubmit(surface: CreateSurfaceContract): CreateSurfaceContract {
   return setCreateSurfaceFields(
     surface,
     surface.dialog.form.fieldSet.fields.map(validateFixtureField),
@@ -363,9 +361,9 @@ function validateCreateSurfaceForSubmit(
 }
 
 function setCreateSurfaceFields(
-  surface: FormlessUiCreateSurfaceContract,
-  fields: readonly FormlessUiCreateField[],
-): FormlessUiCreateSurfaceContract {
+  surface: CreateSurfaceContract,
+  fields: readonly CreateFieldContract[],
+): CreateSurfaceContract {
   const validationErrors = fieldValidationMessages(fields);
 
   return {
@@ -388,9 +386,9 @@ function setCreateSurfaceFields(
 }
 
 function applyFixtureFieldIntent(
-  field: FormlessUiCreateField,
-  intent: FormlessUiFieldIntent,
-): FormlessUiCreateField {
+  field: CreateFieldContract,
+  intent: FieldIntent,
+): CreateFieldContract {
   if (intent.type !== "createDraftChange" || field.fieldName !== intent.fieldName) {
     return field;
   }
@@ -402,7 +400,7 @@ function applyFixtureFieldIntent(
   };
 }
 
-function validateFixtureField(field: FormlessUiCreateField): FormlessUiCreateField {
+function validateFixtureField(field: CreateFieldContract): CreateFieldContract {
   if (field.fieldName !== "task") {
     return field;
   }
@@ -414,23 +412,23 @@ function validateFixtureField(field: FormlessUiCreateField): FormlessUiCreateFie
   };
 }
 
-function fieldValidationMessages(fields: readonly FormlessUiCreateField[]) {
+function fieldValidationMessages(fields: readonly CreateFieldContract[]) {
   return fields.flatMap((field) => field.errors?.map((error) => error.message) ?? []);
 }
 
 function setCreateSurfaceOpen(
-  surface: FormlessUiCreateSurfaceContract,
+  surface: CreateSurfaceContract,
   open: boolean,
-): FormlessUiCreateSurfaceContract {
+): CreateSurfaceContract {
   return surface.dialog.open === open
     ? surface
     : { ...surface, dialog: { ...surface.dialog, open } };
 }
 
 function setCreateSurfacePending(
-  surface: FormlessUiCreateSurfaceContract,
+  surface: CreateSurfaceContract,
   pending: boolean,
-): FormlessUiCreateSurfaceContract {
+): CreateSurfaceContract {
   const pendingFacts = pending ? { isPending: true, label: "Saving" } : undefined;
   const validationErrors = fieldValidationMessages(surface.dialog.form.fieldSet.fields);
   const submitLabel = surface.dialog.form.errors.includes(submissionFailureMessage)
@@ -460,9 +458,7 @@ function setCreateSurfacePending(
   };
 }
 
-function setCreateSurfaceFailed(
-  surface: FormlessUiCreateSurfaceContract,
-): FormlessUiCreateSurfaceContract {
+function setCreateSurfaceFailed(surface: CreateSurfaceContract): CreateSurfaceContract {
   const currentSurface = setCreateSurfacePending(surface, false);
   const errors = [
     ...currentSurface.dialog.form.errors.filter((message) => message !== submissionFailureMessage),
@@ -490,9 +486,7 @@ function setCreateSurfaceFailed(
   };
 }
 
-function clearCreateSurfaceFailure(
-  surface: FormlessUiCreateSurfaceContract,
-): FormlessUiCreateSurfaceContract {
+function clearCreateSurfaceFailure(surface: CreateSurfaceContract): CreateSurfaceContract {
   const errors = surface.dialog.form.errors.filter(
     (message) => message !== submissionFailureMessage,
   );
@@ -514,14 +508,14 @@ function clearCreateSurfaceFailure(
 }
 
 function updateCreateSurface(
-  surfaces: readonly FormlessUiCreateSurfaceContract[],
+  surfaces: readonly CreateSurfaceContract[],
   surfaceId: string,
-  update: (surface: FormlessUiCreateSurfaceContract) => FormlessUiCreateSurfaceContract,
+  update: (surface: CreateSurfaceContract) => CreateSurfaceContract,
 ) {
   return surfaces.map((surface) => (surface.id === surfaceId ? update(surface) : surface));
 }
 
-function cloneCreateSurface(surface: FormlessUiCreateSurfaceContract) {
+function cloneCreateSurface(surface: CreateSurfaceContract) {
   return structuredClone(surface);
 }
 

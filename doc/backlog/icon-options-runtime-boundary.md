@@ -11,9 +11,9 @@ Status: backlog. This is not shipped behavior. Shipped behavior lives in
 - Generated icon fields store and edit a string value.
 - The current icon picker can choose a built-in SVG source or accept custom SVG
   source through the popover.
-- `FormlessUiFieldOptions` has enum, reference, and media asset options, but no
+- `FieldOptions` has enum, reference, and media asset options, but no
   icon options.
-- `FormlessUiEnumOption` can include resolved SVG presentation for enum values.
+- `EnumOption` can include resolved SVG presentation for enum values.
 - The current Formless UI contract and projection preserve existing icon
   behavior, but they do not model icons as selectable runtime options.
 
@@ -31,7 +31,7 @@ The runtime should provide icon options, similar to `mediaAssetOptions`:
 Possible contract shape:
 
 ```ts
-type FormlessUiIconOption = {
+type IconOption = {
   id: string;
   label: string;
   source: string;
@@ -41,7 +41,7 @@ type FormlessUiIconOption = {
 };
 ```
 
-`FormlessUiFieldOptions` can grow `iconOptions`, and icon editor fields can use
+`FieldOptions` can grow `iconOptions`, and icon editor fields can use
 id drafts and stored values. Custom SVG input becomes an intent that creates or
 updates an icon option, not the stored field value itself.
 
@@ -59,7 +59,7 @@ updates an icon option, not the stored field value itself.
 
 A first implementation slice:
 
-1. Add `FormlessUiIconOption` and `iconOptions` to the platform UI contract.
+1. Add `IconOption` and `iconOptions` to the platform UI contract.
 2. Project the default icon catalog into icon options.
 3. Define missing icon option behavior.
 4. Add tests for icon field projection with catalog, custom, and missing ids.

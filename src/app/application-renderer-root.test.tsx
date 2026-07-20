@@ -2,11 +2,8 @@ import { readFile } from "node:fs/promises";
 import { createElement, type ReactNode } from "react";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { describe, expect, it, vi } from "vite-plus/test";
-import type { FormlessUiContractHost } from "@dpeek/formless-presentation/contract-host";
-import {
-  useFormlessUiContractHost,
-  useFormlessUiDocumentTheme,
-} from "@dpeek/formless-presentation/contract-host/react";
+import type { PresentationHost } from "@dpeek/formless-presentation/host";
+import { usePresentationHost, useDocumentTheme } from "@dpeek/formless-presentation/host/react";
 import { ApplicationRendererRoot } from "./application-renderer-root.tsx";
 import {
   applicationThemeReference,
@@ -33,14 +30,14 @@ describe("production application renderer root", () => {
     const fixture = themeBrowserFixture("dark");
     const controller = createApplicationThemeController(fixture.browser);
     const navigationTarget = eventTargetFixture();
-    let currentHost: FormlessUiContractHost | undefined;
+    let currentHost: PresentationHost | undefined;
     let currentThemeId: string | undefined;
     let currentRootReference = "";
     let renderer: ReactTestRenderer | undefined;
 
     function RuntimeProbe() {
-      currentHost = useFormlessUiContractHost();
-      currentThemeId = useFormlessUiDocumentTheme(applicationThemeReference)?.id;
+      currentHost = usePresentationHost();
+      currentThemeId = useDocumentTheme(applicationThemeReference)?.id;
       currentRootReference = useApplicationRootThemeRuntime()?.reference.themeId ?? "";
       return <button autoFocus>Route action</button>;
     }

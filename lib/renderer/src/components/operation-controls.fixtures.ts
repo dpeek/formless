@@ -1,23 +1,23 @@
 import type {
-  FormlessUiButtonContent,
-  FormlessUiCompactStatusContract,
-  FormlessUiOperationButtonContract,
-  FormlessUiOperationControlContract,
-  FormlessUiOperationDestructiveConfirmationContract,
-  FormlessUiOperationFeedbackEventContract,
-  FormlessUiOperationProgressContract,
-  FormlessUiOperationProgressStepStatus,
+  ButtonContent,
+  CompactStatusContract,
+  OperationButtonContract,
+  OperationControlContract,
+  OperationDestructiveConfirmationContract,
+  OperationFeedbackEventContract,
+  OperationProgressContract,
+  OperationProgressStepStatus,
 } from "@dpeek/formless-presentation/contract";
 
 export type OperationControlFixtureTransition = {
   delayMs: number;
-  snapshot: FormlessUiOperationControlContract;
+  snapshot: OperationControlContract;
 };
 
 export type OperationControlFixtureSnapshots = {
-  initial: FormlessUiOperationControlContract;
-  pending: FormlessUiOperationControlContract;
-  settled: FormlessUiOperationControlContract;
+  initial: OperationControlContract;
+  pending: OperationControlContract;
+  settled: OperationControlContract;
   timeline?: readonly OperationControlFixtureTransition[];
 };
 
@@ -45,7 +45,7 @@ const clearCompletedProgress = {
   ],
   title: "Clearing completed tasks",
   updatedAt: 1,
-} satisfies FormlessUiOperationProgressContract;
+} satisfies OperationProgressContract;
 
 const clearCompletedPendingFeedback = pendingFeedback({
   activeProgress: {
@@ -65,7 +65,7 @@ const clearCompletedCommittedFeedback = {
   kind: "operationFeedbackEvent",
   status: "committed",
   title: "Completed tasks cleared",
-} satisfies FormlessUiOperationFeedbackEventContract;
+} satisfies OperationFeedbackEventContract;
 
 const clearCompletedPendingStatus = compactStatus({
   detail: "Clear matching records",
@@ -436,11 +436,11 @@ function workspacePushPendingSnapshot({
   progress,
   runningStep,
 }: {
-  base: FormlessUiOperationControlContract;
+  base: OperationControlContract;
   id: string;
-  progress: FormlessUiOperationProgressContract;
+  progress: OperationProgressContract;
   runningStep: number;
-}): FormlessUiOperationControlContract {
+}): OperationControlContract {
   const activeStep = progress.steps[runningStep];
 
   if (activeStep === undefined) {
@@ -476,12 +476,12 @@ function workspacePushProgress({
 }: {
   id: string;
   statuses: readonly [
-    FormlessUiOperationProgressStepStatus,
-    FormlessUiOperationProgressStepStatus,
-    FormlessUiOperationProgressStepStatus,
+    OperationProgressStepStatus,
+    OperationProgressStepStatus,
+    OperationProgressStepStatus,
   ];
   updatedAt: number;
-}): FormlessUiOperationProgressContract {
+}): OperationProgressContract {
   return {
     detail: "Updating deployment intent.",
     id: `${id}-progress`,
@@ -521,17 +521,17 @@ function operationControl({
   prominence,
   status,
 }: {
-  confirmation?: FormlessUiOperationDestructiveConfirmationContract;
-  content?: FormlessUiButtonContent;
-  countBadge?: FormlessUiOperationButtonContract["countBadge"];
-  density?: FormlessUiOperationButtonContract["density"];
+  confirmation?: OperationDestructiveConfirmationContract;
+  content?: ButtonContent;
+  countBadge?: OperationButtonContract["countBadge"];
+  density?: OperationButtonContract["density"];
   disabledReason?: string;
-  icon?: Extract<FormlessUiButtonContent, { icon: unknown }>["icon"];
+  icon?: Extract<ButtonContent, { icon: unknown }>["icon"];
   id: string;
   label: string;
-  prominence: FormlessUiOperationButtonContract["prominence"];
-  status: FormlessUiCompactStatusContract;
-}): FormlessUiOperationControlContract {
+  prominence: OperationButtonContract["prominence"];
+  status: CompactStatusContract;
+}): OperationControlContract {
   const triggerContent =
     content ?? (icon ? { icon, kind: "iconAndLabel", label } : { kind: "label", label });
   const triggerIntent = confirmation
@@ -567,7 +567,7 @@ function operationControl({
 }
 
 function operationSnapshot(
-  control: FormlessUiOperationControlContract,
+  control: OperationControlContract,
   {
     confirmationOpen,
     feedback,
@@ -575,11 +575,11 @@ function operationSnapshot(
     status,
   }: {
     confirmationOpen?: boolean;
-    feedback?: FormlessUiOperationFeedbackEventContract;
-    progress?: FormlessUiOperationProgressContract;
-    status: FormlessUiCompactStatusContract;
+    feedback?: OperationFeedbackEventContract;
+    progress?: OperationProgressContract;
+    status: CompactStatusContract;
   },
-): FormlessUiOperationControlContract {
+): OperationControlContract {
   const isPending = status.status === "pending";
   const pending = isPending ? { isPending: true, label: status.label } : undefined;
   const confirmation = control.confirmation
@@ -615,10 +615,7 @@ function compactStatus({
   intent,
   label,
   status,
-}: Omit<
-  FormlessUiCompactStatusContract,
-  "accessibilityLabel" | "kind" | "pending"
->): FormlessUiCompactStatusContract {
+}: Omit<CompactStatusContract, "accessibilityLabel" | "kind" | "pending">): CompactStatusContract {
   return {
     accessibilityLabel: `${label}. ${detail}`,
     detail,
@@ -637,9 +634,9 @@ function pendingFeedback({
   progress,
   title,
 }: Pick<
-  FormlessUiOperationFeedbackEventContract,
+  OperationFeedbackEventContract,
   "activeProgress" | "id" | "progress" | "title"
->): FormlessUiOperationFeedbackEventContract {
+>): OperationFeedbackEventContract {
   return {
     ...(activeProgress ? { activeProgress } : {}),
     id,
@@ -659,7 +656,7 @@ function destructiveConfirmation({
   controlId: string;
   description: string;
   title: string;
-}): FormlessUiOperationDestructiveConfirmationContract {
+}): OperationDestructiveConfirmationContract {
   return {
     action: confirmationButton({
       controlId,
@@ -694,9 +691,9 @@ function confirmationButton({
 }: {
   controlId: string;
   label: string;
-  prominence: FormlessUiOperationButtonContract["prominence"];
+  prominence: OperationButtonContract["prominence"];
   source: "button" | "confirmationDialog";
-}): FormlessUiOperationButtonContract {
+}): OperationButtonContract {
   return {
     accessibilityLabel: label,
     content: { kind: "label", label },

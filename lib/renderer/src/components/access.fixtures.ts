@@ -1,22 +1,22 @@
 import type {
-  FormlessUiAccessActionContract,
-  FormlessUiAccessConfirmationContract,
-  FormlessUiAccessControlledFieldContract,
-  FormlessUiAccessDisplayFactContract,
-  FormlessUiAccessFeedbackContract,
-  FormlessUiAccessGrantOptionGroupContract,
-  FormlessUiAccessGrantSelectionContract,
-  FormlessUiAccessInvitationAuthoringContract,
-  FormlessUiAccessInvitationContract,
-  FormlessUiAccessManifestContract,
-  FormlessUiAccessPersonContract,
-  FormlessUiAccessReadyContract,
-  FormlessUiButtonContract,
+  AccessActionContract,
+  AccessConfirmationContract,
+  AccessControlledFieldContract,
+  AccessDisplayFactContract,
+  AccessFeedbackContract,
+  AccessGrantOptionGroupContract,
+  AccessGrantSelectionContract,
+  AccessInvitationAuthoringContract,
+  AccessInvitationContract,
+  AccessManifestContract,
+  AccessPersonContract,
+  AccessReadyContract,
+  ButtonContract,
 } from "@dpeek/formless-presentation/contract";
 import {
-  formlessUiAccessInvitationAuthoringReference,
-  formlessUiAccessManifestReference,
-} from "@dpeek/formless-presentation/contract-host";
+  accessInvitationAuthoringReference,
+  accessManifestReference,
+} from "@dpeek/formless-presentation/host";
 
 export type FormlessAccessFixtureId =
   | "empty"
@@ -26,8 +26,8 @@ export type FormlessAccessFixtureId =
   | "unauthorized";
 
 export type FormlessAccessFixtureState = {
-  authoring: FormlessUiAccessInvitationAuthoringContract | null;
-  manifest: FormlessUiAccessManifestContract;
+  authoring: AccessInvitationAuthoringContract | null;
+  manifest: AccessManifestContract;
 };
 
 export type FormlessAccessFixture = {
@@ -36,8 +36,8 @@ export type FormlessAccessFixture = {
   state: FormlessAccessFixtureState;
 };
 
-export const accessFixtureReference = formlessUiAccessManifestReference("access:fixture");
-export const accessFixtureAuthoringReference = formlessUiAccessInvitationAuthoringReference(
+export const accessFixtureReference = accessManifestReference("access:fixture");
+export const accessFixtureAuthoringReference = accessInvitationAuthoringReference(
   accessFixtureReference.accessId,
   "access:fixture:authoring",
 );
@@ -73,13 +73,13 @@ function readyFixture(
     authority?: AccessFixtureAuthority;
     authoring?: {
       draft: AccessFixtureDraft;
-      feedback?: FormlessUiAccessFeedbackContract;
+      feedback?: AccessFeedbackContract;
       open: boolean;
       pending?: "creation";
     };
-    confirmation?: FormlessUiAccessConfirmationContract;
+    confirmation?: AccessConfirmationContract;
     empty?: boolean;
-    feedback?: FormlessUiAccessFeedbackContract;
+    feedback?: AccessFeedbackContract;
     invitationState?: "pending" | "revoked";
     revocationPending?: boolean;
   },
@@ -108,9 +108,7 @@ function manifestBase() {
   };
 }
 
-function stateManifest(
-  state: "failed" | "loading" | "unauthorized",
-): FormlessUiAccessManifestContract {
+function stateManifest(state: "failed" | "loading" | "unauthorized"): AccessManifestContract {
   if (state === "loading") {
     return { ...manifestBase(), message: "Loading access summary", state };
   }
@@ -142,12 +140,12 @@ function readyManifest({
   invitationState = "pending",
   revocationPending = false,
 }: {
-  confirmation?: FormlessUiAccessConfirmationContract;
+  confirmation?: AccessConfirmationContract;
   empty?: boolean;
-  feedback?: FormlessUiAccessFeedbackContract;
+  feedback?: AccessFeedbackContract;
   invitationState?: "pending" | "revoked";
   revocationPending?: boolean;
-}): FormlessUiAccessReadyContract {
+}): AccessReadyContract {
   return {
     ...manifestBase(),
     authoring: accessFixtureAuthoringReference,
@@ -183,7 +181,7 @@ function readyManifest({
   };
 }
 
-function accessPeople(): readonly FormlessUiAccessPersonContract[] {
+function accessPeople(): readonly AccessPersonContract[] {
   return [
     {
       displayName: "Ada Owner",
@@ -222,7 +220,7 @@ function accessRole(id: string, label: string, scope: string) {
 function accessInvitations(
   invitationState: "pending" | "revoked",
   revocationPending: boolean,
-): readonly FormlessUiAccessInvitationContract[] {
+): readonly AccessInvitationContract[] {
   const pending = pendingInvitation(invitationState, revocationPending);
 
   return [
@@ -251,7 +249,7 @@ function accessInvitations(
 function pendingInvitation(
   state: "pending" | "revoked" = "pending",
   pending = false,
-): FormlessUiAccessInvitationContract {
+): AccessInvitationContract {
   const revocationAction = accessAction(
     "revocation-open",
     pending ? "Revoking..." : "Revoke",
@@ -298,12 +296,12 @@ function invitationAuthoring(
   options:
     | {
         draft: AccessFixtureDraft;
-        feedback?: FormlessUiAccessFeedbackContract;
+        feedback?: AccessFeedbackContract;
         open: boolean;
         pending?: "creation";
       }
     | undefined,
-): FormlessUiAccessInvitationAuthoringContract {
+): AccessInvitationAuthoringContract {
   const draft = options?.draft ?? "empty";
   const pendingReason =
     options?.pending === "creation" ? "Invitation creation is in progress." : undefined;
@@ -354,9 +352,7 @@ function invitationAuthoring(
   };
 }
 
-function authoringFields(
-  draft: AccessFixtureDraft,
-): FormlessUiAccessInvitationAuthoringContract["fields"] {
+function authoringFields(draft: AccessFixtureDraft): AccessInvitationAuthoringContract["fields"] {
   const valid = draft === "valid";
   const invalid = draft === "invalid";
   const targetSurface: string = valid ? "app-install" : "instance";
@@ -420,17 +416,17 @@ function authoringFields(
 }
 
 function field(
-  purpose: FormlessUiAccessControlledFieldContract["purpose"],
+  purpose: AccessControlledFieldContract["purpose"],
   label: string,
-  inputKind: FormlessUiAccessControlledFieldContract["inputKind"],
+  inputKind: AccessControlledFieldContract["inputKind"],
   value: string,
   options: {
     disabledReason?: string;
     errors?: readonly string[];
-    options?: FormlessUiAccessControlledFieldContract["options"];
+    options?: AccessControlledFieldContract["options"];
     required?: boolean;
   } = {},
-): FormlessUiAccessControlledFieldContract {
+): AccessControlledFieldContract {
   const id = `access:fixture:field:${purpose}`;
 
   return {
@@ -460,7 +456,7 @@ function fieldOption(id: string, label: string, value: string, selected: boolean
 function authoringGrantSelections(
   authority: AccessFixtureAuthority,
   draft: AccessFixtureDraft,
-): FormlessUiAccessInvitationAuthoringContract["grantSelections"] {
+): AccessInvitationAuthoringContract["grantSelections"] {
   const selected = draft === "valid";
   const validation = draft === "invalid";
   const instanceRoleOptions: readonly (readonly [id: string, label: string])[] = [
@@ -515,10 +511,10 @@ function authoringGrantSelections(
   ];
 }
 
-function pendingAccessAction<Intent extends FormlessUiAccessActionContract["intent"]>(
-  action: FormlessUiAccessActionContract<Intent>,
+function pendingAccessAction<Intent extends AccessActionContract["intent"]>(
+  action: AccessActionContract<Intent>,
   pending: boolean,
-): FormlessUiAccessActionContract<Intent> {
+): AccessActionContract<Intent> {
   return pending
     ? {
         ...action,
@@ -532,10 +528,10 @@ function pendingAccessAction<Intent extends FormlessUiAccessActionContract["inte
 
 function grantSelection<Purpose extends "memberships" | "roles">(
   purpose: Purpose,
-  groups: readonly FormlessUiAccessGrantOptionGroupContract[],
+  groups: readonly AccessGrantOptionGroupContract[],
   errors: readonly string[],
   disabledReason?: string,
-): FormlessUiAccessGrantSelectionContract & { purpose: Purpose } {
+): AccessGrantSelectionContract & { purpose: Purpose } {
   return {
     ...(disabledReason ? { disabledReason } : {}),
     errors,
@@ -557,7 +553,7 @@ function grantGroup(
   purpose: "memberships" | "roles",
   selectedIds: readonly string[],
   disabledReason?: string,
-): FormlessUiAccessGrantOptionGroupContract {
+): AccessGrantOptionGroupContract {
   const id = `access:fixture:${localId}`;
   const controlId = `access:fixture:${purpose}`;
 
@@ -589,13 +585,13 @@ function grantGroup(
   };
 }
 
-function accessAction<Intent extends FormlessUiAccessActionContract["intent"]>(
-  purpose: FormlessUiAccessActionContract<Intent>["purpose"],
+function accessAction<Intent extends AccessActionContract["intent"]>(
+  purpose: AccessActionContract<Intent>["purpose"],
   label: string,
   intent: Intent,
   disabledReason?: string,
-  type: FormlessUiButtonContract["type"] = "button",
-): FormlessUiAccessActionContract<Intent> {
+  type: ButtonContract["type"] = "button",
+): AccessActionContract<Intent> {
   return {
     control: button(intent.controlId, label, disabledReason, type),
     id: intent.actionId,
@@ -609,8 +605,8 @@ function button(
   id: string,
   label: string,
   disabledReason?: string,
-  type: FormlessUiButtonContract["type"] = "button",
-): FormlessUiButtonContract {
+  type: ButtonContract["type"] = "button",
+): ButtonContract {
   return {
     accessibilityLabel: label,
     content: { kind: "label", label },
@@ -627,16 +623,16 @@ function fact(
   id: string,
   label: string,
   value: string,
-  presentation: FormlessUiAccessDisplayFactContract["presentation"] = "text",
-): FormlessUiAccessDisplayFactContract {
+  presentation: AccessDisplayFactContract["presentation"] = "text",
+): AccessDisplayFactContract {
   return { id, kind: "accessDisplayFact", label, presentation, value };
 }
 
 function statusFact(
   id: string,
   value: string,
-  intent: FormlessUiAccessDisplayFactContract["intent"],
-): FormlessUiAccessDisplayFactContract {
+  intent: AccessDisplayFactContract["intent"],
+): AccessDisplayFactContract {
   return { ...fact(id, "Status", value, "status"), intent };
 }
 
@@ -644,8 +640,8 @@ function feedback(
   id: string,
   title: string,
   detail: string,
-  intent: FormlessUiAccessFeedbackContract["intent"],
-): FormlessUiAccessFeedbackContract {
+  intent: AccessFeedbackContract["intent"],
+): AccessFeedbackContract {
   return {
     detail,
     id: `access:fixture:feedback:${id}`,

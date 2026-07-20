@@ -1,9 +1,9 @@
 import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vite-plus/test";
 import {
-  createFormlessUiMemoryContractHost,
-  type FormlessUiContractHost,
-} from "@dpeek/formless-presentation/contract-host";
+  createMemoryPresentationHost,
+  type PresentationHost,
+} from "@dpeek/formless-presentation/host";
 import {
   APPLICATION_THEME_DOCUMENT_ATTRIBUTE,
   APPLICATION_THEME_STORAGE_KEY,
@@ -104,14 +104,14 @@ describe("application theme runtime", () => {
 
 function createThemeHost(controller: ReturnType<typeof createApplicationThemeController>) {
   const publication = applicationThemeRuntimePublication(controller);
-  return createFormlessUiMemoryContractHost({
+  return createMemoryPresentationHost({
     dispatch: publication.intentHandlers?.[0]?.dispatch,
     nodes: publication.nodes,
   });
 }
 
 function republish(
-  host: FormlessUiContractHost & {
+  host: PresentationHost & {
     publish(nodes: ReturnType<typeof applicationThemeRuntimePublication>["nodes"]): void;
   },
   controller: ReturnType<typeof createApplicationThemeController>,
@@ -119,7 +119,7 @@ function republish(
   host.publish(applicationThemeRuntimePublication(controller).nodes);
 }
 
-function selectionIntent(host: FormlessUiContractHost, mode: "system" | "light" | "dark") {
+function selectionIntent(host: PresentationHost, mode: "system" | "light" | "dark") {
   const option = userControlledTheme(host).selectionControl.options.find(
     (candidate) => candidate.mode === mode,
   );
@@ -129,7 +129,7 @@ function selectionIntent(host: FormlessUiContractHost, mode: "system" | "light" 
   return option.selectionIntent;
 }
 
-function userControlledTheme(host: FormlessUiContractHost): ApplicationThemeContract {
+function userControlledTheme(host: PresentationHost): ApplicationThemeContract {
   const theme = host.read(applicationThemeReference);
   if (!theme || theme.policy.kind !== "userControlled" || !theme.selectionControl) {
     throw new Error("Expected user-controlled application theme.");

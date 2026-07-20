@@ -7,7 +7,7 @@ import type {
   FieldScenarioGroup,
   FieldScenarioProjectionContext,
 } from "../field-scenario-model.ts";
-import type { FormlessUiFieldSurface } from "@dpeek/formless-presentation/contract";
+import type { FieldSurface } from "@dpeek/formless-presentation/contract";
 import {
   createField,
   dateControl,
@@ -75,7 +75,7 @@ export const dateScenarioGroups = [
   }),
 ] satisfies readonly FieldScenarioGroup[];
 
-function existingDateGroup(surface: Extract<FormlessUiFieldSurface, "table-cell">) {
+function existingDateGroup(surface: Extract<FieldSurface, "table-cell">) {
   return projectScenarioGroup({
     id: `date-${surface}`,
     kind: "date",
@@ -174,7 +174,7 @@ function projectDetailDateField(context: FieldScenarioProjectionContext) {
 }
 
 function projectExistingDateField(
-  surface: Extract<FormlessUiFieldSurface, "detail" | "record" | "table-cell">,
+  surface: Extract<FieldSurface, "detail" | "record" | "table-cell">,
   { facets }: FieldScenarioProjectionContext,
 ) {
   const required = facets.requiredness === "required";

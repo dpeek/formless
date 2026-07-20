@@ -3,8 +3,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { FormlessApplicationRenderer } from "@dpeek/formless-renderer/application/assembly";
 import { FormlessApplicationRendererProvider } from "@dpeek/formless-renderer/application/provider";
-import { createFormlessUiMemoryContractHost } from "@dpeek/formless-presentation/contract-host";
-import { FormlessUiContractHostProvider } from "@dpeek/formless-presentation/contract-host/react";
+import { createMemoryPresentationHost } from "@dpeek/formless-presentation/host";
+import { PresentationHostProvider } from "@dpeek/formless-presentation/host/react";
 import { createFormlessApplicationShellFixtures } from "./components/application-shell.fixtures.ts";
 import { projectFormlessApplicationShellFixturePublication } from "./components/application-shell.tsx";
 import { createFormlessApplicationSystemStateFixtures } from "./components/application-system-state.fixtures.ts";
@@ -64,10 +64,10 @@ describe("Formless application renderer", () => {
       ...shellPublication.nodes,
       { reference: systemState.reference, snapshot: systemState.snapshot },
     ] as const;
-    const host = createFormlessUiMemoryContractHost({ nodes, serverNodes: nodes });
+    const host = createMemoryPresentationHost({ nodes, serverNodes: nodes });
 
     const shellHtml = renderToStaticMarkup(
-      <FormlessUiContractHostProvider host={host}>
+      <PresentationHostProvider host={host}>
         <FormlessApplicationRenderer
           presentation={{
             children: <span data-route-child="selected">Route child</span>,
@@ -75,17 +75,17 @@ describe("Formless application renderer", () => {
             shellReference: shellPublication.shellReference,
           }}
         />
-      </FormlessUiContractHostProvider>,
+      </PresentationHostProvider>,
     );
     const stateHtml = renderToStaticMarkup(
-      <FormlessUiContractHostProvider host={host}>
+      <PresentationHostProvider host={host}>
         <FormlessApplicationRenderer
           presentation={{
             kind: "applicationSystemState",
             systemStateReference: systemState.reference,
           }}
         />
-      </FormlessUiContractHostProvider>,
+      </PresentationHostProvider>,
     );
 
     expect(shellHtml).toContain('data-route-child="selected"');
@@ -97,7 +97,7 @@ describe("Formless application renderer", () => {
   it("uses the cached server snapshot as renderer hydration input", () => {
     const systemState = requiredFixture(createFormlessApplicationSystemStateFixtures(), "loading");
     const serverNodes = [{ reference: systemState.reference, snapshot: systemState.snapshot }];
-    const host = createFormlessUiMemoryContractHost({ nodes: serverNodes, serverNodes });
+    const host = createMemoryPresentationHost({ nodes: serverNodes, serverNodes });
     const serverSnapshot = host.getServerSnapshot(systemState.reference);
 
     host.publish([
@@ -111,14 +111,14 @@ describe("Formless application renderer", () => {
     expect(host.getServerSnapshot(systemState.reference)).toBe(serverSnapshot);
 
     const html = renderToStaticMarkup(
-      <FormlessUiContractHostProvider host={host}>
+      <PresentationHostProvider host={host}>
         <FormlessApplicationRenderer
           presentation={{
             kind: "applicationSystemState",
             systemStateReference: systemState.reference,
           }}
         />
-      </FormlessUiContractHostProvider>,
+      </PresentationHostProvider>,
     );
 
     expect(html).toContain(systemState.snapshot.heading);

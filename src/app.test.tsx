@@ -72,7 +72,7 @@ import type { StoredRecord } from "@dpeek/formless-storage";
 import type { BootstrapResponse } from "./shared/protocol.ts";
 import type { SchemaKey } from "./shared/schema-apps.ts";
 import type { AppSchema, EntitySchema } from "@dpeek/formless-schema";
-import type { FormlessUiWorkspaceLinkActionContract } from "@dpeek/formless-presentation/contract";
+import type { WorkspaceLinkActionContract } from "@dpeek/formless-presentation/contract";
 import { parseAppSchema } from "@dpeek/formless-schema";
 import type { NumericExpression } from "@dpeek/formless-schema";
 import {
@@ -123,7 +123,7 @@ function SchemaKeyProbeHomeRoute({
   schemaKey: ClientAppSchemaKey;
   screenPath: string;
   target?: ClientAppTarget;
-  workspaceActions?: readonly FormlessUiWorkspaceLinkActionContract[];
+  workspaceActions?: readonly WorkspaceLinkActionContract[];
 }) {
   const contextSchemaKey = useSchemaKey();
   const targetKind = typeof target === "string" ? "schemaKey" : (target?.kind ?? "none");
@@ -152,7 +152,7 @@ function TargetProbeHomeRoute({
   schemaKey: ClientAppSchemaKey;
   screenPath: string;
   target?: ClientAppTarget;
-  workspaceActions?: readonly FormlessUiWorkspaceLinkActionContract[];
+  workspaceActions?: readonly WorkspaceLinkActionContract[];
 }) {
   const targetKind = typeof target === "string" ? "schemaKey" : (target?.kind ?? "none");
   const installId =
@@ -170,11 +170,7 @@ function TargetProbeHomeRoute({
   );
 }
 
-function WorkspaceActionProbe({
-  actions,
-}: {
-  actions: readonly FormlessUiWorkspaceLinkActionContract[];
-}) {
+function WorkspaceActionProbe({ actions }: { actions: readonly WorkspaceLinkActionContract[] }) {
   return actions.map((action) => (
     <a
       aria-label={action.accessibilityLabel}

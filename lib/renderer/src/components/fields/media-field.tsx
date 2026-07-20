@@ -1,7 +1,7 @@
 import type {
-  FormlessUiDisplayField,
-  FormlessUiFieldIntentHandler,
-  FormlessUiMediaAuthoring,
+  DisplayFieldContract,
+  FieldIntentHandler,
+  MediaAuthoring,
 } from "@dpeek/formless-presentation/contract";
 import { MediaInput, MediaValueDisplay } from "../media-input.tsx";
 import {
@@ -11,7 +11,7 @@ import {
   fieldChromeProps,
   fieldIsReadOnly,
   formatInputValue,
-  type FormlessUiEditorField,
+  type EditorField,
 } from "./field-chrome.tsx";
 import { mediaPickerOptions, mediaPreviewHref } from "./field-options.tsx";
 
@@ -20,9 +20,9 @@ export function MediaFieldEditor({
   inputId,
   onIntent,
 }: {
-  field: FormlessUiEditorField;
+  field: EditorField;
   inputId: string;
-  onIntent: FormlessUiFieldIntentHandler | undefined;
+  onIntent: FieldIntentHandler | undefined;
 }) {
   const value = formatInputValue(editorFieldValue(field));
   const media = mediaAuthoring(field);
@@ -55,7 +55,7 @@ export function MediaFieldEditor({
   );
 }
 
-export function MediaFieldDisplay({ field }: { field: FormlessUiDisplayField }) {
+export function MediaFieldDisplay({ field }: { field: DisplayFieldContract }) {
   return (
     <MediaValueDisplay
       density={astryxDensity(field)}
@@ -66,6 +66,6 @@ export function MediaFieldDisplay({ field }: { field: FormlessUiDisplayField }) 
   );
 }
 
-function mediaAuthoring(field: FormlessUiEditorField): FormlessUiMediaAuthoring | undefined {
+function mediaAuthoring(field: EditorField): MediaAuthoring | undefined {
   return field.media && "fileSelectEnabled" in field.media ? field.media : undefined;
 }

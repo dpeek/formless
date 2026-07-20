@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { FormlessUiAuthIntent } from "@dpeek/formless-presentation/contract";
+import type { AuthIntent } from "@dpeek/formless-presentation/contract";
 import { useSearch } from "wouter";
 
 import {
@@ -167,7 +167,7 @@ export function CollaboratorInvitationAcceptanceRoute() {
     });
   }
 
-  async function handleIntent(intent: FormlessUiAuthIntent) {
+  async function handleIntent(intent: AuthIntent) {
     if (!authIntentIsCurrent(surface, intent)) {
       return;
     }

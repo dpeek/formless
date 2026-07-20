@@ -1,35 +1,35 @@
 import { useLayoutEffect, useState } from "react";
 import type {
-  FormlessUiApplicationSystemStateContract,
-  FormlessUiApplicationSystemStateIntentHandler,
-  FormlessUiApplicationSystemStateReference,
+  ApplicationSystemStateContract,
+  ApplicationSystemStateIntentHandler,
+  ApplicationSystemStateReference,
 } from "@dpeek/formless-presentation/contract";
 import {
-  createFormlessUiMemoryContractHost,
-  formlessUiApplicationSystemStateReference,
-  isFormlessUiApplicationSystemStateIntent,
-  type FormlessUiMutableContractHost,
-} from "@dpeek/formless-presentation/contract-host";
-import { FormlessUiContractHostProvider } from "@dpeek/formless-presentation/contract-host/react";
+  createMemoryPresentationHost,
+  applicationSystemStateReference,
+  isApplicationSystemStateIntent,
+  type MutablePresentationHost,
+} from "@dpeek/formless-presentation/host";
+import { PresentationHostProvider } from "@dpeek/formless-presentation/host/react";
 import { ApplicationPresentation } from "../application-presentation.tsx";
 
 export type ApplicationSystemStateRuntimeHost = {
-  host: FormlessUiMutableContractHost;
-  publish(snapshot: FormlessUiApplicationSystemStateContract): void;
-  reference: FormlessUiApplicationSystemStateReference;
-  updateIntentHandler(handler: FormlessUiApplicationSystemStateIntentHandler): void;
+  host: MutablePresentationHost;
+  publish(snapshot: ApplicationSystemStateContract): void;
+  reference: ApplicationSystemStateReference;
+  updateIntentHandler(handler: ApplicationSystemStateIntentHandler): void;
 };
 
 export function createApplicationSystemStateRuntimeHost(
-  snapshot: FormlessUiApplicationSystemStateContract,
-  initialIntentHandler: FormlessUiApplicationSystemStateIntentHandler,
+  snapshot: ApplicationSystemStateContract,
+  initialIntentHandler: ApplicationSystemStateIntentHandler,
 ): ApplicationSystemStateRuntimeHost {
-  const reference = formlessUiApplicationSystemStateReference(snapshot.id);
+  const reference = applicationSystemStateReference(snapshot.id);
   let intentHandler = initialIntentHandler;
   const node = { reference, snapshot };
-  const host = createFormlessUiMemoryContractHost({
+  const host = createMemoryPresentationHost({
     dispatch: (intent) => {
-      if (!isFormlessUiApplicationSystemStateIntent(intent)) {
+      if (!isApplicationSystemStateIntent(intent)) {
         throw new Error(`Application system-state runtime cannot dispatch ${intent.type}.`);
       }
       return intentHandler(intent);
@@ -52,8 +52,8 @@ export function ApplicationSystemStateRuntime({
   onIntent = () => undefined,
   snapshot,
 }: {
-  onIntent?: FormlessUiApplicationSystemStateIntentHandler;
-  snapshot: FormlessUiApplicationSystemStateContract;
+  onIntent?: ApplicationSystemStateIntentHandler;
+  snapshot: ApplicationSystemStateContract;
 }) {
   return (
     <StableApplicationSystemStateRuntime
@@ -68,8 +68,8 @@ function StableApplicationSystemStateRuntime({
   onIntent,
   snapshot,
 }: {
-  onIntent: FormlessUiApplicationSystemStateIntentHandler;
-  snapshot: FormlessUiApplicationSystemStateContract;
+  onIntent: ApplicationSystemStateIntentHandler;
+  snapshot: ApplicationSystemStateContract;
 }) {
   const [runtime] = useState(() => createApplicationSystemStateRuntimeHost(snapshot, onIntent));
 
@@ -77,13 +77,13 @@ function StableApplicationSystemStateRuntime({
   useLayoutEffect(() => runtime.publish(snapshot), [runtime, snapshot]);
 
   return (
-    <FormlessUiContractHostProvider host={runtime.host}>
+    <PresentationHostProvider host={runtime.host}>
       <ApplicationPresentation
         presentation={{
           kind: "applicationSystemState",
           systemStateReference: runtime.reference,
         }}
       />
-    </FormlessUiContractHostProvider>
+    </PresentationHostProvider>
   );
 }

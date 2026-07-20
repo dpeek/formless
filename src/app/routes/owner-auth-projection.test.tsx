@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import type { FormlessUiAuthIntent } from "@dpeek/formless-presentation/contract";
+import type { AuthIntent } from "@dpeek/formless-presentation/contract";
 import {
   authIntentIsCurrent,
   createAuthPendingGuard,
@@ -94,7 +94,7 @@ describe("owner auth projection", () => {
       ),
     ).toBe(false);
 
-    const fieldIntent: FormlessUiAuthIntent = {
+    const fieldIntent: AuthIntent = {
       ...nameField.intent,
       intent: {
         fieldName: "name",
@@ -191,7 +191,7 @@ describe("owner auth projection", () => {
 
   it("keeps the no-shell host stable and deduplicates pending operations", async () => {
     const first = projectOwnerSignInAuthSurface({ state: { owner, status: "ready" } });
-    const calls: FormlessUiAuthIntent[] = [];
+    const calls: AuthIntent[] = [];
     const runtime = createNoShellAuthRuntimeHost(
       ownerSignInAuthSurfaceReference,
       first,

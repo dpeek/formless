@@ -7,7 +7,7 @@ import type {
   FieldScenarioGroup,
   FieldScenarioProjectionContext,
 } from "../field-scenario-model.ts";
-import type { FormlessUiFieldSurface } from "@dpeek/formless-presentation/contract";
+import type { FieldSurface } from "@dpeek/formless-presentation/contract";
 import {
   createField,
   displayField,
@@ -56,9 +56,7 @@ export const colorScenarioGroups = [
   existingColorGroup("detail"),
 ] satisfies readonly FieldScenarioGroup[];
 
-function existingColorGroup(
-  surface: Extract<FormlessUiFieldSurface, "detail" | "record" | "table-cell">,
-) {
+function existingColorGroup(surface: Extract<FieldSurface, "detail" | "record" | "table-cell">) {
   return projectScenarioGroup({
     id: `color-${surface}`,
     kind: "color",
@@ -89,7 +87,7 @@ function projectCreateColorField({ facets }: FieldScenarioProjectionContext) {
 }
 
 function projectExistingColorField(
-  surface: Extract<FormlessUiFieldSurface, "detail" | "record" | "table-cell">,
+  surface: Extract<FieldSurface, "detail" | "record" | "table-cell">,
   { facets }: FieldScenarioProjectionContext,
 ) {
   const required = facets.requiredness === "required";

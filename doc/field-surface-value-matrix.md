@@ -144,12 +144,14 @@ UI without a Media React package entrypoint.
 
 ### Contract and projection
 
-- `lib/presentation/src/formless-ui-contract.ts`: field contracts and intents.
-- `src/app/generated/formless-ui-projection.ts`: Create, Record, Display, and
+- `lib/presentation/src/contract.ts`: field contracts and intents.
+- `src/app/generated/field-projection.ts`: Create, Record, Display, and
   Operation field projection plus stable occurrence ids.
-- `src/app/generated/formless-ui-intents.ts`: canonical intent adaptation.
+- `src/app/generated/field-intents.ts`: canonical intent adaptation.
+- `src/app/generated/operation-projection.ts`: operation control, status,
+  progress, and feedback projection.
 - `src/app/generated/formless-ui-*-projection.ts`: list, table, result,
-  operation, workspace, and shell composition.
+  workspace, and shell composition.
 
 ### Runtime helpers
 
@@ -176,7 +178,7 @@ UI without a Media React package entrypoint.
   constructors and local intent simulation.
 - `lib/renderer/src/components/fields/*-field.fixtures.ts`: current per-kind
   surface matrices.
-- `lib/renderer/src/components/fields/renderer.tsx`: mode, state-machine, and
+- `lib/renderer/src/components/fields/field-renderer.tsx`: mode, state-machine, and
   renderer-kind dispatch.
 - `lib/renderer/src/components/fields/field-chrome.tsx`: labels, density, access,
   status, draft, and commit adapters.
@@ -200,8 +202,8 @@ exported by `@dpeek/formless-renderer` explicitly.
 
 ## Executable evidence
 
-- `src/app/generated/formless-ui-projection.test.ts` and
-  `formless-ui-intents.test.ts` cover field projection and intent adaptation.
+- `src/app/generated/field-projection.test.ts` and
+  `field-intents.test.ts` cover field projection and intent adaptation.
 - `src/app/generated/create-field-authoring.test.ts`,
   `record-field-authoring.test.ts`, and `operation-field-authoring.test.ts`
   cover draft and flat-write helpers.

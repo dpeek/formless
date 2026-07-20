@@ -1,9 +1,9 @@
 import type { ImageMediaAssetOption } from "@dpeek/formless-media/client";
 import type {
-  FormlessUiField,
-  FormlessUiFieldIntent,
-  FormlessUiRecordResultContract,
-  FormlessUiRecordResultIntent,
+  FieldContract,
+  FieldIntent,
+  RecordResultContract,
+  RecordResultIntent,
 } from "@dpeek/formless-presentation/contract";
 import {
   resolveRecordFieldValue,
@@ -25,15 +25,12 @@ import {
   recordFieldRef,
 } from "../../client/views.ts";
 import {
-  projectGeneratedRecordResultFormlessUiContract,
+  projectGeneratedRecordResultContract,
   projectGeneratedRecordResultOperationAction,
   type GeneratedRecordResultPlacedAction,
-} from "./formless-ui-record-result-projection.ts";
-import { projectGeneratedOperationFormlessUiControl } from "./formless-ui-operation-projection.ts";
-import {
-  projectGeneratedRecordFormlessUiFields,
-  type GeneratedFormlessUiReferenceOption,
-} from "./formless-ui-projection.ts";
+} from "./record-result-projection.ts";
+import { projectGeneratedOperationControl } from "./operation-projection.ts";
+import { projectGeneratedRecordFields, type GeneratedReferenceOption } from "./field-projection.ts";
 import { projectDeleteRecordButtonBinding, selectRecordLabel } from "./record-delete-runtime.ts";
 import {
   initialGeneratedUpdateDraftSessionState,
@@ -55,7 +52,7 @@ export type GeneratedRecordResultFieldAuthoringState = {
 };
 
 export type GeneratedRecordResultFieldRuntime = {
-  field: FormlessUiField;
+  field: FieldContract;
   fieldConfig: RecordFieldConfig;
   fieldId: string;
   kind: "field";
@@ -92,14 +89,14 @@ export type GeneratedRecordResultRuntimePlan = {
 
 export type GeneratedRecordResultFoundation = {
   fieldState?: GeneratedRecordResultFieldAuthoringState;
-  recordResult: FormlessUiRecordResultContract;
+  recordResult: RecordResultContract;
   runtimePlan: GeneratedRecordResultRuntimePlan;
 };
 
 export type SelectGeneratedRecordResultFoundationOptions = {
   accessibilityLabel?: string;
   confirmationOpenByControlId?: Readonly<Record<string, boolean | undefined>>;
-  density?: FormlessUiRecordResultContract["density"];
+  density?: RecordResultContract["density"];
   editingDisabledReason?: string;
   emptyStateDescription?: string;
   emptyStateTitle?: string;
@@ -114,9 +111,7 @@ export type SelectGeneratedRecordResultFoundationOptions = {
   >;
   recordIds: readonly string[];
   recordsById: Readonly<Record<string, StoredRecord>>;
-  referenceOptionsByFieldName?: Readonly<
-    Record<string, readonly GeneratedFormlessUiReferenceOption[]>
-  >;
+  referenceOptionsByFieldName?: Readonly<Record<string, readonly GeneratedReferenceOption[]>>;
   result: RecordResultModel;
   schema?: AppSchema | null;
   selectedRecordId?: string | null;
@@ -151,7 +146,7 @@ export function selectGeneratedRecordResultFoundation({
 
   if (recordId === undefined) {
     return {
-      recordResult: projectGeneratedRecordResultFormlessUiContract({
+      recordResult: projectGeneratedRecordResultContract({
         accessibilityLabel: resolvedAccessibilityLabel,
         density,
         editingDisabledReason: resolvedEditingDisabledReason,
@@ -169,7 +164,7 @@ export function selectGeneratedRecordResultFoundation({
 
   if (record === undefined) {
     return {
-      recordResult: projectGeneratedRecordResultFormlessUiContract({
+      recordResult: projectGeneratedRecordResultContract({
         accessibilityLabel: resolvedAccessibilityLabel,
         density,
         editingDisabledReason: resolvedEditingDisabledReason,
@@ -204,7 +199,7 @@ export function selectGeneratedRecordResultFoundation({
   const treeChildFieldsRenderInline =
     fieldPresentation === "treeChild" &&
     generatedRecordResultFieldsRenderInline(session.visibleFields);
-  const fields = projectGeneratedRecordFormlessUiFields({
+  const fields = projectGeneratedRecordFields({
     canPatch: result.updateOperation !== undefined,
     density: fieldPresentation === "treePlacement" ? "compact" : density,
     densityByFieldName:
@@ -279,7 +274,7 @@ export function selectGeneratedRecordResultFoundation({
 
   return {
     fieldState: nextFieldState,
-    recordResult: projectGeneratedRecordResultFormlessUiContract({
+    recordResult: projectGeneratedRecordResultContract({
       accessibilityLabel: resolvedAccessibilityLabel,
       density,
       editingDisabledReason: resolvedEditingDisabledReason,
@@ -353,7 +348,7 @@ export function createGeneratedRecordResultFieldAuthoringState(
 
 export function selectGeneratedRecordResultRuntimeForIntent(
   runtimePlan: GeneratedRecordResultRuntimePlan,
-  intent: FormlessUiRecordResultIntent,
+  intent: RecordResultIntent,
 ): GeneratedRecordResultRuntime | undefined {
   if (intent.resultId !== runtimePlan.resultId || intent.recordId !== runtimePlan.recordId) {
     return undefined;
@@ -379,7 +374,7 @@ export function resolveGeneratedRecordResultFieldIntent(
     resultId,
   }: {
     fieldId: string;
-    intent: FormlessUiFieldIntent;
+    intent: FieldIntent;
     recordId?: string;
     resultId?: string;
   },
@@ -413,7 +408,7 @@ function selectGeneratedRecordResultRuntimePlan({
 }: {
   entity: EntitySchema;
   id: string;
-  projectedFields: FormlessUiRecordResultContract["fields"];
+  projectedFields: RecordResultContract["fields"];
   record: StoredRecord;
   recordLabel: string;
   result: RecordResultModel;
@@ -494,7 +489,7 @@ function projectGeneratedRecordResultActions({
   runtimePlan,
 }: {
   confirmationOpenByControlId: Readonly<Record<string, boolean | undefined>>;
-  density: FormlessUiRecordResultContract["density"];
+  density: RecordResultContract["density"];
   operationStateByExecutionKey: Readonly<
     Record<string, GeneratedOperationExecutionState | undefined>
   >;
@@ -506,7 +501,7 @@ function projectGeneratedRecordResultActions({
     const state =
       operationStateByExecutionKey[binding.executionKey] ??
       createIdleGeneratedOperationExecutionState(binding.executionKey);
-    const control = projectGeneratedOperationFormlessUiControl({
+    const control = projectGeneratedOperationControl({
       binding,
       confirmationOpen: confirmationOpenByControlId[binding.id] ?? false,
       presentation: {
@@ -573,7 +568,7 @@ function resolveGeneratedRecordResultSystemFieldValues(
   };
 }
 
-function recordResultFieldIntentFieldName(intent: FormlessUiFieldIntent): string | undefined {
+function recordResultFieldIntentFieldName(intent: FieldIntent): string | undefined {
   switch (intent.type) {
     case "fieldErrorChange":
     case "iconDialogCancel":

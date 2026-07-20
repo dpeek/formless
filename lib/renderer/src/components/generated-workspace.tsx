@@ -2,42 +2,42 @@ import { useState } from "react";
 import { Heading } from "@astryxdesign/core/Text";
 import { VStack } from "@astryxdesign/core/VStack";
 import type {
-  FormlessUiContextResultReference,
-  FormlessUiCreateSurfaceContract,
-  FormlessUiCreateField,
-  FormlessUiListContract,
-  FormlessUiMainResultReference,
-  FormlessUiOperationControlContract,
-  FormlessUiOperationPresentationIntent,
-  FormlessUiRecordResultContract,
-  FormlessUiTableActionGroupContract,
-  FormlessUiWorkspaceCollectionActionGroupContract,
-  FormlessUiWorkspaceCollectionContract,
-  FormlessUiWorkspaceCollectionPresentationContract,
-  FormlessUiWorkspaceContextContract,
-  FormlessUiWorkspaceIntent,
-  FormlessUiWorkspaceManifestReference,
-  FormlessUiWorkspaceResultContract,
-  FormlessUiWorkspaceSectionContract,
-  FormlessUiWorkspaceSectionShellReference,
+  ContextResultReference,
+  CreateSurfaceContract,
+  CreateFieldContract,
+  ListContract,
+  MainResultReference,
+  OperationControlContract,
+  OperationPresentationIntent,
+  RecordResultContract,
+  TableActionGroupContract,
+  WorkspaceCollectionActionGroupContract,
+  WorkspaceCollectionContract,
+  WorkspaceCollectionPresentationContract,
+  WorkspaceContextContract,
+  WorkspaceIntent,
+  WorkspaceManifestReference,
+  WorkspaceResultContract,
+  WorkspaceSectionContract,
+  WorkspaceSectionShellReference,
 } from "@dpeek/formless-presentation/contract";
 import {
-  createFormlessUiMemoryContractHost,
-  formlessUiListResultReference,
-  formlessUiRecordResultReference,
-  formlessUiTableResultReference,
-  formlessUiTreeResultReference,
-  formlessUiWorkspaceManifestReference,
-  formlessUiWorkspaceSectionShellReference,
-  isFormlessUiWorkspaceIntent,
-  type FormlessUiContractHostNode,
-  type FormlessUiContractHostNodeSet,
-  type FormlessUiMutableContractHost,
-} from "@dpeek/formless-presentation/contract-host";
-import { FormlessUiContractHostProvider } from "@dpeek/formless-presentation/contract-host/react";
+  createMemoryPresentationHost,
+  listResultReference,
+  recordResultReference,
+  tableResultReference,
+  treeResultReference,
+  workspaceManifestReference,
+  workspaceSectionShellReference,
+  isWorkspaceIntent,
+  type PresentationNode,
+  type PresentationNodeSet,
+  type MutablePresentationHost,
+} from "@dpeek/formless-presentation/host";
+import { PresentationHostProvider } from "@dpeek/formless-presentation/host/react";
 import { applyScenarioFieldIntent } from "./fields/fixture-helpers.ts";
 import { FormlessFixtureFrame, FormlessFixtureSelector } from "./fixture-layout.tsx";
-import { AstryxSubscribedWorkspaceScreenRenderer } from "./formless-ui-workspace-screen-renderer.tsx";
+import { AstryxSubscribedWorkspaceScreenRenderer } from "./workspace-screen-renderer.tsx";
 import {
   createFormlessGeneratedWorkspaceFixtures,
   type FormlessGeneratedWorkspaceFixture,
@@ -45,7 +45,7 @@ import {
 } from "./generated-workspace.fixtures.ts";
 import { applyListFieldIntent, applyListIntent } from "./lists.tsx";
 import { applyTableFieldIntent, applyTableIntent } from "./tables.tsx";
-import { applyFormlessUiTreeResultFixtureIntent } from "./tree-results.tsx";
+import { applyTreeResultFixtureIntent } from "./tree-results.tsx";
 
 export function FormlessGeneratedWorkspaceLayout() {
   const [fixtures] = useState(createFormlessGeneratedWorkspaceHosts);
@@ -71,11 +71,11 @@ export function FormlessGeneratedWorkspaceLayout() {
             <Heading level={1}>Generated Workspace</Heading>
 
             {selectedFixture ? (
-              <FormlessUiContractHostProvider host={selectedFixture.host}>
+              <PresentationHostProvider host={selectedFixture.host}>
                 <AstryxSubscribedWorkspaceScreenRenderer
                   reference={selectedFixture.workspaceReference}
                 />
-              </FormlessUiContractHostProvider>
+              </PresentationHostProvider>
             ) : null}
           </VStack>
         </VStack>
@@ -86,10 +86,10 @@ export function FormlessGeneratedWorkspaceLayout() {
 
 export type FormlessGeneratedWorkspaceFixtureHost = {
   getWorkspace(): FormlessGeneratedWorkspaceFixture["workspace"];
-  host: Omit<FormlessUiMutableContractHost, "dispatch"> & {
-    dispatch(intent: FormlessUiWorkspaceIntent): void;
+  host: Omit<MutablePresentationHost, "dispatch"> & {
+    dispatch(intent: WorkspaceIntent): void;
   };
-  workspaceReference: FormlessUiWorkspaceManifestReference;
+  workspaceReference: WorkspaceManifestReference;
 };
 
 export function createFormlessGeneratedWorkspaceFixtureHost(
@@ -97,11 +97,11 @@ export function createFormlessGeneratedWorkspaceFixtureHost(
 ): FormlessGeneratedWorkspaceFixtureHost {
   let workspace = initialWorkspace;
   const initialPublication = projectGeneratedWorkspaceFixturePublication(workspace);
-  let host: FormlessUiMutableContractHost;
+  let host: MutablePresentationHost;
 
-  host = createFormlessUiMemoryContractHost({
+  host = createMemoryPresentationHost({
     dispatch: (intent) => {
-      if (!isFormlessUiWorkspaceIntent(intent)) {
+      if (!isWorkspaceIntent(intent)) {
         throw new Error("Generated workspace fixture host received a shell intent.");
       }
       const nextWorkspace = applyGeneratedWorkspaceIntent(workspace, intent);
@@ -125,10 +125,10 @@ export function createFormlessGeneratedWorkspaceFixtureHost(
 export function projectGeneratedWorkspaceFixturePublication(
   workspace: FormlessGeneratedWorkspaceFixture["workspace"],
 ): {
-  nodes: FormlessUiContractHostNodeSet;
-  workspaceReference: FormlessUiWorkspaceManifestReference;
+  nodes: PresentationNodeSet;
+  workspaceReference: WorkspaceManifestReference;
 } {
-  const workspaceReference = formlessUiWorkspaceManifestReference(workspace.id);
+  const workspaceReference = workspaceManifestReference(workspace.id);
   const sections = workspace.sections.map((section) =>
     projectGeneratedWorkspaceFixtureSection(workspaceReference.workspaceId, section),
   );
@@ -162,12 +162,12 @@ function createFormlessGeneratedWorkspaceHosts() {
 
 function projectGeneratedWorkspaceFixtureSection(
   workspaceId: string,
-  section: FormlessUiWorkspaceSectionContract,
+  section: WorkspaceSectionContract,
 ): {
-  nodes: FormlessUiContractHostNodeSet;
-  reference: FormlessUiWorkspaceSectionShellReference;
+  nodes: PresentationNodeSet;
+  reference: WorkspaceSectionShellReference;
 } {
-  const reference = formlessUiWorkspaceSectionShellReference(workspaceId, section.id);
+  const reference = workspaceSectionShellReference(workspaceId, section.id);
   const { contextDetail, result, ...presentation } = section.collection.presentation;
   const mainResult = projectGeneratedWorkspaceFixtureMainResult(workspaceId, section.id, result);
   const contextResult = contextDetail
@@ -205,14 +205,14 @@ function projectGeneratedWorkspaceFixtureSection(
 function projectGeneratedWorkspaceFixtureMainResult(
   workspaceId: string,
   sectionId: string,
-  result: FormlessUiWorkspaceResultContract,
+  result: WorkspaceResultContract,
 ): {
-  node: FormlessUiContractHostNode;
-  reference: FormlessUiMainResultReference;
+  node: PresentationNode;
+  reference: MainResultReference;
 } {
   switch (result.kind) {
     case "list": {
-      const reference = formlessUiListResultReference({
+      const reference = listResultReference({
         resultId: result.id,
         role: "mainResult",
         sectionId,
@@ -221,7 +221,7 @@ function projectGeneratedWorkspaceFixtureMainResult(
       return { node: { reference, snapshot: result }, reference };
     }
     case "recordResult": {
-      const reference = formlessUiRecordResultReference({
+      const reference = recordResultReference({
         resultId: result.id,
         role: "mainResult",
         sectionId,
@@ -230,7 +230,7 @@ function projectGeneratedWorkspaceFixtureMainResult(
       return { node: { reference, snapshot: result }, reference };
     }
     case "table": {
-      const reference = formlessUiTableResultReference({
+      const reference = tableResultReference({
         resultId: result.id,
         role: "mainResult",
         sectionId,
@@ -239,7 +239,7 @@ function projectGeneratedWorkspaceFixtureMainResult(
       return { node: { reference, snapshot: result }, reference };
     }
     case "treeResult": {
-      const reference = formlessUiTreeResultReference({
+      const reference = treeResultReference({
         resultId: result.id,
         role: "mainResult",
         sectionId,
@@ -253,12 +253,12 @@ function projectGeneratedWorkspaceFixtureMainResult(
 function projectGeneratedWorkspaceFixtureContextResult(
   workspaceId: string,
   sectionId: string,
-  result: FormlessUiRecordResultContract,
+  result: RecordResultContract,
 ): {
-  node: FormlessUiContractHostNode;
-  reference: FormlessUiContextResultReference;
+  node: PresentationNode;
+  reference: ContextResultReference;
 } {
-  const reference = formlessUiRecordResultReference({
+  const reference = recordResultReference({
     resultId: result.id,
     role: "contextResult",
     sectionId,
@@ -269,7 +269,7 @@ function projectGeneratedWorkspaceFixtureContextResult(
 
 export function applyGeneratedWorkspaceIntent(
   workspace: FormlessGeneratedWorkspaceFixture["workspace"],
-  intent: FormlessUiWorkspaceIntent,
+  intent: WorkspaceIntent,
 ): FormlessGeneratedWorkspaceFixture["workspace"] {
   if (intent.screenId !== workspace.id) {
     return workspace;
@@ -315,9 +315,9 @@ export function selectedGeneratedWorkspaceFixture(
 }
 
 function applyCollectionIntent(
-  collection: FormlessUiWorkspaceCollectionContract,
-  intent: Exclude<FormlessUiWorkspaceIntent, { type: "workspaceExternalAction" }>,
-): FormlessUiWorkspaceCollectionContract {
+  collection: WorkspaceCollectionContract,
+  intent: Exclude<WorkspaceIntent, { type: "workspaceExternalAction" }>,
+): WorkspaceCollectionContract {
   if (intent.type === "workspaceQuerySelection") {
     const navigation = collection.presentation.queryNavigation;
     if (!navigation?.items.some((item) => item.id === intent.queryId)) {
@@ -381,7 +381,7 @@ function applyCollectionIntent(
                 ...surface.dialog.form.fieldSet,
                 fields: surface.dialog.form.fieldSet.fields.map((field) =>
                   field.fieldId === intent.fieldId
-                    ? (applyScenarioFieldIntent(field, intent.intent) as FormlessUiCreateField)
+                    ? (applyScenarioFieldIntent(field, intent.intent) as CreateFieldContract)
                     : field,
                 ),
               },
@@ -407,7 +407,7 @@ function applyCollectionIntent(
         intent.controlId,
         intent.intent,
       ),
-    } as FormlessUiWorkspaceCollectionPresentationContract;
+    } as WorkspaceCollectionPresentationContract;
 
     return {
       ...collection,
@@ -439,9 +439,7 @@ function applyCollectionIntent(
     return {
       ...collection,
       presentation: mapWorkspaceResults(collection.presentation, intent.resultId, (result) =>
-        result.kind === "treeResult"
-          ? applyFormlessUiTreeResultFixtureIntent(result, intent.intent)
-          : result,
+        result.kind === "treeResult" ? applyTreeResultFixtureIntent(result, intent.intent) : result,
       ),
     };
   }
@@ -457,19 +455,17 @@ function applyCollectionIntent(
 }
 
 function withQueryNavigation(
-  presentation: FormlessUiWorkspaceCollectionPresentationContract,
-  queryNavigation: NonNullable<
-    FormlessUiWorkspaceCollectionPresentationContract["queryNavigation"]
-  >,
-): FormlessUiWorkspaceCollectionPresentationContract {
+  presentation: WorkspaceCollectionPresentationContract,
+  queryNavigation: NonNullable<WorkspaceCollectionPresentationContract["queryNavigation"]>,
+): WorkspaceCollectionPresentationContract {
   return { ...presentation, queryNavigation };
 }
 
 function withSelectedContext(
-  presentation: FormlessUiWorkspaceCollectionPresentationContract,
+  presentation: WorkspaceCollectionPresentationContract,
   contextId: string,
   optionId: string,
-): FormlessUiWorkspaceCollectionPresentationContract {
+): WorkspaceCollectionPresentationContract {
   if (presentation.kind === "listDetail") {
     return {
       ...presentation,
@@ -485,11 +481,11 @@ function withSelectedContext(
     : presentation;
 }
 
-function selectContextOption<P extends FormlessUiWorkspaceContextContract["presentation"]>(
-  context: FormlessUiWorkspaceContextContract & { presentation: P },
+function selectContextOption<P extends WorkspaceContextContract["presentation"]>(
+  context: WorkspaceContextContract & { presentation: P },
   contextId: string,
   optionId: string,
-): FormlessUiWorkspaceContextContract & { presentation: P } {
+): WorkspaceContextContract & { presentation: P } {
   if (
     context.id !== contextId ||
     !context.options.some((option) => option.id === optionId && option.availability.available)
@@ -505,10 +501,10 @@ function selectContextOption<P extends FormlessUiWorkspaceContextContract["prese
 }
 
 function mapCreateSurfaces(
-  presentation: FormlessUiWorkspaceCollectionPresentationContract,
+  presentation: WorkspaceCollectionPresentationContract,
   surfaceId: string,
-  update: (surface: FormlessUiCreateSurfaceContract) => FormlessUiCreateSurfaceContract,
-): FormlessUiWorkspaceCollectionPresentationContract {
+  update: (surface: CreateSurfaceContract) => CreateSurfaceContract,
+): WorkspaceCollectionPresentationContract {
   const actions = mapCollectionCreateSurface(presentation.actions, surfaceId, update);
 
   if (presentation.kind === "listDetail") {
@@ -529,11 +525,11 @@ function mapCreateSurfaces(
 }
 
 function mapCollectionCreateSurface(
-  actions: FormlessUiWorkspaceCollectionActionGroupContract,
+  actions: WorkspaceCollectionActionGroupContract,
   surfaceId: string,
-  update: (surface: FormlessUiCreateSurfaceContract) => FormlessUiCreateSurfaceContract,
-): FormlessUiWorkspaceCollectionActionGroupContract {
-  const mapAction = (action: FormlessUiWorkspaceCollectionActionGroupContract["primary"][number]) =>
+  update: (surface: CreateSurfaceContract) => CreateSurfaceContract,
+): WorkspaceCollectionActionGroupContract {
+  const mapAction = (action: WorkspaceCollectionActionGroupContract["primary"][number]) =>
     action.kind === "createAction" && action.surface.id === surfaceId
       ? { ...action, surface: update(action.surface) }
       : action;
@@ -545,11 +541,11 @@ function mapCollectionCreateSurface(
   };
 }
 
-function mapContextCreateSurface<P extends FormlessUiWorkspaceContextContract["presentation"]>(
-  context: FormlessUiWorkspaceContextContract & { presentation: P },
+function mapContextCreateSurface<P extends WorkspaceContextContract["presentation"]>(
+  context: WorkspaceContextContract & { presentation: P },
   surfaceId: string,
-  update: (surface: FormlessUiCreateSurfaceContract) => FormlessUiCreateSurfaceContract,
-): FormlessUiWorkspaceContextContract & { presentation: P } {
+  update: (surface: CreateSurfaceContract) => CreateSurfaceContract,
+): WorkspaceContextContract & { presentation: P } {
   return context.createAction?.surface.id === surfaceId
     ? {
         ...context,
@@ -559,10 +555,10 @@ function mapContextCreateSurface<P extends FormlessUiWorkspaceContextContract["p
 }
 
 function mapWorkspaceResults(
-  presentation: FormlessUiWorkspaceCollectionPresentationContract,
+  presentation: WorkspaceCollectionPresentationContract,
   resultId: string | undefined,
-  update: (result: FormlessUiWorkspaceResultContract) => FormlessUiWorkspaceResultContract,
-): FormlessUiWorkspaceCollectionPresentationContract {
+  update: (result: WorkspaceResultContract) => WorkspaceResultContract,
+): WorkspaceCollectionPresentationContract {
   if (resultId === undefined) {
     return presentation;
   }
@@ -571,7 +567,7 @@ function mapWorkspaceResults(
     presentation.result.id === resultId ? update(presentation.result) : presentation.result;
   const contextDetail =
     presentation.contextDetail?.id === resultId
-      ? (update(presentation.contextDetail) as FormlessUiRecordResultContract)
+      ? (update(presentation.contextDetail) as RecordResultContract)
       : presentation.contextDetail;
 
   return {
@@ -582,11 +578,11 @@ function mapWorkspaceResults(
 }
 
 function applyWorkspaceResultFieldIntent(
-  result: FormlessUiWorkspaceResultContract,
+  result: WorkspaceResultContract,
   fieldId: string,
   recordId: string | undefined,
-  intent: Extract<FormlessUiWorkspaceIntent, { type: "workspaceField" }>["intent"],
-): FormlessUiWorkspaceResultContract {
+  intent: Extract<WorkspaceIntent, { type: "workspaceField" }>["intent"],
+): WorkspaceResultContract {
   if (result.kind === "list") {
     const sourceField = result.items
       .find((item) => item.id === recordId)
@@ -603,11 +599,11 @@ function applyWorkspaceResultFieldIntent(
 }
 
 function mapCollectionOperation(
-  actions: FormlessUiWorkspaceCollectionActionGroupContract,
+  actions: WorkspaceCollectionActionGroupContract,
   controlId: string,
-  intent: FormlessUiOperationPresentationIntent,
-): FormlessUiWorkspaceCollectionActionGroupContract {
-  const mapAction = (action: FormlessUiWorkspaceCollectionActionGroupContract["primary"][number]) =>
+  intent: OperationPresentationIntent,
+): WorkspaceCollectionActionGroupContract {
+  const mapAction = (action: WorkspaceCollectionActionGroupContract["primary"][number]) =>
     action.kind === "operationAction" && action.control.id === controlId
       ? { ...action, control: applyFixtureOperationIntent(action.control, intent) }
       : action;
@@ -620,10 +616,10 @@ function mapCollectionOperation(
 }
 
 function mapResultOperation(
-  result: FormlessUiWorkspaceResultContract,
+  result: WorkspaceResultContract,
   controlId: string,
-  intent: FormlessUiOperationPresentationIntent,
-): FormlessUiWorkspaceResultContract {
+  intent: OperationPresentationIntent,
+): WorkspaceResultContract {
   if (result.kind === "list") {
     return {
       ...result,
@@ -657,9 +653,9 @@ function mapResultOperation(
 }
 
 function mapListActionGroup(
-  actions: FormlessUiListContract["items"][number]["actions"],
+  actions: ListContract["items"][number]["actions"],
   controlId: string,
-  intent: FormlessUiOperationPresentationIntent,
+  intent: OperationPresentationIntent,
 ) {
   const mapAction = (action: (typeof actions.primary)[number]) =>
     action.control.id === controlId
@@ -674,9 +670,9 @@ function mapListActionGroup(
 }
 
 function mapTableActionGroup(
-  actions: FormlessUiTableActionGroupContract,
+  actions: TableActionGroupContract,
   controlId: string,
-  intent: FormlessUiOperationPresentationIntent,
+  intent: OperationPresentationIntent,
 ) {
   const mapAction = (action: (typeof actions.primary)[number]) =>
     action.kind === "operationAction" && action.control.id === controlId
@@ -691,11 +687,11 @@ function mapTableActionGroup(
 }
 
 function mapRecordResultOperation(
-  result: FormlessUiRecordResultContract,
+  result: RecordResultContract,
   controlId: string,
-  intent: FormlessUiOperationPresentationIntent,
-): FormlessUiRecordResultContract {
-  const mapAction = (action: FormlessUiRecordResultContract["actions"]["primary"][number]) =>
+  intent: OperationPresentationIntent,
+): RecordResultContract {
+  const mapAction = (action: RecordResultContract["actions"]["primary"][number]) =>
     action.control.id === controlId
       ? { ...action, control: applyFixtureOperationIntent(action.control, intent) }
       : action;
@@ -711,9 +707,9 @@ function mapRecordResultOperation(
 }
 
 function applyRecordResultIntent(
-  result: FormlessUiRecordResultContract,
-  intent: Extract<FormlessUiWorkspaceIntent, { type: "workspaceRecordResult" }>["intent"],
-): FormlessUiRecordResultContract {
+  result: RecordResultContract,
+  intent: Extract<WorkspaceIntent, { type: "workspaceRecordResult" }>["intent"],
+): RecordResultContract {
   if (intent.resultId !== result.id || intent.recordId !== result.selectedRecord?.id) {
     return result;
   }
@@ -731,9 +727,9 @@ function applyRecordResultIntent(
 }
 
 function applyFixtureOperationIntent(
-  control: FormlessUiOperationControlContract,
-  intent: FormlessUiOperationPresentationIntent,
-): FormlessUiOperationControlContract {
+  control: OperationControlContract,
+  intent: OperationPresentationIntent,
+): OperationControlContract {
   if (intent.controlId !== control.id) {
     return control;
   }

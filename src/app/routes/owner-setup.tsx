@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearch } from "wouter";
-import type { FormlessUiAuthIntent } from "@dpeek/formless-presentation/contract";
+import type { AuthIntent } from "@dpeek/formless-presentation/contract";
 import {
   parseOwnerPasskeyRegistrationOptionsResponse,
   parseOwnerPasskeyRegistrationVerifyResponse,
@@ -147,7 +147,7 @@ export function OwnerSetupRoute() {
     });
   }
 
-  async function handleIntent(intent: FormlessUiAuthIntent) {
+  async function handleIntent(intent: AuthIntent) {
     if (!authIntentIsCurrent(surface, intent)) {
       return;
     }

@@ -2,11 +2,11 @@ import { readFile } from "node:fs/promises";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vite-plus/test";
 import type {
-  FormlessUiContractReference,
-  FormlessUiDocumentThemeIntent,
-  FormlessUiShellNavigationSectionContract,
+  PresentationReference,
+  DocumentThemeIntent,
+  ShellNavigationSectionContract,
 } from "@dpeek/formless-presentation/contract";
-import { formlessUiContractReferenceKey } from "@dpeek/formless-presentation/contract-host";
+import { presentationReferenceKey } from "@dpeek/formless-presentation/host";
 import {
   createFormlessApplicationShellFixtures,
   type FormlessApplicationShellFixture,
@@ -237,7 +237,7 @@ describe("canonical application-shell fixtures", () => {
     const notifications = new Set<string>();
     const unsubscribe = publication.nodes.map(({ reference }) =>
       fixtureHost.host.subscribe(reference, () => {
-        notifications.add(formlessUiContractReferenceKey(reference));
+        notifications.add(presentationReferenceKey(reference));
       }),
     );
     const website = roots.destinations[1];
@@ -255,7 +255,7 @@ describe("canonical application-shell fixtures", () => {
     fixtureHost.host.dispatch(website.selectionIntent);
     expect(notifications).toEqual(
       new Set([
-        formlessUiContractReferenceKey(publication.shellReference),
+        presentationReferenceKey(publication.shellReference),
         referenceKey(publication.nodes, roots.id),
       ]),
     );
@@ -314,7 +314,7 @@ describe("canonical application-shell fixtures", () => {
 
     const notifications: string[] = [];
     const stopListening = fixtureHost.host.subscribe(themeReference, () => {
-      notifications.push(formlessUiContractReferenceKey(themeReference));
+      notifications.push(presentationReferenceKey(themeReference));
     });
 
     fixtureHost.host.dispatch(light.selectionIntent);
@@ -324,7 +324,7 @@ describe("canonical application-shell fixtures", () => {
       selectionControl: { selectedMode: "light" },
     });
     expect(fixtureHost.getShell()).toBe(shellBefore);
-    expect(notifications).toEqual([formlessUiContractReferenceKey(themeReference)]);
+    expect(notifications).toEqual([presentationReferenceKey(themeReference)]);
 
     const fixedFixture = requiredFixture(
       createFormlessApplicationShellFixtures(),
@@ -333,7 +333,7 @@ describe("canonical application-shell fixtures", () => {
     if (!fixedFixture.documentTheme) {
       throw new Error("Missing fixed document-theme fixture.");
     }
-    const unsupportedFixedIntent: FormlessUiDocumentThemeIntent = {
+    const unsupportedFixedIntent: DocumentThemeIntent = {
       ...light.selectionIntent,
       themeId: fixedFixture.documentTheme.id,
     };
@@ -385,12 +385,12 @@ describe("Application Shell prototype layout", () => {
         specifier,
       ),
     );
-    expect(hostSource).toContain("createFormlessUiMemoryContractHost");
+    expect(hostSource).toContain("createMemoryPresentationHost");
     expect(hostSource).toContain("AstryxSubscribedApplicationShellRenderer");
-    expect(shellSource).toContain("useFormlessUiDocumentTheme(themeReference)");
+    expect(shellSource).toContain("useDocumentTheme(themeReference)");
     expect(forbiddenImports).toEqual([]);
     expect(fixtureSource).toContain("documentTheme");
-    expect(sideNavSource).not.toContain("FormlessUiDocumentTheme");
+    expect(sideNavSource).not.toContain("DocumentTheme");
   });
 });
 
@@ -421,7 +421,7 @@ function requiredCurrentShell(shell: FormlessApplicationShellFixtureState | null
 
 function requiredSection(
   shell: FormlessApplicationShellFixtureState,
-  role: FormlessUiShellNavigationSectionContract["role"],
+  role: ShellNavigationSectionContract["role"],
 ) {
   const section = shell.sections.find((candidate) => candidate.role === role);
   if (!section) {
@@ -430,10 +430,7 @@ function requiredSection(
   return section;
 }
 
-function referenceKey(
-  nodes: readonly { reference: FormlessUiContractReference }[],
-  sectionId: string,
-) {
+function referenceKey(nodes: readonly { reference: PresentationReference }[], sectionId: string) {
   const reference = nodes.find(
     (node) =>
       node.reference.kind === "shellNavigationSectionReference" &&
@@ -444,7 +441,7 @@ function referenceKey(
     throw new Error(`Missing ${sectionId} fixture reference.`);
   }
 
-  return formlessUiContractReferenceKey(reference);
+  return presentationReferenceKey(reference);
 }
 
 function importSpecifiers(source: string) {

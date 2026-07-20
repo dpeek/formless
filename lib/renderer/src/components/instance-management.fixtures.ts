@@ -1,30 +1,30 @@
 import type { FieldSchema } from "@dpeek/formless-schema";
 import type {
-  FormlessUiActionTriggerContract,
-  FormlessUiButtonContract,
-  FormlessUiCreateField,
-  FormlessUiCreateSurfaceContract,
-  FormlessUiField,
-  FormlessUiManagementInstallDialogContract,
-  FormlessUiManagementManifestContract,
-  FormlessUiManagementReadyContract,
-  FormlessUiManagementWorkspaceOperationContract,
-  FormlessUiOperationControlContract,
-  FormlessUiTableActionGroupContract,
-  FormlessUiTableColumnContract,
-  FormlessUiTableContract,
-  FormlessUiTableEditActionContract,
-  FormlessUiWorkspaceCollectionContract,
-  FormlessUiWorkspaceCollectionActionGroupContract,
-  FormlessUiWorkspaceContract,
-  FormlessUiWorkspaceIntentScope,
-  FormlessUiWorkspaceSectionContract,
+  ActionTriggerContract,
+  ButtonContract,
+  CreateFieldContract,
+  CreateSurfaceContract,
+  FieldContract,
+  ManagementInstallDialogContract,
+  ManagementManifestContract,
+  ManagementReadyContract,
+  ManagementWorkspaceOperationContract,
+  OperationControlContract,
+  TableActionGroupContract,
+  TableColumnContract,
+  TableContract,
+  TableEditActionContract,
+  WorkspaceCollectionContract,
+  WorkspaceCollectionActionGroupContract,
+  WorkspaceContract,
+  WorkspaceIntentScope,
+  WorkspaceSectionContract,
 } from "@dpeek/formless-presentation/contract";
 import {
-  formlessUiManagementInstallDialogReference,
-  formlessUiManagementManifestReference,
-  formlessUiWorkspaceManifestReference,
-} from "@dpeek/formless-presentation/contract-host";
+  managementInstallDialogReference,
+  managementManifestReference,
+  workspaceManifestReference,
+} from "@dpeek/formless-presentation/host";
 import {
   booleanControl,
   createField,
@@ -50,9 +50,9 @@ export type FormlessInstanceManagementFixtureId =
   | "push-authorization-required";
 
 export type FormlessInstanceManagementFixtureState = {
-  dialog: FormlessUiManagementInstallDialogContract | null;
-  manifest: FormlessUiManagementManifestContract;
-  workspaces: readonly FormlessUiWorkspaceContract[];
+  dialog: ManagementInstallDialogContract | null;
+  manifest: ManagementManifestContract;
+  workspaces: readonly WorkspaceContract[];
 };
 
 export type FormlessInstanceManagementFixture = {
@@ -61,16 +61,15 @@ export type FormlessInstanceManagementFixture = {
   state: FormlessInstanceManagementFixtureState;
 };
 
-export const instanceManagementReference =
-  formlessUiManagementManifestReference("instance-management");
-export const instanceManagementInstallDialogReference = formlessUiManagementInstallDialogReference(
+export const instanceManagementReference = managementManifestReference("instance-management");
+export const instanceManagementInstallDialogReference = managementInstallDialogReference(
   instanceManagementReference.managementId,
   "instance-management:install-dialog",
 );
-export const instanceManagementAppsReference = formlessUiWorkspaceManifestReference(
+export const instanceManagementAppsReference = workspaceManifestReference(
   "instance-management:apps",
 );
-export const instanceManagementRoutesReference = formlessUiWorkspaceManifestReference(
+export const instanceManagementRoutesReference = workspaceManifestReference(
   "instance-management:routes",
 );
 export const instanceManagementInstallActionId = "instance-management:apps:install";
@@ -209,9 +208,9 @@ function readyFixture(
   id: FormlessInstanceManagementFixtureId,
   label: string,
   options: {
-    dialog?: FormlessUiManagementInstallDialogContract;
+    dialog?: ManagementInstallDialogContract;
     installed?: boolean;
-    manifestOverrides?: Partial<FormlessUiManagementReadyContract>;
+    manifestOverrides?: Partial<ManagementReadyContract>;
     pushState?: PushFixtureState;
   },
 ) {
@@ -242,7 +241,7 @@ function manifestBase() {
   };
 }
 
-function loadingManifest(): FormlessUiManagementManifestContract {
+function loadingManifest(): ManagementManifestContract {
   return {
     ...manifestBase(),
     message: "Loading instance settings...",
@@ -250,7 +249,7 @@ function loadingManifest(): FormlessUiManagementManifestContract {
   };
 }
 
-function failedManifest(): FormlessUiManagementManifestContract {
+function failedManifest(): ManagementManifestContract {
   return {
     ...manifestBase(),
     feedback: managementFeedback(
@@ -263,9 +262,7 @@ function failedManifest(): FormlessUiManagementManifestContract {
   };
 }
 
-function readyManifest(
-  overrides: Partial<FormlessUiManagementReadyContract> = {},
-): FormlessUiManagementReadyContract {
+function readyManifest(overrides: Partial<ManagementReadyContract> = {}): ManagementReadyContract {
   return {
     ...manifestBase(),
     installDialog: instanceManagementInstallDialogReference,
@@ -280,8 +277,8 @@ function readyManifest(
 }
 
 function installDialog(
-  overrides: Partial<FormlessUiManagementInstallDialogContract> = {},
-): FormlessUiManagementInstallDialogContract {
+  overrides: Partial<ManagementInstallDialogContract> = {},
+): ManagementInstallDialogContract {
   const fields = overrides.fields ?? installFields();
   const packageOptions = packageOptionsFor(fields.package);
   const submit =
@@ -330,7 +327,7 @@ function installFields(options: { installId?: string; installIdError?: string } 
     ),
     label: installField("label", "Docs Site", "Label"),
     package: installField("packageAppKey", "site", "App type"),
-  } satisfies FormlessUiManagementInstallDialogContract["fields"];
+  } satisfies ManagementInstallDialogContract["fields"];
 }
 
 function installField(
@@ -338,7 +335,7 @@ function installField(
   value: string,
   label: string,
   error?: string,
-): FormlessUiCreateField {
+): CreateFieldContract {
   const field = installFieldSchema(label);
   const control = textControl(field);
 
@@ -359,7 +356,7 @@ function installField(
   });
 }
 
-function packageOptionsFor(packageField: FormlessUiCreateField) {
+function packageOptionsFor(packageField: CreateFieldContract) {
   return [
     packageOption(packageField, "site", "Site", "Install the Site package.", true),
     packageOption(packageField, "tasks", "Tasks", "Install the Tasks package.", false),
@@ -368,7 +365,7 @@ function packageOptionsFor(packageField: FormlessUiCreateField) {
 }
 
 function packageOption(
-  packageField: FormlessUiCreateField,
+  packageField: CreateFieldContract,
   packageAppKey: string,
   label: string,
   description: string,
@@ -395,7 +392,7 @@ function packageOption(
 
 type PushFixtureState = "authorization-required" | "idle";
 
-function pushOperation(state: PushFixtureState): FormlessUiManagementWorkspaceOperationContract {
+function pushOperation(state: PushFixtureState): ManagementWorkspaceOperationContract {
   const operationId = instanceManagementWorkspacePushOperationId;
   const promptId = `${operationId}:authorization`;
 
@@ -424,7 +421,7 @@ function pushOperation(state: PushFixtureState): FormlessUiManagementWorkspaceOp
   };
 }
 
-function pushControl(state: PushFixtureState): FormlessUiOperationControlContract {
+function pushControl(state: PushFixtureState): OperationControlContract {
   const control = instanceManagementWorkspacePushFixture.initial;
 
   return state === "authorization-required"
@@ -513,26 +510,22 @@ function managementWorkspace(
       label: string,
       role: "computed" | "field" | "reference",
     ])[];
-    collectionActions?: (
-      scope: FormlessUiWorkspaceIntentScope,
-    ) => FormlessUiWorkspaceCollectionActionGroupContract;
+    collectionActions?: (scope: WorkspaceIntentScope) => WorkspaceCollectionActionGroupContract;
     emptyDescription: string;
     emptyTitle: string;
     keepCollectionReadyWhenEmpty?: boolean;
     rowActions?: (
-      scope: FormlessUiWorkspaceIntentScope,
+      scope: WorkspaceIntentScope,
       row: readonly [id: string, first: string, second: string],
-    ) => FormlessUiTableActionGroupContract;
+    ) => TableActionGroupContract;
     rows: readonly (readonly [id: string, first: string, second: string])[];
-    sectionActions?: (
-      scope: FormlessUiWorkspaceIntentScope,
-    ) => FormlessUiWorkspaceSectionContract["actions"];
+    sectionActions?: (scope: WorkspaceIntentScope) => WorkspaceSectionContract["actions"];
   },
-): FormlessUiWorkspaceContract {
+): WorkspaceContract {
   const scope = workspaceScope(workspaceId, localId);
   const table = managementTable(scope, label, input);
   const queryNavigation = managementQueryNavigation(scope, input.rows.length);
-  const collection: FormlessUiWorkspaceCollectionContract = {
+  const collection: WorkspaceCollectionContract = {
     accessibilityLabel: label,
     availability:
       input.rows.length === 0 && !input.keepCollectionReadyWhenEmpty
@@ -558,7 +551,7 @@ function managementWorkspace(
     },
     selectedQueryId: queryNavigation.items[0]!.id,
   };
-  const section: FormlessUiWorkspaceSectionContract = {
+  const section: WorkspaceSectionContract = {
     accessibilityLabel: `${label} section`,
     actions: input.sectionActions?.(scope) ?? [],
     collection,
@@ -579,7 +572,7 @@ function managementWorkspace(
 }
 
 function managementTable(
-  scope: FormlessUiWorkspaceIntentScope,
+  scope: WorkspaceIntentScope,
   label: string,
   input: {
     columns: readonly (readonly [
@@ -590,12 +583,12 @@ function managementTable(
     emptyDescription: string;
     emptyTitle: string;
     rowActions?: (
-      scope: FormlessUiWorkspaceIntentScope,
+      scope: WorkspaceIntentScope,
       row: readonly [id: string, first: string, second: string],
-    ) => FormlessUiTableActionGroupContract;
+    ) => TableActionGroupContract;
     rows: readonly (readonly [id: string, first: string, second: string])[];
   },
-): FormlessUiTableContract {
+): TableContract {
   const resultId = `${scope.collectionId}:result`;
   const columns = [
     ...input.columns.map(([id, columnLabel, contentRole], index) => ({
@@ -624,7 +617,7 @@ function managementTable(
             width: "xs" as const,
           },
         ]),
-  ] satisfies readonly FormlessUiTableColumnContract[];
+  ] satisfies readonly TableColumnContract[];
 
   return {
     accessibilityLabel: label,
@@ -669,8 +662,8 @@ function managementTable(
   };
 }
 
-function installAppAction(): FormlessUiWorkspaceSectionContract["actions"][number] {
-  const action: FormlessUiActionTriggerContract = {
+function installAppAction(): WorkspaceSectionContract["actions"][number] {
+  const action: ActionTriggerContract = {
     accessibilityLabel: "Install app",
     icon: "add",
     id: instanceManagementInstallActionControlId,
@@ -692,8 +685,8 @@ function installAppAction(): FormlessUiWorkspaceSectionContract["actions"][numbe
 }
 
 function routeCollectionActions(
-  scope: FormlessUiWorkspaceIntentScope,
-): FormlessUiWorkspaceCollectionActionGroupContract {
+  scope: WorkspaceIntentScope,
+): WorkspaceCollectionActionGroupContract {
   return {
     id: `${scope.collectionId}:actions`,
     kind: "workspaceCollectionActions",
@@ -703,9 +696,7 @@ function routeCollectionActions(
   };
 }
 
-function routeCreateSurface(
-  scope: FormlessUiWorkspaceIntentScope,
-): FormlessUiCreateSurfaceContract {
+function routeCreateSurface(scope: WorkspaceIntentScope): CreateSurfaceContract {
   const id = `${scope.collectionId}:create:route`;
   const title = "Create Route";
 
@@ -738,7 +729,7 @@ function routeCreateSurface(
   };
 }
 
-function routeCreateFields(ownerId: string): FormlessUiCreateField[] {
+function routeCreateFields(ownerId: string): CreateFieldContract[] {
   return [
     createRouteBooleanField(ownerId, "enabled", routeEnabledField, true),
     createRouteTextField(ownerId, "matchHost", routeMatchHostField, ""),
@@ -863,9 +854,9 @@ type RouteFixtureRecord = {
 };
 
 function routeRowActions(
-  scope: FormlessUiWorkspaceIntentScope,
+  scope: WorkspaceIntentScope,
   record: RouteFixtureRecord,
-): FormlessUiTableActionGroupContract {
+): TableActionGroupContract {
   return {
     id: `${scope.collectionId}:result:row:${record.id}:actions`,
     kind: "actionGroup",
@@ -876,9 +867,9 @@ function routeRowActions(
 }
 
 function routeEditAction(
-  scope: FormlessUiWorkspaceIntentScope,
+  scope: WorkspaceIntentScope,
   record: RouteFixtureRecord,
-): FormlessUiTableEditActionContract {
+): TableEditActionContract {
   const tableId = `${scope.collectionId}:result`;
   const rowId = `${tableId}:row:${record.id}`;
   const dialogId = `${rowId}:route.update:dialog`;
@@ -916,7 +907,7 @@ function routeEditAction(
   };
 }
 
-function routeEditFields(rowId: string, record: RouteFixtureRecord): FormlessUiField[] {
+function routeEditFields(rowId: string, record: RouteFixtureRecord): FieldContract[] {
   return [
     recordRouteBooleanField(rowId, "enabled", routeEnabledField, true),
     recordRouteTextField(rowId, "matchHost", routeMatchHostField, ""),
@@ -1034,7 +1025,7 @@ function recordRouteReferenceField(
   });
 }
 
-function tableCell(rowId: string, column: FormlessUiTableColumnContract, displayValue: string) {
+function tableCell(rowId: string, column: TableColumnContract, displayValue: string) {
   return {
     columnId: column.id,
     contents: [
@@ -1056,7 +1047,7 @@ function tableCell(rowId: string, column: FormlessUiTableColumnContract, display
   };
 }
 
-function managementQueryNavigation(scope: FormlessUiWorkspaceIntentScope, count: number) {
+function managementQueryNavigation(scope: WorkspaceIntentScope, count: number) {
   const allId = `${scope.collectionId}:query:all`;
   const activeId = `${scope.collectionId}:query:active`;
   const item = (id: string, label: string, selected: boolean) => ({
@@ -1077,7 +1068,7 @@ function managementQueryNavigation(scope: FormlessUiWorkspaceIntentScope, count:
   };
 }
 
-function emptyCollectionActions(scope: FormlessUiWorkspaceIntentScope) {
+function emptyCollectionActions(scope: WorkspaceIntentScope) {
   return {
     id: `${scope.collectionId}:actions`,
     kind: "workspaceCollectionActions" as const,
@@ -1087,7 +1078,7 @@ function emptyCollectionActions(scope: FormlessUiWorkspaceIntentScope) {
   };
 }
 
-function workspaceScope(workspaceId: string, localId: string): FormlessUiWorkspaceIntentScope {
+function workspaceScope(workspaceId: string, localId: string): WorkspaceIntentScope {
   const sectionId = `${workspaceId}:section:${localId}`;
   return {
     collectionId: `${sectionId}:collection:${localId}`,
@@ -1100,14 +1091,14 @@ function button(
   id: string,
   label: string,
   options: {
-    density?: FormlessUiButtonContract["density"];
+    density?: ButtonContract["density"];
     disabled?: boolean;
     disabledReason?: string;
-    pending?: FormlessUiButtonContract["pending"];
-    prominence?: FormlessUiButtonContract["prominence"];
-    type?: FormlessUiButtonContract["type"];
+    pending?: ButtonContract["pending"];
+    prominence?: ButtonContract["prominence"];
+    type?: ButtonContract["type"];
   } = {},
-): FormlessUiButtonContract {
+): ButtonContract {
   return {
     accessibilityLabel: label,
     content: { kind: "label", label: label.replace(/ workspace$/, "") },

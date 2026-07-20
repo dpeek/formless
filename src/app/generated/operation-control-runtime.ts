@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type {
-  FormlessUiOperationInvokeIntent,
-  FormlessUiOperationPresentationIntent,
+  OperationInvokeIntent,
+  OperationPresentationIntent,
 } from "@dpeek/formless-presentation/contract";
 import {
   createGeneratedOperationController,
@@ -35,12 +35,12 @@ export type GeneratedOperationControlTriggerDecision =
   | { type: "execute" }
   | { type: "ignore" };
 
-export type HandleGeneratedOperationFormlessUiIntentOptions = {
+export type HandleGeneratedOperationIntentOptions = {
   binding: GeneratedOperationControlBinding;
   confirmationOpen?: boolean;
   controller: GeneratedOperationController;
-  intent: FormlessUiOperationPresentationIntent;
-  invoke: (intent: FormlessUiOperationInvokeIntent) => Promise<GeneratedOperationExecutionResult>;
+  intent: OperationPresentationIntent;
+  invoke: (intent: OperationInvokeIntent) => Promise<GeneratedOperationExecutionResult>;
   onConfirmationOpenChange?: (open: boolean) => void;
   onSuccess?: (result: Exclude<GeneratedOperationExecutionResult, { type: "failed" }>) => void;
 };
@@ -98,7 +98,7 @@ export function selectGeneratedOperationControlTriggerDecision({
   return { type: "execute" };
 }
 
-export async function handleGeneratedOperationFormlessUiIntent({
+export async function handleGeneratedOperationIntent({
   binding,
   confirmationOpen = false,
   controller,
@@ -106,9 +106,7 @@ export async function handleGeneratedOperationFormlessUiIntent({
   invoke,
   onConfirmationOpenChange,
   onSuccess,
-}: HandleGeneratedOperationFormlessUiIntentOptions): Promise<
-  GeneratedOperationExecutionResult | undefined
-> {
+}: HandleGeneratedOperationIntentOptions): Promise<GeneratedOperationExecutionResult | undefined> {
   if (intent.controlId !== binding.id) {
     return undefined;
   }

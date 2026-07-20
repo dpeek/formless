@@ -1,7 +1,7 @@
 import type {
-  FormlessUiDisplayField,
-  FormlessUiField,
-  FormlessUiRecordField,
+  DisplayFieldContract,
+  FieldContract,
+  RecordFieldContract,
 } from "@dpeek/formless-presentation/contract";
 import {
   booleanControl,
@@ -28,7 +28,7 @@ export type RecordFieldSurfaceFixture = {
 };
 
 export type RecordFieldRecordFixture = {
-  fields: readonly FormlessUiField[];
+  fields: readonly FieldContract[];
   id: string;
 };
 
@@ -148,7 +148,7 @@ export function createRecordFieldSurfaceFixtures(): readonly RecordFieldSurfaceF
   ];
 }
 
-function createRecordEditorFields(): readonly FormlessUiRecordField[] {
+function createRecordEditorFields(): readonly RecordFieldContract[] {
   return [
     recordField({
       fieldName: "title",
@@ -288,7 +288,7 @@ function createTableCellFields({
   priority: keyof typeof priorityField.values;
   recordId: string;
   title: string;
-}): readonly (FormlessUiRecordField | FormlessUiDisplayField)[] {
+}): readonly (RecordFieldContract | DisplayFieldContract)[] {
   return [
     displayField({
       fieldName: "title",
@@ -364,7 +364,7 @@ function createTableCellFields({
   ];
 }
 
-function createDetailFields(): readonly FormlessUiDisplayField[] {
+function createDetailFields(): readonly DisplayFieldContract[] {
   return [
     displayField({
       fieldName: "title",

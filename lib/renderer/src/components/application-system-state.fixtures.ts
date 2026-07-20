@@ -1,14 +1,13 @@
-import type { FormlessUiApplicationSystemStateContract } from "@dpeek/formless-presentation/contract";
-import { formlessUiApplicationSystemStateReference } from "@dpeek/formless-presentation/contract-host";
+import type { ApplicationSystemStateContract } from "@dpeek/formless-presentation/contract";
+import { applicationSystemStateReference } from "@dpeek/formless-presentation/host";
 
-export type FormlessApplicationSystemStateFixtureId =
-  FormlessUiApplicationSystemStateContract["state"];
+export type FormlessApplicationSystemStateFixtureId = ApplicationSystemStateContract["state"];
 
 export type FormlessApplicationSystemStateFixture = {
   id: FormlessApplicationSystemStateFixtureId;
   label: string;
-  reference: ReturnType<typeof formlessUiApplicationSystemStateReference>;
-  snapshot: FormlessUiApplicationSystemStateContract;
+  reference: ReturnType<typeof applicationSystemStateReference>;
+  snapshot: ApplicationSystemStateContract;
 };
 
 export function createFormlessApplicationSystemStateFixtures(): FormlessApplicationSystemStateFixture[] {
@@ -51,9 +50,7 @@ function fixture(
   label: string,
   heading: string,
   message: string,
-  options: Partial<
-    Pick<FormlessUiApplicationSystemStateContract, "actions" | "facts" | "feedback">
-  > = {
+  options: Partial<Pick<ApplicationSystemStateContract, "actions" | "facts" | "feedback">> = {
     actions: [],
     facts: [],
   },
@@ -62,7 +59,7 @@ function fixture(
   return {
     id: state,
     label,
-    reference: formlessUiApplicationSystemStateReference(stateId),
+    reference: applicationSystemStateReference(stateId),
     snapshot: {
       accessibilityLabel: heading,
       actions: options.actions ?? [],
@@ -82,7 +79,7 @@ function action(
   id: string,
   label: string,
   purpose: "navigate" | "retry",
-): FormlessUiApplicationSystemStateContract["actions"][number] {
+): ApplicationSystemStateContract["actions"][number] {
   const controlId = `control:${id}`;
   return {
     control: {
@@ -110,7 +107,7 @@ function feedback(
   id: string,
   intent: "danger" | "warning",
   title: string,
-): FormlessUiApplicationSystemStateContract["feedback"] {
+): ApplicationSystemStateContract["feedback"] {
   return {
     id: `feedback:${id}`,
     intent,

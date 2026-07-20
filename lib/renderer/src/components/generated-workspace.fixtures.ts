@@ -1,32 +1,29 @@
 import type { FieldSchema } from "@dpeek/formless-schema";
 import type {
-  FormlessUiActionTriggerContract,
-  FormlessUiButtonContract,
-  FormlessUiCreateSurfaceContract,
-  FormlessUiOperationControlContract,
-  FormlessUiRecordResultContract,
-  FormlessUiTreeChildCreationContract,
-  FormlessUiTreeItemContract,
-  FormlessUiTreeResultContract,
-  FormlessUiWorkspaceCollectionActionGroupContract,
-  FormlessUiWorkspaceCollectionContract,
-  FormlessUiWorkspaceContextContract,
-  FormlessUiWorkspaceContract,
-  FormlessUiWorkspaceIntentScope,
-  FormlessUiWorkspaceLinkActionContract,
-  FormlessUiWorkspaceQueryNavigationContract,
-  FormlessUiWorkspaceResultContract,
-  FormlessUiWorkspaceSectionContract,
+  ActionTriggerContract,
+  ButtonContract,
+  CreateSurfaceContract,
+  OperationControlContract,
+  RecordResultContract,
+  TreeChildCreationContract,
+  TreeItemContract,
+  TreeResultContract,
+  WorkspaceCollectionActionGroupContract,
+  WorkspaceCollectionContract,
+  WorkspaceContextContract,
+  WorkspaceContract,
+  WorkspaceIntentScope,
+  WorkspaceLinkActionContract,
+  WorkspaceQueryNavigationContract,
+  WorkspaceResultContract,
+  WorkspaceSectionContract,
 } from "@dpeek/formless-presentation/contract";
 import { createField, textControl, withFixtureFieldOccurrence } from "./fields/fixture-helpers.ts";
-import { createFormlessUiListFixtures } from "./lists.fixtures.ts";
+import { createListFixtures } from "./lists.fixtures.ts";
 import { operationControlFixtures } from "./operation-controls.fixtures.ts";
-import { createFormlessUiRecordResultFixtures } from "./record-results.fixtures.ts";
-import { createFormlessUiTableFixtures } from "./tables.fixtures.ts";
-import {
-  createFormlessUiTreeResultFixtures,
-  type FormlessUiTreeResultFixtureId,
-} from "./tree-results.fixtures.ts";
+import { createRecordResultFixtures } from "./record-results.fixtures.ts";
+import { createTableFixtures } from "./tables.fixtures.ts";
+import { createTreeResultFixtures, type TreeResultFixtureId } from "./tree-results.fixtures.ts";
 
 export type FormlessGeneratedWorkspaceFixtureId =
   | "empty-collection"
@@ -42,10 +39,10 @@ export type FormlessGeneratedWorkspaceFixtureId =
 export type FormlessGeneratedWorkspaceFixture = {
   id: FormlessGeneratedWorkspaceFixtureId;
   label: string;
-  workspace: FormlessUiWorkspaceContract;
+  workspace: WorkspaceContract;
 };
 
-type WorkspaceFixtureScope = FormlessUiWorkspaceIntentScope;
+type WorkspaceFixtureScope = WorkspaceIntentScope;
 
 const createTitleSchema = {
   label: "Task",
@@ -83,7 +80,7 @@ export function createFormlessGeneratedWorkspaceFixtures(): FormlessGeneratedWor
   ];
 }
 
-function tasksWorkspace(): FormlessUiWorkspaceContract {
+function tasksWorkspace(): WorkspaceContract {
   const scope = workspaceScope("tasks", "tasks", "tasks");
 
   return workspace("tasks", "Tasks", [
@@ -119,7 +116,7 @@ function tasksWorkspace(): FormlessUiWorkspaceContract {
   ]);
 }
 
-function multiSectionWorkspace(): FormlessUiWorkspaceContract {
+function multiSectionWorkspace(): WorkspaceContract {
   const companyScope = workspaceScope("crm", "companies", "companies");
   const contactScope = workspaceScope("crm", "contacts", "contacts");
 
@@ -155,7 +152,7 @@ function multiSectionWorkspace(): FormlessUiWorkspaceContract {
   ]);
 }
 
-function listDetailWorkspace(): FormlessUiWorkspaceContract {
+function listDetailWorkspace(): WorkspaceContract {
   const scope = workspaceScope("projects", "work", "project-tasks");
   const selector = populatedContext(scope, "localListDetail");
 
@@ -194,7 +191,7 @@ function listDetailWorkspace(): FormlessUiWorkspaceContract {
   ]);
 }
 
-function siteTreeWorkspace(presentation: "listDetail" | "ordinary"): FormlessUiWorkspaceContract {
+function siteTreeWorkspace(presentation: "listDetail" | "ordinary"): WorkspaceContract {
   const workspaceId = presentation === "ordinary" ? "site-tree" : "site-tree-list-detail";
   const scope = workspaceScope(workspaceId, "composition", "blocks");
   const result = treeResult(scope, "shallow");
@@ -234,7 +231,7 @@ function siteTreeWorkspace(presentation: "listDetail" | "ordinary"): FormlessUiW
   ]);
 }
 
-function singletonContextWorkspace(): FormlessUiWorkspaceContract {
+function singletonContextWorkspace(): WorkspaceContract {
   const scope = workspaceScope("site-settings", "settings", "settings");
 
   return workspace(
@@ -266,7 +263,7 @@ function singletonContextWorkspace(): FormlessUiWorkspaceContract {
   );
 }
 
-function emptyContextWorkspace(): FormlessUiWorkspaceContract {
+function emptyContextWorkspace(): WorkspaceContract {
   const scope = workspaceScope("empty-projects", "tasks", "tasks");
 
   return workspace("empty-projects", "Projects", [
@@ -282,7 +279,7 @@ function emptyContextWorkspace(): FormlessUiWorkspaceContract {
   ]);
 }
 
-function unavailableWorkspace(state: "empty" | "unavailable"): FormlessUiWorkspaceContract {
+function unavailableWorkspace(state: "empty" | "unavailable"): WorkspaceContract {
   const scope = workspaceScope(`${state}-workspace`, "records", "records");
   const ready = readyOrdinaryCollection(scope, {
     label: "Records",
@@ -315,9 +312,9 @@ function unavailableWorkspace(state: "empty" | "unavailable"): FormlessUiWorkspa
 function workspace(
   id: string,
   label: string,
-  sections: readonly FormlessUiWorkspaceSectionContract[],
-  actions: readonly FormlessUiWorkspaceLinkActionContract[] = [],
-): FormlessUiWorkspaceContract {
+  sections: readonly WorkspaceSectionContract[],
+  actions: readonly WorkspaceLinkActionContract[] = [],
+): WorkspaceContract {
   return {
     accessibilityLabel: `${label} workspace`,
     actions,
@@ -331,12 +328,12 @@ function workspace(
 function section(
   scope: WorkspaceFixtureScope,
   input: {
-    actions?: FormlessUiWorkspaceSectionContract["actions"];
-    collection: FormlessUiWorkspaceCollectionContract;
-    headingVisibility: FormlessUiWorkspaceSectionContract["headingVisibility"];
+    actions?: WorkspaceSectionContract["actions"];
+    collection: WorkspaceCollectionContract;
+    headingVisibility: WorkspaceSectionContract["headingVisibility"];
     label: string;
   },
-): FormlessUiWorkspaceSectionContract {
+): WorkspaceSectionContract {
   return {
     accessibilityLabel: `${input.label} section`,
     actions: input.actions ?? [],
@@ -351,16 +348,16 @@ function section(
 function readyOrdinaryCollection(
   scope: WorkspaceFixtureScope,
   input: {
-    actions?: FormlessUiWorkspaceCollectionActionGroupContract;
-    context?: FormlessUiWorkspaceContextContract;
-    contextDetail?: FormlessUiRecordResultContract;
+    actions?: WorkspaceCollectionActionGroupContract;
+    context?: WorkspaceContextContract;
+    contextDetail?: RecordResultContract;
     label: string;
-    queryNavigation?: FormlessUiWorkspaceQueryNavigationContract;
-    result: FormlessUiWorkspaceResultContract;
+    queryNavigation?: WorkspaceQueryNavigationContract;
+    result: WorkspaceResultContract;
     selectedQueryId?: string | null;
-    summaries?: FormlessUiWorkspaceCollectionContract["presentation"]["summaries"];
+    summaries?: WorkspaceCollectionContract["presentation"]["summaries"];
   },
-): FormlessUiWorkspaceCollectionContract {
+): WorkspaceCollectionContract {
   return {
     accessibilityLabel: input.label,
     availability: { state: "ready" },
@@ -380,7 +377,7 @@ function readyOrdinaryCollection(
   };
 }
 
-function queryNavigation(scope: WorkspaceFixtureScope): FormlessUiWorkspaceQueryNavigationContract {
+function queryNavigation(scope: WorkspaceFixtureScope): WorkspaceQueryNavigationContract {
   const activeId = scopedId(scope, "query", "active");
   const completedId = scopedId(scope, "query", "completed");
 
@@ -411,10 +408,10 @@ function queryNavigation(scope: WorkspaceFixtureScope): FormlessUiWorkspaceQuery
   };
 }
 
-function populatedContext<P extends FormlessUiWorkspaceContextContract["presentation"]>(
+function populatedContext<P extends WorkspaceContextContract["presentation"]>(
   scope: WorkspaceFixtureScope,
   presentation: P,
-): FormlessUiWorkspaceContextContract & { presentation: P } {
+): WorkspaceContextContract & { presentation: P } {
   const contextId = scopedId(scope, "context", "projects");
   const launchId = scopedId(scope, "contextOption", "projects:project-launch");
   const docsId = scopedId(scope, "contextOption", "projects:project-docs");
@@ -467,7 +464,7 @@ function populatedContext<P extends FormlessUiWorkspaceContextContract["presenta
 function siteRootContext<P extends "localListDetail" | "localTabs">(
   scope: WorkspaceFixtureScope,
   presentation: P,
-): FormlessUiWorkspaceContextContract & { presentation: P } {
+): WorkspaceContextContract & { presentation: P } {
   const contextId = scopedId(scope, "context", "site-roots");
   const homepageId = scopedId(scope, "contextOption", "homepage");
   const headerId = scopedId(scope, "contextOption", "header");
@@ -497,7 +494,7 @@ function siteRootContext<P extends "localListDetail" | "localTabs">(
   };
 }
 
-function emptyContext(scope: WorkspaceFixtureScope): FormlessUiWorkspaceContextContract {
+function emptyContext(scope: WorkspaceFixtureScope): WorkspaceContextContract {
   return {
     accessibilityLabel: "Project records",
     availability: {
@@ -521,9 +518,7 @@ function emptyContext(scope: WorkspaceFixtureScope): FormlessUiWorkspaceContextC
   };
 }
 
-function collectionActions(
-  scope: WorkspaceFixtureScope,
-): FormlessUiWorkspaceCollectionActionGroupContract {
+function collectionActions(scope: WorkspaceFixtureScope): WorkspaceCollectionActionGroupContract {
   return {
     id: scopedId(scope, "collectionActions", "actions"),
     kind: "workspaceCollectionActions",
@@ -548,7 +543,7 @@ function collectionActions(
 
 function emptyCollectionActions(
   scope: WorkspaceFixtureScope,
-): FormlessUiWorkspaceCollectionActionGroupContract {
+): WorkspaceCollectionActionGroupContract {
   return {
     id: scopedId(scope, "collectionActions", "actions"),
     kind: "workspaceCollectionActions",
@@ -562,9 +557,9 @@ function externalAction(
   scope: WorkspaceFixtureScope,
   id: string,
   label: string,
-): FormlessUiWorkspaceSectionContract["actions"][number] {
+): WorkspaceSectionContract["actions"][number] {
   const actionId = scopedId(scope, "externalActionControl", id);
-  const action: FormlessUiActionTriggerContract = {
+  const action: ActionTriggerContract = {
     accessibilityLabel: label,
     icon: "add",
     id: actionId,
@@ -582,7 +577,7 @@ function externalAction(
   };
 }
 
-function createSurface(id: string, title: string): FormlessUiCreateSurfaceContract {
+function createSurface(id: string, title: string): CreateSurfaceContract {
   const control = textControl(createTitleSchema);
 
   return {
@@ -626,7 +621,7 @@ function createSurface(id: string, title: string): FormlessUiCreateSurfaceContra
 function listResult(
   scope: WorkspaceFixtureScope,
   state: "active" | "empty" = "active",
-): FormlessUiWorkspaceResultContract {
+): WorkspaceResultContract {
   const list = requiredListFixture(state);
   const id = scopedId(scope, "result", "tasks");
 
@@ -653,7 +648,7 @@ function tableResult(
   scope: WorkspaceFixtureScope,
   localId: string,
   state: "active" | "empty" = "active",
-): FormlessUiWorkspaceResultContract {
+): WorkspaceResultContract {
   const table = requiredTableFixture(state);
   const id = scopedId(scope, "result", localId);
 
@@ -682,8 +677,8 @@ function tableResult(
 
 function treeResult(
   scope: WorkspaceFixtureScope,
-  fixtureId: FormlessUiTreeResultFixtureId,
-): FormlessUiTreeResultContract {
+  fixtureId: TreeResultFixtureId,
+): TreeResultContract {
   const source = requiredTreeResultFixture(fixtureId);
   const id = scopedId(scope, "result", fixtureId);
 
@@ -711,9 +706,9 @@ function treeResult(
 }
 
 function scopeTreeItems(
-  items: readonly FormlessUiTreeItemContract[],
+  items: readonly TreeItemContract[],
   resultId: string,
-): readonly FormlessUiTreeItemContract[] {
+): readonly TreeItemContract[] {
   return items.map((item) => ({
     ...item,
     children: scopeTreeItems(item.children, resultId),
@@ -745,9 +740,9 @@ function scopeTreeItems(
 }
 
 function scopeTreeChildCreation(
-  creation: FormlessUiTreeChildCreationContract,
+  creation: TreeChildCreationContract,
   resultId: string,
-): FormlessUiTreeChildCreationContract {
+): TreeChildCreationContract {
   return {
     ...creation,
     variants: creation.variants.map((variant) => ({
@@ -761,7 +756,7 @@ function recordResult(
   scope: WorkspaceFixtureScope,
   localId: string,
   recordLabel: string,
-): FormlessUiRecordResultContract {
+): RecordResultContract {
   const result = requiredRecordResultFixture();
   const id = scopedId(scope, "result", localId);
 
@@ -798,9 +793,9 @@ function recordResult(
 }
 
 function scopedOperationControl(
-  control: FormlessUiOperationControlContract,
+  control: OperationControlContract,
   id: string,
-): FormlessUiOperationControlContract {
+): OperationControlContract {
   const withControlId = <T extends { controlId: string }>(intent: T): T => ({
     ...intent,
     controlId: id,
@@ -836,9 +831,9 @@ function scopedOperationControl(
 function button(
   id: string,
   label: string,
-  type: FormlessUiButtonContract["type"] = "button",
-  prominence: FormlessUiButtonContract["prominence"] = "secondary",
-): FormlessUiButtonContract {
+  type: ButtonContract["type"] = "button",
+  prominence: ButtonContract["prominence"] = "secondary",
+): ButtonContract {
   return {
     accessibilityLabel: label,
     content: { kind: "label", label },
@@ -870,7 +865,7 @@ function scopedId(scope: WorkspaceFixtureScope, kind: string, localId: string) {
 }
 
 function requiredListFixture(id: "active" | "empty") {
-  const fixture = createFormlessUiListFixtures().find((candidate) => candidate.id === id);
+  const fixture = createListFixtures().find((candidate) => candidate.id === id);
   if (!fixture) {
     throw new Error(`Missing ${id} list fixture.`);
   }
@@ -878,7 +873,7 @@ function requiredListFixture(id: "active" | "empty") {
 }
 
 function requiredTableFixture(id: "active" | "empty") {
-  const fixture = createFormlessUiTableFixtures().find((candidate) => candidate.id === id);
+  const fixture = createTableFixtures().find((candidate) => candidate.id === id);
   if (!fixture) {
     throw new Error(`Missing ${id} table fixture.`);
   }
@@ -886,17 +881,15 @@ function requiredTableFixture(id: "active" | "empty") {
 }
 
 function requiredRecordResultFixture() {
-  const fixture = createFormlessUiRecordResultFixtures().find(
-    (candidate) => candidate.id === "editable",
-  );
+  const fixture = createRecordResultFixtures().find((candidate) => candidate.id === "editable");
   if (!fixture) {
     throw new Error("Missing editable record-result fixture.");
   }
   return fixture.recordResult;
 }
 
-function requiredTreeResultFixture(id: FormlessUiTreeResultFixtureId) {
-  const fixture = createFormlessUiTreeResultFixtures().find((candidate) => candidate.id === id);
+function requiredTreeResultFixture(id: TreeResultFixtureId) {
+  const fixture = createTreeResultFixtures().find((candidate) => candidate.id === id);
   if (!fixture) {
     throw new Error(`Missing ${id} tree-result fixture.`);
   }

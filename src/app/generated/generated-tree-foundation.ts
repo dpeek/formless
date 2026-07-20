@@ -1,18 +1,18 @@
 import type {
-  FormlessUiField,
-  FormlessUiTreeChildVariantSelectionIntent,
-  FormlessUiTreeContextActionIntent,
-  FormlessUiTreeCreateIntent,
-  FormlessUiTreeDisclosureOpenChangeIntent,
-  FormlessUiTreeEditingAvailability,
-  FormlessUiTreeFieldIntent,
-  FormlessUiTreeItemContract,
-  FormlessUiTreeItemSelectionIntent,
-  FormlessUiTreeOperationIntent,
-  FormlessUiTreeOrderingContract,
-  FormlessUiTreeReorderIntent,
-  FormlessUiTreeResultContract,
-  FormlessUiTreeWarningContract,
+  FieldContract,
+  TreeChildVariantSelectionIntent,
+  TreeContextActionIntent,
+  TreeCreateIntent,
+  TreeDisclosureOpenChangeIntent,
+  TreeEditingAvailability,
+  TreeFieldIntent,
+  TreeItemContract,
+  TreeItemSelectionIntent,
+  TreeOperationIntent,
+  TreeOrderingContract,
+  TreeReorderIntent,
+  TreeResultContract,
+  TreeWarningContract,
 } from "@dpeek/formless-presentation/contract";
 import type { AppSchema } from "@dpeek/formless-schema";
 import type { FieldValue, StoredRecord } from "@dpeek/formless-storage";
@@ -47,9 +47,9 @@ import {
 } from "./generated-tree-create-foundation.ts";
 import { resolveGeneratedCreateFieldIntent } from "./generated-create-field-index.ts";
 import {
-  projectGeneratedOperationFormlessUiControl,
-  projectGeneratedOperationFormlessUiFeedback,
-} from "./formless-ui-operation-projection.ts";
+  projectGeneratedOperationControl,
+  projectGeneratedOperationFeedback,
+} from "./operation-projection.ts";
 import {
   selectOrderingMoveMenuItems,
   selectResultOrderingContext,
@@ -121,7 +121,7 @@ export type GeneratedTreeRecordFieldRuntime = {
 };
 
 export type GeneratedTreeFieldIntentRuntime = {
-  field: FormlessUiField;
+  field: FieldContract;
   target: GeneratedTreeRecordFieldRuntime;
 };
 
@@ -158,7 +158,7 @@ export type GeneratedTreeRuntimePlan = {
 
 export type GeneratedTreeFoundation = {
   runtimePlan: GeneratedTreeRuntimePlan;
-  tree: FormlessUiTreeResultContract;
+  tree: TreeResultContract;
 };
 
 export function selectGeneratedTreeFoundation({
@@ -216,7 +216,7 @@ export function selectGeneratedTreeFoundation({
     selectedRootId === undefined
       ? "Select a tree root to continue."
       : "The selected tree root is unavailable.";
-  const editing: FormlessUiTreeEditingAvailability =
+  const editing: TreeEditingAvailability =
     rootRecord === undefined
       ? { disabledReason: rootUnavailableMessage, enabled: false }
       : generatedTreeSupportsEditing(result)
@@ -383,7 +383,7 @@ export function selectGeneratedTreeFoundation({
 
 export function resolveGeneratedTreeItemSelectionIntent(
   runtimePlan: GeneratedTreeRuntimePlan,
-  intent: FormlessUiTreeItemSelectionIntent,
+  intent: TreeItemSelectionIntent,
 ): GeneratedTreeItemSelectionRuntime | undefined {
   if (intent.resultId !== runtimePlan.resultId) {
     return undefined;
@@ -394,7 +394,7 @@ export function resolveGeneratedTreeItemSelectionIntent(
 
 export function resolveGeneratedTreeDisclosureIntent(
   runtimePlan: GeneratedTreeRuntimePlan,
-  intent: FormlessUiTreeDisclosureOpenChangeIntent,
+  intent: TreeDisclosureOpenChangeIntent,
 ): GeneratedTreeDisclosureRuntime | undefined {
   if (intent.resultId !== runtimePlan.resultId) {
     return undefined;
@@ -406,7 +406,7 @@ export function resolveGeneratedTreeDisclosureIntent(
 
 export function resolveGeneratedTreeContextActionIntent(
   runtimePlan: GeneratedTreeRuntimePlan,
-  intent: FormlessUiTreeContextActionIntent,
+  intent: TreeContextActionIntent,
 ): GeneratedTreeContextNavigationRuntime | undefined {
   if (intent.resultId !== runtimePlan.resultId) {
     return undefined;
@@ -418,7 +418,7 @@ export function resolveGeneratedTreeContextActionIntent(
 
 export function resolveGeneratedTreeChildVariantSelectionIntent(
   runtimePlan: GeneratedTreeRuntimePlan,
-  intent: FormlessUiTreeChildVariantSelectionIntent,
+  intent: TreeChildVariantSelectionIntent,
 ): GeneratedTreeChildVariantRuntime | undefined {
   if (intent.resultId !== runtimePlan.resultId) {
     return undefined;
@@ -432,7 +432,7 @@ export function resolveGeneratedTreeChildVariantSelectionIntent(
 
 export function resolveGeneratedTreeCreateIntent(
   runtimePlan: GeneratedTreeRuntimePlan,
-  intent: FormlessUiTreeCreateIntent,
+  intent: TreeCreateIntent,
 ): GeneratedTreeChildCreateRuntime | undefined {
   if (intent.resultId !== runtimePlan.resultId || intent.surfaceId !== intent.intent.surfaceId) {
     return undefined;
@@ -446,8 +446,8 @@ export function resolveGeneratedTreeCreateIntent(
 
 export function resolveGeneratedTreeCreateFieldIntent(
   runtimePlan: GeneratedTreeRuntimePlan,
-  intent: FormlessUiTreeFieldIntent,
-): { field: FormlessUiField; runtime: GeneratedTreeChildCreateRuntime } | undefined {
+  intent: TreeFieldIntent,
+): { field: FieldContract; runtime: GeneratedTreeChildCreateRuntime } | undefined {
   if (intent.resultId !== runtimePlan.resultId || intent.target.kind !== "create") {
     return undefined;
   }
@@ -472,7 +472,7 @@ export function resolveGeneratedTreeCreateFieldIntent(
 
 export function resolveGeneratedTreeFieldIntent(
   runtimePlan: GeneratedTreeRuntimePlan,
-  intent: FormlessUiTreeFieldIntent,
+  intent: TreeFieldIntent,
 ): GeneratedTreeFieldIntentRuntime | undefined {
   if (intent.resultId !== runtimePlan.resultId || intent.target.kind === "create") {
     return undefined;
@@ -498,7 +498,7 @@ export function resolveGeneratedTreeFieldIntent(
 
 export function resolveGeneratedTreeOperationIntent(
   runtimePlan: GeneratedTreeRuntimePlan,
-  intent: FormlessUiTreeOperationIntent,
+  intent: TreeOperationIntent,
 ): GeneratedTreePlacementRemovalRuntime | undefined {
   if (intent.resultId !== runtimePlan.resultId || intent.controlId !== intent.intent.controlId) {
     return undefined;
@@ -510,7 +510,7 @@ export function resolveGeneratedTreeOperationIntent(
 
 export function resolveGeneratedTreeReorderIntent(
   runtimePlan: GeneratedTreeRuntimePlan,
-  intent: FormlessUiTreeReorderIntent,
+  intent: TreeReorderIntent,
 ): GeneratedTreeOrderingRuntime | undefined {
   if (intent.resultId !== runtimePlan.resultId) {
     return undefined;
@@ -533,7 +533,7 @@ function selectGeneratedTreeOrderingPlan({
   recordsById,
   result,
 }: {
-  items: readonly FormlessUiTreeItemContract[];
+  items: readonly TreeItemContract[];
   recordsById: Record<string, StoredRecord>;
   result: TreeResultModel;
 }): GeneratedTreeOrderingPlan {
@@ -620,10 +620,10 @@ function selectGeneratedTreeOrderingPlan({
 }
 
 function projectGeneratedTreeOrderings(
-  items: readonly FormlessUiTreeItemContract[],
+  items: readonly TreeItemContract[],
   plan: GeneratedTreeOrderingPlan,
   options: GeneratedTreeOrderingProjectionOptions | undefined,
-): FormlessUiTreeItemContract[] {
+): TreeItemContract[] {
   return items.map((item) => {
     const orderingItems = plan.itemsByItemId.get(item.id);
     const orderingRuntimes = plan.orderingByItemId.get(item.id) ?? [];
@@ -653,10 +653,10 @@ function projectGeneratedTreeOrdering({
   orderingItems,
   pending,
 }: {
-  item: FormlessUiTreeItemContract;
+  item: TreeItemContract;
   orderingItems: readonly OrderingMoveMenuItem[];
   pending: boolean;
-}): FormlessUiTreeOrderingContract {
+}): TreeOrderingContract {
   return {
     accessibilityLabel: `Reorder ${item.label}`,
     actions: orderingItems.map((orderingItem) => {
@@ -693,7 +693,7 @@ function projectGeneratedTreeOrdering({
 function projectGeneratedTreeOrderingFeedback(
   orderings: readonly GeneratedTreeOrderingRuntime[],
   options: GeneratedTreeOrderingProjectionOptions | undefined,
-): FormlessUiTreeResultContract["feedback"] {
+): TreeResultContract["feedback"] {
   const projected = [];
   const seenExecutionKeys = new Set<string>();
 
@@ -707,7 +707,7 @@ function projectGeneratedTreeOrderingFeedback(
     if (state === undefined || state.status === "idle") {
       continue;
     }
-    const feedback = projectGeneratedOperationFormlessUiFeedback(
+    const feedback = projectGeneratedOperationFeedback(
       runtime.binding,
       displaySafeTreeOrderingState(state),
       {
@@ -747,9 +747,9 @@ function displaySafeTreeOrderingState(
 }
 
 function projectGeneratedTreeSelection(
-  items: readonly FormlessUiTreeItemContract[],
+  items: readonly TreeItemContract[],
   selectedPlacementId: string | undefined,
-): FormlessUiTreeItemContract[] {
+): TreeItemContract[] {
   return items.map((item) => ({
     ...item,
     children: projectGeneratedTreeSelection(item.children, selectedPlacementId),
@@ -770,17 +770,17 @@ function projectGeneratedTreeSelectedEditor({
   schema,
 }: {
   childFields: GeneratedTreeRecordProjectionOptions | undefined;
-  childCreation: NonNullable<FormlessUiTreeResultContract["selectedEditor"]>["childCreation"];
-  editing: FormlessUiTreeEditingAvailability;
+  childCreation: NonNullable<TreeResultContract["selectedEditor"]>["childCreation"];
+  editing: TreeEditingAvailability;
   fieldStateByFieldSetId: Readonly<Record<string, GeneratedRecordResultRecordState | undefined>>;
-  item: FormlessUiTreeItemContract;
+  item: TreeItemContract;
   placementFields: GeneratedTreeRecordProjectionOptions | undefined;
-  removePlacement: NonNullable<FormlessUiTreeResultContract["selectedEditor"]>["removePlacement"];
+  removePlacement: NonNullable<TreeResultContract["selectedEditor"]>["removePlacement"];
   recordsById: Record<string, StoredRecord>;
   result: TreeResultModel;
   schema: AppSchema | null;
 }): {
-  editor: NonNullable<FormlessUiTreeResultContract["selectedEditor"]>;
+  editor: NonNullable<TreeResultContract["selectedEditor"]>;
   fieldTargets: GeneratedTreeRecordFieldRuntime[];
 } {
   const placementRecord = recordsById[item.placementId];
@@ -851,14 +851,12 @@ function projectGeneratedTreePlacementRemoval({
   result,
 }: {
   fallbackPlacementId: string | null;
-  item: FormlessUiTreeItemContract;
+  item: TreeItemContract;
   options: GeneratedTreePlacementRemovalProjectionOptions | undefined;
   result: TreeResultModel;
 }):
   | {
-      control: NonNullable<
-        NonNullable<FormlessUiTreeResultContract["selectedEditor"]>["removePlacement"]
-      >;
+      control: NonNullable<NonNullable<TreeResultContract["selectedEditor"]>["removePlacement"]>;
       runtime: GeneratedTreePlacementRemovalRuntime;
     }
   | undefined {
@@ -886,7 +884,7 @@ function projectGeneratedTreePlacementRemoval({
       : state;
 
   return {
-    control: projectGeneratedOperationFormlessUiControl({
+    control: projectGeneratedOperationControl({
       binding,
       confirmationOpen: options?.confirmationOpenByControlId?.[binding.id] ?? false,
       feedbackCopy: {
@@ -1002,7 +1000,7 @@ function generatedTreeRecordResult(
 
 function treeFieldSet(
   target: GeneratedTreeRecordFieldRuntime,
-  editing: FormlessUiTreeEditingAvailability,
+  editing: TreeEditingAvailability,
   label: string,
 ) {
   return {
@@ -1015,7 +1013,7 @@ function treeFieldSet(
   };
 }
 
-function emptyTreeFieldSet(id: string, editing: FormlessUiTreeEditingAvailability, label: string) {
+function emptyTreeFieldSet(id: string, editing: TreeEditingAvailability, label: string) {
   return {
     disabled: !editing.enabled,
     ...(editing.enabled ? {} : { disabledReason: editing.disabledReason }),
@@ -1026,9 +1024,7 @@ function emptyTreeFieldSet(id: string, editing: FormlessUiTreeEditingAvailabilit
   };
 }
 
-function flattenTreeItems(
-  items: readonly FormlessUiTreeItemContract[],
-): FormlessUiTreeItemContract[] {
+function flattenTreeItems(items: readonly TreeItemContract[]): TreeItemContract[] {
   return items.flatMap((item) => [item, ...flattenTreeItems(item.children)]);
 }
 
@@ -1052,7 +1048,7 @@ function selectGeneratedTreeItems({
   recordsById: Record<string, StoredRecord>;
   result: TreeResultModel;
   selectableContextRecordIds: ReadonlySet<string> | undefined;
-}): FormlessUiTreeItemContract[] {
+}): TreeItemContract[] {
   return selectChildPlacements(parentRecordId, recordsById, result).map((placement) =>
     projectGeneratedTreeItem({
       ancestors,
@@ -1088,7 +1084,7 @@ function projectGeneratedTreeItem({
   recordsById: Record<string, StoredRecord>;
   result: TreeResultModel;
   selectableContextRecordIds: ReadonlySet<string> | undefined;
-}): FormlessUiTreeItemContract {
+}): TreeItemContract {
   const itemId = `${id}:item:${placement.id}`;
   const childRecordId = stringValue(placement.values[result.childFieldName]);
   const childRecord = selectChildRecord(childRecordId, recordsById, result);
@@ -1209,7 +1205,7 @@ function projectGeneratedTreeReadinessWarnings({
   itemId: string;
   placement: StoredRecord;
   recordsById: Readonly<Record<string, StoredRecord>>;
-}): FormlessUiTreeWarningContract[] {
+}): TreeWarningContract[] {
   return [
     projectGeneratedTreeRecordReadinessWarning({
       itemId,
@@ -1227,7 +1223,7 @@ function projectGeneratedTreeReadinessWarnings({
           source: "child",
           title: "Child readiness warnings",
         }),
-  ].filter((warning): warning is FormlessUiTreeWarningContract => warning !== undefined);
+  ].filter((warning): warning is TreeWarningContract => warning !== undefined);
 }
 
 function projectGeneratedTreeRecordReadinessWarning({
@@ -1242,7 +1238,7 @@ function projectGeneratedTreeRecordReadinessWarning({
   recordsById: Readonly<Record<string, StoredRecord>>;
   source: "child" | "placement";
   title: string;
-}): FormlessUiTreeWarningContract | undefined {
+}): TreeWarningContract | undefined {
   const items = getRecordReadinessWarnings(record, recordsById);
 
   return items.length === 0
@@ -1339,7 +1335,7 @@ function projectGeneratedTreeContextActions({
     selectableContextRecordIds?.has(childRecord.id) === true;
   const unavailableMessage = "This item is unavailable as a workspace context target.";
   const actionId = `${itemId}:context:${contextLink.target.contextName}`;
-  const intent: FormlessUiTreeContextActionIntent = {
+  const intent: TreeContextActionIntent = {
     actionId,
     itemId,
     resultId,

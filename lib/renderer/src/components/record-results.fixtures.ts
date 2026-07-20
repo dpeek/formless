@@ -1,10 +1,10 @@
 import type { FieldSchema } from "@dpeek/formless-schema";
 import type {
-  FormlessUiField,
-  FormlessUiOperationControlContract,
-  FormlessUiRecordField,
-  FormlessUiRecordResultActionContract,
-  FormlessUiRecordResultContract,
+  FieldContract,
+  OperationControlContract,
+  RecordFieldContract,
+  RecordResultActionContract,
+  RecordResultContract,
 } from "@dpeek/formless-presentation/contract";
 import {
   displayField,
@@ -19,17 +19,17 @@ import {
 import { fieldScenarioGroups } from "./fields/fixtures.ts";
 import { operationControlFixtures } from "./operation-controls.fixtures.ts";
 
-export type FormlessUiRecordResultFixtureId =
+export type RecordResultFixtureId =
   | "editable"
   | "editing-disabled"
   | "empty"
   | "read-only"
   | "unavailable";
 
-export type FormlessUiRecordResultFixture = {
-  id: FormlessUiRecordResultFixtureId;
+export type RecordResultFixture = {
+  id: RecordResultFixtureId;
   label: string;
-  recordResult: FormlessUiRecordResultContract;
+  recordResult: RecordResultContract;
 };
 
 const taskId = "task-1";
@@ -79,7 +79,7 @@ const ownerEmailSchema = {
   type: "text",
 } satisfies Extract<FieldSchema, { type: "text" }>;
 
-export function createFormlessUiRecordResultFixtures(): FormlessUiRecordResultFixture[] {
+export function createRecordResultFixtures(): RecordResultFixture[] {
   return [
     {
       id: "editable",
@@ -113,7 +113,7 @@ export function recordResultUnionField(kind: "article" | "link") {
   return kind === "article" ? summaryField() : urlField();
 }
 
-export function completedTaskControl(): FormlessUiOperationControlContract {
+export function completedTaskControl(): OperationControlContract {
   return {
     feedback: {
       detail: "Status changed from Open to Done.",
@@ -154,7 +154,7 @@ export function taskStatusField(value: "done" | "open") {
   return withRecordIdentity(variant.field);
 }
 
-function editableRecordResultFixture(): FormlessUiRecordResultContract {
+function editableRecordResultFixture(): RecordResultContract {
   return readyRecordResult({
     accessibilityLabel: "Task record",
     actions: {
@@ -178,7 +178,7 @@ function editableRecordResultFixture(): FormlessUiRecordResultContract {
   });
 }
 
-function readOnlyRecordResultFixture(): FormlessUiRecordResultContract {
+function readOnlyRecordResultFixture(): RecordResultContract {
   return readyRecordResult({
     accessibilityLabel: "Read-only task record",
     actions: emptyActions("read-only"),
@@ -189,7 +189,7 @@ function readOnlyRecordResultFixture(): FormlessUiRecordResultContract {
   });
 }
 
-function editingDisabledRecordResultFixture(): FormlessUiRecordResultContract {
+function editingDisabledRecordResultFixture(): RecordResultContract {
   return readyRecordResult({
     accessibilityLabel: "Owner-only task record",
     actions: emptyActions("editing-disabled"),
@@ -205,7 +205,7 @@ function editingDisabledRecordResultFixture(): FormlessUiRecordResultContract {
 
 type ReadyRecordFieldState = "editable" | "editing-disabled" | "read-only";
 
-function readyRecordFields(state: ReadyRecordFieldState): FormlessUiField[] {
+function readyRecordFields(state: ReadyRecordFieldState): FieldContract[] {
   const fields = [
     editableTitleField(),
     readOnlySlugField(),
@@ -227,7 +227,7 @@ function readyRecordFields(state: ReadyRecordFieldState): FormlessUiField[] {
   return fields;
 }
 
-function readOnlyRecordField(field: FormlessUiField): FormlessUiField {
+function readOnlyRecordField(field: FieldContract): FieldContract {
   if (field.mode === "display") {
     return field;
   }
@@ -282,7 +282,7 @@ function readOnlyRecordField(field: FormlessUiField): FormlessUiField {
   });
 }
 
-function recordFieldUnitSuffix(field: FormlessUiRecordField) {
+function recordFieldUnitSuffix(field: RecordFieldContract) {
   const unitValue = String(field.drafts.unitRecordValue ?? "");
 
   if (!field.valueUnit || unitValue === "") {
@@ -292,7 +292,7 @@ function recordFieldUnitSuffix(field: FormlessUiRecordField) {
   return field.valueUnit.options.find((option) => option.value === unitValue)?.label ?? unitValue;
 }
 
-function editingDisabledRecordField(field: FormlessUiField): FormlessUiField {
+function editingDisabledRecordField(field: FieldContract): FieldContract {
   if (field.mode === "display" || field.access.kind !== "editable") {
     return field;
   }
@@ -309,7 +309,7 @@ function editingDisabledRecordField(field: FormlessUiField): FormlessUiField {
   };
 }
 
-function stateRecordResultFixture(state: "empty" | "unavailable"): FormlessUiRecordResultContract {
+function stateRecordResultFixture(state: "empty" | "unavailable"): RecordResultContract {
   return {
     accessibilityLabel: state === "empty" ? "Empty task record" : "Unavailable task record",
     actions: emptyActions(state),
@@ -343,13 +343,10 @@ function readyRecordResult({
   fields,
   selectedRecordLabel,
   warnings,
-}: Pick<
-  FormlessUiRecordResultContract,
-  "accessibilityLabel" | "actions" | "editing" | "warnings"
-> & {
-  fields: readonly FormlessUiField[];
+}: Pick<RecordResultContract, "accessibilityLabel" | "actions" | "editing" | "warnings"> & {
+  fields: readonly FieldContract[];
   selectedRecordLabel: string;
-}): FormlessUiRecordResultContract {
+}): RecordResultContract {
   return {
     accessibilityLabel,
     actions,
@@ -473,7 +470,7 @@ function invalidOwnerEmailField() {
   });
 }
 
-function specializedRecordFields(): FormlessUiField[] {
+function specializedRecordFields(): FieldContract[] {
   return [
     scenarioRecordField("source-icon", "icon"),
     scenarioRecordField("media", "media"),
@@ -504,7 +501,7 @@ function scenarioRecordField(
   return withRecordIdentity(variant.field);
 }
 
-function withRecordIdentity(field: FormlessUiField): FormlessUiField {
+function withRecordIdentity(field: FieldContract): FieldContract {
   return withFixtureFieldOccurrence(
     {
       ...field,
@@ -519,7 +516,7 @@ function recordResultFieldOccurrence(fieldName: string) {
   return { ownerId: `${resultId}:${taskId}`, placementId: fieldName };
 }
 
-function initialCompleteTaskControl(): FormlessUiOperationControlContract {
+function initialCompleteTaskControl(): OperationControlContract {
   return {
     id: "task-complete",
     kind: "operationControl",
@@ -536,7 +533,7 @@ function initialCompleteTaskControl(): FormlessUiOperationControlContract {
   };
 }
 
-function completeTaskTrigger(): FormlessUiOperationControlContract["trigger"] {
+function completeTaskTrigger(): OperationControlContract["trigger"] {
   return {
     accessibilityLabel: "Complete task",
     content: { icon: "confirm", kind: "iconAndLabel", label: "Complete" },
@@ -554,13 +551,13 @@ function completeTaskTrigger(): FormlessUiOperationControlContract["trigger"] {
 }
 
 function operationAction(
-  control: FormlessUiOperationControlContract,
-  role: FormlessUiRecordResultActionContract["role"],
-): FormlessUiRecordResultActionContract {
+  control: OperationControlContract,
+  role: RecordResultActionContract["role"],
+): RecordResultActionContract {
   return { control, kind: "operationAction", role };
 }
 
-function emptyActions(id: string): FormlessUiRecordResultContract["actions"] {
+function emptyActions(id: string): RecordResultContract["actions"] {
   return {
     id: `${resultId}:${id}:actions`,
     kind: "actionGroup",

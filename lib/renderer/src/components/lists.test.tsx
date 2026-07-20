@@ -1,10 +1,10 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vite-plus/test";
 import type {
-  FormlessUiListContract,
-  FormlessUiListOperationActionContract,
+  ListContract,
+  ListOperationActionContract,
 } from "@dpeek/formless-presentation/contract";
-import { createFormlessUiListFixtures } from "./lists.fixtures.ts";
+import { createListFixtures } from "./lists.fixtures.ts";
 import {
   FormlessListsLayout,
   applyListFieldIntent,
@@ -21,7 +21,7 @@ vi.mock("@stylexjs/stylex", () => ({
 
 describe("canonical list fixtures", () => {
   it("cover production list contract states with serializable data", () => {
-    const fixtures = createFormlessUiListFixtures();
+    const fixtures = createListFixtures();
     const active = requiredFixture(fixtures, "active").list;
     const empty = requiredFixture(fixtures, "empty").list;
     const editingDisabled = requiredFixture(fixtures, "editing-disabled").list;
@@ -152,7 +152,7 @@ describe("Lists prototype layout", () => {
   });
 
   it("simulates a direct operation intent from the projected empty state", () => {
-    const empty = requiredFixture(createFormlessUiListFixtures(), "empty").list;
+    const empty = requiredFixture(createListFixtures(), "empty").list;
     const refreshAction = empty.emptyState?.action;
     if (!refreshAction || refreshAction.control.trigger.intent.type !== "operationInvoke") {
       throw new Error("Expected refresh operation fixture.");
@@ -192,11 +192,11 @@ describe("Lists prototype layout", () => {
 });
 
 function activeList() {
-  return requiredFixture(createFormlessUiListFixtures(), "active").list;
+  return requiredFixture(createListFixtures(), "active").list;
 }
 
 function requiredFixture(
-  fixtures: ReturnType<typeof createFormlessUiListFixtures>,
+  fixtures: ReturnType<typeof createListFixtures>,
   id: "active" | "editing-disabled" | "empty",
 ) {
   const fixture = selectedListFixture(fixtures, id);
@@ -208,7 +208,7 @@ function requiredFixture(
   return fixture;
 }
 
-function requiredField(list: FormlessUiListContract, itemId: string, fieldName: string) {
+function requiredField(list: ListContract, itemId: string, fieldName: string) {
   const field = list.items
     .find((item) => item.id === itemId)
     ?.fields.find((candidate) => candidate.fieldName === fieldName);
@@ -220,11 +220,11 @@ function requiredField(list: FormlessUiListContract, itemId: string, fieldName: 
   return field;
 }
 
-function requiredDeleteAction(list: FormlessUiListContract, itemId: string) {
+function requiredDeleteAction(list: ListContract, itemId: string) {
   const action = list.items
     .find((item) => item.id === itemId)
     ?.actions.secondary.find(
-      (candidate): candidate is FormlessUiListOperationActionContract =>
+      (candidate): candidate is ListOperationActionContract =>
         candidate.kind === "operationAction" && candidate.role === "delete",
     );
 
@@ -235,7 +235,7 @@ function requiredDeleteAction(list: FormlessUiListContract, itemId: string) {
   return action;
 }
 
-function requiredOrdering(list: FormlessUiListContract, itemId: string) {
+function requiredOrdering(list: ListContract, itemId: string) {
   const ordering = list.items.find((item) => item.id === itemId)?.ordering;
 
   if (!ordering) {

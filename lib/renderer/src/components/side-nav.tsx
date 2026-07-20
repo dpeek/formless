@@ -10,25 +10,25 @@ import { Text } from "@astryxdesign/core/Text";
 import { VStack } from "@astryxdesign/core/VStack";
 import { memo, type ReactNode } from "react";
 import type {
-  FormlessUiButtonContract,
-  FormlessUiCreateIntent,
-  FormlessUiFieldIntent,
-  FormlessUiShellDestinationContract,
-  FormlessUiShellIntent,
-  FormlessUiShellIntentHandler,
-  FormlessUiShellManifestContract,
-  FormlessUiShellNavigationSectionContract,
-  FormlessUiShellNavigationSectionReference,
-  FormlessUiShellResetContract,
-  FormlessUiShellSessionContract,
-  FormlessUiShellSettingsContract,
+  ButtonContract,
+  CreateIntent,
+  FieldIntent,
+  ShellDestinationContract,
+  ShellIntent,
+  ShellIntentHandler,
+  ShellManifestContract,
+  ShellNavigationSectionContract,
+  ShellNavigationSectionReference,
+  ShellResetContract,
+  ShellSessionContract,
+  ShellSettingsContract,
 } from "@dpeek/formless-presentation/contract";
 import {
-  useFormlessUiShellIntentHandler,
-  useFormlessUiShellNavigationSection,
-} from "@dpeek/formless-presentation/contract-host/react";
-import { AstryxCreateSurfaceRenderer } from "./formless-ui-create-renderer.tsx";
-import { operationIcon } from "./operation-controls.tsx";
+  useShellIntentHandler,
+  useShellNavigationSection,
+} from "@dpeek/formless-presentation/host/react";
+import { AstryxCreateSurfaceRenderer } from "./create-renderer.tsx";
+import { operationIcon } from "./operation-renderer.tsx";
 
 type AstryxShellSectionSlot = "appSwitcher" | "navigation" | "session";
 
@@ -38,9 +38,9 @@ export function AstryxApplicationSideNav({
   sections,
   themeControl,
 }: {
-  manifest: FormlessUiShellManifestContract;
-  onIntent: FormlessUiShellIntentHandler;
-  sections: readonly FormlessUiShellNavigationSectionContract[];
+  manifest: ShellManifestContract;
+  onIntent: ShellIntentHandler;
+  sections: readonly ShellNavigationSectionContract[];
   themeControl?: ReactNode;
 }) {
   return (
@@ -80,11 +80,11 @@ export function AstryxSubscribedApplicationSideNav({
   references,
   themeControl,
 }: {
-  manifest: FormlessUiShellManifestContract;
-  references: readonly FormlessUiShellNavigationSectionReference[];
+  manifest: ShellManifestContract;
+  references: readonly ShellNavigationSectionReference[];
   themeControl?: ReactNode;
 }) {
-  const onIntent = useFormlessUiShellIntentHandler();
+  const onIntent = useShellIntentHandler();
 
   return (
     <AstryxApplicationSideNavFrame
@@ -126,7 +126,7 @@ function AstryxApplicationSideNavFrame({
   themeControl,
 }: {
   appSwitcher: ReactNode;
-  manifest: FormlessUiShellManifestContract;
+  manifest: ShellManifestContract;
   navigation: ReactNode;
   session: ReactNode;
   themeControl?: ReactNode;
@@ -165,11 +165,11 @@ const AstryxSubscribedApplicationShellSectionSlot = memo(
     reference,
     slot,
   }: {
-    onIntent: FormlessUiShellIntentHandler;
-    reference: FormlessUiShellNavigationSectionReference;
+    onIntent: ShellIntentHandler;
+    reference: ShellNavigationSectionReference;
     slot: AstryxShellSectionSlot;
   }) {
-    const section = useFormlessUiShellNavigationSection(reference);
+    const section = useShellNavigationSection(reference);
 
     return section ? (
       <AstryxApplicationShellSectionSlot onIntent={onIntent} section={section} slot={slot} />
@@ -187,8 +187,8 @@ function AstryxApplicationShellSectionSlot({
   section,
   slot,
 }: {
-  onIntent: FormlessUiShellIntentHandler;
-  section: FormlessUiShellNavigationSectionContract;
+  onIntent: ShellIntentHandler;
+  section: ShellNavigationSectionContract;
   slot: AstryxShellSectionSlot;
 }) {
   if (slot === "appSwitcher") {
@@ -213,7 +213,7 @@ function AstryxApplicationShellSectionSlot({
 function AstryxApplicationSwitcherSection({
   section,
 }: {
-  section: FormlessUiShellNavigationSectionContract;
+  section: ShellNavigationSectionContract;
 }) {
   return section.destinations.map((destination) => (
     <NavHeadingMenuItem
@@ -245,8 +245,8 @@ function AstryxShellNavigationSection({
   onIntent,
   section,
 }: {
-  onIntent: FormlessUiShellIntentHandler;
-  section: FormlessUiShellNavigationSectionContract;
+  onIntent: ShellIntentHandler;
+  section: ShellNavigationSectionContract;
 }) {
   if (section.role === "appSettings" && section.settings) {
     return (
@@ -290,9 +290,9 @@ function AstryxShellSettingsNavigationItem({
   section,
   settings,
 }: {
-  onIntent: FormlessUiShellIntentHandler;
-  section: FormlessUiShellNavigationSectionContract;
-  settings: FormlessUiShellSettingsContract;
+  onIntent: ShellIntentHandler;
+  section: ShellNavigationSectionContract;
+  settings: ShellSettingsContract;
 }) {
   return (
     <HoverCard
@@ -311,8 +311,8 @@ function AstryxShellDestination({
   destination,
   onIntent,
 }: {
-  destination: FormlessUiShellDestinationContract;
-  onIntent: FormlessUiShellIntentHandler;
+  destination: ShellDestinationContract;
+  onIntent: ShellIntentHandler;
 }) {
   const supportingText = destinationSupportingText(destination);
 
@@ -356,9 +356,9 @@ function AstryxShellSettings({
   section,
   settings,
 }: {
-  onIntent: FormlessUiShellIntentHandler;
-  section: FormlessUiShellNavigationSectionContract;
-  settings: FormlessUiShellSettingsContract;
+  onIntent: ShellIntentHandler;
+  section: ShellNavigationSectionContract;
+  settings: ShellSettingsContract;
 }) {
   return (
     <VStack gap={3} width="100%">
@@ -402,9 +402,9 @@ function AstryxShellReset({
   reset,
   section,
 }: {
-  onIntent: FormlessUiShellIntentHandler;
-  reset: FormlessUiShellResetContract;
-  section: FormlessUiShellNavigationSectionContract;
+  onIntent: ShellIntentHandler;
+  reset: ShellResetContract;
+  section: ShellNavigationSectionContract;
 }) {
   const dispatchOpenChange = (open: boolean) =>
     onIntent(astryxApplicationShellResetIntent(section, reset, { open, type: "resetOpenChange" }));
@@ -440,9 +440,9 @@ function AstryxShellSession({
   section,
   session,
 }: {
-  onIntent: FormlessUiShellIntentHandler;
-  section: FormlessUiShellNavigationSectionContract;
-  session: FormlessUiShellSessionContract;
+  onIntent: ShellIntentHandler;
+  section: ShellNavigationSectionContract;
+  session: ShellSessionContract;
 }) {
   if (session.state === "anonymous") {
     return null;
@@ -477,7 +477,7 @@ function AstryxShellButton({
   button,
   onClick,
 }: {
-  button: FormlessUiButtonContract;
+  button: ButtonContract;
   onClick: () => Promise<void> | void;
 }) {
   const isLoading = Boolean(button.pending?.isPending);
@@ -509,17 +509,17 @@ function AstryxShellButton({
   );
 }
 
-function destinationSupportingText(destination: FormlessUiShellDestinationContract) {
+function destinationSupportingText(destination: ShellDestinationContract) {
   return destination.availability.available
     ? destination.description
     : destination.availability.message;
 }
 
-function shellButtonLabel(button: FormlessUiButtonContract) {
+function shellButtonLabel(button: ButtonContract) {
   return button.content.kind === "iconOnly" ? button.accessibilityLabel : button.content.label;
 }
 
-function shellButtonVariant(button: FormlessUiButtonContract): ButtonVariant {
+function shellButtonVariant(button: ButtonContract): ButtonVariant {
   return button.prominence === "primary"
     ? "primary"
     : button.prominence === "secondary"
@@ -528,13 +528,13 @@ function shellButtonVariant(button: FormlessUiButtonContract): ButtonVariant {
 }
 
 function syncStatusVariant(
-  state: NonNullable<FormlessUiShellSettingsContract["sync"]>["state"],
+  state: NonNullable<ShellSettingsContract["sync"]>["state"],
 ): BadgeVariant {
   return state === "error" ? "error" : state === "syncing" ? "info" : "success";
 }
 
 function workspaceSaveStatusVariant(
-  state: NonNullable<FormlessUiShellSettingsContract["workspaceSave"]>["state"],
+  state: NonNullable<ShellSettingsContract["workspaceSave"]>["state"],
 ): BadgeVariant {
   return state === "failed"
     ? "error"
@@ -545,24 +545,24 @@ function workspaceSaveStatusVariant(
         : "info";
 }
 
-function resetStatusVariant(state: FormlessUiShellResetContract["status"]["state"]): BadgeVariant {
+function resetStatusVariant(state: ShellResetContract["status"]["state"]): BadgeVariant {
   return state === "error" ? "error" : state === "success" ? "success" : "info";
 }
 
 export function astryxApplicationShellCreateIntent(
-  section: FormlessUiShellNavigationSectionContract,
-  intent: FormlessUiCreateIntent,
-): FormlessUiShellIntent;
+  section: ShellNavigationSectionContract,
+  intent: CreateIntent,
+): ShellIntent;
 export function astryxApplicationShellCreateIntent(
-  section: FormlessUiShellNavigationSectionContract,
-  intent: FormlessUiFieldIntent,
+  section: ShellNavigationSectionContract,
+  intent: FieldIntent,
   fieldId: string,
-): FormlessUiShellIntent;
+): ShellIntent;
 export function astryxApplicationShellCreateIntent(
-  section: FormlessUiShellNavigationSectionContract,
-  intent: FormlessUiCreateIntent | FormlessUiFieldIntent,
+  section: ShellNavigationSectionContract,
+  intent: CreateIntent | FieldIntent,
   fieldId?: string,
-): FormlessUiShellIntent {
+): ShellIntent {
   if (!section.createSurface) {
     throw new Error(`Shell section "${section.id}" has no create surface.`);
   }
@@ -590,10 +590,10 @@ export function astryxApplicationShellCreateIntent(
 }
 
 export function astryxApplicationShellResetIntent(
-  section: FormlessUiShellNavigationSectionContract,
-  reset: FormlessUiShellResetContract,
-  intent: Extract<FormlessUiShellIntent, { type: "shellReset" }>["intent"],
-): FormlessUiShellIntent {
+  section: ShellNavigationSectionContract,
+  reset: ShellResetContract,
+  intent: Extract<ShellIntent, { type: "shellReset" }>["intent"],
+): ShellIntent {
   return {
     controlId: reset.id,
     intent,
@@ -604,9 +604,9 @@ export function astryxApplicationShellResetIntent(
 }
 
 export function astryxApplicationShellLogoutIntent(
-  section: FormlessUiShellNavigationSectionContract,
-  session: Extract<FormlessUiShellSessionContract, { state: "authenticated" }>,
-): FormlessUiShellIntent {
+  section: ShellNavigationSectionContract,
+  session: Extract<ShellSessionContract, { state: "authenticated" }>,
+): ShellIntent {
   return {
     controlId: session.logout.id,
     sectionId: section.id,

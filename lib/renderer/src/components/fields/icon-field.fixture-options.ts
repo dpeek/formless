@@ -1,9 +1,9 @@
-import type { FormlessUiIconOption } from "@dpeek/formless-presentation/contract";
+import type { IconOption } from "@dpeek/formless-presentation/contract";
 
 const strokeSvgAttributes =
   'viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"';
 
-function interfaceIcon(id: string, label: string, body: string): FormlessUiIconOption {
+function interfaceIcon(id: string, label: string, body: string): IconOption {
   return {
     group: "ui",
     id,
@@ -64,4 +64,4 @@ export const iconOptions = [
   interfaceIcon("remove", "Remove", '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>'),
   interfaceIcon("select", "Select", '<path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/>'),
   interfaceIcon("select-down", "Select down", '<path d="m6 9 6 6 6-6"/>'),
-] satisfies readonly FormlessUiIconOption[];
+] satisfies readonly IconOption[];

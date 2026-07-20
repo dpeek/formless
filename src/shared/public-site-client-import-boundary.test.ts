@@ -345,7 +345,7 @@ async function statOrNull(path: string) {
 function forbiddenPublicSiteClientFile(path: string): boolean {
   return (
     forbiddenPublicSiteClientFilePaths.has(path) ||
-    path.startsWith("lib/presentation/src/formless-ui-contract-host") ||
+    path.startsWith("lib/presentation/src/host") ||
     path.startsWith("src/app/generated/") ||
     path.startsWith("src/client/")
   );
@@ -357,7 +357,7 @@ function forbiddenSelectedPublicSiteFile(path: string): boolean {
     path.startsWith("src/client/") ||
     path.startsWith("src/worker/") ||
     path.startsWith("lib/renderer/src/fixtures/") ||
-    path.startsWith("lib/presentation/src/formless-ui-contract-host") ||
+    path.startsWith("lib/presentation/src/host") ||
     path.startsWith("lib/renderer/src/components/access") ||
     path.startsWith("lib/renderer/src/components/application-shell") ||
     path.startsWith("lib/renderer/src/components/auth") ||
@@ -370,8 +370,8 @@ function forbiddenSelectedPublicSiteFile(path: string): boolean {
 
 function forbiddenPublicSiteClientSpecifier(specifier: string): boolean {
   return (
-    specifier === "@dpeek/formless-presentation/contract-host" ||
-    specifier === "@dpeek/formless-presentation/contract-host/react" ||
+    specifier === "@dpeek/formless-presentation/host" ||
+    specifier === "@dpeek/formless-presentation/host/react" ||
     specifier === "@dpeek/formless-gateway/client" ||
     specifier === "platejs" ||
     specifier.startsWith("platejs/") ||

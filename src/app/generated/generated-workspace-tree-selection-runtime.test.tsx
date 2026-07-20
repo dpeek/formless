@@ -1,9 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
-import type {
-  FormlessUiTreeItemContract,
-  FormlessUiTreeResultContract,
-} from "@dpeek/formless-presentation/contract";
+import type { TreeItemContract, TreeResultContract } from "@dpeek/formless-presentation/contract";
 import type { StoredRecord } from "@dpeek/formless-storage";
 import type { ChangeRow } from "../../shared/protocol.ts";
 import type { OperationInvocationResponse } from "../../shared/operation-invocation.ts";
@@ -17,7 +14,7 @@ import { selectScreenModels } from "../../client/views.ts";
 import { bootstrapResponse } from "../../test/protocol-builders.ts";
 import { siteSourceSchema } from "../../test/schema-apps.ts";
 import { testSiteSeedRecords } from "../../test/site-records.ts";
-import { projectGeneratedWorkspaceTreeIntent } from "./formless-ui-workspace-projection.ts";
+import { projectGeneratedWorkspaceTreeIntent } from "./workspace-projection.ts";
 import {
   useGeneratedWorkspaceRuntimeController,
   type GeneratedWorkspaceRuntimeController,
@@ -1093,9 +1090,7 @@ async function dispatchTreeIntent(
   });
 }
 
-function currentTree(
-  controller: GeneratedWorkspaceRuntimeController,
-): FormlessUiTreeResultContract {
+function currentTree(controller: GeneratedWorkspaceRuntimeController): TreeResultContract {
   const result = required(controller.workspace?.sections[0]).collection.presentation.result;
   if (result.kind !== "treeResult") {
     throw new Error("Expected a tree result.");
@@ -1113,15 +1108,11 @@ function currentScope(controller: GeneratedWorkspaceRuntimeController) {
   };
 }
 
-function selectedTreeItem(
-  items: readonly FormlessUiTreeItemContract[],
-): FormlessUiTreeItemContract | undefined {
+function selectedTreeItem(items: readonly TreeItemContract[]): TreeItemContract | undefined {
   return flattenTreeItems(items).find((item) => item.selected);
 }
 
-function flattenTreeItems(
-  items: readonly FormlessUiTreeItemContract[],
-): FormlessUiTreeItemContract[] {
+function flattenTreeItems(items: readonly TreeItemContract[]): TreeItemContract[] {
   return items.flatMap((item) => [item, ...flattenTreeItems(item.children)]);
 }
 

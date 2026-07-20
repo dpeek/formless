@@ -269,7 +269,7 @@ Package tests SHALL be fast, deterministic, and local.
 
 The system SHALL provide a renderer-neutral Presentation package slice under
 `lib/presentation/` for application presentation contracts, references, intents,
-and reactive contract-host behavior.
+and reactive Presentation Host behavior.
 
 #### Scenario: Presentation contracts and host exports are explicit
 
@@ -279,11 +279,26 @@ and reactive contract-host behavior.
 - THEN contract types, references, and intents come from documented
   `@dpeek/formless-presentation/contract` exports
 - AND host types, reference helpers, and the reusable memory host come from
-  documented `@dpeek/formless-presentation/contract-host` exports
+  documented `@dpeek/formless-presentation/host` exports
 - AND the React provider and subscription hooks come from documented
-  `@dpeek/formless-presentation/contract-host/react` exports
+  `@dpeek/formless-presentation/host/react` exports
 - AND consumers do not need a concrete renderer package to publish, host, read,
   subscribe to, or dispatch presentation contracts
+
+#### Scenario: Presentation symbols use package-scoped vocabulary
+
+- GIVEN a consumer imports Presentation contracts or host behavior
+- WHEN it names a public type, helper, hook, or projection
+- THEN surface values use domain names with semantic suffixes such as
+  `Contract`, `Intent`, `Reference`, `Facts`, `State`, `Option`, `Identity`,
+  `Availability`, `Purpose`, or `Handler`
+- AND generic protocol infrastructure uses `PresentationHost`,
+  `PresentationSnapshot`, `PresentationReference`, `PresentationNode`, and
+  `PresentationIntent` vocabulary
+- AND package context supplies the Formless Presentation namespace without a
+  universal `FormlessUi` symbol prefix
+- AND renderer implementations use `Renderer`, runtime construction uses
+  `Projection`, and app-schema `View` retains its existing domain meaning
 
 #### Scenario: Presentation ownership stays renderer neutral
 
@@ -372,7 +387,7 @@ retaining Astryx as an internal component and build dependency.
 - GIVEN a consumer builds the `@dpeek/formless-renderer` public Site renderer
   entrypoints
 - WHEN their import graph is checked
-- THEN it excludes repo-root runtime source, the application contract host,
+- THEN it excludes repo-root runtime source, the application Presentation Host,
   generated admin and workspace runtime, shell and auth presentation, browser
   replica and sync, gateway clients, rich editor modules, storage internals,
   private challenge facts, and provider credentials

@@ -1,16 +1,16 @@
 import { describe, expect, it } from "vite-plus/test";
 import type {
-  FormlessUiListContract,
-  FormlessUiRecordResultContract,
-  FormlessUiTableContract,
-  FormlessUiTreeResultContract,
-  FormlessUiWorkspaceContract,
+  ListContract,
+  RecordResultContract,
+  TableContract,
+  TreeResultContract,
+  WorkspaceContract,
 } from "@dpeek/formless-presentation/contract";
-import { createFormlessUiMemoryContractHost } from "@dpeek/formless-presentation/contract-host";
+import { createMemoryPresentationHost } from "@dpeek/formless-presentation/host";
 import type { GeneratedOperationControlBinding } from "../../client/views.ts";
-import { projectGeneratedListOperationAction } from "./formless-ui-list-projection.ts";
-import { projectGeneratedOperationFormlessUiControl } from "./formless-ui-operation-projection.ts";
-import { projectGeneratedRecordFormlessUiField } from "./formless-ui-projection.ts";
+import { projectGeneratedListOperationAction } from "./list-projection.ts";
+import { projectGeneratedOperationControl } from "./operation-projection.ts";
+import { projectGeneratedRecordField } from "./field-projection.ts";
 import { createApplicationRuntimePublicationCoordinator } from "./application-runtime-contract-host.tsx";
 import {
   prepareGeneratedWorkspaceRuntimePublication,
@@ -20,7 +20,7 @@ import {
 describe("generated workspace contract host adapter", () => {
   it("flattens complete list, table, and context projections into scoped host nodes", () => {
     const publication = projectGeneratedWorkspaceContractHostPublication(workspaceFixture());
-    const host = createFormlessUiMemoryContractHost({ nodes: publication.nodes });
+    const host = createMemoryPresentationHost({ nodes: publication.nodes });
     const workspace = required(host.read(publication.workspaceReference));
     const [listSectionReference, tableSectionReference] = workspace.sections;
     const listSection = required(host.read(required(listSectionReference)));
@@ -65,7 +65,7 @@ describe("generated workspace contract host adapter", () => {
 
   it("isolates unrelated complete reprojections and changes at result, section, and workspace boundaries", () => {
     const initial = projectGeneratedWorkspaceContractHostPublication(workspaceFixture());
-    const host = createFormlessUiMemoryContractHost({ nodes: initial.nodes });
+    const host = createMemoryPresentationHost({ nodes: initial.nodes });
     const manifest = required(host.read(initial.workspaceReference));
     const [listSectionReference, tableSectionReference] = manifest.sections;
     const listSection = required(host.read(required(listSectionReference)));
@@ -207,7 +207,7 @@ describe("generated workspace contract host adapter", () => {
 
   it("publishes a mixed tree result atomically with stable shells and scoped notification", () => {
     const initial = projectGeneratedWorkspaceContractHostPublication(mixedWorkspaceFixture());
-    const host = createFormlessUiMemoryContractHost({ nodes: initial.nodes });
+    const host = createMemoryPresentationHost({ nodes: initial.nodes });
     const manifest = required(host.read(initial.workspaceReference));
     const treeSectionReference = required(manifest.sections[2]);
     const treeSection = required(host.read(treeSectionReference));
@@ -266,7 +266,7 @@ type WorkspaceFixtureOptions = {
   warning?: string;
 };
 
-function workspaceFixture(options: WorkspaceFixtureOptions = {}): FormlessUiWorkspaceContract {
+function workspaceFixture(options: WorkspaceFixtureOptions = {}): WorkspaceContract {
   const sections = {
     archive: archiveSection(),
     tasks: tasksSection(options),
@@ -292,7 +292,7 @@ function workspaceFixture(options: WorkspaceFixtureOptions = {}): FormlessUiWork
   };
 }
 
-function mixedWorkspaceFixture(itemLabel = "Hero"): FormlessUiWorkspaceContract {
+function mixedWorkspaceFixture(itemLabel = "Hero"): WorkspaceContract {
   const workspace = workspaceFixture();
   return { ...workspace, sections: [...workspace.sections, treeSection(itemLabel)] };
 }
@@ -322,7 +322,7 @@ function treeSection(itemLabel: string) {
   };
 }
 
-function treeResult(itemLabel: string): FormlessUiTreeResultContract {
+function treeResult(itemLabel: string): TreeResultContract {
   const id = "tree:site";
   const itemId = `${id}:item:hero`;
 
@@ -471,7 +471,7 @@ function archiveSection() {
   };
 }
 
-function listResult(options: WorkspaceFixtureOptions): FormlessUiListContract {
+function listResult(options: WorkspaceFixtureOptions): ListContract {
   const ids = options.itemIds ?? ["task-1", "task-2"];
 
   return {
@@ -480,7 +480,7 @@ function listResult(options: WorkspaceFixtureOptions): FormlessUiListContract {
     editing: { enabled: true },
     id: "list:tasks",
     items: ids.map((id) => {
-      const field = projectGeneratedRecordFormlessUiField({
+      const field = projectGeneratedRecordField({
         canPatch: true,
         editorDraft: id === "task-1" ? options.fieldDraft : undefined,
         fieldConfig: {
@@ -498,7 +498,7 @@ function listResult(options: WorkspaceFixtureOptions): FormlessUiListContract {
         recordValue: id === "task-1" ? "Initial title" : "Second task",
       });
       const operation = projectGeneratedListOperationAction(
-        projectGeneratedOperationFormlessUiControl({
+        projectGeneratedOperationControl({
           binding: operationBinding(id),
           presentation: {
             accessibilityLabel: `Run ${id}`,
@@ -551,7 +551,7 @@ function listResult(options: WorkspaceFixtureOptions): FormlessUiListContract {
   };
 }
 
-function contextResult(): FormlessUiRecordResultContract {
+function contextResult(): RecordResultContract {
   return {
     accessibilityLabel: "Selected task context",
     actions: {
@@ -571,7 +571,7 @@ function contextResult(): FormlessUiRecordResultContract {
   };
 }
 
-function tableResult(): FormlessUiTableContract {
+function tableResult(): TableContract {
   return {
     accessibilityLabel: "Archived tasks",
     columns: [],
