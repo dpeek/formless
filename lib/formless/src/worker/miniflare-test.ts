@@ -1,11 +1,10 @@
 import { rmSync } from "node:fs";
-import { createRequire } from "node:module";
 import { mkdtemp, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { build, type Plugin } from "esbuild";
 import { Miniflare, type WorkerOptions } from "miniflare";
-import stylexEsbuild from "@stylexjs/unplugin/esbuild";
+import { astryxStylexWorkerBundlePlugin } from "../runtime/stylex-esbuild.ts";
 import { SITE_PUBLIC_RENDERER_WORKER_VIRTUAL_MODULE_ID } from "../shared/workspace-runtime-extensions.ts";
 
 type DispatchFetchInit = Parameters<Miniflare["dispatchFetch"]>[1];
@@ -44,8 +43,6 @@ type WorkerBundle = {
 
 const workerBundleCache = new Map<string, Promise<WorkerBundle>>();
 let workerBundleCacheRoot: Promise<string> | null = null;
-const require = createRequire(import.meta.url);
-
 export async function createWorkerHarness(
   entryPoint: string,
   durableObjects: DurableObjectBindings,
@@ -133,7 +130,10 @@ async function buildWorkerBundle(entryPoint: string): Promise<WorkerBundle> {
       nodePaths: [resolve("node_modules")],
       outfile: scriptPath,
       platform: "browser",
-      plugins: [astryxStylexWorkerBundlePlugin(), workerRuntimeExtensionVirtualModulesPlugin()],
+      plugins: [
+        astryxStylexWorkerBundlePlugin(resolve("lib/renderer")),
+        workerRuntimeExtensionVirtualModulesPlugin(),
+      ],
     });
 
     return {
@@ -156,36 +156,6 @@ async function buildWorkerBundle(entryPoint: string): Promise<WorkerBundle> {
     rmSync(modulesRoot, { force: true, recursive: true });
     throw error;
   }
-}
-
-function astryxStylexWorkerBundlePlugin(): Plugin {
-  const rootDir = resolve("lib/renderer");
-  const stylexOptions = {
-    dev: false,
-    runtimeInjection: false,
-    treeshakeCompensation: true,
-    unstable_moduleResolution: {
-      rootDir,
-      type: "commonJS",
-    },
-  } as const;
-
-  return stylexEsbuild({
-    ...stylexOptions,
-    useCSSLayers: true,
-    babelConfig: {
-      plugins: [
-        [
-          require.resolve("@astryxdesign/build/babel"),
-          {
-            ...stylexOptions,
-            babelConfig: undefined,
-            libraryPrefix: "astryx",
-          },
-        ],
-      ],
-    },
-  } as never) as Plugin;
 }
 
 function workerRuntimeExtensionVirtualModulesPlugin(): Plugin {

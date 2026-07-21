@@ -24,6 +24,7 @@ import {
   FORMLESS_SITE_PROJECT_ROOT_ENV_NAME,
   FORMLESS_WORKSPACE_RUNTIME_EXTENSIONS_ENV_NAME,
 } from "../shared/workspace-runtime-extensions.ts";
+import { astryxStylexWorkerBundlePlugin } from "../runtime/stylex-esbuild.ts";
 import { sitePublicRendererWorkerVirtualModulesPlugin } from "./runtime-extension-bundler.ts";
 import {
   applyAlchemyDeployResourceGraph,
@@ -971,6 +972,7 @@ async function declareFormlessInstanceAlchemyResourceTree(
         __FORMLESS_WORKSPACE_APP_PACKAGES_JSON__: JSON.stringify(input.workspaceAppPackages ?? ""),
       },
       plugins: [
+        astryxStylexWorkerBundlePlugin(path.resolve(input.packageRoot, "../renderer")),
         sitePublicRendererWorkerVirtualModulesPlugin({
           env: workerRuntimeExtensionBundlerEnv(input),
         }),

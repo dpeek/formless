@@ -1156,6 +1156,10 @@ describe("Alchemy Formless instance deployment", () => {
             },
             plugins: [
               expect.objectContaining({
+                name: "@stylexjs/unplugin",
+                setup: expect.any(Function),
+              }),
+              expect.objectContaining({
                 name: "formless-site-public-renderer-worker-virtual-modules",
                 setup: expect.any(Function),
               }),

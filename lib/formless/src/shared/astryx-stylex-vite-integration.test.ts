@@ -18,6 +18,7 @@ type BuildAsset = {
 };
 
 type BuildChunk = {
+  code: string;
   facadeModuleId: string | null;
   fileName: string;
   imports: string[];
@@ -84,6 +85,7 @@ describe("Formless Renderer Astryx StyleX root build integration", () => {
       .filter(({ fileName }) => fileName.endsWith(".css"))
       .map(assetText)
       .join("\n");
+    const emittedJavaScript = chunks.map(({ code }) => code).join("\n");
 
     expect(applicationModules).toEqual(
       expect.arrayContaining([
@@ -114,6 +116,7 @@ describe("Formless Renderer Astryx StyleX root build integration", () => {
     expect(emittedCss).toContain("@layer astryx-base");
     expect(emittedCss).toMatch(/\.x[a-z0-9]+/);
     expect(emittedCss).not.toContain("stylex.create");
+    expect(emittedJavaScript).not.toContain("createTheme");
   }, 30_000);
 });
 
