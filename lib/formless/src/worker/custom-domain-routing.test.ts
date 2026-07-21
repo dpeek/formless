@@ -20,6 +20,8 @@ import { runtimeTopologyRoutes } from "../shared/runtime-topology.ts";
 import {
   ownerLoginRedirectLocationForRoute,
   type AccountCompletionGateTarget,
+  type OwnerPasskeyRegistrationOptionsResponse,
+  type OwnerPasskeyRegistrationVerifyResponse,
 } from "../shared/instance-auth.ts";
 import type { EmailDeliveryRenderedMessage } from "../shared/email-runtime.ts";
 import { PUBLIC_SITE_INDEXING_CACHE_CONTROL } from "@dpeek/formless-site-app/worker";
@@ -403,6 +405,110 @@ describe("installed Site custom-domain Worker routing", () => {
     expect(callbackUrl.searchParams.get("grantSecret")).toMatch(/^[A-Za-z0-9_-]+$/);
     expect(callbackUrl.searchParams.get("state")).toBe(startUrl.searchParams.get("state"));
     expect(requiredHeader(grant, "Location")).not.toContain("nonceHash=");
+  });
+
+  it("continues same-origin Workers.dev instance targets without exact-host routes", async () => {
+    await withWorkersDevAuthHarness(async (deploymentOrigin) => {
+      await resetWorkerState(harness, ["controlPlane", "auth"]);
+
+      await configureHarnessAuth(deploymentOrigin);
+
+      const capability = await harness.mf.dispatchFetch(
+        `${deploymentOrigin}/api/formless/setup/capability`,
+        {
+          body: JSON.stringify({ setupToken, expiresAt: "2999-01-01T00:00:00.000Z" }),
+          headers: adminHeaders({ "Content-Type": "application/json" }),
+          method: "POST",
+        },
+      );
+      const optionsResponse = await harness.mf.dispatchFetch(
+        `${deploymentOrigin}/api/formless/passkeys/register/options`,
+        {
+          body: JSON.stringify({ setupToken }),
+          headers: { "Content-Type": "application/json", Origin: deploymentOrigin },
+          method: "POST",
+        },
+      );
+      const options = (await optionsResponse.json()) as OwnerPasskeyRegistrationOptionsResponse;
+      const authenticator = new VirtualPasskey("d29ya2Vycy1kZXYtb3duZXI");
+      const setupResponse = await harness.mf.dispatchFetch(
+        `${deploymentOrigin}/api/formless/passkeys/register/verify`,
+        {
+          body: JSON.stringify({
+            setupToken,
+            owner: { name: "Workers Dev Owner", email: "owner@example.com" },
+            response: authenticator.registrationResponse(options.options, {
+              origin: deploymentOrigin,
+              rpId: "personal.dpeek.workers.dev",
+            }),
+          }),
+          headers: { "Content-Type": "application/json", Origin: deploymentOrigin },
+          method: "POST",
+        },
+      );
+      const setup = (await setupResponse.json()) as OwnerPasskeyRegistrationVerifyResponse;
+      const centralCookie = cookiePair(requiredHeader(setupResponse, "Set-Cookie"));
+      const accountPath = setup.continueTo;
+
+      expect(accountPath).toBe(`${runtimeTopologyRoutes.authAccountRoute}?returnTo=%2F`);
+
+      if (accountPath === undefined) {
+        throw new Error("Expected owner passkey setup continuation.");
+      }
+
+      const unauthenticated = await harness.mf.dispatchFetch(`${deploymentOrigin}${accountPath}`, {
+        headers: { Accept: "text/html" },
+        redirect: "manual",
+      });
+      const authenticated = await harness.mf.dispatchFetch(`${deploymentOrigin}${accountPath}`, {
+        headers: { Accept: "text/html", Cookie: centralCookie },
+        redirect: "manual",
+      });
+
+      expect(capability.status).toBe(200);
+      expect(optionsResponse.status).toBe(200);
+      expect(setupResponse.status).toBe(200);
+      expect(unauthenticated.status).toBe(302);
+      expect(unauthenticated.headers.get("Location")).toBe(
+        ownerLoginRedirectLocationForRoute(accountPath),
+      );
+      expect(authenticated.status).toBe(302);
+      expect(authenticated.headers.get("Location")).toBe("/");
+    });
+  });
+
+  it("continues owner-protected hostless installed apps on the instance profile", async () => {
+    await withWorkersDevAuthHarness(async (deploymentOrigin) => {
+      await resetWorkerState(harness, ["controlPlane", "auth", "taskStorage"]);
+
+      await configureHarnessAuth(deploymentOrigin);
+      await setupTaskAppInstall();
+
+      const returnTo = `/apps/${taskInstallId}`;
+      const accountPath = `${runtimeTopologyRoutes.authAccountRoute}?returnTo=${encodeURIComponent(returnTo)}`;
+      const owner = await ensureTestIdentityOwner(harness, adminToken, {
+        name: "Hostless App Owner",
+      });
+      const centralCookie = await createCentralAuthSessionCookieForPrincipal(
+        owner.id,
+        deploymentOrigin,
+      );
+      const unauthenticated = await harness.mf.dispatchFetch(`${deploymentOrigin}${accountPath}`, {
+        headers: { Accept: "text/html" },
+        redirect: "manual",
+      });
+      const authenticated = await harness.mf.dispatchFetch(`${deploymentOrigin}${accountPath}`, {
+        headers: { Accept: "text/html", Cookie: centralCookie },
+        redirect: "manual",
+      });
+
+      expect(unauthenticated.status).toBe(302);
+      expect(unauthenticated.headers.get("Location")).toBe(
+        ownerLoginRedirectLocationForRoute(accountPath),
+      );
+      expect(authenticated.status).toBe(302);
+      expect(authenticated.headers.get("Location")).toBe(returnTo);
+    });
   });
 
   it("reports, revokes, and clears central auth-origin sessions", async () => {
@@ -2416,6 +2522,26 @@ async function createCentralAuthSessionCookieForPrincipal(
   return cookiePair(setCookie);
 }
 
+async function configureHarnessAuth(origin: string) {
+  const url = new URL(origin);
+  const response = await harness.durableObjectFetch(
+    "FORMLESS_AUTHORITY",
+    FORMLESS_INSTANCE_AUTHORITY_NAME,
+    "/harness/auth/config",
+    {
+      body: JSON.stringify({
+        canonicalOrigin: url.origin,
+        relyingPartyId: url.hostname,
+        relyingPartyName: "Formless",
+      }),
+      headers: { "Content-Type": "application/json" },
+      method: "POST",
+    },
+  );
+
+  expect(response.status).toBe(200);
+}
+
 async function createInstanceAdminPrincipalSessionCookie(displayName: string) {
   const principal = await createActivePrincipalSessionCookie(displayName);
   const assignment = await assignIdentityInstanceRole(principal.principalId, "instance.admin");
@@ -2968,6 +3094,17 @@ async function withHarness(target: Harness, run: () => Promise<void>) {
   }
 }
 
+async function withWorkersDevAuthHarness(run: (deploymentOrigin: string) => Promise<void>) {
+  const deploymentOrigin = "https://personal.dpeek.workers.dev";
+
+  await withHarness(
+    await createCustomDomainHarness("instance", {
+      FORMLESS_INSTANCE_AUTH_ORIGIN: deploymentOrigin,
+    }),
+    () => run(deploymentOrigin),
+  );
+}
+
 function createCustomDomainHarness(
   runtimeProfile?: "instance" | "publishedSite",
   bindings: Record<string, string> = {},
@@ -3000,7 +3137,7 @@ async function writeCustomDomainHarness() {
     path,
     `
       import worker, { FormlessAuthority } from "${process.cwd()}/src/worker/index.ts";
-      import { createPasskeyCredential } from "${process.cwd()}/src/worker/instance-auth-state.ts";
+      import { createPasskeyCredential, writeInstanceAuthConfig } from "${process.cwd()}/src/worker/instance-auth-state.ts";
       import { createCentralAuthSessionCookie } from "${process.cwd()}/src/worker/central-auth-session.ts";
       import {
         ensureEmailDeliveryTables,
@@ -3027,6 +3164,12 @@ async function writeCustomDomainHarness() {
             if (signupResponse) {
               return signupResponse;
             }
+          }
+
+          if (url.pathname === "/harness/auth/config" && request.method === "POST") {
+            return Response.json({
+              config: writeInstanceAuthConfig(this.ctx.storage, await request.json()),
+            });
           }
 
           if (url.pathname === "/harness/auth/credential" && request.method === "POST") {

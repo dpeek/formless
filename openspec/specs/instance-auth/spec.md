@@ -452,10 +452,29 @@ routes through `/formless/auth` as the runtime-owned continuation contract.
   target before continuing
 - AND the browser is returned to the requested route only through the validated
   continuation target
+- AND when the sign-in redirect target already names an account continuation,
+  successful login resumes that continuation without nesting it in another
+  account return target
 - AND browser client code does not synthesize the final post-login destination
   from raw URL search parameters after login succeeds
 - AND the return target is not exposed to passkey challenge verification as an
   authorization input
+
+#### Scenario: Same-origin deployment target continuation
+
+- GIVEN the configured auth origin is the Workers.dev deployment target for an
+  instance-profile runtime
+- AND the instance has no exact-host route for that deployment host
+- WHEN `/formless/auth` continues to the instance root or a protected hostless
+  installed-app route
+- THEN account completion derives a target from the same-origin runtime surface
+  and resolved route facts without requiring an exact-host binding
+- AND a missing central auth session starts sign-in while a valid central owner
+  session continues to the requested path
+- AND a hostless installed-app target remains bound to its route id, app install,
+  storage identity, access policy, and path-only return target
+- AND same-origin target derivation does not make hostless routes eligible for
+  host-local session issuance or cross-domain handoff grants
 
 #### Scenario: Unsafe return target rejected
 

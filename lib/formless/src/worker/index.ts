@@ -55,13 +55,13 @@ import {
 import { handleInstanceAuthEmailVerificationApiRequest } from "./instance-auth-email-verification.ts";
 import { handleInstanceAuthSignupApiRequest } from "./instance-auth-signup.ts";
 import { handleInstanceAuthAccountCompletionApiRequest } from "./instance-auth-account-completion.ts";
+import { sameOriginAccountCompletionTargetForRuntimeRouteFacts } from "./instance-auth-account-target.ts";
 import { handleOwnerPasskeyApiRequest } from "./owner-passkeys.ts";
 import {
   ownerLoginRedirectLocationForRoute,
   parseOwnerLoginRedirectTarget,
   type AccountCompletionContinuationResult,
   type AccountCompletionGateResult,
-  type AccountCompletionGateTarget,
 } from "../shared/instance-auth.ts";
 import {
   isRuntimeAuthAccountRoutePath,
@@ -743,20 +743,6 @@ async function handleAuthAccountReturnTargetStatusRequest(
   return Response.json({ error: "Authenticated account session is required." }, { status: 401 });
 }
 
-function accountCompletionTargetFromSessionTarget(
-  returnTo: `/${string}`,
-  target: NonNullable<ReturnType<typeof hostAuthSessionTargetForRuntimeRoute>>,
-): AccountCompletionGateTarget {
-  return {
-    ...(target.appInstallId === undefined ? {} : { appInstallId: target.appInstallId }),
-    returnTo,
-    routeId: target.routeId,
-    ...(target.storageIdentity === undefined ? {} : { storageIdentity: target.storageIdentity }),
-    targetOrigin: target.targetOrigin,
-    targetProfile: target.targetProfile,
-  };
-}
-
 type AuthAccountReturnTargetContinuation =
   | { accountCompletion: AccountCompletionGateResult; kind: "blocked" }
   | { accountCompletion: AccountCompletionContinuationResult; kind: "complete" }
@@ -780,7 +766,9 @@ async function resolveAuthAccountReturnTargetContinuation(
   });
   const runtimeRoute = await resolveInstanceRuntimeRouteForRequest(targetRequest, env);
   const runtimeProfile =
-    runtimeRoute?.kind === "mount" && runtimeRoute.targetProfile !== "public-site"
+    runtimeRoute?.kind === "mount" &&
+    runtimeRoute.matchHost !== undefined &&
+    runtimeRoute.targetProfile !== "public-site"
       ? runtimeRoute.targetProfile
       : env.FORMLESS_RUNTIME_PROFILE;
   const targetTopology = resolveWorkerRuntimeRequestTopology(
@@ -797,18 +785,18 @@ async function resolveAuthAccountReturnTargetContinuation(
     return { error: "Account continuation target is public.", kind: "invalid" };
   }
 
-  const target =
-    runtimeRoute?.kind === "mount"
-      ? hostAuthSessionTargetForRuntimeRoute(targetRequest, runtimeRoute, {
-          minimumAccess: "authenticated",
-        })
-      : undefined;
+  const accountCompletionTarget = sameOriginAccountCompletionTargetForRuntimeRouteFacts({
+    accountOrigin: requestOriginForAuth(request),
+    minimumAccess: "authenticated",
+    requestOrigin: requestOriginForAuth(targetRequest),
+    returnTo,
+    runtimeProfile: targetTopology.profileKind,
+    runtimeRoute,
+  });
 
-  if (target === undefined) {
+  if (accountCompletionTarget === undefined) {
     return { error: "Account completion target is unavailable.", kind: "invalid" };
   }
-
-  const accountCompletionTarget = accountCompletionTargetFromSessionTarget(returnTo, target);
   const session =
     requiredAccess === "owner"
       ? await validateCentralAuthSessionAuthority(targetRequest, env)

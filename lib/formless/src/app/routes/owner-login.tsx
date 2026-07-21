@@ -214,9 +214,17 @@ export function ownerLoginSuccessContinuationTarget(
     return continueTo;
   }
 
-  return authAccountContinuationLocationForReturnTarget(
-    ownerLoginRedirectTargetFromSearch(locationSearch),
-  );
+  const redirectTarget = ownerLoginRedirectTargetFromSearch(locationSearch);
+  const redirectUrl = new URL(redirectTarget, "https://formless.local");
+
+  if (
+    redirectUrl.pathname === runtimeTopologyRoutes.authAccountRoute &&
+    redirectUrl.search !== ""
+  ) {
+    return redirectTarget;
+  }
+
+  return authAccountContinuationLocationForReturnTarget(redirectTarget);
 }
 
 export function startOwnerLoginRouteSession({

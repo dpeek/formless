@@ -451,6 +451,18 @@ source for hostless mounts, exact-host mounts, and redirects.
 - **AND** disabled route records are not eligible for runtime mounting or
   redirect handling
 
+#### Scenario: Hostless mount preserves configured profile policy
+
+- **GIVEN** an `instance` or `dev` runtime resolves an enabled hostless mount
+  for an installed app
+- **WHEN** route access or account continuation is evaluated for that mount
+- **THEN** the configured runtime profile remains the active route-policy
+  profile
+- **AND** the mount still supplies its target app install, target profile,
+  storage identity, route access, and surface selection facts
+- **AND** an owner-protected hostless app mount is not reclassified as an
+  anonymous app-profile route
+
 #### Scenario: Redirect route
 
 - **GIVEN** an enabled redirect route matches the request host and path

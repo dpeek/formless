@@ -71,6 +71,24 @@ describe("owner login route data flow", () => {
     ).toBe("/formless/auth?returnTo=%2Fdeployments");
   });
 
+  it("resumes an existing account continuation after passkey login", () => {
+    const clientLocations: unknown[] = [];
+    const documentLocations: string[] = [];
+    const continuationTarget = ownerLoginSuccessContinuationTarget(
+      "/formless/auth",
+      "?redirectTo=%2Fformless%2Fauth%3FreturnTo%3D%252F",
+    );
+
+    navigateAfterOwnerLogin(continuationTarget, {
+      replaceDocumentLocation: (target) => documentLocations.push(target),
+      setLocation: (...args) => clientLocations.push(args),
+    });
+
+    expect(continuationTarget).toBe("/formless/auth?returnTo=%2F");
+    expect(documentLocations).toEqual(["/formless/auth?returnTo=%2F"]);
+    expect(clientLocations).toEqual([]);
+  });
+
   it("uses client navigation for normal owner login redirects", () => {
     const clientLocations: unknown[] = [];
     const documentLocations: string[] = [];
