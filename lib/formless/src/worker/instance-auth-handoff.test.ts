@@ -47,6 +47,26 @@ describe("instance auth origin and protected-route handoff decisions", () => {
 
     expect(
       planRuntimeInstanceAuthConfig({
+        localRuntime: true,
+        productionIdentity: {
+          authOrigin: "https://auth.example.com",
+          canonicalOrigin: "https://www.example.com",
+          relyingPartyId: "example.com",
+        },
+        requestOrigin: "http://localhost:5174",
+        runtimeProfile: "instance",
+      }),
+    ).toEqual({
+      config: {
+        canonicalOrigin: "http://localhost:5174",
+        relyingPartyId: "localhost",
+        relyingPartyName: "Formless",
+      },
+      kind: "write",
+    });
+
+    expect(
+      planRuntimeInstanceAuthConfig({
         productionIdentity: {
           authOrigin: "https://auth.example.com",
           canonicalOrigin: "https://www.example.com",
@@ -94,6 +114,21 @@ describe("instance auth origin and protected-route handoff decisions", () => {
     });
     expect(planRuntimeInstanceAuthConfig({ ...facts, ownerPresent: true })).toEqual({
       kind: "keep",
+    });
+    expect(
+      planRuntimeInstanceAuthConfig({
+        ...facts,
+        localRuntime: true,
+        ownerPresent: true,
+        requestOrigin: "https://local.formless.local",
+      }),
+    ).toEqual({
+      config: {
+        canonicalOrigin: "https://local.formless.local",
+        relyingPartyId: "local.formless.local",
+        relyingPartyName: "Formless",
+      },
+      kind: "write",
     });
   });
 

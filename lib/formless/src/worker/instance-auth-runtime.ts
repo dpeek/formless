@@ -11,6 +11,11 @@ import {
 } from "@dpeek/formless-instance-control-plane";
 import { resolveRuntimeProfileKind, type RuntimeProfileKind } from "../shared/runtime-topology.ts";
 import { readControlPlaneRecords } from "./deployment-control-plane-client.ts";
+import { requestOriginForAuth } from "./instance-auth-handoff.ts";
+import {
+  isLocalOwnerSessionRuntime,
+  type LocalSessionBootstrapEnv,
+} from "./local-session-bootstrap.ts";
 import {
   readInstanceAuthConfig,
   writeInstanceAuthConfig,
@@ -18,7 +23,7 @@ import {
 } from "./instance-auth-state.ts";
 import { readIdentityOwner } from "./identity-control-plane.ts";
 
-export type InstanceAuthRuntimeEnv = {
+export type InstanceAuthRuntimeEnv = Partial<LocalSessionBootstrapEnv> & {
   [FORMLESS_INSTANCE_AUTH_ORIGIN_ENV_NAME]?: string;
   [FORMLESS_INSTANCE_AUTH_RELYING_PARTY_ID_ENV_NAME]?: string;
   [FORMLESS_INSTANCE_AUTH_RELYING_PARTY_NAME_ENV_NAME]?: string;
@@ -41,6 +46,7 @@ export type RuntimeInstanceAuthConfigFacts = {
   explicitCanonicalOrigin?: string;
   explicitRelyingPartyId?: string;
   explicitRelyingPartyName?: string;
+  localRuntime?: boolean;
   ownerPresent?: boolean;
   productionIdentity?: InstanceControlPlaneProductionIdentity;
   requestOrigin: string;
@@ -90,6 +96,10 @@ export function planRuntimeInstanceAuthConfig(
     return { kind: "keep" };
   }
 
+  if (facts.localRuntime) {
+    return { config, kind: "write" };
+  }
+
   if (facts.ownerPresent === undefined) {
     return { config, kind: "check-owner" };
   }
@@ -125,8 +135,10 @@ async function runtimeInstanceAuthConfigFactsForRequest(
   const explicitCanonicalOrigin = stringRuntimeEnvValue(
     env[FORMLESS_INSTANCE_AUTH_ORIGIN_ENV_NAME],
   );
+  const localRuntime = isLocalOwnerSessionRuntime(request, env);
   const productionIdentity =
     explicitCanonicalOrigin === undefined &&
+    !localRuntime &&
     (profileKind === "instance" || profileKind === "publishedSite")
       ? instanceControlPlaneProductionIdentityFromRecords(
           (await readControlPlaneRecords({
@@ -139,6 +151,7 @@ async function runtimeInstanceAuthConfigFactsForRequest(
   return {
     ...(existing === undefined ? {} : { existing }),
     ...(explicitCanonicalOrigin === undefined ? {} : { explicitCanonicalOrigin }),
+    ...(localRuntime ? { localRuntime: true } : {}),
     ...(stringRuntimeEnvValue(env[FORMLESS_INSTANCE_AUTH_RELYING_PARTY_ID_ENV_NAME]) === undefined
       ? {}
       : {
@@ -154,7 +167,7 @@ async function runtimeInstanceAuthConfigFactsForRequest(
           ),
         }),
     ...(productionIdentity === undefined ? {} : { productionIdentity }),
-    requestOrigin: requestUrl.origin,
+    requestOrigin: localRuntime ? requestOriginForAuth(request) : requestUrl.origin,
     runtimeProfile: profileKind,
   };
 }
@@ -175,6 +188,14 @@ function runtimeInstanceAuthConfigFromFacts(
   if (facts.explicitCanonicalOrigin !== undefined) {
     return parseRuntimeAuthConfig({
       canonicalOrigin: facts.explicitCanonicalOrigin,
+      relyingPartyId: facts.explicitRelyingPartyId,
+      relyingPartyName,
+    });
+  }
+
+  if (facts.localRuntime) {
+    return parseRuntimeAuthConfig({
+      canonicalOrigin: facts.requestOrigin,
       relyingPartyId: facts.explicitRelyingPartyId,
       relyingPartyName,
     });

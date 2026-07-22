@@ -36,6 +36,22 @@ ceremonies.
 - AND workers.dev origin remains a bootstrap or preview identity unless the
   owner explicitly selects it as production identity
 
+#### Scenario: Local workspace auth uses the browser-facing local origin
+
+- GIVEN `formless dev` is running a local workspace runtime
+- AND workspace control-plane records contain a deployed production identity
+- WHEN the runtime selects its effective auth origin for request routing,
+  passkeys, sessions, or redirects
+- THEN an explicit runtime auth-origin setting continues to take precedence
+- AND otherwise the effective auth origin is derived from the browser-facing
+  local request origin, including forwarded host and protocol facts
+- AND the deployed production identity does not contribute to local runtime auth
+  configuration
+- AND changed local dev ports or named proxy origins can replace stale persisted
+  local auth configuration even after the local owner exists
+- AND production runtimes continue deriving auth configuration from the deployed
+  production identity when no explicit runtime auth origin is configured
+
 #### Scenario: Missing auth configuration
 
 - GIVEN owner setup or passkey login requires instance auth configuration

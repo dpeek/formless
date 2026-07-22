@@ -539,6 +539,11 @@ optional first app install, credential setup, and push operations.
 - **AND** app install, save, credential setup, push dry-run, and push apply
   entry points are available through browser-owned local runtime flows
   after local session bootstrap
+- **AND** deployed canonical and auth origins preserved in workspace
+  control-plane source do not govern local auth routing, passkeys, sessions, or
+  redirects
+- **AND** the local runtime uses the child dev server origin selected at startup
+  or forwarded named-proxy origin as its browser-facing auth origin
 
 #### Scenario: Open authenticated local session
 

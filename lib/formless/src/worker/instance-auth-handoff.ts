@@ -75,7 +75,10 @@ import {
   activeAppPackageResolver,
   type ActiveRuntimeAppPackageEnv,
 } from "./runtime-app-packages.ts";
-import { isLocalOwnerSessionRuntime } from "./local-session-bootstrap.ts";
+import {
+  isLocalOwnerSessionRuntime,
+  type LocalSessionBootstrapEnv,
+} from "./local-session-bootstrap.ts";
 
 export type {
   HostAuthSession,
@@ -541,12 +544,17 @@ export async function configuredInstanceAuthOrigin(
   env: Pick<
     InstanceAuthHandoffEnv,
     typeof FORMLESS_INSTANCE_AUTH_ORIGIN_ENV_NAME | "FORMLESS_AUTHORITY"
-  >,
+  > &
+    Partial<LocalSessionBootstrapEnv>,
 ): Promise<string | undefined> {
   const explicitOrigin = stringEnvValue(env[FORMLESS_INSTANCE_AUTH_ORIGIN_ENV_NAME]);
 
   if (explicitOrigin !== undefined) {
     return configuredInstanceAuthOriginFromFacts({ explicitOrigin });
+  }
+
+  if (isLocalOwnerSessionRuntime(request, env)) {
+    return requestOriginForAuth(request);
   }
 
   const identity = instanceControlPlaneProductionIdentityFromRecords(

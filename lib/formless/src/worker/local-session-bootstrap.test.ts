@@ -13,6 +13,7 @@ import {
   WORKSPACE_GATEWAY_PROXY_TOKEN_ENV,
   WORKSPACE_GATEWAY_SIDECAR_URL_ENV,
 } from "@dpeek/formless-gateway";
+import { INSTANCE_CONTROL_PLANE_INSTANCE_SETTINGS_ID } from "@dpeek/formless-instance-control-plane";
 import { createWorkerHarness } from "./miniflare-test.ts";
 import { OWNER_SESSION_COOKIE_NAME } from "./owner-session.ts";
 
@@ -150,6 +151,95 @@ describe("local session bootstrap API routes", () => {
     expect(bootstrap.headers.get("Set-Cookie")).toContain(`${OWNER_SESSION_COOKIE_NAME}=`);
   });
 
+  it("keeps deployed production identity out of dynamic-port and named-proxy local auth", async () => {
+    const productionOrigin = "https://verifi-staging.verifi-labs.workers.dev";
+    const dynamicOrigin = "http://localhost:43127";
+
+    await configureProductionIdentity(harness, productionOrigin);
+
+    const dynamicBootstrap = await bootstrapLocalSession({
+      origin: dynamicOrigin,
+      reset: true,
+    });
+    const dynamicCookie = cookiePair(dynamicBootstrap.headers.get("Set-Cookie"));
+    const dynamicSession = await harness.mf.dispatchFetch(`${dynamicOrigin}/api/formless/session`, {
+      headers: { Cookie: dynamicCookie },
+    });
+    const dynamicSetup = await harness.mf.dispatchFetch(`${dynamicOrigin}/api/formless/setup`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    const dynamicSetupBody = (await dynamicSetup.json()) as OwnerSetupStatusResponse;
+    const dynamicAuth = await harness.mf.dispatchFetch(`${dynamicOrigin}/formless/auth`, {
+      headers: { Cookie: dynamicCookie },
+      redirect: "manual",
+    });
+
+    expect(dynamicBootstrap.status).toBe(302);
+    expect(dynamicBootstrap.headers.get("Location")).toBe(
+      `${dynamicOrigin}/local-session?reset=1&redirectTo=%2F`,
+    );
+    expect(dynamicBootstrap.headers.get("Set-Cookie")).toContain(`${OWNER_SESSION_COOKIE_NAME}=`);
+    expect(dynamicSession.status).toBe(200);
+    expect(dynamicSetup.status).toBe(200);
+    expect(dynamicSetupBody.authOrigin).toBe(dynamicOrigin);
+    expect(dynamicAuth.status).toBe(200);
+    expect(await dynamicAuth.text()).not.toContain(productionOrigin);
+    expect(dynamicBootstrap.headers.get("Location")).not.toContain(productionOrigin);
+    expect(dynamicAuth.headers.get("Location")).toBeNull();
+
+    const proxyHarness = await createLocalBootstrapHarness();
+    const childOrigin = "http://127.0.0.1:43128";
+    const proxyOrigin = "https://ooga.formless.local";
+    const forwardedHeaders = {
+      "x-forwarded-host": "ooga.formless.local",
+      "x-forwarded-proto": "https",
+    };
+
+    try {
+      await configureProductionIdentity(proxyHarness, productionOrigin);
+
+      const proxyBootstrap = await bootstrapLocalSession({
+        init: { headers: forwardedHeaders },
+        origin: childOrigin,
+        reset: true,
+        target: proxyHarness,
+      });
+      const proxyCookie = cookiePair(proxyBootstrap.headers.get("Set-Cookie"));
+      const proxySession = await proxyHarness.mf.dispatchFetch(
+        `${childOrigin}/api/formless/session`,
+        {
+          headers: { Cookie: proxyCookie, ...forwardedHeaders },
+        },
+      );
+      const proxySetup = await proxyHarness.mf.dispatchFetch(`${childOrigin}/api/formless/setup`, {
+        headers: {
+          Authorization: `Bearer ${adminToken}`,
+          ...forwardedHeaders,
+        },
+      });
+      const proxySetupBody = (await proxySetup.json()) as OwnerSetupStatusResponse;
+      const proxyAuth = await proxyHarness.mf.dispatchFetch(`${childOrigin}/formless/auth`, {
+        headers: { Cookie: proxyCookie, ...forwardedHeaders },
+        redirect: "manual",
+      });
+
+      expect(proxyBootstrap.status).toBe(302);
+      expect(proxyBootstrap.headers.get("Location")).toBe(
+        `${proxyOrigin}/local-session?reset=1&redirectTo=%2F`,
+      );
+      expect(proxyBootstrap.headers.get("Set-Cookie")).toContain(`${OWNER_SESSION_COOKIE_NAME}=`);
+      expect(proxySession.status).toBe(200);
+      expect(proxySetup.status).toBe(200);
+      expect(proxySetupBody.authOrigin).toBe(proxyOrigin);
+      expect(proxyAuth.status).toBe(200);
+      expect(await proxyAuth.text()).not.toContain(productionOrigin);
+      expect(proxyBootstrap.headers.get("Location")).not.toContain(productionOrigin);
+      expect(proxyAuth.headers.get("Location")).toBeNull();
+    } finally {
+      await proxyHarness.dispose();
+    }
+  });
+
   it("rejects invalid, replayed, cross-origin, and non-local bootstrap requests", async () => {
     const invalid = await harness.fetch(`${LOCAL_SESSION_BOOTSTRAP_API_PATH}?token=wrong`, {
       redirect: "manual",
@@ -182,7 +272,10 @@ describe("local session bootstrap API routes", () => {
       expect(crossOriginBody).toEqual({
         error: "Local session bootstrap requests must be same-origin.",
       });
-      expect(setupAfterRejected.body).toEqual({ setupComplete: false });
+      expect(setupAfterRejected.body).toEqual({
+        authOrigin: "https://example.com",
+        setupComplete: false,
+      });
       expect(accepted.status).toBe(302);
       expect(accepted.headers.get("Location")).toBe("http://example.com/");
       expect(replay.status).toBe(401);
@@ -203,11 +296,13 @@ async function bootstrapLocalSession({
   origin = "http://example.com",
   redirectTo,
   reset = false,
+  target = harness,
 }: {
   init?: HarnessFetchInit;
   origin?: string;
   redirectTo?: string;
   reset?: boolean;
+  target?: Harness;
 } = {}) {
   const url = new URL(
     `${LOCAL_SESSION_BOOTSTRAP_API_PATH}?token=${localSessionBootstrapToken}`,
@@ -225,16 +320,40 @@ async function bootstrapLocalSession({
     origin === "http://example.com" ? `${url.pathname}${url.search}` : url.toString();
 
   if (origin !== "http://example.com") {
-    return harness.mf.dispatchFetch(requestTarget, {
+    return target.mf.dispatchFetch(requestTarget, {
       ...init,
       redirect: "manual",
     });
   }
 
-  return harness.fetch(requestTarget, {
+  return target.fetch(requestTarget, {
     ...init,
     redirect: "manual",
   });
+}
+
+async function configureProductionIdentity(target: Harness, productionOrigin: string) {
+  const response = await target.fetch(
+    "/api/formless/control-plane/operations/instance-settings/create",
+    {
+      body: JSON.stringify({
+        idempotencyKey: "configure-deployed-production-identity",
+        input: {
+          authOrigin: productionOrigin,
+          canonicalOrigin: productionOrigin,
+          productionIdentityStatus: "configured",
+          settingsId: INSTANCE_CONTROL_PLANE_INSTANCE_SETTINGS_ID,
+        },
+      }),
+      headers: {
+        Authorization: `Bearer ${adminToken}`,
+        "Content-Type": "application/json",
+      },
+      method: "POST",
+    },
+  );
+
+  expect(response.status).toBe(200);
 }
 
 async function createSiteInstall(input: { cookie: string | null }) {
