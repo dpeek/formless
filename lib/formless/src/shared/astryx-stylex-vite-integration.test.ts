@@ -1,15 +1,34 @@
-import { resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { cp, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { build, type PluginOption } from "vite-plus";
-import { describe, expect, it } from "vite-plus/test";
+import { afterEach, describe, expect, it } from "vite-plus/test";
 
-import { clientManualChunks, runtimeViteConfig } from "../runtime/vite-config.ts";
+import {
+  clientManualChunks,
+  runtimeViteConfig,
+  SITE_PUBLIC_RENDERER_BROWSER_VIRTUAL_MODULE_ID,
+} from "../runtime/vite-config.ts";
+import {
+  FORMLESS_SITE_PROJECT_ROOT_ENV_NAME,
+  FORMLESS_WORKSPACE_RUNTIME_EXTENSIONS_ENV_NAME,
+  SITE_PUBLIC_RENDERER_RUNTIME_EXTENSION_KEY,
+} from "./workspace-runtime-extensions.ts";
 
 const packageRoot = resolve(fileURLToPath(new URL("../../", import.meta.url)));
 const repoRoot = resolve(packageRoot, "../..");
 const applicationEntry = resolve(packageRoot, "src/main.tsx");
 const publicSiteEntry = resolve(packageRoot, "src/public-site-main.tsx");
+const tempDirs: string[] = [];
+
+afterEach(async () => {
+  await Promise.all(
+    tempDirs.splice(0).map((tempDir) => rm(tempDir, { force: true, recursive: true })),
+  );
+});
 
 type BuildAsset = {
   fileName: string;
@@ -118,7 +137,110 @@ describe("Formless Renderer Astryx StyleX root build integration", () => {
     expect(emittedCss).not.toContain("stylex.create");
     expect(emittedJavaScript).not.toContain("createTheme");
   }, 30_000);
+
+  it("shares React with a hook-using browser renderer from an external workspace", async () => {
+    const workspaceRoot = await makeExternalRendererWorkspace();
+    const rendererEntrypoint = "renderers/site-public.browser.js";
+    const runtimeConfig = runtimeViteConfig({
+      env: {
+        NODE_ENV: "production",
+        VITEST: "true",
+        [FORMLESS_SITE_PROJECT_ROOT_ENV_NAME]: workspaceRoot,
+        [FORMLESS_WORKSPACE_RUNTIME_EXTENSIONS_ENV_NAME]: JSON.stringify({
+          [SITE_PUBLIC_RENDERER_RUNTIME_EXTENSION_KEY]: {
+            browser: rendererEntrypoint,
+            worker: rendererEntrypoint,
+          },
+        }),
+      },
+      packageRoot,
+      workspaceRoot: repoRoot,
+    }) as {
+      plugins?: PluginOption[];
+      resolve?: Record<string, unknown>;
+    };
+    const testEntryId = "virtual:formless-react-singleton-test-entry";
+    const resolvedTestEntryId = `\0${testEntryId}`;
+    const result = await build({
+      build: {
+        minify: false,
+        rollupOptions: {
+          input: testEntryId,
+          preserveEntrySignatures: "strict",
+          output: {
+            format: "es",
+          },
+        },
+        write: false,
+      },
+      configFile: false,
+      plugins: [
+        {
+          name: "formless-react-singleton-test-entry",
+          resolveId(id) {
+            return id === testEntryId ? resolvedTestEntryId : undefined;
+          },
+          load(id) {
+            if (id !== resolvedTestEntryId) {
+              return;
+            }
+
+            return `import { createElement } from "react";
+import { renderToString } from "react-dom/server";
+import { sitePublicRenderer } from ${JSON.stringify(SITE_PUBLIC_RENDERER_BROWSER_VIRTUAL_MODULE_ID)};
+
+export function renderWorkspaceRenderer() {
+  return renderToString(createElement(sitePublicRenderer));
+}
+`;
+          },
+        },
+        ...(runtimeConfig.plugins ?? []),
+      ],
+      resolve: runtimeConfig.resolve,
+      root: packageRoot,
+    });
+    const chunks = buildOutputs(result)
+      .flatMap(({ output }) => output)
+      .filter((item): item is BuildChunk => item.type === "chunk");
+    const entryChunk = chunks.find(({ isEntry }) => isEntry);
+
+    if (!entryChunk) {
+      throw new Error("Missing React singleton integration entry chunk.");
+    }
+
+    const outputPath = join(workspaceRoot, "react-singleton-build.mjs");
+    await writeFile(outputPath, entryChunk.code);
+    const builtModule = (await import(`${pathToFileURL(outputPath).href}?build`)) as {
+      renderWorkspaceRenderer: () => string;
+    };
+
+    expect(builtModule.renderWorkspaceRenderer()).toContain("shared React runtime");
+  }, 30_000);
 });
+
+async function makeExternalRendererWorkspace(): Promise<string> {
+  const workspaceRoot = await mkdtemp(join(tmpdir(), "formless-react-singleton-"));
+  const rendererDirectory = join(workspaceRoot, "renderers");
+  const externalReactDirectory = join(workspaceRoot, "node_modules", "react");
+  const sourceReactDirectory = dirname(createRequire(import.meta.url).resolve("react"));
+
+  tempDirs.push(workspaceRoot);
+  await mkdir(rendererDirectory, { recursive: true });
+  await cp(sourceReactDirectory, externalReactDirectory, { recursive: true });
+  await writeFile(
+    join(rendererDirectory, "site-public.browser.js"),
+    `import { createElement, useMemo } from "react";
+
+export default function ExternalWorkspaceRenderer() {
+  const label = useMemo(() => "shared React runtime", []);
+  return createElement("p", null, label);
+}
+`,
+  );
+
+  return workspaceRoot;
+}
 
 function buildOutputs(value: unknown): BuildOutput[] {
   const outputs = Array.isArray(value) ? value : [value];

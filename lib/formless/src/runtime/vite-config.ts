@@ -132,13 +132,16 @@ export function runtimeViteConfig(input: RuntimeViteConfigInput = {}) {
             astryxCloudflareWorkerSourceCompilationPlugin(),
           ]),
     ],
-    resolve: isUnitTest
-      ? {
-          alias: {
-            "@stylexjs/stylex": path.resolve(packageRoot, "src/test/stylex.ts"),
-          },
-        }
-      : undefined,
+    resolve: {
+      dedupe: ["react", "react-dom"],
+      ...(isUnitTest
+        ? {
+            alias: {
+              "@stylexjs/stylex": path.resolve(packageRoot, "src/test/stylex.ts"),
+            },
+          }
+        : {}),
+    },
     server: {
       fs: {
         allow: serverFsAllow,

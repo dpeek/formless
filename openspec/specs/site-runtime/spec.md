@@ -147,6 +147,8 @@ storage contracts.
   named `SitePublicRenderer` export
 - AND the browser entrypoint is treated as public client asset code
 - AND the Worker entrypoint is treated as trusted owner-authored deploy code
+- AND the browser entrypoint shares the public Site client's React and React DOM
+  runtime instances so renderer hooks participate in the active render
 - AND renderer StyleX authoring calls are compiled out of both browser and
   Worker outputs before either output executes
 - AND server-only imports, Worker bindings, runtime secrets, and provider

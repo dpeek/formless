@@ -646,6 +646,9 @@ bundled Worker and browser runtime build setup used by local dev and push.
 - **AND** workspace-relative runtime extension paths are resolved during build
   setup rather than stored as app data, deployment intent, package app source,
   or Worker runtime bindings
+- **AND** browser runtime extensions share singleton React and React DOM modules
+  with the browser runtime even when their workspace source resolves through a
+  different physical package installation
 
 ### Requirement: Workspace Save From Local Authority
 
@@ -778,6 +781,8 @@ without storing executable code configuration in app data.
   entrypoint
 - **AND** workspace-relative renderer paths are resolved from the workspace root
   during build setup rather than exposed as Worker runtime bindings
+- **AND** the browser renderer uses the same React and React DOM module
+  instances as the local public Site client
 - **AND** Site authoring remains the bundled generated Site admin experience
   backed by flat Site records, schema, media, public actions, and routes
 - **AND** omitting `runtime.extensions["site.publicRenderer"]` from
@@ -792,6 +797,9 @@ without storing executable code configuration in app data.
   entrypoint needed for preview or hydration
 - **AND** workspace-relative renderer paths are resolved from the workspace root
   during deploy build setup rather than exposed as Worker runtime bindings
+- **AND** the deployed browser renderer uses the same React and React DOM module
+  instances as the public Site client rather than bundling independent hook
+  dispatchers
 - **AND** provider credentials, ignored local secret state, Worker secrets, and
   server-only imports remain outside public browser assets
 - **AND** when runtime extensions are configured, push apply does not skip
