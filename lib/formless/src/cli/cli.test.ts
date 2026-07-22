@@ -2460,7 +2460,7 @@ describe("Formless CLI", () => {
 
     expect(spawnCalls).toHaveLength(1);
     expect(spawnCalls[0]).toMatchObject({
-      args: ["run", "--bun", "vp", "dev", "--port", "4443", "--strictPort"],
+      args: ["run", "vp", "dev", "--port", "4443", "--strictPort"],
       command: "bun",
       cwd: "/package",
     });
@@ -2715,7 +2715,7 @@ describe("Formless CLI", () => {
     expect(openedUrl.searchParams.get("redirectTo")).toBeNull();
     expect(openedUrl.searchParams.get("reset")).toBeNull();
     expect(spawnCalls[0]).toMatchObject({
-      args: ["run", "--bun", "vp", "dev", "--port", "5174", "--strictPort", "--host", "127.0.0.1"],
+      args: ["run", "vp", "dev", "--port", "5174", "--strictPort", "--host", "127.0.0.1"],
       command: "bun",
       cwd: "/package",
     });
@@ -2905,7 +2905,7 @@ describe("Formless CLI", () => {
 
     expect(spawnCalls).toHaveLength(1);
     expect(spawnCalls[0]).toMatchObject({
-      args: ["run", "--bun", "vp", "dev", "--port", "4444", "--strictPort"],
+      args: ["run", "vp", "dev", "--port", "4444", "--strictPort"],
       command: "bun",
       cwd: "/package",
     });

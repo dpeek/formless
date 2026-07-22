@@ -64,8 +64,8 @@
         "@internationalized/date": "^3.12.1",
         "@simplewebauthn/browser": "^13.3.0",
         "@simplewebauthn/server": "^13.3.1",
-        "@stylexjs/babel-plugin": "0.18.3",
-        "@stylexjs/unplugin": "0.18.3",
+        "@stylexjs/babel-plugin": "0.19.0",
+        "@stylexjs/unplugin": "0.19.0",
         "@vitejs/plugin-react": "^6.0.1",
         "alchemy": "^0.93.9",
         "react": "19.2.6",
@@ -155,7 +155,7 @@
         "@dpeek/formless-site-app": "workspace:*",
         "@dpeek/formless-source-svg": "workspace:*",
         "@heroicons/react": "latest",
-        "@stylexjs/stylex": "0.18.3",
+        "@stylexjs/stylex": "0.19.0",
         "@thesvg/react": "^3.0.19",
         "react": "19.2.6",
         "react-dom": "19.2.6",
@@ -163,7 +163,7 @@
       "devDependencies": {
         "@astryxdesign/build": "0.1.4",
         "@astryxdesign/cli": "0.1.4",
-        "@stylexjs/unplugin": "0.18.3",
+        "@stylexjs/unplugin": "0.19.0",
         "@testing-library/dom": "^10.4.1",
         "@testing-library/react": "^16.3.2",
         "@types/react": "19.2.15",
@@ -857,13 +857,13 @@
 
     "@standard-schema/spec": ["@standard-schema/spec@1.1.0", "", {}, "sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w=="],
 
-    "@stylexjs/babel-plugin": ["@stylexjs/babel-plugin@0.18.3", "", { "dependencies": { "@babel/core": "^7.26.8", "@babel/helper-module-imports": "^7.25.9", "@babel/traverse": "^7.26.8", "@babel/types": "^7.26.8", "@dual-bundle/import-meta-resolve": "^4.1.0", "@stylexjs/shared": "0.18.3", "@stylexjs/stylex": "0.18.3", "postcss-value-parser": "^4.1.0" } }, "sha512-5VeMIChNaXWlizLUL6c7WrMfuhydHXl3ASTlbj3O0qlEkNOlcgZMH3zzZ0iUrOSFTSgbHAOWUsVJKX5bFeZk4A=="],
+    "@stylexjs/babel-plugin": ["@stylexjs/babel-plugin@0.19.0", "", { "dependencies": { "@babel/core": "^7.26.8", "@babel/helper-module-imports": "^7.25.9", "@babel/traverse": "^7.26.8", "@babel/types": "^7.26.8", "@dual-bundle/import-meta-resolve": "^4.1.0", "@stylexjs/shared": "0.19.0", "@stylexjs/stylex": "0.19.0", "postcss-value-parser": "^4.1.0" } }, "sha512-2SnVZIl047TtqKW0nRTn7Irz0kmoot1bxdGDE/HwfwfF7dJYHqwkIFg92s87v3hj7zxJobrHWwDx1p3qvQXW4g=="],
 
-    "@stylexjs/shared": ["@stylexjs/shared@0.18.3", "", {}, "sha512-g72AKGGhLTFsaez19zod2je9IQeaub2eM85jwJPvfmxymKW8Aleoxm5/pYIsnyxx3MZNOB5AVN6khfo90f9Lgw=="],
+    "@stylexjs/shared": ["@stylexjs/shared@0.19.0", "", {}, "sha512-7Yym70cQH5sPzJHgzJX3FkL9ZCptbC3IbiRijN9YLYU/5OywB/3c519Xv1DOzvxqjv8urSxh98/9HxLaPG7sDg=="],
 
-    "@stylexjs/stylex": ["@stylexjs/stylex@0.18.3", "", { "dependencies": { "css-mediaquery": "^0.1.2", "invariant": "^2.2.4", "styleq": "0.2.1" } }, "sha512-15gDzAJAorOE0yzxaWLNxldW2aqdmCiLG5QcPD8nmVCVqvrWp0Asgv45zk7LtN86WJb/4Ym9eQ6qT5MJW59tWQ=="],
+    "@stylexjs/stylex": ["@stylexjs/stylex@0.19.0", "", { "dependencies": { "css-mediaquery": "^0.1.2", "invariant": "^2.2.4", "styleq": "0.2.1" } }, "sha512-CnUFp7YMaDLDeemsWOfJgoC/gKM5P/yBNMcpJaE6ChJmXr7s0DJwSeGTTlHJcqqwN9OW1qGtmARWLFhGZN1pTA=="],
 
-    "@stylexjs/unplugin": ["@stylexjs/unplugin@0.18.3", "", { "dependencies": { "@babel/core": "^7.26.8", "@babel/plugin-syntax-flow": "^7.26.0", "@babel/plugin-syntax-jsx": "^7.25.9", "@babel/plugin-syntax-typescript": "^7.25.9", "@stylexjs/babel-plugin": "0.18.3", "browserslist": "^4.24.0", "lightningcss": "^1.29.1" }, "peerDependencies": { "unplugin": "^2.3.11" } }, "sha512-qLdYhFB2hmvOSSlz9CSU+jRcDu5W0LBM36EuGvGIBVEputbhIR62G660d2Mw1G6tCw3qe75UDSxlPul2qS6HPQ=="],
+    "@stylexjs/unplugin": ["@stylexjs/unplugin@0.19.0", "", { "dependencies": { "@babel/core": "^7.26.8", "@babel/plugin-syntax-flow": "^7.26.0", "@babel/plugin-syntax-jsx": "^7.25.9", "@babel/plugin-syntax-typescript": "^7.25.9", "@stylexjs/babel-plugin": "0.19.0", "browserslist": "^4.24.0", "lightningcss": "^1.29.1" }, "peerDependencies": { "unplugin": "^2.3.11" } }, "sha512-2QwNYovSwarC/M8DLD78857F6MEi4eQ3UYzgdmyg/K7562M/rV1KWptiATxcKgujlUT6ToNy778SOXf4bGK+Bw=="],
 
     "@swc/helpers": ["@swc/helpers@0.5.21", "", { "dependencies": { "tslib": "^2.8.0" } }, "sha512-jI/VAmtdjB/RnI8GTnokyX7Ug8c+g+ffD6QRLa6XQewtnGyukKkKSk3wLTM3b5cjt1jNh9x0jfVlagdN2gDKQg=="],
 
@@ -1606,6 +1606,8 @@
     "@astryxdesign/cli/commander": ["commander@12.1.0", "", {}, "sha512-Vw8qHK3bZM9y/P10u3Vib8o/DdkvA2OtPtZvD871QKjy74Wj1WSKFILMPRPSdUSx5RFK1arlJzEtA4PkFgnbuA=="],
 
     "@astryxdesign/cli/zod": ["zod@4.4.3", "", {}, "sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ=="],
+
+    "@astryxdesign/core/@stylexjs/stylex": ["@stylexjs/stylex@0.18.3", "", { "dependencies": { "css-mediaquery": "^0.1.2", "invariant": "^2.2.4", "styleq": "0.2.1" } }, "sha512-15gDzAJAorOE0yzxaWLNxldW2aqdmCiLG5QcPD8nmVCVqvrWp0Asgv45zk7LtN86WJb/4Ym9eQ6qT5MJW59tWQ=="],
 
     "@aws-sdk/xml-builder/fast-xml-parser": ["fast-xml-parser@5.7.3", "", { "dependencies": { "@nodable/entities": "^2.1.0", "fast-xml-builder": "^1.1.7", "path-expression-matcher": "^1.5.0", "strnum": "^2.2.3" }, "bin": { "fxparser": "src/cli/cli.js" } }, "sha512-C0AaNuC+mscy6vrAQKAc/rMq+zAPHodfHGZu4sGVehvAQt/JLG1O5zEcYcXSY5zSqr4YVgxsB+pHXTq0i7eDlg=="],
 

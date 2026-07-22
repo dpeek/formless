@@ -505,7 +505,7 @@ function workspaceDevServerCommandForEnv(
   env: NodeJS.ProcessEnv,
 ): FormlessInstanceWorkspaceDevCommand {
   const command: FormlessInstanceWorkspaceDevCommand = {
-    args: ["run", "--bun", "vp", "dev"],
+    args: ["run", "vp", "dev"],
     command: "bun",
     label: "vp dev",
   };

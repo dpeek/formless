@@ -50,8 +50,8 @@
     "@internationalized/date": "^3.12.1",
     "@simplewebauthn/browser": "^13.3.0",
     "@simplewebauthn/server": "^13.3.1",
-    "@stylexjs/babel-plugin": "0.18.3",
-    "@stylexjs/unplugin": "0.18.3",
+    "@stylexjs/babel-plugin": "0.19.0",
+    "@stylexjs/unplugin": "0.19.0",
     "@vitejs/plugin-react": "^6.0.1",
     "alchemy": "^0.93.9",
     "react": "19.2.6",
@@ -74,5 +74,8 @@
     "miniflare": "^4.20260424.0",
     "typescript": "~6.0.2",
     "zod": "3.25.76"
-  }
+  },
+  "browserslist": [
+    "last 1 Chrome version"
+  ]
 }

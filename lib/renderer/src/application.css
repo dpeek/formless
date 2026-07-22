@@ -1,2 +1,6 @@
 @import "@astryxdesign/core/reset.css";
 @import "@astryxdesign/theme-neutral/theme.css";
+
+:where(div):has(> [data-formless-astryx-side-nav-footer]) {
+  border-block-start: none;
+}

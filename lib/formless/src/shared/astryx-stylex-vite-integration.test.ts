@@ -8,7 +8,6 @@ import { build, type PluginOption } from "vite-plus";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 
 import {
-  clientManualChunks,
   runtimeViteConfig,
   SITE_PUBLIC_RENDERER_BROWSER_VIRTUAL_MODULE_ID,
 } from "../runtime/vite-config.ts";
@@ -74,9 +73,6 @@ describe("Formless Renderer Astryx StyleX root build integration", () => {
             application: applicationEntry,
             "public-site": publicSiteEntry,
           },
-          output: {
-            manualChunks: clientManualChunks,
-          },
         },
         write: false,
       },
@@ -100,10 +96,14 @@ describe("Formless Renderer Astryx StyleX root build integration", () => {
     const publicSiteManifestEntry = requiredManifestEntry(manifest, publicSiteEntryChunk.fileName);
     const applicationCss = manifestCss(applicationManifestEntry, manifest);
     const publicSiteCss = manifestCss(publicSiteManifestEntry, manifest);
-    const emittedCss = assets
-      .filter(({ fileName }) => fileName.endsWith(".css"))
-      .map(assetText)
-      .join("\n");
+    const cssAssets = new Map(
+      assets
+        .filter(({ fileName }) => fileName.endsWith(".css"))
+        .map((asset) => [asset.fileName, assetText(asset)]),
+    );
+    const emittedCss = [...cssAssets.values()].join("\n");
+    const sharedCss = publicSiteCss.filter((fileName) => applicationCss.includes(fileName));
+    const publicSiteCssText = cssText(publicSiteCss, cssAssets);
     const emittedJavaScript = chunks.map(({ code }) => code).join("\n");
 
     expect(applicationModules).toEqual(
@@ -131,8 +131,11 @@ describe("Formless Renderer Astryx StyleX root build integration", () => {
     );
     expect(applicationCss.length).toBeGreaterThan(0);
     expect(publicSiteCss.length).toBeGreaterThan(0);
+    expect(sharedCss.length).toBeGreaterThan(0);
+    expect(publicSiteCssText).toMatch(/min-height:\s*260px/);
+    expect(publicSiteCssText).toContain("@layer priority");
     expect(emittedCss).toContain("@layer");
-    expect(emittedCss).toContain("@layer astryx-base");
+    expect(emittedCss).toMatch(/\.astryx[a-z0-9]+/);
     expect(emittedCss).toMatch(/\.x[a-z0-9]+/);
     expect(emittedCss).not.toContain("stylex.create");
     expect(emittedJavaScript).not.toContain("createTheme");
@@ -347,4 +350,8 @@ function manifestCss(
 
 function assetText(asset: BuildAsset): string {
   return typeof asset.source === "string" ? asset.source : new TextDecoder().decode(asset.source);
+}
+
+function cssText(fileNames: readonly string[], assets: ReadonlyMap<string, string>): string {
+  return fileNames.map((fileName) => assets.get(fileName) ?? "").join("\n");
 }

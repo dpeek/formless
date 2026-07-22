@@ -30,7 +30,7 @@ Read this when editing `lib/renderer/*`.
 - `src/site-*`: production public Site renderers and provider.
 - `src/components/`: application, generated-field, management, auth, access, and
   Site presentation.
-- `src/global.css`: public Site reset, core CSS, and neutral theme imports.
+- `src/global.css`: public Site reset, neutral theme, and Site token overrides.
 - `src/main.tsx`, `src/root.tsx`: fixture-explorer entry and layout catalog.
 
 ## Read Path

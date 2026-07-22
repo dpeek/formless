@@ -1,13 +1,17 @@
 import { AlertDialog } from "@astryxdesign/core/AlertDialog";
+import { Avatar } from "@astryxdesign/core/Avatar";
 import { Badge, type BadgeVariant } from "@astryxdesign/core/Badge";
 import { Button, type ButtonVariant } from "@astryxdesign/core/Button";
+import { DropdownMenu } from "@astryxdesign/core/DropdownMenu";
 import { HStack } from "@astryxdesign/core/HStack";
 import { HoverCard } from "@astryxdesign/core/HoverCard";
 import { MetadataList, MetadataListItem } from "@astryxdesign/core/MetadataList";
 import { NavHeadingMenu, NavHeadingMenuItem } from "@astryxdesign/core/NavMenu";
 import { SideNav, SideNavHeading, SideNavItem, SideNavSection } from "@astryxdesign/core/SideNav";
 import { Text } from "@astryxdesign/core/Text";
+import { radiusVars } from "@astryxdesign/core/theme/tokens.stylex";
 import { VStack } from "@astryxdesign/core/VStack";
+import * as stylex from "@stylexjs/stylex";
 import { memo, type ReactNode } from "react";
 import type {
   ButtonContract,
@@ -31,6 +35,12 @@ import { AstryxCreateSurfaceRenderer } from "./create-renderer.tsx";
 import { operationIcon } from "./operation-renderer.tsx";
 
 type AstryxShellSectionSlot = "appSwitcher" | "navigation" | "session";
+
+const shellSessionStyles = stylex.create({
+  avatarTrigger: {
+    borderRadius: radiusVars["--radius-full"],
+  },
+});
 
 export function AstryxApplicationSideNav({
   manifest,
@@ -134,14 +144,16 @@ function AstryxApplicationSideNavFrame({
   return (
     <SideNav
       footer={
-        themeControl ? (
-          <VStack gap={2} width="100%">
-            {themeControl}
-            {session}
-          </VStack>
-        ) : (
-          session
-        )
+        <HStack
+          align="center"
+          data-formless-astryx-side-nav-footer
+          gap={2}
+          justify="between"
+          width="100%"
+        >
+          {session}
+          {themeControl}
+        </HStack>
       }
       header={
         <SideNavHeading
@@ -448,21 +460,28 @@ function AstryxShellSession({
     return null;
   }
 
+  const isLogoutDisabled = Boolean(session.logout.disabled || session.logout.pending?.isPending);
+
   return (
-    <VStack gap={2} width="100%">
-      <VStack gap={0.5} width="100%">
-        <Text display="block" maxLines={1} type="label">
-          {session.identity.displayName}
-        </Text>
-        {session.identity.secondaryLabel ? (
-          <Text color="secondary" display="block" maxLines={1} type="supporting">
-            {session.identity.secondaryLabel}
-          </Text>
-        ) : null}
-      </VStack>
-      <AstryxShellButton
-        button={session.logout}
-        onClick={() => onIntent(astryxApplicationShellLogoutIntent(section, session))}
+    <VStack gap={1}>
+      <DropdownMenu
+        button={{
+          icon: <Avatar name={session.identity.displayName} size="xsmall" />,
+          isIconOnly: true,
+          label: session.identity.displayName,
+          size: "sm",
+          variant: "ghost",
+          xstyle: shellSessionStyles.avatarTrigger,
+        }}
+        hasChevron={false}
+        items={[
+          {
+            isDisabled: isLogoutDisabled,
+            label: "Log out Local Owner",
+            onClick: () => void onIntent(astryxApplicationShellLogoutIntent(section, session)),
+          },
+        ]}
+        placement="above"
       />
       {session.logout.errors?.map((error) => (
         <Text color="secondary" display="block" key={error} role="alert" type="supporting">

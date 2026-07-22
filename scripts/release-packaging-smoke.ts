@@ -73,7 +73,7 @@ try {
   }
 
   console.log("Building bundled browser and Worker runtime...");
-  runBun(["run", "--bun", "vp", "build"], formlessRoot, releaseEnv);
+  runBun(["run", "vp", "build"], formlessRoot, releaseEnv);
   requireRuntimeBuild(formlessRoot);
 
   const browserEntrypoint = "renderers/site-public.browser.tsx";
@@ -85,7 +85,7 @@ try {
   writeRenderer(path.resolve(workspaceRoot, workerEntrypoint), workerMarker);
 
   console.log("Building trusted workspace browser and Worker renderers...");
-  runBun(["run", "--bun", "vp", "build"], formlessRoot, {
+  runBun(["run", "vp", "build"], formlessRoot, {
     ...releaseEnv,
     FORMLESS_SITE_PROJECT_ROOT: workspaceRoot,
     FORMLESS_WORKSPACE_RUNTIME_EXTENSIONS: JSON.stringify({

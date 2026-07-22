@@ -69,8 +69,8 @@ describe("Astryx application shell renderer", () => {
     expect(rendererText(mountedRenderer)).toContain("Settings");
     expect(rendererText(mountedRenderer)).toContain("Sync failed. Try again.");
     expect(rendererText(mountedRenderer)).toContain("Workspace changes are queued.");
-    expect(rendererText(mountedRenderer)).toContain("Ada Lovelace");
-    expect(rendererText(mountedRenderer)).toContain("ada@example.com");
+    expect(requiredByProps(container, { "aria-label": "Ada Lovelace", role: "img" })).toBeDefined();
+    expect(interactiveByLabel(container, "Ada Lovelace")).toBeDefined();
     expect(rendererText(mountedRenderer)).toContain("Route workspace");
 
     const mobileNav = required(
@@ -97,7 +97,8 @@ describe("Astryx application shell renderer", () => {
     const resetDialog = required(container.querySelector<HTMLElement>('[role="alertdialog"]'));
     fireEvent.click(interactiveByLabel(resetDialog, "Cancel"));
     fireEvent.click(interactiveByLabel(resetDialog, "Reset"));
-    fireEvent.click(interactiveByLabel(container, "Log out"));
+    fireEvent.click(interactiveByLabel(container, "Ada Lovelace"));
+    fireEvent.click(await waitFor(() => interactiveByLabel(document.body, "Log out Local Owner")));
 
     expect(intents).toEqual([
       {
@@ -526,7 +527,7 @@ function requiredByProps(container: HTMLElement, props: Record<string, unknown>)
 
 function interactiveByLabel(container: HTMLElement, label: string): HTMLElement {
   return required(
-    Array.from(container.querySelectorAll<HTMLElement>("a,button")).find(
+    Array.from(container.querySelectorAll<HTMLElement>('a,button,[role="menuitem"]')).find(
       (node) =>
         (node.getAttribute("aria-label") ?? node.textContent?.replace(/\s+/g, " ").trim()) ===
         label,
