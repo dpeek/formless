@@ -1,14 +1,13 @@
 import { useRef, useState } from "react";
-import * as stylex from "@stylexjs/stylex";
 import { Heading } from "@astryxdesign/core/Text";
 import { ToastViewport } from "@astryxdesign/core/Toast";
 import { VStack } from "@astryxdesign/core/VStack";
-import { colorVars, spacingVars } from "@astryxdesign/core/theme/tokens.stylex";
 import type {
   OperationControlContract,
   OperationFeedbackEventContract,
   OperationPresentationIntentHandler,
 } from "@dpeek/formless-presentation/contract";
+import { AstryxApplicationSurfaceFrame } from "./application-surface-frame.tsx";
 import {
   operationControlFixtures,
   type OperationControlFixtureKey,
@@ -146,20 +145,22 @@ export function FormlessOperationsLayout() {
   return (
     <FormlessFixtureFrame ariaLabel="Operation fixtures">
       <ToastViewport maxVisible={3} position="bottomEnd">
-        <main {...stylex.props(styles.screen)}>
-          <VStack gap={6} xstyle={styles.content}>
-            <Heading level={1}>Operations</Heading>
-            {operationUseCases.map(({ fixtureKey, presentation, title }) => (
-              <OperationUseCase
-                control={controls[fixtureKey]}
-                key={fixtureKey}
-                onIntent={onIntent}
-                presentation={presentation}
-                title={title}
-              />
-            ))}
-          </VStack>
-          <AstryxOperationFeedback feedback={feedback} />
+        <main>
+          <AstryxApplicationSurfaceFrame width="narrow">
+            <VStack gap={6} width="100%">
+              <Heading level={1}>Operations</Heading>
+              {operationUseCases.map(({ fixtureKey, presentation, title }) => (
+                <OperationUseCase
+                  control={controls[fixtureKey]}
+                  key={fixtureKey}
+                  onIntent={onIntent}
+                  presentation={presentation}
+                  title={title}
+                />
+              ))}
+            </VStack>
+            <AstryxOperationFeedback feedback={feedback} />
+          </AstryxApplicationSurfaceFrame>
         </main>
       </ToastViewport>
     </FormlessFixtureFrame>
@@ -279,21 +280,3 @@ function waitForFixtureResult(delayMs: number) {
 const operationControlFixtureKeys = Object.keys(
   operationControlFixtures,
 ) as OperationControlFixtureKey[];
-
-const styles = stylex.create({
-  screen: {
-    backgroundColor: colorVars["--color-background-body"],
-    color: colorVars["--color-text-primary"],
-    minHeight: "100vh",
-    paddingBlock: spacingVars["--spacing-6"],
-    paddingInline: spacingVars["--spacing-6"],
-    "@media (max-width: 720px)": {
-      paddingBlock: spacingVars["--spacing-4"],
-      paddingInline: spacingVars["--spacing-4"],
-    },
-  },
-  content: {
-    marginInline: "auto",
-    width: "min(100%, 720px)",
-  },
-});

@@ -136,44 +136,41 @@ function AstryxManagementFrame({
   const headingId = `${manifest.id}:heading`;
 
   return (
-    <VStack hAlign="center" paddingBlock={6} paddingInline={4} width="100%">
-      <Section
-        aria-labelledby={headingId}
-        data-formless-astryx-management={manifest.id}
-        data-formless-astryx-management-state={manifest.state}
-        maxWidth={1200}
-        padding={0}
-        variant="transparent"
-        width="100%"
-      >
-        <VStack gap={6} width="100%">
-          <Heading id={headingId} level={1}>
-            {manifest.title}
-          </Heading>
-          {manifest.state === "loading" ? (
-            <EmptyState
-              description={manifest.message}
-              headingLevel={2}
-              icon={<Spinner aria-label={manifest.message} size="md" />}
-              isCompact
-              title="Loading instance settings"
-            />
-          ) : null}
-          {manifest.state === "failed" ? (
-            <AstryxManagementFeedback feedback={manifest.feedback} />
-          ) : null}
-          {manifest.state === "ready" ? (
-            <>
-              <AstryxManagementWorkspaceControls manifest={manifest} onIntent={onIntent} />
-              <VStack gap={8} width="100%">
-                {workspaces}
-              </VStack>
-              {dialog}
-            </>
-          ) : null}
-        </VStack>
-      </Section>
-    </VStack>
+    <Section
+      aria-labelledby={headingId}
+      data-formless-astryx-management={manifest.id}
+      data-formless-astryx-management-state={manifest.state}
+      padding={0}
+      variant="transparent"
+      width="100%"
+    >
+      <VStack gap={6} width="100%">
+        <Heading id={headingId} level={1}>
+          {manifest.title}
+        </Heading>
+        {manifest.state === "loading" ? (
+          <EmptyState
+            description={manifest.message}
+            headingLevel={2}
+            icon={<Spinner aria-label={manifest.message} size="md" />}
+            isCompact
+            title="Loading instance settings"
+          />
+        ) : null}
+        {manifest.state === "failed" ? (
+          <AstryxManagementFeedback feedback={manifest.feedback} />
+        ) : null}
+        {manifest.state === "ready" ? (
+          <>
+            <AstryxManagementWorkspaceControls manifest={manifest} onIntent={onIntent} />
+            <VStack gap={8} width="100%">
+              {workspaces}
+            </VStack>
+            {dialog}
+          </>
+        ) : null}
+      </VStack>
+    </Section>
   );
 }
 

@@ -61,6 +61,41 @@ describe("schema screens", () => {
     ).toThrow('Screen "home" layout section 0 must reference a collection view.');
   });
 
+  it("parses semantic layout widths with a standard default", () => {
+    for (const width of ["narrow", "standard", "wide"] as const) {
+      const schema = parseAppSchema({
+        ...taskSchema(),
+        screens: {
+          home: taskScreen({
+            layout: {
+              type: "stack",
+              width,
+              sections: [{ id: "tasks", type: "collection", view: "taskHome" }],
+            },
+          }),
+        },
+      });
+
+      expect(schema.screens?.home?.layout.width).toBe(width);
+    }
+
+    expect(parseAppSchema(taskSchema()).screens?.home?.layout.width).toBe("standard");
+    expect(() =>
+      parseAppSchema({
+        ...taskSchema(),
+        screens: {
+          home: taskScreen({
+            layout: {
+              type: "stack",
+              width: "full",
+              sections: [{ id: "tasks", type: "collection", view: "taskHome" }],
+            },
+          }),
+        },
+      }),
+    ).toThrow('Screen "home" layout width must be "narrow", "standard", or "wide".');
+  });
+
   it("parses optional owner, authenticated, and anonymous screen access", () => {
     const schema = parseAppSchema(screenAccessSchema());
 

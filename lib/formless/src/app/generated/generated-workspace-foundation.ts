@@ -502,6 +502,7 @@ export function selectGeneratedWorkspaceFoundation(
       id: screen.screenName,
       label: screen.label,
       sections: projectedSections,
+      width: screen.layout.width,
     }),
   };
 }

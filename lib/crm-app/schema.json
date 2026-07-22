@@ -2983,6 +2983,7 @@
       },
       "layout": {
         "type": "stack",
+        "width": "wide",
         "sections": [
           {
             "id": "contacts",
@@ -3011,6 +3012,7 @@
       },
       "layout": {
         "type": "stack",
+        "width": "wide",
         "sections": [
           {
             "id": "audiences",
@@ -3034,6 +3036,7 @@
       },
       "layout": {
         "type": "stack",
+        "width": "wide",
         "sections": [
           {
             "id": "campaigns",
@@ -3057,6 +3060,7 @@
       },
       "layout": {
         "type": "stack",
+        "width": "wide",
         "sections": [
           {
             "id": "broadcasts",

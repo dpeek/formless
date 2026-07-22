@@ -1833,6 +1833,8 @@ export type WorkspaceSectionContract = {
   label: string;
 };
 
+export type WorkspaceWidth = "narrow" | "standard" | "wide";
+
 export type WorkspaceContract = {
   accessibilityLabel: string;
   actions: readonly WorkspaceLinkActionContract[];
@@ -1840,6 +1842,7 @@ export type WorkspaceContract = {
   kind: "workspace";
   label: string;
   sections: readonly WorkspaceSectionContract[];
+  width: WorkspaceWidth;
 };
 
 export type ShellScope = "appOnly" | "multiApp";

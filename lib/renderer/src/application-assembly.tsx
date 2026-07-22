@@ -15,6 +15,10 @@ import { AstryxSubscribedManagementRenderer } from "./components/management-rend
 import { AstryxSubscribedWorkspaceScreenRenderer } from "./components/workspace-screen-renderer.tsx";
 import { AstryxSubscribedApplicationShellRenderer } from "./components/shell.tsx";
 import { AstryxSubscribedDocumentThemeRenderer } from "./components/theme.tsx";
+import {
+  AstryxApplicationSurfaceFrame,
+  AstryxSubscribedWorkspaceSurfaceFrame,
+} from "./components/application-surface-frame.tsx";
 
 export type FormlessApplicationPresentation =
   | {
@@ -56,12 +60,18 @@ export type FormlessApplicationRendererProps = {
 export function FormlessApplicationRenderer({ presentation }: FormlessApplicationRendererProps) {
   switch (presentation.kind) {
     case "access":
-      return <AstryxSubscribedAccessRenderer accessReference={presentation.accessReference} />;
+      return (
+        <AstryxApplicationSurfaceFrame width="standard">
+          <AstryxSubscribedAccessRenderer accessReference={presentation.accessReference} />
+        </AstryxApplicationSurfaceFrame>
+      );
     case "applicationSystemState":
       return (
-        <AstryxSubscribedApplicationSystemStateRenderer
-          systemStateReference={presentation.systemStateReference}
-        />
+        <AstryxApplicationSurfaceFrame width="narrow">
+          <AstryxSubscribedApplicationSystemStateRenderer
+            systemStateReference={presentation.systemStateReference}
+          />
+        </AstryxApplicationSurfaceFrame>
       );
     case "auth":
       return <AstryxSubscribedAuthRenderer reference={presentation.reference} />;
@@ -73,9 +83,11 @@ export function FormlessApplicationRenderer({ presentation }: FormlessApplicatio
       );
     case "management":
       return (
-        <AstryxSubscribedManagementRenderer
-          managementReference={presentation.managementReference}
-        />
+        <AstryxApplicationSurfaceFrame width="standard">
+          <AstryxSubscribedManagementRenderer
+            managementReference={presentation.managementReference}
+          />
+        </AstryxApplicationSurfaceFrame>
       );
     case "shell":
       return (
@@ -87,6 +99,10 @@ export function FormlessApplicationRenderer({ presentation }: FormlessApplicatio
         </AstryxSubscribedApplicationShellRenderer>
       );
     case "workspace":
-      return <AstryxSubscribedWorkspaceScreenRenderer reference={presentation.reference} />;
+      return (
+        <AstryxSubscribedWorkspaceSurfaceFrame reference={presentation.reference}>
+          <AstryxSubscribedWorkspaceScreenRenderer reference={presentation.reference} />
+        </AstryxSubscribedWorkspaceSurfaceFrame>
+      );
   }
 }

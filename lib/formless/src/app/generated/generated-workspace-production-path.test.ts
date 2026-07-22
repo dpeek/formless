@@ -13,6 +13,7 @@ import {
 } from "../../test/schema-apps.ts";
 import { projectGeneratedWorkspaceContractHostPublication } from "./generated-workspace-contract-host.ts";
 import { selectGeneratedWorkspaceFoundation } from "./generated-workspace-foundation.ts";
+import { projectGeneratedWorkspaceContract } from "./workspace-projection.ts";
 
 describe("generated workspace production path", () => {
   it("keeps every shipped screen on a supported canonical result path", () => {
@@ -22,34 +23,61 @@ describe("generated workspace production path", () => {
         selectScreenModels(schema).map((screen) => ({
           results: screen.layout.sections.map((section) => section.collection.result.type),
           screen: screen.screenName,
+          width: screen.layout.width,
         })),
       ]),
     );
 
     expect(inventory).toEqual({
       crm: [
-        { results: ["table", "table", "table"], screen: "contacts" },
-        { results: ["table", "table"], screen: "audiences" },
-        { results: ["table", "table"], screen: "campaigns" },
-        { results: ["table", "table", "table"], screen: "broadcasts" },
+        { results: ["table", "table", "table"], screen: "contacts", width: "wide" },
+        { results: ["table", "table"], screen: "audiences", width: "wide" },
+        { results: ["table", "table"], screen: "campaigns", width: "wide" },
+        { results: ["table", "table", "table"], screen: "broadcasts", width: "wide" },
       ],
       instance: [
-        { results: ["table"], screen: "apps" },
-        { results: ["table"], screen: "routes" },
-        { results: ["table"], screen: "deployments" },
-        { results: ["table", "table", "table"], screen: "settings" },
+        { results: ["table"], screen: "apps", width: "standard" },
+        { results: ["table"], screen: "routes", width: "standard" },
+        { results: ["table"], screen: "deployments", width: "standard" },
+        { results: ["table", "table", "table"], screen: "settings", width: "standard" },
       ],
       rate: [
-        { results: ["table"], screen: "rateHome" },
-        { results: ["list", "list"], screen: "rateSetup" },
+        { results: ["table"], screen: "rateHome", width: "standard" },
+        { results: ["list", "list"], screen: "rateSetup", width: "standard" },
       ],
       site: [
-        { results: ["record"], screen: "siteSettings" },
-        { results: ["tree"], screen: "siteEditor" },
-        { results: ["table", "table", "table"], screen: "siteSubscribers" },
+        { results: ["record"], screen: "siteSettings", width: "narrow" },
+        { results: ["tree"], screen: "siteEditor", width: "wide" },
+        { results: ["table", "table", "table"], screen: "siteSubscribers", width: "wide" },
       ],
-      tasks: [{ results: ["list"], screen: "taskHome" }],
+      tasks: [{ results: ["list"], screen: "taskHome", width: "standard" }],
     });
+  });
+
+  it("publishes narrow, standard, and wide shipped workspace widths", () => {
+    const examples = [
+      { schema: siteSourceSchema, screenName: "siteSettings" },
+      { schema: taskSourceSchema, screenName: "taskHome" },
+      { schema: crmSourceSchema, screenName: "contacts" },
+    ];
+
+    const widths = examples.map(({ schema, screenName }) => {
+      const screen = required(
+        selectScreenModels(schema).find((candidate) => candidate.screenName === screenName),
+      );
+      const workspace = projectGeneratedWorkspaceContract({
+        id: screen.screenName,
+        label: screen.label,
+        sections: [],
+        width: screen.layout.width,
+      });
+      const publication = projectGeneratedWorkspaceContractHostPublication(workspace);
+      const host = createMemoryPresentationHost({ nodes: publication.nodes });
+
+      return required(host.read(publication.workspaceReference)).width;
+    });
+
+    expect(widths).toEqual(["narrow", "standard", "wide"]);
   });
 
   it("publishes a selected route result through the scoped workspace host", () => {
@@ -69,7 +97,11 @@ describe("generated workspace production path", () => {
     const section = required(host.read(required(workspace.sections[0])));
     const result = required(host.read(section.collection.presentation.result));
 
-    expect(workspace).toMatchObject({ id: "workspace:taskHome", kind: "workspaceManifest" });
+    expect(workspace).toMatchObject({
+      id: "workspace:taskHome",
+      kind: "workspaceManifest",
+      width: "standard",
+    });
     expect(section).toMatchObject({ kind: "workspaceSectionShell" });
     expect(result).toMatchObject({ kind: "list" });
   });

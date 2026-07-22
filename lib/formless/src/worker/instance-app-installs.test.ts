@@ -10,6 +10,7 @@ import type {
 } from "../shared/protocol.ts";
 import type { OperationInvocationResponse } from "../shared/operation-invocation.ts";
 import type { SitePageTreeResponse } from "@dpeek/formless-site-app";
+import { parseAppSchema } from "@dpeek/formless-schema";
 import {
   INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX,
   INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
@@ -755,7 +756,7 @@ describe("instance app install API routes", () => {
           ])
           .sort((left, right) => String(left[1]).localeCompare(String(right[1]))),
       ).toEqual([["orders", "/apps/orders", "admin"]]);
-      expect(bootstrap.body.schema).toEqual(workspacePackage.sourceSchema);
+      expect(bootstrap.body.schema).toEqual(parseAppSchema(workspacePackage.sourceSchema));
       expect(bootstrap.body.records).toEqual(
         materializedWorkspaceSeedRecords(workspacePackage.seedRecords),
       );

@@ -568,6 +568,7 @@ function managementWorkspace(
     kind: "workspace",
     label,
     sections: [section],
+    width: "standard",
   };
 }
 

@@ -9,6 +9,7 @@ import type {
   RecordResultContract,
   RecordResultIntent,
 } from "@dpeek/formless-presentation/contract";
+import { AstryxApplicationSurfaceFrame } from "./application-surface-frame.tsx";
 import { applyScenarioFieldIntent, withFixtureFieldOccurrence } from "./fields/fixture-helpers.ts";
 import { FormlessFixtureFrame, FormlessFixtureSelector } from "./fixture-layout.tsx";
 import { AstryxRecordResultRenderer } from "./record-result-renderer.tsx";
@@ -53,8 +54,8 @@ export function FormlessRecordResultsLayout() {
       }
     >
       <main>
-        <VStack hAlign="center" paddingBlock={6} paddingInline={4} width="100%">
-          <VStack gap={5} maxWidth={760} width="100%">
+        <AstryxApplicationSurfaceFrame width="narrow">
+          <VStack gap={5} width="100%">
             <Heading level={1}>Record Results</Heading>
 
             {selectedFixture ? (
@@ -68,7 +69,7 @@ export function FormlessRecordResultsLayout() {
               />
             ) : null}
           </VStack>
-        </VStack>
+        </AstryxApplicationSurfaceFrame>
       </main>
     </FormlessFixtureFrame>
   );

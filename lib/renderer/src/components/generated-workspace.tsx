@@ -35,6 +35,7 @@ import {
   type MutablePresentationHost,
 } from "@dpeek/formless-presentation/host";
 import { PresentationHostProvider } from "@dpeek/formless-presentation/host/react";
+import { AstryxSubscribedWorkspaceSurfaceFrame } from "./application-surface-frame.tsx";
 import { applyScenarioFieldIntent } from "./fields/fixture-helpers.ts";
 import { FormlessFixtureFrame, FormlessFixtureSelector } from "./fixture-layout.tsx";
 import { AstryxSubscribedWorkspaceScreenRenderer } from "./workspace-screen-renderer.tsx";
@@ -66,19 +67,19 @@ export function FormlessGeneratedWorkspaceLayout() {
       }
     >
       <main>
-        <VStack hAlign="center" paddingBlock={6} paddingInline={4} width="100%">
-          <VStack gap={5} maxWidth={1200} width="100%">
-            <Heading level={1}>Generated Workspace</Heading>
+        {selectedFixture ? (
+          <PresentationHostProvider host={selectedFixture.host}>
+            <AstryxSubscribedWorkspaceSurfaceFrame reference={selectedFixture.workspaceReference}>
+              <VStack gap={5} width="100%">
+                <Heading level={1}>Generated Workspace</Heading>
 
-            {selectedFixture ? (
-              <PresentationHostProvider host={selectedFixture.host}>
                 <AstryxSubscribedWorkspaceScreenRenderer
                   reference={selectedFixture.workspaceReference}
                 />
-              </PresentationHostProvider>
-            ) : null}
-          </VStack>
-        </VStack>
+              </VStack>
+            </AstryxSubscribedWorkspaceSurfaceFrame>
+          </PresentationHostProvider>
+        ) : null}
       </main>
     </FormlessFixtureFrame>
   );
@@ -144,6 +145,7 @@ export function projectGeneratedWorkspaceFixturePublication(
           kind: "workspaceManifest",
           label: workspace.label,
           sections: sections.map(({ reference }) => reference),
+          width: workspace.width,
         },
       },
       ...sections.flatMap(({ nodes }) => nodes),

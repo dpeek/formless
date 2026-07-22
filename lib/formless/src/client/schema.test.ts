@@ -136,6 +136,7 @@ describe("task source schema", () => {
         layout: {
           type: "stack",
           sections: [{ id: "tasks", type: "collection", view: "taskHome" }],
+          width: "standard",
         },
       },
     });
@@ -163,6 +164,7 @@ describe("rate source schema", () => {
         layout: {
           type: "stack",
           sections: [{ id: "rates", type: "collection", view: "rateHome" }],
+          width: "standard",
         },
       },
       rateSetup: {
@@ -176,6 +178,7 @@ describe("rate source schema", () => {
             { id: "cards", type: "collection", view: "cardHome" },
             { id: "resources", type: "collection", view: "resourceHome" },
           ],
+          width: "standard",
         },
       },
     });

@@ -1,12 +1,21 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vite-plus/test";
-import { FormlessApplicationRenderer } from "@dpeek/formless-renderer/application/assembly";
+import {
+  FormlessApplicationRenderer,
+  type FormlessApplicationPresentation,
+} from "@dpeek/formless-renderer/application/assembly";
 import { FormlessApplicationRendererProvider } from "@dpeek/formless-renderer/application/provider";
 import { createMemoryPresentationHost } from "@dpeek/formless-presentation/host";
 import { PresentationHostProvider } from "@dpeek/formless-presentation/host/react";
 import { createFormlessApplicationShellFixtures } from "./components/application-shell.fixtures.ts";
 import { projectFormlessApplicationShellFixturePublication } from "./components/application-shell.tsx";
 import { createFormlessApplicationSystemStateFixtures } from "./components/application-system-state.fixtures.ts";
+import { createFormlessAccessFixtures } from "./components/access.fixtures.ts";
+import { projectFormlessAccessFixturePublication } from "./components/access.tsx";
+import { createFormlessGeneratedWorkspaceFixtures } from "./components/generated-workspace.fixtures.ts";
+import { projectGeneratedWorkspaceFixturePublication } from "./components/generated-workspace.tsx";
+import { createFormlessInstanceManagementFixtures } from "./components/instance-management.fixtures.ts";
+import { projectFormlessInstanceManagementFixturePublication } from "./components/instance-management.tsx";
 
 describe("Formless application renderer", () => {
   it("exports an application-only root provider over the renderer-neutral theme contract", () => {
@@ -74,6 +83,47 @@ describe("Formless application renderer", () => {
     expect(shellHtml).toContain("Route child");
     expect(stateHtml).toContain(systemState.snapshot.heading);
     expect(stateHtml).toContain(systemState.reference.stateId);
+    expect(stateHtml).toContain("max-width:760px");
+  });
+
+  it("frames top-level native and generated surfaces once at their selected widths", () => {
+    const access = requiredFixture(createFormlessAccessFixtures(), "populated-owner");
+    const management = requiredFixture(createFormlessInstanceManagementFixtures(), "installed");
+    const workspace = requiredFixture(createFormlessGeneratedWorkspaceFixtures(), "multi-section");
+    const accessPublication = projectFormlessAccessFixturePublication(access.state);
+    const managementPublication = projectFormlessInstanceManagementFixturePublication(
+      management.state,
+    );
+    const workspacePublication = projectGeneratedWorkspaceFixturePublication(workspace.workspace);
+    const nodes = [
+      ...accessPublication.nodes,
+      ...managementPublication.nodes,
+      ...workspacePublication.nodes,
+    ];
+    const host = createMemoryPresentationHost({ nodes, serverNodes: nodes });
+    const renderPresentation = (presentation: FormlessApplicationPresentation) =>
+      renderToStaticMarkup(
+        <PresentationHostProvider host={host}>
+          <FormlessApplicationRenderer presentation={presentation} />
+        </PresentationHostProvider>,
+      );
+
+    const accessHtml = renderPresentation({
+      accessReference: accessPublication.accessReference,
+      kind: "access",
+    });
+    const managementHtml = renderPresentation({
+      kind: "management",
+      managementReference: managementPublication.managementReference,
+    });
+    const workspaceHtml = renderPresentation({
+      kind: "workspace",
+      reference: workspacePublication.workspaceReference,
+    });
+
+    expect(accessHtml.match(/max-width:1200px/g)).toHaveLength(1);
+    expect(managementHtml.match(/max-width:1200px/g)).toHaveLength(1);
+    expect(workspaceHtml.match(/max-width:1600px/g)).toHaveLength(1);
   });
 });
 

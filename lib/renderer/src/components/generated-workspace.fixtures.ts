@@ -17,6 +17,7 @@ import type {
   WorkspaceQueryNavigationContract,
   WorkspaceResultContract,
   WorkspaceSectionContract,
+  WorkspaceWidth,
 } from "@dpeek/formless-presentation/contract";
 import { createField, textControl, withFixtureFieldOccurrence } from "./fields/fixture-helpers.ts";
 import { createListFixtures } from "./lists.fixtures.ts";
@@ -120,36 +121,42 @@ function multiSectionWorkspace(): WorkspaceContract {
   const companyScope = workspaceScope("crm", "companies", "companies");
   const contactScope = workspaceScope("crm", "contacts", "contacts");
 
-  return workspace("crm", "CRM", [
-    section(companyScope, {
-      collection: readyOrdinaryCollection(companyScope, {
-        actions: collectionActions(companyScope),
-        context: populatedContext(companyScope, "localTabs"),
-        contextDetail: recordResult(companyScope, "company-detail", "Acme Company"),
+  return workspace(
+    "crm",
+    "CRM",
+    [
+      section(companyScope, {
+        collection: readyOrdinaryCollection(companyScope, {
+          actions: collectionActions(companyScope),
+          context: populatedContext(companyScope, "localTabs"),
+          contextDetail: recordResult(companyScope, "company-detail", "Acme Company"),
+          label: "Companies",
+          result: tableResult(companyScope, "companies"),
+          summaries: [
+            {
+              availability: { available: true },
+              displayValue: "2",
+              id: scopedId(companyScope, "summary", "companies"),
+              kind: "workspaceSummary",
+              label: "Companies",
+            },
+          ],
+        }),
+        headingVisibility: "visible",
         label: "Companies",
-        result: tableResult(companyScope, "companies"),
-        summaries: [
-          {
-            availability: { available: true },
-            displayValue: "2",
-            id: scopedId(companyScope, "summary", "companies"),
-            kind: "workspaceSummary",
-            label: "Companies",
-          },
-        ],
       }),
-      headingVisibility: "visible",
-      label: "Companies",
-    }),
-    section(contactScope, {
-      collection: readyOrdinaryCollection(contactScope, {
+      section(contactScope, {
+        collection: readyOrdinaryCollection(contactScope, {
+          label: "Contact",
+          result: recordResult(contactScope, "contact", "Sam Rivera"),
+        }),
+        headingVisibility: "visible",
         label: "Contact",
-        result: recordResult(contactScope, "contact", "Sam Rivera"),
       }),
-      headingVisibility: "visible",
-      label: "Contact",
-    }),
-  ]);
+    ],
+    [],
+    "wide",
+  );
 }
 
 function listDetailWorkspace(): WorkspaceContract {
@@ -197,38 +204,44 @@ function siteTreeWorkspace(presentation: "listDetail" | "ordinary"): WorkspaceCo
   const result = treeResult(scope, "shallow");
   const contextDetail = recordResult(scope, "root-detail", "Homepage");
 
-  return workspace(workspaceId, "Site composition", [
-    section(scope, {
-      collection:
-        presentation === "ordinary"
-          ? readyOrdinaryCollection(scope, {
-              context: siteRootContext(scope, "localTabs"),
-              contextDetail,
-              label: "Page composition",
-              result,
-            })
-          : {
-              accessibilityLabel: "Site roots and composition",
-              availability: { state: "ready" },
-              id: scope.collectionId,
-              kind: "workspaceCollection",
-              label: "Page composition",
-              presentation: {
-                accessibilityLabel: "Site roots and composition",
-                actions: emptyCollectionActions(scope),
+  return workspace(
+    workspaceId,
+    "Site composition",
+    [
+      section(scope, {
+        collection:
+          presentation === "ordinary"
+            ? readyOrdinaryCollection(scope, {
+                context: siteRootContext(scope, "localTabs"),
                 contextDetail,
-                id: scopedId(scope, "listDetail", "site-roots"),
-                kind: "listDetail",
+                label: "Page composition",
                 result,
-                selector: siteRootContext(scope, "localListDetail"),
-                summaries: [],
+              })
+            : {
+                accessibilityLabel: "Site roots and composition",
+                availability: { state: "ready" },
+                id: scope.collectionId,
+                kind: "workspaceCollection",
+                label: "Page composition",
+                presentation: {
+                  accessibilityLabel: "Site roots and composition",
+                  actions: emptyCollectionActions(scope),
+                  contextDetail,
+                  id: scopedId(scope, "listDetail", "site-roots"),
+                  kind: "listDetail",
+                  result,
+                  selector: siteRootContext(scope, "localListDetail"),
+                  summaries: [],
+                },
+                selectedQueryId: null,
               },
-              selectedQueryId: null,
-            },
-      headingVisibility: "hidden",
-      label: "Composition",
-    }),
-  ]);
+        headingVisibility: "hidden",
+        label: "Composition",
+      }),
+    ],
+    [],
+    "wide",
+  );
 }
 
 function singletonContextWorkspace(): WorkspaceContract {
@@ -260,6 +273,7 @@ function singletonContextWorkspace(): WorkspaceContract {
         target: "newTab",
       },
     ],
+    "narrow",
   );
 }
 
@@ -314,6 +328,7 @@ function workspace(
   label: string,
   sections: readonly WorkspaceSectionContract[],
   actions: readonly WorkspaceLinkActionContract[] = [],
+  width: WorkspaceWidth = "standard",
 ): WorkspaceContract {
   return {
     accessibilityLabel: `${label} workspace`,
@@ -322,6 +337,7 @@ function workspace(
     kind: "workspace",
     label,
     sections,
+    width,
   };
 }
 

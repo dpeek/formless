@@ -401,6 +401,16 @@ The system SHALL let app schemas define workspace screens that compose collectio
 - THEN each section references an existing collection view
 - AND valid sections are available in schema order
 
+#### Scenario: Screen layout width
+
+- GIVEN a workspace screen layout declares a semantic width
+- WHEN the schema is parsed
+- THEN `narrow`, `standard`, and `wide` are accepted
+- AND an omitted width resolves to `standard`
+- AND any other width is rejected
+- AND the width does not declare pixel dimensions, responsive breakpoints,
+  presentation class names, or renderer-specific properties
+
 #### Scenario: Screen access policy
 
 - GIVEN a workspace screen declares access policy

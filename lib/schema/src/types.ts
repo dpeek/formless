@@ -719,8 +719,11 @@ export type CollectionScreenSectionSchema = {
 
 export type ScreenSectionSchema = CollectionScreenSectionSchema;
 
+export type ScreenLayoutWidthSchema = "narrow" | "standard" | "wide";
+
 export type StackScreenLayoutSchema = {
   type: "stack";
+  width?: ScreenLayoutWidthSchema;
   sections: ScreenSectionSchema[];
 };
 

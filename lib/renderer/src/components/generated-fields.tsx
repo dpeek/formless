@@ -4,6 +4,7 @@ import { Grid } from "@astryxdesign/core/Grid";
 import { Heading } from "@astryxdesign/core/Text";
 import { VStack } from "@astryxdesign/core/VStack";
 import type { FieldIntentHandler } from "@dpeek/formless-presentation/contract";
+import { AstryxApplicationSurfaceFrame } from "./application-surface-frame.tsx";
 import { applyScenarioFieldIntent, scenarioFieldKey } from "./fields/fixture-helpers.ts";
 import { FormlessFixtureFrame, FormlessFixtureSelector } from "./fixture-layout.tsx";
 import {
@@ -55,15 +56,15 @@ export function FormlessGeneratedFieldsLayout() {
       }
     >
       <main>
-        <VStack hAlign="center" paddingBlock={6} paddingInline={4} width="100%">
-          <VStack gap={6} maxWidth={920} width="100%">
+        <AstryxApplicationSurfaceFrame width="standard">
+          <VStack gap={6} width="100%">
             <Heading level={1}>Generated record fields</Heading>
 
             {selectedSurface ? (
               <RecordFieldSet surface={selectedSurface} onIntent={handleIntent} />
             ) : null}
           </VStack>
-        </VStack>
+        </AstryxApplicationSurfaceFrame>
       </main>
     </FormlessFixtureFrame>
   );

@@ -12,6 +12,7 @@ import type {
   TableOperationActionContract,
   TableRowContract,
 } from "@dpeek/formless-presentation/contract";
+import { AstryxApplicationSurfaceFrame } from "./application-surface-frame.tsx";
 import { applyScenarioFieldIntent } from "./fields/fixture-helpers.ts";
 import { FormlessFixtureFrame, FormlessFixtureSelector } from "./fixture-layout.tsx";
 import { AstryxTableRenderer } from "./table-renderer.tsx";
@@ -45,8 +46,8 @@ export function FormlessTablesLayout() {
       }
     >
       <main>
-        <VStack hAlign="center" paddingBlock={6} paddingInline={4} width="100%">
-          <VStack gap={5} maxWidth={1200} width="100%">
+        <AstryxApplicationSurfaceFrame width="wide">
+          <VStack gap={5} width="100%">
             <Heading level={1}>Tables</Heading>
 
             {selectedFixture ? (
@@ -64,7 +65,7 @@ export function FormlessTablesLayout() {
               />
             ) : null}
           </VStack>
-        </VStack>
+        </AstryxApplicationSurfaceFrame>
       </main>
     </FormlessFixtureFrame>
   );

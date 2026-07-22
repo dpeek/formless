@@ -20,6 +20,7 @@ import {
   type MutablePresentationHost,
 } from "@dpeek/formless-presentation/host";
 import { PresentationHostProvider } from "@dpeek/formless-presentation/host/react";
+import { AstryxApplicationSurfaceFrame } from "./application-surface-frame.tsx";
 import { applyScenarioFieldIntent } from "./fields/fixture-helpers.ts";
 import { FormlessFixtureFrame, FormlessFixtureSelector } from "./fixture-layout.tsx";
 import {
@@ -46,8 +47,8 @@ export function FormlessTreeResultsLayout() {
       }
     >
       <main>
-        <VStack hAlign="center" paddingBlock={6} paddingInline={4} width="100%">
-          <VStack gap={5} maxWidth={1200} width="100%">
+        <AstryxApplicationSurfaceFrame width="wide">
+          <VStack gap={5} width="100%">
             <Heading level={1}>Tree Results</Heading>
             <PresentationHostProvider host={fixtureHost.host}>
               <AstryxSubscribedTreeResultRenderer
@@ -56,7 +57,7 @@ export function FormlessTreeResultsLayout() {
               />
             </PresentationHostProvider>
           </VStack>
-        </VStack>
+        </AstryxApplicationSurfaceFrame>
       </main>
     </FormlessFixtureFrame>
   );

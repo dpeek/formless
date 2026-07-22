@@ -604,6 +604,7 @@ function workspaceNodes({
         kind: "workspaceManifest",
         label: workspaceLabel,
         sections,
+        width: "standard",
       },
     },
     {

@@ -11,6 +11,7 @@ import type {
   OperationControlContract,
   OperationPresentationIntent,
 } from "@dpeek/formless-presentation/contract";
+import { AstryxApplicationSurfaceFrame } from "./application-surface-frame.tsx";
 import { applyScenarioFieldIntent } from "./fields/fixture-helpers.ts";
 import { FormlessFixtureFrame, FormlessFixtureSelector } from "./fixture-layout.tsx";
 import { AstryxListRenderer } from "./list-renderer.tsx";
@@ -44,8 +45,8 @@ export function FormlessListsLayout() {
       }
     >
       <main>
-        <VStack hAlign="center" paddingBlock={6} paddingInline={4} width="100%">
-          <VStack gap={5} maxWidth={900} width="100%">
+        <AstryxApplicationSurfaceFrame width="standard">
+          <VStack gap={5} width="100%">
             <Heading level={1}>Lists</Heading>
 
             {selectedFixture ? (
@@ -63,7 +64,7 @@ export function FormlessListsLayout() {
               />
             ) : null}
           </VStack>
-        </VStack>
+        </AstryxApplicationSurfaceFrame>
       </main>
     </FormlessFixtureFrame>
   );

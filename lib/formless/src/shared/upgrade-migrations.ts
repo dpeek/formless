@@ -144,8 +144,8 @@ const sha256DigestPattern = /^sha256:[a-f0-9]{64}$/;
 
 export const bundledSourceSchemaHashFixtures = {
   tasks: "sha256:51428cbdf236029c81d97bafffcdad039be062472226b6adea7a249333081c56",
-  site: "sha256:4b2d03317e4bfa73a3375c212220890694c4bb9ff945dd226fb50611c3267a00",
-  crm: "sha256:407fe74cb45b8f516915519ede3a9b22d6842a69eef4b5c499b8cd79521e8aa2",
+  site: "sha256:50996f719192275b771a33ef067103fdf76a0b648dc85d73c934b52a3350f791",
+  crm: "sha256:d3e2c4de62f3c69dc15ab73217581bd271660fc85bf316d156ac2d5a880b218a",
 } as const satisfies Record<SchemaKey, SourceSchemaHash>;
 
 export function isUpgradeMigrationChecksum(value: unknown): value is UpgradeMigrationChecksum {

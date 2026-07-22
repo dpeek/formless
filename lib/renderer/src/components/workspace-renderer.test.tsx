@@ -108,6 +108,7 @@ describe("Astryx workspace renderer", () => {
           label: "Companies",
         },
       ],
+      width: "standard",
     };
     const html = renderWorkspace(workspace);
 
@@ -188,6 +189,7 @@ describe("Astryx workspace renderer", () => {
           label: "Posts",
         },
       ],
+      width: "standard",
     };
     const html = renderWorkspace(workspace);
 
@@ -424,6 +426,7 @@ function oneSectionWorkspace(
         label: "Workspace section",
       },
     ],
+    width: "standard",
   };
 }
 

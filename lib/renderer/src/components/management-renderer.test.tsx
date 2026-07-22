@@ -411,6 +411,7 @@ function workspaceManifest(id: string, label: string): WorkspaceManifestContract
     kind: "workspaceManifest",
     label,
     sections: [],
+    width: "standard",
   };
 }
 

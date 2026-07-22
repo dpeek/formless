@@ -199,6 +199,61 @@ shell.
   controls may remain available for selected recorded evidence
 - **AND** provider change guidance points to workspace push
 
+### Requirement: Consistent Application Surface Layouts
+
+The system SHALL render generated and native admin surfaces through one
+constrained responsive surface-layout policy.
+
+#### Scenario: Project generated workspace width
+
+- GIVEN a generated workspace screen selects `narrow`, `standard`, or `wide`
+  layout width
+- WHEN generated runtime projects the workspace Presentation contract
+- THEN the contract carries the selected semantic width
+- AND omitted schema width reaches the contract as `standard`
+- AND the contract does not expose pixel dimensions, responsive breakpoints,
+  presentation class names, CSS values, or renderer-specific component props
+
+#### Scenario: Apply one top-level application surface frame
+
+- GIVEN application assembly renders a generated workspace, instance Access,
+  instance Management, or application system-state surface
+- WHEN Formless Renderer selects page geometry
+- THEN one renderer-owned surface frame applies responsive inline and block
+  gutters, centering, and the width cap for that surface
+- AND generated workspaces use their projected semantic width
+- AND Access and Management use the standard width
+- AND application system states use the narrow width
+- AND auth and public Site surfaces retain their separate presentation frames
+- AND a workspace embedded inside Management does not receive a second surface
+  frame
+
+#### Scenario: Keep shell, surface, and result layout ownership distinct
+
+- GIVEN a shell-eligible admin route renders through the application surface
+  frame
+- WHEN shell, surface, section, and result layout compose
+- THEN the application shell owns navigation, viewport behavior, and scrolling
+  without adding an independent route-content gutter
+- AND the application surface frame is the only owner of page gutters and
+  maximum content width
+- AND workspace, Access, Management, and system-state renderers do not duplicate
+  outer page-frame policy
+- AND table, list, record, and tree renderers retain their own internal layout,
+  density, wrapping, and overflow behavior without selecting page width
+- AND table horizontal scrolling and package section edge behavior do not cancel
+  the selected surface gutters
+
+#### Scenario: Responsive surface widths
+
+- GIVEN a narrow, standard, or wide admin surface
+- WHEN available viewport width becomes smaller than its preferred content width
+- THEN the surface shrinks to the available width while preserving responsive
+  gutters
+- AND wide data tables scroll horizontally inside the framed content when their
+  minimum column width exceeds the available width
+- AND desktop width differences do not become separate mobile layout modes
+
 ### Requirement: Screen Workspaces
 
 The system SHALL render generated screens from screen models and collection sections.

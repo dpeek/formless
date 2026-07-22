@@ -16,6 +16,7 @@ import {
   type MutablePresentationHost,
 } from "@dpeek/formless-presentation/host";
 import { PresentationHostProvider } from "@dpeek/formless-presentation/host/react";
+import { AstryxApplicationSurfaceFrame } from "./application-surface-frame.tsx";
 import { applyScenarioFieldIntent } from "./fields/fixture-helpers.ts";
 import { FormlessFixtureFrame, FormlessFixtureSelector } from "./fixture-layout.tsx";
 import { AstryxSubscribedManagementRenderer } from "./management-renderer.tsx";
@@ -57,7 +58,9 @@ export function FormlessInstanceManagementLayout() {
         />
       }
     >
-      <FormlessInstanceManagementFixtureView fixtureHost={selectedFixture} />
+      <AstryxApplicationSurfaceFrame width="standard">
+        <FormlessInstanceManagementFixtureView fixtureHost={selectedFixture} />
+      </AstryxApplicationSurfaceFrame>
     </FormlessFixtureFrame>
   );
 }

@@ -289,6 +289,7 @@ function workspaceFixture(options: WorkspaceFixtureOptions = {}): WorkspaceContr
     kind: "workspace",
     label: "Tasks",
     sections: (options.sectionOrder ?? ["tasks", "archive"]).map((key) => sections[key]),
+    width: "standard",
   };
 }
 

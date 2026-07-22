@@ -3747,6 +3747,7 @@
       },
       "layout": {
         "type": "stack",
+        "width": "narrow",
         "sections": [
           {
             "id": "settings",
@@ -3765,6 +3766,7 @@
       },
       "layout": {
         "type": "stack",
+        "width": "wide",
         "sections": [
           {
             "id": "site",
@@ -3783,6 +3785,7 @@
       },
       "layout": {
         "type": "stack",
+        "width": "wide",
         "sections": [
           {
             "id": "subscriptions",

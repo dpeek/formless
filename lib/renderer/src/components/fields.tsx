@@ -36,6 +36,7 @@ import type {
   FieldIntent,
   FieldIntentHandler,
 } from "@dpeek/formless-presentation/contract";
+import { AstryxApplicationSurfaceFrame } from "./application-surface-frame.tsx";
 
 type FieldOverrides = Record<string, FieldContract>;
 type StateTransitionInvokeIntent = Extract<FieldIntent, { type: "stateTransitionInvoke" }>;
@@ -148,28 +149,30 @@ export function FormlessFieldsLayout() {
         </>
       }
     >
-      <main {...stylex.props(styles.screen)}>
-        <div {...stylex.props(styles.content)}>
-          <header {...stylex.props(styles.header)}>
-            <VStack gap={1}>
-              <Heading level={1}>Field Explorer</Heading>
-            </VStack>
-          </header>
+      <main>
+        <AstryxApplicationSurfaceFrame width="standard">
+          <div {...stylex.props(styles.content)}>
+            <header {...stylex.props(styles.header)}>
+              <VStack gap={1}>
+                <Heading level={1}>Field Explorer</Heading>
+              </VStack>
+            </header>
 
-          <section {...stylex.props(styles.workbench)} aria-label={selectedKindOption.label}>
-            <Card padding={4} variant="muted">
-              {selectedField ? (
-                <FieldPreview
-                  field={selectedField}
-                  onIntent={handleIntent}
-                  onSubmit={handleSubmit}
-                />
-              ) : (
-                <NoScenario />
-              )}
-            </Card>
-          </section>
-        </div>
+            <section {...stylex.props(styles.workbench)} aria-label={selectedKindOption.label}>
+              <Card padding={4} variant="muted">
+                {selectedField ? (
+                  <FieldPreview
+                    field={selectedField}
+                    onIntent={handleIntent}
+                    onSubmit={handleSubmit}
+                  />
+                ) : (
+                  <NoScenario />
+                )}
+              </Card>
+            </section>
+          </div>
+        </AstryxApplicationSurfaceFrame>
       </main>
     </FormlessFixtureFrame>
   );
@@ -657,22 +660,10 @@ function scenarioVariantExists(group: FieldScenarioGroup, values: FieldScenarioF
 }
 
 const styles = stylex.create({
-  screen: {
-    minHeight: "100vh",
-    paddingBlock: spacingVars["--spacing-6"],
-    paddingInline: spacingVars["--spacing-6"],
-    backgroundColor: colorVars["--color-background-body"],
-    color: colorVars["--color-text-primary"],
-    "@media (max-width: 720px)": {
-      paddingBlock: spacingVars["--spacing-4"],
-      paddingInline: spacingVars["--spacing-4"],
-    },
-  },
   content: {
-    width: "min(100%, 1120px)",
-    marginInline: "auto",
     display: "grid",
     gap: spacingVars["--spacing-4"],
+    width: "100%",
   },
   header: {
     display: "flex",

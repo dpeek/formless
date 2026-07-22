@@ -17,6 +17,7 @@ import {
   type MutablePresentationHost,
 } from "@dpeek/formless-presentation/host";
 import { PresentationHostProvider } from "@dpeek/formless-presentation/host/react";
+import { AstryxApplicationSurfaceFrame } from "./application-surface-frame.tsx";
 import {
   accessFixtureAuthoringReference,
   createFormlessAccessFixtures,
@@ -49,7 +50,9 @@ export function FormlessAccessLayout() {
         />
       }
     >
-      <FormlessAccessFixtureView fixtureHost={selectedFixtureHost} />
+      <AstryxApplicationSurfaceFrame width="standard">
+        <FormlessAccessFixtureView fixtureHost={selectedFixtureHost} />
+      </AstryxApplicationSurfaceFrame>
     </FormlessFixtureFrame>
   );
 }

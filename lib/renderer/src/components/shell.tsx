@@ -188,7 +188,7 @@ function AstryxApplicationShellFrame({
       role="application"
     >
       <AppShell
-        contentPadding={4}
+        contentPadding={0}
         data-testid={`formless-astryx-application-shell:${manifest.id}`}
         mobileNav={{
           breakpoint: "md",

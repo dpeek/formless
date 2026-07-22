@@ -31,6 +31,7 @@ describe("generated Formless UI workspace projection", () => {
     const workspace = projectGeneratedWorkspaceContract({
       id: "tasks",
       label: "Tasks",
+      width: "standard",
       sections: [
         {
           actions: [{ action: externalAction(scope, "import"), id: "import" }],
@@ -100,6 +101,7 @@ describe("generated Formless UI workspace projection", () => {
     const workspace = projectGeneratedWorkspaceContract({
       id: "crm",
       label: "CRM",
+      width: "wide",
       sections: [
         {
           collection: collectionFacts({
@@ -147,6 +149,7 @@ describe("generated Formless UI workspace projection", () => {
     const workspace = projectGeneratedWorkspaceContract({
       id: "site",
       label: "Site",
+      width: "wide",
       sections: [
         {
           collection: {
@@ -269,6 +272,7 @@ describe("generated Formless UI workspace projection", () => {
     const listDetail = projectGeneratedWorkspaceContract({
       id: "site",
       label: "Site",
+      width: "narrow",
       sections: [
         {
           collection: {
@@ -317,6 +321,7 @@ describe("generated Formless UI workspace projection", () => {
     const unavailable = projectGeneratedWorkspaceContract({
       id: "site",
       label: "Site",
+      width: "standard",
       sections: [
         {
           collection: {
@@ -441,6 +446,7 @@ describe("generated Formless UI workspace projection", () => {
       projectGeneratedWorkspaceContract({
         id: "site",
         label: "Site",
+        width: "wide",
         sections: [
           {
             collection: {

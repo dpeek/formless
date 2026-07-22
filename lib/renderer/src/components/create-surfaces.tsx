@@ -1,10 +1,8 @@
 import { useState } from "react";
-import * as stylex from "@stylexjs/stylex";
 import { Card } from "@astryxdesign/core/Card";
 import { HStack } from "@astryxdesign/core/HStack";
 import { Heading } from "@astryxdesign/core/Text";
 import { VStack } from "@astryxdesign/core/VStack";
-import { colorVars, spacingVars } from "@astryxdesign/core/theme/tokens.stylex";
 import type { FieldSchema } from "@dpeek/formless-schema";
 import type {
   ButtonContract,
@@ -14,6 +12,7 @@ import type {
   CreateSurfaceContract,
   FieldIntent,
 } from "@dpeek/formless-presentation/contract";
+import { AstryxApplicationSurfaceFrame } from "./application-surface-frame.tsx";
 import { FormlessFixtureFrame } from "./fixture-layout.tsx";
 import { createField, fieldError, textControl } from "./fields/fixture-helpers.ts";
 import { AstryxCreateSurfaceRenderer } from "./create-renderer.tsx";
@@ -168,8 +167,8 @@ export function FormlessCreateSurfacesLayout() {
 
   return (
     <FormlessFixtureFrame ariaLabel="Create fixtures">
-      <main {...stylex.props(styles.screen)}>
-        <div {...stylex.props(styles.content)}>
+      <main>
+        <AstryxApplicationSurfaceFrame width="narrow">
           <VStack gap={4}>
             <Heading level={1}>Create</Heading>
             <CreateTriggerGroup
@@ -191,7 +190,7 @@ export function FormlessCreateSurfacesLayout() {
               onIntent={handleCreateIntent}
             />
           </VStack>
-        </div>
+        </AstryxApplicationSurfaceFrame>
       </main>
     </FormlessFixtureFrame>
   );
@@ -524,21 +523,3 @@ function waitForFixtureSubmission() {
     setTimeout(resolve, submissionDelayMs);
   });
 }
-
-const styles = stylex.create({
-  screen: {
-    backgroundColor: colorVars["--color-background-body"],
-    color: colorVars["--color-text-primary"],
-    minHeight: "100vh",
-    paddingBlock: spacingVars["--spacing-6"],
-    paddingInline: spacingVars["--spacing-6"],
-    "@media (max-width: 720px)": {
-      paddingBlock: spacingVars["--spacing-4"],
-      paddingInline: spacingVars["--spacing-4"],
-    },
-  },
-  content: {
-    marginInline: "auto",
-    width: "min(100%, 760px)",
-  },
-});

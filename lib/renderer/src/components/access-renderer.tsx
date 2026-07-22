@@ -120,41 +120,38 @@ function AstryxAccessFrame({
   const headingId = `${manifest.id}:heading`;
 
   return (
-    <VStack hAlign="center" paddingBlock={6} paddingInline={4} width="100%">
-      <Section
-        aria-labelledby={headingId}
-        data-formless-astryx-access={manifest.id}
-        data-formless-astryx-access-state={manifest.state}
-        maxWidth={1200}
-        padding={0}
-        variant="transparent"
-        width="100%"
-      >
-        <VStack gap={6} width="100%">
-          <HStack align="center" gap={3} justify="between" width="100%" wrap="wrap">
-            <Heading id={headingId} level={1}>
-              {manifest.title}
-            </Heading>
-            {manifest.state === "ready" ? (
-              <AstryxAccessAction action={manifest.invite} onIntent={onIntent} />
-            ) : null}
-          </HStack>
-          {manifest.state === "loading" ? (
-            <EmptyState
-              description={manifest.message}
-              headingLevel={2}
-              icon={<Spinner aria-label={manifest.message} size="md" />}
-              isCompact
-              title={manifest.title}
-            />
+    <Section
+      aria-labelledby={headingId}
+      data-formless-astryx-access={manifest.id}
+      data-formless-astryx-access-state={manifest.state}
+      padding={0}
+      variant="transparent"
+      width="100%"
+    >
+      <VStack gap={6} width="100%">
+        <HStack align="center" gap={3} justify="between" width="100%" wrap="wrap">
+          <Heading id={headingId} level={1}>
+            {manifest.title}
+          </Heading>
+          {manifest.state === "ready" ? (
+            <AstryxAccessAction action={manifest.invite} onIntent={onIntent} />
           ) : null}
-          {manifest.state === "failed" || manifest.state === "unauthorized" ? (
-            <AstryxAccessFeedbackBanner feedback={manifest.feedback} />
-          ) : null}
-          {children}
-        </VStack>
-      </Section>
-    </VStack>
+        </HStack>
+        {manifest.state === "loading" ? (
+          <EmptyState
+            description={manifest.message}
+            headingLevel={2}
+            icon={<Spinner aria-label={manifest.message} size="md" />}
+            isCompact
+            title={manifest.title}
+          />
+        ) : null}
+        {manifest.state === "failed" || manifest.state === "unauthorized" ? (
+          <AstryxAccessFeedbackBanner feedback={manifest.feedback} />
+        ) : null}
+        {children}
+      </VStack>
+    </Section>
   );
 }
 

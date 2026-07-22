@@ -8,6 +8,7 @@ import type {
   CollectionScreenSectionSchema,
   ScreenAccessSchema,
   ScreenLayoutSchema,
+  ScreenLayoutWidthSchema,
   ScreenNavigationSchema,
   ScreenSchema,
   ScreenSectionSchema,
@@ -184,7 +185,7 @@ function parseScreenLayout(
     throw new Error(`${context} must be an object.`);
   }
 
-  assertExactKeys(context, value, ["type", "sections"]);
+  assertExactKeys(context, value, ["type", "sections"], ["width"]);
 
   if (value.type !== "stack") {
     throw new Error(`${context} type must be "stack".`);
@@ -192,8 +193,21 @@ function parseScreenLayout(
 
   return {
     type: "stack",
+    width: parseScreenLayoutWidth(screenName, value.width),
     sections: parseScreenSections(screenName, value.sections, views),
   };
+}
+
+function parseScreenLayoutWidth(screenName: string, value: unknown): ScreenLayoutWidthSchema {
+  if (value === undefined) {
+    return "standard";
+  }
+
+  if (value !== "narrow" && value !== "standard" && value !== "wide") {
+    throw new Error(`Screen "${screenName}" layout width must be "narrow", "standard", or "wide".`);
+  }
+
+  return value;
 }
 
 function parseScreenSections(

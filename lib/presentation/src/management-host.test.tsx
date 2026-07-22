@@ -377,6 +377,7 @@ function workspaceNode(
       kind: "workspaceManifest",
       label,
       sections: [],
+      width: "standard",
     },
   };
 }

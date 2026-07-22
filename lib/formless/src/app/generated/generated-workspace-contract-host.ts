@@ -53,6 +53,7 @@ export function projectGeneratedWorkspaceContractHostPublication(
           kind: "workspaceManifest",
           label: workspace.label,
           sections: sectionReferences,
+          width: workspace.width,
         },
       },
       ...sectionPublications.flatMap(({ nodes }) => nodes),

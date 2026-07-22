@@ -16,6 +16,7 @@ import type {
   FieldVisibilityValue,
   FieldSchema,
   ScreenAccessSchema,
+  ScreenLayoutWidthSchema,
   ScreenNavigationSchema,
   ScreenSchema,
   ToManyRelationshipSchema,
@@ -466,6 +467,7 @@ export type HomeScreenSectionModel = HomeScreenCollectionSectionModel;
 
 export type HomeScreenLayoutModel = {
   type: "stack";
+  width: ScreenLayoutWidthSchema;
   sections: HomeScreenSectionModel[];
 };
 
@@ -559,6 +561,7 @@ function selectScreenModel(
     },
     layout: {
       type: screen.layout.type,
+      width: screen.layout.width ?? "standard",
       sections: screen.layout.sections.map((section) => {
         const collectionModel = collectionModelsByViewName.get(section.view);
 

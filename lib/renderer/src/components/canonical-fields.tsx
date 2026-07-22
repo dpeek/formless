@@ -1,10 +1,8 @@
 import { useState } from "react";
-import * as stylex from "@stylexjs/stylex";
 import { Card } from "@astryxdesign/core/Card";
 import { Grid } from "@astryxdesign/core/Grid";
 import { Heading, Text } from "@astryxdesign/core/Text";
 import { VStack } from "@astryxdesign/core/VStack";
-import { colorVars, spacingVars } from "@astryxdesign/core/theme/tokens.stylex";
 import type {
   FieldEditor,
   FieldEditorControl,
@@ -25,6 +23,7 @@ import type {
   StateMachineFacts,
   StateMachineField,
 } from "@dpeek/formless-presentation/contract";
+import { AstryxApplicationSurfaceFrame } from "./application-surface-frame.tsx";
 import { fixtureFieldId } from "./fields/fixture-helpers.ts";
 import { FieldRenderer, FieldSubmitFormAdapter } from "./fields/field-renderer.tsx";
 import { FormlessFixtureFrame } from "./fixture-layout.tsx";
@@ -164,27 +163,29 @@ export function FormlessCanonicalFieldsLayout() {
 
   return (
     <FormlessFixtureFrame ariaLabel="Canonical field fixtures">
-      <main {...stylex.props(styles.screen)}>
-        <VStack gap={4} maxWidth={1040} width="100%">
-          <Heading level={1}>Canonical Fields</Heading>
-          <Grid columns={{ minWidth: 280, max: 3 }} gap={3} width="100%">
-            {fields.map((field) => (
-              <Card
-                key={`${field.surface}:${field.recordId ?? "new"}:${field.fieldName}`}
-                padding={4}
-                variant="muted"
-              >
-                <VStack gap={3}>
-                  <Text type="label" color="secondary" maxLines={1}>
-                    {field.label}
-                  </Text>
-                  <FieldRenderer field={field} onIntent={handleIntent} />
-                  <FieldSubmitFormAdapter field={field} />
-                </VStack>
-              </Card>
-            ))}
-          </Grid>
-        </VStack>
+      <main>
+        <AstryxApplicationSurfaceFrame width="standard">
+          <VStack gap={4} width="100%">
+            <Heading level={1}>Canonical Fields</Heading>
+            <Grid columns={{ minWidth: 280, max: 3 }} gap={3} width="100%">
+              {fields.map((field) => (
+                <Card
+                  key={`${field.surface}:${field.recordId ?? "new"}:${field.fieldName}`}
+                  padding={4}
+                  variant="muted"
+                >
+                  <VStack gap={3}>
+                    <Text type="label" color="secondary" maxLines={1}>
+                      {field.label}
+                    </Text>
+                    <FieldRenderer field={field} onIntent={handleIntent} />
+                    <FieldSubmitFormAdapter field={field} />
+                  </VStack>
+                </Card>
+              ))}
+            </Grid>
+          </VStack>
+        </AstryxApplicationSurfaceFrame>
       </main>
     </FormlessFixtureFrame>
   );
@@ -1085,17 +1086,3 @@ function removeFieldErrors(
 function isRecordField(field: FieldContract): field is RecordFieldContract {
   return field.mode === "editor" && field.surface !== "create" && field.surface !== "operation";
 }
-
-const styles = stylex.create({
-  screen: {
-    minHeight: "100vh",
-    paddingBlock: spacingVars["--spacing-6"],
-    paddingInline: spacingVars["--spacing-6"],
-    backgroundColor: colorVars["--color-background-body"],
-    color: colorVars["--color-text-primary"],
-    "@media (max-width: 720px)": {
-      paddingBlock: spacingVars["--spacing-4"],
-      paddingInline: spacingVars["--spacing-4"],
-    },
-  },
-});

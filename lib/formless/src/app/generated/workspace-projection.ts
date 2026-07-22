@@ -30,6 +30,7 @@ import type {
   WorkspaceSummaryContract,
   WorkspaceTableIntent,
   WorkspaceTreeIntent,
+  WorkspaceWidth,
 } from "@dpeek/formless-presentation/contract";
 
 export type GeneratedWorkspaceIdentityScope = WorkspaceIntentScope;
@@ -145,6 +146,7 @@ export type ProjectGeneratedWorkspaceContractOptions = {
   id: string;
   label: string;
   sections: readonly GeneratedWorkspaceSectionProjectionFacts[];
+  width: WorkspaceWidth;
 };
 
 export function generatedWorkspaceScreenId(screenId: string): string {
@@ -173,6 +175,7 @@ export function projectGeneratedWorkspaceContract({
   id,
   label,
   sections,
+  width,
 }: ProjectGeneratedWorkspaceContractOptions): WorkspaceContract {
   const screenId = generatedWorkspaceScreenId(id);
   const headingVisibility = sections.length === 1 ? "hidden" : "visible";
@@ -190,6 +193,7 @@ export function projectGeneratedWorkspaceContract({
         section,
       }),
     ),
+    width,
   };
 }
 

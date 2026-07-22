@@ -22,6 +22,7 @@ import {
   type MutablePresentationHost,
 } from "@dpeek/formless-presentation/host";
 import { PresentationHostProvider } from "@dpeek/formless-presentation/host/react";
+import { AstryxApplicationSurfaceFrame } from "./application-surface-frame.tsx";
 import {
   createFormlessApplicationShellFixtures,
   type FormlessApplicationShellFixture,
@@ -46,14 +47,14 @@ export function FormlessApplicationShellLayout() {
   }
 
   const routeChild = (
-    <main>
-      <VStack gap={5} paddingBlock={6} paddingInline={4} width="100%">
+    <AstryxApplicationSurfaceFrame width="standard">
+      <VStack gap={5} width="100%">
         <VStack gap={1}>
           <Heading level={1}>Application Shell</Heading>
           <Text color="secondary">{selectedFixture.routeLabel}</Text>
         </VStack>
       </VStack>
-    </main>
+    </AstryxApplicationSurfaceFrame>
   );
 
   return (

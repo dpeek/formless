@@ -505,6 +505,7 @@ function workspaceController(
     kind: "workspace",
     label,
     sections: [],
+    width: "standard",
   };
   return {
     dispatch,
