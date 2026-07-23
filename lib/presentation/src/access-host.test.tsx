@@ -1,215 +1,183 @@
 import { describe, expect, it } from "vite-plus/test";
 import type {
   AccessActionContract,
-  AccessConfirmationContract,
   AccessControlledFieldContract,
   AccessDisplayFactContract,
-  AccessInvitationAuthoringContract,
-  AccessInvitationAuthoringOpenChangeIntent,
-  AccessInvitationRevocationConfirmationOpenChangeIntent,
-  AccessInvitationRevokeIntent,
-  AccessInvitationSubmitIntent,
   AccessManifestContract,
   AccessReadyContract,
+  AccessRoleSelectionContract,
   ButtonContract,
 } from "./contract.ts";
 import {
-  createMemoryPresentationHost,
   accessInvitationAuthoringReference,
   accessManifestReference,
-  shellManifestReference,
+  accessPersonRoleAuthoringReference,
+  createMemoryPresentationHost,
   type AccessInvitationAuthoringNode,
   type AccessManifestNode,
+  type AccessPersonRoleAuthoringNode,
   type PresentationNodeSet,
-  type ShellManifestNode,
 } from "./host.ts";
 
 const accessReference = accessManifestReference("access:instance");
-const authoringReference = accessInvitationAuthoringReference(
+const invitationReference = accessInvitationAuthoringReference(
   accessReference.accessId,
   "access:instance:invitation-authoring",
 );
-const shellReference = shellManifestReference("shell:instance");
+const personReference = accessPersonRoleAuthoringReference(
+  accessReference.accessId,
+  "access:instance:person-authoring:alex",
+  "person:alex",
+);
 
 describe("access memory Presentation Host", () => {
-  it("reads every access state and complete invitation authoring beside landed references", () => {
-    const host = createMemoryPresentationHost({ nodes: [loadingAccessNode(), shellNode()] });
-    const loading: AccessManifestContract | undefined = host.read({
-      ...accessReference,
-    });
+  it("reads access states and the complete invitation and person authoring graph", () => {
+    const loading: AccessManifestNode = {
+      reference: accessReference,
+      snapshot: {
+        accessibilityLabel: "Access",
+        id: accessReference.accessId,
+        kind: "accessManifest",
+        message: "Loading access...",
+        state: "loading",
+        title: "Access",
+      },
+    };
+    const host = createMemoryPresentationHost({ nodes: [loading] });
+    const snapshot: AccessManifestContract | undefined = host.read({ ...accessReference });
+    expect(snapshot).toMatchObject({ state: "loading" });
 
-    expect(loading).toMatchObject({ message: "Loading access...", state: "loading" });
+    host.publish(readyNodes());
+    const manifest = host.read(accessReference);
+    const invitation = host.read(invitationReference);
+    const person = host.read(personReference);
 
-    host.publish([unauthorizedAccessNode(), shellNode()]);
-    expect(host.read(accessReference)).toMatchObject({
-      feedback: { intent: "danger" },
-      state: "unauthorized",
-    });
-
-    host.publish([failedAccessNode(), shellNode()]);
-    expect(host.read(accessReference)).toMatchObject({
-      feedback: { title: "Access unavailable" },
-      state: "failed",
-    });
-
-    host.publish(readyAccessNodes());
-    const ready: AccessManifestContract | undefined = host.read(accessReference);
-    const authoring: AccessInvitationAuthoringContract | undefined = host.read(authoringReference);
-
-    expect(ready).toMatchObject({
-      invitations: [{ targetEmail: "alex@example.com" }],
-      people: [{ displayName: "Alex Example" }],
+    expect(manifest).toMatchObject({
+      invitations: [{ deletion: { availability: "available" } }],
+      people: [
+        {
+          removal: { availability: "available" },
+          roleAuthoring: { availability: "available" },
+        },
+      ],
+      personAuthoring: personReference,
       state: "ready",
     });
-    expect(authoring).toMatchObject({
-      fields: {
-        displayName: { value: "Taylor Example" },
-        targetAppInstall: { options: [{ label: "Site" }] },
-        targetEmail: { value: "taylor@example.com" },
-        targetOrganization: { options: [{ label: "Formless" }] },
-        targetSurface: { value: "instance" },
-      },
-      grantSelections: [
-        { purpose: "roles", selectedOptionIds: ["role:instance-admin"] },
-        { purpose: "memberships", selectedOptionIds: ["membership:organization"] },
-      ],
-      open: false,
+    expect(invitation).toMatchObject({
+      fields: { acceptanceTarget: { value: "surface:site" } },
+      membershipSelection: { selectedOptionIds: ["membership:research"] },
+      roleSelection: { selectedOptionIds: ["role:site-admin"] },
     });
-    expect(host.read(shellReference)?.title).toBe("Formless");
+    expect(person).toMatchObject({
+      personId: "person:alex",
+      roleSelection: { selectedOptionIds: ["role:instance-admin"] },
+    });
   });
 
-  it("validates access references, controlled identities, selections, and embedded intents", () => {
-    expect(() => createMemoryPresentationHost({ nodes: [readyAccessManifestNode()] })).toThrow(
+  it("validates resolved references and atomic selected-set identities", () => {
+    expect(() => createMemoryPresentationHost({ nodes: [readyManifestNode()] })).toThrow(
       "has no snapshot",
     );
 
-    const authoring = invitationAuthoringNode();
+    const invitation = invitationAuthoringNode();
     expect(() =>
       createMemoryPresentationHost({
         nodes: [
           {
-            ...authoring,
+            ...invitation,
             snapshot: {
-              ...authoring.snapshot,
-              fields: {
-                ...authoring.snapshot.fields,
-                targetEmail: {
-                  ...authoring.snapshot.fields.targetEmail,
-                  changeIntent: {
-                    ...authoring.snapshot.fields.targetEmail.changeIntent,
-                    authoringId: "authoring:other",
-                  },
+              ...invitation.snapshot,
+              roleSelection: {
+                ...invitation.snapshot.roleSelection,
+                selectedOptionIds: [],
+              },
+            },
+          },
+        ],
+      }),
+    ).toThrow("inconsistent role selection");
+
+    const person = personAuthoringNode();
+    const personSelectionIntent = person.snapshot.roleSelection.changeIntent;
+    if (personSelectionIntent.type !== "accessPersonRoleSelectionChange") {
+      throw new Error("Expected person role selection.");
+    }
+    expect(() =>
+      createMemoryPresentationHost({
+        nodes: [
+          {
+            ...person,
+            snapshot: {
+              ...person.snapshot,
+              roleSelection: {
+                ...person.snapshot.roleSelection,
+                changeIntent: {
+                  ...personSelectionIntent,
+                  personId: "person:other",
                 },
               },
             },
           },
         ],
       }),
-    ).toThrow("invalid field contract");
-
-    const roleSelection = authoring.snapshot.grantSelections[0];
-    expect(() =>
-      createMemoryPresentationHost({
-        nodes: [
-          {
-            ...authoring,
-            snapshot: {
-              ...authoring.snapshot,
-              grantSelections: [
-                { ...roleSelection, selectedOptionIds: [] },
-                authoring.snapshot.grantSelections[1],
-              ],
-            },
-          },
-        ],
-      }),
-    ).toThrow("inconsistent grant selection");
-
-    const manifest = readyAccessManifestNode();
-    expect(() =>
-      createMemoryPresentationHost({
-        nodes: [
-          {
-            ...manifest,
-            snapshot: {
-              ...manifest.snapshot,
-              invite: {
-                ...manifest.snapshot.invite,
-                intent: { ...manifest.snapshot.invite.intent, accessId: "access:other" },
-              },
-            },
-          },
-          authoring,
-        ],
-      }),
-    ).toThrow("invalid identity");
+    ).toThrow("invalid role-selection intent");
   });
 });
 
-function readyAccessNodes({ authoringOpen = false }: { authoringOpen?: boolean } = {}) {
-  return [
-    readyAccessManifestNode(),
-    invitationAuthoringNode({ open: authoringOpen }),
-    shellNode(),
-  ] satisfies PresentationNodeSet;
+function readyNodes(): PresentationNodeSet {
+  return [readyManifestNode(), invitationAuthoringNode(), personAuthoringNode()];
 }
 
-function readyAccessManifestNode(): AccessManifestNode & {
-  snapshot: AccessReadyContract;
-} {
-  const inviteControl = button("control:invite", "Invite collaborator", "primary");
-  const invite = {
-    control: inviteControl,
-    id: "action:invite",
-    intent: {
-      accessId: accessReference.accessId,
-      actionId: "action:invite",
-      authoringId: authoringReference.authoringId,
-      controlId: inviteControl.id,
-      open: true,
-      type: "accessInvitationAuthoringOpenChange",
-    },
-    kind: "accessAction",
-    purpose: "authoring-open",
-  } satisfies AccessActionContract<AccessInvitationAuthoringOpenChangeIntent>;
-  const revokeControl = button("control:revoke-open", "Revoke", "secondary");
-  const revoke = {
-    control: revokeControl,
-    id: "action:revoke-open",
-    intent: {
-      accessId: accessReference.accessId,
-      actionId: "action:revoke-open",
-      confirmationId: "confirmation:revoke",
-      controlId: revokeControl.id,
-      invitationId: "invitation:alex",
-      open: true,
-      type: "accessInvitationRevocationConfirmationOpenChange",
-    },
-    kind: "accessAction",
-    purpose: "revocation-open",
-  } satisfies AccessActionContract<AccessInvitationRevocationConfirmationOpenChangeIntent>;
+function readyManifestNode(): AccessManifestNode & { snapshot: AccessReadyContract } {
+  const invite = action("authoring-open", "Invite collaborator", {
+    accessId: accessReference.accessId,
+    actionId: "action:invite",
+    authoringId: invitationReference.authoringId,
+    controlId: "control:invite",
+    open: true,
+    type: "accessInvitationAuthoringOpenChange",
+  });
+  const edit = action("person-role-authoring-open", "Edit roles", {
+    accessId: accessReference.accessId,
+    actionId: "action:edit",
+    authoringId: personReference.authoringId,
+    controlId: "control:edit",
+    open: true,
+    personId: personReference.personId,
+    type: "accessPersonRoleAuthoringOpenChange",
+  });
+  const remove = action("person-removal-open", "Remove person", {
+    accessId: accessReference.accessId,
+    actionId: "action:remove-open",
+    confirmationId: "confirmation:delete",
+    controlId: "control:remove-open",
+    open: true,
+    personId: personReference.personId,
+    type: "accessPersonRemovalConfirmationOpenChange",
+  });
+  const deletion = action("invitation-deletion-open", "Delete invitation", {
+    accessId: accessReference.accessId,
+    actionId: "action:delete-open",
+    confirmationId: "confirmation:delete",
+    controlId: "control:delete-open",
+    invitationId: "invitation:alex",
+    open: true,
+    type: "accessInvitationDeletionConfirmationOpenChange",
+  });
 
   return {
     reference: accessReference,
     snapshot: {
       accessibilityLabel: "Access",
-      authoring: authoringReference,
-      confirmation: revocationConfirmation(),
+      authoring: invitationReference,
       id: accessReference.accessId,
       invitations: [
         {
-          expiresAt: fact(
-            "invitation:alex:expires",
-            "Expires",
-            "2030-01-01T00:00:00Z",
-            "timestamp",
-          ),
+          deletion: { action: deletion, availability: "available" },
+          expiresAt: fact("invitation:alex:expires", "Expires", "2030-01-01", "timestamp"),
           id: "invitation:alex",
-          inviter: fact("invitation:alex:inviter", "Invited by", "Instance owner"),
           kind: "accessInvitation",
-          revocation: { action: revoke, availability: "available" },
-          scope: fact("invitation:alex:scope", "Scope", "Instance"),
-          status: fact("invitation:alex:status", "Status", "Pending", "status", "warning"),
+          status: fact("invitation:alex:status", "Status", "Pending", "status"),
           target: fact("invitation:alex:target", "Target", "Instance"),
           targetEmail: "alex@example.com",
         },
@@ -219,251 +187,190 @@ function readyAccessManifestNode(): AccessManifestNode & {
       people: [
         {
           displayName: "Alex Example",
-          id: "person:alex",
+          id: personReference.personId,
           kind: "accessPerson",
-          primaryEmail: "alex@example.com",
-          roles: [
-            {
-              id: "role:owner",
-              kind: "accessRole",
-              label: "Owner",
-              scope: fact("role:owner:scope", "Scope", "Instance"),
-            },
-          ],
-          status: fact("person:alex:status", "Status", "Active", "status", "success"),
+          removal: { action: remove, availability: "available" },
+          roleAuthoring: {
+            action: edit,
+            availability: "available",
+            reference: personReference,
+          },
+          roles: [],
+          status: fact("person:alex:status", "Status", "Active", "status"),
         },
       ],
+      personAuthoring: personReference,
       state: "ready",
       title: "Access",
     },
   };
 }
 
-function invitationAuthoringNode({
-  open = false,
-}: { open?: boolean } = {}): AccessInvitationAuthoringNode {
-  const cancelControl = button("control:authoring-cancel", "Cancel");
-  const submitControl = button("control:authoring-submit", "Send invite", "primary", "submit");
-  const roleControlId = "control:role-grants";
-  const membershipControlId = "control:membership-grants";
+function invitationAuthoringNode(): AccessInvitationAuthoringNode {
+  const roleSelection = selection({
+    authoringId: invitationReference.authoringId,
+    selectedId: "role:site-admin",
+    type: "invitation",
+  });
 
   return {
-    reference: authoringReference,
+    reference: invitationReference,
     snapshot: {
       accessId: accessReference.accessId,
-      cancel: {
-        control: cancelControl,
-        id: "action:authoring-cancel",
-        intent: {
-          accessId: accessReference.accessId,
-          actionId: "action:authoring-cancel",
-          authoringId: authoringReference.authoringId,
-          controlId: cancelControl.id,
-          open: false,
-          type: "accessInvitationAuthoringOpenChange",
-        },
-        kind: "accessAction",
-        purpose: "authoring-cancel",
-      },
-      description: "Invite a collaborator and choose their access.",
+      cancel: action("authoring-cancel", "Cancel", {
+        accessId: accessReference.accessId,
+        actionId: "action:invite-cancel",
+        authoringId: invitationReference.authoringId,
+        controlId: "control:invite-cancel",
+        open: false,
+        type: "accessInvitationAuthoringOpenChange",
+      }),
+      description: "Invite a collaborator.",
       errors: [],
       fields: {
-        displayName: field("field:display-name", "Name", "display-name", "text", "Taylor Example"),
-        targetAppInstall: field(
-          "field:target-app-install",
-          "Scope",
-          "target-app-install",
+        acceptanceTarget: field(
+          "field:target",
+          "Continue to",
+          "acceptance-target",
           "select",
-          "site",
-          [{ id: "app:site", label: "Site", selected: true, value: "site" }],
-        ),
-        targetEmail: field(
-          "field:target-email",
-          "Email",
-          "target-email",
-          "email",
-          "taylor@example.com",
-        ),
-        targetOrganization: field(
-          "field:target-organization",
-          "Scope",
-          "target-organization",
-          "select",
-          "organization:formless",
+          "surface:site",
           [
             {
-              id: "organization:formless",
-              label: "Formless",
+              id: "target:site",
+              label: "Site",
               selected: true,
-              value: "organization:formless",
+              value: "surface:site",
             },
-          ],
-        ),
-        targetSurface: field(
-          "field:target-surface",
-          "Surface",
-          "target-surface",
-          "select",
-          "instance",
-          [
-            { id: "surface:instance", label: "Instance", selected: true, value: "instance" },
-            { id: "surface:app", label: "App install", selected: false, value: "app-install" },
             {
-              id: "surface:organization",
-              label: "Organization",
-              selected: false,
-              value: "organization",
-            },
-          ],
-        ),
-      },
-      grantSelections: [
-        {
-          errors: [],
-          groups: [
-            {
-              id: "role-group:instance",
-              kind: "accessGrantOptionGroup",
+              id: "target:instance",
               label: "Instance",
-              options: [
-                {
-                  id: "role:instance-admin",
-                  label: "Administrator",
-                  selected: true,
-                  selectionIntent: {
-                    accessId: accessReference.accessId,
-                    authoringId: authoringReference.authoringId,
-                    controlId: roleControlId,
-                    groupId: "role-group:instance",
-                    optionId: "role:instance-admin",
-                    selected: false,
-                    type: "accessInvitationGrantSelection",
-                  },
-                },
-              ],
-            },
-            {
-              id: "role-group:app",
-              kind: "accessGrantOptionGroup",
-              label: "App install",
-              options: [
-                {
-                  disabledReason: "Choose an app install target.",
-                  id: "role:app-editor",
-                  label: "Editor · Site",
-                  selected: false,
-                  selectionIntent: {
-                    accessId: accessReference.accessId,
-                    authoringId: authoringReference.authoringId,
-                    controlId: roleControlId,
-                    groupId: "role-group:app",
-                    optionId: "role:app-editor",
-                    selected: true,
-                    type: "accessInvitationGrantSelection",
-                  },
-                },
-              ],
+              selected: false,
+              value: "surface:instance",
             },
           ],
-          id: roleControlId,
-          kind: "accessGrantSelection",
-          label: "Roles",
-          purpose: "roles",
-          selectedOptionIds: ["role:instance-admin"],
-        },
-        {
-          errors: [],
-          groups: [
-            {
-              id: "membership-group:organizations",
-              kind: "accessGrantOptionGroup",
-              label: "Organizations",
-              options: [
-                {
-                  id: "membership:organization",
-                  label: "Formless",
-                  selected: true,
-                  selectionIntent: {
-                    accessId: accessReference.accessId,
-                    authoringId: authoringReference.authoringId,
-                    controlId: membershipControlId,
-                    groupId: "membership-group:organizations",
-                    optionId: "membership:organization",
-                    selected: false,
-                    type: "accessInvitationGrantSelection",
-                  },
-                },
-              ],
-            },
-          ],
-          id: membershipControlId,
-          kind: "accessGrantSelection",
-          label: "Memberships",
-          purpose: "memberships",
-          selectedOptionIds: ["membership:organization"],
-        },
-      ],
-      id: authoringReference.authoringId,
+        ),
+        displayName: field("field:name", "Name", "display-name", "text", "Taylor"),
+        targetEmail: field("field:email", "Email", "target-email", "email", "t@example.com"),
+      },
+      id: invitationReference.authoringId,
       kind: "accessInvitationAuthoring",
-      open,
-      submit: {
-        control: submitControl,
-        id: "action:authoring-submit",
-        intent: {
+      membershipSelection: {
+        changeIntent: {
           accessId: accessReference.accessId,
-          actionId: "action:authoring-submit",
-          authoringId: authoringReference.authoringId,
-          controlId: submitControl.id,
-          type: "accessInvitationSubmit",
+          authoringId: invitationReference.authoringId,
+          controlId: "membership",
+          type: "accessInvitationMembershipSelectionChange",
         },
-        kind: "accessAction",
-        purpose: "invitation-submit",
-      } satisfies AccessActionContract<AccessInvitationSubmitIntent>,
+        errors: [],
+        groups: [
+          {
+            id: "membership:group",
+            kind: "accessMembershipOptionGroup",
+            label: "Groups",
+            options: [{ id: "membership:research", label: "Research", selected: true }],
+          },
+        ],
+        id: "membership",
+        kind: "accessMembershipSelection",
+        label: "Memberships",
+        selectedOptionIds: ["membership:research"],
+      },
+      open: true,
+      roleSelection,
+      submit: action("invitation-submit", "Send invite", {
+        accessId: accessReference.accessId,
+        actionId: "action:invite-submit",
+        authoringId: invitationReference.authoringId,
+        controlId: "control:invite-submit",
+        type: "accessInvitationSubmit",
+      }),
       title: "Invite collaborator",
     },
   };
 }
 
-function revocationConfirmation(): AccessConfirmationContract {
-  const cancelControl = button("control:revoke-cancel", "Cancel");
-  const actionControl = button("control:revoke-confirm", "Revoke invitation", "primary");
-
+function personAuthoringNode(): AccessPersonRoleAuthoringNode {
   return {
-    action: {
-      control: actionControl,
-      id: "action:revoke-confirm",
-      intent: {
+    reference: personReference,
+    snapshot: {
+      accessId: accessReference.accessId,
+      cancel: action("person-role-authoring-cancel", "Cancel", {
         accessId: accessReference.accessId,
-        actionId: "action:revoke-confirm",
-        confirmationId: "confirmation:revoke",
-        controlId: actionControl.id,
-        invitationId: "invitation:alex",
-        type: "accessInvitationRevoke",
-      },
-      kind: "accessAction",
-      purpose: "invitation-revoke",
-    } satisfies AccessActionContract<AccessInvitationRevokeIntent>,
-    cancel: {
-      control: cancelControl,
-      id: "action:revoke-cancel",
-      intent: {
-        accessId: accessReference.accessId,
-        actionId: "action:revoke-cancel",
-        confirmationId: "confirmation:revoke",
-        controlId: cancelControl.id,
-        invitationId: "invitation:alex",
+        actionId: "action:person-cancel",
+        authoringId: personReference.authoringId,
+        controlId: "control:person-cancel",
         open: false,
-        type: "accessInvitationRevocationConfirmationOpenChange",
-      },
-      kind: "accessAction",
-      purpose: "revocation-cancel",
+        personId: personReference.personId,
+        type: "accessPersonRoleAuthoringOpenChange",
+      }),
+      description: "Choose roles.",
+      displayName: "Alex Example",
+      errors: [],
+      id: personReference.authoringId,
+      kind: "accessPersonRoleAuthoring",
+      open: true,
+      personId: personReference.personId,
+      roleSelection: selection({
+        authoringId: personReference.authoringId,
+        personId: personReference.personId,
+        selectedId: "role:instance-admin",
+        type: "person",
+      }),
+      save: action("person-role-save", "Save roles", {
+        accessId: accessReference.accessId,
+        actionId: "action:person-save",
+        authoringId: personReference.authoringId,
+        controlId: "control:person-save",
+        personId: personReference.personId,
+        type: "accessPersonRoleSubmit",
+      }),
+      title: "Edit roles",
     },
-    description: "The invitation will no longer be usable.",
-    id: "confirmation:revoke",
-    invitationId: "invitation:alex",
-    kind: "accessConfirmation",
-    open: true,
-    title: "Revoke invitation?",
+  };
+}
+
+function selection({
+  authoringId,
+  personId,
+  selectedId,
+  type,
+}: {
+  authoringId: string;
+  personId?: string;
+  selectedId: string;
+  type: "invitation" | "person";
+}): AccessRoleSelectionContract {
+  const id = `${authoringId}:roles`;
+  return {
+    changeIntent:
+      type === "invitation"
+        ? {
+            accessId: accessReference.accessId,
+            authoringId,
+            controlId: id,
+            type: "accessInvitationRoleSelectionChange",
+          }
+        : {
+            accessId: accessReference.accessId,
+            authoringId,
+            controlId: id,
+            personId: personId ?? "",
+            type: "accessPersonRoleSelectionChange",
+          },
+    errors: [],
+    id,
+    kind: "accessRoleSelection",
+    label: "Roles",
+    options: [
+      {
+        id: selectedId,
+        label: selectedId.includes("site") ? "Site — Administrator" : "Instance — Administrator",
+        selected: true,
+        surfaceId: selectedId.includes("site") ? "surface:site" : "surface:instance",
+        surfaceKind: selectedId.includes("site") ? "app-install" : "instance",
+      },
+    ],
+    selectedOptionIds: [selectedId],
   };
 }
 
@@ -478,7 +385,7 @@ function field(
   return {
     changeIntent: {
       accessId: accessReference.accessId,
-      authoringId: authoringReference.authoringId,
+      authoringId: invitationReference.authoringId,
       fieldId: id,
       type: "accessInvitationFieldChange",
     },
@@ -487,10 +394,36 @@ function field(
     inputKind,
     kind: "accessControlledField",
     label,
-    ...(options === undefined ? {} : { options }),
+    ...(options ? { options } : {}),
     purpose,
     required: true,
     value,
+  };
+}
+
+function action<Intent extends AccessActionContract["intent"]>(
+  purpose: AccessActionContract<Intent>["purpose"],
+  label: string,
+  intent: Intent,
+): AccessActionContract<Intent> {
+  return {
+    control: button(intent.controlId, label),
+    id: intent.actionId,
+    intent,
+    kind: "accessAction",
+    purpose,
+  };
+}
+
+function button(id: string, label: string): ButtonContract {
+  return {
+    accessibilityLabel: label,
+    content: { kind: "label", label },
+    density: "default",
+    id,
+    kind: "button",
+    prominence: "secondary",
+    type: "button",
   };
 }
 
@@ -503,96 +436,10 @@ function fact(
 ): AccessDisplayFactContract {
   return {
     id,
-    ...(intent === undefined ? {} : { intent }),
+    ...(intent ? { intent } : {}),
     kind: "accessDisplayFact",
     label,
     presentation,
     value,
-  };
-}
-
-function loadingAccessNode(): AccessManifestNode {
-  return {
-    reference: accessReference,
-    snapshot: {
-      accessibilityLabel: "Access",
-      id: accessReference.accessId,
-      kind: "accessManifest",
-      message: "Loading access...",
-      state: "loading",
-      title: "Access",
-    },
-  };
-}
-
-function unauthorizedAccessNode(): AccessManifestNode {
-  return {
-    reference: accessReference,
-    snapshot: {
-      accessibilityLabel: "Access",
-      feedback: {
-        detail: "Owner or administrator access is required.",
-        id: "feedback:unauthorized",
-        intent: "danger",
-        kind: "accessFeedback",
-        title: "Access denied",
-      },
-      id: accessReference.accessId,
-      kind: "accessManifest",
-      state: "unauthorized",
-      title: "Access",
-    },
-  };
-}
-
-function failedAccessNode(): AccessManifestNode {
-  return {
-    reference: accessReference,
-    snapshot: {
-      accessibilityLabel: "Access",
-      feedback: {
-        detail: "Try again.",
-        id: "feedback:failed",
-        intent: "danger",
-        kind: "accessFeedback",
-        title: "Access unavailable",
-      },
-      id: accessReference.accessId,
-      kind: "accessManifest",
-      state: "failed",
-      title: "Access",
-    },
-  };
-}
-
-function shellNode(): ShellManifestNode {
-  return {
-    reference: shellReference,
-    snapshot: {
-      accessibilityLabel: "Formless application shell",
-      activeDestination: null,
-      id: shellReference.shellId,
-      kind: "shellManifest",
-      navigationSections: [],
-      scope: "multiApp",
-      title: "Formless",
-    },
-  };
-}
-
-function button(
-  id: string,
-  label: string,
-  prominence: ButtonContract["prominence"] = "secondary",
-  type: ButtonContract["type"] = "button",
-): ButtonContract {
-  return {
-    accessibilityLabel: label,
-    content: { kind: "label", label },
-    density: "default",
-    id,
-    kind: "button",
-    prominence,
-    type,
   };
 }

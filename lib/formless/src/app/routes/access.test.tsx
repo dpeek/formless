@@ -15,6 +15,7 @@ import {
 import { IdentityAccessManagementApiError } from "../../client/identity-access-management.ts";
 import {
   instanceAccessInvitationAuthoringReference,
+  instanceAccessPersonRoleAuthoringReference,
   instanceAccessReference,
 } from "./access-contract.ts";
 import { AccessRoute, type AccessRouteDependencies } from "./access.tsx";
@@ -23,19 +24,15 @@ vi.mock("../application-presentation.tsx", () => ({ ApplicationPresentation: () 
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-const NOW = "2026-07-17T00:00:00.000Z";
-
 describe("access route runtime", () => {
-  it("loads only the identity summary and installed-app labels and projects authorization states", async () => {
+  it("loads purpose-built summary state and publishes authorization failures", async () => {
     const ready = await mountAccessRoute({
       fetchInstalls: async () => ({ installs: [siteInstall()], packages: [] }),
-      fetchSummary: async () => populatedSummary(),
+      fetchSummary: async () => summary(),
     });
-
     expect(ready.manifest().state).toBe("ready");
-    expect(ready.readyManifest().invitations[0]?.scope?.value).toBe("Personal Site");
+    expect(ready.readyManifest().invitations[0]?.scope?.value).toBe("Site");
     expect(JSON.stringify(ready.readyManifest())).not.toContain("Instance Settings");
-    expect(JSON.stringify(ready.readyManifest())).not.toContain("Workspace Push");
     await ready.unmount();
 
     const unauthorized = await mountAccessRoute({
@@ -48,137 +45,158 @@ describe("access route runtime", () => {
       },
     });
     expect(unauthorized.manifest()).toMatchObject({
-      state: "unauthorized",
       feedback: { detail: "Administrator authority is required." },
+      state: "unauthorized",
     });
     await unauthorized.unmount();
   });
 
-  it("keeps the draft controlled, deduplicates pending submit, refreshes, and publishes safe outcomes", async () => {
-    const createCalls: unknown[] = [];
+  it("keeps invitation role selection atomic, refreshes, and deduplicates pending submit", async () => {
+    const calls: unknown[] = [];
     let fetchCount = 0;
-    let createAttempt = 0;
-    const retry = deferred<void>();
+    const pending = deferred<void>();
     const runtime = await mountAccessRoute({
-      createIdempotencyKey: () => "access-invitation:test",
+      createIdempotencyKey: (purpose) => `access:${purpose}:test`,
       createInvitation: async (input) => {
-        createCalls.push(input);
-        createAttempt += 1;
-        if (createAttempt === 1) {
-          throw new Error("Failed at /Users/ada/formless with TOKEN=owner-secret.");
-        }
-        await retry.promise;
+        calls.push(input);
+        await pending.promise;
       },
       fetchInstalls: async () => ({ installs: [siteInstall()], packages: [] }),
       fetchSummary: async () => {
         fetchCount += 1;
-        return populatedSummary();
+        return summary();
       },
     });
 
     await runtime.dispatch(runtime.readyManifest().invite.intent);
-    await changeField(runtime, "targetEmail", "lin.new@example.com");
-    await changeField(runtime, "displayName", "Lin New");
-    expect(runtime.authoring()).toMatchObject({
-      open: true,
-      fields: {
-        displayName: { value: "Lin New" },
-        targetEmail: { value: "lin.new@example.com" },
-      },
+    await runtime.dispatch({
+      ...runtime.invitationAuthoring().fields.targetEmail.changeIntent,
+      value: "new@example.com",
+    });
+    await runtime.dispatch({
+      ...runtime.invitationAuthoring().fields.displayName.changeIntent,
+      value: "New Person",
+    });
+    await runtime.dispatch({
+      ...runtime.invitationAuthoring().roleSelection.changeIntent,
+      selectedOptionIds: [
+        "instance-access:role-option:instance:instance:instance.admin",
+        "instance-access:role-option:app-install:install_3Asite:app.editor",
+      ],
+    });
+    await runtime.dispatch({
+      ...required(runtime.invitationAuthoring().fields.acceptanceTarget).changeIntent,
+      value: "app-install:install:site",
     });
 
-    await runtime.dispatch(runtime.authoring().submit.intent);
-    expect(runtime.authoring().feedback).toMatchObject({
-      detail: "Failed at <path> with TOKEN=[redacted]",
-      title: "Invitation could not be created",
-    });
-    expect(JSON.stringify(runtime.authoring())).not.toContain("/Users/ada/formless");
-    expect(JSON.stringify(runtime.authoring())).not.toContain("owner-secret");
-
-    let pendingSubmit: Promise<void> | undefined;
+    let submit: Promise<void> | undefined;
     await act(async () => {
-      pendingSubmit = Promise.resolve(runtime.host.dispatch(runtime.authoring().submit.intent));
+      submit = Promise.resolve(runtime.host.dispatch(runtime.invitationAuthoring().submit.intent));
       await Promise.resolve();
     });
-    expect(runtime.authoring().pending).toMatchObject({ isPending: true });
-    await runtime.dispatch(runtime.authoring().submit.intent);
-    expect(createCalls).toHaveLength(2);
+    expect(runtime.invitationAuthoring().pending).toEqual({
+      isPending: true,
+      label: "Sending invitation",
+    });
+    await runtime.dispatch(runtime.invitationAuthoring().submit.intent);
+    expect(calls).toHaveLength(1);
 
-    retry.resolve();
+    pending.resolve();
     await act(async () => {
-      await pendingSubmit;
+      await submit;
     });
-
     expect(fetchCount).toBe(2);
-    expect(createCalls[1]).toMatchObject({
-      idempotencyKey: "access-invitation:test",
-      invitedPrincipal: { displayName: "Lin New" },
-      targetEmail: "lin.new@example.com",
-      targetSurface: "instance",
+    expect(calls[0]).toMatchObject({
+      appRegistrations: [{ appInstallId: "install:site" }],
+      idempotencyKey: "access:invitation:test",
+      invitedPrincipal: { displayName: "New Person" },
+      roleAssignments: [
+        { roleKey: "instance.admin", scopeKind: "instance" },
+        {
+          appInstallId: "install:site",
+          roleKey: "app.editor",
+          scopeKind: "app-install",
+        },
+      ],
+      targetAppInstallId: "install:site",
+      targetEmail: "new@example.com",
+      targetSurface: "app-install",
     });
-    expect(runtime.readyManifest().feedback).toMatchObject({
-      detail: "Invitation created.",
-      title: "Invitation created",
-    });
-    expect(runtime.authoring()).toMatchObject({
-      open: false,
-      fields: { displayName: { value: "" }, targetEmail: { value: "" } },
-    });
-    expect(JSON.stringify(runtime.readyManifest())).not.toContain("access-invitation:test");
+    expect(runtime.readyManifest().feedback).toMatchObject({ title: "Invitation created" });
+    expect(runtime.invitationAuthoring().open).toBe(false);
     await runtime.unmount();
   });
 
-  it("requires confirmation before the only destructive action, refreshes, and redacts failure", async () => {
-    let fetchCount = 0;
-    let revokeAttempt = 0;
-    const revokeCalls: unknown[] = [];
+  it("runs person role replacement, person removal, and invitation deletion through exact confirmation", async () => {
+    const replacements: unknown[] = [];
+    const removals: unknown[] = [];
+    const deletions: unknown[] = [];
     const runtime = await mountAccessRoute({
-      fetchInstalls: async () => ({ installs: [siteInstall()], packages: [] }),
-      fetchSummary: async () => {
-        fetchCount += 1;
-        return revokeAttempt > 1 ? revokedSummary() : populatedSummary();
+      createIdempotencyKey: (purpose) => `access:${purpose}:test`,
+      deleteInvitation: async (input) => {
+        deletions.push(input);
       },
-      revokeInvitation: async (input) => {
-        revokeCalls.push(input);
-        revokeAttempt += 1;
-        if (revokeAttempt === 1) {
-          throw new Error("Revoke failed at /Users/ada with TOKEN=private-revoke.");
-        }
+      fetchInstalls: async () => ({ installs: [siteInstall()], packages: [] }),
+      fetchSummary: async () => summary(),
+      removePerson: async (input) => {
+        removals.push(input);
+      },
+      replacePersonRoles: async (input) => {
+        replacements.push(input);
       },
     });
+
+    const boForRoles = required(runtime.readyManifest().people[1]);
+    if (boForRoles.roleAuthoring.availability !== "available") {
+      throw new Error("Expected role authoring.");
+    }
+    await runtime.dispatch(boForRoles.roleAuthoring.action.intent);
+    const personAuthoring = runtime.personAuthoring("principal:bo");
+    await runtime.dispatch({
+      ...personAuthoring.roleSelection.changeIntent,
+      selectedOptionIds: [],
+    });
+    await runtime.dispatch({
+      ...runtime.personAuthoring("principal:bo").roleSelection.changeIntent,
+      selectedOptionIds: ["instance-access:role-option:instance:instance:instance.owner"],
+    });
+    await runtime.dispatch(runtime.personAuthoring("principal:bo").save.intent);
+    expect(replacements).toEqual([
+      {
+        idempotencyKey: "access:person-role:test",
+        principalId: "principal:bo",
+        roles: [{ roleKey: "instance.owner", scopeKind: "instance" }],
+      },
+    ]);
+    expect(runtime.readyManifest().feedback).toMatchObject({ title: "Roles saved" });
+
+    const bo = required(runtime.readyManifest().people[1]);
+    if (bo.removal.availability !== "available") {
+      throw new Error("Expected person removal.");
+    }
+    await runtime.dispatch(bo.removal.action.intent);
+    expect(removals).toHaveLength(0);
+    await runtime.dispatch(required(runtime.readyManifest().confirmation).action.intent);
+    expect(removals).toEqual([
+      {
+        idempotencyKey: "access:person-removal:test",
+        principalId: "principal:bo",
+      },
+    ]);
 
     const invitation = required(runtime.readyManifest().invitations[0]);
-    if (invitation.revocation.availability !== "available") {
-      throw new Error("Expected revocation action.");
+    if (invitation.deletion.availability !== "available") {
+      throw new Error("Expected invitation deletion.");
     }
-    await runtime.dispatch(invitation.revocation.action.intent);
-    expect(revokeCalls).toHaveLength(0);
+    await runtime.dispatch(invitation.deletion.action.intent);
+    expect(deletions).toHaveLength(0);
     expect(runtime.readyManifest().confirmation).toMatchObject({
-      invitationId: invitation.id,
-      open: true,
+      invitationId: "invitation:lin",
+      purpose: "invitation-deletion",
     });
-
     await runtime.dispatch(required(runtime.readyManifest().confirmation).action.intent);
-    expect(revokeCalls).toEqual([{ invitationId: "invitation:lin" }]);
-    expect(runtime.readyManifest().feedback).toMatchObject({
-      detail: "Revoke failed at <path> with TOKEN=[redacted]",
-      title: "Invitation could not be revoked",
-    });
-    expect(runtime.readyManifest().confirmation).toMatchObject({ open: true });
-    expect(JSON.stringify(runtime.readyManifest())).not.toContain("private-revoke");
-
-    await runtime.dispatch(required(runtime.readyManifest().confirmation).action.intent);
-    expect(revokeCalls).toHaveLength(2);
-    expect(fetchCount).toBe(2);
-    expect(runtime.readyManifest().confirmation).toBeUndefined();
-    expect(runtime.readyManifest().feedback).toMatchObject({
-      detail: "Invitation revoked.",
-      title: "Invitation revoked",
-    });
-    expect(runtime.readyManifest().invitations[0]?.revocation.availability).toBe("unavailable");
-    expect(JSON.stringify(runtime.readyManifest())).not.toContain("Disable principal");
-    expect(JSON.stringify(runtime.readyManifest())).not.toContain("Remove role");
-    expect(JSON.stringify(runtime.readyManifest())).not.toContain("Transfer owner");
+    expect(deletions).toEqual([{ invitationId: "invitation:lin" }]);
+    expect(runtime.readyManifest().feedback).toMatchObject({ title: "Invitation deleted" });
     await runtime.unmount();
   });
 });
@@ -186,7 +204,6 @@ describe("access route runtime", () => {
 async function mountAccessRoute(dependencies: AccessRouteDependencies) {
   const coordinator = createApplicationRuntimePublicationCoordinator();
   let renderer!: ReturnType<typeof render>;
-
   await act(async () => {
     renderer = render(
       <ApplicationRuntimeContractHostProvider coordinator={coordinator}>
@@ -196,14 +213,17 @@ async function mountAccessRoute(dependencies: AccessRouteDependencies) {
   });
 
   return {
-    authoring: () => required(coordinator.host.read(instanceAccessInvitationAuthoringReference)),
     dispatch: async (intent: Parameters<typeof coordinator.host.dispatch>[0]) => {
       await act(async () => {
         await coordinator.host.dispatch(intent);
       });
     },
     host: coordinator.host,
+    invitationAuthoring: () =>
+      required(coordinator.host.read(instanceAccessInvitationAuthoringReference)),
     manifest: () => required(coordinator.host.read(instanceAccessReference)),
+    personAuthoring: (personId: string) =>
+      required(coordinator.host.read(instanceAccessPersonRoleAuthoringReference(personId))),
     readyManifest: () => readyManifest(required(coordinator.host.read(instanceAccessReference))),
     unmount: async () => {
       renderer.unmount();
@@ -211,110 +231,96 @@ async function mountAccessRoute(dependencies: AccessRouteDependencies) {
   };
 }
 
-async function changeField(
-  runtime: Awaited<ReturnType<typeof mountAccessRoute>>,
-  field: "displayName" | "targetEmail",
-  value: string,
-) {
-  const contract = runtime.authoring().fields[field];
-  await runtime.dispatch({ ...contract.changeIntent, value });
-}
-
-function emptySummary(): IdentityAccessManagementSummary {
+function summary(): IdentityAccessManagementSummary {
   return {
     appRegistrations: [],
     groups: [],
     invitationGrantOptions: {
       authority: { instanceAdmin: false, instanceOwner: true },
       memberships: [],
-      roles: [],
-    },
-    invitations: [],
-    memberships: [],
-    organizations: [],
-    people: [],
-    roles: [],
-  };
-}
-
-function populatedSummary(): IdentityAccessManagementSummary {
-  return {
-    ...emptySummary(),
-    invitationGrantOptions: {
-      authority: { instanceAdmin: false, instanceOwner: true },
-      memberships: [],
-      roles: [{ displayLabel: "Owner", roleKey: "instance.owner", scopeKind: "instance" }],
+      roles: [
+        {
+          displayLabel: "Instance — Owner",
+          roleKey: "instance.owner",
+          scopeKind: "instance",
+        },
+        {
+          displayLabel: "Instance — Administrator",
+          roleKey: "instance.admin",
+          scopeKind: "instance",
+        },
+        {
+          appInstallId: "install:site",
+          displayLabel: "Site — Editor",
+          roleKey: "app.editor",
+          scopeKind: "app-install",
+        },
+      ],
     },
     invitations: [
       {
-        createdAt: NOW,
-        expiresAt: "2026-07-24T00:00:00.000Z",
+        createdAt: "2026-07-16T00:00:00.000Z",
+        expiresAt: "2026-07-30T00:00:00.000Z",
         invitationId: "invitation:lin",
-        inviterPrincipalId: "principal:ada",
         status: "pending",
         targetAppInstallId: "install:site",
         targetEmail: "lin@example.com",
         targetSurface: "app-install",
-        updatedAt: NOW,
+        updatedAt: "2026-07-16T00:00:00.000Z",
       },
     ],
-    people: [
-      {
-        createdAt: NOW,
-        displayName: "Ada Owner",
-        kind: "human",
-        primaryEmail: {
-          displayEmail: "ada@example.com",
-          normalizedEmail: "ada@example.com",
-          principalEmailId: "email:ada",
-          verificationStatus: "verified",
-          verifiedAt: NOW,
-        },
-        principalId: "principal:ada",
-        status: "active",
-        updatedAt: NOW,
-      },
-    ],
+    memberships: [],
+    organizations: [],
+    people: [person("principal:ada", "Ada Owner"), person("principal:bo", "Bo Admin")],
     roles: [
-      {
-        createdAt: NOW,
-        displayLabel: "Owner",
-        roleAssignmentId: "role-assignment:ada-owner",
-        roleId: "role:owner",
-        roleKey: "instance.owner",
-        scopeKind: "instance",
-        status: "active",
-        targetKind: "principal",
-        targetPrincipalId: "principal:ada",
-        updatedAt: NOW,
-      },
+      role("assignment:ada-owner", "principal:ada", "instance.owner"),
+      role("assignment:bo-admin", "principal:bo", "instance.admin"),
     ],
   };
 }
 
-function revokedSummary(): IdentityAccessManagementSummary {
-  const summary = populatedSummary();
+function person(principalId: string, displayName: string) {
   return {
-    ...summary,
-    invitations: summary.invitations.map((invitation) => ({
-      ...invitation,
-      status: "revoked" as const,
-    })),
+    createdAt: "2026-01-01T00:00:00.000Z",
+    displayName,
+    kind: "human" as const,
+    principalId,
+    status: "active" as const,
+    updatedAt: "2026-01-01T00:00:00.000Z",
+  };
+}
+
+function role(
+  roleAssignmentId: string,
+  targetPrincipalId: string,
+  roleKey: "instance.admin" | "instance.owner",
+) {
+  return {
+    createdAt: "2026-01-01T00:00:00.000Z",
+    displayLabel: roleKey,
+    roleAssignmentId,
+    roleId: `role:${roleKey}`,
+    roleKey,
+    scopeKind: "instance" as const,
+    status: "active" as const,
+    targetKind: "principal" as const,
+    targetPrincipalId,
+    updatedAt: "2026-01-01T00:00:00.000Z",
   };
 }
 
 function siteInstall(): AppInstall {
   return {
     adminRoute: "/apps/install:site",
-    createdAt: NOW,
+    createdAt: "2026-01-01T00:00:00.000Z",
     installId: "install:site",
-    label: "Personal Site",
+    label: "Site",
     packageAppKey: "site",
     packageRevision: 1,
     registrationPolicy: "closed",
     sourceSchemaHash: `sha256:${"a".repeat(64)}`,
     status: "installed",
-    updatedAt: NOW,
+    updatedAt: "2026-01-01T00:00:00.000Z",
   };
 }
 
@@ -333,8 +339,8 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-function required<T>(value: T | null | undefined): T {
-  if (value === null || value === undefined) {
+function required<T>(value: T | undefined): T {
+  if (value === undefined) {
     throw new Error("Expected value.");
   }
   return value;

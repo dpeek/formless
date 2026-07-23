@@ -1208,14 +1208,17 @@ describe("installed Site custom-domain Worker routing", () => {
     );
 
     try {
+      const ownerMessage = readInstalledAppSyncSocketMessage(ownerSocket);
+      const matchingMessage = readInstalledAppSyncSocketMessage(matchingSocket);
+
       ownerSocket.send(JSON.stringify({ type: "hello", cursor: 0, schemaUpdatedAt: null }));
       matchingSocket.send(JSON.stringify({ type: "hello", cursor: 0, schemaUpdatedAt: null }));
 
-      await expect(readInstalledAppSyncSocketMessage(ownerSocket)).resolves.toMatchObject({
+      await expect(ownerMessage).resolves.toMatchObject({
         type: "sync",
         payload: { cursor: expect.any(Number) },
       });
-      await expect(readInstalledAppSyncSocketMessage(matchingSocket)).resolves.toMatchObject({
+      await expect(matchingMessage).resolves.toMatchObject({
         type: "sync",
         payload: { cursor: expect.any(Number) },
       });

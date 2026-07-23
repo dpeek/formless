@@ -14,6 +14,7 @@ import {
 import {
   INSTANCE_ACCESS_CONTRIBUTOR_ID,
   instanceAccessInvitationAuthoringReference,
+  instanceAccessPersonRoleAuthoringReference,
   instanceAccessReference,
 } from "./access-contract.ts";
 
@@ -85,6 +86,16 @@ export function prepareAccessRuntimePublication({
           {
             reference: instanceAccessInvitationAuthoringReference,
             snapshot: projection.authoring,
+          },
+        ]),
+    ...(projection.personAuthoring === undefined
+      ? []
+      : [
+          {
+            reference: instanceAccessPersonRoleAuthoringReference(
+              projection.personAuthoring.personId,
+            ),
+            snapshot: projection.personAuthoring,
           },
         ]),
   ];

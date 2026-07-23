@@ -2,6 +2,7 @@ import type { AccessLoadingContract } from "@dpeek/formless-presentation/contrac
 import {
   accessInvitationAuthoringReference,
   accessManifestReference,
+  accessPersonRoleAuthoringReference,
 } from "@dpeek/formless-presentation/host";
 import type { ApplicationRuntimeContractContribution } from "../generated/application-runtime-contract-host.tsx";
 
@@ -14,6 +15,14 @@ export const instanceAccessInvitationAuthoringReference = accessInvitationAuthor
   INSTANCE_ACCESS_ID,
   INSTANCE_ACCESS_INVITATION_AUTHORING_ID,
 );
+
+export function instanceAccessPersonRoleAuthoringReference(personId: string) {
+  return accessPersonRoleAuthoringReference(
+    INSTANCE_ACCESS_ID,
+    `${INSTANCE_ACCESS_ID}:person-role-authoring:${encodeURIComponent(personId).replaceAll("%", "_")}`,
+    personId,
+  );
+}
 
 export const instanceAccessLoadingManifest = {
   accessibilityLabel: "Access",

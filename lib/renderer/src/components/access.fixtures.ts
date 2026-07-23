@@ -1,21 +1,22 @@
 import type {
   AccessActionContract,
-  AccessConfirmationContract,
   AccessControlledFieldContract,
   AccessDisplayFactContract,
   AccessFeedbackContract,
-  AccessGrantOptionGroupContract,
-  AccessGrantSelectionContract,
   AccessInvitationAuthoringContract,
   AccessInvitationContract,
   AccessManifestContract,
+  AccessMembershipSelectionContract,
   AccessPersonContract,
+  AccessPersonRoleAuthoringContract,
   AccessReadyContract,
+  AccessRoleSelectionContract,
   ButtonContract,
 } from "@dpeek/formless-presentation/contract";
 import {
   accessInvitationAuthoringReference,
   accessManifestReference,
+  accessPersonRoleAuthoringReference,
 } from "@dpeek/formless-presentation/host";
 
 export type FormlessAccessFixtureId =
@@ -28,6 +29,7 @@ export type FormlessAccessFixtureId =
 export type FormlessAccessFixtureState = {
   authoring: AccessInvitationAuthoringContract | null;
   manifest: AccessManifestContract;
+  personAuthoring: AccessPersonRoleAuthoringContract | null;
 };
 
 export type FormlessAccessFixture = {
@@ -41,62 +43,36 @@ export const accessFixtureAuthoringReference = accessInvitationAuthoringReferenc
   accessFixtureReference.accessId,
   "access:fixture:authoring",
 );
-
-type AccessFixtureAuthority = "instance-admin" | "owner";
-type AccessFixtureDraft = "empty" | "invalid" | "valid";
+export const accessFixturePersonAuthoringReference = accessPersonRoleAuthoringReference(
+  accessFixtureReference.accessId,
+  "access:fixture:person-authoring:ada",
+  "person:ada",
+);
 
 export function createFormlessAccessFixtures(): FormlessAccessFixture[] {
   return [
-    fixture("loading", "Loading", { authoring: null, manifest: stateManifest("loading") }),
-    fixture("unauthorized", "Unauthorized", {
-      authoring: null,
-      manifest: stateManifest("unauthorized"),
-    }),
-    fixture("failed", "Failed", { authoring: null, manifest: stateManifest("failed") }),
-    readyFixture("empty", "Empty", { empty: true }),
-    readyFixture("populated-owner", "Owner grants", { authority: "owner" }),
+    fixture("loading", "Loading", stateManifest("loading")),
+    fixture("unauthorized", "Unauthorized", stateManifest("unauthorized")),
+    fixture("failed", "Failed", stateManifest("failed")),
+    fixture("empty", "Empty", readyManifest(true)),
+    fixture("populated-owner", "Owner grants", readyManifest(false)),
   ];
 }
 
 function fixture(
   id: FormlessAccessFixtureId,
   label: string,
-  state: FormlessAccessFixtureState,
+  manifest: AccessManifestContract,
 ): FormlessAccessFixture {
-  return { id, label, state };
-}
-
-function readyFixture(
-  id: FormlessAccessFixtureId,
-  label: string,
-  options: {
-    authority?: AccessFixtureAuthority;
-    authoring?: {
-      draft: AccessFixtureDraft;
-      feedback?: AccessFeedbackContract;
-      open: boolean;
-      pending?: "creation";
-    };
-    confirmation?: AccessConfirmationContract;
-    empty?: boolean;
-    feedback?: AccessFeedbackContract;
-    invitationState?: "pending" | "revoked";
-    revocationPending?: boolean;
-  },
-): FormlessAccessFixture {
-  const authority = options.authority ?? "owner";
-  const authoring = invitationAuthoring(authority, options.authoring);
-
-  return fixture(id, label, {
-    authoring,
-    manifest: readyManifest({
-      confirmation: options.confirmation,
-      empty: options.empty,
-      feedback: options.feedback,
-      invitationState: options.invitationState,
-      revocationPending: options.revocationPending,
-    }),
-  });
+  return {
+    id,
+    label,
+    state: {
+      authoring: manifest.state === "ready" ? invitationAuthoring(false) : null,
+      manifest,
+      personAuthoring: null,
+    },
+  };
 }
 
 function manifestBase() {
@@ -112,7 +88,6 @@ function stateManifest(state: "failed" | "loading" | "unauthorized"): AccessMani
   if (state === "loading") {
     return { ...manifestBase(), message: "Loading access summary", state };
   }
-
   return {
     ...manifestBase(),
     feedback:
@@ -133,285 +108,292 @@ function stateManifest(state: "failed" | "loading" | "unauthorized"): AccessMani
   };
 }
 
-function readyManifest({
-  confirmation,
-  empty = false,
-  feedback: manifestFeedback,
-  invitationState = "pending",
-  revocationPending = false,
-}: {
-  confirmation?: AccessConfirmationContract;
-  empty?: boolean;
-  feedback?: AccessFeedbackContract;
-  invitationState?: "pending" | "revoked";
-  revocationPending?: boolean;
-}): AccessReadyContract {
+function readyManifest(empty: boolean): AccessReadyContract {
+  const invite = action("authoring-open", "Invite collaborator", {
+    accessId: accessFixtureReference.accessId,
+    actionId: "access:fixture:invite",
+    authoringId: accessFixtureAuthoringReference.authoringId,
+    controlId: "access:fixture:invite-control",
+    open: true,
+    type: "accessInvitationAuthoringOpenChange",
+  });
+
   return {
     ...manifestBase(),
     authoring: accessFixtureAuthoringReference,
-    ...(confirmation ? { confirmation } : {}),
     ...(empty
       ? {
           invitationsEmptyState: {
-            description: "Invite a collaborator to begin sharing access.",
+            description: "Invite a collaborator to add access.",
             id: "access:fixture:invitations:empty",
             kind: "accessEmptyState" as const,
             title: "No invitations",
           },
           peopleEmptyState: {
-            description: "Invite a collaborator to begin sharing access.",
+            description: "Invite a collaborator to add access.",
             id: "access:fixture:people:empty",
             kind: "accessEmptyState" as const,
             title: "No people",
           },
         }
       : {}),
-    ...(manifestFeedback ? { feedback: manifestFeedback } : {}),
-    invitations: empty ? [] : accessInvitations(invitationState, revocationPending),
-    invite: accessAction("authoring-open", "Invite collaborator", {
-      accessId: accessFixtureReference.accessId,
-      actionId: "access:fixture:authoring-open",
-      authoringId: accessFixtureAuthoringReference.authoringId,
-      controlId: "access:fixture:authoring-open:control",
-      open: true,
-      type: "accessInvitationAuthoringOpenChange",
-    }),
-    people: empty ? [] : accessPeople(),
+    invitations: empty ? [] : [pendingInvitation()],
+    invite,
+    people: empty ? [] : [accessPerson()],
     state: "ready",
   };
 }
 
-function accessPeople(): readonly AccessPersonContract[] {
-  return [
-    {
-      displayName: "Ada Owner",
-      id: "person:ada",
-      kind: "accessPerson",
-      primaryEmail: "ada@example.com",
-      roles: [
-        accessRole("ada-owner", "Owner", "Instance"),
-        accessRole("ada-site-editor", "Editor", "Site"),
-      ],
-      status: statusFact("person:ada:status", "Active", "success"),
-    },
-    {
-      displayName: "Bo Admin",
-      id: "person:bo",
-      kind: "accessPerson",
-      primaryEmail: "bo@example.com",
-      roles: [
-        accessRole("bo-admin", "Administrator", "Instance"),
-        accessRole("bo-organization-admin", "Administrator", "Formless"),
-      ],
-      status: statusFact("person:bo:status", "Active", "success"),
-    },
-  ];
-}
+function accessPerson(): AccessPersonContract {
+  const edit = action("person-role-authoring-open", "Edit roles", {
+    accessId: accessFixtureReference.accessId,
+    actionId: "access:fixture:person-role-open",
+    authoringId: accessFixturePersonAuthoringReference.authoringId,
+    controlId: "access:fixture:person-role-open-control",
+    open: true,
+    personId: "person:ada",
+    type: "accessPersonRoleAuthoringOpenChange",
+  });
+  const remove = action("person-removal-open", "Remove person", {
+    accessId: accessFixtureReference.accessId,
+    actionId: "access:fixture:person-remove-open",
+    confirmationId: "access:fixture:confirmation",
+    controlId: "access:fixture:person-remove-open-control",
+    open: true,
+    personId: "person:ada",
+    type: "accessPersonRemovalConfirmationOpenChange",
+  });
 
-function accessRole(id: string, label: string, scope: string) {
   return {
-    id: `role:${id}`,
-    kind: "accessRole" as const,
-    label,
-    scope: fact(`role:${id}:scope`, "Scope", scope),
+    displayName: "Ada Lovelace",
+    id: "person:ada",
+    kind: "accessPerson",
+    primaryEmail: "ada@example.com",
+    removal: { action: remove, availability: "available" },
+    roleAuthoring: {
+      action: edit,
+      availability: "available",
+      reference: accessFixturePersonAuthoringReference,
+    },
+    roles: [
+      {
+        id: "role:owner",
+        kind: "accessRole",
+        label: "Owner",
+        scope: fact("role:owner:scope", "Scope", "Instance"),
+      },
+    ],
+    status: fact("person:ada:status", "Status", "Active", "status", "success"),
   };
 }
 
-function accessInvitations(
-  invitationState: "pending" | "revoked",
-  revocationPending: boolean,
-): readonly AccessInvitationContract[] {
-  const pending = pendingInvitation(invitationState, revocationPending);
-
-  return [
-    pending,
-    {
-      expiresAt: fact(
-        "invitation:accepted:expires-at",
-        "Expires",
-        "2026-08-01T09:00:00.000Z",
-        "timestamp",
-      ),
-      id: "invitation:accepted",
-      inviter: fact("invitation:accepted:inviter", "Invited by", "Ada Owner"),
-      kind: "accessInvitation",
-      revocation: {
-        availability: "unavailable",
-      },
-      scope: fact("invitation:accepted:scope", "Scope", "Formless"),
-      status: statusFact("invitation:accepted:status", "Accepted", "success"),
-      target: fact("invitation:accepted:target", "Target", "Organization"),
-      targetEmail: "accepted@example.com",
-    },
-  ];
-}
-
-function pendingInvitation(
-  state: "pending" | "revoked" = "pending",
-  pending = false,
-): AccessInvitationContract {
-  const revocationAction = accessAction(
-    "revocation-open",
-    pending ? "Revoking..." : "Revoke",
-    {
-      accessId: accessFixtureReference.accessId,
-      actionId: "access:fixture:revocation-open",
-      confirmationId: "access:fixture:revocation-confirmation",
-      controlId: "access:fixture:revocation-open:control",
-      invitationId: "invitation:pending",
-      open: true,
-      type: "accessInvitationRevocationConfirmationOpenChange",
-    },
-    pending ? "Invitation revocation is in progress." : undefined,
-  );
-
+function pendingInvitation(): AccessInvitationContract {
   return {
+    deletion: {
+      action: action("invitation-deletion-open", "Delete invitation", {
+        accessId: accessFixtureReference.accessId,
+        actionId: "access:fixture:invitation-delete-open",
+        confirmationId: "access:fixture:confirmation",
+        controlId: "access:fixture:invitation-delete-open-control",
+        invitationId: "invitation:pending",
+        open: true,
+        type: "accessInvitationDeletionConfirmationOpenChange",
+      }),
+      availability: "available",
+    },
     expiresAt: fact(
-      "invitation:pending:expires-at",
+      "invitation:pending:expires",
       "Expires",
-      "2026-07-24T12:30:00.000Z",
+      "2026-07-30T00:00:00.000Z",
       "timestamp",
     ),
     id: "invitation:pending",
-    inviter: fact("invitation:pending:inviter", "Invited by", "Ada Owner"),
+    inviter: fact("invitation:pending:inviter", "Inviter", "Ada Lovelace"),
     kind: "accessInvitation",
-    revocation:
-      state === "pending"
-        ? { action: revocationAction, availability: "available" }
-        : {
-            availability: "unavailable",
-          },
     scope: fact("invitation:pending:scope", "Scope", "Site"),
-    status:
-      state === "pending"
-        ? statusFact("invitation:pending:status", "Pending", "warning")
-        : statusFact("invitation:pending:status", "Revoked", "neutral"),
+    status: fact("invitation:pending:status", "Status", "Pending", "status", "warning"),
     target: fact("invitation:pending:target", "Target", "App install"),
-    targetEmail: "grace@example.com",
+    targetEmail: "pending@example.com",
   };
 }
 
-function invitationAuthoring(
-  authority: AccessFixtureAuthority,
-  options:
-    | {
-        draft: AccessFixtureDraft;
-        feedback?: AccessFeedbackContract;
-        open: boolean;
-        pending?: "creation";
-      }
-    | undefined,
-): AccessInvitationAuthoringContract {
-  const draft = options?.draft ?? "empty";
-  const pendingReason =
-    options?.pending === "creation" ? "Invitation creation is in progress." : undefined;
-  const fields = authoringFields(draft);
-  const grantSelections = authoringGrantSelections(authority, draft);
-  const errors = [
-    ...Object.values(fields).flatMap((field) => field.errors),
-    ...grantSelections.flatMap((selection) => selection.errors),
-  ];
-  const submitDisabledReason = pendingReason ?? errors[0];
+export function invitationAuthoring(open: boolean): AccessInvitationAuthoringContract {
+  const roleSelection = fixtureRoleSelection({
+    authoringId: accessFixtureAuthoringReference.authoringId,
+    selectedOptionIds: ["role:instance-owner"],
+    type: "invitation",
+  });
 
   return {
     accessId: accessFixtureReference.accessId,
-    cancel: accessAction("authoring-cancel", "Cancel", {
+    cancel: action("authoring-cancel", "Cancel", {
       accessId: accessFixtureReference.accessId,
       actionId: "access:fixture:authoring-cancel",
       authoringId: accessFixtureAuthoringReference.authoringId,
-      controlId: "access:fixture:authoring-cancel:control",
+      controlId: "access:fixture:authoring-cancel-control",
       open: false,
       type: "accessInvitationAuthoringOpenChange",
     }),
     description: "Invite a collaborator and choose their access.",
-    errors,
-    ...(options?.feedback ? { feedback: options.feedback } : {}),
-    fields,
-    grantSelections,
+    errors: [],
+    fields: {
+      displayName: field("display-name", "Name", "text", "Grace Hopper"),
+      targetEmail: field("target-email", "Email", "email", "invitee@example.com"),
+    },
     id: accessFixtureAuthoringReference.authoringId,
     kind: "accessInvitationAuthoring",
-    open: options?.open ?? false,
-    ...(options?.pending ? { pending: { isPending: true, label: "Sending invitation" } } : {}),
-    submit: pendingAccessAction(
-      accessAction(
-        "invitation-submit",
-        options?.pending ? "Sending invitation" : "Send invitation",
-        {
-          accessId: accessFixtureReference.accessId,
-          actionId: "access:fixture:authoring-submit",
-          authoringId: accessFixtureAuthoringReference.authoringId,
-          controlId: "access:fixture:authoring-submit:control",
-          type: "accessInvitationSubmit",
-        },
-        submitDisabledReason,
-        "submit",
-      ),
-      options?.pending === "creation",
-    ),
+    membershipSelection: fixtureMembershipSelection(),
+    open,
+    roleSelection,
+    submit: action("invitation-submit", "Send invitation", {
+      accessId: accessFixtureReference.accessId,
+      actionId: "access:fixture:authoring-submit",
+      authoringId: accessFixtureAuthoringReference.authoringId,
+      controlId: "access:fixture:authoring-submit-control",
+      type: "accessInvitationSubmit",
+    }),
     title: "Invite collaborator",
   };
 }
 
-function authoringFields(draft: AccessFixtureDraft): AccessInvitationAuthoringContract["fields"] {
-  const valid = draft === "valid";
-  const invalid = draft === "invalid";
-  const targetSurface: string = valid ? "app-install" : "instance";
-  const targetAppInstall = "site";
-  const targetOrganization = "formless";
+export function personRoleAuthoring(): AccessPersonRoleAuthoringContract {
+  return {
+    accessId: accessFixtureReference.accessId,
+    cancel: action("person-role-authoring-cancel", "Cancel", {
+      accessId: accessFixtureReference.accessId,
+      actionId: "access:fixture:person-role-cancel",
+      authoringId: accessFixturePersonAuthoringReference.authoringId,
+      controlId: "access:fixture:person-role-cancel-control",
+      open: false,
+      personId: "person:ada",
+      type: "accessPersonRoleAuthoringOpenChange",
+    }),
+    description: "Choose the exact role levels managed for Ada Lovelace.",
+    displayName: "Ada Lovelace",
+    errors: [],
+    id: accessFixturePersonAuthoringReference.authoringId,
+    kind: "accessPersonRoleAuthoring",
+    open: true,
+    personId: "person:ada",
+    roleSelection: fixtureRoleSelection({
+      authoringId: accessFixturePersonAuthoringReference.authoringId,
+      personId: "person:ada",
+      selectedOptionIds: ["role:instance-owner"],
+      type: "person",
+    }),
+    save: action("person-role-save", "Save roles", {
+      accessId: accessFixtureReference.accessId,
+      actionId: "access:fixture:person-role-save",
+      authoringId: accessFixturePersonAuthoringReference.authoringId,
+      controlId: "access:fixture:person-role-save-control",
+      personId: "person:ada",
+      type: "accessPersonRoleSubmit",
+    }),
+    title: "Edit roles for Ada Lovelace",
+  };
+}
+
+function fixtureRoleSelection({
+  authoringId,
+  personId,
+  selectedOptionIds,
+  type,
+}: {
+  authoringId: string;
+  personId?: string;
+  selectedOptionIds: readonly string[];
+  type: "invitation" | "person";
+}): AccessRoleSelectionContract {
+  const id = `${authoringId}:roles`;
+  const options = [
+    {
+      id: "role:instance-owner",
+      label: "Instance — Owner",
+      surfaceId: "instance",
+      surfaceKind: "instance" as const,
+    },
+    {
+      id: "role:instance-admin",
+      label: "Instance — Administrator",
+      surfaceId: "instance",
+      surfaceKind: "instance" as const,
+    },
+    {
+      id: "role:site-admin",
+      label: "Site — Administrator",
+      surfaceId: "app-install:site",
+      surfaceKind: "app-install" as const,
+    },
+  ]
+    .filter(
+      ({ id: optionId, surfaceId }) =>
+        !selectedOptionIds.some(
+          (selectedId) =>
+            selectedId !== optionId &&
+            (selectedId.startsWith("role:instance") ? "instance" : "app-install:site") ===
+              surfaceId,
+        ),
+    )
+    .map((option) => ({ ...option, selected: selectedOptionIds.includes(option.id) }));
 
   return {
-    displayName: field("display-name", "Name", "text", valid ? "Grace Hopper" : "", {
-      errors: valid ? [] : ["Name is required."],
-    }),
-    targetAppInstall: field("target-app-install", "Scope", "select", targetAppInstall, {
-      disabledReason:
-        targetSurface === "app-install" ? undefined : "Choose App install as the target surface.",
-      errors: invalid ? ["Choose an available app install scope."] : [],
-      options: [fieldOption("app-install:site", "Site", "site", targetAppInstall === "site")],
-      required: false,
-    }),
-    targetEmail: field(
-      "target-email",
-      "Email",
-      "email",
-      valid ? "grace@example.com" : invalid ? "not-an-email" : "",
+    changeIntent:
+      type === "invitation"
+        ? {
+            accessId: accessFixtureReference.accessId,
+            authoringId,
+            controlId: id,
+            type: "accessInvitationRoleSelectionChange",
+          }
+        : {
+            accessId: accessFixtureReference.accessId,
+            authoringId,
+            controlId: id,
+            personId: personId ?? "",
+            type: "accessPersonRoleSelectionChange",
+          },
+    errors: [],
+    id,
+    kind: "accessRoleSelection",
+    label: "Roles",
+    options,
+    selectedOptionIds,
+  };
+}
+
+function fixtureMembershipSelection(): AccessMembershipSelectionContract {
+  return {
+    changeIntent: {
+      accessId: accessFixtureReference.accessId,
+      authoringId: accessFixtureAuthoringReference.authoringId,
+      controlId: "access:fixture:memberships",
+      type: "accessInvitationMembershipSelectionChange",
+    },
+    errors: [],
+    groups: [
       {
-        errors: valid ? [] : [invalid ? "Email must be valid." : "Email is required."],
+        id: "access:fixture:memberships:organizations",
+        kind: "accessMembershipOptionGroup",
+        label: "Organizations",
+        options: [
+          {
+            id: "membership:analytical-engine",
+            label: "Analytical Engine",
+            selected: false,
+          },
+        ],
       },
-    ),
-    targetOrganization: field("target-organization", "Scope", "select", targetOrganization, {
-      disabledReason:
-        targetSurface === "organization" ? undefined : "Choose Organization as the target surface.",
-      errors: [],
-      options: [
-        fieldOption(
-          "organization:formless",
-          "Formless",
-          "formless",
-          targetOrganization === "formless",
-        ),
-      ],
-      required: false,
-    }),
-    targetSurface: field("target-surface", "Surface", "select", targetSurface, {
-      errors: [],
-      options: [
-        fieldOption("surface:instance", "Instance", "instance", targetSurface === "instance"),
-        fieldOption(
-          "surface:app-install",
-          "App install",
-          "app-install",
-          targetSurface === "app-install",
-        ),
-        fieldOption(
-          "surface:organization",
-          "Organization",
-          "organization",
-          targetSurface === "organization",
-        ),
-      ],
-      required: false,
-    }),
+      {
+        id: "access:fixture:memberships:groups",
+        kind: "accessMembershipOptionGroup",
+        label: "Groups",
+        options: [{ id: "membership:research", label: "Research", selected: false }],
+      },
+    ],
+    id: "access:fixture:memberships",
+    kind: "accessMembershipSelection",
+    label: "Memberships",
+    selectedOptionIds: [],
   };
 }
 
@@ -420,15 +402,8 @@ function field(
   label: string,
   inputKind: AccessControlledFieldContract["inputKind"],
   value: string,
-  options: {
-    disabledReason?: string;
-    errors?: readonly string[];
-    options?: AccessControlledFieldContract["options"];
-    required?: boolean;
-  } = {},
 ): AccessControlledFieldContract {
   const id = `access:fixture:field:${purpose}`;
-
   return {
     changeIntent: {
       accessId: accessFixtureReference.accessId,
@@ -436,164 +411,28 @@ function field(
       fieldId: id,
       type: "accessInvitationFieldChange",
     },
-    ...(options.disabledReason ? { disabledReason: options.disabledReason } : {}),
-    errors: options.errors ?? [],
+    errors: [],
     id,
     inputKind,
     kind: "accessControlledField",
     label,
-    ...(options.options ? { options: options.options } : {}),
     purpose,
-    required: options.required ?? true,
+    required: true,
     value,
   };
 }
 
-function fieldOption(id: string, label: string, value: string, selected: boolean) {
-  return { id: `access:fixture:${id}`, label, selected, value };
-}
-
-function authoringGrantSelections(
-  authority: AccessFixtureAuthority,
-  draft: AccessFixtureDraft,
-): AccessInvitationAuthoringContract["grantSelections"] {
-  const selected = draft === "valid";
-  const validation = draft === "invalid";
-  const instanceRoleOptions: readonly (readonly [id: string, label: string])[] = [
-    ...(authority === "owner" ? [["role:owner", "Owner"] as const] : []),
-    ["role:administrator", "Administrator"],
-  ];
-  const roleGroups = [
-    grantGroup(
-      "role-group:instance",
-      "Instance",
-      instanceRoleOptions,
-      "roles",
-      selected ? ["role:administrator"] : [],
-    ),
-    grantGroup(
-      "role-group:app-install",
-      "App install",
-      [["role:site-editor", "Site editor"]],
-      "roles",
-      selected || validation ? ["role:site-editor"] : [],
-      validation ? "Choose an available app install scope for app roles." : undefined,
-    ),
-    grantGroup(
-      "role-group:organization",
-      "Organization",
-      [["role:organization-admin", "Organization administrator"]],
-      "roles",
-      [],
-    ),
-  ];
-  const membershipGroups = [
-    grantGroup(
-      "membership-group:organizations",
-      "Organizations",
-      [["membership:formless", "Formless"]],
-      "memberships",
-      selected ? ["membership:formless"] : [],
-    ),
-    grantGroup(
-      "membership-group:groups",
-      "Groups",
-      [["membership:operations", "Operations"]],
-      "memberships",
-      selected ? ["membership:operations"] : [],
-    ),
-  ];
-  const roleErrors = validation ? ["Choose an available app install scope for app roles."] : [];
-
-  return [
-    grantSelection("roles", roleGroups, roleErrors),
-    grantSelection("memberships", membershipGroups, []),
-  ];
-}
-
-function pendingAccessAction<Intent extends AccessActionContract["intent"]>(
-  action: AccessActionContract<Intent>,
-  pending: boolean,
-): AccessActionContract<Intent> {
-  return pending
-    ? {
-        ...action,
-        control: {
-          ...action.control,
-          pending: { isPending: true, label: action.control.accessibilityLabel },
-        },
-      }
-    : action;
-}
-
-function grantSelection<Purpose extends "memberships" | "roles">(
-  purpose: Purpose,
-  groups: readonly AccessGrantOptionGroupContract[],
-  errors: readonly string[],
-  disabledReason?: string,
-): AccessGrantSelectionContract & { purpose: Purpose } {
-  return {
-    ...(disabledReason ? { disabledReason } : {}),
-    errors,
-    groups,
-    id: `access:fixture:${purpose}`,
-    kind: "accessGrantSelection",
-    label: purpose === "roles" ? "Roles" : "Memberships",
-    purpose,
-    selectedOptionIds: groups.flatMap((group) =>
-      group.options.filter((option) => option.selected).map((option) => option.id),
-    ),
-  };
-}
-
-function grantGroup(
-  localId: string,
-  label: string,
-  options: readonly (readonly [id: string, label: string])[],
-  purpose: "memberships" | "roles",
-  selectedIds: readonly string[],
-  disabledReason?: string,
-): AccessGrantOptionGroupContract {
-  const id = `access:fixture:${localId}`;
-  const controlId = `access:fixture:${purpose}`;
-
-  return {
-    id,
-    kind: "accessGrantOptionGroup",
-    label,
-    options: options.map(([optionLocalId, optionLabel]) => {
-      const optionId = `access:fixture:${optionLocalId}`;
-      const selected = selectedIds.includes(optionLocalId);
-      const optionDisabledReason = disabledReason;
-
-      return {
-        ...(optionDisabledReason ? { disabledReason: optionDisabledReason } : {}),
-        id: optionId,
-        label: optionLabel,
-        selected,
-        selectionIntent: {
-          accessId: accessFixtureReference.accessId,
-          authoringId: accessFixtureAuthoringReference.authoringId,
-          controlId,
-          groupId: id,
-          optionId,
-          selected: !selected,
-          type: "accessInvitationGrantSelection",
-        },
-      };
-    }),
-  };
-}
-
-function accessAction<Intent extends AccessActionContract["intent"]>(
+function action<Intent extends AccessActionContract["intent"]>(
   purpose: AccessActionContract<Intent>["purpose"],
   label: string,
   intent: Intent,
-  disabledReason?: string,
-  type: ButtonContract["type"] = "button",
 ): AccessActionContract<Intent> {
   return {
-    control: button(intent.controlId, label, disabledReason, type),
+    control: button(
+      intent.controlId,
+      label,
+      purpose.includes("remove") || purpose.includes("delete"),
+    ),
     id: intent.actionId,
     intent,
     kind: "accessAction",
@@ -601,21 +440,15 @@ function accessAction<Intent extends AccessActionContract["intent"]>(
   };
 }
 
-function button(
-  id: string,
-  label: string,
-  disabledReason?: string,
-  type: ButtonContract["type"] = "button",
-): ButtonContract {
+function button(id: string, label: string, destructive = false): ButtonContract {
   return {
     accessibilityLabel: label,
     content: { kind: "label", label },
     density: "default",
-    ...(disabledReason ? { disabled: true, disabledReason } : {}),
     id,
     kind: "button",
-    prominence: type === "submit" ? "primary" : "secondary",
-    type,
+    prominence: destructive ? "secondary" : "primary",
+    type: "button",
   };
 }
 
@@ -624,16 +457,16 @@ function fact(
   label: string,
   value: string,
   presentation: AccessDisplayFactContract["presentation"] = "text",
+  intent?: AccessDisplayFactContract["intent"],
 ): AccessDisplayFactContract {
-  return { id, kind: "accessDisplayFact", label, presentation, value };
-}
-
-function statusFact(
-  id: string,
-  value: string,
-  intent: AccessDisplayFactContract["intent"],
-): AccessDisplayFactContract {
-  return { ...fact(id, "Status", value, "status"), intent };
+  return {
+    id,
+    ...(intent ? { intent } : {}),
+    kind: "accessDisplayFact",
+    label,
+    presentation,
+    value,
+  };
 }
 
 function feedback(
@@ -642,11 +475,5 @@ function feedback(
   detail: string,
   intent: AccessFeedbackContract["intent"],
 ): AccessFeedbackContract {
-  return {
-    detail,
-    id: `access:fixture:feedback:${id}`,
-    intent,
-    kind: "accessFeedback",
-    title,
-  };
+  return { detail, id: `access:fixture:feedback:${id}`, intent, kind: "accessFeedback", title };
 }

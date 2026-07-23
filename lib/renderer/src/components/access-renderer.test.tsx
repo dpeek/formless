@@ -7,96 +7,92 @@ import { ToastViewport } from "@astryxdesign/core/Toast";
 import type {
   AccessActionContract,
   AccessConfirmationContract,
-  AccessControlledFieldContract,
-  AccessDisplayFactContract,
   AccessFeedbackContract,
-  AccessGrantOptionGroupContract,
-  AccessGrantSelectionContract,
   AccessIntent,
   AccessInvitationAuthoringContract,
-  AccessInvitationContract,
   AccessManifestContract,
-  AccessPersonContract,
   AccessReadyContract,
   ButtonContract,
 } from "@dpeek/formless-presentation/contract";
-import {
-  createMemoryPresentationHost,
-  accessInvitationAuthoringReference,
-  accessManifestReference,
-} from "@dpeek/formless-presentation/host";
+import { createMemoryPresentationHost } from "@dpeek/formless-presentation/host";
 import { PresentationHostProvider } from "@dpeek/formless-presentation/host/react";
 import {
+  accessFixtureAuthoringReference,
+  accessFixturePersonAuthoringReference,
+  accessFixtureReference,
+  createFormlessAccessFixtures,
+  invitationAuthoring,
+  personRoleAuthoring,
+} from "./access.fixtures.ts";
+import {
   AstryxAccessInvitationAuthoring,
-  AstryxAccessInvitationAuthoringContent,
+  AstryxAccessPersonRoleAuthoring,
   AstryxAccessRenderer,
   AstryxSubscribedAccessRenderer,
 } from "./access-renderer.tsx";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-const accessReference = accessManifestReference("access:test");
-const authoringReference = accessInvitationAuthoringReference(
-  accessReference.accessId,
-  "access:test:authoring",
-);
-
 describe("Astryx access renderer", () => {
-  it("renders loading, unauthorized, failed, empty, populated, feedback, and confirmation states", () => {
-    const loadingHtml = renderAccess(manifestState("loading"));
-    const unauthorizedHtml = renderAccess(manifestState("unauthorized"));
-    const failedHtml = renderAccess(manifestState("failed"));
-    const emptyHtml = renderAccess(readyManifest({ empty: true }));
-    const populatedHtml = renderAccess(
-      readyManifest({
-        confirmation: revocationConfirmation(),
-        feedback: accessFeedback("success"),
-      }),
-      invitationAuthoring(),
-    );
+  it("renders complete state, table, action, feedback, and confirmation outcomes", () => {
+    const loading = fixtureManifest("loading");
+    const unauthorized = fixtureManifest("unauthorized");
+    const failed = fixtureManifest("failed");
+    const empty = fixtureManifest("empty");
+    const populated = ready(fixtureManifest("populated-owner"));
+    const populatedWithConfirmation: AccessReadyContract = {
+      ...populated,
+      confirmation: invitationDeletionConfirmation(),
+      feedback: feedback("Invitation deleted", "success"),
+    };
 
-    expect(loadingHtml).toContain('role="status"');
-    expect(loadingHtml).toContain("Loading access summary");
-    expect(unauthorizedHtml).toContain("Access unavailable");
-    expect(failedHtml).toContain('role="alert"');
-    expect(failedHtml).toContain("Access failed");
-    expect(emptyHtml).toContain("No people");
-    expect(emptyHtml).toContain("No invitations");
-    expect(populatedHtml.match(/<table/g)).toHaveLength(2);
-    expect(populatedHtml.match(/<thead/g)).toHaveLength(2);
-    expect(populatedHtml.match(/<tbody/g)).toHaveLength(2);
-    expect(populatedHtml).toContain("People");
-    expect(populatedHtml).toContain("Invitations");
-    expect(populatedHtml).toContain("Ada Lovelace");
-    expect(populatedHtml).toContain("ada@example.com");
-    expect(populatedHtml).toContain("Owner");
-    expect(populatedHtml).toContain("pending@example.com");
-    expect(populatedHtml).not.toContain("Invitation created");
-    expect(populatedHtml).toContain('role="alertdialog"');
-    expect(populatedHtml).toContain("Revoke invitation?");
-    expect(populatedHtml).toContain("Revoke invitation");
-    expect(populatedHtml).not.toContain("raw-invitation-token");
-    expect(populatedHtml).not.toContain("owner-secret");
+    expect(renderAccess(loading)).toContain("Loading access summary");
+    expect(renderAccess(unauthorized)).toContain("Access unavailable");
+    expect(renderAccess(failed)).toContain("Access could not be loaded");
+    expect(renderAccess(empty)).toContain("No people");
+    expect(renderAccess(empty)).toContain("No invitations");
+
+    const html = renderAccess(populatedWithConfirmation, invitationAuthoring(false));
+    expect(html.match(/<table/g)).toHaveLength(2);
+    expect(html).toContain("Ada Lovelace");
+    expect(html).toContain("Edit roles");
+    expect(html).toContain("Remove person");
+    expect(html).toContain("Delete invitation");
+    expect(html).toContain("Delete invitation?");
+    expect(html).not.toContain("raw-invitation-token");
   });
 
-  it("composes an accessible controlled form dialog with separate sectioned grant selectors", async () => {
-    const emailError = "Email must be valid.";
-    const roleError = "Choose at least one available role.";
-    const authoringBase = invitationAuthoring({
-      errors: [emailError, roleError, "Review the invitation."],
-      feedback: accessFeedback("danger"),
-      pending: { isPending: true, label: "Sending invitation" },
-    });
-    const authoring: AccessInvitationAuthoringContract = {
-      ...authoringBase,
-      fields: {
-        ...authoringBase.fields,
-        targetEmail: { ...authoringBase.fields.targetEmail, errors: [emailError] },
+  it("renders a flat controlled role selector and conditional acceptance target", () => {
+    const base = invitationAuthoring(true);
+    const acceptanceTarget = {
+      ...base.fields.targetEmail,
+      changeIntent: {
+        ...base.fields.targetEmail.changeIntent,
+        fieldId: "access:fixture:field:acceptance-target",
       },
-      grantSelections: [
-        { ...authoringBase.grantSelections[0], errors: [roleError] },
-        authoringBase.grantSelections[1],
+      id: "access:fixture:field:acceptance-target",
+      inputKind: "select" as const,
+      label: "Continue to",
+      options: [
+        { id: "target:instance", label: "Instance", selected: true, value: "instance" },
+        {
+          id: "target:site",
+          label: "Site",
+          selected: false,
+          value: "app-install:site",
+        },
       ],
+      purpose: "acceptance-target" as const,
+      value: "instance",
+    };
+    const authoring: AccessInvitationAuthoringContract = {
+      ...base,
+      errors: ["Review the invitation."],
+      fields: { ...base.fields, acceptanceTarget },
+      roleSelection: {
+        ...base.roleSelection,
+        errors: ["Choose an available role."],
+      },
     };
     const { container, unmount } = render(
       <ToastViewport isTopLayer={false}>
@@ -104,124 +100,112 @@ describe("Astryx access renderer", () => {
       </ToastViewport>,
     );
     const queries = within(container);
-    const dialog = queries.getByRole("dialog", { name: "Invite person" });
-    const emailField = queries.getByRole<HTMLInputElement>("textbox", { name: /^Email/ });
-    const nameField = queries.getByRole<HTMLInputElement>("textbox", { name: /^Name/ });
-    const surfaceSelector = queries.getByRole("combobox", { name: /^Surface/ });
-    const scopeSelector = queries.getByRole("combobox", { name: /^Scope/ });
     const roleSelector = queries.getByRole("combobox", { name: /^Roles/ });
+    const targetSelector = queries.getByRole("combobox", { name: /^Continue to/ });
     const membershipSelector = queries.getByRole("combobox", { name: /^Memberships/ });
 
-    expect(dialog).toHaveProperty("open", true);
-    expect([emailField.value, nameField.value]).toEqual(["invitee@example.com", "Grace Hopper"]);
-    expect(emailField.getAttribute("aria-invalid")).toBe("true");
-    expect(queries.getAllByRole("alert").map((alert) => alert.textContent)).toContain(emailError);
-    expect(surfaceSelector.textContent).toContain("Organization");
-    expect(scopeSelector.textContent).toContain("Analytical Engine");
-    expect(roleSelector.textContent).toContain("Instance role 1");
+    expect(queries.getByRole("dialog", { name: "Invite collaborator" })).toHaveProperty(
+      "open",
+      true,
+    );
+    expect(roleSelector.textContent).toContain("Instance — Owner");
+    expect(roleSelector.textContent).not.toContain("Instance — Administrator");
+    expect(targetSelector.textContent).toContain("Instance");
+    expect(membershipSelector).toBeTruthy();
+    expect(container.textContent).toContain("Review the invitation.");
     expect(roleSelector.getAttribute("aria-invalid")).toBe("true");
-    expect(membershipSelector.getAttribute("aria-disabled")).toBe("true");
-    expect(container.textContent).toContain(
-      "Instance role 6: Instance administrators cannot be invited.",
-    );
-    expect(container.textContent).toContain("Membership grants are unavailable while sending.");
-
-    const html = renderToStaticMarkup(
-      <AstryxAccessInvitationAuthoringContent authoring={authoring} onIntent={() => undefined} />,
-    );
-    expect(html).toContain("Review the invitation.");
-    expect(html).not.toContain("Invitation failed");
-    expect(html).toContain("Sending invitation");
-
     unmount();
   });
 
-  it("dispatches exact field, selection, dialog, submit, confirmation, and revoke intents", async () => {
-    const authoring = invitationAuthoring();
-    const confirmation = revocationConfirmation();
-    const manifest = readyManifest({ confirmation });
+  it("dispatches one exact selected-set intent and person/destructive actions", () => {
+    const authoring = invitationAuthoring(true);
+    const personAuthoring = personRoleAuthoring();
+    const manifest: AccessReadyContract = {
+      ...ready(fixtureManifest("populated-owner")),
+      confirmation: personRemovalConfirmation(),
+      personAuthoring: accessFixturePersonAuthoringReference,
+    };
     const intents: AccessIntent[] = [];
     const onIntent = (intent: AccessIntent) => {
       intents.push(intent);
     };
-    const authoringRender = render(
+    const invitationRender = render(
       <AstryxAccessInvitationAuthoring authoring={authoring} onIntent={onIntent} />,
     );
-    const accessRender = render(
-      <AstryxAccessRenderer authoring={authoring} manifest={manifest} onIntent={onIntent} />,
+    const personRender = render(
+      <AstryxAccessPersonRoleAuthoring authoring={personAuthoring} onIntent={onIntent} />,
     );
-    const authoringQueries = within(authoringRender.container);
-    const accessQueries = within(accessRender.container);
+    const accessRender = render(
+      <AstryxAccessRenderer
+        authoring={authoring}
+        manifest={manifest}
+        onIntent={onIntent}
+        personAuthoring={personAuthoring}
+      />,
+    );
 
-    fireEvent.change(authoringQueries.getByRole("textbox", { name: /^Email/ }), {
-      target: { value: "next@example.com" },
-    });
-    fireEvent.click(authoringQueries.getByRole("combobox", { name: /^Surface/ }));
-    fireEvent.click(authoringQueries.getByRole("option", { name: "App install" }));
-    fireEvent.click(authoringQueries.getByRole("combobox", { name: /^Roles/ }));
-    fireEvent.click(authoringQueries.getByRole("option", { name: "Instance role 2" }));
-    fireEvent.submit(required(authoringRender.container.querySelector("form")));
-    fireEvent.click(authoringQueries.getByRole("button", { name: "Close" }));
-    const confirmationDialog = accessQueries.getByRole("alertdialog", {
-      name: "Revoke invitation?",
-    });
-    fireEvent.click(within(confirmationDialog).getByRole("button", { name: "Cancel" }));
-    fireEvent.click(within(confirmationDialog).getByRole("button", { name: "Revoke invitation" }));
+    const invitationQueries = within(invitationRender.container);
+    fireEvent.click(invitationQueries.getByRole("combobox", { name: /^Roles/ }));
+    fireEvent.click(invitationQueries.getByRole("option", { name: "Site — Administrator" }));
+    fireEvent.submit(required(invitationRender.container.querySelector("form")));
+
+    fireEvent.submit(required(personRender.container.querySelector("form")));
+
+    const confirmation = within(
+      within(accessRender.container).getByRole("alertdialog", { name: "Remove person?" }),
+    );
+    fireEvent.click(confirmation.getByRole("button", { name: "Cancel" }));
+    fireEvent.click(confirmation.getByRole("button", { name: "Remove person" }));
 
     expect(intents).toEqual([
       {
-        accessId: "access:test",
-        authoringId: "access:test:authoring",
-        fieldId: "field:target-email",
-        type: "accessInvitationFieldChange",
-        value: "next@example.com",
-      },
-      {
-        accessId: "access:test",
-        authoringId: "access:test:authoring",
-        fieldId: "field:target-surface",
-        type: "accessInvitationFieldChange",
-        value: "app-install",
-      },
-      {
-        accessId: "access:test",
-        authoringId: "access:test:authoring",
-        controlId: "access:test:roles",
-        groupId: "roles:instance",
-        optionId: "role:instance:1",
-        selected: true,
-        type: "accessInvitationGrantSelection",
+        ...authoring.roleSelection.changeIntent,
+        selectedOptionIds: ["role:instance-owner", "role:site-admin"],
       },
       authoring.submit.intent,
-      { ...authoring.cancel.intent, open: false },
-      { ...confirmation.cancel.intent, open: false },
-      confirmation.action.intent,
+      personAuthoring.save.intent,
+      { ...required(manifest.confirmation).cancel.intent, open: false },
+      required(manifest.confirmation).action.intent,
     ]);
 
-    authoringRender.unmount();
+    invitationRender.unmount();
+    personRender.unmount();
     accessRender.unmount();
   });
 
-  it("subscribes to manifest and authoring snapshots through one Presentation Host", () => {
-    const manifest = readyManifest();
-    const authoring = invitationAuthoring();
+  it("subscribes to manifest plus invitation and person authoring on one host", () => {
+    const invitation = invitationAuthoring(true);
+    const person = personRoleAuthoring();
+    const manifest: AccessReadyContract = {
+      ...ready(fixtureManifest("populated-owner")),
+      personAuthoring: accessFixturePersonAuthoringReference,
+    };
     const host = createMemoryPresentationHost({
       nodes: [
-        { reference: accessReference, snapshot: manifest },
-        { reference: authoringReference, snapshot: authoring },
+        { reference: accessFixtureReference, snapshot: manifest },
+        { reference: accessFixtureAuthoringReference, snapshot: invitation },
+        { reference: accessFixturePersonAuthoringReference, snapshot: person },
       ],
     });
     const html = renderToStaticMarkup(
       <PresentationHostProvider host={host}>
-        <AstryxSubscribedAccessRenderer accessReference={accessReference} />
+        <AstryxSubscribedAccessRenderer accessReference={accessFixtureReference} />
       </PresentationHostProvider>,
     );
 
-    expect(html).toContain("Access");
     expect(html).toContain("Ada Lovelace");
     expect(html).toContain('value="invitee@example.com"');
+    expect(html).toContain("Edit roles for Ada Lovelace");
   });
 });
+
+function fixtureManifest(id: ReturnType<typeof createFormlessAccessFixtures>[number]["id"]) {
+  const fixture = createFormlessAccessFixtures().find((candidate) => candidate.id === id);
+  if (!fixture) {
+    throw new Error(`Missing fixture ${id}.`);
+  }
+  return fixture.state.manifest;
+}
 
 function renderAccess(
   manifest: AccessManifestContract,
@@ -232,381 +216,71 @@ function renderAccess(
   );
 }
 
-function manifestState(state: "failed" | "loading" | "unauthorized"): AccessManifestContract {
-  const base = {
-    accessibilityLabel: "Instance access",
-    id: accessReference.accessId,
-    kind: "accessManifest" as const,
-    title: "Access",
-  };
-
-  return state === "loading"
-    ? { ...base, message: "Loading access summary", state }
-    : {
-        ...base,
-        feedback:
-          state === "failed"
-            ? accessFeedback("danger", "Access failed")
-            : accessFeedback("warning", "Access unavailable"),
-        state,
-      };
-}
-
-function readyManifest({
-  confirmation,
-  empty = false,
-  feedback,
-}: {
-  confirmation?: AccessConfirmationContract;
-  empty?: boolean;
-  feedback?: AccessFeedbackContract;
-} = {}): AccessReadyContract {
+function invitationDeletionConfirmation(): AccessConfirmationContract {
   return {
-    accessibilityLabel: "Instance access",
-    authoring: authoringReference,
-    ...(confirmation ? { confirmation } : {}),
-    ...(empty
-      ? {
-          invitationsEmptyState: {
-            description: "Invite someone to begin sharing access.",
-            id: "access:test:invitations:empty",
-            kind: "accessEmptyState" as const,
-            title: "No invitations",
-          },
-          peopleEmptyState: {
-            description: "Invite someone to begin sharing access.",
-            id: "access:test:people:empty",
-            kind: "accessEmptyState" as const,
-            title: "No people",
-          },
-        }
-      : {}),
-    ...(feedback ? { feedback } : {}),
-    id: accessReference.accessId,
-    invitations: empty ? [] : [pendingInvitation()],
-    invite: accessAction("authoring-open", "Invite person", {
-      accessId: accessReference.accessId,
-      actionId: "action:invite",
-      authoringId: authoringReference.authoringId,
-      controlId: "control:invite",
-      open: true,
-      type: "accessInvitationAuthoringOpenChange",
-    }),
-    kind: "accessManifest",
-    people: empty ? [] : [accessPerson()],
-    state: "ready",
-    title: "Access",
-  };
-}
-
-function accessPerson(): AccessPersonContract {
-  return {
-    displayName: "Ada Lovelace",
-    id: "person:ada",
-    kind: "accessPerson",
-    primaryEmail: "ada@example.com",
-    roles: [
-      {
-        id: "role:owner",
-        kind: "accessRole",
-        label: "Owner",
-        scope: accessFact("role:owner:scope", "Scope", "Instance", "text"),
-      },
-    ],
-    status: accessFact("person:ada:status", "Status", "Active", "status", "success"),
-  };
-}
-
-function pendingInvitation(): AccessInvitationContract {
-  return {
-    expiresAt: accessFact(
-      "invitation:pending:expires",
-      "Expires",
-      "2026-07-24T12:30:00.000Z",
-      "timestamp",
-    ),
-    id: "invitation:pending",
-    inviter: accessFact("invitation:pending:inviter", "Inviter", "Ada Lovelace", "text"),
-    kind: "accessInvitation",
-    revocation: {
-      action: accessAction("revocation-open", "Revoke invitation", {
-        accessId: accessReference.accessId,
-        actionId: "action:revocation-open",
-        confirmationId: "confirmation:revoke",
-        controlId: "control:revocation-open",
-        invitationId: "invitation:pending",
-        open: true,
-        type: "accessInvitationRevocationConfirmationOpenChange",
-      }),
-      availability: "available",
-    },
-    scope: accessFact("invitation:pending:scope", "Scope", "Analytical Engine", "text"),
-    status: accessFact("invitation:pending:status", "Status", "Pending", "status", "warning"),
-    target: accessFact("invitation:pending:target", "Target", "Organization", "text"),
-    targetEmail: "pending@example.com",
-  };
-}
-
-function invitationAuthoring({
-  errors = [],
-  feedback,
-  pending,
-}: {
-  errors?: readonly string[];
-  feedback?: AccessFeedbackContract;
-  pending?: AccessInvitationAuthoringContract["pending"];
-} = {}): AccessInvitationAuthoringContract {
-  const fields = {
-    displayName: accessField("display-name", "Name", "text", "Grace Hopper"),
-    targetAppInstall: accessField("target-app-install", "Scope", "select", "site", {
-      options: [
-        {
-          disabledReason: "The CRM install is paused.",
-          id: "app:crm",
-          label: "CRM",
-          selected: false,
-          value: "crm",
-        },
-        { id: "app:site", label: "Site", selected: true, value: "site" },
-      ],
-      required: false,
-    }),
-    targetEmail: accessField("target-email", "Email", "email", "invitee@example.com"),
-    targetOrganization: accessField("target-organization", "Scope", "select", "analytical-engine", {
-      options: [
-        {
-          id: "organization:analytical-engine",
-          label: "Analytical Engine",
-          selected: true,
-          value: "analytical-engine",
-        },
-      ],
-      required: false,
-    }),
-    targetSurface: accessField("target-surface", "Surface", "select", "organization", {
-      options: [
-        { id: "surface:instance", label: "Instance", selected: false, value: "instance" },
-        {
-          id: "surface:app",
-          label: "App install",
-          selected: false,
-          value: "app-install",
-        },
-        {
-          id: "surface:organization",
-          label: "Organization",
-          selected: true,
-          value: "organization",
-        },
-      ],
-      required: false,
-    }),
-  } satisfies AccessInvitationAuthoringContract["fields"];
-
-  return {
-    accessId: accessReference.accessId,
-    cancel: accessAction("authoring-cancel", "Cancel", {
-      accessId: accessReference.accessId,
-      actionId: "action:authoring-cancel",
-      authoringId: authoringReference.authoringId,
-      controlId: "control:authoring-cancel",
-      open: false,
-      type: "accessInvitationAuthoringOpenChange",
-    }),
-    description: "Invite a person and assign access.",
-    errors,
-    ...(feedback ? { feedback } : {}),
-    fields,
-    grantSelections: [roleSelection(), membershipSelection(pending !== undefined)],
-    id: authoringReference.authoringId,
-    kind: "accessInvitationAuthoring",
-    open: true,
-    ...(pending ? { pending } : {}),
-    submit: accessAction(
-      "invitation-submit",
-      pending ? "Sending invitation" : "Send invitation",
-      {
-        accessId: accessReference.accessId,
-        actionId: "action:authoring-submit",
-        authoringId: authoringReference.authoringId,
-        controlId: "control:authoring-submit",
-        type: "accessInvitationSubmit",
-      },
-      pending?.label,
-      "submit",
-    ),
-    title: "Invite person",
-  };
-}
-
-function roleSelection(): AccessGrantSelectionContract & { purpose: "roles" } {
-  const instanceGroup = roleGroup("roles:instance", "Instance", 6);
-  const groups = [
-    {
-      ...instanceGroup,
-      options: instanceGroup.options.map((option, index) => ({
-        ...option,
-        ...(index === 0
-          ? {
-              selected: true,
-              selectionIntent: { ...option.selectionIntent, selected: false },
-            }
-          : {}),
-        ...(index === 5 ? { disabledReason: "Instance administrators cannot be invited." } : {}),
-      })),
-    },
-    roleGroup("roles:app-install", "App install", 5),
-    roleGroup("roles:organization", "Organization", 5),
-  ];
-
-  return {
-    errors: [],
-    groups,
-    id: "access:test:roles",
-    kind: "accessGrantSelection",
-    label: "Roles",
-    purpose: "roles",
-    selectedOptionIds: ["role:instance:0"],
-  };
-}
-
-function membershipSelection(
-  pending: boolean,
-): AccessGrantSelectionContract & { purpose: "memberships" } {
-  const disabledReason = pending ? "Membership grants are unavailable while sending." : undefined;
-  return {
-    ...(disabledReason ? { disabledReason } : {}),
-    errors: [],
-    groups: [
-      grantGroup("memberships:organizations", "Organizations", ["Analytical Engine"]),
-      grantGroup("memberships:groups", "Groups", ["Research"]),
-    ],
-    id: "access:test:memberships",
-    kind: "accessGrantSelection",
-    label: "Memberships",
-    purpose: "memberships",
-    selectedOptionIds: [],
-  };
-}
-
-function roleGroup(id: string, label: string, optionCount: number): AccessGrantOptionGroupContract {
-  return {
-    id,
-    kind: "accessGrantOptionGroup",
-    label,
-    options: Array.from({ length: optionCount }, (_, index) => {
-      const optionId = `role:${id.split(":")[1]}:${index}`;
-      return {
-        id: optionId,
-        label: `${label} role ${index + 1}`,
-        selected: false,
-        selectionIntent: {
-          accessId: accessReference.accessId,
-          authoringId: authoringReference.authoringId,
-          controlId: "access:test:roles",
-          groupId: id,
-          optionId,
-          selected: true,
-          type: "accessInvitationGrantSelection",
-        },
-      };
-    }),
-  };
-}
-
-function grantGroup(
-  id: string,
-  label: string,
-  optionLabels: readonly string[],
-): AccessGrantOptionGroupContract {
-  return {
-    id,
-    kind: "accessGrantOptionGroup",
-    label,
-    options: optionLabels.map((optionLabel, index) => {
-      const optionId = `${id}:option:${index}`;
-      return {
-        id: optionId,
-        label: optionLabel,
-        selected: false,
-        selectionIntent: {
-          accessId: accessReference.accessId,
-          authoringId: authoringReference.authoringId,
-          controlId: "access:test:memberships",
-          groupId: id,
-          optionId,
-          selected: true,
-          type: "accessInvitationGrantSelection",
-        },
-      };
-    }),
-  };
-}
-
-function accessField(
-  purpose: AccessControlledFieldContract["purpose"],
-  label: string,
-  inputKind: AccessControlledFieldContract["inputKind"],
-  value: string,
-  options: Partial<Pick<AccessControlledFieldContract, "options" | "required">> = {},
-): AccessControlledFieldContract {
-  const id = `field:${purpose}`;
-  return {
-    changeIntent: {
-      accessId: accessReference.accessId,
-      authoringId: authoringReference.authoringId,
-      fieldId: id,
-      type: "accessInvitationFieldChange",
-    },
-    errors: [],
-    id,
-    inputKind,
-    kind: "accessControlledField",
-    label,
-    ...options,
-    purpose,
-    required: options.required ?? true,
-    value,
-  };
-}
-
-function revocationConfirmation(): AccessConfirmationContract {
-  return {
-    action: accessAction("invitation-revoke", "Revoke invitation", {
-      accessId: accessReference.accessId,
-      actionId: "action:revoke",
-      confirmationId: "confirmation:revoke",
-      controlId: "control:revoke",
+    action: action("invitation-delete", "Delete invitation", {
+      accessId: accessFixtureReference.accessId,
+      actionId: "confirmation:action",
+      confirmationId: "confirmation:delete",
+      controlId: "confirmation:action-control",
       invitationId: "invitation:pending",
-      type: "accessInvitationRevoke",
+      type: "accessInvitationDelete",
     }),
-    cancel: accessAction("revocation-cancel", "Cancel", {
-      accessId: accessReference.accessId,
-      actionId: "action:revocation-cancel",
-      confirmationId: "confirmation:revoke",
-      controlId: "control:revocation-cancel",
+    cancel: action("invitation-deletion-cancel", "Cancel", {
+      accessId: accessFixtureReference.accessId,
+      actionId: "confirmation:cancel",
+      confirmationId: "confirmation:delete",
+      controlId: "confirmation:cancel-control",
       invitationId: "invitation:pending",
       open: false,
-      type: "accessInvitationRevocationConfirmationOpenChange",
+      type: "accessInvitationDeletionConfirmationOpenChange",
     }),
-    description: "The pending invitation for pending@example.com will no longer be usable.",
-    id: "confirmation:revoke",
+    description: "The invitation will no longer be usable.",
+    id: "confirmation:delete",
     invitationId: "invitation:pending",
     kind: "accessConfirmation",
     open: true,
-    title: "Revoke invitation?",
+    purpose: "invitation-deletion",
+    title: "Delete invitation?",
   };
 }
 
-function accessAction<Intent extends AccessActionContract["intent"]>(
+function personRemovalConfirmation(): AccessConfirmationContract {
+  return {
+    action: action("person-remove", "Remove person", {
+      accessId: accessFixtureReference.accessId,
+      actionId: "confirmation:action",
+      confirmationId: "confirmation:remove",
+      controlId: "confirmation:action-control",
+      personId: "person:ada",
+      type: "accessPersonRemove",
+    }),
+    cancel: action("person-removal-cancel", "Cancel", {
+      accessId: accessFixtureReference.accessId,
+      actionId: "confirmation:cancel",
+      confirmationId: "confirmation:remove",
+      controlId: "confirmation:cancel-control",
+      open: false,
+      personId: "person:ada",
+      type: "accessPersonRemovalConfirmationOpenChange",
+    }),
+    description: "This person will lose access.",
+    id: "confirmation:remove",
+    kind: "accessConfirmation",
+    open: true,
+    personId: "person:ada",
+    purpose: "person-removal",
+    title: "Remove person?",
+  };
+}
+
+function action<Intent extends AccessActionContract["intent"]>(
   purpose: AccessActionContract<Intent>["purpose"],
   label: string,
   intent: Intent,
-  disabledReason?: string,
-  type: ButtonContract["type"] = "button",
 ): AccessActionContract<Intent> {
   return {
-    control: accessButton(intent.controlId, label, disabledReason, type),
+    control: button(intent.controlId, label),
     id: intent.actionId,
     intent,
     kind: "accessAction",
@@ -614,57 +288,38 @@ function accessAction<Intent extends AccessActionContract["intent"]>(
   };
 }
 
-function accessButton(
-  id: string,
-  label: string,
-  disabledReason?: string,
-  type: ButtonContract["type"] = "button",
-): ButtonContract {
+function button(id: string, label: string): ButtonContract {
   return {
     accessibilityLabel: label,
     content: { kind: "label", label },
     density: "default",
-    ...(disabledReason ? { disabled: true, disabledReason } : {}),
     id,
     kind: "button",
-    prominence: type === "submit" ? "primary" : "secondary",
-    type,
+    prominence: "secondary",
+    type: "button",
   };
 }
 
-function accessFact(
-  id: string,
-  label: string,
-  value: string,
-  presentation: AccessDisplayFactContract["presentation"],
-  intent?: AccessDisplayFactContract["intent"],
-): AccessDisplayFactContract {
+function feedback(title: string, intent: AccessFeedbackContract["intent"]) {
   return {
-    id,
-    ...(intent ? { intent } : {}),
-    kind: "accessDisplayFact",
-    label,
-    presentation,
-    value,
-  };
-}
-
-function accessFeedback(
-  intent: AccessFeedbackContract["intent"],
-  title = intent === "danger" ? "Invitation failed" : "Invitation created",
-): AccessFeedbackContract {
-  return {
-    detail: intent === "danger" ? "Try again later." : "An invitation email was sent.",
-    id: `feedback:${intent}`,
+    detail: title,
+    id: `feedback:${title}`,
     intent,
-    kind: "accessFeedback",
+    kind: "accessFeedback" as const,
     title,
   };
 }
 
-function required<Value>(value: Value): NonNullable<Value> {
+function ready(manifest: AccessManifestContract): AccessReadyContract {
+  if (manifest.state !== "ready") {
+    throw new Error("Expected ready manifest.");
+  }
+  return manifest;
+}
+
+function required<T>(value: T | null | undefined): T {
   if (value === null || value === undefined) {
     throw new Error("Expected value.");
   }
-  return value as NonNullable<Value>;
+  return value;
 }

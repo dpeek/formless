@@ -2395,11 +2395,41 @@ export type AccessRoleContract = {
   scope?: AccessDisplayFactContract;
 };
 
+export type AccessSurfaceKind = "app-install" | "instance" | "organization";
+
+export type AccessRoleOptionContract = {
+  disabledReason?: string;
+  id: string;
+  label: string;
+  selected: boolean;
+  surfaceId: string;
+  surfaceKind: AccessSurfaceKind;
+};
+
 export type AccessPersonContract = {
   displayName: string;
   id: string;
   kind: "accessPerson";
   primaryEmail?: string;
+  removal:
+    | {
+        action: AccessActionContract<AccessPersonRemovalConfirmationOpenChangeIntent>;
+        availability: "available";
+      }
+    | {
+        availability: "unavailable";
+        disabledReason?: string;
+      };
+  roleAuthoring:
+    | {
+        action: AccessActionContract<AccessPersonRoleAuthoringOpenChangeIntent>;
+        availability: "available";
+        reference: AccessPersonRoleAuthoringReference;
+      }
+    | {
+        availability: "unavailable";
+        disabledReason?: string;
+      };
   roles: readonly AccessRoleContract[];
   status: AccessDisplayFactContract;
 };
@@ -2421,14 +2451,20 @@ export type AccessInvitationFieldChangeIntent = {
   value: string;
 };
 
-export type AccessInvitationGrantSelectionIntent = {
+export type AccessInvitationRoleSelectionChangeIntent = {
   accessId: string;
   authoringId: string;
   controlId: string;
-  groupId: string;
-  optionId: string;
-  selected: boolean;
-  type: "accessInvitationGrantSelection";
+  selectedOptionIds: readonly string[];
+  type: "accessInvitationRoleSelectionChange";
+};
+
+export type AccessInvitationMembershipSelectionChangeIntent = {
+  accessId: string;
+  authoringId: string;
+  controlId: string;
+  selectedOptionIds: readonly string[];
+  type: "accessInvitationMembershipSelectionChange";
 };
 
 export type AccessInvitationSubmitIntent = {
@@ -2439,32 +2475,85 @@ export type AccessInvitationSubmitIntent = {
   type: "accessInvitationSubmit";
 };
 
-export type AccessInvitationRevocationConfirmationOpenChangeIntent = {
+export type AccessPersonRoleAuthoringOpenChangeIntent = {
+  accessId: string;
+  actionId: string;
+  authoringId: string;
+  controlId: string;
+  open: boolean;
+  personId: string;
+  type: "accessPersonRoleAuthoringOpenChange";
+};
+
+export type AccessPersonRoleSelectionChangeIntent = {
+  accessId: string;
+  authoringId: string;
+  controlId: string;
+  personId: string;
+  selectedOptionIds: readonly string[];
+  type: "accessPersonRoleSelectionChange";
+};
+
+export type AccessPersonRoleSubmitIntent = {
+  accessId: string;
+  actionId: string;
+  authoringId: string;
+  controlId: string;
+  personId: string;
+  type: "accessPersonRoleSubmit";
+};
+
+export type AccessInvitationDeletionConfirmationOpenChangeIntent = {
   accessId: string;
   actionId: string;
   confirmationId: string;
   controlId: string;
   invitationId: string;
   open: boolean;
-  type: "accessInvitationRevocationConfirmationOpenChange";
+  type: "accessInvitationDeletionConfirmationOpenChange";
 };
 
-export type AccessInvitationRevokeIntent = {
+export type AccessInvitationDeleteIntent = {
   accessId: string;
   actionId: string;
   confirmationId: string;
   controlId: string;
   invitationId: string;
-  type: "accessInvitationRevoke";
+  type: "accessInvitationDelete";
+};
+
+export type AccessPersonRemovalConfirmationOpenChangeIntent = {
+  accessId: string;
+  actionId: string;
+  confirmationId: string;
+  controlId: string;
+  open: boolean;
+  personId: string;
+  type: "accessPersonRemovalConfirmationOpenChange";
+};
+
+export type AccessPersonRemoveIntent = {
+  accessId: string;
+  actionId: string;
+  confirmationId: string;
+  controlId: string;
+  personId: string;
+  type: "accessPersonRemove";
 };
 
 export type AccessIntent =
+  | AccessInvitationDeleteIntent
+  | AccessInvitationDeletionConfirmationOpenChangeIntent
   | AccessInvitationAuthoringOpenChangeIntent
   | AccessInvitationFieldChangeIntent
-  | AccessInvitationGrantSelectionIntent
-  | AccessInvitationRevocationConfirmationOpenChangeIntent
-  | AccessInvitationRevokeIntent
-  | AccessInvitationSubmitIntent;
+  | AccessInvitationMembershipSelectionChangeIntent
+  | AccessInvitationRoleSelectionChangeIntent
+  | AccessInvitationSubmitIntent
+  | AccessPersonRemoveIntent
+  | AccessPersonRemovalConfirmationOpenChangeIntent
+  | AccessPersonRoleAuthoringOpenChangeIntent
+  | AccessPersonRoleSelectionChangeIntent
+  | AccessPersonRoleSubmitIntent;
 
 export type AccessIntentHandler = (intent: AccessIntent) => Promise<void> | void;
 
@@ -2473,10 +2562,16 @@ export type AccessActionIntent = Extract<AccessIntent, { actionId: string }>;
 export type AccessActionPurpose =
   | "authoring-cancel"
   | "authoring-open"
-  | "invitation-revoke"
   | "invitation-submit"
-  | "revocation-cancel"
-  | "revocation-open";
+  | "invitation-delete"
+  | "invitation-deletion-cancel"
+  | "invitation-deletion-open"
+  | "person-removal-cancel"
+  | "person-removal-open"
+  | "person-remove"
+  | "person-role-authoring-cancel"
+  | "person-role-authoring-open"
+  | "person-role-save";
 
 export type AccessActionContract<Intent extends AccessActionIntent = AccessActionIntent> = {
   control: ButtonContract;
@@ -2486,9 +2581,9 @@ export type AccessActionContract<Intent extends AccessActionIntent = AccessActio
   purpose: AccessActionPurpose;
 };
 
-export type AccessInvitationRevocationContract =
+export type AccessInvitationDeletionContract =
   | {
-      action: AccessActionContract<AccessInvitationRevocationConfirmationOpenChangeIntent>;
+      action: AccessActionContract<AccessInvitationDeletionConfirmationOpenChangeIntent>;
       availability: "available";
     }
   | {
@@ -2501,19 +2596,14 @@ export type AccessInvitationContract = {
   id: string;
   inviter?: AccessDisplayFactContract;
   kind: "accessInvitation";
-  revocation: AccessInvitationRevocationContract;
+  deletion: AccessInvitationDeletionContract;
   scope?: AccessDisplayFactContract;
   status: AccessDisplayFactContract;
   target: AccessDisplayFactContract;
   targetEmail: string;
 };
 
-export type AccessInvitationFieldPurpose =
-  | "display-name"
-  | "target-app-install"
-  | "target-email"
-  | "target-organization"
-  | "target-surface";
+export type AccessInvitationFieldPurpose = "acceptance-target" | "display-name" | "target-email";
 
 export type AccessInvitationFieldChangeIntentScope = Omit<
   AccessInvitationFieldChangeIntent,
@@ -2542,38 +2632,50 @@ export type AccessControlledFieldContract = {
   value: string;
 };
 
-export type AccessGrantOptionContract = {
+export type AccessMembershipOptionContract = {
   disabledReason?: string;
   id: string;
   label: string;
   selected: boolean;
-  selectionIntent: AccessInvitationGrantSelectionIntent;
 };
 
-export type AccessGrantOptionGroupContract = {
+export type AccessMembershipOptionGroupContract = {
   id: string;
-  kind: "accessGrantOptionGroup";
+  kind: "accessMembershipOptionGroup";
   label: string;
-  options: readonly AccessGrantOptionContract[];
+  options: readonly AccessMembershipOptionContract[];
 };
 
-export type AccessGrantSelectionContract = {
+export type AccessMembershipSelectionContract = {
+  changeIntent: Omit<AccessInvitationMembershipSelectionChangeIntent, "selectedOptionIds">;
   disabledReason?: string;
   errors: readonly string[];
-  groups: readonly AccessGrantOptionGroupContract[];
+  groups: readonly AccessMembershipOptionGroupContract[];
   id: string;
-  kind: "accessGrantSelection";
+  kind: "accessMembershipSelection";
   label: string;
-  purpose: "memberships" | "roles";
+  selectedOptionIds: readonly string[];
+};
+
+export type AccessRoleSelectionChangeIntentScope =
+  | Omit<AccessInvitationRoleSelectionChangeIntent, "selectedOptionIds">
+  | Omit<AccessPersonRoleSelectionChangeIntent, "selectedOptionIds">;
+
+export type AccessRoleSelectionContract = {
+  changeIntent: AccessRoleSelectionChangeIntentScope;
+  disabledReason?: string;
+  errors: readonly string[];
+  id: string;
+  kind: "accessRoleSelection";
+  label: string;
+  options: readonly AccessRoleOptionContract[];
   selectedOptionIds: readonly string[];
 };
 
 export type AccessInvitationAuthoringFieldsContract = {
+  acceptanceTarget?: AccessControlledFieldContract;
   displayName: AccessControlledFieldContract;
-  targetAppInstall: AccessControlledFieldContract;
   targetEmail: AccessControlledFieldContract;
-  targetOrganization: AccessControlledFieldContract;
-  targetSurface: AccessControlledFieldContract;
 };
 
 export type AccessInvitationAuthoringReference = {
@@ -2590,28 +2692,66 @@ export type AccessInvitationAuthoringContract = {
   errors: readonly string[];
   feedback?: AccessFeedbackContract;
   fields: AccessInvitationAuthoringFieldsContract;
-  grantSelections: readonly [
-    AccessGrantSelectionContract & { purpose: "roles" },
-    AccessGrantSelectionContract & { purpose: "memberships" },
-  ];
   id: string;
   kind: "accessInvitationAuthoring";
+  membershipSelection: AccessMembershipSelectionContract;
   open: boolean;
   pending?: FieldPending;
+  roleSelection: AccessRoleSelectionContract;
   submit: AccessActionContract<AccessInvitationSubmitIntent>;
   title: string;
 };
 
-export type AccessConfirmationContract = {
-  action: AccessActionContract<AccessInvitationRevokeIntent>;
-  cancel: AccessActionContract<AccessInvitationRevocationConfirmationOpenChangeIntent>;
+export type AccessPersonRoleAuthoringReference = {
+  accessId: string;
+  authoringId: string;
+  kind: "accessPersonRoleAuthoringReference";
+  personId: string;
+  role: "accessPersonRoleAuthoring";
+};
+
+export type AccessPersonRoleAuthoringContract = {
+  accessId: string;
+  cancel: AccessActionContract<AccessPersonRoleAuthoringOpenChangeIntent>;
+  description: string;
+  displayName: string;
+  errors: readonly string[];
+  feedback?: AccessFeedbackContract;
+  id: string;
+  kind: "accessPersonRoleAuthoring";
+  open: boolean;
+  pending?: FieldPending;
+  personId: string;
+  roleSelection: AccessRoleSelectionContract;
+  save: AccessActionContract<AccessPersonRoleSubmitIntent>;
+  title: string;
+};
+
+type AccessConfirmationBaseContract = {
   description: string;
   id: string;
-  invitationId: string;
   kind: "accessConfirmation";
   open: boolean;
   title: string;
 };
+
+export type AccessInvitationDeletionConfirmationContract = AccessConfirmationBaseContract & {
+  action: AccessActionContract<AccessInvitationDeleteIntent>;
+  cancel: AccessActionContract<AccessInvitationDeletionConfirmationOpenChangeIntent>;
+  invitationId: string;
+  purpose: "invitation-deletion";
+};
+
+export type AccessPersonRemovalConfirmationContract = AccessConfirmationBaseContract & {
+  action: AccessActionContract<AccessPersonRemoveIntent>;
+  cancel: AccessActionContract<AccessPersonRemovalConfirmationOpenChangeIntent>;
+  personId: string;
+  purpose: "person-removal";
+};
+
+export type AccessConfirmationContract =
+  | AccessInvitationDeletionConfirmationContract
+  | AccessPersonRemovalConfirmationContract;
 
 export type AccessManifestReference = {
   accessId: string;
@@ -2657,6 +2797,7 @@ export type AccessReadyContract = AccessManifestBaseContract & {
   invite: AccessActionContract<AccessInvitationAuthoringOpenChangeIntent>;
   people: readonly AccessPersonContract[];
   peopleEmptyState?: AccessEmptyStateContract;
+  personAuthoring?: AccessPersonRoleAuthoringReference;
   state: "ready";
 };
 
@@ -3018,6 +3159,7 @@ export type WorkspaceSectionShellContract = Omit<
 export type PresentationReference =
   | AccessInvitationAuthoringReference
   | AccessManifestReference
+  | AccessPersonRoleAuthoringReference
   | ApplicationSystemStateReference
   | AuthSurfaceReference
   | DocumentThemeReference

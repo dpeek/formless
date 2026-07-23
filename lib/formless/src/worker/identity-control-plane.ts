@@ -1,6 +1,8 @@
 import { parseIdentityControlPlaneApiRoute } from "../shared/app-storage-identity.ts";
 import {
   IDENTITY_ACCESS_MANAGEMENT_SUMMARY_API_PATH,
+  IDENTITY_ACCESS_PERSON_REMOVAL_API_PATH,
+  IDENTITY_ACCESS_PERSON_ROLE_REPLACEMENT_API_PATH,
   IDENTITY_COLLABORATOR_INVITATION_REVOKE_API_PATH,
   IDENTITY_COLLABORATOR_INVITATIONS_API_PATH,
   IDENTITY_CONTROL_PLANE_SCHEMA_KEY,
@@ -18,6 +20,15 @@ import {
   type IdentityAccessInvitationMembershipGrantOption,
   type IdentityAccessInvitationRoleGrantOption,
   type IdentityAccessManagementSummary,
+  type IdentityAccessPersonMutationErrorResponse,
+  type IdentityAccessPersonMutationFailureReason,
+  type IdentityAccessPersonRemovalRequest,
+  type IdentityAccessPersonRemovalResponse,
+  type IdentityAccessPersonRoleReplacementRequest,
+  type IdentityAccessPersonRoleReplacementResponse,
+  type IdentityAccessPersonRoleSelection,
+  type IdentityAccessPersonSummary,
+  type IdentityAccessRoleSummary,
   type IdentityAppRegistrationStatus,
   type IdentityCollaboratorInvitationGrantRecord,
   type IdentityCollaboratorInvitationRevokeErrorResponse,
@@ -226,6 +237,32 @@ type RevokeCollaboratorInvitationResult =
       status: number;
     };
 
+type IdentityAccessMutationActor = {
+  principalId?: string;
+  trustedAdmin: boolean;
+};
+
+type IdentityAccessMutationAuthority = {
+  instanceAdmin: boolean;
+  instanceOwner: boolean;
+};
+
+class IdentityAccessPersonMutationError extends Error {
+  readonly reason: IdentityAccessPersonMutationFailureReason;
+  readonly status: number;
+
+  constructor(message: string, reason: IdentityAccessPersonMutationFailureReason, status: number) {
+    super(message);
+    this.name = "IdentityAccessPersonMutationError";
+    this.reason = reason;
+    this.status = status;
+  }
+
+  body(): IdentityAccessPersonMutationErrorResponse {
+    return { error: this.message, reason: this.reason };
+  }
+}
+
 type CollaboratorInvitationTokenRevocationInput = {
   invitationId: string;
   now: string;
@@ -242,6 +279,11 @@ type CollaboratorInvitationTargetFacts = {
   targetAppInstallId?: string;
   targetOrganization?: string;
   targetSurface: IdentityInvitationTargetSurface;
+};
+
+type IdentityAccessInstalledAppSurface = {
+  appInstallId: string;
+  displayLabel: string;
 };
 
 type CollaboratorInvitationPrincipalInput = {
@@ -276,7 +318,7 @@ type CollaboratorInvitationAppRegistrationInput = {
   selectedOrganization?: string;
 };
 
-type CreateCollaboratorInvitationInput = CollaboratorInvitationTargetFacts & {
+type CreateCollaboratorInvitationBaseInput = {
   appRegistrations: CollaboratorInvitationAppRegistrationInput[];
   expiresAt: string;
   idempotencyKey: string;
@@ -288,6 +330,13 @@ type CreateCollaboratorInvitationInput = CollaboratorInvitationTargetFacts & {
   roleAssignments: CollaboratorInvitationRoleAssignmentInput[];
   targetEmail: string;
 };
+
+type ParsedCreateCollaboratorInvitationInput = CreateCollaboratorInvitationBaseInput & {
+  acceptanceTarget?: CollaboratorInvitationTargetFacts;
+};
+
+type CreateCollaboratorInvitationInput = CreateCollaboratorInvitationBaseInput &
+  CollaboratorInvitationTargetFacts;
 
 type CollaboratorInvitationDeliveryInput = CollaboratorInvitationTargetFacts & {
   createdAt: string;
@@ -553,6 +602,67 @@ export async function handleIdentityControlPlaneDurableObjectRequest(
         readIdentityAccessManagementSummary(
           storage,
           identityAccessGrantAuthorityFromAuthorization(storage, authorization),
+          identityAccessInstalledAppSurfaces(
+            (await readControlPlaneRecords({ env, requestUrl: request.url })) ?? [],
+          ),
+        ),
+      );
+    }
+
+    if (route.path === IDENTITY_ACCESS_PERSON_ROLE_REPLACEMENT_API_PATH) {
+      if (request.method !== "POST") {
+        return jsonResponse({ error: "Method not allowed." }, 405, { Allow: "POST" });
+      }
+
+      const authorization = await authorizeOperationalManagement(request, env, {
+        hostSessionTarget: hostAuthSessionTargetFromRequestHeaders(request.headers),
+        resolveManagementAuthority,
+      });
+
+      if (!authorization.authorized) {
+        return jsonResponse(
+          { error: authorization.error },
+          authorization.status,
+          authorization.headers,
+        );
+      }
+
+      ensureIdentityControlPlaneStorage(storage);
+
+      return jsonResponse(
+        replaceIdentityAccessPersonRoles(
+          storage,
+          await readJson(request),
+          identityAccessMutationActorFromAuthorization(authorization),
+        ),
+      );
+    }
+
+    if (route.path === IDENTITY_ACCESS_PERSON_REMOVAL_API_PATH) {
+      if (request.method !== "POST") {
+        return jsonResponse({ error: "Method not allowed." }, 405, { Allow: "POST" });
+      }
+
+      const authorization = await authorizeOperationalManagement(request, env, {
+        hostSessionTarget: hostAuthSessionTargetFromRequestHeaders(request.headers),
+        resolveManagementAuthority,
+      });
+
+      if (!authorization.authorized) {
+        return jsonResponse(
+          { error: authorization.error },
+          authorization.status,
+          authorization.headers,
+        );
+      }
+
+      ensureIdentityControlPlaneStorage(storage);
+
+      return jsonResponse(
+        removeIdentityAccessPerson(
+          storage,
+          await readJson(request),
+          identityAccessMutationActorFromAuthorization(authorization),
         ),
       );
     }
@@ -582,10 +692,17 @@ export async function handleIdentityControlPlaneDurableObjectRequest(
         typeof authorization.session?.principalId === "string"
           ? authorization.session.principalId
           : undefined;
-      const created = createCollaboratorInvitation(storage, await readJson(request), {
-        grantAuthorityPrincipalId: inviterPrincipalId,
-        inviterPrincipalId,
-      });
+      const created = createCollaboratorInvitation(
+        storage,
+        await readJson(request),
+        {
+          grantAuthorityPrincipalId: inviterPrincipalId,
+          inviterPrincipalId,
+        },
+        identityAccessInstalledAppSurfaces(
+          (await readControlPlaneRecords({ env, requestUrl: request.url })) ?? [],
+        ),
+      );
 
       return jsonResponse({
         ...created,
@@ -688,6 +805,10 @@ export async function handleIdentityControlPlaneDurableObjectRequest(
 
     if (error instanceof BadRequestError) {
       return jsonResponse({ error: error.message }, 400);
+    }
+
+    if (error instanceof IdentityAccessPersonMutationError) {
+      return jsonResponse(error.body(), error.status);
     }
 
     return jsonResponse({ error: errorMessage(error) }, 400);
@@ -1293,6 +1414,7 @@ function identityAccessGrantAuthorityFromAuthorization(
 function readIdentityAccessManagementSummary(
   storage: DurableObjectStorage,
   grantAuthority: IdentityAccessInvitationGrantAuthoritySummary,
+  installedAppSurfaces: readonly IdentityAccessInstalledAppSurface[],
 ): IdentityAccessManagementSummary {
   ensureIdentityControlPlaneStorage(storage);
 
@@ -1300,6 +1422,11 @@ function readIdentityAccessManagementSummary(
   const primaryEmails = primaryIdentityAccessEmailsByPrincipal(records);
   const roleRecords = new Map(
     identityAccessRecordsForEntity(records, "role").map((record) => [record.id, record]),
+  );
+  const activePersonIds = new Set(
+    identityAccessRecordsForEntity(records, "principal")
+      .filter((record) => (record.values as IdentityPrincipalValues).status !== "disabled")
+      .map((record) => record.id),
   );
 
   return {
@@ -1335,10 +1462,14 @@ function readIdentityAccessManagementSummary(
         updatedAt: record.updatedAt,
       };
     }),
-    invitationGrantOptions: identityAccessInvitationGrantOptions(records, grantAuthority),
-    invitations: identityAccessRecordsForEntity(records, "invitation").map(
-      identityAccessInvitationSummary,
+    invitationGrantOptions: identityAccessInvitationGrantOptions(
+      records,
+      grantAuthority,
+      installedAppSurfaces,
     ),
+    invitations: identityAccessRecordsForEntity(records, "invitation")
+      .filter((record) => (record.values as IdentityInvitationValues).status !== "revoked")
+      .map(identityAccessInvitationSummary),
     memberships: identityAccessRecordsForEntity(records, "membership").map((record) => {
       const values = record.values as IdentityMembershipValues;
 
@@ -1366,66 +1497,86 @@ function readIdentityAccessManagementSummary(
         updatedAt: record.updatedAt,
       };
     }),
-    people: identityAccessRecordsForEntity(records, "principal").map((record) => {
-      const values = record.values as IdentityPrincipalValues;
-      const primaryEmail = primaryEmails.get(record.id);
+    people: identityAccessRecordsForEntity(records, "principal")
+      .filter((record) => activePersonIds.has(record.id))
+      .map((record) => identityAccessPersonSummary(record, primaryEmails.get(record.id))),
+    roles: identityAccessRecordsForEntity(records, "role-assignment")
+      .filter((record) => {
+        const values = record.values as IdentityRoleAssignmentValues;
 
-      return {
-        createdAt: record.createdAt,
-        displayName: values.displayName,
-        kind: values.kind as IdentityPrincipalKind,
-        ...(primaryEmail === undefined
-          ? {}
-          : { primaryEmail: identityAccessPrimaryEmailSummary(primaryEmail) }),
-        principalId: record.id,
-        status: values.status as IdentityPrincipalStatus,
-        updatedAt: record.updatedAt,
-      };
-    }),
-    roles: identityAccessRecordsForEntity(records, "role-assignment").map((record) => {
-      const values = record.values as IdentityRoleAssignmentValues;
-      const role = roleRecords.get(values.role);
+        return (
+          values.status === "active" &&
+          (values.targetKind !== "principal" ||
+            (values.targetPrincipal !== undefined && activePersonIds.has(values.targetPrincipal)))
+        );
+      })
+      .map((record) => identityAccessRoleSummary(record, roleRecords)),
+  };
+}
 
-      if (!role) {
-        throw new Error(`Identity access summary role "${values.role}" is missing.`);
-      }
+function identityAccessPersonSummary(
+  record: StoredRecord,
+  primaryEmail?: StoredRecord,
+): IdentityAccessPersonSummary {
+  const values = record.values as IdentityPrincipalValues;
 
-      const roleValues = role.values as IdentityRoleValues;
+  return {
+    createdAt: record.createdAt,
+    displayName: values.displayName,
+    kind: values.kind as IdentityPrincipalKind,
+    ...(primaryEmail === undefined
+      ? {}
+      : { primaryEmail: identityAccessPrimaryEmailSummary(primaryEmail) }),
+    principalId: record.id,
+    status: values.status as IdentityPrincipalStatus,
+    updatedAt: record.updatedAt,
+  };
+}
 
-      return {
-        ...(values.appInstallId === undefined ? {} : { appInstallId: values.appInstallId }),
-        createdAt: record.createdAt,
-        displayLabel: roleValues.displayLabel,
-        roleAssignmentId: record.id,
-        roleId: role.id,
-        roleKey: roleValues.key,
-        scopeKind: values.scopeKind as IdentityRoleAssignmentScopeKind,
-        ...(values.scopeOrganization === undefined
-          ? {}
-          : { scopeOrganizationId: values.scopeOrganization }),
-        status: values.status as IdentityRoleAssignmentStatus,
-        ...(values.targetGroup === undefined ? {} : { targetGroupId: values.targetGroup }),
-        targetKind: values.targetKind as IdentityRoleAssignmentTargetKind,
-        ...(values.targetOrganization === undefined
-          ? {}
-          : { targetOrganizationId: values.targetOrganization }),
-        ...(values.targetPrincipal === undefined
-          ? {}
-          : { targetPrincipalId: values.targetPrincipal }),
-        updatedAt: record.updatedAt,
-      };
-    }),
+function identityAccessRoleSummary(
+  record: StoredRecord,
+  roleRecords: ReadonlyMap<string, StoredRecord>,
+): IdentityAccessRoleSummary {
+  const values = record.values as IdentityRoleAssignmentValues;
+  const role = roleRecords.get(values.role);
+
+  if (!role) {
+    throw new Error(`Identity access summary role "${values.role}" is missing.`);
+  }
+
+  const roleValues = role.values as IdentityRoleValues;
+
+  return {
+    ...(values.appInstallId === undefined ? {} : { appInstallId: values.appInstallId }),
+    createdAt: record.createdAt,
+    displayLabel: roleValues.displayLabel,
+    roleAssignmentId: record.id,
+    roleId: role.id,
+    roleKey: roleValues.key,
+    scopeKind: values.scopeKind as IdentityRoleAssignmentScopeKind,
+    ...(values.scopeOrganization === undefined
+      ? {}
+      : { scopeOrganizationId: values.scopeOrganization }),
+    status: values.status as IdentityRoleAssignmentStatus,
+    ...(values.targetGroup === undefined ? {} : { targetGroupId: values.targetGroup }),
+    targetKind: values.targetKind as IdentityRoleAssignmentTargetKind,
+    ...(values.targetOrganization === undefined
+      ? {}
+      : { targetOrganizationId: values.targetOrganization }),
+    ...(values.targetPrincipal === undefined ? {} : { targetPrincipalId: values.targetPrincipal }),
+    updatedAt: record.updatedAt,
   };
 }
 
 function identityAccessInvitationGrantOptions(
   records: readonly StoredRecord[],
   authority: IdentityAccessInvitationGrantAuthoritySummary,
+  installedAppSurfaces: readonly IdentityAccessInstalledAppSurface[],
 ): IdentityAccessInvitationGrantOptions {
   return {
     authority,
     memberships: identityAccessInvitationMembershipGrantOptions(records, authority),
-    roles: identityAccessInvitationRoleGrantOptions(records, authority),
+    roles: identityAccessInvitationRoleGrantOptions(records, authority, installedAppSurfaces),
   };
 }
 
@@ -1459,23 +1610,38 @@ function identityAccessInvitationSummary(record: StoredRecord): IdentityAccessIn
 function identityAccessInvitationRoleGrantOptions(
   records: readonly StoredRecord[],
   authority: IdentityAccessInvitationGrantAuthoritySummary,
+  installedAppSurfaces: readonly IdentityAccessInstalledAppSurface[],
 ): IdentityAccessInvitationRoleGrantOption[] {
   const activeRoleKeys = new Set(
     identityAccessRecordsForEntity(records, "role")
       .filter((record) => (record.values as IdentityRoleValues).status === "active")
       .map((record) => (record.values as IdentityRoleValues).key),
   );
+  const activeOrganizations = identityAccessRecordsForEntity(records, "organization")
+    .filter((record) => (record.values as IdentityOrganizationValues).status === "active")
+    .map((record) => ({
+      displayLabel: (record.values as IdentityOrganizationValues).displayName,
+      organizationId: record.id,
+    }));
   const options: IdentityAccessInvitationRoleGrantOption[] = [];
 
   if (authority.instanceOwner && activeRoleKeys.has("instance.owner")) {
-    options.push(identityAccessInvitationRoleGrantOption("instance.owner", "instance"));
+    options.push({
+      displayLabel: identityAccessInvitationRoleGrantDisplayLabel("Instance", "instance.owner"),
+      roleKey: "instance.owner",
+      scopeKind: "instance",
+    });
   }
 
   if (
     (authority.instanceOwner || authority.instanceAdmin) &&
     activeRoleKeys.has("instance.admin")
   ) {
-    options.push(identityAccessInvitationRoleGrantOption("instance.admin", "instance"));
+    options.push({
+      displayLabel: identityAccessInvitationRoleGrantDisplayLabel("Instance", "instance.admin"),
+      roleKey: "instance.admin",
+      scopeKind: "instance",
+    });
   }
 
   for (const roleKey of appScopedInvitationRoleKeys) {
@@ -1484,26 +1650,60 @@ function identityAccessInvitationRoleGrantOptions(
     }
 
     if (authority.instanceOwner || authority.instanceAdmin) {
-      options.push(identityAccessInvitationRoleGrantOption(roleKey, "app-install"));
+      for (const app of installedAppSurfaces) {
+        options.push({
+          appInstallId: app.appInstallId,
+          displayLabel: identityAccessInvitationRoleGrantDisplayLabel(app.displayLabel, roleKey),
+          roleKey,
+          scopeKind: "app-install",
+        });
+      }
     }
 
     if (authority.instanceOwner) {
-      options.push(identityAccessInvitationRoleGrantOption(roleKey, "organization"));
+      for (const organization of activeOrganizations) {
+        options.push({
+          displayLabel: identityAccessInvitationRoleGrantDisplayLabel(
+            organization.displayLabel,
+            roleKey,
+          ),
+          roleKey,
+          scopeKind: "organization",
+          scopeOrganizationId: organization.organizationId,
+        });
+      }
     }
   }
 
-  return options;
+  return options.sort((left, right) => left.displayLabel.localeCompare(right.displayLabel));
 }
 
-function identityAccessInvitationRoleGrantOption(
+function identityAccessInvitationRoleGrantDisplayLabel(
+  surfaceLabel: string,
   roleKey: IdentityControlPlaneRoleKey,
-  scopeKind: IdentityRoleAssignmentScopeKind,
-): IdentityAccessInvitationRoleGrantOption {
-  return {
-    displayLabel: `${identityAccessRoleKeyLabel(roleKey)} (${identityAccessScopeLabel(scopeKind)})`,
-    roleKey,
-    scopeKind,
-  };
+): string {
+  return `${surfaceLabel} — ${identityAccessRoleLevelLabel(roleKey)}`;
+}
+
+function identityAccessInstalledAppSurfaces(
+  records: readonly StoredRecord[],
+): IdentityAccessInstalledAppSurface[] {
+  return records
+    .filter(
+      (record) =>
+        record.entity === "app-install" &&
+        !record.deletedAt &&
+        record.values.status === "installed",
+    )
+    .map((record) => ({
+      appInstallId: parseNonEmptyString("Identity access app install id", record.values.installId),
+      displayLabel: parseNonEmptyString("Identity access app install label", record.values.label),
+    }))
+    .sort(
+      (left, right) =>
+        left.displayLabel.localeCompare(right.displayLabel) ||
+        left.appInstallId.localeCompare(right.appInstallId),
+    );
 }
 
 function identityAccessInvitationMembershipGrantOptions(
@@ -1577,24 +1777,772 @@ function identityAccessPrimaryEmailSummary(record: StoredRecord) {
   };
 }
 
-function identityAccessRoleKeyLabel(roleKey: IdentityControlPlaneRoleKey): string {
-  return roleKey.split(".").map(identityAccessFieldLabel).join(" ");
-}
+function identityAccessRoleLevelLabel(roleKey: IdentityControlPlaneRoleKey): string {
+  const level = roleKey.split(".").at(-1) ?? roleKey;
 
-function identityAccessScopeLabel(scopeKind: IdentityRoleAssignmentScopeKind): string {
-  return identityAccessFieldLabel(scopeKind);
+  return level === "admin" ? "Administrator" : identityAccessFieldLabel(level);
 }
 
 function identityAccessFieldLabel(value: string): string {
   return value.replaceAll(/[-_]/g, " ").replace(/^\w/, (match) => match.toUpperCase());
 }
 
+function identityAccessMutationActorFromAuthorization(authorization: {
+  session?: { principalId?: string };
+  via: "admin-bearer" | "central-session" | "host-session" | "owner-session" | "open";
+}): IdentityAccessMutationActor {
+  return {
+    ...(typeof authorization.session?.principalId === "string"
+      ? { principalId: authorization.session.principalId }
+      : {}),
+    trustedAdmin: authorization.via === "admin-bearer" || authorization.via === "open",
+  };
+}
+
+function replaceIdentityAccessPersonRoles(
+  storage: DurableObjectStorage,
+  value: unknown,
+  actor: IdentityAccessMutationActor,
+): IdentityAccessPersonRoleReplacementResponse {
+  const input = parseIdentityAccessPersonRoleReplacementRequest(value);
+  const records = getBootstrapRecords(storage);
+  const authority = currentIdentityAccessMutationAuthority(records, actor);
+  const principal = currentIdentityAccessMutationPrincipal(records, input.principalId, {
+    activeOnly: true,
+  });
+  const rolesById = identityAccessRoleRecordsById(records);
+  const desiredBySurface = new Map<string, IdentityAccessPersonRoleSelection>();
+
+  for (const selection of input.roles) {
+    const surfaceKey = identityAccessRoleSelectionSurfaceKey(selection);
+
+    if (desiredBySurface.has(surfaceKey)) {
+      throw identityAccessPersonMutationError(
+        "A person may have only one active role level for each access surface.",
+        "invalid-role-selection",
+      );
+    }
+
+    if (!identityAccessRoleSelectionIsEditable(selection, authority)) {
+      throw identityAccessPersonMutationError(
+        "Current principal cannot manage the requested role assignment.",
+        "protected-assignment",
+      );
+    }
+
+    const role = identityAccessActiveRoleRecordByKey(records, selection.roleKey);
+
+    if (!role) {
+      throw identityAccessPersonMutationError(
+        `Requested role "${selection.roleKey}" is unavailable.`,
+        "invalid-role-selection",
+      );
+    }
+
+    desiredBySurface.set(surfaceKey, selection);
+  }
+
+  const currentAssignments = identityAccessPrincipalRoleAssignments(records, principal.id);
+
+  for (const assignment of currentAssignments) {
+    const roleKey = identityAccessRoleKeyForAssignment(assignment, rolesById);
+
+    if (
+      assignment.values.status === "active" &&
+      !identityAccessRoleAssignmentIsEditable(assignment, roleKey, authority) &&
+      desiredBySurface.has(identityAccessRoleAssignmentSurfaceKey(assignment))
+    ) {
+      throw identityAccessPersonMutationError(
+        "Requested roles would alter an assignment outside the current principal's authority.",
+        "protected-assignment",
+      );
+    }
+  }
+
+  assertIdentityAccessReplacementPreservesOwner(
+    records,
+    principal,
+    currentAssignments,
+    rolesById,
+    desiredBySurface,
+    authority,
+  );
+
+  const plans: OperationRecordWritePlan[] = [];
+
+  for (const assignment of currentAssignments) {
+    if (assignment.values.status !== "active") {
+      continue;
+    }
+
+    const roleKey = identityAccessRoleKeyForAssignment(assignment, rolesById);
+
+    if (!identityAccessRoleAssignmentIsEditable(assignment, roleKey, authority)) {
+      continue;
+    }
+
+    const desired = desiredBySurface.get(identityAccessRoleAssignmentSurfaceKey(assignment));
+
+    if (desired && desired.roleKey === roleKey) {
+      continue;
+    }
+
+    plans.push({
+      kind: "patch",
+      record: assignment,
+      values: {
+        ...assignment.values,
+        status: "disabled",
+      },
+    });
+  }
+
+  for (const selection of desiredBySurface.values()) {
+    const active = currentAssignments.find(
+      (assignment) =>
+        assignment.values.status === "active" &&
+        identityAccessRoleAssignmentMatchesSelection(assignment, selection, rolesById),
+    );
+
+    if (active) {
+      continue;
+    }
+
+    const disabled = currentAssignments.find(
+      (assignment) =>
+        assignment.values.status === "disabled" &&
+        identityAccessRoleAssignmentMatchesSelection(assignment, selection, rolesById),
+    );
+
+    if (disabled) {
+      plans.push({
+        kind: "patch",
+        record: disabled,
+        values: {
+          ...disabled.values,
+          status: "active",
+        },
+      });
+      continue;
+    }
+
+    const role = identityAccessActiveRoleRecordByKey(records, selection.roleKey);
+
+    if (!role) {
+      throw identityAccessPersonMutationError(
+        `Requested role "${selection.roleKey}" is unavailable.`,
+        "invalid-role-selection",
+      );
+    }
+
+    plans.push({
+      kind: "create",
+      entity: "role-assignment",
+      id: generatedIdentityRecordId("role-assignment"),
+      values: identityAccessPersonRoleAssignmentValues(principal.id, role.id, selection),
+    });
+  }
+
+  const outcome = writeRecordSetForCommandOperationOutcome(
+    storage,
+    `access-person-role-replacement:${input.principalId}:${input.idempotencyKey}`,
+    plans,
+    validateIdentityControlPlaneRecordConstraint(storage),
+    input.now === undefined ? {} : { now: input.now },
+  );
+  const currentRecords = getBootstrapRecords(storage);
+  const currentRolesById = identityAccessRoleRecordsById(currentRecords);
+
+  return {
+    principalId: principal.id,
+    roles: identityAccessPrincipalRoleAssignments(currentRecords, principal.id)
+      .filter((assignment) => assignment.values.status === "active")
+      .map((assignment) => identityAccessRoleSummary(assignment, currentRolesById)),
+    status: outcome.kind === "replay" ? "replayed" : "committed",
+  };
+}
+
+function removeIdentityAccessPerson(
+  storage: DurableObjectStorage,
+  value: unknown,
+  actor: IdentityAccessMutationActor,
+): IdentityAccessPersonRemovalResponse {
+  const input = parseIdentityAccessPersonRemovalRequest(value);
+  const records = getBootstrapRecords(storage);
+  const authority = currentIdentityAccessMutationAuthority(records, actor);
+  const principal = currentIdentityAccessMutationPrincipal(records, input.principalId, {
+    activeOnly: false,
+  });
+  const rolesById = identityAccessRoleRecordsById(records);
+  const activeAssignments = identityAccessPrincipalRoleAssignments(records, principal.id).filter(
+    (assignment) => assignment.values.status === "active",
+  );
+
+  if (
+    !authority.instanceOwner &&
+    activeAssignments.some((assignment) => {
+      const roleKey = identityAccessRoleKeyForAssignment(assignment, rolesById);
+
+      return !identityAccessRoleAssignmentIsEditable(assignment, roleKey, authority);
+    })
+  ) {
+    throw identityAccessPersonMutationError(
+      "Current principal cannot remove a person with protected role authority.",
+      "protected-assignment",
+    );
+  }
+
+  if (
+    principal.values.status === "active" &&
+    identityAccessPrincipalHasActiveOwnerAssignment(principal.id, activeAssignments, rolesById) &&
+    activeIdentityOwnerPrincipalIds(records).size <= 1
+  ) {
+    throw identityAccessPersonMutationError(
+      "The last active instance owner cannot be removed.",
+      "last-active-owner",
+    );
+  }
+
+  const removedAt = input.now ?? nowIsoString();
+  const outcome = writeRecordSetForCommandOperationOutcome(
+    storage,
+    `access-person-removal:${principal.id}:${input.idempotencyKey}`,
+    [
+      {
+        kind: "patch",
+        record: principal,
+        values: {
+          ...principal.values,
+          status: "disabled",
+        },
+      },
+    ],
+    validateIdentityControlPlaneRecordConstraint(storage),
+    { now: removedAt },
+  );
+  const removedPrincipal = outcome.response.changes
+    .map((change) => change.payload)
+    .find((record) => record.entity === "principal" && record.id === principal.id);
+
+  if (!removedPrincipal) {
+    throw new Error("Identity access person removal did not update the principal.");
+  }
+
+  return {
+    person: identityAccessPersonSummary(
+      removedPrincipal,
+      primaryIdentityAccessEmailsByPrincipal(getBootstrapRecords(storage)).get(principal.id),
+    ),
+    removedAt,
+    status: "disabled",
+  };
+}
+
+function currentIdentityAccessMutationAuthority(
+  records: readonly StoredRecord[],
+  actor: IdentityAccessMutationActor,
+): IdentityAccessMutationAuthority {
+  if (actor.trustedAdmin) {
+    return { instanceAdmin: true, instanceOwner: true };
+  }
+
+  if (actor.principalId !== undefined) {
+    const authority = resolveActiveIdentityAuthorityForPrincipal(records, actor.principalId);
+
+    if (authority?.instanceOwner || authority?.instanceAdmin) {
+      return authority;
+    }
+  }
+
+  throw identityAccessPersonMutationError(
+    "Current principal no longer has access management authority.",
+    "protected-assignment",
+  );
+}
+
+function resolveActiveIdentityAuthorityForPrincipal(
+  records: readonly StoredRecord[],
+  principalId: string,
+): IdentityAccessMutationAuthority | null {
+  const principal = records.find(
+    (record) =>
+      record.id === principalId &&
+      record.entity === "principal" &&
+      !record.deletedAt &&
+      record.values.status === "active",
+  );
+
+  if (!principal) {
+    return null;
+  }
+
+  const rolesById = identityAccessRoleRecordsById(records);
+  let instanceAdmin = false;
+  let instanceOwner = false;
+
+  for (const assignment of identityAccessPrincipalRoleAssignments(records, principal.id)) {
+    if (assignment.values.status !== "active" || assignment.values.scopeKind !== "instance") {
+      continue;
+    }
+
+    const roleKey = identityAccessRoleKeyForAssignment(assignment, rolesById);
+    const role = rolesById.get(String(assignment.values.role));
+
+    if (role?.values.status !== "active") {
+      continue;
+    }
+
+    instanceAdmin ||= roleKey === "instance.admin";
+    instanceOwner ||= roleKey === "instance.owner";
+  }
+
+  return { instanceAdmin, instanceOwner };
+}
+
+function currentIdentityAccessMutationPrincipal(
+  records: readonly StoredRecord[],
+  principalId: string,
+  options: { activeOnly: boolean },
+): StoredRecord {
+  const principal = records.find(
+    (record) => record.id === principalId && record.entity === "principal",
+  );
+
+  if (!principal || principal.deletedAt) {
+    throw identityAccessPersonMutationError(
+      "Access management person could not be found.",
+      "missing-principal",
+    );
+  }
+
+  const status = principal.values.status;
+
+  if (
+    status === "disabled" ||
+    (options.activeOnly && status !== "active") ||
+    (!options.activeOnly && status !== "active" && status !== "invited")
+  ) {
+    throw identityAccessPersonMutationError(
+      options.activeOnly
+        ? "Role replacement requires an active person."
+        : "Person removal requires an active or invited person.",
+      "inactive-principal",
+    );
+  }
+
+  return principal;
+}
+
+function identityAccessRoleRecordsById(
+  records: readonly StoredRecord[],
+): Map<string, StoredRecord> {
+  return new Map(
+    records
+      .filter((record) => record.entity === "role" && !record.deletedAt)
+      .map((record) => [record.id, record]),
+  );
+}
+
+function identityAccessActiveRoleRecordByKey(
+  records: readonly StoredRecord[],
+  roleKey: IdentityControlPlaneRoleKey,
+): StoredRecord | undefined {
+  return records.find(
+    (record) =>
+      record.entity === "role" &&
+      !record.deletedAt &&
+      record.values.status === "active" &&
+      record.values.key === roleKey,
+  );
+}
+
+function identityAccessPrincipalRoleAssignments(
+  records: readonly StoredRecord[],
+  principalId: string,
+): StoredRecord[] {
+  return records.filter(
+    (record) =>
+      record.entity === "role-assignment" &&
+      !record.deletedAt &&
+      record.values.targetKind === "principal" &&
+      record.values.targetPrincipal === principalId,
+  );
+}
+
+function identityAccessRoleKeyForAssignment(
+  assignment: StoredRecord,
+  rolesById: ReadonlyMap<string, StoredRecord>,
+): IdentityControlPlaneRoleKey {
+  const role = rolesById.get(String(assignment.values.role));
+  const roleKey = role?.values.key;
+
+  if (
+    typeof roleKey !== "string" ||
+    !identityControlPlaneRoleKeys.includes(roleKey as IdentityControlPlaneRoleKey)
+  ) {
+    throw identityAccessPersonMutationError(
+      "Person has an unsupported role assignment.",
+      "protected-assignment",
+    );
+  }
+
+  return roleKey as IdentityControlPlaneRoleKey;
+}
+
+function identityAccessRoleSelectionIsEditable(
+  selection: IdentityAccessPersonRoleSelection,
+  authority: IdentityAccessMutationAuthority,
+): boolean {
+  if (authority.instanceOwner) {
+    return true;
+  }
+
+  return (
+    authority.instanceAdmin &&
+    ((selection.scopeKind === "instance" && selection.roleKey === "instance.admin") ||
+      (selection.scopeKind === "app-install" &&
+        appScopedInvitationRoleKeys.includes(
+          selection.roleKey as (typeof appScopedInvitationRoleKeys)[number],
+        )))
+  );
+}
+
+function identityAccessRoleAssignmentIsEditable(
+  assignment: StoredRecord,
+  roleKey: IdentityControlPlaneRoleKey,
+  authority: IdentityAccessMutationAuthority,
+): boolean {
+  if (authority.instanceOwner) {
+    return true;
+  }
+
+  return (
+    authority.instanceAdmin &&
+    ((assignment.values.scopeKind === "instance" && roleKey === "instance.admin") ||
+      (assignment.values.scopeKind === "app-install" &&
+        appScopedInvitationRoleKeys.includes(
+          roleKey as (typeof appScopedInvitationRoleKeys)[number],
+        )))
+  );
+}
+
+function identityAccessRoleSelectionSurfaceKey(
+  selection: IdentityAccessPersonRoleSelection,
+): string {
+  return JSON.stringify([
+    selection.scopeKind,
+    selection.scopeKind === "app-install"
+      ? selection.appInstallId
+      : selection.scopeKind === "organization"
+        ? selection.scopeOrganizationId
+        : "",
+  ]);
+}
+
+function identityAccessRoleAssignmentSurfaceKey(assignment: StoredRecord): string {
+  return JSON.stringify([
+    assignment.values.scopeKind,
+    assignment.values.scopeKind === "app-install"
+      ? assignment.values.appInstallId
+      : assignment.values.scopeKind === "organization"
+        ? assignment.values.scopeOrganization
+        : "",
+  ]);
+}
+
+function identityAccessRoleAssignmentMatchesSelection(
+  assignment: StoredRecord,
+  selection: IdentityAccessPersonRoleSelection,
+  rolesById: ReadonlyMap<string, StoredRecord>,
+): boolean {
+  return (
+    identityAccessRoleAssignmentSurfaceKey(assignment) ===
+      identityAccessRoleSelectionSurfaceKey(selection) &&
+    identityAccessRoleKeyForAssignment(assignment, rolesById) === selection.roleKey
+  );
+}
+
+function identityAccessPersonRoleAssignmentValues(
+  principalId: string,
+  roleId: string,
+  selection: IdentityAccessPersonRoleSelection,
+): IdentityRoleAssignmentValues {
+  if (selection.scopeKind === "app-install") {
+    return {
+      appInstallId: selection.appInstallId,
+      role: roleId,
+      scopeKind: selection.scopeKind,
+      status: "active",
+      targetKind: "principal",
+      targetPrincipal: principalId,
+    };
+  }
+
+  if (selection.scopeKind === "organization") {
+    return {
+      role: roleId,
+      scopeKind: selection.scopeKind,
+      scopeOrganization: selection.scopeOrganizationId,
+      status: "active",
+      targetKind: "principal",
+      targetPrincipal: principalId,
+    };
+  }
+
+  return {
+    role: roleId,
+    scopeKind: selection.scopeKind,
+    status: "active",
+    targetKind: "principal",
+    targetPrincipal: principalId,
+  };
+}
+
+function assertIdentityAccessReplacementPreservesOwner(
+  records: readonly StoredRecord[],
+  principal: StoredRecord,
+  assignments: readonly StoredRecord[],
+  rolesById: ReadonlyMap<string, StoredRecord>,
+  desiredBySurface: ReadonlyMap<string, IdentityAccessPersonRoleSelection>,
+  authority: IdentityAccessMutationAuthority,
+) {
+  if (
+    !authority.instanceOwner ||
+    !identityAccessPrincipalHasActiveOwnerAssignment(principal.id, assignments, rolesById)
+  ) {
+    return;
+  }
+
+  const desiredInstanceRole = desiredBySurface.get(JSON.stringify(["instance", ""]));
+
+  if (desiredInstanceRole?.roleKey === "instance.owner") {
+    return;
+  }
+
+  if (activeIdentityOwnerPrincipalIds(records).size <= 1) {
+    throw identityAccessPersonMutationError(
+      "The last active instance owner cannot be removed.",
+      "last-active-owner",
+    );
+  }
+}
+
+function identityAccessPrincipalHasActiveOwnerAssignment(
+  principalId: string,
+  assignments: readonly StoredRecord[],
+  rolesById: ReadonlyMap<string, StoredRecord>,
+): boolean {
+  return assignments.some(
+    (assignment) =>
+      assignment.values.status === "active" &&
+      assignment.values.targetPrincipal === principalId &&
+      assignment.values.scopeKind === "instance" &&
+      identityAccessRoleKeyForAssignment(assignment, rolesById) === "instance.owner" &&
+      rolesById.get(String(assignment.values.role))?.values.status === "active",
+  );
+}
+
+function activeIdentityOwnerPrincipalIds(records: readonly StoredRecord[]): Set<string> {
+  const rolesById = identityAccessRoleRecordsById(records);
+  const activePrincipalIds = new Set(
+    records
+      .filter(
+        (record) =>
+          record.entity === "principal" && !record.deletedAt && record.values.status === "active",
+      )
+      .map((record) => record.id),
+  );
+  const ownerPrincipalIds = new Set<string>();
+
+  for (const record of records) {
+    if (
+      record.entity !== "role-assignment" ||
+      record.deletedAt ||
+      record.values.status !== "active" ||
+      record.values.targetKind !== "principal" ||
+      record.values.scopeKind !== "instance" ||
+      typeof record.values.targetPrincipal !== "string" ||
+      !activePrincipalIds.has(record.values.targetPrincipal)
+    ) {
+      continue;
+    }
+
+    const role = rolesById.get(String(record.values.role));
+
+    if (role?.values.status === "active" && role.values.key === "instance.owner") {
+      ownerPrincipalIds.add(record.values.targetPrincipal);
+    }
+  }
+
+  return ownerPrincipalIds;
+}
+
+function parseIdentityAccessPersonRoleReplacementRequest(
+  value: unknown,
+): IdentityAccessPersonRoleReplacementRequest {
+  const object = parseRecord("Identity access person role replacement request", value);
+
+  assertAllowedKeys("Identity access person role replacement request", object, [
+    "idempotencyKey",
+    "now",
+    "principalId",
+    "roles",
+  ]);
+
+  if (!Array.isArray(object.roles)) {
+    throw identityAccessPersonMutationError(
+      "Identity access person roles must be an array.",
+      "invalid-role-selection",
+    );
+  }
+
+  return {
+    idempotencyKey: parseNonEmptyString(
+      "Identity access person role replacement idempotencyKey",
+      object.idempotencyKey,
+    ),
+    ...(object.now === undefined
+      ? {}
+      : { now: parseIsoTimestamp("Identity access person role replacement now", object.now) }),
+    principalId: parseNonEmptyString(
+      "Identity access person role replacement principalId",
+      object.principalId,
+    ),
+    roles: object.roles.map(parseIdentityAccessPersonRoleSelection),
+  };
+}
+
+function parseIdentityAccessPersonRoleSelection(
+  value: unknown,
+  index: number,
+): IdentityAccessPersonRoleSelection {
+  const context = `Identity access person roles ${index}`;
+  const object = parseRecord(context, value);
+
+  assertAllowedKeys(context, object, [
+    "appInstallId",
+    "roleKey",
+    "scopeKind",
+    "scopeOrganizationId",
+  ]);
+
+  const roleKey = parseStringLiteral(
+    `${context} roleKey`,
+    object.roleKey,
+    identityControlPlaneRoleKeys,
+  );
+  const scopeKind = parseStringLiteral(
+    `${context} scopeKind`,
+    object.scopeKind,
+    roleAssignmentScopeKinds,
+  );
+  const appInstallId = parseOptionalNonEmptyString(`${context} appInstallId`, object.appInstallId);
+  const scopeOrganizationId = parseOptionalNonEmptyString(
+    `${context} scopeOrganizationId`,
+    object.scopeOrganizationId,
+  );
+
+  if (
+    scopeKind === "instance" &&
+    (roleKey === "instance.owner" || roleKey === "instance.admin") &&
+    appInstallId === undefined &&
+    scopeOrganizationId === undefined
+  ) {
+    return { roleKey, scopeKind };
+  }
+
+  if (
+    scopeKind === "app-install" &&
+    appScopedInvitationRoleKeys.includes(roleKey as (typeof appScopedInvitationRoleKeys)[number]) &&
+    appInstallId !== undefined &&
+    scopeOrganizationId === undefined
+  ) {
+    return {
+      appInstallId,
+      roleKey: roleKey as Extract<
+        IdentityControlPlaneRoleKey,
+        "app.admin" | "app.editor" | "app.user" | "app.viewer"
+      >,
+      scopeKind,
+    };
+  }
+
+  if (
+    scopeKind === "organization" &&
+    appScopedInvitationRoleKeys.includes(roleKey as (typeof appScopedInvitationRoleKeys)[number]) &&
+    appInstallId === undefined &&
+    scopeOrganizationId !== undefined
+  ) {
+    return {
+      roleKey: roleKey as Extract<
+        IdentityControlPlaneRoleKey,
+        "app.admin" | "app.editor" | "app.user" | "app.viewer"
+      >,
+      scopeKind,
+      scopeOrganizationId,
+    };
+  }
+
+  throw identityAccessPersonMutationError(
+    "Identity access person role selection has incompatible role and scope fields.",
+    "invalid-role-selection",
+  );
+}
+
+function parseIdentityAccessPersonRemovalRequest(
+  value: unknown,
+): IdentityAccessPersonRemovalRequest {
+  const object = parseRecord("Identity access person removal request", value);
+
+  assertAllowedKeys("Identity access person removal request", object, [
+    "idempotencyKey",
+    "now",
+    "principalId",
+  ]);
+
+  return {
+    idempotencyKey: parseNonEmptyString(
+      "Identity access person removal idempotencyKey",
+      object.idempotencyKey,
+    ),
+    ...(object.now === undefined
+      ? {}
+      : { now: parseIsoTimestamp("Identity access person removal now", object.now) }),
+    principalId: parseNonEmptyString(
+      "Identity access person removal principalId",
+      object.principalId,
+    ),
+  };
+}
+
+function identityAccessPersonMutationError(
+  message: string,
+  reason: IdentityAccessPersonMutationFailureReason,
+): IdentityAccessPersonMutationError {
+  return new IdentityAccessPersonMutationError(
+    message,
+    reason,
+    reason === "missing-principal"
+      ? 404
+      : reason === "inactive-principal" || reason === "last-active-owner"
+        ? 409
+        : reason === "protected-assignment"
+          ? 403
+          : 400,
+  );
+}
+
 function createCollaboratorInvitation(
   storage: DurableObjectStorage,
   value: unknown,
   options: { grantAuthorityPrincipalId?: string; inviterPrincipalId?: string },
+  installedAppSurfaces: readonly IdentityAccessInstalledAppSurface[],
 ): CreateCollaboratorInvitationWriteResponse {
-  const input = parseCreateCollaboratorInvitationRequest(value);
+  const input = resolveCreateCollaboratorInvitationInput(
+    storage,
+    parseCreateCollaboratorInvitationRequest(value),
+    installedAppSurfaces,
+  );
   const plans = collaboratorInvitationRecordWritePlans(input, options);
 
   if (options.grantAuthorityPrincipalId !== undefined) {
@@ -1621,6 +2569,228 @@ function createCollaboratorInvitation(
     records,
     status: outcome.kind === "replay" ? "replayed" : "committed",
   };
+}
+
+function resolveCreateCollaboratorInvitationInput(
+  storage: DurableObjectStorage,
+  input: ParsedCreateCollaboratorInvitationInput,
+  installedAppSurfaces: readonly IdentityAccessInstalledAppSurface[],
+): CreateCollaboratorInvitationInput {
+  const records = getBootstrapRecords(storage);
+  const installedAppIds = new Set(installedAppSurfaces.map((surface) => surface.appInstallId));
+  const activeOrganizationIds = new Set(
+    identityAccessRecordsForEntity(records, "organization")
+      .filter((record) => record.values.status === "active")
+      .map((record) => record.id),
+  );
+  const selectedSurfaces = new Map<string, CollaboratorInvitationTargetFacts>();
+
+  for (const [index, roleAssignment] of input.roleAssignments.entries()) {
+    const surface = collaboratorInvitationRoleSurface(roleAssignment);
+    const surfaceKey = collaboratorInvitationTargetKey(surface);
+
+    assertCollaboratorInvitationRoleLevel(records, roleAssignment, index);
+    assertCollaboratorInvitationSurfaceAvailable(surface, installedAppIds, activeOrganizationIds);
+
+    if (selectedSurfaces.has(surfaceKey)) {
+      throw new BadRequestError(
+        "Collaborator invitation may select only one role level for each access surface.",
+      );
+    }
+
+    selectedSurfaces.set(surfaceKey, surface);
+  }
+
+  for (const appRegistration of input.appRegistrations) {
+    if (!installedAppIds.has(appRegistration.appInstallId)) {
+      throw new BadRequestError(
+        `Collaborator invitation app install "${appRegistration.appInstallId}" is unavailable.`,
+      );
+    }
+  }
+
+  const acceptanceTarget = resolveCollaboratorInvitationAcceptanceTarget(input.acceptanceTarget, [
+    ...selectedSurfaces.values(),
+  ]);
+
+  assertCollaboratorInvitationSurfaceAvailable(
+    acceptanceTarget,
+    installedAppIds,
+    activeOrganizationIds,
+  );
+
+  const registeredAppIds = new Set(
+    input.appRegistrations.map((registration) => registration.appInstallId),
+  );
+  const appRegistrations = [...input.appRegistrations];
+
+  for (const surface of selectedSurfaces.values()) {
+    if (
+      surface.targetSurface === "app-install" &&
+      surface.targetAppInstallId !== undefined &&
+      !registeredAppIds.has(surface.targetAppInstallId)
+    ) {
+      appRegistrations.push({ appInstallId: surface.targetAppInstallId });
+      registeredAppIds.add(surface.targetAppInstallId);
+    }
+  }
+
+  const { acceptanceTarget: _acceptanceTarget, ...baseInput } = input;
+
+  return {
+    ...baseInput,
+    ...acceptanceTarget,
+    appRegistrations,
+  };
+}
+
+function collaboratorInvitationRoleSurface(
+  roleAssignment: CollaboratorInvitationRoleAssignmentInput,
+): CollaboratorInvitationTargetFacts {
+  if (roleAssignment.scopeKind === "app-install") {
+    return {
+      targetAppInstallId: requiredParsedString(
+        "Collaborator invitation role assignment app install id",
+        roleAssignment.appInstallId,
+      ),
+      targetSurface: "app-install",
+    };
+  }
+
+  if (roleAssignment.scopeKind === "organization") {
+    return {
+      targetOrganization: requiredParsedString(
+        "Collaborator invitation role assignment organization id",
+        roleAssignment.scopeOrganization,
+      ),
+      targetSurface: "organization",
+    };
+  }
+
+  return { targetSurface: "instance" };
+}
+
+function assertCollaboratorInvitationRoleLevel(
+  records: readonly StoredRecord[],
+  roleAssignment: CollaboratorInvitationRoleAssignmentInput,
+  index: number,
+) {
+  const role = records.find(
+    (record) =>
+      record.entity === "role" &&
+      record.id === roleAssignment.role &&
+      !record.deletedAt &&
+      record.values.status === "active",
+  );
+  const roleKey = role?.values.key;
+
+  if (
+    typeof roleKey !== "string" ||
+    !identityControlPlaneRoleKeys.includes(roleKey as IdentityControlPlaneRoleKey)
+  ) {
+    throw new BadRequestError(
+      `Collaborator invitation role assignment ${index} references an unavailable role.`,
+    );
+  }
+
+  const instanceRole = roleKey === "instance.owner" || roleKey === "instance.admin";
+  const compatible =
+    (roleAssignment.scopeKind === "instance" && instanceRole) ||
+    (roleAssignment.scopeKind !== "instance" && !instanceRole);
+
+  if (!compatible) {
+    throw new BadRequestError(
+      `Collaborator invitation role assignment ${index} role "${roleKey}" is unavailable for ${roleAssignment.scopeKind} scope.`,
+    );
+  }
+}
+
+function resolveCollaboratorInvitationAcceptanceTarget(
+  explicitTarget: CollaboratorInvitationTargetFacts | undefined,
+  selectedSurfaces: readonly CollaboratorInvitationTargetFacts[],
+): CollaboratorInvitationTargetFacts {
+  if (selectedSurfaces.length === 0) {
+    if (explicitTarget === undefined) {
+      throw new BadRequestError(
+        "Collaborator invitation requires an acceptance target when no role surface is selected.",
+      );
+    }
+
+    return explicitTarget;
+  }
+
+  if (selectedSurfaces.length === 1) {
+    const selectedSurface = selectedSurfaces[0]!;
+
+    if (
+      explicitTarget !== undefined &&
+      collaboratorInvitationTargetKey(explicitTarget) !==
+        collaboratorInvitationTargetKey(selectedSurface)
+    ) {
+      throw new BadRequestError(
+        "Collaborator invitation acceptance target must be one of its selected role surfaces.",
+      );
+    }
+
+    return selectedSurface;
+  }
+
+  if (explicitTarget === undefined) {
+    throw new BadRequestError(
+      "Collaborator invitation requires an explicit acceptance target for multiple role surfaces.",
+    );
+  }
+
+  const explicitTargetKey = collaboratorInvitationTargetKey(explicitTarget);
+
+  if (
+    !selectedSurfaces.some(
+      (surface) => collaboratorInvitationTargetKey(surface) === explicitTargetKey,
+    )
+  ) {
+    throw new BadRequestError(
+      "Collaborator invitation acceptance target must be one of its selected role surfaces.",
+    );
+  }
+
+  return explicitTarget;
+}
+
+function assertCollaboratorInvitationSurfaceAvailable(
+  surface: CollaboratorInvitationTargetFacts,
+  installedAppIds: ReadonlySet<string>,
+  activeOrganizationIds: ReadonlySet<string>,
+) {
+  if (
+    surface.targetSurface === "app-install" &&
+    (surface.targetAppInstallId === undefined || !installedAppIds.has(surface.targetAppInstallId))
+  ) {
+    throw new BadRequestError(
+      `Collaborator invitation app install "${surface.targetAppInstallId ?? ""}" is unavailable.`,
+    );
+  }
+
+  if (
+    surface.targetSurface === "organization" &&
+    (surface.targetOrganization === undefined ||
+      !activeOrganizationIds.has(surface.targetOrganization))
+  ) {
+    throw new BadRequestError(
+      `Collaborator invitation organization "${surface.targetOrganization ?? ""}" is unavailable.`,
+    );
+  }
+}
+
+function collaboratorInvitationTargetKey(target: CollaboratorInvitationTargetFacts): string {
+  if (target.targetSurface === "app-install") {
+    return `app-install:${target.targetAppInstallId ?? ""}`;
+  }
+
+  if (target.targetSurface === "organization") {
+    return `organization:${target.targetOrganization ?? ""}`;
+  }
+
+  return "instance";
 }
 
 async function revokeCollaboratorInvitationFromAccessManagement(
@@ -4474,7 +5644,7 @@ function parseEnsureIdentityOwnerRequest(value: unknown): EnsureIdentityOwnerInp
 
 function parseCreateCollaboratorInvitationRequest(
   value: unknown,
-): CreateCollaboratorInvitationInput {
+): ParsedCreateCollaboratorInvitationInput {
   const object = parseRecord("Collaborator invitation request", value);
 
   assertAllowedKeys("Collaborator invitation request", object, [
@@ -4496,14 +5666,13 @@ function parseCreateCollaboratorInvitationRequest(
     "Collaborator invitation target email",
     object.targetEmail,
   );
-  const targetFacts = parseCollaboratorInvitationTargetFacts(object);
+  const acceptanceTarget = parseOptionalCollaboratorInvitationTargetFacts(object);
   const now = parseOptionalIsoTimestamp("Collaborator invitation now", object.now);
   const expiresAt = new Date(
     new Date(now ?? new Date().toISOString()).getTime() + collaboratorInvitationLifetimeMs,
   ).toISOString();
 
   return {
-    ...targetFacts,
     targetEmail,
     expiresAt,
     idempotencyKey: parseNonEmptyString(
@@ -4524,8 +5693,29 @@ function parseCreateCollaboratorInvitationRequest(
     memberships: parseCollaboratorInvitationMemberships(object.memberships),
     roleAssignments: parseCollaboratorInvitationRoleAssignments(object.roleAssignments),
     appRegistrations: parseCollaboratorInvitationAppRegistrations(object.appRegistrations),
+    ...(acceptanceTarget === undefined ? {} : { acceptanceTarget }),
     ...(now === undefined ? {} : { now }),
   };
+}
+
+function parseOptionalCollaboratorInvitationTargetFacts(
+  object: Record<string, unknown>,
+): CollaboratorInvitationTargetFacts | undefined {
+  if (
+    object.targetSurface === undefined &&
+    object.targetAppInstallId === undefined &&
+    object.targetOrganization === undefined
+  ) {
+    return undefined;
+  }
+
+  if (object.targetSurface === undefined) {
+    throw new BadRequestError(
+      "Collaborator invitation acceptance target ids require targetSurface.",
+    );
+  }
+
+  return parseCollaboratorInvitationTargetFacts(object);
 }
 
 function parseCollaboratorInvitationTargetFacts(

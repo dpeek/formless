@@ -1,11 +1,17 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { IdentityAccessManagementSummary } from "@dpeek/formless-identity-control-plane";
+import type {
+  IdentityAccessManagementSummary,
+  IdentityAccessPersonRemovalRequest,
+  IdentityAccessPersonRoleReplacementRequest,
+} from "@dpeek/formless-identity-control-plane";
 import type { AppInstall } from "@dpeek/formless-installed-apps";
 import { fetchInstanceAppInstalls } from "../../client/app-installs.ts";
 import {
   createIdentityAccessManagementInvitation,
   fetchIdentityAccessManagementSummary,
   IdentityAccessManagementApiError,
+  removeIdentityAccessManagementPerson,
+  replaceIdentityAccessManagementPersonRoles,
   revokeIdentityAccessManagementInvitation,
   type CreateIdentityAccessManagementInvitationInput,
   type RevokeIdentityAccessManagementInvitationInput,
@@ -16,21 +22,27 @@ import { useApplicationRuntimePublicationCoordinatorContext } from "../generated
 import { instanceAccessReference } from "./access-contract.ts";
 import {
   createInitialAccessInvitationDraft,
+  type AccessConfirmationTarget,
   type AccessIntentActions,
+  type AccessInvitationDeletionState,
   type AccessInvitationDraft,
-  type AccessInvitationRevocationState,
   type AccessInvitationSubmissionState,
   type AccessManagementPresentationState,
+  type AccessPersonRemovalState,
+  type AccessPersonRoleDraft,
+  type AccessPersonRoleSubmissionState,
   type ProjectAccessOptions,
 } from "./access-projection.ts";
 import { createAccessRuntimePublicationController } from "./access-runtime.ts";
 
 export type AccessRouteDependencies = {
-  createIdempotencyKey?: () => string;
+  createIdempotencyKey?: (purpose: "invitation" | "person-removal" | "person-role") => string;
   createInvitation?: (input: CreateIdentityAccessManagementInvitationInput) => Promise<unknown>;
+  deleteInvitation?: (input: RevokeIdentityAccessManagementInvitationInput) => Promise<unknown>;
   fetchInstalls?: (options?: { signal?: AbortSignal }) => Promise<AppInstallsResponse>;
   fetchSummary?: (options?: { signal?: AbortSignal }) => Promise<IdentityAccessManagementSummary>;
-  revokeInvitation?: (input: RevokeIdentityAccessManagementInvitationInput) => Promise<unknown>;
+  removePerson?: (input: IdentityAccessPersonRemovalRequest) => Promise<unknown>;
+  replacePersonRoles?: (input: IdentityAccessPersonRoleReplacementRequest) => Promise<unknown>;
 };
 
 export function AccessRoute({ dependencies = {} }: { dependencies?: AccessRouteDependencies }) {
@@ -42,32 +54,42 @@ export function AccessRoute({ dependencies = {} }: { dependencies?: AccessRouteD
   const fetchSummary = dependencies.fetchSummary ?? fetchIdentityAccessManagementSummary;
   const createInvitation =
     dependencies.createInvitation ?? createIdentityAccessManagementInvitation;
-  const revokeInvitation =
-    dependencies.revokeInvitation ?? revokeIdentityAccessManagementInvitation;
-  const createIdempotencyKey =
-    dependencies.createIdempotencyKey ?? createAccessInvitationIdempotencyKey;
+  const deleteInvitation =
+    dependencies.deleteInvitation ?? revokeIdentityAccessManagementInvitation;
+  const replacePersonRoles =
+    dependencies.replacePersonRoles ?? replaceIdentityAccessManagementPersonRoles;
+  const removePerson = dependencies.removePerson ?? removeIdentityAccessManagementPerson;
+  const createIdempotencyKey = dependencies.createIdempotencyKey ?? createAccessIdempotencyKey;
   const [installs, setInstalls] = useState<readonly AppInstall[]>([]);
   const [state, setState] = useState<AccessManagementPresentationState>({ status: "loading" });
   const [authoringOpen, setAuthoringOpen] = useState(false);
-  const [confirmationInvitationId, setConfirmationInvitationId] = useState<string>();
+  const [confirmation, setConfirmation] = useState<AccessConfirmationTarget>();
   const [draft, setDraft] = useState<AccessInvitationDraft>(() =>
     createInitialAccessInvitationDraft({ installs: [] }),
   );
+  const [personAuthoringDraft, setPersonAuthoringDraft] = useState<AccessPersonRoleDraft>();
   const [submission, setSubmission] = useState<AccessInvitationSubmissionState>({
     status: "idle",
   });
-  const [revocation, setRevocation] = useState<AccessInvitationRevocationState>({
+  const [invitationDeletion, setInvitationDeletion] = useState<AccessInvitationDeletionState>({
+    status: "idle",
+  });
+  const [personRoleSubmission, setPersonRoleSubmission] = useState<AccessPersonRoleSubmissionState>(
+    { status: "idle" },
+  );
+  const [personRemoval, setPersonRemoval] = useState<AccessPersonRemovalState>({
     status: "idle",
   });
   const createPending = useRef(false);
-  const revokePending = useRef(false);
+  const deletePending = useRef(false);
+  const rolePending = useRef(false);
+  const removalPending = useRef(false);
   const mounted = useRef(true);
 
   useEffect(() => {
     mounted.current = true;
     const controller = new AbortController();
     let stopped = false;
-
     setState({ status: "loading" });
 
     void Promise.all([
@@ -78,9 +100,8 @@ export function AccessRoute({ dependencies = {} }: { dependencies?: AccessRouteD
         if (stopped) {
           return;
         }
-        const nextInstalls = registry.installs;
-        setInstalls(nextInstalls);
-        setDraft(createInitialAccessInvitationDraft({ installs: nextInstalls, summary }));
+        setInstalls(registry.installs);
+        setDraft(createInitialAccessInvitationDraft({ installs: registry.installs, summary }));
         setState({ status: "ready", summary });
       })
       .catch((error: unknown) => {
@@ -104,6 +125,14 @@ export function AccessRoute({ dependencies = {} }: { dependencies?: AccessRouteD
     };
   }, [fetchInstalls, fetchSummary]);
 
+  const refreshSummary = useCallback(async () => {
+    const summary = await fetchSummary();
+    if (mounted.current) {
+      setState({ status: "ready", summary });
+    }
+    return summary;
+  }, [fetchSummary]);
+
   const changeAuthoringOpen = useCallback((open: boolean) => {
     setAuthoringOpen(open);
     if (open) {
@@ -114,12 +143,28 @@ export function AccessRoute({ dependencies = {} }: { dependencies?: AccessRouteD
     setDraft(nextDraft);
     setSubmission((current) => (current.status === "failed" ? { status: "idle" } : current));
   }, []);
-  const changeRevocationConfirmation = useCallback((invitationId: string | undefined) => {
-    setConfirmationInvitationId(invitationId);
-    if (invitationId !== undefined) {
-      setRevocation({ status: "idle" });
+  const changePersonAuthoring = useCallback((nextDraft: AccessPersonRoleDraft | undefined) => {
+    setPersonAuthoringDraft(nextDraft);
+    setPersonRoleSubmission({ status: "idle" });
+  }, []);
+  const changePersonRoleDraft = useCallback((nextDraft: AccessPersonRoleDraft) => {
+    setPersonAuthoringDraft(nextDraft);
+    setPersonRoleSubmission((current) =>
+      current.status === "failed" ? { status: "idle" } : current,
+    );
+  }, []);
+  const changeConfirmation = useCallback((target: AccessConfirmationTarget | undefined) => {
+    setConfirmation(target);
+    setPersonRoleSubmission({ status: "idle" });
+    if (target?.kind === "invitation-deletion") {
+      setInvitationDeletion({ status: "idle" });
+      setPersonRemoval({ status: "idle" });
+    } else if (target?.kind === "person-removal") {
+      setInvitationDeletion({ status: "idle" });
+      setPersonRemoval({ status: "idle" });
     }
   }, []);
+
   const submitInvitation = useCallback(
     async (input: CreateIdentityAccessManagementInvitationInput) => {
       if (createPending.current) {
@@ -127,14 +172,12 @@ export function AccessRoute({ dependencies = {} }: { dependencies?: AccessRouteD
       }
       createPending.current = true;
       setSubmission({ status: "submitting" });
-
       try {
         await createInvitation(input);
-        const summary = await fetchSummary();
+        const summary = await refreshSummary();
         if (!mounted.current) {
           return;
         }
-        setState({ status: "ready", summary });
         setDraft(createInitialAccessInvitationDraft({ installs, summary }));
         setAuthoringOpen(false);
         setSubmission({ message: "Invitation created.", status: "succeeded" });
@@ -146,72 +189,165 @@ export function AccessRoute({ dependencies = {} }: { dependencies?: AccessRouteD
         createPending.current = false;
       }
     },
-    [createInvitation, fetchSummary, installs],
+    [createInvitation, installs, refreshSummary],
   );
-  const submitRevocation = useCallback(
+
+  const submitInvitationDeletion = useCallback(
     async (input: RevokeIdentityAccessManagementInvitationInput) => {
-      if (revokePending.current) {
+      if (deletePending.current) {
         return;
       }
-      revokePending.current = true;
-      setRevocation({ invitationId: input.invitationId, status: "submitting" });
-
+      deletePending.current = true;
+      setInvitationDeletion({ invitationId: input.invitationId, status: "submitting" });
       try {
-        await revokeInvitation(input);
-        const summary = await fetchSummary();
+        await deleteInvitation(input);
+        await refreshSummary();
         if (!mounted.current) {
           return;
         }
-        setState({ status: "ready", summary });
-        setConfirmationInvitationId(undefined);
-        setRevocation({
+        setConfirmation(undefined);
+        setInvitationDeletion({
           invitationId: input.invitationId,
-          message: "Invitation revoked.",
+          message: "Invitation deleted.",
           status: "succeeded",
         });
       } catch (error) {
         if (mounted.current) {
-          setRevocation({
+          setInvitationDeletion({
             invitationId: input.invitationId,
             message: accessRequestError(error),
             status: "failed",
           });
         }
       } finally {
-        revokePending.current = false;
+        deletePending.current = false;
       }
     },
-    [fetchSummary, revokeInvitation],
+    [deleteInvitation, refreshSummary],
   );
+
+  const submitPersonRoles = useCallback(
+    async (input: IdentityAccessPersonRoleReplacementRequest) => {
+      if (rolePending.current) {
+        return;
+      }
+      rolePending.current = true;
+      setPersonRoleSubmission({ personId: input.principalId, status: "submitting" });
+      try {
+        await replacePersonRoles(input);
+        await refreshSummary();
+        if (!mounted.current) {
+          return;
+        }
+        setPersonAuthoringDraft(undefined);
+        setPersonRoleSubmission({
+          message: "Roles saved.",
+          personId: input.principalId,
+          status: "succeeded",
+        });
+      } catch (error) {
+        if (mounted.current) {
+          setPersonRoleSubmission({
+            message: accessRequestError(error),
+            personId: input.principalId,
+            status: "failed",
+          });
+        }
+      } finally {
+        rolePending.current = false;
+      }
+    },
+    [refreshSummary, replacePersonRoles],
+  );
+
+  const submitPersonRemoval = useCallback(
+    async (input: IdentityAccessPersonRemovalRequest) => {
+      if (removalPending.current) {
+        return;
+      }
+      removalPending.current = true;
+      setPersonRemoval({ personId: input.principalId, status: "submitting" });
+      try {
+        await removePerson(input);
+        await refreshSummary();
+        if (!mounted.current) {
+          return;
+        }
+        setConfirmation(undefined);
+        setPersonAuthoringDraft((current) =>
+          current?.personId === input.principalId ? undefined : current,
+        );
+        setPersonRemoval({
+          message: "Person removed.",
+          personId: input.principalId,
+          status: "succeeded",
+        });
+      } catch (error) {
+        if (mounted.current) {
+          setPersonRemoval({
+            message: accessRequestError(error),
+            personId: input.principalId,
+            status: "failed",
+          });
+        }
+      } finally {
+        removalPending.current = false;
+      }
+    },
+    [refreshSummary, removePerson],
+  );
+
   const actions = useMemo<AccessIntentActions>(
     () => ({
       changeAuthoringOpen,
+      changeConfirmation,
       changeDraft,
-      changeRevocationConfirmation,
+      changePersonAuthoring,
+      changePersonRoleDraft,
       createIdempotencyKey,
-      revokeInvitation: submitRevocation,
+      deleteInvitation: submitInvitationDeletion,
+      removePerson: submitPersonRemoval,
+      replacePersonRoles: submitPersonRoles,
       submitInvitation,
     }),
     [
       changeAuthoringOpen,
+      changeConfirmation,
       changeDraft,
-      changeRevocationConfirmation,
+      changePersonAuthoring,
+      changePersonRoleDraft,
       createIdempotencyKey,
       submitInvitation,
-      submitRevocation,
+      submitInvitationDeletion,
+      submitPersonRemoval,
+      submitPersonRoles,
     ],
   );
   const input = useMemo<ProjectAccessOptions>(
     () => ({
       authoringOpen,
-      confirmationInvitationId,
+      ...(confirmation ? { confirmation } : {}),
       draft,
       installs,
-      revocation,
+      invitationDeletion,
+      ...(personAuthoringDraft ? { personAuthoringDraft } : {}),
+      personRemoval,
+      personRoleSubmission,
       state,
       submission,
     }),
-    [authoringOpen, confirmationInvitationId, draft, installs, revocation, state, submission],
+    [
+      authoringOpen,
+      confirmation,
+      draft,
+      installs,
+      invitationDeletion,
+      personAuthoringDraft,
+      personRemoval,
+      personRoleSubmission,
+      state,
+      submission,
+    ],
   );
 
   useLayoutEffect(() => {
@@ -236,7 +372,9 @@ function accessRequestError(error: unknown): string {
     : "Access management request failed.";
 }
 
-function createAccessInvitationIdempotencyKey(): string {
+function createAccessIdempotencyKey(
+  purpose: "invitation" | "person-removal" | "person-role",
+): string {
   const randomId = globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2);
-  return `access-invitation:${Date.now()}:${randomId}`;
+  return `access-${purpose}:${Date.now()}:${randomId}`;
 }

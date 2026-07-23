@@ -9,6 +9,8 @@ import {
 } from "@dpeek/formless-storage";
 import {
   IDENTITY_ACCESS_MANAGEMENT_SUMMARY_API_PATH,
+  IDENTITY_ACCESS_PERSON_REMOVAL_API_PATH,
+  IDENTITY_ACCESS_PERSON_ROLE_REPLACEMENT_API_PATH,
   IDENTITY_COLLABORATOR_INVITATIONS_API_PATH,
   IDENTITY_COLLABORATOR_INVITATION_REVOKE_API_PATH,
   IDENTITY_CONTROL_PLANE_BOUNDARY_SCHEMA_KEY,
@@ -444,6 +446,8 @@ describe("identity control-plane schema contracts", () => {
     expect(IDENTITY_CONTROL_PLANE_BOUNDARY_SCHEMA_KEY).toBe("auth");
     expect(IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX).toBe("/api/formless/identity");
     expect(IDENTITY_ACCESS_MANAGEMENT_SUMMARY_API_PATH).toBe("/access-summary");
+    expect(IDENTITY_ACCESS_PERSON_ROLE_REPLACEMENT_API_PATH).toBe("/access-people/replace-roles");
+    expect(IDENTITY_ACCESS_PERSON_REMOVAL_API_PATH).toBe("/access-people/remove");
     expect(IDENTITY_COLLABORATOR_INVITATIONS_API_PATH).toBe("/collaborator-invitations");
     expect(IDENTITY_COLLABORATOR_INVITATION_REVOKE_API_PATH).toBe(
       "/collaborator-invitations/revoke",
@@ -837,6 +841,48 @@ describe("identity control-plane schema contracts", () => {
         roleAssignmentRecord("role-assignment:ada-owner-duplicate"),
       ]),
     ).toThrow('violates identity uniqueness "auth:role-assignment.uniqueActiveAssignment"');
+    expect(() =>
+      validateIdentityControlPlaneRecords("Identity records", [
+        ...records,
+        roleRecord("role:admin", {
+          displayLabel: "Administrator",
+          key: "instance.admin",
+        }),
+        roleAssignmentRecord("role-assignment:ada-admin-conflict", {
+          role: "role:admin",
+        }),
+      ]),
+    ).toThrow('violates identity uniqueness "auth:role-assignment.uniqueActiveAssignment"');
+    expect(() =>
+      validateIdentityControlPlaneRecords("Identity records", [
+        ...replaceRecord(
+          records,
+          roleAssignmentRecord("role-assignment:ada-owner", {
+            status: "disabled",
+          }),
+        ),
+        roleRecord("role:admin", {
+          displayLabel: "Administrator",
+          key: "instance.admin",
+        }),
+        roleAssignmentRecord("role-assignment:ada-admin-replacement", {
+          role: "role:admin",
+        }),
+      ]),
+    ).not.toThrow();
+    expect(() =>
+      validateIdentityControlPlaneRecords("Identity records", [
+        ...records,
+        roleAssignmentRecord("role-assignment:ada-owner-app", {
+          appInstallId: "site",
+          scopeKind: "app-install",
+        }),
+        roleAssignmentRecord("role-assignment:ada-owner-other-app", {
+          appInstallId: "tasks",
+          scopeKind: "app-install",
+        }),
+      ]),
+    ).not.toThrow();
     expect(() =>
       validateIdentityControlPlaneRecords("Identity records", [
         ...records,

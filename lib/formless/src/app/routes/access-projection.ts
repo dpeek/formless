@@ -4,20 +4,26 @@ import type {
   AccessControlledFieldContract,
   AccessDisplayFactContract,
   AccessFeedbackContract,
-  AccessGrantOptionContract,
-  AccessGrantOptionGroupContract,
-  AccessGrantSelectionContract,
   AccessIntent,
   AccessInvitationAuthoringContract,
   AccessInvitationAuthoringOpenChangeIntent,
   AccessInvitationContract,
+  AccessInvitationDeleteIntent,
+  AccessInvitationDeletionConfirmationOpenChangeIntent,
   AccessInvitationFieldPurpose,
-  AccessInvitationRevocationConfirmationOpenChangeIntent,
-  AccessInvitationRevokeIntent,
   AccessInvitationSubmitIntent,
   AccessManifestContract,
+  AccessMembershipOptionGroupContract,
+  AccessMembershipSelectionContract,
   AccessPersonContract,
+  AccessPersonRemoveIntent,
+  AccessPersonRemovalConfirmationOpenChangeIntent,
+  AccessPersonRoleAuthoringContract,
+  AccessPersonRoleAuthoringOpenChangeIntent,
+  AccessPersonRoleSubmitIntent,
   AccessReadyContract,
+  AccessRoleOptionContract,
+  AccessRoleSelectionContract,
   ButtonContract,
   CompactStatusIntent,
 } from "@dpeek/formless-presentation/contract";
@@ -27,8 +33,9 @@ import type {
   IdentityAccessInvitationRoleGrantOption,
   IdentityAccessInvitationSummary,
   IdentityAccessManagementSummary,
+  IdentityAccessPersonRoleReplacementRequest,
+  IdentityAccessPersonRoleSelection,
   IdentityAccessRoleSummary,
-  IdentityInvitationTargetSurface,
 } from "@dpeek/formless-identity-control-plane";
 import type { AppInstall } from "@dpeek/formless-installed-apps";
 import type {
@@ -40,6 +47,7 @@ import {
   INSTANCE_ACCESS_ID,
   instanceAccessInvitationAuthoringReference,
   instanceAccessLoadingManifest,
+  instanceAccessPersonRoleAuthoringReference,
 } from "./access-contract.ts";
 
 const ACCESS_INVITE_ACTION_ID = `${INSTANCE_ACCESS_ID}:invite`;
@@ -50,11 +58,7 @@ const ACCESS_AUTHORING_SUBMIT_ACTION_ID = `${INSTANCE_ACCESS_ID}:authoring-submi
 const ACCESS_AUTHORING_SUBMIT_CONTROL_ID = `${INSTANCE_ACCESS_ID}:authoring-submit-control`;
 const ACCESS_ROLE_SELECTION_ID = `${INSTANCE_ACCESS_ID}:role-grants`;
 const ACCESS_MEMBERSHIP_SELECTION_ID = `${INSTANCE_ACCESS_ID}:membership-grants`;
-const ACCESS_REVOCATION_CONFIRMATION_ID = `${INSTANCE_ACCESS_ID}:revocation-confirmation`;
-const ACCESS_REVOCATION_CANCEL_ACTION_ID = `${INSTANCE_ACCESS_ID}:revocation-cancel`;
-const ACCESS_REVOCATION_CANCEL_CONTROL_ID = `${INSTANCE_ACCESS_ID}:revocation-cancel-control`;
-const ACCESS_REVOCATION_ACTION_ID = `${INSTANCE_ACCESS_ID}:revoke`;
-const ACCESS_REVOCATION_CONTROL_ID = `${INSTANCE_ACCESS_ID}:revoke-control`;
+const ACCESS_CONFIRMATION_ID = `${INSTANCE_ACCESS_ID}:destructive-confirmation`;
 
 export type AccessManagementPresentationState =
   | { message: string; status: "failed" }
@@ -63,13 +67,16 @@ export type AccessManagementPresentationState =
   | { message: string; status: "unauthorized" };
 
 export type AccessInvitationDraft = {
+  acceptanceTargetId: string;
   displayName: string;
   membershipOptionIds: readonly string[];
   roleOptionIds: readonly string[];
-  targetAppInstallId: string;
   targetEmail: string;
-  targetOrganizationId: string;
-  targetSurface: IdentityInvitationTargetSurface;
+};
+
+export type AccessPersonRoleDraft = {
+  personId: string;
+  roleOptionIds: readonly string[];
 };
 
 export type AccessInvitationSubmissionState =
@@ -78,18 +85,37 @@ export type AccessInvitationSubmissionState =
   | { message: string; status: "succeeded" }
   | { status: "submitting" };
 
-export type AccessInvitationRevocationState =
+export type AccessInvitationDeletionState =
   | { invitationId: string; message: string; status: "failed" }
   | { status: "idle" }
   | { invitationId: string; message: string; status: "succeeded" }
   | { invitationId: string; status: "submitting" };
 
+export type AccessPersonRoleSubmissionState =
+  | { message: string; personId: string; status: "failed" }
+  | { status: "idle" }
+  | { message: string; personId: string; status: "succeeded" }
+  | { personId: string; status: "submitting" };
+
+export type AccessPersonRemovalState =
+  | { message: string; personId: string; status: "failed" }
+  | { status: "idle" }
+  | { message: string; personId: string; status: "succeeded" }
+  | { personId: string; status: "submitting" };
+
+export type AccessConfirmationTarget =
+  | { invitationId: string; kind: "invitation-deletion" }
+  | { kind: "person-removal"; personId: string };
+
 export type ProjectAccessOptions = {
   authoringOpen: boolean;
-  confirmationInvitationId?: string | undefined;
+  confirmation?: AccessConfirmationTarget | undefined;
   draft: AccessInvitationDraft;
   installs: readonly AppInstall[];
-  revocation: AccessInvitationRevocationState;
+  invitationDeletion: AccessInvitationDeletionState;
+  personAuthoringDraft?: AccessPersonRoleDraft | undefined;
+  personRemoval: AccessPersonRemovalState;
+  personRoleSubmission: AccessPersonRoleSubmissionState;
   state: AccessManagementPresentationState;
   submission: AccessInvitationSubmissionState;
 };
@@ -97,43 +123,89 @@ export type ProjectAccessOptions = {
 export type AccessProjection = {
   authoring?: AccessInvitationAuthoringContract | undefined;
   manifest: AccessManifestContract;
+  personAuthoring?: AccessPersonRoleAuthoringContract | undefined;
 };
 
 export type ResolvedAccessIntent =
-  | { draft: AccessInvitationDraft; kind: "draftChange" }
+  | { draft: AccessInvitationDraft; kind: "invitationDraftChange" }
+  | { draft: AccessPersonRoleDraft; kind: "personRoleDraftChange" }
+  | { kind: "authoringOpenChange"; open: boolean }
+  | { kind: "confirmationChange"; target: AccessConfirmationTarget | undefined }
+  | { kind: "deleteInvitation"; invitationId: string }
   | { kind: "ignored" }
   | {
       kind: "invitationSubmit";
       request: Omit<CreateIdentityAccessManagementInvitationInput, "idempotencyKey">;
     }
-  | { invitationId: string | undefined; kind: "revocationConfirmationChange" }
-  | { invitationId: string; kind: "revokeInvitation" }
-  | { kind: "authoringOpenChange"; open: boolean };
+  | {
+      draft: AccessPersonRoleDraft | undefined;
+      kind: "personAuthoringChange";
+    }
+  | {
+      kind: "personRoleSubmit";
+      request: Omit<IdentityAccessPersonRoleReplacementRequest, "idempotencyKey">;
+    }
+  | { kind: "removePerson"; personId: string };
 
 export type AccessIntentActions = {
   changeAuthoringOpen(open: boolean): void;
+  changeConfirmation(target: AccessConfirmationTarget | undefined): void;
   changeDraft(draft: AccessInvitationDraft): void;
-  changeRevocationConfirmation(invitationId: string | undefined): void;
-  createIdempotencyKey(): string;
-  revokeInvitation(input: RevokeIdentityAccessManagementInvitationInput): Promise<void> | void;
+  changePersonAuthoring(draft: AccessPersonRoleDraft | undefined): void;
+  changePersonRoleDraft(draft: AccessPersonRoleDraft): void;
+  createIdempotencyKey(purpose: "invitation" | "person-removal" | "person-role"): string;
+  deleteInvitation(input: RevokeIdentityAccessManagementInvitationInput): Promise<void> | void;
+  removePerson(input: { idempotencyKey: string; principalId: string }): Promise<void> | void;
+  replacePersonRoles(input: IdentityAccessPersonRoleReplacementRequest): Promise<void> | void;
   submitInvitation(input: CreateIdentityAccessManagementInvitationInput): Promise<void> | void;
 };
 
+type AccessLabels = {
+  groups: ReadonlyMap<string, string>;
+  installs: ReadonlyMap<string, string>;
+  organizations: ReadonlyMap<string, string>;
+  people: ReadonlyMap<string, string>;
+};
+
+type ProjectedRoleChoice = AccessRoleOptionContract & {
+  role: IdentityAccessInvitationRoleGrantOption;
+  surfaceLabel: string;
+};
+
 export function createInitialAccessInvitationDraft({
-  installs,
-  summary,
+  installs: _installs,
+  summary: _summary,
 }: {
   installs: readonly AppInstall[];
   summary?: IdentityAccessManagementSummary | undefined;
 }): AccessInvitationDraft {
   return {
+    acceptanceTargetId: "",
     displayName: "",
     membershipOptionIds: [],
     roleOptionIds: [],
-    targetAppInstallId: installs[0]?.installId ?? "",
     targetEmail: "",
-    targetOrganizationId: summary?.organizations[0]?.organizationId ?? "",
-    targetSurface: "instance",
+  };
+}
+
+export function createInitialAccessPersonRoleDraft(
+  summary: IdentityAccessManagementSummary,
+  personId: string,
+): AccessPersonRoleDraft {
+  const choices = projectRoleChoices(summary.invitationGrantOptions, accessLabels(summary, []));
+  const choiceIds = new Set(choices.map(({ id }) => id));
+
+  return {
+    personId,
+    roleOptionIds: summary.roles
+      .filter(
+        (role) =>
+          role.status === "active" &&
+          role.targetKind === "principal" &&
+          role.targetPrincipalId === personId,
+      )
+      .map(accessRoleSummaryOptionId)
+      .filter((id) => choiceIds.has(id)),
   };
 }
 
@@ -148,7 +220,6 @@ export function projectAccess(options: ProjectAccessOptions): AccessProjection {
   if (options.state.status === "loading") {
     return { manifest: instanceAccessLoadingManifest };
   }
-
   if (options.state.status === "unauthorized") {
     return {
       manifest: {
@@ -158,7 +229,6 @@ export function projectAccess(options: ProjectAccessOptions): AccessProjection {
       },
     };
   }
-
   if (options.state.status === "failed") {
     return {
       manifest: {
@@ -176,25 +246,27 @@ export function projectAccess(options: ProjectAccessOptions): AccessProjection {
 
   const summary = options.state.summary;
   const labels = accessLabels(summary, options.installs);
-  const authoring = projectAccessInvitationAuthoring(options, summary, labels);
-  const people = projectAccessPeople(summary, labels);
+  const roleChoices = projectRoleChoices(summary.invitationGrantOptions, labels);
+  const authoring = projectAccessInvitationAuthoring(options, summary, roleChoices, labels);
+  const people = projectAccessPeople(options, summary, roleChoices, labels);
   const invitations = projectAccessInvitations(options, summary, labels);
-  const confirmation = projectAccessConfirmation(options, invitations);
+  const personAuthoring = projectAccessPersonRoleAuthoring(options, summary, roleChoices);
+  const confirmation = projectAccessConfirmation(options, people, invitations);
   const manifest: AccessReadyContract = {
     ...base,
     authoring: instanceAccessInvitationAuthoringReference,
-    ...(confirmation === undefined ? {} : { confirmation }),
+    ...(confirmation ? { confirmation } : {}),
     ...(invitations.length === 0
       ? {
           invitationsEmptyState: {
             description: "Invite a collaborator to add access.",
             id: `${INSTANCE_ACCESS_ID}:invitations:empty`,
-            kind: "accessEmptyState",
+            kind: "accessEmptyState" as const,
             title: "No invitations",
           },
         }
       : {}),
-    ...(readyFeedback(options) === undefined ? {} : { feedback: readyFeedback(options) }),
+    ...(readyFeedback(options) ? { feedback: readyFeedback(options) } : {}),
     invitations,
     invite: accessInviteAction(summary, options.submission),
     kind: "accessManifest",
@@ -204,15 +276,18 @@ export function projectAccess(options: ProjectAccessOptions): AccessProjection {
           peopleEmptyState: {
             description: "Invite a collaborator to add access.",
             id: `${INSTANCE_ACCESS_ID}:people:empty`,
-            kind: "accessEmptyState",
+            kind: "accessEmptyState" as const,
             title: "No people",
           },
         }
       : {}),
+    ...(personAuthoring
+      ? { personAuthoring: instanceAccessPersonRoleAuthoringReference(personAuthoring.personId) }
+      : {}),
     state: "ready",
   };
 
-  return { authoring, manifest };
+  return { authoring, manifest, ...(personAuthoring ? { personAuthoring } : {}) };
 }
 
 export function resolveAccessIntent(
@@ -224,25 +299,25 @@ export function resolveAccessIntent(
     return { kind: "ignored" };
   }
 
-  const authoring = projection.authoring;
-  if (!authoring) {
-    return { kind: "ignored" };
-  }
-
   switch (intent.type) {
     case "accessInvitationAuthoringOpenChange": {
+      const authoring = projection.authoring;
+      if (!authoring) {
+        return { kind: "ignored" };
+      }
       const expected = intent.open ? projection.manifest.invite : authoring.cancel;
       return sameAccessActionIntent(intent, expected.intent) && expected.control.disabled !== true
         ? { kind: "authoringOpenChange", open: intent.open }
         : { kind: "ignored" };
     }
     case "accessInvitationFieldChange": {
-      if (authoring.pending?.isPending) {
+      const authoring = projection.authoring;
+      if (!authoring || authoring.pending?.isPending) {
         return { kind: "ignored" };
       }
       const field = Object.values(authoring.fields).find(
         (candidate) =>
-          candidate.id === intent.fieldId &&
+          candidate?.id === intent.fieldId &&
           candidate.changeIntent.authoringId === intent.authoringId,
       );
       if (!field || field.disabledReason) {
@@ -258,76 +333,166 @@ export function resolveAccessIntent(
       }
       return {
         draft: accessDraftWithFieldValue(options.draft, field.purpose, intent.value),
-        kind: "draftChange",
+        kind: "invitationDraftChange",
       };
     }
-    case "accessInvitationGrantSelection": {
-      if (authoring.pending?.isPending) {
-        return { kind: "ignored" };
-      }
-      const selection = authoring.grantSelections.find(
-        (candidate) => candidate.id === intent.controlId,
-      );
-      const group = selection?.groups.find((candidate) => candidate.id === intent.groupId);
-      const option = group?.options.find((candidate) => candidate.id === intent.optionId);
+    case "accessInvitationRoleSelectionChange": {
+      const authoring = projection.authoring;
       if (
-        !selection ||
-        !option ||
-        selection.disabledReason ||
-        option.disabledReason ||
-        option.selectionIntent.selected !== intent.selected ||
-        option.selected === intent.selected
+        !authoring ||
+        authoring.pending?.isPending ||
+        !sameSelectionIntent(intent, authoring.roleSelection.changeIntent) ||
+        !validSelectedRoleOptionIds(authoring.roleSelection, intent.selectedOptionIds)
       ) {
         return { kind: "ignored" };
       }
-      const current =
-        selection.purpose === "roles"
-          ? options.draft.roleOptionIds
-          : options.draft.membershipOptionIds;
-      const next = toggleAccessOption(current, option.id, intent.selected);
       return {
-        draft:
-          selection.purpose === "roles"
-            ? { ...options.draft, roleOptionIds: next }
-            : { ...options.draft, membershipOptionIds: next },
-        kind: "draftChange",
+        draft: accessInvitationDraftWithRoles(
+          options.draft,
+          authoring.roleSelection,
+          intent.selectedOptionIds,
+        ),
+        kind: "invitationDraftChange",
       };
     }
-    case "accessInvitationSubmit":
-      return sameAccessActionIntent(intent, authoring.submit.intent) &&
+    case "accessInvitationMembershipSelectionChange": {
+      const authoring = projection.authoring;
+      const membership = authoring?.membershipSelection;
+      const availableIds = new Set(
+        membership?.groups.flatMap((group) =>
+          group.options.filter((option) => !option.disabledReason).map(({ id }) => id),
+        ) ?? [],
+      );
+      if (
+        !authoring ||
+        !membership ||
+        authoring.pending?.isPending ||
+        !sameSelectionIntent(intent, membership.changeIntent) ||
+        !distinctStrings(intent.selectedOptionIds).every((id) => availableIds.has(id))
+      ) {
+        return { kind: "ignored" };
+      }
+      return {
+        draft: { ...options.draft, membershipOptionIds: [...intent.selectedOptionIds] },
+        kind: "invitationDraftChange",
+      };
+    }
+    case "accessInvitationSubmit": {
+      const authoring = projection.authoring;
+      return authoring &&
+        sameAccessActionIntent(intent, authoring.submit.intent) &&
         authoring.submit.control.disabled !== true
-        ? {
-            kind: "invitationSubmit",
-            request: accessInvitationRequest(options, authoring),
-          }
+        ? { kind: "invitationSubmit", request: accessInvitationRequest(options, authoring) }
         : { kind: "ignored" };
-    case "accessInvitationRevocationConfirmationOpenChange": {
+    }
+    case "accessPersonRoleAuthoringOpenChange": {
       if (!intent.open) {
-        const confirmation = projection.manifest.confirmation;
-        return confirmation && sameAccessActionIntent(intent, confirmation.cancel.intent)
-          ? { invitationId: undefined, kind: "revocationConfirmationChange" }
+        const authoring = projection.personAuthoring;
+        return authoring &&
+          sameAccessActionIntent(intent, authoring.cancel.intent) &&
+          authoring.cancel.control.disabled !== true
+          ? { draft: undefined, kind: "personAuthoringChange" }
           : { kind: "ignored" };
       }
-      const invitation = projection.manifest.invitations.find(
-        (candidate) => candidate.id === intent.invitationId,
-      );
+      const person = projection.manifest.people.find(({ id }) => id === intent.personId);
       const action =
-        invitation?.revocation.availability === "available"
-          ? invitation.revocation.action
+        person?.roleAuthoring.availability === "available"
+          ? person.roleAuthoring.action
           : undefined;
       return action &&
         action.control.disabled !== true &&
-        sameAccessActionIntent(intent, action.intent)
-        ? { invitationId: intent.invitationId, kind: "revocationConfirmationChange" }
+        sameAccessActionIntent(intent, action.intent) &&
+        options.state.status === "ready"
+        ? {
+            draft: createInitialAccessPersonRoleDraft(options.state.summary, intent.personId),
+            kind: "personAuthoringChange",
+          }
         : { kind: "ignored" };
     }
-    case "accessInvitationRevoke": {
+    case "accessPersonRoleSelectionChange": {
+      const authoring = projection.personAuthoring;
+      if (
+        !authoring ||
+        authoring.pending?.isPending ||
+        !sameSelectionIntent(intent, authoring.roleSelection.changeIntent) ||
+        !validSelectedRoleOptionIds(authoring.roleSelection, intent.selectedOptionIds)
+      ) {
+        return { kind: "ignored" };
+      }
+      return {
+        draft: { personId: authoring.personId, roleOptionIds: [...intent.selectedOptionIds] },
+        kind: "personRoleDraftChange",
+      };
+    }
+    case "accessPersonRoleSubmit": {
+      const authoring = projection.personAuthoring;
+      return authoring &&
+        sameAccessActionIntent(intent, authoring.save.intent) &&
+        authoring.save.control.disabled !== true
+        ? {
+            kind: "personRoleSubmit",
+            request: accessPersonRoleRequest(options, authoring),
+          }
+        : { kind: "ignored" };
+    }
+    case "accessInvitationDeletionConfirmationOpenChange": {
+      if (!intent.open) {
+        const confirmation = projection.manifest.confirmation;
+        return confirmation?.purpose === "invitation-deletion" &&
+          sameAccessActionIntent(intent, confirmation.cancel.intent)
+          ? { kind: "confirmationChange", target: undefined }
+          : { kind: "ignored" };
+      }
+      const invitation = projection.manifest.invitations.find(
+        ({ id }) => id === intent.invitationId,
+      );
+      const action =
+        invitation?.deletion.availability === "available" ? invitation.deletion.action : undefined;
+      return action &&
+        action.control.disabled !== true &&
+        sameAccessActionIntent(intent, action.intent)
+        ? {
+            kind: "confirmationChange",
+            target: { invitationId: intent.invitationId, kind: "invitation-deletion" },
+          }
+        : { kind: "ignored" };
+    }
+    case "accessInvitationDelete": {
       const confirmation = projection.manifest.confirmation;
-      return confirmation &&
+      return confirmation?.purpose === "invitation-deletion" &&
         confirmation.open &&
         confirmation.action.control.disabled !== true &&
         sameAccessActionIntent(intent, confirmation.action.intent)
-        ? { invitationId: confirmation.invitationId, kind: "revokeInvitation" }
+        ? { invitationId: confirmation.invitationId, kind: "deleteInvitation" }
+        : { kind: "ignored" };
+    }
+    case "accessPersonRemovalConfirmationOpenChange": {
+      if (!intent.open) {
+        const confirmation = projection.manifest.confirmation;
+        return confirmation?.purpose === "person-removal" &&
+          sameAccessActionIntent(intent, confirmation.cancel.intent)
+          ? { kind: "confirmationChange", target: undefined }
+          : { kind: "ignored" };
+      }
+      const person = projection.manifest.people.find(({ id }) => id === intent.personId);
+      const action =
+        person?.removal.availability === "available" ? person.removal.action : undefined;
+      return action &&
+        action.control.disabled !== true &&
+        sameAccessActionIntent(intent, action.intent)
+        ? {
+            kind: "confirmationChange",
+            target: { kind: "person-removal", personId: intent.personId },
+          }
+        : { kind: "ignored" };
+    }
+    case "accessPersonRemove": {
+      const confirmation = projection.manifest.confirmation;
+      return confirmation?.purpose === "person-removal" &&
+        confirmation.open &&
+        confirmation.action.control.disabled !== true &&
+        sameAccessActionIntent(intent, confirmation.action.intent)
+        ? { kind: "removePerson", personId: confirmation.personId }
         : { kind: "ignored" };
     }
   }
@@ -347,38 +512,63 @@ export async function dispatchAccessIntent(
     case "authoringOpenChange":
       actions.changeAuthoringOpen(resolved.open);
       return;
-    case "draftChange":
+    case "confirmationChange":
+      actions.changeConfirmation(resolved.target);
+      return;
+    case "invitationDraftChange":
       actions.changeDraft(resolved.draft);
       return;
-    case "revocationConfirmationChange":
-      actions.changeRevocationConfirmation(resolved.invitationId);
+    case "personAuthoringChange":
+      actions.changePersonAuthoring(resolved.draft);
+      return;
+    case "personRoleDraftChange":
+      actions.changePersonRoleDraft(resolved.draft);
       return;
     case "invitationSubmit":
       await actions.submitInvitation({
         ...resolved.request,
-        idempotencyKey: actions.createIdempotencyKey(),
+        idempotencyKey: actions.createIdempotencyKey("invitation"),
       });
       return;
-    case "revokeInvitation":
-      await actions.revokeInvitation({ invitationId: resolved.invitationId });
+    case "personRoleSubmit":
+      await actions.replacePersonRoles({
+        ...resolved.request,
+        idempotencyKey: actions.createIdempotencyKey("person-role"),
+      });
+      return;
+    case "deleteInvitation":
+      await actions.deleteInvitation({ invitationId: resolved.invitationId });
+      return;
+    case "removePerson":
+      await actions.removePerson({
+        idempotencyKey: actions.createIdempotencyKey("person-removal"),
+        principalId: resolved.personId,
+      });
   }
 }
 
 function projectAccessInvitationAuthoring(
   options: ProjectAccessOptions,
   summary: IdentityAccessManagementSummary,
+  choices: readonly ProjectedRoleChoice[],
   labels: AccessLabels,
 ): AccessInvitationAuthoringContract {
   const pending = options.submission.status === "submitting";
-  const fields = projectAccessAuthoringFields(options, labels);
-  const roleSelection = projectRoleSelection(options, summary.invitationGrantOptions, labels);
+  const roleSelection = projectRoleSelection({
+    authoringId: instanceAccessInvitationAuthoringReference.authoringId,
+    choices,
+    pendingReason: pending ? "Invitation creation is in progress." : undefined,
+    selectedOptionIds: options.draft.roleOptionIds,
+    type: "invitation",
+  });
+  const fields = projectAccessAuthoringFields(options, roleSelection, choices);
   const membershipSelection = projectMembershipSelection(
     options,
     summary.invitationGrantOptions,
     labels,
   );
   const errors = [
-    ...Object.values(fields).flatMap((field) => field.errors),
+    ...Object.values(fields).flatMap((field) => field?.errors ?? []),
     ...roleSelection.errors,
     ...membershipSelection.errors,
   ];
@@ -389,15 +579,14 @@ function projectAccessInvitationAuthoring(
     "button",
     pending ? "Invitation creation is in progress." : undefined,
   );
-  const submitDisabledReason = pending
-    ? "Invitation creation is in progress."
-    : (errors[0] ?? invitationAuthorityDisabledReason(summary.invitationGrantOptions));
   const submitControl = accessButton(
     ACCESS_AUTHORING_SUBMIT_CONTROL_ID,
     pending ? "Sending..." : "Send invite",
     "primary",
     "submit",
-    submitDisabledReason,
+    pending
+      ? "Invitation creation is in progress."
+      : (errors[0] ?? invitationAuthorityDisabledReason(summary.invitationGrantOptions)),
   );
 
   return {
@@ -429,11 +618,12 @@ function projectAccessInvitationAuthoring(
         }
       : {}),
     fields,
-    grantSelections: [roleSelection, membershipSelection],
     id: instanceAccessInvitationAuthoringReference.authoringId,
     kind: "accessInvitationAuthoring",
+    membershipSelection,
     open: options.authoringOpen,
     ...(pending ? { pending: { isPending: true, label: "Sending invitation" } } : {}),
+    roleSelection,
     submit: {
       control: submitControl,
       id: ACCESS_AUTHORING_SUBMIT_ACTION_ID,
@@ -453,196 +643,124 @@ function projectAccessInvitationAuthoring(
 
 function projectAccessAuthoringFields(
   options: ProjectAccessOptions,
-  labels: AccessLabels,
+  roleSelection: AccessRoleSelectionContract,
+  choices: readonly ProjectedRoleChoice[],
 ): AccessInvitationAuthoringContract["fields"] {
-  const { draft } = options;
   const pendingReason =
     options.submission.status === "submitting" ? "Invitation creation is in progress." : undefined;
-  const appOptions = Array.from(labels.installs.entries()).map(([installId, label]) =>
-    fieldOption("app-install", installId, label, installId === draft.targetAppInstallId),
-  );
-  const organizationOptions = Array.from(labels.organizations.entries()).map(
-    ([organizationId, label]) =>
-      fieldOption(
-        "organization",
-        organizationId,
-        label,
-        organizationId === draft.targetOrganizationId,
-      ),
-  );
-  const surfaceOptions = [
-    fieldOption("surface", "instance", "Instance", draft.targetSurface === "instance"),
-    ...(appOptions.length > 0
-      ? [
-          fieldOption(
-            "surface",
-            "app-install",
-            "App install",
-            draft.targetSurface === "app-install",
-          ),
-        ]
-      : []),
-    ...(organizationOptions.length > 0
-      ? [
-          fieldOption(
-            "surface",
-            "organization",
-            "Organization",
-            draft.targetSurface === "organization",
-          ),
-        ]
-      : []),
-  ];
+  const selectedSurfaceIds = selectedRoleSurfaceIds(roleSelection, choices);
+  const acceptanceOptions = selectedSurfaceIds.map((surfaceId) => {
+    const choice = choices.find((candidate) => candidate.surfaceId === surfaceId);
+    return fieldOption(
+      "acceptance-target",
+      surfaceId,
+      choice?.surfaceLabel ?? "Unavailable surface",
+      surfaceId === options.draft.acceptanceTargetId,
+    );
+  });
+  const acceptanceTarget =
+    acceptanceOptions.length > 1
+      ? accessField({
+          disabledReason: pendingReason,
+          errors: acceptanceOptions.some(
+            (option) => option.value === options.draft.acceptanceTargetId,
+          )
+            ? []
+            : ["Choose where the invitation continues after acceptance."],
+          inputKind: "select",
+          label: "Continue to",
+          options: acceptanceOptions,
+          purpose: "acceptance-target",
+          required: true,
+          value: options.draft.acceptanceTargetId,
+        })
+      : undefined;
 
   return {
+    ...(acceptanceTarget ? { acceptanceTarget } : {}),
     displayName: accessField({
       disabledReason: pendingReason,
-      errors: requiredTextErrors("Name", draft.displayName),
+      errors: requiredTextErrors("Name", options.draft.displayName),
       inputKind: "text",
       label: "Name",
       purpose: "display-name",
       required: true,
-      value: draft.displayName,
-    }),
-    targetAppInstall: accessField({
-      disabledReason:
-        pendingReason ??
-        (appOptions.length === 0
-          ? "No app installs are available."
-          : draft.targetSurface === "app-install"
-            ? undefined
-            : "Choose App install as the target surface."),
-      errors:
-        draft.targetSurface === "app-install" && !labels.installs.has(draft.targetAppInstallId)
-          ? ["Choose an available app install scope."]
-          : [],
-      inputKind: "select",
-      label: "Scope",
-      options: appOptions,
-      purpose: "target-app-install",
-      required: false,
-      value: draft.targetAppInstallId,
+      value: options.draft.displayName,
     }),
     targetEmail: accessField({
       disabledReason: pendingReason,
-      errors: emailErrors(draft.targetEmail),
+      errors: emailErrors(options.draft.targetEmail),
       inputKind: "email",
       label: "Email",
       purpose: "target-email",
       required: true,
-      value: draft.targetEmail,
-    }),
-    targetOrganization: accessField({
-      disabledReason:
-        pendingReason ??
-        (organizationOptions.length === 0
-          ? "No organizations are available."
-          : draft.targetSurface === "organization"
-            ? undefined
-            : "Choose Organization as the target surface."),
-      errors:
-        draft.targetSurface === "organization" &&
-        !labels.organizations.has(draft.targetOrganizationId)
-          ? ["Choose an available organization scope."]
-          : [],
-      inputKind: "select",
-      label: "Scope",
-      options: organizationOptions,
-      purpose: "target-organization",
-      required: false,
-      value: draft.targetOrganizationId,
-    }),
-    targetSurface: accessField({
-      disabledReason: pendingReason,
-      errors: surfaceOptions.some(
-        (option) => option.value === draft.targetSurface && option.disabledReason === undefined,
-      )
-        ? []
-        : ["Choose an available target surface."],
-      inputKind: "select",
-      label: "Surface",
-      options: surfaceOptions,
-      purpose: "target-surface",
-      required: false,
-      value: draft.targetSurface,
+      value: options.draft.targetEmail,
     }),
   };
 }
 
-function projectRoleSelection(
-  options: ProjectAccessOptions,
-  grantOptions: IdentityAccessInvitationGrantOptions,
-  labels: AccessLabels,
-): AccessGrantSelectionContract & { purpose: "roles" } {
-  const pendingReason =
-    options.submission.status === "submitting" ? "Invitation creation is in progress." : undefined;
-  const scopeKinds =
-    options.draft.targetSurface === "app-install"
-      ? (["instance", "app-install"] as const)
-      : options.draft.targetSurface === "organization"
-        ? (["instance", "organization"] as const)
-        : (["instance"] as const);
-  const groups = scopeKinds.map((scopeKind) => ({
-    id: `${INSTANCE_ACCESS_ID}:role-group:${scopeKind}`,
-    kind: "accessGrantOptionGroup" as const,
-    label: fieldKeyLabel(scopeKind),
-    options: grantOptions.roles
-      .filter((option) => option.scopeKind === scopeKind)
-      .map((option) => projectRoleOption(options, option, labels, scopeKind, pendingReason)),
-  }));
-  const selectedOptionIds = groups.flatMap((group) =>
-    group.options.filter(({ selected }) => selected).map(({ id }) => id),
+function projectRoleSelection({
+  authoringId,
+  choices,
+  pendingReason,
+  personId,
+  selectedOptionIds,
+  type,
+}: {
+  authoringId: string;
+  choices: readonly ProjectedRoleChoice[];
+  pendingReason?: string;
+  personId?: string;
+  selectedOptionIds: readonly string[];
+  type: "invitation" | "person";
+}): AccessRoleSelectionContract {
+  const knownIds = new Set(choices.map(({ id }) => id));
+  const selectedIds = selectedOptionIds.filter((id) => knownIds.has(id));
+  const selectedSet = new Set(selectedIds);
+  const selectedSurfaces = new Set(
+    choices.filter(({ id }) => selectedSet.has(id)).map(({ surfaceId }) => surfaceId),
   );
-  const errors = groups.flatMap((group) =>
-    group.options.flatMap((option) =>
-      option.selected && option.disabledReason ? [option.disabledReason] : [],
-    ),
+  const visibleChoices = choices.filter(
+    ({ id, surfaceId }) => !selectedSurfaces.has(surfaceId) || selectedSet.has(id),
   );
+  const errors = [
+    ...(type === "invitation" && selectedIds.length === 0 ? ["Choose at least one role."] : []),
+    ...(selectedIds.length !== selectedOptionIds.length
+      ? ["Choose only available role levels."]
+      : []),
+  ];
+  const id =
+    type === "invitation"
+      ? ACCESS_ROLE_SELECTION_ID
+      : `${INSTANCE_ACCESS_ID}:person-role-grants:${correlationSegment(personId ?? "")}`;
 
   return {
-    ...(pendingReason === undefined ? {} : { disabledReason: pendingReason }),
-    errors: distinctStrings(errors),
-    groups,
-    id: ACCESS_ROLE_SELECTION_ID,
-    kind: "accessGrantSelection",
-    label: "Roles",
-    purpose: "roles",
-    selectedOptionIds,
-  };
-}
-
-function projectRoleOption(
-  options: ProjectAccessOptions,
-  option: IdentityAccessInvitationRoleGrantOption,
-  labels: AccessLabels,
-  scopeKind: IdentityAccessInvitationRoleGrantOption["scopeKind"],
-  pendingReason: string | undefined,
-): AccessGrantOptionContract {
-  const id = accessRoleOptionId(option);
-  const selected = options.draft.roleOptionIds.includes(id);
-  const disabledReason =
-    pendingReason ??
-    (scopeKind === "app-install" && !labels.installs.has(options.draft.targetAppInstallId)
-      ? "Choose an available app install scope for app roles."
-      : scopeKind === "organization" &&
-          !labels.organizations.has(options.draft.targetOrganizationId)
-        ? "Choose an available organization scope for organization roles."
-        : undefined);
-
-  return {
-    ...(disabledReason === undefined ? {} : { disabledReason }),
+    changeIntent:
+      type === "invitation"
+        ? {
+            accessId: INSTANCE_ACCESS_ID,
+            authoringId,
+            controlId: id,
+            type: "accessInvitationRoleSelectionChange",
+          }
+        : {
+            accessId: INSTANCE_ACCESS_ID,
+            authoringId,
+            controlId: id,
+            personId: personId ?? "",
+            type: "accessPersonRoleSelectionChange",
+          },
+    ...(pendingReason ? { disabledReason: pendingReason } : {}),
+    errors,
     id,
-    label: safeLabel(option.displayLabel, "Unnamed role"),
-    selected,
-    selectionIntent: {
-      accessId: INSTANCE_ACCESS_ID,
-      authoringId: instanceAccessInvitationAuthoringReference.authoringId,
-      controlId: ACCESS_ROLE_SELECTION_ID,
-      groupId: `${INSTANCE_ACCESS_ID}:role-group:${scopeKind}`,
-      optionId: id,
-      selected: !selected,
-      type: "accessInvitationGrantSelection",
-    },
+    kind: "accessRoleSelection",
+    label: "Roles",
+    options: visibleChoices.map(({ role: _role, surfaceLabel: _surfaceLabel, ...choice }) => ({
+      ...choice,
+      ...(pendingReason ? { disabledReason: pendingReason } : {}),
+      selected: selectedSet.has(choice.id),
+    })),
+    selectedOptionIds: visibleChoices.filter(({ id }) => selectedSet.has(id)).map(({ id }) => id),
   };
 }
 
@@ -650,46 +768,51 @@ function projectMembershipSelection(
   options: ProjectAccessOptions,
   grantOptions: IdentityAccessInvitationGrantOptions,
   labels: AccessLabels,
-): AccessGrantSelectionContract & { purpose: "memberships" } {
+): AccessMembershipSelectionContract {
   const pendingReason =
     options.submission.status === "submitting" ? "Invitation creation is in progress." : undefined;
-  const groups: AccessGrantOptionGroupContract[] = [
+  const groups: AccessMembershipOptionGroupContract[] = [
     {
       id: `${INSTANCE_ACCESS_ID}:membership-group:organizations`,
-      kind: "accessGrantOptionGroup",
+      kind: "accessMembershipOptionGroup",
       label: "Organizations",
       options: grantOptions.memberships
-        .filter((option) => option.targetKind === "organization")
-        .map((option) =>
-          projectMembershipOption(options, option, labels, "organizations", pendingReason),
-        ),
+        .filter(({ targetKind }) => targetKind === "organization")
+        .map((option) => projectMembershipOption(options, option, labels, pendingReason)),
     },
     {
       id: `${INSTANCE_ACCESS_ID}:membership-group:groups`,
-      kind: "accessGrantOptionGroup",
+      kind: "accessMembershipOptionGroup",
       label: "Groups",
       options: grantOptions.memberships
-        .filter((option) => option.targetKind === "group")
-        .map((option) => projectMembershipOption(options, option, labels, "groups", pendingReason)),
+        .filter(({ targetKind }) => targetKind === "group")
+        .map((option) => projectMembershipOption(options, option, labels, pendingReason)),
     },
   ];
-  const selectedOptionIds = groups.flatMap((group) =>
-    group.options.filter(({ selected }) => selected).map(({ id }) => id),
+  const selectedOptionIds = groups.flatMap(({ options: groupOptions }) =>
+    groupOptions.filter(({ selected }) => selected).map(({ id }) => id),
   );
-  const errors = groups.flatMap((group) =>
-    group.options.flatMap((option) =>
-      option.selected && option.disabledReason ? [option.disabledReason] : [],
+  const errors = distinctStrings(
+    groups.flatMap(({ options: groupOptions }) =>
+      groupOptions.flatMap((option) =>
+        option.selected && option.disabledReason ? [option.disabledReason] : [],
+      ),
     ),
   );
 
   return {
-    ...(pendingReason === undefined ? {} : { disabledReason: pendingReason }),
-    errors: distinctStrings(errors),
+    changeIntent: {
+      accessId: INSTANCE_ACCESS_ID,
+      authoringId: instanceAccessInvitationAuthoringReference.authoringId,
+      controlId: ACCESS_MEMBERSHIP_SELECTION_ID,
+      type: "accessInvitationMembershipSelectionChange",
+    },
+    ...(pendingReason ? { disabledReason: pendingReason } : {}),
+    errors,
     groups,
     id: ACCESS_MEMBERSHIP_SELECTION_ID,
-    kind: "accessGrantSelection",
+    kind: "accessMembershipSelection",
     label: "Memberships",
-    purpose: "memberships",
     selectedOptionIds,
   };
 }
@@ -698,76 +821,262 @@ function projectMembershipOption(
   options: ProjectAccessOptions,
   option: IdentityAccessInvitationMembershipGrantOption,
   labels: AccessLabels,
-  groupKey: "groups" | "organizations",
   pendingReason: string | undefined,
-): AccessGrantOptionContract {
+) {
   const id = accessMembershipOptionId(option);
-  const selected = options.draft.membershipOptionIds.includes(id);
   const targetId =
     option.targetKind === "group" ? option.targetGroupId : option.targetOrganizationId;
   const targetLabels = option.targetKind === "group" ? labels.groups : labels.organizations;
-  const available = targetId !== undefined && targetLabels.has(targetId);
   const unavailableLabel =
     option.targetKind === "group" ? "Unavailable group" : "Unavailable organization";
-  const disabledReason = pendingReason ?? (available ? undefined : `${unavailableLabel}.`);
-  const label =
-    targetId === undefined ? unavailableLabel : (targetLabels.get(targetId) ?? unavailableLabel);
+  const available = targetId !== undefined && targetLabels.has(targetId);
 
   return {
-    ...(disabledReason === undefined ? {} : { disabledReason }),
+    ...((pendingReason ?? (available ? undefined : `${unavailableLabel}.`))
+      ? { disabledReason: pendingReason ?? `${unavailableLabel}.` }
+      : {}),
     id,
-    label,
-    selected,
-    selectionIntent: {
-      accessId: INSTANCE_ACCESS_ID,
-      authoringId: instanceAccessInvitationAuthoringReference.authoringId,
-      controlId: ACCESS_MEMBERSHIP_SELECTION_ID,
-      groupId: `${INSTANCE_ACCESS_ID}:membership-group:${groupKey}`,
-      optionId: id,
-      selected: !selected,
-      type: "accessInvitationGrantSelection",
-    },
+    label: targetId ? (targetLabels.get(targetId) ?? unavailableLabel) : unavailableLabel,
+    selected: options.draft.membershipOptionIds.includes(id),
   };
 }
 
 function projectAccessPeople(
+  options: ProjectAccessOptions,
   summary: IdentityAccessManagementSummary,
+  choices: readonly ProjectedRoleChoice[],
   labels: AccessLabels,
 ): readonly AccessPersonContract[] {
-  const rolesByPrincipalId = new Map<string, IdentityAccessRoleSummary[]>();
-  for (const role of summary.roles) {
-    if (
-      role.status !== "active" ||
-      role.targetKind !== "principal" ||
-      role.targetPrincipalId === undefined
-    ) {
-      continue;
-    }
-    rolesByPrincipalId.set(role.targetPrincipalId, [
-      ...(rolesByPrincipalId.get(role.targetPrincipalId) ?? []),
-      role,
-    ]);
-  }
+  const rolesByPrincipalId = rolesByPrincipal(summary);
+  const canManage = canManageInvitations(summary.invitationGrantOptions);
+  const activeOwnerIds = new Set(
+    summary.roles
+      .filter(
+        (role) =>
+          role.status === "active" &&
+          role.roleKey === "instance.owner" &&
+          role.targetKind === "principal" &&
+          role.targetPrincipalId,
+      )
+      .map(({ targetPrincipalId }) => targetPrincipalId as string),
+  );
 
-  return summary.people.map((person) => ({
+  return summary.people.map((person) => {
+    const personRoles = rolesByPrincipalId.get(person.principalId) ?? [];
+    const hasOwner = personRoles.some(({ roleKey }) => roleKey === "instance.owner");
+    const reference = instanceAccessPersonRoleAuthoringReference(person.principalId);
+    const editPending =
+      options.personRoleSubmission.status === "submitting" &&
+      options.personRoleSubmission.personId === person.principalId;
+    const removalReason = !canManage
+      ? "Owner or administrator access is required."
+      : !summary.invitationGrantOptions.authority.instanceOwner && hasOwner
+        ? "Instance administrators cannot remove an owner."
+        : hasOwner && activeOwnerIds.size <= 1
+          ? "The last active owner cannot be removed."
+          : undefined;
+    const editControl = accessButton(
+      `${reference.authoringId}:open-control`,
+      "Edit roles",
+      "secondary",
+      "button",
+      editPending ? "Role replacement is in progress." : undefined,
+    );
+    const removalPendingPersonId =
+      options.personRemoval.status === "submitting" ? options.personRemoval.personId : undefined;
+    const removalControl = accessButton(
+      `${INSTANCE_ACCESS_ID}:person-removal-open-control:${correlationSegment(person.principalId)}`,
+      "Remove person",
+      "secondary",
+      "button",
+      removalReason ??
+        (removalPendingPersonId
+          ? removalPendingPersonId === person.principalId
+            ? "Person removal is in progress."
+            : "Another person removal is in progress."
+          : undefined),
+    );
+    const canEdit = canManage && choices.length > 0;
+
+    return {
+      displayName: safeLabel(person.displayName, "Unnamed person"),
+      id: person.principalId,
+      kind: "accessPerson",
+      ...(person.primaryEmail
+        ? { primaryEmail: displaySafeText(person.primaryEmail.displayEmail) }
+        : {}),
+      removal: removalReason
+        ? { availability: "unavailable", disabledReason: removalReason }
+        : {
+            action: {
+              control: removalControl,
+              id: `${INSTANCE_ACCESS_ID}:person-removal-open:${correlationSegment(person.principalId)}`,
+              intent: {
+                accessId: INSTANCE_ACCESS_ID,
+                actionId: `${INSTANCE_ACCESS_ID}:person-removal-open:${correlationSegment(person.principalId)}`,
+                confirmationId: ACCESS_CONFIRMATION_ID,
+                controlId: removalControl.id,
+                open: true,
+                personId: person.principalId,
+                type: "accessPersonRemovalConfirmationOpenChange",
+              },
+              kind: "accessAction",
+              purpose: "person-removal-open",
+            },
+            availability: "available",
+          },
+      roleAuthoring: canEdit
+        ? {
+            action: {
+              control: editControl,
+              id: `${reference.authoringId}:open`,
+              intent: {
+                accessId: INSTANCE_ACCESS_ID,
+                actionId: `${reference.authoringId}:open`,
+                authoringId: reference.authoringId,
+                controlId: editControl.id,
+                open: true,
+                personId: person.principalId,
+                type: "accessPersonRoleAuthoringOpenChange",
+              },
+              kind: "accessAction",
+              purpose: "person-role-authoring-open",
+            },
+            availability: "available",
+            reference,
+          }
+        : {
+            availability: "unavailable",
+            disabledReason: "No role levels are available to manage.",
+          },
+      roles: personRoles.map((role) => ({
+        id: role.roleAssignmentId,
+        kind: "accessRole",
+        label: accessRoleLabel(role.roleKey),
+        scope: accessFact(
+          `${role.roleAssignmentId}:scope`,
+          "Scope",
+          accessRoleScopeLabel(role, labels),
+        ),
+      })),
+      status: accessStatusFact(`${person.principalId}:status`, person.status),
+    };
+  });
+}
+
+function projectAccessPersonRoleAuthoring(
+  options: ProjectAccessOptions,
+  summary: IdentityAccessManagementSummary,
+  choices: readonly ProjectedRoleChoice[],
+): AccessPersonRoleAuthoringContract | undefined {
+  const draft = options.personAuthoringDraft;
+  if (!draft) {
+    return undefined;
+  }
+  const person = summary.people.find(({ principalId }) => principalId === draft.personId);
+  if (!person) {
+    return undefined;
+  }
+  const reference = instanceAccessPersonRoleAuthoringReference(person.principalId);
+  const pending =
+    options.personRoleSubmission.status === "submitting" &&
+    options.personRoleSubmission.personId === person.principalId;
+  const activeOwnerIds = new Set(
+    summary.roles
+      .filter(
+        (role) =>
+          role.status === "active" &&
+          role.roleKey === "instance.owner" &&
+          role.targetKind === "principal" &&
+          role.targetPrincipalId,
+      )
+      .map(({ targetPrincipalId }) => targetPrincipalId as string),
+  );
+  const protectsLastOwner =
+    activeOwnerIds.size === 1 &&
+    activeOwnerIds.has(person.principalId) &&
+    summary.invitationGrantOptions.authority.instanceOwner;
+  const authoringChoices = choices.map((choice) =>
+    protectsLastOwner && choice.role.roleKey === "instance.owner"
+      ? { ...choice, disabledReason: "The last active owner role cannot be removed." }
+      : choice,
+  );
+  const roleSelection = projectRoleSelection({
+    authoringId: reference.authoringId,
+    choices: authoringChoices,
+    pendingReason: pending ? "Role replacement is in progress." : undefined,
+    personId: person.principalId,
+    selectedOptionIds: draft.roleOptionIds,
+    type: "person",
+  });
+  const cancelControl = accessButton(
+    `${reference.authoringId}:cancel-control`,
+    "Cancel",
+    "secondary",
+    "button",
+    pending ? "Role replacement is in progress." : undefined,
+  );
+  const saveControl = accessButton(
+    `${reference.authoringId}:save-control`,
+    pending ? "Saving..." : "Save roles",
+    "primary",
+    "submit",
+    pending ? "Role replacement is in progress." : roleSelection.errors[0],
+  );
+
+  return {
+    accessId: INSTANCE_ACCESS_ID,
+    cancel: {
+      control: cancelControl,
+      id: `${reference.authoringId}:cancel`,
+      intent: {
+        accessId: INSTANCE_ACCESS_ID,
+        actionId: `${reference.authoringId}:cancel`,
+        authoringId: reference.authoringId,
+        controlId: cancelControl.id,
+        open: false,
+        personId: person.principalId,
+        type: "accessPersonRoleAuthoringOpenChange",
+      },
+      kind: "accessAction",
+      purpose: "person-role-authoring-cancel",
+    },
+    description: `Choose the exact role levels managed for ${safeLabel(person.displayName, "this person")}.`,
     displayName: safeLabel(person.displayName, "Unnamed person"),
-    id: person.principalId,
-    kind: "accessPerson",
-    ...(person.primaryEmail === undefined
-      ? {}
-      : { primaryEmail: displaySafeText(person.primaryEmail.displayEmail) }),
-    roles: (rolesByPrincipalId.get(person.principalId) ?? []).map((role) => ({
-      id: role.roleAssignmentId,
-      kind: "accessRole",
-      label: accessRoleLabel(role.roleKey),
-      scope: accessFact(
-        `${role.roleAssignmentId}:scope`,
-        "Scope",
-        accessRoleScopeLabel(role, labels),
-      ),
-    })),
-    status: accessStatusFact(`${person.principalId}:status`, person.status),
-  }));
+    errors: roleSelection.errors,
+    ...(options.personRoleSubmission.status === "failed" &&
+    options.personRoleSubmission.personId === person.principalId
+      ? {
+          feedback: accessFeedback(
+            "person-role-failed",
+            "Roles could not be saved",
+            options.personRoleSubmission.message,
+            "danger",
+          ),
+        }
+      : {}),
+    id: reference.authoringId,
+    kind: "accessPersonRoleAuthoring",
+    open: true,
+    ...(pending ? { pending: { isPending: true, label: "Saving roles" } } : {}),
+    personId: person.principalId,
+    roleSelection,
+    save: {
+      control: saveControl,
+      id: `${reference.authoringId}:save`,
+      intent: {
+        accessId: INSTANCE_ACCESS_ID,
+        actionId: `${reference.authoringId}:save`,
+        authoringId: reference.authoringId,
+        controlId: saveControl.id,
+        personId: person.principalId,
+        type: "accessPersonRoleSubmit",
+      },
+      kind: "accessAction",
+      purpose: "person-role-save",
+    },
+    title: `Edit roles for ${safeLabel(person.displayName, "person")}`,
+  };
 }
 
 function projectAccessInvitations(
@@ -778,18 +1087,23 @@ function projectAccessInvitations(
   const canManage = canManageInvitations(summary.invitationGrantOptions);
 
   return summary.invitations.map((invitation) => {
-    const revocationDisabledReason = accessRevocationDisabledReason(options, invitation, canManage);
-    const revokeControl = accessButton(
-      `${ACCESS_REVOCATION_CONTROL_ID}:${correlationSegment(invitation.invitationId)}`,
-      options.revocation.status === "submitting" &&
-        options.revocation.invitationId === invitation.invitationId
-        ? "Revoking..."
-        : "Revoke",
+    const pending =
+      options.invitationDeletion.status === "submitting" &&
+      options.invitationDeletion.invitationId === invitation.invitationId;
+    const disabledReason =
+      options.invitationDeletion.status === "submitting"
+        ? pending
+          ? "Invitation deletion is in progress."
+          : "Another invitation deletion is in progress."
+        : undefined;
+    const control = accessButton(
+      `${INSTANCE_ACCESS_ID}:invitation-delete-open-control:${correlationSegment(invitation.invitationId)}`,
+      pending ? "Deleting..." : "Delete invitation",
       "secondary",
       "button",
-      revocationDisabledReason,
+      disabledReason,
     );
-    const revocation =
+    const deletion =
       invitation.status !== "pending"
         ? { availability: "unavailable" as const }
         : !canManage
@@ -799,24 +1113,25 @@ function projectAccessInvitations(
             }
           : {
               action: {
-                control: revokeControl,
-                id: `${INSTANCE_ACCESS_ID}:revocation-open:${correlationSegment(invitation.invitationId)}`,
+                control,
+                id: `${INSTANCE_ACCESS_ID}:invitation-delete-open:${correlationSegment(invitation.invitationId)}`,
                 intent: {
                   accessId: INSTANCE_ACCESS_ID,
-                  actionId: `${INSTANCE_ACCESS_ID}:revocation-open:${correlationSegment(invitation.invitationId)}`,
-                  confirmationId: ACCESS_REVOCATION_CONFIRMATION_ID,
-                  controlId: revokeControl.id,
+                  actionId: `${INSTANCE_ACCESS_ID}:invitation-delete-open:${correlationSegment(invitation.invitationId)}`,
+                  confirmationId: ACCESS_CONFIRMATION_ID,
+                  controlId: control.id,
                   invitationId: invitation.invitationId,
                   open: true,
-                  type: "accessInvitationRevocationConfirmationOpenChange" as const,
+                  type: "accessInvitationDeletionConfirmationOpenChange" as const,
                 },
                 kind: "accessAction" as const,
-                purpose: "revocation-open" as const,
+                purpose: "invitation-deletion-open" as const,
               },
               availability: "available" as const,
             };
 
     return {
+      deletion,
       expiresAt: accessFact(
         `${invitation.invitationId}:expires-at`,
         "Expires",
@@ -824,17 +1139,16 @@ function projectAccessInvitations(
         "timestamp",
       ),
       id: invitation.invitationId,
-      ...(invitation.inviterPrincipalId === undefined
-        ? {}
-        : {
+      ...(invitation.inviterPrincipalId
+        ? {
             inviter: accessFact(
               `${invitation.invitationId}:inviter`,
               "Invited by",
               labels.people.get(invitation.inviterPrincipalId) ?? "Unavailable person",
             ),
-          }),
+          }
+        : {}),
       kind: "accessInvitation",
-      revocation,
       scope: accessFact(
         `${invitation.invitationId}:scope`,
         "Scope",
@@ -853,70 +1167,131 @@ function projectAccessInvitations(
 
 function projectAccessConfirmation(
   options: ProjectAccessOptions,
+  people: readonly AccessPersonContract[],
   invitations: readonly AccessInvitationContract[],
 ): AccessConfirmationContract | undefined {
-  if (options.confirmationInvitationId === undefined) {
+  const target = options.confirmation;
+  if (!target) {
     return undefined;
   }
-  const invitation = invitations.find(
-    (candidate) => candidate.id === options.confirmationInvitationId,
-  );
-  if (!invitation || invitation.revocation.availability !== "available") {
+
+  if (target.kind === "invitation-deletion") {
+    const invitation = invitations.find(({ id }) => id === target.invitationId);
+    if (!invitation || invitation.deletion.availability !== "available") {
+      return undefined;
+    }
+    const pending =
+      options.invitationDeletion.status === "submitting" &&
+      options.invitationDeletion.invitationId === invitation.id;
+    const cancelControl = accessButton(
+      `${ACCESS_CONFIRMATION_ID}:cancel-control`,
+      "Cancel",
+      "secondary",
+      "button",
+      pending ? "Invitation deletion is in progress." : undefined,
+    );
+    const actionControl = accessButton(
+      `${ACCESS_CONFIRMATION_ID}:action-control`,
+      pending ? "Deleting..." : "Delete invitation",
+      "primary",
+      "button",
+      pending ? "Invitation deletion is in progress." : undefined,
+    );
+
+    return {
+      action: accessAction(
+        `${ACCESS_CONFIRMATION_ID}:action`,
+        actionControl,
+        {
+          accessId: INSTANCE_ACCESS_ID,
+          actionId: `${ACCESS_CONFIRMATION_ID}:action`,
+          confirmationId: ACCESS_CONFIRMATION_ID,
+          controlId: actionControl.id,
+          invitationId: invitation.id,
+          type: "accessInvitationDelete",
+        },
+        "invitation-delete",
+      ),
+      cancel: accessAction(
+        `${ACCESS_CONFIRMATION_ID}:cancel`,
+        cancelControl,
+        {
+          accessId: INSTANCE_ACCESS_ID,
+          actionId: `${ACCESS_CONFIRMATION_ID}:cancel`,
+          confirmationId: ACCESS_CONFIRMATION_ID,
+          controlId: cancelControl.id,
+          invitationId: invitation.id,
+          open: false,
+          type: "accessInvitationDeletionConfirmationOpenChange",
+        },
+        "invitation-deletion-cancel",
+      ),
+      description: `The pending invitation for ${invitation.targetEmail} will no longer be usable.`,
+      id: ACCESS_CONFIRMATION_ID,
+      invitationId: invitation.id,
+      kind: "accessConfirmation",
+      open: true,
+      purpose: "invitation-deletion",
+      title: "Delete invitation?",
+    };
+  }
+
+  const person = people.find(({ id }) => id === target.personId);
+  if (!person || person.removal.availability !== "available") {
     return undefined;
   }
   const pending =
-    options.revocation.status === "submitting" && options.revocation.invitationId === invitation.id;
+    options.personRemoval.status === "submitting" && options.personRemoval.personId === person.id;
   const cancelControl = accessButton(
-    ACCESS_REVOCATION_CANCEL_CONTROL_ID,
+    `${ACCESS_CONFIRMATION_ID}:cancel-control`,
     "Cancel",
     "secondary",
     "button",
-    pending ? "Invitation revocation is in progress." : undefined,
+    pending ? "Person removal is in progress." : undefined,
   );
   const actionControl = accessButton(
-    ACCESS_REVOCATION_CONTROL_ID,
-    pending ? "Revoking..." : "Revoke invitation",
+    `${ACCESS_CONFIRMATION_ID}:action-control`,
+    pending ? "Removing..." : "Remove person",
     "primary",
     "button",
-    pending ? "Invitation revocation is in progress." : undefined,
+    pending ? "Person removal is in progress." : undefined,
   );
 
   return {
-    action: {
-      control: actionControl,
-      id: ACCESS_REVOCATION_ACTION_ID,
-      intent: {
+    action: accessAction(
+      `${ACCESS_CONFIRMATION_ID}:action`,
+      actionControl,
+      {
         accessId: INSTANCE_ACCESS_ID,
-        actionId: ACCESS_REVOCATION_ACTION_ID,
-        confirmationId: ACCESS_REVOCATION_CONFIRMATION_ID,
+        actionId: `${ACCESS_CONFIRMATION_ID}:action`,
+        confirmationId: ACCESS_CONFIRMATION_ID,
         controlId: actionControl.id,
-        invitationId: invitation.id,
-        type: "accessInvitationRevoke",
+        personId: person.id,
+        type: "accessPersonRemove",
       },
-      kind: "accessAction",
-      purpose: "invitation-revoke",
-    },
-    cancel: {
-      control: cancelControl,
-      id: ACCESS_REVOCATION_CANCEL_ACTION_ID,
-      intent: {
+      "person-remove",
+    ),
+    cancel: accessAction(
+      `${ACCESS_CONFIRMATION_ID}:cancel`,
+      cancelControl,
+      {
         accessId: INSTANCE_ACCESS_ID,
-        actionId: ACCESS_REVOCATION_CANCEL_ACTION_ID,
-        confirmationId: ACCESS_REVOCATION_CONFIRMATION_ID,
+        actionId: `${ACCESS_CONFIRMATION_ID}:cancel`,
+        confirmationId: ACCESS_CONFIRMATION_ID,
         controlId: cancelControl.id,
-        invitationId: invitation.id,
         open: false,
-        type: "accessInvitationRevocationConfirmationOpenChange",
+        personId: person.id,
+        type: "accessPersonRemovalConfirmationOpenChange",
       },
-      kind: "accessAction",
-      purpose: "revocation-cancel",
-    },
-    description: `The pending invitation for ${invitation.targetEmail} will no longer be usable.`,
-    id: ACCESS_REVOCATION_CONFIRMATION_ID,
-    invitationId: invitation.id,
+      "person-removal-cancel",
+    ),
+    description: `${person.displayName} will lose access immediately. Reviewable identity records are retained.`,
+    id: ACCESS_CONFIRMATION_ID,
     kind: "accessConfirmation",
     open: true,
-    title: "Revoke invitation?",
+    personId: person.id,
+    purpose: "person-removal",
+    title: "Remove person?",
   };
 }
 
@@ -924,16 +1299,14 @@ function accessInviteAction(
   summary: IdentityAccessManagementSummary,
   submission: AccessInvitationSubmissionState,
 ): AccessActionContract<AccessInvitationAuthoringOpenChangeIntent> {
-  const disabledReason =
-    submission.status === "submitting"
-      ? "Invitation creation is in progress."
-      : invitationAuthorityDisabledReason(summary.invitationGrantOptions);
   const control = accessButton(
     ACCESS_INVITE_CONTROL_ID,
     "Invite collaborator",
     "primary",
     "button",
-    disabledReason,
+    submission.status === "submitting"
+      ? "Invitation creation is in progress."
+      : invitationAuthorityDisabledReason(summary.invitationGrantOptions),
   );
 
   return {
@@ -959,75 +1332,181 @@ function accessInvitationRequest(
   if (options.state.status !== "ready") {
     throw new Error("Access invitation request requires a ready summary.");
   }
-  const { draft } = options;
-  const grantOptions = options.state.summary.invitationGrantOptions;
-  const selectedRoleIds = new Set(authoring.grantSelections[0].selectedOptionIds);
-  const selectedMembershipIds = new Set(authoring.grantSelections[1].selectedOptionIds);
-  const roleAssignments: NonNullable<
-    CreateIdentityAccessManagementInvitationInput["roleAssignments"]
-  > = [];
-  for (const option of grantOptions.roles) {
-    if (!selectedRoleIds.has(accessRoleOptionId(option))) {
-      continue;
-    }
-    if (option.scopeKind === "app-install") {
-      roleAssignments.push({
-        appInstallId: draft.targetAppInstallId,
-        roleKey: option.roleKey,
-        scopeKind: option.scopeKind,
-      });
-    } else if (option.scopeKind === "organization") {
-      roleAssignments.push({
-        roleKey: option.roleKey,
-        scopeKind: option.scopeKind,
-        scopeOrganization: draft.targetOrganizationId,
-      });
-    } else {
-      roleAssignments.push({ roleKey: option.roleKey, scopeKind: option.scopeKind });
-    }
-  }
+  const choices = projectRoleChoices(
+    options.state.summary.invitationGrantOptions,
+    accessLabels(options.state.summary, options.installs),
+  );
+  const selected = choices.filter(({ id }) =>
+    authoring.roleSelection.selectedOptionIds.includes(id),
+  );
+  const selectedMembershipIds = new Set(authoring.membershipSelection.selectedOptionIds);
   const memberships: NonNullable<CreateIdentityAccessManagementInvitationInput["memberships"]> = [];
-  for (const option of grantOptions.memberships) {
+  for (const option of options.state.summary.invitationGrantOptions.memberships) {
     if (!selectedMembershipIds.has(accessMembershipOptionId(option))) {
       continue;
     }
-    if (option.targetKind === "group" && option.targetGroupId !== undefined) {
+    if (option.targetKind === "group" && option.targetGroupId) {
       memberships.push({ targetGroup: option.targetGroupId, targetKind: "group" });
-    } else if (option.targetKind === "organization" && option.targetOrganizationId !== undefined) {
+    } else if (option.targetKind === "organization" && option.targetOrganizationId) {
       memberships.push({
         targetKind: "organization",
         targetOrganization: option.targetOrganizationId,
       });
     }
   }
-  const target =
-    draft.targetSurface === "app-install"
-      ? { targetAppInstallId: draft.targetAppInstallId, targetSurface: draft.targetSurface }
-      : draft.targetSurface === "organization"
-        ? {
-            targetOrganization: draft.targetOrganizationId,
-            targetSurface: draft.targetSurface,
-          }
-        : { targetSurface: draft.targetSurface };
+  const surfaceIds = distinctStrings(selected.map(({ surfaceId }) => surfaceId));
+  const acceptanceTargetId =
+    surfaceIds.length === 1 ? surfaceIds[0] : options.draft.acceptanceTargetId;
+  const acceptanceChoice = selected.find(({ surfaceId }) => surfaceId === acceptanceTargetId);
+  if (!acceptanceChoice) {
+    throw new Error("Access invitation requires a selected acceptance target.");
+  }
+  const target = invitationTargetFromRole(acceptanceChoice.role);
+  const appRegistrations = distinctStrings(
+    selected.flatMap(({ role }) => (role.scopeKind === "app-install" ? [role.appInstallId] : [])),
+  ).map((appInstallId) => ({ appInstallId }));
 
   return {
     ...target,
-    appRegistrations:
-      draft.targetSurface === "app-install" ? [{ appInstallId: draft.targetAppInstallId }] : [],
-    invitedPrincipal: { displayName: draft.displayName.trim() },
+    appRegistrations,
+    invitedPrincipal: { displayName: options.draft.displayName.trim() },
     memberships,
     principalEmail: { primary: true, recovery: false },
-    roleAssignments,
-    targetEmail: draft.targetEmail.trim(),
+    roleAssignments: selected.map(({ role }) => invitationRoleAssignment(role)),
+    targetEmail: options.draft.targetEmail.trim(),
   };
 }
 
-type AccessLabels = {
-  groups: ReadonlyMap<string, string>;
-  installs: ReadonlyMap<string, string>;
-  organizations: ReadonlyMap<string, string>;
-  people: ReadonlyMap<string, string>;
-};
+function accessPersonRoleRequest(
+  options: ProjectAccessOptions,
+  authoring: AccessPersonRoleAuthoringContract,
+): Omit<IdentityAccessPersonRoleReplacementRequest, "idempotencyKey"> {
+  if (options.state.status !== "ready") {
+    throw new Error("Access person role request requires a ready summary.");
+  }
+  const choices = projectRoleChoices(
+    options.state.summary.invitationGrantOptions,
+    accessLabels(options.state.summary, options.installs),
+  );
+  const byId = new Map(choices.map((choice) => [choice.id, choice.role]));
+
+  return {
+    principalId: authoring.personId,
+    roles: authoring.roleSelection.selectedOptionIds.map((id) =>
+      identityPersonRoleSelection(required(byId.get(id))),
+    ),
+  };
+}
+
+function projectRoleChoices(
+  grantOptions: IdentityAccessInvitationGrantOptions,
+  labels: AccessLabels,
+): readonly ProjectedRoleChoice[] {
+  return grantOptions.roles.map((role) => {
+    const surface = accessRoleSurface(role, labels);
+    return {
+      id: accessRoleOptionId(role),
+      label: safeLabel(role.displayLabel, `${surface.label} — Unnamed role`),
+      role,
+      selected: false,
+      surfaceId: surface.id,
+      surfaceKind: role.scopeKind,
+      surfaceLabel: surface.label,
+    };
+  });
+}
+
+function accessRoleSurface(
+  role: IdentityAccessInvitationRoleGrantOption,
+  labels: AccessLabels,
+): { id: string; label: string } {
+  if (role.scopeKind === "app-install") {
+    return {
+      id: `app-install:${role.appInstallId}`,
+      label: labels.installs.get(role.appInstallId) ?? "Unavailable app install",
+    };
+  }
+  if (role.scopeKind === "organization") {
+    return {
+      id: `organization:${role.scopeOrganizationId}`,
+      label: labels.organizations.get(role.scopeOrganizationId) ?? "Unavailable organization",
+    };
+  }
+  return { id: "instance", label: "Instance" };
+}
+
+function invitationTargetFromRole(
+  role: IdentityAccessInvitationRoleGrantOption,
+):
+  | { targetAppInstallId: string; targetSurface: "app-install" }
+  | { targetOrganization: string; targetSurface: "organization" }
+  | { targetSurface: "instance" } {
+  if (role.scopeKind === "app-install") {
+    return { targetAppInstallId: role.appInstallId, targetSurface: "app-install" };
+  }
+  if (role.scopeKind === "organization") {
+    return {
+      targetOrganization: role.scopeOrganizationId,
+      targetSurface: "organization",
+    };
+  }
+  return { targetSurface: "instance" };
+}
+
+function invitationRoleAssignment(
+  role: IdentityAccessInvitationRoleGrantOption,
+): NonNullable<CreateIdentityAccessManagementInvitationInput["roleAssignments"]>[number] {
+  if (role.scopeKind === "app-install") {
+    return {
+      appInstallId: role.appInstallId,
+      roleKey: role.roleKey,
+      scopeKind: "app-install",
+    };
+  }
+  if (role.scopeKind === "organization") {
+    return {
+      roleKey: role.roleKey,
+      scopeKind: "organization",
+      scopeOrganization: role.scopeOrganizationId,
+    };
+  }
+  return { roleKey: role.roleKey, scopeKind: "instance" };
+}
+
+function identityPersonRoleSelection(
+  role: IdentityAccessInvitationRoleGrantOption,
+): IdentityAccessPersonRoleSelection {
+  if (role.scopeKind === "app-install") {
+    return {
+      appInstallId: role.appInstallId,
+      roleKey: role.roleKey,
+      scopeKind: "app-install",
+    };
+  }
+  if (role.scopeKind === "organization") {
+    return {
+      roleKey: role.roleKey,
+      scopeKind: "organization",
+      scopeOrganizationId: role.scopeOrganizationId,
+    };
+  }
+  return { roleKey: role.roleKey, scopeKind: "instance" };
+}
+
+function rolesByPrincipal(summary: IdentityAccessManagementSummary) {
+  const roles = new Map<string, IdentityAccessRoleSummary[]>();
+  for (const role of summary.roles) {
+    if (
+      role.status !== "active" ||
+      role.targetKind !== "principal" ||
+      role.targetPrincipalId === undefined
+    ) {
+      continue;
+    }
+    roles.set(role.targetPrincipalId, [...(roles.get(role.targetPrincipalId) ?? []), role]);
+  }
+  return roles;
+}
 
 function accessLabels(
   summary: IdentityAccessManagementSummary,
@@ -1057,14 +1536,14 @@ function accessLabels(
 
 function accessRoleScopeLabel(role: IdentityAccessRoleSummary, labels: AccessLabels): string {
   if (role.scopeKind === "app-install") {
-    return role.appInstallId === undefined
-      ? "Unavailable app install"
-      : (labels.installs.get(role.appInstallId) ?? "Unavailable app install");
+    return role.appInstallId
+      ? (labels.installs.get(role.appInstallId) ?? "Unavailable app install")
+      : "Unavailable app install";
   }
   if (role.scopeKind === "organization") {
-    return role.scopeOrganizationId === undefined
-      ? "Unavailable organization"
-      : (labels.organizations.get(role.scopeOrganizationId) ?? "Unavailable organization");
+    return role.scopeOrganizationId
+      ? (labels.organizations.get(role.scopeOrganizationId) ?? "Unavailable organization")
+      : "Unavailable organization";
   }
   return "Instance";
 }
@@ -1090,48 +1569,144 @@ function accessInvitationScopeLabel(
   labels: AccessLabels,
 ): string {
   if (invitation.targetSurface === "app-install") {
-    return invitation.targetAppInstallId === undefined
-      ? "Unavailable app install"
-      : (labels.installs.get(invitation.targetAppInstallId) ?? "Unavailable app install");
+    return invitation.targetAppInstallId
+      ? (labels.installs.get(invitation.targetAppInstallId) ?? "Unavailable app install")
+      : "Unavailable app install";
   }
   if (invitation.targetSurface === "organization") {
-    return invitation.targetOrganizationId === undefined
-      ? "Unavailable organization"
-      : (labels.organizations.get(invitation.targetOrganizationId) ?? "Unavailable organization");
+    return invitation.targetOrganizationId
+      ? (labels.organizations.get(invitation.targetOrganizationId) ?? "Unavailable organization")
+      : "Unavailable organization";
   }
   return "Instance";
 }
 
-function accessRevocationDisabledReason(
-  options: ProjectAccessOptions,
-  invitation: IdentityAccessInvitationSummary,
-  canManage: boolean,
-): string | undefined {
-  if (!canManage || invitation.status !== "pending") {
-    return undefined;
+function accessRoleSummaryOptionId(role: IdentityAccessRoleSummary): string {
+  const surface =
+    role.scopeKind === "app-install"
+      ? (role.appInstallId ?? "unavailable")
+      : role.scopeKind === "organization"
+        ? (role.scopeOrganizationId ?? "unavailable")
+        : "instance";
+  return `${INSTANCE_ACCESS_ID}:role-option:${correlationSegment(role.scopeKind)}:${correlationSegment(surface)}:${correlationSegment(role.roleKey)}`;
+}
+
+function accessRoleOptionId(option: IdentityAccessInvitationRoleGrantOption): string {
+  const surface =
+    option.scopeKind === "app-install"
+      ? option.appInstallId
+      : option.scopeKind === "organization"
+        ? option.scopeOrganizationId
+        : "instance";
+  return `${INSTANCE_ACCESS_ID}:role-option:${correlationSegment(option.scopeKind)}:${correlationSegment(surface)}:${correlationSegment(option.roleKey)}`;
+}
+
+function accessMembershipOptionId(option: IdentityAccessInvitationMembershipGrantOption): string {
+  const targetId =
+    option.targetKind === "group" ? option.targetGroupId : option.targetOrganizationId;
+  return `${INSTANCE_ACCESS_ID}:membership-option:${correlationSegment(option.targetKind)}:${correlationSegment(targetId ?? "unavailable")}`;
+}
+
+function selectedRoleSurfaceIds(
+  selection: AccessRoleSelectionContract,
+  choices: readonly ProjectedRoleChoice[],
+): readonly string[] {
+  const byId = new Map(choices.map((choice) => [choice.id, choice.surfaceId]));
+  return distinctStrings(
+    selection.selectedOptionIds.flatMap((id) => {
+      const surfaceId = byId.get(id);
+      return surfaceId ? [surfaceId] : [];
+    }),
+  );
+}
+
+function accessInvitationDraftWithRoles(
+  draft: AccessInvitationDraft,
+  selection: AccessRoleSelectionContract,
+  selectedOptionIds: readonly string[],
+): AccessInvitationDraft {
+  const byId = new Map(selection.options.map((option) => [option.id, option.surfaceId]));
+  const surfaceIds = distinctStrings(
+    selectedOptionIds.flatMap((id) => {
+      const surfaceId = byId.get(id);
+      return surfaceId ? [surfaceId] : [];
+    }),
+  );
+  return {
+    ...draft,
+    acceptanceTargetId:
+      surfaceIds.length === 1
+        ? (surfaceIds[0] ?? "")
+        : surfaceIds.includes(draft.acceptanceTargetId)
+          ? draft.acceptanceTargetId
+          : "",
+    roleOptionIds: [...selectedOptionIds],
+  };
+}
+
+function validSelectedRoleOptionIds(
+  selection: AccessRoleSelectionContract,
+  selectedOptionIds: readonly string[],
+): boolean {
+  if (distinctStrings(selectedOptionIds).length !== selectedOptionIds.length) {
+    return false;
   }
-  if (options.revocation.status !== "submitting") {
-    return undefined;
+  const optionsById = new Map(selection.options.map((option) => [option.id, option]));
+  const currentSelected = new Set(selection.selectedOptionIds);
+  const selectedSurfaces = new Set<string>();
+  for (const id of selectedOptionIds) {
+    const option = optionsById.get(id);
+    if (!option || (option.disabledReason && !currentSelected.has(id))) {
+      return false;
+    }
+    if (selectedSurfaces.has(option.surfaceId)) {
+      return false;
+    }
+    selectedSurfaces.add(option.surfaceId);
   }
-  return options.revocation.invitationId === invitation.invitationId
-    ? "Invitation revocation is in progress."
-    : "Another invitation revocation is in progress.";
+  return selection.options
+    .filter((option) => option.disabledReason && option.selected)
+    .every((option) => selectedOptionIds.includes(option.id));
 }
 
 function readyFeedback(options: ProjectAccessOptions): AccessFeedbackContract | undefined {
-  if (options.revocation.status === "failed") {
+  if (options.personRemoval.status === "failed") {
     return accessFeedback(
-      "revocation-failed",
-      "Invitation could not be revoked",
-      options.revocation.message,
+      "person-removal-failed",
+      "Person could not be removed",
+      options.personRemoval.message,
       "danger",
     );
   }
-  if (options.revocation.status === "succeeded") {
+  if (options.personRemoval.status === "succeeded") {
     return accessFeedback(
-      "revocation-succeeded",
-      "Invitation revoked",
-      options.revocation.message,
+      "person-removal-succeeded",
+      "Person removed",
+      options.personRemoval.message,
+      "success",
+    );
+  }
+  if (options.personRoleSubmission.status === "succeeded") {
+    return accessFeedback(
+      "person-role-succeeded",
+      "Roles saved",
+      options.personRoleSubmission.message,
+      "success",
+    );
+  }
+  if (options.invitationDeletion.status === "failed") {
+    return accessFeedback(
+      "invitation-deletion-failed",
+      "Invitation could not be deleted",
+      options.invitationDeletion.message,
+      "danger",
+    );
+  }
+  if (options.invitationDeletion.status === "succeeded") {
+    return accessFeedback(
+      "invitation-deletion-succeeded",
+      "Invitation deleted",
+      options.invitationDeletion.message,
       "success",
     );
   }
@@ -1171,7 +1746,7 @@ function accessField({
   required,
   value,
 }: {
-  disabledReason?: string | undefined;
+  disabledReason?: string;
   errors: readonly string[];
   inputKind: AccessControlledFieldContract["inputKind"];
   label: string;
@@ -1188,28 +1763,21 @@ function accessField({
       fieldId: id,
       type: "accessInvitationFieldChange",
     },
-    ...(disabledReason === undefined ? {} : { disabledReason }),
+    ...(disabledReason ? { disabledReason } : {}),
     errors,
     id,
     inputKind,
     kind: "accessControlledField",
     label,
-    ...(options === undefined ? {} : { options }),
+    ...(options ? { options } : {}),
     purpose,
     required,
     value,
   };
 }
 
-function fieldOption(
-  kind: string,
-  value: string,
-  label: string,
-  selected: boolean,
-  disabledReason?: string,
-) {
+function fieldOption(kind: string, value: string, label: string, selected: boolean) {
   return {
-    ...(disabledReason === undefined ? {} : { disabledReason }),
     id: `${INSTANCE_ACCESS_ID}:${kind}-option:${correlationSegment(value)}`,
     label,
     selected,
@@ -1226,7 +1794,7 @@ function accessFact(
 ): AccessDisplayFactContract {
   return {
     id,
-    ...(intent === undefined ? {} : { intent }),
+    ...(intent ? { intent } : {}),
     kind: "accessDisplayFact",
     label,
     presentation,
@@ -1262,9 +1830,7 @@ function accessButton(
     accessibilityLabel: label,
     content: { kind: "label", label },
     density: "default",
-    ...(disabledReason === undefined
-      ? {}
-      : { disabled: true, disabledReason, errors: [disabledReason] }),
+    ...(disabledReason ? { disabled: true, disabledReason, errors: [disabledReason] } : {}),
     id,
     kind: "button",
     prominence,
@@ -1272,14 +1838,19 @@ function accessButton(
   };
 }
 
-function accessRoleOptionId(option: IdentityAccessInvitationRoleGrantOption): string {
-  return `${INSTANCE_ACCESS_ID}:role-option:${correlationSegment(option.scopeKind)}:${correlationSegment(option.roleKey)}`;
-}
-
-function accessMembershipOptionId(option: IdentityAccessInvitationMembershipGrantOption): string {
-  const targetId =
-    option.targetKind === "group" ? option.targetGroupId : option.targetOrganizationId;
-  return `${INSTANCE_ACCESS_ID}:membership-option:${correlationSegment(option.targetKind)}:${correlationSegment(targetId ?? "unavailable")}`;
+function accessAction<
+  Intent extends
+    | AccessInvitationDeleteIntent
+    | AccessInvitationDeletionConfirmationOpenChangeIntent
+    | AccessPersonRemoveIntent
+    | AccessPersonRemovalConfirmationOpenChangeIntent,
+>(
+  id: string,
+  control: ButtonContract,
+  intent: Intent,
+  purpose: AccessActionContract<Intent>["purpose"],
+): AccessActionContract<Intent> {
+  return { control, id, intent, kind: "accessAction", purpose };
 }
 
 function invitationAuthorityDisabledReason(
@@ -1300,19 +1871,12 @@ function accessDraftWithFieldValue(
   value: string,
 ): AccessInvitationDraft {
   switch (purpose) {
+    case "acceptance-target":
+      return { ...draft, acceptanceTargetId: value };
     case "display-name":
       return { ...draft, displayName: value };
-    case "target-app-install":
-      return { ...draft, targetAppInstallId: value };
     case "target-email":
       return { ...draft, targetEmail: value };
-    case "target-organization":
-      return { ...draft, targetOrganizationId: value };
-    case "target-surface":
-      return {
-        ...draft,
-        targetSurface: value as IdentityInvitationTargetSurface,
-      };
   }
 }
 
@@ -1320,9 +1884,13 @@ function sameAccessActionIntent(
   actual: AccessIntent,
   expected:
     | AccessInvitationAuthoringOpenChangeIntent
-    | AccessInvitationRevocationConfirmationOpenChangeIntent
-    | AccessInvitationRevokeIntent
-    | AccessInvitationSubmitIntent,
+    | AccessInvitationDeleteIntent
+    | AccessInvitationDeletionConfirmationOpenChangeIntent
+    | AccessInvitationSubmitIntent
+    | AccessPersonRemoveIntent
+    | AccessPersonRemovalConfirmationOpenChangeIntent
+    | AccessPersonRoleAuthoringOpenChangeIntent
+    | AccessPersonRoleSubmitIntent,
 ): boolean {
   if (actual.type !== expected.type) {
     return false;
@@ -1332,15 +1900,19 @@ function sameAccessActionIntent(
   );
 }
 
-function toggleAccessOption(
-  current: readonly string[],
-  optionId: string,
-  selected: boolean,
-): readonly string[] {
-  if (selected) {
-    return current.includes(optionId) ? [...current] : [...current, optionId];
-  }
-  return current.filter((candidate) => candidate !== optionId);
+function sameSelectionIntent(
+  actual: AccessIntent,
+  expected: { accessId: string; authoringId: string; controlId: string; type: string },
+): boolean {
+  return (
+    actual.type === expected.type &&
+    "authoringId" in actual &&
+    "controlId" in actual &&
+    actual.accessId === expected.accessId &&
+    actual.authoringId === expected.authoringId &&
+    actual.controlId === expected.controlId &&
+    (!("personId" in expected) || ("personId" in actual && actual.personId === expected.personId))
+  );
 }
 
 function requiredTextErrors(label: string, value: string): readonly string[] {
@@ -1348,9 +1920,9 @@ function requiredTextErrors(label: string, value: string): readonly string[] {
 }
 
 function emailErrors(value: string): readonly string[] {
-  const required = requiredTextErrors("Email", value);
-  if (required.length > 0) {
-    return required;
+  const requiredErrors = requiredTextErrors("Email", value);
+  if (requiredErrors.length > 0) {
+    return requiredErrors;
   }
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim()) ? [] : ["Email must be valid."];
 }
@@ -1364,6 +1936,13 @@ function correlationSegment(value: string): string {
   return encodeURIComponent(value).replaceAll("%", "_");
 }
 
-function distinctStrings(values: readonly string[]): readonly string[] {
+function distinctStrings(values: readonly string[]): string[] {
   return Array.from(new Set(values));
+}
+
+function required<T>(value: T | undefined): T {
+  if (value === undefined) {
+    throw new Error("Expected value.");
+  }
+  return value;
 }

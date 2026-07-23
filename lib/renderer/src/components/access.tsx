@@ -1,32 +1,32 @@
 import { useState } from "react";
 import type {
   AccessActionContract,
-  AccessControlledFieldContract,
-  AccessGrantSelectionContract,
+  AccessConfirmationContract,
+  AccessFeedbackContract,
   AccessIntent,
-  AccessInvitationAuthoringContract,
   AccessManifestReference,
-  AccessReadyContract,
+  ButtonContract,
 } from "@dpeek/formless-presentation/contract";
 import {
-  createMemoryPresentationHost,
   accessInvitationAuthoringReference,
   accessManifestReference,
+  accessPersonRoleAuthoringReference,
+  createMemoryPresentationHost,
   isAccessIntent,
-  type PresentationNodeSet,
   type MutablePresentationHost,
+  type PresentationNodeSet,
 } from "@dpeek/formless-presentation/host";
 import { PresentationHostProvider } from "@dpeek/formless-presentation/host/react";
 import { AstryxApplicationSurfaceFrame } from "./application-surface-frame.tsx";
 import {
-  accessFixtureAuthoringReference,
   createFormlessAccessFixtures,
+  personRoleAuthoring,
   type FormlessAccessFixture,
   type FormlessAccessFixtureId,
   type FormlessAccessFixtureState,
 } from "./access.fixtures.ts";
-import { FormlessFixtureFrame, FormlessFixtureSelector } from "./fixture-layout.tsx";
 import { AstryxSubscribedAccessRenderer } from "./access-renderer.tsx";
+import { FormlessFixtureFrame, FormlessFixtureSelector } from "./fixture-layout.tsx";
 
 export function FormlessAccessLayout() {
   const [fixtureHosts] = useState(createFormlessAccessFixtureHosts);
@@ -89,12 +89,10 @@ export function createFormlessAccessFixtureHost(
       if (!isAccessIntent(intent)) {
         throw new Error("Access fixture host received an unsupported intent.");
       }
-
       const nextState = applyFormlessAccessFixtureIntent(state, intent);
       if (nextState === state) {
         return;
       }
-
       state = nextState;
       host.publish(projectFormlessAccessFixturePublication(state).nodes);
     },
@@ -130,6 +128,18 @@ export function projectFormlessAccessFixturePublication(state: FormlessAccessFix
             },
           ]
         : []),
+      ...(state.personAuthoring
+        ? [
+            {
+              reference: accessPersonRoleAuthoringReference(
+                state.personAuthoring.accessId,
+                state.personAuthoring.id,
+                state.personAuthoring.personId,
+              ),
+              snapshot: state.personAuthoring,
+            },
+          ]
+        : []),
     ],
   };
 }
@@ -138,392 +148,262 @@ export function applyFormlessAccessFixtureIntent(
   state: FormlessAccessFixtureState,
   intent: AccessIntent,
 ): FormlessAccessFixtureState {
-  const manifest = state.manifest;
-  if (manifest.state !== "ready" || manifest.id !== intent.accessId) {
+  if (state.manifest.state !== "ready" || state.manifest.id !== intent.accessId) {
     return state;
   }
+  const manifest = state.manifest;
 
   switch (intent.type) {
     case "accessInvitationAuthoringOpenChange":
-      return applyAuthoringOpenChange(state, manifest, intent);
-    case "accessInvitationFieldChange":
-      return applyAuthoringFieldChange(state, intent);
-    case "accessInvitationGrantSelection":
-      return applyAuthoringGrantSelection(state, intent);
-    case "accessInvitationSubmit":
-      return applyAuthoringSubmit(state, intent);
-    case "accessInvitationRevocationConfirmationOpenChange":
-      return applyRevocationConfirmationOpenChange(state, manifest, intent);
-    case "accessInvitationRevoke":
-      return applyInvitationRevoke(state, manifest, intent);
-  }
-}
-
-function createFormlessAccessFixtureHosts() {
-  return createFormlessAccessFixtures().map(createFormlessAccessFixtureHost);
-}
-
-function applyAuthoringOpenChange(
-  state: FormlessAccessFixtureState,
-  manifest: AccessReadyContract,
-  intent: Extract<AccessIntent, { type: "accessInvitationAuthoringOpenChange" }>,
-) {
-  const authoring = state.authoring;
-  if (!authoring || authoring.id !== intent.authoringId) {
-    return state;
-  }
-
-  const currentAction = intent.open ? manifest.invite : authoring.cancel;
-  if (!isExactAccessIntent(intent, currentAction.intent) || currentAction.control.disabled) {
-    return state;
-  }
-
-  return replaceAuthoring(state, {
-    ...authoring,
-    feedback: undefined,
-    open: intent.open,
-  });
-}
-
-function applyAuthoringFieldChange(
-  state: FormlessAccessFixtureState,
-  intent: Extract<AccessIntent, { type: "accessInvitationFieldChange" }>,
-) {
-  const authoring = state.authoring;
-  if (!authoring || authoring.id !== intent.authoringId || authoring.pending) {
-    return state;
-  }
-
-  const fieldEntry = Object.entries(authoring.fields).find(([, field]) =>
-    isExactAccessIntent(intent, { ...field.changeIntent, value: intent.value }),
-  ) as
-    | [keyof AccessInvitationAuthoringContract["fields"], AccessControlledFieldContract]
-    | undefined;
-  if (!fieldEntry || fieldEntry[1].disabledReason) {
-    return state;
-  }
-
-  const [fieldKey, field] = fieldEntry;
-  const fields = normalizeAuthoringFields({
-    ...authoring.fields,
-    [fieldKey]: {
-      ...field,
-      errors: fieldErrors(field, intent.value),
-      options: field.options?.map((option) => ({
-        ...option,
-        selected: option.value === intent.value,
-      })),
-      value: intent.value,
-    },
-  });
-
-  return replaceAuthoring(state, validateAuthoring({ ...authoring, feedback: undefined, fields }));
-}
-
-function applyAuthoringGrantSelection(
-  state: FormlessAccessFixtureState,
-  intent: Extract<AccessIntent, { type: "accessInvitationGrantSelection" }>,
-) {
-  const authoring = state.authoring;
-  if (!authoring || authoring.id !== intent.authoringId || authoring.pending) {
-    return state;
-  }
-
-  const grantSelections: AccessInvitationAuthoringContract["grantSelections"] = [
-    applyGrantSelection(authoring.grantSelections[0], intent),
-    applyGrantSelection(authoring.grantSelections[1], intent),
-  ];
-  const changed = grantSelections.some(
-    (selection, index) => selection !== authoring.grantSelections[index],
-  );
-
-  return changed
-    ? replaceAuthoring(
-        state,
-        validateAuthoring({ ...authoring, feedback: undefined, grantSelections }),
-      )
-    : state;
-}
-
-function applyAuthoringSubmit(
-  state: FormlessAccessFixtureState,
-  intent: Extract<AccessIntent, { type: "accessInvitationSubmit" }>,
-) {
-  const authoring = state.authoring;
-  if (
-    !authoring ||
-    !authoring.open ||
-    authoring.pending ||
-    authoring.submit.control.disabled ||
-    !isExactAccessIntent(intent, authoring.submit.intent)
-  ) {
-    return state;
-  }
-
-  return replaceAuthoring(state, {
-    ...authoring,
-    feedback: {
-      detail: "The invitation request could not be completed.",
-      id: "access:fixture:feedback:creation-failed",
-      intent: "danger",
-      kind: "accessFeedback",
-      title: "Invitation could not be created",
-    },
-  });
-}
-
-function applyRevocationConfirmationOpenChange(
-  state: FormlessAccessFixtureState,
-  manifest: AccessReadyContract,
-  intent: Extract<AccessIntent, { type: "accessInvitationRevocationConfirmationOpenChange" }>,
-) {
-  if (!intent.open) {
-    const confirmation = manifest.confirmation;
-    if (!confirmation || !isExactAccessIntent(intent, confirmation.cancel.intent)) {
-      return state;
-    }
-
-    const { confirmation: _confirmation, feedback: _feedback, ...nextManifest } = manifest;
-    return { ...state, manifest: nextManifest };
-  }
-
-  const invitation = manifest.invitations.find(
-    (candidate) =>
-      candidate.id === intent.invitationId &&
-      candidate.revocation.availability === "available" &&
-      isExactAccessIntent(intent, candidate.revocation.action.intent),
-  );
-  if (!invitation || invitation.revocation.availability !== "available") {
-    return state;
-  }
-
-  return {
-    ...state,
-    manifest: {
-      ...manifest,
-      feedback: undefined,
-      confirmation: revocationConfirmation(intent.invitationId, invitation.targetEmail),
-    },
-  };
-}
-
-function applyInvitationRevoke(
-  state: FormlessAccessFixtureState,
-  manifest: AccessReadyContract,
-  intent: Extract<AccessIntent, { type: "accessInvitationRevoke" }>,
-): FormlessAccessFixtureState {
-  const confirmation = manifest.confirmation;
-  if (
-    !confirmation ||
-    confirmation.action.control.disabled ||
-    !isExactAccessIntent(intent, confirmation.action.intent)
-  ) {
-    return state;
-  }
-
-  return {
-    ...state,
-    manifest: {
-      ...manifest,
-      feedback: {
-        detail: "The pending invitation remains active.",
-        id: "access:fixture:feedback:revocation-failed",
-        intent: "danger",
-        kind: "accessFeedback",
-        title: "Invitation could not be revoked",
-      },
-    },
-  };
-}
-
-function applyGrantSelection<Purpose extends "memberships" | "roles">(
-  selection: AccessGrantSelectionContract & { purpose: Purpose },
-  intent: Extract<AccessIntent, { type: "accessInvitationGrantSelection" }>,
-): AccessGrantSelectionContract & { purpose: Purpose } {
-  if (selection.id !== intent.controlId || selection.disabledReason) {
-    return selection;
-  }
-
-  const groups = selection.groups.map((group) => {
-    if (group.id !== intent.groupId) {
-      return group;
-    }
-
-    const options = group.options.map((option) => {
-      if (
-        option.id !== intent.optionId ||
-        option.disabledReason ||
-        !isExactAccessIntent(intent, option.selectionIntent)
-      ) {
-        return option;
+      return state.authoring?.id === intent.authoringId
+        ? { ...state, authoring: { ...state.authoring, open: intent.open } }
+        : state;
+    case "accessInvitationFieldChange": {
+      const authoring = state.authoring;
+      if (!authoring || authoring.id !== intent.authoringId) {
+        return state;
       }
-
+      const entry = Object.entries(authoring.fields).find(
+        ([, field]) => field?.id === intent.fieldId,
+      );
+      return entry?.[1]
+        ? {
+            ...state,
+            authoring: {
+              ...authoring,
+              fields: {
+                ...authoring.fields,
+                [entry[0]]: { ...entry[1], errors: [], value: intent.value },
+              },
+            },
+          }
+        : state;
+    }
+    case "accessInvitationRoleSelectionChange":
+      return state.authoring?.id === intent.authoringId
+        ? {
+            ...state,
+            authoring: {
+              ...state.authoring,
+              roleSelection: applyRoleSelection(
+                state.authoring.roleSelection,
+                intent.selectedOptionIds,
+              ),
+            },
+          }
+        : state;
+    case "accessInvitationMembershipSelectionChange":
+      return state.authoring?.id === intent.authoringId
+        ? {
+            ...state,
+            authoring: {
+              ...state.authoring,
+              membershipSelection: {
+                ...state.authoring.membershipSelection,
+                groups: state.authoring.membershipSelection.groups.map((group) => ({
+                  ...group,
+                  options: group.options.map((option) => ({
+                    ...option,
+                    selected: intent.selectedOptionIds.includes(option.id),
+                  })),
+                })),
+                selectedOptionIds: [...intent.selectedOptionIds],
+              },
+            },
+          }
+        : state;
+    case "accessInvitationSubmit":
+      return state.authoring?.id === intent.authoringId
+        ? {
+            ...state,
+            authoring: { ...state.authoring, open: false },
+            manifest: {
+              ...manifest,
+              feedback: feedback("invitation-created", "Invitation created"),
+            },
+          }
+        : state;
+    case "accessPersonRoleAuthoringOpenChange":
+      if (!intent.open) {
+        return state.personAuthoring?.personId === intent.personId
+          ? {
+              ...state,
+              manifest: { ...manifest, personAuthoring: undefined },
+              personAuthoring: null,
+            }
+          : state;
+      }
       return {
-        ...option,
-        selected: intent.selected,
-        selectionIntent: { ...option.selectionIntent, selected: !intent.selected },
+        ...state,
+        manifest: {
+          ...manifest,
+          personAuthoring: accessPersonRoleAuthoringReference(
+            intent.accessId,
+            intent.authoringId,
+            intent.personId,
+          ),
+        },
+        personAuthoring: personRoleAuthoring(),
       };
-    });
-
-    return options.some((option, index) => option !== group.options[index])
-      ? { ...group, options }
-      : group;
-  });
-
-  if (!groups.some((group, index) => group !== selection.groups[index])) {
-    return selection;
+    case "accessPersonRoleSelectionChange":
+      return state.personAuthoring?.id === intent.authoringId
+        ? {
+            ...state,
+            personAuthoring: {
+              ...state.personAuthoring,
+              roleSelection: applyRoleSelection(
+                state.personAuthoring.roleSelection,
+                intent.selectedOptionIds,
+              ),
+            },
+          }
+        : state;
+    case "accessPersonRoleSubmit":
+      return state.personAuthoring?.id === intent.authoringId
+        ? {
+            ...state,
+            manifest: {
+              ...manifest,
+              feedback: feedback("roles-saved", "Roles saved"),
+              personAuthoring: undefined,
+            },
+            personAuthoring: null,
+          }
+        : state;
+    case "accessInvitationDeletionConfirmationOpenChange":
+      return intent.open
+        ? {
+            ...state,
+            manifest: {
+              ...manifest,
+              confirmation: invitationDeletionConfirmation(intent.invitationId),
+            },
+          }
+        : { ...state, manifest: { ...manifest, confirmation: undefined } };
+    case "accessInvitationDelete":
+      return manifest.confirmation?.purpose === "invitation-deletion"
+        ? {
+            ...state,
+            manifest: {
+              ...manifest,
+              confirmation: undefined,
+              feedback: feedback("invitation-deleted", "Invitation deleted"),
+              invitations: manifest.invitations.filter(({ id }) => id !== intent.invitationId),
+            },
+          }
+        : state;
+    case "accessPersonRemovalConfirmationOpenChange":
+      return intent.open
+        ? {
+            ...state,
+            manifest: {
+              ...manifest,
+              confirmation: personRemovalConfirmation(intent.personId),
+            },
+          }
+        : { ...state, manifest: { ...manifest, confirmation: undefined } };
+    case "accessPersonRemove":
+      return manifest.confirmation?.purpose === "person-removal"
+        ? {
+            ...state,
+            manifest: {
+              ...manifest,
+              confirmation: undefined,
+              feedback: feedback("person-removed", "Person removed"),
+              people: manifest.people.filter(({ id }) => id !== intent.personId),
+            },
+          }
+        : state;
   }
+}
 
+function applyRoleSelection(
+  selection: FormlessAccessFixtureState["authoring"] extends infer _Authoring
+    ? NonNullable<FormlessAccessFixtureState["authoring"]>["roleSelection"]
+    : never,
+  selectedOptionIds: readonly string[],
+) {
   return {
     ...selection,
-    errors: groups.flatMap((group) =>
-      group.options.flatMap((option) =>
-        option.selected && option.disabledReason ? [option.disabledReason] : [],
+    options: selection.options
+      .map((option) => ({ ...option, selected: selectedOptionIds.includes(option.id) }))
+      .filter(
+        (option) =>
+          option.selected ||
+          !selection.options.some(
+            (candidate) =>
+              candidate.surfaceId === option.surfaceId && selectedOptionIds.includes(candidate.id),
+          ),
       ),
-    ),
-    groups,
-    selectedOptionIds: groups.flatMap((group) =>
-      group.options.filter((option) => option.selected).map((option) => option.id),
-    ),
+    selectedOptionIds: [...selectedOptionIds],
   };
 }
 
-function normalizeAuthoringFields(
-  fields: AccessInvitationAuthoringContract["fields"],
-): AccessInvitationAuthoringContract["fields"] {
-  const targetSurface = fields.targetSurface.value;
-  const targetAppInstall = accessFieldWithDefaultOption(fields.targetAppInstall);
-  const targetOrganization = accessFieldWithDefaultOption(fields.targetOrganization);
+function invitationDeletionConfirmation(invitationId: string): AccessConfirmationContract {
   return {
-    ...fields,
-    targetAppInstall: {
-      ...targetAppInstall,
-      disabledReason:
-        targetSurface === "app-install" ? undefined : "Choose App install as the target surface.",
-      errors:
-        targetSurface === "app-install" && !targetAppInstall.value
-          ? ["Choose an available app install scope."]
-          : [],
-      required: false,
-    },
-    targetOrganization: {
-      ...targetOrganization,
-      disabledReason:
-        targetSurface === "organization" ? undefined : "Choose Organization as the target surface.",
-      errors:
-        targetSurface === "organization" && !targetOrganization.value
-          ? ["Choose an available organization scope."]
-          : [],
-      required: false,
-    },
-  };
-}
-
-function accessFieldWithDefaultOption(
-  field: AccessControlledFieldContract,
-): AccessControlledFieldContract {
-  if (field.value) {
-    return field;
-  }
-
-  const defaultOption = field.options?.find((option) => option.disabledReason === undefined);
-  if (!defaultOption) {
-    return field;
-  }
-
-  return {
-    ...field,
-    options: field.options?.map((option) => ({
-      ...option,
-      selected: option.id === defaultOption.id,
-    })),
-    value: defaultOption.value,
-  };
-}
-
-function fieldErrors(field: AccessControlledFieldContract, value: string) {
-  const trimmed = value.trim();
-  if (field.required && !trimmed) {
-    return [`${field.label} is required.`];
-  }
-  if (field.inputKind === "email" && !/^\S+@\S+\.\S+$/.test(trimmed)) {
-    return ["Email must be valid."];
-  }
-  return [];
-}
-
-function validateAuthoring(
-  authoring: AccessInvitationAuthoringContract,
-): AccessInvitationAuthoringContract {
-  const errors = [
-    ...Object.values(authoring.fields).flatMap((field) => field.errors),
-    ...authoring.grantSelections.flatMap((selection) => selection.errors),
-  ];
-  const {
-    disabled: _disabled,
-    disabledReason: _disabledReason,
-    ...submitControl
-  } = authoring.submit.control;
-
-  return {
-    ...authoring,
-    errors,
-    submit: {
-      ...authoring.submit,
-      control:
-        errors.length > 0
-          ? { ...submitControl, disabled: true, disabledReason: errors[0] }
-          : submitControl,
-    },
-  };
-}
-
-function revocationConfirmation(
-  invitationId: string,
-  targetEmail: string,
-): AccessReadyContract["confirmation"] {
-  return {
-    action: accessAction("invitation-revoke", "Revoke invitation", {
+    action: action("invitation-delete", "Delete invitation", {
       accessId: "access:fixture",
-      actionId: "access:fixture:revocation-confirm",
-      confirmationId: "access:fixture:revocation-confirmation",
-      controlId: "access:fixture:revocation-confirm:control",
+      actionId: "access:fixture:confirmation:action",
+      confirmationId: "access:fixture:confirmation",
+      controlId: "access:fixture:confirmation:action-control",
       invitationId,
-      type: "accessInvitationRevoke",
+      type: "accessInvitationDelete",
     }),
-    cancel: accessAction("revocation-cancel", "Cancel", {
+    cancel: action("invitation-deletion-cancel", "Cancel", {
       accessId: "access:fixture",
-      actionId: "access:fixture:revocation-cancel",
-      confirmationId: "access:fixture:revocation-confirmation",
-      controlId: "access:fixture:revocation-cancel:control",
+      actionId: "access:fixture:confirmation:cancel",
+      confirmationId: "access:fixture:confirmation",
+      controlId: "access:fixture:confirmation:cancel-control",
       invitationId,
       open: false,
-      type: "accessInvitationRevocationConfirmationOpenChange",
+      type: "accessInvitationDeletionConfirmationOpenChange",
     }),
-    description: `The pending invitation for ${targetEmail} will no longer be usable.`,
-    id: "access:fixture:revocation-confirmation",
+    description: "The pending invitation will no longer be usable.",
+    id: "access:fixture:confirmation",
     invitationId,
     kind: "accessConfirmation",
     open: true,
-    title: "Revoke invitation?",
+    purpose: "invitation-deletion",
+    title: "Delete invitation?",
   };
 }
 
-function accessAction<Intent extends AccessActionContract["intent"]>(
+function personRemovalConfirmation(personId: string): AccessConfirmationContract {
+  return {
+    action: action("person-remove", "Remove person", {
+      accessId: "access:fixture",
+      actionId: "access:fixture:confirmation:action",
+      confirmationId: "access:fixture:confirmation",
+      controlId: "access:fixture:confirmation:action-control",
+      personId,
+      type: "accessPersonRemove",
+    }),
+    cancel: action("person-removal-cancel", "Cancel", {
+      accessId: "access:fixture",
+      actionId: "access:fixture:confirmation:cancel",
+      confirmationId: "access:fixture:confirmation",
+      controlId: "access:fixture:confirmation:cancel-control",
+      open: false,
+      personId,
+      type: "accessPersonRemovalConfirmationOpenChange",
+    }),
+    description: "This person will lose access immediately.",
+    id: "access:fixture:confirmation",
+    kind: "accessConfirmation",
+    open: true,
+    personId,
+    purpose: "person-removal",
+    title: "Remove person?",
+  };
+}
+
+function action<Intent extends AccessActionContract["intent"]>(
   purpose: AccessActionContract<Intent>["purpose"],
   label: string,
   intent: Intent,
 ): AccessActionContract<Intent> {
   return {
-    control: {
-      accessibilityLabel: label,
-      content: { kind: "label", label },
-      density: "default",
-      id: intent.controlId,
-      kind: "button",
-      prominence: purpose === "invitation-revoke" ? "primary" : "secondary",
-      type: "button",
-    },
+    control: button(intent.controlId, label),
     id: intent.actionId,
     intent,
     kind: "accessAction",
@@ -531,23 +411,28 @@ function accessAction<Intent extends AccessActionContract["intent"]>(
   };
 }
 
-function replaceAuthoring(
-  state: FormlessAccessFixtureState,
-  authoring: AccessInvitationAuthoringContract,
-) {
-  return authoring === state.authoring ? state : { ...state, authoring };
+function button(id: string, label: string): ButtonContract {
+  return {
+    accessibilityLabel: label,
+    content: { kind: "label", label },
+    density: "default",
+    id,
+    kind: "button",
+    prominence: "secondary",
+    type: "button",
+  };
 }
 
-function isExactAccessIntent(actual: AccessIntent, expected: AccessIntent) {
-  const actualRecord = actual as unknown as Record<string, unknown>;
-  const expectedRecord = expected as unknown as Record<string, unknown>;
-  const actualKeys = Object.keys(actualRecord);
-  const expectedKeys = Object.keys(expectedRecord);
-
-  return (
-    actualKeys.length === expectedKeys.length &&
-    expectedKeys.every((key) => actualRecord[key] === expectedRecord[key])
-  );
+function feedback(id: string, title: string): AccessFeedbackContract {
+  return {
+    detail: title,
+    id: `access:fixture:feedback:${id}`,
+    intent: "success",
+    kind: "accessFeedback",
+    title,
+  };
 }
 
-export { accessFixtureAuthoringReference };
+function createFormlessAccessFixtureHosts() {
+  return createFormlessAccessFixtures().map(createFormlessAccessFixtureHost);
+}

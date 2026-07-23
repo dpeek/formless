@@ -105,6 +105,10 @@ beforeEach(async () => {
   instanceAuthHarnessName = randomUUID();
   await resetIdentityStorage();
   await writeAuthConfig();
+  await createDefaultAppInstall("site", {
+    label: "Site",
+    packageAppKey: "site",
+  });
 });
 
 afterAll(async () => {
@@ -846,6 +850,11 @@ describe("collaborator invitation acceptance status", () => {
     const appInstallId = `invite-target-${unique}`;
     const mappedHost = `invite-target-${unique}.example.com`;
     const targetEmail = `mapped-app-${unique}@example.com`;
+
+    await writeDefaultAuthConfig();
+    await configureDefaultProductionIdentity();
+    await createDefaultAppInstall(appInstallId);
+
     const invitation = await createInvitation({
       invitationId: `invitation:mapped-app-${unique}`,
       targetEmail,
@@ -859,9 +868,6 @@ describe("collaborator invitation acceptance status", () => {
     });
     const token = rawTokenFor(invitation.id);
 
-    await writeDefaultAuthConfig();
-    await configureDefaultProductionIdentity();
-    await createDefaultAppInstall(appInstallId);
     const route = await createDefaultRoute(`route:mapped-app:${unique}`, {
       access: "authenticated",
       appInstall: appInstallId,
@@ -996,6 +1002,11 @@ describe("collaborator invitation acceptance status", () => {
     const appInstallId = `invite-blocked-${unique}`;
     const mappedHost = `invite-blocked-${unique}.example.com`;
     const targetEmail = `blocked-mapped-app-${unique}@example.com`;
+
+    await writeDefaultAuthConfig();
+    await configureDefaultProductionIdentity();
+    await createDefaultAppInstall(appInstallId);
+
     const invitation = await createInvitation({
       invitationId: `invitation:blocked-mapped-app-${unique}`,
       targetEmail,
@@ -1008,9 +1019,6 @@ describe("collaborator invitation acceptance status", () => {
     });
     const token = rawTokenFor(invitation.id);
 
-    await writeDefaultAuthConfig();
-    await configureDefaultProductionIdentity();
-    await createDefaultAppInstall(appInstallId);
     const route = await createDefaultRoute(`route:blocked-mapped-app:${unique}`, {
       access: "authenticated",
       appInstall: appInstallId,
@@ -1095,6 +1103,16 @@ describe("collaborator invitation acceptance status", () => {
     const mappedHost = `invite-custom-${unique}.example.com`;
     const targetEmail = `custom-invite-${unique}@example.com`;
     const principalId = `principal:custom-invite-${unique}`;
+
+    await writeDefaultAuthConfig();
+    await configureDefaultProductionIdentity();
+    await createDefaultAppInstall(appInstallId, {
+      label: "Custom invitation target",
+      packageAppKey: customOnboardingPackageAppKey,
+      registrationOperation: customOnboardingRegistrationOperationKey,
+      registrationPolicy: "custom-operation",
+    });
+
     const invitation = await createInvitation({
       invitationId: `invitation:custom-invite-${unique}`,
       targetEmail,
@@ -1108,14 +1126,6 @@ describe("collaborator invitation acceptance status", () => {
     });
     const token = rawTokenFor(invitation.id);
 
-    await writeDefaultAuthConfig();
-    await configureDefaultProductionIdentity();
-    await createDefaultAppInstall(appInstallId, {
-      label: "Custom invitation target",
-      packageAppKey: customOnboardingPackageAppKey,
-      registrationOperation: customOnboardingRegistrationOperationKey,
-      registrationPolicy: "custom-operation",
-    });
     const route = await createDefaultRoute(`route:custom-invite:${unique}`, {
       access: "authenticated",
       appInstall: appInstallId,

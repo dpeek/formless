@@ -12,6 +12,8 @@ export const IDENTITY_CONTROL_PLANE_BOUNDARY_SCHEMA_KEY = "auth";
 export const IDENTITY_CONTROL_PLANE_STORAGE_IDENTITY = "instance:identity";
 export const IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX = "/api/formless/identity";
 export const IDENTITY_ACCESS_MANAGEMENT_SUMMARY_API_PATH = "/access-summary";
+export const IDENTITY_ACCESS_PERSON_ROLE_REPLACEMENT_API_PATH = "/access-people/replace-roles";
+export const IDENTITY_ACCESS_PERSON_REMOVAL_API_PATH = "/access-people/remove";
 export const IDENTITY_COLLABORATOR_INVITATIONS_API_PATH = "/collaborator-invitations";
 export const IDENTITY_COLLABORATOR_INVITATION_REVOKE_API_PATH = "/collaborator-invitations/revoke";
 
@@ -22,6 +24,9 @@ export type IdentityControlPlaneStorageIdentity = typeof IDENTITY_CONTROL_PLANE_
 export type IdentityControlPlaneApiRoutePrefix = typeof IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX;
 export type IdentityAccessManagementSummaryApiPath =
   typeof IDENTITY_ACCESS_MANAGEMENT_SUMMARY_API_PATH;
+export type IdentityAccessPersonRoleReplacementApiPath =
+  typeof IDENTITY_ACCESS_PERSON_ROLE_REPLACEMENT_API_PATH;
+export type IdentityAccessPersonRemovalApiPath = typeof IDENTITY_ACCESS_PERSON_REMOVAL_API_PATH;
 export type IdentityCollaboratorInvitationsApiPath =
   typeof IDENTITY_COLLABORATOR_INVITATIONS_API_PATH;
 export type IdentityCollaboratorInvitationRevokeApiPath =
@@ -304,11 +309,30 @@ export type IdentityAccessInvitationGrantAuthoritySummary = {
   instanceOwner: boolean;
 };
 
-export type IdentityAccessInvitationRoleGrantOption = {
-  displayLabel: string;
-  roleKey: IdentityControlPlaneRoleKey;
-  scopeKind: IdentityRoleAssignmentScopeKind;
-};
+export type IdentityAccessInvitationRoleGrantOption =
+  | {
+      displayLabel: string;
+      roleKey: Extract<IdentityControlPlaneRoleKey, "instance.admin" | "instance.owner">;
+      scopeKind: Extract<IdentityRoleAssignmentScopeKind, "instance">;
+    }
+  | {
+      appInstallId: string;
+      displayLabel: string;
+      roleKey: Extract<
+        IdentityControlPlaneRoleKey,
+        "app.admin" | "app.editor" | "app.user" | "app.viewer"
+      >;
+      scopeKind: Extract<IdentityRoleAssignmentScopeKind, "app-install">;
+    }
+  | {
+      displayLabel: string;
+      roleKey: Extract<
+        IdentityControlPlaneRoleKey,
+        "app.admin" | "app.editor" | "app.user" | "app.viewer"
+      >;
+      scopeKind: Extract<IdentityRoleAssignmentScopeKind, "organization">;
+      scopeOrganizationId: string;
+    };
 
 export type IdentityAccessInvitationMembershipGrantOption = {
   displayLabel: string;
@@ -332,6 +356,65 @@ export type IdentityAccessManagementSummary = {
   organizations: IdentityAccessOrganizationSummary[];
   people: IdentityAccessPersonSummary[];
   roles: IdentityAccessRoleSummary[];
+};
+
+export type IdentityAccessPersonRoleSelection =
+  | {
+      roleKey: Extract<IdentityControlPlaneRoleKey, "instance.admin" | "instance.owner">;
+      scopeKind: Extract<IdentityRoleAssignmentScopeKind, "instance">;
+    }
+  | {
+      appInstallId: string;
+      roleKey: Extract<
+        IdentityControlPlaneRoleKey,
+        "app.admin" | "app.editor" | "app.user" | "app.viewer"
+      >;
+      scopeKind: Extract<IdentityRoleAssignmentScopeKind, "app-install">;
+    }
+  | {
+      roleKey: Extract<
+        IdentityControlPlaneRoleKey,
+        "app.admin" | "app.editor" | "app.user" | "app.viewer"
+      >;
+      scopeKind: Extract<IdentityRoleAssignmentScopeKind, "organization">;
+      scopeOrganizationId: string;
+    };
+
+export type IdentityAccessPersonRoleReplacementRequest = {
+  idempotencyKey: string;
+  now?: string;
+  principalId: string;
+  roles: IdentityAccessPersonRoleSelection[];
+};
+
+export type IdentityAccessPersonRoleReplacementResponse = {
+  principalId: string;
+  roles: IdentityAccessRoleSummary[];
+  status: "committed" | "replayed";
+};
+
+export type IdentityAccessPersonRemovalRequest = {
+  idempotencyKey: string;
+  now?: string;
+  principalId: string;
+};
+
+export type IdentityAccessPersonRemovalResponse = {
+  person: IdentityAccessPersonSummary;
+  removedAt: string;
+  status: "disabled";
+};
+
+export type IdentityAccessPersonMutationFailureReason =
+  | "inactive-principal"
+  | "invalid-role-selection"
+  | "last-active-owner"
+  | "missing-principal"
+  | "protected-assignment";
+
+export type IdentityAccessPersonMutationErrorResponse = {
+  error: string;
+  reason: IdentityAccessPersonMutationFailureReason;
 };
 
 export type IdentityCollaboratorInvitationRevokeRequest = {

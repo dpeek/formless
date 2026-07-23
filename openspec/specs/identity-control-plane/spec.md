@@ -211,8 +211,9 @@ flat role assignment records.
 - AND `instance` scope does not require a scope id
 - AND `app-install` and `organization` scopes require a scope id
 - AND supported first-pass statuses are `active` and `disabled`
-- AND active role assignments are unique by role, target kind, selected target
-  record, scope kind, and selected scope id
+- AND active role assignments are unique by target kind, selected target
+  record, scope kind, and selected scope id so one target has at most one
+  active runtime role level on a given access surface
 - AND the first owner is represented as an `instance.owner` role assignment for
   a principal at instance scope
 
@@ -337,6 +338,24 @@ as reviewable identity records.
 - AND raw invite tokens, token hashes, rendered email bodies, email delivery
   provider responses, and session material are not stored on identity records
 
+#### Scenario: Select invitation roles across access surfaces
+
+- GIVEN access management offers current grant-authorized role levels for the
+  instance, installed apps, and organizations
+- WHEN an invitation selects role grants
+- THEN each choice identifies one exact access surface and one role level
+- AND the invitation may select role levels for more than one access surface
+- AND it selects at most one role level for each exact access surface
+- AND each selected app-install surface creates one pending app registration
+  for the invited principal when no matching registration exists
+- AND the invitation record retains one exact target surface for acceptance
+  continuation
+- AND when one role surface is selected that surface may be used as the target
+- AND when several role surfaces are selected the request explicitly chooses
+  one of those selected surfaces as the acceptance target
+- AND a missing, unavailable, unauthorized, or unselected acceptance target
+  rejects the invitation before identity or private token state is written
+
 #### Scenario: Owner grants collaborator invitation roles
 
 - GIVEN a browser session resolves to an active principal with active
@@ -409,7 +428,10 @@ identity-control-plane record editor to normal administrators.
   app-registration, organization, group, and invitation summary facts needed by
   the surface
 - AND the response includes display-safe collaborator invitation grant choices
-  derived from the current actor's active owner or instance-admin authority
+  derived from the current actor's active owner or instance-admin authority and
+  exact available instance, app-install, and organization surfaces
+- AND revoked invitations and disabled principals may remain reviewable
+  identity records without remaining in the active invitation or people lists
 - AND raw invite tokens, token hashes, credential material, passkey challenge
   secrets, session ids, handoff grant secrets, provider responses, recovery
   material, and admin bearer material are not returned
@@ -433,15 +455,17 @@ identity-control-plane record editor to normal administrators.
 - AND raw invite tokens and token hashes remain unavailable to the browser
   surface except for the delivery path that renders the invitation link
 
-#### Scenario: Revoke pending collaborator invitation from access management
+#### Scenario: Delete pending collaborator invitation from access management
 
-- GIVEN the dedicated access management surface submits a revoke request for a
+- GIVEN the dedicated access management surface submits a delete request for a
   pending collaborator invitation
 - AND the browser session resolves to an active principal with active
   `instance.owner` or `instance.admin` authority at instance scope
 - WHEN the request is accepted
 - THEN identity storage changes the matching `invitation` record status to
   `revoked`
+- AND the active invitation list omits the revoked invitation after refresh
+- AND the reviewable invitation record is retained rather than hard deleted
 - AND the invitation keeps display-safe target email, target surface, inviter
   principal, invited principal, target app install or organization, expiry, and
   accepted timestamp facts when present
@@ -465,26 +489,80 @@ identity-control-plane record editor to normal administrators.
   challenge secrets, credential material, session ids, handoff grant secrets,
   provider responses, recovery material, or admin bearer material
 
+#### Scenario: Replace person role levels from access management
+
+- GIVEN the dedicated access management surface submits the exact desired role
+  level for each editable access surface of an existing active principal
+- WHEN the current browser principal is still authorized to grant and remove
+  every changed role level
+- THEN identity storage disables replaced or removed role assignments and
+  creates or reactivates the selected assignments in one identity commit
+- AND role assignments outside the current actor's grant authority remain
+  unchanged
+- AND a request that attempts to alter a protected assignment is rejected
+  rather than partially applied
+- AND only an active `instance.owner` may grant, replace, or remove
+  `instance.owner`
+- AND `instance.admin` may manage `instance.admin` and app-install role levels
+  but may not manage owner or organization authority
+- AND current principal, role, assignment, target, and actor authority are
+  re-read during the mutation instead of trusted from the browser summary
+- AND successful replacement immediately narrows subsequent route, data,
+  operation, handoff, host-session, and push authorization that depends on a
+  removed role
+
+#### Scenario: Preserve one active owner
+
+- GIVEN a person role replacement or person removal would remove active
+  `instance.owner` authority
+- WHEN identity storage evaluates the mutation against current principals and
+  role assignments
+- THEN the mutation is authorized only for an active `instance.owner`
+- AND it is rejected if it would leave the instance without an active owner
+- AND the rejection does not change principal, role assignment, credential,
+  session, invitation, membership, app registration, or private auth state
+
+#### Scenario: Remove person from access management
+
+- GIVEN the dedicated access management surface submits an explicitly confirmed
+  remove request for an active or invited principal
+- WHEN the current browser principal has active authority to manage that
+  principal and the last-owner rule is satisfied
+- THEN identity storage changes the principal status to `disabled`
+- AND the active people list omits the disabled principal after refresh
+- AND existing email, membership, app-registration, role-assignment, policy,
+  and invitation identity records remain reviewable rather than being hard
+  deleted
+- AND private credentials remain outside reviewable identity records and are
+  not deleted by this access-management action
+- AND the disabled principal and its retained assignments cannot authorize
+  subsequent browser entry, data access, operations, handoff, host sessions, or
+  push delivery
+- AND an `instance.admin` cannot remove a principal with active
+  `instance.owner` authority
+
 #### Scenario: Reject unauthorized access management request
 
 - GIVEN a browser session is missing, stale, disabled, scoped to the wrong
   instance, or lacks active `instance.owner` or `instance.admin` authority
-- WHEN it reads the access management summary, creates an invitation, or
-  revokes an invitation through the dedicated access management behavior
+- WHEN it reads the access management summary, creates or deletes an
+  invitation, replaces person roles, or removes a person through the dedicated
+  access management behavior
 - THEN the request is rejected before identity records, private invite token
   state, rendered invitation links, or email delivery requests are created
 - AND stale signed session facts do not authorize access after the principal is
   disabled or role assignments change
 
-#### Scenario: First-pass non-revocation destructive identity actions unavailable
+#### Scenario: Access mutations remain purpose-built
 
 - GIVEN the dedicated access management surface is available
-- WHEN a principal attempts to disable a principal, remove a role assignment,
-  transfer owner authority, or remove owner authority
-- THEN the first-pass surface does not expose those actions
-- AND future destructive identity actions require purpose-built owner/admin
-  confirmation and current role checks before generic identity records or
-  private auth state are changed
+- WHEN a principal deletes an invitation, replaces role assignments, grants or
+  removes owner authority, or removes a person
+- THEN the surface uses purpose-built access management requests with explicit
+  confirmation for destructive effects
+- AND it does not expose generic identity record editors, arbitrary record
+  plans, snapshot restore, credential management, session material, or owner
+  recovery controls
 
 ### Requirement: Reactive Access Management Presentation Contract
 
@@ -500,14 +578,23 @@ revocation, refresh, validation, and private auth state.
 - THEN one typed `AccessManifestReference` resolves one loading, unauthorized,
   failed, or ready access snapshot
 - AND a ready access snapshot carries the `Access` title, display-safe people
-  with primary email, status, and role labels, display-safe invitations with
-  target, scope, status, expiry, inviter, and explicit revocation availability,
-  page feedback, and one invitation-authoring reference
+  with primary email, status, role labels, role-edit availability, and
+  person-removal availability
+- AND it carries display-safe invitations with target, scope, status, expiry,
+  inviter, and explicit deletion availability, page feedback, one
+  invitation-authoring reference, and current person-role authoring when open
 - AND the invitation-authoring snapshot carries dialog visibility, controlled
-  target email, display name, target-surface and applicable scope
-  fields, ordered role and membership option groups, exact selected option ids,
-  explicit option and control disabled reasons, validation, pending state,
-  feedback, and cancel and submit actions
+  target email, display name, one flat role-level selection, a conditional
+  acceptance-target field when selected roles span several surfaces, ordered
+  membership option groups, exact selected option ids, explicit option and
+  control disabled reasons, validation, pending state, feedback, and cancel and
+  submit actions
+- AND person-role authoring reuses the flat role-level selection contract with
+  the person's current exact selected role levels and save and cancel actions
+- AND selected role options remain visible while the other role levels for each
+  selected surface are omitted until that selected level is removed
+- AND person removal and invitation deletion carry explicit confirmation,
+  pending, success, and failure contracts
 - AND organization, group, membership, app-registration, app-install, role,
   inviter, and scope labels are resolved before publication rather than being
   reconstructed from raw records or displayed from storage ids
@@ -521,17 +608,17 @@ revocation, refresh, validation, and private auth state.
 
 - GIVEN the application shell host is active and `/access` is the selected
   React route child
-- WHEN shell, access summary, invitation authoring, feedback, or confirmation
-  presentation changes
+- WHEN shell, access summary, invitation authoring, person-role authoring,
+  feedback, or confirmation presentation changes
 - THEN the access runtime contributes its renderer-neutral nodes and current
   intent handler through the existing application-host publication coordinator
   without creating a nested host or replacing the stable host context
 - AND server rendering seeds `/access` with its loading access-manifest node
   before route-child effects run, and hydration replaces that contribution
   atomically with current runtime state
-- AND controlled invitation draft changes replace only the invitation-authoring
-  snapshot while a semantically unchanged access summary retains object
-  identity and does not notify its reference scope
+- AND controlled invitation or person-role draft changes replace only their
+  authoring snapshot while a semantically unchanged access summary retains
+  object identity and does not notify its reference scope
 - AND the complete access contribution adds and removes its manifest and
   authoring nodes atomically without changing shell reference roles or route
   selection
@@ -539,25 +626,30 @@ revocation, refresh, validation, and private auth state.
 #### Scenario: Dispatch canonical access management intents
 
 - GIVEN a subscribed access renderer reads the access manifest and invitation
-  authoring snapshots
-- WHEN the user opens or closes invitation authoring, changes a field, selects
-  target scope, role, or membership options, submits an invitation, opens or
-  closes pending-invitation revocation confirmation, or confirms revocation
+  or person-role authoring snapshots
+- WHEN the user opens or closes authoring, changes a field, replaces the exact
+  selected role-level set, selects membership options, chooses an acceptance
+  target, submits an invitation or person-role replacement, opens or closes
+  destructive confirmation, or confirms invitation deletion or person removal
 - THEN the renderer dispatches canonical access intents carrying exact current
-  access, authoring, field, option, invitation, confirmation, and control
-  identity as applicable
+  access, authoring, person, field, selected option set, invitation,
+  confirmation, and control identity as applicable
 - AND runtime resolves each intent against its latest summary, controlled
   draft, allowed grant options, active authority, and pending state before
   changing state or invoking an effect
+- AND each role selector change is one atomic selected-set intent rather than
+  concurrent per-option intents that can overwrite one another
 - AND successful invitation creation resets and closes authoring, refreshes the
   display-safe summary, and publishes success feedback without exposing private
   delivery state
-- AND pending invitation revocation requires explicit destructive confirmation,
-  refreshes the summary after success, and remains the only destructive
-  identity action exposed by the first-pass contract
+- AND successful person-role replacement refreshes the person and role summary
+  before publishing success feedback
+- AND invitation deletion and person removal require explicit destructive
+  confirmation and refresh the active summary after success
 - AND renderers do not construct invitation requests, infer authority, read
-  identity APIs, create or deliver tokens, revoke private token state, refresh
-  summaries, redact errors, or navigate directly
+  identity APIs, construct role replacement or person removal requests, create
+  or deliver tokens, revoke private token state, refresh summaries, redact
+  errors, or navigate directly
 
 #### Scenario: Formless Renderer consumes access contracts
 
@@ -566,8 +658,9 @@ revocation, refresh, validation, and private auth state.
 - WHEN runtime publishes the complete access contract graph
 - THEN one subscribed Formless Renderer access entrypoint reads only access
   references and snapshots, renders people, roles, invitations, controlled
-  invitation authoring, feedback, empty, unauthorized, loading, failure, and
-  destructive confirmation states, and dispatches canonical access intents
+  invitation and person-role authoring, feedback, empty, unauthorized, loading,
+  failure, and destructive confirmation states, and dispatches canonical
+  access intents
 - AND access runtime imports contracts and host behavior from documented
   `@dpeek/formless-presentation` subpaths while renderer entrypoints come from
   documented `@dpeek/formless-renderer` subpaths
@@ -587,17 +680,25 @@ revocation, refresh, validation, and private auth state.
 - AND invitation authoring opens in a form-purpose `Dialog` using `FormLayout`,
   `TextInput`, `Selector`, and `DateTimeInput` for controlled single-value
   fields
-- AND role grants render in one sectioned `MultiSelector` grouped by Instance,
-  App install, and Organization, and memberships render in a separate sectioned
-  `MultiSelector` grouped by Organizations and Groups instead of expanded
-  checkbox lists
+- AND invitation and person role levels render in one flat `MultiSelector`
+  whose ungrouped labels combine the display-safe surface and level, such as
+  `Instance — Owner`, `Instance — Administrator`, and
+  `Site — Administrator`
+- AND selecting one role level for a surface removes its other level options
+  until the selected level is removed
+- AND invitation authoring renders an acceptance-target `Selector` only when
+  selected role levels span several surfaces
+- AND memberships render in a separate sectioned `MultiSelector` grouped by
+  Organizations and Groups instead of expanded checkbox lists
 - AND grant selectors do not offer select-all, large option sets are searchable,
   and projected disabled reasons remain visible without the renderer inferring
   authority from role names, target kinds, or option ids
+- AND person rows expose role-edit and destructive remove controls while
+  pending invitation rows expose a destructive delete control
 - AND loading, empty, validation, pending, success, and failure states compose
   package `Spinner`, `EmptyState`, `FieldStatus`, and `Banner` patterns, and
-  pending invitation revocation composes `AlertDialog` before dispatching its
-  confirm intent
+  invitation deletion and person removal compose `AlertDialog` before
+  dispatching their confirm intents
 - AND the renderer uses package-owned styling and contains no identity runtime
   imports, API clients, effect handlers, private auth state, or production
   assembly behavior
@@ -609,17 +710,18 @@ revocation, refresh, validation, and private auth state.
 - THEN serializable data-only memory-host fixtures cover owner and
   instance-admin grants, loading, unauthorized, failed, empty and populated
   summaries, people and roles, organizations and groups, app-scoped grants,
-  invitation authoring drafts and validation, pending and successful creation,
-  pending invitation revocation confirmation, success, and failure
+  flat invitation and person-role authoring, multi-surface acceptance-target
+  selection, exclusive role levels, pending and successful creation and role
+  replacement, invitation deletion, person removal, confirmation, success, and
+  failure
 - AND a focused Access layout composes the subscribed access renderer as the
   route child of the existing application shell through one memory host
-- AND minimal reducers may simulate canonical draft, selection, dialog, submit,
-  confirmation, and revoke intents without importing identity runtime, storage,
-  APIs, invitation delivery, credentials, sessions, private token state,
-  navigation, or timers
-- AND fixtures contain no secrets, unsupported destructive identity actions,
-  production assembly behavior, or behavior that bypasses the canonical
-  Presentation Host
+- AND minimal reducers may simulate canonical draft, atomic selected-set,
+  dialog, submit, confirmation, delete, role replacement, and removal intents
+  without importing identity runtime, storage, APIs, invitation delivery,
+  credentials, sessions, private token state, navigation, or timers
+- AND fixtures contain no secrets, generic identity editing, production
+  assembly behavior, or behavior that bypasses the canonical Presentation Host
 
 ### Requirement: Collaborator Invitation Acceptance
 
@@ -708,8 +810,10 @@ target and scope rather than raw optional fields.
   install scopes
 - WHEN identity-control-plane records are validated
 - THEN the records are valid
-- AND a duplicate active assignment for the same role, target kind, selected
-  target record, scope kind, and selected scope id is rejected
+- AND two different active role levels for the same target kind, selected target
+  record, scope kind, and selected scope id are rejected
+- AND replacing a level disables the prior assignment before the new level
+  becomes active in the same identity commit
 - AND tombstoned duplicate role assignments do not block the active assignment
 
 #### Scenario: App registration uniqueness allows multiple users

@@ -5,6 +5,8 @@ import type {
   AccessInvitationAuthoringReference,
   AccessManifestContract,
   AccessManifestReference,
+  AccessPersonRoleAuthoringContract,
+  AccessPersonRoleAuthoringReference,
   ApplicationSystemStateContract,
   ApplicationSystemStateIntent,
   ApplicationSystemStateReference,
@@ -51,31 +53,33 @@ export type PresentationSnapshot<Reference extends PresentationReference> =
       ? ApplicationSystemStateContract
       : Reference extends AccessInvitationAuthoringReference
         ? AccessInvitationAuthoringContract
-        : Reference extends AuthSurfaceReference<infer SurfaceKind>
-          ? Extract<AuthSurfaceContract, { surfaceKind: SurfaceKind }>
-          : Reference extends DocumentThemeReference
-            ? DocumentThemeContract
-            : Reference extends ManagementManifestReference
-              ? ManagementManifestContract
-              : Reference extends ManagementInstallDialogReference
-                ? ManagementInstallDialogContract
-                : Reference extends WorkspaceManifestReference
-                  ? WorkspaceManifestContract
-                  : Reference extends WorkspaceSectionShellReference
-                    ? WorkspaceSectionShellContract
-                    : Reference extends ShellManifestReference
-                      ? ShellManifestContract
-                      : Reference extends ShellNavigationSectionReference
-                        ? ShellNavigationSectionContract
-                        : Reference extends ListResultReference
-                          ? ListContract
-                          : Reference extends TableResultReference
-                            ? TableContract
-                            : Reference extends TreeResultReference
-                              ? TreeResultContract
-                              : Reference extends RecordResultReference
-                                ? RecordResultContract
-                                : never;
+        : Reference extends AccessPersonRoleAuthoringReference
+          ? AccessPersonRoleAuthoringContract
+          : Reference extends AuthSurfaceReference<infer SurfaceKind>
+            ? Extract<AuthSurfaceContract, { surfaceKind: SurfaceKind }>
+            : Reference extends DocumentThemeReference
+              ? DocumentThemeContract
+              : Reference extends ManagementManifestReference
+                ? ManagementManifestContract
+                : Reference extends ManagementInstallDialogReference
+                  ? ManagementInstallDialogContract
+                  : Reference extends WorkspaceManifestReference
+                    ? WorkspaceManifestContract
+                    : Reference extends WorkspaceSectionShellReference
+                      ? WorkspaceSectionShellContract
+                      : Reference extends ShellManifestReference
+                        ? ShellManifestContract
+                        : Reference extends ShellNavigationSectionReference
+                          ? ShellNavigationSectionContract
+                          : Reference extends ListResultReference
+                            ? ListContract
+                            : Reference extends TableResultReference
+                              ? TableContract
+                              : Reference extends TreeResultReference
+                                ? TreeResultContract
+                                : Reference extends RecordResultReference
+                                  ? RecordResultContract
+                                  : never;
 
 export type PresentationHostListener = () => void;
 
@@ -108,6 +112,11 @@ export type AccessManifestNode = {
 export type AccessInvitationAuthoringNode = {
   reference: AccessInvitationAuthoringReference;
   snapshot: AccessInvitationAuthoringContract;
+};
+
+export type AccessPersonRoleAuthoringNode = {
+  reference: AccessPersonRoleAuthoringReference;
+  snapshot: AccessPersonRoleAuthoringContract;
 };
 
 export type AuthSurfaceNode = {
@@ -168,6 +177,7 @@ export type ManagementInstallDialogNode = {
 export type PresentationNode =
   | AccessInvitationAuthoringNode
   | AccessManifestNode
+  | AccessPersonRoleAuthoringNode
   | ApplicationSystemStateNode
   | AuthSurfaceNode
   | DocumentThemeNode
@@ -292,6 +302,20 @@ export function accessInvitationAuthoringReference(
     authoringId,
     kind: "accessInvitationAuthoringReference",
     role: "accessInvitationAuthoring",
+  };
+}
+
+export function accessPersonRoleAuthoringReference(
+  accessId: string,
+  authoringId: string,
+  personId: string,
+): AccessPersonRoleAuthoringReference {
+  return {
+    accessId,
+    authoringId,
+    kind: "accessPersonRoleAuthoringReference",
+    personId,
+    role: "accessPersonRoleAuthoring",
   };
 }
 
@@ -438,6 +462,13 @@ export function presentationReferenceKey(reference: PresentationReference): stri
       return JSON.stringify([reference.role, reference.stateId]);
     case "accessInvitationAuthoringReference":
       return JSON.stringify([reference.role, reference.accessId, reference.authoringId]);
+    case "accessPersonRoleAuthoringReference":
+      return JSON.stringify([
+        reference.role,
+        reference.accessId,
+        reference.personId,
+        reference.authoringId,
+      ]);
     case "authSurfaceReference":
       return JSON.stringify([reference.role, reference.surfaceKind, reference.surfaceId]);
     case "documentThemeReference":
@@ -471,11 +502,17 @@ export function presentationReferenceKey(reference: PresentationReference): stri
 export function isWorkspaceIntent(intent: PresentationIntent): intent is WorkspaceIntent {
   switch (intent.type) {
     case "accessInvitationAuthoringOpenChange":
+    case "accessInvitationDelete":
+    case "accessInvitationDeletionConfirmationOpenChange":
     case "accessInvitationFieldChange":
-    case "accessInvitationGrantSelection":
-    case "accessInvitationRevocationConfirmationOpenChange":
-    case "accessInvitationRevoke":
+    case "accessInvitationMembershipSelectionChange":
+    case "accessInvitationRoleSelectionChange":
     case "accessInvitationSubmit":
+    case "accessPersonRemove":
+    case "accessPersonRemovalConfirmationOpenChange":
+    case "accessPersonRoleAuthoringOpenChange":
+    case "accessPersonRoleSelectionChange":
+    case "accessPersonRoleSubmit":
     case "applicationSystemStateAction":
     case "authAction":
     case "authContinuation":
@@ -508,11 +545,17 @@ export function isApplicationSystemStateIntent(
 export function isAccessIntent(intent: PresentationIntent): intent is AccessIntent {
   switch (intent.type) {
     case "accessInvitationAuthoringOpenChange":
+    case "accessInvitationDelete":
+    case "accessInvitationDeletionConfirmationOpenChange":
     case "accessInvitationFieldChange":
-    case "accessInvitationGrantSelection":
-    case "accessInvitationRevocationConfirmationOpenChange":
-    case "accessInvitationRevoke":
+    case "accessInvitationMembershipSelectionChange":
+    case "accessInvitationRoleSelectionChange":
     case "accessInvitationSubmit":
+    case "accessPersonRemove":
+    case "accessPersonRemovalConfirmationOpenChange":
+    case "accessPersonRoleAuthoringOpenChange":
+    case "accessPersonRoleSelectionChange":
+    case "accessPersonRoleSubmit":
       return true;
     default:
       return false;
@@ -624,6 +667,17 @@ function assertNodeMatchesReference(node: PresentationNode) {
         throw mismatchedNodeError(reference);
       }
       assertAccessInvitationAuthoringContract(snapshot);
+      return;
+    case "accessPersonRoleAuthoringReference":
+      if (
+        snapshot.kind !== "accessPersonRoleAuthoring" ||
+        snapshot.id !== reference.authoringId ||
+        snapshot.accessId !== reference.accessId ||
+        snapshot.personId !== reference.personId
+      ) {
+        throw mismatchedNodeError(reference);
+      }
+      assertAccessPersonRoleAuthoringContract(snapshot);
       return;
     case "authSurfaceReference":
       if (
@@ -757,19 +811,66 @@ function assertAccessManifestContract(snapshot: AccessManifestContract) {
   );
 
   for (const invitation of invitations) {
-    if (invitation.revocation.availability !== "available") {
+    if (invitation.deletion.availability !== "available") {
       continue;
     }
-    const action = invitation.revocation.action;
+    const action = invitation.deletion.action;
     assertAccessActionIdentity(action, snapshot.id);
     if (
-      action.purpose !== "revocation-open" ||
-      action.intent.type !== "accessInvitationRevocationConfirmationOpenChange" ||
+      action.purpose !== "invitation-deletion-open" ||
+      action.intent.type !== "accessInvitationDeletionConfirmationOpenChange" ||
       action.intent.invitationId !== invitation.id ||
       !action.intent.open
     ) {
       throw new Error(
-        `Formless UI access manifest ${JSON.stringify(snapshot.id)} has an invalid invitation revocation action.`,
+        `Formless UI access manifest ${JSON.stringify(snapshot.id)} has an invalid invitation deletion action.`,
+      );
+    }
+  }
+
+  for (const person of people) {
+    if (person.roleAuthoring.availability === "available") {
+      const { action, reference } = person.roleAuthoring;
+      assertAccessActionIdentity(action, snapshot.id);
+      if (
+        action.purpose !== "person-role-authoring-open" ||
+        action.intent.type !== "accessPersonRoleAuthoringOpenChange" ||
+        action.intent.authoringId !== reference.authoringId ||
+        action.intent.personId !== person.id ||
+        reference.accessId !== snapshot.id ||
+        reference.personId !== person.id ||
+        !action.intent.open
+      ) {
+        throw new Error(
+          `Formless UI access manifest ${JSON.stringify(snapshot.id)} has an invalid person role-authoring action.`,
+        );
+      }
+    }
+    if (person.removal.availability === "available") {
+      const action = person.removal.action;
+      assertAccessActionIdentity(action, snapshot.id);
+      if (
+        action.purpose !== "person-removal-open" ||
+        action.intent.type !== "accessPersonRemovalConfirmationOpenChange" ||
+        action.intent.personId !== person.id ||
+        !action.intent.open
+      ) {
+        throw new Error(
+          `Formless UI access manifest ${JSON.stringify(snapshot.id)} has an invalid person removal action.`,
+        );
+      }
+    }
+  }
+
+  if (snapshot.personAuthoring) {
+    const person = people.find(({ id }) => id === snapshot.personAuthoring?.personId);
+    if (
+      !person ||
+      person.roleAuthoring.availability !== "available" ||
+      !semanticallyEqual(person.roleAuthoring.reference, snapshot.personAuthoring)
+    ) {
+      throw new Error(
+        `Formless UI access manifest ${JSON.stringify(snapshot.id)} has an invalid current person authoring reference.`,
       );
     }
   }
@@ -779,19 +880,37 @@ function assertAccessManifestContract(snapshot: AccessManifestContract) {
   }
   assertAccessActionIdentity(confirmation.cancel, snapshot.id);
   assertAccessActionIdentity(confirmation.action, snapshot.id);
+  if (confirmation.purpose === "invitation-deletion") {
+    if (
+      confirmation.cancel.purpose !== "invitation-deletion-cancel" ||
+      confirmation.cancel.intent.type !== "accessInvitationDeletionConfirmationOpenChange" ||
+      confirmation.cancel.intent.confirmationId !== confirmation.id ||
+      confirmation.cancel.intent.invitationId !== confirmation.invitationId ||
+      confirmation.cancel.intent.open ||
+      confirmation.action.purpose !== "invitation-delete" ||
+      confirmation.action.intent.type !== "accessInvitationDelete" ||
+      confirmation.action.intent.confirmationId !== confirmation.id ||
+      confirmation.action.intent.invitationId !== confirmation.invitationId
+    ) {
+      throw new Error(
+        `Formless UI access manifest ${JSON.stringify(snapshot.id)} has an invalid invitation deletion confirmation.`,
+      );
+    }
+    return;
+  }
   if (
-    confirmation.cancel.purpose !== "revocation-cancel" ||
-    confirmation.cancel.intent.type !== "accessInvitationRevocationConfirmationOpenChange" ||
+    confirmation.cancel.purpose !== "person-removal-cancel" ||
+    confirmation.cancel.intent.type !== "accessPersonRemovalConfirmationOpenChange" ||
     confirmation.cancel.intent.confirmationId !== confirmation.id ||
-    confirmation.cancel.intent.invitationId !== confirmation.invitationId ||
+    confirmation.cancel.intent.personId !== confirmation.personId ||
     confirmation.cancel.intent.open ||
-    confirmation.action.purpose !== "invitation-revoke" ||
-    confirmation.action.intent.type !== "accessInvitationRevoke" ||
+    confirmation.action.purpose !== "person-remove" ||
+    confirmation.action.intent.type !== "accessPersonRemove" ||
     confirmation.action.intent.confirmationId !== confirmation.id ||
-    confirmation.action.intent.invitationId !== confirmation.invitationId
+    confirmation.action.intent.personId !== confirmation.personId
   ) {
     throw new Error(
-      `Formless UI access manifest ${JSON.stringify(snapshot.id)} has an invalid revocation confirmation.`,
+      `Formless UI access manifest ${JSON.stringify(snapshot.id)} has an invalid person removal confirmation.`,
     );
   }
 }
@@ -814,15 +933,18 @@ function assertAccessInvitationAuthoringContract(snapshot: AccessInvitationAutho
   }
 
   const expectedFieldPurposes = {
+    acceptanceTarget: "acceptance-target",
     displayName: "display-name",
-    targetAppInstall: "target-app-install",
     targetEmail: "target-email",
-    targetOrganization: "target-organization",
-    targetSurface: "target-surface",
   } as const;
-  const fields = Object.entries(snapshot.fields) as Array<
-    [keyof typeof expectedFieldPurposes, (typeof snapshot.fields)[keyof typeof snapshot.fields]]
-  >;
+  const fields = Object.entries(snapshot.fields).filter(
+    (
+      entry,
+    ): entry is [
+      keyof typeof expectedFieldPurposes,
+      AccessInvitationAuthoringContract["fields"]["displayName"],
+    ] => entry[1] !== undefined,
+  );
   assertDistinctAccessIdentities(
     snapshot.id,
     "fields",
@@ -863,50 +985,104 @@ function assertAccessInvitationAuthoringContract(snapshot: AccessInvitationAutho
     }
   }
 
-  const expectedGrantPurposes = ["roles", "memberships"] as const;
-  snapshot.grantSelections.forEach((selection, index) => {
-    if (selection.purpose !== expectedGrantPurposes[index]) {
-      throw new Error(
-        `Formless UI access invitation authoring ${JSON.stringify(snapshot.id)} has invalid grant order.`,
-      );
-    }
-    assertDistinctAccessIdentities(
-      snapshot.id,
-      "grant groups",
-      selection.groups.map(({ id }) => id),
-    );
-    const options = selection.groups.flatMap((group) =>
-      group.options.map((option) => ({ group, option })),
-    );
-    assertDistinctAccessIdentities(
-      snapshot.id,
-      "grant options",
-      options.map(({ option }) => option.id),
-    );
-    const selectedOptionIds = options
-      .filter(({ option }) => option.selected)
-      .map(({ option }) => option.id);
-    if (!semanticallyEqual(selection.selectedOptionIds, selectedOptionIds)) {
-      throw new Error(
-        `Formless UI access invitation authoring ${JSON.stringify(snapshot.id)} has inconsistent grant selection.`,
-      );
-    }
-    for (const { group, option } of options) {
-      const intent = option.selectionIntent;
-      if (
-        intent.accessId !== snapshot.accessId ||
-        intent.authoringId !== snapshot.id ||
-        intent.controlId !== selection.id ||
-        intent.groupId !== group.id ||
-        intent.optionId !== option.id ||
-        intent.selected === option.selected
-      ) {
-        throw new Error(
-          `Formless UI access invitation authoring ${JSON.stringify(snapshot.id)} has an invalid grant-selection intent.`,
-        );
-      }
-    }
+  assertAccessRoleSelection(snapshot.roleSelection, {
+    accessId: snapshot.accessId,
+    authoringId: snapshot.id,
+    type: "accessInvitationRoleSelectionChange",
   });
+  assertAccessMembershipSelection(snapshot);
+}
+
+function assertAccessPersonRoleAuthoringContract(snapshot: AccessPersonRoleAuthoringContract) {
+  assertAccessActionIdentity(snapshot.cancel, snapshot.accessId);
+  assertAccessActionIdentity(snapshot.save, snapshot.accessId);
+  if (
+    snapshot.cancel.purpose !== "person-role-authoring-cancel" ||
+    snapshot.cancel.intent.type !== "accessPersonRoleAuthoringOpenChange" ||
+    snapshot.cancel.intent.authoringId !== snapshot.id ||
+    snapshot.cancel.intent.personId !== snapshot.personId ||
+    snapshot.cancel.intent.open ||
+    snapshot.save.purpose !== "person-role-save" ||
+    snapshot.save.intent.type !== "accessPersonRoleSubmit" ||
+    snapshot.save.intent.authoringId !== snapshot.id ||
+    snapshot.save.intent.personId !== snapshot.personId
+  ) {
+    throw new Error(
+      `Formless UI access person role authoring ${JSON.stringify(snapshot.id)} has invalid actions.`,
+    );
+  }
+  assertAccessRoleSelection(snapshot.roleSelection, {
+    accessId: snapshot.accessId,
+    authoringId: snapshot.id,
+    personId: snapshot.personId,
+    type: "accessPersonRoleSelectionChange",
+  });
+}
+
+function assertAccessRoleSelection(
+  selection: AccessInvitationAuthoringContract["roleSelection"],
+  expectedIntent: {
+    accessId: string;
+    authoringId: string;
+    personId?: string;
+    type: "accessInvitationRoleSelectionChange" | "accessPersonRoleSelectionChange";
+  },
+) {
+  assertDistinctAccessIdentities(
+    expectedIntent.authoringId,
+    "role options",
+    selection.options.map(({ id }) => id),
+  );
+  const selectedOptionIds = selection.options
+    .filter(({ selected }) => selected)
+    .map(({ id }) => id);
+  if (!semanticallyEqual(selection.selectedOptionIds, selectedOptionIds)) {
+    throw new Error(
+      `Formless UI access authoring ${JSON.stringify(expectedIntent.authoringId)} has inconsistent role selection.`,
+    );
+  }
+  const intent = selection.changeIntent;
+  if (
+    intent.accessId !== expectedIntent.accessId ||
+    intent.authoringId !== expectedIntent.authoringId ||
+    intent.controlId !== selection.id ||
+    intent.type !== expectedIntent.type ||
+    ("personId" in intent ? intent.personId : undefined) !== expectedIntent.personId
+  ) {
+    throw new Error(
+      `Formless UI access authoring ${JSON.stringify(expectedIntent.authoringId)} has an invalid role-selection intent.`,
+    );
+  }
+}
+
+function assertAccessMembershipSelection(snapshot: AccessInvitationAuthoringContract) {
+  const selection = snapshot.membershipSelection;
+  assertDistinctAccessIdentities(
+    snapshot.id,
+    "membership groups",
+    selection.groups.map(({ id }) => id),
+  );
+  const options = selection.groups.flatMap(({ options }) => options);
+  assertDistinctAccessIdentities(
+    snapshot.id,
+    "membership options",
+    options.map(({ id }) => id),
+  );
+  const selectedOptionIds = options.filter(({ selected }) => selected).map(({ id }) => id);
+  if (!semanticallyEqual(selection.selectedOptionIds, selectedOptionIds)) {
+    throw new Error(
+      `Formless UI access invitation authoring ${JSON.stringify(snapshot.id)} has inconsistent membership selection.`,
+    );
+  }
+  if (
+    selection.changeIntent.accessId !== snapshot.accessId ||
+    selection.changeIntent.authoringId !== snapshot.id ||
+    selection.changeIntent.controlId !== selection.id
+  ) {
+    throw new Error(
+      `Formless UI access invitation authoring ${JSON.stringify(snapshot.id)} has an invalid membership-selection intent.`,
+    );
+  }
 }
 
 function assertAccessActionIdentity(action: AccessActionContract, accessId: string) {
@@ -1146,6 +1322,12 @@ function assertReferencesResolve(nodes: StoredPresentationNodes) {
         throw invalidScopedReferenceError(node.snapshot.authoring);
       }
       assertReferenceResolves(nodes, node.snapshot.authoring);
+      if (node.snapshot.personAuthoring) {
+        if (node.snapshot.personAuthoring.accessId !== node.snapshot.id) {
+          throw invalidScopedReferenceError(node.snapshot.personAuthoring);
+        }
+        assertReferenceResolves(nodes, node.snapshot.personAuthoring);
+      }
       continue;
     }
 

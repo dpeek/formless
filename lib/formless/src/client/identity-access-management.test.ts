@@ -4,8 +4,12 @@ import {
   createIdentityAccessManagementInvitation,
   IDENTITY_COLLABORATOR_INVITATIONS_API_ROUTE,
   IDENTITY_COLLABORATOR_INVITATION_REVOKE_API_ROUTE,
+  IDENTITY_ACCESS_PERSON_REMOVAL_API_ROUTE,
+  IDENTITY_ACCESS_PERSON_ROLE_REPLACEMENT_API_ROUTE,
   fetchIdentityAccessManagementSummary,
   IDENTITY_ACCESS_MANAGEMENT_SUMMARY_API_ROUTE,
+  removeIdentityAccessManagementPerson,
+  replaceIdentityAccessManagementPersonRoles,
   revokeIdentityAccessManagementInvitation,
 } from "./identity-access-management.ts";
 
@@ -85,7 +89,6 @@ describe("identity access management client", () => {
 
     const result = await createIdentityAccessManagementInvitation(
       {
-        appRegistrations: [{ appInstallId: "site" }],
         idempotencyKey: "access-invite-ada",
         invitedPrincipal: { displayName: "Ada Collaborator" },
         principalEmail: { primary: true, recovery: false },
@@ -96,9 +99,7 @@ describe("identity access management client", () => {
             scopeKind: "app-install",
           },
         ],
-        targetAppInstallId: "site",
         targetEmail: "ada@example.com",
-        targetSurface: "app-install",
       },
       {
         fetcher: async (input, init) => {
@@ -126,7 +127,7 @@ describe("identity access management client", () => {
     });
     expect(typeof requests[0]?.init?.body).toBe("string");
     expect(JSON.parse(requests[0]?.init?.body as string)).toEqual({
-      appRegistrations: [{ appInstallId: "site" }],
+      appRegistrations: [],
       idempotencyKey: "access-invite-ada",
       invitedPrincipal: { displayName: "Ada Collaborator" },
       memberships: [],
@@ -138,9 +139,7 @@ describe("identity access management client", () => {
           scopeKind: "app-install",
         },
       ],
-      targetAppInstallId: "site",
       targetEmail: "ada@example.com",
-      targetSurface: "app-install",
     });
     expect(JSON.stringify(result)).not.toContain("raw");
     expect(JSON.stringify(result)).not.toContain("token");
@@ -199,6 +198,103 @@ describe("identity access management client", () => {
     expect(JSON.stringify(result)).not.toContain("session");
   });
 
+  it("replaces person roles through one selected-set access request", async () => {
+    const requests: Array<{ input: RequestInfo | URL; init?: RequestInit }> = [];
+    const input = {
+      idempotencyKey: "replace-ada-roles",
+      now: "2026-07-23T00:00:00.000Z",
+      principalId: "principal:ada",
+      roles: [
+        {
+          appInstallId: "site",
+          roleKey: "app.editor" as const,
+          scopeKind: "app-install" as const,
+        },
+        {
+          roleKey: "instance.admin" as const,
+          scopeKind: "instance" as const,
+        },
+      ],
+    };
+    const body = {
+      principalId: input.principalId,
+      roles: [],
+      status: "committed",
+    } as const;
+
+    const result = await replaceIdentityAccessManagementPersonRoles(input, {
+      fetcher: async (requestInput, init) => {
+        requests.push({ input: requestInput, init });
+        return Response.json(body);
+      },
+    });
+
+    expect(IDENTITY_ACCESS_PERSON_ROLE_REPLACEMENT_API_ROUTE).toBe(
+      "/api/formless/identity/access-people/replace-roles",
+    );
+    expect(result).toEqual(body);
+    expect(requests).toEqual([
+      {
+        input: IDENTITY_ACCESS_PERSON_ROLE_REPLACEMENT_API_ROUTE,
+        init: {
+          body: JSON.stringify(input),
+          credentials: "same-origin",
+          headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json",
+          },
+          method: "POST",
+          signal: undefined,
+        },
+      },
+    ]);
+  });
+
+  it("removes a person through the soft-disable access request", async () => {
+    const requests: Array<{ input: RequestInfo | URL; init?: RequestInit }> = [];
+    const input = {
+      idempotencyKey: "remove-ada",
+      principalId: "principal:ada",
+    };
+    const body = {
+      person: {
+        createdAt: "2026-07-01T00:00:00.000Z",
+        displayName: "Ada",
+        kind: "human",
+        principalId: input.principalId,
+        status: "disabled",
+        updatedAt: "2026-07-23T00:00:00.000Z",
+      },
+      removedAt: "2026-07-23T00:00:00.000Z",
+      status: "disabled",
+    } as const;
+
+    const result = await removeIdentityAccessManagementPerson(input, {
+      fetcher: async (requestInput, init) => {
+        requests.push({ input: requestInput, init });
+        return Response.json(body);
+      },
+    });
+
+    expect(IDENTITY_ACCESS_PERSON_REMOVAL_API_ROUTE).toBe(
+      "/api/formless/identity/access-people/remove",
+    );
+    expect(result).toEqual(body);
+    expect(requests[0]).toEqual({
+      input: IDENTITY_ACCESS_PERSON_REMOVAL_API_ROUTE,
+      init: {
+        body: JSON.stringify(input),
+        credentials: "same-origin",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        method: "POST",
+        signal: undefined,
+      },
+    });
+  });
+
   it("raises response status and safe error text for rejected invitation revokes", async () => {
     await expect(
       revokeIdentityAccessManagementInvitation(
@@ -212,7 +308,10 @@ describe("identity access management client", () => {
         },
       ),
     ).rejects.toMatchObject({
-      body: { error: "Collaborator invitation is not pending." },
+      body: {
+        error: "Collaborator invitation is not pending.",
+        reason: "revoked-invitation",
+      },
       message: "Collaborator invitation is not pending.",
       name: "IdentityAccessManagementApiError",
       status: 409,

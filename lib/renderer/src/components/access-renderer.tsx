@@ -40,20 +40,24 @@ import type {
   AccessDisplayFactContract,
   AccessEmptyStateContract,
   AccessFeedbackContract,
-  AccessGrantSelectionContract,
   AccessIntentHandler,
   AccessInvitationAuthoringContract,
   AccessInvitationContract,
   AccessManifestContract,
   AccessManifestReference,
+  AccessMembershipSelectionContract,
   AccessPersonContract,
+  AccessPersonRoleAuthoringContract,
+  AccessPersonRoleAuthoringReference,
   AccessReadyContract,
+  AccessRoleSelectionContract,
   ButtonContract,
 } from "@dpeek/formless-presentation/contract";
 import {
   useAccessIntentHandler,
   useAccessInvitationAuthoring,
   useAccessManifest,
+  useAccessPersonRoleAuthoring,
 } from "@dpeek/formless-presentation/host/react";
 import { operationIcon } from "./operation-renderer.tsx";
 
@@ -63,15 +67,22 @@ export function AstryxAccessRenderer({
   authoring,
   manifest,
   onIntent,
+  personAuthoring,
 }: {
   authoring?: AccessInvitationAuthoringContract | undefined;
   manifest: AccessManifestContract;
   onIntent: AccessIntentHandler;
+  personAuthoring?: AccessPersonRoleAuthoringContract | undefined;
 }) {
   return (
     <AstryxAccessFrame manifest={manifest} onIntent={onIntent}>
       {manifest.state === "ready" ? (
-        <AstryxAccessReadyContent authoring={authoring} manifest={manifest} onIntent={onIntent} />
+        <AstryxAccessReadyContent
+          authoring={authoring}
+          manifest={manifest}
+          onIntent={onIntent}
+          personAuthoring={personAuthoring}
+        />
       ) : null}
     </AstryxAccessFrame>
   );
@@ -105,7 +116,26 @@ function AstryxSubscribedAccessReadyContent({ manifest }: { manifest: AccessRead
   const authoring = useAccessInvitationAuthoring(manifest.authoring);
   const onIntent = useAccessIntentHandler();
 
-  return <AstryxAccessReadyContent authoring={authoring} manifest={manifest} onIntent={onIntent} />;
+  return (
+    <AstryxAccessReadyContent authoring={authoring} manifest={manifest} onIntent={onIntent}>
+      {manifest.personAuthoring ? (
+        <AstryxSubscribedAccessPersonRoleAuthoring reference={manifest.personAuthoring} />
+      ) : null}
+    </AstryxAccessReadyContent>
+  );
+}
+
+function AstryxSubscribedAccessPersonRoleAuthoring({
+  reference,
+}: {
+  reference: AccessPersonRoleAuthoringReference;
+}) {
+  const authoring = useAccessPersonRoleAuthoring(reference);
+  const onIntent = useAccessIntentHandler();
+
+  return authoring ? (
+    <AstryxAccessPersonRoleAuthoring authoring={authoring} onIntent={onIntent} />
+  ) : null;
 }
 
 function AstryxAccessFrame({
@@ -157,12 +187,16 @@ function AstryxAccessFrame({
 
 function AstryxAccessReadyContent({
   authoring,
+  children,
   manifest,
   onIntent,
+  personAuthoring,
 }: {
   authoring?: AccessInvitationAuthoringContract | undefined;
+  children?: ReactNode;
   manifest: AccessReadyContract;
   onIntent: AccessIntentHandler;
+  personAuthoring?: AccessPersonRoleAuthoringContract | undefined;
 }) {
   return (
     <VStack gap={6} width="100%">
@@ -171,6 +205,7 @@ function AstryxAccessReadyContent({
         <AstryxAccessPeople
           accessId={manifest.id}
           emptyState={manifest.peopleEmptyState}
+          onIntent={onIntent}
           people={manifest.people}
         />
         <AstryxAccessInvitations
@@ -183,6 +218,10 @@ function AstryxAccessReadyContent({
       {authoring ? (
         <AstryxAccessInvitationAuthoring authoring={authoring} onIntent={onIntent} />
       ) : null}
+      {personAuthoring ? (
+        <AstryxAccessPersonRoleAuthoring authoring={personAuthoring} onIntent={onIntent} />
+      ) : null}
+      {children}
       {manifest.confirmation ? (
         <AstryxAccessConfirmation confirmation={manifest.confirmation} onIntent={onIntent} />
       ) : null}
@@ -198,10 +237,12 @@ type AstryxAccessPersonRow = {
 function AstryxAccessPeople({
   accessId,
   emptyState,
+  onIntent,
   people,
 }: {
   accessId: string;
   emptyState?: AccessEmptyStateContract;
+  onIntent: AccessIntentHandler;
   people: readonly AccessPersonContract[];
 }) {
   const headingId = `${accessId}:people-heading`;
@@ -256,6 +297,33 @@ function AstryxAccessPeople({
       key: "status",
       renderCell: ({ person }) => <AstryxAccessFact fact={person.status} />,
       width: pixel(104),
+    },
+    {
+      header: "Actions",
+      key: "actions",
+      renderCell: ({ person }) => (
+        <HStack gap={1} wrap="wrap">
+          {person.roleAuthoring.availability === "available" ? (
+            <AstryxAccessAction action={person.roleAuthoring.action} onIntent={onIntent} />
+          ) : person.roleAuthoring.disabledReason ? (
+            <FieldStatus
+              message={person.roleAuthoring.disabledReason}
+              type="warning"
+              variant="detached"
+            />
+          ) : null}
+          {person.removal.availability === "available" ? (
+            <AstryxAccessAction action={person.removal.action} destructive onIntent={onIntent} />
+          ) : person.removal.disabledReason ? (
+            <FieldStatus
+              message={person.removal.disabledReason}
+              type="warning"
+              variant="detached"
+            />
+          ) : null}
+        </HStack>
+      ),
+      width: proportional(1, { minWidth: 180 }),
     },
   ];
 
@@ -351,15 +419,11 @@ function AstryxAccessInvitations({
       header: "Actions",
       key: "actions",
       renderCell: ({ invitation }) =>
-        invitation.revocation.availability === "available" ? (
-          <AstryxAccessAction
-            action={invitation.revocation.action}
-            destructive
-            onIntent={onIntent}
-          />
-        ) : invitation.revocation.disabledReason ? (
+        invitation.deletion.availability === "available" ? (
+          <AstryxAccessAction action={invitation.deletion.action} destructive onIntent={onIntent} />
+        ) : invitation.deletion.disabledReason ? (
           <FieldStatus
-            message={invitation.revocation.disabledReason}
+            message={invitation.deletion.disabledReason}
             type="warning"
             variant="detached"
           />
@@ -497,12 +561,6 @@ export function AstryxAccessInvitationAuthoringContent({
 }) {
   const formId = `${authoring.id}:form`;
   const formErrors = astryxAccessFormErrors(authoring);
-  const scopeField =
-    authoring.fields.targetSurface.value === "app-install"
-      ? authoring.fields.targetAppInstall
-      : authoring.fields.targetSurface.value === "organization"
-        ? authoring.fields.targetOrganization
-        : undefined;
 
   return (
     <Layout
@@ -529,29 +587,23 @@ export function AstryxAccessInvitationAuthoringContent({
                     pending={authoring.pending}
                   />
                 </HStack>
-                <HStack gap={3} width="100%">
+                <AstryxAccessRoleSelection
+                  onIntent={onIntent}
+                  pending={authoring.pending}
+                  selection={authoring.roleSelection}
+                />
+                {authoring.fields.acceptanceTarget ? (
                   <AstryxAccessControlledField
-                    field={authoring.fields.targetSurface}
+                    field={authoring.fields.acceptanceTarget}
                     onIntent={onIntent}
                     pending={authoring.pending}
                   />
-                  {scopeField ? (
-                    <AstryxAccessControlledField
-                      field={scopeField}
-                      onIntent={onIntent}
-                      pending={authoring.pending}
-                    />
-                  ) : null}
-                </HStack>
-                {authoring.grantSelections.map((selection) => (
-                  <AstryxAccessGrantSelection
-                    key={selection.id}
-                    onIntent={onIntent}
-                    pending={authoring.pending}
-                    selection={selection}
-                    targetSurface={authoring.fields.targetSurface.value}
-                  />
-                ))}
+                ) : null}
+                <AstryxAccessMembershipSelection
+                  onIntent={onIntent}
+                  pending={authoring.pending}
+                  selection={authoring.membershipSelection}
+                />
               </FormLayout>
               {formErrors.length > 0 ? (
                 <VStack aria-live="assertive" gap={1} role="alert">
@@ -665,60 +717,81 @@ function AstryxAccessControlledField({
   return control;
 }
 
-function AstryxAccessGrantSelection({
+function AstryxAccessRoleSelection({
   onIntent,
   pending,
   selection,
-  targetSurface,
 }: {
   onIntent: AccessIntentHandler;
   pending?: AccessInvitationAuthoringContract["pending"];
-  selection: AccessGrantSelectionContract;
-  targetSurface: string;
+  selection: AccessRoleSelectionContract;
 }) {
-  const groups =
-    selection.purpose === "roles"
-      ? selection.groups.filter((group) => astryxAccessRoleGroupIsVisible(group.id, targetSurface))
-      : selection.groups;
-  const visibleOptionIds = new Set(
-    groups.flatMap((group) => group.options.map((option) => option.id)),
-  );
-  const visibleSelection = {
-    ...selection,
-    groups,
-    selectedOptionIds: selection.selectedOptionIds.filter((id) => visibleOptionIds.has(id)),
-  };
-  const optionCount = groups.reduce((count, group) => count + group.options.length, 0);
   const isDisabled = selection.disabledReason !== undefined || pending !== undefined;
-  const disabledMessage = selection.disabledReason;
   const disabledReasons = [
     ...(selection.disabledReason ? [selection.disabledReason] : []),
-    ...groups.flatMap((group) =>
+    ...selection.options.flatMap((option) =>
+      option.disabledReason ? [`${option.label}: ${option.disabledReason}`] : [],
+    ),
+  ];
+
+  return (
+    <VStack data-formless-astryx-access-role-selection={selection.id} gap={1} width="100%">
+      <MultiSelector
+        description={astryxAccessDisabledDescription(disabledReasons)}
+        disabledMessage={selection.disabledReason}
+        hasSearch={selection.options.length > SEARCHABLE_OPTION_COUNT}
+        hasSelectAll={false}
+        isDisabled={isDisabled}
+        label={selection.label}
+        onChange={(selectedOptionIds) =>
+          void dispatchAstryxAccessRoleSelectionChange(onIntent, selection, selectedOptionIds)
+        }
+        options={selection.options.map((option) => ({
+          disabled: option.disabledReason !== undefined,
+          label: option.label,
+          value: option.id,
+        }))}
+        status={astryxAccessValidationStatus(selection.errors)}
+        triggerDisplay="labels"
+        value={[...selection.selectedOptionIds]}
+        width="100%"
+      />
+    </VStack>
+  );
+}
+
+function AstryxAccessMembershipSelection({
+  onIntent,
+  pending,
+  selection,
+}: {
+  onIntent: AccessIntentHandler;
+  pending?: AccessInvitationAuthoringContract["pending"];
+  selection: AccessMembershipSelectionContract;
+}) {
+  const optionCount = selection.groups.reduce((count, group) => count + group.options.length, 0);
+  const disabledReasons = [
+    ...(selection.disabledReason ? [selection.disabledReason] : []),
+    ...selection.groups.flatMap((group) =>
       group.options.flatMap((option) =>
         option.disabledReason ? [`${option.label}: ${option.disabledReason}`] : [],
       ),
     ),
   ];
-  const description = astryxAccessDisabledDescription(disabledReasons);
-  const status = astryxAccessValidationStatus(selection.errors);
 
   return (
-    <VStack data-formless-astryx-access-grants={selection.purpose} gap={1} width="100%">
+    <VStack data-formless-astryx-access-membership-selection={selection.id} gap={1} width="100%">
       <MultiSelector
-        description={description}
-        disabledMessage={disabledMessage}
+        description={astryxAccessDisabledDescription(disabledReasons)}
+        disabledMessage={selection.disabledReason}
         hasSearch={optionCount > SEARCHABLE_OPTION_COUNT}
         hasSelectAll={false}
-        isDisabled={isDisabled}
+        isDisabled={selection.disabledReason !== undefined || pending !== undefined}
         label={selection.label}
         onChange={(selectedOptionIds) =>
-          void dispatchAstryxAccessGrantSelectionChanges(
-            onIntent,
-            visibleSelection,
-            selectedOptionIds,
-          )
+          void onIntent({ ...selection.changeIntent, selectedOptionIds })
         }
-        options={groups.map((group) => ({
+        options={selection.groups.map((group) => ({
           options: group.options.map((option) => ({
             disabled: option.disabledReason !== undefined,
             label: option.label,
@@ -727,26 +800,89 @@ function AstryxAccessGrantSelection({
           title: group.label,
           type: "section" as const,
         }))}
-        status={status}
+        status={astryxAccessValidationStatus(selection.errors)}
         triggerDisplay="labels"
-        value={[...visibleSelection.selectedOptionIds]}
+        value={[...selection.selectedOptionIds]}
         width="100%"
       />
     </VStack>
   );
 }
 
-function astryxAccessRoleGroupIsVisible(groupId: string, targetSurface: string): boolean {
-  if (groupId.endsWith(":instance")) {
-    return true;
-  }
-  if (groupId.endsWith(":app-install")) {
-    return targetSurface === "app-install";
-  }
-  if (groupId.endsWith(":organization")) {
-    return targetSurface === "organization";
-  }
-  return true;
+export function AstryxAccessPersonRoleAuthoring({
+  authoring,
+  onIntent,
+}: {
+  authoring: AccessPersonRoleAuthoringContract;
+  onIntent: AccessIntentHandler;
+}) {
+  return (
+    <Dialog
+      aria-label={authoring.title}
+      isOpen={authoring.open}
+      onOpenChange={(open) => void onIntent({ ...authoring.cancel.intent, open })}
+      purpose="form"
+      width={560}
+    >
+      <AstryxAccessPersonRoleAuthoringContent authoring={authoring} onIntent={onIntent} />
+    </Dialog>
+  );
+}
+
+function AstryxAccessPersonRoleAuthoringContent({
+  authoring,
+  onIntent,
+}: {
+  authoring: AccessPersonRoleAuthoringContract;
+  onIntent: AccessIntentHandler;
+}) {
+  const formId = `${authoring.id}:form`;
+
+  return (
+    <Layout
+      content={
+        <LayoutContent>
+          <form
+            aria-busy={authoring.pending?.isPending}
+            id={formId}
+            noValidate
+            onSubmit={(event) => {
+              event.preventDefault();
+              void onIntent(authoring.save.intent);
+            }}
+          >
+            <VStack gap={4} width="100%">
+              <Text color="secondary" type="body">
+                {authoring.description}
+              </Text>
+              <AstryxAccessRoleSelection
+                onIntent={onIntent}
+                pending={authoring.pending}
+                selection={authoring.roleSelection}
+              />
+              {authoring.feedback ? (
+                <AstryxAccessFeedbackToast feedback={authoring.feedback} />
+              ) : null}
+            </VStack>
+          </form>
+        </LayoutContent>
+      }
+      footer={
+        <LayoutFooter hasDivider>
+          <HStack gap={2} justify="end" width="100%">
+            <AstryxAccessAction action={authoring.cancel} onIntent={onIntent} />
+            <AstryxAccessAction action={authoring.save} form={formId} onIntent={onIntent} />
+          </HStack>
+        </LayoutFooter>
+      }
+      header={
+        <DialogHeader
+          onOpenChange={(open) => void onIntent({ ...authoring.cancel.intent, open })}
+          title={authoring.title}
+        />
+      }
+    />
+  );
 }
 
 function AstryxAccessConfirmation({
@@ -872,22 +1008,12 @@ export function dispatchAstryxAccessFieldChange(
   return onIntent({ ...field.changeIntent, value });
 }
 
-export function dispatchAstryxAccessGrantSelectionChanges(
+export function dispatchAstryxAccessRoleSelectionChange(
   onIntent: AccessIntentHandler,
-  selection: AccessGrantSelectionContract,
+  selection: AccessRoleSelectionContract,
   selectedOptionIds: readonly string[],
 ) {
-  const nextSelectedOptionIds = new Set(selectedOptionIds);
-  return Promise.all(
-    selection.groups.flatMap((group) =>
-      group.options.flatMap((option) => {
-        const selected = nextSelectedOptionIds.has(option.id);
-        return selected === option.selected
-          ? []
-          : [Promise.resolve(onIntent({ ...option.selectionIntent, selected }))];
-      }),
-    ),
-  );
+  return onIntent({ ...selection.changeIntent, selectedOptionIds });
 }
 
 function submitAstryxAccessInvitation(
@@ -960,8 +1086,9 @@ function astryxAccessValidationStatus(errors: readonly string[]) {
 
 function astryxAccessFormErrors(authoring: AccessInvitationAuthoringContract): readonly string[] {
   const fieldErrors = new Set([
-    ...Object.values(authoring.fields).flatMap((field) => field.errors),
-    ...authoring.grantSelections.flatMap((selection) => selection.errors),
+    ...Object.values(authoring.fields).flatMap((field) => field?.errors ?? []),
+    ...authoring.roleSelection.errors,
+    ...authoring.membershipSelection.errors,
   ]);
 
   return authoring.errors.filter((error) => !fieldErrors.has(error));

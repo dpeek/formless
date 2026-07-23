@@ -10,6 +10,7 @@ import type {
   AccessIntentHandler,
   AccessInvitationAuthoringReference,
   AccessManifestReference,
+  AccessPersonRoleAuthoringReference,
   ApplicationSystemStateIntentHandler,
   ApplicationSystemStateReference,
   AuthIntentHandler,
@@ -123,6 +124,10 @@ export function useApplicationSystemState(reference: ApplicationSystemStateRefer
 }
 
 export function useAccessInvitationAuthoring(reference: AccessInvitationAuthoringReference) {
+  return usePresentationSnapshot(reference);
+}
+
+export function useAccessPersonRoleAuthoring(reference: AccessPersonRoleAuthoringReference) {
   return usePresentationSnapshot(reference);
 }
 

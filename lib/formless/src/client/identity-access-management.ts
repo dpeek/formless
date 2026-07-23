@@ -2,9 +2,15 @@ import {
   IDENTITY_COLLABORATOR_INVITATIONS_API_PATH,
   IDENTITY_COLLABORATOR_INVITATION_REVOKE_API_PATH,
   IDENTITY_ACCESS_MANAGEMENT_SUMMARY_API_PATH,
+  IDENTITY_ACCESS_PERSON_REMOVAL_API_PATH,
+  IDENTITY_ACCESS_PERSON_ROLE_REPLACEMENT_API_PATH,
   IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX,
   type IdentityControlPlaneRoleKey,
   type IdentityAccessManagementSummary,
+  type IdentityAccessPersonRemovalRequest,
+  type IdentityAccessPersonRemovalResponse,
+  type IdentityAccessPersonRoleReplacementRequest,
+  type IdentityAccessPersonRoleReplacementResponse,
   type IdentityCollaboratorInvitationRevokeRequest,
   type IdentityCollaboratorInvitationRevokeResponse,
   type IdentityInvitationTargetSurface,
@@ -14,6 +20,10 @@ import {
 
 export const IDENTITY_ACCESS_MANAGEMENT_SUMMARY_API_ROUTE =
   `${IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX}${IDENTITY_ACCESS_MANAGEMENT_SUMMARY_API_PATH}` as const;
+export const IDENTITY_ACCESS_PERSON_ROLE_REPLACEMENT_API_ROUTE =
+  `${IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX}${IDENTITY_ACCESS_PERSON_ROLE_REPLACEMENT_API_PATH}` as const;
+export const IDENTITY_ACCESS_PERSON_REMOVAL_API_ROUTE =
+  `${IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX}${IDENTITY_ACCESS_PERSON_REMOVAL_API_PATH}` as const;
 export const IDENTITY_COLLABORATOR_INVITATIONS_API_ROUTE =
   `${IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX}${IDENTITY_COLLABORATOR_INVITATIONS_API_PATH}` as const;
 export const IDENTITY_COLLABORATOR_INVITATION_REVOKE_API_ROUTE =
@@ -45,15 +55,21 @@ export type CreateIdentityAccessManagementInvitationInput = {
   roleAssignments?: Array<
     | {
         appInstallId: string;
-        roleKey: IdentityControlPlaneRoleKey;
+        roleKey: Extract<
+          IdentityControlPlaneRoleKey,
+          "app.admin" | "app.editor" | "app.user" | "app.viewer"
+        >;
         scopeKind: Extract<IdentityRoleAssignmentScopeKind, "app-install">;
       }
     | {
-        roleKey: IdentityControlPlaneRoleKey;
+        roleKey: Extract<IdentityControlPlaneRoleKey, "instance.admin" | "instance.owner">;
         scopeKind: Extract<IdentityRoleAssignmentScopeKind, "instance">;
       }
     | {
-        roleKey: IdentityControlPlaneRoleKey;
+        roleKey: Extract<
+          IdentityControlPlaneRoleKey,
+          "app.admin" | "app.editor" | "app.user" | "app.viewer"
+        >;
         scopeKind: Extract<IdentityRoleAssignmentScopeKind, "organization">;
         scopeOrganization: string;
       }
@@ -61,7 +77,7 @@ export type CreateIdentityAccessManagementInvitationInput = {
   targetAppInstallId?: string;
   targetEmail: string;
   targetOrganization?: string;
-  targetSurface: IdentityInvitationTargetSurface;
+  targetSurface?: IdentityInvitationTargetSurface;
 };
 
 export type IdentityAccessManagementInvitationResponse = {
@@ -80,6 +96,7 @@ export type IdentityAccessManagementInvitationRevokeResponse =
 
 export type IdentityAccessManagementApiErrorBody = {
   error: string;
+  reason?: string;
 };
 
 export class IdentityAccessManagementApiError extends Error {
@@ -142,6 +159,39 @@ export async function createIdentityAccessManagementInvitation(
   return readJsonResponse<IdentityAccessManagementInvitationResponse>(response);
 }
 
+export async function replaceIdentityAccessManagementPersonRoles(
+  input: IdentityAccessPersonRoleReplacementRequest,
+  {
+    fetcher = fetch,
+    signal,
+  }: {
+    fetcher?: typeof fetch;
+    signal?: AbortSignal;
+  } = {},
+): Promise<IdentityAccessPersonRoleReplacementResponse> {
+  return postIdentityAccessManagementRequest(
+    IDENTITY_ACCESS_PERSON_ROLE_REPLACEMENT_API_ROUTE,
+    input,
+    { fetcher, signal },
+  );
+}
+
+export async function removeIdentityAccessManagementPerson(
+  input: IdentityAccessPersonRemovalRequest,
+  {
+    fetcher = fetch,
+    signal,
+  }: {
+    fetcher?: typeof fetch;
+    signal?: AbortSignal;
+  } = {},
+): Promise<IdentityAccessPersonRemovalResponse> {
+  return postIdentityAccessManagementRequest(IDENTITY_ACCESS_PERSON_REMOVAL_API_ROUTE, input, {
+    fetcher,
+    signal,
+  });
+}
+
 export async function revokeIdentityAccessManagementInvitation(
   input: RevokeIdentityAccessManagementInvitationInput,
   {
@@ -166,6 +216,31 @@ export async function revokeIdentityAccessManagementInvitation(
   return readJsonResponse<IdentityAccessManagementInvitationRevokeResponse>(response);
 }
 
+async function postIdentityAccessManagementRequest<T>(
+  route: string,
+  input: unknown,
+  {
+    fetcher,
+    signal,
+  }: {
+    fetcher: typeof fetch;
+    signal?: AbortSignal;
+  },
+): Promise<T> {
+  const response = await fetcher(route, {
+    body: JSON.stringify(input),
+    credentials: "same-origin",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    method: "POST",
+    signal,
+  });
+
+  return readJsonResponse<T>(response);
+}
+
 async function readJsonResponse<T>(response: Response): Promise<T> {
   const body = (await response.json()) as unknown;
 
@@ -188,7 +263,10 @@ function identityAccessManagementErrorBody(value: unknown): IdentityAccessManage
 
   const error = typeof value.error === "string" ? value.error : "Access management request failed.";
 
-  return { error };
+  return {
+    error,
+    ...(typeof value.reason === "string" ? { reason: value.reason } : {}),
+  };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

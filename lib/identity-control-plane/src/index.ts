@@ -497,7 +497,6 @@ function validateUniqueActiveRoleAssignments(context: string, records: readonly 
 
   for (const record of activeStatusRecordsForEntity(records, "role-assignment")) {
     const key = identityUniqueKey([
-      requiredStringValue(context, record, "role"),
       requiredStringValue(context, record, "targetKind"),
       selectedRoleAssignmentTargetValue(context, record),
       requiredStringValue(context, record, "scopeKind"),
