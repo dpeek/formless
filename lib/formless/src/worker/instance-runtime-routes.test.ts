@@ -325,6 +325,7 @@ describe("instance runtime route resolution", () => {
         kind: "mount",
         targetProfile: "app",
         appInstall: "tasks",
+        requiredRole: "app.admin",
         surface: "admin",
         createdAt: "2026-06-02T00:00:00.000Z",
         updatedAt: "2026-06-02T00:00:00.000Z",
@@ -352,6 +353,16 @@ describe("instance runtime route resolution", () => {
         surface: "public-site",
         createdAt: "2026-06-02T00:00:00.000Z",
         updatedAt: "2026-06-02T00:00:00.000Z",
+      }),
+      routeRecord("route:host:instance:admin.example.com", {
+        access: "management",
+        enabled: true,
+        matchHost: "admin.example.com",
+        matchPath: "/",
+        matchPrefix: "/",
+        kind: "mount",
+        targetProfile: "instance",
+        surface: "admin",
       }),
       routeRecord("route:disabled", {
         enabled: false,
@@ -402,9 +413,23 @@ describe("instance runtime route resolution", () => {
       access: "authenticated",
       id: "route:tasks:members",
       kind: "mount",
+      requiredRole: "app.admin",
       surface: "admin",
       target: { installId: "tasks", kind: "appInstall", packageAppKey: "tasks" },
       targetProfile: "app",
+    });
+    expect(
+      resolveInstanceRuntimeRouteFromRecords({
+        appInstalls,
+        records,
+        request: { host: "admin.example.com", pathname: "/settings" },
+      }),
+    ).toMatchObject({
+      access: "management",
+      id: "route:host:instance:admin.example.com",
+      kind: "mount",
+      matchHost: "admin.example.com",
+      targetProfile: "instance",
     });
     expect(
       resolveInstanceRuntimeRouteFromRecords({
@@ -447,6 +472,13 @@ describe("instance runtime route resolution", () => {
         appInstall: "site",
         surface: "public-site",
       }),
+      routeRecord("instance-default-management", {
+        enabled: true,
+        matchPath: "/settings",
+        kind: "mount",
+        targetProfile: "instance",
+        surface: "admin",
+      }),
       routeRecord("missing-install", {
         enabled: true,
         matchPath: "/apps/missing",
@@ -457,6 +489,17 @@ describe("instance runtime route resolution", () => {
       }),
     ];
 
+    expect(
+      resolveInstanceRuntimeRouteFromRecords({
+        appInstalls,
+        records,
+        request: { host: "formless.local", pathname: "/settings" },
+      }),
+    ).toMatchObject({
+      access: "management",
+      id: "instance-default-management",
+      targetProfile: "instance",
+    });
     expect(
       resolveInstanceRuntimeRouteFromRecords({
         appInstalls,

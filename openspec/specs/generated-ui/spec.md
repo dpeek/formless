@@ -280,15 +280,19 @@ The system SHALL render generated screens from screen models and collection sect
 - THEN generated UI renders the declared app screen
 - AND no frontend schema editor route takes precedence over that screen path
 
-#### Scenario: Owner screen route guard
+#### Scenario: Protected screen route guard
 
-- GIVEN a generated app route has effective access `owner` from its mounted
-  route, selected schema screen, or both
-- WHEN an anonymous browser navigates to that route
+- GIVEN a generated app route has effective access `owner`, `management`, or
+  `authenticated` with a required app role from its mounted route, selected
+  schema screen, or both
+- WHEN a browser without the required current authority navigates to that route
 - THEN generated UI does not render the screen workspace
-- AND the runtime owner-login redirect handles the browser route
-- AND app record sync or owner-only screen data loading does not start before
-  the owner access check resolves
+- AND the runtime account continuation or role-review behavior handles the
+  browser route without treating every protected route as owner-only
+- AND app record sync, push connection, or protected screen data loading does
+  not start before the exact route access check resolves
+- AND client-side navigation uses the same instance-auth route requirement as
+  initial Worker browser routing
 
 #### Scenario: Anonymous screen route
 
@@ -2056,7 +2060,8 @@ navigation, and external effects.
 
 #### Scenario: Project complete instance management presentation
 
-- GIVEN an owner opens `/` on an eligible product instance shell
+- GIVEN an owner or instance admin opens `/` on an eligible product instance
+  shell
 - WHEN generated runtime projects instance management presentation
 - THEN a typed management manifest reference resolves one loading, failed, or
   ready management snapshot
@@ -2074,6 +2079,16 @@ navigation, and external effects.
 - AND management snapshots contain no control-plane records, gateway clients,
   operation handlers, browser replica APIs, route objects, React nodes, runtime
   callbacks, raw logs, filesystem paths, provider credentials, or secrets
+
+#### Scenario: Instance admin management navigation
+
+- GIVEN an active principal has active `instance.admin` authority
+- WHEN the browser opens Instance Settings or `/access`
+- THEN the client management guard accepts the management route
+- AND Apps, Routes, and access-management presentation render through their
+  existing operational API authorization
+- AND owner setup, recovery, owner-role management, auth-origin policy, and
+  admin-bearer recovery controls remain unavailable without owner authority
 
 #### Scenario: Compose management and workspaces on the application host
 
@@ -2174,7 +2189,7 @@ cache, provider evidence, view, screen, read model, and operation models.
 
 #### Scenario: Instance overview surface
 
-- **GIVEN** an owner opens `/` on the product instance shell
+- **GIVEN** an owner or instance admin opens `/` on the product instance shell
 - **WHEN** app install, route, workspace gateway, deployment config,
   deployment observation, desired-state projection, and provider evidence data
   are available

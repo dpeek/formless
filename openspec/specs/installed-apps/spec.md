@@ -214,9 +214,9 @@ instance `route` records.
 - **AND** disabled route records, deleted installs, unsupported package keys,
   and missing public Site capability are omitted from launch navigation
 - **AND** the link label, install id, package app key, route id, route kind,
-  access policy, and href are available to the browser without exposing
-  installed app records, provider secrets, deployment evidence, or raw route
-  provider state
+  access policy, required role, and href are available to the browser without
+  exposing installed app records, provider secrets, deployment evidence, or raw
+  route provider state
 - **AND** default `/apps/<installId>` and `/sites/<installId>` paths are used
   only when no schema-owned route records exist for an older install snapshot
 - **AND** custom enabled route paths are preserved rather than recomputed from
@@ -412,7 +412,18 @@ The system SHALL represent app admin and public Site routes as schema-owned
 - **WHEN** default route records are created
 - **THEN** route records target the app install for an admin route under
   `/apps/<installId>`
+- **AND** the admin route uses authenticated access with required role
+  `app.admin` scoped through that app install target
 - **AND** no public Site route record is created for that install
+
+#### Scenario: Site admin route role
+
+- **GIVEN** a Site app install creates its default admin and public route records
+- **WHEN** route access is projected
+- **THEN** the admin route uses authenticated access with required role
+  `app.admin` scoped through that app install target
+- **AND** the public Site routes retain anonymous access without a required app
+  role
 
 #### Scenario: Route record target
 
@@ -435,6 +446,20 @@ records and the active package resolver.
 - **THEN** the response derives installed apps from schema-owned app install and
   route records
 - **AND** package lists come from the active package resolver
+
+#### Scenario: Role-filtered browser registry read
+
+- **GIVEN** a principal-backed browser reads `/api/formless/app-installs`
+- **WHEN** current instance auth resolves the principal's authority
+- **THEN** active `instance.owner` or `instance.admin` authority can read the
+  complete operational install registry and active package list
+- **AND** a principal authorized only by app-install-scoped `app.admin` receives
+  only matching install records, their eligible routes, and package facts
+  needed to mount those installs
+- **AND** packages, installs, and routes outside the principal's current scope
+  are omitted
+- **AND** an ordinary authenticated principal receives no protected installed
+  app registry metadata
 
 #### Scenario: Browser active package registry
 

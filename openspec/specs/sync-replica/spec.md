@@ -163,6 +163,21 @@ The system SHALL support push sync over hibernatable WebSockets for schema-key a
 - THEN the Authority accepts push sync messages for that installed app
 - AND the socket can catch up from the client's cursor
 
+#### Scenario: Installed app admin push authorization remains current
+
+- GIVEN an installed app admin push socket was accepted for an active owner or
+  matching app-install-scoped app administrator
+- WHEN the socket sends catch-up messages or becomes eligible for a committed
+  change broadcast
+- THEN the runtime rechecks current principal status, matching authority, and
+  session version before returning protected app changes
+- AND a disabled principal, disabled or removed matching role, changed session
+  version, ordinary authenticated principal, instance admin without matching app
+  role, or app admin for another install receives no later catch-up or broadcast
+  data
+- AND an unauthorized socket is closed or suppressed instead of retaining
+  handshake-time authority
+
 ### Requirement: Push Sync Messages
 
 The system SHALL use push sync messages to catch up clients and deliver committed writes.

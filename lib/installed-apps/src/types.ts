@@ -7,8 +7,9 @@ export type AppInstallId = string;
 export type AppInstallRegistrationPolicy = "closed" | "email-verified" | "custom-operation";
 export type AppInstallRegistrationOperation = `${string}.${string}`;
 export type AppInstallStatus = "installed";
-export type AppInstallRouteAccess = "anonymous" | "authenticated" | "owner";
+export type AppInstallRouteAccess = "anonymous" | "authenticated" | "management" | "owner";
 export type AppInstallRouteKind = "admin" | "publicSite";
+export type AppInstallRouteRequiredRole = "app.admin";
 
 export type AppInstallRoute = {
   access?: AppInstallRouteAccess;
@@ -16,6 +17,7 @@ export type AppInstallRoute = {
   id: string;
   path: `/${string}`;
   prefix?: `/${string}/`;
+  requiredRole?: AppInstallRouteRequiredRole;
   routeKind: AppInstallRouteKind;
 };
 
@@ -25,6 +27,7 @@ export type AppInstallLaunchLink = {
   installId: AppInstallId;
   label: string;
   packageAppKey: PackageAppKey;
+  requiredRole?: AppInstallRouteRequiredRole;
   routeId?: string;
   routeKind: AppInstallRouteKind;
 };

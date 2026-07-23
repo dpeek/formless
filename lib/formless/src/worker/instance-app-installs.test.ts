@@ -15,6 +15,8 @@ import {
   INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX,
   INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
 } from "@dpeek/formless-instance-control-plane";
+import { IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX } from "@dpeek/formless-identity-control-plane";
+import type { StoredRecord } from "@dpeek/formless-storage";
 import {
   crmSeedRecords,
   crmSourceSchema,
@@ -22,7 +24,7 @@ import {
   taskSeedRecords,
   taskSourceSchema,
 } from "../test/schema-apps.ts";
-import { operationWriteRequest } from "../test/authority-write.ts";
+import { operationWriteRequest, recordOperationRequest } from "../test/authority-write.ts";
 import { ensureTestIdentityOwner, resetTestIdentityStorage } from "../test/identity-owner.ts";
 import {
   bundledSourceSchemaHashFixtures,
@@ -304,11 +306,12 @@ describe("instance app install API routes", () => {
             record.values.targetProfile,
             record.values.surface,
             record.values.access,
+            record.values.requiredRole,
           ])
           .sort(([left], [right]) => String(left).localeCompare(String(right))),
       ).toEqual([
-        ["route:labs:admin", "app", "admin", "owner"],
-        ["route:labs:public-site", "public-site", "public-site", "anonymous"],
+        ["route:labs:admin", "app", "admin", "authenticated", "app.admin"],
+        ["route:labs:public-site", "public-site", "public-site", "anonymous", undefined],
       ]);
       expect(controlPlaneJson).not.toContain("formless.app.json");
       expect(controlPlaneJson).not.toContain("../app");
@@ -486,19 +489,24 @@ describe("instance app install API routes", () => {
       ["admin", "/apps/personal-admin"],
       ["publicSite", "/sites/personal"],
     ]);
-    expect(after.body.installs[0]?.routes?.map((route) => [route.routeKind, route.access])).toEqual(
-      [
-        ["admin", "owner"],
-        ["publicSite", "anonymous"],
-      ],
-    );
+    expect(
+      after.body.installs[0]?.routes?.map((route) => [
+        route.routeKind,
+        route.access,
+        route.requiredRole,
+      ]),
+    ).toEqual([
+      ["admin", "authenticated", "app.admin"],
+      ["publicSite", "anonymous", undefined],
+    ]);
     expect(after.body.installs[0]?.launchLinks).toEqual([
       {
-        access: "owner",
+        access: "authenticated",
         href: "/apps/personal-admin",
         installId: "personal",
         label: "Personal Site",
         packageAppKey: "site",
+        requiredRole: "app.admin",
         routeId: "route:personal:admin",
         routeKind: "admin",
       },
@@ -836,10 +844,31 @@ describe("instance app install API routes", () => {
     expect(accepted.response.status).toBe(201);
   });
 
-  it("requires operational management authorization for app management reads when configured", async () => {
+  it("projects app install registry metadata through current management and app authority", async () => {
+    await postAdminJson<CreateAppInstallResponse>("/api/formless/app-installs", {
+      packageAppKey: "site",
+      installId: "personal",
+      label: "Personal Site",
+    });
+    await postAdminJson<CreateAppInstallResponse>("/api/formless/app-installs", {
+      packageAppKey: "tasks",
+      installId: "work",
+      label: "Work Tasks",
+    });
+    const instanceAdmin = await createIdentityPrincipal("Registry Instance Admin");
+    await assignIdentityRole(instanceAdmin.id, "instance.admin");
+    const personalAdmin = await createIdentityPrincipal("Registry Personal App Admin");
+    await assignIdentityRole(personalAdmin.id, "app.admin", "personal");
+    const workAdmin = await createIdentityPrincipal("Registry Work App Admin");
+    await assignIdentityRole(workAdmin.id, "app.admin", "work");
+    const ordinary = await createIdentityPrincipal("Registry Ordinary Principal");
     const anonymous = await harness.fetch("/api/formless/app-installs");
     const admin = await getJson<AppInstallsResponse>("/api/formless/app-installs");
     const ownerRead = await getOwnerJson<AppInstallsResponse>("/api/formless/app-installs");
+    const instanceAdminRead = await getRegistryForPrincipal(instanceAdmin.id);
+    const personalAdminRead = await getRegistryForPrincipal(personalAdmin.id);
+    const workAdminRead = await getRegistryForPrincipal(workAdmin.id);
+    const ordinaryRead = await getRegistryForPrincipal(ordinary.id);
 
     expect(anonymous.status).toBe(401);
     expect(anonymous.headers.get("WWW-Authenticate")).toBe('Bearer realm="formless-admin"');
@@ -847,8 +876,31 @@ describe("instance app install API routes", () => {
       error:
         "Owner session, instance-admin session, or admin authorization is required for this read endpoint.",
     });
-    expect(admin.body.installs).toEqual([]);
-    expect(ownerRead.body.installs).toEqual([]);
+    expect(admin.body.installs.map((install) => install.installId)).toEqual(["personal", "work"]);
+    expect(ownerRead.body).toEqual(admin.body);
+    expect(instanceAdminRead).toEqual(admin.body);
+    expect(personalAdminRead.installs.map((install) => install.installId)).toEqual(["personal"]);
+    expect(personalAdminRead.packages.map((appPackage) => appPackage.packageAppKey)).toEqual([
+      "site",
+    ]);
+    expect(personalAdminRead.installs[0]?.routes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          requiredRole: "app.admin",
+          routeKind: "admin",
+        }),
+        expect.objectContaining({
+          access: "anonymous",
+          routeKind: "publicSite",
+        }),
+      ]),
+    );
+    expect(personalAdminRead.launchLinks?.every((link) => link.installId === "personal")).toBe(
+      true,
+    );
+    expect(workAdminRead.installs.map((install) => install.installId)).toEqual(["work"]);
+    expect(workAdminRead.packages.map((appPackage) => appPackage.packageAppKey)).toEqual(["tasks"]);
+    expect(ordinaryRead).toEqual({ installs: [], launchLinks: [], packages: [] });
   });
 
   it("guards installed app management reads while keeping public Site tree reads anonymous", async () => {
@@ -899,6 +951,16 @@ async function getOwnerJson<T>(path: string) {
     body: (await response.json()) as T,
     response,
   };
+}
+
+async function getRegistryForPrincipal(principalId: string) {
+  const response = await harness.fetch("/api/formless/app-installs", {
+    headers: await principalSessionHeaders(principalId),
+  });
+
+  expect(response.status).toBe(200);
+
+  return (await response.json()) as AppInstallsResponse;
 }
 
 async function postAdminJson<T>(path: string, body: unknown) {
@@ -996,6 +1058,78 @@ async function ownerSessionHeaders() {
   return {
     Cookie: cookiePair(created.cookie),
   };
+}
+
+async function principalSessionHeaders(principalId: string) {
+  const created = await createOwnerSessionCookie({
+    env: { FORMLESS_ADMIN_TOKEN: adminToken },
+    maxAgeSeconds: 60,
+    now: "2999-01-01T00:00:00.000Z",
+    owner: {
+      createdAt: "2999-01-01T00:00:00.000Z",
+      id: principalId,
+      name: "Session Principal",
+    },
+    request: new Request("http://example.com/apps"),
+  });
+
+  return { Cookie: cookiePair(created.cookie) };
+}
+
+async function createIdentityPrincipal(displayName: string): Promise<StoredRecord> {
+  return await postIdentityRecordOperation({
+    entity: "principal",
+    idempotencyKey: `registry-create-${displayName.toLowerCase().replace(/\W+/g, "-")}`,
+    operationName: "create",
+    input: {
+      displayName,
+      kind: "human",
+      status: "active",
+    },
+  });
+}
+
+async function assignIdentityRole(
+  principalId: string,
+  roleKey: "app.admin" | "instance.admin",
+  appInstallId?: string,
+): Promise<StoredRecord> {
+  return await postIdentityRecordOperation({
+    entity: "role-assignment",
+    idempotencyKey: [
+      "registry-assign",
+      principalId.replace(/\W+/g, "-"),
+      roleKey.replace(/\./g, "-"),
+      appInstallId ?? "instance",
+    ].join("-"),
+    operationName: "create",
+    input: {
+      ...(appInstallId === undefined ? {} : { appInstallId }),
+      role: `role:${roleKey}`,
+      scopeKind: appInstallId === undefined ? "instance" : "app-install",
+      status: "active",
+      targetKind: "principal",
+      targetPrincipal: principalId,
+    },
+  });
+}
+
+async function postIdentityRecordOperation(
+  input: Parameters<typeof recordOperationRequest>[0],
+): Promise<StoredRecord> {
+  const request = recordOperationRequest(input);
+  const response = await harness.fetch(
+    `${IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX}${request.path.slice("/api".length)}`,
+    {
+      body: JSON.stringify(request.body),
+      headers: adminHeaders({ "Content-Type": "application/json" }),
+      method: "POST",
+    },
+  );
+
+  expect(response.status).toBe(200);
+
+  return request.response(await response.json()).record;
 }
 
 function cookiePair(cookie: string) {

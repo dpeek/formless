@@ -9,9 +9,11 @@ import type {
   CentralAuthSessionValidationFailureReason,
 } from "./central-auth-session.ts";
 import type {
+  ActiveIdentityAppAuthority,
   ActiveIdentityAuthority,
   ActiveIdentityPrincipal,
 } from "./identity-owner-internal.ts";
+import type { RuntimeRouteRequiredRole } from "../shared/runtime-topology.ts";
 import type { InstanceAuthSessionTargetBinding } from "./instance-auth-state.ts";
 import type { OwnerSession, OwnerSessionValidationFailureReason } from "./owner-session.ts";
 
@@ -29,6 +31,7 @@ export type HostAuthSessionValidationFailureReason =
   | "malformed-cookie"
   | "malformed-payload"
   | "missing-cookie"
+  | "missing-app-admin-authority"
   | "missing-management-authority"
   | "missing-owner-authority"
   | "missing-principal"
@@ -40,7 +43,11 @@ export type HostAuthSessionValidationFailureReason =
   | "wrong-purpose"
   | "wrong-target";
 
-export type InstanceAuthAuthorityRequirement = "authenticated" | "management" | "owner";
+export type InstanceAuthAuthorityRequirement =
+  | "app.admin"
+  | "authenticated"
+  | "management"
+  | "owner";
 export type InstanceAuthSession = CentralAuthSession | HostAuthSession | OwnerSession;
 export type InstanceAuthSessionKind = "central-session" | "host-session" | "owner-session";
 
@@ -68,8 +75,13 @@ export type InstanceAuthAccessReaders = {
   readAccountCompletion: (
     session: InstanceAuthSession,
     target: AccountCompletionGateTarget,
+    requiredRole?: RuntimeRouteRequiredRole,
   ) => Promise<AccountCompletionGateResolutionResult>;
   readActivePrincipal: (session: InstanceAuthSession) => Promise<ActiveIdentityPrincipal | null>;
+  readAppAdminAuthority: (
+    session: InstanceAuthSession,
+    appInstallId: string,
+  ) => Promise<ActiveIdentityAppAuthority | null>;
   readCentralSession: () => Promise<CentralAuthSessionReadResult>;
   readHostSession: (target: InstanceAuthSessionTargetBinding) => Promise<HostAuthSessionReadResult>;
   readHostSessionVersion: (session: HostAuthSession) => Promise<number>;
@@ -83,6 +95,7 @@ export type InstanceAuthAccessReaders = {
 export type InstanceAuthAccessFailureReason =
   | CentralAuthSessionValidationFailureReason
   | HostAuthSessionValidationFailureReason
+  | "missing-app-admin-authority"
   | "missing-management-authority"
   | "missing-owner-authority"
   | "missing-principal";
@@ -104,6 +117,7 @@ export type InstanceAuthAccessResult =
 
 export type InstanceAuthAccessInput = {
   accountCompletionTarget?: AccountCompletionGateTarget;
+  appInstallId?: string;
   localOwnerSessionFallbackAllowed: boolean;
   requiredAuthority: InstanceAuthAuthorityRequirement;
   target?: InstanceAuthSessionTargetBinding;
@@ -187,6 +201,10 @@ export async function resolveInstanceAuthAccess(
     }
   }
 
+  if (centralSession.ok) {
+    return centralFailure;
+  }
+
   if (input.target !== undefined) {
     const hostSession = await readers.readHostSession(input.target);
 
@@ -210,6 +228,13 @@ export async function resolveInstanceAuthAccess(
 
   if (centralFailure.reason === "account-completion-required") {
     return centralFailure;
+  }
+
+  if (
+    ownerFailure?.reason === "missing-app-admin-authority" ||
+    centralFailure.reason === "missing-app-admin-authority"
+  ) {
+    return { ok: false, reason: "missing-app-admin-authority" };
   }
 
   if (
@@ -339,9 +364,35 @@ async function validateCurrentSession(
   input: InstanceAuthAccessInput,
   readers: InstanceAuthAccessReaders,
 ): Promise<InstanceAuthAccessResult> {
-  const currentAuthority = await readCurrentAuthority(session, input.requiredAuthority, readers);
+  const currentAuthority = await readCurrentAuthority(
+    session,
+    input.requiredAuthority,
+    input.appInstallId,
+    input.target,
+    readers,
+  );
 
   if (!currentAuthority) {
+    if (
+      input.requiredAuthority === "app.admin" &&
+      input.accountCompletionTarget !== undefined &&
+      (await readers.readActivePrincipal(session))?.id === session.principalId
+    ) {
+      const accountCompletion = await readers.readAccountCompletion(
+        session,
+        input.accountCompletionTarget,
+        "app.admin",
+      );
+
+      if (accountCompletion.status === "blocked") {
+        return {
+          accountCompletion,
+          ok: false,
+          reason: "account-completion-required",
+        };
+      }
+    }
+
     return { ok: false, reason: missingAuthorityReason(input.requiredAuthority) };
   }
 
@@ -353,10 +404,17 @@ async function validateCurrentSession(
     return { ok: false, reason: "revoked-session" };
   }
 
-  if (input.requiredAuthority === "authenticated" && input.accountCompletionTarget !== undefined) {
+  if (
+    (input.requiredAuthority === "authenticated" || input.requiredAuthority === "app.admin") &&
+    input.accountCompletionTarget !== undefined &&
+    !(input.requiredAuthority === "app.admin" && currentAuthority.ownerAuthorized)
+  ) {
     const accountCompletion = await readers.readAccountCompletion(
       session,
       input.accountCompletionTarget,
+      input.requiredAuthority === "app.admin" && !currentAuthority.ownerAuthorized
+        ? "app.admin"
+        : undefined,
     );
 
     if (accountCompletion.status === "blocked") {
@@ -370,7 +428,7 @@ async function validateCurrentSession(
 
   return {
     ok: true,
-    ownerAuthorized: input.requiredAuthority === "owner",
+    ownerAuthorized: currentAuthority.ownerAuthorized,
     principalId: session.principalId,
     session,
     ...(input.target === undefined ? {} : { target: input.target }),
@@ -381,21 +439,50 @@ async function validateCurrentSession(
 async function readCurrentAuthority(
   session: InstanceAuthSession,
   requirement: InstanceAuthAuthorityRequirement,
+  appInstallId: string | undefined,
+  target: InstanceAuthSessionTargetBinding | undefined,
   readers: InstanceAuthAccessReaders,
-): Promise<boolean> {
+): Promise<{ ownerAuthorized: boolean } | null> {
   switch (requirement) {
     case "authenticated":
-      return (await readers.readActivePrincipal(session))?.id === session.principalId;
+      return (await readers.readActivePrincipal(session))?.id === session.principalId
+        ? { ownerAuthorized: false }
+        : null;
+    case "app.admin": {
+      const targetAppInstallId = target?.appInstallId;
+      const requiredAppInstallId = appInstallId ?? targetAppInstallId;
+
+      if (
+        requiredAppInstallId === undefined ||
+        (targetAppInstallId !== undefined && targetAppInstallId !== requiredAppInstallId)
+      ) {
+        return null;
+      }
+
+      const authority = await readers.readAppAdminAuthority(session, requiredAppInstallId);
+
+      if (
+        authority?.id !== session.principalId ||
+        authority.appInstallId !== requiredAppInstallId ||
+        (!authority.appAdmin && !authority.instanceOwner)
+      ) {
+        return null;
+      }
+
+      return { ownerAuthorized: authority.instanceOwner };
+    }
     case "management": {
       const authority = await readers.readManagementAuthority(session);
 
-      return (
-        authority?.id === session.principalId &&
+      return authority?.id === session.principalId &&
         (authority.instanceAdmin === true || authority.instanceOwner === true)
-      );
+        ? { ownerAuthorized: authority.instanceOwner }
+        : null;
     }
     case "owner":
-      return (await readers.readOwnerAuthority(session))?.id === session.principalId;
+      return (await readers.readOwnerAuthority(session))?.id === session.principalId
+        ? { ownerAuthorized: true }
+        : null;
   }
 }
 
@@ -403,6 +490,8 @@ function missingAuthorityReason(
   requirement: InstanceAuthAuthorityRequirement,
 ): InstanceAuthAccessFailureReason {
   switch (requirement) {
+    case "app.admin":
+      return "missing-app-admin-authority";
     case "authenticated":
       return "missing-principal";
     case "management":
@@ -420,6 +509,8 @@ function sessionTargetBindingsEqual(
     left.targetOrigin === right.targetOrigin &&
     left.routeId === right.routeId &&
     left.targetProfile === right.targetProfile &&
+    left.access === right.access &&
+    left.requiredRole === right.requiredRole &&
     left.appInstallId === right.appInstallId &&
     left.storageIdentity === right.storageIdentity
   );

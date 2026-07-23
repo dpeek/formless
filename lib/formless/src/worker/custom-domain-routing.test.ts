@@ -1,5 +1,6 @@
 import { createHash, generateKeyPairSync, type KeyObject } from "node:crypto";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vite-plus/test";
+import type { WebSocketEventMap } from "miniflare";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -8,7 +9,11 @@ import {
   INSTANCE_CONTROL_PLANE_INSTANCE_SETTINGS_ID,
   INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
 } from "@dpeek/formless-instance-control-plane";
-import { IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX } from "@dpeek/formless-identity-control-plane";
+import {
+  IDENTITY_ACCESS_MANAGEMENT_SUMMARY_API_PATH,
+  IDENTITY_COLLABORATOR_INVITATIONS_API_PATH,
+  IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX,
+} from "@dpeek/formless-identity-control-plane";
 import type { AppSchema } from "@dpeek/formless-schema";
 
 import {
@@ -18,11 +23,13 @@ import {
 } from "../app/runtime-profile.ts";
 import { runtimeTopologyRoutes } from "../shared/runtime-topology.ts";
 import {
+  COLLABORATOR_INVITATION_ACCEPT_PATH,
   ownerLoginRedirectLocationForRoute,
   type AccountCompletionGateTarget,
   type OwnerPasskeyRegistrationOptionsResponse,
   type OwnerPasskeyRegistrationVerifyResponse,
 } from "../shared/instance-auth.ts";
+import type { SyncSocketServerMessage } from "../shared/protocol.ts";
 import type { EmailDeliveryRenderedMessage } from "../shared/email-runtime.ts";
 import { PUBLIC_SITE_INDEXING_CACHE_CONTROL } from "@dpeek/formless-site-app/worker";
 import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
@@ -606,6 +613,67 @@ describe("installed Site custom-domain Worker routing", () => {
     );
   });
 
+  it("carries an accepted instance-admin invitation into Settings and Access without app authority", async () => {
+    await resetWorkerState(harness, ["controlPlane", "taskStorage", "auth"]);
+    await setupPrimaryProductionIdentity();
+    await patchRouteRecord("route:primary-production", { access: "management" });
+    await configureAuthEmail({ settingsMode: "update", testKey: "instance-admin-journey" });
+    await setupMappedApp({ access: "authenticated", requiredRole: "app.admin" });
+
+    const accepted = await inviteAndAcceptCollaborator({
+      displayName: "Invited Instance Admin",
+      roleAssignment: {
+        roleKey: "instance.admin",
+        scopeKind: "instance",
+      },
+      targetEmail: "invited-instance-admin@example.com",
+      targetSurface: "instance",
+      testKey: "instance-admin-journey",
+    });
+    const settings = await fetchAuth("/", {
+      headers: { Accept: "text/html", Cookie: accepted.cookie },
+      redirect: "manual",
+    });
+    const access = await fetchAuth("/access", {
+      headers: { Accept: "text/html", Cookie: accepted.cookie },
+      redirect: "manual",
+    });
+    const accessSummary = await fetchAuth(
+      `${IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX}${IDENTITY_ACCESS_MANAGEMENT_SUMMARY_API_PATH}`,
+      { headers: { Cookie: accepted.cookie } },
+    );
+    const registry = await fetchAuth("/api/formless/app-installs", {
+      headers: { Cookie: accepted.cookie },
+    });
+    const registryBody = (await registry.json()) as {
+      installs?: Array<{ installId?: string }>;
+    };
+    const appBootstrap = await fetchAuth(`/api/app-installs/tasks/${taskInstallId}/bootstrap`, {
+      headers: { Cookie: accepted.cookie },
+    });
+    const appSync = await fetchAuth(`/api/app-installs/tasks/${taskInstallId}/sync?after=0`, {
+      headers: { Cookie: accepted.cookie },
+    });
+    const ownerRecovery = await fetchAuth("/api/formless/setup/capability", {
+      body: "not-json",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: accepted.cookie,
+      },
+      method: "POST",
+    });
+
+    expect(accepted.verify.status).toBe(200);
+    expect(settings.status).toBe(200);
+    expect(access.status).toBe(200);
+    expect(accessSummary.status).toBe(200);
+    expect(registry.status).toBe(200);
+    expect(registryBody.installs?.map((install) => install.installId)).toContain(taskInstallId);
+    expect(appBootstrap.status).toBe(401);
+    expect(appSync.status).toBe(401);
+    expect(ownerRecovery.status).toBe(401);
+  }, 10_000);
+
   it("consumes mapped app auth callbacks into host-local session cookies", async () => {
     await resetWorkerState(harness, ["controlPlane", "auth"]);
     await setupPrimaryProductionIdentity();
@@ -678,6 +746,7 @@ describe("installed Site custom-domain Worker routing", () => {
     expect(setCookie).toContain("Secure");
     expect(hostSessionPayload).toEqual(
       expect.objectContaining({
+        access: "owner",
         appInstallId: taskInstallId,
         instanceId: "www.example.com",
         principalId: owner.id,
@@ -802,6 +871,681 @@ describe("installed Site custom-domain Worker routing", () => {
       ),
     );
   });
+
+  it("authorizes matching app admins through central and host-local sessions with owner override", async () => {
+    await resetWorkerState(harness, ["controlPlane", "auth"]);
+    await setupPrimaryProductionIdentity();
+    await setupMappedApp({ access: "authenticated", requiredRole: "app.admin" });
+
+    const matching = await createCompletionReadyPrincipalSessionCookie("Matching App Admin");
+    const matchingAssignment = await assignIdentityAppRole(matching.principalId, taskInstallId);
+    const ordinary = await createCompletionReadyPrincipalSessionCookie("Ordinary App Principal");
+    const owner = await ensureTestIdentityOwner(harness, adminToken, {
+      name: "App Override Owner",
+    });
+    const ownerCookie = await createCentralAuthSessionCookieForPrincipal(owner.id);
+    const start = await fetchHost(mappedAppHost, "/schema?view=board", {
+      headers: { Accept: "text/html" },
+      redirect: "manual",
+    });
+    const accountUrl = requiredHeader(start, "Location");
+
+    const matchingStatus = await harness.mf.dispatchFetch(accountUrl, {
+      headers: { Accept: "application/json", Cookie: matching.cookie },
+      redirect: "manual",
+    });
+    const ordinaryStatus = await harness.mf.dispatchFetch(accountUrl, {
+      headers: { Accept: "application/json", Cookie: ordinary.cookie },
+      redirect: "manual",
+    });
+    const ownerStatus = await harness.mf.dispatchFetch(accountUrl, {
+      headers: { Accept: "application/json", Cookie: ownerCookie },
+      redirect: "manual",
+    });
+    const ordinaryBody = (await ordinaryStatus.json()) as {
+      gate?: { kind?: string; roleKey?: string; scopeKind?: string };
+    };
+    const { grant } = await issueHandoffGrantFromAuthAccount(accountUrl, matching.cookie);
+    const callback = await harness.mf.dispatchFetch(requiredHeader(grant, "Location"), {
+      headers: { Cookie: cookiePair(requiredHeader(start, "Set-Cookie")) },
+      redirect: "manual",
+    });
+    const hostCookie = cookiePair(requiredHeader(callback, "Set-Cookie"));
+    const hostShell = await fetchHost(mappedAppHost, "/schema?view=board", {
+      headers: { Accept: "text/html", Cookie: hostCookie },
+      redirect: "manual",
+    });
+
+    await postAdminJson(
+      `${IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX}/operations/role-assignment/update`,
+      {
+        idempotencyKey: "revoke-matching-app-admin",
+        recordId: matchingAssignment.id,
+        input: { status: "disabled" },
+      },
+    );
+    const revokedHostShell = await fetchHost(mappedAppHost, "/schema?view=board", {
+      headers: { Accept: "text/html", Cookie: hostCookie },
+      redirect: "manual",
+    });
+
+    expect(matchingStatus.status).toBe(200);
+    expect(ownerStatus.status).toBe(200);
+    expect(ordinaryStatus.status).toBe(409);
+    expect(ordinaryBody.gate).toMatchObject({
+      kind: "role-review",
+      roleKey: "app.admin",
+      scopeKind: "app-install",
+    });
+    expect(callback.status).toBe(302);
+    expect(hostShell.status).toBe(200);
+    expect(revokedHostShell.status).toBe(302);
+    expect(new URL(requiredHeader(revokedHostShell, "Location")).origin).toBe(
+      "https://www.example.com",
+    );
+  });
+
+  it("authorizes installed app HTTP data by current install scope and preserves owner-only controls", async () => {
+    await resetWorkerState(harness, ["controlPlane", "auth"]);
+    await setupPrimaryProductionIdentity();
+    await setupMappedApp({ access: "authenticated", requiredRole: "app.admin" });
+    await postAdminJson("/api/formless/app-installs", {
+      packageAppKey: "tasks",
+      installId: "other-workspace",
+      label: "Other Workspace",
+    });
+    await postAdminJson("/api/formless/app-installs", {
+      packageAppKey: "site",
+      installId: "public-site",
+      label: "Public Site",
+    });
+
+    const dataApi = `/api/app-installs/tasks/${taskInstallId}`;
+    const schemaResponse = await fetchMappedHost(`${dataApi}/schema`, {
+      headers: adminHeaders(),
+    });
+    const schemaBody = (await schemaResponse.json()) as { schema: AppSchema };
+    const schema = structuredClone(schemaBody.schema);
+    const createOperation = schema.entities.task?.operations?.create;
+
+    if (!createOperation) {
+      throw new Error("Expected the installed Tasks schema create operation.");
+    }
+
+    createOperation.policy = { actors: ["admin", "owner"] };
+    const schemaWrite = await fetchMappedHost(`${dataApi}/schema`, {
+      body: JSON.stringify({ schema }),
+      headers: adminHeaders({ "Content-Type": "application/json" }),
+      method: "POST",
+    });
+
+    expect(schemaWrite.status).toBe(200);
+
+    const matching = await createCompletionReadyPrincipalSessionCookie("HTTP Matching App Admin");
+    await assignIdentityAppRole(matching.principalId, taskInstallId);
+    const wrongInstall = await createActivePrincipalSessionCookie("HTTP Wrong App Admin");
+    await assignIdentityAppRole(wrongInstall.principalId, "other-workspace");
+    const instanceAdmin = await createInstanceAdminPrincipalSessionCookie("HTTP Instance Admin");
+    const ordinary = await createActivePrincipalSessionCookie("HTTP Ordinary Principal");
+    const disabled = await createActivePrincipalSessionCookie("HTTP Disabled Principal");
+    await postAdminJson(`${IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX}/operations/principal/update`, {
+      idempotencyKey: "disable-http-data-principal",
+      recordId: disabled.principalId,
+      input: { status: "disabled" },
+    });
+    const owner = await ensureTestIdentityOwner(harness, adminToken, {
+      name: "HTTP Data Owner",
+    });
+    const ownerCookie = await createCentralAuthSessionCookieForPrincipal(owner.id);
+
+    const matchingReads = await Promise.all(
+      ["/bootstrap", "/schema", "/sync?after=0"].map((path) =>
+        fetchMappedHost(`${dataApi}${path}`, {
+          headers: { Cookie: matching.cookie },
+        }),
+      ),
+    );
+    const ownerBootstrap = await fetchMappedHost(`${dataApi}/bootstrap`, {
+      headers: { Cookie: ownerCookie },
+    });
+    const deniedBootstraps = await Promise.all(
+      [wrongInstall.cookie, instanceAdmin.cookie, ordinary.cookie, disabled.cookie].map((cookie) =>
+        fetchMappedHost(`${dataApi}/bootstrap`, {
+          headers: { Cookie: cookie },
+        }),
+      ),
+    );
+
+    expect(matchingReads.map((response) => response.status)).toEqual([200, 200, 200]);
+    expect(ownerBootstrap.status).toBe(200);
+    expect(deniedBootstraps.map((response) => response.status)).toEqual([401, 401, 401, 401]);
+
+    const matchingCreate = recordOperationRequest({
+      entity: "task",
+      idempotencyKey: "http-matching-admin-create",
+      input: { done: false, title: "Matching app admin" },
+      operationName: "create",
+    });
+    const matchingCreateResponse = await fetchMappedHost(
+      `${dataApi}${matchingCreate.path.slice("/api".length)}`,
+      {
+        body: JSON.stringify(matchingCreate.body),
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: matching.cookie,
+        },
+        method: "POST",
+      },
+    );
+    const matchingCreateBody = (await matchingCreateResponse.json()) as OperationInvocationResponse;
+    const ownerCreate = recordOperationRequest({
+      entity: "task",
+      idempotencyKey: "http-owner-create",
+      input: { done: false, title: "Owner override" },
+      operationName: "create",
+    });
+    const ownerCreateResponse = await fetchMappedHost(
+      `${dataApi}${ownerCreate.path.slice("/api".length)}`,
+      {
+        body: JSON.stringify(ownerCreate.body),
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: ownerCookie,
+        },
+        method: "POST",
+      },
+    );
+    const ownerCreateBody = (await ownerCreateResponse.json()) as OperationInvocationResponse;
+    const wrongCreate = recordOperationRequest({
+      entity: "task",
+      idempotencyKey: "http-wrong-admin-create",
+      input: { done: false, title: "Wrong app admin" },
+      operationName: "create",
+    });
+    const wrongCreateResponse = await fetchMappedHost(
+      `${dataApi}${wrongCreate.path.slice("/api".length)}`,
+      {
+        body: JSON.stringify(wrongCreate.body),
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: wrongInstall.cookie,
+        },
+        method: "POST",
+      },
+    );
+
+    expect(matchingCreateResponse.status).toBe(200);
+    expect(matchingCreateBody.invocation.actor).toEqual({
+      kind: "admin",
+      principalId: matching.principalId,
+    });
+    expect(ownerCreateResponse.status).toBe(200);
+    expect(ownerCreateBody.invocation.actor).toEqual({ kind: "owner" });
+    expect(wrongCreateResponse.status).toBe(401);
+
+    const hostSession = await createMappedAppHostSessionFromCentralCookie(matching.cookie);
+    const hostBootstrap = await fetchHost(mappedAppHost, `${dataApi}/bootstrap`, {
+      headers: { Cookie: hostSession.cookie },
+    });
+    const hostCreate = recordOperationRequest({
+      entity: "task",
+      idempotencyKey: "http-host-admin-create",
+      input: { done: false, title: "Host app admin" },
+      operationName: "create",
+    });
+    const hostCreateResponse = await fetchHost(
+      mappedAppHost,
+      `${dataApi}${hostCreate.path.slice("/api".length)}`,
+      {
+        body: JSON.stringify(hostCreate.body),
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: hostSession.cookie,
+        },
+        method: "POST",
+      },
+    );
+    const hostCreateBody = (await hostCreateResponse.json()) as OperationInvocationResponse;
+
+    expect(hostBootstrap.status).toBe(200);
+    expect(hostCreateResponse.status).toBe(200);
+    expect(hostCreateBody.invocation.actor).toMatchObject({
+      kind: "admin",
+      principalId: matching.principalId,
+      sessionTarget: {
+        appInstallId: taskInstallId,
+        storageIdentity: `app:${taskInstallId}`,
+        targetOrigin: `https://${mappedAppHost}`,
+      },
+    });
+
+    const deniedControls = await Promise.all([
+      fetchMappedHost(`${dataApi}/snapshot`, {
+        headers: { Cookie: matching.cookie },
+      }),
+      ...[
+        "/schema",
+        "/snapshot/restore",
+        "/reset/schema",
+        "/reset/seed",
+        "/package-migrations/apply",
+      ].map((path) =>
+        fetchMappedHost(`${dataApi}${path}`, {
+          body: "not-json",
+          headers: {
+            "Content-Type": "application/json",
+            Cookie: matching.cookie,
+          },
+          method: "POST",
+        }),
+      ),
+      fetchMappedHost("/api/formless/archive/restore", {
+        body: "not-json",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: matching.cookie,
+        },
+        method: "POST",
+      }),
+      fetchMappedHost("/api/formless/setup/capability", {
+        body: "not-json",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: matching.cookie,
+        },
+        method: "POST",
+      }),
+    ]);
+    const publicTree = await fetchMappedHost("/api/app-installs/site/public-site/tree/home");
+    const publicOperation = await fetchMappedHost(
+      "/api/app-installs/site/public-site/public/operations/subscription/subscribe",
+      {
+        body: "not-json",
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      },
+    );
+
+    expect(deniedControls.map((response) => response.status)).toEqual(
+      deniedControls.map(() => 401),
+    );
+    expect(publicTree.status).toBe(200);
+    expect(publicOperation.status).toBe(400);
+  });
+
+  it("authorizes installed app push sync by current principal and exact app target", async () => {
+    await resetWorkerState(harness, ["controlPlane", "taskStorage", "auth"]);
+    await setupPrimaryProductionIdentity();
+    await setupMappedApp({ access: "authenticated", requiredRole: "app.admin" });
+    await postAdminJson("/api/formless/app-installs", {
+      packageAppKey: "tasks",
+      installId: "other-workspace",
+      label: "Other Workspace",
+    });
+
+    const matching = await createCompletionReadyPrincipalSessionCookie("Push Matching App Admin");
+    await assignIdentityAppRole(matching.principalId, taskInstallId);
+    const wrongInstall = await createActivePrincipalSessionCookie("Push Wrong App Admin");
+    await assignIdentityAppRole(wrongInstall.principalId, "other-workspace");
+    const instanceAdmin = await createInstanceAdminPrincipalSessionCookie("Push Instance Admin");
+    const ordinary = await createActivePrincipalSessionCookie("Push Ordinary Principal");
+    const disabled = await createActivePrincipalSessionCookie("Push Disabled Principal");
+    await postAdminJson(`${IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX}/operations/principal/update`, {
+      idempotencyKey: "disable-push-principal-before-upgrade",
+      recordId: disabled.principalId,
+      input: { status: "disabled" },
+    });
+    const owner = await ensureTestIdentityOwner(harness, adminToken, {
+      name: "Push Owner",
+    });
+    const ownerCookie = await createCentralAuthSessionCookieForPrincipal(owner.id);
+    const syncPath = `/api/app-installs/tasks/${taskInstallId}/sync/ws`;
+    const ownerSocket = await openInstalledAppSyncSocket("www.example.com", syncPath, ownerCookie);
+    const matchingSocket = await openInstalledAppSyncSocket(
+      "www.example.com",
+      syncPath,
+      matching.cookie,
+    );
+
+    try {
+      ownerSocket.send(JSON.stringify({ type: "hello", cursor: 0, schemaUpdatedAt: null }));
+      matchingSocket.send(JSON.stringify({ type: "hello", cursor: 0, schemaUpdatedAt: null }));
+
+      await expect(readInstalledAppSyncSocketMessage(ownerSocket)).resolves.toMatchObject({
+        type: "sync",
+        payload: { cursor: expect.any(Number) },
+      });
+      await expect(readInstalledAppSyncSocketMessage(matchingSocket)).resolves.toMatchObject({
+        type: "sync",
+        payload: { cursor: expect.any(Number) },
+      });
+    } finally {
+      ownerSocket.close();
+      matchingSocket.close();
+    }
+
+    const denied = await Promise.all(
+      [wrongInstall.cookie, instanceAdmin.cookie, ordinary.cookie, disabled.cookie].map((cookie) =>
+        fetchHost("www.example.com", syncPath, {
+          headers: { Cookie: cookie, Upgrade: "websocket" },
+        }),
+      ),
+    );
+    const hostSession = await createMappedAppHostSessionFromCentralCookie(matching.cookie);
+    const hostSocket = await openInstalledAppSyncSocket(
+      mappedAppHost,
+      syncPath,
+      hostSession.cookie,
+    );
+    const wrongTarget = await fetchHost(
+      mappedAppHost,
+      "/api/app-installs/tasks/other-workspace/sync/ws",
+      {
+        headers: { Cookie: hostSession.cookie, Upgrade: "websocket" },
+      },
+    );
+
+    hostSocket.close();
+
+    expect(denied.map((response) => response.status)).toEqual([401, 401, 401, 401]);
+    expect(wrongTarget.status).toBe(401);
+  });
+
+  it("closes installed app push sockets after authority or session version narrows", async () => {
+    await resetWorkerState(harness, ["controlPlane", "taskStorage", "auth"]);
+    await setupPrimaryProductionIdentity();
+    await setupMappedApp({ access: "authenticated", requiredRole: "app.admin" });
+
+    const syncPath = `/api/app-installs/tasks/${taskInstallId}/sync/ws`;
+    const revokedRole =
+      await createCompletionReadyPrincipalSessionCookie("Push Revoked Role Admin");
+    const revokedAssignment = await assignIdentityAppRole(revokedRole.principalId, taskInstallId);
+    const revokedRoleSocket = await openInstalledAppSyncSocket(
+      "www.example.com",
+      syncPath,
+      revokedRole.cookie,
+    );
+
+    await primeInstalledAppSyncSocket(revokedRoleSocket);
+    await postAdminJson(
+      `${IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX}/operations/role-assignment/update`,
+      {
+        idempotencyKey: "revoke-push-role-after-upgrade",
+        recordId: revokedAssignment.id,
+        input: { status: "disabled" },
+      },
+    );
+    const revokedRoleClosed = expectInstalledAppSyncSocketClosedWithoutMessage(revokedRoleSocket);
+
+    revokedRoleSocket.send(
+      JSON.stringify({ type: "sync-requested", cursor: 0, schemaUpdatedAt: null }),
+    );
+    await revokedRoleClosed;
+
+    const disabledPrincipal = await createCompletionReadyPrincipalSessionCookie(
+      "Push Later Disabled Admin",
+    );
+    await assignIdentityAppRole(disabledPrincipal.principalId, taskInstallId);
+    const disabledPrincipalSocket = await openInstalledAppSyncSocket(
+      "www.example.com",
+      syncPath,
+      disabledPrincipal.cookie,
+    );
+
+    await primeInstalledAppSyncSocket(disabledPrincipalSocket);
+    await postAdminJson(`${IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX}/operations/principal/update`, {
+      idempotencyKey: "disable-push-principal-after-upgrade",
+      recordId: disabledPrincipal.principalId,
+      input: { status: "disabled" },
+    });
+    const disabledPrincipalClosed =
+      expectInstalledAppSyncSocketClosedWithoutMessage(disabledPrincipalSocket);
+
+    await postInstalledAppRecordOperation("tasks", taskInstallId, {
+      entity: "task",
+      idempotencyKey: "push-broadcast-after-principal-disable",
+      input: { done: false, title: "No stale push delivery" },
+      operationName: "create",
+    });
+    await disabledPrincipalClosed;
+
+    const versioned = await createCompletionReadyPrincipalSessionCookie(
+      "Push Versioned Host Admin",
+    );
+    await assignIdentityAppRole(versioned.principalId, taskInstallId);
+    const hostSession = await createMappedAppHostSessionFromCentralCookie(versioned.cookie);
+    const versionedSocket = await openInstalledAppSyncSocket(
+      mappedAppHost,
+      syncPath,
+      hostSession.cookie,
+    );
+
+    await primeInstalledAppSyncSocket(versionedSocket);
+    await bumpHarnessHostSessionVersion(hostSession.setCookie);
+    const versionedClosed = expectInstalledAppSyncSocketClosedWithoutMessage(versionedSocket);
+
+    versionedSocket.send(
+      JSON.stringify({ type: "sync-requested", cursor: 0, schemaUpdatedAt: null }),
+    );
+    await versionedClosed;
+  });
+
+  it("narrows accepted app-admin journeys after role removal and principal disabling", async () => {
+    await resetWorkerState(harness, ["controlPlane", "taskStorage", "auth"]);
+    await setupPrimaryProductionIdentity();
+    await patchRouteRecord("route:primary-production", { access: "management" });
+    await configureAuthEmail({ settingsMode: "update", testKey: "app-admin-journey" });
+    await setupMappedApp({ access: "authenticated", requiredRole: "app.admin" });
+    await postAdminJson("/api/formless/app-installs", {
+      packageAppKey: "tasks",
+      installId: "other-workspace",
+      label: "Other Workspace",
+    });
+    await allowTaskAdminCreates();
+
+    const removed = await inviteAndAcceptCollaborator({
+      displayName: "Invited App Admin",
+      roleAssignment: {
+        appInstallId: taskInstallId,
+        roleKey: "app.admin",
+        scopeKind: "app-install",
+      },
+      targetAppInstallId: taskInstallId,
+      targetEmail: "invited-app-admin@example.com",
+      targetSurface: "app-install",
+      testKey: "app-admin-journey",
+    });
+    const removedHostSession = await createMappedAppHostSessionFromCentralCookie(removed.cookie);
+    const dataApi = `/api/app-installs/tasks/${taskInstallId}`;
+    const centralRegistry = await fetchAuth("/api/formless/app-installs", {
+      headers: { Cookie: removed.cookie },
+    });
+    const centralRegistryBody = (await centralRegistry.json()) as {
+      installs: Array<{ installId: string }>;
+    };
+    const centralSync = await fetchAuth(`${dataApi}/sync?after=0`, {
+      headers: { Cookie: removed.cookie },
+    });
+    const centralCreate = recordOperationRequest({
+      entity: "task",
+      idempotencyKey: "accepted-app-admin-central-create",
+      input: { done: false, title: "Accepted central app admin" },
+      operationName: "create",
+    });
+    const centralCreateResponse = await fetchAuth(
+      `${dataApi}${centralCreate.path.slice("/api".length)}`,
+      {
+        body: JSON.stringify(centralCreate.body),
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: removed.cookie,
+        },
+        method: "POST",
+      },
+    );
+    const hostEntry = await fetchHost(mappedAppHost, "/schema?view=board", {
+      headers: { Accept: "text/html", Cookie: removedHostSession.cookie },
+      redirect: "manual",
+    });
+    const hostRegistry = await fetchHost(mappedAppHost, "/api/formless/app-installs", {
+      headers: { Cookie: removedHostSession.cookie },
+    });
+    const hostRegistryBody = (await hostRegistry.json()) as {
+      installs: Array<{ installId: string }>;
+    };
+    const wrongTarget = await fetchHost(
+      mappedAppHost,
+      "/api/app-installs/tasks/other-workspace/bootstrap",
+      { headers: { Cookie: removedHostSession.cookie } },
+    );
+    const management = await fetchAuth("/access", {
+      headers: { Accept: "text/html", Cookie: removed.cookie },
+      redirect: "manual",
+    });
+    const ownerRecovery = await fetchAuth("/api/formless/setup/capability", {
+      body: "not-json",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: removed.cookie,
+      },
+      method: "POST",
+    });
+    const removedSocket = await openInstalledAppSyncSocket(
+      mappedAppHost,
+      `${dataApi}/sync/ws`,
+      removedHostSession.cookie,
+    );
+
+    await primeInstalledAppSyncSocket(removedSocket);
+
+    expect(removed.verify.status).toBe(200);
+    expect(centralRegistry.status).toBe(200);
+    expect(centralRegistryBody.installs.map((install) => install.installId)).toEqual([
+      taskInstallId,
+    ]);
+    expect(centralSync.status).toBe(200);
+    expect(centralCreateResponse.status).toBe(200);
+    expect(hostEntry.status).toBe(200);
+    expect(hostRegistry.status).toBe(200);
+    expect(hostRegistryBody.installs.map((install) => install.installId)).toEqual([taskInstallId]);
+    expect(wrongTarget.status).toBe(401);
+    expect(management.status).toBe(302);
+    expect(ownerRecovery.status).toBe(401);
+
+    await deleteIdentityRoleAssignment(removed.roleAssignmentId, "accepted-app-admin");
+    const removedSocketClosed = expectInstalledAppSyncSocketClosedWithoutMessage(removedSocket);
+
+    removedSocket.send(
+      JSON.stringify({ type: "sync-requested", cursor: 0, schemaUpdatedAt: null }),
+    );
+    await removedSocketClosed;
+
+    const removedEntry = await fetchHost(mappedAppHost, "/schema?view=board", {
+      headers: { Accept: "text/html", Cookie: removedHostSession.cookie },
+      redirect: "manual",
+    });
+    const removedRegistry = await fetchAuth("/api/formless/app-installs", {
+      headers: { Cookie: removed.cookie },
+    });
+    const removedRegistryBody = (await removedRegistry.json()) as {
+      installs: Array<{ installId: string }>;
+    };
+    const removedSync = await fetchHost(mappedAppHost, `${dataApi}/sync?after=0`, {
+      headers: { Cookie: removedHostSession.cookie },
+    });
+    const removedCreate = recordOperationRequest({
+      entity: "task",
+      idempotencyKey: "removed-app-admin-create",
+      input: { done: false, title: "Removed app admin" },
+      operationName: "create",
+    });
+    const removedCreateResponse = await fetchAuth(
+      `${dataApi}${removedCreate.path.slice("/api".length)}`,
+      {
+        body: JSON.stringify(removedCreate.body),
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: removed.cookie,
+        },
+        method: "POST",
+      },
+    );
+
+    expect(removedEntry.status).toBe(302);
+    expect(removedRegistry.status).toBe(200);
+    expect(removedRegistryBody.installs).toEqual([]);
+    expect(removedSync.status).toBe(409);
+    expect(removedCreateResponse.status).toBe(401);
+
+    const disabled = await inviteAndAcceptCollaborator({
+      displayName: "Disabled Invited App Admin",
+      roleAssignment: {
+        appInstallId: taskInstallId,
+        roleKey: "app.admin",
+        scopeKind: "app-install",
+      },
+      targetAppInstallId: taskInstallId,
+      targetEmail: "disabled-invited-app-admin@example.com",
+      targetSurface: "app-install",
+      testKey: "disabled-app-admin-journey",
+    });
+    const disabledHostSession = await createMappedAppHostSessionFromCentralCookie(disabled.cookie);
+    const disabledSocket = await openInstalledAppSyncSocket(
+      "www.example.com",
+      `${dataApi}/sync/ws`,
+      disabled.cookie,
+    );
+
+    await primeInstalledAppSyncSocket(disabledSocket);
+    await postAdminJson(`${IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX}/operations/principal/update`, {
+      idempotencyKey: "disable-accepted-app-admin",
+      recordId: disabled.principalId,
+      input: { status: "disabled" },
+    });
+    const disabledSocketClosed = expectInstalledAppSyncSocketClosedWithoutMessage(disabledSocket);
+
+    await postInstalledAppRecordOperation("tasks", taskInstallId, {
+      entity: "task",
+      idempotencyKey: "broadcast-after-accepted-principal-disable",
+      input: { done: false, title: "No disabled collaborator delivery" },
+      operationName: "create",
+    });
+    await disabledSocketClosed;
+
+    const disabledEntry = await fetchHost(mappedAppHost, "/schema?view=board", {
+      headers: { Accept: "text/html", Cookie: disabledHostSession.cookie },
+      redirect: "manual",
+    });
+    const disabledRegistry = await fetchAuth("/api/formless/app-installs", {
+      headers: { Cookie: disabled.cookie },
+    });
+    const disabledSync = await fetchAuth(`${dataApi}/sync?after=0`, {
+      headers: { Cookie: disabled.cookie },
+    });
+    const disabledCreate = recordOperationRequest({
+      entity: "task",
+      idempotencyKey: "disabled-app-admin-create",
+      input: { done: false, title: "Disabled app admin" },
+      operationName: "create",
+    });
+    const disabledCreateResponse = await fetchHost(
+      mappedAppHost,
+      `${dataApi}${disabledCreate.path.slice("/api".length)}`,
+      {
+        body: JSON.stringify(disabledCreate.body),
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: disabledHostSession.cookie,
+        },
+        method: "POST",
+      },
+    );
+
+    expect(disabledEntry.status).toBe(302);
+    expect(disabledRegistry.status).toBe(401);
+    expect(disabledSync.status).toBe(401);
+    expect(disabledCreateResponse.status).toBe(401);
+  }, 20_000);
 
   it("blocks authenticated handoff grants until target account gates are satisfied", async () => {
     await resetWorkerState(harness, ["controlPlane", "auth"]);
@@ -1074,6 +1818,7 @@ describe("installed Site custom-domain Worker routing", () => {
     expect(setCookie).toContain(`${HOST_AUTH_NONCE_COOKIE_NAME}=;`);
     expect(hostSessionPayload).toEqual(
       expect.objectContaining({
+        access: "authenticated",
         appInstallId: taskInstallId,
         principalId: signup.body.principal.principalId,
         purpose: "host-session",
@@ -1089,13 +1834,17 @@ describe("installed Site custom-domain Worker routing", () => {
     expect(assetRequests).toEqual(["/index.html"]);
   }, 10_000);
 
-  it("executes authenticated operations from matched host-local sessions", async () => {
+  it("executes authenticated operations for app admins from matched host-local sessions", async () => {
     await resetWorkerState(harness, ["controlPlane", "taskStorage", "auth"]);
     await setupPrimaryProductionIdentity();
     await setupMappedApp({ access: "authenticated" });
 
-    const { cookie, principalId } =
-      await createAuthenticatedMappedAppHostSession("Authenticated Operator");
+    const principal = await createCompletionReadyPrincipalSessionCookie(
+      "Authenticated App Admin Operator",
+    );
+    await assignIdentityAppRole(principal.principalId, taskInstallId);
+    const { cookie } = await createMappedAppHostSessionFromCentralCookie(principal.cookie);
+    const principalId = principal.principalId;
     const unauthenticatedBootstrap = await fetchHost(
       mappedAppHost,
       `/api/app-installs/tasks/${taskInstallId}/bootstrap`,
@@ -1178,9 +1927,12 @@ describe("installed Site custom-domain Worker routing", () => {
     await setupPrimaryProductionIdentity();
     await setupMappedApp({ access: "authenticated" });
 
-    const { cookie, principalId } = await createAuthenticatedMappedAppHostSession(
+    const principal = await createCompletionReadyPrincipalSessionCookie(
       "Policy Gated Host Session",
     );
+    await assignIdentityAppRole(principal.principalId, taskInstallId);
+    const { cookie } = await createMappedAppHostSessionFromCentralCookie(principal.cookie);
+    const principalId = principal.principalId;
     const policy = await createAccountPolicy({
       appInstallId: taskInstallId,
       displayName: "Task workspace terms",
@@ -1373,6 +2125,7 @@ describe("installed Site custom-domain Worker routing", () => {
     expect(setCookie).not.toContain(`${OWNER_SESSION_COOKIE_NAME}=`);
     expect(hostSessionPayload).toEqual(
       expect.objectContaining({
+        access: "owner",
         instanceId: "www.example.com",
         principalId: owner.id,
         purpose: "host-session",
@@ -1618,8 +2371,8 @@ describe("installed Site custom-domain Worker routing", () => {
     expect(
       appInstallsBody.installs?.some((install) => install.installId === "host-session-site"),
     ).toBe(true);
-    expect(installedAppBootstrap.status).toBe(200);
-    expect(installedAppBootstrapBody.schema).toEqual(siteSourceSchema);
+    expect(installedAppBootstrap.status).toBe(401);
+    expect(installedAppBootstrapBody.schema).toBeUndefined();
     expect(staleVersionBootstrap.status).toBe(401);
     expect(assetRequests).toEqual(["/"]);
   });
@@ -2002,6 +2755,167 @@ async function configureAuthEmail(input: { settingsMode: "create" | "update"; te
   });
 }
 
+async function inviteAndAcceptCollaborator(input: {
+  displayName: string;
+  roleAssignment:
+    | {
+        appInstallId: string;
+        roleKey: "app.admin";
+        scopeKind: "app-install";
+      }
+    | {
+        roleKey: "instance.admin";
+        scopeKind: "instance";
+      };
+  targetAppInstallId?: string;
+  targetEmail: string;
+  targetSurface: "app-install" | "instance";
+  testKey: string;
+}) {
+  const invitationId = `invitation:${input.testKey}`;
+  const principalId = `principal:${input.testKey}`;
+  const roleAssignmentId = `role-assignment:${input.testKey}`;
+  const invitationResponse = await postAdminJson(
+    `${IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX}${IDENTITY_COLLABORATOR_INVITATIONS_API_PATH}`,
+    {
+      idempotencyKey: `invite-${input.testKey}`,
+      invitationId,
+      invitedPrincipal: {
+        displayName: input.displayName,
+        id: principalId,
+      },
+      now: new Date().toISOString(),
+      principalEmail: {
+        id: `principal-email:${input.testKey}`,
+        primary: true,
+        recovery: false,
+      },
+      roleAssignments: [
+        {
+          id: roleAssignmentId,
+          ...input.roleAssignment,
+        },
+      ],
+      targetEmail: input.targetEmail,
+      targetSurface: input.targetSurface,
+      ...(input.targetAppInstallId === undefined
+        ? {}
+        : {
+            appRegistrations: [
+              {
+                appInstallId: input.targetAppInstallId,
+                id: `app-registration:${input.testKey}`,
+              },
+            ],
+            targetAppInstallId: input.targetAppInstallId,
+          }),
+    },
+  );
+  const invitationBody = (await invitationResponse.json()) as {
+    delivery?: {
+      delivery?: { id?: string };
+      status?: string;
+    };
+  };
+  const deliveryId = invitationBody.delivery?.delivery?.id;
+
+  if (invitationBody.delivery?.status !== "scheduled" || !deliveryId) {
+    throw new Error(
+      `Expected collaborator invitation delivery, received ${JSON.stringify(invitationBody)}.`,
+    );
+  }
+
+  const rendered = await readRenderedEmailMessage(deliveryId);
+  const token = verificationTokenFromMessage(rendered.message);
+  const optionsResponse = await fetchAuth(
+    `${COLLABORATOR_INVITATION_ACCEPT_PATH}/passkeys/register/options`,
+    {
+      body: JSON.stringify({ invitationId, token }),
+      headers: { "Content-Type": "application/json" },
+      method: "POST",
+    },
+  );
+  const optionsBody = (await optionsResponse.json()) as {
+    options?: PublicKeyCredentialCreationOptionsJSON;
+  };
+
+  if (!optionsResponse.ok || !optionsBody.options) {
+    throw new Error(
+      `Expected invitation passkey options, received ${JSON.stringify(optionsBody)}.`,
+    );
+  }
+
+  const passkey = new VirtualPasskey(
+    Buffer.from(`invitation-credential:${input.testKey}`).toString("base64url"),
+  );
+  const verify = await fetchAuth(
+    `${COLLABORATOR_INVITATION_ACCEPT_PATH}/passkeys/register/verify`,
+    {
+      body: JSON.stringify({
+        invitationId,
+        response: passkey.registrationResponse(optionsBody.options, {
+          origin: "https://www.example.com",
+          rpId: "example.com",
+        }),
+        token,
+      }),
+      headers: { "Content-Type": "application/json" },
+      method: "POST",
+    },
+  );
+
+  if (!verify.ok) {
+    throw new Error(
+      `Expected collaborator invitation acceptance, received ${verify.status}: ${await verify.text()}.`,
+    );
+  }
+
+  return {
+    cookie: cookiePair(requiredHeader(verify, "Set-Cookie")),
+    principalId,
+    roleAssignmentId,
+    verify,
+  };
+}
+
+async function allowTaskAdminCreates() {
+  const dataApi = `/api/app-installs/tasks/${taskInstallId}`;
+  const schemaResponse = await harness.fetch(`${dataApi}/schema`, {
+    headers: adminHeaders(),
+  });
+  const schemaBody = (await schemaResponse.json()) as { schema?: AppSchema };
+  const schema = schemaBody.schema;
+  const createOperation = schema?.entities.task?.operations?.create;
+
+  if (!schema || !createOperation) {
+    throw new Error("Expected installed Tasks create operation.");
+  }
+
+  createOperation.policy = { actors: ["admin", "owner"] };
+
+  const write = await harness.fetch(`${dataApi}/schema`, {
+    body: JSON.stringify({ schema }),
+    headers: adminHeaders({ "Content-Type": "application/json" }),
+    method: "POST",
+  });
+
+  expect(write.status).toBe(200);
+}
+
+async function deleteIdentityRoleAssignment(roleAssignmentId: string, testKey: string) {
+  const request = recordOperationRequest({
+    entity: "role-assignment",
+    idempotencyKey: `delete-role-assignment-${testKey}`,
+    operationName: "delete",
+    recordId: roleAssignmentId,
+  });
+
+  await postAdminJson(
+    `${IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX}${request.path.slice("/api".length)}`,
+    request.body,
+  );
+}
+
 async function instanceSettingsRecordId(): Promise<string> {
   const response = await harness.fetch(`${controlPlaneApi}/bootstrap`, {
     headers: adminHeaders(),
@@ -2158,6 +3072,102 @@ function fetchHost(host: string, path: string, init?: DispatchFetchInit) {
   return fetchHarnessHost(harness, host, path, init);
 }
 
+async function openInstalledAppSyncSocket(host: string, path: string, cookie: string) {
+  const response = await fetchHost(host, path, {
+    headers: { Cookie: cookie, Upgrade: "websocket" },
+  });
+
+  expect(response.status).toBe(101);
+  expect(response.webSocket).toBeTruthy();
+
+  const socket = response.webSocket;
+
+  if (!socket) {
+    throw new Error("Installed app WebSocket upgrade did not return a client socket.");
+  }
+
+  socket.accept();
+
+  return socket;
+}
+
+function readInstalledAppSyncSocketMessage(
+  socket: Awaited<ReturnType<typeof openInstalledAppSyncSocket>>,
+) {
+  return new Promise<SyncSocketServerMessage>((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      cleanup();
+      reject(new Error("Timed out waiting for installed app sync message."));
+    }, 1000);
+    const cleanup = () => {
+      clearTimeout(timeout);
+      socket.removeEventListener("message", onMessage);
+      socket.removeEventListener("error", onError);
+    };
+    const onMessage = (event: WebSocketEventMap["message"]) => {
+      cleanup();
+
+      if (typeof event.data !== "string") {
+        reject(new Error("Installed app sync message was not text."));
+        return;
+      }
+
+      resolve(JSON.parse(event.data) as SyncSocketServerMessage);
+    };
+    const onError = () => {
+      cleanup();
+      reject(new Error("Installed app sync socket emitted an error."));
+    };
+
+    socket.addEventListener("message", onMessage);
+    socket.addEventListener("error", onError);
+  });
+}
+
+async function primeInstalledAppSyncSocket(
+  socket: Awaited<ReturnType<typeof openInstalledAppSyncSocket>>,
+) {
+  socket.send(JSON.stringify({ type: "hello", cursor: 0, schemaUpdatedAt: null }));
+
+  await expect(readInstalledAppSyncSocketMessage(socket)).resolves.toMatchObject({
+    type: "sync",
+    payload: { cursor: expect.any(Number) },
+  });
+}
+
+function expectInstalledAppSyncSocketClosedWithoutMessage(
+  socket: Awaited<ReturnType<typeof openInstalledAppSyncSocket>>,
+) {
+  return new Promise<void>((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      cleanup();
+      reject(new Error("Timed out waiting for installed app sync socket to close."));
+    }, 1000);
+    const cleanup = () => {
+      clearTimeout(timeout);
+      socket.removeEventListener("close", onClose);
+      socket.removeEventListener("message", onMessage);
+      socket.removeEventListener("error", onError);
+    };
+    const onClose = () => {
+      cleanup();
+      resolve();
+    };
+    const onMessage = () => {
+      cleanup();
+      reject(new Error("Unauthorized installed app sync socket received protected data."));
+    };
+    const onError = () => {
+      cleanup();
+      reject(new Error("Installed app sync socket errored before closing."));
+    };
+
+    socket.addEventListener("close", onClose);
+    socket.addEventListener("message", onMessage);
+    socket.addEventListener("error", onError);
+  });
+}
+
 function fetchHarnessHost(
   targetHarness: Harness,
   host: string,
@@ -2173,7 +3183,13 @@ function cookiePair(cookie: string) {
 
 function signupTargetFromAccountUrl(url: URL): AccountCompletionGateTarget {
   return {
+    access: requiredSearchParam(url, "access") as NonNullable<
+      AccountCompletionGateTarget["access"]
+    >,
     appInstallId: requiredSearchParam(url, "appInstallId"),
+    ...(url.searchParams.get("requiredRole") === "app.admin"
+      ? { requiredRole: "app.admin" as const }
+      : {}),
     returnTo: requiredSearchParam(url, "returnTo") as `/${string}`,
     routeId: requiredSearchParam(url, "routeId"),
     storageIdentity: requiredSearchParam(url, "storageIdentity"),
@@ -2326,16 +3342,6 @@ async function createMappedAppHostSession(ownerName: string) {
   };
 }
 
-async function createAuthenticatedMappedAppHostSession(displayName: string) {
-  const principal = await createCompletionReadyPrincipalSessionCookie(displayName);
-  const hostSession = await createMappedAppHostSessionFromCentralCookie(principal.cookie);
-
-  return {
-    ...hostSession,
-    principalId: principal.principalId,
-  };
-}
-
 async function createMappedAppHostSessionFromCentralCookie(centralCookie: string) {
   const start = await fetchHost(mappedAppHost, "/schema?view=board", {
     headers: { Accept: "text/html" },
@@ -2357,6 +3363,21 @@ async function createMappedAppHostSessionFromCentralCookie(centralCookie: string
     cookie: cookiePair(setCookie),
     setCookie,
   };
+}
+
+async function bumpHarnessHostSessionVersion(setCookie: string) {
+  const response = await harness.durableObjectFetch(
+    "FORMLESS_AUTHORITY",
+    FORMLESS_INSTANCE_AUTHORITY_NAME,
+    "/harness/auth/host-session/revoke",
+    {
+      body: JSON.stringify(signedCookiePayload(setCookie, HOST_AUTH_SESSION_COOKIE_NAME)),
+      headers: { "Content-Type": "application/json" },
+      method: "POST",
+    },
+  );
+
+  expect(response.status).toBe(200);
 }
 
 async function createActivePrincipalSessionCookie(
@@ -2577,6 +3598,30 @@ async function assignIdentityInstanceRole(
   return operationRecord((await response.json()) as OperationInvocationResponse);
 }
 
+async function assignIdentityAppRole(principalId: string, appInstallId: string) {
+  const response = await postAdminJson(
+    `${IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX}/operations/role-assignment/create`,
+    {
+      idempotencyKey: [
+        "custom-domain-assign",
+        principalId.replace(/\W+/g, "-"),
+        "app-admin",
+        appInstallId,
+      ].join("-"),
+      input: {
+        appInstallId,
+        role: "role:app.admin",
+        scopeKind: "app-install",
+        status: "active",
+        targetKind: "principal",
+        targetPrincipal: principalId,
+      },
+    },
+  );
+
+  return operationRecord((await response.json()) as OperationInvocationResponse);
+}
+
 async function mappedInstanceHostSessionCookieForPrincipal(principalId: string) {
   const routeId = routeRecordIds.get(`route:host:instance:${mappedInstanceHost}`);
 
@@ -2585,6 +3630,7 @@ async function mappedInstanceHostSessionCookieForPrincipal(principalId: string) 
   }
 
   return `${HOST_AUTH_SESSION_COOKIE_NAME}=${await signCookiePayload({
+    access: "owner",
     expiresAt: "2999-01-01T12:00:00.000Z",
     instanceId: "www.example.com",
     issuedAt: "2999-01-01T00:00:00.000Z",
@@ -3121,6 +4167,9 @@ function createCustomDomainHarness(
         ...(runtimeProfile === undefined ? {} : { FORMLESS_RUNTIME_PROFILE: runtimeProfile }),
       },
       compatibilityDate: "2026-04-28",
+      queueProducers: {
+        FORMLESS_EMAIL_DELIVERY_QUEUE: "formless-email-delivery",
+      },
       r2Buckets: ["FORMLESS_MEDIA"],
       serviceBindings: {
         ASSETS: assetResponse,
@@ -3137,7 +4186,11 @@ async function writeCustomDomainHarness() {
     path,
     `
       import worker, { FormlessAuthority } from "${process.cwd()}/src/worker/index.ts";
-      import { createPasskeyCredential, writeInstanceAuthConfig } from "${process.cwd()}/src/worker/instance-auth-state.ts";
+      import {
+        bumpHostSessionRevocationVersion,
+        createPasskeyCredential,
+        writeInstanceAuthConfig,
+      } from "${process.cwd()}/src/worker/instance-auth-state.ts";
       import { createCentralAuthSessionCookie } from "${process.cwd()}/src/worker/central-auth-session.ts";
       import {
         ensureEmailDeliveryTables,
@@ -3204,6 +4257,15 @@ async function writeCustomDomainHarness() {
             return Response.json(
               { session: created.session },
               { headers: { "Set-Cookie": created.cookie } },
+            );
+          }
+
+          if (
+            url.pathname === "/harness/auth/host-session/revoke" &&
+            request.method === "POST"
+          ) {
+            return Response.json(
+              bumpHostSessionRevocationVersion(this.ctx.storage, await request.json()),
             );
           }
 

@@ -13,7 +13,12 @@ import {
   type InstanceControlPlaneRouteTargetProfile,
   type InstanceControlPlaneRouteValues,
 } from "@dpeek/formless-instance-control-plane";
-import { parseRuntimeRouteAccess, type RuntimeRouteAccess } from "../shared/runtime-topology.ts";
+import {
+  parseRuntimeRouteAccess,
+  parseRuntimeRouteRequiredRole,
+  type RuntimeRouteAccess,
+  type RuntimeRouteRequiredRole,
+} from "../shared/runtime-topology.ts";
 import type { StoredRecord } from "@dpeek/formless-storage";
 import type { AppPackageResolver } from "../shared/app-packages.ts";
 
@@ -28,6 +33,7 @@ export type InstanceRuntimeMountRouteResolution = {
   matchHost?: string;
   matchPath: `/${string}`;
   matchPrefix?: `/${string}`;
+  requiredRole?: RuntimeRouteRequiredRole;
   surface?: InstanceControlPlaneRouteSurface;
   target?: InstalledAppStorageIdentity;
   targetProfile: InstanceControlPlaneRouteTargetProfile;
@@ -224,6 +230,7 @@ function routeValues(values: StoredRecord["values"]): InstanceControlPlaneRouteV
   const matchPath = optionalAbsolutePath(values.matchPath);
   const matchPrefix = optionalAbsolutePath(values.matchPrefix);
   const access = parseRuntimeRouteAccess(optionalString(values.access));
+  const requiredRole = parseRuntimeRouteRequiredRole(optionalString(values.requiredRole));
 
   if ((kind !== "mount" && kind !== "redirect") || !matchPath) {
     return undefined;
@@ -245,6 +252,7 @@ function routeValues(values: StoredRecord["values"]): InstanceControlPlaneRouteV
       ? { surface: values.surface }
       : {}),
     ...(access === undefined ? {} : { access }),
+    ...(requiredRole === undefined ? {} : { requiredRole }),
     ...(typeof values.deploymentConfig === "string"
       ? { deploymentConfig: values.deploymentConfig }
       : {}),
@@ -340,6 +348,7 @@ function runtimeRouteResolutionFromCandidate(
     ...(candidate.matchHost === undefined ? {} : { matchHost: candidate.matchHost }),
     matchPath: values.matchPath,
     ...(values.matchPrefix === undefined ? {} : { matchPrefix: values.matchPrefix }),
+    ...(values.requiredRole === undefined ? {} : { requiredRole: values.requiredRole }),
     ...(values.surface === undefined ? {} : { surface: values.surface }),
     ...(target === undefined ? {} : { target }),
     targetProfile,

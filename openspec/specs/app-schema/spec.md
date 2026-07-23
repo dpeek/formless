@@ -622,6 +622,11 @@ public forms, automation, audit, and authorization.
   host-local session for the target storage identity can invoke the operation
 - AND `owner` means an active principal with active `instance.owner` authority
   can invoke the operation
+- AND for browser operations against an installed app storage identity,
+  `admin` may be supplied by an active principal with current `app.admin`
+  authority at that app-install scope
+- AND `instance.admin` authority alone and `app.admin` authority for another
+  app install do not supply that installed-app `admin` actor
 - AND response field filters may be keyed by each declared actor kind
 - AND response field filters select command output payload field names,
   including fields written by record-plan steps whose entity differs from the

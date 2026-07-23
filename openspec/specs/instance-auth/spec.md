@@ -427,6 +427,17 @@ sessions, local-dev owner sessions, and mapped host-local sessions.
 - AND the response includes the display-safe owner identity from the principal
   records and session expiry
 
+#### Scenario: Session status evaluates a protected route target
+
+- GIVEN client-side navigation selects an instance management route or an
+  installed app route with a required role
+- WHEN the browser requests session status for that resolved route target
+- THEN instance auth evaluates the current principal, authority, role scope,
+  session version, route, app install, storage identity, and host binding
+- AND the response reports whether that exact route target is authorized
+- AND the client does not infer management or app access from stale role claims
+  stored in a cookie or from authentication alone
+
 #### Scenario: Logout clears auth-origin session
 
 - GIVEN a browser has a central auth session cookie or local-dev owner session
@@ -573,9 +584,9 @@ one-time grants.
 
 #### Scenario: One-time grant issuance
 
-- GIVEN a browser without a valid host-local session requests an
-  authenticated or owner-only route on a host that is not the configured auth
-  origin
+- GIVEN a browser without a valid host-local session requests an authenticated,
+  management, owner-only, or required-app-role route on a host that is not the
+  configured auth origin
 - AND the target host starts auth handoff with a host-local nonce cookie,
   target origin, route id, target profile, target app install or storage
   identity, path-only redirect target, and state
@@ -628,6 +639,9 @@ one-time grants.
 - AND instance-admin management reads or writes recheck active
   `instance.admin` authority or active `instance.owner` authority according to
   the path's required management role
+- AND app-admin routes, reads, writes, and sync recheck active `app.admin`
+  authority at the host session target's app-install scope or active
+  `instance.owner` authority
 - AND disabled principals, removed owner authority, changed role assignments, or
   revoked session versions invalidate or narrow future authorization
 - AND host sessions are not accepted on a different host, route, app install,
@@ -641,7 +655,8 @@ keeping durable auth state and Worker request handling at explicit adapters.
 
 #### Scenario: Resolve auth origin and protected-route handoff from explicit facts
 
-- GIVEN runtime routing has selected an authenticated or owner-only route
+- GIVEN runtime routing has selected an authenticated, management, owner-only,
+  or required-app-role route
 - WHEN instance auth decides whether to continue locally, enter the auth account
   orchestrator, or start cross-origin handoff
 - THEN the decision Module consumes the request, configured auth origin, route
@@ -656,8 +671,9 @@ keeping durable auth state and Worker request handling at explicit adapters.
 
 - GIVEN a protected browser route or management request carries a central,
   local owner, or host-local session
-- WHEN route access, owner authority, operational management authority, host
-  session revocation, or account completion is evaluated
+- WHEN route access, owner authority, operational management authority,
+  app-install role authority, host session revocation, or account completion is
+  evaluated
 - THEN the decision Module consumes current session, principal, authority,
   session-version, target, and account-completion facts through instance-auth
   reader interfaces
@@ -977,6 +993,16 @@ or using browser access for an authenticated target.
 - AND stale signed session facts do not satisfy gates after principal status,
   role assignments, memberships, app registrations, policy records, or policy
   acceptances change
+
+#### Scenario: Authenticated principal lacks the target route role
+
+- GIVEN an active principal has a valid browser session
+- AND a protected continuation targets an app route requiring `app.admin`
+- WHEN the principal lacks active `app.admin` authority for that app install
+  and lacks active `instance.owner` authority
+- THEN account completion selects a display-safe `role-review` gate instead of
+  redirecting to owner sign-in or continuing to the app
+- AND a role for another app install does not satisfy the gate
 
 #### Scenario: Gate completion writes through owning records
 
@@ -1352,6 +1378,57 @@ recovery authority.
   owner credential recovery, changing auth origin or relying-party policy,
   rotating browser session signing policy, and creating or rotating admin-bearer
   recovery material
+
+#### Scenario: Instance admin opens instance settings
+
+- GIVEN a browser session resolves to an active principal with active
+  `instance.admin` authority at instance scope
+- WHEN the principal opens the instance settings surface, app install and route
+  management, or `/access`
+- THEN management route access accepts the request
+- AND backing operational management APIs apply their existing instance-admin
+  grant limits
+- AND the principal does not receive access to installed app data without a
+  separate matching app-install role
+
+### Requirement: Principal-Backed App Admin Authorization
+
+The system SHALL authorize installed app administration through active
+principals with active app-install-scoped `app.admin` authority while keeping
+instance management and owner authority separate.
+
+#### Scenario: Matching app admin authority
+
+- GIVEN a browser request includes a valid central auth session on the
+  configured auth origin or a matching host-local session
+- WHEN the session principal is active
+- AND the principal has an active `app.admin` role assignment whose scope id is
+  the target app install id
+- THEN the target app admin browser route and its authorized app data APIs
+  accept the request
+- AND active `instance.owner` authority also satisfies the app admin boundary
+- AND authorization uses current identity-control-plane principal and role
+  assignment records rather than stale cookie or handoff facts
+
+#### Scenario: App admin scope isolation
+
+- GIVEN a principal has active `app.admin` authority for one app install
+- WHEN the principal requests another app install, instance settings, or an
+  owner-only route or operation
+- THEN the app role does not authorize the request
+- AND active `instance.admin` authority alone does not authorize installed app
+  data
+
+#### Scenario: App admin authority is revoked
+
+- GIVEN a central or host-local session was previously accepted for an app
+  admin target
+- WHEN the principal is disabled, the matching role assignment or role is
+  disabled, or the applicable session version changes
+- THEN future route checks, app reads, app writes, sync catch-up, and push
+  delivery reject or narrow access immediately
+- AND the session or open push connection does not retain authority from stale
+  signed or attached role facts
 
 ### Requirement: Admin Bearer Boundary
 

@@ -47,6 +47,8 @@ import {
   workerRuntimeProfileInput,
 } from "./routing.ts";
 
+export const INTERNAL_PUBLIC_SITE_BOOTSTRAP_PATH = "/_internal/public-site/bootstrap";
+
 export type PublicSiteWorkerTreeInput = {
   records: StoredRecord[];
   schema: AppSchema;
@@ -497,7 +499,18 @@ async function fetchSiteBootstrapRecords(
   target?: AppStorageIdentity,
 ): Promise<StoredRecord[] | undefined> {
   try {
-    const response = await fetchAuthorityJson(request, env, target, "/bootstrap");
+    const authorityId = env.FORMLESS_AUTHORITY.idFromName(target?.authorityName ?? siteSchemaKey);
+    const authority = env.FORMLESS_AUTHORITY.get(authorityId);
+    const url = new URL(INTERNAL_PUBLIC_SITE_BOOTSTRAP_PATH, request.url);
+
+    url.searchParams.set("apiRoutePrefix", target?.apiRoutePrefix ?? `/api/${siteSchemaKey}`);
+
+    const response = await authority.fetch(
+      new Request(url, {
+        headers: { Accept: "application/json" },
+        method: "GET",
+      }),
+    );
 
     if (!response.ok) {
       return undefined;

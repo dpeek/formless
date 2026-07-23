@@ -216,6 +216,18 @@ flat role assignment records.
 - AND the first owner is represented as an `instance.owner` role assignment for
   a principal at instance scope
 
+#### Scenario: App admin runtime scope
+
+- GIVEN an active principal has an active `app.admin` role assignment at
+  app-install scope
+- WHEN runtime authorization resolves a protected installed app target
+- THEN the assignment authorizes only the app install named by its scope id
+- AND it does not authorize another app install, operational instance
+  management, or owner-only behavior
+- AND disabling the principal, role record, or role assignment removes that
+  authority from subsequent route, read, write, sync, and push checks without
+  relying on session expiry
+
 ### Requirement: App Registration And Invitation Records
 
 The system SHALL store display-safe app identity enrollment and pending invite

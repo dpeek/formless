@@ -381,8 +381,8 @@ records.
 - **THEN** each route record can store camelCase fields for enabled state,
   optional match host, match path, optional match prefix, kind, optional target
   profile, optional app install reference, optional surface, optional access
-  policy, optional deployment config reference, redirect target fields,
-  and redirect policy fields
+  policy, optional required role, optional deployment config reference,
+  redirect target fields, and redirect policy fields
 - **AND** route records remain flat schema records
 - **AND** created and updated timestamps come from record system fields rather
   than route value fields
@@ -415,28 +415,46 @@ records.
 
 - **GIVEN** an owner or admin creates a mount route
 - **WHEN** the route includes access policy
-- **THEN** `access` is `anonymous`, `authenticated`, or `owner`
+- **THEN** `access` is `anonymous`, `authenticated`, `management`, or `owner`
 - **AND** `anonymous` means the route can be read without a principal-backed
   browser session
 - **AND** `authenticated` means browser reads require a valid owner session or
   host-local session for an active principal on the matched route target
+- **AND** `management` means browser reads require an active principal with
+  active `instance.owner` or `instance.admin` authority at instance scope
 - **AND** `owner` means browser reads require an owner session or host-local
   session for the matched owner route target whose principal has active
   `instance.owner` authority
+- **AND** an app admin mount may combine `authenticated` access with
+  `requiredRole` `app.admin`
+- **AND** `app.admin` is resolved at `app-install` scope from the route's
+  referenced `appInstall`, never from a client-supplied scope
+- **AND** `requiredRole` is rejected on anonymous, management, owner, redirect,
+  non-app, or app routes without one referenced app install
 - **AND** operational management API reads and writes require a session whose
   principal has active `instance.owner` or `instance.admin` authority, a
   matching host-local session with that current authority, or admin bearer
   authorization
 - **AND** owner-only recovery, owner role management, auth origin policy, and
   admin bearer recovery remain outside operational management authorization
-- **AND** omitted access defaults to `owner` for instance, app admin, and app
-  schema mounts
+- **AND** omitted access defaults to `management` for instance management
+  mounts and to `owner` for app admin and app schema mounts
 - **AND** omitted access defaults to `anonymous` for public Site mounts
+
+#### Scenario: Default installed app admin route access
+
+- **GIVEN** an owner or admin creates a package app install
+- **WHEN** the runtime creates its default app admin mount route
+- **THEN** the route uses access `authenticated` with required role `app.admin`
+- **AND** active `instance.owner` authority remains an override for local and
+  deployed owner operation of the installed app
+- **AND** active `instance.admin` authority alone does not satisfy the app role
+  requirement
 
 #### Scenario: Mapped instance route host session authorizes control plane
 
 - **GIVEN** an enabled exact-host `route` mounts the instance profile with
-  access `owner`
+  access `management` or `owner`
 - **AND** the browser has a valid host-local session for that route target and
   storage identity `instance:control-plane`
 - **WHEN** the browser reads or writes protected operational instance

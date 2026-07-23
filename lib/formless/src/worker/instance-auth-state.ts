@@ -15,7 +15,13 @@ import {
   type InstanceAuthConfigInput,
   type OwnerLoginRedirectTarget,
 } from "../shared/instance-auth.ts";
-import { runtimeAuthAccountGateRoutes } from "../shared/runtime-topology.ts";
+import {
+  parseRuntimeRouteAccess,
+  parseRuntimeRouteRequiredRole,
+  runtimeAuthAccountGateRoutes,
+  type RuntimeRouteAccess,
+  type RuntimeRouteRequiredRole,
+} from "../shared/runtime-topology.ts";
 import { normalizeEmailDeliveryAddress } from "../shared/email-runtime.ts";
 import { nowIsoString } from "../shared/clock.ts";
 import type { IdentityInvitationTargetSurface } from "@dpeek/formless-identity-control-plane";
@@ -103,6 +109,8 @@ type HostSessionRevocationVersionRow = {
   target_origin: string;
   route_id: string;
   target_profile: string;
+  access: string;
+  required_role: string | null;
   app_install_id: string | null;
   storage_identity: string | null;
   session_version: number;
@@ -117,6 +125,8 @@ type HandoffGrantRow = {
   target_origin: string;
   route_id: string;
   target_profile: string;
+  access: string;
+  required_role: string | null;
   app_install_id: string | null;
   storage_identity: string | null;
   return_to: string;
@@ -350,7 +360,9 @@ export type UpdatePasskeyCredentialVerificationResult =
 export type InstanceAuthHandoffTargetProfile = (typeof instanceAuthHandoffTargetProfiles)[number];
 
 export type InstanceAuthSessionTargetBinding = {
+  access: Exclude<RuntimeRouteAccess, "anonymous">;
   appInstallId?: string;
+  requiredRole?: RuntimeRouteRequiredRole;
   routeId: string;
   storageIdentity?: string;
   targetOrigin: string;
@@ -727,10 +739,17 @@ export function ensureInstanceAuthTables(storage: DurableObjectStorage) {
       target_origin TEXT NOT NULL,
       route_id TEXT NOT NULL,
       target_profile TEXT NOT NULL CHECK (target_profile IN ('instance', 'app', 'public-site')),
+      access TEXT NOT NULL CHECK (access IN ('authenticated', 'management', 'owner')),
+      required_role TEXT CHECK (required_role IS NULL OR required_role = 'app.admin'),
       app_install_id TEXT,
       storage_identity TEXT,
       session_version INTEGER NOT NULL CHECK (session_version >= 0),
       updated_at TEXT NOT NULL,
+      CHECK (required_role IS NULL OR (
+        access = 'authenticated' AND
+        target_profile = 'app' AND
+        app_install_id IS NOT NULL
+      )),
       CHECK (app_install_id IS NOT NULL OR storage_identity IS NOT NULL)
     );
 
@@ -754,6 +773,8 @@ export function ensureInstanceAuthTables(storage: DurableObjectStorage) {
       target_origin TEXT NOT NULL,
       route_id TEXT NOT NULL,
       target_profile TEXT NOT NULL CHECK (target_profile IN ('instance', 'app', 'public-site')),
+      access TEXT NOT NULL CHECK (access IN ('authenticated', 'management', 'owner')),
+      required_role TEXT CHECK (required_role IS NULL OR required_role = 'app.admin'),
       app_install_id TEXT,
       storage_identity TEXT,
       return_to TEXT NOT NULL,
@@ -762,6 +783,11 @@ export function ensureInstanceAuthTables(storage: DurableObjectStorage) {
       created_at TEXT NOT NULL,
       expires_at TEXT NOT NULL,
       consumed_at TEXT,
+      CHECK (required_role IS NULL OR (
+        access = 'authenticated' AND
+        target_profile = 'app' AND
+        app_install_id IS NOT NULL
+      )),
       CHECK (app_install_id IS NOT NULL OR storage_identity IS NOT NULL)
     );
 
@@ -1403,12 +1429,14 @@ export function bumpHostSessionRevocationVersion(
           target_origin,
           route_id,
           target_profile,
+          access,
+          required_role,
           app_install_id,
           storage_identity,
           session_version,
           updated_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(scope_key) DO UPDATE SET
           session_version = excluded.session_version,
           updated_at = excluded.updated_at
@@ -1419,6 +1447,8 @@ export function bumpHostSessionRevocationVersion(
       scope.targetOrigin,
       scope.routeId,
       scope.targetProfile,
+      scope.access,
+      scope.requiredRole ?? null,
       scope.appInstallId ?? null,
       scope.storageIdentity ?? null,
       sessionVersion,
@@ -1471,6 +1501,8 @@ export function createHandoffGrant(
           target_origin,
           route_id,
           target_profile,
+          access,
+          required_role,
           app_install_id,
           storage_identity,
           return_to,
@@ -1480,7 +1512,7 @@ export function createHandoffGrant(
           expires_at,
           consumed_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
       `,
       grant.grantId,
       grant.grantSecretHash,
@@ -1489,6 +1521,8 @@ export function createHandoffGrant(
       grant.targetOrigin,
       grant.routeId,
       grant.targetProfile,
+      grant.access,
+      grant.requiredRole ?? null,
       grant.appInstallId ?? null,
       grant.storageIdentity ?? null,
       grant.returnTo,
@@ -2449,6 +2483,8 @@ function readHostSessionRevocationVersionByScopeKey(
           target_origin,
           route_id,
           target_profile,
+          access,
+          required_role,
           app_install_id,
           storage_identity,
           session_version,
@@ -2472,6 +2508,10 @@ function hostSessionRevocationVersionFromRow(
     targetOrigin: row.target_origin,
     routeId: row.route_id,
     targetProfile: parseInstanceAuthHandoffTargetProfile(row.target_profile),
+    access: parseProtectedRuntimeRouteAccess(row.access),
+    ...(row.required_role === null
+      ? {}
+      : { requiredRole: parseRequiredRuntimeRouteRole(row.required_role) }),
     ...(row.app_install_id === null ? {} : { appInstallId: row.app_install_id }),
     ...(row.storage_identity === null ? {} : { storageIdentity: row.storage_identity }),
     sessionVersion: parseNonNegativeInteger("Host session revocation version", row.session_version),
@@ -2486,6 +2526,8 @@ function hostSessionScopeKey(input: HostSessionRevocationVersionInput): string {
     input.targetOrigin,
     input.routeId,
     input.targetProfile,
+    input.access,
+    input.requiredRole ?? null,
     input.appInstallId ?? null,
     input.storageIdentity ?? null,
   ]);
@@ -2597,6 +2639,8 @@ function readHandoffGrantById(
           target_origin,
           route_id,
           target_profile,
+          access,
+          required_role,
           app_install_id,
           storage_identity,
           return_to,
@@ -2630,6 +2674,8 @@ function readHandoffGrantBySecretHash(
           target_origin,
           route_id,
           target_profile,
+          access,
+          required_role,
           app_install_id,
           storage_identity,
           return_to,
@@ -2657,6 +2703,10 @@ function handoffGrantFromRow(row: HandoffGrantRow): StoredHandoffGrant {
     targetOrigin: row.target_origin,
     routeId: row.route_id,
     targetProfile: parseInstanceAuthHandoffTargetProfile(row.target_profile),
+    access: parseProtectedRuntimeRouteAccess(row.access),
+    ...(row.required_role === null
+      ? {}
+      : { requiredRole: parseRequiredRuntimeRouteRole(row.required_role) }),
     ...(row.app_install_id === null ? {} : { appInstallId: row.app_install_id }),
     ...(row.storage_identity === null ? {} : { storageIdentity: row.storage_identity }),
     returnTo: parsePathOnlyReturnTarget("Stored handoff grant return target", row.return_to),
@@ -3168,6 +3218,7 @@ function parseCollaboratorInvitationTargetSurface(value: unknown): IdentityInvit
 function normalizeInstanceAuthTargetBinding(
   input: InstanceAuthSessionTargetBinding,
 ): InstanceAuthSessionTargetBinding {
+  const access = parseProtectedRuntimeRouteAccess(input.access);
   const appInstallId = parseOptionalNonEmptyString(
     "Instance auth target app install id",
     input.appInstallId,
@@ -3181,10 +3232,27 @@ function normalizeInstanceAuthTargetBinding(
     throw new Error("Instance auth target requires app install id or storage identity.");
   }
 
+  const requiredRole =
+    input.requiredRole === undefined
+      ? undefined
+      : parseRequiredRuntimeRouteRole(input.requiredRole);
+  const targetProfile = parseInstanceAuthHandoffTargetProfile(input.targetProfile);
+
+  if (
+    requiredRole !== undefined &&
+    (access !== "authenticated" || targetProfile !== "app" || appInstallId === undefined)
+  ) {
+    throw new Error(
+      "Instance auth target role requires an authenticated app target with one app install.",
+    );
+  }
+
   return {
+    access,
     targetOrigin: parseInstanceAuthCanonicalOrigin(input.targetOrigin),
     routeId: parseNonEmptyString("Instance auth target route id", input.routeId),
-    targetProfile: parseInstanceAuthHandoffTargetProfile(input.targetProfile),
+    targetProfile,
+    ...(requiredRole === undefined ? {} : { requiredRole }),
     ...(appInstallId === undefined ? {} : { appInstallId }),
     ...(storageIdentity === undefined ? {} : { storageIdentity }),
   };
@@ -3198,9 +3266,33 @@ function instanceAuthTargetBindingsEqual(
     left.targetOrigin === right.targetOrigin &&
     left.routeId === right.routeId &&
     left.targetProfile === right.targetProfile &&
+    left.access === right.access &&
+    (left.requiredRole ?? undefined) === (right.requiredRole ?? undefined) &&
     (left.appInstallId ?? undefined) === (right.appInstallId ?? undefined) &&
     (left.storageIdentity ?? undefined) === (right.storageIdentity ?? undefined)
   );
+}
+
+function parseProtectedRuntimeRouteAccess(
+  value: unknown,
+): Exclude<RuntimeRouteAccess, "anonymous"> {
+  const access = typeof value === "string" ? parseRuntimeRouteAccess(value) : undefined;
+
+  if (access === undefined || access === "anonymous") {
+    throw new Error("Instance auth target access must be protected.");
+  }
+
+  return access;
+}
+
+function parseRequiredRuntimeRouteRole(value: unknown): RuntimeRouteRequiredRole {
+  const requiredRole = typeof value === "string" ? parseRuntimeRouteRequiredRole(value) : undefined;
+
+  if (requiredRole === undefined) {
+    throw new Error("Instance auth target required role is invalid.");
+  }
+
+  return requiredRole;
 }
 
 function parseInstanceAuthHandoffTargetProfile(value: unknown): InstanceAuthHandoffTargetProfile {

@@ -33,7 +33,9 @@ import { computeSourceSchemaHash } from "../shared/upgrade-migrations.ts";
 import { recordOperationRequest } from "../test/authority-write.ts";
 import { ensureTestIdentityOwner } from "../test/identity-owner.ts";
 import {
+  INTERNAL_IDENTITY_APP_AUTHORITY_PATH,
   INTERNAL_IDENTITY_PRINCIPAL_AUTHORITY_PATH,
+  type ActiveIdentityAppAuthority,
   type ActiveIdentityAuthority,
 } from "./identity-owner-internal.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
@@ -1267,6 +1269,77 @@ describe("identity control-plane API routes", () => {
       instanceOwner: false,
     });
   });
+
+  it("resolves current app-admin authority with exact install and active-role isolation", async () => {
+    const ownerAuthority = await createIdentityOwnerAuthority("App Lookup Owner");
+    const appAdmin = await createIdentityPrincipal("App Lookup Admin");
+    const assignment = await assignIdentityAppRole(appAdmin.id, "tasks");
+    const ordinary = await createIdentityPrincipal("App Lookup Ordinary");
+    const disabled = await createIdentityPrincipal("App Lookup Disabled");
+    await assignIdentityAppRole(disabled.id, "tasks");
+
+    await postRecordOperation({
+      entity: "principal",
+      idempotencyKey: "disable-app-lookup-principal",
+      operationName: "update",
+      recordId: disabled.id,
+      input: { status: "disabled" },
+    });
+
+    expect(await readAppAuthority(ownerAuthority.principal.id, "tasks")).toEqual({
+      appAdmin: false,
+      appInstallId: "tasks",
+      id: ownerAuthority.principal.id,
+      instanceOwner: true,
+    });
+    expect(await readAppAuthority(appAdmin.id, "tasks")).toEqual({
+      appAdmin: true,
+      appInstallId: "tasks",
+      id: appAdmin.id,
+      instanceOwner: false,
+    });
+    expect(await readAppAuthority(appAdmin.id, "crm")).toEqual({
+      appAdmin: false,
+      appInstallId: "crm",
+      id: appAdmin.id,
+      instanceOwner: false,
+    });
+    expect(await readAppAuthority(ordinary.id, "tasks")).toEqual({
+      appAdmin: false,
+      appInstallId: "tasks",
+      id: ordinary.id,
+      instanceOwner: false,
+    });
+    expect(await readAppAuthority(disabled.id, "tasks")).toBeNull();
+
+    await postRecordOperation({
+      entity: "role-assignment",
+      idempotencyKey: "disable-app-lookup-assignment",
+      operationName: "update",
+      recordId: assignment.id,
+      input: { status: "disabled" },
+    });
+    expect(await readAppAuthority(appAdmin.id, "tasks")).toEqual({
+      appAdmin: false,
+      appInstallId: "tasks",
+      id: appAdmin.id,
+      instanceOwner: false,
+    });
+
+    await postRecordOperation({
+      entity: "role",
+      idempotencyKey: "disable-app-admin-role",
+      operationName: "update",
+      recordId: "role:app.admin",
+      input: { status: "disabled" },
+    });
+    expect(await readAppAuthority(ordinary.id, "tasks")).toEqual({
+      appAdmin: false,
+      appInstallId: "tasks",
+      id: ordinary.id,
+      instanceOwner: false,
+    });
+  });
 });
 
 async function resetKnownState() {
@@ -1478,6 +1551,24 @@ async function assignIdentityInstanceRole(
   });
 }
 
+async function assignIdentityAppRole(principalId: string, appInstallId: string) {
+  return await postRecordOperation({
+    entity: "role-assignment",
+    idempotencyKey: ["assign", principalId.replace(/\W+/g, "-"), "app-admin", appInstallId].join(
+      "-",
+    ),
+    operationName: "create",
+    input: {
+      appInstallId,
+      role: "role:app.admin",
+      scopeKind: "app-install",
+      status: "active",
+      targetKind: "principal",
+      targetPrincipal: principalId,
+    },
+  });
+}
+
 async function readPrincipalAuthority(
   principalId: string,
 ): Promise<ActiveIdentityAuthority | null> {
@@ -1493,6 +1584,31 @@ async function readPrincipalAuthority(
   );
   const body = (await response.json()) as {
     authority?: ActiveIdentityAuthority | null;
+    error?: string;
+  };
+
+  expect(response.status).toBe(200);
+
+  return body.authority ?? null;
+}
+
+async function readAppAuthority(
+  principalId: string,
+  appInstallId: string,
+): Promise<ActiveIdentityAppAuthority | null> {
+  const url = new URL(INTERNAL_IDENTITY_APP_AUTHORITY_PATH, "http://internal");
+
+  url.searchParams.set("principalId", principalId);
+  url.searchParams.set("appInstallId", appInstallId);
+
+  const response = await harness.durableObjectFetch(
+    "FORMLESS_AUTHORITY",
+    IDENTITY_CONTROL_PLANE_STORAGE_IDENTITY,
+    `${url.pathname}${url.search}`,
+    { method: "GET" },
+  );
+  const body = (await response.json()) as {
+    authority?: ActiveIdentityAppAuthority | null;
     error?: string;
   };
 

@@ -30,6 +30,7 @@ import type { Env } from "./index.ts";
 import {
   authorizeAuthorityOperation,
   authorizeInstanceWrite,
+  authorizeOwnerManagementRead,
   type AuthorityAdminGuardResult,
 } from "./authority-admin-guard.ts";
 import type { WorkerSchemaAppDefinition } from "./schema-apps.ts";
@@ -71,11 +72,14 @@ import { handleInstanceEmailRuntimeDurableObjectRequest } from "./email-runtime.
 import { ensureRuntimeInstanceAuthConfig } from "./instance-auth-runtime.ts";
 import {
   authenticatedOperationActorForSession,
+  bindInstanceAuthAccessSession,
   handleInstanceAuthHandoffDurableObjectRequest,
   hostAuthSessionTargetFromRequestHeaders,
+  validateBoundInstanceAuthAccessSession,
   validateCentralAuthSessionAuthority,
   validateCentralAuthSessionPrincipal,
   validateHostAuthSessionAuthority,
+  validateInstanceAuthAccessSession,
 } from "./instance-auth-handoff.ts";
 import { validateOwnerSessionAuthority, validateOwnerSessionPrincipal } from "./owner-session.ts";
 import {
@@ -106,8 +110,23 @@ import {
   findActiveWorkerSchemaAppDefinition,
   listActiveAppPackages,
 } from "./runtime-app-packages.ts";
+import { INTERNAL_PUBLIC_SITE_BOOTSTRAP_PATH } from "./public-site-worker-runtime.ts";
 
 export const INTERNAL_RESET_APP_STORAGE_PATH = "/_internal/reset-app-storage";
+
+type InstalledAppSyncSocketAuthorization =
+  | { kind: "open" }
+  | {
+      access: unknown;
+      appInstallId: string;
+      kind: "instance-auth";
+      packageAppKey: string;
+      storageIdentity: string;
+    };
+
+type AuthoritySyncSocketAttachment = SyncSocketAttachment & {
+  authorization?: InstalledAppSyncSocketAuthorization;
+};
 
 export class FormlessAuthority extends DurableObject<Env> {
   private readonly bindings: Env;
@@ -341,6 +360,46 @@ export class FormlessAuthority extends DurableObject<Env> {
       return jsonResponse({ reset: true });
     }
 
+    if (url.pathname === INTERNAL_PUBLIC_SITE_BOOTSTRAP_PATH) {
+      if (request.method !== "GET") {
+        return jsonResponse({ error: "Method not allowed." }, 405, { Allow: "GET" });
+      }
+
+      const apiRoutePrefix = url.searchParams.get("apiRoutePrefix");
+      const route = apiRoutePrefix
+        ? parseAuthorityRoute(`${apiRoutePrefix}/bootstrap`, this.bindings)
+        : undefined;
+
+      if (!route || route.identity.authorityName !== this.ctx.id.name) {
+        return jsonResponse({ error: "Not found." }, 404);
+      }
+
+      const source = storageSourceFromRoute(route, this.bindings);
+      const operation = selectAuthorityOperation({
+        method: "GET",
+        path: "/bootstrap",
+        searchParams: new URLSearchParams(),
+      });
+
+      if (!operation) {
+        return jsonResponse({ error: "Not found." }, 404);
+      }
+
+      ensureStorageTables(this.ctx.storage);
+      const result = await executeAuthorityOperation({
+        app: route.app,
+        identity: route.identity,
+        operation,
+        packageResolver: activeAppPackageResolver(this.bindings),
+        source,
+        sourceSchemas: activeWorkerSourceSchemas(this.bindings),
+        storage: this.ctx.storage,
+        writes: new AuthorityWriteModule(() => this.scheduleCommittedWriteBroadcast(source)),
+      });
+
+      return jsonResponse(result.body, result.status, result.headers);
+    }
+
     const route = parseAuthorityRoute(url.pathname, this.bindings);
 
     if (!route) {
@@ -365,13 +424,11 @@ export class FormlessAuthority extends DurableObject<Env> {
       }
 
       if (route.path === "/sync/ws") {
-        return this.handleSyncWebSocketRequest(request, route.app);
+        return this.handleSyncWebSocketRequest(request, route.identity, route.app);
       }
 
       const source = storageSourceFromRoute(route, this.bindings);
-      const writes = new AuthorityWriteModule(this.ctx.storage, source, () =>
-        this.ctx.getWebSockets(),
-      );
+      const writes = new AuthorityWriteModule(() => this.scheduleCommittedWriteBroadcast(source));
 
       const internalAuthProfileCompletionResponse =
         await handleInternalAuthProfileCompletionRequest({
@@ -462,19 +519,48 @@ export class FormlessAuthority extends DurableObject<Env> {
 
       if (operation) {
         const hostSessionTarget = hostAuthSessionTargetForAuthorityRoute(request, route.identity);
+        const installedAppDataAuthorization =
+          route.identity.kind === "appInstall" && isInstalledAppDataOperation(operation)
+            ? await authorizeInstalledAppDataRequest(
+                request,
+                this.bindings,
+                route.identity,
+                hostSessionTarget,
+              )
+            : undefined;
         const actorCandidates =
           operation.kind === "entityOperation"
-            ? await operationActorCandidatesForRequest(request, this.bindings, hostSessionTarget)
+            ? installedAppDataAuthorization?.authorized
+              ? installedAppDataAuthorization.actorCandidates
+              : installedAppDataAuthorization
+                ? undefined
+                : await operationActorCandidatesForRequest(
+                    request,
+                    this.bindings,
+                    hostSessionTarget,
+                  )
             : undefined;
-        const authorization =
-          operation.kind === "entityOperation"
-            ? await authorizeEntityOperationRequest(request, operation, this.bindings, {
-                actorCandidates,
+        const authorization = installedAppDataAuthorization
+          ? installedAppDataAuthorization.authorized
+            ? { authorized: true as const }
+            : await authorizeInstalledAppDataFallback(
+                request,
+                operation,
+                this.bindings,
+                hostSessionTarget,
+              )
+          : route.identity.kind === "appInstall" && operation.kind === "exportSnapshot"
+            ? await authorizeOwnerManagementRead(request, this.bindings, {
                 hostSessionTarget,
               })
-            : await authorizeAuthorityOperation(request, operation, this.bindings, {
-                hostSessionTarget,
-              });
+            : operation.kind === "entityOperation"
+              ? await authorizeEntityOperationRequest(request, operation, this.bindings, {
+                  actorCandidates,
+                  hostSessionTarget,
+                })
+              : await authorizeAuthorityOperation(request, operation, this.bindings, {
+                  hostSessionTarget,
+                });
 
         if (!authorization.authorized) {
           return jsonResponse(
@@ -532,9 +618,7 @@ export class FormlessAuthority extends DurableObject<Env> {
     }
   }
 
-  webSocketMessage(socket: WebSocket, message: string | ArrayBuffer) {
-    ensureStorageTables(this.ctx.storage);
-
+  async webSocketMessage(socket: WebSocket, message: string | ArrayBuffer) {
     const parsedMessage = parseSyncSocketMessage(message);
 
     if (!parsedMessage) {
@@ -542,16 +626,29 @@ export class FormlessAuthority extends DurableObject<Env> {
       return;
     }
 
+    const currentAttachment = syncSocketAttachment(socket);
+
+    if (!(await this.syncSocketAuthorized(socket, currentAttachment))) {
+      closeUnauthorizedSyncSocket(socket);
+      return;
+    }
+
+    ensureStorageTables(this.ctx.storage);
     const source = storageSourceFromSyncSocket(this.ctx, socket, this.bindings);
     const attachment = {
+      ...currentAttachment,
       cursor: parsedMessage.cursor,
       schemaUpdatedAt: parsedMessage.schemaUpdatedAt,
-    } satisfies SyncSocketAttachment;
+    } satisfies AuthoritySyncSocketAttachment;
 
     sendSyncToSocket(this.ctx.storage, source, socket, attachment);
   }
 
-  private handleSyncWebSocketRequest(request: Request, app: WorkerSchemaAppDefinition) {
+  private async handleSyncWebSocketRequest(
+    request: Request,
+    identity: AppStorageIdentity,
+    app: WorkerSchemaAppDefinition,
+  ) {
     if (request.method !== "GET") {
       return jsonResponse({ error: "WebSocket sync requires GET." }, 405, { Allow: "GET" });
     }
@@ -562,17 +659,115 @@ export class FormlessAuthority extends DurableObject<Env> {
       });
     }
 
+    const authorization =
+      identity.kind === "appInstall"
+        ? await this.installedAppSyncSocketAuthorization(request, identity)
+        : undefined;
+
+    if (identity.kind === "appInstall" && authorization === undefined) {
+      return jsonResponse(
+        { error: "Owner or matching app administrator session is required for push sync." },
+        401,
+        { "WWW-Authenticate": 'Bearer realm="formless-app-admin"' },
+      );
+    }
+
     const pair = new WebSocketPair();
     const client = pair[0];
     const server = pair[1];
 
-    server.serializeAttachment(initialSyncSocketAttachment());
+    server.serializeAttachment(initialSyncSocketAttachment(authorization));
     this.ctx.acceptWebSocket(server, [app.key]);
 
     return new Response(null, {
       status: 101,
       webSocket: client,
     });
+  }
+
+  private async installedAppSyncSocketAuthorization(
+    request: Request,
+    identity: Extract<AppStorageIdentity, { kind: "appInstall" }>,
+  ): Promise<InstalledAppSyncSocketAuthorization | undefined> {
+    const target = hostAuthSessionTargetForAuthorityRoute(request, identity);
+    const authorization = await authorizeInstalledAppDataRequest(
+      request,
+      this.bindings,
+      identity,
+      target,
+    );
+
+    if (authorization.authorized) {
+      return {
+        access: bindInstanceAuthAccessSession(authorization.access),
+        appInstallId: identity.installId,
+        kind: "instance-auth",
+        packageAppKey: identity.packageAppKey,
+        storageIdentity: identity.authorityName,
+      };
+    }
+
+    const fallback = await authorizeOwnerManagementRead(request, this.bindings, {
+      hostSessionTarget: target,
+    });
+
+    return fallback.authorized && fallback.via === "open" ? { kind: "open" } : undefined;
+  }
+
+  private async syncSocketAuthorized(
+    socket: WebSocket,
+    attachment: AuthoritySyncSocketAttachment,
+  ): Promise<boolean> {
+    const authorization = attachment.authorization;
+
+    if (authorization === undefined) {
+      return this.ctx.id.name?.startsWith("app:") !== true;
+    }
+
+    if (authorization.kind === "open") {
+      return installedAppOpenSyncAllowed(this.bindings);
+    }
+
+    const identity = installedAppStorageIdentity(
+      {
+        installId: authorization.appInstallId,
+        packageAppKey: authorization.packageAppKey,
+      },
+      activeAppPackageResolver(this.bindings),
+    );
+
+    if (
+      identity === undefined ||
+      identity.sourceSchemaKey !== this.ctx.getTags(socket)[0] ||
+      authorization.storageIdentity !== this.ctx.id.name ||
+      authorization.storageIdentity !== identity.authorityName
+    ) {
+      return false;
+    }
+
+    return validateBoundInstanceAuthAccessSession(authorization.access, this.bindings, {
+      appInstallId: authorization.appInstallId,
+      storageIdentity: authorization.storageIdentity,
+    });
+  }
+
+  private scheduleCommittedWriteBroadcast(source: StorageSource) {
+    this.ctx.waitUntil(this.broadcastCommittedWrite(source));
+  }
+
+  private async broadcastCommittedWrite(source: StorageSource) {
+    await Promise.allSettled(
+      this.ctx.getWebSockets().map(async (socket) => {
+        const attachment = syncSocketAttachment(socket);
+
+        if (!(await this.syncSocketAuthorized(socket, attachment))) {
+          closeUnauthorizedSyncSocket(socket);
+          return;
+        }
+
+        sendSyncToSocket(this.ctx.storage, source, socket, attachment);
+      }),
+    );
   }
 }
 
@@ -588,6 +783,75 @@ function hostAuthSessionTargetForAuthorityRoute(request: Request, identity: AppS
   }
 
   return target;
+}
+
+function isInstalledAppDataOperation(operation: AuthorityOperation): boolean {
+  return (
+    operation.kind === "bootstrap" ||
+    operation.kind === "readSchema" ||
+    operation.kind === "sync" ||
+    operation.kind === "entityOperation"
+  );
+}
+
+async function authorizeInstalledAppDataRequest(
+  request: Request,
+  env: Env,
+  identity: Extract<AppStorageIdentity, { kind: "appInstall" }>,
+  target: ReturnType<typeof hostAuthSessionTargetFromRequestHeaders>,
+): Promise<
+  | {
+      access: Extract<Awaited<ReturnType<typeof validateInstanceAuthAccessSession>>, { ok: true }>;
+      actorCandidates: OperationInvocationActorCandidates;
+      authorized: true;
+    }
+  | { authorized: false }
+> {
+  const access = await validateInstanceAuthAccessSession(request, env, {
+    appInstallId: identity.installId,
+    requiredAuthority: "app.admin",
+    target,
+  });
+
+  if (!access.ok) {
+    return { authorized: false };
+  }
+
+  const actorCandidates: OperationInvocationActorCandidates = {};
+  const authenticated = authenticatedOperationActorForSession({
+    principalId: access.principalId,
+    session: access.session,
+    target,
+  });
+
+  if (access.ownerAuthorized) {
+    actorCandidates.owner = { kind: "owner" };
+  } else {
+    actorCandidates.admin = {
+      kind: "admin",
+      principalId: access.principalId,
+      ...(authenticated?.sessionTarget === undefined
+        ? {}
+        : { sessionTarget: authenticated.sessionTarget }),
+    };
+  }
+
+  if (authenticated) {
+    actorCandidates.authenticated = authenticated;
+  }
+
+  return { access, actorCandidates, authorized: true };
+}
+
+async function authorizeInstalledAppDataFallback(
+  request: Request,
+  operation: AuthorityOperation,
+  env: Env,
+  hostSessionTarget: ReturnType<typeof hostAuthSessionTargetFromRequestHeaders>,
+): Promise<AuthorityAdminGuardResult> {
+  return operation.metadata.mode === "read"
+    ? authorizeOwnerManagementRead(request, env, { hostSessionTarget })
+    : authorizeAuthorityOperation(request, operation, env, { hostSessionTarget });
 }
 
 async function authorizeEntityOperationRequest(
@@ -734,18 +998,10 @@ async function operationActorCandidatesForRequest(
 }
 
 class AuthorityWriteModule {
-  private readonly storage: DurableObjectStorage;
-  private readonly source: StorageSource;
-  private readonly webSockets: () => Iterable<WebSocket>;
+  private readonly notifyCommittedWrite: () => void;
 
-  constructor(
-    storage: DurableObjectStorage,
-    source: StorageSource,
-    webSockets: () => Iterable<WebSocket>,
-  ) {
-    this.storage = storage;
-    this.source = source;
-    this.webSockets = webSockets;
+  constructor(notifyCommittedWrite: () => void) {
+    this.notifyCommittedWrite = notifyCommittedWrite;
   }
 
   apply<T>(write: () => WriteOutcome<T>): WriteOutcome<T> {
@@ -756,16 +1012,6 @@ class AuthorityWriteModule {
     }
 
     return outcome;
-  }
-
-  private notifyCommittedWrite() {
-    for (const socket of this.webSockets()) {
-      try {
-        sendSyncToSocket(this.storage, this.source, socket, syncSocketAttachment(socket));
-      } catch {
-        // A stale socket should not block other replicas from receiving committed state.
-      }
-    }
   }
 }
 
@@ -852,8 +1098,12 @@ async function publicOperationInputNotificationSourceRecords(input: {
 
   try {
     const id = input.env.FORMLESS_AUTHORITY.idFromName(defaultSiteIdentity.authorityName);
+    const url = new URL(INTERNAL_PUBLIC_SITE_BOOTSTRAP_PATH, input.requestUrl);
+
+    url.searchParams.set("apiRoutePrefix", defaultSiteIdentity.apiRoutePrefix);
+
     const response = await input.env.FORMLESS_AUTHORITY.get(id).fetch(
-      new Request(new URL(`${defaultSiteIdentity.apiRoutePrefix}/bootstrap`, input.requestUrl), {
+      new Request(url, {
         headers: { Accept: "application/json" },
         method: "GET",
       }),
@@ -920,14 +1170,33 @@ function packageSchemaProvenanceForSchemaKey(
     : undefined;
 }
 
-function initialSyncSocketAttachment(): SyncSocketAttachment {
-  return { cursor: 0, schemaUpdatedAt: null };
+function initialSyncSocketAttachment(
+  authorization?: InstalledAppSyncSocketAuthorization,
+): AuthoritySyncSocketAttachment {
+  return {
+    ...(authorization === undefined ? {} : { authorization }),
+    cursor: 0,
+    schemaUpdatedAt: null,
+  };
 }
 
-function syncSocketAttachment(socket: WebSocket): SyncSocketAttachment {
+function syncSocketAttachment(socket: WebSocket): AuthoritySyncSocketAttachment {
   const attachment = socket.deserializeAttachment();
 
-  return isSyncSocketAttachment(attachment) ? attachment : initialSyncSocketAttachment();
+  if (!isSyncSocketAttachment(attachment)) {
+    return initialSyncSocketAttachment();
+  }
+
+  const authorization =
+    isObjectRecord(attachment) && "authorization" in attachment
+      ? parseInstalledAppSyncSocketAuthorization(attachment.authorization)
+      : undefined;
+
+  return {
+    ...(authorization === undefined ? {} : { authorization }),
+    cursor: attachment.cursor,
+    schemaUpdatedAt: attachment.schemaUpdatedAt,
+  };
 }
 
 function parseSyncSocketMessage(message: string | ArrayBuffer) {
@@ -948,7 +1217,7 @@ function sendSyncToSocket(
   storage: DurableObjectStorage,
   source: StorageSource,
   socket: WebSocket,
-  attachment: SyncSocketAttachment,
+  attachment: AuthoritySyncSocketAttachment,
 ) {
   const response = syncResponseForAttachment(storage, source, attachment);
   const message = {
@@ -958,9 +1227,10 @@ function sendSyncToSocket(
 
   socket.send(JSON.stringify(message));
   socket.serializeAttachment({
+    ...(attachment.authorization === undefined ? {} : { authorization: attachment.authorization }),
     cursor: response.cursor,
     schemaUpdatedAt: response.schemaUpdatedAt ?? attachment.schemaUpdatedAt,
-  } satisfies SyncSocketAttachment);
+  } satisfies AuthoritySyncSocketAttachment);
 }
 
 function syncResponseForAttachment(
@@ -992,6 +1262,14 @@ function closeMalformedSyncSocket(socket: WebSocket) {
   socket.close(1003, "Malformed sync message.");
 }
 
+function closeUnauthorizedSyncSocket(socket: WebSocket) {
+  try {
+    socket.close(1008, "Push sync authorization is no longer current.");
+  } catch {
+    // The socket is already closing or closed.
+  }
+}
+
 function sendSyncSocketError(socket: WebSocket, message: string) {
   const response = {
     type: "error",
@@ -1003,6 +1281,50 @@ function sendSyncSocketError(socket: WebSocket, message: string) {
   } catch {
     // The socket is already closing or closed.
   }
+}
+
+function parseInstalledAppSyncSocketAuthorization(
+  value: unknown,
+): InstalledAppSyncSocketAuthorization | undefined {
+  if (!isObjectRecord(value)) {
+    return undefined;
+  }
+
+  if (value.kind === "open") {
+    return { kind: "open" };
+  }
+
+  if (
+    value.kind !== "instance-auth" ||
+    typeof value.appInstallId !== "string" ||
+    value.appInstallId === "" ||
+    typeof value.packageAppKey !== "string" ||
+    value.packageAppKey === "" ||
+    typeof value.storageIdentity !== "string" ||
+    value.storageIdentity === "" ||
+    !("access" in value)
+  ) {
+    return undefined;
+  }
+
+  return {
+    access: value.access,
+    appInstallId: value.appInstallId,
+    kind: "instance-auth",
+    packageAppKey: value.packageAppKey,
+    storageIdentity: value.storageIdentity,
+  };
+}
+
+function installedAppOpenSyncAllowed(env: Env): boolean {
+  return (
+    (env.FORMLESS_ADMIN_TOKEN?.trim() ?? "") === "" &&
+    (env.FORMLESS_OWNER_SESSION_SECRET?.trim() ?? "") === ""
+  );
+}
+
+function isObjectRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 async function handleInternalAuthProfileCompletionRequest(input: {

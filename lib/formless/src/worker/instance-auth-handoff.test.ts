@@ -167,6 +167,7 @@ describe("instance auth origin and protected-route handoff decisions", () => {
       kind: "handoff",
       returnTo: "/schema?view=board",
       target: {
+        access: "authenticated",
         appInstallId: "tasks",
         routeId: "route:app:tasks",
         storageIdentity: "app:tasks",
@@ -187,6 +188,7 @@ describe("instance auth origin and protected-route handoff decisions", () => {
     ).toMatchObject({
       kind: "handoff",
       target: {
+        access: "authenticated",
         appInstallId: "site",
         routeId: "route:public-site:site",
         storageIdentity: "app:site",
@@ -212,6 +214,7 @@ describe("instance auth origin and protected-route handoff decisions", () => {
       kind: "handoff",
       returnTo: "/deployments",
       target: {
+        access: "owner",
         routeId: "route:instance:admin",
         storageIdentity: INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
         targetOrigin: "https://admin.example.com",
@@ -284,6 +287,7 @@ describe("instance auth origin and protected-route handoff decisions", () => {
     expect(instanceAuthCallbackReservationFromFacts(callback)).toEqual({
       kind: "reserved",
       target: {
+        access: "authenticated",
         appInstallId: "tasks",
         routeId: "route:app:tasks",
         storageIdentity: "app:tasks",
@@ -300,6 +304,7 @@ describe("instance auth origin and protected-route handoff decisions", () => {
     ).toEqual({
       kind: "reserved",
       target: {
+        access: "owner",
         routeId: "route:instance:admin",
         storageIdentity: INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
         targetOrigin: "https://admin.example.com",
@@ -332,6 +337,7 @@ describe("instance auth origin and protected-route handoff decisions", () => {
     ).toEqual({
       access: "authenticated",
       target: {
+        access: "authenticated",
         appInstallId: "tasks",
         routeId: "route:app:tasks",
         storageIdentity: "app:tasks",
@@ -360,6 +366,7 @@ describe("instance auth origin and protected-route handoff decisions", () => {
         runtimeRoute: instanceRoute("owner"),
       }),
     ).toEqual({
+      access: "owner",
       routeId: "route:instance:admin",
       storageIdentity: INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
       targetOrigin: "https://admin.example.com",
@@ -378,9 +385,45 @@ describe("instance auth origin and protected-route handoff decisions", () => {
       }),
     ).toBeUndefined();
   });
+
+  it("binds management access and required app role into route targets", () => {
+    const appAdminRoute = {
+      ...appRoute("app", "tasks", "authenticated"),
+      requiredRole: "app.admin" as const,
+    };
+
+    expect(
+      planProtectedRouteAuthRedirect({
+        authOrigin: "https://auth.example.com",
+        entry: "handoff",
+        requestOrigin: "https://tasks.example.com",
+        requiredAccess: "authenticated",
+        runtimeRoute: appAdminRoute,
+        safeReturnTo: "/schema",
+      }),
+    ).toMatchObject({
+      kind: "handoff",
+      target: {
+        access: "authenticated",
+        appInstallId: "tasks",
+        requiredRole: "app.admin",
+      },
+    });
+    expect(
+      mappedInstanceManagementTargetFromFacts({
+        requestOrigin: "https://admin.example.com",
+        runtimeRoute: instanceRoute("management"),
+      }),
+    ).toMatchObject({
+      access: "management",
+      targetProfile: "instance",
+    });
+  });
 });
 
-function instanceRoute(access: "authenticated" | "owner"): InstanceRuntimeMountRouteResolution {
+function instanceRoute(
+  access: "authenticated" | "management" | "owner",
+): InstanceRuntimeMountRouteResolution {
   return {
     access,
     id: "route:instance:admin",

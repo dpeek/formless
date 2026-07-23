@@ -445,11 +445,13 @@ describe("instance auth state", () => {
     expect(storedSession.session).toEqual(revoked.ok ? revoked.session : undefined);
     expect(missingVersion.version).toBeNull();
     expect(firstVersion).toEqual({
+      access: "authenticated",
       instanceId,
       principalId,
       targetOrigin,
       routeId,
       targetProfile: "app",
+      requiredRole: "app.admin",
       appInstallId,
       storageIdentity,
       sessionVersion: 1,
@@ -493,6 +495,7 @@ describe("instance auth state", () => {
     expect(created).toEqual({
       ok: true,
       grant: {
+        access: "authenticated",
         grantId,
         grantSecretHash,
         instanceId,
@@ -500,6 +503,7 @@ describe("instance auth state", () => {
         targetOrigin,
         routeId,
         targetProfile: "app",
+        requiredRole: "app.admin",
         appInstallId,
         storageIdentity,
         returnTo,
@@ -1114,6 +1118,7 @@ async function hashEmailVerificationToken(token: string) {
 
 function handoffGrantInput() {
   return {
+    access: "authenticated",
     grantId,
     grantSecretHash,
     instanceId,
@@ -1121,6 +1126,7 @@ function handoffGrantInput() {
     targetOrigin,
     routeId,
     targetProfile: "app",
+    requiredRole: "app.admin",
     appInstallId,
     storageIdentity,
     returnTo,
@@ -1144,11 +1150,13 @@ function accountCompletionTarget() {
 
 function hostSessionTarget() {
   return {
+    access: "authenticated",
     instanceId,
     principalId,
     targetOrigin,
     routeId,
     targetProfile: "app",
+    requiredRole: "app.admin",
     appInstallId,
     storageIdentity,
   };
@@ -1479,6 +1487,8 @@ async function writeInstanceAuthHarness() {
 
       function targetBindingFromSearch(url) {
         return {
+          access: url.searchParams.get("access") ?? undefined,
+          requiredRole: url.searchParams.get("requiredRole") ?? undefined,
           instanceId: url.searchParams.get("instanceId") ?? undefined,
           principalId: url.searchParams.get("principalId") ?? undefined,
           targetOrigin: url.searchParams.get("targetOrigin") ?? undefined,

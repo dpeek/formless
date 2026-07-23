@@ -21,6 +21,7 @@ import { nowIsoString } from "../shared/clock.ts";
 import { acceptsRuntimeHtml } from "../shared/runtime-topology.ts";
 import {
   INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
+  instanceControlPlaneEffectiveRouteAccess,
   instanceControlPlanePreferredAdminOriginFromRecords,
 } from "@dpeek/formless-instance-control-plane";
 import type { OwnerIdentity } from "../shared/protocol.ts";
@@ -516,12 +517,14 @@ function invitationAcceptanceHandoffTarget(
 
   const route = mappedInvitationTargetRoute(records, invitation);
 
-  if (route === undefined || route.appInstall === undefined) {
+  if (route === undefined || route.access === "anonymous" || route.appInstall === undefined) {
     return undefined;
   }
 
   return {
+    access: route.access,
     appInstallId: route.appInstall,
+    ...(route.requiredRole === undefined ? {} : { requiredRole: route.requiredRole }),
     returnTo: route.matchPath,
     routeId: route.recordId,
     storageIdentity: `app:${route.appInstall}`,
@@ -543,9 +546,11 @@ function preferredAdminInvitationTarget(
     .map(routeRecordTarget)
     .find((candidate) => candidate?.recordId === resolution.routeId);
 
-  return route === undefined
+  return route === undefined || route.access === "anonymous"
     ? undefined
     : {
+        access: route.access,
+        ...(route.requiredRole === undefined ? {} : { requiredRole: route.requiredRole }),
         returnTo: route.matchPath,
         routeId: route.recordId,
         storageIdentity: INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
@@ -571,9 +576,11 @@ function mappedInvitationTargetRoute(
 function routeRecordTarget(record: StoredRecord):
   | {
       appInstall?: string;
+      access: "anonymous" | "authenticated" | "management" | "owner";
       matchHost: string;
       matchPath: `/${string}`;
       recordId: string;
+      requiredRole?: "app.admin";
       targetProfile: "app" | "instance" | "public-site";
     }
   | undefined {
@@ -590,12 +597,27 @@ function routeRecordTarget(record: StoredRecord):
   }
 
   return {
+    access: instanceControlPlaneEffectiveRouteAccess({
+      access: stringValue(record.values.access) as
+        | "anonymous"
+        | "authenticated"
+        | "management"
+        | "owner"
+        | undefined,
+      kind: "mount",
+      surface:
+        record.values.surface === "admin" || record.values.surface === "public-site"
+          ? record.values.surface
+          : undefined,
+      targetProfile,
+    }),
     ...(stringValue(record.values.appInstall) === undefined
       ? {}
       : { appInstall: stringValue(record.values.appInstall) }),
     matchHost,
     matchPath,
     recordId: record.id,
+    ...(record.values.requiredRole === "app.admin" ? { requiredRole: "app.admin" as const } : {}),
     targetProfile,
   };
 }

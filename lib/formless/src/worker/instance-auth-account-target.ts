@@ -78,5 +78,9 @@ function runtimeRouteAccessSatisfies(
     return true;
   }
 
+  if (required === "authenticated") {
+    return actual === "authenticated" || actual === "management";
+  }
+
   return actual === required;
 }

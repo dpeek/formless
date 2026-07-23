@@ -10,9 +10,18 @@ export const runtimeProfileKinds = [
 
 export type RuntimeProfileKind = (typeof runtimeProfileKinds)[number];
 
-export const runtimeRouteAccessKinds = ["anonymous", "authenticated", "owner"] as const;
+export const runtimeRouteAccessKinds = [
+  "anonymous",
+  "authenticated",
+  "management",
+  "owner",
+] as const;
 
 export type RuntimeRouteAccess = (typeof runtimeRouteAccessKinds)[number];
+
+export const runtimeRouteRequiredRoles = ["app.admin"] as const;
+
+export type RuntimeRouteRequiredRole = (typeof runtimeRouteRequiredRoles)[number];
 
 export type RuntimeTopologyRoutePolicy = {
   instanceBrowserRoutes: boolean;
@@ -132,11 +141,18 @@ export function parseRuntimeRouteAccess(value: string | undefined): RuntimeRoute
   switch (value) {
     case "anonymous":
     case "authenticated":
+    case "management":
     case "owner":
       return value;
     default:
       return undefined;
   }
+}
+
+export function parseRuntimeRouteRequiredRole(
+  value: string | undefined,
+): RuntimeRouteRequiredRole | undefined {
+  return value === "app.admin" ? value : undefined;
 }
 
 export function isRuntimeRouteAccess(value: unknown): value is RuntimeRouteAccess {
@@ -166,8 +182,10 @@ function runtimeRouteAccessRank(access: RuntimeRouteAccess): number {
       return 0;
     case "authenticated":
       return 1;
-    case "owner":
+    case "management":
       return 2;
+    case "owner":
+      return 3;
   }
 }
 

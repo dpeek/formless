@@ -1983,7 +1983,10 @@ async function writeAccountCompletionHarness() {
 
             const schemaResponse = await super.fetch(
               new Request(\`http://internal/api/app-installs/\${packageAppKey}/\${installId}/schema\`, {
-                headers: { Accept: "application/json" },
+                headers: {
+                  Accept: "application/json",
+                  Authorization: "Bearer " + this.env.FORMLESS_ADMIN_TOKEN,
+                },
                 method: "GET",
               }),
             );

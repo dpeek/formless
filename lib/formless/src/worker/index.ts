@@ -44,8 +44,6 @@ import {
   resolveAuthAccountHandoffContinuation,
   setHostAuthSessionTargetHeaders,
   startProtectedRouteAuthAccount,
-  validateCentralAuthSessionAuthority,
-  validateCentralAuthSessionPrincipal,
   validateRouteAccessSession,
 } from "./instance-auth-handoff.ts";
 import {
@@ -386,10 +384,9 @@ export default {
     const instanceAppInstallsResponse = isInstanceAppInstallsApiPath(requestUrl.pathname)
       ? await handleInstanceAppInstallsApiRequest(
           authorityRequestWithOriginalUrlFacts(request, {
-            hostSessionTarget: mappedInstanceManagementTargetFromFacts({
-              requestOrigin: requestOriginForAuth(request),
-              runtimeRoute,
-            }),
+            hostSessionTarget: requestHasCookie(request, HOST_AUTH_SESSION_COOKIE_NAME)
+              ? hostAuthSessionTargetForRuntimeRoute(request, runtimeRoute)
+              : undefined,
           }),
           env,
         )
@@ -797,12 +794,10 @@ async function resolveAuthAccountReturnTargetContinuation(
   if (accountCompletionTarget === undefined) {
     return { error: "Account completion target is unavailable.", kind: "invalid" };
   }
-  const session =
-    requiredAccess === "owner"
-      ? await validateCentralAuthSessionAuthority(targetRequest, env)
-      : await validateCentralAuthSessionPrincipal(targetRequest, env, {
-          accountCompletionTarget,
-        });
+  const session = await validateRouteAccessSession(targetRequest, env, {
+    requiredAccess,
+    ...(runtimeRoute?.kind === "mount" ? { runtimeRoute } : {}),
+  });
 
   if (session.ok) {
     return {
@@ -890,10 +885,10 @@ function isInstalledAppManagementApiRead(request: Request, path: `/${string}`): 
   });
 
   if (operation?.metadata.mode === "read") {
-    return operation.kind !== "siteTree";
+    return operation.kind === "exportSnapshot";
   }
 
-  return request.method === "GET" && path === "/sync/ws";
+  return false;
 }
 
 async function authorizeInstalledAppRouteAccess(

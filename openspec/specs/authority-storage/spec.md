@@ -57,6 +57,46 @@ The system SHALL expose app storage operations through schema-key and installed-
 - THEN the installed app API route remains available
 - AND schema-key API routes remain blocked by the profile policy
 
+### Requirement: Installed App Admin Data Authorization
+
+The system SHALL authorize generated installed-app administration separately
+from browser route eligibility and operational instance management.
+
+#### Scenario: Matching app administrator uses generated app data
+
+- GIVEN a request targets an installed app storage identity
+- WHEN the request bootstraps the browser replica, reads the active schema,
+  syncs committed changes over HTTP or push, or invokes an entity operation
+- THEN the request requires an active principal with active `app.admin`
+  authority at app-install scope for that exact install or active
+  `instance.owner` authority
+- AND active `instance.admin` authority alone, `app.admin` for another install,
+  or an ordinary authenticated session does not authorize the request
+- AND central and host-local sessions are evaluated through the same current
+  instance-auth authority reader
+
+#### Scenario: App admin data authorization does not grant storage control
+
+- GIVEN a principal is authorized only by matching `app.admin` authority
+- WHEN the principal requests schema writes, reset schema, reset seed, snapshot
+  export or restore, package migration, archive, or another storage-control
+  operation
+- THEN existing owner, operational-management, admin-bearer, CLI, or automation
+  authorization remains required according to that operation
+- AND app admin data authorization does not grant instance control-plane reads
+  or writes
+
+#### Scenario: Entity operations keep actor policy
+
+- GIVEN the installed app data boundary accepts a matching app administrator
+- WHEN the principal invokes an entity operation
+- THEN Authority supplies the existing `admin` operation actor candidate for
+  that principal and target app install
+- AND the operation is accepted only when its schema actor policy permits the
+  selected actor
+- AND a matching route or app role does not bypass operation input, field,
+  state, invariant, idempotency, or materialization validation
+
 ### Requirement: Storage Snapshot Contract Boundary
 
 The system SHALL expose storage snapshot contracts and parsing through the

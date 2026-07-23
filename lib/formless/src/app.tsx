@@ -54,11 +54,15 @@ import type {
   InstallableAppPackage,
 } from "@dpeek/formless-installed-apps";
 import {
+  authAccountContinuationLocationForReturnTarget,
   COLLABORATOR_INVITATION_ACCEPT_PATH,
-  ownerLoginRedirectLocationForRoute,
   type OwnerLoginRedirectTarget,
 } from "./shared/instance-auth.ts";
-import { runtimeTopologyRoutes, type RuntimeRouteAccess } from "./shared/runtime-topology.ts";
+import {
+  runtimeTopologyRoutes,
+  type RuntimeRouteAccess,
+  type RuntimeRouteRequiredRole,
+} from "./shared/runtime-topology.ts";
 import type { WorkspaceLinkActionContract } from "@dpeek/formless-presentation/contract";
 import { initialInstanceManagementRuntimeContribution } from "./app/routes/instance-management-contract.ts";
 import { initialInstanceAccessRuntimeContribution } from "./app/routes/access-contract.ts";
@@ -477,16 +481,16 @@ function AppRoutes({
       ) : null}
       {browserRoutes.instanceShellRoute ? (
         <Route path={browserRoutes.instanceShellRoute}>
-          <OwnerRouteGuard access="owner">
+          <ProtectedRouteGuard access="management">
             <InstanceShellRoute localWorkspaceGatewayAvailable={localWorkspaceGatewayAvailable} />
-          </OwnerRouteGuard>
+          </ProtectedRouteGuard>
         </Route>
       ) : null}
       {browserRoutes.instanceAccessRoute ? (
         <Route path={browserRoutes.instanceAccessRoute}>
-          <OwnerRouteGuard access="authenticated">
+          <ProtectedRouteGuard access="management">
             <AccessRoute />
-          </OwnerRouteGuard>
+          </ProtectedRouteGuard>
         </Route>
       ) : null}
       {publishedSite ? (
@@ -519,7 +523,10 @@ function AppRoutes({
       ) : null}
       {generatedWorlds.map((world) => (
         <Route key={world.route} path={world.route}>
-          <OwnerRouteGuard access={world.access ?? "anonymous"}>
+          <ProtectedRouteGuard
+            access={world.access ?? "anonymous"}
+            requiredRole={world.requiredRole}
+          >
             <HomeRoute
               activePackageResolver={installedAppRouteContext.activePackageResolver}
               schemaKey={world.app.key}
@@ -531,13 +538,16 @@ function AppRoutes({
                 installedAppRouteContext.appInstalls,
               )}
             />
-          </OwnerRouteGuard>
+          </ProtectedRouteGuard>
         </Route>
       ))}
       {generatedWorlds.map((world) => (
         <Route key={`${world.route}/*`} path={runtimeScreenWildcardRoute(world)}>
           {(params) => (
-            <OwnerRouteGuard access={world.access ?? "anonymous"}>
+            <ProtectedRouteGuard
+              access={world.access ?? "anonymous"}
+              requiredRole={world.requiredRole}
+            >
               <HomeRoute
                 activePackageResolver={installedAppRouteContext.activePackageResolver}
                 schemaKey={world.app.key}
@@ -549,33 +559,37 @@ function AppRoutes({
                   installedAppRouteContext.appInstalls,
                 )}
               />
-            </OwnerRouteGuard>
+            </ProtectedRouteGuard>
           )}
         </Route>
       ))}
       {browserRoutes.installedAppHomeRoutePattern ? (
         <Route path={browserRoutes.installedAppHomeRoutePattern}>
           {(params) => (
-            <InstalledAppHomeRoute
-              installedAppRouteContext={installedAppRouteContext}
-              installId={runtimeRouteParam(params, "installId")}
-              routeComponents={routeComponents}
-              runtimeProfile={runtimeProfile}
-              screenPath="/"
-            />
+            <ProtectedRouteGuard access="authenticated" requiredRole="app.admin">
+              <InstalledAppHomeRoute
+                installedAppRouteContext={installedAppRouteContext}
+                installId={runtimeRouteParam(params, "installId")}
+                routeComponents={routeComponents}
+                runtimeProfile={runtimeProfile}
+                screenPath="/"
+              />
+            </ProtectedRouteGuard>
           )}
         </Route>
       ) : null}
       {browserRoutes.installedAppScreenRoutePattern ? (
         <Route path={browserRoutes.installedAppScreenRoutePattern}>
           {(params) => (
-            <InstalledAppHomeRoute
-              installedAppRouteContext={installedAppRouteContext}
-              installId={runtimeRouteParam(params, "installId")}
-              routeComponents={routeComponents}
-              runtimeProfile={runtimeProfile}
-              screenPath={runtimeWildcardScreenPath(params)}
-            />
+            <ProtectedRouteGuard access="authenticated" requiredRole="app.admin">
+              <InstalledAppHomeRoute
+                installedAppRouteContext={installedAppRouteContext}
+                installId={runtimeRouteParam(params, "installId")}
+                routeComponents={routeComponents}
+                runtimeProfile={runtimeProfile}
+                screenPath={runtimeWildcardScreenPath(params)}
+              />
+            </ProtectedRouteGuard>
           )}
         </Route>
       ) : null}
@@ -682,15 +696,13 @@ function InstalledAppHomeRoute({
   );
 
   return (
-    <OwnerRouteGuard access={world.access ?? "owner"}>
-      <HomeRoute
-        activePackageResolver={installedAppRouteContext.activePackageResolver}
-        schemaKey={world.app.key}
-        screenPath={screenPath}
-        target={world.target}
-        workspaceActions={siteWorkspaceLinkActionsForInstall(install)}
-      />
-    </OwnerRouteGuard>
+    <HomeRoute
+      activePackageResolver={installedAppRouteContext.activePackageResolver}
+      schemaKey={world.app.key}
+      screenPath={screenPath}
+      target={world.target}
+      workspaceActions={siteWorkspaceLinkActionsForInstall(install)}
+    />
   );
 }
 
@@ -846,85 +858,165 @@ function RouteLoading() {
   );
 }
 
-function OwnerRouteGuard({
+type ProtectedRouteGuardState = "authorized" | "checking" | "redirect";
+
+export function ProtectedRouteGuard({
   access,
   children,
+  fetcher,
+  requiredRole,
 }: {
   access: RuntimeRouteAccess;
   children: ReactNode;
+  fetcher?: typeof fetch;
+  requiredRole?: RuntimeRouteRequiredRole;
 }) {
   const [location] = useLocation();
-  const [state, setState] = useState<"authorized" | "checking" | "redirect">(() =>
-    access === "owner" && typeof window !== "undefined" ? "checking" : "authorized",
+  const routeTarget = protectedRouteTarget(location);
+  const guardKey = [access, requiredRole ?? "", routeTarget].join(":");
+  const [resolution, setResolution] = useState<{
+    key: string;
+    state: ProtectedRouteGuardState;
+  }>(() => ({
+    key: guardKey,
+    state: access !== "anonymous" && typeof window !== "undefined" ? "checking" : "authorized",
+  }));
+  const state =
+    resolution.key === guardKey
+      ? resolution.state
+      : access === "anonymous"
+        ? "authorized"
+        : "checking";
+
+  useEffect(
+    () =>
+      startProtectedRouteGuardSession({
+        access,
+        fetcher,
+        location: routeTarget,
+        onState: (nextState) => setResolution({ key: guardKey, state: nextState }),
+        requiredRole,
+      }),
+    [access, fetcher, guardKey, requiredRole, routeTarget],
   );
 
-  useEffect(() => {
-    if (access !== "owner") {
-      setState("authorized");
-      return;
-    }
-
-    const controller = new AbortController();
-    let stopped = false;
-
-    setState("checking");
-
-    async function checkOwnerSession() {
-      try {
-        const { fetchOwnerSessionStatus } = await import("./app/routes/owner-login.tsx");
-        const status = await fetchOwnerSessionStatus({ signal: controller.signal });
-
-        if (!stopped) {
-          setState(status.authenticated ? "authorized" : "redirect");
-        }
-      } catch {
-        if (!stopped && !controller.signal.aborted) {
-          setState("redirect");
-        }
-      }
-    }
-
-    void checkOwnerSession();
-
-    return () => {
-      stopped = true;
-      controller.abort();
-    };
-  }, [access, location]);
-
-  if (access !== "owner" || state === "authorized") {
+  if (access === "anonymous" || state === "authorized") {
     return <>{children}</>;
   }
 
   if (state === "redirect") {
-    return <Redirect replace to={ownerLoginRedirectLocationForRoute(ownerRouteTarget(location))} />;
+    return <Redirect replace to={authAccountContinuationLocationForReturnTarget(routeTarget)} />;
   }
 
-  return <OwnerRouteLoading />;
+  return <ProtectedRouteLoading />;
 }
 
-function OwnerRouteLoading() {
+export function startProtectedRouteGuardSession({
+  access,
+  fetcher = fetch,
+  location,
+  onState,
+  requiredRole,
+}: {
+  access: RuntimeRouteAccess;
+  fetcher?: typeof fetch;
+  location: OwnerLoginRedirectTarget;
+  onState: (state: ProtectedRouteGuardState) => void;
+  requiredRole?: RuntimeRouteRequiredRole;
+}): () => void {
+  if (access === "anonymous") {
+    onState("authorized");
+    return () => undefined;
+  }
+
+  const controller = new AbortController();
+  let stopped = false;
+
+  onState("checking");
+
+  async function checkAccess() {
+    try {
+      const requiresExactRouteCheck = access === "authenticated" || requiredRole === "app.admin";
+      const authorized =
+        access === "owner"
+          ? await ownerRouteSessionIsAuthorized(fetcher, controller.signal)
+          : access === "management"
+            ? await managementRouteSessionIsAuthorized(fetcher, controller.signal)
+            : requiresExactRouteCheck
+              ? await exactRouteSessionIsAuthorized(fetcher, location, controller.signal)
+              : false;
+
+      if (!stopped) {
+        onState(authorized ? "authorized" : "redirect");
+      }
+    } catch {
+      if (!stopped && !controller.signal.aborted) {
+        onState("redirect");
+      }
+    }
+  }
+
+  void checkAccess();
+
+  return () => {
+    stopped = true;
+    controller.abort();
+  };
+}
+
+async function ownerRouteSessionIsAuthorized(fetcher: typeof fetch, signal: AbortSignal) {
+  const { fetchOwnerSessionStatus } = await import("./app/routes/owner-login.tsx");
+  const status = await fetchOwnerSessionStatus({ fetcher, signal });
+
+  return status.authenticated;
+}
+
+async function managementRouteSessionIsAuthorized(fetcher: typeof fetch, signal: AbortSignal) {
+  const response = await fetcher("/api/formless/control-plane/bootstrap", {
+    credentials: "same-origin",
+    headers: { Accept: "application/json" },
+    signal,
+  });
+
+  return response.ok;
+}
+
+async function exactRouteSessionIsAuthorized(
+  fetcher: typeof fetch,
+  location: OwnerLoginRedirectTarget,
+  signal: AbortSignal,
+) {
+  const response = await fetcher(authAccountContinuationLocationForReturnTarget(location), {
+    credentials: "same-origin",
+    headers: { Accept: "application/json" },
+    signal,
+  });
+
+  return response.ok;
+}
+
+function ProtectedRouteLoading() {
   return (
     <ApplicationSystemStateRuntime
       snapshot={projectApplicationSystemState({
-        heading: "Checking owner access",
-        id: "application-system-state:owner-access",
-        message: "Checking owner access...",
+        heading: "Checking route access",
+        id: "application-system-state:route-access",
+        message: "Checking route access...",
         state: "loading",
       })}
     />
   );
 }
 
-function ownerRouteTarget(location: string): OwnerLoginRedirectTarget {
+function protectedRouteTarget(location: string): OwnerLoginRedirectTarget {
   if (typeof window === "undefined") {
-    return ownerRouteTargetFromLocation(location);
+    return protectedRouteTargetFromLocation(location);
   }
 
-  return ownerRouteTargetFromLocation(`${window.location.pathname}${window.location.search}`);
+  return protectedRouteTargetFromLocation(`${window.location.pathname}${window.location.search}`);
 }
 
-function ownerRouteTargetFromLocation(location: string): OwnerLoginRedirectTarget {
+function protectedRouteTargetFromLocation(location: string): OwnerLoginRedirectTarget {
   return location.startsWith("/") ? (location as OwnerLoginRedirectTarget) : "/";
 }
 

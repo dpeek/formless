@@ -356,9 +356,11 @@ describe("runtime profile resolver", () => {
             routeKind: "admin",
           },
           {
+            access: "authenticated",
             enabled: true,
             id: "app-route:personal:admin-custom",
             path: "/apps/personal-admin",
+            requiredRole: "app.admin",
             routeKind: "admin",
           },
         ],
@@ -373,6 +375,8 @@ describe("runtime profile resolver", () => {
     }
 
     expect(world.route).toBe("/apps/personal-admin");
+    expect(world.access).toBe("authenticated");
+    expect(world.requiredRole).toBe("app.admin");
     expect(world.target.installId).toBe("personal");
     expect(
       findRuntimeWorldMountByRoute(profile, "/apps/personal", { appInstalls }),

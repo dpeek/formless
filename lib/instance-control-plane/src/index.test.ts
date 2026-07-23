@@ -570,6 +570,7 @@ describe("instance control-plane schema contracts", () => {
       "appInstall",
       "surface",
       "access",
+      "requiredRole",
       "deploymentConfig",
       "toHost",
       "toUrl",
@@ -587,6 +588,7 @@ describe("instance control-plane schema contracts", () => {
       "appInstall",
       "surface",
       "access",
+      "requiredRole",
       "deploymentConfig",
       "toHost",
       "toUrl",
@@ -702,7 +704,15 @@ describe("instance control-plane schema contracts", () => {
         values: {
           anonymous: { label: "Anonymous" },
           authenticated: { label: "Authenticated" },
+          management: { label: "Management" },
           owner: { label: "Owner" },
+        },
+      },
+      requiredRole: {
+        type: "enum",
+        required: false,
+        values: {
+          "app.admin": { label: "App admin" },
         },
       },
       deploymentConfig: {
@@ -737,6 +747,7 @@ describe("instance control-plane schema contracts", () => {
       "appInstall",
       "surface",
       "access",
+      "requiredRole",
       "deploymentConfig",
       "toHost",
       "toUrl",
@@ -864,6 +875,7 @@ describe("instance control-plane schema contracts", () => {
       { field: "appInstall", display: "readOnly" },
       { field: "surface", display: "readOnly" },
       { field: "access", display: "readOnly" },
+      { field: "requiredRole", display: "readOnly" },
       { field: "toHost", display: "readOnly" },
       { field: "toUrl", display: "readOnly" },
       { field: "statusCode", display: "readOnly" },
@@ -877,6 +889,7 @@ describe("instance control-plane schema contracts", () => {
       targetProfile: { visibleWhen: { field: "kind", values: ["mount"] } },
       appInstall: { visibleWhen: { field: "targetProfile", values: ["app", "public-site"] } },
       access: { visibleWhen: { field: "kind", values: ["mount"] } },
+      requiredRole: { visibleWhen: { field: "targetProfile", values: ["app"] } },
       toHost: { visibleWhen: { field: "kind", values: ["redirect"] } },
       statusCode: { visibleWhen: { field: "kind", values: ["redirect"] } },
     });
@@ -1097,7 +1110,8 @@ describe("instance control-plane schema contracts", () => {
         targetProfile: "app",
         appInstall: "personal",
         surface: "admin",
-        access: "owner",
+        access: "authenticated",
+        requiredRole: "app.admin",
       },
       {
         enabled: true,
@@ -1126,7 +1140,15 @@ describe("instance control-plane schema contracts", () => {
         packageResolver: controlPlanePackageResolver,
         now,
       }).map((record) => record.values.access),
-    ).toEqual(["owner"]);
+    ).toEqual(["authenticated"]);
+    expect(
+      instanceControlPlaneDefaultRoutesForInstall({
+        installId: "verifi",
+        packageAppKey: "verifi",
+        packageResolver: controlPlanePackageResolver,
+        now,
+      }).map((record) => record.values.requiredRole),
+    ).toEqual(["app.admin"]);
     expect(
       instanceControlPlaneEffectiveRouteAccess({
         kind: "mount",
@@ -1150,6 +1172,104 @@ describe("instance control-plane schema contracts", () => {
         access: "authenticated",
       }),
     ).toBe("authenticated");
+    expect(
+      instanceControlPlaneEffectiveRouteAccess({
+        kind: "mount",
+        targetProfile: "instance",
+        surface: "admin",
+      }),
+    ).toBe("management");
+  });
+
+  it("validates management and app-role route authorization combinations", () => {
+    const install = storedAppInstallRecord({
+      installId: "personal",
+      label: "Personal Site",
+      packageAppKey: "site",
+    });
+    const parseRoute = (route: StoredRecord) =>
+      parseInstanceControlPlaneStorageSnapshot(
+        "Instance archive controlPlane",
+        controlPlaneSnapshot({ records: [install, route] }),
+        { packageResolver: controlPlanePackageResolver },
+      );
+    const managementRoute = storedRouteRecord({
+      id: "route:instance:settings",
+      values: {
+        access: "management",
+        enabled: true,
+        kind: "mount",
+        matchPath: "/settings",
+        surface: "admin",
+        targetProfile: "instance",
+      },
+    });
+    const appAdminRoute = storedRouteRecord({
+      id: "route:personal:admin",
+      values: {
+        access: "authenticated",
+        appInstall: "personal",
+        enabled: true,
+        kind: "mount",
+        matchPath: "/apps/personal",
+        requiredRole: "app.admin",
+        surface: "admin",
+        targetProfile: "app",
+      },
+    });
+
+    expect(parseRoute(managementRoute).records).toEqual([install, managementRoute]);
+    expect(parseRoute(appAdminRoute).records).toEqual([install, appAdminRoute]);
+
+    const invalidCases: Array<[string, StoredRecord, RegExp]> = [
+      [
+        "management app mount",
+        {
+          ...appAdminRoute,
+          values: {
+            access: "management",
+            appInstall: "personal",
+            enabled: true,
+            kind: "mount",
+            matchPath: "/apps/personal",
+            surface: "admin",
+            targetProfile: "app",
+          },
+        },
+        /access.*can only be "management" for instance mount routes/,
+      ],
+      [
+        "owner app role",
+        { ...appAdminRoute, values: { ...appAdminRoute.values, access: "owner" } },
+        /requiredRole.*requires an authenticated app admin mount/,
+      ],
+      [
+        "anonymous app role",
+        { ...appAdminRoute, values: { ...appAdminRoute.values, access: "anonymous" } },
+        /requiredRole.*requires an authenticated app admin mount/,
+      ],
+      [
+        "instance app role",
+        {
+          ...managementRoute,
+          values: {
+            ...managementRoute.values,
+            access: "authenticated",
+            requiredRole: "app.admin",
+          },
+        },
+        /requiredRole.*requires an authenticated app admin mount/,
+      ],
+      [
+        "unsupported role",
+        { ...appAdminRoute, values: { ...appAdminRoute.values, requiredRole: "app.viewer" } },
+        /requiredRole.*must be "app.admin"/,
+      ],
+    ];
+
+    for (const [label, route, error] of invalidCases) {
+      expect(() => parseRoute(route), label).toThrow(error);
+    }
   });
 
   it("derives private package route records from resolved capabilities", () => {
@@ -1217,6 +1337,8 @@ describe("instance control-plane schema contracts", () => {
           targetProfile: "app",
           appInstall: "personal",
           surface: "admin",
+          access: "authenticated",
+          requiredRole: "app.admin",
         },
       }),
       storedRouteRecord({
@@ -1238,11 +1360,12 @@ describe("instance control-plane schema contracts", () => {
       instanceControlPlaneAppLaunchLinksFromRecords(records, controlPlanePackageResolver),
     ).toEqual([
       {
-        access: "owner",
+        access: "authenticated",
         href: "/launch/personal-admin",
         installId: "personal",
         label: "Personal Site",
         packageAppKey: "site",
+        requiredRole: "app.admin",
         routeId: "route:personal:admin",
         routeKind: "admin",
       },

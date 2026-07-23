@@ -894,6 +894,8 @@ function targetKey(target: AccountCompletionGateTarget): string {
     target.targetOrigin,
     target.routeId,
     target.targetProfile,
+    target.access,
+    target.requiredRole,
     target.appInstallId,
     target.selectedOrganization,
     target.returnTo,

@@ -287,7 +287,7 @@ async function hostOwnerSessionStatusResponse(
     target: hostSessionTarget,
   });
 
-  if (!hostSession.ok || hostSession.session.principalId !== owner.id) {
+  if (!hostSession.ok) {
     return jsonResponse(
       {
         authenticated: false,

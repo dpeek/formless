@@ -17,8 +17,11 @@ import {
 } from "../shared/instance-auth.ts";
 import {
   acceptsRuntimeHtml,
+  parseRuntimeRouteAccess,
+  parseRuntimeRouteRequiredRole,
   runtimeTopologyRoutes,
   type RuntimeRouteAccess,
+  type RuntimeRouteRequiredRole,
 } from "../shared/runtime-topology.ts";
 import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
 import {
@@ -38,6 +41,7 @@ import {
   type InstanceAuthAccessResult,
   type InstanceAuthAuthorityRequirement,
   type InstanceAuthSession,
+  type InstanceAuthSessionKind,
 } from "./instance-auth-access.ts";
 import {
   consumeHandoffGrant,
@@ -51,6 +55,7 @@ import {
 } from "./instance-auth-state.ts";
 import { readControlPlaneRecords } from "./deployment-control-plane-client.ts";
 import {
+  readInternalIdentityAppAuthorityForPrincipal,
   readInternalIdentityAuthorityForPrincipal,
   readInternalActiveIdentityPrincipal,
   readInternalIdentityOwnerForPrincipal,
@@ -62,6 +67,7 @@ import {
   type OwnerSessionEnv,
 } from "./owner-session.ts";
 import {
+  validateCentralAuthSessionBinding,
   validateCentralAuthSessionState,
   type CentralAuthSession,
   type CentralAuthSessionValidationFailureReason,
@@ -92,6 +98,7 @@ export const HOST_AUTH_SESSION_COOKIE_NAME = "formless_host_session";
 
 const instanceAuthHostSessionValidatePath = "/formless/auth/host-session/validate";
 const instanceAuthCentralSessionValidatePath = "/formless/auth/central-session/validate";
+const internalBoundCentralSessionValidatePath = "/_internal/instance-auth/central-session/validate";
 const handoffGrantTtlMs = 5 * 60 * 1000;
 const hostNonceMaxAgeSeconds = 5 * 60;
 const hostSessionMaxAgeSeconds = 12 * 60 * 60;
@@ -100,7 +107,9 @@ const hostSessionVersion = 1;
 const base64UrlPattern = /^[A-Za-z0-9_-]+$/;
 const handoffTargetProfiles = ["instance", "app", "public-site"] as const;
 const handoffTargetHeaders = {
+  access: "x-formless-auth-handoff-access",
   appInstallId: "x-formless-auth-handoff-app-install-id",
+  requiredRole: "x-formless-auth-handoff-required-role",
   routeId: "x-formless-auth-handoff-route-id",
   storageIdentity: "x-formless-auth-handoff-storage-identity",
   targetOrigin: "x-formless-auth-handoff-target-origin",
@@ -133,12 +142,13 @@ type HostAuthSessionPayload = HostAuthSession & {
   version: typeof hostSessionVersion;
 };
 
-export type ProtectedRouteAccess = "authenticated" | "owner";
+export type ProtectedRouteAccess = Exclude<RuntimeRouteAccess, "anonymous">;
 type HostSessionAuthorityRequirement = ProtectedRouteAccess | "management";
 type CentralSessionAuthorityRequirement = ProtectedRouteAccess | "management";
 type CentralAuthSessionAuthorityValidationFailureReason =
   | CentralAuthSessionValidationFailureReason
   | "account-completion-required"
+  | "missing-app-admin-authority"
   | "missing-management-authority"
   | "missing-owner-authority";
 
@@ -296,11 +306,15 @@ async function startProtectedRouteAuthRedirect(
   const state = randomBase64Url(32);
   const location = new URL(plan.entryPath, plan.authOrigin);
 
+  location.searchParams.set("access", plan.target.access);
   location.searchParams.set("targetOrigin", plan.target.targetOrigin);
   location.searchParams.set("routeId", plan.target.routeId);
   location.searchParams.set("targetProfile", plan.target.targetProfile);
   if (plan.target.appInstallId !== undefined) {
     location.searchParams.set("appInstallId", plan.target.appInstallId);
+  }
+  if (plan.target.requiredRole !== undefined) {
+    location.searchParams.set("requiredRole", plan.target.requiredRole);
   }
   if (plan.target.storageIdentity !== undefined) {
     location.searchParams.set("storageIdentity", plan.target.storageIdentity);
@@ -336,7 +350,7 @@ export async function handleInstanceAuthHandoffRequest(
 
   if (callback.kind === "reserved") {
     if (!callback.target) {
-      return new Response(null, { status: 404 });
+      return jsonResponse({ error: "Handoff callback is invalid." }, 400);
     }
 
     if (request.method !== "GET" && request.method !== "HEAD") {
@@ -435,18 +449,31 @@ export async function resolveAuthAccountHandoffContinuation(
   }
 
   const target = await verifiedHandoffStartTargetFromSearch(request, env, url);
-  const session = await validateAuthOriginSession(request, env, target.requiredAccess);
+  const accountCompletionTarget = accountCompletionTargetForHandoffTarget(target);
+  const session = await validateAuthOriginSession(request, env, target.requiredAccess, {
+    accountCompletionTarget,
+    target,
+  });
 
   if (!session.ok) {
+    if (
+      session.reason === "account-completion-required" &&
+      session.accountCompletion?.status === "blocked"
+    ) {
+      return {
+        accountCompletion: session.accountCompletion,
+        kind: "blocked",
+      };
+    }
+
     return {
       kind: "login-required",
       redirectTo: ownerLoginRedirectLocationForRoute(authAccountRedirectTargetForRequest(request)),
     };
   }
 
-  const accountCompletionTarget = accountCompletionTargetForHandoffTarget(target);
   const accountCompletion =
-    target.requiredAccess === "authenticated"
+    target.requiredAccess === "authenticated" && !session.ownerAuthorized
       ? await resolveAccountCompletionForTarget(
           request,
           env,
@@ -486,6 +513,10 @@ export async function handleInstanceAuthHandoffDurableObjectRequest(
     return handleCentralAuthSessionValidationDurableObjectRequest(request, storage, env);
   }
 
+  if (url.pathname === internalBoundCentralSessionValidatePath) {
+    return handleBoundCentralAuthSessionValidationDurableObjectRequest(request, storage);
+  }
+
   if (url.pathname === INSTANCE_AUTH_HANDOFF_CALLBACK_PATH) {
     return handleHandoffCallbackDurableObjectRequest(request, storage, env);
   }
@@ -500,9 +531,23 @@ export async function handleInstanceAuthHandoffDurableObjectRequest(
 
   try {
     const target = await verifiedHandoffStartTargetFromSearch(request, env, url);
-    const session = await validateAuthOriginSession(request, env, target.requiredAccess);
+    const session = await validateAuthOriginSession(request, env, target.requiredAccess, {
+      accountCompletionTarget: accountCompletionTargetForHandoffTarget(target),
+      target,
+    });
 
     if (!session.ok) {
+      if (
+        session.reason === "account-completion-required" &&
+        session.accountCompletion?.status === "blocked"
+      ) {
+        if (acceptsRuntimeHtml(request.headers.get("Accept"))) {
+          return redirectResponse(authAccountRedirectTargetForRequest(request), 302);
+        }
+
+        return accountCompletionBlockedResponse(session.accountCompletion);
+      }
+
       if (!acceptsRuntimeHtml(request.headers.get("Accept"))) {
         return jsonResponse({ error: "Authenticated account session is required." }, 401);
       }
@@ -510,7 +555,7 @@ export async function handleInstanceAuthHandoffDurableObjectRequest(
       return redirectResponse(authAccountRedirectTargetForRequest(request), 302);
     }
 
-    if (target.requiredAccess === "authenticated") {
+    if (target.requiredAccess === "authenticated" && !session.ownerAuthorized) {
       const accountCompletion = await resolveAccountCompletionGate({
         env,
         input: {
@@ -585,6 +630,46 @@ export function hostAuthSessionTargetForRuntimeRoute(
   });
 }
 
+export function routeAccessTargetForRuntimeRoute(
+  request: Request,
+  runtimeRoute: InstanceRuntimeRouteResolution | undefined,
+  options: { minimumAccess?: ProtectedRouteAccess } = {},
+): InstanceAuthSessionTargetBinding | undefined {
+  if (
+    runtimeRoute?.kind !== "mount" ||
+    runtimeRoute.access === "anonymous" ||
+    (options.minimumAccess !== undefined &&
+      !runtimeRouteAccessSatisfies(runtimeRoute.access, options.minimumAccess))
+  ) {
+    return undefined;
+  }
+
+  const common = {
+    access: runtimeRoute.access,
+    ...(runtimeRoute.requiredRole === undefined ? {} : { requiredRole: runtimeRoute.requiredRole }),
+    routeId: runtimeRoute.id,
+    targetOrigin: requestOriginForAuth(request),
+    targetProfile: runtimeRoute.targetProfile,
+  };
+
+  if (runtimeRoute.target !== undefined) {
+    return {
+      ...common,
+      appInstallId: runtimeRoute.target.installId,
+      storageIdentity: runtimeRoute.target.authorityName,
+    };
+  }
+
+  if (runtimeRoute.targetProfile !== "instance") {
+    return undefined;
+  }
+
+  return {
+    ...common,
+    storageIdentity: INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
+  };
+}
+
 export function hostAuthSessionTargetForRuntimeRouteFacts(input: {
   minimumAccess?: ProtectedRouteAccess;
   requestOrigin: string;
@@ -593,6 +678,7 @@ export function hostAuthSessionTargetForRuntimeRouteFacts(input: {
   if (
     input.runtimeRoute?.kind !== "mount" ||
     input.runtimeRoute.matchHost === undefined ||
+    input.runtimeRoute.access === "anonymous" ||
     (input.minimumAccess !== undefined &&
       !runtimeRouteAccessSatisfies(input.runtimeRoute.access, input.minimumAccess))
   ) {
@@ -603,7 +689,11 @@ export function hostAuthSessionTargetForRuntimeRouteFacts(input: {
 
   if (input.runtimeRoute.target !== undefined) {
     return {
+      access: input.runtimeRoute.access,
       appInstallId: input.runtimeRoute.target.installId,
+      ...(input.runtimeRoute.requiredRole === undefined
+        ? {}
+        : { requiredRole: input.runtimeRoute.requiredRole }),
       routeId: input.runtimeRoute.id,
       storageIdentity: input.runtimeRoute.target.authorityName,
       targetOrigin,
@@ -616,7 +706,11 @@ export function hostAuthSessionTargetForRuntimeRouteFacts(input: {
   }
 
   return {
+    access: input.runtimeRoute.access,
     routeId: input.runtimeRoute.id,
+    ...(input.runtimeRoute.requiredRole === undefined
+      ? {}
+      : { requiredRole: input.runtimeRoute.requiredRole }),
     storageIdentity: INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
     targetOrigin,
     targetProfile: input.runtimeRoute.targetProfile,
@@ -668,7 +762,7 @@ export function mappedInstanceManagementTargetFromFacts(input: {
   runtimeRoute?: InstanceRuntimeRouteResolution;
 }): InstanceAuthSessionTargetBinding | undefined {
   const target = hostAuthSessionTargetForRuntimeRouteFacts({
-    minimumAccess: "owner",
+    minimumAccess: "management",
     requestOrigin: input.requestOrigin,
     runtimeRoute: input.runtimeRoute,
   });
@@ -696,15 +790,18 @@ export function setHostAuthSessionTargetHeaders(
   target: InstanceAuthSessionTargetBinding | undefined,
 ): void {
   if (target === undefined) {
+    headers.delete(handoffTargetHeaders.access);
     headers.delete(handoffTargetHeaders.targetOrigin);
     headers.delete(handoffTargetHeaders.routeId);
     headers.delete(handoffTargetHeaders.targetProfile);
     headers.delete(handoffTargetHeaders.appInstallId);
+    headers.delete(handoffTargetHeaders.requiredRole);
     headers.delete(handoffTargetHeaders.storageIdentity);
 
     return;
   }
 
+  headers.set(handoffTargetHeaders.access, target.access);
   headers.set(handoffTargetHeaders.targetOrigin, target.targetOrigin);
   headers.set(handoffTargetHeaders.routeId, target.routeId);
   headers.set(handoffTargetHeaders.targetProfile, target.targetProfile);
@@ -713,6 +810,12 @@ export function setHostAuthSessionTargetHeaders(
     headers.delete(handoffTargetHeaders.appInstallId);
   } else {
     headers.set(handoffTargetHeaders.appInstallId, target.appInstallId);
+  }
+
+  if (target.requiredRole === undefined) {
+    headers.delete(handoffTargetHeaders.requiredRole);
+  } else {
+    headers.set(handoffTargetHeaders.requiredRole, target.requiredRole);
   }
 
   if (target.storageIdentity === undefined) {
@@ -759,7 +862,7 @@ export async function validateHostAuthSessionAuthorityInStorage(
 ): Promise<HostAuthSessionAuthorityValidationResult> {
   return validateHostAuthSessionRequirement(request, env, {
     now: options.now,
-    requiredAccess: "owner",
+    requiredAccess: options.target?.access ?? "owner",
     storage,
     target: options.target,
   });
@@ -861,25 +964,42 @@ async function validateAuthOriginSession(
   request: Request,
   env: InstanceAuthHandoffEnv,
   requiredAccess: ProtectedRouteAccess,
-  options: { now?: string } = {},
+  options: {
+    accountCompletionTarget?: AccountCompletionGateTarget;
+    now?: string;
+    target?: InstanceAuthSessionTargetBinding;
+  } = {},
 ): Promise<
-  | { ok: true; session: CentralAuthSession | OwnerSession }
   | {
+      ok: true;
+      ownerAuthorized: boolean;
+      session: CentralAuthSession | OwnerSession;
+    }
+  | {
+      accountCompletion?: AccountCompletionGateResolutionResult;
       ok: false;
       reason: InstanceAuthAccessFailureReason;
     }
 > {
   const result = await resolveInstanceAuthAccess(
     {
+      ...(options.accountCompletionTarget === undefined
+        ? {}
+        : { accountCompletionTarget: options.accountCompletionTarget }),
       localOwnerSessionFallbackAllowed: isLocalOwnerSessionRuntime(request, env),
-      requiredAuthority: requiredAccess,
+      requiredAuthority: options.target?.requiredRole ?? requiredAccess,
+      ...(options.target === undefined ? {} : { target: options.target }),
     },
     instanceAuthAccessReaders(request, env, { now: options.now }),
   );
 
   return result.ok
-    ? { ok: true, session: result.session as CentralAuthSession | OwnerSession }
-    : { ok: false, reason: result.reason };
+    ? {
+        ok: true,
+        ownerAuthorized: result.ownerAuthorized,
+        session: result.session as CentralAuthSession | OwnerSession,
+      }
+    : result;
 }
 
 async function validateHostAuthSessionRequirement(
@@ -898,12 +1018,13 @@ async function validateHostAuthSessionRequirement(
     return { ok: false, reason: "missing-target" };
   }
 
+  const requiredAuthority = target.requiredRole ?? requiredAccess;
   const result = await validateHostInstanceAuthAccess(
     {
-      ...(requiredAccess === "authenticated"
+      ...(requiredAuthority === "authenticated" || requiredAuthority === "app.admin"
         ? { accountCompletionTarget: accountCompletionTargetForRouteRequest(request, target) }
         : {}),
-      requiredAuthority: requiredAccess,
+      requiredAuthority,
       target,
     },
     instanceAuthAccessReaders(request, env, {
@@ -925,7 +1046,10 @@ async function validateHostAuthSessionRequirement(
 export type InstanceAuthAccessReaderOverrides = Partial<
   Pick<
     InstanceAuthAccessReaders,
-    "readActivePrincipal" | "readManagementAuthority" | "readOwnerAuthority"
+    | "readActivePrincipal"
+    | "readAppAdminAuthority"
+    | "readManagementAuthority"
+    | "readOwnerAuthority"
   >
 >;
 
@@ -934,6 +1058,7 @@ export async function validateInstanceAuthAccessSession(
   env: InstanceAuthAccessEnv,
   options: {
     accountCompletionTarget?: AccountCompletionGateTarget;
+    appInstallId?: string;
     now?: string;
     readers?: InstanceAuthAccessReaderOverrides;
     requiredAuthority: InstanceAuthAuthorityRequirement;
@@ -946,6 +1071,7 @@ export async function validateInstanceAuthAccessSession(
       ...(options.accountCompletionTarget === undefined
         ? {}
         : { accountCompletionTarget: options.accountCompletionTarget }),
+      ...(options.appInstallId === undefined ? {} : { appInstallId: options.appInstallId }),
       localOwnerSessionFallbackAllowed: isLocalOwnerSessionRuntime(request, env),
       requiredAuthority: options.requiredAuthority,
       ...(options.target === undefined ? {} : { target: options.target }),
@@ -956,6 +1082,124 @@ export async function validateInstanceAuthAccessSession(
       storage: options.storage,
     }),
   );
+}
+
+export type InstanceAuthAccessBinding = {
+  principalId: string;
+  session: InstanceAuthSession;
+  via: InstanceAuthSessionKind;
+};
+
+export function bindInstanceAuthAccessSession(
+  access: Extract<RouteAccessSessionValidationResult, { ok: true }>,
+): InstanceAuthAccessBinding {
+  return {
+    principalId: access.principalId,
+    session: access.session,
+    via: access.via,
+  };
+}
+
+export async function validateBoundInstanceAuthAccessSession(
+  value: unknown,
+  env: InstanceAuthAccessEnv,
+  options: {
+    appInstallId: string;
+    now?: string;
+    storageIdentity: string;
+  },
+): Promise<boolean> {
+  const binding = parseInstanceAuthAccessBinding(value);
+
+  if (!binding) {
+    return false;
+  }
+
+  const target =
+    binding.via === "host-session"
+      ? hostAuthSessionTargetFromSession(binding.session as HostAuthSession)
+      : undefined;
+
+  if (
+    target !== undefined &&
+    (target.access !== "authenticated" ||
+      target.requiredRole !== "app.admin" ||
+      target.targetProfile !== "app" ||
+      target.appInstallId !== options.appInstallId ||
+      target.storageIdentity !== options.storageIdentity)
+  ) {
+    return false;
+  }
+
+  const readers: InstanceAuthAccessReaders = {
+    readAccountCompletion: () =>
+      Promise.reject(new Error("Bound push sessions do not resolve account completion.")),
+    readActivePrincipal: (session) => readInternalActiveIdentityPrincipal(env, session.principalId),
+    readAppAdminAuthority: (session, appInstallId) =>
+      readInternalIdentityAppAuthorityForPrincipal(env, session.principalId, appInstallId),
+    readCentralSession: async () => {
+      if (binding.via !== "central-session") {
+        return {
+          ok: false,
+          ownerSessionFallbackAllowed: binding.via === "owner-session",
+          reason: "missing-session",
+        };
+      }
+
+      const session = await readBoundCentralSessionFromRuntime(
+        env,
+        binding.session as CentralAuthSession,
+        options.now,
+      );
+
+      return session
+        ? { ok: true, ownerSessionFallbackAllowed: false, session }
+        : {
+            ok: false,
+            ownerSessionFallbackAllowed: false,
+            reason: "revoked-session",
+          };
+    },
+    readHostSession: async (expectedTarget) => {
+      if (
+        binding.via !== "host-session" ||
+        target === undefined ||
+        !hostAuthSessionTargetBindingsEqual(target, expectedTarget) ||
+        !sessionIsCurrent(binding.session, options.now)
+      ) {
+        return { ok: false, reason: "wrong-target" };
+      }
+
+      return { ok: true, session: binding.session as HostAuthSession };
+    },
+    readHostSessionVersion: (session) =>
+      env.FORMLESS_AUTHORITY === undefined
+        ? Promise.reject(new Error("Instance auth storage is unavailable."))
+        : readHostSessionVersionFromRuntime(
+            new Request("http://internal"),
+            env as InstanceAuthHandoffEnv,
+            session,
+          ),
+    readLocalOwnerSession: async () =>
+      binding.via === "owner-session" && sessionIsCurrent(binding.session, options.now)
+        ? { ok: true, session: binding.session as OwnerSession }
+        : { ok: false, reason: "expired" },
+    readManagementAuthority: (session) =>
+      readInternalIdentityAuthorityForPrincipal(env, session.principalId),
+    readOwnerAuthority: (session) =>
+      readInternalIdentityOwnerForPrincipal(env, session.principalId),
+  };
+  const result = await resolveInstanceAuthAccess(
+    {
+      appInstallId: options.appInstallId,
+      localOwnerSessionFallbackAllowed: binding.via === "owner-session",
+      requiredAuthority: "app.admin",
+      ...(target === undefined ? {} : { target }),
+    },
+    readers,
+  );
+
+  return result.ok && result.principalId === binding.principalId && result.via === binding.via;
 }
 
 export async function validateRouteAccessSession(
@@ -972,15 +1216,18 @@ export async function validateRouteAccessSession(
     options.target ??
     (options.runtimeRoute === undefined
       ? undefined
-      : hostAuthSessionTargetForRuntimeRoute(request, options.runtimeRoute, {
+      : routeAccessTargetForRuntimeRoute(request, options.runtimeRoute, {
           minimumAccess: options.requiredAccess,
         }));
+  const requiredAuthority = target?.requiredRole ?? options.requiredAccess;
+
   return validateInstanceAuthAccessSession(request, env, {
-    ...(options.requiredAccess === "authenticated" && target !== undefined
+    ...((requiredAuthority === "authenticated" || requiredAuthority === "app.admin") &&
+    target !== undefined
       ? { accountCompletionTarget: accountCompletionTargetForRouteRequest(request, target) }
       : {}),
     now: options.now,
-    requiredAuthority: options.requiredAccess,
+    requiredAuthority,
     target,
   });
 }
@@ -1013,13 +1260,16 @@ function instanceAuthAccessReaders(
   } = {},
 ): InstanceAuthAccessReaders {
   const readers: InstanceAuthAccessReaders = {
-    readAccountCompletion: async (session, target) =>
+    readAccountCompletion: async (session, target, requiredRole) =>
       options.storage !== undefined
         ? resolveAccountCompletionGate({
             env,
             input: {
               actorKind: "authenticated",
               principalId: session.principalId,
+              ...(requiredRole === undefined
+                ? {}
+                : { requiredRole: { roleKey: requiredRole, scopeKind: "app-install" } }),
               target,
             },
             storage: options.storage,
@@ -1031,7 +1281,10 @@ function instanceAuthAccessReaders(
               env as InstanceAuthHandoffEnv,
               session.principalId,
               target,
+              requiredRole,
             ),
+    readAppAdminAuthority: (session, appInstallId) =>
+      readInternalIdentityAppAuthorityForPrincipal(env, session.principalId, appInstallId),
     readActivePrincipal: (session) => readInternalActiveIdentityPrincipal(env, session.principalId),
     readCentralSession: async () => {
       if (options.storage === undefined) {
@@ -1082,10 +1335,19 @@ async function readCentralSessionFromRuntime(
   now?: string,
 ): ReturnType<InstanceAuthAccessReaders["readCentralSession"]> {
   const id = env.FORMLESS_AUTHORITY.idFromName(FORMLESS_INSTANCE_AUTHORITY_NAME);
+  const headers = new Headers(request.headers);
+
+  headers.delete("Connection");
+  headers.delete("Sec-WebSocket-Extensions");
+  headers.delete("Sec-WebSocket-Key");
+  headers.delete("Sec-WebSocket-Protocol");
+  headers.delete("Sec-WebSocket-Version");
+  headers.delete("Upgrade");
+
   const response = await env.FORMLESS_AUTHORITY.get(id).fetch(
     new Request(new URL(instanceAuthCentralSessionValidatePath, request.url), {
       body: JSON.stringify(now === undefined ? {} : { now }),
-      headers: request.headers,
+      headers,
       method: "POST",
     }),
   );
@@ -1139,6 +1401,7 @@ async function resolveAccountCompletionForTarget(
   env: InstanceAuthHandoffEnv,
   principalId: string,
   target: AccountCompletionGateTarget,
+  requiredRole?: RuntimeRouteRequiredRole,
 ): Promise<AccountCompletionGateResolutionResult> {
   const id = env.FORMLESS_AUTHORITY.idFromName(FORMLESS_INSTANCE_AUTHORITY_NAME);
   const response = await env.FORMLESS_AUTHORITY.get(id).fetch(
@@ -1146,6 +1409,9 @@ async function resolveAccountCompletionForTarget(
       body: JSON.stringify({
         actorKind: "authenticated",
         principalId,
+        ...(requiredRole === undefined
+          ? {}
+          : { requiredRole: { roleKey: requiredRole, scopeKind: "app-install" } }),
         target,
       }),
       headers: { "Content-Type": "application/json" },
@@ -1174,7 +1440,9 @@ function accountCompletionTargetForHandoffTarget(
   }
 
   return {
+    access: target.access,
     ...(target.appInstallId === undefined ? {} : { appInstallId: target.appInstallId }),
+    ...(target.requiredRole === undefined ? {} : { requiredRole: target.requiredRole }),
     returnTo,
     routeId: target.routeId,
     ...(target.storageIdentity === undefined ? {} : { storageIdentity: target.storageIdentity }),
@@ -1195,7 +1463,9 @@ function accountCompletionTargetForRouteRequest(
   }
 
   return {
+    access: target.access,
     ...(target.appInstallId === undefined ? {} : { appInstallId: target.appInstallId }),
+    ...(target.requiredRole === undefined ? {} : { requiredRole: target.requiredRole }),
     returnTo,
     routeId: target.routeId,
     ...(target.storageIdentity === undefined ? {} : { storageIdentity: target.storageIdentity }),
@@ -1357,6 +1627,28 @@ async function handleCentralAuthSessionValidationDurableObjectRequest(
   }
 }
 
+async function handleBoundCentralAuthSessionValidationDurableObjectRequest(
+  request: Request,
+  storage: DurableObjectStorage,
+): Promise<Response> {
+  if (request.method !== "POST") {
+    return jsonResponse({ error: "Method not allowed." }, 405, { Allow: "POST" });
+  }
+
+  try {
+    const body = (await request.json()) as { now?: unknown; session?: unknown };
+    const result = validateCentralAuthSessionBinding(storage, body.session, {
+      now: typeof body.now === "string" ? body.now : undefined,
+    });
+
+    return result.ok
+      ? jsonResponse({ session: result.session, validated: true })
+      : jsonResponse({ reason: result.reason }, 401);
+  } catch {
+    return jsonResponse({ reason: "malformed-payload" }, 400);
+  }
+}
+
 async function validateHostAuthSessionCookie(
   request: Request,
   env: InstanceAuthHandoffEnv,
@@ -1419,10 +1711,12 @@ async function validateHostAuthSessionCookie(
   return {
     ok: true,
     session: {
+      access: payload.access,
       expiresAt: payload.expiresAt,
       instanceId: payload.instanceId,
       issuedAt: payload.issuedAt,
       principalId: payload.principalId,
+      ...(payload.requiredRole === undefined ? {} : { requiredRole: payload.requiredRole }),
       routeId: payload.routeId,
       sessionVersion: payload.sessionVersion,
       targetOrigin: payload.targetOrigin,
@@ -1452,10 +1746,12 @@ function handoffStartTargetFromSearch(
   }
 
   return {
+    access: handoffTargetAccessValue(requiredSearchParam(url, "access")),
     ...(appInstallId === undefined ? {} : { appInstallId }),
     nonceHash: base64UrlSearchParam(url, "nonceHash"),
     returnTo,
     routeId: requiredSearchParam(url, "routeId"),
+    ...optionalHandoffRequiredRole(optionalSearchParam(url, "requiredRole")),
     state: base64UrlSearchParam(url, "state"),
     ...(storageIdentity === undefined ? {} : { storageIdentity }),
     targetOrigin: parseInstanceAuthCanonicalOrigin(requiredSearchParam(url, "targetOrigin")),
@@ -1570,8 +1866,10 @@ async function createHostAuthSessionCookie(
   const issuedAt = nowIsoString();
   const expiresAt = new Date(Date.parse(issuedAt) + hostSessionMaxAgeSeconds * 1000).toISOString();
   const revocationVersion = readHostSessionRevocationVersion(storage, {
+    access: grant.access,
     instanceId: grant.instanceId,
     principalId: grant.principalId,
+    ...(grant.requiredRole === undefined ? {} : { requiredRole: grant.requiredRole }),
     routeId: grant.routeId,
     targetOrigin: grant.targetOrigin,
     targetProfile: grant.targetProfile,
@@ -1579,10 +1877,12 @@ async function createHostAuthSessionCookie(
     ...(grant.storageIdentity === undefined ? {} : { storageIdentity: grant.storageIdentity }),
   });
   const session: HostAuthSession = {
+    access: grant.access,
     expiresAt,
     instanceId: grant.instanceId,
     issuedAt,
     principalId: grant.principalId,
+    ...(grant.requiredRole === undefined ? {} : { requiredRole: grant.requiredRole }),
     routeId: grant.routeId,
     sessionVersion: revocationVersion?.sessionVersion ?? 0,
     targetOrigin: grant.targetOrigin,
@@ -1695,8 +1995,10 @@ function handoffTargetBindingFromHeaders(headers: Headers): InstanceAuthSessionT
   }
 
   return {
+    access: handoffTargetAccessValue(requiredHeader(headers, handoffTargetHeaders.access)),
     ...(appInstallId === undefined ? {} : { appInstallId }),
     routeId: requiredHeader(headers, handoffTargetHeaders.routeId),
+    ...optionalHandoffRequiredRole(optionalHeader(headers, handoffTargetHeaders.requiredRole)),
     ...(storageIdentity === undefined ? {} : { storageIdentity }),
     targetOrigin: parseInstanceAuthCanonicalOrigin(
       requiredHeader(headers, handoffTargetHeaders.targetOrigin),
@@ -1746,10 +2048,15 @@ function parseHostAuthSession(value: unknown): HostAuthSession | undefined {
   }
 
   const sessionVersion = parseNonNegativeIntegerValue(value.sessionVersion);
+  const access = typeof value.access === "string" ? handoffTargetAccessValue(value.access) : null;
   const targetProfile =
     typeof value.targetProfile === "string" ? handoffTargetProfileValue(value.targetProfile) : null;
   const appInstallId = optionalRecordString(value.appInstallId);
   const storageIdentity = optionalRecordString(value.storageIdentity);
+  const requiredRole =
+    typeof value.requiredRole === "string"
+      ? optionalHandoffRequiredRole(value.requiredRole).requiredRole
+      : undefined;
 
   if (
     typeof value.instanceId !== "string" ||
@@ -1767,6 +2074,7 @@ function parseHostAuthSession(value: unknown): HostAuthSession | undefined {
     !isTimestamp(value.issuedAt) ||
     !isTimestamp(value.expiresAt) ||
     sessionVersion === undefined ||
+    access === null ||
     targetProfile === null ||
     (appInstallId === undefined && storageIdentity === undefined)
   ) {
@@ -1774,11 +2082,13 @@ function parseHostAuthSession(value: unknown): HostAuthSession | undefined {
   }
 
   return {
+    access,
     expiresAt: value.expiresAt,
     instanceId: value.instanceId.trim(),
     issuedAt: value.issuedAt,
     principalId: value.principalId.trim(),
     routeId: value.routeId.trim(),
+    ...(requiredRole === undefined ? {} : { requiredRole }),
     sessionVersion,
     targetOrigin: parseInstanceAuthCanonicalOrigin(value.targetOrigin),
     targetProfile,
@@ -1815,6 +2125,113 @@ function parseCentralAuthSessionBody(value: unknown): CentralAuthSession {
   };
 }
 
+function parseInstanceAuthAccessBinding(value: unknown): InstanceAuthAccessBinding | undefined {
+  if (
+    !isRecord(value) ||
+    typeof value.principalId !== "string" ||
+    value.principalId.trim() === "" ||
+    (value.via !== "central-session" &&
+      value.via !== "host-session" &&
+      value.via !== "owner-session")
+  ) {
+    return undefined;
+  }
+
+  try {
+    const session =
+      value.via === "central-session"
+        ? parseCentralAuthSessionBody(value.session)
+        : value.via === "host-session"
+          ? parseHostAuthSession(value.session)
+          : parseBoundOwnerSession(value.session);
+
+    if (!session || session.principalId !== value.principalId.trim()) {
+      return undefined;
+    }
+
+    return {
+      principalId: session.principalId,
+      session,
+      via: value.via,
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+function parseBoundOwnerSession(value: unknown): OwnerSession | undefined {
+  if (
+    !isRecord(value) ||
+    typeof value.instanceId !== "string" ||
+    value.instanceId.trim() === "" ||
+    typeof value.principalId !== "string" ||
+    value.principalId.trim() === "" ||
+    typeof value.issuedAt !== "string" ||
+    typeof value.expiresAt !== "string" ||
+    !isTimestamp(value.issuedAt) ||
+    !isTimestamp(value.expiresAt)
+  ) {
+    return undefined;
+  }
+
+  return {
+    expiresAt: value.expiresAt,
+    instanceId: value.instanceId.trim(),
+    issuedAt: value.issuedAt,
+    principalId: value.principalId.trim(),
+  };
+}
+
+function hostAuthSessionTargetFromSession(
+  session: HostAuthSession,
+): InstanceAuthSessionTargetBinding {
+  return {
+    access: session.access,
+    ...(session.appInstallId === undefined ? {} : { appInstallId: session.appInstallId }),
+    ...(session.requiredRole === undefined ? {} : { requiredRole: session.requiredRole }),
+    routeId: session.routeId,
+    ...(session.storageIdentity === undefined ? {} : { storageIdentity: session.storageIdentity }),
+    targetOrigin: session.targetOrigin,
+    targetProfile: session.targetProfile,
+  };
+}
+
+function sessionIsCurrent(session: InstanceAuthSession, now?: string): boolean {
+  return (
+    parseTimestampMs("Bound auth session expiresAt", session.expiresAt) >
+    parseTimestampMs("Bound auth session validation time", now ?? nowIsoString())
+  );
+}
+
+async function readBoundCentralSessionFromRuntime(
+  env: InstanceAuthAccessEnv,
+  session: CentralAuthSession,
+  now?: string,
+): Promise<CentralAuthSession | null> {
+  if (env.FORMLESS_AUTHORITY === undefined) {
+    return null;
+  }
+
+  const id = env.FORMLESS_AUTHORITY.idFromName(FORMLESS_INSTANCE_AUTHORITY_NAME);
+  const response = await env.FORMLESS_AUTHORITY.get(id).fetch(
+    new Request(`http://internal${internalBoundCentralSessionValidatePath}`, {
+      body: JSON.stringify({
+        ...(now === undefined ? {} : { now }),
+        session,
+      }),
+      headers: { "Content-Type": "application/json" },
+      method: "POST",
+    }),
+  );
+  const body = (await response.json()) as { session?: unknown; validated?: boolean };
+
+  if (!response.ok || body.validated !== true || body.session === undefined) {
+    return null;
+  }
+
+  return parseCentralAuthSessionBody(body.session);
+}
+
 function hostAuthSessionTargetBindingsEqual(
   left: InstanceAuthSessionTargetBinding,
   right: InstanceAuthSessionTargetBinding,
@@ -1823,6 +2240,8 @@ function hostAuthSessionTargetBindingsEqual(
     left.targetOrigin === right.targetOrigin &&
     left.routeId === right.routeId &&
     left.targetProfile === right.targetProfile &&
+    left.access === right.access &&
+    left.requiredRole === right.requiredRole &&
     left.appInstallId === right.appInstallId &&
     left.storageIdentity === right.storageIdentity
   );
@@ -1841,8 +2260,10 @@ function runtimeRouteAccessRank(access: ProtectedRouteAccess | "anonymous"): num
       return 0;
     case "authenticated":
       return 1;
-    case "owner":
+    case "management":
       return 2;
+    case "owner":
+      return 3;
   }
 }
 
@@ -1877,6 +2298,32 @@ function handoffTargetProfileValue(value: string): InstanceAuthHandoffTargetProf
   }
 
   return value as InstanceAuthHandoffTargetProfile;
+}
+
+function handoffTargetAccessValue(value: string): ProtectedRouteAccess {
+  const access = parseRuntimeRouteAccess(value);
+
+  if (access === undefined || access === "anonymous") {
+    throw new Error("Handoff target access is invalid.");
+  }
+
+  return access;
+}
+
+function optionalHandoffRequiredRole(value: string | undefined): {
+  requiredRole?: RuntimeRouteRequiredRole;
+} {
+  if (value === undefined) {
+    return {};
+  }
+
+  const requiredRole = parseRuntimeRouteRequiredRole(value);
+
+  if (requiredRole === undefined) {
+    throw new Error("Handoff target required role is invalid.");
+  }
+
+  return { requiredRole };
 }
 
 function requiredSearchParam(url: URL, name: string): string {

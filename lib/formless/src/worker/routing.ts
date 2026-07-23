@@ -199,11 +199,7 @@ export function protectedBrowserRouteDecisionFromFacts(input: {
     return { kind: "continue" };
   }
 
-  const requiredAccess = input.runtimeRoute?.kind === "mount" ? input.runtimeRoute.access : "owner";
-
-  if (requiredAccess === "anonymous") {
-    return { kind: "continue" };
-  }
+  const requiredAccess = routeAccess;
 
   if (input.session === "unread") {
     return { kind: "validate-session", requiredAccess };
@@ -448,12 +444,14 @@ export function ownerBrowserRouteAccessFromFacts(
     return mountRoute.access;
   }
 
-  if (topology.pathname === runtimeTopologyRoutes.accessRoute) {
-    return "authenticated";
+  if (
+    topology.pathname === runtimeTopologyRoutes.accessRoute ||
+    topology.pathname === runtimeTopologyRoutes.instanceRootRoute
+  ) {
+    return "management";
   }
 
   if (
-    topology.pathname === runtimeTopologyRoutes.instanceRootRoute ||
     topology.pathname === runtimeTopologyRoutes.appRouteBase ||
     topology.pathname.startsWith(`${runtimeTopologyRoutes.appRouteBase}/`)
   ) {

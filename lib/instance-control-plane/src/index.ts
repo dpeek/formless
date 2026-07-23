@@ -12,6 +12,7 @@ import {
   type AppInstallRouteAccess,
   type AppInstallRoute,
   type AppInstallRouteKind,
+  type AppInstallRouteRequiredRole,
   type AppPackageResolver,
   type PackageAppKey,
   type PackageAppRevision,
@@ -43,7 +44,7 @@ export const INSTANCE_CONTROL_PLANE_BOUNDARY_SCHEMA_KEY = "instance";
 export const INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY = "instance:control-plane";
 export const INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX = "/api/formless/control-plane";
 export const INSTANCE_CONTROL_PLANE_SOURCE_SCHEMA_HASH =
-  "sha256:af060135a2cf1e5667cdc2216d3eae565554e16164e14558ab31f455b9e3adff" satisfies SourceSchemaHash;
+  "sha256:13bcc776bf669fb3330b327a331e9dbbb9bfd86b1500bbacdaf3d28ff252bc8a" satisfies SourceSchemaHash;
 export const INSTANCE_CONTROL_PLANE_INSTANCE_SETTINGS_ID = "instance";
 export const instanceControlPlaneSchemaProvenance = {
   kind: "instance-control-plane",
@@ -135,6 +136,7 @@ export type InstanceControlPlaneRouteKind = "mount" | "redirect";
 export type InstanceControlPlaneRouteSurface = "admin" | "public-site";
 export type InstanceControlPlaneRouteTargetProfile = "app" | "instance" | "public-site";
 export type InstanceControlPlaneRouteAccess = AppInstallRouteAccess;
+export type InstanceControlPlaneRouteRequiredRole = AppInstallRouteRequiredRole;
 
 export type InstanceControlPlaneRouteValues = {
   enabled: boolean;
@@ -146,6 +148,7 @@ export type InstanceControlPlaneRouteValues = {
   appInstall?: AppInstallId;
   surface?: InstanceControlPlaneRouteSurface;
   access?: InstanceControlPlaneRouteAccess;
+  requiredRole?: InstanceControlPlaneRouteRequiredRole;
   deploymentConfig?: string;
   toHost?: string;
   toUrl?: string;
@@ -382,7 +385,11 @@ export const instanceControlPlaneSourceSchema = {
         access: optionalEnumField("Access", {
           anonymous: "Anonymous",
           authenticated: "Authenticated",
+          management: "Management",
           owner: "Owner",
+        }),
+        requiredRole: optionalEnumField("Required role", {
+          "app.admin": "App admin",
         }),
         deploymentConfig: optionalReferenceField("Deployment config", "deployment-config", "label"),
         toHost: optionalTextField("To host"),
@@ -407,6 +414,7 @@ export const instanceControlPlaneSourceSchema = {
         "appInstall",
         "surface",
         "access",
+        "requiredRole",
         "deploymentConfig",
         "toHost",
         "toUrl",
@@ -766,6 +774,7 @@ export const instanceControlPlaneSourceSchema = {
         { field: "appInstall", display: "readOnly" },
         { field: "surface", display: "readOnly" },
         { field: "access", display: "readOnly" },
+        { field: "requiredRole", display: "readOnly" },
         { field: "toHost", display: "readOnly" },
         { field: "toUrl", display: "readOnly" },
         { field: "statusCode", display: "readOnly" },
@@ -917,6 +926,7 @@ export const instanceControlPlaneSourceSchema = {
         visibleWhen: { field: "targetProfile", values: ["app", "public-site"] },
       },
       { field: "access", visibleWhen: { field: "kind", values: ["mount"] } },
+      { field: "requiredRole", visibleWhen: { field: "targetProfile", values: ["app"] } },
       "deploymentConfig",
       { field: "toHost", visibleWhen: { field: "kind", values: ["redirect"] } },
       { field: "toUrl", visibleWhen: { field: "kind", values: ["redirect"] } },
@@ -939,6 +949,7 @@ export const instanceControlPlaneSourceSchema = {
         visibleWhen: { field: "targetProfile", values: ["app", "public-site"] },
       },
       { field: "access", visibleWhen: { field: "kind", values: ["mount"] } },
+      { field: "requiredRole", visibleWhen: { field: "targetProfile", values: ["app"] } },
       "deploymentConfig",
       { field: "toHost", visibleWhen: { field: "kind", values: ["redirect"] } },
       { field: "toUrl", visibleWhen: { field: "kind", values: ["redirect"] } },
@@ -1371,6 +1382,7 @@ function appInstallRouteFromControlPlaneRoute(
     id,
     path: values.matchPath,
     ...(values.matchPrefix === undefined ? {} : { prefix: values.matchPrefix as `/${string}/` }),
+    ...(values.requiredRole === undefined ? {} : { requiredRole: values.requiredRole }),
     routeKind,
   };
 }
@@ -1458,6 +1470,7 @@ function appInstallLaunchLinkFromControlPlaneRoute(
     installId: input.installId,
     label: input.label,
     packageAppKey: input.packageApp.packageAppKey,
+    ...(values.requiredRole === undefined ? {} : { requiredRole: values.requiredRole }),
     routeId: id,
     routeKind,
   };
@@ -1600,7 +1613,9 @@ export function instanceControlPlaneDefaultRoutesForInstall(input: {
   const publicRouteBase = packageApp?.publicRouteBase;
   const routeInput = { install: { installId: input.installId }, now: input.now };
   const adminRoute = mountRouteRecord(routeInput, {
+    access: "authenticated",
     matchPath: `${adminRouteBase}/${input.installId}`,
+    requiredRole: "app.admin",
     surface: "admin",
     targetProfile: "app",
   });
@@ -1629,7 +1644,9 @@ export function instanceControlPlaneRouteRecordsForAppInstall(input: {
 }): InstanceControlPlaneRecord<"route", InstanceControlPlaneRouteValues>[] {
   const records = [
     mountRouteRecord(input, {
+      access: "authenticated",
       matchPath: input.install.adminRoute,
+      requiredRole: "app.admin",
       surface: "admin",
       targetProfile: "app",
     }),
@@ -1664,10 +1681,12 @@ export function isInstanceControlPlaneRouteSafePath(path: string): path is `/${s
 function mountRouteRecord(
   input: { install: Pick<AppInstall, "installId">; now: string },
   route: {
+    access?: InstanceControlPlaneRouteAccess;
     matchPath: `/${string}`;
     matchPrefix?: `/${string}`;
     surface: InstanceControlPlaneRouteSurface;
     targetProfile: InstanceControlPlaneRouteTargetProfile;
+    requiredRole?: InstanceControlPlaneRouteRequiredRole;
   },
 ): InstanceControlPlaneRecord<"route", InstanceControlPlaneRouteValues> {
   return {
@@ -1686,11 +1705,14 @@ function mountRouteRecord(
       targetProfile: route.targetProfile,
       appInstall: input.install.installId,
       surface: route.surface,
-      access: instanceControlPlaneDefaultRouteAccess({
-        kind: "mount",
-        surface: route.surface,
-        targetProfile: route.targetProfile,
-      }),
+      access:
+        route.access ??
+        instanceControlPlaneDefaultRouteAccess({
+          kind: "mount",
+          surface: route.surface,
+          targetProfile: route.targetProfile,
+        }),
+      ...(route.requiredRole === undefined ? {} : { requiredRole: route.requiredRole }),
     },
   };
 }
@@ -1699,10 +1721,17 @@ export function instanceControlPlaneDefaultRouteAccess(
   route: Pick<InstanceControlPlaneRouteValues, "kind"> &
     Partial<Pick<InstanceControlPlaneRouteValues, "surface" | "targetProfile">>,
 ): InstanceControlPlaneRouteAccess {
-  return route.kind === "mount" &&
-    (route.targetProfile === "public-site" || route.surface === "public-site")
-    ? "anonymous"
-    : "owner";
+  if (route.kind === "mount") {
+    if (route.targetProfile === "public-site" || route.surface === "public-site") {
+      return "anonymous";
+    }
+
+    if (route.targetProfile === "instance") {
+      return "management";
+    }
+  }
+
+  return "owner";
 }
 
 export function instanceControlPlaneEffectiveRouteAccess(
@@ -2597,8 +2626,46 @@ function validateSourceRoute(
     );
   }
 
+  validateSourceRouteAuthorization(context, route, kind);
+
   if (route.values.enabled === true) {
     assertEnabledSourceRouteIsUnique(context, route, routes);
+  }
+}
+
+function validateSourceRouteAuthorization(context: string, route: StoredRecord, kind: string) {
+  const access = optionalStringValue(context, route, "access");
+  const requiredRole = optionalStringValue(context, route, "requiredRole");
+  const targetProfile = optionalStringValue(context, route, "targetProfile");
+  const appInstall = optionalStringValue(context, route, "appInstall");
+  const surface = optionalStringValue(context, route, "surface");
+
+  if (access === "management" && (kind !== "mount" || targetProfile !== "instance")) {
+    throw new Error(
+      `${context} route "${route.id}" field "${controlPlaneFieldLabel(route, "access")}" can only be "management" for instance mount routes.`,
+    );
+  }
+
+  if (requiredRole === undefined) {
+    return;
+  }
+
+  if (requiredRole !== "app.admin") {
+    throw new Error(
+      `${context} route "${route.id}" field "${controlPlaneFieldLabel(route, "requiredRole")}" must be "app.admin".`,
+    );
+  }
+
+  if (
+    kind !== "mount" ||
+    access !== "authenticated" ||
+    targetProfile !== "app" ||
+    appInstall === undefined ||
+    surface !== "admin"
+  ) {
+    throw new Error(
+      `${context} route "${route.id}" field "${controlPlaneFieldLabel(route, "requiredRole")}" requires an authenticated app admin mount with one app install.`,
+    );
   }
 }
 
@@ -3904,6 +3971,7 @@ function editorForField(field: string): FieldEditor {
     field === "routeKind" ||
     field === "surface" ||
     field === "access" ||
+    field === "requiredRole" ||
     field === "packageCapability" ||
     field === "registrationPolicy" ||
     field === "targetKind" ||

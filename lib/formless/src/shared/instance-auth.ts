@@ -29,7 +29,13 @@ import type {
 } from "@dpeek/formless-schema";
 
 import { parseOwnerSetupToken, type OwnerIdentity, type OwnerIdentityInput } from "./protocol.ts";
-import { runtimeTopologyRoutes } from "./runtime-topology.ts";
+import {
+  parseRuntimeRouteAccess,
+  parseRuntimeRouteRequiredRole,
+  runtimeTopologyRoutes,
+  type RuntimeRouteAccess,
+  type RuntimeRouteRequiredRole,
+} from "./runtime-topology.ts";
 
 export type InstanceAuthConfigInput = {
   canonicalOrigin: string;
@@ -235,7 +241,9 @@ export type AccountCompletionBrowserVisiblePrivateFieldName =
   (typeof accountCompletionBrowserVisiblePrivateFieldNames)[number];
 
 export type AccountCompletionGateTarget = {
+  access?: Exclude<RuntimeRouteAccess, "anonymous">;
   appInstallId?: string;
+  requiredRole?: RuntimeRouteRequiredRole;
   returnTo: OwnerLoginRedirectTarget;
   routeId: string;
   selectedOrganization?: string;
@@ -781,8 +789,33 @@ export function parseAccountCompletionGateTarget(value: unknown): AccountComplet
     "Account completion gate target",
     object,
     ["returnTo", "routeId", "targetOrigin", "targetProfile"],
-    ["appInstallId", "selectedOrganization", "storageIdentity"],
+    ["access", "appInstallId", "requiredRole", "selectedOrganization", "storageIdentity"],
   );
+
+  const access =
+    object.access === undefined
+      ? undefined
+      : parseRuntimeRouteAccess(
+          parseTrimmedNonEmptyString("Account completion gate target access", object.access),
+        );
+
+  if (access === "anonymous" || (object.access !== undefined && access === undefined)) {
+    throw new Error("Account completion gate target access must be protected.");
+  }
+
+  const requiredRole =
+    object.requiredRole === undefined
+      ? undefined
+      : parseRuntimeRouteRequiredRole(
+          parseTrimmedNonEmptyString(
+            "Account completion gate target requiredRole",
+            object.requiredRole,
+          ),
+        );
+
+  if (object.requiredRole !== undefined && requiredRole === undefined) {
+    throw new Error('Account completion gate target requiredRole must be "app.admin".');
+  }
 
   const appInstallId = parseOptionalTrimmedNonEmptyString(
     "Account completion gate target appInstallId",
@@ -803,7 +836,9 @@ export function parseAccountCompletionGateTarget(value: unknown): AccountComplet
   );
 
   return {
+    ...(access === undefined ? {} : { access }),
     ...(appInstallId === undefined ? {} : { appInstallId }),
+    ...(requiredRole === undefined ? {} : { requiredRole }),
     returnTo: parseOwnerLoginContinuationTarget(
       "Account completion gate target returnTo",
       object.returnTo,

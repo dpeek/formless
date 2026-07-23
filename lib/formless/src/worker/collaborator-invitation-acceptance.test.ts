@@ -940,6 +940,7 @@ describe("collaborator invitation acceptance status", () => {
     });
 
     const target = {
+      access: "authenticated" as const,
       appInstallId,
       routeId: route.id,
       storageIdentity: `app:${appInstallId}`,
@@ -951,6 +952,7 @@ describe("collaborator invitation acceptance status", () => {
     const handoffStartUrl = new URL(INSTANCE_AUTH_HANDOFF_START_PATH, authOrigin);
 
     handoffStartUrl.searchParams.set("targetOrigin", target.targetOrigin);
+    handoffStartUrl.searchParams.set("access", target.access);
     handoffStartUrl.searchParams.set("routeId", target.routeId);
     handoffStartUrl.searchParams.set("targetProfile", target.targetProfile);
     handoffStartUrl.searchParams.set("appInstallId", target.appInstallId);
@@ -1126,6 +1128,7 @@ describe("collaborator invitation acceptance status", () => {
       targetProfile: "app",
     });
     const target: AccountCompletionGateTarget = {
+      access: "authenticated",
       appInstallId,
       returnTo: "/",
       routeId: route.id,
@@ -1382,6 +1385,7 @@ describe("collaborator invitation acceptance status", () => {
 
     const continuationUrl = new URL(handoff.returnTo, handoff.targetOrigin);
     const target = {
+      access: "authenticated" as const,
       routeId: adminRoute.id,
       storageIdentity: INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
       targetOrigin: `https://${adminHost}`,
@@ -1392,6 +1396,7 @@ describe("collaborator invitation acceptance status", () => {
     const handoffStartUrl = new URL(INSTANCE_AUTH_HANDOFF_START_PATH, authOrigin);
 
     handoffStartUrl.searchParams.set("targetOrigin", target.targetOrigin);
+    handoffStartUrl.searchParams.set("access", target.access);
     handoffStartUrl.searchParams.set("routeId", target.routeId);
     handoffStartUrl.searchParams.set("targetProfile", target.targetProfile);
     handoffStartUrl.searchParams.set("storageIdentity", target.storageIdentity);
@@ -2412,7 +2417,10 @@ async function writeCollaboratorInvitationAcceptanceHarness() {
 
             const schemaResponse = await super.fetch(
               new Request(\`http://internal/api/app-installs/\${packageAppKey}/\${installId}/schema\`, {
-                headers: { Accept: "application/json" },
+                headers: {
+                  Accept: "application/json",
+                  Authorization: "Bearer " + this.bindings.FORMLESS_ADMIN_TOKEN,
+                },
                 method: "GET",
               }),
             );

@@ -66,12 +66,14 @@ import type { EmailDeliveryRecord, EmailDeliveryScheduleRequest } from "../share
 import {
   INTERNAL_IDENTITY_ACTIVE_PRINCIPAL_PATH,
   INTERNAL_IDENTITY_ACCOUNT_COMPLETION_STATE_PATH,
+  INTERNAL_IDENTITY_APP_AUTHORITY_PATH,
   INTERNAL_IDENTITY_EMAIL_VERIFICATION_COMMIT_PATH,
   INTERNAL_IDENTITY_OWNER_PATH,
   INTERNAL_IDENTITY_OWNER_PRINCIPAL_PATH,
   INTERNAL_IDENTITY_PRINCIPAL_AUTHORITY_PATH,
   INTERNAL_IDENTITY_OWNER_RESET_PATH,
   type AccountCompletionIdentityState,
+  type ActiveIdentityAppAuthority,
   type ActiveIdentityAuthority,
 } from "./identity-owner-internal.ts";
 import { parseAccountCompletionGateTarget } from "../shared/instance-auth.ts";
@@ -1015,6 +1017,25 @@ async function handleIdentityOwnerInternalRequest(
 
     return jsonResponse({
       authority: readActiveIdentityAuthorityForPrincipal(storage, principalId),
+    });
+  }
+
+  if (url.pathname === INTERNAL_IDENTITY_APP_AUTHORITY_PATH) {
+    if (request.method !== "GET") {
+      return jsonResponse({ error: "Method not allowed." }, 405, { Allow: "GET" });
+    }
+
+    const principalId = parseNonEmptyString(
+      "Identity app authority principal id",
+      url.searchParams.get("principalId"),
+    );
+    const appInstallId = parseNonEmptyString(
+      "Identity app authority app install id",
+      url.searchParams.get("appInstallId"),
+    );
+
+    return jsonResponse({
+      authority: readActiveIdentityAppAuthorityForPrincipal(storage, principalId, appInstallId),
     });
   }
 
@@ -3947,7 +3968,12 @@ function readActiveIdentityOwner(storage: DurableObjectStorage): OwnerIdentity |
   ensureIdentityControlPlaneStorage(storage);
 
   const records = getBootstrapRecords(storage);
-  const ownerRole = activeRoleRecord(records, "instance.owner");
+  const ownerRole = activeRoleRecordOrUndefined(records, "instance.owner");
+
+  if (!ownerRole) {
+    return null;
+  }
+
   const principals = new Map(
     records
       .filter(
@@ -3990,7 +4016,7 @@ function readActiveIdentityOwnerForPrincipal(
   ensureIdentityControlPlaneStorage(storage);
 
   const records = getBootstrapRecords(storage);
-  const ownerRole = activeRoleRecord(records, "instance.owner");
+  const ownerRole = activeRoleRecordOrUndefined(records, "instance.owner");
   const principal = records.find(
     (record) =>
       record.id === principalId &&
@@ -4008,7 +4034,7 @@ function readActiveIdentityOwnerForPrincipal(
       record.entity === "role-assignment" &&
       !record.deletedAt &&
       record.values.status === "active" &&
-      record.values.role === ownerRole.id &&
+      record.values.role === ownerRole?.id &&
       record.values.targetKind === "principal" &&
       record.values.scopeKind === "instance" &&
       record.values.targetPrincipal === principal.id,
@@ -4040,13 +4066,52 @@ function readActiveIdentityAuthorityForPrincipal(
     return null;
   }
 
-  const ownerRole = activeRoleRecord(records, "instance.owner");
-  const adminRole = activeRoleRecord(records, "instance.admin");
+  const ownerRole = activeRoleRecordOrUndefined(records, "instance.owner");
+  const adminRole = activeRoleRecordOrUndefined(records, "instance.admin");
 
   return {
     id: principal.id,
-    instanceAdmin: hasActiveInstanceRoleAssignment(records, principal.id, adminRole.id),
-    instanceOwner: hasActiveInstanceRoleAssignment(records, principal.id, ownerRole.id),
+    instanceAdmin:
+      adminRole !== undefined &&
+      hasActiveInstanceRoleAssignment(records, principal.id, adminRole.id),
+    instanceOwner:
+      ownerRole !== undefined &&
+      hasActiveInstanceRoleAssignment(records, principal.id, ownerRole.id),
+  };
+}
+
+function readActiveIdentityAppAuthorityForPrincipal(
+  storage: DurableObjectStorage,
+  principalId: string,
+  appInstallId: string,
+): ActiveIdentityAppAuthority | null {
+  ensureIdentityControlPlaneStorage(storage);
+
+  const records = getBootstrapRecords(storage);
+  const principal = records.find(
+    (record) =>
+      record.id === principalId &&
+      record.entity === "principal" &&
+      !record.deletedAt &&
+      record.values.status === "active",
+  );
+
+  if (!principal) {
+    return null;
+  }
+
+  const ownerRole = activeRoleRecordOrUndefined(records, "instance.owner");
+  const appAdminRole = activeRoleRecordOrUndefined(records, "app.admin");
+
+  return {
+    appAdmin:
+      appAdminRole !== undefined &&
+      hasActiveAppInstallRoleAssignment(records, principal.id, appAdminRole.id, appInstallId),
+    appInstallId,
+    id: principal.id,
+    instanceOwner:
+      ownerRole !== undefined &&
+      hasActiveInstanceRoleAssignment(records, principal.id, ownerRole.id),
   };
 }
 
@@ -4283,6 +4348,25 @@ function hasActiveInstanceRoleAssignment(
   );
 }
 
+function hasActiveAppInstallRoleAssignment(
+  records: readonly StoredRecord[],
+  principalId: string,
+  roleId: string,
+  appInstallId: string,
+): boolean {
+  return records.some(
+    (record) =>
+      record.entity === "role-assignment" &&
+      !record.deletedAt &&
+      record.values.status === "active" &&
+      record.values.role === roleId &&
+      record.values.targetKind === "principal" &&
+      record.values.scopeKind === "app-install" &&
+      record.values.appInstallId === appInstallId &&
+      record.values.targetPrincipal === principalId,
+  );
+}
+
 function identityOwnerFromPrincipal(
   records: readonly StoredRecord[],
   principal: StoredRecord,
@@ -4317,6 +4401,19 @@ function activeRoleRecord(
   }
 
   return role;
+}
+
+function activeRoleRecordOrUndefined(
+  records: readonly StoredRecord[],
+  roleKey: IdentityControlPlaneRoleKey,
+): StoredRecord | undefined {
+  return records.find(
+    (record) =>
+      record.entity === "role" &&
+      !record.deletedAt &&
+      record.values.status === "active" &&
+      record.values.key === roleKey,
+  );
 }
 
 function primaryPrincipalEmail(records: readonly StoredRecord[], principalId: string) {

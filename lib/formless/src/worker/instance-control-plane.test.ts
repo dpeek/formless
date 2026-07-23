@@ -277,10 +277,11 @@ describe("instance control-plane API routes", () => {
     expect(ordinaryWrite.body.error).toBe(
       "Owner session, instance-admin session, or admin authorization is required for this write endpoint.",
     );
-    expect(removedAdminRead.status).toBe(401);
+    expect(removedAdminRead.status).toBe(200);
     expect(await removedAdminRead.json()).toEqual({
-      error:
-        "Owner session, instance-admin session, or admin authorization is required for this read endpoint.",
+      installs: [],
+      launchLinks: [],
+      packages: [],
     });
     expect(disabledAdminWrite.response.status).toBe(401);
     expect(disabledAdminWrite.body.error).toBe(
@@ -529,6 +530,100 @@ describe("instance control-plane API routes", () => {
     expect(unsupportedPublicRoute.response.status).toBe(400);
     expect(unsupportedPublicRoute.body.error).toBe(
       'Package app "tasks" does not support public Site routes.',
+    );
+  });
+
+  it("validates management and app-role route authorization on writes", async () => {
+    await postAdminJson<OperationInvocationResponse>(createAppInstallOperation, {
+      idempotencyKey: "create-route-authorization",
+      input: {
+        packageAppKey: "site",
+        installId: "personal",
+        label: "Personal Site",
+      },
+    });
+
+    const managementRoute = await postAdminJson<OperationInvocationResponse>(
+      `${controlPlaneApi}/operations/route/create`,
+      {
+        idempotencyKey: "management-route",
+        input: {
+          access: "management",
+          enabled: true,
+          kind: "mount",
+          matchPath: "/settings",
+          surface: "admin",
+          targetProfile: "instance",
+        },
+      },
+    );
+    const appRoleRoute = await postAdminJson<OperationInvocationResponse>(
+      `${controlPlaneApi}/operations/route/create`,
+      {
+        idempotencyKey: "app-role-route",
+        input: {
+          access: "authenticated",
+          appInstall: "personal",
+          enabled: true,
+          kind: "mount",
+          matchPath: "/apps/personal-alt",
+          requiredRole: "app.admin",
+          surface: "admin",
+          targetProfile: "app",
+        },
+      },
+    );
+    const ownerRoleRoute = await postAdminJson<FailureResponse>(
+      `${controlPlaneApi}/operations/route/create`,
+      {
+        idempotencyKey: "owner-role-route",
+        input: {
+          access: "owner",
+          appInstall: "personal",
+          enabled: true,
+          kind: "mount",
+          matchPath: "/apps/personal-owner",
+          requiredRole: "app.admin",
+          surface: "admin",
+          targetProfile: "app",
+        },
+      },
+    );
+    const managementAppRoute = await postAdminJson<FailureResponse>(
+      `${controlPlaneApi}/operations/route/create`,
+      {
+        idempotencyKey: "management-app-route",
+        input: {
+          access: "management",
+          appInstall: "personal",
+          enabled: true,
+          kind: "mount",
+          matchPath: "/apps/personal-management",
+          surface: "admin",
+          targetProfile: "app",
+        },
+      },
+    );
+
+    expect(managementRoute.response.status).toBe(200);
+    expect(operationRecord(managementRoute).values).toMatchObject({
+      access: "management",
+      targetProfile: "instance",
+    });
+    expect(appRoleRoute.response.status).toBe(200);
+    expect(operationRecord(appRoleRoute).values).toMatchObject({
+      access: "authenticated",
+      appInstall: "personal",
+      requiredRole: "app.admin",
+      targetProfile: "app",
+    });
+    expect(ownerRoleRoute.response.status).toBe(400);
+    expect(ownerRoleRoute.body.error).toBe(
+      'Field "requiredRole" requires an authenticated app admin mount with one app install.',
+    );
+    expect(managementAppRoute.response.status).toBe(400);
+    expect(managementAppRoute.body.error).toBe(
+      'Field "access" can only be "management" for instance mount routes.',
     );
   });
 

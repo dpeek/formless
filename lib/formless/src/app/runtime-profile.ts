@@ -29,6 +29,7 @@ import {
   runtimeTopologyRoutes,
   stringRuntimeConfigValue,
   type RuntimeRouteAccess,
+  type RuntimeRouteRequiredRole,
   type RuntimeProfileKind,
 } from "../shared/runtime-topology.ts";
 
@@ -44,6 +45,7 @@ export type RuntimeWorldMount = {
   access?: RuntimeRouteAccess;
   app: RuntimeAppDefinition;
   generatedRoutes: boolean;
+  requiredRole?: RuntimeRouteRequiredRole;
   route: `/${string}`;
   target?: AppStorageIdentity;
 };
@@ -651,6 +653,7 @@ export function installedAppWorldMountFromInstall(
     access: adminRoute?.access ?? "owner",
     app,
     generatedRoutes: true,
+    ...(adminRoute?.requiredRole === undefined ? {} : { requiredRole: adminRoute.requiredRole }),
     route,
     target,
   };

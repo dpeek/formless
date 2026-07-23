@@ -273,7 +273,7 @@ describe("Worker document routing", () => {
           { profile: "instance" },
         ),
       }),
-    ).toEqual({ kind: "validate-session", requiredAccess: "owner" });
+    ).toEqual({ kind: "validate-session", requiredAccess: "management" });
   });
 
   it("routes published Site documents to the Worker SSR path only in the published profile", () => {
@@ -464,7 +464,7 @@ describe("Worker document routing", () => {
         documentRequest("http://example.com/"),
         instanceProfile,
       ),
-    ).toBe(true);
+    ).toBe(false);
     expect(
       shouldRedirectAnonymousOwnerBrowserRoute(
         documentRequest("http://example.com/apps/personal?screen=routes"),
@@ -590,7 +590,7 @@ describe("Worker document routing", () => {
         documentRequest("http://example.com/access"),
         instanceProfile,
       ),
-    ).toBe("authenticated");
+    ).toBe("management");
     expect(
       ownerBrowserRouteAccessForRequest(
         documentRequest("http://example.com/deployments"),

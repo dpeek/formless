@@ -223,6 +223,46 @@ export async function validateCentralAuthSessionState(
   };
 }
 
+export function validateCentralAuthSessionBinding(
+  storage: DurableObjectStorage,
+  value: unknown,
+  options: { now?: string } = {},
+): CentralAuthSessionValidationResult {
+  const session = parseCentralAuthSession(value);
+
+  if (!session) {
+    return { ok: false, reason: "malformed-payload" };
+  }
+
+  const stored = readCentralAuthSession(storage, session.sessionIdHash);
+
+  if (!stored) {
+    return { ok: false, reason: "missing-session" };
+  }
+
+  if (
+    stored.instanceId !== session.instanceId ||
+    stored.principalId !== session.principalId ||
+    stored.issuedAt !== session.issuedAt ||
+    stored.expiresAt !== session.expiresAt
+  ) {
+    return { ok: false, reason: "malformed-payload" };
+  }
+
+  if (
+    parseTimestampMs("Central auth session expiresAt", stored.expiresAt) <=
+    parseTimestampMs("Central auth session validation time", options.now ?? nowIsoString())
+  ) {
+    return { ok: false, reason: "expired" };
+  }
+
+  if (stored.revokedAt !== undefined) {
+    return { ok: false, reason: "revoked-session" };
+  }
+
+  return { ok: true, session };
+}
+
 export async function revokeCentralAuthSessionCookie(
   request: Request,
   storage: DurableObjectStorage,
@@ -430,6 +470,34 @@ function parseCentralAuthSessionPayload(
   } catch {
     return undefined;
   }
+}
+
+function parseCentralAuthSession(value: unknown): CentralAuthSession | undefined {
+  if (
+    !isRecord(value) ||
+    typeof value.sessionIdHash !== "string" ||
+    !base64UrlPattern.test(value.sessionIdHash) ||
+    typeof value.principalId !== "string" ||
+    value.principalId.trim() === "" ||
+    typeof value.instanceId !== "string" ||
+    value.instanceId.trim() === "" ||
+    typeof value.issuedAt !== "string" ||
+    value.issuedAt.trim() === "" ||
+    typeof value.expiresAt !== "string" ||
+    value.expiresAt.trim() === "" ||
+    !isTimestamp(value.issuedAt) ||
+    !isTimestamp(value.expiresAt)
+  ) {
+    return undefined;
+  }
+
+  return {
+    expiresAt: value.expiresAt,
+    instanceId: value.instanceId.trim(),
+    issuedAt: value.issuedAt,
+    principalId: value.principalId.trim(),
+    sessionIdHash: value.sessionIdHash,
+  };
 }
 
 async function signCentralAuthSessionPayload(

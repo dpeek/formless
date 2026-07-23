@@ -1012,7 +1012,9 @@ export function authAccountSignupTargetFromSearch(
 
   try {
     return parseAccountCompletionGateTarget({
+      access: optionalSearchParam(params, "access"),
       appInstallId: optionalSearchParam(params, "appInstallId"),
+      requiredRole: optionalSearchParam(params, "requiredRole"),
       returnTo: params.get("returnTo"),
       routeId: params.get("routeId"),
       selectedOrganization: optionalSearchParam(params, "selectedOrganization"),

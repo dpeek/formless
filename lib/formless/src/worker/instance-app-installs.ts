@@ -2,6 +2,8 @@ import {
   appInstallInitializationPlan,
   findAppInstall,
   type AppInstall,
+  type AppInstallLaunchLink,
+  type AppInstallRoute,
 } from "@dpeek/formless-installed-apps";
 import {
   INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX,
@@ -25,7 +27,11 @@ import {
   type AuthorityAdminGuardEnv,
 } from "./authority-admin-guard.ts";
 import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
-import { hostAuthSessionTargetFromRequestHeaders } from "./instance-auth-handoff.ts";
+import {
+  hostAuthSessionTargetFromRequestHeaders,
+  validateInstanceAuthAccessSession,
+} from "./instance-auth-handoff.ts";
+import type { InstanceAuthSessionTargetBinding } from "./instance-auth-state.ts";
 import {
   CREATE_APP_INSTALL_CONTROL_PLANE_OPERATION_PATH,
   INTERNAL_UPDATE_APP_INSTALL_PACKAGE_FACTS_PATH,
@@ -157,7 +163,17 @@ export async function handleInstanceAppInstallsDurableObjectRequest(
         hostSessionTarget: hostAuthSessionTargetForInstanceAppInstallsRequest(request),
       });
 
-      if (!authorization.authorized) {
+      if (authorization.authorized) {
+        return jsonResponse(await appInstallsResponse(request, env));
+      }
+
+      const hostSessionTarget = hostAuthSessionTargetFromRequestHeaders(request.headers);
+      const authenticated = await validateInstanceAuthAccessSession(request, env, {
+        requiredAuthority: "authenticated",
+        ...(hostSessionTarget === undefined ? {} : { target: hostSessionTarget }),
+      });
+
+      if (!authenticated.ok) {
         return jsonResponse(
           { error: authorization.error },
           authorization.status,
@@ -165,7 +181,11 @@ export async function handleInstanceAppInstallsDurableObjectRequest(
         );
       }
 
-      return jsonResponse(await appInstallsResponse(request, env));
+      const response = await appInstallsResponse(request, env);
+
+      return jsonResponse(
+        await appAdminAppInstallsResponse(request, env, response, hostSessionTarget),
+      );
     }
 
     if (request.method === "POST") {
@@ -363,6 +383,107 @@ async function appInstallsResponse(
     installs: instanceControlPlaneAppInstallsFromRecords(records ?? [], packageResolver),
     launchLinks: instanceControlPlaneAppLaunchLinksFromRecords(records ?? [], packageResolver),
   };
+}
+
+async function appAdminAppInstallsResponse(
+  request: Request,
+  env: InstanceAppInstallsApiEnv,
+  response: AppInstallsResponse,
+  hostSessionTarget: InstanceAuthSessionTargetBinding | undefined,
+): Promise<AppInstallsResponse> {
+  const installs: AppInstall[] = [];
+
+  for (const install of response.installs) {
+    const target = appAdminRegistryTarget(request, install, hostSessionTarget);
+
+    if (!target) {
+      continue;
+    }
+
+    const authorization = await validateInstanceAuthAccessSession(request, env, {
+      requiredAuthority: "app.admin",
+      target,
+    });
+
+    if (authorization.ok) {
+      installs.push(appAdminInstallProjection(install));
+    }
+  }
+
+  const packageAppKeys = new Set(installs.map((install) => install.packageAppKey));
+  const installIds = new Set(installs.map((install) => install.installId));
+
+  return {
+    installs,
+    packages: response.packages.filter((appPackage) =>
+      packageAppKeys.has(appPackage.packageAppKey),
+    ),
+    ...(response.launchLinks === undefined
+      ? {}
+      : {
+          launchLinks: response.launchLinks.filter(
+            (link) => installIds.has(link.installId) && appAdminLaunchLinkIsEligible(link),
+          ),
+        }),
+  };
+}
+
+function appAdminRegistryTarget(
+  request: Request,
+  install: AppInstall,
+  hostSessionTarget: InstanceAuthSessionTargetBinding | undefined,
+): InstanceAuthSessionTargetBinding | undefined {
+  if (hostSessionTarget) {
+    return hostSessionTarget.appInstallId === install.installId ? hostSessionTarget : undefined;
+  }
+
+  const adminRoute = install.routes?.find(
+    (route) => route.routeKind === "admin" && route.requiredRole === "app.admin",
+  );
+
+  return {
+    access: "authenticated",
+    appInstallId: install.installId,
+    requiredRole: "app.admin",
+    routeId: adminRoute?.id ?? `app-install:${install.installId}:admin`,
+    storageIdentity: `app:${install.installId}`,
+    targetOrigin: new URL(request.url).origin,
+    targetProfile: "app",
+  };
+}
+
+function appAdminInstallProjection(install: AppInstall): AppInstall {
+  const routes = install.routes?.filter(appAdminRouteIsEligible);
+  const launchLinks = install.launchLinks?.filter(appAdminLaunchLinkIsEligible);
+
+  return {
+    ...install,
+    ...(routes === undefined ? {} : { routes }),
+    ...(launchLinks === undefined ? {} : { launchLinks }),
+  };
+}
+
+function appAdminRouteIsEligible(route: AppInstallRoute): boolean {
+  if (!route.enabled) {
+    return false;
+  }
+
+  return appAdminRouteAccessIsEligible(route.access ?? "anonymous", route.requiredRole);
+}
+
+function appAdminLaunchLinkIsEligible(link: AppInstallLaunchLink): boolean {
+  return appAdminRouteAccessIsEligible(link.access, link.requiredRole);
+}
+
+function appAdminRouteAccessIsEligible(
+  access: AppInstallRoute["access"] | AppInstallLaunchLink["access"],
+  requiredRole: AppInstallRoute["requiredRole"],
+): boolean {
+  if (access === "anonymous") {
+    return true;
+  }
+
+  return access === "authenticated" && (requiredRole === undefined || requiredRole === "app.admin");
 }
 
 export async function readControlPlaneAppInstallsForRequest(

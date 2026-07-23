@@ -67,18 +67,27 @@ The system SHALL mount browser surfaces according to the active runtime profile.
 - AND source app routes such as `/tasks`, `/crm/audiences`, `/site/schema`, and
   `/pages/home` are not eligible instance browser routes
 
+#### Scenario: Product instance settings route
+
+- GIVEN the runtime profile is `instance`
+- WHEN a browser navigates to `/`
+- THEN the client shell is eligible to render Instance Settings for an active
+  principal with active `instance.owner` or `instance.admin` authority
+- AND owner-only security and recovery behavior remains unavailable to a
+  principal authorized only as instance admin
+
 #### Scenario: Product instance access management route
 
 - GIVEN the runtime profile is `instance`
 - WHEN a browser navigates to `/access`
 - THEN the client shell is eligible to render the dedicated access management
   surface
-- AND the route is treated as an authenticated instance browser surface unless
-  a stricter route access policy explicitly requires owner access
-- AND route access only proves an active principal-backed browser session;
-  identity summary reads, collaborator invitation creation, role grants, and
-  destructive identity actions remain authorized by identity-control-plane
-  management rules
+- AND the route is treated as a management instance browser surface unless an
+  explicit route access policy requires owner access
+- AND active `instance.owner` or `instance.admin` authority satisfies the
+  management route while identity summary reads, collaborator invitation
+  creation, role grants, and destructive identity actions remain authorized by
+  identity-control-plane management rules
 - AND installed app routing, public Site routing, account orchestrator routes,
   account gate routes, and raw generated identity-control-plane record editing
   remain separate route families
@@ -166,6 +175,30 @@ surfaces or protected management API data.
 - AND `authenticated` access does not by itself grant owner-only instance
   management authority
 
+#### Scenario: Management browser route
+
+- GIVEN a runtime browser route has effective access `management`
+- WHEN the request includes a valid central auth session on the configured auth
+  origin, local-dev owner session, or matching host-local session for an active
+  principal with active `instance.owner` or `instance.admin` authority at
+  instance scope
+- THEN the route remains eligible for the instance settings or access
+  management surface
+- AND owner recovery, owner-role management, auth-origin policy, browser
+  session signing policy, and admin-bearer recovery remain owner-only
+
+#### Scenario: App role browser route
+
+- GIVEN an app route has effective access `authenticated`
+- AND the route requires `app.admin`
+- WHEN the request includes a valid central auth session on the configured auth
+  origin, local-dev owner session, or matching host-local session
+- THEN the route remains eligible only when the principal has active
+  `app.admin` authority at app-install scope for the route's referenced app
+  install or has active `instance.owner` authority
+- AND active `instance.admin` authority, a role for another app install, or an
+  ordinary authenticated session does not satisfy the route requirement
+
 #### Scenario: Anonymous owner browser route
 
 - GIVEN a runtime browser route has effective access `owner`
@@ -182,7 +215,8 @@ surfaces or protected management API data.
 #### Scenario: Anonymous mapped protected browser route
 
 - GIVEN a mapped host runtime browser route has effective access
-  `authenticated` or `owner`
+  `authenticated`, `management`, or `owner`, including an authenticated route
+  with a required app role
 - AND the mapped host is not the configured auth origin
 - AND the request is a `GET` or `HEAD` request that accepts HTML
 - WHEN the request does not include a valid host-local session for the mapped
@@ -225,6 +259,18 @@ surfaces or protected management API data.
 - AND route access does not replace operation actor policy for generated app
   reads, writes, or command execution
 
+#### Scenario: Installed app admin API authorization
+
+- GIVEN a generated admin app uses an installed app API for bootstrap, schema
+  read, HTTP sync, push sync, or an entity operation
+- WHEN the request is authorized
+- THEN the app data boundary independently requires active `instance.owner`
+  authority or active `app.admin` authority scoped to that app install
+- AND browser route eligibility does not authorize another app install or make
+  any installed app data available to every authenticated principal
+- AND entity operation actor policy is still evaluated after app data access
+  succeeds
+
 #### Scenario: Owner management API route
 
 - GIVEN a management API route exposes owner-only instance dashboard or
@@ -241,11 +287,11 @@ surfaces or protected management API data.
 #### Scenario: Mapped instance host management API route
 
 - GIVEN an enabled exact-host `route` mounts the instance profile with
-  effective access `owner`
+  effective access `management` or `owner`
 - AND a browser has completed cross-domain auth handoff for that mapped
   instance host route
-- WHEN the browser requests owner-protected instance control-plane management
-  API reads or writes through that mapped host
+- WHEN the browser requests operational instance control-plane management API
+  reads or writes through that mapped host
 - THEN the runtime authorizes the request with the host-local session only when
   the session is valid for the same host, route, target profile, and
   `instance:control-plane` storage identity

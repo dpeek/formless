@@ -1158,6 +1158,7 @@ function isInstanceControlPlaneRouteValidationEntity(schema: AppSchema, entityNa
     entity.fields.appInstall?.type === "reference" &&
     entity.fields.surface?.type === "enum" &&
     entity.fields.access?.type === "enum" &&
+    entity.fields.requiredRole?.type === "enum" &&
     entity.fields.deploymentConfig?.type === "reference" &&
     entity.fields.toHost?.type === "text" &&
     entity.fields.toUrl?.type === "text" &&
@@ -1210,12 +1211,46 @@ function validateInstanceControlPlaneRouteValues(
     throw new BadRequestError('Field "kind" must be "mount" or "redirect".');
   }
 
+  validateInstanceControlPlaneRouteAuthorization(values, kind);
+
   if (values.enabled === true) {
     assertEnabledInstanceControlPlaneRouteIsUnique(
       values,
       reader,
       existingRecordId,
       additionalRecords,
+    );
+  }
+}
+
+function validateInstanceControlPlaneRouteAuthorization(values: RecordValues, kind: string) {
+  const access = optionalStringRecordValue(values, "access");
+  const requiredRole = optionalStringRecordValue(values, "requiredRole");
+  const targetProfile = optionalStringRecordValue(values, "targetProfile");
+  const appInstall = optionalStringRecordValue(values, "appInstall");
+  const surface = optionalStringRecordValue(values, "surface");
+
+  if (access === "management" && (kind !== "mount" || targetProfile !== "instance")) {
+    throw new BadRequestError('Field "access" can only be "management" for instance mount routes.');
+  }
+
+  if (requiredRole === undefined) {
+    return;
+  }
+
+  if (requiredRole !== "app.admin") {
+    throw new BadRequestError('Field "requiredRole" must be "app.admin".');
+  }
+
+  if (
+    kind !== "mount" ||
+    access !== "authenticated" ||
+    targetProfile !== "app" ||
+    appInstall === undefined ||
+    surface !== "admin"
+  ) {
+    throw new BadRequestError(
+      'Field "requiredRole" requires an authenticated app admin mount with one app install.',
     );
   }
 }

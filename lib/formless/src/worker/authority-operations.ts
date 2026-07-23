@@ -183,6 +183,7 @@ type EntityOperationRoute = {
 };
 
 export type OperationInvocationActorCandidates = {
+  admin?: OperationInvocationActor;
   authenticated?: OperationInvocationActor;
   owner?: OperationInvocationActor;
 };
@@ -567,15 +568,23 @@ function operationInvocationActorFromCandidates(
     return candidates.authenticated;
   }
 
+  if (actors?.includes("admin") && candidates.admin) {
+    return candidates.admin;
+  }
+
   if ((actors === undefined || actors.includes("owner")) && candidates.owner) {
     return candidates.owner;
+  }
+
+  if (actors === undefined && candidates.admin) {
+    return candidates.admin;
   }
 
   if (actors === undefined && candidates.authenticated) {
     return candidates.authenticated;
   }
 
-  return candidates.owner ?? candidates.authenticated;
+  return candidates.owner ?? candidates.admin ?? candidates.authenticated;
 }
 
 function writeOperationResult<T extends AuthorityOperationResponseBody>(
