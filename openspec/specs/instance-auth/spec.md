@@ -237,6 +237,25 @@ instance-scoped.
 - AND requesting login options does not disclose whether any principal,
   credential, email, or role exists
 
+#### Scenario: Upgrade legacy login challenge storage
+
+- GIVEN an existing instance has a passkey challenge table from an earlier
+  runtime that requires login challenges to carry a principal id
+- AND the table may include retired owner-setup challenge columns and
+  constraints
+- WHEN the current runtime initializes instance auth before issuing login
+  options
+- THEN it upgrades the table to accept principal-neutral login challenges even
+  if an earlier migration attempt was recorded without changing that legacy
+  table
+- AND compatible invitation registration challenges remain available
+- AND retired owner-setup challenge rows are not copied into current challenge
+  storage
+- AND no passkey credential, principal, role assignment, or session state is
+  changed
+- AND any upgrade or challenge-storage failure is returned as a display-safe
+  account sign-in error without raw SQL or storage diagnostics
+
 #### Scenario: Challenge replay
 
 - GIVEN a registration or login challenge has already been verified or has

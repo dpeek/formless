@@ -110,6 +110,15 @@ const instanceAuthSqlMigrations = createSqlStorageMigrationRegistry([
     summary: "Remove principal bindings from stored passkey login challenges.",
     apply: migratePrincipalNeutralLoginChallenges,
   },
+  {
+    id: "2026-07-24-instance-auth-repair-legacy-passkey-challenges",
+    owner: "formless",
+    family: instanceAuthSqlMigrationFamily,
+    checksum: "sha256:b6d9d34075fd2eeaa919ba1dc63c662dd563668141659677fe65d48d0f9969a8",
+    safety: "auto-safe",
+    summary: "Repair deployed legacy passkey challenge storage.",
+    apply: repairLegacyPasskeyChallengeStorage,
+  },
 ]);
 
 type InstanceAuthConfigRow = {
@@ -2389,6 +2398,70 @@ function migratePrincipalNeutralLoginChallenges(storage: DurableObjectStorage) {
       expires_at,
       consumed_at
     FROM ${legacyTableName}
+  `);
+  storage.sql.exec(`DROP TABLE ${legacyTableName}`);
+  storage.sql.exec(passkeyChallengesExpiresAtIndexSql);
+}
+
+function repairLegacyPasskeyChallengeStorage(storage: DurableObjectStorage) {
+  const tableSql = storage.sql
+    .exec<{ sql: string | null }>(
+      "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?",
+      passkeyChallengesTableName,
+    )
+    .toArray()[0]?.sql;
+
+  if (
+    tableSql === undefined ||
+    tableSql === null ||
+    /kind\s*=\s*'login'\s+AND\s+principal_id\s+IS\s+NULL/i.test(tableSql)
+  ) {
+    return;
+  }
+
+  const legacyTableName = "instance_auth_challenges_legacy_repair";
+
+  storage.sql.exec(`DROP TABLE IF EXISTS ${legacyTableName}`);
+  storage.sql.exec(`DROP INDEX IF EXISTS ${passkeyChallengesExpiresAtIndexName}`);
+  storage.sql.exec(`ALTER TABLE ${passkeyChallengesTableName} RENAME TO ${legacyTableName}`);
+  storage.sql.exec(passkeyChallengesTableSql);
+  storage.sql.exec(`
+    INSERT INTO ${passkeyChallengesTableName} (
+      id,
+      kind,
+      challenge,
+      invitation_id,
+      invitation_token_hash,
+      principal_id,
+      registration_origin,
+      registration_relying_party_id,
+      created_at,
+      expires_at,
+      consumed_at
+    )
+    SELECT
+      id,
+      kind,
+      challenge,
+      invitation_id,
+      invitation_token_hash,
+      CASE WHEN kind = 'login' THEN NULL ELSE principal_id END,
+      registration_origin,
+      registration_relying_party_id,
+      created_at,
+      expires_at,
+      consumed_at
+    FROM ${legacyTableName}
+    WHERE
+      kind = 'login'
+      OR (
+        kind = 'registration'
+        AND principal_id IS NOT NULL
+        AND invitation_id IS NOT NULL
+        AND invitation_token_hash IS NOT NULL
+        AND registration_origin IS NOT NULL
+        AND registration_relying_party_id IS NOT NULL
+      )
   `);
   storage.sql.exec(`DROP TABLE ${legacyTableName}`);
   storage.sql.exec(passkeyChallengesExpiresAtIndexSql);

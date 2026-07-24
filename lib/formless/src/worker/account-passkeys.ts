@@ -34,6 +34,8 @@ const loginVerifyPath = `${ACCOUNT_PASSKEY_API_PATH}/login/verify`;
 const passkeyChallengeTtlMs = 5 * 60 * 1000;
 const base64UrlPattern = /^[A-Za-z0-9_-]+$/;
 
+class DisplaySafeAccountPasskeyError extends Error {}
+
 type AccountPasskeyApiEnv = AuthorityAdminGuardEnv & {
   FORMLESS_AUTHORITY: DurableObjectNamespace;
 };
@@ -73,7 +75,7 @@ export async function handleAccountPasskeyDurableObjectRequest(
 
     return jsonResponse({ error: "Not found." }, 404);
   } catch (error) {
-    return jsonResponse({ error: errorMessage(error) }, 400);
+    return jsonResponse({ error: displaySafeAccountPasskeyError(error) }, 400);
   }
 }
 
@@ -92,7 +94,9 @@ async function handleLoginOptionsRequest(
     return methodNotAllowedResponse("POST");
   }
 
-  parseAccountPasskeyLoginOptionsRequest(await readJson(request));
+  const requestBody = await readJson(request);
+
+  parseDisplaySafeRequest(() => parseAccountPasskeyLoginOptionsRequest(requestBody));
 
   const config = requireInstanceAuthConfig(storage);
   const owner = await readIdentityOwner(env);
@@ -131,7 +135,8 @@ async function handleLoginVerifyRequest(
     return methodNotAllowedResponse("POST");
   }
 
-  const body = parseAccountPasskeyLoginVerifyRequest(await readJson(request));
+  const requestBody = await readJson(request);
+  const body = parseDisplaySafeRequest(() => parseAccountPasskeyLoginVerifyRequest(requestBody));
   const config = requireInstanceAuthConfig(storage);
   const owner = await readIdentityOwner(env);
   const state = readInstanceSetupState(storage, owner);
@@ -143,9 +148,8 @@ async function handleLoginVerifyRequest(
     );
   }
 
-  const challengeValue = clientDataChallenge(
-    "Passkey login response",
-    body.response.response.clientDataJSON,
+  const challengeValue = parseDisplaySafeRequest(() =>
+    clientDataChallenge("Passkey login response", body.response.response.clientDataJSON),
   );
   const challenge = consumePasskeyChallenge(storage, {
     kind: "login",
@@ -272,7 +276,7 @@ function requireInstanceAuthConfig(storage: DurableObjectStorage): StoredInstanc
   const config = readInstanceAuthConfig(storage);
 
   if (!config) {
-    throw new Error("Instance auth configuration is missing.");
+    throw new DisplaySafeAccountPasskeyError("Instance auth configuration is missing.");
   }
 
   return config;
@@ -311,7 +315,7 @@ async function readJson(request: Request): Promise<unknown> {
   try {
     return await request.json();
   } catch {
-    throw new Error("Request body must be valid JSON.");
+    throw new DisplaySafeAccountPasskeyError("Request body must be valid JSON.");
   }
 }
 
@@ -336,8 +340,20 @@ function jsonResponse(body: unknown, status = 200, headers: HeadersInit = {}): R
   });
 }
 
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : "Bad request.";
+function parseDisplaySafeRequest<T>(parse: () => T): T {
+  try {
+    return parse();
+  } catch (error) {
+    throw new DisplaySafeAccountPasskeyError(
+      error instanceof Error ? error.message : "Bad request.",
+    );
+  }
+}
+
+function displaySafeAccountPasskeyError(error: unknown): string {
+  return error instanceof DisplaySafeAccountPasskeyError
+    ? error.message
+    : "Account sign in failed.";
 }
 
 function parseBase64UrlString(context: string, value: unknown): string {

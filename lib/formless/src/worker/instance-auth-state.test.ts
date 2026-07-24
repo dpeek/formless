@@ -43,6 +43,8 @@ const expiredAt = "2026-05-21T00:00:30.000Z";
 const invitationRegistrationChallenge = "aW52aXRhdGlvbi1yZWdpc3RyYXRpb24tY2hhbGxlbmdl";
 const signupRegistrationChallenge = "c2lnbnVwLXJlZ2lzdHJhdGlvbi1jaGFsbGVuZ2U";
 const loginChallenge = "bG9naW4tY2hhbGxlbmdl";
+const migratedLoginChallenge = "bWlncmF0ZWQtbG9naW4tY2hhbGxlbmdl";
+const legacyOwnerSetupChallenge = "bGVnYWN5LW93bmVyLXNldHVwLWNoYWxsZW5nZQ";
 const deleteChallenge = "ZGVsZXRlLWNoYWxsZW5nZQ";
 const centralSessionIdHash = "Y2VudHJhbC1zZXNzaW9uLWhhc2g";
 const grantId = "aGFuZG9mZi1ncmFudC0x";
@@ -157,11 +159,11 @@ describe("instance auth state", () => {
     expect(stored.config).toEqual(first);
   });
 
-  it("migrates principal-bound login challenge rows to principal-neutral private state", async () => {
+  it("repairs deployed setup-token challenge storage after the first migration was recorded", async () => {
     const migrated = await postJson<{
       appliedMigrations: Array<{ migrationId: string; storageFamily: string }>;
       indexSql: string;
-      rows: Array<{ kind: string; principal_id: string | null }>;
+      rows: Array<{ id: string; kind: string; principal_id: string | null }>;
       tableSql: string;
     }>("/migrate-principal-neutral-login-challenges", {});
 
@@ -170,13 +172,19 @@ describe("instance auth state", () => {
         migrationId: "2026-07-24-instance-auth-principal-neutral-login-challenges",
         storageFamily: "instance-auth",
       }),
+      expect.objectContaining({
+        migrationId: "2026-07-24-instance-auth-repair-legacy-passkey-challenges",
+        storageFamily: "instance-auth",
+      }),
     ]);
     expect(migrated.rows).toEqual([
-      { kind: "login", principal_id: null },
-      { kind: "registration", principal_id: principalId },
+      { id: "legacy-login", kind: "login", principal_id: null },
+      { id: "legacy-registration", kind: "registration", principal_id: principalId },
     ]);
     expect(migrated.tableSql).toMatch(/kind\s*=\s*'login'\s+AND\s+principal_id\s+IS\s+NULL/i);
+    expect(migrated.tableSql).not.toContain("setup_token_hash");
     expect(migrated.indexSql).toContain("instance_auth_challenges");
+    expect(await readChallenge(legacyOwnerSetupChallenge)).toEqual({ challenge: null });
     expect(await readChallenge(loginChallenge)).toEqual({
       challenge: {
         challenge: loginChallenge,
@@ -199,6 +207,23 @@ describe("instance auth state", () => {
         principalId,
         relyingPartyId,
       },
+    });
+    expect(
+      await createChallenge({
+        kind: "login",
+        challenge: migratedLoginChallenge,
+        createdAt,
+        expiresAt,
+      }),
+    ).toEqual({
+      challenge: {
+        challenge: migratedLoginChallenge,
+        createdAt,
+        expiresAt,
+        id: expect.any(String),
+        kind: "login",
+      },
+      ok: true,
     });
   });
 
@@ -1428,6 +1453,7 @@ async function writeInstanceAuthHarness() {
                     challenge TEXT NOT NULL UNIQUE,
                     invitation_id TEXT,
                     invitation_token_hash TEXT,
+                    setup_token_hash TEXT,
                     principal_id TEXT,
                     registration_origin TEXT,
                     registration_relying_party_id TEXT,
@@ -1437,6 +1463,17 @@ async function writeInstanceAuthHarness() {
                     CHECK (
                       (
                         kind = 'registration'
+                        AND setup_token_hash IS NOT NULL
+                        AND principal_id IS NULL
+                        AND invitation_id IS NULL
+                        AND invitation_token_hash IS NULL
+                        AND registration_origin IS NULL
+                        AND registration_relying_party_id IS NULL
+                      )
+                      OR
+                      (
+                        kind = 'registration'
+                        AND setup_token_hash IS NULL
                         AND principal_id IS NOT NULL
                         AND invitation_id IS NOT NULL
                         AND invitation_token_hash IS NOT NULL
@@ -1446,6 +1483,7 @@ async function writeInstanceAuthHarness() {
                       OR
                       (
                         kind = 'login'
+                        AND setup_token_hash IS NULL
                         AND principal_id IS NOT NULL
                         AND invitation_id IS NULL
                         AND invitation_token_hash IS NULL
@@ -1456,12 +1494,27 @@ async function writeInstanceAuthHarness() {
                   );
                   CREATE INDEX idx_instance_auth_challenges_expires_at
                     ON instance_auth_challenges (expires_at);
+                  INSERT INTO formless_applied_sql_migrations (
+                    storage_family,
+                    migration_id,
+                    checksum,
+                    package_version,
+                    applied_at
+                  )
+                  VALUES (
+                    'instance-auth',
+                    '2026-07-24-instance-auth-principal-neutral-login-challenges',
+                    'sha256:a067010dfdd1d5d38eb6d312fc9c1a1516ec7ab9caa315049210751c236164d8',
+                    NULL,
+                    '2026-07-24T00:00:00.000Z'
+                  );
                   INSERT INTO instance_auth_challenges (
                     id,
                     kind,
                     challenge,
                     invitation_id,
                     invitation_token_hash,
+                    setup_token_hash,
                     principal_id,
                     registration_origin,
                     registration_relying_party_id,
@@ -1471,9 +1524,24 @@ async function writeInstanceAuthHarness() {
                   )
                   VALUES
                     (
+                      'legacy-owner-setup',
+                      'registration',
+                      '${legacyOwnerSetupChallenge}',
+                      NULL,
+                      NULL,
+                      'c2V0dXAtdG9rZW4taGFzaA',
+                      NULL,
+                      NULL,
+                      NULL,
+                      '${createdAt}',
+                      '${expiresAt}',
+                      NULL
+                    ),
+                    (
                       'legacy-login',
                       'login',
                       '${loginChallenge}',
+                      NULL,
                       NULL,
                       NULL,
                       '${principalId}',
@@ -1489,6 +1557,7 @@ async function writeInstanceAuthHarness() {
                       '${invitationRegistrationChallenge}',
                       '${invitationId}',
                       'aW52aXRhdGlvbi10b2tlbi1oYXNo',
+                      NULL,
                       '${principalId}',
                       '${canonicalOrigin}',
                       '${relyingPartyId}',
@@ -1513,7 +1582,7 @@ async function writeInstanceAuthHarness() {
                   .one().sql,
                 rows: this.ctx.storage.sql
                   .exec(
-                    "SELECT kind, principal_id FROM instance_auth_challenges ORDER BY kind ASC",
+                    "SELECT id, kind, principal_id FROM instance_auth_challenges ORDER BY id ASC",
                   )
                   .toArray(),
                 tableSql: this.ctx.storage.sql

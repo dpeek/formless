@@ -303,6 +303,16 @@ describe("account passkey login API routes", () => {
       error: "Owner setup must be complete before passkey login.",
     });
   });
+
+  it("returns a display-safe error when challenge storage rejects login insertion", async () => {
+    await seedOwnerPasskey(new VirtualPasskey(credentialId));
+    await postJson("/harness/reject-login-challenge-storage", {});
+
+    const rejected = await postJson("/api/formless/passkeys/login/options", {});
+
+    expect(rejected.response.status).toBe(400);
+    expect(rejected.body).toEqual({ error: "Account sign in failed." });
+  });
 });
 
 async function configureAuth() {
@@ -699,6 +709,36 @@ async function writeAccountPasskeyHarness() {
             });
 
             return Response.json(credential);
+          }
+
+          if (
+            request.method === "POST" &&
+            url.pathname === "/harness/reject-login-challenge-storage"
+          ) {
+            this.ctx.storage.transactionSync(() => {
+              this.ctx.storage.sql.exec(
+                "DROP INDEX IF EXISTS idx_instance_auth_challenges_expires_at",
+              );
+              this.ctx.storage.sql.exec("DROP TABLE instance_auth_challenges");
+              this.ctx.storage.sql.exec(\`
+                CREATE TABLE instance_auth_challenges (
+                  id TEXT PRIMARY KEY,
+                  kind TEXT NOT NULL CHECK (kind IN ('login', 'registration')),
+                  challenge TEXT NOT NULL UNIQUE,
+                  invitation_id TEXT,
+                  invitation_token_hash TEXT,
+                  principal_id TEXT,
+                  registration_origin TEXT,
+                  registration_relying_party_id TEXT,
+                  created_at TEXT NOT NULL,
+                  expires_at TEXT NOT NULL,
+                  consumed_at TEXT,
+                  CHECK (kind != 'login')
+                )
+              \`);
+            });
+
+            return Response.json({ rejected: true });
           }
 
           return super.fetch(request);
