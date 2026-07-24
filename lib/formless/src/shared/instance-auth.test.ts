@@ -6,6 +6,7 @@ import {
   parseAccountCompletionGateResolutionResult,
   parseAccountCompletionGateResult,
   parseAccountCompletionGateTarget,
+  parseAuthAccountStatusResult,
   parseCollaboratorInvitationAcceptanceRequest,
   parseCollaboratorInvitationAcceptanceStatusResponse,
   parseCollaboratorInvitationPasskeyRegistrationOptionsRequest,
@@ -16,15 +17,15 @@ import {
   parseInstanceAuthConfigInput,
   parseInstanceAuthErrorResponse,
   parseInstanceAuthRelyingPartyId,
-  parseOwnerLogoutResponse,
-  parseOwnerPasskeyLoginOptionsRequest,
-  parseOwnerPasskeyLoginOptionsResponse,
-  parseOwnerPasskeyLoginVerifyRequest,
-  parseOwnerPasskeyLoginVerifyResponse,
-  parseOwnerSessionStatusResponse,
-  ownerLoginRedirectLocationForRoute,
-  ownerLoginRedirectTargetFromSearch,
-  parseOwnerLoginRedirectTarget,
+  parseAccountLogoutResponse,
+  parseAccountPasskeyLoginOptionsRequest,
+  parseAccountPasskeyLoginOptionsResponse,
+  parseAccountPasskeyLoginVerifyRequest,
+  parseAccountPasskeyLoginVerifyResponse,
+  parseAccountSessionStatusResponse,
+  accountRedirectLocationForRoute,
+  accountRedirectTargetFromSearch,
+  parseAccountRedirectTarget,
 } from "./instance-auth.ts";
 
 const setupToken = "abcDEF0123456789_-abcDEF0123456789_-";
@@ -34,6 +35,11 @@ const owner = {
   name: "Ada Owner",
   email: "ada@example.com",
   createdAt: "2026-05-28T00:00:00.000Z",
+};
+const principal = {
+  displayName: "Ada Account",
+  email: "ada@example.com",
+  principalId: "principal:ada",
 };
 
 describe("instance auth origin policy", () => {
@@ -477,6 +483,27 @@ describe("account completion gate protocol", () => {
     ).toThrow("Account completion continuation result continueTo must be path-only.");
   });
 
+  it("parses display-safe forbidden account outcomes without target facts", () => {
+    const forbidden = {
+      principal,
+      status: "forbidden",
+    } as const;
+
+    expect(parseAuthAccountStatusResult(forbidden)).toEqual(forbidden);
+    expect(() =>
+      parseAuthAccountStatusResult({
+        ...forbidden,
+        routeId: "route:private",
+      }),
+    ).toThrow('Auth account forbidden result has unsupported key "routeId".');
+    expect(() =>
+      parseAuthAccountStatusResult({
+        ...forbidden,
+        sessionId: "private-session",
+      }),
+    ).toThrow("private browser-visible field");
+  });
+
   it("rejects unsupported gates and gate payload values", () => {
     expect(() => parseAccountCompletionGate({ kind: "captcha" })).toThrow(
       "Account completion gate kind is unsupported.",
@@ -556,70 +583,68 @@ describe("account completion gate protocol", () => {
   });
 });
 
-describe("owner passkey protocol", () => {
+describe("account passkey protocol", () => {
   it("parses login options, login verify, session status, and logout responses", () => {
-    expect(parseOwnerPasskeyLoginOptionsRequest({})).toEqual({});
-    expect(parseOwnerPasskeyLoginOptionsResponse({ options: loginOptions() })).toEqual({
+    expect(parseAccountPasskeyLoginOptionsRequest({})).toEqual({});
+    expect(parseAccountPasskeyLoginOptionsResponse({ options: loginOptions() })).toEqual({
       options: loginOptions(),
     });
     expect(
-      parseOwnerPasskeyLoginVerifyRequest({
+      parseAccountPasskeyLoginVerifyRequest({
         response: authenticationResponse(),
       }),
     ).toEqual({
       response: authenticationResponse(),
     });
     expect(
-      parseOwnerPasskeyLoginVerifyResponse({
+      parseAccountPasskeyLoginVerifyResponse({
         authenticated: true,
         continueTo: "/formless/auth",
-        owner,
+        principal,
         session: { expiresAt: "2026-06-28T00:00:00.000Z" },
       }),
     ).toEqual({
       authenticated: true,
       continueTo: "/formless/auth",
-      owner,
+      principal,
       session: { expiresAt: "2026-06-28T00:00:00.000Z" },
     });
     expect(
-      parseOwnerSessionStatusResponse({
+      parseAccountSessionStatusResponse({
         authenticated: false,
-        owner,
         setupComplete: true,
       }),
     ).toEqual({
       authenticated: false,
-      owner,
       setupComplete: true,
     });
     expect(
-      parseOwnerSessionStatusResponse({
+      parseAccountSessionStatusResponse({
         authenticated: true,
-        owner,
+        principal,
         session: { expiresAt: "2026-06-28T00:00:00.000Z" },
         setupComplete: true,
       }),
     ).toEqual({
       authenticated: true,
-      owner,
+      principal,
       session: { expiresAt: "2026-06-28T00:00:00.000Z" },
       setupComplete: true,
     });
     expect(
-      parseOwnerLogoutResponse({ authenticated: false, continueTo: "/formless/auth/sign-in" }),
+      parseAccountLogoutResponse({ authenticated: false, continueTo: "/formless/auth/sign-in" }),
     ).toEqual({ authenticated: false, continueTo: "/formless/auth/sign-in" });
   });
 
   it("rejects malformed passkey payloads and unsupported keys", () => {
     expect(() =>
-      parseOwnerPasskeyLoginVerifyRequest({
+      parseAccountPasskeyLoginVerifyRequest({
         redirectTo: "/apps/site",
         response: authenticationResponse(),
       }),
     ).toThrow('Passkey login verify request has unsupported key "redirectTo".');
     expect(() =>
-      parseOwnerPasskeyLoginVerifyRequest({
+      parseAccountPasskeyLoginVerifyRequest({
         response: {
           ...authenticationResponse(),
           type: "password",
@@ -627,24 +652,31 @@ describe("owner passkey protocol", () => {
       }),
     ).toThrow('Passkey login response type must be "public-key".');
     expect(() =>
-      parseOwnerPasskeyLoginVerifyResponse({
+      parseAccountPasskeyLoginVerifyResponse({
         authenticated: true,
         continueTo: "https://evil.example/apps/site",
-        owner,
+        principal,
         session: { expiresAt: "2026-06-28T00:00:00.000Z" },
       }),
     ).toThrow("Passkey login verify response continueTo must be path-only.");
     expect(() =>
-      parseOwnerPasskeyLoginVerifyResponse({
+      parseAccountPasskeyLoginVerifyResponse({
         authenticated: true,
         continueTo: "/apps/site",
-        owner,
+        principal,
         session: { expiresAt: "2026-06-28T00:00:00.000Z" },
       }),
     ).toThrow("Passkey login verify response continueTo must route through /formless/auth.");
-    expect(() => parseOwnerPasskeyLoginOptionsRequest({ setupToken })).toThrow(
+    expect(() => parseAccountPasskeyLoginOptionsRequest({ setupToken })).toThrow(
       'Passkey login options request has unsupported key "setupToken".',
     );
+    expect(() =>
+      parseAccountSessionStatusResponse({
+        authenticated: false,
+        owner,
+        setupComplete: true,
+      }),
+    ).toThrow('Account session status response has unsupported key "owner".');
   });
 
   it("parses public-safe error shapes without accepting private details", () => {
@@ -660,22 +692,20 @@ describe("owner passkey protocol", () => {
   });
 });
 
-describe("owner login redirects", () => {
+describe("account redirects", () => {
   it("keeps only same-origin path and query return targets", () => {
-    expect(parseOwnerLoginRedirectTarget("/apps/personal?screen=routes")).toBe(
+    expect(parseAccountRedirectTarget("/apps/personal?screen=routes")).toBe(
       "/apps/personal?screen=routes",
     );
     expect(
-      ownerLoginRedirectTargetFromSearch(
-        "?redirectTo=%2Fapps%2Fpersonal%2Fsettings%3Fpanel%3Ddeploy",
-      ),
+      accountRedirectTargetFromSearch("?redirectTo=%2Fapps%2Fpersonal%2Fsettings%3Fpanel%3Ddeploy"),
     ).toBe("/apps/personal/settings?panel=deploy");
-    expect(ownerLoginRedirectLocationForRoute("/apps/personal?screen=routes")).toBe(
+    expect(accountRedirectLocationForRoute("/apps/personal?screen=routes")).toBe(
       "/formless/auth/sign-in?redirectTo=%2Fapps%2Fpersonal%3Fscreen%3Droutes",
     );
   });
 
-  it("ignores unsafe owner login return targets", () => {
+  it("ignores unsafe account return targets", () => {
     for (const value of [
       "https://formless.local/apps/personal",
       "https://example.com/apps/personal",
@@ -686,11 +716,11 @@ describe("owner login redirects", () => {
       "/apps/personal\u0000",
       undefined,
     ]) {
-      expect(parseOwnerLoginRedirectTarget(value)).toBeUndefined();
+      expect(parseAccountRedirectTarget(value)).toBeUndefined();
     }
 
-    expect(ownerLoginRedirectTargetFromSearch("?redirectTo=https%3A%2F%2Fexample.com")).toBe("/");
-    expect(ownerLoginRedirectLocationForRoute("https://example.com/apps/personal")).toBe(
+    expect(accountRedirectTargetFromSearch("?redirectTo=https%3A%2F%2Fexample.com")).toBe("/");
+    expect(accountRedirectLocationForRoute("https://example.com/apps/personal")).toBe(
       "/formless/auth/sign-in?redirectTo=%2F",
     );
   });

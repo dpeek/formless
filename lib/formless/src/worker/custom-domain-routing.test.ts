@@ -24,7 +24,7 @@ import {
 import { runtimeTopologyRoutes } from "../shared/runtime-topology.ts";
 import {
   COLLABORATOR_INVITATION_ACCEPT_PATH,
-  ownerLoginRedirectLocationForRoute,
+  accountRedirectLocationForRoute,
   type AccountCompletionGateTarget,
 } from "../shared/instance-auth.ts";
 import type { SyncSocketServerMessage } from "../shared/protocol.ts";
@@ -267,13 +267,13 @@ describe("installed Site custom-domain Worker routing", () => {
       const schemaKeyApi = await fetchHost("admin.example.com", "/api/site/bootstrap");
 
       expect(home.status).toBe(302);
-      expect(home.headers.get("Location")).toBe(ownerLoginRedirectLocationForRoute("/"));
+      expect(home.headers.get("Location")).toBe(accountRedirectLocationForRoute("/"));
       expect(publicSitePage.status).toBe(302);
       expect(publicSitePage.headers.get("Location")).toBe(
-        ownerLoginRedirectLocationForRoute("/blog/starter-post"),
+        accountRedirectLocationForRoute("/blog/starter-post"),
       );
       expect(staleCookieHome.status).toBe(302);
-      expect(staleCookieHome.headers.get("Location")).toBe(ownerLoginRedirectLocationForRoute("/"));
+      expect(staleCookieHome.headers.get("Location")).toBe(accountRedirectLocationForRoute("/"));
       expect(mappingLookup.status).toBe(200);
       expect(schemaKeyApi.status).toBe(404);
       expect(assetRequests).toEqual([]);
@@ -392,7 +392,7 @@ describe("installed Site custom-domain Worker routing", () => {
 
     expect(unauthenticated.status).toBe(302);
     expect(unauthenticated.headers.get("Location")).toBe(
-      ownerLoginRedirectLocationForRoute(
+      accountRedirectLocationForRoute(
         `${runtimeTopologyRoutes.authAccountRoute}${startUrl.search}`,
       ),
     );
@@ -440,7 +440,7 @@ describe("installed Site custom-domain Worker routing", () => {
 
       expect(unauthenticated.status).toBe(302);
       expect(unauthenticated.headers.get("Location")).toBe(
-        ownerLoginRedirectLocationForRoute(accountPath),
+        accountRedirectLocationForRoute(accountPath),
       );
       expect(authenticated.status).toBe(302);
       expect(authenticated.headers.get("Location")).toBe("/");
@@ -474,11 +474,76 @@ describe("installed Site custom-domain Worker routing", () => {
 
       expect(unauthenticated.status).toBe(302);
       expect(unauthenticated.headers.get("Location")).toBe(
-        ownerLoginRedirectLocationForRoute(accountPath),
+        accountRedirectLocationForRoute(accountPath),
       );
       expect(authenticated.status).toBe(302);
       expect(authenticated.headers.get("Location")).toBe(returnTo);
     });
+  });
+
+  it("returns owners and instance admins through account continuation to instance management", async () => {
+    await resetWorkerState(harness, ["controlPlane", "auth"]);
+    await setupPrimaryProductionIdentity();
+    await patchRouteRecord("route:primary-production", { access: "management" });
+
+    const owner = await ensureTestIdentityOwner(harness, adminToken, {
+      name: "Management Journey Owner",
+    });
+    const ownerCookie = await createCentralAuthSessionCookieForPrincipal(owner.id);
+    const instanceAdmin = await createInstanceAdminPrincipalSessionCookie(
+      "Management Journey Admin",
+    );
+    const ordinary = await createActivePrincipalSessionCookie("Management Journey App User");
+    const accountPath = `${runtimeTopologyRoutes.authAccountRoute}?returnTo=%2Faccess`;
+
+    for (const cookie of [ownerCookie, instanceAdmin.cookie]) {
+      const status = await fetchAuth(accountPath, {
+        headers: { Accept: "application/json", Cookie: cookie },
+        redirect: "manual",
+      });
+      const statusBody = (await status.json()) as {
+        continueTo?: string;
+        status?: string;
+      };
+      const browser = await fetchAuth(accountPath, {
+        headers: { Accept: "text/html", Cookie: cookie },
+        redirect: "manual",
+      });
+
+      expect(status.status).toBe(200);
+      expect(statusBody).toMatchObject({
+        continueTo: "/access",
+        status: "complete",
+      });
+      expect(browser.status).toBe(302);
+      expect(browser.headers.get("Location")).toBe("/access");
+    }
+
+    const forbiddenStatus = await fetchAuth(accountPath, {
+      headers: { Accept: "application/json", Cookie: ordinary.cookie },
+      redirect: "manual",
+    });
+    const forbiddenBody = (await forbiddenStatus.json()) as {
+      principal?: { displayName?: string; principalId?: string };
+      status?: string;
+    };
+    const forbiddenBrowser = await fetchAuth(accountPath, {
+      headers: { Accept: "text/html", Cookie: ordinary.cookie },
+      redirect: "manual",
+    });
+
+    expect(forbiddenStatus.status).toBe(403);
+    expect(forbiddenBody).toMatchObject({
+      principal: {
+        displayName: "Management Journey App User",
+        principalId: ordinary.principalId,
+      },
+      status: "forbidden",
+    });
+    expect(forbiddenBrowser.status).toBe(200);
+    expect(forbiddenBrowser.headers.get("Location")).toBeNull();
+    expect(JSON.stringify(forbiddenBody)).not.toContain("/access");
+    expect(JSON.stringify(forbiddenBody)).not.toContain("routeId");
   });
 
   it("reports, revokes, and clears central auth-origin sessions", async () => {
@@ -501,7 +566,7 @@ describe("installed Site custom-domain Worker routing", () => {
     });
     const centralStatusBody = (await centralStatus.json()) as {
       authenticated?: boolean;
-      owner?: { id?: string };
+      principal?: { principalId?: string };
       session?: { expiresAt?: string };
       setupComplete?: boolean;
     };
@@ -510,7 +575,7 @@ describe("installed Site custom-domain Worker routing", () => {
     });
     const deployedOwnerStatusBody = (await deployedOwnerStatus.json()) as {
       authenticated?: boolean;
-      owner?: { id?: string };
+      principal?: { principalId?: string };
       setupComplete?: boolean;
     };
     const logout = await fetchHost("www.example.com", "/api/formless/session/logout", {
@@ -523,7 +588,7 @@ describe("installed Site custom-domain Worker routing", () => {
     });
     const afterLogoutBody = (await afterLogout.json()) as {
       authenticated?: boolean;
-      owner?: { id?: string };
+      principal?: { principalId?: string };
       setupComplete?: boolean;
     };
     const logoutSetCookie = requiredHeader(logout, "Set-Cookie");
@@ -531,16 +596,16 @@ describe("installed Site custom-domain Worker routing", () => {
     expect(centralStatus.status).toBe(200);
     expect(centralStatusBody).toMatchObject({
       authenticated: true,
-      owner: { id: owner.id },
+      principal: { principalId: owner.id },
       setupComplete: true,
     });
     expect(Date.parse(centralStatusBody.session?.expiresAt ?? "")).toBeGreaterThan(0);
     expect(deployedOwnerStatus.status).toBe(200);
     expect(deployedOwnerStatusBody).toMatchObject({
       authenticated: false,
-      owner: { id: owner.id },
       setupComplete: true,
     });
+    expect(deployedOwnerStatusBody).not.toHaveProperty("principal");
     expect(logout.status).toBe(200);
     expect(logoutBody.authenticated).toBe(false);
     expect(logoutSetCookie).toContain(`${CENTRAL_AUTH_SESSION_COOKIE_NAME}=;`);
@@ -548,9 +613,9 @@ describe("installed Site custom-domain Worker routing", () => {
     expect(afterLogout.status).toBe(200);
     expect(afterLogoutBody).toMatchObject({
       authenticated: false,
-      owner: { id: owner.id },
       setupComplete: true,
     });
+    expect(afterLogoutBody).not.toHaveProperty("principal");
   });
 
   it("accepts central auth-origin instance-admin sessions for management APIs", async () => {
@@ -783,7 +848,7 @@ describe("installed Site custom-domain Worker routing", () => {
     expect(assetRequests).toEqual(["/index.html"]);
   });
 
-  it("issues authenticated handoff grants for active principals while preserving owner rechecks", async () => {
+  it("returns app principals to authorized mapped app targets and forbids unavailable targets", async () => {
     await resetWorkerState(harness, ["controlPlane", "auth"]);
     await setupPrimaryProductionIdentity();
     await setupMappedApp({ access: "authenticated" });
@@ -799,6 +864,15 @@ describe("installed Site custom-domain Worker routing", () => {
       principal.cookie,
     );
     const callbackUrl = new URL(requiredHeader(grant, "Location"), startLocation);
+    const callback = await harness.mf.dispatchFetch(callbackUrl.toString(), {
+      headers: { Cookie: cookiePair(requiredHeader(start, "Set-Cookie")) },
+      redirect: "manual",
+    });
+    const hostSessionCookie = cookiePair(requiredHeader(callback, "Set-Cookie"));
+    const target = await fetchHost(mappedAppHost, "/schema?view=board", {
+      headers: { Accept: "text/html", Cookie: hostSessionCookie },
+      redirect: "manual",
+    });
 
     expect(start.status).toBe(302);
     expect(account.status).toBe(302);
@@ -806,6 +880,9 @@ describe("installed Site custom-domain Worker routing", () => {
     expect(grant.status).toBe(302);
     expect(callbackUrl.origin).toBe(`https://${mappedAppHost}`);
     expect(callbackUrl.pathname).toBe(INSTANCE_AUTH_HANDOFF_CALLBACK_PATH);
+    expect(callback.status).toBe(302);
+    expect(callback.headers.get("Location")).toBe("/schema?view=board");
+    expect(target.status).toBe(200);
 
     await resetWorkerState(harness, ["controlPlane", "auth"]);
     await setupPrimaryProductionIdentity();
@@ -819,20 +896,58 @@ describe("installed Site custom-domain Worker routing", () => {
       redirect: "manual",
     });
     const ownerOnlyStartUrl = new URL(requiredHeader(ownerOnlyStart, "Location"));
-    const ownerOnlyGrant = await harness.mf.dispatchFetch(ownerOnlyStartUrl.toString(), {
+    const ownerOnlyAccount = await harness.mf.dispatchFetch(ownerOnlyStartUrl.toString(), {
       headers: {
         Accept: "text/html",
         Cookie: ownerOnlyPrincipal.cookie,
       },
       redirect: "manual",
     });
-
-    expect(ownerOnlyGrant.status).toBe(302);
-    expect(ownerOnlyGrant.headers.get("Location")).toBe(
-      ownerLoginRedirectLocationForRoute(
-        `${runtimeTopologyRoutes.authAccountRoute}${ownerOnlyStartUrl.search}`,
-      ),
+    const ownerOnlyStatus = await harness.mf.dispatchFetch(ownerOnlyStartUrl.toString(), {
+      headers: {
+        Accept: "application/json",
+        Cookie: ownerOnlyPrincipal.cookie,
+      },
+      redirect: "manual",
+    });
+    const ownerOnlyStatusBody = (await ownerOnlyStatus.json()) as {
+      principal?: { displayName?: string; principalId?: string };
+      status?: string;
+    };
+    const handoffStartUrl = new URL(
+      `${INSTANCE_AUTH_HANDOFF_START_PATH}${ownerOnlyStartUrl.search}`,
+      ownerOnlyStartUrl,
     );
+    const ownerOnlyGrant = await harness.mf.dispatchFetch(handoffStartUrl.toString(), {
+      headers: {
+        Accept: "application/json",
+        Cookie: ownerOnlyPrincipal.cookie,
+      },
+      redirect: "manual",
+    });
+    const ownerOnlyGrantBody = (await ownerOnlyGrant.json()) as {
+      principal?: { principalId?: string };
+      status?: string;
+    };
+
+    expect(ownerOnlyAccount.status).toBe(200);
+    expect(ownerOnlyAccount.headers.get("Location")).toBeNull();
+    expect(ownerOnlyStatus.status).toBe(403);
+    expect(ownerOnlyStatusBody).toMatchObject({
+      principal: {
+        displayName: "Owner Route Non Owner Principal",
+        principalId: ownerOnlyPrincipal.principalId,
+      },
+      status: "forbidden",
+    });
+    expect(ownerOnlyGrant.status).toBe(403);
+    expect(ownerOnlyGrantBody).toEqual(ownerOnlyStatusBody);
+    expect(ownerOnlyGrant.headers.get("Location")).toBeNull();
+    expect(ownerOnlyGrant.headers.get("Set-Cookie")).toBeNull();
+    expect(JSON.stringify(ownerOnlyStatusBody)).not.toContain("targetOrigin");
+    expect(JSON.stringify(ownerOnlyStatusBody)).not.toContain("routeId");
+    expect(JSON.stringify(ownerOnlyStatusBody)).not.toContain("storageIdentity");
+    expect(JSON.stringify(ownerOnlyStatusBody)).not.toContain("grant");
   });
 
   it("authorizes matching app admins through central and host-local sessions with owner override", async () => {
@@ -878,7 +993,6 @@ describe("installed Site custom-domain Worker routing", () => {
       headers: { Accept: "text/html", Cookie: hostCookie },
       redirect: "manual",
     });
-
     await postAdminJson(
       `${IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX}/operations/role-assignment/update`,
       {
@@ -2075,7 +2189,7 @@ describe("installed Site custom-domain Worker routing", () => {
     });
     const sessionStatusBody = (await sessionStatus.json()) as {
       authenticated?: boolean;
-      owner?: { id?: string };
+      principal?: { principalId?: string };
       session?: { expiresAt?: string };
       setupComplete?: boolean;
     };
@@ -2108,7 +2222,7 @@ describe("installed Site custom-domain Worker routing", () => {
     expect(sessionStatus.status).toBe(200);
     expect(sessionStatusBody).toMatchObject({
       authenticated: true,
-      owner: { id: owner.id },
+      principal: { principalId: owner.id },
       setupComplete: true,
     });
     expect(Date.parse(sessionStatusBody.session?.expiresAt ?? "")).toBeGreaterThan(0);
@@ -2210,7 +2324,7 @@ describe("installed Site custom-domain Worker routing", () => {
     expect(account.status).toBe(200);
     expect(accountReturn.status).toBe(302);
     expect(accountReturn.headers.get("Location")).toBe(
-      ownerLoginRedirectLocationForRoute(
+      accountRedirectLocationForRoute(
         `${runtimeTopologyRoutes.authAccountRoute}?returnTo=%2Fdeployments`,
       ),
     );
@@ -2581,7 +2695,7 @@ describe("installed Site custom-domain Worker routing", () => {
     });
 
     expect(home.status).toBe(302);
-    expect(home.headers.get("Location")).toBe(ownerLoginRedirectLocationForRoute("/"));
+    expect(home.headers.get("Location")).toBe(accountRedirectLocationForRoute("/"));
     expect(nested.status).toBe(404);
     expect(assetRequests).toEqual([]);
   });

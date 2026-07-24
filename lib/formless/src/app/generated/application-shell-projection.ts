@@ -23,7 +23,7 @@ import {
   type GeneratedRootNavigationFacts,
 } from "../../client/generated-authoring.ts";
 import type { HomeScreenModel } from "../../client/views.ts";
-import type { OwnerSessionStatusResponse } from "../../shared/instance-auth.ts";
+import type { AccountSessionStatusResponse } from "../../shared/instance-auth.ts";
 import { COLLABORATOR_INVITATION_ACCEPT_PATH } from "../../shared/instance-auth.ts";
 import {
   isRuntimeAuthAccountRoutePath,
@@ -84,7 +84,7 @@ export type ProjectGeneratedApplicationShellOptions = {
   currentPath: string;
   installs?: readonly AppInstall[] | undefined;
   logoutState?: GeneratedShellLogoutState | undefined;
-  ownerSession?: OwnerSessionStatusResponse | undefined;
+  accountSession?: AccountSessionStatusResponse | undefined;
   resetState?: GeneratedShellResetState | undefined;
   root?: GeneratedShellRootProjectionInput | undefined;
   routeWorld: RuntimeWorldMount | undefined;
@@ -392,20 +392,20 @@ export function selectGeneratedShellReset(
 }
 
 export function selectGeneratedShellSession(
-  ownerSession: OwnerSessionStatusResponse | undefined,
+  accountSession: AccountSessionStatusResponse | undefined,
   logoutState: GeneratedShellLogoutState = "idle",
 ): ShellSessionContract {
   const id = `${GENERATED_APPLICATION_SHELL_ID}:session`;
 
-  if (!ownerSession?.authenticated) {
+  if (!accountSession?.authenticated) {
     return { id, kind: "shellSession", state: "anonymous" };
   }
 
   return {
     id,
     identity: {
-      displayName: ownerSession.owner.name,
-      ...(ownerSession.owner.email ? { secondaryLabel: ownerSession.owner.email } : {}),
+      displayName: accountSession.principal.displayName,
+      ...(accountSession.principal.email ? { secondaryLabel: accountSession.principal.email } : {}),
     },
     kind: "shellSession",
     logout: {
@@ -442,7 +442,7 @@ export function projectGeneratedApplicationShell({
   currentPath,
   installs = [],
   logoutState = "idle",
-  ownerSession,
+  accountSession,
   resetState,
   root,
   routeWorld,
@@ -528,12 +528,12 @@ export function projectGeneratedApplicationShell({
   }
 
   sections.push({
-    accessibilityLabel: "Owner session",
+    accessibilityLabel: "Account session",
     destinations: [],
-    id: `${GENERATED_APPLICATION_SHELL_ID}:owner-session`,
+    id: `${GENERATED_APPLICATION_SHELL_ID}:account-session`,
     kind: "shellNavigationSection",
     role: "session",
-    session: selectGeneratedShellSession(ownerSession, logoutState),
+    session: selectGeneratedShellSession(accountSession, logoutState),
     shellId: GENERATED_APPLICATION_SHELL_ID,
   });
 

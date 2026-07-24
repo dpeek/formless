@@ -28,7 +28,7 @@ export type RuntimeTopologyRoutePolicy = {
   installedAppApiRoutes: boolean;
   installedAppBrowserRoutes: boolean;
   installedSitePublicRoutes: boolean;
-  ownerSessionBrowserRoutes: boolean;
+  accountSessionBrowserRoutes: boolean;
   schemaKeyApiRoutes: boolean;
   schemaKeyBrowserRoutes: boolean;
   workspaceGatewayApiRoutes: boolean;
@@ -89,10 +89,10 @@ export type RuntimeRouteBaseMatch = {
   suffixSegments: readonly string[];
 };
 
-const ownerSessionClientRoutePaths = [runtimeTopologyRoutes.authAccountRoute] as const;
+const accountSessionClientRoutePaths = [runtimeTopologyRoutes.authAccountRoute] as const;
 const clientRoutePaths = [
   runtimeTopologyRoutes.localSessionRoute,
-  ...ownerSessionClientRoutePaths,
+  ...accountSessionClientRoutePaths,
 ] as const;
 const clientRoutePrefixes = [
   runtimeTopologyRoutes.appRouteBase,
@@ -232,7 +232,7 @@ export function runtimeRoutePolicyForProfileKind(
     installedAppApiRoutes: true,
     installedAppBrowserRoutes: instanceBrowserRoutes,
     installedSitePublicRoutes: instanceBrowserRoutes,
-    ownerSessionBrowserRoutes: instanceBrowserRoutes || profileKind === "publishedSite",
+    accountSessionBrowserRoutes: instanceBrowserRoutes || profileKind === "publishedSite",
     schemaKeyApiRoutes: profileKind !== "instance",
     schemaKeyBrowserRoutes: profileKind === "dev",
     workspaceGatewayApiRoutes,
@@ -252,7 +252,7 @@ export function isRuntimeClientShellRoute(pathname: string): boolean {
 
 export function isRuntimePublishedProfileClientShellRoute(pathname: string): boolean {
   return (
-    isRuntimeOwnerSessionClientShellPath(pathname) ||
+    isRuntimeAccountSessionClientShellPath(pathname) ||
     publishedProfileClientRoutePrefixes.some((prefix) => routeMatchesPrefix(pathname, prefix))
   );
 }
@@ -375,9 +375,9 @@ function isRuntimeClientShellPath(pathname: string): boolean {
   return clientRoutePaths.includes(pathname as (typeof clientRoutePaths)[number]);
 }
 
-function isRuntimeOwnerSessionClientShellPath(pathname: string): boolean {
-  return ownerSessionClientRoutePaths.includes(
-    pathname as (typeof ownerSessionClientRoutePaths)[number],
+function isRuntimeAccountSessionClientShellPath(pathname: string): boolean {
+  return accountSessionClientRoutePaths.includes(
+    pathname as (typeof accountSessionClientRoutePaths)[number],
   );
 }
 

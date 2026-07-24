@@ -1,7 +1,7 @@
 import {
-  parseOwnerLoginRedirectTarget,
+  parseAccountRedirectTarget,
   type AccountCompletionGateResolutionResult,
-  type OwnerLoginRedirectTarget,
+  type AccountRedirectTarget,
 } from "../shared/instance-auth.ts";
 
 const instanceAuthHandoffStartPath = "/formless/auth/handoff";
@@ -11,7 +11,7 @@ export function accountCompletionContinueToFromRequest(
   request: Request,
   accountCompletion: AccountCompletionGateResolutionResult,
   authOrigin: string | undefined,
-): { continueTo?: OwnerLoginRedirectTarget } {
+): { continueTo?: AccountRedirectTarget } {
   if (accountCompletion.status !== "complete") {
     return {};
   }
@@ -28,7 +28,7 @@ export function accountCompletionContinueToFromRequest(
 function accountCompletionHandoffContinueToFromRequest(
   request: Request,
   accountCompletion: Extract<AccountCompletionGateResolutionResult, { status: "complete" }>,
-): OwnerLoginRedirectTarget | undefined {
+): AccountRedirectTarget | undefined {
   const url = new URL(request.url);
   const nonceHash = base64UrlSearchParam(url.searchParams.get("nonceHash"));
   const state = base64UrlSearchParam(url.searchParams.get("state"));
@@ -62,7 +62,7 @@ function accountCompletionHandoffContinueToFromRequest(
   handoffSearch.set("nonceHash", nonceHash);
   handoffSearch.set("state", state);
 
-  return parseOwnerLoginRedirectTarget(`${instanceAuthHandoffStartPath}?${handoffSearch}`);
+  return parseAccountRedirectTarget(`${instanceAuthHandoffStartPath}?${handoffSearch}`);
 }
 
 function base64UrlSearchParam(value: string | null): string | undefined {

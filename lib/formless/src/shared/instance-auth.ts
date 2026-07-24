@@ -28,7 +28,6 @@ import type {
   PublicSafeOperationInputField,
 } from "@dpeek/formless-schema";
 
-import { type OwnerIdentity } from "./protocol.ts";
 import {
   parseRuntimeRouteAccess,
   parseRuntimeRouteRequiredRole,
@@ -50,43 +49,48 @@ export const FORMLESS_INSTANCE_AUTH_RELYING_PARTY_NAME_ENV_NAME =
   "FORMLESS_INSTANCE_AUTH_RELYING_PARTY_NAME";
 export const COLLABORATOR_INVITATION_ACCEPT_PATH = "/formless/auth/invitations/accept";
 
-export type OwnerSessionSummary = {
+export type AccountSessionSummary = {
   expiresAt: string;
 };
 
-export type OwnerPasskeyLoginOptionsRequest = Record<string, never>;
+export type AccountPrincipalIdentity = {
+  displayName: string;
+  email?: string;
+  principalId: string;
+};
 
-export type OwnerPasskeyLoginOptionsResponse = {
+export type AccountPasskeyLoginOptionsRequest = Record<string, never>;
+
+export type AccountPasskeyLoginOptionsResponse = {
   options: PublicKeyCredentialRequestOptionsJSON;
 };
 
-export type OwnerPasskeyLoginVerifyRequest = {
+export type AccountPasskeyLoginVerifyRequest = {
   response: AuthenticationResponseJSON;
 };
 
-export type OwnerPasskeyLoginVerifyResponse = {
+export type AccountPasskeyLoginVerifyResponse = {
   authenticated: true;
-  continueTo: OwnerLoginRedirectTarget;
-  owner: OwnerIdentity;
-  session: OwnerSessionSummary;
+  continueTo: AccountRedirectTarget;
+  principal: AccountPrincipalIdentity;
+  session: AccountSessionSummary;
 };
 
-export type OwnerSessionStatusResponse =
+export type AccountSessionStatusResponse =
   | {
       authenticated: false;
-      owner?: OwnerIdentity;
       setupComplete: boolean;
     }
   | {
       authenticated: true;
-      owner: OwnerIdentity;
-      session: OwnerSessionSummary;
+      principal: AccountPrincipalIdentity;
+      session: AccountSessionSummary;
       setupComplete: true;
     };
 
-export type OwnerLogoutResponse = {
+export type AccountLogoutResponse = {
   authenticated: false;
-  continueTo?: OwnerLoginRedirectTarget;
+  continueTo?: AccountRedirectTarget;
 };
 
 export type InstanceAuthErrorResponse = {
@@ -161,7 +165,7 @@ export type CollaboratorInvitationPasskeyRegistrationVerifyResponse = {
   continueTo?: AuthSuccessContinuationTarget;
   handoff?: CollaboratorInvitationAcceptanceHandoffSummary;
   invitation: CollaboratorInvitationAcceptanceInvitationSummary;
-  session: OwnerSessionSummary;
+  session: AccountSessionSummary;
   verified: true;
 };
 
@@ -223,7 +227,7 @@ export type AccountCompletionGateTarget = {
   access?: Exclude<RuntimeRouteAccess, "anonymous">;
   appInstallId?: string;
   requiredRole?: RuntimeRouteRequiredRole;
-  returnTo: OwnerLoginRedirectTarget;
+  returnTo: AccountRedirectTarget;
   routeId: string;
   selectedOrganization?: string;
   storageIdentity?: string;
@@ -321,7 +325,7 @@ export type AccountCompletionGateResult = {
 };
 
 export type AccountCompletionContinuationResult = {
-  continueTo: OwnerLoginRedirectTarget;
+  continueTo: AccountRedirectTarget;
   status: "complete";
   target: AccountCompletionGateTarget;
 };
@@ -330,28 +334,35 @@ export type AccountCompletionGateResolutionResult =
   | AccountCompletionContinuationResult
   | AccountCompletionGateResult;
 
-export type OwnerLoginRedirectTarget = `/${string}`;
+export type AccountAuthorizationForbiddenResult = {
+  principal: AccountPrincipalIdentity;
+  status: "forbidden";
+};
+
+export type AuthAccountStatusResult =
+  | AccountAuthorizationForbiddenResult
+  | AccountCompletionGateResolutionResult;
+
+export type AccountRedirectTarget = `/${string}`;
 export type AuthSuccessContinuationTarget =
-  | OwnerLoginRedirectTarget
+  | AccountRedirectTarget
   | `http://${string}`
   | `https://${string}`;
 
-export const ownerLoginDefaultRedirectTarget = "/" satisfies OwnerLoginRedirectTarget;
-export const ownerPasskeyLoginContinuationTarget =
-  "/formless/auth" satisfies OwnerLoginRedirectTarget;
+export const accountDefaultRedirectTarget = "/" satisfies AccountRedirectTarget;
+export const accountPasskeyLoginContinuationTarget =
+  "/formless/auth" satisfies AccountRedirectTarget;
 
-const ownerLoginRedirectBaseOrigin = "https://formless.local";
+const accountRedirectBaseOrigin = "https://formless.local";
 
-export function parseOwnerLoginRedirectTarget(
-  value: unknown,
-): OwnerLoginRedirectTarget | undefined {
+export function parseAccountRedirectTarget(value: unknown): AccountRedirectTarget | undefined {
   if (
     typeof value !== "string" ||
     value === "" ||
     !value.startsWith("/") ||
     value.startsWith("//") ||
     value.startsWith("/\\") ||
-    hasOwnerLoginRedirectControlCharacter(value)
+    hasAccountRedirectControlCharacter(value)
   ) {
     return undefined;
   }
@@ -359,44 +370,42 @@ export function parseOwnerLoginRedirectTarget(
   let url: URL;
 
   try {
-    url = new URL(value, ownerLoginRedirectBaseOrigin);
+    url = new URL(value, accountRedirectBaseOrigin);
   } catch {
     return undefined;
   }
 
-  if (url.origin !== ownerLoginRedirectBaseOrigin || url.username || url.password || url.hash) {
+  if (url.origin !== accountRedirectBaseOrigin || url.username || url.password || url.hash) {
     return undefined;
   }
 
-  return `${url.pathname}${url.search}` as OwnerLoginRedirectTarget;
+  return `${url.pathname}${url.search}` as AccountRedirectTarget;
 }
 
-export function ownerLoginRedirectTargetFromSearch(search: string): OwnerLoginRedirectTarget {
+export function accountRedirectTargetFromSearch(search: string): AccountRedirectTarget {
   const normalized = search.startsWith("?") ? search : `?${search}`;
   const redirectTo = new URLSearchParams(normalized).get("redirectTo");
 
-  return parseOwnerLoginRedirectTarget(redirectTo) ?? ownerLoginDefaultRedirectTarget;
+  return parseAccountRedirectTarget(redirectTo) ?? accountDefaultRedirectTarget;
 }
 
-export function ownerLoginRedirectLocationForRoute(
+export function accountRedirectLocationForRoute(
   routeTarget: string,
 ): `${typeof runtimeTopologyRoutes.authAccountSignInRoute}?${string}` {
-  const redirectTarget =
-    parseOwnerLoginRedirectTarget(routeTarget) ?? ownerLoginDefaultRedirectTarget;
+  const redirectTarget = parseAccountRedirectTarget(routeTarget) ?? accountDefaultRedirectTarget;
 
   return `${runtimeTopologyRoutes.authAccountSignInRoute}?redirectTo=${encodeURIComponent(redirectTarget)}`;
 }
 
 export function authAccountContinuationLocationForReturnTarget(
   routeTarget: string,
-): OwnerLoginRedirectTarget {
-  const redirectTarget =
-    parseOwnerLoginRedirectTarget(routeTarget) ?? ownerLoginDefaultRedirectTarget;
+): AccountRedirectTarget {
+  const redirectTarget = parseAccountRedirectTarget(routeTarget) ?? accountDefaultRedirectTarget;
 
-  return `${runtimeTopologyRoutes.authAccountRoute}?returnTo=${encodeURIComponent(redirectTarget)}` as OwnerLoginRedirectTarget;
+  return `${runtimeTopologyRoutes.authAccountRoute}?returnTo=${encodeURIComponent(redirectTarget)}` as AccountRedirectTarget;
 }
 
-function hasOwnerLoginRedirectControlCharacter(value: string): boolean {
+function hasAccountRedirectControlCharacter(value: string): boolean {
   for (let index = 0; index < value.length; index += 1) {
     const code = value.charCodeAt(index);
 
@@ -550,9 +559,9 @@ export function parseInstanceAuthRelyingPartyName(value: unknown): string {
   return parseTrimmedNonEmptyString("Instance auth relying-party name", value);
 }
 
-export function parseOwnerPasskeyLoginOptionsRequest(
+export function parseAccountPasskeyLoginOptionsRequest(
   value: unknown,
-): OwnerPasskeyLoginOptionsRequest {
+): AccountPasskeyLoginOptionsRequest {
   const object = parseObject("Passkey login options request", value);
 
   assertKeys("Passkey login options request", object, []);
@@ -560,9 +569,9 @@ export function parseOwnerPasskeyLoginOptionsRequest(
   return {};
 }
 
-export function parseOwnerPasskeyLoginOptionsResponse(
+export function parseAccountPasskeyLoginOptionsResponse(
   value: unknown,
-): OwnerPasskeyLoginOptionsResponse {
+): AccountPasskeyLoginOptionsResponse {
   const object = parseObject("Passkey login options response", value);
 
   assertKeys("Passkey login options response", object, ["options"]);
@@ -572,9 +581,9 @@ export function parseOwnerPasskeyLoginOptionsResponse(
   };
 }
 
-export function parseOwnerPasskeyLoginVerifyRequest(
+export function parseAccountPasskeyLoginVerifyRequest(
   value: unknown,
-): OwnerPasskeyLoginVerifyRequest {
+): AccountPasskeyLoginVerifyRequest {
   const object = parseObject("Passkey login verify request", value);
 
   assertKeys("Passkey login verify request", object, ["response"]);
@@ -584,15 +593,15 @@ export function parseOwnerPasskeyLoginVerifyRequest(
   };
 }
 
-export function parseOwnerPasskeyLoginVerifyResponse(
+export function parseAccountPasskeyLoginVerifyResponse(
   value: unknown,
-): OwnerPasskeyLoginVerifyResponse {
+): AccountPasskeyLoginVerifyResponse {
   const object = parseObject("Passkey login verify response", value);
 
   assertKeys("Passkey login verify response", object, [
     "authenticated",
     "continueTo",
-    "owner",
+    "principal",
     "session",
   ]);
 
@@ -602,69 +611,61 @@ export function parseOwnerPasskeyLoginVerifyResponse(
 
   return {
     authenticated: true,
-    continueTo: parseOwnerPasskeyLoginContinuationTarget(
+    continueTo: parseAccountPasskeyLoginContinuationTarget(
       "Passkey login verify response continueTo",
       object.continueTo,
     ),
-    owner: parseOwnerIdentity("Passkey login owner", object.owner),
-    session: parseOwnerSessionSummary("Passkey login session", object.session),
+    principal: parseAccountPrincipalIdentity("Passkey login principal", object.principal),
+    session: parseAccountSessionSummary("Passkey login session", object.session),
   };
 }
 
-export function parseOwnerSessionStatusResponse(value: unknown): OwnerSessionStatusResponse {
-  const object = parseObject("Owner session status response", value);
+export function parseAccountSessionStatusResponse(value: unknown): AccountSessionStatusResponse {
+  const object = parseObject("Account session status response", value);
 
   if (object.authenticated === true) {
-    assertKeys("Owner session status response", object, [
+    assertKeys("Account session status response", object, [
       "authenticated",
-      "owner",
+      "principal",
       "session",
       "setupComplete",
     ]);
 
     if (object.setupComplete !== true) {
-      throw new Error("Owner session status response setupComplete must be true.");
+      throw new Error("Account session status response setupComplete must be true.");
     }
 
     return {
       authenticated: true,
-      owner: parseOwnerIdentity("Owner session owner", object.owner),
-      session: parseOwnerSessionSummary("Owner session", object.session),
+      principal: parseAccountPrincipalIdentity("Account session principal", object.principal),
+      session: parseAccountSessionSummary("Account session", object.session),
       setupComplete: true,
     };
   }
 
   if (object.authenticated !== false) {
-    throw new Error("Owner session status response authenticated must be a boolean.");
+    throw new Error("Account session status response authenticated must be a boolean.");
   }
 
-  assertKeys(
-    "Owner session status response",
-    object,
-    ["authenticated", "setupComplete"],
-    ["owner"],
-  );
+  assertKeys("Account session status response", object, ["authenticated", "setupComplete"]);
 
   if (typeof object.setupComplete !== "boolean") {
-    throw new Error("Owner session status response setupComplete must be a boolean.");
+    throw new Error("Account session status response setupComplete must be a boolean.");
   }
 
   return {
     authenticated: false,
-    ...(object.owner === undefined
-      ? {}
-      : { owner: parseOwnerIdentity("Owner session owner", object.owner) }),
     setupComplete: object.setupComplete,
   };
 }
 
-export function parseOwnerLogoutResponse(value: unknown): OwnerLogoutResponse {
-  const object = parseObject("Owner logout response", value);
+export function parseAccountLogoutResponse(value: unknown): AccountLogoutResponse {
+  const object = parseObject("Account logout response", value);
 
-  assertKeys("Owner logout response", object, ["authenticated"], ["continueTo"]);
+  assertKeys("Account logout response", object, ["authenticated"], ["continueTo"]);
 
   if (object.authenticated !== false) {
-    throw new Error("Owner logout response authenticated must be false.");
+    throw new Error("Account logout response authenticated must be false.");
   }
 
   return {
@@ -672,8 +673,8 @@ export function parseOwnerLogoutResponse(value: unknown): OwnerLogoutResponse {
     ...(object.continueTo === undefined
       ? {}
       : {
-          continueTo: parseOwnerLoginContinuationTarget(
-            "Owner logout response continueTo",
+          continueTo: parseAccountContinuationTarget(
+            "Account logout response continueTo",
             object.continueTo,
           ),
         }),
@@ -747,7 +748,7 @@ export function parseAccountCompletionGateTarget(value: unknown): AccountComplet
     ...(access === undefined ? {} : { access }),
     ...(appInstallId === undefined ? {} : { appInstallId }),
     ...(requiredRole === undefined ? {} : { requiredRole }),
-    returnTo: parseOwnerLoginContinuationTarget(
+    returnTo: parseAccountContinuationTarget(
       "Account completion gate target returnTo",
       object.returnTo,
     ),
@@ -983,7 +984,7 @@ export function parseAccountCompletionContinuationResult(
   }
 
   return {
-    continueTo: parseOwnerLoginContinuationTarget(
+    continueTo: parseAccountContinuationTarget(
       "Account completion continuation result continueTo",
       object.continueTo,
     ),
@@ -1008,6 +1009,23 @@ export function parseAccountCompletionGateResolutionResult(
   }
 
   throw new Error("Account completion result status is unsupported.");
+}
+
+export function parseAuthAccountStatusResult(value: unknown): AuthAccountStatusResult {
+  assertNoAccountCompletionPrivateResponseKeys("Auth account status result", value);
+
+  const object = parseObject("Auth account status result", value);
+
+  if (object.status !== "forbidden") {
+    return parseAccountCompletionGateResolutionResult(object);
+  }
+
+  assertKeys("Auth account forbidden result", object, ["principal", "status"]);
+
+  return {
+    principal: parseAccountPrincipalIdentity("Auth account forbidden principal", object.principal),
+    status: "forbidden",
+  };
 }
 
 export function parseCollaboratorInvitationAcceptanceRequest(
@@ -1154,7 +1172,7 @@ export function parseCollaboratorInvitationPasskeyRegistrationVerifyResponse(
       ? {}
       : { handoff: parseCollaboratorInvitationAcceptanceHandoffSummary(object.handoff) }),
     invitation: parseCollaboratorInvitationAcceptanceInvitationSummary(object.invitation),
-    session: parseOwnerSessionSummary(
+    session: parseAccountSessionSummary(
       "Collaborator invitation passkey registration verify session",
       object.session,
     ),
@@ -1188,7 +1206,7 @@ function parseCollaboratorInvitationAcceptanceHandoffSummary(
 
   assertKeys("Collaborator invitation acceptance handoff", object, ["returnTo", "targetOrigin"]);
 
-  const returnTo = parseOwnerLoginRedirectTarget(object.returnTo);
+  const returnTo = parseAccountRedirectTarget(object.returnTo);
 
   if (!returnTo) {
     throw new Error("Collaborator invitation acceptance handoff returnTo must be path-only.");
@@ -1200,11 +1218,8 @@ function parseCollaboratorInvitationAcceptanceHandoffSummary(
   };
 }
 
-function parseOwnerLoginContinuationTarget(
-  context: string,
-  value: unknown,
-): OwnerLoginRedirectTarget {
-  const target = parseOwnerLoginRedirectTarget(value);
+function parseAccountContinuationTarget(context: string, value: unknown): AccountRedirectTarget {
+  const target = parseAccountRedirectTarget(value);
 
   if (!target) {
     throw new Error(`${context} must be path-only.`);
@@ -1213,14 +1228,14 @@ function parseOwnerLoginContinuationTarget(
   return target;
 }
 
-function parseOwnerPasskeyLoginContinuationTarget(
+function parseAccountPasskeyLoginContinuationTarget(
   context: string,
   value: unknown,
-): OwnerLoginRedirectTarget {
-  const target = parseOwnerLoginContinuationTarget(context, value);
-  const targetUrl = new URL(target, ownerLoginRedirectBaseOrigin);
+): AccountRedirectTarget {
+  const target = parseAccountContinuationTarget(context, value);
+  const targetUrl = new URL(target, accountRedirectBaseOrigin);
 
-  if (targetUrl.pathname !== ownerPasskeyLoginContinuationTarget) {
+  if (targetUrl.pathname !== accountPasskeyLoginContinuationTarget) {
     throw new Error(`${context} must route through /formless/auth.`);
   }
 
@@ -1231,13 +1246,13 @@ function parseAuthSuccessContinuationTarget(
   context: string,
   value: unknown,
 ): AuthSuccessContinuationTarget {
-  const pathOnlyTarget = parseOwnerLoginRedirectTarget(value);
+  const pathOnlyTarget = parseAccountRedirectTarget(value);
 
   if (pathOnlyTarget) {
     return pathOnlyTarget;
   }
 
-  if (typeof value !== "string" || value === "" || hasOwnerLoginRedirectControlCharacter(value)) {
+  if (typeof value !== "string" || value === "" || hasAccountRedirectControlCharacter(value)) {
     throw new Error(`${context} must be path-only or an HTTP(S) URL.`);
   }
 
@@ -1603,7 +1618,7 @@ function parseAccountCompletionDisplaySafeUrl(context: string, value: unknown): 
     throw new Error(`${context} must use HTTP or HTTPS.`);
   }
 
-  if (hasOwnerLoginRedirectControlCharacter(raw)) {
+  if (hasAccountRedirectControlCharacter(raw)) {
     throw new Error(`${context} must not include control characters.`);
   }
 
@@ -2056,10 +2071,10 @@ function parseClientExtensionResults(
   return { ...object } as AuthenticationExtensionsClientOutputs;
 }
 
-function parseOwnerIdentity(context: string, value: unknown): OwnerIdentity {
+function parseAccountPrincipalIdentity(context: string, value: unknown): AccountPrincipalIdentity {
   const object = parseObject(context, value);
 
-  assertKeys(context, object, ["createdAt", "id", "name"], ["email"]);
+  assertKeys(context, object, ["displayName", "principalId"], ["email"]);
 
   const email =
     object.email === undefined
@@ -2067,14 +2082,13 @@ function parseOwnerIdentity(context: string, value: unknown): OwnerIdentity {
       : parseTrimmedNonEmptyString(`${context} email`, object.email);
 
   return {
-    id: parseTrimmedNonEmptyString(`${context} id`, object.id),
-    name: parseTrimmedNonEmptyString(`${context} name`, object.name),
+    displayName: parseTrimmedNonEmptyString(`${context} displayName`, object.displayName),
     ...(email === undefined ? {} : { email }),
-    createdAt: parseTrimmedNonEmptyString(`${context} createdAt`, object.createdAt),
+    principalId: parseTrimmedNonEmptyString(`${context} principalId`, object.principalId),
   };
 }
 
-function parseOwnerSessionSummary(context: string, value: unknown): OwnerSessionSummary {
+function parseAccountSessionSummary(context: string, value: unknown): AccountSessionSummary {
   const object = parseObject(context, value);
 
   assertKeys(context, object, ["expiresAt"]);

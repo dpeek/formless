@@ -7,13 +7,15 @@ import {
 import { nowIsoString } from "../shared/clock.ts";
 import {
   FORMLESS_INSTANCE_AUTH_ORIGIN_ENV_NAME,
-  ownerLoginRedirectLocationForRoute,
+  accountRedirectLocationForRoute,
   parseAccountCompletionGateResolutionResult,
+  parseAuthAccountStatusResult,
   parseInstanceAuthCanonicalOrigin,
-  parseOwnerLoginRedirectTarget,
+  parseAccountRedirectTarget,
+  type AccountAuthorizationForbiddenResult,
   type AccountCompletionGateResolutionResult,
   type AccountCompletionGateTarget,
-  type OwnerLoginRedirectTarget,
+  type AccountRedirectTarget,
 } from "../shared/instance-auth.ts";
 import {
   acceptsRuntimeHtml,
@@ -37,7 +39,6 @@ import {
   type HostAuthSession,
   type HostAuthSessionValidationFailureReason,
   type InstanceAuthAccessReaders,
-  type InstanceAuthAccessFailureReason,
   type InstanceAuthAccessResult,
   type InstanceAuthAuthorityRequirement,
   type InstanceAuthSession,
@@ -59,6 +60,7 @@ import {
   readInternalIdentityAuthorityForPrincipal,
   readInternalActiveIdentityPrincipal,
   readInternalIdentityOwnerForPrincipal,
+  type ActiveIdentityPrincipal,
 } from "./identity-owner-internal.ts";
 import {
   ownerSessionSigningSecret,
@@ -180,13 +182,13 @@ export type ProtectedRouteAuthRedirectPlan =
   | {
       kind: "account";
       location: string;
-      returnTo: OwnerLoginRedirectTarget;
+      returnTo: AccountRedirectTarget;
     }
   | {
       authOrigin: string;
       entryPath: string;
       kind: "handoff";
-      returnTo: OwnerLoginRedirectTarget;
+      returnTo: AccountRedirectTarget;
       target: InstanceAuthSessionTargetBinding;
     }
   | { error: "Handoff return target must be path-only."; kind: "invalid-return-target" }
@@ -198,7 +200,7 @@ export function planProtectedRouteAuthRedirect(input: {
   requestOrigin: string;
   requiredAccess: ProtectedRouteAccess;
   runtimeRoute: InstanceRuntimeRouteResolution | undefined;
-  safeReturnTo: OwnerLoginRedirectTarget | undefined;
+  safeReturnTo: AccountRedirectTarget | undefined;
 }): ProtectedRouteAuthRedirectPlan {
   if (!input.authOrigin) {
     return { kind: "unavailable" };
@@ -286,7 +288,7 @@ async function startProtectedRouteAuthRedirect(
     requestOrigin: requestOriginForAuth(request),
     requiredAccess: options.requiredAccess,
     runtimeRoute,
-    safeReturnTo: parseOwnerLoginRedirectTarget(`${url.pathname}${url.search}`),
+    safeReturnTo: parseAccountRedirectTarget(`${url.pathname}${url.search}`),
   });
 
   if (plan.kind === "unavailable") {
@@ -388,6 +390,10 @@ export type AuthAccountHandoffBrowserContinuationResult =
       accountCompletion: Extract<AccountCompletionGateResolutionResult, { status: "blocked" }>;
       kind: "blocked";
     }
+  | {
+      accountAuthorization: AccountAuthorizationForbiddenResult;
+      kind: "forbidden";
+    }
   | { kind: "response"; response: Response };
 
 export type AuthAccountHandoffContinuationResolution =
@@ -398,6 +404,10 @@ export type AuthAccountHandoffContinuationResolution =
   | {
       accountCompletion: Extract<AccountCompletionGateResolutionResult, { status: "complete" }>;
       kind: "complete";
+    }
+  | {
+      accountAuthorization: AccountAuthorizationForbiddenResult;
+      kind: "forbidden";
     }
   | { kind: "login-required"; redirectTo: `/${string}` };
 
@@ -423,6 +433,13 @@ export async function handleAuthAccountHandoffBrowserContinuation(
       return {
         accountCompletion: resolution.accountCompletion,
         kind: "blocked",
+      };
+    }
+
+    if (resolution.kind === "forbidden") {
+      return {
+        accountAuthorization: resolution.accountAuthorization,
+        kind: "forbidden",
       };
     }
 
@@ -466,9 +483,16 @@ export async function resolveAuthAccountHandoffContinuation(
       };
     }
 
+    if (session.authenticated !== undefined) {
+      return {
+        accountAuthorization: accountAuthorizationForbiddenResult(session.authenticated.principal),
+        kind: "forbidden",
+      };
+    }
+
     return {
       kind: "login-required",
-      redirectTo: ownerLoginRedirectLocationForRoute(authAccountRedirectTargetForRequest(request)),
+      redirectTo: accountRedirectLocationForRoute(authAccountRedirectTargetForRequest(request)),
     };
   }
 
@@ -546,6 +570,16 @@ export async function handleInstanceAuthHandoffDurableObjectRequest(
         }
 
         return accountCompletionBlockedResponse(session.accountCompletion);
+      }
+
+      if (session.authenticated !== undefined) {
+        if (acceptsRuntimeHtml(request.headers.get("Accept"))) {
+          return redirectResponse(authAccountRedirectTargetForRequest(request), 302);
+        }
+
+        return accountAuthorizationForbiddenResponse(
+          accountAuthorizationForbiddenResult(session.authenticated.principal),
+        );
       }
 
       if (!acceptsRuntimeHtml(request.headers.get("Accept"))) {
@@ -975,11 +1009,7 @@ async function validateAuthOriginSession(
       ownerAuthorized: boolean;
       session: CentralAuthSession | OwnerSession;
     }
-  | {
-      accountCompletion?: AccountCompletionGateResolutionResult;
-      ok: false;
-      reason: InstanceAuthAccessFailureReason;
-    }
+  | Extract<InstanceAuthAccessResult, { ok: false }>
 > {
   const result = await resolveInstanceAuthAccess(
     {
@@ -1238,6 +1268,25 @@ export function accountCompletionBlockedResponse(
   return jsonResponse(parseAccountCompletionGateResolutionResult(result), 409);
 }
 
+export function accountAuthorizationForbiddenResponse(
+  result: AccountAuthorizationForbiddenResult,
+): Response {
+  return jsonResponse(parseAuthAccountStatusResult(result), 403);
+}
+
+export function accountAuthorizationForbiddenResult(
+  principal: ActiveIdentityPrincipal,
+): AccountAuthorizationForbiddenResult {
+  return {
+    principal: {
+      displayName: principal.displayName,
+      ...(principal.email === undefined ? {} : { email: principal.email }),
+      principalId: principal.id,
+    },
+    status: "forbidden",
+  };
+}
+
 export function authenticatedOperationActorForSession(session: {
   principalId: string;
   session: Pick<CentralAuthSession | HostAuthSession | OwnerSession, "instanceId">;
@@ -1433,7 +1482,7 @@ function accountCompletionTargetForHandoffTarget(
     "expiresAt" | "grantSecretHash" | "instanceId" | "principalId"
   >,
 ): AccountCompletionGateTarget {
-  const returnTo = parseOwnerLoginRedirectTarget(target.returnTo);
+  const returnTo = parseAccountRedirectTarget(target.returnTo);
 
   if (!returnTo) {
     throw new Error("Account completion handoff return target must be path-only.");
@@ -1456,7 +1505,7 @@ function accountCompletionTargetForRouteRequest(
   target: InstanceAuthSessionTargetBinding,
 ): AccountCompletionGateTarget {
   const url = new URL(request.url);
-  const returnTo = parseOwnerLoginRedirectTarget(`${url.pathname}${url.search}`);
+  const returnTo = parseAccountRedirectTarget(`${url.pathname}${url.search}`);
 
   if (!returnTo) {
     throw new Error("Account completion return target must be path-only.");
@@ -1490,7 +1539,7 @@ function authAccountRedirectTargetForRequest(request: Request) {
   url.pathname = runtimeTopologyRoutes.authAccountRoute;
 
   return (
-    parseOwnerLoginRedirectTarget(`${url.pathname}${url.search}`) ??
+    parseAccountRedirectTarget(`${url.pathname}${url.search}`) ??
     runtimeTopologyRoutes.authAccountRoute
   );
 }
@@ -1501,8 +1550,7 @@ function handoffStartRedirectTargetForAuthAccountRequest(request: Request) {
   url.pathname = INSTANCE_AUTH_HANDOFF_START_PATH;
 
   return (
-    parseOwnerLoginRedirectTarget(`${url.pathname}${url.search}`) ??
-    INSTANCE_AUTH_HANDOFF_START_PATH
+    parseAccountRedirectTarget(`${url.pathname}${url.search}`) ?? INSTANCE_AUTH_HANDOFF_START_PATH
   );
 }
 
@@ -1732,7 +1780,7 @@ async function validateHostAuthSessionCookie(
 function handoffStartTargetFromSearch(
   url: URL,
 ): Omit<CreateHandoffGrantInput, "expiresAt" | "grantSecretHash" | "instanceId" | "principalId"> {
-  const returnTo = parseOwnerLoginRedirectTarget(requiredSearchParam(url, "returnTo"));
+  const returnTo = parseAccountRedirectTarget(requiredSearchParam(url, "returnTo"));
 
   if (!returnTo) {
     throw new Error("Handoff return target must be path-only.");

@@ -14,7 +14,7 @@ import type {
   OperationInputFieldContract,
   OwnerSetupAuthSurfaceContract,
   OwnerSetupStep,
-  OwnerSignInAuthSurfaceContract,
+  AccountSignInAuthSurfaceContract,
   SignupAuthSurfaceContract,
   SignupStep,
 } from "@dpeek/formless-presentation/contract";
@@ -31,7 +31,7 @@ export type FormlessAuthFixtureId = FormlessAuthFixture["id"];
 export function createFormlessAuthFixtures(): FormlessAuthFixture[] {
   return [
     ...ownerSetupFixtures(),
-    ...ownerSignInFixtures(),
+    ...accountSignInFixtures(),
     ...accountGateFixtures(),
     ...signupFixtures(),
     ...invitationFixtures(),
@@ -197,55 +197,52 @@ function ownerSetupFixtures(): FormlessAuthFixture[] {
   ];
 }
 
-function ownerSignInFixtures(): FormlessAuthFixture[] {
+function accountSignInFixtures(): FormlessAuthFixture[] {
   return [
-    ownerSignInFixture("loading", {
-      message: authMessage("loading", "Checking owner session."),
+    accountSignInFixture("loading", {
+      message: authMessage("loading", "Checking account session."),
     }),
-    ownerSignInFixture("incomplete", {
+    accountSignInFixture("incomplete", {
       message: authMessage("incomplete", "Complete owner setup before signing in.", "warning"),
     }),
-    ownerSignInFixture("ready", {
-      facts: [authFact("owner", "Owner", "Ada Lovelace")],
-      passkey: availablePasskey("owner-sign-in:ready", "sign-in", "Sign in with passkey"),
+    accountSignInFixture("ready", {
+      passkey: availablePasskey("account-sign-in:ready", "sign-in", "Sign in with passkey"),
     }),
-    ownerSignInFixture("submitting", {
-      facts: [authFact("owner", "Owner", "Ada Lovelace")],
-      passkey: availablePasskey("owner-sign-in:submitting", "sign-in", "Signing in", true),
+    accountSignInFixture("submitting", {
+      passkey: availablePasskey("account-sign-in:submitting", "sign-in", "Signing in", true),
       pending: true,
     }),
-    ownerSignInFixture("passkey-unavailable", {
-      facts: [authFact("owner", "Owner", "Ada Lovelace")],
+    accountSignInFixture("passkey-unavailable", {
       message: authMessage(
         "passkey-unavailable",
         "This browser does not support passkeys.",
         "warning",
       ),
       passkey: unavailablePasskey(
-        "owner-sign-in:passkey-unavailable",
+        "account-sign-in:passkey-unavailable",
         "sign-in",
         "This browser does not support passkeys.",
       ),
     }),
-    ownerSignInFixture("failed", {
-      actions: [authAction("owner-sign-in:failed", "retry", "Try again")],
-      feedback: authFeedback("sign-in-failed", "Owner sign in failed"),
+    accountSignInFixture("failed", {
+      actions: [authAction("account-sign-in:failed", "retry", "Try again")],
+      feedback: authFeedback("sign-in-failed", "Account sign in failed"),
     }),
-    ownerSignInFixture("complete", {
-      actions: [authAction("owner-sign-in:complete", "logout", "Sign out", "secondary")],
-      continuation: authContinuation("owner-sign-in:complete", "Approved account destination"),
-      facts: [authFact("owner", "Owner", "Ada Lovelace")],
-      message: authMessage("complete", "Owner signed in.", "success"),
+    accountSignInFixture("complete", {
+      actions: [authAction("account-sign-in:complete", "logout", "Sign out", "secondary")],
+      continuation: authContinuation("account-sign-in:complete", "Approved account destination"),
+      facts: [authFact("principal", "Account", "Ada Lovelace")],
+      message: authMessage("complete", "Signed in.", "success"),
     }),
-    ownerSignInFixture("logout-pending", {
+    accountSignInFixture("logout-pending", {
       actions: [
-        authAction("owner-sign-in:logout-pending", "logout", "Signing out", "secondary", true),
+        authAction("account-sign-in:logout-pending", "logout", "Signing out", "secondary", true),
       ],
-      facts: [authFact("owner", "Owner", "Ada Lovelace")],
+      facts: [authFact("principal", "Account", "Ada Lovelace")],
       pending: true,
     }),
-    ownerSignInFixture("continuing", {
-      facts: [authFact("owner", "Owner", "Ada Lovelace")],
+    accountSignInFixture("continuing", {
+      facts: [authFact("principal", "Account", "Ada Lovelace")],
       message: authMessage("continuing", "Opening the approved destination.", "success"),
       pending: true,
     }),
@@ -327,6 +324,15 @@ function accountGateFixtures(): FormlessAuthFixture[] {
     accountTerminalFixture("failed", {
       actions: [authAction("account-gate:failed", "retry", "Try again")],
       feedback: authFeedback("account-failed", "Account requirements could not be loaded"),
+    }),
+    accountTerminalFixture("forbidden", {
+      actions: [authAction("account-gate:forbidden", "logout", "Sign out", "secondary")],
+      facts: [authFact("principal", "Account", "Ada App User")],
+      message: authMessage(
+        "forbidden",
+        "This account cannot open the requested destination.",
+        "warning",
+      ),
     }),
     accountTerminalFixture("complete", {
       continuation: authContinuation("account-gate:complete", "Approved destination"),
@@ -536,16 +542,16 @@ function ownerSetupFixture(
   });
 }
 
-function ownerSignInFixture(
-  state: OwnerSignInAuthSurfaceContract["state"],
+function accountSignInFixture(
+  state: AccountSignInAuthSurfaceContract["state"],
   overrides: Partial<AuthSurfaceBaseContract> = {},
 ): FormlessAuthFixture {
-  const suffix = `owner-sign-in:${state}`;
-  return fixture("Owner sign in", stateLabel(state), {
-    ...authSurface(suffix, ownerSignInHeading(state)),
+  const suffix = `account-sign-in:${state}`;
+  return fixture("Account sign in", stateLabel(state), {
+    ...authSurface(suffix, accountSignInHeading(state)),
     ...overrides,
     state,
-    surfaceKind: "owner-sign-in",
+    surfaceKind: "account-sign-in",
   });
 }
 
@@ -553,7 +559,7 @@ function accountGateFixture(
   gateKind: AccountGateKind,
   state: Exclude<
     AccountGateAuthSurfaceContract["state"],
-    "complete" | "continuing" | "failed" | "loading"
+    "complete" | "continuing" | "failed" | "forbidden" | "loading"
   >,
   overrides: Partial<AuthSurfaceBaseContract> = {},
 ): FormlessAuthFixture {
@@ -568,12 +574,19 @@ function accountGateFixture(
 }
 
 function accountTerminalFixture(
-  state: "complete" | "continuing" | "failed" | "loading",
+  state: "complete" | "continuing" | "failed" | "forbidden" | "loading",
   overrides: Partial<AuthSurfaceBaseContract> = {},
 ): FormlessAuthFixture {
   const suffix = `account-gate:${state}`;
   return fixture("Account gate", stateLabel(state), {
-    ...authSurface(suffix, state === "loading" ? "Checking account" : "Account ready"),
+    ...authSurface(
+      suffix,
+      state === "loading"
+        ? "Checking account"
+        : state === "forbidden"
+          ? "Access unavailable"
+          : "Account ready",
+    ),
     ...overrides,
     state,
     surfaceKind: "account-gate",
@@ -917,11 +930,11 @@ function ownerSetupHeading(state: OwnerSetupAuthSurfaceContract["state"]) {
   return "Check owner setup";
 }
 
-function ownerSignInHeading(state: OwnerSignInAuthSurfaceContract["state"]) {
+function accountSignInHeading(state: AccountSignInAuthSurfaceContract["state"]) {
   if (state === "complete" || state === "continuing" || state === "logout-pending")
-    return "Owner signed in";
+    return "Signed in";
   if (state === "passkey-unavailable") return "Passkeys are unavailable";
-  return "Owner sign in";
+  return "Account sign in";
 }
 
 function signupHeading(

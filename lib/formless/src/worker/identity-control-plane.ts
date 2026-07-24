@@ -86,6 +86,7 @@ import {
   type AccountCompletionIdentityState,
   type ActiveIdentityAppAuthority,
   type ActiveIdentityAuthority,
+  type ActiveIdentityPrincipal,
 } from "./identity-owner-internal.ts";
 import { parseAccountCompletionGateTarget } from "../shared/instance-auth.ts";
 import {
@@ -5694,10 +5695,11 @@ function readActiveIdentityAppAuthorityForPrincipal(
 function readActiveIdentityPrincipal(
   storage: DurableObjectStorage,
   principalId: string,
-): { id: string } | null {
+): ActiveIdentityPrincipal | null {
   ensureIdentityControlPlaneStorage(storage);
 
-  const principal = getBootstrapRecords(storage).find(
+  const records = getBootstrapRecords(storage);
+  const principal = records.find(
     (record) =>
       record.id === principalId &&
       record.entity === "principal" &&
@@ -5705,7 +5707,7 @@ function readActiveIdentityPrincipal(
       record.values.status === "active",
   );
 
-  return principal ? { id: principal.id } : null;
+  return principal ? activeIdentityPrincipalFromRecord(records, principal) : null;
 }
 
 function readAccountCompletionIdentityState(
@@ -5947,16 +5949,29 @@ function identityOwnerFromPrincipal(
   records: readonly StoredRecord[],
   principal: StoredRecord,
 ): OwnerIdentity {
+  const identity = activeIdentityPrincipalFromRecord(records, principal);
+
+  return {
+    id: identity.id,
+    name: identity.displayName,
+    ...(identity.email === undefined ? {} : { email: identity.email }),
+    createdAt: principal.createdAt,
+  };
+}
+
+function activeIdentityPrincipalFromRecord(
+  records: readonly StoredRecord[],
+  principal: StoredRecord,
+): ActiveIdentityPrincipal {
   const email = primaryPrincipalEmail(records, principal.id);
 
   return {
-    id: principal.id,
-    name: parseNonEmptyString(
-      "Identity owner principal display name",
+    displayName: parseNonEmptyString(
+      "Identity principal display name",
       principal.values.displayName,
     ),
     ...(email === undefined ? {} : { email }),
-    createdAt: principal.createdAt,
+    id: principal.id,
   };
 }
 
@@ -6007,7 +6022,7 @@ function primaryPrincipalEmail(records: readonly StoredRecord[], principalId: st
     return undefined;
   }
 
-  return parseNonEmptyString("Identity owner principal email", record.values.displayEmail);
+  return parseNonEmptyString("Identity principal email", record.values.displayEmail);
 }
 
 function compareStoredRecords(left: StoredRecord, right: StoredRecord) {

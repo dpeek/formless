@@ -111,7 +111,7 @@ export type RuntimeRoutePolicy = {
   instanceBrowserRoutes: boolean;
   installedAppBrowserRoutes: boolean;
   installedSitePublicRoutes: boolean;
-  ownerSessionBrowserRoutes: boolean;
+  accountSessionBrowserRoutes: boolean;
   schemaKeyApiRoutes: boolean;
   schemaKeyBrowserRoutes: boolean;
 };
@@ -243,7 +243,7 @@ export function runtimeRoutePolicy(profile: RuntimeProfile): RuntimeRoutePolicy 
     instanceBrowserRoutes: policy.instanceBrowserRoutes,
     installedAppBrowserRoutes: policy.installedAppBrowserRoutes,
     installedSitePublicRoutes: policy.installedSitePublicRoutes,
-    ownerSessionBrowserRoutes: policy.ownerSessionBrowserRoutes,
+    accountSessionBrowserRoutes: policy.accountSessionBrowserRoutes,
     schemaKeyApiRoutes: policy.schemaKeyApiRoutes,
     schemaKeyBrowserRoutes: policy.schemaKeyBrowserRoutes,
   };
@@ -256,7 +256,7 @@ export function runtimeBrowserRoutePatterns(profile: RuntimeProfile): RuntimeBro
   const hasInstanceBrowserShell = profile.instanceShell && policy.instanceBrowserRoutes;
 
   return {
-    ...(policy.ownerSessionBrowserRoutes
+    ...(policy.accountSessionBrowserRoutes
       ? {
           authAccountGateRoutePattern: runtimeTopologyRoutes.authAccountGateRoutePattern,
           authAccountRoute: runtimeTopologyRoutes.authAccountRoute,

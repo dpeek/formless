@@ -27,12 +27,16 @@ import {
 } from "./instance-auth-handoff.ts";
 import { isLocalOwnerSessionRuntime } from "./local-session-bootstrap.ts";
 import { readIdentityOwner, resetIdentityOwner } from "./identity-control-plane.ts";
+import {
+  readInternalActiveIdentityPrincipal,
+  type ActiveIdentityPrincipal,
+} from "./identity-owner-internal.ts";
 import { ownerSetupAdminOrigin } from "./owner-setup-continuation.ts";
 
 export const OWNER_SETUP_API_PATH = "/api/formless/setup";
-export const OWNER_SESSION_API_PATH = "/api/formless/session";
+export const ACCOUNT_SESSION_API_PATH = "/api/formless/session";
 export const INTERNAL_RESET_OWNER_SETUP_PATH = "/_internal/reset-owner-setup";
-export const OWNER_SESSION_LOGOUT_API_PATH = `${OWNER_SESSION_API_PATH}/logout`;
+export const ACCOUNT_SESSION_LOGOUT_API_PATH = `${ACCOUNT_SESSION_API_PATH}/logout`;
 
 const ownerSetupCapabilityPath = `${OWNER_SETUP_API_PATH}/capability`;
 
@@ -49,7 +53,7 @@ export async function handleOwnerSetupApiRequest(
   request: Request,
   env: OwnerSetupApiEnv,
 ): Promise<Response | undefined> {
-  if (!isOwnerApiPath(new URL(request.url).pathname)) {
+  if (!isOwnerSetupOrAccountApiPath(new URL(request.url).pathname)) {
     return undefined;
   }
 
@@ -78,17 +82,17 @@ export async function handleOwnerSetupDurableObjectRequest(
     return jsonResponse({ reset: true });
   }
 
-  if (!isOwnerApiPath(pathname)) {
+  if (!isOwnerSetupOrAccountApiPath(pathname)) {
     return undefined;
   }
 
   try {
-    if (pathname === OWNER_SESSION_LOGOUT_API_PATH) {
-      return await handleOwnerLogoutRequest(request, storage, env);
+    if (pathname === ACCOUNT_SESSION_LOGOUT_API_PATH) {
+      return await handleAccountLogoutRequest(request, storage, env);
     }
 
-    if (pathname === OWNER_SESSION_API_PATH) {
-      return await handleOwnerSessionRequest(request, storage, env);
+    if (pathname === ACCOUNT_SESSION_API_PATH) {
+      return await handleAccountSessionRequest(request, storage, env);
     }
 
     if (pathname === OWNER_SETUP_API_PATH) {
@@ -105,11 +109,11 @@ export async function handleOwnerSetupDurableObjectRequest(
   }
 }
 
-function isOwnerApiPath(pathname: string) {
+function isOwnerSetupOrAccountApiPath(pathname: string) {
   return (
     isOwnerSetupApiPath(pathname) ||
-    pathname === OWNER_SESSION_API_PATH ||
-    pathname === OWNER_SESSION_LOGOUT_API_PATH
+    pathname === ACCOUNT_SESSION_API_PATH ||
+    pathname === ACCOUNT_SESSION_LOGOUT_API_PATH
   );
 }
 
@@ -117,22 +121,22 @@ function isOwnerSetupApiPath(pathname: string) {
   return pathname === OWNER_SETUP_API_PATH || pathname.startsWith(`${OWNER_SETUP_API_PATH}/`);
 }
 
-async function handleOwnerSessionRequest(
+async function handleAccountSessionRequest(
   request: Request,
   storage: DurableObjectStorage,
   env: OwnerSetupApiEnv,
 ): Promise<Response> {
   switch (request.method) {
     case "GET":
-      return await handleOwnerSessionStatusRequest(request, storage, env);
+      return await handleAccountSessionStatusRequest(request, storage, env);
     case "POST":
-      return await handleOwnerLoginRequest(request, storage, env);
+      return await handleAccountLoginRequest(request, storage, env);
     default:
       return methodNotAllowedResponse("GET, POST");
   }
 }
 
-async function handleOwnerSessionStatusRequest(
+async function handleAccountSessionStatusRequest(
   request: Request,
   storage: DurableObjectStorage,
   env: OwnerSetupApiEnv,
@@ -146,42 +150,39 @@ async function handleOwnerSessionStatusRequest(
 
   const centralSession = await validateCentralAuthSessionCookie(request, storage, env);
 
-  if (centralSession.ok && centralSession.session.principalId === state.owner.id) {
-    return jsonResponse({
-      authenticated: true,
-      owner: state.owner,
-      session: { expiresAt: centralSession.session.expiresAt },
-      setupComplete: true,
-    });
+  if (centralSession.ok) {
+    const principal = await readInternalActiveIdentityPrincipal(
+      env,
+      centralSession.session.principalId,
+    );
+
+    if (principal) {
+      return authenticatedAccountSessionResponse(principal, centralSession.session.expiresAt);
+    }
   }
 
   if (ownerSessionFallbackAllowed(request, storage, env)) {
     const session = await validateOwnerSessionCookie(request, env);
 
-    if (session.ok && session.session.principalId === state.owner.id) {
-      return jsonResponse({
-        authenticated: true,
-        owner: state.owner,
-        session: { expiresAt: session.session.expiresAt },
-        setupComplete: true,
-      });
+    if (session.ok) {
+      const principal = await readInternalActiveIdentityPrincipal(env, session.session.principalId);
+
+      if (principal) {
+        return authenticatedAccountSessionResponse(principal, session.session.expiresAt);
+      }
     }
   }
 
-  const hostSession = await hostOwnerSessionStatusResponse(request, storage, env, state.owner);
+  const hostSession = await hostAccountSessionStatusResponse(request, storage, env);
 
   if (hostSession) {
     return hostSession;
   }
 
-  return jsonResponse({
-    authenticated: false,
-    owner: state.owner,
-    setupComplete: true,
-  });
+  return jsonResponse({ authenticated: false, setupComplete: true });
 }
 
-async function handleOwnerLoginRequest(
+async function handleAccountLoginRequest(
   _request: Request,
   storage: DurableObjectStorage,
   env: OwnerSetupApiEnv,
@@ -199,14 +200,14 @@ async function handleOwnerLoginRequest(
   return jsonResponse(
     {
       authenticated: false,
-      error: "Passkey login is required.",
+      error: "Account passkey login is required.",
     },
     401,
     { "WWW-Authenticate": 'Bearer realm="formless-passkey"' },
   );
 }
 
-async function handleOwnerLogoutRequest(
+async function handleAccountLogoutRequest(
   request: Request,
   storage: DurableObjectStorage,
   env: OwnerSetupApiEnv,
@@ -245,11 +246,10 @@ async function handleOwnerLogoutRequest(
   );
 }
 
-async function hostOwnerSessionStatusResponse(
+async function hostAccountSessionStatusResponse(
   request: Request,
   storage: DurableObjectStorage,
   env: OwnerSetupApiEnv,
-  owner: Awaited<ReturnType<typeof readIdentityOwner>>,
 ): Promise<Response | undefined> {
   const hostSessionTarget = hostAuthSessionTargetFromRequestHeaders(request.headers);
 
@@ -257,29 +257,33 @@ async function hostOwnerSessionStatusResponse(
     return undefined;
   }
 
-  if (!owner) {
-    return jsonResponse({ authenticated: false, setupComplete: false }, 401);
-  }
-
   const hostSession = await validateHostAuthSessionAuthorityInStorage(request, storage, env, {
     target: hostSessionTarget,
   });
 
   if (!hostSession.ok) {
-    return jsonResponse(
-      {
-        authenticated: false,
-        owner,
-        setupComplete: true,
-      },
-      401,
-    );
+    return jsonResponse({ authenticated: false, setupComplete: true }, 401);
   }
 
+  const principal = await readInternalActiveIdentityPrincipal(env, hostSession.session.principalId);
+
+  return principal
+    ? authenticatedAccountSessionResponse(principal, hostSession.session.expiresAt)
+    : jsonResponse({ authenticated: false, setupComplete: true }, 401);
+}
+
+function authenticatedAccountSessionResponse(
+  principal: ActiveIdentityPrincipal,
+  expiresAt: string,
+): Response {
   return jsonResponse({
     authenticated: true,
-    owner,
-    session: { expiresAt: hostSession.session.expiresAt },
+    principal: {
+      displayName: principal.displayName,
+      ...(principal.email === undefined ? {} : { email: principal.email }),
+      principalId: principal.id,
+    },
+    session: { expiresAt },
     setupComplete: true,
   });
 }

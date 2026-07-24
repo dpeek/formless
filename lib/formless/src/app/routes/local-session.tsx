@@ -6,12 +6,12 @@ import {
 } from "../../client/db.ts";
 import { resetLocalBrowserReplicaState } from "../../client/sync.ts";
 import {
-  ownerLoginDefaultRedirectTarget,
-  parseOwnerLoginRedirectTarget,
-  type OwnerLoginRedirectTarget,
+  accountDefaultRedirectTarget,
+  parseAccountRedirectTarget,
+  type AccountRedirectTarget,
 } from "../../shared/instance-auth.ts";
 import { runtimeTopologyRoutes } from "../../shared/runtime-topology.ts";
-import { fetchOwnerSessionStatus } from "./owner-login.tsx";
+import { fetchAccountSessionStatus } from "./account-sign-in.tsx";
 import type { ApplicationSystemStateContract } from "@dpeek/formless-presentation/contract";
 import { projectApplicationSystemState } from "./application-system-state-projection.ts";
 import { ApplicationSystemStateRuntime } from "./application-system-state-runtime.tsx";
@@ -105,7 +105,7 @@ export function startLocalSessionRouteSession({
 
   async function startSession() {
     try {
-      const session = await fetchOwnerSessionStatus({ fetcher, signal: controller.signal });
+      const session = await fetchAccountSessionStatus({ fetcher, signal: controller.signal });
 
       if (stopped) {
         return;
@@ -159,14 +159,14 @@ export function startLocalSessionRouteSession({
   };
 }
 
-export function localSessionRedirectTargetFromSearch(search: string): OwnerLoginRedirectTarget {
+export function localSessionRedirectTargetFromSearch(search: string): AccountRedirectTarget {
   const normalized = search.startsWith("?") ? search : `?${search}`;
   const redirectTo = new URLSearchParams(normalized).get("redirectTo");
-  const parsed = parseOwnerLoginRedirectTarget(redirectTo) ?? ownerLoginDefaultRedirectTarget;
+  const parsed = parseAccountRedirectTarget(redirectTo) ?? accountDefaultRedirectTarget;
 
   return parsed === runtimeTopologyRoutes.localSessionRoute ||
     parsed.startsWith(`${runtimeTopologyRoutes.localSessionRoute}?`)
-    ? ownerLoginDefaultRedirectTarget
+    ? accountDefaultRedirectTarget
     : parsed;
 }
 

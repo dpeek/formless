@@ -378,12 +378,12 @@ async function handleOwnerSetupPasskeyRegistrationOptions(
     rpID: config.relyingPartyId,
     rpName: config.relyingPartyName,
     userDisplayName: proof.proof.displayName,
-    userID: textBytes(completionId),
+    userID: textBytes(ownerSetupPrincipalId(completionId)),
     userName: proof.proof.displayEmail,
     attestationType: "none",
     authenticatorSelection: {
-      residentKey: "preferred",
-      userVerification: "preferred",
+      residentKey: "required",
+      userVerification: "required",
     },
   });
   const createdAt = nowIsoString();
@@ -489,6 +489,7 @@ async function handleOwnerSetupPasskeyRegistrationVerify(
       expectedChallenge: passkeyChallenge.challenge.challenge,
       expectedOrigin: config.authOrigin,
       expectedRPID: config.relyingPartyId,
+      requireUserVerification: true,
     });
   } catch {
     return jsonResponse({ error: "Passkey registration verification failed." }, 401);

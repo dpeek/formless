@@ -10,7 +10,7 @@ import type {
   CreateFieldContract,
   OperationInputFieldContract,
   OwnerSetupAuthSurfaceContract,
-  OwnerSignInAuthSurfaceContract,
+  AccountSignInAuthSurfaceContract,
   SignupAuthSurfaceContract,
 } from "./contract.ts";
 import {
@@ -26,9 +26,9 @@ const ownerSetupReference = authSurfaceReference({
   surfaceId: "auth:owner-setup",
   surfaceKind: "owner-setup",
 });
-const ownerSignInReference = authSurfaceReference({
-  surfaceId: "auth:owner-sign-in",
-  surfaceKind: "owner-sign-in",
+const accountSignInReference = authSurfaceReference({
+  surfaceId: "auth:account-sign-in",
+  surfaceKind: "account-sign-in",
 });
 const accountGateReference = authSurfaceReference({
   surfaceId: "auth:account-gate",
@@ -52,8 +52,8 @@ describe("auth memory Presentation Host", () => {
     const ownerSetup: OwnerSetupAuthSurfaceContract | undefined = host.read({
       ...ownerSetupReference,
     });
-    const ownerSignIn: OwnerSignInAuthSurfaceContract | undefined = host.read({
-      ...ownerSignInReference,
+    const accountSignIn: AccountSignInAuthSurfaceContract | undefined = host.read({
+      ...accountSignInReference,
     });
     const accountGate: AccountGateAuthSurfaceContract | undefined = host.read({
       ...accountGateReference,
@@ -66,7 +66,7 @@ describe("auth memory Presentation Host", () => {
     });
 
     expect(ownerSetup?.state).toBe("loading");
-    expect(ownerSignIn?.state).toBe("ready");
+    expect(accountSignIn?.state).toBe("ready");
     expect(accountGate?.gateKind).toBe("profile-completion");
     expect(accountGate?.fields[0]?.field.surface).toBe("operation");
     expect(signup?.step).toBe("email-verification");
@@ -109,7 +109,7 @@ describe("auth memory Presentation Host", () => {
       }),
     ).toThrow("invalid field contract");
 
-    const signIn = ownerSignInNode();
+    const signIn = accountSignInNode();
     const passkey = signIn.snapshot.passkey;
     if (passkey?.availability !== "available") {
       throw new Error("Expected an available sign-in passkey fixture.");
@@ -136,7 +136,7 @@ describe("auth memory Presentation Host", () => {
 function authStateFamilyNodes() {
   return [
     ownerSetupNode(),
-    ownerSignInNode(),
+    accountSignInNode(),
     accountGateNode(),
     signupNode(),
     invitationNode(),
@@ -167,17 +167,17 @@ function ownerSetupNode(
   };
 }
 
-function ownerSignInNode(
-  state: OwnerSignInAuthSurfaceContract["state"] = "ready",
-): AuthSurfaceNode & { snapshot: OwnerSignInAuthSurfaceContract } {
+function accountSignInNode(
+  state: AccountSignInAuthSurfaceContract["state"] = "ready",
+): AuthSurfaceNode & { snapshot: AccountSignInAuthSurfaceContract } {
   return {
-    reference: ownerSignInReference,
+    reference: accountSignInReference,
     snapshot: {
-      ...authSurfaceBase(ownerSignInReference.surfaceId, "Sign in"),
-      passkey: authPasskey(ownerSignInReference.surfaceId, "sign-in"),
+      ...authSurfaceBase(accountSignInReference.surfaceId, "Sign in"),
+      passkey: authPasskey(accountSignInReference.surfaceId, "sign-in"),
       pending: state === "submitting",
       state,
-      surfaceKind: "owner-sign-in",
+      surfaceKind: "account-sign-in",
     },
   };
 }

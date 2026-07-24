@@ -5,8 +5,10 @@ import { useLocation, useSearch } from "wouter";
 import {
   parseAccountCompletionGateResolutionResult,
   parseAccountCompletionGateTarget,
+  parseAuthAccountStatusResult,
   parseInstanceAuthCanonicalOrigin,
-  parseOwnerLoginRedirectTarget,
+  parseAccountRedirectTarget,
+  type AccountAuthorizationForbiddenResult,
   type AccountCompletionAppRegistrationGate,
   type AccountCompletionContinuationResult,
   type AccountCompletionGate,
@@ -14,6 +16,7 @@ import {
   type AccountCompletionGateResult,
   type AccountCompletionGateTarget,
   type AccountCompletionProfileCompletionGate,
+  type AuthAccountStatusResult,
 } from "../../shared/instance-auth.ts";
 import {
   parseOwnerSetupToken,
@@ -45,6 +48,7 @@ import {
   passkeyUnavailableMessage,
   type CreatePasskeyRegistrationResponse,
 } from "./passkey-browser.ts";
+import { logoutAccountSession } from "./account-sign-in.tsx";
 
 const instanceAuthHandoffStartPath = "/formless/auth/handoff";
 const emailVerificationRequestPath = `${runtimeAuthAccountGateRoutes.emailVerification}/request`;
@@ -81,6 +85,10 @@ type AuthAccountGateActionState =
   | { kind: "gate-submitting" }
   | { kind: "gate-unavailable"; message: string }
   | { kind: "profile-completion-submitting" };
+
+type AuthAccountForbiddenActionState =
+  | { kind: "logout-pending" }
+  | { kind: "logout-failed"; message: string };
 
 type AuthAccountSignupState = {
   challengeId?: string;
@@ -119,6 +127,11 @@ export type AuthAccountRouteState =
       continueTo: `/${string}`;
       result: AccountCompletionContinuationResult;
       status: "continuing";
+    }
+  | {
+      action?: AuthAccountForbiddenActionState;
+      result: AccountAuthorizationForbiddenResult;
+      status: "forbidden";
     }
   | { message: string; status: "failed" }
   | { status: "loading" }
@@ -345,6 +358,15 @@ export function AuthAccountRoute() {
     );
   }
 
+  function applyAccountStatusResult(result: AuthAccountStatusResult) {
+    if (result.status === "forbidden") {
+      publishState({ result, status: "forbidden" });
+      return;
+    }
+
+    applyGateCompletionResult({ accountCompletion: result });
+  }
+
   function applyOwnerSetupCompletionResult(result: OwnerSetupCompletionApiResult) {
     if (result.continueTo) {
       publishState({
@@ -432,9 +454,7 @@ export function AuthAccountRoute() {
         target: state.result.target,
         token,
       });
-      const result = await fetchAuthAccountStatus({ locationSearch });
-
-      applyGateCompletionResult({ accountCompletion: result });
+      applyAccountStatusResult(await fetchAuthAccountStatus({ locationSearch }));
     } catch (error) {
       publishState({
         action: {
@@ -844,6 +864,36 @@ export function AuthAccountRoute() {
     });
   }
 
+  async function logoutForbiddenAccount() {
+    if (state.status !== "forbidden" || state.action?.kind === "logout-pending") {
+      return;
+    }
+
+    const result = state.result;
+
+    publishState({ action: { kind: "logout-pending" }, result, status: "forbidden" });
+
+    try {
+      const loggedOut = await logoutAccountSession();
+
+      if (loggedOut.continueTo) {
+        navigateTo(loggedOut.continueTo);
+        return;
+      }
+
+      setSessionRevision((revision) => revision + 1);
+    } catch (error) {
+      publishState({
+        action: {
+          kind: "logout-failed",
+          message: error instanceof Error ? error.message : "Account logout failed.",
+        },
+        result,
+        status: "forbidden",
+      });
+    }
+  }
+
   function retryCurrentState() {
     if (state.status === "owner-setup-completion-ready") {
       void pendingGuard.current.run(retryOwnerSetupCompletion);
@@ -891,6 +941,9 @@ export function AuthAccountRoute() {
       const action = surface.actions.find((candidate) => candidate.id === intent.actionId);
       if (action?.purpose === "submit") await submitCurrentAction();
       else if (action?.purpose === "retry") retryCurrentState();
+      else if (action?.purpose === "logout") {
+        await pendingGuard.current.run(logoutForbiddenAccount);
+      }
       return;
     }
     if (intent.type === "authContinuation" && "continueTo" in state && state.continueTo) {
@@ -952,6 +1005,11 @@ export function startAuthAccountRouteSession({
       });
 
       if (stopped) {
+        return;
+      }
+
+      if (result.status === "forbidden") {
+        onState({ result, status: "forbidden" });
         return;
       }
 
@@ -1258,7 +1316,7 @@ export async function fetchAuthAccountStatus({
   fetcher = fetch,
   locationSearch,
   signal,
-}: AuthAccountFetchOptions): Promise<AccountCompletionGateResolutionResult> {
+}: AuthAccountFetchOptions): Promise<AuthAccountStatusResult> {
   const response = await fetcher(authAccountStatusRequestPath(locationSearch), {
     credentials: "same-origin",
     headers: { Accept: "application/json" },
@@ -1266,12 +1324,16 @@ export async function fetchAuthAccountStatus({
   });
   const body = await readAuthAccountJson(response);
 
-  if (response.status === 409) {
-    const result = parseAccountCompletionGateResolutionResult(body);
+  if (response.status === 403) {
+    const result = parseAuthAccountStatusResult(body);
 
-    if (result.status === "blocked") {
-      return result;
-    }
+    if (result.status === "forbidden") return result;
+  }
+
+  if (response.status === 409) {
+    const result = parseAuthAccountStatusResult(body);
+
+    if (result.status === "blocked") return result;
   }
 
   if (!response.ok) {
@@ -1280,7 +1342,7 @@ export async function fetchAuthAccountStatus({
     });
   }
 
-  return parseAccountCompletionGateResolutionResult(body);
+  return parseAuthAccountStatusResult(body);
 }
 
 export async function requestAuthAccountEmailVerification({
@@ -1718,7 +1780,7 @@ function parseOptionalPathOnlyContinueTo(value: unknown): { continueTo?: `/${str
     return {};
   }
 
-  const continueTo = parseOwnerLoginRedirectTarget(value);
+  const continueTo = parseAccountRedirectTarget(value);
 
   if (!continueTo) {
     throw new AuthAccountApiError("Account completion continueTo must be path-only.");
@@ -1735,7 +1797,7 @@ function parseOptionalAuthAccountCompletionHandoff(value: unknown): {
   }
 
   const object = parseRecord("Account completion handoff", value);
-  const returnTo = parseOwnerLoginRedirectTarget(object.returnTo);
+  const returnTo = parseAccountRedirectTarget(object.returnTo);
 
   if (!returnTo) {
     throw new AuthAccountApiError("Account completion handoff returnTo must be path-only.");
@@ -1888,7 +1950,7 @@ function parseOptionalOwnerSetupContinueTo(value: unknown): { continueTo?: strin
     throw new AuthAccountApiError("Owner setup continuation was invalid.");
   }
 
-  const path = parseOwnerLoginRedirectTarget(value);
+  const path = parseAccountRedirectTarget(value);
 
   if (path) {
     return { continueTo: path };

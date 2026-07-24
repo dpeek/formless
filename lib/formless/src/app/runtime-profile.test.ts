@@ -148,7 +148,7 @@ describe("runtime profile resolver", () => {
       instanceBrowserRoutes: true,
       installedAppBrowserRoutes: true,
       installedSitePublicRoutes: true,
-      ownerSessionBrowserRoutes: true,
+      accountSessionBrowserRoutes: true,
       schemaKeyApiRoutes: false,
       schemaKeyBrowserRoutes: false,
     });
@@ -192,7 +192,7 @@ describe("runtime profile resolver", () => {
       instanceBrowserRoutes: true,
       installedAppBrowserRoutes: true,
       installedSitePublicRoutes: true,
-      ownerSessionBrowserRoutes: true,
+      accountSessionBrowserRoutes: true,
       schemaKeyApiRoutes: true,
       schemaKeyBrowserRoutes: true,
     });

@@ -17,7 +17,7 @@ import type {
   CreateFieldContract,
   OperationInputFieldContract,
   OwnerSetupAuthSurfaceContract,
-  OwnerSignInAuthSurfaceContract,
+  AccountSignInAuthSurfaceContract,
   SignupAuthSurfaceContract,
 } from "@dpeek/formless-presentation/contract";
 import {
@@ -33,19 +33,23 @@ import {
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-const ownerSignInReference = authSurfaceReference({
-  surfaceId: "auth:test:owner-sign-in",
-  surfaceKind: "owner-sign-in",
+const accountSignInReference = authSurfaceReference({
+  surfaceId: "auth:test:account-sign-in",
+  surfaceKind: "account-sign-in",
 });
 
 describe("Astryx auth renderer", () => {
   it.each([
-    ["loading", ownerSignInSurface("loading", authMessage("Loading account", "info"))],
+    ["loading", accountSignInSurface("loading", authMessage("Loading account", "info"))],
     ["blocked", accountGateSurface("blocked", authMessage("Account blocked", "warning"))],
+    [
+      "forbidden",
+      accountTerminalSurface("forbidden", authMessage("Access unavailable", "warning")),
+    ],
     ["unavailable", invitationSurface("unavailable", authMessage("Invite unavailable", "warning"))],
     ["failed", signupSurface("failed", authMessage("Signup failed", "danger"))],
     ["complete", ownerSetupSurface("complete", authMessage("Setup complete", "success"))],
-    ["continuing", ownerSignInSurface("continuing", authMessage("Continuing", "info"))],
+    ["continuing", accountSignInSurface("continuing", authMessage("Continuing", "info"))],
   ] satisfies readonly [string, AuthSurfaceContract][])(
     "renders the accessible %s frame, card, and status hierarchy",
     (state, surface) => {
@@ -73,6 +77,27 @@ describe("Astryx auth renderer", () => {
     },
   );
 
+  it("renders forbidden account identity and logout without protected target data", () => {
+    const html = renderAuth(
+      accountTerminalSurface(
+        "forbidden",
+        authMessage("This account cannot open the requested destination.", "warning"),
+        {
+          actions: [authAction("auth:test:account-gate", "logout", "Sign out")],
+          facts: [authFact("account", "Account", "Ada App User")],
+        },
+      ),
+    );
+
+    expect(html).toContain("Access unavailable");
+    expect(html).toContain("Ada App User");
+    expect(html).toContain("Sign out");
+    expect(html).toContain('data-formless-astryx-auth-control-kind="action"');
+    expect(html).not.toContain("route:private");
+    expect(html).not.toContain("app:private");
+    expect(html).not.toContain("principal:other");
+  });
+
   it("composes controlled opaque-token, policy, fact, feedback, action, and passkey primitives", () => {
     const tokenSurface = signupSurface("ready", authMessage("Enter the token", "info"), {
       actions: [authAction("auth:test:signup", "submit", "Verify")],
@@ -87,10 +112,10 @@ describe("Astryx auth renderer", () => {
       fields: [authCreateField("auth:test:signup", verificationTokenField())],
       policies: [termsPolicy("auth:test:signup")],
     });
-    const passkeySurface = ownerSignInSurface("ready", undefined, {
-      passkey: availablePasskey(ownerSignInReference.surfaceId),
+    const passkeySurface = accountSignInSurface("ready", undefined, {
+      passkey: availablePasskey(accountSignInReference.surfaceId),
     });
-    const unavailableSurface = ownerSignInSurface(
+    const unavailableSurface = accountSignInSurface(
       "passkey-unavailable",
       authMessage("Passkeys unavailable", "warning"),
       {
@@ -196,16 +221,16 @@ describe("Astryx auth renderer", () => {
     const retryRenderer = mount(<AstryxAuthRenderer onIntent={onIntent} surface={retrySurface} />);
     fireEvent.click(authButtonByControlId(retryRenderer, "auth:test:signup:action:retry:control"));
 
-    const passkeySurface = ownerSignInSurface("ready", undefined, {
-      passkey: availablePasskey(ownerSignInReference.surfaceId),
+    const passkeySurface = accountSignInSurface("ready", undefined, {
+      passkey: availablePasskey(accountSignInReference.surfaceId),
     });
     const passkeyRenderer = mount(
       <AstryxAuthRenderer onIntent={onIntent} surface={passkeySurface} />,
     );
     fireEvent.submit(required(passkeyRenderer.container.querySelector("form")));
 
-    const continuingSurface = ownerSignInSurface("continuing", undefined, {
-      continuation: authContinuation(ownerSignInReference.surfaceId),
+    const continuingSurface = accountSignInSurface("continuing", undefined, {
+      continuation: authContinuation(accountSignInReference.surfaceId),
     });
     const continuingRenderer = mount(
       <AstryxAuthRenderer onIntent={onIntent} surface={continuingSurface} />,
@@ -213,7 +238,7 @@ describe("Astryx auth renderer", () => {
     fireEvent.click(
       authButtonByControlId(
         continuingRenderer,
-        `${ownerSignInReference.surfaceId}:destination:account:control`,
+        `${accountSignInReference.surfaceId}:destination:account:control`,
       ),
     );
 
@@ -247,15 +272,15 @@ describe("Astryx auth renderer", () => {
         type: "authAction",
       },
       {
-        controlId: `${ownerSignInReference.surfaceId}:passkey:control`,
-        passkeyId: `${ownerSignInReference.surfaceId}:passkey`,
-        surfaceId: ownerSignInReference.surfaceId,
+        controlId: `${accountSignInReference.surfaceId}:passkey:control`,
+        passkeyId: `${accountSignInReference.surfaceId}:passkey`,
+        surfaceId: accountSignInReference.surfaceId,
         type: "authPasskey",
       },
       {
-        controlId: `${ownerSignInReference.surfaceId}:destination:account:control`,
-        destinationId: `${ownerSignInReference.surfaceId}:destination:account`,
-        surfaceId: ownerSignInReference.surfaceId,
+        controlId: `${accountSignInReference.surfaceId}:destination:account:control`,
+        destinationId: `${accountSignInReference.surfaceId}:destination:account`,
+        surfaceId: accountSignInReference.surfaceId,
         type: "authContinuation",
       },
     ]);
@@ -317,14 +342,14 @@ describe("Astryx auth renderer", () => {
       },
       nodes: [
         {
-          reference: ownerSignInReference,
-          snapshot: ownerSignInSurface("loading", authMessage("Loading account", "info")),
+          reference: accountSignInReference,
+          snapshot: accountSignInSurface("loading", authMessage("Loading account", "info")),
         },
       ],
     });
     const renderer = mount(
       <PresentationHostProvider host={host}>
-        <AstryxSubscribedAuthRenderer reference={ownerSignInReference} />
+        <AstryxSubscribedAuthRenderer reference={accountSignInReference} />
       </PresentationHostProvider>,
     );
 
@@ -334,9 +359,9 @@ describe("Astryx auth renderer", () => {
     await act(async () => {
       host.publish([
         {
-          reference: ownerSignInReference,
-          snapshot: ownerSignInSurface("continuing", undefined, {
-            continuation: authContinuation(ownerSignInReference.surfaceId),
+          reference: accountSignInReference,
+          snapshot: accountSignInSurface("continuing", undefined, {
+            continuation: authContinuation(accountSignInReference.surfaceId),
           }),
         },
       ]);
@@ -347,10 +372,10 @@ describe("Astryx auth renderer", () => {
     fireEvent.click(
       authButtonByControlId(
         renderer,
-        `${ownerSignInReference.surfaceId}:destination:account:control`,
+        `${accountSignInReference.surfaceId}:destination:account:control`,
       ),
     );
-    expect(intents).toEqual([authContinuation(ownerSignInReference.surfaceId).intent]);
+    expect(intents).toEqual([authContinuation(accountSignInReference.surfaceId).intent]);
 
     unmountAll(renderer);
   });
@@ -369,23 +394,23 @@ function ownerSetupSurface(
   };
 }
 
-function ownerSignInSurface(
-  state: OwnerSignInAuthSurfaceContract["state"],
-  message?: OwnerSignInAuthSurfaceContract["message"],
+function accountSignInSurface(
+  state: AccountSignInAuthSurfaceContract["state"],
+  message?: AccountSignInAuthSurfaceContract["message"],
   overrides: Partial<AuthSurfaceBaseContract> = {},
-): OwnerSignInAuthSurfaceContract {
+): AccountSignInAuthSurfaceContract {
   return {
-    ...authSurfaceBase(ownerSignInReference.surfaceId, "Owner sign in", message),
+    ...authSurfaceBase(accountSignInReference.surfaceId, "Account sign in", message),
     ...overrides,
     state,
-    surfaceKind: "owner-sign-in",
+    surfaceKind: "account-sign-in",
   };
 }
 
 function accountGateSurface(
   state: Exclude<
     AccountGateAuthSurfaceContract["state"],
-    "complete" | "continuing" | "failed" | "loading"
+    "complete" | "continuing" | "failed" | "forbidden" | "loading"
   >,
   message?: AccountGateAuthSurfaceContract["message"],
   overrides: Partial<AuthSurfaceBaseContract> = {},
@@ -394,6 +419,23 @@ function accountGateSurface(
     ...authSurfaceBase("auth:test:account-gate", "Account gate", message),
     ...overrides,
     gateKind: "role-review",
+    state,
+    surfaceKind: "account-gate",
+  };
+}
+
+function accountTerminalSurface(
+  state: "complete" | "continuing" | "failed" | "forbidden" | "loading",
+  message?: AccountGateAuthSurfaceContract["message"],
+  overrides: Partial<AuthSurfaceBaseContract> = {},
+): AccountGateAuthSurfaceContract {
+  return {
+    ...authSurfaceBase(
+      "auth:test:account-gate",
+      state === "forbidden" ? "Access unavailable" : "Account gate",
+      message,
+    ),
+    ...overrides,
     state,
     surfaceKind: "account-gate",
   };
@@ -670,7 +712,7 @@ function authButtonByControlId(renderer: RenderResult, controlId: string): HTMLB
 function authSurfaceNode(renderer: RenderResult): HTMLElement {
   return required(
     renderer.container.querySelector<HTMLElement>(
-      `[data-formless-astryx-auth-surface="${ownerSignInReference.surfaceId}"]`,
+      `[data-formless-astryx-auth-surface="${accountSignInReference.surfaceId}"]`,
     ),
   );
 }

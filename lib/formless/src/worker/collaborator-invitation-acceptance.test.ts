@@ -457,9 +457,26 @@ describe("collaborator invitation acceptance status", () => {
       targetAppInstallId: "site",
     });
 
+    const authenticator = new VirtualPasskey("Y29sbGFib3JhdG9yLWNyZWRlbnRpYWwtMQ");
+    const unverifiedOptions = await fetchPasskeyRegistrationOptions(invitation.id, token);
+
+    if (!("options" in unverifiedOptions.body)) {
+      throw new Error(
+        `Expected passkey options, received ${JSON.stringify(unverifiedOptions.body)}.`,
+      );
+    }
+
+    const unverified = await verifyPasskeyRegistration(
+      invitation.id,
+      token,
+      authenticator.registrationResponse(unverifiedOptions.body.options, {
+        origin: authOrigin,
+        rpId: "example.com",
+        userVerified: false,
+      }),
+    );
     const options = await fetchPasskeyRegistrationOptions(invitation.id, token);
     const countsAfterOptions = await authCounts();
-    const authenticator = new VirtualPasskey("Y29sbGFib3JhdG9yLWNyZWRlbnRpYWwtMQ");
 
     if (!("options" in options.body)) {
       throw new Error(`Expected passkey options, received ${JSON.stringify(options.body)}.`);
@@ -483,11 +500,21 @@ describe("collaborator invitation acceptance status", () => {
     expect(options.body.options.rp).toEqual({ id: "example.com", name: "Formless" });
     expect(options.body.options.user.name).toBe("Passkey.Collab@example.com");
     expect(options.body.options.user.displayName).toBe("Passkey Collaborator");
+    expect(options.body.options.authenticatorSelection).toMatchObject({
+      requireResidentKey: true,
+      residentKey: "required",
+      userVerification: "required",
+    });
+    expect(Buffer.from(options.body.options.user.id, "base64url").toString()).toBe(
+      "principal:passkey",
+    );
     expect(JSON.stringify(options.body)).not.toContain(token);
     expect(JSON.stringify(options.body)).not.toContain(privateToken.tokenHash);
+    expect(unverified.response.status).toBe(401);
+    expect(unverified.body).toEqual({ error: "Passkey registration verification failed." });
     expect(countsAfterOptions).toEqual({
       centralSessions: 0,
-      challenges: 1,
+      challenges: 2,
       credentials: 0,
       handoffGrants: 0,
     });
@@ -521,7 +548,7 @@ describe("collaborator invitation acceptance status", () => {
     expect(privateToken.consumedAt).toEqual(expect.any(String));
     expect(countsAfterVerify).toEqual({
       centralSessions: 1,
-      challenges: 1,
+      challenges: 2,
       credentials: 1,
       handoffGrants: 0,
     });
@@ -2135,7 +2162,7 @@ class VirtualPasskey {
 
   registrationResponse(
     options: PublicKeyCredentialCreationOptionsJSON,
-    input: { origin: string; rpId: string },
+    input: { origin: string; rpId: string; userVerified?: boolean },
   ): RegistrationResponseJSON {
     const clientDataJSON = clientDataJson("webauthn.create", options.challenge, input.origin);
     const authData = registrationAuthenticatorData({
@@ -2143,6 +2170,7 @@ class VirtualPasskey {
       credentialPublicKey: this.credentialPublicKey(),
       counter: 0,
       rpId: input.rpId,
+      userVerified: input.userVerified ?? true,
     });
     const attestationObject = cborMap([
       ["fmt", "none"],
@@ -2186,6 +2214,7 @@ function registrationAuthenticatorData(input: {
   credentialId: Uint8Array;
   credentialPublicKey: Uint8Array;
   rpId: string;
+  userVerified: boolean;
 }) {
   const credentialIdLength = new Uint8Array(2);
   const credentialIdLengthView = new DataView(credentialIdLength.buffer);
@@ -2194,7 +2223,7 @@ function registrationAuthenticatorData(input: {
 
   return concatBytes([
     sha256(new TextEncoder().encode(input.rpId)),
-    new Uint8Array([0x45]),
+    new Uint8Array([input.userVerified ? 0x45 : 0x41]),
     uint32(input.counter),
     new Uint8Array(16),
     credentialIdLength,

@@ -71,6 +71,46 @@ describe("auth account projection", () => {
     expect(project({ result: completeResult(), status: "complete" }).continuation).toBeUndefined();
   });
 
+  it("projects forbidden account access with only current identity and logout", () => {
+    const surface = project({
+      result: {
+        principal: {
+          displayName: "Ada App User",
+          email: "ada@example.com",
+          principalId: "principal:ada",
+        },
+        status: "forbidden",
+      },
+      status: "forbidden",
+    });
+
+    expect(surface).toMatchObject({
+      actions: [
+        {
+          control: { content: { label: "Sign out" } },
+          purpose: "logout",
+        },
+      ],
+      facts: [{ label: "Account", value: "Ada App User" }],
+      frame: {
+        heading: {
+          description: "Signed in as Ada App User.",
+          title: "Access unavailable",
+        },
+      },
+      message: {
+        severity: "warning",
+        title: "This account cannot open the requested destination.",
+      },
+      state: "forbidden",
+      surfaceKind: "account-gate",
+    });
+    expect(surface).not.toHaveProperty("gateKind");
+    expect(surface.continuation).toBeUndefined();
+    expect(JSON.stringify(surface)).not.toContain("ada@example.com");
+    expect(JSON.stringify(surface)).not.toContain("principal:ada");
+  });
+
   it("projects all seven account gate kinds with only available completion actions", () => {
     const cases: Array<{
       action: boolean;

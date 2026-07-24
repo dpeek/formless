@@ -1,31 +1,30 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import {
-  fetchOwnerSessionStatus,
+  fetchAccountSessionStatus,
   loginWithPasskey,
-  logoutOwnerSession,
-  navigateAfterOwnerLogin,
-  ownerLoginRedirectRequiresDocumentNavigation,
-  ownerLoginSuccessContinuationTarget,
-  startOwnerLoginRouteSession,
-  type OwnerLoginApiError,
-  type OwnerLoginRouteState,
-} from "./owner-login.tsx";
+  logoutAccountSession,
+  navigateAfterAccountSignIn,
+  accountSignInRedirectRequiresDocumentNavigation,
+  accountSignInSuccessContinuationTarget,
+  startAccountSignInRouteSession,
+  type AccountSignInApiError,
+  type AccountSignInRouteState,
+} from "./account-sign-in.tsx";
 import type {
-  OwnerPasskeyLoginOptionsResponse,
-  OwnerPasskeyLoginVerifyRequest,
+  AccountPasskeyLoginOptionsResponse,
+  AccountPasskeyLoginVerifyRequest,
+  AccountPrincipalIdentity,
 } from "../../shared/instance-auth.ts";
-import type { OwnerIdentity } from "../../shared/protocol.ts";
 import { isRuntimeClientShellRoute, runtimeTopologyRoutes } from "../../shared/runtime-topology.ts";
 
-const owner: OwnerIdentity = {
-  id: "owner-1",
-  name: "Ada Owner",
+const principal: AccountPrincipalIdentity = {
+  displayName: "Ada Account",
   email: "ada@example.com",
-  createdAt: "2026-05-21T00:00:00.000Z",
+  principalId: "principal:ada",
 };
 
-describe("owner login route", () => {
+describe("account sign-in route", () => {
   it("uses the account sign-in gate route instead of the deleted legacy login route", () => {
     expect(runtimeTopologyRoutes.authAccountSignInRoute).toBe("/formless/auth/sign-in");
     expect(isRuntimeClientShellRoute(runtimeTopologyRoutes.authAccountSignInRoute)).toBe(true);
@@ -33,38 +32,38 @@ describe("owner login route", () => {
   });
 });
 
-describe("owner login route data flow", () => {
+describe("account sign-in route data flow", () => {
   it("uses document navigation for internal auth handoff redirects", () => {
     const clientLocations: unknown[] = [];
     const documentLocations: string[] = [];
     const handoffTarget =
       "/formless/auth/handoff?targetOrigin=https%3A%2F%2Fadmin.example.com&state=c0tPAI" as const;
 
-    navigateAfterOwnerLogin(handoffTarget, {
+    navigateAfterAccountSignIn(handoffTarget, {
       replaceDocumentLocation: (target) => documentLocations.push(target),
       setLocation: (...args) => clientLocations.push(args),
     });
 
-    expect(ownerLoginRedirectRequiresDocumentNavigation(handoffTarget)).toBe(true);
+    expect(accountSignInRedirectRequiresDocumentNavigation(handoffTarget)).toBe(true);
     expect(documentLocations).toEqual([handoffTarget]);
     expect(clientLocations).toEqual([]);
   });
 
   it("routes passkey login success through the account continuation contract", () => {
     expect(
-      ownerLoginSuccessContinuationTarget(
+      accountSignInSuccessContinuationTarget(
         "/formless/auth",
         "?redirectTo=%2Fapps%2Fpersonal%3Fscreen%3Droutes",
       ),
     ).toBe("/formless/auth?returnTo=%2Fapps%2Fpersonal%3Fscreen%3Droutes");
     expect(
-      ownerLoginSuccessContinuationTarget(
+      accountSignInSuccessContinuationTarget(
         "/formless/auth",
         "?redirectTo=https%3A%2F%2Fevil.example.com%2Fadmin",
       ),
     ).toBe("/formless/auth?returnTo=%2F");
     expect(
-      ownerLoginSuccessContinuationTarget(
+      accountSignInSuccessContinuationTarget(
         "/formless/auth?returnTo=%2Fdeployments",
         "?redirectTo=%2Fapps%2Fpersonal",
       ),
@@ -74,12 +73,12 @@ describe("owner login route data flow", () => {
   it("resumes an existing account continuation after passkey login", () => {
     const clientLocations: unknown[] = [];
     const documentLocations: string[] = [];
-    const continuationTarget = ownerLoginSuccessContinuationTarget(
+    const continuationTarget = accountSignInSuccessContinuationTarget(
       "/formless/auth",
       "?redirectTo=%2Fformless%2Fauth%3FreturnTo%3D%252F",
     );
 
-    navigateAfterOwnerLogin(continuationTarget, {
+    navigateAfterAccountSignIn(continuationTarget, {
       replaceDocumentLocation: (target) => documentLocations.push(target),
       setLocation: (...args) => clientLocations.push(args),
     });
@@ -89,25 +88,25 @@ describe("owner login route data flow", () => {
     expect(clientLocations).toEqual([]);
   });
 
-  it("uses client navigation for normal owner login redirects", () => {
+  it("uses client navigation for normal account sign-in redirects", () => {
     const clientLocations: unknown[] = [];
     const documentLocations: string[] = [];
     const redirectTarget = "/apps/personal/settings?panel=routes" as const;
 
-    navigateAfterOwnerLogin(redirectTarget, {
+    navigateAfterAccountSignIn(redirectTarget, {
       replaceDocumentLocation: (target) => documentLocations.push(target),
       setLocation: (...args) => clientLocations.push(args),
     });
 
-    expect(ownerLoginRedirectRequiresDocumentNavigation(redirectTarget)).toBe(false);
+    expect(accountSignInRedirectRequiresDocumentNavigation(redirectTarget)).toBe(false);
     expect(clientLocations).toEqual([[redirectTarget, { replace: true }]]);
     expect(documentLocations).toEqual([]);
   });
 
   it("loads ready state when owner setup is complete but no session exists", async () => {
-    const states: OwnerLoginRouteState[] = [];
-    const stop = startOwnerLoginRouteSession({
-      fetcher: jsonFetcher({ authenticated: false, owner, setupComplete: true }),
+    const states: AccountSignInRouteState[] = [];
+    const stop = startAccountSignInRouteSession({
+      fetcher: jsonFetcher({ authenticated: false, setupComplete: true }),
       onState: (state) => states.push(state),
       passkeysSupported: () => true,
     });
@@ -118,13 +117,13 @@ describe("owner login route data flow", () => {
       stop();
     }
 
-    expect(states).toEqual([{ status: "loading" }, { status: "ready", owner }]);
+    expect(states).toEqual([{ status: "loading" }, { status: "ready" }]);
   });
 
   it("loads unavailable state when setup is complete but WebAuthn is unavailable", async () => {
-    const states: OwnerLoginRouteState[] = [];
-    const stop = startOwnerLoginRouteSession({
-      fetcher: jsonFetcher({ authenticated: false, owner, setupComplete: true }),
+    const states: AccountSignInRouteState[] = [];
+    const stop = startAccountSignInRouteSession({
+      fetcher: jsonFetcher({ authenticated: false, setupComplete: true }),
       onState: (state) => states.push(state),
       passkeysSupported: () => false,
     });
@@ -140,17 +139,16 @@ describe("owner login route data flow", () => {
       {
         status: "passkey-unavailable",
         message: "This browser does not support passkeys.",
-        owner,
       },
     ]);
   });
 
-  it("loads complete state when an owner session already exists", async () => {
-    const states: OwnerLoginRouteState[] = [];
-    const stop = startOwnerLoginRouteSession({
+  it("loads complete state with the authenticated principal identity", async () => {
+    const states: AccountSignInRouteState[] = [];
+    const stop = startAccountSignInRouteSession({
       fetcher: jsonFetcher({
         authenticated: true,
-        owner,
+        principal,
         session: { expiresAt: "2026-06-21T00:00:00.000Z" },
         setupComplete: true,
       }),
@@ -163,12 +161,12 @@ describe("owner login route data flow", () => {
       stop();
     }
 
-    expect(states).toEqual([{ status: "loading" }, { status: "complete", owner }]);
+    expect(states).toEqual([{ status: "loading" }, { status: "complete", principal }]);
   });
 
   it("loads setup-incomplete state before the first owner exists", async () => {
-    const states: OwnerLoginRouteState[] = [];
-    const stop = startOwnerLoginRouteSession({
+    const states: AccountSignInRouteState[] = [];
+    const stop = startAccountSignInRouteSession({
       fetcher: jsonFetcher({ authenticated: false, setupComplete: false }),
       onState: (state) => states.push(state),
     });
@@ -182,7 +180,7 @@ describe("owner login route data flow", () => {
     expect(states).toEqual([{ status: "loading" }, { status: "setup-incomplete" }]);
   });
 
-  it("runs owner login through passkey assertion without admin authorization", async () => {
+  it("runs account sign-in through passkey assertion without admin authorization", async () => {
     const calls: Array<{
       authorization: string | null;
       body: unknown;
@@ -208,7 +206,7 @@ describe("owner login route data flow", () => {
       return Response.json({
         authenticated: true,
         continueTo: "/formless/auth",
-        owner,
+        principal,
         session: { expiresAt: "2026-06-21T00:00:00.000Z" },
       });
     };
@@ -221,7 +219,7 @@ describe("owner login route data flow", () => {
     ).resolves.toEqual({
       authenticated: true,
       continueTo: "/formless/auth",
-      owner,
+      principal,
       session: { expiresAt: "2026-06-21T00:00:00.000Z" },
     });
     expect(calls).toEqual([
@@ -244,7 +242,7 @@ describe("owner login route data flow", () => {
     ]);
   });
 
-  it("keeps owner login failure details", async () => {
+  it("keeps account sign-in failure details", async () => {
     await expect(
       loginWithPasskey({
         createAuthenticationResponse: async () => authenticationResponse,
@@ -256,7 +254,7 @@ describe("owner login route data flow", () => {
     ).rejects.toMatchObject({
       message: "Instance auth configuration is missing.",
       status: 400,
-    } satisfies Partial<OwnerLoginApiError>);
+    } satisfies Partial<AccountSignInApiError>);
   });
 
   it("posts logout without admin authorization", async () => {
@@ -277,7 +275,7 @@ describe("owner login route data flow", () => {
       return Response.json({ authenticated: false, continueTo: "/formless/auth/sign-in" });
     };
 
-    await expect(logoutOwnerSession({ fetcher })).resolves.toEqual({
+    await expect(logoutAccountSession({ fetcher })).resolves.toEqual({
       authenticated: false,
       continueTo: "/formless/auth/sign-in",
     });
@@ -291,23 +289,22 @@ describe("owner login route data flow", () => {
     ]);
   });
 
-  it("parses owner session status responses", async () => {
+  it("parses anonymous account session status without candidate identity", async () => {
     await expect(
-      fetchOwnerSessionStatus({
-        fetcher: jsonFetcher({ authenticated: false, owner, setupComplete: true }),
+      fetchAccountSessionStatus({
+        fetcher: jsonFetcher({ authenticated: false, setupComplete: true }),
       }),
-    ).resolves.toEqual({ authenticated: false, owner, setupComplete: true });
+    ).resolves.toEqual({ authenticated: false, setupComplete: true });
   });
 });
 
 const loginOptionsResponse = {
   options: {
-    allowCredentials: [{ id: "Y3JlZA", transports: ["internal"], type: "public-key" }],
     challenge: "Y2hhbGxlbmdl",
     rpId: "example.com",
-    userVerification: "preferred",
+    userVerification: "required",
   },
-} satisfies OwnerPasskeyLoginOptionsResponse;
+} satisfies AccountPasskeyLoginOptionsResponse;
 
 const authenticationResponse = {
   clientExtensionResults: {},
@@ -320,7 +317,7 @@ const authenticationResponse = {
     userHandle: "dXNlcg",
   },
   type: "public-key",
-} satisfies OwnerPasskeyLoginVerifyRequest["response"];
+} satisfies AccountPasskeyLoginVerifyRequest["response"];
 
 function jsonFetcher(body: unknown, init: ResponseInit = {}): typeof fetch {
   return async () => Response.json(body, init);

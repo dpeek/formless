@@ -8,11 +8,13 @@ import type {
   AuthenticationResponseJSON,
   PublicKeyCredentialRequestOptionsJSON,
 } from "@simplewebauthn/server";
+import { IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX } from "@dpeek/formless-identity-control-plane";
 
 import type {
-  OwnerPasskeyLoginOptionsResponse,
-  OwnerPasskeyLoginVerifyResponse,
+  AccountPasskeyLoginOptionsResponse,
+  AccountPasskeyLoginVerifyResponse,
 } from "../shared/instance-auth.ts";
+import type { OperationInvocationResponse } from "../shared/operation-invocation.ts";
 import { CENTRAL_AUTH_SESSION_COOKIE_NAME } from "./central-auth-session.ts";
 import { HOST_AUTH_SESSION_COOKIE_NAME } from "./instance-auth-handoff.ts";
 import { OWNER_SESSION_COOKIE_NAME } from "./owner-session.ts";
@@ -32,14 +34,14 @@ let harnessDir: string | undefined;
 let harnessPath: string;
 
 beforeAll(async () => {
-  harnessPath = await writeOwnerPasskeyHarness();
+  harnessPath = await writeAccountPasskeyHarness();
 });
 
 beforeEach(async () => {
   harness = await createWorkerHarness(
     harnessPath,
     {
-      FORMLESS_AUTHORITY: { className: "OwnerPasskeyApiHarness", useSQLite: true },
+      FORMLESS_AUTHORITY: { className: "AccountPasskeyApiHarness", useSQLite: true },
     },
     {
       bindings: { FORMLESS_ADMIN_TOKEN: adminToken },
@@ -58,17 +60,17 @@ afterAll(async () => {
   }
 });
 
-describe("owner passkey login API routes", () => {
-  it("creates login options and verifies assertions against owner credential facts", async () => {
+describe("account passkey login API routes", () => {
+  it("creates discoverable login options and verifies owner assertions", async () => {
     const authenticator = new VirtualPasskey(credentialId);
     const owner = await seedOwnerPasskey(authenticator);
+    const principal = accountPrincipalIdentity(owner);
     const options = await loginOptions();
 
     expect(options.response.status).toBe(200);
     expect(options.body.options.rpId).toBe(relyingPartyId);
-    expect(options.body.options.allowCredentials).toEqual([
-      { id: credentialId, type: "public-key", transports: ["internal"] },
-    ]);
+    expect(options.body.options.allowCredentials).toBeUndefined();
+    expect(options.body.options.userVerification).toBe("required");
 
     const accepted = await verifyLogin(
       authenticator.authenticationResponse(options.body.options, {
@@ -98,29 +100,25 @@ describe("owner passkey login API routes", () => {
     expect(accepted.body).toEqual({
       authenticated: true,
       continueTo: "/formless/auth",
-      owner,
+      principal,
       session: { expiresAt: expect.any(String) },
     });
     expect(replay.response.status).toBe(401);
     expect(replay.response.headers.get("Set-Cookie")).toBeNull();
     expect(replay.body).toEqual({ error: "Passkey challenge is invalid." });
 
-    await createStoredCredential("Y3JlZGVudGlhbC0y", "other-principal");
-
-    const wrongPrincipalOptions = await loginOptions();
-    const wrongPrincipal = await verifyLogin(
-      new VirtualPasskey("Y3JlZGVudGlhbC0y").authenticationResponse(
-        wrongPrincipalOptions.body.options,
-        {
-          counter: 2,
-          origin: canonicalOrigin,
-          rpId: relyingPartyId,
-        },
-      ),
+    const wrongUserHandleOptions = await loginOptions();
+    const wrongUserHandle = await verifyLogin(
+      authenticator.authenticationResponse(wrongUserHandleOptions.body.options, {
+        counter: 2,
+        origin: canonicalOrigin,
+        rpId: relyingPartyId,
+        userHandle: "principal:other",
+      }),
     );
 
-    expect(wrongPrincipal.response.status).toBe(401);
-    expect(wrongPrincipal.body).toEqual({
+    expect(wrongUserHandle.response.status).toBe(401);
+    expect(wrongUserHandle.body).toEqual({
       authenticated: false,
       error: "Passkey credential is invalid.",
     });
@@ -171,9 +169,107 @@ describe("owner passkey login API routes", () => {
     });
   });
 
+  it("authenticates active instance admins and app principals without preselecting a role", async () => {
+    await seedOwnerPasskey(new VirtualPasskey(credentialId));
+
+    for (const account of [
+      {
+        displayName: "Instance Admin",
+        role: { kind: "instance" as const, roleKey: "instance.admin" as const },
+      },
+      {
+        displayName: "Tasks App Admin",
+        role: {
+          appInstallId: "tasks",
+          kind: "app" as const,
+          roleKey: "app.admin" as const,
+        },
+      },
+    ]) {
+      const principal = await createIdentityPrincipal(account.displayName);
+      await assignIdentityRole(principal.principalId, account.role);
+      const accountCredentialId = base64UrlEncode(
+        new TextEncoder().encode(`credential:${account.displayName}`),
+      );
+      const authenticator = new VirtualPasskey(accountCredentialId, principal.principalId);
+
+      await createStoredCredential(accountCredentialId, principal.principalId, authenticator);
+
+      const options = await loginOptions();
+      const accepted = await verifyLogin(
+        authenticator.authenticationResponse(options.body.options, {
+          counter: 1,
+          origin: canonicalOrigin,
+          rpId: relyingPartyId,
+        }),
+      );
+      const sessionCookie = cookiePair(accepted.response.headers.get("Set-Cookie"));
+      const status = await harness.fetch("/api/formless/session", {
+        headers: { Cookie: sessionCookie },
+      });
+
+      expect(accepted.response.status).toBe(200);
+      expect(accepted.body).toEqual({
+        authenticated: true,
+        continueTo: "/formless/auth",
+        principal,
+        session: { expiresAt: expect.any(String) },
+      });
+      expect(status.status).toBe(200);
+      await expect(status.json()).resolves.toEqual({
+        authenticated: true,
+        principal,
+        session: { expiresAt: expect.any(String) },
+        setupComplete: true,
+      });
+    }
+  });
+
+  it("rejects an inactive credential principal without advancing verification state", async () => {
+    await seedOwnerPasskey(new VirtualPasskey(credentialId));
+
+    const principal = await createIdentityPrincipal("Inactive Account");
+    const inactiveCredentialId = base64UrlEncode(new TextEncoder().encode("credential:inactive"));
+    const authenticator = new VirtualPasskey(inactiveCredentialId, principal.principalId);
+
+    await createStoredCredential(inactiveCredentialId, principal.principalId, authenticator);
+
+    const options = await loginOptions();
+    await updateIdentityPrincipalStatus(principal.principalId, "disabled");
+
+    const rejected = await verifyLogin(
+      authenticator.authenticationResponse(options.body.options, {
+        counter: 1,
+        origin: canonicalOrigin,
+        rpId: relyingPartyId,
+      }),
+    );
+
+    expect(rejected.response.status).toBe(401);
+    expect(rejected.response.headers.get("Set-Cookie")).toBeNull();
+    expect(rejected.body).toEqual({
+      authenticated: false,
+      error: "Passkey credential is invalid.",
+    });
+
+    await updateIdentityPrincipalStatus(principal.principalId, "active");
+
+    const retryOptions = await loginOptions();
+    const accepted = await verifyLogin(
+      authenticator.authenticationResponse(retryOptions.body.options, {
+        counter: 1,
+        origin: canonicalOrigin,
+        rpId: relyingPartyId,
+      }),
+    );
+
+    expect(accepted.response.status).toBe(200);
+  });
+
   it("rejects app-controlled redirect input without consuming the login challenge", async () => {
     const authenticator = new VirtualPasskey(credentialId);
     const owner = await seedOwnerPasskey(authenticator);
+    const principal = accountPrincipalIdentity(owner);
     const options = await loginOptions();
     const response = authenticator.authenticationResponse(options.body.options, {
       counter: 1,
@@ -192,7 +288,7 @@ describe("owner passkey login API routes", () => {
     expect(accepted.body).toEqual({
       authenticated: true,
       continueTo: "/formless/auth",
-      owner,
+      principal,
       session: { expiresAt: expect.any(String) },
     });
   });
@@ -234,20 +330,110 @@ async function seedOwnerPasskey(authenticator: VirtualPasskey) {
   return response.body.owner;
 }
 
+function accountPrincipalIdentity(owner: { email?: string; id: string; name: string }) {
+  return {
+    displayName: owner.name,
+    ...(owner.email === undefined ? {} : { email: owner.email }),
+    principalId: owner.id,
+  };
+}
+
+async function createIdentityPrincipal(displayName: string) {
+  const response = await postJson<OperationInvocationResponse>(
+    `${IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX}/operations/principal/create`,
+    {
+      idempotencyKey: `account-passkey-principal-${displayName.replace(/\W+/g, "-").toLowerCase()}`,
+      input: {
+        displayName,
+        kind: "human",
+        status: "active",
+      },
+    },
+    {
+      headers: { Authorization: `Bearer ${adminToken}` },
+    },
+  );
+
+  expect(response.response.status).toBe(200);
+
+  if (response.body.output.type !== "create") {
+    throw new Error("Expected principal create output.");
+  }
+
+  return {
+    displayName,
+    principalId: response.body.output.record.id,
+  };
+}
+
+async function assignIdentityRole(
+  principalId: string,
+  role:
+    | { kind: "instance"; roleKey: "instance.admin" }
+    | { appInstallId: string; kind: "app"; roleKey: "app.admin" },
+) {
+  const response = await postJson(
+    `${IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX}/operations/role-assignment/create`,
+    {
+      idempotencyKey: `account-passkey-role-${principalId.replace(/\W+/g, "-")}`,
+      input: {
+        ...(role.kind === "app"
+          ? { appInstallId: role.appInstallId, scopeKind: "app-install" }
+          : { scopeKind: "instance" }),
+        role: `role:${role.roleKey}`,
+        status: "active",
+        targetKind: "principal",
+        targetPrincipal: principalId,
+      },
+    },
+    {
+      headers: { Authorization: `Bearer ${adminToken}` },
+    },
+  );
+
+  expect(response.response.status).toBe(200);
+}
+
+async function updateIdentityPrincipalStatus(principalId: string, status: "active" | "disabled") {
+  const response = await postJson(
+    `${IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX}/operations/principal/update`,
+    {
+      idempotencyKey: `account-passkey-principal-${status}-${principalId.replace(/\W+/g, "-")}`,
+      input: { status },
+      recordId: principalId,
+    },
+    {
+      headers: { Authorization: `Bearer ${adminToken}` },
+    },
+  );
+
+  expect(response.response.status).toBe(200);
+}
+
 async function createStoredCredential(
   credentialIdValue: string,
-  principalIdValue = "existing-principal",
+  principalIdValue: string,
+  authenticator: VirtualPasskey,
 ) {
   const response = await postJson("/harness/credential", {
     credentialId: credentialIdValue,
+    credentialPublicKey: [...authenticator.credentialPublicKey()],
     principalId: principalIdValue,
   });
 
   expect(response.response.status).toBe(200);
 }
 
+function cookiePair(setCookie: string | null): string {
+  if (!setCookie) {
+    throw new Error("Expected session cookie.");
+  }
+
+  return setCookie.split(";", 1)[0] ?? "";
+}
+
 async function loginOptions() {
-  const response = await postJson<OwnerPasskeyLoginOptionsResponse>(
+  const response = await postJson<AccountPasskeyLoginOptionsResponse>(
     "/api/formless/passkeys/login/options",
     {},
   );
@@ -261,7 +447,7 @@ async function verifyLogin(
   response: AuthenticationResponseJSON,
   input: { redirectTo?: unknown } = {},
 ) {
-  return postJson<OwnerPasskeyLoginVerifyResponse | { authenticated?: false; error: string }>(
+  return postJson<AccountPasskeyLoginVerifyResponse | { authenticated?: false; error: string }>(
     "/api/formless/passkeys/login/verify",
     { ...input, response },
   );
@@ -287,19 +473,26 @@ async function postJson<T = unknown>(path: string, body: unknown, init: HarnessF
 class VirtualPasskey {
   private readonly credentialId: string;
   private readonly privateKey: KeyObject;
+  private readonly principalId: string;
   private readonly publicKey: KeyObject;
 
-  constructor(credentialIdValue: string) {
+  constructor(credentialIdValue: string, principalId = "owner") {
     const pair = generateKeyPairSync("ec", { namedCurve: "prime256v1" });
 
     this.credentialId = credentialIdValue;
     this.privateKey = pair.privateKey;
+    this.principalId = principalId;
     this.publicKey = pair.publicKey;
   }
 
   authenticationResponse(
     options: PublicKeyCredentialRequestOptionsJSON,
-    input: { counter: number; origin: string; rpId: string },
+    input: {
+      counter: number;
+      origin: string;
+      rpId: string;
+      userHandle?: string;
+    },
   ): AuthenticationResponseJSON {
     const clientDataJSON = clientDataJson(options.challenge, input.origin);
     const authenticatorData = authenticationAuthenticatorData({
@@ -317,7 +510,7 @@ class VirtualPasskey {
         clientDataJSON: base64UrlEncode(clientDataJSON),
         authenticatorData: base64UrlEncode(authenticatorData),
         signature: base64UrlEncode(signature),
-        userHandle: base64UrlEncode(new TextEncoder().encode("owner")),
+        userHandle: base64UrlEncode(new TextEncoder().encode(input.userHandle ?? this.principalId)),
       },
       authenticatorAttachment: "platform",
       clientExtensionResults: {},
@@ -445,9 +638,9 @@ function base64UrlDecode(value: string): Uint8Array {
   return new Uint8Array(Buffer.from(value, "base64url"));
 }
 
-async function writeOwnerPasskeyHarness() {
-  harnessDir = await mkdtemp(join(tmpdir(), "formless-owner-passkey-api-harness-"));
-  const path = join(harnessDir, "owner-passkey-api-harness.ts");
+async function writeAccountPasskeyHarness() {
+  harnessDir = await mkdtemp(join(tmpdir(), "formless-account-passkey-api-harness-"));
+  const path = join(harnessDir, "account-passkey-api-harness.ts");
 
   await writeFile(
     path,
@@ -459,7 +652,7 @@ async function writeOwnerPasskeyHarness() {
       import { ensureIdentityOwner } from "${process.cwd()}/src/worker/identity-control-plane.ts";
       import { createPasskeyCredential, writeInstanceAuthConfig } from "${process.cwd()}/src/worker/instance-auth-state.ts";
 
-      export class OwnerPasskeyApiHarness extends FormlessAuthority {
+      export class AccountPasskeyApiHarness extends FormlessAuthority {
         async fetch(request) {
           const url = new URL(request.url);
 
@@ -496,7 +689,7 @@ async function writeOwnerPasskeyHarness() {
             const credential = createPasskeyCredential(this.ctx.storage, {
               credentialId: body.credentialId,
               principalId: body.principalId ?? "existing-principal",
-              publicKey: new Uint8Array([1, 2, 3, 4]),
+              publicKey: new Uint8Array(body.credentialPublicKey),
               counter: 0,
               transports: ["internal"],
               credentialDeviceType: "singleDevice",

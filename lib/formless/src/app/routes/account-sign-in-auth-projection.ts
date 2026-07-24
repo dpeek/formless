@@ -5,55 +5,57 @@ import type {
   AuthMessageContract,
   AuthPasskeyContract,
   ButtonContract,
-  OwnerSignInAuthSurfaceContract,
+  AccountSignInAuthSurfaceContract,
 } from "@dpeek/formless-presentation/contract";
 import { authSurfaceReference } from "@dpeek/formless-presentation/host";
 import { displaySafeText } from "./instance-management-display-safety.ts";
-import type { OwnerLoginRouteState } from "./owner-login.tsx";
+import type { AccountSignInRouteState } from "./account-sign-in.tsx";
 
-export const OWNER_SIGN_IN_AUTH_SURFACE_ID = "auth:owner-sign-in";
+export const ACCOUNT_SIGN_IN_AUTH_SURFACE_ID = "auth:account-sign-in";
 
-export const ownerSignInAuthSurfaceReference = authSurfaceReference({
-  surfaceId: OWNER_SIGN_IN_AUTH_SURFACE_ID,
-  surfaceKind: "owner-sign-in",
+export const accountSignInAuthSurfaceReference = authSurfaceReference({
+  surfaceId: ACCOUNT_SIGN_IN_AUTH_SURFACE_ID,
+  surfaceKind: "account-sign-in",
 });
 
-export function projectOwnerSignInAuthSurface({
+export function projectAccountSignInAuthSurface({
   state,
 }: {
-  state: OwnerLoginRouteState;
-}): OwnerSignInAuthSurfaceContract {
+  state: AccountSignInRouteState;
+}): AccountSignInAuthSurfaceContract {
   const pending =
     state.status === "submitting" ||
     state.status === "logging-out" ||
     state.status === "continuing";
-  const passkey = ownerSignInPasskey(state);
+  const passkey = accountSignInPasskey(state);
 
   return {
-    actions: ownerSignInActions(state),
+    actions: accountSignInActions(state),
     ...(state.status === "complete" ? { continuation: authContinuation() } : {}),
-    facts: ownerSignInFacts(state),
+    facts: accountSignInFacts(state),
     ...(state.status === "failed"
-      ? { feedback: authFeedback("sign-in-failure", "Owner sign in failed", state.message) }
+      ? {
+          feedback: authFeedback("sign-in-failure", "Account sign in failed", state.message),
+        }
       : {}),
     fields: [],
-    frame: authFrame(ownerSignInHeading(state), ownerSignInDescription(state)),
-    id: OWNER_SIGN_IN_AUTH_SURFACE_ID,
+    frame: authFrame(accountSignInHeading(state), accountSignInDescription(state)),
+    id: ACCOUNT_SIGN_IN_AUTH_SURFACE_ID,
     kind: "authSurface",
-    ...(ownerSignInMessage(state) ? { message: ownerSignInMessage(state) } : {}),
+    ...(accountSignInMessage(state) ? { message: accountSignInMessage(state) } : {}),
     ...(passkey ? { passkey } : {}),
     pending,
     policies: [],
-    state: ownerSignInContractState(state),
-    surfaceKind: "owner-sign-in",
+    state: accountSignInContractState(state),
+    surfaceKind: "account-sign-in",
   };
 }
 
-function ownerSignInPasskey(state: OwnerLoginRouteState): AuthPasskeyContract | undefined {
+function accountSignInPasskey(state: AccountSignInRouteState): AuthPasskeyContract | undefined {
   if (state.status === "passkey-unavailable") {
     return {
       availability: "unavailable",
-      id: `${OWNER_SIGN_IN_AUTH_SURFACE_ID}:passkey:sign-in`,
+      id: `${ACCOUNT_SIGN_IN_AUTH_SURFACE_ID}:passkey:sign-in`,
       kind: "authPasskey",
       purpose: "sign-in",
       unavailableReason: displaySafeText(state.message),
@@ -62,13 +64,13 @@ function ownerSignInPasskey(state: OwnerLoginRouteState): AuthPasskeyContract | 
   if (
     state.status !== "ready" &&
     state.status !== "submitting" &&
-    !(state.status === "failed" && state.owner)
+    !(state.status === "failed" && state.retry === "sign-in")
   ) {
     return undefined;
   }
 
   const pending = state.status === "submitting";
-  const passkeyId = `${OWNER_SIGN_IN_AUTH_SURFACE_ID}:passkey:sign-in`;
+  const passkeyId = `${ACCOUNT_SIGN_IN_AUTH_SURFACE_ID}:passkey:sign-in`;
   const control = authButton(
     `${passkeyId}:control`,
     pending
@@ -88,7 +90,7 @@ function ownerSignInPasskey(state: OwnerLoginRouteState): AuthPasskeyContract | 
     intent: {
       controlId: control.id,
       passkeyId,
-      surfaceId: OWNER_SIGN_IN_AUTH_SURFACE_ID,
+      surfaceId: ACCOUNT_SIGN_IN_AUTH_SURFACE_ID,
       type: "authPasskey",
     },
     kind: "authPasskey",
@@ -96,11 +98,13 @@ function ownerSignInPasskey(state: OwnerLoginRouteState): AuthPasskeyContract | 
   };
 }
 
-function ownerSignInActions(state: OwnerLoginRouteState): readonly AuthActionContract[] {
+function accountSignInActions(state: AccountSignInRouteState): readonly AuthActionContract[] {
   if (state.status === "complete") {
     return [authAction("logout", "Sign out", "secondary")];
   }
-  return state.status === "failed" && !state.owner ? [authAction("retry", "Try again")] : [];
+  return state.status === "failed" && state.retry === "load"
+    ? [authAction("retry", "Try again")]
+    : [];
 }
 
 function authAction(
@@ -108,7 +112,7 @@ function authAction(
   label: string,
   prominence: ButtonContract["prominence"] = "primary",
 ): AuthActionContract {
-  const id = `${OWNER_SIGN_IN_AUTH_SURFACE_ID}:action:${purpose}`;
+  const id = `${ACCOUNT_SIGN_IN_AUTH_SURFACE_ID}:action:${purpose}`;
   const control = authButton(`${id}:control`, label, prominence);
   return {
     control,
@@ -116,7 +120,7 @@ function authAction(
     intent: {
       actionId: id,
       controlId: control.id,
-      surfaceId: OWNER_SIGN_IN_AUTH_SURFACE_ID,
+      surfaceId: ACCOUNT_SIGN_IN_AUTH_SURFACE_ID,
       type: "authAction",
     },
     kind: "authAction",
@@ -125,7 +129,7 @@ function authAction(
 }
 
 function authContinuation(): AuthContinuationContract {
-  const destinationId = `${OWNER_SIGN_IN_AUTH_SURFACE_ID}:destination:account`;
+  const destinationId = `${ACCOUNT_SIGN_IN_AUTH_SURFACE_ID}:destination:account`;
   const control = authButton(`${destinationId}:control`, "Continue", "primary");
   return {
     control,
@@ -138,43 +142,43 @@ function authContinuation(): AuthContinuationContract {
     intent: {
       controlId: control.id,
       destinationId,
-      surfaceId: OWNER_SIGN_IN_AUTH_SURFACE_ID,
+      surfaceId: ACCOUNT_SIGN_IN_AUTH_SURFACE_ID,
       type: "authContinuation",
     },
     kind: "authContinuation",
   };
 }
 
-function ownerSignInFacts(state: OwnerLoginRouteState) {
-  return "owner" in state && state.owner
+function accountSignInFacts(state: AccountSignInRouteState) {
+  return "principal" in state && state.principal
     ? [
         {
-          id: "auth:fact:owner",
+          id: "auth:fact:principal",
           kind: "authFact" as const,
-          label: "Owner",
-          value: displaySafeText(state.owner.name),
+          label: "Account",
+          value: displaySafeText(state.principal.displayName),
         },
       ]
     : [];
 }
 
-function ownerSignInContractState(
-  state: OwnerLoginRouteState,
-): OwnerSignInAuthSurfaceContract["state"] {
+function accountSignInContractState(
+  state: AccountSignInRouteState,
+): AccountSignInAuthSurfaceContract["state"] {
   if (state.status === "logging-out") return "logout-pending";
   if (state.status === "setup-incomplete") return "incomplete";
   return state.status;
 }
 
-function ownerSignInHeading(state: OwnerLoginRouteState): string {
+function accountSignInHeading(state: AccountSignInRouteState): string {
   switch (state.status) {
     case "complete":
     case "continuing":
-      return "Owner signed in";
+      return "Signed in";
     case "logging-out":
       return "Signing out";
     case "loading":
-      return "Checking owner session";
+      return "Checking account session";
     case "passkey-unavailable":
       return "Passkeys are unavailable";
     case "setup-incomplete":
@@ -182,24 +186,24 @@ function ownerSignInHeading(state: OwnerLoginRouteState): string {
     case "failed":
     case "ready":
     case "submitting":
-      return "Owner sign in";
+      return "Account sign in";
   }
 }
 
-function ownerSignInDescription(state: OwnerLoginRouteState): string | undefined {
+function accountSignInDescription(state: AccountSignInRouteState): string | undefined {
   switch (state.status) {
     case "complete":
-      return `Signed in as ${displaySafeText(state.owner.name)}.`;
+      return `Signed in as ${displaySafeText(state.principal.displayName)}.`;
     case "continuing":
       return "Opening your approved destination.";
     case "logging-out":
-      return `Signed in as ${displaySafeText(state.owner.name)}.`;
+      return `Signed in as ${displaySafeText(state.principal.displayName)}.`;
     case "ready":
     case "submitting":
-      return `Sign in as ${displaySafeText(state.owner.name)}.`;
+      return "Use a passkey for your Formless account.";
     case "failed":
-      return state.owner
-        ? `Sign in as ${displaySafeText(state.owner.name)}.`
+      return state.principal
+        ? `Signed in as ${displaySafeText(state.principal.displayName)}.`
         : "Sign in to this Formless instance.";
     case "setup-incomplete":
       return "Create the first owner before signing in.";
@@ -208,7 +212,7 @@ function ownerSignInDescription(state: OwnerLoginRouteState): string | undefined
   }
 }
 
-function ownerSignInMessage(state: OwnerLoginRouteState): AuthMessageContract | undefined {
+function accountSignInMessage(state: AccountSignInRouteState): AuthMessageContract | undefined {
   if (state.status === "loading") return authMessage("loading", "Loading sign-in state.");
   if (state.status === "passkey-unavailable")
     return authMessage("passkey", state.message, "warning");

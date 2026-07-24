@@ -117,7 +117,7 @@ function routeComponents(): AppRouteComponents {
     ),
     InstanceShellRoute: () => <output data-route="instance" />,
     LocalSessionRoute: () => <output data-route="local-session" />,
-    OwnerLoginRoute: () => <output data-route="owner-login" />,
+    AccountSignInRoute: () => <output data-route="account-sign-in" />,
     SitePageRoute: ({ linkMode, routeBase, slug, target }) => (
       <output
         data-install-id={targetInstallId(target)}

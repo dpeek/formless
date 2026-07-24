@@ -340,6 +340,14 @@ describe("production owner setup email proof API", () => {
     const challenges = await ownerSetupPasskeyChallenges();
 
     expect(options.completionId).toMatch(/^[A-Za-z0-9_-]+$/);
+    expect(options.options.authenticatorSelection).toMatchObject({
+      requireResidentKey: true,
+      residentKey: "required",
+      userVerification: "required",
+    });
+    expect(Buffer.from(options.options.user.id, "base64url").toString()).toBe(
+      `principal:owner-setup:${options.completionId}`,
+    );
     expect(challenges).toEqual([
       {
         authOrigin,
@@ -487,6 +495,28 @@ describe("production owner setup email proof API", () => {
     });
 
     expect(wrongRp).toEqual({
+      body: { error: "Passkey registration verification failed." },
+      status: 401,
+    });
+    expect(await ownerSetupPasskeyPreparations()).toEqual([]);
+
+    const unverifiedOptions = await requestOwnerSetupPasskeyOptions({
+      challengeId: verifiedEmail.started.ownerSetup.challengeId,
+      email: "ada.owner@example.com",
+    });
+    const unverified = await postAuthJsonFailure("/formless/auth/setup/passkeys/register/verify", {
+      challengeId: verifiedEmail.started.ownerSetup.challengeId,
+      completionId: unverifiedOptions.completionId,
+      email: "ada.owner@example.com",
+      response: passkey.registrationResponse(unverifiedOptions.options, {
+        origin: authOrigin,
+        rpId: "auth.example.com",
+        userVerified: false,
+      }),
+      setupToken,
+    });
+
+    expect(unverified).toEqual({
       body: { error: "Passkey registration verification failed." },
       status: 401,
     });
@@ -1134,7 +1164,7 @@ class VirtualPasskey {
 
   registrationResponse(
     options: PublicKeyCredentialCreationOptionsJSON,
-    input: { origin: string; rpId: string },
+    input: { origin: string; rpId: string; userVerified?: boolean },
   ): RegistrationResponseJSON {
     const clientDataJSON = clientDataJson("webauthn.create", options.challenge, input.origin);
     const authData = registrationAuthenticatorData({
@@ -1142,6 +1172,7 @@ class VirtualPasskey {
       credentialPublicKey: this.credentialPublicKey(),
       counter: 0,
       rpId: input.rpId,
+      userVerified: input.userVerified ?? true,
     });
     const attestationObject = cborMap([
       ["fmt", "none"],
@@ -1185,6 +1216,7 @@ function registrationAuthenticatorData(input: {
   credentialId: Uint8Array;
   credentialPublicKey: Uint8Array;
   rpId: string;
+  userVerified: boolean;
 }) {
   const credentialIdLength = new Uint8Array(2);
   const credentialIdLengthView = new DataView(credentialIdLength.buffer);
@@ -1193,7 +1225,7 @@ function registrationAuthenticatorData(input: {
 
   return concatBytes([
     sha256(new TextEncoder().encode(input.rpId)),
-    new Uint8Array([0x45]),
+    new Uint8Array([input.userVerified ? 0x45 : 0x41]),
     uint32(input.counter),
     new Uint8Array(16),
     credentialIdLength,

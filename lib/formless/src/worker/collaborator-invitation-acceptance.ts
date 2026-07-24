@@ -14,7 +14,7 @@ import {
   type AccountCompletionGateTarget,
   type AuthSuccessContinuationTarget,
   parseInstanceAuthCanonicalOrigin,
-  parseOwnerLoginRedirectTarget,
+  parseAccountRedirectTarget,
 } from "../shared/instance-auth.ts";
 import { normalizeEmailDeliveryAddress } from "../shared/email-runtime.ts";
 import { nowIsoString } from "../shared/clock.ts";
@@ -212,8 +212,8 @@ async function handlePasskeyRegistrationOptionsRequest(
     userName: candidate.invitation.targetEmail,
     attestationType: "none",
     authenticatorSelection: {
-      residentKey: "preferred",
-      userVerification: "preferred",
+      residentKey: "required",
+      userVerification: "required",
     },
   });
   const created = createPasskeyChallenge(storage, {
@@ -289,6 +289,7 @@ async function handlePasskeyRegistrationVerifyRequest(
       expectedChallenge: challenge.challenge.challenge,
       expectedOrigin: candidate.config.canonicalOrigin,
       expectedRPID: candidate.config.relyingPartyId,
+      requireUserVerification: true,
     });
   } catch {
     return jsonResponse({ error: "Passkey registration verification failed." }, 401);
@@ -490,7 +491,7 @@ async function collaboratorInvitationAcceptanceContinuation(
     return undefined;
   }
 
-  const returnTo = parseOwnerLoginRedirectTarget(target.returnTo);
+  const returnTo = parseAccountRedirectTarget(target.returnTo);
 
   return returnTo === undefined
     ? undefined

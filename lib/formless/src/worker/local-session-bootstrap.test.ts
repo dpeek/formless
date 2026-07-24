@@ -6,7 +6,7 @@ import type {
   CreateAppInstallResponse,
   OwnerSetupStatusResponse,
 } from "../shared/protocol.ts";
-import type { OwnerSessionStatusResponse } from "../shared/instance-auth.ts";
+import type { AccountSessionStatusResponse } from "../shared/instance-auth.ts";
 import {
   LOCAL_SESSION_BOOTSTRAP_API_PATH,
   LOCAL_SESSION_BOOTSTRAP_TOKEN_ENV,
@@ -44,7 +44,7 @@ describe("local session bootstrap API routes", () => {
       reset: true,
     });
     const cookie = cookiePair(bootstrap.headers.get("Set-Cookie"));
-    const session = await getJson<OwnerSessionStatusResponse>("/api/formless/session", {
+    const session = await getJson<AccountSessionStatusResponse>("/api/formless/session", {
       headers: { Cookie: cookie },
     });
     const installsBefore = await getJson<AppInstallsResponse>("/api/formless/app-installs");
@@ -72,10 +72,9 @@ describe("local session bootstrap API routes", () => {
     expect(bootstrap.headers.get("Set-Cookie")).not.toContain(localSessionBootstrapToken);
     expect(session.body).toEqual({
       authenticated: true,
-      owner: {
-        id: "local-dev-owner",
-        name: "Local Dev Owner",
-        createdAt: expect.any(String),
+      principal: {
+        displayName: "Local Dev Owner",
+        principalId: "local-dev-owner",
       },
       session: { expiresAt: expect.any(String) },
       setupComplete: true,

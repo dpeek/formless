@@ -6,9 +6,9 @@ import {
 } from "@dpeek/formless-gateway";
 import { nowIsoString } from "../shared/clock.ts";
 import {
-  ownerLoginDefaultRedirectTarget,
-  parseOwnerLoginRedirectTarget,
-  type OwnerLoginRedirectTarget,
+  accountDefaultRedirectTarget,
+  parseAccountRedirectTarget,
+  type AccountRedirectTarget,
 } from "../shared/instance-auth.ts";
 import { resolveRuntimeProfileKind, runtimeTopologyRoutes } from "../shared/runtime-topology.ts";
 import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
@@ -93,8 +93,8 @@ export async function handleLocalSessionBootstrapDurableObjectRequest(
   });
   const requestUrl = new URL(request.url);
   const redirectTarget =
-    parseOwnerLoginRedirectTarget(requestUrl.searchParams.get("redirectTo")) ??
-    ownerLoginDefaultRedirectTarget;
+    parseAccountRedirectTarget(requestUrl.searchParams.get("redirectTo")) ??
+    accountDefaultRedirectTarget;
   const browserRedirectTarget = localSessionBrowserRedirectTarget(requestUrl, redirectTarget);
   const headers = new Headers({
     Location: new URL(browserRedirectTarget, localSessionRedirectOrigin(request)).toString(),
@@ -196,8 +196,8 @@ function localSessionRedirectOrigin(request: Request): string {
 
 function localSessionBrowserRedirectTarget(
   requestUrl: URL,
-  redirectTarget: OwnerLoginRedirectTarget,
-): OwnerLoginRedirectTarget {
+  redirectTarget: AccountRedirectTarget,
+): AccountRedirectTarget {
   if (requestUrl.searchParams.get("reset") !== "1") {
     return redirectTarget;
   }
@@ -207,7 +207,7 @@ function localSessionBrowserRedirectTarget(
   localSessionUrl.searchParams.set("reset", "1");
   localSessionUrl.searchParams.set("redirectTo", redirectTarget);
 
-  return `${localSessionUrl.pathname}${localSessionUrl.search}` as OwnerLoginRedirectTarget;
+  return `${localSessionUrl.pathname}${localSessionUrl.search}` as AccountRedirectTarget;
 }
 
 async function exchangeLocalSessionBootstrapToken(

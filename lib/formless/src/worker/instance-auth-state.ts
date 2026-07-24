@@ -10,10 +10,10 @@ import {
   parseInstanceAuthCanonicalOrigin,
   parseInstanceAuthConfigInput,
   parseInstanceAuthRelyingPartyId,
-  parseOwnerLoginRedirectTarget,
+  parseAccountRedirectTarget,
   type AccountCompletionGateTarget,
   type InstanceAuthConfigInput,
-  type OwnerLoginRedirectTarget,
+  type AccountRedirectTarget,
 } from "../shared/instance-auth.ts";
 import {
   parseRuntimeRouteAccess,
@@ -25,6 +25,11 @@ import {
 import { normalizeEmailDeliveryAddress } from "../shared/email-runtime.ts";
 import { nowIsoString } from "../shared/clock.ts";
 import type { IdentityInvitationTargetSurface } from "@dpeek/formless-identity-control-plane";
+import {
+  createSqlStorageMigrationRegistry,
+  runSqlStorageMigrations,
+  storageSqlMigrationFamily,
+} from "./sql-migrations.ts";
 
 const base64UrlPattern = /^[A-Za-z0-9_-]+$/;
 const signupPasskeyChallengeScopeHash = "c2lnbnVwLWVtYWlsLWNoYWxsZW5nZQ";
@@ -53,6 +58,59 @@ const authenticatorTransports = [
   "smart-card",
   "usb",
 ] as const satisfies readonly AuthenticatorTransportFuture[];
+
+const passkeyChallengesTableName = "instance_auth_challenges";
+const passkeyChallengesExpiresAtIndexName = "idx_instance_auth_challenges_expires_at";
+const passkeyChallengesTableSql = `
+  CREATE TABLE IF NOT EXISTS ${passkeyChallengesTableName} (
+    id TEXT PRIMARY KEY,
+    kind TEXT NOT NULL CHECK (kind IN ('login', 'registration')),
+    challenge TEXT NOT NULL UNIQUE,
+    invitation_id TEXT,
+    invitation_token_hash TEXT,
+    principal_id TEXT,
+    registration_origin TEXT,
+    registration_relying_party_id TEXT,
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    consumed_at TEXT,
+    CHECK (
+      (
+        kind = 'registration'
+        AND principal_id IS NOT NULL
+        AND invitation_id IS NOT NULL
+        AND invitation_token_hash IS NOT NULL
+        AND registration_origin IS NOT NULL
+        AND registration_relying_party_id IS NOT NULL
+      )
+      OR
+      (
+        kind = 'login'
+        AND principal_id IS NULL
+        AND invitation_id IS NULL
+        AND invitation_token_hash IS NULL
+        AND registration_origin IS NULL
+        AND registration_relying_party_id IS NULL
+      )
+    )
+  )
+`;
+const passkeyChallengesExpiresAtIndexSql = `
+  CREATE INDEX IF NOT EXISTS ${passkeyChallengesExpiresAtIndexName}
+    ON ${passkeyChallengesTableName} (expires_at)
+`;
+const instanceAuthSqlMigrationFamily = storageSqlMigrationFamily("instance-auth");
+const instanceAuthSqlMigrations = createSqlStorageMigrationRegistry([
+  {
+    id: "2026-07-24-instance-auth-principal-neutral-login-challenges",
+    owner: "formless",
+    family: instanceAuthSqlMigrationFamily,
+    checksum: "sha256:a067010dfdd1d5d38eb6d312fc9c1a1516ec7ab9caa315049210751c236164d8",
+    safety: "auto-safe",
+    summary: "Remove principal bindings from stored passkey login challenges.",
+    apply: migratePrincipalNeutralLoginChallenges,
+  },
+]);
 
 type InstanceAuthConfigRow = {
   canonical_origin: string;
@@ -217,7 +275,6 @@ export type StoredPasskeyLoginChallenge = {
   id: string;
   kind: "login";
   challenge: string;
-  principalId: string;
   createdAt: string;
   expiresAt: string;
   consumedAt?: string;
@@ -255,7 +312,6 @@ export type CreatePasskeyChallengeInput =
       id?: string;
       kind: "login";
       challenge: string;
-      principalId: string;
       createdAt?: string;
       expiresAt: string;
     };
@@ -403,7 +459,7 @@ export type StoredHandoffGrant = InstanceAuthSessionTargetBinding & {
   instanceId: string;
   nonceHash: string;
   principalId: string;
-  returnTo: OwnerLoginRedirectTarget;
+  returnTo: AccountRedirectTarget;
   state: string;
 };
 
@@ -627,41 +683,8 @@ export function ensureInstanceAuthTables(storage: DurableObjectStorage) {
       updated_at TEXT NOT NULL
     );
 
-    CREATE TABLE IF NOT EXISTS instance_auth_challenges (
-      id TEXT PRIMARY KEY,
-      kind TEXT NOT NULL CHECK (kind IN ('login', 'registration')),
-      challenge TEXT NOT NULL UNIQUE,
-      invitation_id TEXT,
-      invitation_token_hash TEXT,
-      principal_id TEXT,
-      registration_origin TEXT,
-      registration_relying_party_id TEXT,
-      created_at TEXT NOT NULL,
-      expires_at TEXT NOT NULL,
-      consumed_at TEXT,
-      CHECK (
-        (
-          kind = 'registration'
-          AND principal_id IS NOT NULL
-          AND invitation_id IS NOT NULL
-          AND invitation_token_hash IS NOT NULL
-          AND registration_origin IS NOT NULL
-          AND registration_relying_party_id IS NOT NULL
-        )
-        OR
-        (
-          kind = 'login'
-          AND principal_id IS NOT NULL
-          AND invitation_id IS NULL
-          AND invitation_token_hash IS NULL
-          AND registration_origin IS NULL
-          AND registration_relying_party_id IS NULL
-        )
-      )
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_instance_auth_challenges_expires_at
-      ON instance_auth_challenges (expires_at);
+    ${passkeyChallengesTableSql};
+    ${passkeyChallengesExpiresAtIndexSql};
 
     CREATE TABLE IF NOT EXISTS instance_auth_passkey_credentials (
       credential_id TEXT PRIMARY KEY,
@@ -851,6 +874,10 @@ export function ensureInstanceAuthTables(storage: DurableObjectStorage) {
         storage_identity
       );
   `);
+  runSqlStorageMigrations(storage, {
+    family: instanceAuthSqlMigrationFamily,
+    migrations: instanceAuthSqlMigrations,
+  });
 }
 
 export function resetInstanceAuthTables(storage: DurableObjectStorage) {
@@ -2217,7 +2244,6 @@ function normalizePasskeyChallengeInput(
     id,
     kind,
     challenge,
-    principalId: parseNonEmptyString("Passkey challenge principal id", input.principalId),
     createdAt,
     expiresAt,
   };
@@ -2301,18 +2327,71 @@ function passkeyChallengeFromRow(row: PasskeyChallengeRow): StoredPasskeyChallen
   }
 
   if (row.kind === "login") {
-    if (row.principal_id === null) {
-      throw new Error("Stored passkey login challenge is missing principal id.");
+    if (row.principal_id !== null) {
+      throw new Error("Stored passkey login challenge must not include a principal id.");
     }
 
     return {
       ...base,
       kind: "login",
-      principalId: row.principal_id,
     };
   }
 
   throw new Error(`Stored passkey challenge has unsupported kind "${row.kind}".`);
+}
+
+function migratePrincipalNeutralLoginChallenges(storage: DurableObjectStorage) {
+  const tableSql = storage.sql
+    .exec<{ sql: string | null }>(
+      "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?",
+      passkeyChallengesTableName,
+    )
+    .toArray()[0]?.sql;
+
+  if (
+    tableSql === undefined ||
+    tableSql === null ||
+    !/kind\s*=\s*'login'\s+AND\s+principal_id\s+IS\s+NOT\s+NULL/i.test(tableSql)
+  ) {
+    return;
+  }
+
+  const legacyTableName = "instance_auth_challenges_principal_login_legacy";
+
+  storage.sql.exec(`DROP TABLE IF EXISTS ${legacyTableName}`);
+  storage.sql.exec(`DROP INDEX IF EXISTS ${passkeyChallengesExpiresAtIndexName}`);
+  storage.sql.exec(`ALTER TABLE ${passkeyChallengesTableName} RENAME TO ${legacyTableName}`);
+  storage.sql.exec(passkeyChallengesTableSql);
+  storage.sql.exec(`
+    INSERT INTO ${passkeyChallengesTableName} (
+      id,
+      kind,
+      challenge,
+      invitation_id,
+      invitation_token_hash,
+      principal_id,
+      registration_origin,
+      registration_relying_party_id,
+      created_at,
+      expires_at,
+      consumed_at
+    )
+    SELECT
+      id,
+      kind,
+      challenge,
+      invitation_id,
+      invitation_token_hash,
+      CASE WHEN kind = 'login' THEN NULL ELSE principal_id END,
+      registration_origin,
+      registration_relying_party_id,
+      created_at,
+      expires_at,
+      consumed_at
+    FROM ${legacyTableName}
+  `);
+  storage.sql.exec(`DROP TABLE ${legacyTableName}`);
+  storage.sql.exec(passkeyChallengesExpiresAtIndexSql);
 }
 
 function normalizeCreatePasskeyCredentialInput(
@@ -3357,8 +3436,8 @@ function parseOptionalNonEmptyString(context: string, value: unknown): string | 
   return parseNonEmptyString(context, value);
 }
 
-function parsePathOnlyReturnTarget(context: string, value: unknown): OwnerLoginRedirectTarget {
-  const target = parseOwnerLoginRedirectTarget(value);
+function parsePathOnlyReturnTarget(context: string, value: unknown): AccountRedirectTarget {
+  const target = parseAccountRedirectTarget(value);
 
   if (target === undefined) {
     throw new Error(`${context} must be a safe path-only redirect target.`);

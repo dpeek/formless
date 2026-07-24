@@ -33,6 +33,8 @@ import { resolveInstanceRuntimeRouteForRequest } from "./instance-runtime-routes
 import { mappedAppHostFromRuntimeRoute } from "./mapped-app-host.ts";
 import {
   HOST_AUTH_SESSION_COOKIE_NAME,
+  accountAuthorizationForbiddenResponse,
+  accountAuthorizationForbiddenResult,
   configuredInstanceAuthOrigin,
   accountCompletionBlockedResponse,
   handleAuthAccountHandoffBrowserContinuation,
@@ -55,10 +57,11 @@ import { handleInstanceAuthOwnerSetupApiRequest } from "./instance-auth-owner-se
 import { handleInstanceAuthSignupApiRequest } from "./instance-auth-signup.ts";
 import { handleInstanceAuthAccountCompletionApiRequest } from "./instance-auth-account-completion.ts";
 import { sameOriginAccountCompletionTargetForRuntimeRouteFacts } from "./instance-auth-account-target.ts";
-import { handleOwnerPasskeyApiRequest } from "./owner-passkeys.ts";
+import { handleAccountPasskeyApiRequest } from "./account-passkeys.ts";
 import {
-  ownerLoginRedirectLocationForRoute,
-  parseOwnerLoginRedirectTarget,
+  accountRedirectLocationForRoute,
+  parseAccountRedirectTarget,
+  type AccountAuthorizationForbiddenResult,
   type AccountCompletionContinuationResult,
   type AccountCompletionGateResult,
 } from "../shared/instance-auth.ts";
@@ -92,8 +95,8 @@ import {
 } from "./local-session-bootstrap.ts";
 import {
   handleOwnerSetupApiRequest,
-  OWNER_SESSION_API_PATH,
-  OWNER_SESSION_LOGOUT_API_PATH,
+  ACCOUNT_SESSION_API_PATH,
+  ACCOUNT_SESSION_LOGOUT_API_PATH,
 } from "./owner-setup.ts";
 import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
 import { validateOwnerSessionCookie } from "./owner-session.ts";
@@ -370,10 +373,10 @@ export default {
       return ownerSetupResponse;
     }
 
-    const ownerPasskeyResponse = await handleOwnerPasskeyApiRequest(request, env);
+    const accountPasskeyResponse = await handleAccountPasskeyApiRequest(request, env);
 
-    if (ownerPasskeyResponse) {
-      return ownerPasskeyResponse;
+    if (accountPasskeyResponse) {
+      return accountPasskeyResponse;
     }
 
     const archiveResponse = await handleInstanceArchiveApiRequest(request, env);
@@ -581,7 +584,7 @@ function redirectResponse(location: string, status: number): Response {
   });
 }
 
-function isOwnerAuthRoute(pathname: string): boolean {
+function isInstanceAuthApiRoute(pathname: string): boolean {
   return (
     isLocalSessionBootstrapApiPath(pathname) ||
     pathname === "/api/formless/setup" ||
@@ -594,7 +597,7 @@ function isOwnerAuthRoute(pathname: string): boolean {
 }
 
 function isReservedAuthOriginRoute(pathname: string): boolean {
-  return isOwnerAuthRoute(pathname) || isRuntimeAuthAccountRoutePath(pathname);
+  return isInstanceAuthApiRoute(pathname) || isRuntimeAuthAccountRoutePath(pathname);
 }
 
 async function handleAuthAccountStatusRequest(
@@ -634,6 +637,10 @@ async function handleAuthAccountStatusRequest(
 
     if (handoffContinuation?.kind === "complete") {
       return Response.json(handoffContinuation.accountCompletion);
+    }
+
+    if (handoffContinuation?.kind === "forbidden") {
+      return accountAuthorizationForbiddenResponse(handoffContinuation.accountAuthorization);
     }
 
     return await handleAuthAccountReturnTargetStatusRequest(request, env);
@@ -677,6 +684,10 @@ async function handleAuthAccountBrowserRequest(
     return await handleClientShellDocumentRequest(request, env);
   }
 
+  if (handoffContinuation?.kind === "forbidden") {
+    return await handleClientShellDocumentRequest(request, env);
+  }
+
   const returnTargetContinuation = await handleAuthAccountReturnTargetBrowserRequest(request, env);
 
   if (returnTargetContinuation?.kind === "response") {
@@ -710,6 +721,8 @@ async function handleAuthAccountReturnTargetBrowserRequest(
         kind: "response",
         response: redirectResponse(resolution.accountCompletion.continueTo, 302),
       };
+    case "forbidden":
+      return { kind: "blocked" };
     case "invalid":
       return {
         kind: "response",
@@ -719,7 +732,7 @@ async function handleAuthAccountReturnTargetBrowserRequest(
       return {
         kind: "response",
         response: redirectResponse(
-          ownerLoginRedirectLocationForRoute(authAccountRedirectTarget(request)),
+          accountRedirectLocationForRoute(authAccountRedirectTarget(request)),
           302,
         ),
       };
@@ -740,6 +753,10 @@ async function handleAuthAccountReturnTargetStatusRequest(
     return accountCompletionBlockedResponse(resolution.accountCompletion);
   }
 
+  if (resolution.kind === "forbidden") {
+    return accountAuthorizationForbiddenResponse(resolution.accountAuthorization);
+  }
+
   if (resolution.kind === "invalid") {
     return Response.json({ error: resolution.error }, { status: 400 });
   }
@@ -750,6 +767,7 @@ async function handleAuthAccountReturnTargetStatusRequest(
 type AuthAccountReturnTargetContinuation =
   | { accountCompletion: AccountCompletionGateResult; kind: "blocked" }
   | { accountCompletion: AccountCompletionContinuationResult; kind: "complete" }
+  | { accountAuthorization: AccountAuthorizationForbiddenResult; kind: "forbidden" }
   | { error: string; kind: "invalid" }
   | { kind: "login-required" };
 
@@ -757,7 +775,7 @@ async function resolveAuthAccountReturnTargetContinuation(
   request: Request,
   env: Env,
 ): Promise<AuthAccountReturnTargetContinuation> {
-  const returnTo = parseOwnerLoginRedirectTarget(new URL(request.url).searchParams.get("returnTo"));
+  const returnTo = parseAccountRedirectTarget(new URL(request.url).searchParams.get("returnTo"));
 
   if (!returnTo) {
     return { error: "Account return target must be path-only.", kind: "invalid" };
@@ -827,6 +845,13 @@ async function resolveAuthAccountReturnTargetContinuation(
     };
   }
 
+  if (session.authenticated !== undefined) {
+    return {
+      accountAuthorization: accountAuthorizationForbiddenResult(session.authenticated.principal),
+      kind: "forbidden",
+    };
+  }
+
   return { kind: "login-required" };
 }
 
@@ -836,7 +861,7 @@ async function handleNonAuthOriginOwnerAuthRoute(
   requestTopology: WorkerRuntimeRequestTopology,
   runtimeRoute: Awaited<ReturnType<typeof resolveInstanceRuntimeRouteForRequest>>,
 ): Promise<Response | undefined> {
-  if (!isOwnerAuthRoute(requestTopology.pathname)) {
+  if (!isInstanceAuthApiRoute(requestTopology.pathname)) {
     return undefined;
   }
 
@@ -868,8 +893,8 @@ function isMappedInstanceHostSessionApiRequest(
   request: Request,
 ): boolean {
   return (
-    (requestTopology.pathname === OWNER_SESSION_API_PATH ||
-      requestTopology.pathname === OWNER_SESSION_LOGOUT_API_PATH) &&
+    (requestTopology.pathname === ACCOUNT_SESSION_API_PATH ||
+      requestTopology.pathname === ACCOUNT_SESSION_LOGOUT_API_PATH) &&
     requestHasCookie(request, HOST_AUTH_SESSION_COOKIE_NAME)
   );
 }
@@ -1015,7 +1040,7 @@ async function redirectAnonymousProtectedBrowserRoute(
   }
 
   return redirectResponse(
-    ownerLoginRedirectLocationForRoute(ownerBrowserRedirectTarget(request)),
+    accountRedirectLocationForRoute(ownerBrowserRedirectTarget(request)),
     302,
   );
 }
@@ -1030,7 +1055,7 @@ function authAccountRedirectTarget(request: Request) {
   const url = new URL(request.url);
   const target = `${runtimeTopologyRoutes.authAccountRoute}${url.search}`;
 
-  return parseOwnerLoginRedirectTarget(target) ?? runtimeTopologyRoutes.authAccountRoute;
+  return parseAccountRedirectTarget(target) ?? runtimeTopologyRoutes.authAccountRoute;
 }
 
 function notFoundResponse(json: boolean): Response {

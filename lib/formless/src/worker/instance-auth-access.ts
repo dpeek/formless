@@ -110,6 +110,13 @@ export type InstanceAuthAccessResult =
       via: InstanceAuthSessionKind;
     }
   | {
+      authenticated?: {
+        principal: ActiveIdentityPrincipal;
+        principalId: string;
+        session: InstanceAuthSession;
+        target?: InstanceAuthSessionTargetBinding;
+        via: InstanceAuthSessionKind;
+      };
       ok: false;
       accountCompletion?: AccountCompletionGateResolutionResult;
       reason: InstanceAuthAccessFailureReason;
@@ -203,6 +210,10 @@ export async function resolveInstanceAuthAccess(
 
   if (centralSession.ok) {
     return centralFailure;
+  }
+
+  if (ownerFailure?.authenticated !== undefined) {
+    return ownerFailure;
   }
 
   if (input.target !== undefined) {
@@ -364,6 +375,14 @@ async function validateCurrentSession(
   input: InstanceAuthAccessInput,
   readers: InstanceAuthAccessReaders,
 ): Promise<InstanceAuthAccessResult> {
+  if (
+    via === "host-session" &&
+    (await readers.readHostSessionVersion(session as HostAuthSession)) !==
+      (session as HostAuthSession).sessionVersion
+  ) {
+    return { ok: false, reason: "revoked-session" };
+  }
+
   const currentAuthority = await readCurrentAuthority(
     session,
     input.requiredAuthority,
@@ -373,11 +392,13 @@ async function validateCurrentSession(
   );
 
   if (!currentAuthority) {
-    if (
-      input.requiredAuthority === "app.admin" &&
-      input.accountCompletionTarget !== undefined &&
-      (await readers.readActivePrincipal(session))?.id === session.principalId
-    ) {
+    const authenticated = await readAuthenticatedSessionFacts(session, via, input, readers);
+
+    if (authenticated === undefined) {
+      return { ok: false, reason: "missing-principal" };
+    }
+
+    if (input.requiredAuthority === "app.admin" && input.accountCompletionTarget !== undefined) {
       const accountCompletion = await readers.readAccountCompletion(
         session,
         input.accountCompletionTarget,
@@ -387,21 +408,18 @@ async function validateCurrentSession(
       if (accountCompletion.status === "blocked") {
         return {
           accountCompletion,
+          authenticated,
           ok: false,
           reason: "account-completion-required",
         };
       }
     }
 
-    return { ok: false, reason: missingAuthorityReason(input.requiredAuthority) };
-  }
-
-  if (
-    via === "host-session" &&
-    (await readers.readHostSessionVersion(session as HostAuthSession)) !==
-      (session as HostAuthSession).sessionVersion
-  ) {
-    return { ok: false, reason: "revoked-session" };
+    return {
+      authenticated,
+      ok: false,
+      reason: missingAuthorityReason(input.requiredAuthority),
+    };
   }
 
   if (
@@ -409,6 +427,12 @@ async function validateCurrentSession(
     input.accountCompletionTarget !== undefined &&
     !(input.requiredAuthority === "app.admin" && currentAuthority.ownerAuthorized)
   ) {
+    const authenticated = await readAuthenticatedSessionFacts(session, via, input, readers);
+
+    if (authenticated === undefined) {
+      return { ok: false, reason: "missing-principal" };
+    }
+
     const accountCompletion = await readers.readAccountCompletion(
       session,
       input.accountCompletionTarget,
@@ -420,6 +444,7 @@ async function validateCurrentSession(
     if (accountCompletion.status === "blocked") {
       return {
         accountCompletion,
+        authenticated,
         ok: false,
         reason: "account-completion-required",
       };
@@ -484,6 +509,27 @@ async function readCurrentAuthority(
         ? { ownerAuthorized: true }
         : null;
   }
+}
+
+async function readAuthenticatedSessionFacts(
+  session: InstanceAuthSession,
+  via: InstanceAuthSessionKind,
+  input: InstanceAuthAccessInput,
+  readers: InstanceAuthAccessReaders,
+) {
+  const principal = await readers.readActivePrincipal(session);
+
+  if (principal?.id !== session.principalId) {
+    return undefined;
+  }
+
+  return {
+    principal,
+    principalId: session.principalId,
+    session,
+    ...(input.target === undefined ? {} : { target: input.target }),
+    via,
+  };
 }
 
 function missingAuthorityReason(

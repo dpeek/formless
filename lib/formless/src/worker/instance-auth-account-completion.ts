@@ -29,7 +29,7 @@ import {
   parseAccountCompletionGateResolutionResult,
   parseAccountCompletionGateTarget,
   parseInstanceAuthCanonicalOrigin,
-  parseOwnerLoginRedirectTarget,
+  parseAccountRedirectTarget,
   type AccountCompletionGate,
   type AccountCompletionGateOperationInputContract,
   type AccountCompletionGateOperationReference,
@@ -1196,7 +1196,7 @@ function assertAppRegistrationCompletionRouteMatchesTarget(
   target: AccountCompletionGateTarget & { appInstallId: string },
   request: Request,
 ) {
-  const returnTo = parseOwnerLoginRedirectTarget(target.returnTo);
+  const returnTo = parseAccountRedirectTarget(target.returnTo);
 
   if (!returnTo) {
     throw new Error("App-registration completion return target must be path-only.");

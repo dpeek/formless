@@ -187,6 +187,28 @@ surfaces or protected management API data.
 - AND owner recovery, owner-role management, auth-origin policy, browser
   session signing policy, and admin-bearer recovery remain owner-only
 
+#### Scenario: Anonymous management browser route
+
+- GIVEN a runtime browser route has effective access `management`
+- AND the request is a `GET` or `HEAD` request that accepts HTML
+- WHEN the request does not include a valid session for an active principal
+- THEN the runtime redirects through `/formless/auth` on the configured auth
+  origin
+- AND credential entry uses generic account sign-in without selecting or
+  disclosing the configured owner
+- AND after authentication the account orchestrator evaluates the resolved
+  principal's current management authority before serving the route
+
+#### Scenario: Authenticated principal without management authority
+
+- GIVEN a runtime browser route has effective access `management`
+- AND the request includes a valid session for an active principal without
+  active `instance.owner` or `instance.admin` authority at instance scope
+- WHEN the runtime evaluates the route
+- THEN it does not serve the management surface
+- AND the account orchestrator returns a display-safe forbidden outcome instead
+  of restarting account sign-in
+
 #### Scenario: App role browser route
 
 - GIVEN an app route has effective access `authenticated`

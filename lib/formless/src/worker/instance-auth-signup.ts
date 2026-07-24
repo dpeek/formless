@@ -10,7 +10,7 @@ import type { EmailDeliveryScheduleRequest } from "../shared/email-runtime.ts";
 import { normalizeEmailDeliveryAddress } from "../shared/email-runtime.ts";
 import {
   parseAccountCompletionGateTarget,
-  parseOwnerLoginRedirectTarget,
+  parseAccountRedirectTarget,
   type AccountCompletionGateResolutionResult,
   type AccountCompletionGateTarget,
 } from "../shared/instance-auth.ts";
@@ -333,8 +333,8 @@ async function handleSignupPasskeyRegistrationOptions(
     userName: challenge.challenge.displayEmail,
     attestationType: "none",
     authenticatorSelection: {
-      residentKey: "preferred",
-      userVerification: "preferred",
+      residentKey: "required",
+      userVerification: "required",
     },
   });
   const created = createPasskeyChallenge(storage, {
@@ -407,6 +407,7 @@ async function handleSignupPasskeyRegistrationVerify(
       expectedChallenge: passkeyChallenge.challenge.challenge,
       expectedOrigin: config.authOrigin,
       expectedRPID: config.relyingPartyId,
+      requireUserVerification: true,
     });
   } catch {
     return jsonResponse({ error: "Passkey registration verification failed." }, 401);
@@ -675,7 +676,7 @@ function assertSignupRouteMatchesTarget(
   target: AccountCompletionGateTarget & { appInstallId: string },
   request: Request,
 ) {
-  const returnTo = parseOwnerLoginRedirectTarget(target.returnTo);
+  const returnTo = parseAccountRedirectTarget(target.returnTo);
 
   if (!returnTo) {
     throw new Error("Signup target return target must be path-only.");

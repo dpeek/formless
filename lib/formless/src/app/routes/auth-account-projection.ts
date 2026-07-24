@@ -291,7 +291,9 @@ function projectAccountGateSurface({
   state: AuthAccountGateRouteState;
 }): AccountGateAuthSurfaceContract {
   const gate = state.status === "blocked" ? state.result.gate : undefined;
-  const pending = state.status === "blocked" && accountGateActionIsPending(state.action);
+  const pending =
+    (state.status === "blocked" && accountGateActionIsPending(state.action)) ||
+    (state.status === "forbidden" && state.action?.kind === "logout-pending");
   const contractState = accountGateContractState(state);
   const feedback = accountGateFeedback(state, session);
   const continuation = accountGateContinuation(state);
@@ -626,6 +628,17 @@ function ownerSetupPasskey(
 }
 
 function accountGateActions(state: AuthAccountGateRouteState): readonly AuthActionContract[] {
+  if (state.status === "forbidden") {
+    return [
+      authAction(
+        AUTH_ACCOUNT_GATE_SURFACE_ID,
+        "logout",
+        state.action?.kind === "logout-pending" ? "Signing out..." : "Sign out",
+        "secondary",
+        state.action?.kind === "logout-pending",
+      ),
+    ];
+  }
   if (state.status === "failed")
     return [authAction(AUTH_ACCOUNT_GATE_SURFACE_ID, "retry", "Try again")];
   if (state.status !== "blocked") return [];
@@ -757,6 +770,9 @@ function ownerSetupFacts(
 
 function accountGateFacts(state: AuthAccountGateRouteState): readonly AuthFactContract[] {
   if (state.status === "loading" || state.status === "failed") return [];
+  if (state.status === "forbidden") {
+    return compactFacts(authFact("principal", "Account", state.result.principal.displayName));
+  }
   if (state.status === "blocked") {
     const verificationFacts =
       state.result.gate.kind === "email-verification" && state.action && "email" in state.action
@@ -1052,6 +1068,7 @@ function signupStep(
 function accountGateHeading(state: AuthAccountGateRouteState): string {
   if (state.status === "loading") return "Checking account";
   if (state.status === "failed") return "Account unavailable";
+  if (state.status === "forbidden") return "Access unavailable";
   if (state.status === "complete" || state.status === "continuing") return "Account ready";
   return gateCopy(state.result.gate).heading;
 }
@@ -1059,6 +1076,8 @@ function accountGateHeading(state: AuthAccountGateRouteState): string {
 function accountGateDescription(state: AuthAccountGateRouteState): string | undefined {
   if (state.status === "complete") return "Your account is ready to continue.";
   if (state.status === "continuing") return "Opening your approved destination.";
+  if (state.status === "forbidden")
+    return `Signed in as ${displaySafeText(state.result.principal.displayName)}.`;
   if (state.status === "blocked") return gateCopy(state.result.gate).message;
   return undefined;
 }
@@ -1089,6 +1108,12 @@ function signupDescription(
 function accountGateMessage(state: AuthAccountGateRouteState): AuthMessageContract | undefined {
   if (state.status === "loading") return authMessage("loading", "Loading account status.");
   if (state.status === "continuing") return authMessage("continuing", "Continuing...", "success");
+  if (state.status === "forbidden")
+    return authMessage(
+      "forbidden",
+      "This account cannot open the requested destination.",
+      "warning",
+    );
   if (state.status === "blocked" && accountGateIsUnavailable(state.result.gate))
     return authMessage("unavailable", accountGateUnavailableMessage(state.result.gate), "warning");
   return undefined;
@@ -1110,6 +1135,8 @@ function accountGateFeedback(
 ): AuthFeedbackContract | undefined {
   if (state.status === "failed")
     return authFeedback("account-failure", "Account unavailable", state.message);
+  if (state.status === "forbidden" && state.action?.kind === "logout-failed")
+    return authFeedback("logout-failure", "Sign out failed", state.action.message);
   if (state.status === "blocked" && state.action?.kind === "gate-unavailable")
     return authFeedback("gate-failure", "Account step failed", state.action.message);
   if (
@@ -1375,7 +1402,7 @@ function isCompletableAppRegistrationGate(
 
 function authAction(
   surfaceId: string,
-  purpose: "retry" | "submit",
+  purpose: "logout" | "retry" | "submit",
   label: string,
   prominence: ButtonContract["prominence"] = "primary",
   pending = false,

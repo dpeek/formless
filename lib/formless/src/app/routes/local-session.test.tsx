@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
 import { FormlessReplicaDatabaseDeleteBlockedError } from "../../client/db.ts";
-import type { OwnerIdentity } from "../../shared/protocol.ts";
 import {
   localSessionBrowserResetRequestedFromSearch,
   localSessionRedirectTargetFromSearch,
@@ -8,10 +7,9 @@ import {
   type LocalSessionRouteState,
 } from "./local-session.tsx";
 
-const owner: OwnerIdentity = {
-  id: "owner-1",
-  name: "Ada Owner",
-  createdAt: "2026-06-01T00:00:00.000Z",
+const principal = {
+  displayName: "Ada Owner",
+  principalId: "owner-1",
 };
 
 describe("local session route data flow", () => {
@@ -25,7 +23,7 @@ describe("local session route data flow", () => {
       },
       fetcher: jsonFetcher({
         authenticated: true,
-        owner,
+        principal,
         session: { expiresAt: "2026-06-21T00:00:00.000Z" },
         setupComplete: true,
       }),
@@ -60,7 +58,7 @@ describe("local session route data flow", () => {
       },
       fetcher: jsonFetcher({
         authenticated: true,
-        owner,
+        principal,
         session: { expiresAt: "2026-06-21T00:00:00.000Z" },
         setupComplete: true,
       }),
@@ -92,7 +90,7 @@ describe("local session route data flow", () => {
       },
       fetcher: jsonFetcher({
         authenticated: true,
-        owner,
+        principal,
         session: { expiresAt: "2026-06-21T00:00:00.000Z" },
         setupComplete: true,
       }),
@@ -128,7 +126,7 @@ describe("local session route data flow", () => {
         events.push("reset-browser-state");
         return { deletedDatabaseNames: [], skippedDatabaseNames: [] };
       },
-      fetcher: jsonFetcher({ authenticated: false, setupComplete: true, owner }),
+      fetcher: jsonFetcher({ authenticated: false, setupComplete: true }),
       onComplete: () => events.push("complete"),
       onState: (state) => states.push(state),
       resetBrowserStateRequested: true,

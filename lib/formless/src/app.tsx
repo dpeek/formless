@@ -56,7 +56,7 @@ import type {
 import {
   authAccountContinuationLocationForReturnTarget,
   COLLABORATOR_INVITATION_ACCEPT_PATH,
-  type OwnerLoginRedirectTarget,
+  type AccountRedirectTarget,
 } from "./shared/instance-auth.ts";
 import {
   runtimeTopologyRoutes,
@@ -105,7 +105,7 @@ export type AppRouteComponents = {
   HomeRoute: ElementType<HomeRouteProps>;
   InstanceShellRoute: ElementType<InstanceShellRouteProps>;
   LocalSessionRoute: ElementType;
-  OwnerLoginRoute: ElementType;
+  AccountSignInRoute: ElementType;
   SitePageRoute: ElementType<PublicSiteRouteProps>;
   publicSiteReactAdapters?: PublicSiteReactAdapterRegistry;
 };
@@ -148,9 +148,9 @@ const defaultRouteComponents: AppRouteComponents = {
       default: module.LocalSessionRoute,
     })),
   ),
-  OwnerLoginRoute: lazy(() =>
-    import("./app/routes/owner-login.tsx").then((module) => ({
-      default: module.OwnerLoginRoute,
+  AccountSignInRoute: lazy(() =>
+    import("./app/routes/account-sign-in.tsx").then((module) => ({
+      default: module.AccountSignInRoute,
     })),
   ),
   SitePageRoute: defaultPublicSiteReactAdapters.get("site")!.Route,
@@ -427,7 +427,7 @@ function AppRoutes({
     HomeRoute,
     InstanceShellRoute,
     LocalSessionRoute,
-    OwnerLoginRoute,
+    AccountSignInRoute,
   } = routeComponents;
   const publicSiteReactAdapters =
     routeComponents.publicSiteReactAdapters ??
@@ -461,7 +461,7 @@ function AppRoutes({
       ) : null}
       {browserRoutes.authAccountSignInRoute ? (
         <Route path={browserRoutes.authAccountSignInRoute}>
-          <OwnerLoginRoute />
+          <AccountSignInRoute />
         </Route>
       ) : null}
       <Route path={runtimeTopologyRoutes.authAccountGateRoutePattern}>
@@ -913,7 +913,7 @@ export function startProtectedRouteGuardSession({
 }: {
   access: RuntimeRouteAccess;
   fetcher?: typeof fetch;
-  location: OwnerLoginRedirectTarget;
+  location: AccountRedirectTarget;
   onState: (state: ProtectedRouteGuardState) => void;
   requiredRole?: RuntimeRouteRequiredRole;
 }): () => void {
@@ -958,8 +958,8 @@ export function startProtectedRouteGuardSession({
 }
 
 async function ownerRouteSessionIsAuthorized(fetcher: typeof fetch, signal: AbortSignal) {
-  const { fetchOwnerSessionStatus } = await import("./app/routes/owner-login.tsx");
-  const status = await fetchOwnerSessionStatus({ fetcher, signal });
+  const { fetchAccountSessionStatus } = await import("./app/routes/account-sign-in.tsx");
+  const status = await fetchAccountSessionStatus({ fetcher, signal });
 
   return status.authenticated;
 }
@@ -976,7 +976,7 @@ async function managementRouteSessionIsAuthorized(fetcher: typeof fetch, signal:
 
 async function exactRouteSessionIsAuthorized(
   fetcher: typeof fetch,
-  location: OwnerLoginRedirectTarget,
+  location: AccountRedirectTarget,
   signal: AbortSignal,
 ) {
   const response = await fetcher(authAccountContinuationLocationForReturnTarget(location), {
@@ -1001,7 +1001,7 @@ function ProtectedRouteLoading() {
   );
 }
 
-function protectedRouteTarget(location: string): OwnerLoginRedirectTarget {
+function protectedRouteTarget(location: string): AccountRedirectTarget {
   if (typeof window === "undefined") {
     return protectedRouteTargetFromLocation(location);
   }
@@ -1009,8 +1009,8 @@ function protectedRouteTarget(location: string): OwnerLoginRedirectTarget {
   return protectedRouteTargetFromLocation(`${window.location.pathname}${window.location.search}`);
 }
 
-function protectedRouteTargetFromLocation(location: string): OwnerLoginRedirectTarget {
-  return location.startsWith("/") ? (location as OwnerLoginRedirectTarget) : "/";
+function protectedRouteTargetFromLocation(location: string): AccountRedirectTarget {
+  return location.startsWith("/") ? (location as AccountRedirectTarget) : "/";
 }
 
 function runtimeScreenWildcardRoute(world: RuntimeWorldMount): `/${string}` {

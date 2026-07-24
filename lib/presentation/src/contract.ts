@@ -2052,7 +2052,7 @@ export type AuthSurfaceKind =
   | "account-gate"
   | "collaborator-invitation-acceptance"
   | "owner-setup"
-  | "owner-sign-in"
+  | "account-sign-in"
   | "signup";
 
 export type AuthMessageSeverity = "danger" | "info" | "success" | "warning";
@@ -2236,7 +2236,7 @@ export type OwnerSetupAuthSurfaceState =
 
 export type OwnerSetupStep = "completion" | "email-verification" | "identity" | "passkey";
 
-export type OwnerSignInAuthSurfaceState =
+export type AccountSignInAuthSurfaceState =
   | "complete"
   | "continuing"
   | "failed"
@@ -2261,6 +2261,7 @@ export type AccountGateAuthSurfaceState =
   | "complete"
   | "continuing"
   | "failed"
+  | "forbidden"
   | "loading"
   | "passkey-unavailable"
   | "ready"
@@ -2293,7 +2294,7 @@ export type AuthSurfaceState =
   | AccountGateAuthSurfaceState
   | CollaboratorInvitationAuthSurfaceState
   | OwnerSetupAuthSurfaceState
-  | OwnerSignInAuthSurfaceState
+  | AccountSignInAuthSurfaceState
   | SignupAuthSurfaceState;
 
 export type AuthSurfaceBaseContract = {
@@ -2317,16 +2318,16 @@ export type OwnerSetupAuthSurfaceContract = AuthSurfaceBaseContract & {
   surfaceKind: "owner-setup";
 };
 
-export type OwnerSignInAuthSurfaceContract = AuthSurfaceBaseContract & {
-  state: OwnerSignInAuthSurfaceState;
-  surfaceKind: "owner-sign-in";
+export type AccountSignInAuthSurfaceContract = AuthSurfaceBaseContract & {
+  state: AccountSignInAuthSurfaceState;
+  surfaceKind: "account-sign-in";
 };
 
 export type AccountGateAuthSurfaceContract = AuthSurfaceBaseContract &
   (
     | {
         gateKind?: never;
-        state: "complete" | "continuing" | "failed" | "loading";
+        state: "complete" | "continuing" | "failed" | "forbidden" | "loading";
         surfaceKind: "account-gate";
       }
     | {
@@ -2362,7 +2363,7 @@ export type AuthSurfaceContract =
   | AccountGateAuthSurfaceContract
   | CollaboratorInvitationAuthSurfaceContract
   | OwnerSetupAuthSurfaceContract
-  | OwnerSignInAuthSurfaceContract
+  | AccountSignInAuthSurfaceContract
   | SignupAuthSurfaceContract;
 
 export type AuthIntent =

@@ -4,11 +4,11 @@ import {
 } from "@simplewebauthn/server";
 
 import {
-  ownerPasskeyLoginContinuationTarget,
-  parseOwnerPasskeyLoginOptionsRequest,
-  parseOwnerPasskeyLoginVerifyRequest,
-  type OwnerPasskeyLoginOptionsResponse,
-  type OwnerPasskeyLoginVerifyResponse,
+  accountPasskeyLoginContinuationTarget,
+  parseAccountPasskeyLoginOptionsRequest,
+  parseAccountPasskeyLoginVerifyRequest,
+  type AccountPasskeyLoginOptionsResponse,
+  type AccountPasskeyLoginVerifyResponse,
 } from "../shared/instance-auth.ts";
 import { nowIsoString } from "../shared/clock.ts";
 import { type AuthorityAdminGuardEnv } from "./authority-admin-guard.ts";
@@ -21,28 +21,28 @@ import {
   passkeyCredentialToWebAuthnCredential,
   readInstanceAuthConfig,
   readPasskeyCredential,
-  readPasskeyCredentialsForPrincipal,
   updatePasskeyCredentialVerification,
   type StoredInstanceAuthConfig,
 } from "./instance-auth-state.ts";
 import { readIdentityOwner } from "./identity-control-plane.ts";
+import { readInternalActiveIdentityPrincipal } from "./identity-owner-internal.ts";
 
-export const OWNER_PASSKEY_API_PATH = "/api/formless/passkeys";
+export const ACCOUNT_PASSKEY_API_PATH = "/api/formless/passkeys";
 
-const loginOptionsPath = `${OWNER_PASSKEY_API_PATH}/login/options`;
-const loginVerifyPath = `${OWNER_PASSKEY_API_PATH}/login/verify`;
+const loginOptionsPath = `${ACCOUNT_PASSKEY_API_PATH}/login/options`;
+const loginVerifyPath = `${ACCOUNT_PASSKEY_API_PATH}/login/verify`;
 const passkeyChallengeTtlMs = 5 * 60 * 1000;
 const base64UrlPattern = /^[A-Za-z0-9_-]+$/;
 
-type OwnerPasskeyApiEnv = AuthorityAdminGuardEnv & {
+type AccountPasskeyApiEnv = AuthorityAdminGuardEnv & {
   FORMLESS_AUTHORITY: DurableObjectNamespace;
 };
 
-export async function handleOwnerPasskeyApiRequest(
+export async function handleAccountPasskeyApiRequest(
   request: Request,
-  env: OwnerPasskeyApiEnv,
+  env: AccountPasskeyApiEnv,
 ): Promise<Response | undefined> {
-  if (!isOwnerPasskeyApiPath(new URL(request.url).pathname)) {
+  if (!isAccountPasskeyApiPath(new URL(request.url).pathname)) {
     return undefined;
   }
 
@@ -51,14 +51,14 @@ export async function handleOwnerPasskeyApiRequest(
   return env.FORMLESS_AUTHORITY.get(id).fetch(request);
 }
 
-export async function handleOwnerPasskeyDurableObjectRequest(
+export async function handleAccountPasskeyDurableObjectRequest(
   request: Request,
   storage: DurableObjectStorage,
-  env: OwnerPasskeyApiEnv,
+  env: AccountPasskeyApiEnv,
 ): Promise<Response | undefined> {
   const pathname = new URL(request.url).pathname;
 
-  if (!isOwnerPasskeyApiPath(pathname)) {
+  if (!isAccountPasskeyApiPath(pathname)) {
     return undefined;
   }
 
@@ -77,20 +77,22 @@ export async function handleOwnerPasskeyDurableObjectRequest(
   }
 }
 
-function isOwnerPasskeyApiPath(pathname: string) {
-  return pathname === OWNER_PASSKEY_API_PATH || pathname.startsWith(`${OWNER_PASSKEY_API_PATH}/`);
+function isAccountPasskeyApiPath(pathname: string) {
+  return (
+    pathname === ACCOUNT_PASSKEY_API_PATH || pathname.startsWith(`${ACCOUNT_PASSKEY_API_PATH}/`)
+  );
 }
 
 async function handleLoginOptionsRequest(
   request: Request,
   storage: DurableObjectStorage,
-  env: OwnerPasskeyApiEnv,
+  env: AccountPasskeyApiEnv,
 ): Promise<Response> {
   if (request.method !== "POST") {
     return methodNotAllowedResponse("POST");
   }
 
-  parseOwnerPasskeyLoginOptionsRequest(await readJson(request));
+  parseAccountPasskeyLoginOptionsRequest(await readJson(request));
 
   const config = requireInstanceAuthConfig(storage);
   const owner = await readIdentityOwner(env);
@@ -100,24 +102,13 @@ async function handleLoginOptionsRequest(
     return jsonResponse({ error: "Owner setup must be complete before passkey login." }, 409);
   }
 
-  const credentials = readPasskeyCredentialsForPrincipal(storage, state.owner.id);
-
-  if (credentials.length === 0) {
-    return jsonResponse({ error: "No owner passkeys are registered." }, 409);
-  }
-
   const options = await generateAuthenticationOptions({
     rpID: config.relyingPartyId,
-    allowCredentials: credentials.map((credential) => ({
-      id: credential.credentialId,
-      ...(credential.transports.length === 0 ? {} : { transports: credential.transports }),
-    })),
-    userVerification: "preferred",
+    userVerification: "required",
   });
   const created = createPasskeyChallenge(storage, {
     kind: "login",
     challenge: options.challenge,
-    principalId: state.owner.id,
     createdAt: nowIsoString(),
     expiresAt: challengeExpiresAt(),
   });
@@ -126,7 +117,7 @@ async function handleLoginOptionsRequest(
     return jsonResponse({ error: "Passkey challenge already exists." }, 409);
   }
 
-  const response: OwnerPasskeyLoginOptionsResponse = { options };
+  const response: AccountPasskeyLoginOptionsResponse = { options };
 
   return jsonResponse(response);
 }
@@ -134,13 +125,13 @@ async function handleLoginOptionsRequest(
 async function handleLoginVerifyRequest(
   request: Request,
   storage: DurableObjectStorage,
-  env: OwnerPasskeyApiEnv,
+  env: AccountPasskeyApiEnv,
 ): Promise<Response> {
   if (request.method !== "POST") {
     return methodNotAllowedResponse("POST");
   }
 
-  const body = parseOwnerPasskeyLoginVerifyRequest(await readJson(request));
+  const body = parseAccountPasskeyLoginVerifyRequest(await readJson(request));
   const config = requireInstanceAuthConfig(storage);
   const owner = await readIdentityOwner(env);
   const state = readInstanceSetupState(storage, owner);
@@ -166,7 +157,7 @@ async function handleLoginVerifyRequest(
     return passkeyChallengeFailureResponse(challenge.reason);
   }
 
-  if (challenge.challenge.kind !== "login" || challenge.challenge.principalId !== state.owner.id) {
+  if (challenge.challenge.kind !== "login") {
     return jsonResponse(
       { authenticated: false, error: "Passkey login challenge is invalid." },
       401,
@@ -175,7 +166,17 @@ async function handleLoginVerifyRequest(
 
   const credential = readPasskeyCredential(storage, body.response.id);
 
-  if (!credential || credential.principalId !== state.owner.id) {
+  if (!credential) {
+    return jsonResponse({ authenticated: false, error: "Passkey credential is invalid." }, 401);
+  }
+
+  const resolvedPrincipal = await readInternalActiveIdentityPrincipal(env, credential.principalId);
+
+  if (
+    !resolvedPrincipal ||
+    resolvedPrincipal.id !== credential.principalId ||
+    !passkeyUserHandleMatchesPrincipal(body.response.response.userHandle, credential.principalId)
+  ) {
     return jsonResponse({ authenticated: false, error: "Passkey credential is invalid." }, 401);
   }
 
@@ -188,6 +189,7 @@ async function handleLoginVerifyRequest(
       expectedOrigin: config.canonicalOrigin,
       expectedRPID: config.relyingPartyId,
       credential: passkeyCredentialToWebAuthnCredential(credential),
+      requireUserVerification: true,
     });
   } catch {
     return jsonResponse({ authenticated: false, error: "Passkey login verification failed." }, 401);
@@ -195,6 +197,12 @@ async function handleLoginVerifyRequest(
 
   if (!verified.verified) {
     return jsonResponse({ authenticated: false, error: "Passkey login verification failed." }, 401);
+  }
+
+  const principal = await readInternalActiveIdentityPrincipal(env, credential.principalId);
+
+  if (!principal || principal.id !== credential.principalId) {
+    return jsonResponse({ authenticated: false, error: "Passkey credential is invalid." }, 401);
   }
 
   const updated = updatePasskeyCredentialVerification(storage, {
@@ -214,21 +222,50 @@ async function handleLoginVerifyRequest(
 
   const session = await createCentralAuthSessionCookie(storage, {
     env,
-    principalId: state.owner.id,
+    principalId: principal.id,
     request,
   });
   const headers = new Headers();
 
   headers.set("Set-Cookie", session.cookie);
 
-  const response: OwnerPasskeyLoginVerifyResponse = {
+  const response: AccountPasskeyLoginVerifyResponse = {
     authenticated: true,
-    continueTo: ownerPasskeyLoginContinuationTarget,
-    owner: state.owner,
+    continueTo: accountPasskeyLoginContinuationTarget,
+    principal: {
+      displayName: principal.displayName,
+      ...(principal.email === undefined ? {} : { email: principal.email }),
+      principalId: principal.id,
+    },
     session: { expiresAt: session.session.expiresAt },
   };
 
   return jsonResponse(response, 200, headers);
+}
+
+function passkeyUserHandleMatchesPrincipal(
+  userHandle: string | undefined,
+  principalId: string,
+): boolean {
+  if (!userHandle) {
+    return false;
+  }
+
+  let actual: Uint8Array;
+
+  try {
+    actual = base64UrlDecode(userHandle);
+  } catch {
+    return false;
+  }
+
+  const expected = new TextEncoder().encode(principalId);
+
+  if (actual.byteLength !== expected.byteLength) {
+    return false;
+  }
+
+  return actual.every((value, index) => value === expected[index]);
 }
 
 function requireInstanceAuthConfig(storage: DurableObjectStorage): StoredInstanceAuthConfig {

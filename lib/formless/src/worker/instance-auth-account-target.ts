@@ -2,7 +2,7 @@ import { INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY } from "@dpeek/formless-instanc
 
 import {
   type AccountCompletionGateTarget,
-  type OwnerLoginRedirectTarget,
+  type AccountRedirectTarget,
 } from "../shared/instance-auth.ts";
 import { type RuntimeProfileKind, type RuntimeRouteAccess } from "../shared/runtime-topology.ts";
 import type { InstanceRuntimeRouteResolution } from "./instance-runtime-routes.ts";
@@ -14,7 +14,7 @@ export function sameOriginAccountCompletionTargetForRuntimeRouteFacts(input: {
   accountOrigin: string;
   minimumAccess?: ProtectedRouteAccess;
   requestOrigin: string;
-  returnTo: OwnerLoginRedirectTarget;
+  returnTo: AccountRedirectTarget;
   runtimeProfile: RuntimeProfileKind;
   runtimeRoute: InstanceRuntimeRouteResolution | undefined;
 }): AccountCompletionGateTarget | undefined {

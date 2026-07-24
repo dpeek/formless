@@ -155,6 +155,45 @@ describe("auth account route data flow", () => {
     expect(JSON.stringify(states)).not.toContain("grantSecret");
   });
 
+  it("keeps authenticated authorization failures on a forbidden account outcome", async () => {
+    const calls: FetchCall[] = [];
+    const navigations: string[] = [];
+    const states: AuthAccountRouteState[] = [];
+    const forbidden = {
+      principal: {
+        displayName: "Ada App User",
+        email: "ada@example.com",
+        principalId: "principal:ada",
+      },
+      status: "forbidden",
+    } as const;
+    const stop = startAuthAccountRouteSession({
+      fetcher: recordingJsonFetcher(calls, forbidden, { status: 403 }),
+      locationSearch: "?returnTo=%2Fdeployments",
+      navigateTo: (target) => navigations.push(target),
+      onState: (state) => states.push(state),
+    });
+
+    try {
+      await waitFor(() => states.some((state) => state.status === "forbidden"));
+    } finally {
+      stop();
+    }
+
+    expect(calls).toEqual([
+      {
+        credentials: "same-origin",
+        input: "/formless/auth?returnTo=%2Fdeployments",
+        method: undefined,
+      },
+    ]);
+    expect(navigations).toEqual([]);
+    expect(states).toEqual([{ status: "loading" }, { result: forbidden, status: "forbidden" }]);
+    expect(JSON.stringify(states)).not.toContain("/deployments");
+    expect(JSON.stringify(states)).not.toContain("routeId");
+    expect(JSON.stringify(states)).not.toContain("storageIdentity");
+  });
+
   it("renders signup when an anonymous target-bound account status can expose safe target facts", async () => {
     const calls: FetchCall[] = [];
     const states: AuthAccountRouteState[] = [];
@@ -664,7 +703,7 @@ describe("auth account route data flow", () => {
       }),
     ).rejects.toMatchObject({
       message:
-        'Account completion result cannot include private browser-visible field "sessionId".',
+        'Auth account status result cannot include private browser-visible field "sessionId".',
     } satisfies Partial<AuthAccountApiError>);
   });
 });

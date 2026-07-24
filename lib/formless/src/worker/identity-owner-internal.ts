@@ -20,6 +20,8 @@ export type IdentityOwnerInternalEnv = {
 };
 
 export type ActiveIdentityPrincipal = {
+  displayName: string;
+  email?: string;
   id: string;
 };
 

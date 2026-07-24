@@ -170,7 +170,7 @@ describe("owner setup status and capability API routes", () => {
     expect(accepted.response.status).toBe(200);
   });
 
-  it("requires owner setup before owner login", async () => {
+  it("requires owner setup before account login", async () => {
     const rejected = await harness.fetch("/api/formless/session", {
       headers: { Authorization: `Bearer ${adminToken}` },
       method: "POST",

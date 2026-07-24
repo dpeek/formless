@@ -62,7 +62,7 @@ describe("application shell runtime boundary", () => {
           reference,
         }}
         currentPath="/tasks"
-        ownerSession={{ authenticated: false, setupComplete: true }}
+        accountSession={{ authenticated: false, setupComplete: true }}
         routeWorld={routeWorld}
         runtimeProfile={runtimeProfile}
         screenModels={[]}
@@ -121,7 +121,7 @@ describe("application shell runtime boundary", () => {
         activeScreenPath="/"
         currentPath="/tasks"
         dependencies={dependencies}
-        ownerSession={{ authenticated: false, setupComplete: true }}
+        accountSession={{ authenticated: false, setupComplete: true }}
         routeWorld={routeWorld}
         runtimeProfile={runtimeProfile}
         screenModels={[screen]}
@@ -272,13 +272,12 @@ describe("application shell runtime boundary", () => {
       <ApplicationShellRuntimeBoundary
         currentPath="/tasks"
         dependencies={dependencies}
-        ownerSession={{
+        accountSession={{
           authenticated: true,
-          owner: {
-            createdAt: "2026-07-16T00:00:00.000Z",
+          principal: {
+            displayName: "Instance Admin",
             email: "owner@example.com",
-            id: "owner",
-            name: "Owner",
+            principalId: "principal:instance-admin",
           },
           session: { expiresAt: "private-session-value" },
           setupComplete: true,

@@ -157,6 +157,51 @@ describe("instance auth state", () => {
     expect(stored.config).toEqual(first);
   });
 
+  it("migrates principal-bound login challenge rows to principal-neutral private state", async () => {
+    const migrated = await postJson<{
+      appliedMigrations: Array<{ migrationId: string; storageFamily: string }>;
+      indexSql: string;
+      rows: Array<{ kind: string; principal_id: string | null }>;
+      tableSql: string;
+    }>("/migrate-principal-neutral-login-challenges", {});
+
+    expect(migrated.appliedMigrations).toEqual([
+      expect.objectContaining({
+        migrationId: "2026-07-24-instance-auth-principal-neutral-login-challenges",
+        storageFamily: "instance-auth",
+      }),
+    ]);
+    expect(migrated.rows).toEqual([
+      { kind: "login", principal_id: null },
+      { kind: "registration", principal_id: principalId },
+    ]);
+    expect(migrated.tableSql).toMatch(/kind\s*=\s*'login'\s+AND\s+principal_id\s+IS\s+NULL/i);
+    expect(migrated.indexSql).toContain("instance_auth_challenges");
+    expect(await readChallenge(loginChallenge)).toEqual({
+      challenge: {
+        challenge: loginChallenge,
+        createdAt,
+        expiresAt,
+        id: "legacy-login",
+        kind: "login",
+      },
+    });
+    expect(await readChallenge(invitationRegistrationChallenge)).toEqual({
+      challenge: {
+        canonicalOrigin,
+        challenge: invitationRegistrationChallenge,
+        createdAt,
+        expiresAt,
+        id: "legacy-registration",
+        invitationId,
+        invitationTokenHash: "aW52aXRhdGlvbi10b2tlbi1oYXNo",
+        kind: "registration",
+        principalId,
+        relyingPartyId,
+      },
+    });
+  });
+
   it("creates, consumes, rejects replay, expires, and deletes passkey challenges", async () => {
     const invitationTokenHash = await hashInvitationToken(invitationRawToken);
     const invitationRegistration = await createChallenge({
@@ -259,7 +304,6 @@ describe("instance auth state", () => {
     await createChallenge({
       kind: "login",
       challenge: loginChallenge,
-      principalId,
       createdAt,
       expiresAt: expiredAt,
     });
@@ -277,7 +321,6 @@ describe("instance auth state", () => {
         id: expect.any(String),
         kind: "login",
         challenge: loginChallenge,
-        principalId,
         createdAt,
         expiresAt: expiredAt,
       },
@@ -289,7 +332,6 @@ describe("instance auth state", () => {
     await createChallenge({
       kind: "login",
       challenge: deleteChallenge,
-      principalId,
       createdAt,
       expiresAt,
     });
@@ -1202,6 +1244,10 @@ async function writeInstanceAuthHarness() {
         validateEmailVerificationChallenge,
         writeInstanceAuthConfig,
       } from "${process.cwd()}/src/worker/instance-auth-state.ts";
+      import {
+        readAppliedSqlMigrations,
+        storageSqlMigrationFamily,
+      } from "${process.cwd()}/src/worker/sql-migrations.ts";
 
       export class InstanceAuthHarness extends DurableObject {
         constructor(ctx, env) {
@@ -1361,6 +1407,121 @@ async function writeInstanceAuthHarness() {
 
             if (request.method === "POST" && url.pathname === "/email-verification-link") {
               return Response.json(buildEmailVerificationLink(await request.json()));
+            }
+
+            if (
+              request.method === "POST" &&
+              url.pathname === "/migrate-principal-neutral-login-challenges"
+            ) {
+              this.ctx.storage.transactionSync(() => {
+                this.ctx.storage.sql.exec(
+                  "DROP INDEX IF EXISTS idx_instance_auth_challenges_expires_at",
+                );
+                this.ctx.storage.sql.exec("DROP TABLE instance_auth_challenges");
+                this.ctx.storage.sql.exec(
+                  "DELETE FROM formless_applied_sql_migrations WHERE storage_family = 'instance-auth'",
+                );
+                this.ctx.storage.sql.exec(\`
+                  CREATE TABLE instance_auth_challenges (
+                    id TEXT PRIMARY KEY,
+                    kind TEXT NOT NULL CHECK (kind IN ('login', 'registration')),
+                    challenge TEXT NOT NULL UNIQUE,
+                    invitation_id TEXT,
+                    invitation_token_hash TEXT,
+                    principal_id TEXT,
+                    registration_origin TEXT,
+                    registration_relying_party_id TEXT,
+                    created_at TEXT NOT NULL,
+                    expires_at TEXT NOT NULL,
+                    consumed_at TEXT,
+                    CHECK (
+                      (
+                        kind = 'registration'
+                        AND principal_id IS NOT NULL
+                        AND invitation_id IS NOT NULL
+                        AND invitation_token_hash IS NOT NULL
+                        AND registration_origin IS NOT NULL
+                        AND registration_relying_party_id IS NOT NULL
+                      )
+                      OR
+                      (
+                        kind = 'login'
+                        AND principal_id IS NOT NULL
+                        AND invitation_id IS NULL
+                        AND invitation_token_hash IS NULL
+                        AND registration_origin IS NULL
+                        AND registration_relying_party_id IS NULL
+                      )
+                    )
+                  );
+                  CREATE INDEX idx_instance_auth_challenges_expires_at
+                    ON instance_auth_challenges (expires_at);
+                  INSERT INTO instance_auth_challenges (
+                    id,
+                    kind,
+                    challenge,
+                    invitation_id,
+                    invitation_token_hash,
+                    principal_id,
+                    registration_origin,
+                    registration_relying_party_id,
+                    created_at,
+                    expires_at,
+                    consumed_at
+                  )
+                  VALUES
+                    (
+                      'legacy-login',
+                      'login',
+                      '${loginChallenge}',
+                      NULL,
+                      NULL,
+                      '${principalId}',
+                      NULL,
+                      NULL,
+                      '${createdAt}',
+                      '${expiresAt}',
+                      NULL
+                    ),
+                    (
+                      'legacy-registration',
+                      'registration',
+                      '${invitationRegistrationChallenge}',
+                      '${invitationId}',
+                      'aW52aXRhdGlvbi10b2tlbi1oYXNo',
+                      '${principalId}',
+                      '${canonicalOrigin}',
+                      '${relyingPartyId}',
+                      '${createdAt}',
+                      '${expiresAt}',
+                      NULL
+                    );
+                \`);
+              });
+
+              ensureInstanceAuthTables(this.ctx.storage);
+
+              return Response.json({
+                appliedMigrations: readAppliedSqlMigrations(
+                  this.ctx.storage,
+                  storageSqlMigrationFamily("instance-auth"),
+                ),
+                indexSql: this.ctx.storage.sql
+                  .exec(
+                    "SELECT sql FROM sqlite_master WHERE type = 'index' AND name = 'idx_instance_auth_challenges_expires_at'",
+                  )
+                  .one().sql,
+                rows: this.ctx.storage.sql
+                  .exec(
+                    "SELECT kind, principal_id FROM instance_auth_challenges ORDER BY kind ASC",
+                  )
+                  .toArray(),
+                tableSql: this.ctx.storage.sql
+                  .exec(
+                    "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'instance_auth_challenges'",
+                  )
+                  .one().sql,
+              });
             }
 
             if (request.method === "POST" && url.pathname === "/challenge") {

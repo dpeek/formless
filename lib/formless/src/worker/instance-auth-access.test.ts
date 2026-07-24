@@ -147,11 +147,40 @@ describe("instance auth access readers and decisions", () => {
       ),
     ).resolves.toEqual({ ok: false, reason: "missing-principal" });
 
-    await expect(
-      resolveInstanceAuthAccess(
+    const missingOwnerAuthority = await resolveInstanceAuthAccess(
+      {
+        localOwnerSessionFallbackAllowed: false,
+        requiredAuthority: "owner",
+      },
+      accessReaders({
+        readCentralSession: async () => ({
+          ok: true,
+          ownerSessionFallbackAllowed: false,
+          session: centralSession,
+        }),
+        readOwnerAuthority: async () => null,
+      }),
+    );
+
+    expect(missingOwnerAuthority).toMatchObject({
+      authenticated: {
+        principalId: centralSession.principalId,
+        session: centralSession,
+        via: "central-session",
+      },
+      ok: false,
+      reason: "missing-owner-authority",
+    });
+
+    for (const authority of [
+      null,
+      { id: centralSession.principalId, instanceAdmin: false, instanceOwner: false },
+      { id: "principal:other", instanceAdmin: true, instanceOwner: false },
+    ]) {
+      const missingManagementAuthority = await resolveInstanceAuthAccess(
         {
           localOwnerSessionFallbackAllowed: false,
-          requiredAuthority: "owner",
+          requiredAuthority: "management",
         },
         accessReaders({
           readCentralSession: async () => ({
@@ -159,32 +188,19 @@ describe("instance auth access readers and decisions", () => {
             ownerSessionFallbackAllowed: false,
             session: centralSession,
           }),
-          readOwnerAuthority: async () => null,
+          readManagementAuthority: async () => authority,
         }),
-      ),
-    ).resolves.toEqual({ ok: false, reason: "missing-owner-authority" });
+      );
 
-    for (const authority of [
-      null,
-      { id: centralSession.principalId, instanceAdmin: false, instanceOwner: false },
-      { id: "principal:other", instanceAdmin: true, instanceOwner: false },
-    ]) {
-      await expect(
-        resolveInstanceAuthAccess(
-          {
-            localOwnerSessionFallbackAllowed: false,
-            requiredAuthority: "management",
-          },
-          accessReaders({
-            readCentralSession: async () => ({
-              ok: true,
-              ownerSessionFallbackAllowed: false,
-              session: centralSession,
-            }),
-            readManagementAuthority: async () => authority,
-          }),
-        ),
-      ).resolves.toEqual({ ok: false, reason: "missing-management-authority" });
+      expect(missingManagementAuthority).toMatchObject({
+        authenticated: {
+          principalId: centralSession.principalId,
+          session: centralSession,
+          via: "central-session",
+        },
+        ok: false,
+        reason: "missing-management-authority",
+      });
     }
 
     for (const authority of [
@@ -297,15 +313,23 @@ describe("instance auth access readers and decisions", () => {
         instanceOwner: false,
       },
     ]) {
-      await expect(
-        resolveInstanceAuthAccess(
-          input,
-          accessReaders({
-            ...centralReader,
-            readAppAdminAuthority: async () => authority,
-          }),
-        ),
-      ).resolves.toEqual({ ok: false, reason: "missing-app-admin-authority" });
+      const missingAppAuthority = await resolveInstanceAuthAccess(
+        input,
+        accessReaders({
+          ...centralReader,
+          readAppAdminAuthority: async () => authority,
+        }),
+      );
+
+      expect(missingAppAuthority).toMatchObject({
+        authenticated: {
+          principalId: centralSession.principalId,
+          session: centralSession,
+          via: "central-session",
+        },
+        ok: false,
+        reason: "missing-app-admin-authority",
+      });
     }
 
     await expect(
@@ -362,17 +386,22 @@ describe("instance auth access readers and decisions", () => {
       status: "blocked" as const,
       target: accountTarget,
     };
-    await expect(
-      resolveInstanceAuthAccess(
-        input,
-        accessReaders({
-          ...centralReader,
-          readAccountCompletion: async () => roleReview,
-          readAppAdminAuthority: async () => null,
-        }),
-      ),
-    ).resolves.toEqual({
+    const roleReviewResult = await resolveInstanceAuthAccess(
+      input,
+      accessReaders({
+        ...centralReader,
+        readAccountCompletion: async () => roleReview,
+        readAppAdminAuthority: async () => null,
+      }),
+    );
+
+    expect(roleReviewResult).toMatchObject({
       accountCompletion: roleReview,
+      authenticated: {
+        principalId: centralSession.principalId,
+        session: centralSession,
+        via: "central-session",
+      },
       ok: false,
       reason: "account-completion-required",
     });
@@ -385,7 +414,7 @@ describe("instance auth access readers and decisions", () => {
           readAppAdminAuthority: async () => null,
         }),
       ),
-    ).resolves.toEqual({ ok: false, reason: "missing-app-admin-authority" });
+    ).resolves.toEqual({ ok: false, reason: "missing-principal" });
   });
 
   it("blocks current account gates and builds authenticated operation actor facts", async () => {
@@ -399,8 +428,14 @@ describe("instance auth access readers and decisions", () => {
       accessReaders({ readAccountCompletion: async () => blocked }),
     );
 
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       accountCompletion: blocked,
+      authenticated: {
+        principalId: hostSession.principalId,
+        session: hostSession,
+        target,
+        via: "host-session",
+      },
       ok: false,
       reason: "account-completion-required",
     });
@@ -488,7 +523,10 @@ function accessReaders(
       status: "complete",
       target: completionTarget,
     }),
-    readActivePrincipal: async (session) => ({ id: session.principalId }),
+    readActivePrincipal: async (session) => ({
+      displayName: "Active principal",
+      id: session.principalId,
+    }),
     readAppAdminAuthority: async (session, appInstallId) => ({
       appAdmin: true,
       appInstallId,

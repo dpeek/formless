@@ -4,8 +4,8 @@ import type {
   RegistrationResponseJSON,
 } from "@simplewebauthn/server";
 import type {
-  OwnerPasskeyLoginOptionsResponse,
-  OwnerPasskeyLoginVerifyRequest,
+  AccountPasskeyLoginOptionsResponse,
+  AccountPasskeyLoginVerifyRequest,
 } from "../../shared/instance-auth.ts";
 
 export const passkeyUnavailableMessage = "This browser does not support passkeys.";
@@ -15,8 +15,8 @@ export type CreatePasskeyRegistrationResponse = (
 ) => Promise<RegistrationResponseJSON>;
 
 export type CreatePasskeyAuthenticationResponse = (
-  options: OwnerPasskeyLoginOptionsResponse["options"],
-) => Promise<OwnerPasskeyLoginVerifyRequest["response"]>;
+  options: AccountPasskeyLoginOptionsResponse["options"],
+) => Promise<AccountPasskeyLoginVerifyRequest["response"]>;
 
 export function browserSupportsPasskeys() {
   return (
@@ -38,8 +38,8 @@ export async function createBrowserPasskeyRegistrationResponse(
 }
 
 export async function createBrowserPasskeyAuthenticationResponse(
-  options: OwnerPasskeyLoginOptionsResponse["options"],
-): Promise<OwnerPasskeyLoginVerifyRequest["response"]> {
+  options: AccountPasskeyLoginOptionsResponse["options"],
+): Promise<AccountPasskeyLoginVerifyRequest["response"]> {
   if (!browserSupportsPasskeys()) {
     throw new Error(passkeyUnavailableMessage);
   }

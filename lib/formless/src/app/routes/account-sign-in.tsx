@@ -3,18 +3,18 @@ import type { AuthIntent } from "@dpeek/formless-presentation/contract";
 import { useLocation } from "wouter";
 import {
   authAccountContinuationLocationForReturnTarget,
-  ownerLoginRedirectTargetFromSearch,
-  parseOwnerLogoutResponse,
-  parseOwnerPasskeyLoginOptionsResponse,
-  parseOwnerPasskeyLoginVerifyResponse,
-  parseOwnerSessionStatusResponse,
-  type OwnerLogoutResponse,
-  type OwnerPasskeyLoginOptionsResponse,
-  type OwnerPasskeyLoginVerifyRequest,
-  type OwnerPasskeyLoginVerifyResponse,
-  type OwnerSessionStatusResponse,
+  accountRedirectTargetFromSearch,
+  parseAccountLogoutResponse,
+  parseAccountPasskeyLoginOptionsResponse,
+  parseAccountPasskeyLoginVerifyResponse,
+  parseAccountSessionStatusResponse,
+  type AccountLogoutResponse,
+  type AccountPasskeyLoginOptionsResponse,
+  type AccountPasskeyLoginVerifyRequest,
+  type AccountPasskeyLoginVerifyResponse,
+  type AccountPrincipalIdentity,
+  type AccountSessionStatusResponse,
 } from "../../shared/instance-auth.ts";
-import type { OwnerIdentity } from "../../shared/protocol.ts";
 import { runtimeTopologyRoutes } from "../../shared/runtime-topology.ts";
 import {
   browserSupportsPasskeys,
@@ -29,80 +29,90 @@ import {
   NoShellAuthRuntimeBoundary,
 } from "./auth-runtime-boundary.tsx";
 import {
-  ownerSignInAuthSurfaceReference,
-  projectOwnerSignInAuthSurface,
-} from "./owner-sign-in-auth-projection.ts";
+  accountSignInAuthSurfaceReference,
+  projectAccountSignInAuthSurface,
+} from "./account-sign-in-auth-projection.ts";
 
-export type OwnerLoginRouteState =
-  | { status: "complete"; owner: OwnerIdentity }
-  | { continueTo: `/${string}`; owner?: OwnerIdentity; status: "continuing" }
-  | { status: "failed"; message: string; owner?: OwnerIdentity }
-  | { status: "logging-out"; owner: OwnerIdentity }
+export type AccountSignInRouteState =
+  | { status: "complete"; principal: AccountPrincipalIdentity }
+  | {
+      continueTo: `/${string}`;
+      principal?: AccountPrincipalIdentity;
+      status: "continuing";
+    }
+  | {
+      message: string;
+      principal?: AccountPrincipalIdentity;
+      retry: "load" | "sign-in";
+      status: "failed";
+    }
+  | { status: "logging-out"; principal: AccountPrincipalIdentity }
   | { status: "loading" }
-  | { status: "passkey-unavailable"; message: string; owner?: OwnerIdentity }
-  | { status: "ready"; owner: OwnerIdentity }
+  | { status: "passkey-unavailable"; message: string }
+  | { status: "ready" }
   | { status: "setup-incomplete" }
-  | { status: "submitting"; owner: OwnerIdentity };
+  | { status: "submitting" };
 
-type StartOwnerLoginRouteSessionOptions = {
+type StartAccountSignInRouteSessionOptions = {
   fetcher?: typeof fetch;
-  onState: (state: OwnerLoginRouteState) => void;
+  onState: (state: AccountSignInRouteState) => void;
   passkeysSupported?: () => boolean;
 };
 
-type OwnerLoginFetchOptions = {
+type AccountSignInFetchOptions = {
   fetcher?: typeof fetch;
   signal?: AbortSignal;
 };
 
-type OwnerLoginLocationSetter = (path: `/${string}`, options?: { replace?: boolean }) => void;
+type AccountSignInLocationSetter = (path: `/${string}`, options?: { replace?: boolean }) => void;
 
-export function OwnerLoginRoute() {
-  const [state, setState] = useState<OwnerLoginRouteState>({ status: "loading" });
+export function AccountSignInRoute() {
+  const [state, setState] = useState<AccountSignInRouteState>({ status: "loading" });
   const [sessionRevision, setSessionRevision] = useState(0);
   const pendingGuard = useRef(createAuthPendingGuard());
   const [location, setLocation] = useLocation();
-  const redirectTarget = ownerLoginRedirectTargetFromSearch(
-    ownerLoginSearchFromRouteLocation(location),
+  const redirectTarget = accountRedirectTargetFromSearch(
+    accountSignInSearchFromRouteLocation(location),
   );
 
   useEffect(
     () =>
-      startOwnerLoginRouteSession({
+      startAccountSignInRouteSession({
         onState: setState,
       }),
     [sessionRevision],
   );
 
-  const owner =
-    state.status === "ready" || state.status === "failed" || state.status === "submitting"
-      ? state.owner
-      : undefined;
-  const disabled = state.status === "submitting" || owner === undefined;
-  const surface = useMemo(() => projectOwnerSignInAuthSurface({ state }), [state]);
+  const signInAvailable =
+    state.status === "ready" || (state.status === "failed" && state.retry === "sign-in");
+  const surface = useMemo(() => projectAccountSignInAuthSurface({ state }), [state]);
 
   async function submitLogin() {
-    if (!owner || disabled) {
+    if (!signInAvailable) {
       return;
     }
 
     await pendingGuard.current.run(async () => {
-      setState({ status: "submitting", owner });
+      setState({ status: "submitting" });
 
       try {
         const response = await loginWithPasskey();
-        const continueTo = ownerLoginSuccessContinuationTarget(
+        const continueTo = accountSignInSuccessContinuationTarget(
           response.continueTo,
-          ownerLoginSearchFromRouteLocation(location),
+          accountSignInSearchFromRouteLocation(location),
         );
 
-        setState({ continueTo, owner: response.owner, status: "continuing" });
-        navigateAfterOwnerLogin(continueTo, { setLocation });
+        setState({
+          continueTo,
+          principal: response.principal,
+          status: "continuing",
+        });
+        navigateAfterAccountSignIn(continueTo, { setLocation });
       } catch (error) {
         setState({
           status: "failed",
-          message: error instanceof Error ? error.message : "Owner login failed.",
-          owner,
+          message: error instanceof Error ? error.message : "Account sign in failed.",
+          retry: "sign-in",
         });
       }
     });
@@ -113,26 +123,27 @@ export function OwnerLoginRoute() {
       return;
     }
 
-    const loggedOutOwner = state.owner;
+    const loggedOutPrincipal = state.principal;
 
     await pendingGuard.current.run(async () => {
-      setState({ status: "logging-out", owner: loggedOutOwner });
+      setState({ status: "logging-out", principal: loggedOutPrincipal });
 
       try {
-        const response = await logoutOwnerSession();
+        const response = await logoutAccountSession();
 
         if (response.continueTo) {
           setState({ continueTo: response.continueTo, status: "continuing" });
-          navigateAfterOwnerLogin(response.continueTo, { setLocation });
+          navigateAfterAccountSignIn(response.continueTo, { setLocation });
           return;
         }
 
-        setState({ status: "ready", owner: loggedOutOwner });
+        setState({ status: "ready" });
       } catch (error) {
         setState({
           status: "failed",
-          message: error instanceof Error ? error.message : "Owner logout failed.",
-          owner: loggedOutOwner,
+          message: error instanceof Error ? error.message : "Account logout failed.",
+          principal: loggedOutPrincipal,
+          retry: "load",
         });
       }
     });
@@ -159,31 +170,31 @@ export function OwnerLoginRoute() {
     }
 
     if (intent.type === "authContinuation") {
-      navigateAfterOwnerLogin(redirectTarget, { setLocation });
+      navigateAfterAccountSignIn(redirectTarget, { setLocation });
     }
   }
 
   return (
     <NoShellAuthRuntimeBoundary
       onIntent={handleIntent}
-      reference={ownerSignInAuthSurfaceReference}
+      reference={accountSignInAuthSurfaceReference}
       snapshot={surface}
     >
       <ApplicationPresentation
-        presentation={{ kind: "auth", reference: ownerSignInAuthSurfaceReference }}
+        presentation={{ kind: "auth", reference: accountSignInAuthSurfaceReference }}
       />
     </NoShellAuthRuntimeBoundary>
   );
 }
 
-export function navigateAfterOwnerLogin(
+export function navigateAfterAccountSignIn(
   redirectTarget: `/${string}`,
   options: {
     replaceDocumentLocation?: (target: `/${string}`) => void;
-    setLocation: OwnerLoginLocationSetter;
+    setLocation: AccountSignInLocationSetter;
   },
 ): void {
-  if (ownerLoginRedirectRequiresDocumentNavigation(redirectTarget)) {
+  if (accountSignInRedirectRequiresDocumentNavigation(redirectTarget)) {
     const replaceDocumentLocation =
       options.replaceDocumentLocation ??
       ((target: `/${string}`) => window.location.replace(target));
@@ -195,13 +206,13 @@ export function navigateAfterOwnerLogin(
   options.setLocation(redirectTarget, { replace: true });
 }
 
-export function ownerLoginRedirectRequiresDocumentNavigation(
+export function accountSignInRedirectRequiresDocumentNavigation(
   redirectTarget: `/${string}`,
 ): boolean {
   return redirectTarget === "/formless" || redirectTarget.startsWith("/formless/");
 }
 
-export function ownerLoginSuccessContinuationTarget(
+export function accountSignInSuccessContinuationTarget(
   continueTo: `/${string}`,
   locationSearch: string,
 ): `/${string}` {
@@ -214,7 +225,7 @@ export function ownerLoginSuccessContinuationTarget(
     return continueTo;
   }
 
-  const redirectTarget = ownerLoginRedirectTargetFromSearch(locationSearch);
+  const redirectTarget = accountRedirectTargetFromSearch(locationSearch);
   const redirectUrl = new URL(redirectTarget, "https://formless.local");
 
   if (
@@ -227,11 +238,11 @@ export function ownerLoginSuccessContinuationTarget(
   return authAccountContinuationLocationForReturnTarget(redirectTarget);
 }
 
-export function startOwnerLoginRouteSession({
+export function startAccountSignInRouteSession({
   fetcher = fetch,
   onState,
   passkeysSupported = browserSupportsPasskeys,
-}: StartOwnerLoginRouteSessionOptions) {
+}: StartAccountSignInRouteSessionOptions) {
   const controller = new AbortController();
   let stopped = false;
 
@@ -239,28 +250,27 @@ export function startOwnerLoginRouteSession({
 
   async function loadSessionState() {
     try {
-      const status = await fetchOwnerSessionStatus({ fetcher, signal: controller.signal });
+      const status = await fetchAccountSessionStatus({ fetcher, signal: controller.signal });
 
       if (stopped) {
         return;
       }
 
       if (status.authenticated) {
-        onState({ status: "complete", owner: status.owner });
+        onState({ status: "complete", principal: status.principal });
         return;
       }
 
-      if (status.setupComplete && status.owner) {
+      if (status.setupComplete) {
         if (!passkeysSupported()) {
           onState({
             status: "passkey-unavailable",
             message: passkeyUnavailableMessage,
-            owner: status.owner,
           });
           return;
         }
 
-        onState({ status: "ready", owner: status.owner });
+        onState({ status: "ready" });
         return;
       }
 
@@ -269,7 +279,8 @@ export function startOwnerLoginRouteSession({
       if (!stopped && !controller.signal.aborted) {
         onState({
           status: "failed",
-          message: error instanceof Error ? error.message : "Owner login could not load.",
+          message: error instanceof Error ? error.message : "Account sign-in state could not load.",
+          retry: "load",
         });
       }
     }
@@ -283,43 +294,46 @@ export function startOwnerLoginRouteSession({
   };
 }
 
-export async function fetchOwnerSessionStatus({
+export async function fetchAccountSessionStatus({
   fetcher = fetch,
   signal,
-}: OwnerLoginFetchOptions = {}): Promise<OwnerSessionStatusResponse> {
+}: AccountSignInFetchOptions = {}): Promise<AccountSessionStatusResponse> {
   const response = await fetcher("/api/formless/session", {
     credentials: "same-origin",
     headers: { Accept: "application/json" },
     signal,
   });
-  const body = await readOwnerLoginJson(response);
+  const body = await readAccountSignInJson(response);
 
   if (!response.ok) {
-    throw new OwnerLoginApiError(ownerLoginErrorMessage(body, "Owner session status failed."), {
-      status: response.status,
-    });
+    throw new AccountSignInApiError(
+      accountSignInErrorMessage(body, "Account session status failed."),
+      {
+        status: response.status,
+      },
+    );
   }
 
-  return parseOwnerSessionStatusResponse(body);
+  return parseAccountSessionStatusResponse(body);
 }
 
 export async function loginWithPasskey({
   createAuthenticationResponse = createBrowserPasskeyAuthenticationResponse,
   fetcher = fetch,
   signal,
-}: OwnerLoginFetchOptions & {
+}: AccountSignInFetchOptions & {
   createAuthenticationResponse?: CreatePasskeyAuthenticationResponse;
-} = {}): Promise<OwnerPasskeyLoginVerifyResponse> {
-  const options = await fetchOwnerPasskeyLoginOptions({ fetcher, signal });
+} = {}): Promise<AccountPasskeyLoginVerifyResponse> {
+  const options = await fetchAccountPasskeyLoginOptions({ fetcher, signal });
   const response = await createAuthenticationResponse(options.options);
 
-  return await verifyOwnerPasskeyLogin({ fetcher, response, signal });
+  return await verifyAccountPasskeyLogin({ fetcher, response, signal });
 }
 
-export async function fetchOwnerPasskeyLoginOptions({
+export async function fetchAccountPasskeyLoginOptions({
   fetcher = fetch,
   signal,
-}: OwnerLoginFetchOptions = {}): Promise<OwnerPasskeyLoginOptionsResponse> {
+}: AccountSignInFetchOptions = {}): Promise<AccountPasskeyLoginOptionsResponse> {
   const response = await fetcher("/api/formless/passkeys/login/options", {
     body: "{}",
     credentials: "same-origin",
@@ -330,24 +344,27 @@ export async function fetchOwnerPasskeyLoginOptions({
     method: "POST",
     signal,
   });
-  const body = await readOwnerLoginJson(response);
+  const body = await readAccountSignInJson(response);
 
   if (!response.ok) {
-    throw new OwnerLoginApiError(ownerLoginErrorMessage(body, "Passkey login options failed."), {
-      status: response.status,
-    });
+    throw new AccountSignInApiError(
+      accountSignInErrorMessage(body, "Passkey login options failed."),
+      {
+        status: response.status,
+      },
+    );
   }
 
-  return parseOwnerPasskeyLoginOptionsResponse(body);
+  return parseAccountPasskeyLoginOptionsResponse(body);
 }
 
-async function verifyOwnerPasskeyLogin({
+async function verifyAccountPasskeyLogin({
   fetcher = fetch,
   response: assertionResponse,
   signal,
-}: OwnerLoginFetchOptions & {
-  response: OwnerPasskeyLoginVerifyRequest["response"];
-}): Promise<OwnerPasskeyLoginVerifyResponse> {
+}: AccountSignInFetchOptions & {
+  response: AccountPasskeyLoginVerifyRequest["response"];
+}): Promise<AccountPasskeyLoginVerifyResponse> {
   const response = await fetcher("/api/formless/passkeys/login/verify", {
     body: JSON.stringify({
       response: assertionResponse,
@@ -360,65 +377,65 @@ async function verifyOwnerPasskeyLogin({
     method: "POST",
     signal,
   });
-  const body = await readOwnerLoginJson(response);
+  const body = await readAccountSignInJson(response);
 
   if (!response.ok) {
-    throw new OwnerLoginApiError(ownerLoginErrorMessage(body, "Owner login failed."), {
+    throw new AccountSignInApiError(accountSignInErrorMessage(body, "Account sign in failed."), {
       status: response.status,
     });
   }
 
-  return parseOwnerPasskeyLoginVerifyResponse(body);
+  return parseAccountPasskeyLoginVerifyResponse(body);
 }
 
-export async function logoutOwnerSession({
+export async function logoutAccountSession({
   fetcher = fetch,
   signal,
-}: OwnerLoginFetchOptions = {}): Promise<OwnerLogoutResponse> {
+}: AccountSignInFetchOptions = {}): Promise<AccountLogoutResponse> {
   const response = await fetcher("/api/formless/session/logout", {
     credentials: "same-origin",
     headers: { Accept: "application/json" },
     method: "POST",
     signal,
   });
-  const body = await readOwnerLoginJson(response);
+  const body = await readAccountSignInJson(response);
 
   if (!response.ok) {
-    throw new OwnerLoginApiError(ownerLoginErrorMessage(body, "Owner logout failed."), {
+    throw new AccountSignInApiError(accountSignInErrorMessage(body, "Account logout failed."), {
       status: response.status,
     });
   }
 
-  return parseOwnerLogoutResponse(body);
+  return parseAccountLogoutResponse(body);
 }
 
-export class OwnerLoginApiError extends Error {
+export class AccountSignInApiError extends Error {
   status: number | undefined;
 
   constructor(message: string, options: { status?: number } = {}) {
     super(message);
-    this.name = "OwnerLoginApiError";
+    this.name = "AccountSignInApiError";
     this.status = options.status;
   }
 }
 
-async function readOwnerLoginJson(response: Response): Promise<unknown> {
+async function readAccountSignInJson(response: Response): Promise<unknown> {
   try {
     return await response.json();
   } catch {
-    throw new OwnerLoginApiError("Owner login response was not JSON.", {
+    throw new AccountSignInApiError("Account sign-in response was not JSON.", {
       status: response.status,
     });
   }
 }
 
-function ownerLoginErrorMessage(value: unknown, fallback: string): string {
+function accountSignInErrorMessage(value: unknown, fallback: string): string {
   return isRecord(value) && typeof value.error === "string" && value.error.trim() !== ""
     ? value.error
     : fallback;
 }
 
-function ownerLoginSearchFromRouteLocation(location: string): string {
+function accountSignInSearchFromRouteLocation(location: string): string {
   const queryStart = location.indexOf("?");
 
   if (queryStart >= 0) {

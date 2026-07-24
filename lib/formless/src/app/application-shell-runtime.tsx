@@ -22,7 +22,10 @@ import { resetSeedData } from "../client/sync.ts";
 import { selectGeneratedRootNavigationFacts } from "../client/generated-authoring.ts";
 import { selectPrimaryScreenModels, type HomeScreenModel } from "../client/views.ts";
 import { todayDateString } from "../shared/date.ts";
-import type { OwnerLogoutResponse, OwnerSessionStatusResponse } from "../shared/instance-auth.ts";
+import type {
+  AccountLogoutResponse,
+  AccountSessionStatusResponse,
+} from "../shared/instance-auth.ts";
 import type { BootstrapResponse } from "../shared/protocol.ts";
 import type { RecordValues } from "@dpeek/formless-storage";
 import {
@@ -54,7 +57,7 @@ import {
   useHomeRouteSelectionStore,
   withHomeRouteSelectedSectionContextRecordId,
 } from "./routes/home-selection.tsx";
-import { fetchOwnerSessionStatus, logoutOwnerSession } from "./routes/owner-login.tsx";
+import { fetchAccountSessionStatus, logoutAccountSession } from "./routes/account-sign-in.tsx";
 import {
   runtimeScreenPathFromRoute,
   type RuntimeProfile,
@@ -68,8 +71,8 @@ const ROOT_CREATE_TRIGGER: GeneratedCreateTriggerPresentation = {
 };
 
 export type ApplicationShellRuntimeDependencies = {
-  fetchOwnerSession?: () => Promise<OwnerSessionStatusResponse>;
-  logout?: () => Promise<OwnerLogoutResponse>;
+  fetchAccountSession?: () => Promise<AccountSessionStatusResponse>;
+  logout?: () => Promise<AccountLogoutResponse>;
   navigate?: (path: `/${string}`) => void;
   reset?: (
     target: ClientAppTarget,
@@ -87,7 +90,7 @@ export type ApplicationShellRuntimeBoundaryProps = {
   dependencies?: ApplicationShellRuntimeDependencies;
   installedAppRouteInstalls?: readonly AppInstall[] | undefined;
   initialRouteContractContributions?: readonly ApplicationRuntimeContractContribution[];
-  ownerSession?: OwnerSessionStatusResponse | undefined;
+  accountSession?: AccountSessionStatusResponse | undefined;
   routeWorld: RuntimeWorldMount | undefined;
   runtimeProfile: RuntimeProfile;
   screenModels?: readonly HomeScreenModel[] | undefined;
@@ -124,7 +127,7 @@ function ApplicationShellRuntime({
   dependencies = {},
   initialRouteContractContributions,
   installedAppRouteInstalls = [],
-  ownerSession: ownerSessionProp,
+  accountSession: accountSessionProp,
   routeWorld,
   runtimeProfile,
   screenModels: screenModelsProp,
@@ -215,8 +218,8 @@ function ApplicationShellRuntime({
       ),
     [createDescriptors, initialCreateSurfaces, registeredCreateRuntimes],
   );
-  const [ownerSession, setOwnerSession] = useState<OwnerSessionStatusResponse | undefined>(
-    ownerSessionProp,
+  const [accountSession, setAccountSession] = useState<AccountSessionStatusResponse | undefined>(
+    accountSessionProp,
   );
   const [logoutState, setLogoutState] = useState<"error" | "idle" | "pending">("idle");
   const [resetState, setResetState] = useState<GeneratedShellResetState>({
@@ -238,7 +241,7 @@ function ApplicationShellRuntime({
     currentPath,
     installs: installedAppRouteInstalls,
     logoutState,
-    ownerSession,
+    accountSession,
     resetState: routeWorld ? resetState : undefined,
     root:
       rootFacts === undefined
@@ -327,7 +330,7 @@ function ApplicationShellRuntime({
       activePackageResolver,
       dependencies,
       logoutState,
-      ownerSession,
+      accountSession,
       registeredCreateRuntimes,
       resetState,
       rootFacts,
@@ -357,35 +360,35 @@ function ApplicationShellRuntime({
   );
 
   useEffect(() => {
-    if (ownerSessionProp !== undefined) {
-      setOwnerSession(ownerSessionProp);
+    if (accountSessionProp !== undefined) {
+      setAccountSession(accountSessionProp);
       return;
     }
 
     if (!scope) {
-      setOwnerSession(undefined);
+      setAccountSession(undefined);
       return;
     }
 
     let stopped = false;
-    const load = dependencies.fetchOwnerSession ?? (() => fetchOwnerSessionStatus());
+    const load = dependencies.fetchAccountSession ?? (() => fetchAccountSessionStatus());
 
     void load()
       .then((session) => {
         if (!stopped) {
-          setOwnerSession(session);
+          setAccountSession(session);
         }
       })
       .catch(() => {
         if (!stopped) {
-          setOwnerSession(undefined);
+          setAccountSession(undefined);
         }
       });
 
     return () => {
       stopped = true;
     };
-  }, [dependencies.fetchOwnerSession, ownerSessionProp, scope]);
+  }, [dependencies.fetchAccountSession, accountSessionProp, scope]);
 
   useEffect(() => {
     setResetState({ open: false, status: { state: "idle" } });
@@ -417,16 +420,16 @@ function ApplicationShellRuntime({
   }
 
   async function executeLogout() {
-    if (logoutState === "pending" || ownerSession?.authenticated !== true) {
+    if (logoutState === "pending" || accountSession?.authenticated !== true) {
       return;
     }
 
     setLogoutState("pending");
 
     try {
-      const logout = dependencies.logout ?? (() => logoutOwnerSession());
+      const logout = dependencies.logout ?? (() => logoutAccountSession());
       const response = await logout();
-      setOwnerSession({ authenticated: false, setupComplete: true });
+      setAccountSession({ authenticated: false, setupComplete: true });
       setLogoutState("idle");
 
       if (response.continueTo) {

@@ -222,7 +222,7 @@ describe("generated application shell projection", () => {
     const projection = required(
       projectGeneratedApplicationShell({
         currentPath: "/unknown",
-        ownerSession: { authenticated: false, setupComplete: true },
+        accountSession: { authenticated: false, setupComplete: true },
         routeWorld: undefined,
         runtimeProfile: dev,
       }),
@@ -395,13 +395,12 @@ function completeProjection(): GeneratedApplicationShellProjection {
       currentPath: `/site${activeScreenPath === "/" ? "" : activeScreenPath}`,
       installs: [installedSiteFixture()],
       logoutState: "idle",
-      ownerSession: {
+      accountSession: {
         authenticated: true,
-        owner: {
-          createdAt: "2026-07-16T00:00:00.000Z",
+        principal: {
+          displayName: "Ada Lovelace",
           email: "ada@example.com",
-          id: "owner-1",
-          name: "Ada Lovelace",
+          principalId: "principal:ada",
         },
         session: { expiresAt: "session-token-must-not-project" },
         setupComplete: true,

@@ -115,6 +115,10 @@ account journey after verifying the owner's primary email and passkey.
   origin
 - THEN the one-time registration challenge is bound to the setup capability,
   verified email proof, instance, auth origin, and relying-party id
+- AND the options require a discoverable resident credential with required user
+  verification
+- AND the WebAuthn user id is the deterministic principal id that will own the
+  credential when setup completes
 - AND passkey options are not issued for an unverified, expired, revoked,
   consumed, wrong-capability, wrong-instance, or wrong-origin email proof
 
@@ -198,6 +202,17 @@ bound to identity principals without storing private authenticator material.
 The system MUST make passkey registration and login challenges one-time and
 instance-scoped.
 
+#### Scenario: Registration requires discoverable credentials
+
+- GIVEN owner setup, collaborator invitation acceptance, or self-service signup
+  requests passkey registration options
+- WHEN the runtime builds browser-safe WebAuthn creation options
+- THEN the options require a resident credential and required user verification
+- AND the WebAuthn user id is the stable identity principal id that owns or will
+  own the credential
+- AND registration remains bound to its existing setup capability, invitation,
+  verified email proof, instance, canonical origin, and relying-party facts
+
 #### Scenario: Registration options
 
 - GIVEN first-owner setup is not complete and a valid setup capability is
@@ -210,15 +225,17 @@ instance-scoped.
 
 #### Scenario: Login options
 
-- GIVEN owner setup is complete with an active principal that has an active
-  `instance.owner` role assignment
-- AND at least one passkey credential is stored for that principal
-- WHEN login options are requested
+- GIVEN owner setup is complete
+- WHEN account sign-in requests passkey login options on the configured auth
+  origin
 - THEN the system stores a one-time login challenge scoped to the instance
-- AND the challenge is bound to the principal id selected for the eligible
-  owner credential set
-- AND the response contains only browser-safe WebAuthn request options for
-  eligible owner credentials
+- AND the challenge is not bound to a principal, credential, route target, role,
+  or display identity before the browser returns an assertion
+- AND the browser-safe WebAuthn request options omit `allowCredentials` so the
+  authenticator selects a discoverable credential for the relying party
+- AND the options require user verification
+- AND requesting login options does not disclose whether any principal,
+  credential, email, or role exists
 
 #### Scenario: Challenge replay
 
@@ -436,22 +453,28 @@ verification.
 #### Scenario: Successful passkey login
 
 - GIVEN owner setup is complete
-- AND an active principal has an active `instance.owner` role assignment at
-  instance scope
-- AND a passkey credential exists for that principal
-- WHEN the owner submits a valid assertion for the active login challenge,
+- AND a discoverable passkey credential is stored for an active principal
+- WHEN the browser submits a valid assertion for the active principal-neutral
+  login challenge,
   canonical origin, relying-party id, and stored credential public key
-- THEN the system updates the stored credential verification facts
+- THEN the runtime resolves the credential id to its stored principal
+- AND the returned WebAuthn user handle matches the stable principal id that owns
+  the credential
+- AND the system updates the stored credential verification facts
 - AND the system issues a central auth session cookie for that principal scoped
   to the configured auth origin
 - AND the response includes a display-safe continuation target back through
   `/formless/auth`
+- AND passkey authentication does not require `instance.owner`,
+  `instance.admin`, app-install role, or target-route authority before creating
+  the principal session
 - AND deployed passkey login does not issue a host-local session cookie
 
 #### Scenario: Reject invalid passkey login
 
 - WHEN a passkey login assertion has the wrong challenge, origin, relying-party
-  id, credential id, principal, signature, or authenticator counter
+  id, credential id, user handle, signature, or authenticator counter
+- OR the resolved credential principal is missing, disabled, or revoked
 - THEN login is rejected
 - AND no central auth session, owner session, or host-local session cookie is
   issued
@@ -464,13 +487,15 @@ sessions, local-dev owner sessions, and mapped host-local sessions.
 
 #### Scenario: Session status after central passkey login
 
-- GIVEN an owner principal has logged in with a passkey
+- GIVEN an active principal has logged in with a passkey
 - WHEN the browser requests `/api/formless/session`
-- THEN the response reports the owner as authenticated
-- AND the response includes the display-safe owner identity from the principal
+- THEN the response reports the principal as authenticated
+- AND the response includes the display-safe principal identity from identity
   records and central session expiry
 - AND the response is available only on the configured auth origin for the
   central auth session cookie
+- AND an unauthenticated response does not identify the configured owner or any
+  other principal
 
 #### Scenario: Session status after local dev bootstrap
 
@@ -506,11 +531,11 @@ sessions, local-dev owner sessions, and mapped host-local sessions.
 #### Scenario: Mapped admin host session status and logout
 
 - GIVEN a mapped instance admin host has completed cross-domain auth handoff
-  for an owner principal
+  for an active principal
 - WHEN the browser requests `/api/formless/session` from that mapped host with
   the host-local session cookie
-- THEN the response reports the owner as authenticated without requiring a
-  central auth-origin owner cookie on that host
+- THEN the response reports that principal as authenticated without requiring a
+  central auth-origin cookie on that host
 - WHEN the browser posts to `/api/formless/session/logout` from that mapped
   host
 - THEN the response clears the host-local session cookie
@@ -549,8 +574,8 @@ routes through `/formless/auth` as the runtime-owned continuation contract.
   installed-app route
 - THEN account completion derives a target from the same-origin runtime surface
   and resolved route facts without requiring an exact-host binding
-- AND a missing central auth session starts sign-in while a valid central owner
-  session continues to the requested path
+- AND a missing central auth session starts sign-in while a valid central
+  principal session is evaluated against the requested path
 - AND a hostless installed-app target remains bound to its route id, app install,
   storage identity, access policy, and path-only return target
 - AND same-origin target derivation does not make hostless routes eligible for
@@ -564,6 +589,20 @@ routes through `/formless/auth` as the runtime-owned continuation contract.
 - THEN the unsafe return target is ignored
 - AND `/formless/auth` uses the product instance root as the continuation
   target after successful login
+
+#### Scenario: Authenticated principal lacks target authority
+
+- GIVEN a browser has a valid central session for an active principal
+- AND `/formless/auth` evaluates a protected target that requires management,
+  owner, or app-install authority the principal does not hold
+- WHEN no supported account-completion gate can satisfy that target authority
+- THEN the orchestrator returns a display-safe forbidden account outcome
+  instead of restarting passkey sign-in
+- AND the outcome may offer logout or a runtime-approved continuation without
+  exposing unavailable routes, role assignments, other principals, or private
+  target facts
+- AND no target shell, host-local session, handoff grant, credential ceremony,
+  or target data is made available
 
 #### Scenario: Account continuation may enter auth handoff
 
@@ -810,8 +849,7 @@ account completion gates.
 #### Scenario: Redirect unauthenticated account browser
 
 - GIVEN a browser navigates to `/formless/auth` with a protected target
-- WHEN the browser has no active central auth session for a principal that can
-  evaluate that target
+- WHEN the browser has no valid central auth session for an active principal
 - THEN the orchestrator starts the configured credential entry path with a safe
   path-only return target back to `/formless/auth`
 - AND the credential entry path remains on the configured auth origin
@@ -829,6 +867,18 @@ account completion gates.
 - AND sign-in and setup gates do not become durable logged-in account surfaces
 - AND passkey ceremonies remain scoped to the configured auth origin and
   relying-party id
+
+#### Scenario: Render generic account sign-in
+
+- GIVEN `/formless/auth` starts credential entry for a protected target
+- WHEN the configured auth origin renders `/formless/auth/sign-in`
+- THEN the browser surface identifies the Formless instance without identifying
+  the owner or any candidate principal
+- AND the surface offers one discoverable-passkey sign-in action
+- AND successful authentication creates a session for the principal resolved
+  from the verified credential before returning through `/formless/auth`
+- AND target authorization, account completion, and handoff are evaluated only
+  after authentication and are not inferred by the sign-in surface
 
 #### Scenario: Orchestrate production owner setup
 
@@ -858,7 +908,7 @@ account completion gates.
 
 ### Requirement: Reactive Auth-Origin Presentation Contract
 
-The system SHALL project owner setup, owner sign-in, account orchestration, and
+The system SHALL project owner setup, account sign-in, account orchestration, and
 collaborator invitation acceptance through complete renderer-neutral auth
 contracts on stable scoped hosts while instance-auth runtime code owns secrets,
 ceremonies, sessions, route policy, operations, and navigation.
@@ -900,11 +950,11 @@ ceremonies, sessions, route policy, operations, and navigation.
 - AND renderers do not call auth APIs, browser credential APIs, session clients,
   operation controllers, or navigation effects directly
 
-#### Scenario: Project owner setup and sign-in states
+#### Scenario: Project owner setup and account sign-in states
 
-- GIVEN the configured auth origin renders first-owner setup or owner sign-in
-- WHEN setup status, session status, passkey support, controlled owner identity,
-  pending state, failure, completion, or continuation changes
+- GIVEN the configured auth origin renders first-owner setup or account sign-in
+- WHEN setup status, session status, passkey support, authenticated principal
+  identity, pending state, failure, completion, or continuation changes
 - THEN the auth contract represents loading, invalid or incomplete setup,
   identity entry, email sending, email sent, email verification, credential
   creation, passkey-unavailable, failed, already-complete, complete,
@@ -912,9 +962,10 @@ ceremonies, sessions, route policy, operations, and navigation.
 - AND owner setup carries controlled required display-name, primary-email, and
   verification-token fields plus the action available for its current account
   step
-- AND owner sign-in carries only display-safe owner identity, passkey action,
-  logout action, and runtime-approved continuation presentation applicable to
-  the current state
+- AND account sign-in carries no candidate principal identity before
+  authentication and carries only the passkey action, authenticated
+  display-safe principal identity, logout action, and runtime-approved
+  continuation presentation applicable to the current state
 - AND successful setup and sign-in remain transient continuation states rather
   than becoming a durable account dashboard
 - AND setup capability tokens, raw email tokens, passkey options, credential
@@ -982,7 +1033,7 @@ ceremonies, sessions, route policy, operations, and navigation.
 
 #### Scenario: Formless Renderer consumes auth contracts
 
-- GIVEN production owner setup, owner sign-in, account, signup, and invitation
+- GIVEN production owner setup, account sign-in, account, signup, and invitation
   routes publish complete renderer-neutral auth contracts
 - WHEN each route publishes its auth-surface snapshot
 - THEN pure and subscribed Formless Renderer auth entrypoints consume only auth

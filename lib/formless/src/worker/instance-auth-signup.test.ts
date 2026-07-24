@@ -101,8 +101,17 @@ describe("self-service app signup API", () => {
   });
 
   it("verifies email, registers a passkey, commits app registration, and issues a central session", async () => {
-    const { completedBody, completedStatus, cookie, credentials, records, token, verifiedEmail } =
-      await completeSignupFlow();
+    const {
+      completedBody,
+      completedStatus,
+      cookie,
+      credentials,
+      options,
+      records,
+      token,
+      unverified,
+      verifiedEmail,
+    } = await completeSignupFlow();
 
     expect({ body: completedBody, status: completedStatus }).toMatchObject({
       body: { verified: true },
@@ -115,6 +124,18 @@ describe("self-service app signup API", () => {
         displayEmail: "Ada.Signup@example.com",
       },
     });
+    expect(unverified).toEqual({
+      body: { error: "Passkey registration verification failed." },
+      status: 401,
+    });
+    expect(options.options.authenticatorSelection).toMatchObject({
+      requireResidentKey: true,
+      residentKey: "required",
+      userVerification: "required",
+    });
+    expect(Buffer.from(options.options.user.id, "base64url").toString()).toBe(
+      completedBody.principal.principalId,
+    );
     expect(cookie).toContain(`${CENTRAL_AUTH_SESSION_COOKIE_NAME}=`);
     expect(completedBody).toMatchObject({
       accountCompletion: {
@@ -252,7 +273,7 @@ async function completeSignupFlow({
       token,
     },
   );
-  const options = await postAuthJson<SignupPasskeyOptionsResponse>(
+  const unverifiedOptions = await postAuthJson<SignupPasskeyOptionsResponse>(
     "/formless/auth/signup/passkeys/register/options",
     {
       challengeId: started.signup.challengeId,
@@ -262,6 +283,34 @@ async function completeSignupFlow({
     },
   );
   const passkey = new VirtualPasskey(credentialId);
+  const unverifiedResponse = await fetchAuth("/formless/auth/signup/passkeys/register/verify", {
+    body: JSON.stringify({
+      challengeId: started.signup.challengeId,
+      displayName,
+      email: normalizedEmail,
+      response: passkey.registrationResponse(unverifiedOptions.options, {
+        origin: authOrigin,
+        rpId: "auth.example.com",
+        userVerified: false,
+      }),
+      target: started.signup.target,
+    }),
+    headers: { "Content-Type": "application/json" },
+    method: "POST",
+  });
+  const unverified = {
+    body: (await unverifiedResponse.json()) as { error: string },
+    status: unverifiedResponse.status,
+  };
+  const options = await postAuthJson<SignupPasskeyOptionsResponse>(
+    "/formless/auth/signup/passkeys/register/options",
+    {
+      challengeId: started.signup.challengeId,
+      displayName,
+      email: normalizedEmail,
+      target: started.signup.target,
+    },
+  );
   const completed = await fetchAuth("/formless/auth/signup/passkeys/register/verify", {
     body: JSON.stringify({
       challengeId: started.signup.challengeId,
@@ -287,8 +336,10 @@ async function completeSignupFlow({
     completedStatus: completed.status,
     cookie: completed.headers.get("Set-Cookie") ?? "",
     credentials: credentials.credentials,
+    options,
     records: records.records,
     token,
+    unverified,
     verifiedEmail,
   };
 }
@@ -768,7 +819,7 @@ class VirtualPasskey {
 
   registrationResponse(
     options: PublicKeyCredentialCreationOptionsJSON,
-    input: { origin: string; rpId: string },
+    input: { origin: string; rpId: string; userVerified?: boolean },
   ): RegistrationResponseJSON {
     const clientDataJSON = clientDataJson("webauthn.create", options.challenge, input.origin);
     const authData = registrationAuthenticatorData({
@@ -776,6 +827,7 @@ class VirtualPasskey {
       credentialPublicKey: this.credentialPublicKey(),
       counter: 0,
       rpId: input.rpId,
+      userVerified: input.userVerified ?? true,
     });
     const attestationObject = cborMap([
       ["fmt", "none"],
@@ -819,6 +871,7 @@ function registrationAuthenticatorData(input: {
   credentialId: Uint8Array;
   credentialPublicKey: Uint8Array;
   rpId: string;
+  userVerified: boolean;
 }) {
   const credentialIdLength = new Uint8Array(2);
   const credentialIdLengthView = new DataView(credentialIdLength.buffer);
@@ -827,7 +880,7 @@ function registrationAuthenticatorData(input: {
 
   return concatBytes([
     sha256(new TextEncoder().encode(input.rpId)),
-    new Uint8Array([0x45]),
+    new Uint8Array([input.userVerified ? 0x45 : 0x41]),
     uint32(input.counter),
     new Uint8Array(16),
     credentialIdLength,
