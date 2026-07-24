@@ -307,7 +307,19 @@ export async function resolveAccountCompletionGate(input: {
     return blockedResult(target, invitationGate(pendingInvitation));
   }
 
-  if (!hasSatisfiedAppRegistration) {
+  const requiredRoleSatisfied =
+    input.input.requiredRole !== undefined &&
+    hasRequiredRole(state, input.input.requiredRole, target);
+
+  if (input.input.requiredRole && !requiredRoleSatisfied) {
+    return blockedResult(target, roleReviewGate(input.input.requiredRole, target, state));
+  }
+
+  const requiredAppRoleSatisfied =
+    requiredRoleSatisfied &&
+    (input.input.requiredRole?.scopeKind ?? defaultRoleScopeKind(target)) === "app-install";
+
+  if (!hasSatisfiedAppRegistration && !requiredAppRoleSatisfied) {
     const appRegistrationGate = await readTargetAppInstallRegistrationGate(input.env, target);
     const operation =
       appRegistrationGate.registrationPolicy === "email-verified"
@@ -352,10 +364,6 @@ export async function resolveAccountCompletionGate(input: {
       operation: termsAcceptanceCompletionOperation(target),
       policies: missingPolicies.map(accountCompletionPolicyReference),
     });
-  }
-
-  if (input.input.requiredRole && !hasRequiredRole(state, input.input.requiredRole, target)) {
-    return blockedResult(target, roleReviewGate(input.input.requiredRole, target, state));
   }
 
   return completeResult(target);

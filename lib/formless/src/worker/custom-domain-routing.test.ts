@@ -955,9 +955,9 @@ describe("installed Site custom-domain Worker routing", () => {
     await setupPrimaryProductionIdentity();
     await setupMappedApp({ access: "authenticated", requiredRole: "app.admin" });
 
-    const matching = await createCompletionReadyPrincipalSessionCookie("Matching App Admin");
+    const matching = await createAccountReadyPrincipalSessionCookie("Matching App Admin");
     const matchingAssignment = await assignIdentityAppRole(matching.principalId, taskInstallId);
-    const ordinary = await createCompletionReadyPrincipalSessionCookie("Ordinary App Principal");
+    const ordinary = await createAccountReadyPrincipalSessionCookie("Ordinary App Principal");
     const owner = await ensureTestIdentityOwner(harness, adminToken, {
       name: "App Override Owner",
     });
@@ -3459,6 +3459,14 @@ async function createActivePrincipalSessionCookie(
 }
 
 async function createCompletionReadyPrincipalSessionCookie(displayName: string) {
+  const principal = await createAccountReadyPrincipalSessionCookie(displayName);
+
+  await createAppRegistration(principal.principalId, taskInstallId);
+
+  return principal;
+}
+
+async function createAccountReadyPrincipalSessionCookie(displayName: string) {
   const principal = await createActivePrincipalSessionCookie(displayName);
 
   await createVerifiedPrimaryEmail(
@@ -3466,7 +3474,6 @@ async function createCompletionReadyPrincipalSessionCookie(displayName: string) 
     `${displayName.replace(/\W+/g, "-").toLowerCase()}@example.com`,
   );
   await createPrivateCredentialForPrincipal(principal.principalId, displayName);
-  await createAppRegistration(principal.principalId, taskInstallId);
 
   return principal;
 }

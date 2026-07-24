@@ -503,6 +503,7 @@ export async function resolveAuthAccountHandoffContinuation(
           env,
           session.session.principalId,
           accountCompletionTarget,
+          target.requiredRole,
         )
       : completeAccountContinuationResult(accountCompletionTarget);
 
@@ -595,6 +596,14 @@ export async function handleInstanceAuthHandoffDurableObjectRequest(
         input: {
           actorKind: "authenticated",
           principalId: session.session.principalId,
+          ...(target.requiredRole === undefined
+            ? {}
+            : {
+                requiredRole: {
+                  roleKey: target.requiredRole,
+                  scopeKind: "app-install",
+                } as const,
+              }),
           target: accountCompletionTargetForHandoffTarget(target),
         },
         storage,

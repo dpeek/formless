@@ -1118,9 +1118,13 @@ or using browser access for an authenticated target.
   blocking the requested target
 - AND `app-registration` requires an active `app-registration` record for the
   requested app install, principal or selected organization, and target context
+  unless the target route requires an app-scoped runtime role that the
+  principal already satisfies
+- AND an active matching `app.admin` assignment satisfies an app route requiring
+  `app.admin` without requiring a duplicate `app-registration` record
 - AND for app installs whose registration policy is `closed`, a missing
-  `app-registration` remains a blocking `app-registration` gate that cannot be
-  self-service completed by the authenticated principal
+  `app-registration` remains a blocking `app-registration` gate only when the
+  target is not already authorized by its required app-scoped runtime role
 - AND `profile-completion` is satisfied only by app-owned records or explicit
   app operations declared for that target, not by arbitrary auth-runtime writes
   to app storage
@@ -1142,7 +1146,22 @@ or using browser access for an authenticated target.
   and lacks active `instance.owner` authority
 - THEN account completion selects a display-safe `role-review` gate instead of
   redirecting to owner sign-in or continuing to the app
+- AND the role-review gate is selected before app-registration policy is
+  evaluated for that role-protected route
 - AND a role for another app install does not satisfy the gate
+
+#### Scenario: App admin satisfies role-protected app registration
+
+- GIVEN an active principal has a valid browser session
+- AND a protected app route requires `app.admin`
+- AND the principal has active `app.admin` authority for that app install
+- AND the principal has no separate `app-registration` record for that install
+- WHEN account completion evaluates the protected app target
+- THEN the required role satisfies the target's registration gate
+- AND account completion continues to any later profile, terms, or target
+  continuation checks
+- AND a role for another app install does not satisfy registration or
+  authorization for the requested target
 
 #### Scenario: Gate completion writes through owning records
 
@@ -1186,6 +1205,8 @@ or using browser access for an authenticated target.
 - AND the active principal has no active identity `app-registration` record for
   the requested app install and current principal or selected organization
   context
+- AND the target is not already authorized by a satisfied app-scoped runtime
+  role requirement
 - WHEN the runtime resolves the next blocking account gate
 - THEN it returns a display-safe `app-registration` gate with the target app
   install id, target facts, and registration policy `closed`

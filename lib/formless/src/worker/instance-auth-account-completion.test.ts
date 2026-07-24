@@ -300,6 +300,69 @@ describe("instance auth account completion resolver", () => {
     });
   });
 
+  it("honors matching app admins without registration and reviews missing or wrong-install roles", async () => {
+    const matching = await createPrincipal("Matching App Admin");
+
+    await createPrimaryEmail(matching.id, "matching-app-admin@example.com", "verified");
+    await createCredential(matching.id, "matching-app-admin");
+    await assignRole(matching.id, "app.admin", {
+      appInstallId: "crm",
+      scopeKind: "app-install",
+    });
+
+    await expect(
+      resolveGate({
+        principalId: matching.id,
+        requiredRole: { roleKey: "app.admin", scopeKind: "app-install" },
+        target: appTarget(),
+      }),
+    ).resolves.toEqual({
+      continueTo: "/dashboard",
+      status: "complete",
+      target: appTarget(),
+    });
+
+    const wrongInstall = await expectGate(
+      {
+        principalId: matching.id,
+        requiredRole: { roleKey: "app.admin", scopeKind: "app-install" },
+        target: appTarget({
+          appInstallId: "billing",
+          routeId: "route:billing",
+          storageIdentity: "app:billing",
+        }),
+      },
+      "role-review",
+    );
+    const ordinary = await createPrincipal("Ordinary App Principal");
+
+    await createPrimaryEmail(ordinary.id, "ordinary-app-principal@example.com", "verified");
+    await createCredential(ordinary.id, "ordinary-app-principal");
+
+    const missingRole = await expectGate(
+      {
+        principalId: ordinary.id,
+        requiredRole: { roleKey: "app.admin", scopeKind: "app-install" },
+        target: appTarget(),
+      },
+      "role-review",
+    );
+    const appRegistrations = (await identityRecords()).records.filter(
+      (record) =>
+        record.entity === "app-registration" &&
+        (record.values.targetPrincipal === matching.id ||
+          record.values.targetPrincipal === ordinary.id),
+    );
+
+    expect(wrongInstall).toMatchObject({
+      gate: { kind: "role-review", roleKey: "app.admin", scopeKind: "app-install" },
+    });
+    expect(missingRole).toMatchObject({
+      gate: { kind: "role-review", roleKey: "app.admin", scopeKind: "app-install" },
+    });
+    expect(appRegistrations).toEqual([]);
+  });
+
   it("returns a self-service email-verified app registration gate", async () => {
     await createAppInstall({
       installId: "portal",
@@ -1813,7 +1876,7 @@ async function createOrganization(displayName: string) {
 
 async function assignRole(
   principalId: string,
-  roleKey: "app.user" | "instance.admin" | "instance.owner",
+  roleKey: "app.admin" | "app.user" | "instance.admin" | "instance.owner",
   input: {
     appInstallId?: string;
     scopeKind: "app-install" | "instance" | "organization";
