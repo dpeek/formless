@@ -13,6 +13,7 @@ import type {
   CreateFieldContract,
   OperationInputFieldContract,
   OwnerSetupAuthSurfaceContract,
+  OwnerSetupStep,
   OwnerSignInAuthSurfaceContract,
   SignupAuthSurfaceContract,
   SignupStep,
@@ -42,52 +43,157 @@ function ownerSetupFixtures(): FormlessAuthFixture[] {
     ownerSetupFixture("loading", {
       message: authMessage("loading", "Checking setup status."),
     }),
-    ownerSetupFixture("incomplete", {
-      message: authMessage("incomplete", "Owner setup is not ready.", "warning"),
-    }),
     ownerSetupFixture("invalid", {
       message: authMessage("invalid", "This setup link is unavailable.", "danger"),
     }),
-    ownerSetupFixture("ready", {
-      fields: ownerIdentityFields("owner-setup:ready"),
-      passkey: availablePasskey("owner-setup:ready", "create", "Create owner passkey"),
-    }),
-    ownerSetupFixture("submitting", {
-      fields: ownerIdentityFields("owner-setup:submitting"),
-      passkey: availablePasskey("owner-setup:submitting", "create", "Creating owner passkey", true),
-      pending: true,
-    }),
-    ownerSetupFixture("passkey-unavailable", {
-      message: authMessage(
-        "passkey-unavailable",
-        "This browser does not support passkeys.",
-        "warning",
-      ),
-      passkey: unavailablePasskey(
-        "owner-setup:passkey-unavailable",
-        "create",
-        "This browser does not support passkeys.",
-      ),
-    }),
-    ownerSetupFixture("failed", {
-      actions: [authAction("owner-setup:failed", "retry", "Try again")],
-      feedback: authFeedback("setup-failed", "Owner setup failed"),
-    }),
+    ownerSetupFixture(
+      "ready",
+      {
+        actions: [authAction("owner-setup:identity:ready", "submit", "Send verification email")],
+        fields: ownerIdentityFields("owner-setup:identity:ready"),
+      },
+      "identity",
+    ),
+    ownerSetupFixture(
+      "submitting",
+      {
+        actions: [
+          authAction(
+            "owner-setup:identity:submitting",
+            "submit",
+            "Sending verification email",
+            "primary",
+            true,
+          ),
+        ],
+        fields: ownerIdentityFields("owner-setup:identity:submitting"),
+        pending: true,
+      },
+      "identity",
+    ),
+    ownerSetupFixture(
+      "ready",
+      {
+        actions: [authAction("owner-setup:email-verification:ready", "submit", "Verify email")],
+        facts: [authFact("email", "Primary email", "ada@example.com")],
+        fields: [
+          authCreateField({
+            autocomplete: "one-time-code",
+            fieldName: "token",
+            label: "Verification token",
+            purpose: "verification-token",
+            required: true,
+            surfaceId: "owner-setup:email-verification:ready",
+          }),
+        ],
+      },
+      "email-verification",
+    ),
+    ownerSetupFixture(
+      "submitting",
+      {
+        actions: [
+          authAction(
+            "owner-setup:email-verification:submitting",
+            "submit",
+            "Verifying email",
+            "primary",
+            true,
+          ),
+        ],
+        facts: [authFact("email", "Primary email", "ada@example.com")],
+        fields: [
+          authCreateField({
+            autocomplete: "one-time-code",
+            fieldName: "token",
+            label: "Verification token",
+            purpose: "verification-token",
+            required: true,
+            surfaceId: "owner-setup:email-verification:submitting",
+          }),
+        ],
+        pending: true,
+      },
+      "email-verification",
+    ),
+    ownerSetupFixture(
+      "ready",
+      {
+        facts: [authFact("email", "Verified primary email", "ada@example.com")],
+        passkey: availablePasskey("owner-setup:passkey:ready", "create", "Create owner passkey"),
+      },
+      "passkey",
+    ),
+    ownerSetupFixture(
+      "submitting",
+      {
+        facts: [authFact("email", "Verified primary email", "ada@example.com")],
+        passkey: availablePasskey(
+          "owner-setup:passkey:submitting",
+          "create",
+          "Creating owner passkey",
+          true,
+        ),
+        pending: true,
+      },
+      "passkey",
+    ),
+    ownerSetupFixture(
+      "passkey-unavailable",
+      {
+        message: authMessage(
+          "passkey-unavailable",
+          "This browser does not support passkeys.",
+          "warning",
+        ),
+        passkey: unavailablePasskey(
+          "owner-setup:passkey-unavailable",
+          "create",
+          "This browser does not support passkeys.",
+        ),
+      },
+      "passkey",
+    ),
+    ownerSetupFixture(
+      "failed",
+      {
+        actions: [authAction("owner-setup:completion:failed", "retry", "Try owner setup again")],
+        feedback: authFeedback("setup-failed", "Owner activation failed"),
+        facts: [authFact("email", "Verified primary email", "ada@example.com")],
+      },
+      "completion",
+    ),
+    ownerSetupFixture(
+      "submitting",
+      {
+        facts: [authFact("email", "Verified primary email", "ada@example.com")],
+        pending: true,
+      },
+      "completion",
+    ),
     ownerSetupFixture("already-complete", {
       continuation: authContinuation("owner-setup:already-complete", "Instance administration"),
       facts: [authFact("owner", "Owner", "Ada Lovelace")],
       message: authMessage("already-complete", "Owner setup is already complete.", "success"),
     }),
-    ownerSetupFixture("complete", {
-      continuation: authContinuation("owner-setup:complete", "Instance administration"),
-      facts: [authFact("owner", "Owner", "Ada Lovelace")],
-      message: authMessage("complete", "Owner setup is complete.", "success"),
-    }),
-    ownerSetupFixture("continuing", {
-      facts: [authFact("owner", "Owner", "Ada Lovelace")],
-      message: authMessage("continuing", "Opening the approved destination.", "success"),
-      pending: true,
-    }),
+    ownerSetupFixture(
+      "complete",
+      {
+        continuation: authContinuation("owner-setup:complete", "Instance administration"),
+        facts: [authFact("owner", "Owner", "Ada Lovelace")],
+        message: authMessage("complete", "Owner setup is complete.", "success"),
+      },
+      "completion",
+    ),
+    ownerSetupFixture(
+      "continuing",
+      {
+        facts: [authFact("owner", "Owner", "Ada Lovelace")],
+        message: authMessage("continuing", "Opening the approved destination.", "success"),
+        pending: true,
+      },
+      "completion",
+    ),
   ];
 }
 
@@ -418,12 +524,14 @@ function invitationFixtures(): FormlessAuthFixture[] {
 function ownerSetupFixture(
   state: OwnerSetupAuthSurfaceContract["state"],
   overrides: Partial<AuthSurfaceBaseContract> = {},
+  step?: OwnerSetupStep,
 ): FormlessAuthFixture {
-  const suffix = `owner-setup:${state}`;
+  const suffix = `owner-setup:${step ? `${step}:` : ""}${state}`;
   return fixture("Owner setup", stateLabel(state), {
     ...authSurface(suffix, ownerSetupHeading(state)),
     ...overrides,
     state,
+    ...(step ? { step } : {}),
     surfaceKind: "owner-setup",
   });
 }
@@ -526,8 +634,8 @@ function ownerIdentityFields(idSuffix: string) {
   return [
     authCreateField({
       autocomplete: "name",
-      fieldName: "name",
-      label: "Name",
+      fieldName: "displayName",
+      label: "Display name",
       purpose: "display-name",
       required: true,
       surfaceId: idSuffix,
@@ -538,6 +646,7 @@ function ownerIdentityFields(idSuffix: string) {
       fieldName: "email",
       label: "Email",
       purpose: "email",
+      required: true,
       surfaceId: idSuffix,
       value: "ada@example.com",
     }),

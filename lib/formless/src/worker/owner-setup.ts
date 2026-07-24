@@ -1,28 +1,15 @@
-import {
-  parseOwnerSetupCompleteRequest,
-  parseOwnerSetupToken,
-  type OwnerSetupCompleteResponse,
-  type OwnerSetupStatusResponse,
-} from "../shared/protocol.ts";
+import { parseOwnerSetupToken, type OwnerSetupStatusResponse } from "../shared/protocol.ts";
 import { runtimeTopologyRoutes } from "../shared/runtime-topology.ts";
 import { nowIsoString } from "../shared/clock.ts";
 import { authorizeAdminWrite, type AuthorityAdminGuardEnv } from "./authority-admin-guard.ts";
 import {
-  completeFirstOwnerSetupInCurrentTransaction,
   hashOwnerSetupToken,
   readInstanceSetupState,
   resetInstanceSetupTables,
-  validateFirstOwnerSetupCapability,
   writeOwnerSetupCapability,
-  type CompleteFirstOwnerSetupResult,
   type WriteOwnerSetupCapabilityResult,
 } from "./instance-setup-state.ts";
-import {
-  createOwnerSessionCookie,
-  clearOwnerSessionCookie,
-  ownerSessionSigningSecret,
-  validateOwnerSessionCookie,
-} from "./owner-session.ts";
+import { clearOwnerSessionCookie, validateOwnerSessionCookie } from "./owner-session.ts";
 import {
   CENTRAL_AUTH_SESSION_COOKIE_NAME,
   clearCentralAuthSessionCookie,
@@ -31,6 +18,7 @@ import {
 } from "./central-auth-session.ts";
 import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
 import { readInstanceAuthConfig, resetInstanceAuthTables } from "./instance-auth-state.ts";
+import { resetOwnerSetupEmailProofTables } from "./instance-auth-owner-setup-state.ts";
 import {
   clearHostAuthSessionCookie,
   configuredInstanceAuthOrigin,
@@ -38,13 +26,8 @@ import {
   validateHostAuthSessionAuthorityInStorage,
 } from "./instance-auth-handoff.ts";
 import { isLocalOwnerSessionRuntime } from "./local-session-bootstrap.ts";
-import {
-  ensureIdentityOwner,
-  readIdentityOwner,
-  resetIdentityOwner,
-} from "./identity-control-plane.ts";
-import { completeOwnerPasskeyRegistration } from "./owner-passkeys.ts";
-import { ownerSetupAdminOrigin, ownerSetupSuccessContinueTo } from "./owner-setup-continuation.ts";
+import { readIdentityOwner, resetIdentityOwner } from "./identity-control-plane.ts";
+import { ownerSetupAdminOrigin } from "./owner-setup-continuation.ts";
 
 export const OWNER_SETUP_API_PATH = "/api/formless/setup";
 export const OWNER_SESSION_API_PATH = "/api/formless/session";
@@ -52,7 +35,6 @@ export const INTERNAL_RESET_OWNER_SETUP_PATH = "/_internal/reset-owner-setup";
 export const OWNER_SESSION_LOGOUT_API_PATH = `${OWNER_SESSION_API_PATH}/logout`;
 
 const ownerSetupCapabilityPath = `${OWNER_SETUP_API_PATH}/capability`;
-const ownerSetupCompletePath = `${OWNER_SETUP_API_PATH}/complete`;
 
 type OwnerSetupApiEnv = AuthorityAdminGuardEnv & {
   FORMLESS_AUTHORITY: DurableObjectNamespace;
@@ -62,7 +44,6 @@ type OwnerSetupCapabilityRequest = {
   expiresAt?: string;
   setupToken: string;
 };
-type OwnerSetupFailureReason = Extract<CompleteFirstOwnerSetupResult, { ok: false }>["reason"];
 
 export async function handleOwnerSetupApiRequest(
   request: Request,
@@ -91,6 +72,7 @@ export async function handleOwnerSetupDurableObjectRequest(
 
     resetInstanceSetupTables(storage);
     resetInstanceAuthTables(storage);
+    resetOwnerSetupEmailProofTables(storage);
     await resetIdentityOwner(env);
 
     return jsonResponse({ reset: true });
@@ -115,10 +97,6 @@ export async function handleOwnerSetupDurableObjectRequest(
 
     if (pathname === ownerSetupCapabilityPath) {
       return await handleOwnerSetupCapabilityRequest(request, storage, env);
-    }
-
-    if (pathname === ownerSetupCompletePath) {
-      return await handleOwnerSetupCompleteRequest(request, storage, env);
     }
 
     return jsonResponse({ error: "Not found." }, 404);
@@ -361,54 +339,6 @@ async function handleOwnerSetupCapabilityRequest(
   return ownerSetupCapabilityResponse(result);
 }
 
-async function handleOwnerSetupCompleteRequest(
-  request: Request,
-  storage: DurableObjectStorage,
-  env: OwnerSetupApiEnv,
-): Promise<Response> {
-  if (request.method !== "POST") {
-    return methodNotAllowedResponse("POST");
-  }
-
-  const bodyValue = await readJson(request);
-
-  if (isRecord(bodyValue) && "response" in bodyValue) {
-    return completeOwnerPasskeyRegistration(request, storage, env, bodyValue);
-  }
-
-  if (readInstanceAuthConfig(storage)) {
-    return jsonResponse({ error: "Owner setup requires a passkey registration response." }, 400);
-  }
-
-  const body = parseOwnerSetupCompleteRequest(bodyValue);
-  const completedAt = nowIsoString();
-  const tokenHash = await hashOwnerSetupToken(body.setupToken);
-  const existingOwner = await readIdentityOwner(env);
-  const setup = validateFirstOwnerSetupCapability(storage, {
-    tokenHash,
-    instanceId: requestInstanceId(request),
-    now: completedAt,
-    owner: existingOwner,
-  });
-
-  if (!setup.ok) {
-    return await ownerSetupCompleteResponse(request, env, setup);
-  }
-
-  const owner = await ensureIdentityOwner(env, {
-    now: completedAt,
-    owner: body.owner,
-  });
-  const result = completeFirstOwnerSetupInCurrentTransaction(storage, {
-    tokenHash,
-    instanceId: requestInstanceId(request),
-    now: completedAt,
-    owner,
-  });
-
-  return await ownerSetupCompleteResponse(request, env, result);
-}
-
 async function ownerSetupStatusResponse(
   request: Request,
   storage: DurableObjectStorage,
@@ -455,64 +385,6 @@ function ownerSetupCapabilityResponse(result: WriteOwnerSetupCapabilityResult): 
       : { expiresAt: result.capability.expiresAt }),
     setupComplete: false,
   });
-}
-
-async function ownerSetupCompleteResponse(
-  request: Request,
-  env: OwnerSetupApiEnv,
-  result: CompleteFirstOwnerSetupResult,
-): Promise<Response> {
-  if (result.ok) {
-    const continueTo = await ownerSetupSuccessContinueTo(request, env);
-    const response: OwnerSetupCompleteResponse = {
-      setupComplete: true,
-      owner: result.owner,
-      ...(continueTo === undefined ? {} : { continueTo }),
-    };
-    const headers = new Headers();
-
-    if (ownerSessionSigningSecret(env)) {
-      const session = await createOwnerSessionCookie({
-        env,
-        owner: result.owner,
-        request,
-      });
-
-      headers.set("Set-Cookie", session.cookie);
-    }
-
-    return jsonResponse(response, 200, headers);
-  }
-
-  const failure = setupFailureResponse(result.reason);
-
-  return jsonResponse(
-    {
-      error: failure.error,
-      ...(result.owner === undefined ? {} : { owner: result.owner }),
-      reason: result.reason,
-      setupComplete: result.reason === "already-complete",
-    },
-    failure.status,
-  );
-}
-
-function setupFailureResponse(reason: OwnerSetupFailureReason): {
-  error: string;
-  status: number;
-} {
-  switch (reason) {
-    case "already-complete":
-      return { error: "Owner setup is already complete.", status: 409 };
-    case "expired-token":
-      return { error: "Owner setup link has expired.", status: 410 };
-    case "invalid-token":
-      return { error: "Owner setup link is invalid.", status: 401 };
-    case "missing-capability":
-      return { error: "Owner setup link is missing or has already been used.", status: 404 };
-    case "wrong-instance":
-      return { error: "Owner setup link is not valid for this instance.", status: 401 };
-  }
 }
 
 function parseOwnerSetupCapabilityRequest(value: unknown): OwnerSetupCapabilityRequest {

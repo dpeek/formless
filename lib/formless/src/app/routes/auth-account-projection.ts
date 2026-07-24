@@ -12,6 +12,8 @@ import type {
   AuthSurfaceReference,
   ButtonContract,
   FieldIntent,
+  OwnerSetupAuthSurfaceContract,
+  OwnerSetupStep,
   SignupAuthSurfaceContract,
   SignupStep,
 } from "@dpeek/formless-presentation/contract";
@@ -46,7 +48,13 @@ import { displaySafeText } from "./instance-management-display-safety.ts";
 import { passkeyUnavailableMessage } from "./passkey-browser.ts";
 import type { AuthAccountRouteState } from "./auth-account.tsx";
 
+type AuthAccountGateRouteState = Exclude<
+  AuthAccountRouteState,
+  { status: `owner-setup-${string}` } | { status: `signup-${string}` }
+>;
+
 export const AUTH_ACCOUNT_GATE_SURFACE_ID = "auth:account";
+export const AUTH_ACCOUNT_OWNER_SETUP_SURFACE_ID = "auth:account:owner-setup";
 export const AUTH_ACCOUNT_SIGNUP_SURFACE_ID = "auth:account:signup";
 
 export const authAccountGateSurfaceReference = authSurfaceReference({
@@ -56,6 +64,10 @@ export const authAccountGateSurfaceReference = authSurfaceReference({
 export const authAccountSignupSurfaceReference = authSurfaceReference({
   surfaceId: AUTH_ACCOUNT_SIGNUP_SURFACE_ID,
   surfaceKind: "signup",
+});
+export const authAccountOwnerSetupSurfaceReference = authSurfaceReference({
+  surfaceId: AUTH_ACCOUNT_OWNER_SETUP_SURFACE_ID,
+  surfaceKind: "owner-setup",
 });
 
 const accountDraftFieldConfigs: CreateFieldConfig[] = [
@@ -75,6 +87,8 @@ export type AuthAccountDraftSession = {
 export type AuthAccountDraftSubmission =
   | { kind: "app-registration"; ok: true }
   | { acceptedPolicyIds: string[]; kind: "terms-acceptance"; ok: true }
+  | { displayName: string; email: string; kind: "owner-setup-identity"; ok: true }
+  | { kind: "owner-setup-verification-token"; ok: true; token: string }
   | { displayName: string; email: string; kind: "signup-identity"; ok: true }
   | { input: Record<string, unknown>; kind: "profile-completion"; ok: true }
   | { kind: "verification-token"; ok: true; token: string }
@@ -176,6 +190,21 @@ export function selectAuthAccountDraftSubmission({
     state: markGeneratedCreateDraftSessionSubmitted(session.create),
   });
 
+  if (isOwnerSetupIdentityState(state)) {
+    const displayName = stringFieldValue(create.values.displayName);
+    const email = stringFieldValue(create.values.email);
+    return create.canSubmit && displayName && email
+      ? { displayName, email, kind: "owner-setup-identity", ok: true }
+      : { ok: false };
+  }
+
+  if (isOwnerSetupEmailVerificationState(state)) {
+    const token = stringFieldValue(create.values.token);
+    return create.canSubmit && token
+      ? { kind: "owner-setup-verification-token", ok: true, token }
+      : { ok: false };
+  }
+
   if (state.status === "blocked") {
     const { gate } = state.result;
     if (gate.kind === "email-verification") {
@@ -238,7 +267,8 @@ export function projectAuthAccountSurface({
 }: {
   session: AuthAccountDraftSession;
   state: AuthAccountRouteState;
-}): AccountGateAuthSurfaceContract | SignupAuthSurfaceContract {
+}): AccountGateAuthSurfaceContract | OwnerSetupAuthSurfaceContract | SignupAuthSurfaceContract {
+  if (isOwnerSetupState(state)) return projectOwnerSetupSurface({ session, state });
   return isSignupState(state)
     ? projectSignupSurface({ session, state })
     : projectAccountGateSurface({ session, state });
@@ -246,7 +276,8 @@ export function projectAuthAccountSurface({
 
 export function authAccountSurfaceReference(
   surface: AuthSurfaceContract,
-): AuthSurfaceReference<"account-gate" | "signup"> {
+): AuthSurfaceReference<"account-gate" | "owner-setup" | "signup"> {
+  if (surface.surfaceKind === "owner-setup") return authAccountOwnerSetupSurfaceReference;
   return surface.surfaceKind === "signup"
     ? authAccountSignupSurfaceReference
     : authAccountGateSurfaceReference;
@@ -257,7 +288,7 @@ function projectAccountGateSurface({
   state,
 }: {
   session: AuthAccountDraftSession;
-  state: Exclude<AuthAccountRouteState, { status: `signup-${string}` }>;
+  state: AuthAccountGateRouteState;
 }): AccountGateAuthSurfaceContract {
   const gate = state.status === "blocked" ? state.result.gate : undefined;
   const pending = state.status === "blocked" && accountGateActionIsPending(state.action);
@@ -281,6 +312,45 @@ function projectAccountGateSurface({
     state: contractState,
     surfaceKind: "account-gate",
   } as AccountGateAuthSurfaceContract;
+}
+
+function projectOwnerSetupSurface({
+  session,
+  state,
+}: {
+  session: AuthAccountDraftSession;
+  state: Extract<AuthAccountRouteState, { status: `owner-setup-${string}` }>;
+}): OwnerSetupAuthSurfaceContract {
+  const pending = ownerSetupIsPending(state);
+  const feedback =
+    "message" in state &&
+    state.message &&
+    state.status !== "owner-setup-invalid" &&
+    state.status !== "owner-setup-passkey-unavailable"
+      ? authFeedback("owner-setup-failure", "Owner setup failed", state.message)
+      : undefined;
+  const message = ownerSetupMessage(state);
+  const passkey = ownerSetupPasskey(state);
+  const continuation = ownerSetupContinuation(state);
+  const step = ownerSetupStep(state);
+
+  return {
+    actions: ownerSetupActions(state),
+    ...(continuation ? { continuation } : {}),
+    facts: ownerSetupFacts(state),
+    ...(feedback ? { feedback } : {}),
+    fields: ownerSetupFields(state, session, pending),
+    frame: authFrame(ownerSetupHeading(state), ownerSetupDescription(state)),
+    id: AUTH_ACCOUNT_OWNER_SETUP_SURFACE_ID,
+    kind: "authSurface",
+    ...(message ? { message } : {}),
+    ...(passkey ? { passkey } : {}),
+    pending,
+    policies: [],
+    state: ownerSetupContractState(state),
+    ...(step ? { step } : {}),
+    surfaceKind: "owner-setup",
+  };
 }
 
 function projectSignupSurface({
@@ -320,8 +390,36 @@ function projectSignupSurface({
   };
 }
 
+function ownerSetupFields(
+  state: Extract<AuthAccountRouteState, { status: `owner-setup-${string}` }>,
+  session: AuthAccountDraftSession,
+  pending: boolean,
+): readonly AuthFieldContract[] {
+  if (isOwnerSetupIdentityState(state)) {
+    return projectCreateAuthFields({
+      fields: accountDraftFieldConfigs.filter(
+        (field) => field.fieldName === "displayName" || field.fieldName === "email",
+      ),
+      pending,
+      purposeByFieldName: { displayName: "display-name", email: "email" },
+      session,
+      surfaceId: AUTH_ACCOUNT_OWNER_SETUP_SURFACE_ID,
+    });
+  }
+  if (isOwnerSetupEmailVerificationState(state)) {
+    return projectCreateAuthFields({
+      fields: accountDraftFieldConfigs.filter((field) => field.fieldName === "token"),
+      pending,
+      purposeByFieldName: { token: "verification-token" },
+      session,
+      surfaceId: AUTH_ACCOUNT_OWNER_SETUP_SURFACE_ID,
+    });
+  }
+  return [];
+}
+
 function accountGateFields(
-  state: Exclude<AuthAccountRouteState, { status: `signup-${string}` }>,
+  state: AuthAccountGateRouteState,
   session: AuthAccountDraftSession,
   pending: boolean,
 ): readonly AuthFieldContract[] {
@@ -447,9 +545,87 @@ function profileCompletionFields(
   }));
 }
 
-function accountGateActions(
-  state: Exclude<AuthAccountRouteState, { status: `signup-${string}` }>,
+function ownerSetupActions(
+  state: Extract<AuthAccountRouteState, { status: `owner-setup-${string}` }>,
 ): readonly AuthActionContract[] {
+  if (isOwnerSetupIdentityState(state)) {
+    return [
+      authAction(
+        AUTH_ACCOUNT_OWNER_SETUP_SURFACE_ID,
+        "submit",
+        "Send verification email",
+        "primary",
+        state.status === "owner-setup-email-sending",
+      ),
+    ];
+  }
+  if (isOwnerSetupEmailVerificationState(state)) {
+    return [
+      authAction(
+        AUTH_ACCOUNT_OWNER_SETUP_SURFACE_ID,
+        "submit",
+        "Verify email",
+        "primary",
+        state.status === "owner-setup-email-verifying",
+      ),
+    ];
+  }
+  if (state.status === "owner-setup-completion-ready") {
+    return [authAction(AUTH_ACCOUNT_OWNER_SETUP_SURFACE_ID, "retry", "Try owner setup again")];
+  }
+  if (state.status === "owner-setup-invalid") {
+    return [authAction(AUTH_ACCOUNT_OWNER_SETUP_SURFACE_ID, "retry", "Try again")];
+  }
+  return [];
+}
+
+function ownerSetupPasskey(
+  state: Extract<AuthAccountRouteState, { status: `owner-setup-${string}` }>,
+): AuthPasskeyContract | undefined {
+  if (state.status === "owner-setup-passkey-unavailable") {
+    return {
+      availability: "unavailable",
+      id: `${AUTH_ACCOUNT_OWNER_SETUP_SURFACE_ID}:passkey:create`,
+      kind: "authPasskey",
+      purpose: "create",
+      unavailableReason: displaySafeText(
+        state.message ?? "This browser does not support passkeys.",
+      ),
+    };
+  }
+  if (
+    state.status !== "owner-setup-credential-ready" &&
+    state.status !== "owner-setup-credential-submitting"
+  ) {
+    return undefined;
+  }
+
+  const passkeyId = `${AUTH_ACCOUNT_OWNER_SETUP_SURFACE_ID}:passkey:create`;
+  const pending = state.status === "owner-setup-credential-submitting";
+  const control = authButton(
+    `${passkeyId}:control`,
+    pending ? "Creating passkey..." : "Create owner passkey",
+    "primary",
+    "submit",
+    { pending },
+  );
+
+  return {
+    availability: "available",
+    control,
+    id: passkeyId,
+    intent: {
+      controlId: control.id,
+      passkeyId,
+      surfaceId: AUTH_ACCOUNT_OWNER_SETUP_SURFACE_ID,
+      type: "authPasskey",
+    },
+    kind: "authPasskey",
+    purpose: "create",
+  };
+}
+
+function accountGateActions(state: AuthAccountGateRouteState): readonly AuthActionContract[] {
   if (state.status === "failed")
     return [authAction(AUTH_ACCOUNT_GATE_SURFACE_ID, "retry", "Try again")];
   if (state.status !== "blocked") return [];
@@ -530,7 +706,7 @@ function signupActions(
 }
 
 function accountGatePolicies(
-  state: Exclude<AuthAccountRouteState, { status: `signup-${string}` }>,
+  state: AuthAccountGateRouteState,
   session: AuthAccountDraftSession,
 ): readonly AuthPolicyContract[] {
   if (state.status !== "blocked" || state.result.gate.kind !== "terms-acceptance") return [];
@@ -555,9 +731,31 @@ function accountGatePolicies(
   });
 }
 
-function accountGateFacts(
-  state: Exclude<AuthAccountRouteState, { status: `signup-${string}` }>,
+function ownerSetupFacts(
+  state: Extract<AuthAccountRouteState, { status: `owner-setup-${string}` }>,
 ): readonly AuthFactContract[] {
+  if (
+    state.status === "owner-setup-already-complete" ||
+    state.status === "owner-setup-complete" ||
+    state.status === "owner-setup-continuing"
+  ) {
+    return compactFacts(authFact("owner", "Owner", state.owner?.name));
+  }
+  if (
+    state.status === "owner-setup-ready" ||
+    state.status === "owner-setup-loading" ||
+    state.status === "owner-setup-invalid"
+  ) {
+    return [];
+  }
+  return compactFacts(
+    authFact("owner-name", "Name", state.displayName),
+    authFact("owner-email", "Primary email", state.email),
+    "expiresAt" in state ? authFact("verification-expires", "Expires", state.expiresAt) : undefined,
+  );
+}
+
+function accountGateFacts(state: AuthAccountGateRouteState): readonly AuthFactContract[] {
   if (state.status === "loading" || state.status === "failed") return [];
   if (state.status === "blocked") {
     const verificationFacts =
@@ -661,8 +859,165 @@ function targetFacts(target: AccountCompletionGateTarget): AuthFactContract[] {
   );
 }
 
+function ownerSetupContractState(
+  state: Extract<AuthAccountRouteState, { status: `owner-setup-${string}` }>,
+): OwnerSetupAuthSurfaceContract["state"] {
+  if (state.status === "owner-setup-already-complete") return "already-complete";
+  if (state.status === "owner-setup-complete") return "complete";
+  if (state.status === "owner-setup-continuing") return "continuing";
+  if (state.status === "owner-setup-invalid") return "invalid";
+  if (state.status === "owner-setup-loading") return "loading";
+  if (state.status === "owner-setup-passkey-unavailable") return "passkey-unavailable";
+  if (ownerSetupIsPending(state)) return "submitting";
+  if ("message" in state && state.message) return "failed";
+  return "ready";
+}
+
+function ownerSetupStep(
+  state: Extract<AuthAccountRouteState, { status: `owner-setup-${string}` }>,
+): OwnerSetupStep | undefined {
+  if (isOwnerSetupIdentityState(state)) return "identity";
+  if (isOwnerSetupEmailVerificationState(state)) return "email-verification";
+  if (
+    state.status === "owner-setup-credential-ready" ||
+    state.status === "owner-setup-credential-submitting" ||
+    state.status === "owner-setup-passkey-unavailable"
+  ) {
+    return "passkey";
+  }
+  if (
+    state.status === "owner-setup-completion-ready" ||
+    state.status === "owner-setup-completing" ||
+    state.status === "owner-setup-complete" ||
+    state.status === "owner-setup-continuing"
+  ) {
+    return "completion";
+  }
+  return undefined;
+}
+
+function ownerSetupIsPending(
+  state: Extract<AuthAccountRouteState, { status: `owner-setup-${string}` }>,
+): boolean {
+  return (
+    state.status === "owner-setup-email-sending" ||
+    state.status === "owner-setup-email-verifying" ||
+    state.status === "owner-setup-credential-submitting" ||
+    state.status === "owner-setup-completing"
+  );
+}
+
+function ownerSetupHeading(
+  state: Extract<AuthAccountRouteState, { status: `owner-setup-${string}` }>,
+): string {
+  if (state.status === "owner-setup-loading") return "Checking setup link";
+  if (state.status === "owner-setup-invalid") return "Setup link unavailable";
+  if (state.status === "owner-setup-already-complete") return "Owner setup is complete";
+  if (state.status === "owner-setup-complete" || state.status === "owner-setup-continuing") {
+    return "Owner setup complete";
+  }
+  if (isOwnerSetupEmailVerificationState(state)) return "Verify primary email";
+  if (state.status === "owner-setup-passkey-unavailable") return "Passkeys are unavailable";
+  if (
+    state.status === "owner-setup-credential-ready" ||
+    state.status === "owner-setup-credential-submitting"
+  ) {
+    return "Create owner passkey";
+  }
+  if (
+    state.status === "owner-setup-completion-ready" ||
+    state.status === "owner-setup-completing"
+  ) {
+    return "Activate owner account";
+  }
+  return "Claim this Formless instance";
+}
+
+function ownerSetupDescription(
+  state: Extract<AuthAccountRouteState, { status: `owner-setup-${string}` }>,
+): string | undefined {
+  if (state.status === "owner-setup-already-complete") {
+    return state.owner
+      ? `${displaySafeText(state.owner.name)} owns this Formless instance.`
+      : "This instance has an owner.";
+  }
+  if (state.status === "owner-setup-complete") return "Your owner account is ready.";
+  if (state.status === "owner-setup-continuing") return "Opening your approved destination.";
+  if (isOwnerSetupIdentityState(state))
+    return "Verify your primary email before creating an owner passkey.";
+  if (isOwnerSetupEmailVerificationState(state))
+    return `A verification email was sent to ${displaySafeText(state.email)}.`;
+  if (
+    state.status === "owner-setup-credential-ready" ||
+    state.status === "owner-setup-credential-submitting" ||
+    state.status === "owner-setup-passkey-unavailable"
+  ) {
+    return "Create a passkey to protect the owner account.";
+  }
+  if (
+    state.status === "owner-setup-completion-ready" ||
+    state.status === "owner-setup-completing"
+  ) {
+    return "Finish activating the verified owner account.";
+  }
+  return undefined;
+}
+
+function ownerSetupMessage(
+  state: Extract<AuthAccountRouteState, { status: `owner-setup-${string}` }>,
+): AuthMessageContract | undefined {
+  if (state.status === "owner-setup-loading")
+    return authMessage("owner-setup-loading", "Loading owner setup.");
+  if (state.status === "owner-setup-invalid")
+    return authMessage("owner-setup-invalid", state.message, "danger");
+  if (state.status === "owner-setup-passkey-unavailable")
+    return authMessage(
+      "owner-setup-passkey",
+      state.message ?? "This browser does not support passkeys.",
+      "warning",
+    );
+  if (state.status === "owner-setup-continuing")
+    return authMessage("owner-setup-continuing", "Continuing...", "success");
+  return undefined;
+}
+
+function ownerSetupContinuation(
+  state: Extract<AuthAccountRouteState, { status: `owner-setup-${string}` }>,
+): AuthContinuationContract | undefined {
+  if (
+    (state.status !== "owner-setup-complete" && state.status !== "owner-setup-continuing") ||
+    !state.continueTo
+  ) {
+    return undefined;
+  }
+
+  const destinationId = `${AUTH_ACCOUNT_OWNER_SETUP_SURFACE_ID}:destination:account`;
+  const control = authButton(`${destinationId}:control`, "Continue", "primary");
+  const origin =
+    state.handoff?.targetOrigin ??
+    (state.continueTo.startsWith("/") ? undefined : safeHttpOrigin(state.continueTo));
+
+  return {
+    control,
+    destination: {
+      detail: "Open your approved destination.",
+      id: destinationId,
+      kind: "authContinuationDestination",
+      label: "Continue",
+      ...(origin ? { origin } : {}),
+    },
+    intent: {
+      controlId: control.id,
+      destinationId,
+      surfaceId: AUTH_ACCOUNT_OWNER_SETUP_SURFACE_ID,
+      type: "authContinuation",
+    },
+    kind: "authContinuation",
+  };
+}
+
 function accountGateContractState(
-  state: Exclude<AuthAccountRouteState, { status: `signup-${string}` }>,
+  state: AuthAccountGateRouteState,
 ): AccountGateAuthSurfaceContract["state"] {
   if (state.status !== "blocked") return state.status;
   if (accountGateActionIsPending(state.action)) return "submitting";
@@ -694,18 +1049,14 @@ function signupStep(
   return "passkey";
 }
 
-function accountGateHeading(
-  state: Exclude<AuthAccountRouteState, { status: `signup-${string}` }>,
-): string {
+function accountGateHeading(state: AuthAccountGateRouteState): string {
   if (state.status === "loading") return "Checking account";
   if (state.status === "failed") return "Account unavailable";
   if (state.status === "complete" || state.status === "continuing") return "Account ready";
   return gateCopy(state.result.gate).heading;
 }
 
-function accountGateDescription(
-  state: Exclude<AuthAccountRouteState, { status: `signup-${string}` }>,
-): string | undefined {
+function accountGateDescription(state: AuthAccountGateRouteState): string | undefined {
   if (state.status === "complete") return "Your account is ready to continue.";
   if (state.status === "continuing") return "Opening your approved destination.";
   if (state.status === "blocked") return gateCopy(state.result.gate).message;
@@ -735,9 +1086,7 @@ function signupDescription(
   return undefined;
 }
 
-function accountGateMessage(
-  state: Exclude<AuthAccountRouteState, { status: `signup-${string}` }>,
-): AuthMessageContract | undefined {
+function accountGateMessage(state: AuthAccountGateRouteState): AuthMessageContract | undefined {
   if (state.status === "loading") return authMessage("loading", "Loading account status.");
   if (state.status === "continuing") return authMessage("continuing", "Continuing...", "success");
   if (state.status === "blocked" && accountGateIsUnavailable(state.result.gate))
@@ -756,7 +1105,7 @@ function signupMessage(
 }
 
 function accountGateFeedback(
-  state: Exclude<AuthAccountRouteState, { status: `signup-${string}` }>,
+  state: AuthAccountGateRouteState,
   session: AuthAccountDraftSession,
 ): AuthFeedbackContract | undefined {
   if (state.status === "failed")
@@ -786,7 +1135,7 @@ function accountGateFeedback(
 }
 
 function accountGateContinuation(
-  state: Exclude<AuthAccountRouteState, { status: `signup-${string}` }>,
+  state: AuthAccountGateRouteState,
 ): AuthContinuationContract | undefined {
   if ((state.status !== "complete" && state.status !== "continuing") || !state.continueTo)
     return undefined;
@@ -841,6 +1190,12 @@ function signupPasskey(
 }
 
 function authAccountCreateFieldConfigs(state: AuthAccountRouteState): CreateFieldConfig[] {
+  if (isOwnerSetupIdentityState(state))
+    return accountDraftFieldConfigs.filter(
+      (field) => field.fieldName === "displayName" || field.fieldName === "email",
+    );
+  if (isOwnerSetupEmailVerificationState(state))
+    return accountDraftFieldConfigs.filter((field) => field.fieldName === "token");
   if (state.status === "blocked" && state.result.gate.kind === "email-verification") {
     const name =
       state.action?.kind === "email-verification-sent" ||
@@ -867,6 +1222,12 @@ function authAccountProfileInputContract(
 }
 
 function authAccountDraftSeedValues(state: AuthAccountRouteState): Record<string, string> {
+  if (isOwnerSetupState(state)) {
+    return {
+      ...("displayName" in state && state.displayName ? { displayName: state.displayName } : {}),
+      ...("email" in state && state.email ? { email: state.email } : {}),
+    };
+  }
   if (state.status === "blocked" && state.result.gate.kind === "email-verification") {
     const email =
       state.action && "email" in state.action ? state.action.email : state.result.gate.displayEmail;
@@ -881,6 +1242,10 @@ function authAccountDraftSeedValues(state: AuthAccountRouteState): Record<string
 }
 
 function authAccountDraftSessionKey(state: AuthAccountRouteState): string {
+  if (isOwnerSetupState(state)) {
+    const challengeId = "challengeId" in state ? state.challengeId : "identity";
+    return `owner-setup:${challengeId}`;
+  }
   if (isSignupState(state)) return `signup:${targetKey(state.target)}`;
   if (state.status === "blocked") {
     const operationKey = state.result.gate.operation?.operationKey ?? "none";
@@ -900,6 +1265,32 @@ function targetKey(target: AccountCompletionGateTarget): string {
     target.selectedOrganization,
     target.returnTo,
   ]);
+}
+
+function isOwnerSetupState(
+  state: AuthAccountRouteState,
+): state is Extract<AuthAccountRouteState, { status: `owner-setup-${string}` }> {
+  return state.status.startsWith("owner-setup-");
+}
+
+function isOwnerSetupIdentityState(
+  state: AuthAccountRouteState,
+): state is Extract<
+  AuthAccountRouteState,
+  { status: "owner-setup-email-sending" | "owner-setup-ready" }
+> {
+  return state.status === "owner-setup-ready" || state.status === "owner-setup-email-sending";
+}
+
+function isOwnerSetupEmailVerificationState(
+  state: AuthAccountRouteState,
+): state is Extract<
+  AuthAccountRouteState,
+  { status: "owner-setup-email-sent" | "owner-setup-email-verifying" }
+> {
+  return (
+    state.status === "owner-setup-email-sent" || state.status === "owner-setup-email-verifying"
+  );
 }
 
 function isSignupState(

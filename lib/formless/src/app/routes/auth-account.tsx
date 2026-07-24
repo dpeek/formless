@@ -16,6 +16,11 @@ import {
   type AccountCompletionProfileCompletionGate,
 } from "../../shared/instance-auth.ts";
 import {
+  parseOwnerSetupToken,
+  type OwnerIdentity,
+  type OwnerSetupStatusResponse,
+} from "../../shared/protocol.ts";
+import {
   runtimeAuthAccountGateRoutes,
   runtimeTopologyRoutes,
 } from "../../shared/runtime-topology.ts";
@@ -48,6 +53,12 @@ const signupStartPath = `${runtimeTopologyRoutes.authAccountRoute}/signup/start`
 const signupEmailVerifyPath = `${runtimeTopologyRoutes.authAccountRoute}/signup/email/verify`;
 const signupPasskeyRegistrationOptionsPath = `${runtimeTopologyRoutes.authAccountRoute}/signup/passkeys/register/options`;
 const signupPasskeyRegistrationVerifyPath = `${runtimeTopologyRoutes.authAccountRoute}/signup/passkeys/register/verify`;
+const ownerSetupStatusPath = "/api/formless/setup";
+const ownerSetupStartPath = `${runtimeTopologyRoutes.authAccountSetupRoute}/start`;
+const ownerSetupEmailVerifyPath = `${runtimeTopologyRoutes.authAccountSetupRoute}/email/verify`;
+const ownerSetupPasskeyRegistrationOptionsPath = `${runtimeTopologyRoutes.authAccountSetupRoute}/passkeys/register/options`;
+const ownerSetupPasskeyRegistrationVerifyPath = `${runtimeTopologyRoutes.authAccountSetupRoute}/passkeys/register/verify`;
+const ownerSetupCompletePath = `${runtimeTopologyRoutes.authAccountSetupRoute}/complete`;
 const appRegistrationGateCompletePath = `${runtimeAuthAccountGateRoutes.appRegistration}/complete`;
 const profileCompletionGateCompletePath = `${runtimeAuthAccountGateRoutes.profileCompletion}/complete`;
 const termsAcceptanceGateCompletePath = `${runtimeAuthAccountGateRoutes.termsAcceptance}/complete`;
@@ -80,6 +91,19 @@ type AuthAccountSignupState = {
   target: AccountCompletionGateTarget;
 };
 
+type AuthAccountOwnerSetupChallengeState = {
+  challengeId: string;
+  displayName: string;
+  email: string;
+  expiresAt: string;
+  message?: string;
+  setupToken: string;
+};
+
+type AuthAccountOwnerSetupCompletionState = AuthAccountOwnerSetupChallengeState & {
+  completionId: string;
+};
+
 export type AuthAccountRouteState =
   | {
       action?: AuthAccountGateActionState;
@@ -98,6 +122,54 @@ export type AuthAccountRouteState =
     }
   | { message: string; status: "failed" }
   | { status: "loading" }
+  | { owner?: OwnerIdentity; status: "owner-setup-already-complete" }
+  | (AuthAccountOwnerSetupCompletionState & {
+      status: "owner-setup-completing";
+    })
+  | (AuthAccountOwnerSetupCompletionState & {
+      status: "owner-setup-completion-ready";
+    })
+  | {
+      continueTo?: string;
+      handoff?: AuthAccountCompletionHandoff;
+      owner: OwnerIdentity;
+      status: "owner-setup-complete";
+    }
+  | (AuthAccountOwnerSetupChallengeState & {
+      status: "owner-setup-credential-ready";
+    })
+  | (AuthAccountOwnerSetupChallengeState & {
+      status: "owner-setup-credential-submitting";
+    })
+  | (AuthAccountOwnerSetupChallengeState & {
+      status: "owner-setup-email-sent";
+    })
+  | (AuthAccountOwnerSetupChallengeState & {
+      status: "owner-setup-email-verifying";
+    })
+  | {
+      displayName: string;
+      email: string;
+      message?: string;
+      setupToken: string;
+      status: "owner-setup-email-sending";
+    }
+  | { message: string; status: "owner-setup-invalid" }
+  | { status: "owner-setup-loading" }
+  | (AuthAccountOwnerSetupChallengeState & {
+      status: "owner-setup-passkey-unavailable";
+    })
+  | {
+      continueTo: string;
+      handoff?: AuthAccountCompletionHandoff;
+      owner: OwnerIdentity;
+      status: "owner-setup-continuing";
+    }
+  | {
+      message?: string;
+      setupToken: string;
+      status: "owner-setup-ready";
+    }
   | (AuthAccountSignupState & { status: "signup-credential-ready" })
   | (AuthAccountSignupState & { status: "signup-credential-submitting" })
   | (AuthAccountSignupState & { status: "signup-email-sending" })
@@ -119,8 +191,9 @@ export type AuthAccountRouteState =
 type StartAuthAccountRouteSessionOptions = {
   currentOrigin?: string;
   fetcher?: typeof fetch;
+  locationPath?: string;
   locationSearch: string;
-  navigateTo?: (target: `/${string}`) => void;
+  navigateTo?: (target: string) => void;
   onState: (state: AuthAccountRouteState) => void;
 };
 
@@ -160,6 +233,37 @@ type SignupChallengeSummary = {
   target: AccountCompletionGateTarget;
 };
 
+type OwnerSetupChallengeSummary = {
+  challengeId: string;
+  displayEmail: string;
+  displayName: string;
+  expiresAt: string;
+  status: "email-sent" | "email-verified" | "passkey-prepared";
+};
+
+type OwnerSetupRouteRequest = {
+  challengeId?: string;
+  email?: string;
+  setupToken: string;
+  verificationToken?: string;
+};
+
+type OwnerSetupPasskeyPreparation = {
+  completionId: string;
+  ownerSetup: OwnerSetupChallengeSummary;
+  prepared: true;
+};
+
+export type OwnerSetupCompletionApiResult = {
+  completed: true;
+  completionId: string;
+  continueTo?: string;
+  handoff?: AuthAccountCompletionHandoff;
+  owner: OwnerIdentity;
+  session: { expiresAt: string };
+  setupComplete: true;
+};
+
 type AuthAccountPasskeyRegistrationOptions = Parameters<CreatePasskeyRegistrationResponse>[0];
 
 export function AuthAccountRoute() {
@@ -172,7 +276,7 @@ export function AuthAccountRoute() {
   const [sessionRevision, setSessionRevision] = useState(0);
   const pendingGuard = useRef(createAuthPendingGuard());
   const currentOrigin = typeof window === "undefined" ? undefined : window.location.origin;
-  const navigateTo = (target: `/${string}`) => {
+  const navigateTo = (target: string) => {
     if (typeof window !== "undefined") {
       window.location.assign(target);
     }
@@ -186,6 +290,7 @@ export function AuthAccountRoute() {
     () =>
       startAuthAccountRouteSession({
         currentOrigin,
+        locationPath,
         locationSearch,
         navigateTo,
         onState: publishState,
@@ -238,6 +343,25 @@ export function AuthAccountRoute() {
           }
         : { result: result.accountCompletion, status: "complete" },
     );
+  }
+
+  function applyOwnerSetupCompletionResult(result: OwnerSetupCompletionApiResult) {
+    if (result.continueTo) {
+      publishState({
+        continueTo: result.continueTo,
+        ...(result.handoff ? { handoff: result.handoff } : {}),
+        owner: result.owner,
+        status: "owner-setup-continuing",
+      });
+      navigateTo(result.continueTo);
+      return;
+    }
+
+    publishState({
+      ...(result.handoff ? { handoff: result.handoff } : {}),
+      owner: result.owner,
+      status: "owner-setup-complete",
+    });
   }
 
   async function submitEmailVerificationRequest(email: string) {
@@ -423,6 +547,163 @@ export function AuthAccountRoute() {
     }
   }
 
+  async function submitOwnerSetupStart(displayName: string, email: string) {
+    if (state.status !== "owner-setup-ready") {
+      return;
+    }
+
+    publishState({
+      displayName,
+      email,
+      setupToken: state.setupToken,
+      status: "owner-setup-email-sending",
+    });
+
+    try {
+      const started = await startProductionOwnerSetup({
+        displayName,
+        email,
+        setupToken: state.setupToken,
+      });
+
+      publishState({
+        challengeId: started.ownerSetup.challengeId,
+        displayName: started.ownerSetup.displayName,
+        email: started.ownerSetup.displayEmail,
+        expiresAt: started.ownerSetup.expiresAt,
+        setupToken: state.setupToken,
+        status: "owner-setup-email-sent",
+      });
+    } catch (error) {
+      publishState({
+        message: error instanceof Error ? error.message : "Owner setup email delivery failed.",
+        setupToken: state.setupToken,
+        status: "owner-setup-ready",
+      });
+    }
+  }
+
+  async function submitOwnerSetupEmailToken(token: string) {
+    if (state.status !== "owner-setup-email-sent") {
+      return;
+    }
+
+    const challengeState = state;
+
+    publishState({ ...challengeState, status: "owner-setup-email-verifying" });
+
+    try {
+      const verified = await verifyProductionOwnerSetupEmail({
+        challengeId: challengeState.challengeId,
+        email: challengeState.email,
+        setupToken: challengeState.setupToken,
+        token,
+      });
+
+      publishState({
+        challengeId: verified.ownerSetup.challengeId,
+        displayName: verified.ownerSetup.displayName,
+        email: verified.ownerSetup.displayEmail,
+        expiresAt: verified.ownerSetup.expiresAt,
+        setupToken: challengeState.setupToken,
+        status: "owner-setup-credential-ready",
+      });
+    } catch (error) {
+      publishState({
+        ...challengeState,
+        message: error instanceof Error ? error.message : "Owner setup email verification failed.",
+        status: "owner-setup-email-sent",
+      });
+    }
+  }
+
+  async function submitOwnerSetupPasskey() {
+    if (state.status !== "owner-setup-credential-ready") {
+      return;
+    }
+
+    if (!browserSupportsPasskeys()) {
+      publishState({
+        ...state,
+        message: passkeyUnavailableMessage,
+        status: "owner-setup-passkey-unavailable",
+      });
+      return;
+    }
+
+    const challengeState = state;
+
+    publishState({ ...challengeState, status: "owner-setup-credential-submitting" });
+
+    try {
+      const prepared = await prepareProductionOwnerSetupPasskey({
+        challengeId: challengeState.challengeId,
+        email: challengeState.email,
+        setupToken: challengeState.setupToken,
+      });
+      const completionState: AuthAccountOwnerSetupCompletionState = {
+        challengeId: prepared.ownerSetup.challengeId,
+        completionId: prepared.completionId,
+        displayName: prepared.ownerSetup.displayName,
+        email: prepared.ownerSetup.displayEmail,
+        expiresAt: prepared.ownerSetup.expiresAt,
+        setupToken: challengeState.setupToken,
+      };
+
+      publishState({ ...completionState, status: "owner-setup-completing" });
+
+      try {
+        applyOwnerSetupCompletionResult(
+          await completeProductionOwnerSetup({
+            challengeId: completionState.challengeId,
+            completionId: completionState.completionId,
+            email: completionState.email,
+            setupToken: completionState.setupToken,
+          }),
+        );
+      } catch (error) {
+        publishState({
+          ...completionState,
+          message: error instanceof Error ? error.message : "Owner setup completion failed.",
+          status: "owner-setup-completion-ready",
+        });
+      }
+    } catch (error) {
+      publishState({
+        ...challengeState,
+        message: error instanceof Error ? error.message : "Owner passkey setup failed.",
+        status: "owner-setup-credential-ready",
+      });
+    }
+  }
+
+  async function retryOwnerSetupCompletion() {
+    if (state.status !== "owner-setup-completion-ready") {
+      return;
+    }
+
+    const completionState = state;
+
+    publishState({ ...completionState, status: "owner-setup-completing" });
+
+    try {
+      applyOwnerSetupCompletionResult(
+        await completeProductionOwnerSetup({
+          challengeId: completionState.challengeId,
+          completionId: completionState.completionId,
+          email: completionState.email,
+          setupToken: completionState.setupToken,
+        }),
+      );
+    } catch (error) {
+      publishState({
+        ...completionState,
+        message: error instanceof Error ? error.message : "Owner setup completion failed.",
+        status: "owner-setup-completion-ready",
+      });
+    }
+  }
+
   async function submitSignupStart(displayName: string, email: string) {
     if (state.status !== "signup-ready") {
       return;
@@ -534,6 +815,12 @@ export function AuthAccountRoute() {
 
     await pendingGuard.current.run(async () => {
       switch (submission.kind) {
+        case "owner-setup-identity":
+          await submitOwnerSetupStart(submission.displayName, submission.email);
+          return;
+        case "owner-setup-verification-token":
+          await submitOwnerSetupEmailToken(submission.token);
+          return;
         case "email-verification":
           await submitEmailVerificationRequest(submission.email);
           return;
@@ -558,6 +845,18 @@ export function AuthAccountRoute() {
   }
 
   function retryCurrentState() {
+    if (state.status === "owner-setup-completion-ready") {
+      void pendingGuard.current.run(retryOwnerSetupCompletion);
+      return;
+    }
+    if (state.status === "owner-setup-invalid") {
+      setSessionRevision((revision) => revision + 1);
+      return;
+    }
+    if (state.status.startsWith("owner-setup-") && "message" in state && state.message) {
+      publishState({ ...state, message: undefined } as AuthAccountRouteState);
+      return;
+    }
     if (state.status === "failed") {
       setSessionRevision((revision) => revision + 1);
       return;
@@ -567,8 +866,7 @@ export function AuthAccountRoute() {
       return;
     }
     if (state.status.startsWith("signup-") && "message" in state && state.message) {
-      const { message: _message, ...nextState } = state;
-      publishState(nextState);
+      publishState({ ...state, message: undefined } as AuthAccountRouteState);
     }
   }
 
@@ -584,7 +882,9 @@ export function AuthAccountRoute() {
       return;
     }
     if (intent.type === "authPasskey") {
-      await pendingGuard.current.run(submitSignupPasskey);
+      await pendingGuard.current.run(
+        state.status.startsWith("owner-setup-") ? submitOwnerSetupPasskey : submitSignupPasskey,
+      );
       return;
     }
     if (intent.type === "authAction") {
@@ -613,10 +913,19 @@ export function AuthAccountRoute() {
 export function startAuthAccountRouteSession({
   currentOrigin,
   fetcher = fetch,
+  locationPath = runtimeTopologyRoutes.authAccountRoute,
   locationSearch,
   navigateTo,
   onState,
 }: StartAuthAccountRouteSessionOptions) {
+  if (locationPath === runtimeTopologyRoutes.authAccountSetupRoute) {
+    return startOwnerSetupAccountRouteSession({
+      fetcher,
+      locationSearch,
+      onState,
+    });
+  }
+
   const controller = new AbortController();
   let stopped = false;
 
@@ -686,6 +995,263 @@ export function startAuthAccountRouteSession({
     stopped = true;
     controller.abort();
   };
+}
+
+function startOwnerSetupAccountRouteSession({
+  fetcher,
+  locationSearch,
+  onState,
+}: {
+  fetcher: typeof fetch;
+  locationSearch: string;
+  onState: (state: AuthAccountRouteState) => void;
+}) {
+  const controller = new AbortController();
+  let stopped = false;
+  const routeRequest = ownerSetupRouteRequestFromSearch(locationSearch);
+
+  onState({ status: "owner-setup-loading" });
+
+  if (!routeRequest.ok) {
+    onState({ message: routeRequest.message, status: "owner-setup-invalid" });
+
+    return () => {
+      stopped = true;
+      controller.abort();
+    };
+  }
+  const request = routeRequest.request;
+
+  async function loadOwnerSetup() {
+    try {
+      const setup = await fetchProductionOwnerSetupStatus({
+        fetcher,
+        signal: controller.signal,
+      });
+
+      if (stopped) {
+        return;
+      }
+
+      if (setup.setupComplete) {
+        onState({
+          ...(setup.owner ? { owner: setup.owner } : {}),
+          status: "owner-setup-already-complete",
+        });
+        return;
+      }
+
+      if (request.challengeId && request.email && request.verificationToken) {
+        const verified = await verifyProductionOwnerSetupEmail({
+          challengeId: request.challengeId,
+          email: request.email,
+          fetcher,
+          setupToken: request.setupToken,
+          signal: controller.signal,
+          token: request.verificationToken,
+        });
+
+        if (!stopped) {
+          onState({
+            challengeId: verified.ownerSetup.challengeId,
+            displayName: verified.ownerSetup.displayName,
+            email: verified.ownerSetup.displayEmail,
+            expiresAt: verified.ownerSetup.expiresAt,
+            setupToken: request.setupToken,
+            status: "owner-setup-credential-ready",
+          });
+        }
+        return;
+      }
+
+      onState({
+        setupToken: request.setupToken,
+        status: "owner-setup-ready",
+      });
+    } catch (error) {
+      if (!stopped && !controller.signal.aborted) {
+        onState({
+          message: error instanceof Error ? error.message : "Owner setup could not be loaded.",
+          status: "owner-setup-invalid",
+        });
+      }
+    }
+  }
+
+  void loadOwnerSetup();
+
+  return () => {
+    stopped = true;
+    controller.abort();
+  };
+}
+
+export async function fetchProductionOwnerSetupStatus({
+  fetcher = fetch,
+  signal,
+}: AuthAccountApiOptions = {}): Promise<OwnerSetupStatusResponse> {
+  const response = await fetcher(ownerSetupStatusPath, {
+    credentials: "same-origin",
+    headers: { Accept: "application/json" },
+    signal,
+  });
+  const body = await readAuthAccountJson(response);
+
+  if (!response.ok) {
+    throw new AuthAccountApiError(authAccountErrorMessage(body, "Owner setup status failed."), {
+      status: response.status,
+    });
+  }
+
+  return parseOwnerSetupStatusResponse(body);
+}
+
+export async function startProductionOwnerSetup({
+  displayName,
+  email,
+  fetcher = fetch,
+  setupToken,
+  signal,
+}: AuthAccountApiOptions & {
+  displayName: string;
+  email: string;
+  setupToken: string;
+}): Promise<{ ownerSetup: OwnerSetupChallengeSummary }> {
+  const response = await postAuthAccountJson({
+    body: { displayName, email, setupToken },
+    fetcher,
+    path: ownerSetupStartPath,
+    signal,
+  });
+
+  if (!response.ok) {
+    throw new AuthAccountApiError(
+      authAccountErrorMessage(response.body, "Owner setup email delivery failed."),
+      { status: response.status },
+    );
+  }
+
+  return parseOwnerSetupChallengeResponse(response.body);
+}
+
+export async function verifyProductionOwnerSetupEmail({
+  challengeId,
+  email,
+  fetcher = fetch,
+  setupToken,
+  signal,
+  token,
+}: AuthAccountApiOptions & {
+  challengeId: string;
+  email: string;
+  setupToken: string;
+  token: string;
+}): Promise<{ ownerSetup: OwnerSetupChallengeSummary; verified: true }> {
+  const response = await postAuthAccountJson({
+    body: { challengeId, email, setupToken, token },
+    fetcher,
+    path: ownerSetupEmailVerifyPath,
+    signal,
+  });
+
+  if (!response.ok) {
+    throw new AuthAccountApiError(
+      authAccountErrorMessage(response.body, "Owner setup email verification failed."),
+      { status: response.status },
+    );
+  }
+
+  const parsed = parseRecord("Owner setup email verification response", response.body);
+
+  if (parsed.verified !== true) {
+    throw new AuthAccountApiError("Owner setup email verification response was invalid.");
+  }
+
+  return {
+    ownerSetup: parseOwnerSetupChallengeSummary(parsed.ownerSetup),
+    verified: true,
+  };
+}
+
+export async function prepareProductionOwnerSetupPasskey({
+  challengeId,
+  createRegistrationResponse = createBrowserPasskeyRegistrationResponse,
+  email,
+  fetcher = fetch,
+  setupToken,
+  signal,
+}: AuthAccountApiOptions & {
+  challengeId: string;
+  createRegistrationResponse?: CreatePasskeyRegistrationResponse;
+  email: string;
+  setupToken: string;
+}): Promise<OwnerSetupPasskeyPreparation> {
+  const request = { challengeId, email, setupToken };
+  const optionsResponse = await postAuthAccountJson({
+    body: request,
+    fetcher,
+    path: ownerSetupPasskeyRegistrationOptionsPath,
+    signal,
+  });
+
+  if (!optionsResponse.ok) {
+    throw new AuthAccountApiError(
+      authAccountErrorMessage(optionsResponse.body, "Owner passkey options failed."),
+      { status: optionsResponse.status },
+    );
+  }
+
+  const options = parseOwnerSetupPasskeyOptionsResponse(optionsResponse.body);
+  const registrationResponse = await createRegistrationResponse(options.options);
+  const verifyResponse = await postAuthAccountJson({
+    body: {
+      ...request,
+      completionId: options.completionId,
+      response: registrationResponse,
+    },
+    fetcher,
+    path: ownerSetupPasskeyRegistrationVerifyPath,
+    signal,
+  });
+
+  if (!verifyResponse.ok) {
+    throw new AuthAccountApiError(
+      authAccountErrorMessage(verifyResponse.body, "Owner passkey verification failed."),
+      { status: verifyResponse.status },
+    );
+  }
+
+  return parseOwnerSetupPasskeyPreparation(verifyResponse.body);
+}
+
+export async function completeProductionOwnerSetup({
+  challengeId,
+  completionId,
+  email,
+  fetcher = fetch,
+  setupToken,
+  signal,
+}: AuthAccountApiOptions & {
+  challengeId: string;
+  completionId: string;
+  email: string;
+  setupToken: string;
+}): Promise<OwnerSetupCompletionApiResult> {
+  const response = await postAuthAccountJson({
+    body: { challengeId, completionId, email, setupToken },
+    fetcher,
+    path: ownerSetupCompletePath,
+    signal,
+  });
+
+  if (!response.ok) {
+    throw new AuthAccountApiError(
+      authAccountErrorMessage(response.body, "Owner setup completion failed."),
+      { status: response.status },
+    );
+  }
+
+  return parseOwnerSetupCompletionResponse(response.body);
 }
 
 export async function fetchAuthAccountStatus({
@@ -1180,6 +1746,180 @@ function parseOptionalAuthAccountCompletionHandoff(value: unknown): {
       returnTo,
       targetOrigin: parseInstanceAuthCanonicalOrigin(object.targetOrigin),
     },
+  };
+}
+
+function ownerSetupRouteRequestFromSearch(
+  locationSearch: string,
+): { ok: true; request: OwnerSetupRouteRequest } | { message: string; ok: false } {
+  const params = new URLSearchParams(normalizedSearch(locationSearch));
+  const challengeId = optionalSearchParam(params, "challengeId");
+  const email = optionalSearchParam(params, "email");
+  const setupTokenValue =
+    optionalSearchParam(params, "setupToken") ??
+    (challengeId === undefined ? optionalSearchParam(params, "token") : undefined);
+  const verificationToken =
+    challengeId === undefined ? undefined : optionalSearchParam(params, "token");
+
+  try {
+    const setupToken = parseOwnerSetupToken(setupTokenValue);
+    const hasVerificationInput =
+      challengeId !== undefined || email !== undefined || verificationToken !== undefined;
+
+    if (
+      hasVerificationInput &&
+      (challengeId === undefined || email === undefined || verificationToken === undefined)
+    ) {
+      throw new Error("Owner setup email link is incomplete.");
+    }
+
+    return {
+      ok: true,
+      request: {
+        ...(challengeId ? { challengeId } : {}),
+        ...(email ? { email } : {}),
+        setupToken,
+        ...(verificationToken ? { verificationToken } : {}),
+      },
+    };
+  } catch {
+    return { message: "Owner setup link is invalid.", ok: false };
+  }
+}
+
+function parseOwnerSetupStatusResponse(value: unknown): OwnerSetupStatusResponse {
+  const object = parseRecord("Owner setup status response", value);
+
+  if (typeof object.setupComplete !== "boolean") {
+    throw new AuthAccountApiError("Owner setup status response was invalid.");
+  }
+
+  return {
+    ...(typeof object.adminOrigin === "string" ? { adminOrigin: object.adminOrigin } : {}),
+    ...(typeof object.authOrigin === "string" ? { authOrigin: object.authOrigin } : {}),
+    setupComplete: object.setupComplete,
+    ...(object.owner === undefined ? {} : { owner: parseOwnerIdentity(object.owner) }),
+  };
+}
+
+function parseOwnerSetupChallengeResponse(value: unknown): {
+  ownerSetup: OwnerSetupChallengeSummary;
+} {
+  const object = parseRecord("Owner setup challenge response", value);
+
+  return { ownerSetup: parseOwnerSetupChallengeSummary(object.ownerSetup) };
+}
+
+function parseOwnerSetupChallengeSummary(value: unknown): OwnerSetupChallengeSummary {
+  const object = parseRecord("Owner setup challenge", value);
+  const status = requiredString(object.status, "Owner setup challenge status");
+
+  if (status !== "email-sent" && status !== "email-verified" && status !== "passkey-prepared") {
+    throw new AuthAccountApiError("Owner setup challenge status was invalid.");
+  }
+
+  return {
+    challengeId: requiredString(object.challengeId, "Owner setup challenge id"),
+    displayEmail: requiredString(object.displayEmail, "Owner setup display email"),
+    displayName: requiredString(object.displayName, "Owner setup display name"),
+    expiresAt: requiredString(object.expiresAt, "Owner setup expiry"),
+    status,
+  };
+}
+
+function parseOwnerSetupPasskeyOptionsResponse(value: unknown): {
+  completionId: string;
+  options: AuthAccountPasskeyRegistrationOptions;
+} {
+  const object = parseRecord("Owner setup passkey options response", value);
+
+  if (!isRecord(object.options)) {
+    throw new AuthAccountApiError("Owner setup passkey options response was invalid.");
+  }
+
+  return {
+    completionId: requiredString(object.completionId, "Owner setup completion id"),
+    options: object.options as unknown as AuthAccountPasskeyRegistrationOptions,
+  };
+}
+
+function parseOwnerSetupPasskeyPreparation(value: unknown): OwnerSetupPasskeyPreparation {
+  const object = parseRecord("Owner setup passkey verification response", value);
+
+  if (object.prepared !== true) {
+    throw new AuthAccountApiError("Owner setup passkey verification response was invalid.");
+  }
+
+  return {
+    completionId: requiredString(object.completionId, "Owner setup completion id"),
+    ownerSetup: parseOwnerSetupChallengeSummary(object.ownerSetup),
+    prepared: true,
+  };
+}
+
+function parseOwnerSetupCompletionResponse(value: unknown): OwnerSetupCompletionApiResult {
+  const object = parseRecord("Owner setup completion response", value);
+
+  if (object.completed !== true || object.setupComplete !== true) {
+    throw new AuthAccountApiError("Owner setup completion response was invalid.");
+  }
+
+  const session = parseRecord("Owner setup session", object.session);
+
+  return {
+    completed: true,
+    completionId: requiredString(object.completionId, "Owner setup completion id"),
+    ...parseOptionalOwnerSetupContinueTo(object.continueTo),
+    ...parseOptionalAuthAccountCompletionHandoff(object.handoff),
+    owner: parseOwnerIdentity(object.owner),
+    session: {
+      expiresAt: requiredString(session.expiresAt, "Owner setup session expiry"),
+    },
+    setupComplete: true,
+  };
+}
+
+function parseOptionalOwnerSetupContinueTo(value: unknown): { continueTo?: string } {
+  if (value === undefined) {
+    return {};
+  }
+
+  if (typeof value !== "string") {
+    throw new AuthAccountApiError("Owner setup continuation was invalid.");
+  }
+
+  const path = parseOwnerLoginRedirectTarget(value);
+
+  if (path) {
+    return { continueTo: path };
+  }
+
+  try {
+    const url = new URL(value);
+
+    if (
+      url.username ||
+      url.password ||
+      url.hash ||
+      (url.protocol !== "http:" && url.protocol !== "https:")
+    ) {
+      throw new Error("unsafe continuation");
+    }
+
+    return { continueTo: `${url.origin}${url.pathname}${url.search}` };
+  } catch {
+    throw new AuthAccountApiError("Owner setup continuation was invalid.");
+  }
+}
+
+function parseOwnerIdentity(value: unknown): OwnerIdentity {
+  const object = parseRecord("Owner identity", value);
+
+  return {
+    createdAt: requiredString(object.createdAt, "Owner createdAt"),
+    ...(object.email === undefined ? {} : { email: requiredString(object.email, "Owner email") }),
+    id: requiredString(object.id, "Owner id"),
+    name: requiredString(object.name, "Owner name"),
   };
 }
 

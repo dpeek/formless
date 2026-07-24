@@ -26,6 +26,7 @@ export type CentralAuthSession = Omit<StoredCentralAuthSession, "revokedAt">;
 
 export type CreateCentralAuthSessionCookieInput = {
   env: CentralAuthSessionEnv;
+  idempotencyKey?: string;
   maxAgeSeconds?: number;
   now?: string;
   principalId: string;
@@ -115,9 +116,19 @@ export async function createCentralAuthSessionCookie(
   ).toISOString();
   const instanceId = authOriginInstanceId(authOrigin);
   const principalId = parseNonEmptyString("Central auth session principal id", input.principalId);
+  const idempotentSessionId =
+    input.idempotencyKey === undefined
+      ? undefined
+      : await signString(
+          `central-auth-session-id\n${parseNonEmptyString(
+            "Central auth session idempotency key",
+            input.idempotencyKey,
+          )}`,
+          secret,
+        );
 
   for (let attempt = 0; attempt < 3; attempt += 1) {
-    const sessionId = randomBase64Url(32);
+    const sessionId = idempotentSessionId ?? randomBase64Url(32);
     const sessionIdHash = await sha256Base64Url(sessionId);
     const created = createCentralAuthSession(storage, {
       expiresAt,
@@ -127,7 +138,14 @@ export async function createCentralAuthSessionCookie(
       sessionIdHash,
     });
 
-    if (!created.ok) {
+    if (
+      !created.ok &&
+      (idempotentSessionId === undefined ||
+        created.session.expiresAt !== expiresAt ||
+        created.session.instanceId !== instanceId ||
+        created.session.issuedAt !== issuedAt ||
+        created.session.principalId !== principalId)
+    ) {
       continue;
     }
 

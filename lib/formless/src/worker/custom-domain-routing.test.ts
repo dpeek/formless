@@ -26,8 +26,6 @@ import {
   COLLABORATOR_INVITATION_ACCEPT_PATH,
   ownerLoginRedirectLocationForRoute,
   type AccountCompletionGateTarget,
-  type OwnerPasskeyRegistrationOptionsResponse,
-  type OwnerPasskeyRegistrationVerifyResponse,
 } from "../shared/instance-auth.ts";
 import type { SyncSocketServerMessage } from "../shared/protocol.ts";
 import type { EmailDeliveryRenderedMessage } from "../shared/email-runtime.ts";
@@ -101,7 +99,7 @@ describe("installed Site custom-domain Worker routing", () => {
   it("seeds passkey auth config from the configured production origin", async () => {
     await resetWorkerState(harness, ["controlPlane", "auth"]);
     await setupPrimaryProductionIdentity();
-    await expectOwnerPasskeyRouteNotFound(harness, "personal.dpeek.workers.dev");
+    await expectAuthConfigMissing(harness);
     await expectAuthConfigRp(harness, "www.example.com", "example.com");
   });
 
@@ -419,49 +417,17 @@ describe("installed Site custom-domain Worker routing", () => {
       await resetWorkerState(harness, ["controlPlane", "auth"]);
 
       await configureHarnessAuth(deploymentOrigin);
-
-      const capability = await harness.mf.dispatchFetch(
-        `${deploymentOrigin}/api/formless/setup/capability`,
-        {
-          body: JSON.stringify({ setupToken, expiresAt: "2999-01-01T00:00:00.000Z" }),
-          headers: adminHeaders({ "Content-Type": "application/json" }),
-          method: "POST",
-        },
+      const owner = await ensureTestIdentityOwner(harness, adminToken, {
+        name: "Workers Dev Owner",
+        email: "owner@example.com",
+      });
+      const centralCookie = await createCentralAuthSessionCookieForPrincipal(
+        owner.id,
+        deploymentOrigin,
       );
-      const optionsResponse = await harness.mf.dispatchFetch(
-        `${deploymentOrigin}/api/formless/passkeys/register/options`,
-        {
-          body: JSON.stringify({ setupToken }),
-          headers: { "Content-Type": "application/json", Origin: deploymentOrigin },
-          method: "POST",
-        },
-      );
-      const options = (await optionsResponse.json()) as OwnerPasskeyRegistrationOptionsResponse;
-      const authenticator = new VirtualPasskey("d29ya2Vycy1kZXYtb3duZXI");
-      const setupResponse = await harness.mf.dispatchFetch(
-        `${deploymentOrigin}/api/formless/passkeys/register/verify`,
-        {
-          body: JSON.stringify({
-            setupToken,
-            owner: { name: "Workers Dev Owner", email: "owner@example.com" },
-            response: authenticator.registrationResponse(options.options, {
-              origin: deploymentOrigin,
-              rpId: "personal.dpeek.workers.dev",
-            }),
-          }),
-          headers: { "Content-Type": "application/json", Origin: deploymentOrigin },
-          method: "POST",
-        },
-      );
-      const setup = (await setupResponse.json()) as OwnerPasskeyRegistrationVerifyResponse;
-      const centralCookie = cookiePair(requiredHeader(setupResponse, "Set-Cookie"));
-      const accountPath = setup.continueTo;
+      const accountPath = `${runtimeTopologyRoutes.authAccountRoute}?returnTo=%2F`;
 
       expect(accountPath).toBe(`${runtimeTopologyRoutes.authAccountRoute}?returnTo=%2F`);
-
-      if (accountPath === undefined) {
-        throw new Error("Expected owner passkey setup continuation.");
-      }
 
       const unauthenticated = await harness.mf.dispatchFetch(`${deploymentOrigin}${accountPath}`, {
         headers: { Accept: "text/html" },
@@ -472,9 +438,6 @@ describe("installed Site custom-domain Worker routing", () => {
         redirect: "manual",
       });
 
-      expect(capability.status).toBe(200);
-      expect(optionsResponse.status).toBe(200);
-      expect(setupResponse.status).toBe(200);
       expect(unauthenticated.status).toBe(302);
       expect(unauthenticated.headers.get("Location")).toBe(
         ownerLoginRedirectLocationForRoute(accountPath),
@@ -2221,18 +2184,6 @@ describe("installed Site custom-domain Worker routing", () => {
       headers: adminHeaders({ "Content-Type": "application/json" }),
       method: "POST",
     });
-    const registerOptions = await fetchHost(
-      mappedInstanceHost,
-      "/api/formless/passkeys/register/options",
-      {
-        body: JSON.stringify({ setupToken }),
-        headers: { "Content-Type": "application/json", Origin: `https://${mappedInstanceHost}` },
-        method: "POST",
-      },
-    );
-    const registerOptionsBody = (await registerOptions.json()) as {
-      options: { rp: { id: string; name: string } };
-    };
     const sessionStatus = await fetchHost(mappedInstanceHost, "/api/formless/session");
     const owner = await ensureTestIdentityOwner(harness, adminToken, {
       name: "Mapped Auth Origin Owner",
@@ -2268,11 +2219,6 @@ describe("installed Site custom-domain Worker routing", () => {
     expect(authenticatedAccountReturn.status).toBe(302);
     expect(authenticatedAccountReturn.headers.get("Location")).toBe("/deployments");
     expect(setupCapability.status).toBe(200);
-    expect(registerOptions.status).toBe(200);
-    expect(registerOptionsBody.options.rp).toEqual({
-      id: mappedInstanceHost,
-      name: "Formless",
-    });
     expect(sessionStatus.status).toBe(200);
     expect(assetRequests).toEqual(["/index.html", "/index.html", "/index.html"]);
   });
@@ -2643,43 +2589,34 @@ describe("installed Site custom-domain Worker routing", () => {
 
 async function expectAuthConfigRp(targetHarness: Harness, host: string, expectedRpId: string) {
   const origin = `https://${host}`;
-  const capability = await targetHarness.mf.dispatchFetch(
-    `${origin}/api/formless/setup/capability`,
-    {
-      body: JSON.stringify({ setupToken }),
-      headers: adminHeaders({ "Content-Type": "application/json" }),
-      method: "POST",
-    },
+  const status = await targetHarness.mf.dispatchFetch(`${origin}/api/formless/setup`);
+  const configResponse = await targetHarness.durableObjectFetch(
+    "FORMLESS_AUTHORITY",
+    FORMLESS_INSTANCE_AUTHORITY_NAME,
+    "/harness/auth/config",
   );
-  const options = await targetHarness.mf.dispatchFetch(
-    `${origin}/api/formless/passkeys/register/options`,
-    {
-      body: JSON.stringify({ setupToken }),
-      headers: { "Content-Type": "application/json", Origin: origin },
-      method: "POST",
-    },
-  );
-  const body = (await options.json()) as { options: { rp: { id: string; name: string } } };
+  const body = (await configResponse.json()) as {
+    config: { relyingPartyId: string; relyingPartyName: string } | null;
+  };
 
-  expect(capability.status).toBe(200);
-  expect(options.status).toBe(200);
-  expect(body.options.rp).toEqual({ id: expectedRpId, name: "Formless" });
+  expect(status.status).toBe(200);
+  expect(configResponse.status).toBe(200);
+  expect(body.config).toMatchObject({
+    relyingPartyId: expectedRpId,
+    relyingPartyName: "Formless",
+  });
 }
 
-async function expectOwnerPasskeyRouteNotFound(targetHarness: Harness, host: string) {
-  const origin = `https://${host}`;
-  const options = await targetHarness.mf.dispatchFetch(
-    `${origin}/api/formless/passkeys/register/options`,
-    {
-      body: JSON.stringify({ setupToken }),
-      headers: { "Content-Type": "application/json", Origin: origin },
-      method: "POST",
-    },
+async function expectAuthConfigMissing(targetHarness: Harness) {
+  const response = await targetHarness.durableObjectFetch(
+    "FORMLESS_AUTHORITY",
+    FORMLESS_INSTANCE_AUTHORITY_NAME,
+    "/harness/auth/config",
   );
-  const body = (await options.json()) as { error: string };
+  const body = (await response.json()) as { config: unknown };
 
-  expect(options.status).toBe(404);
-  expect(body.error).toBe("Not found.");
+  expect(response.status).toBe(200);
+  expect(body.config).toBeUndefined();
 }
 
 async function setupPrimaryProductionIdentity() {
@@ -4192,6 +4129,7 @@ async function writeCustomDomainHarness() {
       import {
         bumpHostSessionRevocationVersion,
         createPasskeyCredential,
+        readInstanceAuthConfig,
         writeInstanceAuthConfig,
       } from "${process.cwd()}/src/worker/instance-auth-state.ts";
       import { createCentralAuthSessionCookie } from "${process.cwd()}/src/worker/central-auth-session.ts";
@@ -4222,10 +4160,16 @@ async function writeCustomDomainHarness() {
             }
           }
 
-          if (url.pathname === "/harness/auth/config" && request.method === "POST") {
-            return Response.json({
-              config: writeInstanceAuthConfig(this.ctx.storage, await request.json()),
-            });
+          if (url.pathname === "/harness/auth/config") {
+            if (request.method === "GET") {
+              return Response.json({ config: readInstanceAuthConfig(this.ctx.storage) });
+            }
+
+            if (request.method === "POST") {
+              return Response.json({
+                config: writeInstanceAuthConfig(this.ctx.storage, await request.json()),
+              });
+            }
           }
 
           if (url.pathname === "/harness/auth/credential" && request.method === "POST") {

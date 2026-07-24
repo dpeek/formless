@@ -21,10 +21,6 @@ import {
   parseOwnerPasskeyLoginOptionsResponse,
   parseOwnerPasskeyLoginVerifyRequest,
   parseOwnerPasskeyLoginVerifyResponse,
-  parseOwnerPasskeyRegistrationOptionsRequest,
-  parseOwnerPasskeyRegistrationOptionsResponse,
-  parseOwnerPasskeyRegistrationVerifyRequest,
-  parseOwnerPasskeyRegistrationVerifyResponse,
   parseOwnerSessionStatusResponse,
   ownerLoginRedirectLocationForRoute,
   ownerLoginRedirectTargetFromSearch,
@@ -561,39 +557,6 @@ describe("account completion gate protocol", () => {
 });
 
 describe("owner passkey protocol", () => {
-  it("parses registration options and registration verify payloads", () => {
-    const verifyRequest = {
-      setupToken,
-      owner: { name: " Ada Owner ", email: " ada@example.com " },
-      response: registrationResponse(),
-    };
-
-    expect(parseOwnerPasskeyRegistrationOptionsRequest({ setupToken })).toEqual({ setupToken });
-    expect(
-      parseOwnerPasskeyRegistrationOptionsResponse({ options: registrationOptions() }),
-    ).toEqual({
-      options: registrationOptions(),
-    });
-    expect(parseOwnerPasskeyRegistrationVerifyRequest(verifyRequest)).toEqual({
-      setupToken,
-      owner: { name: "Ada Owner", email: "ada@example.com" },
-      response: registrationResponse(),
-    });
-    expect(
-      parseOwnerPasskeyRegistrationVerifyResponse({
-        continueTo: "/formless/auth?returnTo=%2F",
-        owner,
-        session: { expiresAt: "2026-06-28T00:00:00.000Z" },
-        setupComplete: true,
-      }),
-    ).toEqual({
-      continueTo: "/formless/auth?returnTo=%2F",
-      owner,
-      session: { expiresAt: "2026-06-28T00:00:00.000Z" },
-      setupComplete: true,
-    });
-  });
-
   it("parses login options, login verify, session status, and logout responses", () => {
     expect(parseOwnerPasskeyLoginOptionsRequest({})).toEqual({});
     expect(parseOwnerPasskeyLoginOptionsResponse({ options: loginOptions() })).toEqual({
@@ -650,19 +613,6 @@ describe("owner passkey protocol", () => {
 
   it("rejects malformed passkey payloads and unsupported keys", () => {
     expect(() =>
-      parseOwnerPasskeyRegistrationOptionsResponse({
-        options: { ...registrationOptions(), challenge: "not+base64" },
-      }),
-    ).toThrow("Passkey registration options challenge must be base64url.");
-    expect(() =>
-      parseOwnerPasskeyRegistrationVerifyRequest({
-        setupToken,
-        owner: { name: "Ada Owner" },
-        response: registrationResponse(),
-        redirectTo: "/apps/site",
-      }),
-    ).toThrow('Passkey registration verify request has unsupported key "redirectTo".');
-    expect(() =>
       parseOwnerPasskeyLoginVerifyRequest({
         redirectTo: "/apps/site",
         response: authenticationResponse(),
@@ -694,15 +644,6 @@ describe("owner passkey protocol", () => {
     ).toThrow("Passkey login verify response continueTo must route through /formless/auth.");
     expect(() => parseOwnerPasskeyLoginOptionsRequest({ setupToken })).toThrow(
       'Passkey login options request has unsupported key "setupToken".',
-    );
-    expect(() =>
-      parseOwnerPasskeyRegistrationVerifyResponse({
-        continueTo: "https://admin.example.com/#session",
-        owner,
-        setupComplete: true,
-      }),
-    ).toThrow(
-      "Passkey registration verify response continueTo must be path-only or an HTTP(S) URL without credentials or hash.",
     );
   });
 

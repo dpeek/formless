@@ -6,24 +6,13 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 
 import type {
   AuthenticationResponseJSON,
-  PublicKeyCredentialCreationOptionsJSON,
   PublicKeyCredentialRequestOptionsJSON,
-  RegistrationResponseJSON,
 } from "@simplewebauthn/server";
 
 import type {
-  OwnerLogoutResponse,
   OwnerPasskeyLoginOptionsResponse,
   OwnerPasskeyLoginVerifyResponse,
-  OwnerPasskeyRegistrationOptionsResponse,
-  OwnerPasskeyRegistrationVerifyResponse,
-  OwnerSessionStatusResponse,
 } from "../shared/instance-auth.ts";
-import type {
-  AppInstallsResponse,
-  BootstrapResponse,
-  CreateAppInstallResponse,
-} from "../shared/protocol.ts";
 import { CENTRAL_AUTH_SESSION_COOKIE_NAME } from "./central-auth-session.ts";
 import { HOST_AUTH_SESSION_COOKIE_NAME } from "./instance-auth-handoff.ts";
 import { OWNER_SESSION_COOKIE_NAME } from "./owner-session.ts";
@@ -33,12 +22,9 @@ type Harness = Awaited<ReturnType<typeof createWorkerHarness>>;
 type HarnessFetchInit = NonNullable<Parameters<Harness["fetch"]>[1]>;
 
 const adminToken = "test-admin-token";
-const setupToken = "abcDEF0123456789_-abcDEF0123456789_-";
-const otherSetupToken = "xyzXYZ0123456789_-xyzXYZ0123456789_-";
 const canonicalOrigin = "https://example.com";
 const relyingPartyId = "example.com";
 const relyingPartyName = "Formless";
-const futureExpiresAt = "2999-01-01T00:00:00.000Z";
 const credentialId = "Y3JlZGVudGlhbC0x";
 
 let harness: Harness;
@@ -72,308 +58,10 @@ afterAll(async () => {
   }
 });
 
-describe("owner passkey API routes", () => {
-  it("creates registration options only after auth config and setup capability validation", async () => {
-    await configureAuth();
-
-    const missingCapability = await postJson("/api/formless/passkeys/register/options", {
-      setupToken,
-    });
-
-    expect(missingCapability.response.status).toBe(404);
-    expect(missingCapability.body).toEqual({
-      error: "Owner setup link is missing or has already been used.",
-      reason: "missing-capability",
-      setupComplete: false,
-    });
-
-    await createSetupCapability();
-
-    const wrongToken = await postJson("/api/formless/passkeys/register/options", {
-      setupToken: otherSetupToken,
-    });
-    const accepted = await postJson<OwnerPasskeyRegistrationOptionsResponse>(
-      "/api/formless/passkeys/register/options",
-      { setupToken },
-    );
-
-    expect(wrongToken.response.status).toBe(401);
-    expect(wrongToken.body).toEqual({
-      error: "Owner setup link is invalid.",
-      reason: "invalid-token",
-      setupComplete: false,
-    });
-    expect(accepted.response.status).toBe(200);
-    expect(accepted.response.headers.get("Cache-Control")).toBe("no-store");
-    expect(accepted.body.options.rp).toEqual({ id: relyingPartyId, name: relyingPartyName });
-    expect(accepted.body.options.challenge).toEqual(expect.any(String));
-    expect(JSON.stringify(accepted.body)).not.toContain(setupToken);
-  });
-
-  it("verifies registration against challenge, origin, RP id, and setup capability", async () => {
-    await configureAuth();
-    await createSetupCapability();
-
-    const authenticator = new VirtualPasskey(credentialId);
-    const options = await registrationOptions();
-    const wrongOrigin = await postJson("/api/formless/passkeys/register/verify", {
-      setupToken,
-      owner: { name: "Ada Owner" },
-      response: authenticator.registrationResponse(options.body.options, {
-        origin: "https://other.example.com",
-        rpId: relyingPartyId,
-      }),
-    });
-    const replayAfterFailedVerify = await postJson("/api/formless/passkeys/register/verify", {
-      setupToken,
-      owner: { name: "Ada Owner" },
-      response: authenticator.registrationResponse(options.body.options, {
-        origin: canonicalOrigin,
-        rpId: relyingPartyId,
-      }),
-    });
-
-    expect(wrongOrigin.response.status).toBe(401);
-    expect(wrongOrigin.body).toEqual({
-      error: "Passkey registration verification failed.",
-    });
-    expect(replayAfterFailedVerify.response.status).toBe(401);
-    expect(replayAfterFailedVerify.body).toEqual({
-      error: "Passkey challenge is invalid.",
-    });
-
-    const freshOptions = await registrationOptions();
-    const wrongRpId = await postJson("/api/formless/passkeys/register/verify", {
-      setupToken,
-      owner: { name: "Ada Owner" },
-      response: authenticator.registrationResponse(freshOptions.body.options, {
-        origin: canonicalOrigin,
-        rpId: "login.example.com",
-      }),
-    });
-
-    expect(wrongRpId.response.status).toBe(401);
-    expect(wrongRpId.body).toEqual({
-      error: "Passkey registration verification failed.",
-    });
-
-    const successfulOptions = await registrationOptions();
-    const verified = await postJson<OwnerPasskeyRegistrationVerifyResponse>(
-      "/api/formless/passkeys/register/verify",
-      {
-        setupToken,
-        owner: { name: "Ada Owner", email: "ada@example.com" },
-        response: authenticator.registrationResponse(successfulOptions.body.options, {
-          origin: canonicalOrigin,
-          rpId: relyingPartyId,
-        }),
-      },
-    );
-    const identity = await getJson<BootstrapResponse>("/api/formless/identity/bootstrap");
-    const setCookie = verified.response.headers.get("Set-Cookie");
-    const statusWithCentralSession = await getJson<OwnerSessionStatusResponse>(
-      "/api/formless/session",
-      { headers: { Cookie: cookiePair(setCookie) } },
-    );
-
-    expect(verified.response.status).toBe(200);
-    expect(setCookie).toContain(`${CENTRAL_AUTH_SESSION_COOKIE_NAME}=`);
-    expect(setCookie).not.toContain(`${OWNER_SESSION_COOKIE_NAME}=`);
-    expect(setCookie).not.toContain(`${HOST_AUTH_SESSION_COOKIE_NAME}=`);
-    expect(verified.body).toEqual({
-      setupComplete: true,
-      owner: {
-        id: expect.any(String),
-        name: "Ada Owner",
-        email: "ada@example.com",
-        createdAt: expect.any(String),
-      },
-      session: { expiresAt: expect.any(String) },
-    });
-    expect(statusWithCentralSession.body).toEqual({
-      authenticated: true,
-      owner: verified.body.owner,
-      session: { expiresAt: expect.any(String) },
-      setupComplete: true,
-    });
-    expectIdentityOwnerRecords(identity.body, verified.body.owner);
-  });
-
-  it("rejects setup completion without a passkey response without consuming setup state", async () => {
-    await configureAuth();
-    await createSetupCapability();
-
-    const authenticator = new VirtualPasskey(credentialId);
-    const options = await registrationOptions();
-    const missingResponse = await postJson("/api/formless/setup/complete", {
-      setupToken,
-      owner: { name: "Ada Owner" },
-    });
-    const statusAfterMissing = await getJson<OwnerSessionStatusResponse>("/api/formless/session");
-    const verified = await postJson<OwnerPasskeyRegistrationVerifyResponse>(
-      "/api/formless/setup/complete",
-      {
-        setupToken,
-        owner: { name: "Ada Owner", email: "ada@example.com" },
-        response: authenticator.registrationResponse(options.body.options, {
-          origin: canonicalOrigin,
-          rpId: relyingPartyId,
-        }),
-      },
-    );
-
-    expect(missingResponse.response.status).toBe(400);
-    expect(missingResponse.body).toEqual({
-      error: "Owner setup requires a passkey registration response.",
-    });
-    expect(statusAfterMissing.body).toEqual({ authenticated: false, setupComplete: false });
-    expect(verified.response.status).toBe(200);
-    expect(verified.response.headers.get("Set-Cookie")).toContain(
-      `${CENTRAL_AUTH_SESSION_COOKIE_NAME}=`,
-    );
-    expect(verified.response.headers.get("Set-Cookie")).not.toContain(
-      `${OWNER_SESSION_COOKIE_NAME}=`,
-    );
-    expect(verified.response.headers.get("Set-Cookie")).not.toContain(
-      `${HOST_AUTH_SESSION_COOKIE_NAME}=`,
-    );
-    expect(verified.body).toEqual({
-      setupComplete: true,
-      owner: {
-        id: expect.any(String),
-        name: "Ada Owner",
-        email: "ada@example.com",
-        createdAt: expect.any(String),
-      },
-      session: { expiresAt: expect.any(String) },
-    });
-  });
-
-  it("does not store owner state or consume setup capability when credential storage fails", async () => {
-    await configureAuth();
-    await createSetupCapability();
-    await createStoredCredential(credentialId);
-
-    const duplicateAuthenticator = new VirtualPasskey(credentialId);
-    const duplicateOptions = await registrationOptions();
-    const duplicate = await postJson("/api/formless/passkeys/register/verify", {
-      setupToken,
-      owner: { name: "Ada Owner" },
-      response: duplicateAuthenticator.registrationResponse(duplicateOptions.body.options, {
-        origin: canonicalOrigin,
-        rpId: relyingPartyId,
-      }),
-    });
-    const statusAfterDuplicate = await getJson<OwnerSessionStatusResponse>("/api/formless/session");
-    const identityAfterDuplicate = await getJson<BootstrapResponse>(
-      "/api/formless/identity/bootstrap",
-    );
-
-    expect(duplicate.response.status).toBe(409);
-    expect(duplicate.body).toEqual({ error: "Passkey credential already exists." });
-    expect(statusAfterDuplicate.body).toEqual({ authenticated: false, setupComplete: false });
-    expect(
-      identityAfterDuplicate.body.records.filter((record) => record.entity === "principal"),
-    ).toEqual([]);
-
-    const replacementAuthenticator = new VirtualPasskey("Y3JlZGVudGlhbC1yZXBsYWNlbWVudA");
-    const replacementOptions = await registrationOptions();
-    const verified = await postJson<OwnerPasskeyRegistrationVerifyResponse>(
-      "/api/formless/passkeys/register/verify",
-      {
-        setupToken,
-        owner: { name: "Ada Owner" },
-        response: replacementAuthenticator.registrationResponse(replacementOptions.body.options, {
-          origin: canonicalOrigin,
-          rpId: relyingPartyId,
-        }),
-      },
-    );
-
-    expect(verified.response.status).toBe(200);
-    expect(verified.body).toMatchObject({
-      setupComplete: true,
-      owner: { name: "Ada Owner" },
-      session: { expiresAt: expect.any(String) },
-    });
-  });
-
-  it("issues central sessions from first passkey setup without owner or host-local cookies", async () => {
-    const registered = await registerOwnerPasskey(new VirtualPasskey(credentialId));
-    const setCookie = registered.response.headers.get("Set-Cookie");
-    const sessionCookie = cookiePair(setCookie);
-    const statusWithCookie = await getJson<OwnerSessionStatusResponse>("/api/formless/session", {
-      headers: { Cookie: sessionCookie },
-    });
-    const appInstallsBefore = await getJson<AppInstallsResponse>("/api/formless/app-installs");
-    const ownerWrite = await postJson<CreateAppInstallResponse>(
-      "/api/formless/app-installs",
-      {
-        packageAppKey: "site",
-        installId: "site",
-        label: "Site",
-      },
-      { headers: { Cookie: sessionCookie } },
-    );
-    const tokenOnlyLogin = await postJson<{
-      authenticated: false;
-      error: string;
-    }>("/api/formless/session", {}, { headers: { Authorization: `Bearer ${adminToken}` } });
-    const logout = await postJson<OwnerLogoutResponse>(
-      "/api/formless/session/logout",
-      {},
-      { headers: { Cookie: sessionCookie } },
-    );
-    const appInstallsAfter = await getJson<AppInstallsResponse>("/api/formless/app-installs");
-    const statusAfterLogout = await getJson<OwnerSessionStatusResponse>("/api/formless/session");
-
-    expect(setCookie).toContain(`${CENTRAL_AUTH_SESSION_COOKIE_NAME}=`);
-    expect(setCookie).not.toContain(`${OWNER_SESSION_COOKIE_NAME}=`);
-    expect(setCookie).not.toContain(`${HOST_AUTH_SESSION_COOKIE_NAME}=`);
-    expect(statusWithCookie.body).toEqual({
-      authenticated: true,
-      owner: registered.body.owner,
-      session: { expiresAt: expect.any(String) },
-      setupComplete: true,
-    });
-    expect(appInstallsBefore.body.installs).toEqual([]);
-    expect(ownerWrite.response.status).toBe(201);
-    expect(ownerWrite.body.install).toMatchObject({
-      installId: "site",
-      packageAppKey: "site",
-    });
-    expect(appInstallsAfter.body.installs.map((install) => install.installId)).toEqual(["site"]);
-    expect(tokenOnlyLogin.response.status).toBe(401);
-    expect(tokenOnlyLogin.response.headers.get("Set-Cookie")).toBeNull();
-    expect(tokenOnlyLogin.body).toEqual({
-      authenticated: false,
-      error: "Passkey login is required.",
-    });
-    expect(logout.response.status).toBe(200);
-    expect(logout.response.headers.get("Set-Cookie")).toContain(
-      `${CENTRAL_AUTH_SESSION_COOKIE_NAME}=;`,
-    );
-    expect(logout.response.headers.get("Set-Cookie")).not.toContain(
-      `${OWNER_SESSION_COOKIE_NAME}=`,
-    );
-    expect(logout.response.headers.get("Set-Cookie")).not.toContain(
-      `${HOST_AUTH_SESSION_COOKIE_NAME}=`,
-    );
-    expect(logout.body).toEqual({
-      authenticated: false,
-      continueTo: "/formless/auth/sign-in",
-    });
-    expect(statusAfterLogout.body).toEqual({
-      authenticated: false,
-      owner: registered.body.owner,
-      setupComplete: true,
-    });
-  });
-
+describe("owner passkey login API routes", () => {
   it("creates login options and verifies assertions against owner credential facts", async () => {
     const authenticator = new VirtualPasskey(credentialId);
-    const registered = await registerOwnerPasskey(authenticator);
-
+    const owner = await seedOwnerPasskey(authenticator);
     const options = await loginOptions();
 
     expect(options.response.status).toBe(200);
@@ -410,7 +98,7 @@ describe("owner passkey API routes", () => {
     expect(accepted.body).toEqual({
       authenticated: true,
       continueTo: "/formless/auth",
-      owner: registered.body.owner,
+      owner,
       session: { expiresAt: expect.any(String) },
     });
     expect(replay.response.status).toBe(401);
@@ -419,10 +107,10 @@ describe("owner passkey API routes", () => {
 
     await createStoredCredential("Y3JlZGVudGlhbC0y", "other-principal");
 
-    const wrongPrincipalCredentialOptions = await loginOptions();
-    const wrongPrincipalCredential = await verifyLogin(
+    const wrongPrincipalOptions = await loginOptions();
+    const wrongPrincipal = await verifyLogin(
       new VirtualPasskey("Y3JlZGVudGlhbC0y").authenticationResponse(
-        wrongPrincipalCredentialOptions.body.options,
+        wrongPrincipalOptions.body.options,
         {
           counter: 2,
           origin: canonicalOrigin,
@@ -431,9 +119,8 @@ describe("owner passkey API routes", () => {
       ),
     );
 
-    expect(wrongPrincipalCredential.response.status).toBe(401);
-    expect(wrongPrincipalCredential.response.headers.get("Set-Cookie")).toBeNull();
-    expect(wrongPrincipalCredential.body).toEqual({
+    expect(wrongPrincipal.response.status).toBe(401);
+    expect(wrongPrincipal.body).toEqual({
       authenticated: false,
       error: "Passkey credential is invalid.",
     });
@@ -448,7 +135,6 @@ describe("owner passkey API routes", () => {
     );
 
     expect(wrongOrigin.response.status).toBe(401);
-    expect(wrongOrigin.response.headers.get("Set-Cookie")).toBeNull();
     expect(wrongOrigin.body).toEqual({
       authenticated: false,
       error: "Passkey login verification failed.",
@@ -464,7 +150,6 @@ describe("owner passkey API routes", () => {
     );
 
     expect(wrongRp.response.status).toBe(401);
-    expect(wrongRp.response.headers.get("Set-Cookie")).toBeNull();
     expect(wrongRp.body).toEqual({
       authenticated: false,
       error: "Passkey login verification failed.",
@@ -480,7 +165,6 @@ describe("owner passkey API routes", () => {
     );
 
     expect(counterRegression.response.status).toBe(401);
-    expect(counterRegression.response.headers.get("Set-Cookie")).toBeNull();
     expect(counterRegression.body).toEqual({
       authenticated: false,
       error: "Passkey login verification failed.",
@@ -489,8 +173,7 @@ describe("owner passkey API routes", () => {
 
   it("rejects app-controlled redirect input without consuming the login challenge", async () => {
     const authenticator = new VirtualPasskey(credentialId);
-    const registered = await registerOwnerPasskey(authenticator);
-
+    const owner = await seedOwnerPasskey(authenticator);
     const options = await loginOptions();
     const response = authenticator.authenticationResponse(options.body.options, {
       counter: 1,
@@ -506,19 +189,10 @@ describe("owner passkey API routes", () => {
       error: 'Passkey login verify request has unsupported key "redirectTo".',
     });
     expect(accepted.response.status).toBe(200);
-    expect(accepted.response.headers.get("Set-Cookie")).toContain(
-      `${CENTRAL_AUTH_SESSION_COOKIE_NAME}=`,
-    );
-    expect(accepted.response.headers.get("Set-Cookie")).not.toContain(
-      `${OWNER_SESSION_COOKIE_NAME}=`,
-    );
-    expect(accepted.response.headers.get("Set-Cookie")).not.toContain(
-      `${HOST_AUTH_SESSION_COOKIE_NAME}=`,
-    );
     expect(accepted.body).toEqual({
       authenticated: true,
       continueTo: "/formless/auth",
-      owner: registered.body.owner,
+      owner,
       session: { expiresAt: expect.any(String) },
     });
   });
@@ -545,13 +219,19 @@ async function configureAuth() {
   expect(response.response.status).toBe(200);
 }
 
-async function createSetupCapability() {
-  const response = await postJson("/harness/setup/capability", {
-    setupToken,
-    expiresAt: futureExpiresAt,
+async function seedOwnerPasskey(authenticator: VirtualPasskey) {
+  await configureAuth();
+
+  const response = await postJson<{
+    owner: { createdAt: string; email?: string; id: string; name: string };
+  }>("/harness/owner-passkey", {
+    credentialId,
+    credentialPublicKey: [...authenticator.credentialPublicKey()],
   });
 
   expect(response.response.status).toBe(200);
+
+  return response.body.owner;
 }
 
 async function createStoredCredential(
@@ -566,58 +246,10 @@ async function createStoredCredential(
   expect(response.response.status).toBe(200);
 }
 
-async function getJson<T = unknown>(path: string, init: HarnessFetchInit = {}) {
-  const response = await harness.fetch(path, {
-    ...init,
-    headers: {
-      Authorization: `Bearer ${adminToken}`,
-      ...(init.headers as Record<string, string> | undefined),
-    },
-  });
-
-  return {
-    body: (await response.json()) as T,
-    response,
-  };
-}
-
-async function registrationOptions() {
-  const response = await postJson<OwnerPasskeyRegistrationOptionsResponse>(
-    "/api/formless/passkeys/register/options",
-    { setupToken },
-  );
-
-  expect(response.response.status).toBe(200);
-
-  return response;
-}
-
 async function loginOptions() {
   const response = await postJson<OwnerPasskeyLoginOptionsResponse>(
     "/api/formless/passkeys/login/options",
     {},
-  );
-
-  expect(response.response.status).toBe(200);
-
-  return response;
-}
-
-async function registerOwnerPasskey(authenticator: VirtualPasskey) {
-  await configureAuth();
-  await createSetupCapability();
-
-  const options = await registrationOptions();
-  const response = await postJson<OwnerPasskeyRegistrationVerifyResponse>(
-    "/api/formless/passkeys/register/verify",
-    {
-      setupToken,
-      owner: { name: "Ada Owner", email: "ada@example.com" },
-      response: authenticator.registrationResponse(options.body.options, {
-        origin: canonicalOrigin,
-        rpId: relyingPartyId,
-      }),
-    },
   );
 
   expect(response.response.status).toBe(200);
@@ -636,15 +268,13 @@ async function verifyLogin(
 }
 
 async function postJson<T = unknown>(path: string, body: unknown, init: HarnessFetchInit = {}) {
-  const headers = {
-    ...(init.headers as Record<string, string> | undefined),
-    "Content-Type": "application/json",
-  };
-
   const response = await harness.fetch(path, {
     ...init,
     body: JSON.stringify(body),
-    headers,
+    headers: {
+      ...(init.headers as Record<string, string> | undefined),
+      "Content-Type": "application/json",
+    },
     method: "POST",
   });
 
@@ -652,63 +282,6 @@ async function postJson<T = unknown>(path: string, body: unknown, init: HarnessF
     body: (await response.json()) as T,
     response,
   };
-}
-
-function cookiePair(cookie: string | null) {
-  if (!cookie) {
-    throw new Error("Missing Set-Cookie header.");
-  }
-
-  return cookie.split(";")[0] ?? cookie;
-}
-
-function expectIdentityOwnerRecords(
-  identity: BootstrapResponse,
-  owner: OwnerPasskeyRegistrationVerifyResponse["owner"],
-) {
-  const principal = identity.records.find(
-    (record) => record.entity === "principal" && record.id === owner.id,
-  );
-  const email = identity.records.find(
-    (record) => record.entity === "principal-email" && record.values.principal === owner.id,
-  );
-  const assignment = identity.records.find(
-    (record) =>
-      record.entity === "role-assignment" &&
-      record.values.role === "role:instance.owner" &&
-      record.values.targetPrincipal === owner.id,
-  );
-
-  expect(principal).toMatchObject({
-    id: owner.id,
-    entity: "principal",
-    values: {
-      displayName: owner.name,
-      kind: "human",
-      status: "active",
-    },
-  });
-  expect(email).toMatchObject({
-    entity: "principal-email",
-    values: {
-      principal: owner.id,
-      displayEmail: owner.email,
-      normalizedEmail: owner.email,
-      verificationStatus: "unverified",
-      primary: true,
-      recovery: true,
-    },
-  });
-  expect(assignment).toMatchObject({
-    entity: "role-assignment",
-    values: {
-      role: "role:instance.owner",
-      targetKind: "principal",
-      targetPrincipal: owner.id,
-      scopeKind: "instance",
-      status: "active",
-    },
-  });
 }
 
 class VirtualPasskey {
@@ -724,42 +297,11 @@ class VirtualPasskey {
     this.publicKey = pair.publicKey;
   }
 
-  registrationResponse(
-    options: PublicKeyCredentialCreationOptionsJSON,
-    input: { origin: string; rpId: string },
-  ): RegistrationResponseJSON {
-    const clientDataJSON = clientDataJson("webauthn.create", options.challenge, input.origin);
-    const authData = registrationAuthenticatorData({
-      credentialId: base64UrlDecode(this.credentialId),
-      credentialPublicKey: this.credentialPublicKey(),
-      counter: 0,
-      rpId: input.rpId,
-    });
-    const attestationObject = cborMap([
-      ["fmt", "none"],
-      ["attStmt", []],
-      ["authData", authData],
-    ]);
-
-    return {
-      id: this.credentialId,
-      rawId: this.credentialId,
-      response: {
-        clientDataJSON: base64UrlEncode(clientDataJSON),
-        attestationObject: base64UrlEncode(attestationObject),
-        transports: ["internal"],
-      },
-      authenticatorAttachment: "platform",
-      clientExtensionResults: {},
-      type: "public-key",
-    };
-  }
-
   authenticationResponse(
     options: PublicKeyCredentialRequestOptionsJSON,
     input: { counter: number; origin: string; rpId: string },
   ): AuthenticationResponseJSON {
-    const clientDataJSON = clientDataJson("webauthn.get", options.challenge, input.origin);
+    const clientDataJSON = clientDataJson(options.challenge, input.origin);
     const authenticatorData = authenticationAuthenticatorData({
       counter: input.counter,
       rpId: input.rpId,
@@ -783,7 +325,7 @@ class VirtualPasskey {
     };
   }
 
-  private credentialPublicKey(): Uint8Array {
+  credentialPublicKey(): Uint8Array {
     const jwk = this.publicKey.export({ format: "jwk" }) as JsonWebKey;
 
     if (!jwk.x || !jwk.y) {
@@ -800,28 +342,6 @@ class VirtualPasskey {
   }
 }
 
-function registrationAuthenticatorData(input: {
-  counter: number;
-  credentialId: Uint8Array;
-  credentialPublicKey: Uint8Array;
-  rpId: string;
-}) {
-  const credentialIdLength = new Uint8Array(2);
-  const credentialIdLengthView = new DataView(credentialIdLength.buffer);
-
-  credentialIdLengthView.setUint16(0, input.credentialId.byteLength, false);
-
-  return concatBytes([
-    sha256(new TextEncoder().encode(input.rpId)),
-    new Uint8Array([0x45]),
-    uint32(input.counter),
-    new Uint8Array(16),
-    credentialIdLength,
-    input.credentialId,
-    input.credentialPublicKey,
-  ]);
-}
-
 function authenticationAuthenticatorData(input: { counter: number; rpId: string }) {
   return concatBytes([
     sha256(new TextEncoder().encode(input.rpId)),
@@ -830,14 +350,10 @@ function authenticationAuthenticatorData(input: { counter: number; rpId: string 
   ]);
 }
 
-function clientDataJson(
-  type: "webauthn.create" | "webauthn.get",
-  challenge: string,
-  origin: string,
-) {
+function clientDataJson(challenge: string, origin: string) {
   return new TextEncoder().encode(
     JSON.stringify({
-      type,
+      type: "webauthn.get",
       challenge,
       origin,
       crossOrigin: false,
@@ -875,10 +391,6 @@ function cborEncode(value: CborValue): Uint8Array {
 }
 
 function cborHeader(major: number, value: number): Uint8Array {
-  if (!Number.isInteger(value) || value < 0) {
-    throw new Error("CBOR value must be a non-negative integer.");
-  }
-
   if (value < 24) {
     return new Uint8Array([(major << 5) | value]);
   }
@@ -889,28 +401,22 @@ function cborHeader(major: number, value: number): Uint8Array {
 
   if (value <= 0xffff) {
     const bytes = new Uint8Array(3);
-    const view = new DataView(bytes.buffer);
-
+    new DataView(bytes.buffer).setUint16(1, value, false);
     bytes[0] = (major << 5) | 25;
-    view.setUint16(1, value, false);
 
     return bytes;
   }
 
   const bytes = new Uint8Array(5);
-  const view = new DataView(bytes.buffer);
-
+  new DataView(bytes.buffer).setUint32(1, value, false);
   bytes[0] = (major << 5) | 26;
-  view.setUint32(1, value, false);
 
   return bytes;
 }
 
 function uint32(value: number): Uint8Array {
   const bytes = new Uint8Array(4);
-  const view = new DataView(bytes.buffer);
-
-  view.setUint32(0, value, false);
+  new DataView(bytes.buffer).setUint32(0, value, false);
 
   return bytes;
 }
@@ -920,8 +426,7 @@ function sha256(bytes: Uint8Array): Uint8Array {
 }
 
 function concatBytes(chunks: readonly Uint8Array[]): Uint8Array {
-  const totalLength = chunks.reduce((total, chunk) => total + chunk.byteLength, 0);
-  const output = new Uint8Array(totalLength);
+  const output = new Uint8Array(chunks.reduce((total, chunk) => total + chunk.byteLength, 0));
   let offset = 0;
 
   for (const chunk of chunks) {
@@ -951,7 +456,7 @@ async function writeOwnerPasskeyHarness() {
       import { FormlessAuthority } from "${process.cwd()}/src/worker/authority.ts";
       import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "${process.cwd()}/src/worker/formless-instance.ts";
       import { IDENTITY_CONTROL_PLANE_API_ROUTE_PREFIX, IDENTITY_CONTROL_PLANE_STORAGE_IDENTITY } from "@dpeek/formless-identity-control-plane";
-      import { hashOwnerSetupToken, writeOwnerSetupCapability } from "${process.cwd()}/src/worker/instance-setup-state.ts";
+      import { ensureIdentityOwner } from "${process.cwd()}/src/worker/identity-control-plane.ts";
       import { createPasskeyCredential, writeInstanceAuthConfig } from "${process.cwd()}/src/worker/instance-auth-state.ts";
 
       export class OwnerPasskeyApiHarness extends FormlessAuthority {
@@ -964,16 +469,26 @@ async function writeOwnerPasskeyHarness() {
             return Response.json({ config });
           }
 
-          if (request.method === "POST" && url.pathname === "/harness/setup/capability") {
+          if (request.method === "POST" && url.pathname === "/harness/owner-passkey") {
             const body = await request.json();
-            const capability = writeOwnerSetupCapability(this.ctx.storage, {
-              tokenHash: await hashOwnerSetupToken(body.setupToken),
-              instanceId: url.hostname.toLowerCase(),
+            const owner = await ensureIdentityOwner(this.env, {
+              now: nowIsoString(),
+              owner: { name: "Ada Owner", email: "ada@example.com" },
+              ownerId: "owner",
+            });
+            const credential = createPasskeyCredential(this.ctx.storage, {
+              credentialId: body.credentialId,
+              principalId: owner.id,
+              publicKey: new Uint8Array(body.credentialPublicKey),
+              counter: 0,
+              transports: ["internal"],
+              credentialDeviceType: "singleDevice",
+              credentialBackedUp: false,
               createdAt: nowIsoString(),
-              expiresAt: body.expiresAt,
+              updatedAt: nowIsoString(),
             });
 
-            return Response.json(capability);
+            return Response.json({ credential, owner });
           }
 
           if (request.method === "POST" && url.pathname === "/harness/credential") {

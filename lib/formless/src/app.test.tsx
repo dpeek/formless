@@ -32,12 +32,16 @@ describe("application route selection", () => {
     const account = renderRoute("/formless/auth", {
       runtimeProfile: createPublishedSiteRuntimeProfile(),
     });
+    const ownerSetup = renderRoute("/formless/auth/setup", {
+      runtimeProfile: createPublishedSiteRuntimeProfile(),
+    });
     const publishedSite = renderRoute("/blog/shipping", {
       runtimeProfile: createPublishedSiteRuntimeProfile(),
     });
 
     expect(localSession).toContain('data-route="local-session"');
     expect(account).toContain('data-route="auth-account"');
+    expect(ownerSetup).toContain('data-route="auth-account"');
     expect(publishedSite).toContain('data-route="public-site"');
     expect(publishedSite).toContain('data-link-mode="published"');
     expect(publishedSite).toContain('data-slug="blog/shipping"');
@@ -114,7 +118,6 @@ function routeComponents(): AppRouteComponents {
     InstanceShellRoute: () => <output data-route="instance" />,
     LocalSessionRoute: () => <output data-route="local-session" />,
     OwnerLoginRoute: () => <output data-route="owner-login" />,
-    OwnerSetupRoute: () => <output data-route="owner-setup" />,
     SitePageRoute: ({ linkMode, routeBase, slug, target }) => (
       <output
         data-install-id={targetInstallId(target)}

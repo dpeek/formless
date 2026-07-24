@@ -124,6 +124,7 @@ export function AstryxAuthRenderer({
         data-formless-astryx-auth-surface={surface.id}
         data-formless-astryx-auth-surface-kind={surface.surfaceKind}
         data-formless-astryx-auth-surface-state={surface.state}
+        data-formless-astryx-auth-surface-step={"step" in surface ? surface.step : undefined}
         {...stylex.props(styles.frame)}
       >
         <VStack gap={5} hAlign="center" width="100%">

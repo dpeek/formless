@@ -4,10 +4,8 @@ import {
   isSyncSocketClientMessage,
   isSyncSocketServerMessage,
   parseCreateAppInstallRequest,
-  parseOwnerSetupCompleteRequest,
   parseOwnerSetupToken,
   type ChangeRow,
-  type OwnerSetupCompleteRequest,
   type SyncResponse,
 } from "./protocol.ts";
 import type { StoredRecord } from "@dpeek/formless-storage";
@@ -140,49 +138,6 @@ describe("owner setup protocol", () => {
     expect(() => parseOwnerSetupToken("abcDEF0123456789_-abcDEF0123456789_~")).toThrow(
       "Owner setup token must be URL-safe.",
     );
-  });
-
-  it("parses complete requests with the first owner identity", () => {
-    const request = {
-      setupToken: "abcDEF0123456789_-abcDEF0123456789_-",
-      owner: {
-        name: "  Ada Owner  ",
-        email: "  ada@example.com  ",
-      },
-    };
-
-    expect(parseOwnerSetupCompleteRequest(request)).toEqual({
-      setupToken: request.setupToken,
-      owner: {
-        name: "Ada Owner",
-        email: "ada@example.com",
-      },
-    } satisfies OwnerSetupCompleteRequest);
-  });
-
-  it("rejects unsupported complete request shapes", () => {
-    expect(() => parseOwnerSetupCompleteRequest({ owner: { name: "Ada" } })).toThrow(
-      'Owner setup request must include "setupToken".',
-    );
-    expect(() =>
-      parseOwnerSetupCompleteRequest({
-        setupToken: "abcDEF0123456789_-abcDEF0123456789_-",
-        owner: { name: "" },
-      }),
-    ).toThrow("Owner setup owner name must be a non-empty string.");
-    expect(() =>
-      parseOwnerSetupCompleteRequest({
-        setupToken: "abcDEF0123456789_-abcDEF0123456789_-",
-        owner: { name: "Ada", role: "admin" },
-      }),
-    ).toThrow('Owner setup owner has unsupported key "role".');
-    expect(() =>
-      parseOwnerSetupCompleteRequest({
-        setupToken: "abcDEF0123456789_-abcDEF0123456789_-",
-        owner: { name: "Ada" },
-        redirectTo: "/admin",
-      }),
-    ).toThrow('Owner setup request has unsupported key "redirectTo".');
   });
 });
 

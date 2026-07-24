@@ -68,7 +68,6 @@ type PasskeyChallengeRow = {
   challenge: string;
   invitation_id: string | null;
   invitation_token_hash: string | null;
-  setup_token_hash: string | null;
   principal_id: string | null;
   registration_origin: string | null;
   registration_relying_party_id: string | null;
@@ -183,16 +182,6 @@ export type WriteInstanceAuthConfigInput = InstanceAuthConfigInput & {
 
 export type PasskeyChallengeKind = (typeof passkeyChallengeKinds)[number];
 
-export type StoredOwnerPasskeyRegistrationChallenge = {
-  id: string;
-  kind: "registration";
-  challenge: string;
-  setupTokenHash: string;
-  createdAt: string;
-  expiresAt: string;
-  consumedAt?: string;
-};
-
 export type StoredCollaboratorInvitationPasskeyRegistrationChallenge = {
   canonicalOrigin: string;
   challenge: string;
@@ -221,7 +210,6 @@ export type StoredEmailVerifiedSignupPasskeyRegistrationChallenge = {
 };
 
 export type StoredPasskeyRegistrationChallenge =
-  | StoredOwnerPasskeyRegistrationChallenge
   | StoredCollaboratorInvitationPasskeyRegistrationChallenge
   | StoredEmailVerifiedSignupPasskeyRegistrationChallenge;
 
@@ -240,14 +228,6 @@ export type StoredPasskeyChallenge =
   | StoredPasskeyLoginChallenge;
 
 export type CreatePasskeyChallengeInput =
-  | {
-      id?: string;
-      kind: "registration";
-      challenge: string;
-      setupTokenHash: string;
-      createdAt?: string;
-      expiresAt: string;
-    }
   | {
       canonicalOrigin: string;
       challenge: string;
@@ -653,7 +633,6 @@ export function ensureInstanceAuthTables(storage: DurableObjectStorage) {
       challenge TEXT NOT NULL UNIQUE,
       invitation_id TEXT,
       invitation_token_hash TEXT,
-      setup_token_hash TEXT,
       principal_id TEXT,
       registration_origin TEXT,
       registration_relying_party_id TEXT,
@@ -663,17 +642,6 @@ export function ensureInstanceAuthTables(storage: DurableObjectStorage) {
       CHECK (
         (
           kind = 'registration'
-          AND setup_token_hash IS NOT NULL
-          AND principal_id IS NULL
-          AND invitation_id IS NULL
-          AND invitation_token_hash IS NULL
-          AND registration_origin IS NULL
-          AND registration_relying_party_id IS NULL
-        )
-        OR
-        (
-          kind = 'registration'
-          AND setup_token_hash IS NULL
           AND principal_id IS NOT NULL
           AND invitation_id IS NOT NULL
           AND invitation_token_hash IS NOT NULL
@@ -683,7 +651,6 @@ export function ensureInstanceAuthTables(storage: DurableObjectStorage) {
         OR
         (
           kind = 'login'
-          AND setup_token_hash IS NULL
           AND principal_id IS NOT NULL
           AND invitation_id IS NULL
           AND invitation_token_hash IS NULL
@@ -985,7 +952,6 @@ export function createPasskeyChallenge(
           challenge,
           invitation_id,
           invitation_token_hash,
-          setup_token_hash,
           principal_id,
           registration_origin,
           registration_relying_party_id,
@@ -993,7 +959,7 @@ export function createPasskeyChallenge(
           expires_at,
           consumed_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
       normalizedChallenge.id,
       normalizedChallenge.kind,
@@ -1008,7 +974,6 @@ export function createPasskeyChallenge(
         : "invitationTokenHash" in normalizedChallenge
           ? normalizedChallenge.invitationTokenHash
           : null,
-      "setupTokenHash" in normalizedChallenge ? normalizedChallenge.setupTokenHash : null,
       "principalId" in normalizedChallenge ? normalizedChallenge.principalId : null,
       "canonicalOrigin" in normalizedChallenge ? normalizedChallenge.canonicalOrigin : null,
       "relyingPartyId" in normalizedChallenge ? normalizedChallenge.relyingPartyId : null,
@@ -1177,6 +1142,29 @@ export function readPasskeyCredential(
     storage,
     parseBase64UrlString("Passkey credential id", credentialId),
   );
+}
+
+export function deletePasskeyCredentialInCurrentTransaction(
+  storage: DurableObjectStorage,
+  input: { credentialId: unknown; principalId: unknown },
+): boolean {
+  ensureInstanceAuthTables(storage);
+
+  const credentialId = parseBase64UrlString("Passkey credential id", input.credentialId);
+  const principalId = parseNonEmptyString("Passkey credential principal id", input.principalId);
+  const existing = readPasskeyCredentialById(storage, credentialId);
+
+  if (!existing || existing.principalId !== principalId) {
+    return false;
+  }
+
+  storage.sql.exec(
+    "DELETE FROM instance_auth_passkey_credentials WHERE credential_id = ? AND principal_id = ?",
+    credentialId,
+    principalId,
+  );
+
+  return true;
 }
 
 export function readPasskeyCredentialsForPrincipal(
@@ -1359,6 +1347,29 @@ export function readCentralAuthSession(
     storage,
     parseBase64UrlString("Central auth session id hash", sessionIdHash),
   );
+}
+
+export function deleteCentralAuthSessionInCurrentTransaction(
+  storage: DurableObjectStorage,
+  input: { principalId: unknown; sessionIdHash: unknown },
+): boolean {
+  ensureInstanceAuthTables(storage);
+
+  const sessionIdHash = parseBase64UrlString("Central auth session id hash", input.sessionIdHash);
+  const principalId = parseNonEmptyString("Central auth session principal id", input.principalId);
+  const existing = readCentralAuthSessionByHash(storage, sessionIdHash);
+
+  if (!existing || existing.principalId !== principalId) {
+    return false;
+  }
+
+  storage.sql.exec(
+    "DELETE FROM instance_auth_central_sessions WHERE session_id_hash = ? AND principal_id = ?",
+    sessionIdHash,
+    principalId,
+  );
+
+  return true;
 }
 
 export function revokeCentralAuthSession(
@@ -2155,20 +2166,6 @@ function normalizePasskeyChallengeInput(
       throw new Error("Passkey registration challenge kind must be registration.");
     }
 
-    if ("setupTokenHash" in input) {
-      return {
-        id,
-        kind,
-        challenge,
-        setupTokenHash: parseBase64UrlString(
-          "Passkey challenge setup token hash",
-          input.setupTokenHash,
-        ),
-        createdAt,
-        expiresAt,
-      };
-    }
-
     const canonicalOrigin = parseInstanceAuthCanonicalOrigin(input.canonicalOrigin);
 
     if ("signupEmailChallengeId" in input) {
@@ -2239,7 +2236,6 @@ function readPasskeyChallengeByChallenge(
           challenge,
           invitation_id,
           invitation_token_hash,
-          setup_token_hash,
           principal_id,
           registration_origin,
           registration_relying_party_id,
@@ -2266,14 +2262,6 @@ function passkeyChallengeFromRow(row: PasskeyChallengeRow): StoredPasskeyChallen
   };
 
   if (row.kind === "registration") {
-    if (row.setup_token_hash !== null) {
-      return {
-        ...base,
-        kind: "registration",
-        setupTokenHash: row.setup_token_hash,
-      };
-    }
-
     if (
       row.invitation_id !== null &&
       row.invitation_token_hash === signupPasskeyChallengeScopeHash &&

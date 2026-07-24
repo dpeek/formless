@@ -84,41 +84,93 @@ ceremonies.
 - AND local-dev bootstrap sessions and preview deployment remain available
   without creating production passkey credentials
 
-### Requirement: First Owner Passkey Setup
+### Requirement: Production First Owner Account Setup
 
-The system SHALL register the first owner passkey as part of passkey-backed
-first-owner setup.
+The system SHALL complete deployed first-owner setup through the auth-origin
+account journey after verifying the owner's primary email and passkey.
 
-#### Scenario: Complete setup with passkey
+#### Scenario: Start owner setup through the account journey
 
-- GIVEN a valid owner setup capability exists for the instance
-- WHEN setup completion submits owner identity and a valid passkey registration
-  response for the active registration challenge
-- THEN the system stores an active principal for the owner identity
-- AND if the setup request includes an owner email, the system stores a primary
-  principal-email record for that principal
-- AND the system stores an active `instance.owner` role assignment for that
-  principal at instance scope
-- AND the system stores the passkey credential for that principal
+- GIVEN first-owner setup is incomplete
+- AND a valid owner setup capability exists for the instance
+- AND a browser opens `/formless/auth/setup` on the configured auth origin
+- WHEN the browser submits its required display name and primary email
+- THEN the account orchestrator validates the capability for the host-derived
+  instance
+- AND the setup surface collects a required display name and required primary
+  email
+- AND starting setup creates a private `owner-setup` email challenge bound to
+  the setup capability hash, instance, auth origin, and runtime-owned
+  continuation
+- AND missing auth or email-delivery configuration is rejected before creating
+  the challenge
+- AND starting setup does not create a principal, principal-email, credential,
+  role assignment, session, app install, route, or handoff grant
+
+#### Scenario: Register owner passkey after verified email
+
+- GIVEN a valid owner setup capability has an unexpired verified email proof
+  for its required primary email
+- WHEN the browser requests passkey registration options on the configured auth
+  origin
+- THEN the one-time registration challenge is bound to the setup capability,
+  verified email proof, instance, auth origin, and relying-party id
+- AND passkey options are not issued for an unverified, expired, revoked,
+  consumed, wrong-capability, wrong-instance, or wrong-origin email proof
+
+#### Scenario: Complete production owner setup
+
+- GIVEN a valid owner setup capability has verified control of its required
+  primary email
+- AND passkey registration has been verified on the configured auth origin and
+  relying-party id
+- WHEN the runtime commits first-owner setup
+- THEN the system makes one active human principal, one verified primary
+  recovery `principal-email`, one active `instance.owner` role assignment, and
+  one passkey credential effective for that principal
 - AND the setup capability is consumed
 - AND no app install metadata or route record is created by owner setup
 - AND a central auth session cookie is issued for that principal on the
   configured auth origin
-- AND when a valid admin target exists, the response includes a display-safe
-  continuation target that moves the browser through the account continuation
-  or mapped-admin entry flow instead of leaving a durable setup-complete surface
-- AND deployed passkey setup does not issue a host-local session cookie
+- AND account completion continues through the runtime-owned account
+  continuation or mapped-admin handoff instead of leaving a durable
+  setup-complete surface
+- AND deployed owner setup does not issue an owner session or host-local session
+  cookie
 
-#### Scenario: Reject setup without valid passkey
+#### Scenario: Prepare owner setup without partial authority
+
+- GIVEN identity records and private auth state have separate transaction
+  owners
+- WHEN the runtime prepares a verified owner setup completion before its final
+  activation decision
+- THEN it may retain private, purpose-bound, non-authorizing preparation state
+  needed to resume or revoke that completion
+- AND prepared state is absent from identity records, reviewable snapshots,
+  archives, sync payloads, browser presentation contracts, credential lookup,
+  session authorization, and owner authorization
+- AND no prepared principal, email proof, credential, role assignment, session,
+  or setup capability is treated as active, verified, accepted, or consumed
+- AND the final activation decision is idempotent and makes the principal,
+  verified primary email, credential, owner role, consumed capability, and
+  central session effective as one logical completion
+- AND retry after an interrupted response resumes the same completion or
+  returns its completed account continuation without granting duplicate
+  identity, credential, role, or session authority
+
+#### Scenario: Reject incomplete owner setup
 
 - GIVEN a valid owner setup capability exists for the instance
-- WHEN setup completion omits the passkey registration response or submits an
-  invalid registration response
+- WHEN setup completion lacks a verified primary email proof or valid passkey
+  registration response, or the verified email or credential conflicts with an
+  existing identity
 - THEN setup completion is rejected
-- AND no owner principal or owner role assignment is stored
-- AND no setup capability is consumed
-- AND no central auth session, owner session, or host-local session cookie is
-  issued
+- AND no principal, verified principal-email, passkey credential, owner role
+  assignment, central session, owner session, or host-local session becomes
+  effective
+- AND the setup capability is not consumed
+- AND the failure does not disclose whether an unrelated principal owns the
+  normalized email or credential
 
 ### Requirement: Passkey Credential Storage
 
@@ -150,9 +202,10 @@ instance-scoped.
 
 - GIVEN first-owner setup is not complete and a valid setup capability is
   supplied
+- AND the capability has a current verified `owner-setup` email proof
 - WHEN registration options are requested
 - THEN the system stores a one-time registration challenge scoped to the
-  instance and setup capability
+  instance, setup capability, and verified email proof
 - AND the response contains only browser-safe WebAuthn creation options
 
 #### Scenario: Login options
@@ -777,6 +830,20 @@ account completion gates.
 - AND passkey ceremonies remain scoped to the configured auth origin and
   relying-party id
 
+#### Scenario: Orchestrate production owner setup
+
+- GIVEN `/formless/auth/setup` carries a valid first-owner setup capability
+- WHEN the browser completes display-name entry, required email verification,
+  and passkey registration
+- THEN each step is represented by the `/formless/auth` account journey and its
+  renderer-neutral presentation contract
+- AND the owner setup capability, private email proof, passkey options,
+  credential response, preparation state, session material, and raw
+  continuation state remain runtime-owned
+- AND successful setup re-enters account completion for the runtime-selected
+  administration target before returning a same-origin continuation or
+  target-bound handoff
+
 #### Scenario: Preserve machine-readable account gate responses
 
 - GIVEN protected browser APIs, installed app APIs, operation requests, or
@@ -839,17 +906,20 @@ ceremonies, sessions, route policy, operations, and navigation.
 - WHEN setup status, session status, passkey support, controlled owner identity,
   pending state, failure, completion, or continuation changes
 - THEN the auth contract represents loading, invalid or incomplete setup,
-  ready, submitting, passkey-unavailable, failed, already-complete, complete,
+  identity entry, email sending, email sent, email verification, credential
+  creation, passkey-unavailable, failed, already-complete, complete,
   logout-pending, and continuing states where applicable
-- AND ready owner setup carries controlled required name and optional email
-  fields plus one passkey-backed submit action
+- AND owner setup carries controlled required display-name, primary-email, and
+  verification-token fields plus the action available for its current account
+  step
 - AND owner sign-in carries only display-safe owner identity, passkey action,
   logout action, and runtime-approved continuation presentation applicable to
   the current state
 - AND successful setup and sign-in remain transient continuation states rather
   than becoming a durable account dashboard
-- AND setup capability tokens, passkey options, credential responses, challenge
-  ids, and session material are absent from every auth snapshot
+- AND setup capability tokens, raw email tokens, passkey options, credential
+  responses, private challenge ids, preparation state, and session material are
+  absent from every auth snapshot
 
 #### Scenario: Project account gates and signup states
 
@@ -1197,10 +1267,13 @@ instance auth state bound to the configured auth origin and account target.
 - GIVEN a browser submits an email verification token on the configured auth
   origin for the matching account target
 - WHEN private auth state verifies an unexpired, unrevoked, unconsumed token
-- THEN identity storage creates or updates one `principal-email` record for the
-  principal with normalized email, display email, verified status, primary flag,
-  and verified timestamp according to the target flow
-- AND the token is consumed only when the matching identity write is durable
+- THEN a flow for an existing principal creates or updates one
+  `principal-email` record with normalized email, display email, verified
+  status, primary flag, and verified timestamp according to the target flow
+- AND a pre-identity signup or first-owner flow instead retains a private
+  verified email proof bound to its account target until identity activation
+- AND the token is consumed only when the matching identity write or private
+  first-owner proof is durable
 - AND wrong-token, wrong-email, wrong-target, expired, revoked, consumed, or
   missing challenge attempts do not reveal whether an unrelated principal
   exists for the same email
@@ -1530,8 +1603,8 @@ without requiring passkey registration.
   workspace gateway mutations
 - **THEN** local session bootstrap is the owner-session setup path
 - **AND** first-owner passkey setup is not required for local dev onboarding
-- **AND** deployed or remote instance owner setup still uses the passkey-backed
-  first-owner setup flow
+- **AND** deployed or remote instance owner setup still uses the
+  verified-email-first passkey-backed account journey
 
 #### Scenario: Reject local bootstrap outside local dev
 

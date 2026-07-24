@@ -31,7 +31,7 @@ import {
 import {
   ownerSignInAuthSurfaceReference,
   projectOwnerSignInAuthSurface,
-} from "./owner-auth-projection.ts";
+} from "./owner-sign-in-auth-projection.ts";
 
 export type OwnerLoginRouteState =
   | { status: "complete"; owner: OwnerIdentity }

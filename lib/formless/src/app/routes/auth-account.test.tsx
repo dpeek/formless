@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
+import type { RegistrationResponseJSON } from "@simplewebauthn/server";
 
 import {
   authAccountContinuationTarget,
@@ -8,10 +9,14 @@ import {
   completeAuthAccountProfileCompletionGate,
   completeAuthAccountTermsAcceptanceGate,
   completeEmailVerifiedSignupWithPasskey,
+  completeProductionOwnerSetup,
   fetchAuthAccountStatus,
+  prepareProductionOwnerSetupPasskey,
   requestAuthAccountEmailVerification,
   startAuthAccountRouteSession,
   startEmailVerifiedSignup,
+  startProductionOwnerSetup,
+  verifyProductionOwnerSetupEmail,
   type AuthAccountApiError,
   type AuthAccountRouteState,
 } from "./auth-account.tsx";
@@ -21,8 +26,9 @@ import type {
   AccountCompletionGateOperationInputContract,
   AccountCompletionGateResult,
   AccountCompletionGateTarget,
-  OwnerPasskeyRegistrationVerifyRequest,
 } from "../../shared/instance-auth.ts";
+
+const setupToken = "abcDEF0123456789_-abcDEF0123456789_-";
 
 describe("auth account route data flow", () => {
   it("keeps missing continuation targets local", () => {
@@ -44,6 +50,78 @@ describe("auth account route data flow", () => {
         status: "failed",
       },
     ]);
+  });
+
+  it("loads the owner setup entry through the common account route", async () => {
+    const calls: JsonFetchCall[] = [];
+    const states: AuthAccountRouteState[] = [];
+    const stop = startAuthAccountRouteSession({
+      fetcher: recordingJsonSequenceFetcher(calls, [
+        { body: { authOrigin: "https://auth.example.com", setupComplete: false } },
+      ]),
+      locationPath: "/formless/auth/setup",
+      locationSearch: `?token=${setupToken}`,
+      onState: (state) => states.push(state),
+    });
+
+    try {
+      await waitFor(() => states.some((state) => state.status === "owner-setup-ready"));
+    } finally {
+      stop();
+    }
+
+    expect(calls).toEqual([
+      {
+        body: undefined,
+        credentials: "same-origin",
+        input: "/api/formless/setup",
+        method: undefined,
+      },
+    ]);
+    expect(states).toEqual([
+      { status: "owner-setup-loading" },
+      { setupToken, status: "owner-setup-ready" },
+    ]);
+  });
+
+  it("verifies an emailed owner setup link before exposing passkey creation", async () => {
+    const calls: JsonFetchCall[] = [];
+    const states: AuthAccountRouteState[] = [];
+    const challenge = ownerSetupChallenge("email-verified");
+    const stop = startAuthAccountRouteSession({
+      fetcher: recordingJsonSequenceFetcher(calls, [
+        { body: { setupComplete: false } },
+        { body: { ownerSetup: challenge, verified: true } },
+      ]),
+      locationPath: "/formless/auth/setup",
+      locationSearch: `?challengeId=${encodeURIComponent(challenge.challengeId)}&email=${encodeURIComponent(challenge.displayEmail)}&setupToken=${setupToken}&token=email-token`,
+      onState: (state) => states.push(state),
+    });
+
+    try {
+      await waitFor(() => states.some((state) => state.status === "owner-setup-credential-ready"));
+    } finally {
+      stop();
+    }
+
+    expect(calls.map((call) => call.input)).toEqual([
+      "/api/formless/setup",
+      "/formless/auth/setup/email/verify",
+    ]);
+    expect(calls[1]?.body).toEqual({
+      challengeId: challenge.challengeId,
+      email: challenge.displayEmail,
+      setupToken,
+      token: "email-token",
+    });
+    expect(states.at(-1)).toEqual({
+      challengeId: challenge.challengeId,
+      displayName: challenge.displayName,
+      email: challenge.displayEmail,
+      expiresAt: challenge.expiresAt,
+      setupToken,
+      status: "owner-setup-credential-ready",
+    });
   });
 
   it("loads blocked account completion from the status response", async () => {
@@ -503,6 +581,78 @@ describe("auth account route data flow", () => {
     expect(JSON.stringify(calls)).not.toContain("grantSecret");
   });
 
+  it("runs verified-email-first owner setup through only the production account APIs", async () => {
+    const calls: JsonFetchCall[] = [];
+    const sent = ownerSetupChallenge("email-sent");
+    const verified = ownerSetupChallenge("email-verified");
+    const prepared = ownerSetupChallenge("passkey-prepared");
+    const completionId = "Y29tcGxldGlvbi1vd25lci1zZXR1cA";
+    const fetcher = recordingJsonSequenceFetcher(calls, [
+      { body: { ownerSetup: sent } },
+      { body: { ownerSetup: verified, verified: true } },
+      { body: { completionId, options: passkeyRegistrationOptions() } },
+      { body: { completionId, ownerSetup: prepared, prepared: true } },
+      {
+        body: {
+          completed: true,
+          completionId,
+          continueTo: "https://admin.example.com/",
+          handoff: { returnTo: "/", targetOrigin: "https://admin.example.com" },
+          owner: {
+            createdAt: "2026-07-24T04:00:00.000Z",
+            email: sent.displayEmail,
+            id: "principal:owner",
+            name: sent.displayName,
+          },
+          session: { expiresAt: "2026-07-24T12:00:00.000Z" },
+          setupComplete: true,
+        },
+      },
+    ]);
+
+    const started = await startProductionOwnerSetup({
+      displayName: sent.displayName,
+      email: sent.displayEmail,
+      fetcher,
+      setupToken,
+    });
+    await verifyProductionOwnerSetupEmail({
+      challengeId: started.ownerSetup.challengeId,
+      email: started.ownerSetup.displayEmail,
+      fetcher,
+      setupToken,
+      token: "owner-email-token",
+    });
+    const passkey = await prepareProductionOwnerSetupPasskey({
+      challengeId: started.ownerSetup.challengeId,
+      createRegistrationResponse: async () => passkeyRegistrationResponse(),
+      email: started.ownerSetup.displayEmail,
+      fetcher,
+      setupToken,
+    });
+    const completed = await completeProductionOwnerSetup({
+      challengeId: started.ownerSetup.challengeId,
+      completionId: passkey.completionId,
+      email: started.ownerSetup.displayEmail,
+      fetcher,
+      setupToken,
+    });
+
+    expect(completed).toMatchObject({
+      continueTo: "https://admin.example.com/",
+      handoff: { returnTo: "/", targetOrigin: "https://admin.example.com" },
+      setupComplete: true,
+    });
+    expect(calls.map((call) => call.input)).toEqual([
+      "/formless/auth/setup/start",
+      "/formless/auth/setup/email/verify",
+      "/formless/auth/setup/passkeys/register/options",
+      "/formless/auth/setup/passkeys/register/verify",
+      "/formless/auth/setup/complete",
+    ]);
+    expect(calls.map((call) => call.method)).toEqual(["POST", "POST", "POST", "POST", "POST"]);
+  });
+
   it("rejects status responses that expose private session or grant material", async () => {
     await expect(
       fetchAuthAccountStatus({
@@ -663,7 +813,7 @@ function passkeyRegistrationOptions() {
   };
 }
 
-function passkeyRegistrationResponse(): OwnerPasskeyRegistrationVerifyRequest["response"] {
+function passkeyRegistrationResponse(): RegistrationResponseJSON {
   return {
     id: "credential-id",
     rawId: "credential-id",
@@ -673,6 +823,16 @@ function passkeyRegistrationResponse(): OwnerPasskeyRegistrationVerifyRequest["r
     },
     type: "public-key",
     clientExtensionResults: {},
+  };
+}
+
+function ownerSetupChallenge(status: "email-sent" | "email-verified" | "passkey-prepared") {
+  return {
+    challengeId: "challenge:owner-setup",
+    displayEmail: "ada.owner@example.com",
+    displayName: "Ada Owner",
+    expiresAt: "2026-07-24T05:00:00.000Z",
+    status,
   };
 }
 

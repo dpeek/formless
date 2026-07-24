@@ -28,7 +28,7 @@ import type {
   PublicSafeOperationInputField,
 } from "@dpeek/formless-schema";
 
-import { parseOwnerSetupToken, type OwnerIdentity, type OwnerIdentityInput } from "./protocol.ts";
+import { type OwnerIdentity } from "./protocol.ts";
 import {
   parseRuntimeRouteAccess,
   parseRuntimeRouteRequiredRole,
@@ -52,27 +52,6 @@ export const COLLABORATOR_INVITATION_ACCEPT_PATH = "/formless/auth/invitations/a
 
 export type OwnerSessionSummary = {
   expiresAt: string;
-};
-
-export type OwnerPasskeyRegistrationOptionsRequest = {
-  setupToken: string;
-};
-
-export type OwnerPasskeyRegistrationOptionsResponse = {
-  options: PublicKeyCredentialCreationOptionsJSON;
-};
-
-export type OwnerPasskeyRegistrationVerifyRequest = {
-  setupToken: string;
-  owner: OwnerIdentityInput;
-  response: RegistrationResponseJSON;
-};
-
-export type OwnerPasskeyRegistrationVerifyResponse = {
-  continueTo?: AuthSuccessContinuationTarget;
-  owner: OwnerIdentity;
-  session?: OwnerSessionSummary;
-  setupComplete: true;
 };
 
 export type OwnerPasskeyLoginOptionsRequest = Record<string, never>;
@@ -569,77 +548,6 @@ export function parseInstanceAuthRelyingPartyId(
 
 export function parseInstanceAuthRelyingPartyName(value: unknown): string {
   return parseTrimmedNonEmptyString("Instance auth relying-party name", value);
-}
-
-export function parseOwnerPasskeyRegistrationOptionsRequest(
-  value: unknown,
-): OwnerPasskeyRegistrationOptionsRequest {
-  const object = parseObject("Passkey registration options request", value);
-
-  assertKeys("Passkey registration options request", object, ["setupToken"]);
-
-  return {
-    setupToken: parseOwnerSetupToken(object.setupToken),
-  };
-}
-
-export function parseOwnerPasskeyRegistrationOptionsResponse(
-  value: unknown,
-): OwnerPasskeyRegistrationOptionsResponse {
-  const object = parseObject("Passkey registration options response", value);
-
-  assertKeys("Passkey registration options response", object, ["options"]);
-
-  return {
-    options: parseCreationOptions("Passkey registration options", object.options),
-  };
-}
-
-export function parseOwnerPasskeyRegistrationVerifyRequest(
-  value: unknown,
-): OwnerPasskeyRegistrationVerifyRequest {
-  const object = parseObject("Passkey registration verify request", value);
-
-  assertKeys("Passkey registration verify request", object, ["owner", "response", "setupToken"]);
-
-  return {
-    setupToken: parseOwnerSetupToken(object.setupToken),
-    owner: parseOwnerIdentityInput("Passkey registration owner", object.owner),
-    response: parseRegistrationResponse("Passkey registration response", object.response),
-  };
-}
-
-export function parseOwnerPasskeyRegistrationVerifyResponse(
-  value: unknown,
-): OwnerPasskeyRegistrationVerifyResponse {
-  const object = parseObject("Passkey registration verify response", value);
-
-  assertKeys(
-    "Passkey registration verify response",
-    object,
-    ["owner", "setupComplete"],
-    ["continueTo", "session"],
-  );
-
-  if (object.setupComplete !== true) {
-    throw new Error("Passkey registration verify response setupComplete must be true.");
-  }
-
-  return {
-    ...(object.continueTo === undefined
-      ? {}
-      : {
-          continueTo: parseAuthSuccessContinuationTarget(
-            "Passkey registration verify response continueTo",
-            object.continueTo,
-          ),
-        }),
-    owner: parseOwnerIdentity("Passkey registration owner", object.owner),
-    ...(object.session === undefined
-      ? {}
-      : { session: parseOwnerSessionSummary("Passkey registration session", object.session) }),
-    setupComplete: true,
-  };
 }
 
 export function parseOwnerPasskeyLoginOptionsRequest(
@@ -2146,22 +2054,6 @@ function parseClientExtensionResults(
   const object = parseObject(context, value);
 
   return { ...object } as AuthenticationExtensionsClientOutputs;
-}
-
-function parseOwnerIdentityInput(context: string, value: unknown): OwnerIdentityInput {
-  const object = parseObject(context, value);
-
-  assertKeys(context, object, ["name"], ["email"]);
-
-  const email =
-    object.email === undefined
-      ? undefined
-      : parseTrimmedNonEmptyString(`${context} email`, object.email);
-
-  return {
-    name: parseTrimmedNonEmptyString(`${context} name`, object.name),
-    ...(email === undefined ? {} : { email }),
-  };
 }
 
 function parseOwnerIdentity(context: string, value: unknown): OwnerIdentity {

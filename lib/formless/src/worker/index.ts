@@ -51,6 +51,7 @@ import {
   handleCollaboratorInvitationAcceptanceBrowserRequest,
 } from "./collaborator-invitation-acceptance.ts";
 import { handleInstanceAuthEmailVerificationApiRequest } from "./instance-auth-email-verification.ts";
+import { handleInstanceAuthOwnerSetupApiRequest } from "./instance-auth-owner-setup.ts";
 import { handleInstanceAuthSignupApiRequest } from "./instance-auth-signup.ts";
 import { handleInstanceAuthAccountCompletionApiRequest } from "./instance-auth-account-completion.ts";
 import { sameOriginAccountCompletionTargetForRuntimeRouteFacts } from "./instance-auth-account-target.ts";
@@ -314,6 +315,12 @@ export default {
 
     if (authAccountCompletionApiResponse) {
       return authAccountCompletionApiResponse;
+    }
+
+    const authOwnerSetupApiResponse = await handleInstanceAuthOwnerSetupApiRequest(request, env);
+
+    if (authOwnerSetupApiResponse) {
+      return authOwnerSetupApiResponse;
     }
 
     const authSignupApiResponse = await handleInstanceAuthSignupApiRequest(request, env);

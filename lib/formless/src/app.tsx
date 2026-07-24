@@ -106,7 +106,6 @@ export type AppRouteComponents = {
   InstanceShellRoute: ElementType<InstanceShellRouteProps>;
   LocalSessionRoute: ElementType;
   OwnerLoginRoute: ElementType;
-  OwnerSetupRoute: ElementType;
   SitePageRoute: ElementType<PublicSiteRouteProps>;
   publicSiteReactAdapters?: PublicSiteReactAdapterRegistry;
 };
@@ -152,11 +151,6 @@ const defaultRouteComponents: AppRouteComponents = {
   OwnerLoginRoute: lazy(() =>
     import("./app/routes/owner-login.tsx").then((module) => ({
       default: module.OwnerLoginRoute,
-    })),
-  ),
-  OwnerSetupRoute: lazy(() =>
-    import("./app/routes/owner-setup.tsx").then((module) => ({
-      default: module.OwnerSetupRoute,
     })),
   ),
   SitePageRoute: defaultPublicSiteReactAdapters.get("site")!.Route,
@@ -434,7 +428,6 @@ function AppRoutes({
     InstanceShellRoute,
     LocalSessionRoute,
     OwnerLoginRoute,
-    OwnerSetupRoute,
   } = routeComponents;
   const publicSiteReactAdapters =
     routeComponents.publicSiteReactAdapters ??
@@ -463,7 +456,7 @@ function AppRoutes({
       </Route>
       {browserRoutes.authAccountSetupRoute ? (
         <Route path={browserRoutes.authAccountSetupRoute}>
-          <OwnerSetupRoute />
+          <AuthAccountRoute />
         </Route>
       ) : null}
       {browserRoutes.authAccountSignInRoute ? (

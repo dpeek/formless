@@ -125,6 +125,52 @@ describe("Astryx auth renderer", () => {
     expect(`${tokenHtml}${passkeyHtml}${unavailableHtml}`).not.toContain("central-session-secret");
   });
 
+  it("renders the complete verified-email owner setup sequence through the common auth surface", () => {
+    const surfaceId = "auth:test:owner-setup";
+    const identity = ownerSetupSurface("ready", undefined, {
+      actions: [authAction(surfaceId, "submit", "Send verification email")],
+      step: "identity",
+    });
+    const emailVerification = ownerSetupSurface("ready", undefined, {
+      actions: [authAction(surfaceId, "submit", "Verify email")],
+      fields: [authCreateField(surfaceId, verificationTokenField())],
+      step: "email-verification",
+    });
+    const passkey = ownerSetupSurface("ready", undefined, {
+      passkey: availablePasskey(surfaceId, "create"),
+      step: "passkey",
+    });
+    const completionRetry = ownerSetupSurface(
+      "failed",
+      authMessage("Activation failed", "danger"),
+      {
+        actions: [authAction(surfaceId, "retry", "Try owner setup again")],
+        step: "completion",
+      },
+    );
+    const complete = ownerSetupSurface("complete", authMessage("Owner setup complete", "success"), {
+      continuation: authContinuation(surfaceId),
+      step: "completion",
+    });
+
+    const identityHtml = renderAuth(identity);
+    const emailHtml = renderAuth(emailVerification);
+    const passkeyHtml = renderAuth(passkey);
+    const retryHtml = renderAuth(completionRetry);
+    const completeHtml = renderAuth(complete);
+
+    expect(identityHtml).toContain('data-formless-astryx-auth-surface-step="identity"');
+    expect(identityHtml).toContain("Send verification email");
+    expect(emailHtml).toContain('data-formless-astryx-auth-surface-step="email-verification"');
+    expect(emailHtml).toContain("Verification token");
+    expect(passkeyHtml).toContain('data-formless-astryx-auth-surface-step="passkey"');
+    expect(passkeyHtml).toContain("Continue with a passkey");
+    expect(retryHtml).toContain('data-formless-astryx-auth-surface-step="completion"');
+    expect(retryHtml).toContain("Try owner setup again");
+    expect(completeHtml).toContain('data-formless-astryx-auth-surface-step="completion"');
+    expect(completeHtml).toContain("Continue");
+  });
+
   it("dispatches exact controlled field, policy, submit, retry, passkey, and continuation intents", async () => {
     const intents: AuthIntent[] = [];
     const onIntent = (intent: AuthIntent) => {
@@ -313,7 +359,7 @@ describe("Astryx auth renderer", () => {
 function ownerSetupSurface(
   state: OwnerSetupAuthSurfaceContract["state"],
   message?: OwnerSetupAuthSurfaceContract["message"],
-  overrides: Partial<AuthSurfaceBaseContract> = {},
+  overrides: Partial<OwnerSetupAuthSurfaceContract> = {},
 ): OwnerSetupAuthSurfaceContract {
   return {
     ...authSurfaceBase("auth:test:owner-setup", "Owner setup", message),
@@ -548,7 +594,7 @@ function authAction(
   };
 }
 
-function availablePasskey(surfaceId: string) {
+function availablePasskey(surfaceId: string, purpose: "create" | "sign-in" = "sign-in") {
   const id = `${surfaceId}:passkey`;
   const control = authButton(`${id}:control`, "Continue with a passkey", "primary", "submit");
   return {
@@ -557,7 +603,7 @@ function availablePasskey(surfaceId: string) {
     id,
     intent: { controlId: control.id, passkeyId: id, surfaceId, type: "authPasskey" as const },
     kind: "authPasskey" as const,
-    purpose: "sign-in" as const,
+    purpose,
   };
 }
 

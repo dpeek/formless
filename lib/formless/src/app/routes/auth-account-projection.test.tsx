@@ -9,6 +9,7 @@ import type {
 } from "../../shared/instance-auth.ts";
 import {
   authAccountGateSurfaceReference,
+  authAccountOwnerSetupSurfaceReference,
   authAccountSignupSurfaceReference,
   authAccountSurfaceReference,
   initialAuthAccountDraftSession,
@@ -22,6 +23,9 @@ import { authIntentIsCurrent, createAuthPendingGuard } from "./auth-runtime-boun
 import type { AuthAccountRouteState } from "./auth-account.tsx";
 
 const privateValues = [
+  "abcDEF0123456789_-abcDEF0123456789_-",
+  "challenge:owner-setup-private",
+  "completion:owner-setup-private",
   "challenge:signup-private",
   "storage:private",
   "central-session-private",
@@ -153,6 +157,144 @@ describe("auth account projection", () => {
     expect(closed.state).toBe("blocked");
     expect(closed.actions).toEqual([]);
     expect(JSON.stringify(closed)).not.toContain("Invented signup");
+  });
+
+  it("projects the complete owner setup account journey without private runtime state", () => {
+    const challenge = ownerSetupChallengeState();
+    const completion = {
+      ...challenge,
+      completionId: "completion:owner-setup-private",
+    };
+    const owner = {
+      createdAt: "2026-07-24T04:00:00.000Z",
+      email: "ada.owner@example.com",
+      id: "principal:owner",
+      name: "Ada Owner",
+    };
+    const states: Array<[AuthAccountRouteState, string | undefined, string]> = [
+      [{ status: "owner-setup-loading" }, undefined, "loading"],
+      [
+        { message: "Owner setup link is invalid.", status: "owner-setup-invalid" },
+        undefined,
+        "invalid",
+      ],
+      [ownerSetupState(), "identity", "ready"],
+      [
+        {
+          displayName: "Ada Owner",
+          email: "ada.owner@example.com",
+          setupToken: privateValues[0],
+          status: "owner-setup-email-sending",
+        },
+        "identity",
+        "submitting",
+      ],
+      [{ ...challenge, status: "owner-setup-email-sent" }, "email-verification", "ready"],
+      [{ ...challenge, status: "owner-setup-email-verifying" }, "email-verification", "submitting"],
+      [{ ...challenge, status: "owner-setup-credential-ready" }, "passkey", "ready"],
+      [{ ...challenge, status: "owner-setup-credential-submitting" }, "passkey", "submitting"],
+      [
+        {
+          ...challenge,
+          message: "This browser does not support passkeys.",
+          status: "owner-setup-passkey-unavailable",
+        },
+        "passkey",
+        "passkey-unavailable",
+      ],
+      [
+        {
+          ...completion,
+          message: "Owner setup completion must be retried.",
+          status: "owner-setup-completion-ready",
+        },
+        "completion",
+        "failed",
+      ],
+      [{ ...completion, status: "owner-setup-completing" }, "completion", "submitting"],
+      [{ owner, status: "owner-setup-already-complete" }, undefined, "already-complete"],
+      [
+        {
+          continueTo: "/formless/auth?returnTo=%2F",
+          owner,
+          status: "owner-setup-complete",
+        },
+        "completion",
+        "complete",
+      ],
+      [
+        {
+          continueTo: "https://admin.example.com/",
+          handoff: { returnTo: "/", targetOrigin: "https://admin.example.com" },
+          owner,
+          status: "owner-setup-continuing",
+        },
+        "completion",
+        "continuing",
+      ],
+    ];
+
+    for (const [state, step, contractState] of states) {
+      const surface = project(state);
+      expect(surface.surfaceKind).toBe("owner-setup");
+      expect(surface.state).toBe(contractState);
+      if (surface.surfaceKind === "owner-setup") expect(surface.step).toBe(step);
+      const serialized = JSON.stringify(surface);
+      expect(serialized).not.toContain(privateValues[0]);
+      expect(serialized).not.toContain("challenge:owner-setup-private");
+      expect(serialized).not.toContain("completion:owner-setup-private");
+    }
+
+    const continuation = project(states.at(-1)![0]);
+    expect(continuation.continuation?.destination.origin).toBe("https://admin.example.com");
+    expect(continuation.continuation?.destination.detail).toBe("Open your approved destination.");
+  });
+
+  it("controls owner identity and opaque verification token submissions", () => {
+    const identityState = ownerSetupState();
+    let session = initialAuthAccountDraftSession(identityState);
+
+    session = nextAuthAccountDraftSession(session, {
+      fieldName: "displayName",
+      fieldValue: { kind: "input", value: "Ada Owner" },
+      type: "createDraftChange",
+    });
+    session = nextAuthAccountDraftSession(session, {
+      fieldName: "email",
+      fieldValue: { kind: "input", value: "ada.owner@example.com" },
+      type: "createDraftChange",
+    });
+
+    const identitySurface = projectAuthAccountSurface({ session, state: identityState });
+    expect(identitySurface.fields.map((field) => field.autocomplete)).toEqual(["name", "email"]);
+    expect(selectAuthAccountDraftSubmission({ session, state: identityState })).toEqual({
+      displayName: "Ada Owner",
+      email: "ada.owner@example.com",
+      kind: "owner-setup-identity",
+      ok: true,
+    });
+
+    const tokenState: AuthAccountRouteState = {
+      ...ownerSetupChallengeState(),
+      status: "owner-setup-email-sent",
+    };
+    session = prepareAuthAccountDraftSession(session, tokenState);
+    session = nextAuthAccountDraftSession(session, {
+      fieldName: "token",
+      fieldValue: { kind: "input", value: "opaque_owner_email_token-123" },
+      type: "createDraftChange",
+    });
+    const tokenSurface = projectAuthAccountSurface({ session, state: tokenState });
+
+    expect(tokenSurface.fields[0]).toMatchObject({
+      autocomplete: "one-time-code",
+      purpose: "verification-token",
+    });
+    expect(selectAuthAccountDraftSubmission({ session, state: tokenState })).toEqual({
+      kind: "owner-setup-verification-token",
+      ok: true,
+      token: "opaque_owner_email_token-123",
+    });
   });
 
   it("projects every shipped signup step, failure, completion, and continuation state", () => {
@@ -507,8 +649,10 @@ describe("auth account projection", () => {
 
   it("keeps references scoped, rejects pending intents, and deduplicates operations", async () => {
     const account = project({ status: "loading" });
+    const ownerSetup = project(ownerSetupState());
     const signup = project(signupState());
     expect(authAccountSurfaceReference(account)).toBe(authAccountGateSurfaceReference);
+    expect(authAccountSurfaceReference(ownerSetup)).toBe(authAccountOwnerSetupSurfaceReference);
     expect(authAccountSurfaceReference(signup)).toBe(authAccountSignupSurfaceReference);
 
     const pendingState: AuthAccountRouteState = {
@@ -569,6 +713,23 @@ function project(state: AuthAccountRouteState) {
 
 function signupState(): Extract<AuthAccountRouteState, { status: "signup-ready" }> {
   return { status: "signup-ready", target: accountTarget() };
+}
+
+function ownerSetupState(): Extract<AuthAccountRouteState, { status: "owner-setup-ready" }> {
+  return {
+    setupToken: privateValues[0],
+    status: "owner-setup-ready",
+  };
+}
+
+function ownerSetupChallengeState() {
+  return {
+    challengeId: "challenge:owner-setup-private",
+    displayName: "Ada Owner",
+    email: "ada.owner@example.com",
+    expiresAt: "2026-07-24T05:00:00.000Z",
+    setupToken: privateValues[0],
+  };
 }
 
 function blockedResult(gate: AccountCompletionGate): AccountCompletionGateResult {

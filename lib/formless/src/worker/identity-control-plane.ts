@@ -159,6 +159,8 @@ export const INTERNAL_COLLABORATOR_INVITATION_ACCEPTANCE_COMMIT_PATH =
   "/_internal/identity/collaborator-invitation-acceptance-commit";
 export const INTERNAL_EMAIL_VERIFIED_SIGNUP_COMMIT_PATH =
   "/_internal/identity/email-verified-signup-commit";
+export const INTERNAL_OWNER_SETUP_ACTIVATION_COMMIT_PATH =
+  "/_internal/identity/owner-setup-activation-commit";
 export const INTERNAL_EMAIL_VERIFIED_APP_REGISTRATION_COMMIT_PATH =
   "/_internal/identity/email-verified-app-registration-commit";
 export const INTERNAL_TERMS_ACCEPTANCE_COMMIT_PATH = "/_internal/identity/terms-acceptance-commit";
@@ -470,6 +472,35 @@ export type IdentityEmailVerifiedSignupCommitResult =
       error: string;
       ok: false;
       reason: IdentityEmailVerifiedSignupCommitFailureReason;
+    };
+
+export type IdentityOwnerSetupActivationCommitInput = {
+  activatedAt: string;
+  completionId: string;
+  displayEmail: string;
+  displayName: string;
+  normalizedEmail: string;
+  principalId: string;
+};
+
+export type IdentityOwnerSetupActivationCommitFailureReason =
+  | "email-owned-by-another-principal"
+  | "identity-validation-failed"
+  | "owner-already-active";
+
+export type IdentityOwnerSetupActivationCommitResult =
+  | {
+      ok: true;
+      output: OperationCommandOutput;
+      owner: OwnerIdentity;
+      principalEmail: IdentityEmailVerificationPrincipalEmailSummary;
+      records: StoredRecord[];
+      status: "committed" | "replayed";
+    }
+  | {
+      error: string;
+      ok: false;
+      reason: IdentityOwnerSetupActivationCommitFailureReason;
     };
 
 export type IdentityEmailVerifiedAppRegistrationCommitInput = {
@@ -1033,6 +1064,30 @@ export async function commitIdentityEmailVerifiedSignup(
   return body;
 }
 
+export async function commitIdentityOwnerSetupActivation(
+  env: IdentityOwnerEnv,
+  input: IdentityOwnerSetupActivationCommitInput,
+): Promise<IdentityOwnerSetupActivationCommitResult> {
+  const response = await fetchIdentityOwnerInternal(
+    env,
+    INTERNAL_OWNER_SETUP_ACTIVATION_COMMIT_PATH,
+    {
+      body: JSON.stringify(input),
+      headers: { "Content-Type": "application/json" },
+      method: "POST",
+    },
+  );
+  const body = (await response.json()) as
+    | IdentityOwnerSetupActivationCommitResult
+    | { error?: string };
+
+  if (!response.ok || !isIdentityOwnerSetupActivationCommitResult(body)) {
+    throw new Error(responseBodyError(body) ?? "Identity owner setup activation failed.");
+  }
+
+  return body;
+}
+
 export async function commitIdentityEmailVerifiedAppRegistration(
   env: IdentityOwnerEnv,
   input: IdentityEmailVerifiedAppRegistrationCommitInput,
@@ -1217,6 +1272,16 @@ async function handleIdentityOwnerInternalRequest(
     }
 
     const result = commitEmailVerifiedSignupIntoIdentity(storage, await readJson(request));
+
+    return jsonResponse(result);
+  }
+
+  if (url.pathname === INTERNAL_OWNER_SETUP_ACTIVATION_COMMIT_PATH) {
+    if (request.method !== "POST") {
+      return jsonResponse({ error: "Method not allowed." }, 405, { Allow: "POST" });
+    }
+
+    const result = commitOwnerSetupActivationIntoIdentity(storage, await readJson(request));
 
     return jsonResponse(result);
   }
@@ -3903,6 +3968,288 @@ function emailVerifiedSignupAppRegistrationSummary(
   };
 }
 
+function commitOwnerSetupActivationIntoIdentity(
+  storage: DurableObjectStorage,
+  value: unknown,
+): IdentityOwnerSetupActivationCommitResult {
+  const input = parseIdentityOwnerSetupActivationCommitRequest(value);
+
+  ensureIdentityControlPlaneStorage(storage);
+
+  let plans: OperationRecordWritePlan[];
+
+  try {
+    const planned = ownerSetupActivationWritePlans(getBootstrapRecords(storage), input);
+
+    if (!planned.ok) {
+      return planned;
+    }
+
+    plans = planned.plans;
+  } catch {
+    return identityOwnerSetupActivationCommitFailure("identity-validation-failed");
+  }
+
+  let outcome: WriteOutcome<OperationCommandOutput>;
+
+  try {
+    outcome = writeRecordSetForCommandOperationOutcome(
+      storage,
+      `owner-setup-activation:${input.completionId}`,
+      plans,
+      validateIdentityControlPlaneRecordConstraint(storage),
+      { now: input.activatedAt },
+    );
+  } catch {
+    return identityOwnerSetupActivationCommitFailure("identity-validation-failed");
+  }
+
+  const records = getBootstrapRecords(storage);
+  const owner = readActiveIdentityOwnerForPrincipal(storage, input.principalId);
+  const principalEmail = records.find(
+    (record) =>
+      record.entity === "principal-email" &&
+      !record.deletedAt &&
+      record.values.normalizedEmail === input.normalizedEmail &&
+      record.values.principal === input.principalId &&
+      record.values.primary === true &&
+      record.values.recovery === true &&
+      record.values.verificationStatus === "verified",
+  );
+
+  if (!owner || !principalEmail) {
+    return identityOwnerSetupActivationCommitFailure("identity-validation-failed");
+  }
+
+  return {
+    ok: true,
+    output: outcome.response,
+    owner,
+    principalEmail: emailVerificationPrincipalEmailSummary(principalEmail),
+    records: outcome.response.changes.map((change) => change.payload),
+    status: outcome.kind === "replay" ? "replayed" : "committed",
+  };
+}
+
+function ownerSetupActivationWritePlans(
+  records: readonly StoredRecord[],
+  input: IdentityOwnerSetupActivationCommitInput,
+):
+  | { ok: true; plans: OperationRecordWritePlan[] }
+  | Extract<IdentityOwnerSetupActivationCommitResult, { ok: false }> {
+  const ownerRole = activeRoleRecord(records, "instance.owner");
+  const activeOwnerAssignment = records.find(
+    (record) =>
+      record.entity === "role-assignment" &&
+      !record.deletedAt &&
+      record.values.status === "active" &&
+      record.values.role === ownerRole.id &&
+      record.values.targetKind === "principal" &&
+      record.values.scopeKind === "instance",
+  );
+
+  if (activeOwnerAssignment && activeOwnerAssignment.values.targetPrincipal !== input.principalId) {
+    return identityOwnerSetupActivationCommitFailure("owner-already-active");
+  }
+
+  const ownerAssignment = records.find(
+    (record) =>
+      record.entity === "role-assignment" &&
+      !record.deletedAt &&
+      record.values.role === ownerRole.id &&
+      record.values.targetKind === "principal" &&
+      record.values.targetPrincipal === input.principalId &&
+      record.values.scopeKind === "instance",
+  );
+  const principal = records.find(
+    (record) => record.entity === "principal" && record.id === input.principalId,
+  );
+
+  if (principal?.deletedAt || (principal && principal.values.kind !== "human")) {
+    return identityOwnerSetupActivationCommitFailure("identity-validation-failed");
+  }
+
+  const existingEmail = records.find(
+    (record) =>
+      record.entity === "principal-email" &&
+      !record.deletedAt &&
+      record.values.normalizedEmail === input.normalizedEmail,
+  );
+
+  if (existingEmail && existingEmail.values.principal !== input.principalId) {
+    return identityOwnerSetupActivationCommitFailure("email-owned-by-another-principal");
+  }
+
+  const plans: OperationRecordWritePlan[] = [];
+
+  if (!principal) {
+    plans.push({
+      kind: "create",
+      entity: "principal",
+      id: input.principalId,
+      values: {
+        displayName: input.displayName,
+        kind: "human",
+        status: "active",
+      },
+    });
+  } else if (
+    principal.values.displayName !== input.displayName ||
+    principal.values.status !== "active"
+  ) {
+    plans.push({
+      kind: "patch",
+      record: principal,
+      values: {
+        ...principal.values,
+        displayName: input.displayName,
+        status: "active",
+      },
+    });
+  }
+
+  for (const record of records) {
+    if (
+      record.entity === "principal-email" &&
+      !record.deletedAt &&
+      record.values.principal === input.principalId &&
+      record.values.primary === true &&
+      record.id !== existingEmail?.id
+    ) {
+      plans.push({
+        kind: "patch",
+        record,
+        values: {
+          ...record.values,
+          primary: false,
+        },
+      });
+    }
+  }
+
+  if (!existingEmail) {
+    plans.push({
+      kind: "create",
+      entity: "principal-email",
+      id: `principal-email:${input.principalId}:primary`,
+      values: {
+        principal: input.principalId,
+        displayEmail: input.displayEmail,
+        normalizedEmail: input.normalizedEmail,
+        verificationStatus: "verified",
+        primary: true,
+        recovery: true,
+        verifiedAt: input.activatedAt,
+      },
+    });
+  } else if (
+    existingEmail.values.displayEmail !== input.displayEmail ||
+    existingEmail.values.verificationStatus !== "verified" ||
+    existingEmail.values.primary !== true ||
+    existingEmail.values.recovery !== true ||
+    existingEmail.values.verifiedAt !== input.activatedAt
+  ) {
+    plans.push({
+      kind: "patch",
+      record: existingEmail,
+      values: {
+        ...existingEmail.values,
+        displayEmail: input.displayEmail,
+        normalizedEmail: input.normalizedEmail,
+        verificationStatus: "verified",
+        primary: true,
+        recovery: true,
+        verifiedAt: input.activatedAt,
+      },
+    });
+  }
+
+  if (!ownerAssignment) {
+    plans.push({
+      kind: "create",
+      entity: "role-assignment",
+      id: `role-assignment:${input.principalId}:instance.owner`,
+      values: {
+        role: ownerRole.id,
+        targetKind: "principal",
+        targetPrincipal: input.principalId,
+        scopeKind: "instance",
+        status: "active",
+      },
+    });
+  } else if (ownerAssignment.values.status !== "active") {
+    plans.push({
+      kind: "patch",
+      record: ownerAssignment,
+      values: {
+        ...ownerAssignment.values,
+        status: "active",
+      },
+    });
+  }
+
+  return { ok: true, plans };
+}
+
+function parseIdentityOwnerSetupActivationCommitRequest(
+  value: unknown,
+): IdentityOwnerSetupActivationCommitInput {
+  const object = parseRecord("Identity owner setup activation commit request", value);
+
+  assertAllowedKeys("Identity owner setup activation commit request", object, [
+    "activatedAt",
+    "completionId",
+    "displayEmail",
+    "displayName",
+    "normalizedEmail",
+    "principalId",
+  ]);
+
+  const displayEmail = normalizeEmailDeliveryAddress(
+    "Identity owner setup activation display email",
+    object.displayEmail,
+  );
+  const normalizedEmail = normalizeEmailDeliveryAddress(
+    "Identity owner setup activation normalized email",
+    object.normalizedEmail,
+  ).toLowerCase();
+
+  if (displayEmail.toLowerCase() !== normalizedEmail) {
+    throw new BadRequestError("Identity owner setup activation display email must match email.");
+  }
+
+  return {
+    activatedAt: parseIsoTimestamp(
+      "Identity owner setup activation activatedAt",
+      object.activatedAt,
+    ),
+    completionId: parseNonEmptyString(
+      "Identity owner setup activation completion id",
+      object.completionId,
+    ),
+    displayEmail,
+    displayName: parseNonEmptyString(
+      "Identity owner setup activation display name",
+      object.displayName,
+    ),
+    normalizedEmail,
+    principalId: parseNonEmptyString(
+      "Identity owner setup activation principal id",
+      object.principalId,
+    ),
+  };
+}
+
+function identityOwnerSetupActivationCommitFailure(
+  reason: IdentityOwnerSetupActivationCommitFailureReason,
+): Extract<IdentityOwnerSetupActivationCommitResult, { ok: false }> {
+  return {
+    error: "Owner setup activation could not be committed.",
+    ok: false,
+    reason,
+  };
+}
+
 function commitEmailVerifiedAppRegistrationIntoIdentity(
   storage: DurableObjectStorage,
   value: unknown,
@@ -4420,6 +4767,33 @@ function isIdentityEmailVerifiedSignupCommitResult(
       record.principalEmail !== null &&
       typeof record.appRegistration === "object" &&
       record.appRegistration !== null &&
+      Array.isArray(record.records)
+    );
+  }
+
+  return (
+    record.ok === false && typeof record.reason === "string" && typeof record.error === "string"
+  );
+}
+
+function isIdentityOwnerSetupActivationCommitResult(
+  value: unknown,
+): value is IdentityOwnerSetupActivationCommitResult {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+
+  const record = value as Record<string, unknown>;
+
+  if (record.ok === true) {
+    return (
+      typeof record.status === "string" &&
+      typeof record.output === "object" &&
+      record.output !== null &&
+      typeof record.owner === "object" &&
+      record.owner !== null &&
+      typeof record.principalEmail === "object" &&
+      record.principalEmail !== null &&
       Array.isArray(record.records)
     );
   }

@@ -195,17 +195,6 @@ export type OwnerSetupStatusResponse = {
   owner?: OwnerIdentity;
 };
 
-export type OwnerSetupCompleteRequest = {
-  setupToken: string;
-  owner: OwnerIdentityInput;
-};
-
-export type OwnerSetupCompleteResponse = {
-  continueTo?: string;
-  setupComplete: true;
-  owner: OwnerIdentity;
-};
-
 export type AppInstallsResponse = {
   packages: InstallableAppPackage[];
   installs: AppInstall[];
@@ -287,19 +276,6 @@ export function parseOwnerSetupToken(value: unknown): string {
   }
 
   return token;
-}
-
-export function parseOwnerSetupCompleteRequest(value: unknown): OwnerSetupCompleteRequest {
-  if (!isRecord(value)) {
-    throw new Error("Owner setup request must be an object.");
-  }
-
-  assertOwnerSetupRequestKeys(value);
-
-  return {
-    setupToken: parseOwnerSetupToken(value.setupToken),
-    owner: parseOwnerIdentityInput(value.owner),
-  };
 }
 
 export function parseCreateAppInstallRequest(value: unknown): CreateAppInstallRequest {
@@ -401,23 +377,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function assertOwnerSetupRequestKeys(value: Record<string, unknown>) {
-  const requiredKeys = ["setupToken", "owner"];
-  const allowedKeys = new Set(requiredKeys);
-
-  for (const key of Object.keys(value)) {
-    if (!allowedKeys.has(key)) {
-      throw new Error(`Owner setup request has unsupported key "${key}".`);
-    }
-  }
-
-  for (const key of requiredKeys) {
-    if (!(key in value)) {
-      throw new Error(`Owner setup request must include "${key}".`);
-    }
-  }
-}
-
 function assertCreateAppInstallRequestKeys(value: Record<string, unknown>) {
   const requiredKeys = ["packageAppKey", "installId", "label"];
   const allowedKeys = new Set([...requiredKeys, "registrationOperation", "registrationPolicy"]);
@@ -443,31 +402,6 @@ function parseOptionalAppInstallRegistrationPolicy(
   }
 
   return parseAppInstallRegistrationPolicy(value, "App install registration policy");
-}
-
-function parseOwnerIdentityInput(value: unknown): OwnerIdentityInput {
-  if (!isRecord(value)) {
-    throw new Error("Owner setup owner must be an object.");
-  }
-
-  const allowedKeys = new Set(["name", "email"]);
-
-  for (const key of Object.keys(value)) {
-    if (!allowedKeys.has(key)) {
-      throw new Error(`Owner setup owner has unsupported key "${key}".`);
-    }
-  }
-
-  const name = parseTrimmedNonEmptyString("Owner setup owner name", value.name);
-  const email =
-    value.email === undefined
-      ? undefined
-      : parseTrimmedNonEmptyString("Owner setup owner email", value.email);
-
-  return {
-    name,
-    ...(email === undefined ? {} : { email }),
-  };
 }
 
 function parseNonEmptyString(context: string, value: unknown): string {

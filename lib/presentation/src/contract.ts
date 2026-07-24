@@ -2234,6 +2234,8 @@ export type OwnerSetupAuthSurfaceState =
   | "ready"
   | "submitting";
 
+export type OwnerSetupStep = "completion" | "email-verification" | "identity" | "passkey";
+
 export type OwnerSignInAuthSurfaceState =
   | "complete"
   | "continuing"
@@ -2311,6 +2313,7 @@ export type AuthSurfaceBaseContract = {
 
 export type OwnerSetupAuthSurfaceContract = AuthSurfaceBaseContract & {
   state: OwnerSetupAuthSurfaceState;
+  step?: OwnerSetupStep;
   surfaceKind: "owner-setup";
 };
 
