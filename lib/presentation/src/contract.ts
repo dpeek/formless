@@ -2418,7 +2418,8 @@ export type AccessPersonContract = {
       }
     | {
         availability: "unavailable";
-        disabledReason?: string;
+        control: ButtonContract;
+        disabledReason: string;
       };
   roleAuthoring:
     | {

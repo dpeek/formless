@@ -659,10 +659,11 @@ export async function handleIdentityControlPlaneDurableObjectRequest(
       ensureIdentityControlPlaneStorage(storage);
 
       return jsonResponse(
-        removeIdentityAccessPerson(
+        await removeIdentityAccessPerson(
           storage,
           await readJson(request),
           identityAccessMutationActorFromAuthorization(authorization),
+          { env, requestUrl: request.url },
         ),
       );
     }
@@ -1962,11 +1963,12 @@ function replaceIdentityAccessPersonRoles(
   };
 }
 
-function removeIdentityAccessPerson(
+async function removeIdentityAccessPerson(
   storage: DurableObjectStorage,
   value: unknown,
   actor: IdentityAccessMutationActor,
-): IdentityAccessPersonRemovalResponse {
+  options: { env: IdentityControlPlaneApiEnv; requestUrl: string },
+): Promise<IdentityAccessPersonRemovalResponse> {
   const input = parseIdentityAccessPersonRemovalRequest(value);
   const records = getBootstrapRecords(storage);
   const authority = currentIdentityAccessMutationAuthority(records, actor);
@@ -2004,10 +2006,40 @@ function removeIdentityAccessPerson(
   }
 
   const removedAt = input.now ?? nowIsoString();
+  const pendingInvitations = records.filter(
+    (record) =>
+      record.entity === "invitation" &&
+      !record.deletedAt &&
+      (record.values as IdentityInvitationValues).invitedPrincipal === principal.id &&
+      (record.values as IdentityInvitationValues).status === "pending",
+  );
+
+  await Promise.all(
+    pendingInvitations.map((invitation) =>
+      requestCollaboratorInvitationTokenRevocation({
+        env: options.env,
+        invitationId: invitation.id,
+        now: removedAt,
+        requestUrl: options.requestUrl,
+      }),
+    ),
+  );
+
+  const invitationRevocationPlans: OperationRecordWritePlan[] = pendingInvitations.map(
+    (invitation) => ({
+      kind: "patch",
+      record: invitation,
+      values: {
+        ...invitation.values,
+        status: "revoked",
+      },
+    }),
+  );
   const outcome = writeRecordSetForCommandOperationOutcome(
     storage,
     `access-person-removal:${principal.id}:${input.idempotencyKey}`,
     [
+      ...invitationRevocationPlans,
       {
         kind: "patch",
         record: principal,

@@ -529,10 +529,14 @@ identity-control-plane record editor to normal administrators.
 - WHEN the current browser principal has active authority to manage that
   principal and the last-owner rule is satisfied
 - THEN identity storage changes the principal status to `disabled`
+- AND any pending invitation records bound to the principal change status to
+  `revoked`
+- AND private instance auth state revokes the matching pending invitation
+  tokens so those invitation links can no longer be accepted
 - AND the active people list omits the disabled principal after refresh
 - AND existing email, membership, app-registration, role-assignment, policy,
-  and invitation identity records remain reviewable rather than being hard
-  deleted
+  and invitation identity records, including revoked invitations, remain
+  reviewable rather than being hard deleted
 - AND private credentials remain outside reviewable identity records and are
   not deleted by this access-management action
 - AND the disabled principal and its retained assignments cannot authorize
@@ -589,6 +593,8 @@ revocation, refresh, validation, and private auth state.
   membership option groups, exact selected option ids, explicit option and
   control disabled reasons, validation, pending state, feedback, and cancel and
   submit actions
+- AND invitation validation remains hidden until the first submit attempt, when
+  invalid fields publish their errors without invoking invitation creation
 - AND person-role authoring reuses the flat role-level selection contract with
   the person's current exact selected role levels and save and cancel actions
 - AND selected role options remain visible while the other role levels for each
@@ -677,6 +683,9 @@ revocation, refresh, validation, and private auth state.
   and grid primitives for page layout, `Table` for the uniform people and
   invitation summaries, and `Badge` and `Timestamp` for status and temporal
   facts
+- AND unavailable person-removal controls remain visible as disabled
+  destructive buttons whose disabled reason is available on hover and keyboard
+  focus
 - AND invitation authoring opens in a form-purpose `Dialog` using `FormLayout`,
   `TextInput`, `Selector`, and `DateTimeInput` for controlled single-value
   fields

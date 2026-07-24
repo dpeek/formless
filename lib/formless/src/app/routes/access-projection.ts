@@ -113,6 +113,7 @@ export type ProjectAccessOptions = {
   draft: AccessInvitationDraft;
   installs: readonly AppInstall[];
   invitationDeletion: AccessInvitationDeletionState;
+  invitationSubmitAttempted: boolean;
   personAuthoringDraft?: AccessPersonRoleDraft | undefined;
   personRemoval: AccessPersonRemovalState;
   personRoleSubmission: AccessPersonRoleSubmissionState;
@@ -122,6 +123,7 @@ export type ProjectAccessOptions = {
 
 export type AccessProjection = {
   authoring?: AccessInvitationAuthoringContract | undefined;
+  invitationValidationErrors?: readonly string[] | undefined;
   manifest: AccessManifestContract;
   personAuthoring?: AccessPersonRoleAuthoringContract | undefined;
 };
@@ -133,6 +135,7 @@ export type ResolvedAccessIntent =
   | { kind: "confirmationChange"; target: AccessConfirmationTarget | undefined }
   | { kind: "deleteInvitation"; invitationId: string }
   | { kind: "ignored" }
+  | { kind: "invitationValidationReveal" }
   | {
       kind: "invitationSubmit";
       request: Omit<CreateIdentityAccessManagementInvitationInput, "idempotencyKey">;
@@ -156,6 +159,7 @@ export type AccessIntentActions = {
   createIdempotencyKey(purpose: "invitation" | "person-removal" | "person-role"): string;
   deleteInvitation(input: RevokeIdentityAccessManagementInvitationInput): Promise<void> | void;
   removePerson(input: { idempotencyKey: string; principalId: string }): Promise<void> | void;
+  revealInvitationValidation(): void;
   replacePersonRoles(input: IdentityAccessPersonRoleReplacementRequest): Promise<void> | void;
   submitInvitation(input: CreateIdentityAccessManagementInvitationInput): Promise<void> | void;
 };
@@ -247,7 +251,13 @@ export function projectAccess(options: ProjectAccessOptions): AccessProjection {
   const summary = options.state.summary;
   const labels = accessLabels(summary, options.installs);
   const roleChoices = projectRoleChoices(summary.invitationGrantOptions, labels);
-  const authoring = projectAccessInvitationAuthoring(options, summary, roleChoices, labels);
+  const authoringProjection = projectAccessInvitationAuthoring(
+    options,
+    summary,
+    roleChoices,
+    labels,
+  );
+  const authoring = authoringProjection.authoring;
   const people = projectAccessPeople(options, summary, roleChoices, labels);
   const invitations = projectAccessInvitations(options, summary, labels);
   const personAuthoring = projectAccessPersonRoleAuthoring(options, summary, roleChoices);
@@ -287,7 +297,12 @@ export function projectAccess(options: ProjectAccessOptions): AccessProjection {
     state: "ready",
   };
 
-  return { authoring, manifest, ...(personAuthoring ? { personAuthoring } : {}) };
+  return {
+    authoring,
+    invitationValidationErrors: authoringProjection.validationErrors,
+    manifest,
+    ...(personAuthoring ? { personAuthoring } : {}),
+  };
 }
 
 export function resolveAccessIntent(
@@ -379,11 +394,16 @@ export function resolveAccessIntent(
     }
     case "accessInvitationSubmit": {
       const authoring = projection.authoring;
-      return authoring &&
-        sameAccessActionIntent(intent, authoring.submit.intent) &&
-        authoring.submit.control.disabled !== true
-        ? { kind: "invitationSubmit", request: accessInvitationRequest(options, authoring) }
-        : { kind: "ignored" };
+      if (
+        !authoring ||
+        !sameAccessActionIntent(intent, authoring.submit.intent) ||
+        authoring.submit.control.disabled === true
+      ) {
+        return { kind: "ignored" };
+      }
+      return projection.invitationValidationErrors?.length
+        ? { kind: "invitationValidationReveal" }
+        : { kind: "invitationSubmit", request: accessInvitationRequest(options, authoring) };
     }
     case "accessPersonRoleAuthoringOpenChange": {
       if (!intent.open) {
@@ -518,6 +538,9 @@ export async function dispatchAccessIntent(
     case "invitationDraftChange":
       actions.changeDraft(resolved.draft);
       return;
+    case "invitationValidationReveal":
+      actions.revealInvitationValidation();
+      return;
     case "personAuthoringChange":
       actions.changePersonAuthoring(resolved.draft);
       return;
@@ -552,26 +575,50 @@ function projectAccessInvitationAuthoring(
   summary: IdentityAccessManagementSummary,
   choices: readonly ProjectedRoleChoice[],
   labels: AccessLabels,
-): AccessInvitationAuthoringContract {
+): {
+  authoring: AccessInvitationAuthoringContract;
+  validationErrors: readonly string[];
+} {
   const pending = options.submission.status === "submitting";
-  const roleSelection = projectRoleSelection({
+  const validatedRoleSelection = projectRoleSelection({
     authoringId: instanceAccessInvitationAuthoringReference.authoringId,
     choices,
     pendingReason: pending ? "Invitation creation is in progress." : undefined,
     selectedOptionIds: options.draft.roleOptionIds,
     type: "invitation",
   });
-  const fields = projectAccessAuthoringFields(options, roleSelection, choices);
-  const membershipSelection = projectMembershipSelection(
+  const validatedFields = projectAccessAuthoringFields(options, validatedRoleSelection, choices);
+  const validatedMembershipSelection = projectMembershipSelection(
     options,
     summary.invitationGrantOptions,
     labels,
   );
-  const errors = [
-    ...Object.values(fields).flatMap((field) => field?.errors ?? []),
-    ...roleSelection.errors,
-    ...membershipSelection.errors,
+  const validationErrors = [
+    ...Object.values(validatedFields).flatMap((field) => field?.errors ?? []),
+    ...validatedRoleSelection.errors,
+    ...validatedMembershipSelection.errors,
   ];
+  const fields = options.invitationSubmitAttempted
+    ? validatedFields
+    : {
+        ...(validatedFields.acceptanceTarget
+          ? {
+              acceptanceTarget: {
+                ...validatedFields.acceptanceTarget,
+                errors: [],
+              },
+            }
+          : {}),
+        displayName: { ...validatedFields.displayName, errors: [] },
+        targetEmail: { ...validatedFields.targetEmail, errors: [] },
+      };
+  const roleSelection = options.invitationSubmitAttempted
+    ? validatedRoleSelection
+    : { ...validatedRoleSelection, errors: [] };
+  const membershipSelection = options.invitationSubmitAttempted
+    ? validatedMembershipSelection
+    : { ...validatedMembershipSelection, errors: [] };
+  const errors = options.invitationSubmitAttempted ? validationErrors : [];
   const cancelControl = accessButton(
     ACCESS_AUTHORING_CANCEL_CONTROL_ID,
     "Cancel",
@@ -586,58 +633,61 @@ function projectAccessInvitationAuthoring(
     "submit",
     pending
       ? "Invitation creation is in progress."
-      : (errors[0] ?? invitationAuthorityDisabledReason(summary.invitationGrantOptions)),
+      : invitationAuthorityDisabledReason(summary.invitationGrantOptions),
   );
 
   return {
-    accessId: INSTANCE_ACCESS_ID,
-    cancel: {
-      control: cancelControl,
-      id: ACCESS_AUTHORING_CANCEL_ACTION_ID,
-      intent: {
-        accessId: INSTANCE_ACCESS_ID,
-        actionId: ACCESS_AUTHORING_CANCEL_ACTION_ID,
-        authoringId: instanceAccessInvitationAuthoringReference.authoringId,
-        controlId: cancelControl.id,
-        open: false,
-        type: "accessInvitationAuthoringOpenChange",
+    authoring: {
+      accessId: INSTANCE_ACCESS_ID,
+      cancel: {
+        control: cancelControl,
+        id: ACCESS_AUTHORING_CANCEL_ACTION_ID,
+        intent: {
+          accessId: INSTANCE_ACCESS_ID,
+          actionId: ACCESS_AUTHORING_CANCEL_ACTION_ID,
+          authoringId: instanceAccessInvitationAuthoringReference.authoringId,
+          controlId: cancelControl.id,
+          open: false,
+          type: "accessInvitationAuthoringOpenChange",
+        },
+        kind: "accessAction",
+        purpose: "authoring-cancel",
       },
-      kind: "accessAction",
-      purpose: "authoring-cancel",
-    },
-    description: "Invite a collaborator and choose their access.",
-    errors,
-    ...(options.submission.status === "failed"
-      ? {
-          feedback: accessFeedback(
-            "invitation-failed",
-            "Invitation could not be created",
-            options.submission.message,
-            "danger",
-          ),
-        }
-      : {}),
-    fields,
-    id: instanceAccessInvitationAuthoringReference.authoringId,
-    kind: "accessInvitationAuthoring",
-    membershipSelection,
-    open: options.authoringOpen,
-    ...(pending ? { pending: { isPending: true, label: "Sending invitation" } } : {}),
-    roleSelection,
-    submit: {
-      control: submitControl,
-      id: ACCESS_AUTHORING_SUBMIT_ACTION_ID,
-      intent: {
-        accessId: INSTANCE_ACCESS_ID,
-        actionId: ACCESS_AUTHORING_SUBMIT_ACTION_ID,
-        authoringId: instanceAccessInvitationAuthoringReference.authoringId,
-        controlId: submitControl.id,
-        type: "accessInvitationSubmit",
+      description: "Invite a collaborator and choose their access.",
+      errors,
+      ...(options.submission.status === "failed"
+        ? {
+            feedback: accessFeedback(
+              "invitation-failed",
+              "Invitation could not be created",
+              options.submission.message,
+              "danger",
+            ),
+          }
+        : {}),
+      fields,
+      id: instanceAccessInvitationAuthoringReference.authoringId,
+      kind: "accessInvitationAuthoring",
+      membershipSelection,
+      open: options.authoringOpen,
+      ...(pending ? { pending: { isPending: true, label: "Sending invitation" } } : {}),
+      roleSelection,
+      submit: {
+        control: submitControl,
+        id: ACCESS_AUTHORING_SUBMIT_ACTION_ID,
+        intent: {
+          accessId: INSTANCE_ACCESS_ID,
+          actionId: ACCESS_AUTHORING_SUBMIT_ACTION_ID,
+          authoringId: instanceAccessInvitationAuthoringReference.authoringId,
+          controlId: submitControl.id,
+          type: "accessInvitationSubmit",
+        },
+        kind: "accessAction",
+        purpose: "invitation-submit",
       },
-      kind: "accessAction",
-      purpose: "invitation-submit",
+      title: "Invite collaborator",
     },
-    title: "Invite collaborator",
+    validationErrors,
   };
 }
 
@@ -906,7 +956,11 @@ function projectAccessPeople(
         ? { primaryEmail: displaySafeText(person.primaryEmail.displayEmail) }
         : {}),
       removal: removalReason
-        ? { availability: "unavailable", disabledReason: removalReason }
+        ? {
+            availability: "unavailable",
+            control: removalControl,
+            disabledReason: removalReason,
+          }
         : {
             action: {
               control: removalControl,

@@ -551,6 +551,73 @@ describe("identity control-plane API routes", () => {
     }
   });
 
+  it("revokes pending invitations when removing an invited person", async () => {
+    await configureAuthInvitationEmailDelivery();
+    const ownerSession = await createOwnerSessionHeaders();
+    const created = await postCollaboratorInvitationResponse(
+      {
+        idempotencyKey: "invite-person-removal",
+        invitationId: "invitation:person-removal",
+        targetEmail: "person-removal@example.com",
+        targetSurface: "instance",
+        now: "2999-01-01T00:00:00.000Z",
+        invitedPrincipal: {
+          id: "principal:person-removal",
+          displayName: "Person Removal",
+        },
+      },
+      ownerSession.headers,
+    );
+    const removed = await postIdentityAccessPersonRemovalResponse(
+      {
+        idempotencyKey: "remove-invited-person",
+        now: "2999-01-02T00:00:00.000Z",
+        principalId: "principal:person-removal",
+      },
+      ownerSession.headers,
+    );
+    const summary = await getAccessSummary(ownerSession.headers);
+    const retained = await getJson<BootstrapResponse>(`${identityApi}/bootstrap`);
+    const publicAcceptance = await fetchCollaboratorInvitationAcceptanceStatus(
+      "invitation:person-removal",
+      "fake-token",
+    );
+    const retainedInvitation = recordById(retained.body.records, "invitation:person-removal");
+
+    expect(created.response.status).toBe(200);
+    expect(removed.response.status).toBe(200);
+    expect(removed.body).toMatchObject({
+      person: {
+        principalId: "principal:person-removal",
+        status: "disabled",
+      },
+      removedAt: "2999-01-02T00:00:00.000Z",
+      status: "disabled",
+    });
+    expect(summary.body.people).not.toContainEqual(
+      expect.objectContaining({ principalId: "principal:person-removal" }),
+    );
+    expect(summary.body.invitations).not.toContainEqual(
+      expect.objectContaining({ invitationId: "invitation:person-removal" }),
+    );
+    expect(recordById(retained.body.records, "principal:person-removal")).toMatchObject({
+      values: { status: "disabled" },
+    });
+    expect(retainedInvitation).toMatchObject({
+      values: {
+        invitedPrincipal: "principal:person-removal",
+        status: "revoked",
+      },
+    });
+    expect(retainedInvitation.deletedAt).toBeUndefined();
+    expect(publicAcceptance.response.status).toBe(409);
+    expect(publicAcceptance.body).toEqual({
+      eligible: false,
+      error: "Invitation link is no longer available.",
+      reason: "revoked-invitation",
+    });
+  });
+
   it("rejects unauthorized collaborator invitation revocation before identity writes", async () => {
     const ownerSession = await createOwnerSessionHeaders();
     const created = await postCollaboratorInvitationResponse(

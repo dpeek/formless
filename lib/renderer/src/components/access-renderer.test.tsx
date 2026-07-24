@@ -62,6 +62,52 @@ describe("Astryx access renderer", () => {
     expect(html).not.toContain("raw-invitation-token");
   });
 
+  it("renders unavailable person removal as a disabled button with its reason as a tooltip", () => {
+    const populated = ready(fixtureManifest("populated-owner"));
+    const person = required(populated.people[0]);
+    if (person.removal.availability !== "available") {
+      throw new Error("Expected the populated access fixture to allow person removal.");
+    }
+    const disabledReason = "The last active owner cannot be removed.";
+    const manifest: AccessReadyContract = {
+      ...populated,
+      people: [
+        {
+          ...person,
+          removal: {
+            availability: "unavailable",
+            control: {
+              ...person.removal.action.control,
+              disabled: true,
+              disabledReason,
+              errors: [disabledReason],
+            },
+            disabledReason,
+          },
+        },
+      ],
+    };
+    const intents: AccessIntent[] = [];
+    const { container, unmount } = render(
+      <AstryxAccessRenderer
+        manifest={manifest}
+        onIntent={(intent) => {
+          intents.push(intent);
+        }}
+      />,
+    );
+    const queries = within(container);
+    const button = queries.getByRole("button", { name: "Remove person" });
+    const tooltip = within(document.body).getByRole("tooltip", { hidden: true });
+
+    expect(button.getAttribute("aria-disabled")).toBe("true");
+    expect(button.getAttribute("aria-describedby")).toContain(tooltip.id);
+    expect(tooltip.textContent).toBe(disabledReason);
+    fireEvent.click(button);
+    expect(intents).toEqual([]);
+    unmount();
+  });
+
   it("renders a flat controlled role selector and conditional acceptance target", () => {
     const base = invitationAuthoring(true);
     const acceptanceTarget = {

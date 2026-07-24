@@ -74,6 +74,7 @@ export function AccessRoute({ dependencies = {} }: { dependencies?: AccessRouteD
   const [invitationDeletion, setInvitationDeletion] = useState<AccessInvitationDeletionState>({
     status: "idle",
   });
+  const [invitationSubmitAttempted, setInvitationSubmitAttempted] = useState(false);
   const [personRoleSubmission, setPersonRoleSubmission] = useState<AccessPersonRoleSubmissionState>(
     { status: "idle" },
   );
@@ -136,6 +137,7 @@ export function AccessRoute({ dependencies = {} }: { dependencies?: AccessRouteD
   const changeAuthoringOpen = useCallback((open: boolean) => {
     setAuthoringOpen(open);
     if (open) {
+      setInvitationSubmitAttempted(false);
       setSubmission({ status: "idle" });
     }
   }, []);
@@ -152,6 +154,9 @@ export function AccessRoute({ dependencies = {} }: { dependencies?: AccessRouteD
     setPersonRoleSubmission((current) =>
       current.status === "failed" ? { status: "idle" } : current,
     );
+  }, []);
+  const revealInvitationValidation = useCallback(() => {
+    setInvitationSubmitAttempted(true);
   }, []);
   const changeConfirmation = useCallback((target: AccessConfirmationTarget | undefined) => {
     setConfirmation(target);
@@ -307,6 +312,7 @@ export function AccessRoute({ dependencies = {} }: { dependencies?: AccessRouteD
       createIdempotencyKey,
       deleteInvitation: submitInvitationDeletion,
       removePerson: submitPersonRemoval,
+      revealInvitationValidation,
       replacePersonRoles: submitPersonRoles,
       submitInvitation,
     }),
@@ -317,6 +323,7 @@ export function AccessRoute({ dependencies = {} }: { dependencies?: AccessRouteD
       changePersonAuthoring,
       changePersonRoleDraft,
       createIdempotencyKey,
+      revealInvitationValidation,
       submitInvitation,
       submitInvitationDeletion,
       submitPersonRemoval,
@@ -330,6 +337,7 @@ export function AccessRoute({ dependencies = {} }: { dependencies?: AccessRouteD
       draft,
       installs,
       invitationDeletion,
+      invitationSubmitAttempted,
       ...(personAuthoringDraft ? { personAuthoringDraft } : {}),
       personRemoval,
       personRoleSubmission,
@@ -342,6 +350,7 @@ export function AccessRoute({ dependencies = {} }: { dependencies?: AccessRouteD
       draft,
       installs,
       invitationDeletion,
+      invitationSubmitAttempted,
       personAuthoringDraft,
       personRemoval,
       personRoleSubmission,

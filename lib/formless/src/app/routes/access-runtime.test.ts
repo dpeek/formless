@@ -104,6 +104,11 @@ describe("access projection", () => {
     expect(ada).toMatchObject({
       removal: {
         availability: "unavailable",
+        control: {
+          content: { kind: "label", label: "Remove person" },
+          disabled: true,
+          disabledReason: "The last active owner cannot be removed.",
+        },
         disabledReason: "The last active owner cannot be removed.",
       },
       roleAuthoring: { availability: "available" },
@@ -143,8 +148,13 @@ describe("access projection", () => {
 
     const adminProjection = projectAccess(input({ summary: populatedSummary({ owner: false }) }));
     const adminOwner = required(readyManifest(adminProjection).people[0]);
-    expect(adminOwner.removal).toEqual({
+    expect(adminOwner.removal).toMatchObject({
       availability: "unavailable",
+      control: {
+        content: { kind: "label", label: "Remove person" },
+        disabled: true,
+        disabledReason: "Instance administrators cannot remove an owner.",
+      },
       disabledReason: "Instance administrators cannot remove an owner.",
     });
   });
@@ -308,6 +318,7 @@ function input({
   draft = validDraft(),
   installs = [siteInstall()],
   invitationDeletion = { status: "idle" },
+  invitationSubmitAttempted = false,
   personAuthoringDraft,
   personRemoval = { status: "idle" },
   personRoleSubmission = { status: "idle" },
@@ -323,6 +334,7 @@ function input({
     draft,
     installs,
     invitationDeletion,
+    invitationSubmitAttempted,
     ...(personAuthoringDraft ? { personAuthoringDraft } : {}),
     personRemoval,
     personRoleSubmission,
@@ -525,6 +537,9 @@ function recordingActions(calls: unknown[]): AccessIntentActions {
     },
     removePerson: (value) => {
       calls.push({ kind: "removePerson", value });
+    },
+    revealInvitationValidation: () => {
+      calls.push({ kind: "revealInvitationValidation" });
     },
     replacePersonRoles: (value) => {
       calls.push({ kind: "replacePersonRoles", value });

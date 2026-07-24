@@ -314,13 +314,9 @@ function AstryxAccessPeople({
           ) : null}
           {person.removal.availability === "available" ? (
             <AstryxAccessAction action={person.removal.action} destructive onIntent={onIntent} />
-          ) : person.removal.disabledReason ? (
-            <FieldStatus
-              message={person.removal.disabledReason}
-              type="warning"
-              variant="detached"
-            />
-          ) : null}
+          ) : (
+            <AstryxAccessControl button={person.removal.control} destructive />
+          )}
         </HStack>
       ),
       width: proportional(1, { minWidth: 180 }),
@@ -937,7 +933,27 @@ function AstryxAccessAction({
   form?: string;
   onIntent: AccessIntentHandler;
 }) {
-  const button = action.control;
+  return (
+    <AstryxAccessControl
+      button={action.control}
+      destructive={destructive}
+      form={form}
+      onClick={form ? undefined : () => void onIntent(action.intent)}
+    />
+  );
+}
+
+function AstryxAccessControl({
+  button,
+  destructive = false,
+  form,
+  onClick,
+}: {
+  button: ButtonContract;
+  destructive?: boolean;
+  form?: string;
+  onClick?: () => void;
+}) {
   const content = button.content;
   const isIconOnly = content.kind === "iconOnly";
   const isLoading = Boolean(button.pending?.isPending);
@@ -951,7 +967,7 @@ function AstryxAccessAction({
       isIconOnly={isIconOnly}
       isLoading={isLoading}
       label={button.accessibilityLabel}
-      onClick={form ? undefined : () => void onIntent(action.intent)}
+      onClick={onClick}
       size={button.density === "compact" ? "sm" : "md"}
       tooltip={button.disabledReason}
       type={button.type}

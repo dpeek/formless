@@ -127,6 +127,34 @@ describe("access route runtime", () => {
     await runtime.unmount();
   });
 
+  it("reveals invitation validation only after submit and blocks the invalid effect", async () => {
+    const invitations: unknown[] = [];
+    const runtime = await mountAccessRoute({
+      createInvitation: async (input) => {
+        invitations.push(input);
+      },
+      fetchInstalls: async () => ({ installs: [siteInstall()], packages: [] }),
+      fetchSummary: async () => summary(),
+    });
+
+    await runtime.dispatch(runtime.readyManifest().invite.intent);
+    const pristine = runtime.invitationAuthoring();
+    expect(pristine.errors).toEqual([]);
+    expect(pristine.fields.targetEmail.errors).toEqual([]);
+    expect(pristine.fields.displayName.errors).toEqual([]);
+    expect(pristine.roleSelection.errors).toEqual([]);
+    expect(pristine.submit.control.disabled).not.toBe(true);
+
+    await runtime.dispatch(pristine.submit.intent);
+
+    const attempted = runtime.invitationAuthoring();
+    expect(attempted.fields.targetEmail.errors).toEqual(["Email is required."]);
+    expect(attempted.fields.displayName.errors).toEqual(["Name is required."]);
+    expect(attempted.roleSelection.errors).toEqual(["Choose at least one role."]);
+    expect(invitations).toEqual([]);
+    await runtime.unmount();
+  });
+
   it("runs person role replacement, person removal, and invitation deletion through exact confirmation", async () => {
     const replacements: unknown[] = [];
     const removals: unknown[] = [];
